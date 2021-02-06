@@ -20,6 +20,8 @@
 /* Begin PBXFileReference section */
 		A32D820C23A8022700B6546B /* i2cEeprom.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = i2cEeprom.h; sourceTree = "<group>"; };
 		A32D820D23A8022700B6546B /* i2cEeprom.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = i2cEeprom.c; sourceTree = "<group>"; };
+		A333D60925CEEBEF008856E4 /* SSD1306.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SSD1306.h; sourceTree = "<group>"; };
+		A333D60A25CEEBEF008856E4 /* SSD1306.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = SSD1306.c; sourceTree = "<group>"; };
 		A349451723B5335C009A636E /* adc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = adc.h; sourceTree = "<group>"; };
 		A349451823B5335C009A636E /* adc.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = adc.c; sourceTree = "<group>"; };
 		A349451A23B7A79D009A636E /* pwm.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pwm.h; sourceTree = "<group>"; };
@@ -79,6 +81,8 @@
 		A34F48E923A02EDA00D9D1E2 /* tools */ = {
 			isa = PBXGroup;
 			children = (
+				A333D60A25CEEBEF008856E4 /* SSD1306.c */,
+				A333D60925CEEBEF008856E4 /* SSD1306.h */,
 				A34F48D1239C2DA500D9D1E2 /* utils.c */,
 				A34F48D0239C2DA500D9D1E2 /* utils.h */,
 				A32D820D23A8022700B6546B /* i2cEeprom.c */,

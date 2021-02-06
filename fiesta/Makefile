@@ -1,7 +1,7 @@
 F_CPU = 16000000
 
 PRG            = main
-OBJ            = main.o adc.o i2cEeprom.o twi_i2c.o UART.o utils.o pcf8574a.o pwm.o
+OBJ            = main.o SSD1306.o adc.o i2cEeprom.o twi_i2c.o UART.o utils.o pcf8574a.o pwm.o
 MCU_TARGET     = atmega32
 OPTIMIZE       = -O2
 
@@ -17,7 +17,7 @@ CC             = avr-gcc
 
 # Override is only needed by avr-lib build system.
 
-override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS) -std=c99
+override CFLAGS        = -g -Wall $(OPTIMIZE) -mmcu=$(MCU_TARGET) $(DEFS) -std=c99 -Wno-missing-braces
 override LDFLAGS       = -Wl,-Map,$(PRG).map
 
 OBJCOPY        = avr-objcopy
