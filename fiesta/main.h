@@ -27,10 +27,6 @@ extern unsigned char lastLoudness;
 extern unsigned char MEM[];
 extern char s[];
 
-extern void setVolumeChangerTimer(void);
-
-void setVolume(bool toZero);
-
 #define MAIN_DELAY_TIME 7
 //in ms
 #define POWER_RES_COUNTER 100       //* MAIN_DELAY_TIME
