@@ -7,6 +7,7 @@
 *.pyc
 *.so
 *.vglog
+*.map
 callgrind.out.*
 dhat.out.*
 massif.out.*

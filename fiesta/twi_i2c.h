@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include "utils.h"
 
+#define MASTER_TRANSMITTER 0
+
 void TWI_Init(void);
 void TWI_Start(void);
 void TWI_Stop(void);
