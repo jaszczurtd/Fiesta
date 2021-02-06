@@ -1,0 +1,997 @@
+
+main.elf:     file format elf32-avr
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         0000049c  00000000  00000000  00000094  2**1
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .data         00000000  00800060  0000049c  00000530  2**0
+                  CONTENTS, ALLOC, LOAD, DATA
+  2 .bss          0000001b  00800060  00800060  00000530  2**0
+                  ALLOC
+  3 .comment      00000011  00000000  00000000  00000530  2**0
+                  CONTENTS, READONLY
+  4 .note.gnu.avr.deviceinfo 0000003c  00000000  00000000  00000544  2**2
+                  CONTENTS, READONLY
+  5 .debug_aranges 00000148  00000000  00000000  00000580  2**3
+                  CONTENTS, READONLY, DEBUGGING
+  6 .debug_info   00001b35  00000000  00000000  000006c8  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  7 .debug_abbrev 00001161  00000000  00000000  000021fd  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  8 .debug_line   000013af  00000000  00000000  0000335e  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  9 .debug_frame  000002d8  00000000  00000000  00004710  2**2
+                  CONTENTS, READONLY, DEBUGGING
+ 10 .debug_str    000005e6  00000000  00000000  000049e8  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 11 .debug_loc    000007f3  00000000  00000000  00004fce  2**0
+                  CONTENTS, READONLY, DEBUGGING
+ 12 .debug_ranges 00000030  00000000  00000000  000057c1  2**0
+                  CONTENTS, READONLY, DEBUGGING
+
+Disassembly of section .text:
+
+00000000 <__vectors>:
+   0:	0c 94 2a 00 	jmp	0x54	; 0x54 <__ctors_end>
+   4:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+   8:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+   c:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  10:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  14:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  18:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  1c:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  20:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  24:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  28:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  2c:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  30:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  34:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  38:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  3c:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  40:	0c 94 78 00 	jmp	0xf0	; 0xf0 <__vector_16>
+  44:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  48:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  4c:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+  50:	0c 94 3c 00 	jmp	0x78	; 0x78 <__bad_interrupt>
+
+00000054 <__ctors_end>:
+  54:	11 24       	eor	r1, r1
+  56:	1f be       	out	0x3f, r1	; 63
+  58:	cf e5       	ldi	r28, 0x5F	; 95
+  5a:	d8 e0       	ldi	r29, 0x08	; 8
+  5c:	de bf       	out	0x3e, r29	; 62
+  5e:	cd bf       	out	0x3d, r28	; 61
+
+00000060 <__do_clear_bss>:
+  60:	20 e0       	ldi	r18, 0x00	; 0
+  62:	a0 e6       	ldi	r26, 0x60	; 96
+  64:	b0 e0       	ldi	r27, 0x00	; 0
+  66:	01 c0       	rjmp	.+2      	; 0x6a <.do_clear_bss_start>
+
+00000068 <.do_clear_bss_loop>:
+  68:	1d 92       	st	X+, r1
+
+0000006a <.do_clear_bss_start>:
+  6a:	ab 37       	cpi	r26, 0x7B	; 123
+  6c:	b2 07       	cpc	r27, r18
+  6e:	e1 f7       	brne	.-8      	; 0x68 <.do_clear_bss_loop>
+  70:	0e 94 3b 02 	call	0x476	; 0x476 <main>
+  74:	0c 94 4c 02 	jmp	0x498	; 0x498 <_exit>
+
+00000078 <__bad_interrupt>:
+  78:	0c 94 00 00 	jmp	0	; 0x0 <__vectors>
+
+0000007c <setup>:
+#if DEBUG_VAL
+int debugval = 0;
+#endif
+
+void setup(void) {
+    cli();
+  7c:	f8 94       	cli
+__attribute__ ((__always_inline__))
+void wdt_enable (const uint8_t value)
+{
+	if (_SFR_IO_REG_P (_WD_CONTROL_REG))
+	{
+		__asm__ __volatile__ (
+  7e:	88 e1       	ldi	r24, 0x18	; 24
+  80:	9f e0       	ldi	r25, 0x0F	; 15
+  82:	0f b6       	in	r0, 0x3f	; 63
+  84:	f8 94       	cli
+  86:	a8 95       	wdr
+  88:	81 bd       	out	0x21, r24	; 33
+  8a:	0f be       	out	0x3f, r0	; 63
+  8c:	91 bd       	out	0x21, r25	; 33
+    
+    wdt_enable( WDTO_2S );
+    
+    TWI_Init();
+  8e:	0e 94 33 01 	call	0x266	; 0x266 <TWI_Init>
+    PWM_Init(true, false);
+  92:	60 e0       	ldi	r22, 0x00	; 0
+  94:	81 e0       	ldi	r24, 0x01	; 1
+  96:	0e 94 05 02 	call	0x40a	; 0x40a <PWM_Init>
+    ADC_Init(true);
+  9a:	81 e0       	ldi	r24, 0x01	; 1
+  9c:	0e 94 56 00 	call	0xac	; 0xac <ADC_Init>
+
+    clearPorts();
+  a0:	0e 94 01 02 	call	0x402	; 0x402 <clearPorts>
+    
+    restoreStatusFromEEPROM();
+  a4:	0e 94 20 01 	call	0x240	; 0x240 <restoreStatusFromEEPROM>
+    
+    sei();
+  a8:	78 94       	sei
+}
+  aa:	08 95       	ret
+
+000000ac <ADC_Init>:
+
+static int value;
+static bool byInterrupt = false;
+
+void ADC_Init(bool interrupt) {
+    byInterrupt = interrupt;
+  ac:	80 93 60 00 	sts	0x0060, r24	; 0x800060 <_edata>
+    
+    bitSet(ADMUX, REFS0);
+  b0:	3e 9a       	sbi	0x07, 6	; 7
+    bitClear(ADMUX, REFS1);
+  b2:	3f 98       	cbi	0x07, 7	; 7
+    
+    bitClear(ADMUX, MUX0);
+  b4:	38 98       	cbi	0x07, 0	; 7
+    bitClear(ADMUX, MUX1);
+  b6:	39 98       	cbi	0x07, 1	; 7
+    bitClear(ADMUX, MUX2);
+  b8:	3a 98       	cbi	0x07, 2	; 7
+
+    bitSet(ADCSRA, ADEN | ADPS0 | ADPS1 | ADPS2);
+  ba:	37 9a       	sbi	0x06, 7	; 6
+    
+    if(interrupt) {
+  bc:	88 23       	and	r24, r24
+  be:	11 f0       	breq	.+4      	; 0xc4 <ADC_Init+0x18>
+        bitSet(ADCSRA, ADSC);
+  c0:	36 9a       	sbi	0x06, 6	; 6
+        bitSet(ADCSRA, ADIE);
+  c2:	33 9a       	sbi	0x06, 3	; 6
+    }
+    
+    value = 0;
+  c4:	10 92 62 00 	sts	0x0062, r1	; 0x800062 <value+0x1>
+  c8:	10 92 61 00 	sts	0x0061, r1	; 0x800061 <value>
+}
+  cc:	08 95       	ret
+
+000000ce <getADCValue>:
+
+int getADCValue(void) {
+    
+    if(byInterrupt) {
+  ce:	80 91 60 00 	lds	r24, 0x0060	; 0x800060 <_edata>
+  d2:	88 23       	and	r24, r24
+  d4:	39 f0       	breq	.+14     	; 0xe4 <getADCValue+0x16>
+        bitSet(ADCSRA, ADIE);
+  d6:	33 9a       	sbi	0x06, 3	; 6
+        bitSet(ADCSRA, ADSC);
+  d8:	36 9a       	sbi	0x06, 6	; 6
+
+        return value;
+  da:	80 91 61 00 	lds	r24, 0x0061	; 0x800061 <value>
+  de:	90 91 62 00 	lds	r25, 0x0062	; 0x800062 <value+0x1>
+  e2:	08 95       	ret
+    } else {
+        bitSet(ADCSRA, ADSC);
+  e4:	36 9a       	sbi	0x06, 6	; 6
+        while(ADCSRA & (1<<ADSC));
+  e6:	36 99       	sbic	0x06, 6	; 6
+  e8:	fe cf       	rjmp	.-4      	; 0xe6 <getADCValue+0x18>
+        
+        return ADC;
+  ea:	84 b1       	in	r24, 0x04	; 4
+  ec:	95 b1       	in	r25, 0x05	; 5
+    }
+}
+  ee:	08 95       	ret
+
+000000f0 <__vector_16>:
+
+ISR(ADC_vect) {
+  f0:	8f 93       	push	r24
+  f2:	9f 93       	push	r25
+    value = ADC;
+  f4:	84 b1       	in	r24, 0x04	; 4
+  f6:	95 b1       	in	r25, 0x05	; 5
+  f8:	90 93 62 00 	sts	0x0062, r25	; 0x800062 <value+0x1>
+  fc:	80 93 61 00 	sts	0x0061, r24	; 0x800061 <value>
+}
+ 100:	9f 91       	pop	r25
+ 102:	8f 91       	pop	r24
+ 104:	18 95       	reti
+
+00000106 <EEPROM_start>:
+//  Created by Marcin Kielesiński on 16/12/2019.
+//
+
+#include "i2cEeprom.h"
+
+bool EEPROM_start(unsigned char addr) {
+ 106:	cf 93       	push	r28
+ 108:	c8 2f       	mov	r28, r24
+ 10a:	07 c0       	rjmp	.+14     	; 0x11a <EEPROM_start+0x14>
+        //Check status
+        if((TWSR & 0xF8) != 0x08) {
+            return false;
+        }
+        
+        TWI_Write(addr);
+ 10c:	8c 2f       	mov	r24, r28
+ 10e:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        
+    } while((TWSR & 0xF8) != 0x18);
+ 112:	91 b1       	in	r25, 0x01	; 1
+ 114:	98 7f       	andi	r25, 0xF8	; 248
+ 116:	98 31       	cpi	r25, 0x18	; 24
+ 118:	49 f0       	breq	.+18     	; 0x12c <EEPROM_start+0x26>
+        TWI_Start();
+ 11a:	0e 94 39 01 	call	0x272	; 0x272 <TWI_Start>
+        if((TWSR & 0xF8) != 0x08) {
+ 11e:	91 b1       	in	r25, 0x01	; 1
+ 120:	98 7f       	andi	r25, 0xF8	; 248
+ 122:	98 30       	cpi	r25, 0x08	; 8
+ 124:	99 f3       	breq	.-26     	; 0x10c <EEPROM_start+0x6>
+            return false;
+ 126:	80 e0       	ldi	r24, 0x00	; 0
+    
+    return true;
+}
+ 128:	cf 91       	pop	r28
+ 12a:	08 95       	ret
+    return true;
+ 12c:	81 e0       	ldi	r24, 0x01	; 1
+}
+ 12e:	cf 91       	pop	r28
+ 130:	08 95       	ret
+
+00000132 <EEPROMwrite>:
+
+bool EEPROMwrite(unsigned char ucAddress, unsigned char ucData) {
+ 132:	1f 93       	push	r17
+ 134:	cf 93       	push	r28
+ 136:	df 93       	push	r29
+ 138:	18 2f       	mov	r17, r24
+ 13a:	d6 2f       	mov	r29, r22
+    
+    if(EEPROM_start(EEPROM_ADDR_WR)) {
+ 13c:	80 ea       	ldi	r24, 0xA0	; 160
+ 13e:	0e 94 83 00 	call	0x106	; 0x106 <EEPROM_start>
+ 142:	c8 2f       	mov	r28, r24
+ 144:	81 11       	cpse	r24, r1
+ 146:	05 c0       	rjmp	.+10     	; 0x152 <EEPROMwrite+0x20>
+        TWI_Stop();
+        _delay_ms(12);
+        return TRUE;
+    }
+    return false;
+}
+ 148:	8c 2f       	mov	r24, r28
+ 14a:	df 91       	pop	r29
+ 14c:	cf 91       	pop	r28
+ 14e:	1f 91       	pop	r17
+ 150:	08 95       	ret
+        TWI_Write(ucAddress >> 8);
+ 152:	80 e0       	ldi	r24, 0x00	; 0
+ 154:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        TWI_Write(ucAddress);
+ 158:	81 2f       	mov	r24, r17
+ 15a:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        TWI_Write(ucData);
+ 15e:	8d 2f       	mov	r24, r29
+ 160:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        TWI_Stop();
+ 164:	0e 94 3f 01 	call	0x27e	; 0x27e <TWI_Stop>
+	#else
+		//round up by default
+		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+	#endif
+
+	__builtin_avr_delay_cycles(__ticks_dc);
+ 168:	8f e7       	ldi	r24, 0x7F	; 127
+ 16a:	9b eb       	ldi	r25, 0xBB	; 187
+ 16c:	01 97       	sbiw	r24, 0x01	; 1
+ 16e:	f1 f7       	brne	.-4      	; 0x16c <EEPROMwrite+0x3a>
+ 170:	00 c0       	rjmp	.+0      	; 0x172 <EEPROMwrite+0x40>
+ 172:	00 00       	nop
+}
+ 174:	8c 2f       	mov	r24, r28
+ 176:	df 91       	pop	r29
+ 178:	cf 91       	pop	r28
+ 17a:	1f 91       	pop	r17
+ 17c:	08 95       	ret
+
+0000017e <EEPROMread>:
+
+unsigned char EEPROMread(unsigned char ucAddress) {
+ 17e:	cf 93       	push	r28
+ 180:	c8 2f       	mov	r28, r24
+    
+    unsigned char data = 0;
+    
+    if(EEPROM_start(EEPROM_ADDR_WR)) {
+ 182:	80 ea       	ldi	r24, 0xA0	; 160
+ 184:	0e 94 83 00 	call	0x106	; 0x106 <EEPROM_start>
+ 188:	81 11       	cpse	r24, r1
+ 18a:	04 c0       	rjmp	.+8      	; 0x194 <EEPROMread+0x16>
+    unsigned char data = 0;
+ 18c:	c0 e0       	ldi	r28, 0x00	; 0
+        data = TWI_Read(0);
+        TWI_Stop();
+    }
+    
+    return data;
+}
+ 18e:	8c 2f       	mov	r24, r28
+ 190:	cf 91       	pop	r28
+ 192:	08 95       	ret
+        TWI_Write(ucAddress >> 8);
+ 194:	80 e0       	ldi	r24, 0x00	; 0
+ 196:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        TWI_Write(ucAddress);
+ 19a:	8c 2f       	mov	r24, r28
+ 19c:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        TWI_Start();
+ 1a0:	0e 94 39 01 	call	0x272	; 0x272 <TWI_Start>
+        TWI_Write(EEPROM_ADDR_RD);
+ 1a4:	81 ea       	ldi	r24, 0xA1	; 161
+ 1a6:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+        data = TWI_Read(0);
+ 1aa:	80 e0       	ldi	r24, 0x00	; 0
+ 1ac:	0e 94 45 01 	call	0x28a	; 0x28a <TWI_Read>
+ 1b0:	c8 2f       	mov	r28, r24
+        TWI_Stop();
+ 1b2:	0e 94 3f 01 	call	0x27e	; 0x27e <TWI_Stop>
+}
+ 1b6:	8c 2f       	mov	r24, r28
+ 1b8:	cf 91       	pop	r28
+ 1ba:	08 95       	ret
+
+000001bc <setStoreStatusFlag>:
+static int eepromDelay = 0;
+static bool eepromWrite = false;
+unsigned char MEM[EEPROM_SIZE];
+
+inline void setStoreStatusFlag(bool value) {
+    eepromWrite = value;
+ 1bc:	80 93 63 00 	sts	0x0063, r24	; 0x800063 <eepromWrite>
+}
+ 1c0:	08 95       	ret
+
+000001c2 <storeStatusToEEPROM>:
+
+bool storeStatusToEEPROM(void) {
+ 1c2:	0f 93       	push	r16
+ 1c4:	1f 93       	push	r17
+ 1c6:	cf 93       	push	r28
+ 1c8:	df 93       	push	r29
+    if(eepromDelay-- <= 0) {
+ 1ca:	80 91 64 00 	lds	r24, 0x0064	; 0x800064 <eepromDelay>
+ 1ce:	90 91 65 00 	lds	r25, 0x0065	; 0x800065 <eepromDelay+0x1>
+ 1d2:	18 16       	cp	r1, r24
+ 1d4:	19 06       	cpc	r1, r25
+ 1d6:	64 f4       	brge	.+24     	; 0x1f0 <storeStatusToEEPROM+0x2e>
+ 1d8:	01 97       	sbiw	r24, 0x01	; 1
+ 1da:	90 93 65 00 	sts	0x0065, r25	; 0x800065 <eepromDelay+0x1>
+ 1de:	80 93 64 00 	sts	0x0064, r24	; 0x800064 <eepromDelay>
+            }
+            eepromWrite = false;
+        }
+        return true;
+    }
+    return false;
+ 1e2:	c0 e0       	ldi	r28, 0x00	; 0
+}
+ 1e4:	8c 2f       	mov	r24, r28
+ 1e6:	df 91       	pop	r29
+ 1e8:	cf 91       	pop	r28
+ 1ea:	1f 91       	pop	r17
+ 1ec:	0f 91       	pop	r16
+ 1ee:	08 95       	ret
+        eepromDelay = WRITE_EEPROM_DELAY;
+ 1f0:	84 e6       	ldi	r24, 0x64	; 100
+ 1f2:	90 e0       	ldi	r25, 0x00	; 0
+ 1f4:	90 93 65 00 	sts	0x0065, r25	; 0x800065 <eepromDelay+0x1>
+ 1f8:	80 93 64 00 	sts	0x0064, r24	; 0x800064 <eepromDelay>
+        if(eepromWrite) {
+ 1fc:	c0 91 63 00 	lds	r28, 0x0063	; 0x800063 <eepromWrite>
+ 200:	cc 23       	and	r28, r28
+ 202:	b9 f0       	breq	.+46     	; 0x232 <storeStatusToEEPROM+0x70>
+ 204:	07 e7       	ldi	r16, 0x77	; 119
+ 206:	10 e0       	ldi	r17, 0x00	; 0
+ 208:	d0 2f       	mov	r29, r16
+ 20a:	d0 95       	com	r29
+                EEPROMwrite(a, MEM[a]);
+ 20c:	f8 01       	movw	r30, r16
+ 20e:	61 91       	ld	r22, Z+
+ 210:	8f 01       	movw	r16, r30
+ 212:	8d 2f       	mov	r24, r29
+ 214:	8e 0f       	add	r24, r30
+ 216:	0e 94 99 00 	call	0x132	; 0x132 <EEPROMwrite>
+            for(int a = 0; a < EEPROM_SIZE; a++) {
+ 21a:	f0 e0       	ldi	r31, 0x00	; 0
+ 21c:	0b 37       	cpi	r16, 0x7B	; 123
+ 21e:	1f 07       	cpc	r17, r31
+ 220:	a9 f7       	brne	.-22     	; 0x20c <storeStatusToEEPROM+0x4a>
+            eepromWrite = false;
+ 222:	10 92 63 00 	sts	0x0063, r1	; 0x800063 <eepromWrite>
+}
+ 226:	8c 2f       	mov	r24, r28
+ 228:	df 91       	pop	r29
+ 22a:	cf 91       	pop	r28
+ 22c:	1f 91       	pop	r17
+ 22e:	0f 91       	pop	r16
+ 230:	08 95       	ret
+        return true;
+ 232:	c1 e0       	ldi	r28, 0x01	; 1
+}
+ 234:	8c 2f       	mov	r24, r28
+ 236:	df 91       	pop	r29
+ 238:	cf 91       	pop	r28
+ 23a:	1f 91       	pop	r17
+ 23c:	0f 91       	pop	r16
+ 23e:	08 95       	ret
+
+00000240 <restoreStatusFromEEPROM>:
+
+void restoreStatusFromEEPROM(void) {
+ 240:	0f 93       	push	r16
+ 242:	1f 93       	push	r17
+ 244:	cf 93       	push	r28
+    for(int a = 0; a < EEPROM_SIZE; a++) {
+ 246:	07 e7       	ldi	r16, 0x77	; 119
+ 248:	10 e0       	ldi	r17, 0x00	; 0
+void restoreStatusFromEEPROM(void) {
+ 24a:	c0 e0       	ldi	r28, 0x00	; 0
+        MEM[a] = EEPROMread(a);
+ 24c:	8c 2f       	mov	r24, r28
+ 24e:	0e 94 bf 00 	call	0x17e	; 0x17e <EEPROMread>
+ 252:	f8 01       	movw	r30, r16
+ 254:	81 93       	st	Z+, r24
+ 256:	8f 01       	movw	r16, r30
+    for(int a = 0; a < EEPROM_SIZE; a++) {
+ 258:	cf 5f       	subi	r28, 0xFF	; 255
+ 25a:	c4 30       	cpi	r28, 0x04	; 4
+ 25c:	b9 f7       	brne	.-18     	; 0x24c <restoreStatusFromEEPROM+0xc>
+    }
+}
+ 25e:	cf 91       	pop	r28
+ 260:	1f 91       	pop	r17
+ 262:	0f 91       	pop	r16
+ 264:	08 95       	ret
+
+00000266 <TWI_Init>:
+//
+
+#include "twi_i2c.h"
+
+void TWI_Init(void) {
+    TWSR &= (~((1<<TWPS1)|(1<<TWPS0)));        // Preskaler = 1  ->> TWPS1=0 TWPS0=0
+ 266:	81 b1       	in	r24, 0x01	; 1
+ 268:	8c 7f       	andi	r24, 0xFC	; 252
+ 26a:	81 b9       	out	0x01, r24	; 1
+    TWBR = (((F_CPU / 100000) - 16) / 2);      // ((Fclk/Ftwi)-16)/2
+ 26c:	88 e4       	ldi	r24, 0x48	; 72
+ 26e:	80 b9       	out	0x00, r24	; 0
+}
+ 270:	08 95       	ret
+
+00000272 <TWI_Start>:
+
+void TWI_Start(void) {
+    TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWSTA);
+ 272:	84 ea       	ldi	r24, 0xA4	; 164
+ 274:	86 bf       	out	0x36, r24	; 54
+    while (!(TWCR & (1<<TWINT)));
+ 276:	06 b6       	in	r0, 0x36	; 54
+ 278:	07 fe       	sbrs	r0, 7
+ 27a:	fd cf       	rjmp	.-6      	; 0x276 <TWI_Start+0x4>
+}
+ 27c:	08 95       	ret
+
+0000027e <TWI_Stop>:
+
+void TWI_Stop(void) {
+    TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWSTO);
+ 27e:	84 e9       	ldi	r24, 0x94	; 148
+ 280:	86 bf       	out	0x36, r24	; 54
+    while ((TWCR & (1<<TWSTO)));
+ 282:	06 b6       	in	r0, 0x36	; 54
+ 284:	04 fc       	sbrc	r0, 4
+ 286:	fd cf       	rjmp	.-6      	; 0x282 <TWI_Stop+0x4>
+}
+ 288:	08 95       	ret
+
+0000028a <TWI_Read>:
+
+unsigned char TWI_Read(unsigned char ack) {
+    TWCR = (1<<TWINT) | (1<<TWEN) | (((ack ? 1 : 0)<<TWEA));
+ 28a:	81 11       	cpse	r24, r1
+ 28c:	07 c0       	rjmp	.+14     	; 0x29c <TWI_Read+0x12>
+ 28e:	84 e8       	ldi	r24, 0x84	; 132
+ 290:	86 bf       	out	0x36, r24	; 54
+    while (!(TWCR & (1<<TWINT)));
+ 292:	06 b6       	in	r0, 0x36	; 54
+ 294:	07 fe       	sbrs	r0, 7
+ 296:	fd cf       	rjmp	.-6      	; 0x292 <TWI_Read+0x8>
+    return TWDR;
+ 298:	83 b1       	in	r24, 0x03	; 3
+}
+ 29a:	08 95       	ret
+    TWCR = (1<<TWINT) | (1<<TWEN) | (((ack ? 1 : 0)<<TWEA));
+ 29c:	84 ec       	ldi	r24, 0xC4	; 196
+ 29e:	f8 cf       	rjmp	.-16     	; 0x290 <TWI_Read+0x6>
+
+000002a0 <TWI_Write>:
+
+void TWI_Write(unsigned char byte) {
+    TWDR = byte;
+ 2a0:	83 b9       	out	0x03, r24	; 3
+    TWCR = (1<<TWINT) | (1<<TWEN);
+ 2a2:	84 e8       	ldi	r24, 0x84	; 132
+ 2a4:	86 bf       	out	0x36, r24	; 54
+    while (!(TWCR & (1<<TWINT)));
+ 2a6:	06 b6       	in	r0, 0x36	; 54
+ 2a8:	07 fe       	sbrs	r0, 7
+ 2aa:	fd cf       	rjmp	.-6      	; 0x2a6 <TWI_Write+0x6>
+}
+ 2ac:	08 95       	ret
+
+000002ae <UART_Init>:
+
+#include "UART.h"
+
+void UART_Init(void) {
+    int myubrr = MYUBRR;
+    UBRRH = (unsigned char)(myubrr>>8);    // Ustalenie prędkości transmisji
+ 2ae:	81 e0       	ldi	r24, 0x01	; 1
+ 2b0:	80 bd       	out	0x20, r24	; 32
+    UBRRL = (unsigned char)myubrr;
+ 2b2:	8f e9       	ldi	r24, 0x9F	; 159
+ 2b4:	89 b9       	out	0x09, r24	; 9
+
+    UCSRB = (1<<RXEN)|(1<<TXEN)|(1<<RXCIE);     // Włączenie nadajnika, odbiornika,
+ 2b6:	88 e9       	ldi	r24, 0x98	; 152
+ 2b8:	8a b9       	out	0x0a, r24	; 10
+                                                   // odblokowanie przerwania od odbioru
+    // Format ramki: 8 bitów danych, 1 bit stopu, włączony tryb nieparzystości
+    UCSRC = (1<<URSEL)|(3<<UCSZ0)|(1<<UPM1);
+ 2ba:	86 ea       	ldi	r24, 0xA6	; 166
+ 2bc:	80 bd       	out	0x20, r24	; 32
+}
+ 2be:	08 95       	ret
+
+000002c0 <UART_Receive>:
+
+unsigned char UART_Receive(void) {
+    while ( !(UCSRA & (1<<RXC)) );    // Wait for data to be received //
+ 2c0:	5f 9b       	sbis	0x0b, 7	; 11
+ 2c2:	fe cf       	rjmp	.-4      	; 0x2c0 <UART_Receive>
+    return UDR;                        // Get and return received data from buffer //
+ 2c4:	8c b1       	in	r24, 0x0c	; 12
+}                                    // (zmienna data przyjmuje wartosc UDR)
+ 2c6:	08 95       	ret
+
+000002c8 <UART_Sent>:
+
+void UART_Sent(unsigned char data) {
+    while ( !( UCSRA & (1<<UDRE)) );    // Wait for empty transmit buffer //
+ 2c8:	5d 9b       	sbis	0x0b, 5	; 11
+ 2ca:	fe cf       	rjmp	.-4      	; 0x2c8 <UART_Sent>
+    UDR = data;                            // Put data into buffer, sends the data //
+ 2cc:	8c b9       	out	0x0c, r24	; 12
+}
+ 2ce:	08 95       	ret
+
+000002d0 <delay_ms>:
+//  Created by Marcin Kielesiński on 07/12/2019.
+//
+
+#include "utils.h"
+
+void delay_ms(int ms) {
+ 2d0:	9c 01       	movw	r18, r24
+    while (0 < ms) {
+ 2d2:	18 16       	cp	r1, r24
+ 2d4:	19 06       	cpc	r1, r25
+ 2d6:	4c f4       	brge	.+18     	; 0x2ea <delay_ms+0x1a>
+ 2d8:	8f e9       	ldi	r24, 0x9F	; 159
+ 2da:	9f e0       	ldi	r25, 0x0F	; 15
+ 2dc:	01 97       	sbiw	r24, 0x01	; 1
+ 2de:	f1 f7       	brne	.-4      	; 0x2dc <delay_ms+0xc>
+ 2e0:	00 c0       	rjmp	.+0      	; 0x2e2 <delay_ms+0x12>
+ 2e2:	00 00       	nop
+        _delay_ms(1);
+        --ms;
+ 2e4:	21 50       	subi	r18, 0x01	; 1
+ 2e6:	31 09       	sbc	r19, r1
+    while (0 < ms) {
+ 2e8:	b9 f7       	brne	.-18     	; 0x2d8 <delay_ms+0x8>
+    }
+}
+ 2ea:	08 95       	ret
+
+000002ec <binatoi>:
+
+int binatoi(char *s) {
+ 2ec:	fc 01       	movw	r30, r24
+    int i,l=0,w=1;
+    
+    for(i=0; i < strlen(s); i++)
+ 2ee:	dc 01       	movw	r26, r24
+ 2f0:	0d 90       	ld	r0, X+
+ 2f2:	00 20       	and	r0, r0
+ 2f4:	e9 f7       	brne	.-6      	; 0x2f0 <binatoi+0x4>
+ 2f6:	ad 01       	movw	r20, r26
+ 2f8:	41 50       	subi	r20, 0x01	; 1
+ 2fa:	51 09       	sbc	r21, r1
+    int i,l=0,w=1;
+ 2fc:	21 e0       	ldi	r18, 0x01	; 1
+ 2fe:	30 e0       	ldi	r19, 0x00	; 0
+ 300:	70 e0       	ldi	r23, 0x00	; 0
+ 302:	60 e0       	ldi	r22, 0x00	; 0
+    for(i=0; i < strlen(s); i++)
+ 304:	e4 17       	cp	r30, r20
+ 306:	f5 07       	cpc	r31, r21
+ 308:	51 f0       	breq	.+20     	; 0x31e <binatoi+0x32>
+    {
+        if (s [i]=='1')
+ 30a:	91 91       	ld	r25, Z+
+ 30c:	91 33       	cpi	r25, 0x31	; 49
+ 30e:	49 f0       	breq	.+18     	; 0x322 <binatoi+0x36>
+        {
+            l+=w;
+            w*=2;
+        }
+        if(s [i]=='0')
+ 310:	90 33       	cpi	r25, 0x30	; 48
+ 312:	c1 f7       	brne	.-16     	; 0x304 <binatoi+0x18>
+        {
+            w*=2;
+ 314:	22 0f       	add	r18, r18
+ 316:	33 1f       	adc	r19, r19
+    for(i=0; i < strlen(s); i++)
+ 318:	e4 17       	cp	r30, r20
+ 31a:	f5 07       	cpc	r31, r21
+ 31c:	b1 f7       	brne	.-20     	; 0x30a <binatoi+0x1e>
+        }
+    }
+    return(l);
+}
+ 31e:	cb 01       	movw	r24, r22
+ 320:	08 95       	ret
+            l+=w;
+ 322:	62 0f       	add	r22, r18
+ 324:	73 1f       	adc	r23, r19
+            w*=2;
+ 326:	22 0f       	add	r18, r18
+ 328:	33 1f       	adc	r19, r19
+        if(s [i]=='0')
+ 32a:	ec cf       	rjmp	.-40     	; 0x304 <binatoi+0x18>
+
+0000032c <decToBinary>:
+
+static char binaryNum[16 + 1];
+char *decToBinary(int n) {
+ 32c:	9c 01       	movw	r18, r24
+    // array to store binary number
+    int a = 0, c, k;
+    
+    memset(binaryNum, 0, sizeof(binaryNum));
+ 32e:	e6 e6       	ldi	r30, 0x66	; 102
+ 330:	f0 e0       	ldi	r31, 0x00	; 0
+ 332:	81 e1       	ldi	r24, 0x11	; 17
+ 334:	df 01       	movw	r26, r30
+ 336:	1d 92       	st	X+, r1
+ 338:	8a 95       	dec	r24
+ 33a:	e9 f7       	brne	.-6      	; 0x336 <decToBinary+0xa>
+    
+    for (c = 15; c >= 0; c--) {
+ 33c:	45 e7       	ldi	r20, 0x75	; 117
+ 33e:	50 e0       	ldi	r21, 0x00	; 0
+        k = n >> c;
+        
+        if (k & 1) {
+            binaryNum[a++] = '1';
+        } else {
+            binaryNum[a++] = '0';
+ 340:	70 e3       	ldi	r23, 0x30	; 48
+            binaryNum[a++] = '1';
+ 342:	61 e3       	ldi	r22, 0x31	; 49
+ 344:	06 c0       	rjmp	.+12     	; 0x352 <decToBinary+0x26>
+ 346:	60 83       	st	Z, r22
+    for (c = 15; c >= 0; c--) {
+ 348:	31 96       	adiw	r30, 0x01	; 1
+ 34a:	b0 e0       	ldi	r27, 0x00	; 0
+ 34c:	e6 37       	cpi	r30, 0x76	; 118
+ 34e:	fb 07       	cpc	r31, r27
+ 350:	89 f0       	breq	.+34     	; 0x374 <decToBinary+0x48>
+        k = n >> c;
+ 352:	ca 01       	movw	r24, r20
+ 354:	8e 1b       	sub	r24, r30
+ 356:	9f 0b       	sbc	r25, r31
+ 358:	d9 01       	movw	r26, r18
+ 35a:	02 c0       	rjmp	.+4      	; 0x360 <decToBinary+0x34>
+ 35c:	b5 95       	asr	r27
+ 35e:	a7 95       	ror	r26
+ 360:	8a 95       	dec	r24
+ 362:	e2 f7       	brpl	.-8      	; 0x35c <decToBinary+0x30>
+        if (k & 1) {
+ 364:	a0 fd       	sbrc	r26, 0
+ 366:	ef cf       	rjmp	.-34     	; 0x346 <decToBinary+0x1a>
+            binaryNum[a++] = '0';
+ 368:	70 83       	st	Z, r23
+    for (c = 15; c >= 0; c--) {
+ 36a:	31 96       	adiw	r30, 0x01	; 1
+ 36c:	b0 e0       	ldi	r27, 0x00	; 0
+ 36e:	e6 37       	cpi	r30, 0x76	; 118
+ 370:	fb 07       	cpc	r31, r27
+ 372:	79 f7       	brne	.-34     	; 0x352 <decToBinary+0x26>
+        }
+    }
+    return binaryNum;
+}
+ 374:	86 e6       	ldi	r24, 0x66	; 102
+ 376:	90 e0       	ldi	r25, 0x00	; 0
+ 378:	08 95       	ret
+
+0000037a <BinToBCD>:
+
+unsigned char BinToBCD(unsigned char bin) {
+ 37a:	28 2f       	mov	r18, r24
+    return ((((bin) / 10) << 4) + ((bin) % 10));
+ 37c:	9d ec       	ldi	r25, 0xCD	; 205
+ 37e:	89 9f       	mul	r24, r25
+ 380:	91 2d       	mov	r25, r1
+ 382:	11 24       	eor	r1, r1
+ 384:	96 95       	lsr	r25
+ 386:	96 95       	lsr	r25
+ 388:	96 95       	lsr	r25
+ 38a:	89 2f       	mov	r24, r25
+ 38c:	82 95       	swap	r24
+ 38e:	80 7f       	andi	r24, 0xF0	; 240
+ 390:	39 2f       	mov	r19, r25
+ 392:	33 0f       	add	r19, r19
+ 394:	33 0f       	add	r19, r19
+ 396:	93 0f       	add	r25, r19
+ 398:	99 0f       	add	r25, r25
+ 39a:	29 1b       	sub	r18, r25
+}
+ 39c:	82 0f       	add	r24, r18
+ 39e:	08 95       	ret
+
+000003a0 <reverse>:
+
+
+unsigned char reverse(unsigned char b) {
+   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+ 3a0:	82 95       	swap	r24
+   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+ 3a2:	90 e0       	ldi	r25, 0x00	; 0
+ 3a4:	9c 01       	movw	r18, r24
+ 3a6:	35 95       	asr	r19
+ 3a8:	27 95       	ror	r18
+ 3aa:	35 95       	asr	r19
+ 3ac:	27 95       	ror	r18
+ 3ae:	23 73       	andi	r18, 0x33	; 51
+ 3b0:	88 0f       	add	r24, r24
+ 3b2:	99 1f       	adc	r25, r25
+ 3b4:	88 0f       	add	r24, r24
+ 3b6:	99 1f       	adc	r25, r25
+ 3b8:	8c 7c       	andi	r24, 0xCC	; 204
+ 3ba:	28 2b       	or	r18, r24
+   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+ 3bc:	30 e0       	ldi	r19, 0x00	; 0
+ 3be:	c9 01       	movw	r24, r18
+ 3c0:	95 95       	asr	r25
+ 3c2:	87 95       	ror	r24
+ 3c4:	85 75       	andi	r24, 0x55	; 85
+ 3c6:	22 0f       	add	r18, r18
+ 3c8:	33 1f       	adc	r19, r19
+ 3ca:	2a 7a       	andi	r18, 0xAA	; 170
+   return b;
+}
+ 3cc:	82 2b       	or	r24, r18
+ 3ce:	08 95       	ret
+
+000003d0 <pcf8574writeByte>:
+//  Created by Marcin Kielesiński on 07/02/2020.
+//
+
+#include "pcf8574a.h"
+
+void pcf8574writeByte(unsigned char outputs, unsigned char value) {
+ 3d0:	cf 93       	push	r28
+ 3d2:	df 93       	push	r29
+ 3d4:	d8 2f       	mov	r29, r24
+ 3d6:	c6 2f       	mov	r28, r22
+    
+    TWI_Start();
+ 3d8:	0e 94 39 01 	call	0x272	; 0x272 <TWI_Start>
+    
+    switch(outputs) {
+ 3dc:	dd 23       	and	r29, r29
+ 3de:	39 f0       	breq	.+14     	; 0x3ee <pcf8574writeByte+0x1e>
+        case PORT_OUTPUTS:
+            TWI_Write(PCF8574_WRITE_ADDR_A);
+            break;
+    }
+    TWI_Write(value);
+ 3e0:	8c 2f       	mov	r24, r28
+ 3e2:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+    TWI_Stop();
+}
+ 3e6:	df 91       	pop	r29
+ 3e8:	cf 91       	pop	r28
+    TWI_Stop();
+ 3ea:	0c 94 3f 01 	jmp	0x27e	; 0x27e <TWI_Stop>
+            TWI_Write(PCF8574_WRITE_ADDR_A);
+ 3ee:	80 e7       	ldi	r24, 0x70	; 112
+ 3f0:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+    TWI_Write(value);
+ 3f4:	8c 2f       	mov	r24, r28
+ 3f6:	0e 94 50 01 	call	0x2a0	; 0x2a0 <TWI_Write>
+}
+ 3fa:	df 91       	pop	r29
+ 3fc:	cf 91       	pop	r28
+    TWI_Stop();
+ 3fe:	0c 94 3f 01 	jmp	0x27e	; 0x27e <TWI_Stop>
+
+00000402 <clearPorts>:
+
+void clearPorts(void) {
+    pcf8574writeByte(PORT_OUTPUTS, 0);
+ 402:	60 e0       	ldi	r22, 0x00	; 0
+ 404:	80 e0       	ldi	r24, 0x00	; 0
+ 406:	0c 94 e8 01 	jmp	0x3d0	; 0x3d0 <pcf8574writeByte>
+
+0000040a <PWM_Init>:
+
+#include "pwm.h"
+
+void PWM_Init(bool channel0, bool channel1) {
+    
+    if(channel0) {
+ 40a:	88 23       	and	r24, r24
+ 40c:	29 f0       	breq	.+10     	; 0x418 <PWM_Init+0xe>
+        bitSet(DDRB, PB3);
+ 40e:	bb 9a       	sbi	0x17, 3	; 23
+        TCCR0 |= (1<<WGM00)|(1<<COM00)|(1<<COM01)|(1<<CS01);
+ 410:	83 b7       	in	r24, 0x33	; 51
+ 412:	82 67       	ori	r24, 0x72	; 114
+ 414:	83 bf       	out	0x33, r24	; 51
+        OCR0 = 0;
+ 416:	1c be       	out	0x3c, r1	; 60
+    }
+    if(channel1) {
+ 418:	66 23       	and	r22, r22
+ 41a:	21 f0       	breq	.+8      	; 0x424 <PWM_Init+0x1a>
+        bitSet(DDRD, PB7);
+ 41c:	8f 9a       	sbi	0x11, 7	; 17
+        TCCR2 = (1<<WGM21)|(1<<WGM20)|(3<<COM20)|(5<<CS20);
+ 41e:	8d e7       	ldi	r24, 0x7D	; 125
+ 420:	85 bd       	out	0x25, r24	; 37
+        OCR2 = 0;
+ 422:	13 bc       	out	0x23, r1	; 35
+    }
+
+}
+ 424:	08 95       	ret
+
+00000426 <PWM_Increase>:
+
+void PWM_Increase(bool channel0, bool channel1, int val) {
+    if(channel0 && OCR0 < 255) {
+ 426:	88 23       	and	r24, r24
+ 428:	31 f0       	breq	.+12     	; 0x436 <PWM_Increase+0x10>
+ 42a:	8c b7       	in	r24, 0x3c	; 60
+ 42c:	8f 3f       	cpi	r24, 0xFF	; 255
+ 42e:	19 f0       	breq	.+6      	; 0x436 <PWM_Increase+0x10>
+        OCR0++;
+ 430:	8c b7       	in	r24, 0x3c	; 60
+ 432:	8f 5f       	subi	r24, 0xFF	; 255
+ 434:	8c bf       	out	0x3c, r24	; 60
+    }
+    if(channel1 && OCR2 < 255) {
+ 436:	66 23       	and	r22, r22
+ 438:	31 f0       	breq	.+12     	; 0x446 <PWM_Increase+0x20>
+ 43a:	83 b5       	in	r24, 0x23	; 35
+ 43c:	8f 3f       	cpi	r24, 0xFF	; 255
+ 43e:	19 f0       	breq	.+6      	; 0x446 <PWM_Increase+0x20>
+        OCR2++;
+ 440:	83 b5       	in	r24, 0x23	; 35
+ 442:	8f 5f       	subi	r24, 0xFF	; 255
+ 444:	83 bd       	out	0x23, r24	; 35
+    }
+}
+ 446:	08 95       	ret
+
+00000448 <PWM_Decrease>:
+
+void PWM_Decrease(bool channel0, bool channel1, int val) {
+    if(channel0 && OCR0 > 0) {
+ 448:	88 23       	and	r24, r24
+ 44a:	19 f0       	breq	.+6      	; 0x452 <PWM_Decrease+0xa>
+ 44c:	8c b7       	in	r24, 0x3c	; 60
+ 44e:	81 11       	cpse	r24, r1
+ 450:	09 c0       	rjmp	.+18     	; 0x464 <PWM_Decrease+0x1c>
+        OCR0--;
+    }
+    if(channel1 && OCR2 > 0) {
+ 452:	66 23       	and	r22, r22
+ 454:	31 f0       	breq	.+12     	; 0x462 <PWM_Decrease+0x1a>
+ 456:	83 b5       	in	r24, 0x23	; 35
+ 458:	88 23       	and	r24, r24
+ 45a:	19 f0       	breq	.+6      	; 0x462 <PWM_Decrease+0x1a>
+        OCR2--;
+ 45c:	83 b5       	in	r24, 0x23	; 35
+ 45e:	81 50       	subi	r24, 0x01	; 1
+ 460:	83 bd       	out	0x23, r24	; 35
+    }
+}
+ 462:	08 95       	ret
+        OCR0--;
+ 464:	8c b7       	in	r24, 0x3c	; 60
+ 466:	81 50       	subi	r24, 0x01	; 1
+ 468:	8c bf       	out	0x3c, r24	; 60
+ 46a:	f3 cf       	rjmp	.-26     	; 0x452 <PWM_Decrease+0xa>
+
+0000046c <PWM_SetValue>:
+
+void PWM_SetValue(bool channel0, bool channel1, int value) {
+    if(channel0) {
+ 46c:	81 11       	cpse	r24, r1
+        OCR0 = value;
+ 46e:	4c bf       	out	0x3c, r20	; 60
+    }
+    if(channel1) {
+ 470:	61 11       	cpse	r22, r1
+        OCR2 = value;
+ 472:	43 bd       	out	0x23, r20	; 35
+    }
+}
+ 474:	08 95       	ret
+
+00000476 <main>:
+
+int main(void) {
+    
+    setup();
+ 476:	0e 94 3e 00 	call	0x7c	; 0x7c <setup>
+    
+    while(1) {
+
+
+
+        if(!storeStatusToEEPROM()) {
+ 47a:	0e 94 e1 00 	call	0x1c2	; 0x1c2 <storeStatusToEEPROM>
+ 47e:	81 11       	cpse	r24, r1
+ 480:	fc cf       	rjmp	.-8      	; 0x47a <main+0x4>
+ 482:	8f e5       	ldi	r24, 0x5F	; 95
+ 484:	9d e6       	ldi	r25, 0x6D	; 109
+ 486:	01 97       	sbiw	r24, 0x01	; 1
+ 488:	f1 f7       	brne	.-4      	; 0x486 <main+0x10>
+ 48a:	00 c0       	rjmp	.+0      	; 0x48c <main+0x16>
+ 48c:	00 00       	nop
+ 48e:	0e 94 e1 00 	call	0x1c2	; 0x1c2 <storeStatusToEEPROM>
+ 492:	81 11       	cpse	r24, r1
+ 494:	f2 cf       	rjmp	.-28     	; 0x47a <main+0x4>
+ 496:	f5 cf       	rjmp	.-22     	; 0x482 <main+0xc>
+
+00000498 <_exit>:
+ 498:	f8 94       	cli
+
+0000049a <__stop_program>:
+ 49a:	ff cf       	rjmp	.-2      	; 0x49a <__stop_program>
