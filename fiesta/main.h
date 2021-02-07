@@ -20,7 +20,7 @@
 #include "adc.h"
 #include "pwm.h"
 #include "pcf8574a.h"
-#include "SSD1306.h"
+#include "clib/u8g2.h"
 
 extern int rc5Code, switchCode;
 extern unsigned char lastLoudness;
