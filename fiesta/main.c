@@ -36,13 +36,14 @@ int main(void) {
     
     setup();
     
-    OLED_Init();  //initialize the OLED
-	OLED_Clear(); //clear the display (for good measure)
+    lcd_init(LCD_DISP_ON);    // init lcd and turn on
 
-
-
+    lcd_clrscr();
 
 	int p = 0;
+	int b = 0;
+	int c = 0;
+
 	char buf[128];
 
     while(1) {
@@ -50,9 +51,22 @@ int main(void) {
         }
 
         memset (buf, 0, sizeof(buf));
-        snprintf(buf, sizeof(buf) - 1, "HELLO WORLD %d", p++);
-    	OLED_SetCursor(0, 0);        //set the cursor position to (0, 0)
-    	OLED_Printf(buf); //Print out some text
+        snprintf(buf, sizeof(buf) - 1, "HELLO %d", p++);
+
+        lcd_gotoxy(0,0);          // set cursor to first column at line 3
+        lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
+
+        memset (buf, 0, sizeof(buf));
+        snprintf(buf, sizeof(buf) - 1, "Hello %d", b += 2);
+
+        lcd_gotoxy(0,1);          // set cursor to first column at line 3
+        lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
+
+        memset (buf, 0, sizeof(buf));
+        snprintf(buf, sizeof(buf) - 1, "AaBbCc %d", c += 3);
+
+        lcd_gotoxy(0,2);          // set cursor to first column at line 3
+        lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
 
     	wdt_reset();
 
