@@ -36,14 +36,28 @@ int main(void) {
     
     setup();
     
+    OLED_Init();  //initialize the OLED
+	OLED_Clear(); //clear the display (for good measure)
+
+
+
+
+	int p = 0;
+	char buf[128];
+
     while(1) {
-
-
-
         if(!storeStatusToEEPROM()) {
-            _delay_ms(MAIN_DELAY_TIME);
         }
+
+        memset (buf, 0, sizeof(buf));
+        snprintf(buf, sizeof(buf) - 1, "HELLO WORLD %d", p++);
+    	OLED_SetCursor(0, 0);        //set the cursor position to (0, 0)
+    	OLED_Printf(buf); //Print out some text
+
+    	wdt_reset();
+
+	_delay_ms(MAIN_DELAY_TIME);
     }
-    
+
     return 0;
 }
