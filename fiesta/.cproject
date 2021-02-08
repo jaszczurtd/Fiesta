@@ -37,7 +37,7 @@
 								<option id="de.innot.avreclipse.cppcompiler.option.optimize.1063933096" name="Optimization Level" superClass="de.innot.avreclipse.cppcompiler.option.optimize"/>
 							</tool>
 							<tool id="de.innot.avreclipse.tool.linker.winavr.app.debug.1661150603" name="AVR C Linker" superClass="de.innot.avreclipse.tool.linker.winavr.app.debug">
-								<option id="de.innot.avreclipse.linker.option.otherlinkargs.467271358" superClass="de.innot.avreclipse.linker.option.otherlinkargs" value="-Wl,-gc-sections" valueType="string"/>
+								<option id="de.innot.avreclipse.linker.option.otherlinkargs.467271358" name="Other Arguments" superClass="de.innot.avreclipse.linker.option.otherlinkargs" value="-Wl,-gc-sections" valueType="string"/>
 								<inputType id="de.innot.avreclipse.tool.linker.input.1057571708" name="OBJ Files" superClass="de.innot.avreclipse.tool.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
@@ -114,12 +114,6 @@
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="fiesta.de.innot.avreclipse.project.winavr.elf_2.1.0.1589942572" name="AVR Cross Target Application" projectType="de.innot.avreclipse.project.winavr.elf_2.1.0"/>
 	</storageModule>
-	<storageModule moduleId="scannerConfiguration">
-		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		<scannerConfigBuildInfo instanceId="de.innot.avreclipse.configuration.app.release.569071099;de.innot.avreclipse.configuration.app.release.569071099.;de.innot.avreclipse.tool.compiler.winavr.app.release.1361128334;de.innot.avreclipse.compiler.winavr.input.1747848664">
-			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="de.innot.avreclipse.core.AVRGCCManagedMakePerProjectProfileC"/>
-		</scannerConfigBuildInfo>
-	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
 		<configuration configurationName="Debug">
@@ -130,4 +124,13 @@
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="de.innot.avreclipse.configuration.app.debug.173340230;de.innot.avreclipse.configuration.app.debug.173340230.;de.innot.avreclipse.tool.compiler.winavr.app.debug.1583631161;de.innot.avreclipse.compiler.winavr.input.1036645986">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="de.innot.avreclipse.core.AVRGCCManagedMakePerProjectProfileC"/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="de.innot.avreclipse.configuration.app.release.569071099;de.innot.avreclipse.configuration.app.release.569071099.;de.innot.avreclipse.tool.compiler.winavr.app.release.1361128334;de.innot.avreclipse.compiler.winavr.input.1747848664">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="de.innot.avreclipse.core.AVRGCCManagedMakePerProjectProfileC"/>
+		</scannerConfigBuildInfo>
+	</storageModule>
 </cproject>

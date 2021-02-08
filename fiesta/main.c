@@ -56,21 +56,9 @@ int main(void) {
         lcd_gotoxy(0,0);          // set cursor to first column at line 3
         lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
 
-        memset (buf, 0, sizeof(buf));
-        snprintf(buf, sizeof(buf) - 1, "Hello %d", b += 2);
-
-        lcd_gotoxy(0,1);          // set cursor to first column at line 3
-        lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
-
-        memset (buf, 0, sizeof(buf));
-        snprintf(buf, sizeof(buf) - 1, "AaBbCc %d", c += 3);
-
-        lcd_gotoxy(0,2);          // set cursor to first column at line 3
-        lcd_puts(buf);  // put string from RAM to display (TEXTMODE) or buffer (GRAPHICMODE)
-
     	wdt_reset();
 
-	_delay_ms(MAIN_DELAY_TIME);
+	//_delay_ms(MAIN_DELAY_TIME);
     }
 
     return 0;
