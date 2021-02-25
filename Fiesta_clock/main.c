@@ -25,7 +25,13 @@ static void setup(void) {
     lcd_init(LCD_DISP_ON);    // init lcd and turn on
     lcd_clrscr();
 
+    lcd_charMode(NORMALSIZE);
+    lcd_gotoxy(8, 0);
+	lcd_puts("FORD");
+
     lcd_charMode(DOUBLESIZE);
+    lcd_gotoxy(4, 2);
+	lcd_puts("FIESTA");
 
     PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
 
