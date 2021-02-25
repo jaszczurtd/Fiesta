@@ -22,6 +22,8 @@
 #include "clockPart.h"
 #include "ds18b20.h"
 #include "tempPart.h"
+#include "adc.h"
+#include "voltPart.h"
 
 bool ignition(void);
 bool setButtonPressed(void);

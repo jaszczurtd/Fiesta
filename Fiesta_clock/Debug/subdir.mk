@@ -5,6 +5,7 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
 ../PCF8563.c \
+../adc.c \
 ../clockPart.c \
 ../ds18b20.c \
 ../font.c \
@@ -12,10 +13,12 @@ C_SRCS += \
 ../main.c \
 ../tempPart.c \
 ../twi_i2c.c \
-../utils.c 
+../utils.c \
+../voltPart.c 
 
 OBJS += \
 ./PCF8563.o \
+./adc.o \
 ./clockPart.o \
 ./ds18b20.o \
 ./font.o \
@@ -23,10 +26,12 @@ OBJS += \
 ./main.o \
 ./tempPart.o \
 ./twi_i2c.o \
-./utils.o 
+./utils.o \
+./voltPart.o 
 
 C_DEPS += \
 ./PCF8563.d \
+./adc.d \
 ./clockPart.d \
 ./ds18b20.d \
 ./font.d \
@@ -34,7 +39,8 @@ C_DEPS += \
 ./main.d \
 ./tempPart.d \
 ./twi_i2c.d \
-./utils.d 
+./utils.d \
+./voltPart.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes

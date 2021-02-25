@@ -62,3 +62,20 @@ unsigned char reverse(unsigned char b) {
    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
    return b;
 }
+
+void doubleToDec(double val, int *hi, int *lo) {
+	int t1 = (int)val;
+	if(t1 > -128) {
+		if(hi != NULL) {
+			*hi = t1;
+		}
+		int t2 = (int) (((double)val - t1) * 10);
+		if(lo != NULL) {
+			if(t2 >= 0) {
+				*lo = t2;
+			} else {
+				*lo = 0;
+			}
+		}
+	}
+}
