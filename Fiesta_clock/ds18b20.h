@@ -38,7 +38,7 @@ References:
 
 //functions
 void ds18b20_setPin(unsigned char pin);
-void ds18b20_gettemp(int *a, unsigned char *b, double *native);
+void ds18b20_gettemp(int *a, int *b, double *native);
 
 #endif
 

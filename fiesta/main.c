@@ -39,6 +39,7 @@ int main(void) {
     lcd_init(LCD_DISP_ON);    // init lcd and turn on
 
     lcd_clrscr();
+    lcd_charMode(DOUBLESIZE);
 
 	int p = 0;
 	int b = 0;

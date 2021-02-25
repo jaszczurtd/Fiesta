@@ -8,9 +8,9 @@
 #include "tempPart.h"
 
 static int temp_in_hi = 0;
-static unsigned char temp_in_lo = 0;
+static int temp_in_lo = 0;
 static int temp_out_hi = 0;
-static unsigned char temp_out_lo = 0;
+static int temp_out_lo = 0;
 static double temp_out = 0.0;
 static int temp_in_delay = 0;
 static int temp_out_delay = 0;

@@ -149,7 +149,7 @@ uint8_t ds18b20_readbyte(void){
 /*
  * get temperature
  */
-void ds18b20_gettemp(int *a, unsigned char *b, double *native) {
+void ds18b20_gettemp(int *a, int *b, double *native) {
     uint8_t temperature_l;
     uint8_t temperature_h;
     char error = 0;
@@ -213,20 +213,7 @@ void ds18b20_gettemp(int *a, unsigned char *b, double *native) {
     	*native = retd;
     }
 
-    int t1 = (int)retd;
-    if(t1 > -128) {
-    	if(a != NULL) {
-    		*a = t1;
-    	}
-        int t2 = (int) (((double)retd - t1) * 10);
-        if(b != NULL) {
-			if(t2 >= 0) {
-				*b = t2;
-			} else {
-				*b = 0;
-			}
-        }
-    }
+    doubleToDec(retd, a, b);
 }
 
 

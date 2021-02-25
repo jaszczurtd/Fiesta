@@ -188,5 +188,6 @@ int binatoi(char *s);
 char *decToBinary(int n);
 unsigned char BinToBCD(unsigned char bin);
 unsigned char reverse(unsigned char b);
+void doubleToDec(double val, int *hi, int *lo);
 
 #endif /* utils_h */

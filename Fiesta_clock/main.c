@@ -4,6 +4,7 @@
 char s[BUF_L + 1];
 
 static unsigned char mode = MODE_CLOCK;
+static bool lastIgnition = false;
 
 static void setup(void) {
     wdt_enable( WDTO_2S );
@@ -12,7 +13,7 @@ static void setup(void) {
 	sbi(DDRC, PC1); //orange led
 	sbi(DDRC, PC2);	//blue led
 
-	//ADC7 = voltomierz
+	//ADC6 = voltomierz
 
 	cbi(DDRD, PD0); //increase hour
 	cbi(DDRD, PD1); //increase minute
@@ -23,6 +24,8 @@ static void setup(void) {
     TWI_Init();
     lcd_init(LCD_DISP_ON);    // init lcd and turn on
     lcd_clrscr();
+
+    lcd_charMode(DOUBLESIZE);
 
     PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
 
@@ -35,12 +38,16 @@ int main(void) {
 
 	setup();
 
-    lcd_charMode(DOUBLESIZE);
-
     while(1) {
     	wdt_reset();
 
-    	if(!ignition()) {
+    	bool ig = ignition();
+    	if(ig != lastIgnition) {
+    		lastIgnition = ig;
+    		lcd_clrscr();
+    	}
+
+    	if(!ig) {
         	clockMainFunction();
     	} else {
 
@@ -52,6 +59,7 @@ int main(void) {
         		temp_read_display();
     			break;
     		case MODE_VOLT:
+    			voltMainFunction();
     			break;
     		}
 
