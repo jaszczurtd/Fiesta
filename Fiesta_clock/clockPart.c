@@ -7,8 +7,12 @@
 
 #include "clockPart.h"
 
+#define SET_DELAY 80
+
 #define CLOCK_OPERATION_DELAY 120
 #define ITEM_VISIBILITY_CYCLES_COUNTER 10
+
+#define CLOCK_SET_MODE_DELAY_LOPS 80
 
 static PCF_DateTime pcfDateTime;
 static bool clockSetMode = false;
@@ -235,41 +239,111 @@ void setClockSetMode(bool enabled) {
     }
 }
 
+bool isClockSetMode(void) {
+	return clockSetMode;
+}
+
 void getTime(void) {
     PCF_GetDateTime(&pcfDateTime);
+}
+
+static int clockSetModeDelayLoops = 0;
+static bool clockSetModeOrdered = false;
+static int hourDelay = 0, minuteDelay = 0;
+
+void manageSetMode(void) {
+	if(setButton()) {
+
+		if(CLOCK_SET_MODE_DELAY_LOPS < clockSetModeDelayLoops++) {
+			clockSetModeOrdered = true;
+			clockSetModeDelayLoops = 0;
+			activeItem = 0;
+
+			lcd_clrscr();
+			lcd_gotoxy(6, 2);
+			lcd_charMode(DOUBLESIZE);
+			lcd_puts("PUSC");
+
+			hourDelay = minuteDelay = 0;
+
+			if(setButtonPressed()) { }
+		}
+	} else {
+		clockSetModeDelayLoops = 0;
+		clockSetModeOrdered = false;
+	}
 }
 
 void clockMainFunction(void) {
 
     if(!clockSetMode) {
-    
+
     	getTime();
-        
-        if(!ignition() && setButtonPressed()) {
+
+    	manageSetMode();
+
+        if(clockSetModeOrdered) {
+        	clockSetModeOrdered = false;
         	pause();
             setClockSetMode(true);
             setItemVisible();
             return;
         }
         
+    	if(ignition()) {
+    		if(setHour()) {
+
+    			while(setHour()) {
+    				if(hourDelay > 5) {
+    					break;
+    				}
+    				hourDelay++;
+    				_delay_ms(SET_DELAY);
+    			}
+
+    			activeItem = D_HOUR;
+    			setItem(true);
+    			PCF_SetDateTime(&pcfDateTime);
+    			_delay_ms(SET_DELAY);
+    		} else {
+    			hourDelay = 0;
+    		}
+
+    		if(setMinute()) {
+
+    			while(setMinute()) {
+    				if(minuteDelay > 5) {
+    					break;
+    				}
+    				minuteDelay++;
+    				_delay_ms(SET_DELAY);
+    			}
+
+    			activeItem = D_MINUTE;
+    			setItem(true);
+    			PCF_SetDateTime(&pcfDateTime);
+    			_delay_ms(SET_DELAY);
+    		} else {
+    			minuteDelay = 0;
+    		}
+    	}
+
     } else {
-    	 if(!ignition()) {
 
-    		 if(setButtonPressed()) {
-				pause();
+		 if(setButtonPressed()) {
+			pause();
 
-                 if(++activeItem > CLOCK_SETTABLE_ITEMS - 1) {
-                     setClockSetMode(false);
+			 if(++activeItem > CLOCK_SETTABLE_ITEMS - 1) {
+				 setClockSetMode(false);
 
-                     PCF_SetDateTime(&pcfDateTime);
-                     return;
-                 }
-    		 } else if(setHour()) {
-                 setItem(true);
-    		 } else if(setMinute()) {
-                 setItem(false);
-    		 }
-    	 }
+				 PCF_SetDateTime(&pcfDateTime);
+				 return;
+			 }
+		 } else if(setHour()) {
+			 setItem(true);
+		 } else if(setMinute()) {
+			 setItem(false);
+		 }
         
         if(itemVisibilityCounter++ > ITEM_VISIBILITY_CYCLES_COUNTER) {
             itemVisibilityCounter = 0;

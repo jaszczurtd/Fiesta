@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include "main.h"
 
-#define TEMP_DELAY_LOOPS 25
+#define TEMP_DELAY_LOOPS 20
 
 extern char s[];
 

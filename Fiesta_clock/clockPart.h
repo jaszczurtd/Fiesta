@@ -17,6 +17,9 @@ extern bool powerIsOn;
 extern char s[];
 
 void setClockSetMode(bool enabled);
+bool isClockSetMode(void);
+void manageSetMode(void);
+
 void clockMainFunction(void);
 
 void getTime(void);
