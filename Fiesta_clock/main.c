@@ -1,10 +1,19 @@
 
 #include "main.h"
 
+#define IDLE_SECONDS 60
+
+#define IDLE_LED_ON_CYCLES 400
+#define IDLE_LED_OFF_CYCLES 2800
+
 char s[BUF_L + 1];
 
 static unsigned char mode = MODE_CLOCK;
 static bool lastIgnition = false;
+static bool idleTimer = false;
+static bool wasAnyButton = false;
+static bool blinkLED = false;
+static int idleLEDCycles = 0;
 
 static void setup(void) {
     wdt_enable( WDTO_2S );
@@ -37,6 +46,11 @@ static void setup(void) {
 
     temp_initial_read();
 
+    idleTimer = wasAnyButton = blinkLED = false;
+    idleLEDCycles = 0;
+
+    lcd_clrscr();
+
     sei();
 }
 
@@ -51,11 +65,48 @@ int main(void) {
     	if(ig != lastIgnition) {
     		lastIgnition = ig;
     		lcd_clrscr();
+
+    		blinkLED = false;
+			blueLED(false);
+    	}
+
+		if(blinkLED) {
+
+			if(idleLEDCycles++ > (IDLE_LED_OFF_CYCLES + IDLE_LED_ON_CYCLES)) {
+				idleLEDCycles = 0;
+			}
+
+			blueLED(idleLEDCycles < IDLE_LED_ON_CYCLES);
+		}
+
+    	if(idleTimer) {
+    		if(checkIfTimerReached()) {
+    			lcd_sleep(true);
+    			blinkLED = true;
+    		}
+
+    	} else {
+			lcd_sleep(false);
     	}
 
     	if(!ig) {
-        	clockMainFunction();
+    		if(!idleTimer) {
+    			idleTimer = true;
+    			startTimerForSeconds(IDLE_SECONDS);
+    		}
+
+    		if(idleTimer && anyButton()) {
+    			wasAnyButton = true;
+    			idleTimer = false;
+    			blinkLED = false;
+				blueLED(false);
+    		}
+
+    		if(!blinkLED) {
+    			clockMainFunction();
+    		}
     	} else {
+    		idleTimer = false;
 
     		switch(mode) {
     		case MODE_CLOCK:
@@ -95,6 +146,10 @@ bool ignition(void) {
 	return bit_is_clear(PINC, PC3);
 }
 bool setButtonPressed(void) {
+	if(wasAnyButton) {
+		wasAnyButton = false;
+		return false;
+	}
 	bool state = false;
 
 	while(setButton()) {
