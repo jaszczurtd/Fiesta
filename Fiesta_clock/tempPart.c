@@ -38,7 +38,9 @@ void temp_initial_read(void) {
 	ds18b20_setPin(PD3);
 	ds18b20_gettemp(&temp_out_hi, &temp_out_lo, &temp_out);
 
-	check_temp_for_leds();
+	if(ignition()) {
+		check_temp_for_leds();
+	}
 	init_delay();
 }
 
