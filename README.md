@@ -13,3 +13,6 @@ copyright (c) Davide Gironi
 PCF8563.c
 Created: 2014-11-18 20:00:32
 Author: Jakub Pachciarek
+
+ST7735 for AVR:
+https://github.com/LongHairedHacker/avr-st7735
