@@ -16,11 +16,15 @@
 #include "utils.h"
 #include "twi_i2c.h"
 #include "i2cEeprom.h"
-#include "UART.h"
 #include "adc.h"
-#include "pwm.h"
 #include "pcf8574a.h"
 #include "lcd.h"
+
+#include "spi.h"
+#include "st7735.h"
+#include "st7735_gfx.h"
+#include "st7735_font.h"
+#include "free_sans.h"
 
 extern int rc5Code, switchCode;
 extern unsigned char lastLoudness;
@@ -28,7 +32,7 @@ extern unsigned char lastLoudness;
 extern unsigned char MEM[];
 extern char s[];
 
-#define MAIN_DELAY_TIME 7
+#define MAIN_DELAY_TIME 150
 //in ms
 #define POWER_RES_COUNTER 100       //* MAIN_DELAY_TIME
 #define SPEAKERS_COUNTER 35         //POWER_RES_COUNTER + (* MAIN_DELAY_TIME)
