@@ -82,7 +82,7 @@ sizedummy: Fiesta_clock.elf
 
 avrdudedummy: Fiesta_clock.elf
 	@echo 'Invoking: AVRDude'
-	C:\Users\ministerq\Documents\development\WINAVR\bin\avrdude -pm328p -cusbasp -Uflash:w:Fiesta_clock.hex:a
+	C:\development\WINAVR\bin\avrdude -pm328p -cusbasp -Uflash:w:Fiesta_clock.hex:a
 	@echo 'Finished building: $@'
 	@echo ' '
 

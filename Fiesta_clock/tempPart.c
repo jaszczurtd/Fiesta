@@ -18,8 +18,10 @@ static int temp_out_delay = 0;
 void check_temp_for_leds(void) {
 	if(temp_out < 4.1 && temp_out > 0.1) {
 		orangeLED(true);
+		redLED(false);
 	} else if (temp_out < 0.1) {
 		redLED(true);
+		orangeLED(false);
 	} else {
 		orangeLED(false);
 		redLED(false);
