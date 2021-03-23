@@ -1,0 +1,39 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "C:\\Program Files (x86)\\Arduino\\libraries\\TFT\\src",
+                "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\tools\\**",
+                "C:\\Users\\ministerq\\Documents\\Arduino\\libraries\\**",
+                "c:\\Program Files (x86)\\Arduino\\libraries\\**",
+                "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\hardware\\samd\\1.6.6\\**",
+                "${workspaceFolder}/**",
+                "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages",
+                "C:\\Program Files (x86)\\Arduino\\libraries\\**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "USBCON"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64",
+            "browse": {
+                "limitSymbolsToIncludedHeaders": false,
+                "path": [
+                    "${workspaceRoot}",
+                    "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\avr\\avr\\include",
+                    "c:\\Users\\ministerq\\Documents\\Arduino\\libraries",
+                    "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino"
+                ]
+            },
+            "forcedInclude": [
+                "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\hardware\\samd\\1.6.6\\cores\\arduino\\Arduino.h"
+            ]
+        }
+    ],
+    "version": 4
+}

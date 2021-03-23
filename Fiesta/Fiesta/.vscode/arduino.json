@@ -1,0 +1,7 @@
+{
+    "board": "adafruit:samd:adafruit_itsybitsy_m0",
+    "configuration": "opt=small,usbstack=arduino,debug=off",
+    "port": "COM9",
+    "programmer": "USBasp",
+    "sketch": "graphicstest.ino"
+}
