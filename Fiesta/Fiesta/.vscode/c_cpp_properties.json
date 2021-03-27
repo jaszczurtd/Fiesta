@@ -27,6 +27,8 @@
                     "${workspaceRoot}",
                     "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\avr\\avr\\include",
                     "c:\\Users\\ministerq\\Documents\\Arduino\\libraries",
+                    "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\onewire",
+                    "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\DallasTemperature",
                     "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino"
                 ]
             },
