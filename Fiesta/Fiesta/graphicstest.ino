@@ -37,6 +37,8 @@ void setup(void) {
 static int a = 0, b = 0, c = 0, d = 0;
 static char msg[128];
 
+unsigned char vall = 0;
+
 void function() {
   uint16_t time = millis();
   time = millis() - time;
@@ -46,11 +48,18 @@ void function() {
   double t1 = ntcToTemp(A1, 1506, 1500);
   doubleToDec(t1, &a, &b);
 
-  double t2 = ds18b20ToTemp(7, 0);
+  double t2 = ds18b20ToTemp(4, 0);
   doubleToDec(t2, &c, &d);
 
+  vall++;
+  if(vall == 256) {
+    vall = 0;
+  }
+
+  valToPWM(9, vall);
+
   memset(msg, 0, sizeof(msg));
-  snprintf(msg, sizeof(msg) - 1, "temp: %d.%d %d.%d", a, b, c, d);
+  snprintf(msg, sizeof(msg) - 1, "temp: %d.%d %d.%d %d", a, b, c, d, vall);
 
   tft.fillRect(0, 0, 120, 20, ST77XX_BLACK);
   tft.setCursor(1, 1);
@@ -62,7 +71,7 @@ void function() {
 
 void loop() {
   function();
-  delay(250);
+  delay(50);
 }
 
 
