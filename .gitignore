@@ -86,3 +86,4 @@ __pycache__
 *.d
 *.eep
 *.lss
+Fiesta/ArduinoOutput/
