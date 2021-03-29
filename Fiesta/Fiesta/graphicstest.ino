@@ -67,6 +67,25 @@ void function() {
   tft.setTextSize(1);
   tft.println(msg);
 
+
+  int y = 12;
+  int x = 3;
+
+  int size = 14;
+  for(int a = 0; a < 7; a++) {
+
+    tft.fillRect(x, y, size, size, ST77XX_RED);
+
+    tft.setTextColor(ST7735_ORANGE);
+    tft.setCursor(x + size + 2, y + 2);
+    tft.setTextSize(1);
+    tft.println("jakis text");
+
+    y += size;
+    y += 2;
+
+  }
+
 }
 
 void loop() {
