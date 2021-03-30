@@ -1,0 +1,14 @@
+mac 35a-aaa-ddba-1ba - zawór turbo
+
+zestawienie funkcji
+
+-wskaźniki:
+1) poziomu paliwa
+2) temperatury głowicy
+3) temperatury płynu
+4) temperatury oleju
+5) temperatury powietrza w kolektorze ssącym
+6) grzania świec żarowych
+7) podgrzewania płynu
+8) ciśnienia doładowania
+9) obrotów silnika (?)
