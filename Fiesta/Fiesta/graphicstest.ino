@@ -3,6 +3,7 @@
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <Arduino.h>
 
+#include "graphics.h"
 
 #define TFT_CS     2
 #define TFT_RST    0  // you can also connect this to the Arduino reset
@@ -29,9 +30,11 @@ void setup(void) {
   tft.setRotation(1);
 
   Serial.println(F("Initialized"));
-  tft.fillScreen(ST77XX_BLACK);
 
-
+  tft.fillScreen(ST7735_BLACK);
+  drawImage(0, 0, 160, 128, (unsigned int*)FiestaLogo);
+  delay(2000);
+  tft.fillScreen(ST7735_BLACK);
 }
 
 static int a = 0, b = 0, c = 0, d = 0;
@@ -57,6 +60,7 @@ void function() {
   }
 
   valToPWM(9, vall);
+  valToPWM(10, 255 - vall);
 
   memset(msg, 0, sizeof(msg));
   snprintf(msg, sizeof(msg) - 1, "temp: %d.%d %d.%d %d", a, b, c, d, vall);
@@ -89,6 +93,7 @@ void function() {
 }
 
 void loop() {
+
   function();
   delay(50);
 }

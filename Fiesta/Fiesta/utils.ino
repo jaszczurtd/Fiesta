@@ -144,3 +144,12 @@ double ds18b20ToTemp(int pin, int index) {
 void valToPWM(unsigned char pin, unsigned char val) {
     analogWrite(pin, (unsigned char)(255 - val));
 }
+
+void drawImage(int x, int y, int width, int height, unsigned int *pointer) {
+    Adafruit_ST7735 tft = returnReference();
+    for(int row = 0; row < height; row++) {
+        for(int col = 0; col < width; col++) {
+            tft.drawPixel(col + x, row + y, pgm_read_word(pointer++));
+        }      
+    }
+}
