@@ -7,6 +7,9 @@
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 
 int binatoi(char *s) {
     int i, l = 0, w = 1;
@@ -126,7 +129,7 @@ void ds18b20Init(int pin) {
     if(!initialized) {
         oneWire.begin(pin);
         sensors.setOneWire(&oneWire);
-        sensors.setResolution(tempDeviceAddress, 12);
+        sensors.setResolution(tempDeviceAddress, 12);  //in bits
         sensors.setWaitForConversion(false);
         sensors.begin();
         initialized = true;
