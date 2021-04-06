@@ -156,3 +156,23 @@ void drawImage(int x, int y, int width, int height, unsigned int *pointer) {
         }      
     }
 }
+
+int percentToWidth(double percent, int maxWidth) {
+    return ((percent / 100) * (maxWidth - 2));
+}
+
+int textWidth(const char* text) {
+    Adafruit_ST7735 tft = returnReference();
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    return w;
+}
+
+int textHeight(const char* text) {
+    Adafruit_ST7735 tft = returnReference();
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    return h;
+}

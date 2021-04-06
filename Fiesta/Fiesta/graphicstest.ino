@@ -37,22 +37,41 @@ void setup(void) {
   tft.fillScreen(ST7735_BLACK);
 }
 
-static int a = 0, b = 0, c = 0, d = 0;
 static char msg[128];
 
 unsigned char vall = 0;
 
-void function() {
- 
-  showFuelAmount();
+void drawFunctions() {
+  showFuelAmount(110, 1024);
 
 
 }
 
+static bool draw = false;
+static long lastSec = -1;
+
+static bool alertBlink = false;
+bool alertSwitch(void) {
+  return alertBlink;
+}
+
 void loop() {
 
-  function();
-  delay(50);
+  long msec = millis();
+
+  int sec = (msec % 1000 > 500);
+
+  if(lastSec != sec) {
+    lastSec = sec;
+    alertBlink = (alertBlink) ? false : true;
+    draw = true;
+  }
+
+  if(draw) {
+    drawFunctions();
+    draw = false;
+  }
+
 }
 
 
