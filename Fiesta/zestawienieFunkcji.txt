@@ -1,4 +1,4 @@
-mac 35a-aaa-ddba-1ba - zawór turbo
+﻿mac 35a-aaa-ddba-1ba - zawór turbo
 
 zestawienie funkcji
 
@@ -12,3 +12,9 @@ zestawienie funkcji
 7) podgrzewania płynu
 8) ciśnienia doładowania
 9) obrotów silnika (?)
+
+
+-wyjścia:
+1) świece żarowe
+2) wentylator chłodnicy
+3) podgrzewacz cieczy silnika
