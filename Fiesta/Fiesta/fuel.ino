@@ -16,6 +16,14 @@
 static char *half = (char*)"1/2";
 static char *full = (char*)"F";
 static char *empty = (char*)"E";
+static char *emptyMessage = (char*)"Pusty bak!";
+
+static bool drawOnce = true; 
+void redrawFuel(void) {
+    drawOnce = true;
+}
+
+static int currentWidth = 0;
 
 const unsigned int fuelIcon[] PROGMEM = {
 0x0000, 0x0000, 0x0000, 0xf5a5, 0xfda0, 0xfda0, 0xfda0, 0xfda0, 0xfda0, 0xfd80, 0xe5eb, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 
@@ -50,39 +58,65 @@ int getWidth(void) {
     return SCREEN_W - getBaseX() - OFFSET;
 }
 
+void drawFuelEmpty(void) {
+    if(currentWidth <= 1) {
+
+        int color = ST7735_WHITE;
+        if(seriousAlertSwitch()) {
+            color = ST7735_RED;
+        }
+
+        int x = getBaseX() + ((getWidth() - textWidth(emptyMessage)) / 2);
+        int y = getBaseY() + ((FUEL_HEIGHT - textHeight(emptyMessage)) / 2);
+
+        Adafruit_ST7735 tft = returnReference();
+        tft.setTextSize(1);
+        tft.setTextColor(color);
+        tft.setCursor(x, y);
+        tft.println(emptyMessage);
+    }
+}
+
 void showFuelAmount(int currentVal, int maxVal) {
-    Adafruit_ST7735 tft = returnReference();
-
-    int x = getBaseX(), y = getBaseY(), w, tw, width = getWidth();
-
-    drawImage(OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, (unsigned int*)fuelIcon);
-
+    int width = getWidth();
     double percent = (currentVal * 100) / maxVal;
-    w = percentToWidth(percent, width);
+    currentWidth = percentToWidth(percent, width);
 
-    drawChangeableFuelContent(w);
+    if(drawOnce) {
+        Adafruit_ST7735 tft = returnReference();
 
-    y += FUEL_HEIGHT + (OFFSET / 2);
+        int x = getBaseX(), y = getBaseY(), tw;
 
-    tft.setTextSize(1);
-    tft.setTextColor(ST7735_RED);
-    tft.setCursor(x, y);
-    tft.println(empty);
+        drawImage(OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, (unsigned int*)fuelIcon);
 
-    tw = textWidth(half);
-    x = getBaseX();
-    x += ((width - tw) / 2);
+        drawChangeableFuelContent(currentWidth);
 
-    tft.setTextColor(ST7735_WHITE);
-    tft.setCursor(x, y);
-    tft.println(half);
+        y += FUEL_HEIGHT + (OFFSET / 2);
 
-    x = getBaseX() + width;
-    tw = textWidth(full);
-    x -= tw;
+        tft.setTextSize(1);
+        tft.setTextColor(ST7735_RED);
+        tft.setCursor(x, y);
+        tft.println(empty);
 
-    tft.setCursor(x, y);
-    tft.println(full);
+        tw = textWidth(half);
+        x = getBaseX();
+        x += ((width - tw) / 2);
+
+        tft.setTextColor(ST7735_WHITE);
+        tft.setCursor(x, y);
+        tft.println(half);
+
+        x = getBaseX() + width;
+        tw = textWidth(full);
+        x -= tw;
+
+        tft.setCursor(x, y);
+        tft.println(full);
+
+        drawOnce = false;
+    } else {
+        drawChangeableFuelContent(currentWidth);
+    }
 }
 
 static int lastWidth = 0;

@@ -7,7 +7,7 @@ zestawienie funkcji
 2) temperatury głowicy
 3) temperatury płynu
 4) temperatury oleju
-5) temperatury powietrza w kolektorze ssącym
+5) temperatury powietrza turbo
 6) grzania świec żarowych
 7) podgrzewania płynu
 8) ciśnienia doładowania
@@ -18,3 +18,14 @@ zestawienie funkcji
 1) świece żarowe
 2) wentylator chłodnicy
 3) podgrzewacz cieczy silnika
+
+
+-wejścia analog CPU:
+
+a1 - poziom paliwa / położenie przepustnicy
+a2 - temp. głowicy / temp. płynu
+a3 - temp. oleju / temp. powietrza turbo
+a4 - ciśnienie doładowania
+a5 - 
+
+

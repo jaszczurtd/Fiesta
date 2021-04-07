@@ -10,6 +10,8 @@
                       // in which case, set this #define pin to 0!
 #define TFT_DC     3
 
+static char msg[128];
+
 // OPTION 1 (recommended) is to use the HARDWARE SPI pins, which are unique
 // to each board and not reassignable. For Arduino Uno: MOSI = pin 11 and
 // SCLK = pin 13. This is the fastest mode of operation and is required if
@@ -35,31 +37,58 @@ void setup(void) {
   drawImage(0, 0, SCREEN_W, SCREEN_H, (unsigned int*)FiestaLogo);
   delay(2000);
   tft.fillScreen(ST7735_BLACK);
+
+  redrawFuel();
 }
-
-static char msg[128];
-
-unsigned char vall = 0;
 
 void drawFunctions() {
   showFuelAmount(110, 1024);
 
+  int p[] = {
+    ST7735_ORANGE,
+    ST7735_RED,
+    ST7735_YELLOW
+  };
+
+  int x = 0;
+  for(int a = 0; a < 3; a++) {
+      tft.fillRect(x, 0, 53, 53, p[a]);
+      x += 54;
+  }
+
+  
 
 }
 
-static bool draw = false;
-static long lastSec = -1;
+void seriousAlertsDrawFunctions() {
+  drawFuelEmpty();
 
-static bool alertBlink = false;
+}
+
+static bool draw = false, seriousAlertDraw = false;
+
+static bool alertBlink = false, seriousAlertBlink = false;
 bool alertSwitch(void) {
   return alertBlink;
 }
+bool seriousAlertSwitch(void) {
+  return seriousAlertBlink;
+}
+
+static long lastSec = -1, lastHalfSec = -1;
 
 void loop() {
 
   long msec = millis();
 
   int sec = (msec % 1000 > 500);
+  int halfsec = (msec % 500 > 250);
+
+  if(lastHalfSec != halfsec) {
+    lastHalfSec = halfsec;
+    seriousAlertBlink = (seriousAlertBlink) ? false : true;
+    seriousAlertDraw = true;
+  }
 
   if(lastSec != sec) {
     lastSec = sec;
@@ -70,6 +99,11 @@ void loop() {
   if(draw) {
     drawFunctions();
     draw = false;
+  }
+
+  if(seriousAlertDraw) {
+    seriousAlertsDrawFunctions();
+    seriousAlertDraw = false;
   }
 
 }
