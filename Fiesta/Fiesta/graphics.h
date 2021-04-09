@@ -11,6 +11,8 @@
 #define BIG_ICONS_WIDTH 53
 #define BIG_ICONS_HEIGHT 53
 
+#define BIG_ICONS_BG_COLOR 0xf7be
+
 #define BIG_ICONS_OFFSET 1
 
 #define FIESTA_LOGO_WIDTH 158

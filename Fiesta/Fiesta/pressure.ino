@@ -11,8 +11,6 @@
 #define BAR_TEXT_X 6
 #define BAR_TEXT_Y 51
 
-#define BAR_BG_COLOR 0xf7be
-
 static bool p_drawOnce = true; 
 void redrawPressure(void) {
     p_drawOnce = true;
@@ -31,7 +29,7 @@ static int lastHI = 0, lastLO = 0;
 void showPressureAmount(double current) {
 
     if(p_drawOnce) {
-        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BAR_BG_COLOR, (unsigned int*)pressure);
+        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned int*)pressure);
         p_drawOnce = false;
     } else {
         Adafruit_ST7735 tft = returnReference();
@@ -52,7 +50,7 @@ void showPressureAmount(double current) {
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y - 11;
 
-            tft.fillRect(x, y, 28, 13, BAR_BG_COLOR);
+            tft.fillRect(x, y, 28, 13, BIG_ICONS_BG_COLOR);
 
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y;

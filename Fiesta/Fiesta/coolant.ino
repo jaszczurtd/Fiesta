@@ -30,7 +30,7 @@ static int lastCoolantHeight = 0;
 void showTemperatureAmount(int currentVal, int maxVal) {
 
     if(t_drawOnce) {
-        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, 0xf7be, (unsigned int*)temperature);
+        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned int*)temperature);
         t_drawOnce = false;
     } else {
         int x, y, color;
@@ -40,6 +40,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         if(currentVal > TEMP_MAX) {
             currentVal = TEMP_MAX;
         }
+        int valToDisplay = currentVal;
 
         bool overheat = false;
         if(currentVal <= TEMP_MIN && currentVal < TEMP_OK_LO) {
@@ -48,7 +49,6 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         if(currentVal >= TEMP_OK_LO && currentVal < TEMP_OK_HI) {
             color = ST77XX_ORANGE;
         } else {
-            color = 0xf7be;
             overheat = true;
         }
 
@@ -67,11 +67,10 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             draw = true;
         }
 
-        if(overheat || alertSwitch()) {
+        if(overheat) {
             draw = true;
-            color = ST7735_RED;
+            color = (alertSwitch()) ? ST7735_RED : ST77XX_ORANGE;
         }
-
 
         if(draw) {
             x = t_getBaseX() + 16;
@@ -83,6 +82,22 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             y = t_getBaseY() + TEMP_DOT_Y;
 
             tft.fillCircle(x, y, 6, color);
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            x = t_getBaseX() + 26;
+            y = t_getBaseY() + 19;
+            tft.setCursor(x, y);
+
+            tft.fillRect(x, y, 22, 8, BIG_ICONS_BG_COLOR);
+
+            char temp[8];
+            memset(temp, 0, sizeof(temp));
+            snprintf(temp, sizeof(temp) - 1, "%d", valToDisplay);
+
+            tft.println(temp);
         }
    }
 }

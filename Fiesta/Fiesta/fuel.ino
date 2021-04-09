@@ -101,7 +101,7 @@ void drawChangeableFuelContent(int w) {
 
     bool draw = false;
     if(lastWidth != w) {
-       // lastWidth = w;
+        lastWidth = w;
         draw = true;
     }
 
@@ -109,9 +109,11 @@ void drawChangeableFuelContent(int w) {
 
     int width = f_getWidth();
     int minW = percentToWidth(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
-    if((w > minW) || alertSwitch()) {
+    if(w <= minW) {
         draw = true;
-        color = ST7735_RED;
+        if(alertSwitch()) {
+            color = ST7735_RED;
+        }
     }
 
     if(draw) {
