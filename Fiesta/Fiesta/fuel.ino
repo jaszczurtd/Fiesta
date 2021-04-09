@@ -101,6 +101,7 @@ void drawChangeableFuelContent(int w) {
 
     bool draw = false;
     if(lastWidth != w) {
+       // lastWidth = w;
         draw = true;
     }
 
