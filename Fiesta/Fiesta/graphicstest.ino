@@ -33,29 +33,25 @@ void setup(void) {
 
   Serial.println(F("Initialized"));
 
-  tft.fillScreen(ST7735_BLACK);
-  drawImage(0, 0, SCREEN_W, SCREEN_H, (unsigned int*)FiestaLogo);
+  tft.fillScreen(ST7735_WHITE);
+
+  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned int*)FiestaLogo);
   delay(2000);
   tft.fillScreen(ST7735_BLACK);
 
   redrawFuel();
+  redrawTemperature();
+  redrawOil();
+  redrawPressure();
 }
 
 void drawFunctions() {
   showFuelAmount(110, 1024);
-
-  int p[] = {
-    ST7735_ORANGE,
-    ST7735_RED,
-    ST7735_YELLOW
-  };
-
-  int x = 0;
-  for(int a = 0; a < 3; a++) {
-      tft.fillRect(x, 0, 53, 53, p[a]);
-      x += 54;
-  }
-
+  showTemperatureAmount(60, 120);
+  showOilAmount(80, 120);
+  showPressureAmount(1.0);
   
 
 }
