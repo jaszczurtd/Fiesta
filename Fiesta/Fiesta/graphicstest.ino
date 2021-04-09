@@ -49,7 +49,7 @@ void setup(void) {
 
 void drawFunctions() {
   showFuelAmount(110, 1024);
-  showTemperatureAmount(60, 120);
+  showTemperatureAmount(110, 120);
   showOilAmount(80, 120);
   showPressureAmount(1.0);
   
