@@ -32,12 +32,10 @@ void showOilAmount(int currentVal, int maxVal) {
     } else {
         int x, y, color;
 
-        Adafruit_ST7735 tft = returnReference();
-
+        int valToDisplay = currentVal;
         if(currentVal > TEMP_OIL_MAX) {
             currentVal = TEMP_OIL_MAX;
         }
-        int valToDisplay = currentVal;
 
         bool overheat = false;
         if(currentVal <= TEMP_MIN && currentVal < TEMP_OK_LO) {
@@ -55,8 +53,7 @@ void showOilAmount(int currentVal, int maxVal) {
             currentVal = 0;
         }
 
-        double percent = (currentVal * 100) / maxVal;
-        int currentHeight = percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
+        int currentHeight = currentValToHeight(currentVal, maxVal);
 
         bool draw = false;
         if(lastOilHeight != currentHeight) {
@@ -70,31 +67,22 @@ void showOilAmount(int currentVal, int maxVal) {
         }
 
         if(draw) {
-            x = o_getBaseX() + 15;
+            Adafruit_ST7735 tft = returnReference();
+
+            x = o_getBaseX() + 14;
             y = o_getBaseY() + 4 + (TEMP_BAR_MAXHEIGHT - currentHeight);
 
-            tft.fillRect(x, y, 3, currentHeight, color);
+            drawTempBar(x, y, currentHeight, color);
 
             x = o_getBaseX() + OIL_DOT_X;
             y = o_getBaseY() + OIL_DOT_Y;
 
             tft.fillCircle(x, y, 6, color);
 
-            tft.setFont();
-            tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
-
             x = o_getBaseX() + 25;
             y = o_getBaseY() + 19;
-            tft.setCursor(x, y);
 
-            tft.fillRect(x, y, 22, 8, BIG_ICONS_BG_COLOR);
-
-            char temp[8];
-            memset(temp, 0, sizeof(temp));
-            snprintf(temp, sizeof(temp) - 1, "%d", valToDisplay);
-
-            tft.println(temp);
+            drawTempValue(x, y, valToDisplay);
         }
     }
 }

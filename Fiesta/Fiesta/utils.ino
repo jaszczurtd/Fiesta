@@ -182,3 +182,32 @@ int textHeight(const char* text) {
     tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
     return h;
 }
+
+void drawTempValue(int x, int y, int valToDisplay) {
+    Adafruit_ST7735 tft = returnReference();
+
+    tft.setFont();
+    tft.setTextSize(1);
+    tft.setTextColor(ST7735_BLACK);
+    tft.setCursor(x, y);
+
+    tft.fillRect(x, y, 22, 8, BIG_ICONS_BG_COLOR);
+
+    char temp[8];
+    memset(temp, 0, sizeof(temp));
+    snprintf(temp, sizeof(temp) - 1, "%d", valToDisplay);
+
+    tft.println(temp);
+}
+
+int currentValToHeight(int currentVal, int maxVal) {
+    double percent = (currentVal * 100) / maxVal;
+    return percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
+}
+
+void drawTempBar(int x, int y, int currentHeight, int color) {
+    Adafruit_ST7735 tft = returnReference();
+    
+    tft.fillRect(x, y, 3, currentHeight, color);
+    tft.fillRect(x, y - 2, 3, 2, BIG_ICONS_BG_COLOR);
+}

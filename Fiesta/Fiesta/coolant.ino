@@ -10,8 +10,6 @@
 #define TEMP_DOT_X 17
 #define TEMP_DOT_Y 39
 
-#define TEMP_BAR_MAXHEIGHT 30
-
 static bool t_drawOnce = true; 
 void redrawTemperature(void) {
     t_drawOnce = true;
@@ -35,12 +33,10 @@ void showTemperatureAmount(int currentVal, int maxVal) {
     } else {
         int x, y, color;
 
-        Adafruit_ST7735 tft = returnReference();
-
+        int valToDisplay = currentVal;
         if(currentVal > TEMP_MAX) {
             currentVal = TEMP_MAX;
         }
-        int valToDisplay = currentVal;
 
         bool overheat = false;
         if(currentVal <= TEMP_MIN && currentVal < TEMP_OK_LO) {
@@ -58,8 +54,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             currentVal = 0;
         }
 
-        double percent = (currentVal * 100) / maxVal;
-        int currentHeight = percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
+        int currentHeight = currentValToHeight(currentVal, maxVal);
 
         bool draw = false;
         if(lastCoolantHeight != currentHeight) {
@@ -73,31 +68,21 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         }
 
         if(draw) {
+            Adafruit_ST7735 tft = returnReference();
+
             x = t_getBaseX() + 16;
             y = t_getBaseY() + 4 + (TEMP_BAR_MAXHEIGHT - currentHeight);
 
-            tft.fillRect(x, y, 3, currentHeight, color);
+            drawTempBar(x, y, currentHeight, color);
 
             x = t_getBaseX() + TEMP_DOT_X;
             y = t_getBaseY() + TEMP_DOT_Y;
 
             tft.fillCircle(x, y, 6, color);
 
-            tft.setFont();
-            tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
-
             x = t_getBaseX() + 26;
             y = t_getBaseY() + 19;
-            tft.setCursor(x, y);
-
-            tft.fillRect(x, y, 22, 8, BIG_ICONS_BG_COLOR);
-
-            char temp[8];
-            memset(temp, 0, sizeof(temp));
-            snprintf(temp, sizeof(temp) - 1, "%d", valToDisplay);
-
-            tft.println(temp);
+            drawTempValue(x, y, valToDisplay);
         }
    }
 }

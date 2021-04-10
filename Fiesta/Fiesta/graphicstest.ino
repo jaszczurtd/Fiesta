@@ -49,10 +49,11 @@ void setup(void) {
 
 void drawFunctions() {
   showFuelAmount(110, 1024);
-  showTemperatureAmount(90, 120);
-  showOilAmount(80, 150);
+  showTemperatureAmount(120, 120);
+  showOilAmount(150, 150);
   showPressureAmount(1.0);
   
+  tft.fillRect(0, 54, 60, 40, ST7735_ORANGE);
 
 }
 
