@@ -3,6 +3,8 @@
 #ifndef T_TEMPERATURE
 #define T_TEMPERATURE
 
+#define TEMP_BAR_MAXHEIGHT 30
+
 #define TEMP_OIL_MAX 155
 #define TEMP_OIL_OK_HI 115
 
