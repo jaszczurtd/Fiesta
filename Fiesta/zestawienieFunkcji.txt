@@ -3,14 +3,14 @@
 zestawienie funkcji
 
 -wskaźniki:
-1) poziomu paliwa
+1) poziomu paliwa 			v
 2) temperatury głowicy
-3) temperatury płynu
-4) temperatury oleju
-5) temperatury powietrza turbo
+3) temperatury płynu			v
+4) temperatury oleju			v
+5) temperatury powietrza turbo		v
 6) grzania świec żarowych
 7) podgrzewania płynu
-8) ciśnienia doładowania
+8) ciśnienia doładowania		v
 9) obrotów silnika (?)
 
 

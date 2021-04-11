@@ -3,7 +3,7 @@
 #include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
 #include <Arduino.h>
 
-#include "graphics.h"
+#include "temperature.h"
 
 #define TFT_CS     2
 #define TFT_RST    0  // you can also connect this to the Arduino reset
@@ -45,6 +45,8 @@ void setup(void) {
   redrawTemperature();
   redrawOil();
   redrawPressure();
+  redrawIntercooler();
+  redrawEngineLoad();
 }
 
 void drawFunctions() {
@@ -52,8 +54,24 @@ void drawFunctions() {
   showTemperatureAmount(120, 120);
   showOilAmount(150, 150);
   showPressureAmount(1.0);
-  
-  tft.fillRect(0, 54, 60, 40, ST7735_ORANGE);
+  showICTemperatureAmount(40);
+  showEngineLoadAmount(40);
+
+/*  
+  int c[] = {
+    ST7735_CYAN,
+    ST7735_GREEN,
+    ST7735_YELLOW,
+    ST7735_RED
+  };
+
+  int x = 0;
+  for(int a = 0; a < 4; a++) {
+    tft.fillRect(x, 53, 40, 40, c[a]);
+
+    x += 40;
+  } 
+  */
 
 }
 
