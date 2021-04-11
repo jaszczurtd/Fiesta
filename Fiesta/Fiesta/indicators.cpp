@@ -1,17 +1,10 @@
-
-#include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
-#include <Fonts/FreeSansBold9pt7b.h>
-
-#include "temperature.h"
-
+#include "indicators.h"
 
 //-------------------------------------------------------------------------------------------------
-//temperature
+//coolant temperature indicator
 //-------------------------------------------------------------------------------------------------
 
-#define TEMP_DOT_X 17
-#define TEMP_DOT_Y 39
+static char displayTxt[8];
 
 static bool t_drawOnce = true; 
 void redrawTemperature(void) {
@@ -91,11 +84,8 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//oil
+//oil temperature indicator
 //-------------------------------------------------------------------------------------------------
-
-#define OIL_DOT_X 15
-#define OIL_DOT_Y 39
 
 static bool o_drawOnce = true; 
 void redrawOil(void) {
@@ -176,11 +166,8 @@ void showOilAmount(int currentVal, int maxVal) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//pressure
+//pressure indicator
 //-------------------------------------------------------------------------------------------------
-
-#define BAR_TEXT_X 6
-#define BAR_TEXT_Y 51
 
 static bool p_drawOnce = true; 
 void redrawPressure(void) {
@@ -205,7 +192,6 @@ void showPressureAmount(double current) {
     } else {
         Adafruit_ST7735 tft = returnReference();
 
-        char bar[16];
         int hi, lo;
         int x, y;
 
@@ -215,8 +201,8 @@ void showPressureAmount(double current) {
             lastHI = hi;
             lastLO = lo;
 
-            memset(bar, 0, sizeof(bar));
-            snprintf(bar, sizeof(bar) - 1, "%d.%d", hi, lo);
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d.%d", hi, lo);
 
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y - 11;
@@ -230,7 +216,7 @@ void showPressureAmount(double current) {
             tft.setTextSize(1);
             tft.setTextColor(ST7735_BLACK);
             tft.setCursor(x, y);
-            tft.println(bar);
+            tft.println(displayTxt);
 
             tft.setFont();
             tft.setTextSize(1);
@@ -260,23 +246,45 @@ const int ic_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-void showICTemperatureAmount(int currentVal) {
+unsigned char lastICTempVal = 255;
+
+void showICTemperatureAmount(unsigned char currentVal) {
 
     if(ic_drawOnce) {
         drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)ic);
         ic_drawOnce = false;
     } else {
+        if(lastICTempVal != currentVal) {
+            lastICTempVal = currentVal;
 
+            int x, y, w, offset;
+            Adafruit_ST7735 tft = returnReference();        
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+
+            w = textWidth(displayTxt);
+
+            x = ic_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
+            y = ic_getBaseY() + 30;
+            
+            offset = 5;
+            tft.fillRect(ic_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.setCursor(x, y);
+            tft.println(displayTxt);
+
+            tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+        }
     }
 }
 
 //-------------------------------------------------------------------------------------------------
-//fuel - intake temp
+//fuel indicator
 //-------------------------------------------------------------------------------------------------
-
-#define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
-
-#define OFFSET 4
 
 const char *half = (char*)F("1/2");
 const char *full = (char*)F("F");
@@ -395,7 +403,7 @@ void drawChangeableFuelContent(int w) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//fuel - intake temp
+//engine load indicator
 //-------------------------------------------------------------------------------------------------
 
 static bool e_drawOnce = true; 
@@ -411,13 +419,37 @@ const int e_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-void showEngineLoadAmount(int currentVal) {
+unsigned char lastLoadAmount = 255;
+
+void showEngineLoadAmount(unsigned char currentVal) {
 
     if(e_drawOnce) {
         drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)pump);
         e_drawOnce = false;
     } else {
+        if(lastLoadAmount != currentVal) {
+            lastLoadAmount = currentVal;
 
+            int x, y, w, offset;
+            Adafruit_ST7735 tft = returnReference();        
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d%%", currentVal);
+
+            w = textWidth(displayTxt);
+
+            x = e_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
+            y = e_getBaseY() + 30;
+            
+            offset = 5;
+            tft.fillRect(e_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.setCursor(x, y);
+            tft.println(displayTxt);
+        }
     }
 }
 

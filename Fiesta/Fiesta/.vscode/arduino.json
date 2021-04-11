@@ -3,6 +3,6 @@
     "configuration": "opt=small,usbstack=arduino,debug=off",
     "port": "COM1",
     "programmer": "USBasp",
-    "sketch": "graphicstest.ino",
+    "sketch": "main.ino",
     "output": "../ArduinoOutput"
 }
