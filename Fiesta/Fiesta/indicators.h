@@ -36,6 +36,9 @@ void showFuelAmount(int currentVal, int maxVal);
 void drawChangeableFuelContent(int w);
 void redrawEngineLoad(void);
 void showEngineLoadAmount(unsigned char currentVal);
-
+void redrawRPM(void);
+void showRPMamount(int currentVal);
+void redrawEGT(void);
+void showEGTTemperatureAmount(int currentVal);
 
 #endif

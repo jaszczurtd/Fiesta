@@ -186,14 +186,18 @@ static int lastHI = 0, lastLO = 0;
 
 void showPressureAmount(double current) {
 
+    Adafruit_ST7735 tft = returnReference();
+    int x, y;
+
     if(p_drawOnce) {
         drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned int*)pressure);
+        x = p_getBaseX() + BIG_ICONS_WIDTH;
+        tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR);
+
         p_drawOnce = false;
     } else {
-        Adafruit_ST7735 tft = returnReference();
 
         int hi, lo;
-        int x, y;
 
         doubleToDec(current, &hi, &lo);
 
@@ -225,6 +229,110 @@ void showPressureAmount(double current) {
             y = p_getBaseY() + 45;
             tft.setCursor(x, y);
             tft.println(F("BAR"));
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+//engine load indicator
+//-------------------------------------------------------------------------------------------------
+
+static bool e_drawOnce = true; 
+void redrawEngineLoad(void) {
+    e_drawOnce = true;
+}
+
+const int e_getBaseX(void) {
+    return 0;
+}
+
+const int e_getBaseY(void) {
+    return BIG_ICONS_HEIGHT; 
+}
+
+unsigned char lastLoadAmount = 255;
+
+void showEngineLoadAmount(unsigned char currentVal) {
+
+    if(e_drawOnce) {
+        drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)pump);
+        e_drawOnce = false;
+    } else {
+        if(lastLoadAmount != currentVal) {
+            lastLoadAmount = currentVal;
+
+            int x, y, w, offset;
+            Adafruit_ST7735 tft = returnReference();        
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d%%", currentVal);
+
+            w = textWidth(displayTxt);
+
+            x = e_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
+            y = e_getBaseY() + 30;
+            
+            offset = 5;
+            tft.fillRect(e_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.setCursor(x, y);
+            tft.println(displayTxt);
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+//engine EGT
+//-------------------------------------------------------------------------------------------------
+
+static bool egt_drawOnce = true; 
+void redrawEGT(void) {
+    egt_drawOnce = true;
+}
+
+const int egt_getBaseX(void) {
+    return (2 * SMALL_ICONS_WIDTH);
+}
+
+const int egt_getBaseY(void) {
+    return BIG_ICONS_HEIGHT; 
+}
+
+int lastEGTTempVal = 9999;
+
+void showEGTTemperatureAmount(int currentVal) {
+
+    if(egt_drawOnce) {
+        drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)egt);
+        egt_drawOnce = false;
+    } else {
+        if(lastEGTTempVal != currentVal) {
+            lastEGTTempVal = currentVal;
+
+            int x, y, w, offset;
+            Adafruit_ST7735 tft = returnReference();        
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+
+            w = textWidth(displayTxt);
+
+            x = egt_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
+            y = egt_getBaseY() + 30;
+            
+            offset = 5;
+            tft.fillRect(egt_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.setCursor(x, y);
+            tft.println(displayTxt);
+
+            tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
         }
     }
 }
@@ -278,6 +386,56 @@ void showICTemperatureAmount(unsigned char currentVal) {
             tft.println(displayTxt);
 
             tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+        }
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
+//engine rpm
+//-------------------------------------------------------------------------------------------------
+
+static bool rpm_drawOnce = true; 
+void redrawRPM(void) {
+    rpm_drawOnce = true;
+}
+
+const int rpm_getBaseX(void) {
+    return SMALL_ICONS_WIDTH;
+}
+
+const int rpm_getBaseY(void) {
+    return BIG_ICONS_HEIGHT; 
+}
+
+static int lastRPMAmount = 9999;
+void showRPMamount(int currentVal) {
+
+    if(rpm_drawOnce) {
+        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)rpm);
+        rpm_drawOnce = false;
+    } else {
+        if(lastRPMAmount != currentVal) {
+            lastRPMAmount = currentVal;
+
+            int x, y, w, offset;
+            Adafruit_ST7735 tft = returnReference();        
+
+            tft.setFont();
+            tft.setTextSize(1);
+            tft.setTextColor(ST7735_BLACK);
+
+            memset(displayTxt, 0, sizeof(displayTxt));
+            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+
+            w = textWidth(displayTxt);
+
+            x = rpm_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
+            y = rpm_getBaseY() + 30;
+            
+            offset = 5;
+            tft.fillRect(rpm_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.setCursor(x, y);
+            tft.println(displayTxt);
         }
     }
 }
@@ -399,57 +557,6 @@ void drawChangeableFuelContent(int w) {
         tft.fillRect(x, y, w, FUEL_HEIGHT, color);
         tft.drawLine(x + w, y, x + w, y + FUEL_HEIGHT, ST7735_BLACK);
         tft.drawRect(x, y, width, FUEL_HEIGHT, C_GRAY_DARK);
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-//engine load indicator
-//-------------------------------------------------------------------------------------------------
-
-static bool e_drawOnce = true; 
-void redrawEngineLoad(void) {
-    e_drawOnce = true;
-}
-
-const int e_getBaseX(void) {
-    return 0;
-}
-
-const int e_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
-}
-
-unsigned char lastLoadAmount = 255;
-
-void showEngineLoadAmount(unsigned char currentVal) {
-
-    if(e_drawOnce) {
-        drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)pump);
-        e_drawOnce = false;
-    } else {
-        if(lastLoadAmount != currentVal) {
-            lastLoadAmount = currentVal;
-
-            int x, y, w, offset;
-            Adafruit_ST7735 tft = returnReference();        
-
-            tft.setFont();
-            tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
-
-            memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d%%", currentVal);
-
-            w = textWidth(displayTxt);
-
-            x = e_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
-            y = e_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(e_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(displayTxt);
-        }
     }
 }
 

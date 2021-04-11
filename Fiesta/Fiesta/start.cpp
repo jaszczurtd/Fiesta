@@ -9,6 +9,8 @@ void initialization(void) {
     redrawPressure();
     redrawIntercooler();
     redrawEngineLoad();
+    redrawRPM();
+    redrawEGT();
 }
 
 void drawFunctions() {
@@ -18,23 +20,8 @@ void drawFunctions() {
   showPressureAmount(1.0);
   showICTemperatureAmount(25);
   showEngineLoadAmount(40);
-
-/*  
-  int c[] = {
-    ST7735_CYAN,
-    ST7735_GREEN,
-    ST7735_YELLOW,
-    ST7735_RED
-  };
-
-  int x = 0;
-  for(int a = 0; a < 4; a++) {
-    tft.fillRect(x, 53, 40, 40, c[a]);
-
-    x += 40;
-  } 
-  */
-
+  showRPMamount(1450);
+  showEGTTemperatureAmount(6230);
 }
 
 void seriousAlertsDrawFunctions() {
