@@ -5,11 +5,7 @@
 //  Created by Marcin Kielesiński on 07/12/2019.
 //
 
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
-#include <Adafruit_ST7789.h> // Hardware-specific library for ST7789
+#include "utils.h"
 
 int binatoi(char *s) {
     int i, l = 0, w = 1;
@@ -77,14 +73,6 @@ void doubleToDec(double val, int *hi, int *lo) {
 double adcToVolt(double basev, int adc) {
     return adc * (basev/1024.0);    
 }
-
-// temp. for nominal resistance (almost always 25 C)
-#define TEMPERATURENOMINAL 21   
-// how many samples to take and average, more takes longer
-// but is more 'smooth'
-#define NUMSAMPLES 6
-// The beta coefficient of the thermistor (usually 3000-4000)
-#define BCOEFFICIENT 3950
 
 static int samples[NUMSAMPLES];
 double ntcToTemp(int tpin, int thermistor, int r) {

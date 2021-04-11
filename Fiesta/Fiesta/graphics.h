@@ -1,3 +1,19 @@
+#ifndef T_GFX
+#define T_GFX
+
+#include <Arduino.h>
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+
+#include "utils.h"
+
+void initGraphics(void);
+Adafruit_ST7735 returnReference(void);
+
+#define TFT_CS     2
+#define TFT_RST    0  // you can also connect this to the Arduino reset
+                      // in which case, set this #define pin to 0!
+#define TFT_DC     3
 
 #define SCREEN_W 160
 #define SCREEN_H 128
@@ -390,4 +406,5 @@ const unsigned int pump[] PROGMEM = {
 };
 
 
+ #endif
  
