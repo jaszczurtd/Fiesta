@@ -53,13 +53,13 @@ unsigned char reverse(unsigned char b) {
    return b;
 }
 
-void doubleToDec(double val, int *hi, int *lo) {
+void floatToDec(float val, int *hi, int *lo) {
 	int t1 = (int)val;
 	if(t1 > -128) {
 		if(hi != NULL) {
 			*hi = t1;
 		}
-		int t2 = (int) (((double)val - t1) * 10);
+		int t2 = (int) (((float)val - t1) * 10);
 		if(lo != NULL) {
 			if(t2 >= 0) {
 				*lo = t2;
@@ -70,12 +70,12 @@ void doubleToDec(double val, int *hi, int *lo) {
 	}
 }
 
-double adcToVolt(double basev, int adc) {
+float adcToVolt(float basev, int adc) {
     return adc * (basev/1024.0);    
 }
 
 static int samples[NUMSAMPLES];
-double ntcToTemp(int tpin, int thermistor, int r) {
+float ntcToTemp(int tpin, int thermistor, int r) {
 
     uint8_t i;
     float average;
@@ -97,7 +97,7 @@ double ntcToTemp(int tpin, int thermistor, int r) {
     average = 1023 / average - 1;
     average = r / average;
 
-    double steinhart;
+    float steinhart;
     steinhart = average / thermistor;     // (R/Ro)
     steinhart = log(steinhart);                  // ln(R/Ro)
     steinhart /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
@@ -124,7 +124,7 @@ void ds18b20Init(int pin) {
     }
 }
 
-double ds18b20ToTemp(int pin, int index) {
+float ds18b20ToTemp(int pin, int index) {
     ds18b20Init(pin);
 
     sensors.getAddress(tempDeviceAddress, index);
@@ -151,7 +151,7 @@ void drawImage(int x, int y, int width, int height, int background, unsigned int
     }
 }
 
-int percentToWidth(double percent, int maxWidth) {
+int percentToWidth(float percent, int maxWidth) {
     return ((percent / 100) * (maxWidth - 2));
 }
 
@@ -189,7 +189,7 @@ void drawTempValue(int x, int y, int valToDisplay) {
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
-    double percent = (currentVal * 100) / maxVal;
+    float percent = (currentVal * 100) / maxVal;
     return percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
 }
 
