@@ -6,20 +6,22 @@
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Arduino.h>
+#include <Wire.h>
+#include <PCF8574.h>
 #include "graphics.h"
 
 int binatoi(char *s);
 char *decToBinary(int n);
 unsigned char BinToBCD(unsigned char bin);
 unsigned char reverse(unsigned char b);
-void doubleToDec(double val, int *hi, int *lo);
-double adcToVolt(double basev, int adc);
-double ntcToTemp(int tpin, int thermistor, int r);
+void floatToDec(float val, int *hi, int *lo);
+float adcToVolt(float basev, int adc);
+float ntcToTemp(int tpin, int thermistor, int r);
 void ds18b20Init(int pin);
-double ds18b20ToTemp(int pin, int index);
+float ds18b20ToTemp(int pin, int index);
 void valToPWM(unsigned char pin, unsigned char val);
 void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
-int percentToWidth(double percent, int maxWidth);
+int percentToWidth(float percent, int maxWidth);
 int textWidth(const char* text);
 int textHeight(const char* text);
 void drawTempValue(int x, int y, int valToDisplay);

@@ -1,27 +1,54 @@
 
 #include "start.h"
 
+static int readCycles = 0;
+static int currentValue = 0;
+
+static float valueFields[F_LAST];
+
 void initialization(void) {
-    initGraphics();
-    redrawFuel();
-    redrawTemperature();
-    redrawOil();
-    redrawPressure();
-    redrawIntercooler();
-    redrawEngineLoad();
-    redrawRPM();
-    redrawEGT();
+  for(int a = 0; a < F_LAST; a++) {
+    valueFields[a] = 0.0;
+  }
+
+  initGraphics();
+  redrawFuel();
+  redrawTemperature();
+  redrawOil();
+  redrawPressure();
+  redrawIntercooler();
+  redrawEngineLoad();
+  redrawRPM();
+  redrawEGT();
 }
 
-void drawFunctions() {
-  showFuelAmount(110, 1024);
-  showTemperatureAmount(120, 120);
-  showOilAmount(150, 150);
-  showPressureAmount(1.0);
-  showICTemperatureAmount(25);
-  showEngineLoadAmount(40);
-  showRPMamount(1450);
-  showEGTTemperatureAmount(6230);
+void drawFunctions(void) {
+  showFuelAmount((int)valueFields[F_FUEL], 1024);
+  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
+  showOilAmount((int)valueFields[F_OIL_TEMP], 150);
+  showPressureAmount(valueFields[F_PRESSURE]);
+  showICTemperatureAmount((unsigned char)valueFields[F_INTAKE_TEMP]);
+  showEngineLoadAmount((unsigned char)valueFields[F_ENGINE_LOAD]);
+  showRPMamount((int)valueFields[F_RPM]);
+  showEGTTemperatureAmount((int)valueFields[F_EGT]);
+}
+
+void readValues(void) {
+  if(readCycles++ > READ_CYCLES_AMOUNT) {
+    readCycles = 0;
+
+    switch(currentValue) {
+      case F_COOLANT_TEMP:
+        valueFields[F_COOLANT_TEMP] = readCoolantTemp();
+        break;
+      case F_OIL_TEMP:
+        valueFields[F_OIL_TEMP] = readOilTemp();
+        break;
+    }
+    if(currentValue++ > F_LAST) {
+      currentValue = 0;
+    }
+  }
 }
 
 void seriousAlertsDrawFunctions() {
@@ -69,6 +96,8 @@ void looper(void) {
     seriousAlertsDrawFunctions();
     seriousAlertDraw = false;
   }
+
+  readValues();
 
 }
 

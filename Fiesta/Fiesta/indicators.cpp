@@ -19,7 +19,7 @@ const int t_getBaseY(void) {
     return 0; 
 }
 
-static int lastCoolantHeight = 0;
+static int lastCoolantHeight = C_INIT_VAL;
 
 void showTemperatureAmount(int currentVal, int maxVal) {
 
@@ -76,10 +76,10 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 
             tft.fillCircle(x, y, 6, color);
 
-            x = t_getBaseX() + 26;
-            y = t_getBaseY() + 19;
-            drawTempValue(x, y, valToDisplay);
         }
+        x = t_getBaseX() + 26;
+        y = t_getBaseY() + 19;
+        drawTempValue(x, y, valToDisplay);
    }
 }
 
@@ -100,7 +100,7 @@ const int o_getBaseY(void) {
     return 0; 
 }
 
-static int lastOilHeight = 0;
+static int lastOilHeight = C_INIT_VAL;
 
 void showOilAmount(int currentVal, int maxVal) {
 
@@ -156,12 +156,11 @@ void showOilAmount(int currentVal, int maxVal) {
             y = o_getBaseY() + OIL_DOT_Y;
 
             tft.fillCircle(x, y, 6, color);
-
-            x = o_getBaseX() + 25;
-            y = o_getBaseY() + 19;
-
-            drawTempValue(x, y, valToDisplay);
         }
+        
+        x = o_getBaseX() + 25;
+        y = o_getBaseY() + 19;
+        drawTempValue(x, y, valToDisplay);
     }
 }
 
@@ -182,9 +181,10 @@ const int p_getBaseY(void) {
     return 0; 
 }
 
-static int lastHI = 0, lastLO = 0;
+static int lastHI = C_INIT_VAL;
+static int lastLO = C_INIT_VAL;
 
-void showPressureAmount(double current) {
+void showPressureAmount(float current) {
 
     Adafruit_ST7735 tft = returnReference();
     int x, y;
@@ -199,7 +199,7 @@ void showPressureAmount(double current) {
 
         int hi, lo;
 
-        doubleToDec(current, &hi, &lo);
+        floatToDec(current, &hi, &lo);
 
         if(hi != lastHI || lo != lastLO) {
             lastHI = hi;
@@ -250,7 +250,7 @@ const int e_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-unsigned char lastLoadAmount = 255;
+static int lastLoadAmount = C_INIT_VAL;
 
 void showEngineLoadAmount(unsigned char currentVal) {
 
@@ -301,7 +301,7 @@ const int egt_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-int lastEGTTempVal = 9999;
+static int lastEGTTempVal = C_INIT_VAL;
 
 void showEGTTemperatureAmount(int currentVal) {
 
@@ -354,7 +354,7 @@ const int ic_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-unsigned char lastICTempVal = 255;
+static int lastICTempVal = C_INIT_VAL;
 
 void showICTemperatureAmount(unsigned char currentVal) {
 
@@ -407,7 +407,7 @@ const int rpm_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
-static int lastRPMAmount = 9999;
+static int lastRPMAmount = C_INIT_VAL;
 void showRPMamount(int currentVal) {
 
     if(rpm_drawOnce) {
@@ -489,7 +489,7 @@ void drawFuelEmpty(void) {
 
 void showFuelAmount(int currentVal, int maxVal) {
     int width = f_getWidth();
-    double percent = (currentVal * 100) / maxVal;
+    float percent = (currentVal * 100) / maxVal;
     currentWidth = percentToWidth(percent, width);
 
     if(f_drawOnce) {
@@ -558,5 +558,26 @@ void drawChangeableFuelContent(int w) {
         tft.drawLine(x + w, y, x + w, y + FUEL_HEIGHT, ST7735_BLACK);
         tft.drawRect(x, y, width, FUEL_HEIGHT, C_GRAY_DARK);
     }
+}
+
+//-------------------------------------------------------------------------------------------------
+//READERS
+//-------------------------------------------------------------------------------------------------
+
+
+//-------------------------------------------------------------------------------------------------
+//Read coolant temperature
+//-------------------------------------------------------------------------------------------------
+
+float readCoolantTemp(void) {
+    return ds18b20ToTemp(4, 0);
+}
+
+//-------------------------------------------------------------------------------------------------
+//Read oil temperature
+//-------------------------------------------------------------------------------------------------
+
+float readOilTemp(void) {
+    return ntcToTemp(A1, 1506, 1500);
 }
 

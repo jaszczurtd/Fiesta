@@ -22,12 +22,15 @@
 
 #define OFFSET 4
 
+#define C_INIT_VAL 99999;
+
+//indicators
 void redrawTemperature(void);
 void showTemperatureAmount(int currentVal, int maxVal);
 void redrawOil(void);
 void showOilAmount(int currentVal, int maxVal);
 void redrawPressure(void);
-void showPressureAmount(double current);
+void showPressureAmount(float current);
 void redrawIntercooler(void);
 void showICTemperatureAmount(unsigned char currentVal);
 void redrawFuel(void);
@@ -40,5 +43,9 @@ void redrawRPM(void);
 void showRPMamount(int currentVal);
 void redrawEGT(void);
 void showEGTTemperatureAmount(int currentVal);
+
+//readers
+float readCoolantTemp(void);
+float readOilTemp(void);
 
 #endif
