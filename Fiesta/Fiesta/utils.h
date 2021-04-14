@@ -1,8 +1,6 @@
 #ifndef T_UTILS
 #define T_UTILS
 
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Arduino.h>
@@ -17,8 +15,6 @@ unsigned char reverse(unsigned char b);
 void floatToDec(float val, int *hi, int *lo);
 float adcToVolt(float basev, int adc);
 float ntcToTemp(int tpin, int thermistor, int r);
-void ds18b20Init(int pin);
-float ds18b20ToTemp(int pin, int index);
 void valToPWM(unsigned char pin, unsigned char val);
 void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
 int percentToWidth(float percent, int maxWidth);
@@ -33,9 +29,9 @@ void displayErrorWithMessage(int x, int y, const char *msg);
 #define TEMPERATURENOMINAL 21   
 // how many samples to take and average, more takes longer
 // but is more 'smooth'
-#define NUMSAMPLES 6
+#define NUMSAMPLES 5
 // The beta coefficient of the thermistor (usually 3000-4000)
-#define BCOEFFICIENT 3950
+#define BCOEFFICIENT 3600
 
 #define TEMP_BAR_MAXHEIGHT 30
 

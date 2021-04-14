@@ -35,12 +35,11 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         }
 
         bool overheat = false;
-        if(currentVal <= TEMP_MIN && currentVal < TEMP_OK_LO) {
-            color = ST7735_BLUE;
-        } else 
-        if(currentVal >= TEMP_OK_LO && currentVal < TEMP_OK_HI) {
+        color = ST7735_BLUE;
+        if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
             color = ST77XX_ORANGE;
-        } else {
+        } 
+        if(currentVal > TEMP_OIL_OK_HI) {
             overheat = true;
         }
 
@@ -116,12 +115,11 @@ void showOilAmount(int currentVal, int maxVal) {
         }
 
         bool overheat = false;
-        if(currentVal <= TEMP_MIN && currentVal < TEMP_OK_LO) {
-            color = ST7735_BLUE;
-        } else 
-        if(currentVal >= TEMP_OK_LO && currentVal < TEMP_OIL_OK_HI) {
+        color = ST7735_BLUE;
+        if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
             color = ST77XX_ORANGE;
-        } else {
+        } 
+        if(currentVal > TEMP_OIL_OK_HI) {
             overheat = true;
         }
 
@@ -570,7 +568,7 @@ void drawChangeableFuelContent(int w) {
 //-------------------------------------------------------------------------------------------------
 
 float readCoolantTemp(void) {
-    return ds18b20ToTemp(4, 0);
+    return ntcToTemp(A2, 1506, 1500);
 }
 
 //-------------------------------------------------------------------------------------------------

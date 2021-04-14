@@ -82,8 +82,8 @@ float ntcToTemp(int tpin, int thermistor, int r) {
 
     // take N samples in a row, with a slight delay
     for (i=0; i< NUMSAMPLES; i++) {
-    samples[i] = analogRead(tpin);
-    delay(10);
+        samples[i] = analogRead(tpin);
+        delay(5);
     }
 
     // average all the samples out
@@ -106,30 +106,6 @@ float ntcToTemp(int tpin, int thermistor, int r) {
     steinhart -= 273.15;                         // convert absolute temp to C    
 
     return steinhart;
-}
-
-static bool initialized = false;
-DeviceAddress tempDeviceAddress;
-OneWire oneWire;
-DallasTemperature sensors;
-
-void ds18b20Init(int pin) {
-    if(!initialized) {
-        oneWire.begin(pin);
-        sensors.setOneWire(&oneWire);
-        sensors.setResolution(tempDeviceAddress, 12);  //in bits
-        sensors.setWaitForConversion(false);
-        sensors.begin();
-        initialized = true;
-    }
-}
-
-float ds18b20ToTemp(int pin, int index) {
-    ds18b20Init(pin);
-
-    sensors.getAddress(tempDeviceAddress, index);
-    sensors.requestTemperatures(); 
-    return sensors.getTempCByIndex(index);
 }
 
 void valToPWM(unsigned char pin, unsigned char val) {
