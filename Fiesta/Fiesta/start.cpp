@@ -7,6 +7,10 @@ static int currentValue = 0;
 static float valueFields[F_LAST];
 
 void initialization(void) {
+
+  Wire.begin();
+  Serial.begin(9600);
+ 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = 0.0;
   }
@@ -20,6 +24,8 @@ void initialization(void) {
   redrawEngineLoad();
   redrawRPM();
   redrawEGT();
+  
+  Serial.println("\nFiesta MTDDI");
 }
 
 void drawFunctions(void) {
@@ -86,6 +92,9 @@ void looper(void) {
     alertBlink = (alertBlink) ? false : true;
     draw = true;
   }
+
+  pcf8574(0, alertBlink);
+  pcf8574(1, seriousAlertBlink);
 
   if(draw) {
     drawFunctions();
