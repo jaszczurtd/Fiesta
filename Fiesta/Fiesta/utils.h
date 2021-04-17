@@ -8,22 +8,7 @@
 #include <PCF8574.h>
 #include "graphics.h"
 
-int binatoi(char *s);
-char *decToBinary(int n);
-unsigned char BinToBCD(unsigned char bin);
-unsigned char reverse(unsigned char b);
-void floatToDec(float val, int *hi, int *lo);
-float adcToVolt(float basev, int adc);
-float ntcToTemp(int tpin, int thermistor, int r);
-void valToPWM(unsigned char pin, unsigned char val);
-void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
-int percentToWidth(float percent, int maxWidth);
-int textWidth(const char* text);
-int textHeight(const char* text);
-void drawTempValue(int x, int y, int valToDisplay);
-int currentValToHeight(int currentVal, int maxVal);
-void drawTempBar(int x, int y, int currentHeight, int color);
-void displayErrorWithMessage(int x, int y, const char *msg);
+#define PCF8574_ADDR 0x38
 
 // temp. for nominal resistance (almost always 25 C)
 #define TEMPERATURENOMINAL 21   
@@ -43,5 +28,25 @@ void displayErrorWithMessage(int x, int y, const char *msg);
 
 #define TEMP_OK_LO 70
 #define TEMP_OK_HI 105
+
+int binatoi(char *s);
+char *decToBinary(int n);
+unsigned char BinToBCD(unsigned char bin);
+unsigned char reverse(unsigned char b);
+void floatToDec(float val, int *hi, int *lo);
+float adcToVolt(float basev, int adc);
+float ntcToTemp(int tpin, int thermistor, int r);
+void valToPWM(unsigned char pin, unsigned char val);
+void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
+int percentToWidth(float percent, int maxWidth);
+int textWidth(const char* text);
+int textHeight(const char* text);
+void drawTempValue(int x, int y, int valToDisplay);
+int currentValToHeight(int currentVal, int maxVal);
+void drawTempBar(int x, int y, int currentHeight, int color);
+void displayErrorWithMessage(int x, int y, const char *msg);
+void pcf857_init(void);
+void pcf8574(unsigned char pin, bool value);
+void i2cScanner(void);
 
 #endif

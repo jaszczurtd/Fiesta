@@ -5,6 +5,7 @@
 #include "graphics.h"
 #include "indicators.h"
 #include "utils.h"
+#include <Wire.h>
 
 #define F_FUEL 0
 #define F_COOLANT_TEMP 1
