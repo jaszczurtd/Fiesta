@@ -48,5 +48,7 @@ void displayErrorWithMessage(int x, int y, const char *msg);
 void pcf857_init(void);
 void pcf8574(unsigned char pin, bool value);
 void i2cScanner(void);
+void init4051(void);
+void set4051ActivePin(unsigned char pin);
 
 #endif

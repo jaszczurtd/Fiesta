@@ -266,3 +266,17 @@ void i2cScanner(void) {
  
   delay(5000);           // wait 5 seconds for next scan
 }
+
+void init4051(void) {
+    pinMode(13, OUTPUT);  //C
+    pinMode(12, OUTPUT);  //B  
+    pinMode(11, OUTPUT);  //A
+
+    set4051ActivePin(0);
+}
+
+void set4051ActivePin(unsigned char pin) {
+    digitalWrite(11, (pin & 0x01) > 0); 
+    digitalWrite(12, (pin & 0x02) > 0); 
+    digitalWrite(13, (pin & 0x04) > 0); 
+}
