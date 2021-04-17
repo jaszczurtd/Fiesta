@@ -11,6 +11,8 @@ void initialization(void) {
   Wire.begin();
   Serial.begin(9600);
  
+  init4051();
+
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = 0.0;
   }
