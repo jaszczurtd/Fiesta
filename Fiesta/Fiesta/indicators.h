@@ -9,6 +9,8 @@
 #include "graphics.h"
 #include "start.h"
 
+#define FUEL_BOX_COLOR 0xBDF7
+
 #define TEMP_DOT_X 17
 #define TEMP_DOT_Y 39
 
@@ -23,6 +25,9 @@
 #define OFFSET 4
 
 #define C_INIT_VAL 99999;
+
+#define THROTTLE_MIN 51
+#define THROTTLE_MAX 957
 
 //indicators
 void redrawTemperature(void);
@@ -47,5 +52,7 @@ void showEGTTemperatureAmount(int currentVal);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
+float readThrottle(void);
+float readAirTemperature(void);
 
 #endif

@@ -74,24 +74,24 @@ float adcToVolt(float basev, int adc) {
     return adc * (basev/1024.0);    
 }
 
-static int samples[NUMSAMPLES];
-float ntcToTemp(int tpin, int thermistor, int r) {
+float getAverageValueFrom(int tpin) {
 
     uint8_t i;
-    float average;
+    float average = 0;
 
     // take N samples in a row, with a slight delay
-    for (i=0; i< NUMSAMPLES; i++) {
-        samples[i] = analogRead(tpin);
+    for (i = 0; i < NUMSAMPLES; i++) {
+        average += analogRead(tpin);
         delay(5);
     }
-
-    // average all the samples out
-    average = 0;
-    for (i=0; i< NUMSAMPLES; i++) {
-        average += samples[i];
-    }
     average /= NUMSAMPLES;
+
+    return average;
+}
+
+float ntcToTemp(int tpin, int thermistor, int r) {
+
+    float average = getAverageValueFrom(tpin);
 
     // convert the value to resistance
     average = 1023 / average - 1;
