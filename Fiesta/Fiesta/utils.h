@@ -8,13 +8,16 @@
 #include <PCF8574.h>
 #include "graphics.h"
 
+static char debb[128];
+#define deb(format, ...) { memset(debb, 0, sizeof(debb));  snprintf(debb, sizeof(debb) - 1, format, ## __VA_ARGS__); Serial.println(debb); }
+
 #define PCF8574_ADDR 0x38
 
 // temp. for nominal resistance (almost always 25 C)
 #define TEMPERATURENOMINAL 21   
 // how many samples to take and average, more takes longer
 // but is more 'smooth'
-#define NUMSAMPLES 5
+#define NUMSAMPLES 6
 // The beta coefficient of the thermistor (usually 3000-4000)
 #define BCOEFFICIENT 3600
 
@@ -50,5 +53,6 @@ void pcf8574(unsigned char pin, bool value);
 void i2cScanner(void);
 void init4051(void);
 void set4051ActivePin(unsigned char pin);
+float getAverageValueFrom(int tpin);
 
 #endif
