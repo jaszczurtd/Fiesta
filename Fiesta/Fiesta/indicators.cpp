@@ -326,7 +326,7 @@ void showEGTTemperatureAmount(int currentVal) {
             y = egt_getBaseY() + 30;
             
             offset = 5;
-            tft.fillRect(egt_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.fillRect(egt_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
@@ -379,7 +379,7 @@ void showICTemperatureAmount(unsigned char currentVal) {
             y = ic_getBaseY() + 30;
             
             offset = 5;
-            tft.fillRect(ic_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
+            tft.fillRect(ic_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
@@ -554,7 +554,7 @@ void drawChangeableFuelContent(int w) {
         int x = f_getBaseX(), y = f_getBaseY(); 
         tft.fillRect(x, y, w, FUEL_HEIGHT, color);
         tft.drawLine(x + w, y, x + w, y + FUEL_HEIGHT, ST7735_BLACK);
-        tft.drawRect(x, y, width, FUEL_HEIGHT, C_GRAY_DARK);
+        tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
     }
 }
 
@@ -581,3 +581,20 @@ float readOilTemp(void) {
     return ntcToTemp(A1, 1506, 1500);
 }
 
+//-------------------------------------------------------------------------------------------------
+//Read throttle
+//-------------------------------------------------------------------------------------------------
+
+float readThrottle(void) {
+    set4051ActivePin(2);
+    return ((getAverageValueFrom(A1) - THROTTLE_MIN) * 100) / (THROTTLE_MAX - THROTTLE_MIN);
+}
+
+//-------------------------------------------------------------------------------------------------
+//Read air temperature
+//-------------------------------------------------------------------------------------------------
+
+float readAirTemperature(void) {
+    set4051ActivePin(3);
+    return ntcToTemp(A1, 5050, 5100);
+}

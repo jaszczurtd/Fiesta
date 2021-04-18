@@ -52,6 +52,12 @@ void readValues(void) {
       case F_OIL_TEMP:
         valueFields[F_OIL_TEMP] = readOilTemp();
         break;
+      case F_ENGINE_LOAD:
+        valueFields[F_ENGINE_LOAD] = readThrottle();
+        break;
+      case F_INTAKE_TEMP:
+        valueFields[F_INTAKE_TEMP] = readAirTemperature();
+        break;
     }
     if(currentValue++ > F_LAST) {
       currentValue = 0;
