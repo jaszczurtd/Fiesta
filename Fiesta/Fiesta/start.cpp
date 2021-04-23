@@ -17,6 +17,8 @@ void initialization(void) {
     valueFields[a] = 0.0;
   }
 
+  initRPMCount();
+
   initGraphics();
   redrawFuel();
   redrawTemperature();
@@ -63,6 +65,7 @@ void readValues(void) {
       currentValue = 0;
     }
   }
+  readRPM();
 }
 
 void seriousAlertsDrawFunctions() {
@@ -118,4 +121,40 @@ void looper(void) {
 
 }
 
+#define engineCylinders 4    
+#define engineCycles 4  
+#define refreshInterval 750
 
+static unsigned long previousMillis = 0;
+static volatile int RPMpulses = 0;
+static volatile unsigned long shortPulse = 0;
+static volatile unsigned long lastPulse = 0;
+
+void countRPM(void) {
+  unsigned long now = micros();
+  unsigned long nowPulse = now - lastPulse;
+  
+  lastPulse = now;
+
+  if((nowPulse >> 1) > shortPulse){ 
+    RPMpulses++;
+    shortPulse = nowPulse; 
+  } else { 
+    shortPulse = nowPulse;
+  }
+}
+
+void initRPMCount(void) {
+  pinMode(4, INPUT_PULLUP); 
+  attachInterrupt(digitalPinToInterrupt(4), countRPM, FALLING);  
+}
+
+void readRPM(void) {
+  if(millis() - previousMillis > refreshInterval) {
+    previousMillis = millis();
+
+    int RPM = int(RPMpulses * (60000.0 / float(refreshInterval)) * engineCycles / engineCylinders / 2.0 ); 
+    RPMpulses = 0; 
+    valueFields[F_RPM] = min(99999, RPM); 
+  }  
+}
