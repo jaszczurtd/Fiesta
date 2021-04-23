@@ -23,5 +23,7 @@ void initialization(void);
 void looper(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
+void initRPMCount(void);
+void readRPM(void);
 
 #endif
