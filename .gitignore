@@ -87,3 +87,4 @@ __pycache__
 *.eep
 *.lss
 Fiesta/ArduinoOutput/
+Fiesta_pcbs/ecu/~ecu.pcb
