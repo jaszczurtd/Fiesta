@@ -1,0 +1,114 @@
+1	glow plugs relay
+2	nc
+3	(sck)
+4	(sda)
+5	(a0)
+6	(cpu reset)
+7	(cs)
+8	(3.3v)
+9	nc
+10	nc
+11	nc
+12	heater hi
+13	heater lo
+14	EGT
+15
+16
+17	heated glass
+18
+19	heated glass
+20	nc
+21	hall sign
+22	hall gnd
+23	nc                                    
+24	nc
+25	gnd
+26	nc
+
+27	5V
+28	nc
+29	nc
+30	nc
+31	turbo pressure
+32	"H" glass button
+33	nc
+34	misc 1
+35	EGR
+36	nc
+37	nc
+38	nc
+39	
+40	nc
+41	misc 2
+42	turbo
+43	nc
+44	nc
+45	nc
+46
+47	nc
+48	nc
+49	SDA
+50	SCL
+51	gnd
+52	nc
+
+53	throttle pos
+54	nc
+55	+12V / ATT
+56	nc
+57	oil temp
+58	coolant temp
+59	nc
+60	nc
+61	nc
+62	nc
+63	air temp
+64	nc
+65	nc
+66
+67	nc
+68	FAN
+69	idle
+70
+71	+12V / ignition
+72	nc
+73	nc
+74	nc
+75	nc
+76	gnd
+77	gnd
+78	nc
+
+79	nc
+80	glow plugs lamp
+81	nc
+82	nc
+83	3.3V
+84	nc
+85	nc
+86	nc
+87	nc
+88	nc
+89	nc
+90
+91	
+92	+12V / ignition
+93	nc
+94	nc
+95	nc
+96
+97	+12V / ignition
+98	nc
+99	nc
+100	
+101	nc
+102	nc
+103	gnd
+104	nc
+
+
+
+
+
+
+
