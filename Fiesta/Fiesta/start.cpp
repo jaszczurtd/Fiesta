@@ -4,7 +4,7 @@
 static int readCycles = 0;
 static int currentValue = 0;
 
-static float valueFields[F_LAST];
+float valueFields[F_LAST];
 
 void initialization(void) {
 
@@ -12,6 +12,10 @@ void initialization(void) {
   Serial.begin(9600);
  
   init4051();
+
+  #ifdef I2C_SCANNER
+  i2cScanner();
+  #endif
 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = 0.0;
@@ -41,6 +45,7 @@ void drawFunctions(void) {
   showEngineLoadAmount((unsigned char)valueFields[F_ENGINE_LOAD]);
   showRPMamount((int)valueFields[F_RPM]);
   showEGTTemperatureAmount((int)valueFields[F_EGT]);
+  showVolts(valueFields[F_VOLTS]);
 }
 
 void readValues(void) {
@@ -59,6 +64,9 @@ void readValues(void) {
         break;
       case F_INTAKE_TEMP:
         valueFields[F_INTAKE_TEMP] = readAirTemperature();
+        break;
+      case F_VOLTS:
+        valueFields[F_VOLTS] = readVolts();
         break;
     }
     if(currentValue++ > F_LAST) {

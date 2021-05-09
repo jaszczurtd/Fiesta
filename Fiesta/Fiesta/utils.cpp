@@ -7,52 +7,6 @@
 
 #include "utils.h"
 
-int binatoi(char *s) {
-    int i, l = 0, w = 1;
-    
-    for(i = 0; i < strlen(s); i++) {
-        if (s [i] == '1')  {
-            l += w;
-            w *= 2;
-        }
-        if(s [i]=='0') {
-            w *= 2;
-        }
-    }
-    return(l);
-}
-
-static char binaryNum[16 + 1];
-char *decToBinary(int n) {
-    // array to store binary number
-    int a = 0, c, k;
-    
-    memset(binaryNum, 0, sizeof(binaryNum));
-    
-    for (c = 15; c >= 0; c--) {
-        k = n >> c;
-        
-        if (k & 1) {
-            binaryNum[a++] = '1';
-        } else {
-            binaryNum[a++] = '0';
-        }
-    }
-    return binaryNum;
-}
-
-unsigned char BinToBCD(unsigned char bin) {
-    return ((((bin) / 10) << 4) + ((bin) % 10));
-}
-
-
-unsigned char reverse(unsigned char b) {
-   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
-   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
-   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
-   return b;
-}
-
 void floatToDec(float val, int *hi, int *lo) {
 	int t1 = (int)val;
 	if(t1 > -128) {
@@ -71,7 +25,7 @@ void floatToDec(float val, int *hi, int *lo) {
 }
 
 float adcToVolt(float basev, int adc) {
-    return adc * (basev/1024.0);    
+    return adc * (basev / 1024.0);    
 }
 
 float getAverageValueFrom(int tpin) {
@@ -112,56 +66,8 @@ void valToPWM(unsigned char pin, unsigned char val) {
     analogWrite(pin, (unsigned char)(255 - val));
 }
 
-void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer) {
-    Adafruit_ST7735 tft = returnReference();
-
-    tft.fillRect(x, y, width, height, background);
-
-    for(register int row = 0; row < height; row++) {
-        for(register int col = 0; col < width; col++) {
-            int px = pgm_read_word(pointer++);
-            if(px != background) {
-                tft.drawPixel(col + x, row + y, px);
-            }
-        }      
-    }
-}
-
 int percentToWidth(float percent, int maxWidth) {
     return ((percent / 100) * (maxWidth - 2));
-}
-
-int textWidth(const char* text) {
-    Adafruit_ST7735 tft = returnReference();
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-    return w;
-}
-
-int textHeight(const char* text) {
-    Adafruit_ST7735 tft = returnReference();
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-    return h;
-}
-
-void drawTempValue(int x, int y, int valToDisplay) {
-    Adafruit_ST7735 tft = returnReference();
-
-    tft.setFont();
-    tft.setTextSize(1);
-    tft.setTextColor(ST7735_BLACK);
-    tft.setCursor(x, y);
-
-    tft.fillRect(x, y, 22, 8, BIG_ICONS_BG_COLOR);
-
-    char temp[8];
-    memset(temp, 0, sizeof(temp));
-    snprintf(temp, sizeof(temp) - 1, "%d", valToDisplay);
-
-    tft.println(temp);
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
@@ -169,66 +75,12 @@ int currentValToHeight(int currentVal, int maxVal) {
     return percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
 }
 
-void drawTempBar(int x, int y, int currentHeight, int color) {
-    Adafruit_ST7735 tft = returnReference();
-    
-    tft.fillRect(x, y, 3, currentHeight, color);
-    tft.fillRect(x, y - 2, 3, 2, BIG_ICONS_BG_COLOR);
-}
-
-void displayErrorWithMessage(int x, int y, const char *msg) {
-    Adafruit_ST7735 tft = returnReference();
-
-    int workingx = x; 
-    int workingy = y;
-
-    tft.fillCircle(workingx, workingy, 10, ST77XX_RED);
-    workingx += 20;
-    tft.fillCircle(workingx, workingy, 10, ST77XX_RED);
-
-    workingy += 5;
-    workingx = x + 4;
-
-    tft.fillRoundRect(workingx, workingy, 15, 40, 6, ST77XX_RED);
-    workingy +=30;
-    tft.drawLine(workingx, workingy, workingx + 14, workingy, ST77XX_BLACK);
-
-    workingx +=6;
-    workingy +=4;
-    tft.drawLine(workingx, workingy, workingx, workingy + 5, ST77XX_BLACK);
-    tft.drawLine(workingx + 1, workingy, workingx + 1, workingy + 5, ST77XX_BLACK);
-
-    workingx = x -16;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, ST77XX_BLACK);
-
-    workingy = y - 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y - 2, ST77XX_BLACK);
-
-    workingy = y + 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y + 2, ST77XX_BLACK);
-
-    workingx = x + 23;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, ST77XX_BLACK);
-  
-    workingy = y - 3;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y - 8, ST77XX_BLACK);
-
-    workingy = y + 1;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, ST77XX_BLACK);
-
-    tft.setCursor(x + 8, y + 46);
-    tft.setTextColor(ST77XX_BLUE);
-    tft.setTextSize(1);
-    tft.println(msg);
-}
-
 PCF8574 expander = PCF8574(PCF8574_ADDR);
 void pcf8574(unsigned char pin, bool value) {
     expander.write(pin, value);
 }
 
+#ifdef I2C_SCANNER
 void i2cScanner(void) {
   byte error, address;
   int nDevices;
@@ -245,18 +97,18 @@ void i2cScanner(void) {
  
     if (error == 0) {
       Serial.print("I2C device found at address 0x");
-      if (address<16)
+      if (address < 16)
         Serial.print("0");
-      Serial.print(address,HEX);
+      Serial.print(address, HEX);
       Serial.println("  !");
  
       nDevices++;
     }
     else if (error==4) {
       Serial.print("Unknown error at address 0x");
-      if (address<16)
+      if (address < 16)
         Serial.print("0");
-      Serial.println(address,HEX);
+      Serial.println(address, HEX);
     }    
   }
   if (nDevices == 0)
@@ -266,6 +118,7 @@ void i2cScanner(void) {
  
   delay(5000);           // wait 5 seconds for next scan
 }
+#endif
 
 void init4051(void) {
     pinMode(13, OUTPUT);  //C

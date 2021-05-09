@@ -9,6 +9,12 @@
 
 void initGraphics(void);
 Adafruit_ST7735 returnReference(void);
+void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
+int textWidth(const char* text);
+int textHeight(const char* text);
+void drawTempValue(int x, int y, int valToDisplay);
+void drawTempBar(int x, int y, int currentHeight, int color);
+void displayErrorWithMessage(int x, int y, const char *msg);
 
 #define TFT_CS     2
 #define TFT_RST    0  // you can also connect this to the Arduino reset
