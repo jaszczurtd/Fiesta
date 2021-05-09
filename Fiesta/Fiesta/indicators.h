@@ -11,6 +11,10 @@
 
 #define FUEL_BOX_COLOR 0xBDF7
 
+#define VOLTS_OK_COLOR 0x4228
+#define VOLTS_LOW_ERROR_COLOR 0xA000
+#define VOLTS_BIG_ERROR_COLOR ST7735_RED
+
 #define TEMP_DOT_X 17
 #define TEMP_DOT_Y 39
 
@@ -48,11 +52,13 @@ void redrawRPM(void);
 void showRPMamount(int currentVal);
 void redrawEGT(void);
 void showEGTTemperatureAmount(int currentVal);
+void showVolts(float volts);
 
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
 float readThrottle(void);
 float readAirTemperature(void);
+float readVolts(void);
 
 #endif

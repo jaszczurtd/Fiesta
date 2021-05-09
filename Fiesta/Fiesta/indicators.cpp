@@ -204,7 +204,7 @@ void showPressureAmount(float current) {
             lastLO = lo;
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d.%d", hi, lo);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%d"), hi, lo);
 
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y - 11;
@@ -267,7 +267,7 @@ void showEngineLoadAmount(unsigned char currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d%%", currentVal);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d%%"), currentVal);
 
             w = textWidth(displayTxt);
 
@@ -318,7 +318,7 @@ void showEGTTemperatureAmount(int currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
 
             w = textWidth(displayTxt);
 
@@ -371,7 +371,7 @@ void showICTemperatureAmount(unsigned char currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
 
             w = textWidth(displayTxt);
 
@@ -423,7 +423,7 @@ void showRPMamount(int currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, "%d", currentVal);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
 
             w = textWidth(displayTxt);
 
@@ -455,15 +455,15 @@ void redrawFuel(void) {
 static int currentWidth = 0;
 
 int f_getBaseX(void) {
-    return OFFSET + FUEL_WIDTH + OFFSET;
+    return (OFFSET * 3) + FUEL_WIDTH + OFFSET;
 }
 
 int f_getBaseY(void) {
-    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - (OFFSET / 2); 
+    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - OFFSET; 
 }
 
 int f_getWidth(void) {
-    return SCREEN_W - f_getBaseX() - OFFSET;
+    return SCREEN_W - f_getBaseX() - (OFFSET / 2);
 }
 
 void drawFuelEmpty(void) {
@@ -495,7 +495,7 @@ void showFuelAmount(int currentVal, int maxVal) {
 
         int x = f_getBaseX(), y = f_getBaseY(), tw;
 
-        drawImage(OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned int*)fuelIcon);
+        drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned int*)fuelIcon);
 
         drawChangeableFuelContent(currentWidth);
 
@@ -559,6 +559,54 @@ void drawChangeableFuelContent(int w) {
 }
 
 //-------------------------------------------------------------------------------------------------
+//volt indicator
+//-------------------------------------------------------------------------------------------------
+
+int v_getBaseX(void) {
+    return 0;
+}
+
+int v_getBaseY(void) {
+    return 120; 
+}
+
+static int lastV1 = -1, lastV2 = -1;
+
+void showVolts(float volts) {
+    int v1, v2;
+
+    floatToDec(volts, &v1, &v2);
+    if(v1 != lastV1 || v2 != lastV2) {
+        lastV1 = v1;
+        lastV2 = v2;
+
+        Adafruit_ST7735 tft = returnReference();
+
+        int x = v_getBaseX();
+        int y = v_getBaseY();
+
+        int color = VOLTS_OK_COLOR;
+        if(volts < 11.5) {
+            color = VOLTS_LOW_ERROR_COLOR;
+        }
+        if(volts > 14.7) {
+            color = VOLTS_BIG_ERROR_COLOR;
+        }
+
+        tft.setTextColor(color);
+        tft.setCursor(x, y);
+
+        memset(displayTxt, 0, sizeof(displayTxt));
+        snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%dV"), v1, v2);
+
+        tft.fillRect(x, y, textWidth((const char*)F("14.4V")) + 2, 8, ST7735_BLACK);
+
+        tft.setTextSize(1);
+        tft.println(displayTxt);
+    }
+}
+
+//-------------------------------------------------------------------------------------------------
 //READERS
 //-------------------------------------------------------------------------------------------------
 
@@ -597,4 +645,12 @@ float readThrottle(void) {
 float readAirTemperature(void) {
     set4051ActivePin(3);
     return ntcToTemp(A1, 5050, 5100);
+}
+
+//-------------------------------------------------------------------------------------------------
+//Read volts
+//-------------------------------------------------------------------------------------------------
+
+float readVolts(void) {
+    return analogRead(A2) / 53.157142;
 }
