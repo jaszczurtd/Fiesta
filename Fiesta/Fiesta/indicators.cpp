@@ -4,6 +4,13 @@
 //coolant temperature indicator
 //-------------------------------------------------------------------------------------------------
 
+
+const char *half = (char*)F("1/2");
+const char *full = (char*)F("F");
+const char *empty = (char*)F("E");
+const char *emptyMessage = (char*)F("Pusty bak!");
+const char *err = (char*)F("ERR");
+
 static char displayTxt[8];
 
 static bool t_drawOnce = true; 
@@ -371,7 +378,13 @@ void showICTemperatureAmount(unsigned char currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+
+            bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
+            if(error) {
+                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%s"), err);
+            } else {
+                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+            }
 
             w = textWidth(displayTxt);
 
@@ -382,8 +395,10 @@ void showICTemperatureAmount(unsigned char currentVal) {
             tft.fillRect(ic_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
             tft.setCursor(x, y);
             tft.println(displayTxt);
-
-            tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+            
+            if(!error) {
+                tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+            }
         }
     }
 }
@@ -442,11 +457,6 @@ void showRPMamount(int currentVal) {
 //fuel indicator
 //-------------------------------------------------------------------------------------------------
 
-const char *half = (char*)F("1/2");
-const char *full = (char*)F("F");
-const char *empty = (char*)F("E");
-const char *emptyMessage = (char*)F("Pusty bak!");
-
 static bool f_drawOnce = true; 
 void redrawFuel(void) {
     f_drawOnce = true;
@@ -496,6 +506,14 @@ void showFuelAmount(int currentVal, int maxVal) {
         int x = f_getBaseX(), y = f_getBaseY(), tw;
 
         drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned int*)fuelIcon);
+
+        tft.fillTriangle(x - 6 - FUEL_WIDTH - OFFSET, 
+            y + ((FUEL_HEIGHT) / 2), 
+            x - FUEL_WIDTH - OFFSET - 1, 
+            y + 6, 
+            x - FUEL_WIDTH - OFFSET - 1, 
+            y + (FUEL_HEIGHT - 6), 
+            FUEL_COLOR);
 
         drawChangeableFuelContent(currentWidth);
 
@@ -597,9 +615,9 @@ void showVolts(float volts) {
         tft.setCursor(x, y);
 
         memset(displayTxt, 0, sizeof(displayTxt));
-        snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%dV"), v1, v2);
+        snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%dv"), v1, v2);
 
-        tft.fillRect(x, y, textWidth((const char*)F("14.4V")) + 2, 8, ST7735_BLACK);
+        tft.fillRect(x, y, textWidth((const char*)F("14.4v")) + 2, 8, ST7735_BLACK);
 
         tft.setTextSize(1);
         tft.println(displayTxt);
