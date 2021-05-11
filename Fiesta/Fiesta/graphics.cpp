@@ -17,8 +17,6 @@ void initGraphics(void) {
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
   drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned int*)FiestaLogo);
-  delay(2000);
-  tft.fillScreen(ST7735_BLACK);
 }
 
 void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer) {
@@ -56,11 +54,16 @@ void drawTempValue(int x, int y, int valToDisplay) {
 
     tft.fillRect(x, y, 24, 8, BIG_ICONS_BG_COLOR);
 
-    char temp[8];
-    memset(temp, 0, sizeof(temp));
-    snprintf(temp, sizeof(temp) - 1, (const char*)F("%d"), valToDisplay);
+    if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
+        tft.println(err);
+        return;
+    } else {
+        char temp[8];
+        memset(temp, 0, sizeof(temp));
 
-    tft.println(temp);
+        snprintf(temp, sizeof(temp) - 1, (const char*)F("%d"), valToDisplay);
+        tft.println(temp);
+    }
 }
 
 void drawTempBar(int x, int y, int currentHeight, int color) {

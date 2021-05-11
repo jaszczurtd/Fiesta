@@ -76,8 +76,14 @@ int currentValToHeight(int currentVal, int maxVal) {
 }
 
 PCF8574 expander = PCF8574(PCF8574_ADDR);
+void pcf857_init(void) {
+  for(int pin = 0; pin < 7; pin++) {
+    expander.write(pin, 0);
+  }
+}
+
 void pcf8574(unsigned char pin, bool value) {
-    expander.write(pin, value);
+  expander.write(pin, value);
 }
 
 #ifdef I2C_SCANNER
@@ -132,4 +138,9 @@ void set4051ActivePin(unsigned char pin) {
     digitalWrite(11, (pin & 0x01) > 0); 
     digitalWrite(12, (pin & 0x02) > 0); 
     digitalWrite(13, (pin & 0x04) > 0); 
+}
+
+int getSeconds(void) {
+  long msec = millis();
+  return ((msec + 500) / 1000);
 }

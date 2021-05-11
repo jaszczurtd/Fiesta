@@ -9,21 +9,39 @@ float valueFields[F_LAST];
 void initialization(void) {
 
   Wire.begin();
+  pcf857_init();
+
   Serial.begin(9600);
  
-  init4051();
-
   #ifdef I2C_SCANNER
   i2cScanner();
   #endif
 
+  init4051();
+
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = 0.0;
   }
+  float coolant = readCoolantTemp();
+  valueFields[F_COOLANT_TEMP] = coolant;
 
-  initRPMCount();
+  //coolant sensor failure - fan enabled in that case at start
+  if(coolant < TEMP_LOWEST) {
+    fan(true);          
+  }
 
   initGraphics();
+
+  int sec = getSeconds();
+  int secDest = sec + FIESTA_INTRO_TIME;
+  while(sec < secDest) {
+    sec = getSeconds();
+  }
+
+  Adafruit_ST7735 tft = returnReference();
+  tft.fillScreen(ST7735_BLACK);
+
+  initRPMCount();
   redrawFuel();
   redrawTemperature();
   redrawOil();
@@ -112,9 +130,6 @@ void looper(void) {
     draw = true;
   }
 
-  pcf8574(0, alertBlink);
-  pcf8574(1, seriousAlertBlink);
-
   if(draw) {
     drawFunctions();
     draw = false;
@@ -165,4 +180,24 @@ void readRPM(void) {
     RPMpulses = 0; 
     valueFields[F_RPM] = min(99999, RPM); 
   }  
+}
+
+void glowPlugs(bool enable) {
+  pcf8574(O_GLOW_PLUGS, enable);
+}
+
+void glowPlugsLamp(bool enable) {
+  pcf8574(O_GLOW_PLUGS_LAMP, enable);
+}
+
+void fan(bool enable) {
+  pcf8574(O_FAN, enable);
+}
+
+void heater(bool enable, int level) {
+  pcf8574(level, enable);
+}
+
+void heatedGlass(bool enable, int side) {
+  pcf8574(side, enable);
 }

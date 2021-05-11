@@ -33,6 +33,8 @@
 #define THROTTLE_MIN 51
 #define THROTTLE_MAX 957
 
+extern const char *err;
+
 //indicators
 void redrawTemperature(void);
 void showTemperatureAmount(int currentVal, int maxVal);
