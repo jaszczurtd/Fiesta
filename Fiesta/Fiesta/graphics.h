@@ -4,19 +4,11 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+#include <Fonts/FreeSansBold9pt7b.h>
 
 #include "utils.h"
 #include "start.h"
-#include "indicators.h"
 
-void initGraphics(void);
-Adafruit_ST7735 returnReference(void);
-void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
-int textWidth(const char* text);
-int textHeight(const char* text);
-void drawTempValue(int x, int y, int valToDisplay);
-void drawTempBar(int x, int y, int currentHeight, int color);
-void displayErrorWithMessage(int x, int y, const char *msg);
 
 #define TFT_CS     2
 #define TFT_RST    0  // you can also connect this to the Arduino reset
@@ -46,6 +38,71 @@ void displayErrorWithMessage(int x, int y, const char *msg);
 #define FUEL_WIDTH 18
 #define FUEL_HEIGHT 18
 #define FUEL_COLOR 0xfda0
+
+#define FUEL_BOX_COLOR 0xBDF7
+
+#define VOLTS_OK_COLOR 0x4228
+#define VOLTS_LOW_ERROR_COLOR 0xA000
+#define VOLTS_BIG_ERROR_COLOR ST7735_RED
+
+#define TEMP_DOT_X 17
+#define TEMP_DOT_Y 39
+
+#define OIL_DOT_X 15
+#define OIL_DOT_Y 39
+
+#define BAR_TEXT_X 6
+#define BAR_TEXT_Y 51
+
+#define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
+
+#define OFFSET 4
+
+#define C_INIT_VAL 99999;
+
+#define THROTTLE_MIN 51
+#define THROTTLE_MAX 957
+
+extern const char *err;
+
+
+void initGraphics(void);
+Adafruit_ST7735 returnReference(void);
+void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer);
+int textWidth(const char* text);
+int textHeight(const char* text);
+void drawTempValue(int x, int y, int valToDisplay);
+void drawTempBar(int x, int y, int currentHeight, int color);
+void displayErrorWithMessage(int x, int y, const char *msg);
+
+//indicators
+void redrawTemperature(void);
+void showTemperatureAmount(int currentVal, int maxVal);
+void redrawOil(void);
+void showOilAmount(int currentVal, int maxVal);
+void redrawPressure(void);
+void showPressureAmount(float current);
+void redrawIntercooler(void);
+void showICTemperatureAmount(unsigned char currentVal);
+void redrawFuel(void);
+void drawFuelEmpty(void);
+void showFuelAmount(int currentVal, int maxVal);
+void drawChangeableFuelContent(int w);
+void redrawEngineLoad(void);
+void showEngineLoadAmount(unsigned char currentVal);
+void redrawRPM(void);
+void showRPMamount(int currentVal);
+void redrawEGT(void);
+void showEGTTemperatureAmount(int currentVal);
+void showVolts(float volts);
+
+//readers
+float readCoolantTemp(void);
+float readOilTemp(void);
+float readThrottle(void);
+float readAirTemperature(void);
+float readVolts(void);
+
 
 const unsigned int FiestaLogo[] PROGMEM = { 
 0xf79e, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffdf, 0xf7bf, 0xf7be, 0xef7d, 0xef5d, 0xe73d, 0xe73d, 0xe71c, 0xe73c, 0xe75d, 0xef5d, 0xef7d, 0xef5d, 0xef7d, 0xef5d, 0xef5d, 0xef7d, 0xef7d, 0xef5d, 0xef7d, 0xef7d, 0xef5d, 0xef5d, 0xef5d, 0xef5d, 0xef5d, 0xef5d, 0xe73c, 0xe73c, 0xe71c, 0xdf1c, 0xdf1c, 0xdefb, 0xdefc, 0xdefb, 0xdefb, 0xdefb, 0xdefb, 0xdefb, 0xdefc, 0xe71c, 0xe73c, 0xef7d, 0xf79e, 0xf7be, 0xffdf, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xf79e, 

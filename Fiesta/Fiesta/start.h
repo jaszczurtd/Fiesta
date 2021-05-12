@@ -3,9 +3,10 @@
 #define T_START
 
 #include "graphics.h"
-#include "indicators.h"
 #include "utils.h"
 #include <Wire.h>
+
+//#define DEBUG
 
 #define FIESTA_INTRO_TIME 2 //in seconds
 
@@ -44,6 +45,8 @@ extern float valueFields[];
 #define TEMP_LOWEST -100
 #define TEMP_HIGHEST 170
 
+#define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
+
 void initialization(void);
 void looper(void);
 bool seriousAlertSwitch(void);
@@ -56,5 +59,13 @@ void glowPlugsLamp(bool enable);
 void fan(bool enable);
 void heater(bool enable, int level);
 void heatedGlass(bool enable, int side);
+bool isGlowPlugsHeating(void);
+
+#ifdef DEBUG
+void debugFunc(void);
+#endif
+
+void initGlowPlugsTime(float temp);
+void glowPlugsMainLoop(void);
 
 #endif

@@ -11,9 +11,6 @@
 //debug i2c only
 //#define I2C_SCANNER
 
-static char debb[128];
-#define deb(format, ...) { memset(debb, 0, sizeof(debb));  snprintf(debb, sizeof(debb) - 1, format, ## __VA_ARGS__); Serial.println(debb); }
-
 #define PCF8574_ADDR 0x38
 
 // temp. for nominal resistance (almost always 25 C)

@@ -77,8 +77,8 @@ int currentValToHeight(int currentVal, int maxVal) {
 
 PCF8574 expander = PCF8574(PCF8574_ADDR);
 void pcf857_init(void) {
-  for(int pin = 0; pin < 7; pin++) {
-    expander.write(pin, 0);
+  for(int pin = 0; pin < 8; pin++) {
+    expander.write(pin, false);
   }
 }
 
@@ -110,7 +110,7 @@ void i2cScanner(void) {
  
       nDevices++;
     }
-    else if (error==4) {
+    else if (error == 4) {
       Serial.print("Unknown error at address 0x");
       if (address < 16)
         Serial.print("0");
@@ -141,6 +141,5 @@ void set4051ActivePin(unsigned char pin) {
 }
 
 int getSeconds(void) {
-  long msec = millis();
-  return ((msec + 500) / 1000);
+  return ((millis() + 500) / 1000);
 }
