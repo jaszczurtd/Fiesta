@@ -25,10 +25,8 @@ void initialization(void) {
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
 
-  //coolant sensor failure - fan enabled in that case at start (forever)
-  if(coolant < TEMP_LOWEST) {
+  if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
-    fan(true);          
   }
   initGlowPlugsTime(coolant);
 
@@ -155,6 +153,7 @@ void looper(void) {
 
   readValues();
   glowPlugsMainLoop();
+  fanMainLoop();
 
 }
 
@@ -279,7 +278,38 @@ void glowPlugsMainLoop(void) {
 // fan
 //-----------------------------------------------------------------------------
 
+static bool fanEnabled = false;
+static bool lastFanStatus = false;
 
+void fanMainLoop(void) {
+
+  float coolant = valueFields[F_COOLANT_TEMP];
+  //works only if the temp. sensor is plugged
+  if(coolant > TEMP_LOWEST) {
+
+    if(fanEnabled && coolant <= TEMP_FAN_STOP) {
+      fanEnabled = false;
+    }
+
+    if(!fanEnabled && coolant >= TEMP_FAN_START) {
+      fanEnabled = true;
+    }
+
+  } else {
+    //temp sensor read fail, fan enabled by default
+    fanEnabled = true;
+  }
+
+  if(lastFanStatus != fanEnabled) {
+    fan(fanEnabled);
+    lastFanStatus = fanEnabled;          
+  }
+
+}
+
+//-----------------------------------------------------------------------------
+// heated glass
+//-----------------------------------------------------------------------------
 
 
 
