@@ -47,6 +47,9 @@ extern float valueFields[];
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
 
+#define TEMP_FAN_START  100
+#define TEMP_FAN_STOP   93
+
 void initialization(void);
 void looper(void);
 bool seriousAlertSwitch(void);
@@ -67,5 +70,6 @@ void debugFunc(void);
 
 void initGlowPlugsTime(float temp);
 void glowPlugsMainLoop(void);
+void fanMainLoop(void);
 
 #endif
