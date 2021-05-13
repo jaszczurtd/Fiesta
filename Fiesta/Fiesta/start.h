@@ -47,8 +47,8 @@ extern float valueFields[];
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
 
-#define TEMP_FAN_START  100
-#define TEMP_FAN_STOP   93
+#define TEMP_FAN_START  102
+#define TEMP_FAN_STOP   94
 
 void initialization(void);
 void looper(void);
