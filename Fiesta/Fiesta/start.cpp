@@ -1,9 +1,6 @@
 
 #include "start.h"
 
-static int readCycles = 0;
-static int currentValue = 0;
-
 float valueFields[F_LAST];
 
 void initialization(void) {
@@ -42,6 +39,7 @@ void initialization(void) {
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
 
+  initHeatedWindow();
   initRPMCount();
   redrawFuel();
   redrawTemperature();
@@ -74,6 +72,9 @@ void drawFunctions(void) {
   showVolts(valueFields[F_VOLTS]);
   #endif
 }
+
+static int readCycles = 0;
+static int currentValue = 0;
 
 void readValues(void) {
   if(readCycles++ > READ_CYCLES_AMOUNT) {
@@ -154,6 +155,8 @@ void looper(void) {
   readValues();
   glowPlugsMainLoop();
   fanMainLoop();
+  engineHeaterMainLoop();
+  heatedWindowMainLoop();
 
 }
 
@@ -211,7 +214,7 @@ void heater(bool enable, int level) {
   pcf8574(level, enable);
 }
 
-void heatedGlass(bool enable, int side) {
+void heatedWindow(bool enable, int side) {
   pcf8574(side, enable);
 }
 
@@ -281,6 +284,10 @@ void glowPlugsMainLoop(void) {
 static bool fanEnabled = false;
 static bool lastFanStatus = false;
 
+bool isFanEnabled(void) {
+  return fanEnabled;  
+}
+
 void fanMainLoop(void) {
 
   float coolant = valueFields[F_COOLANT_TEMP];
@@ -308,21 +315,159 @@ void fanMainLoop(void) {
 }
 
 //-----------------------------------------------------------------------------
-// heated glass
+// engine heater
 //-----------------------------------------------------------------------------
+
+static bool heaterLoEnabled = false;
+static bool heaterHiEnabled = false;
+static bool lastHeaterLoEnabled = false;
+static bool lastHeaterHiEnabled = false;
+
+void engineHeaterMainLoop(void) {
+  float coolant = valueFields[F_COOLANT_TEMP];
+  float volts = valueFields[F_VOLTS];
+
+  if(coolant > TEMP_HEATER_STOP ||
+    isFanEnabled() ||
+    isGlowPlugsHeating() ||
+    volts < MINIMUM_VOLTS_AMOUNT) {
+    heaterLoEnabled = false;
+    heaterHiEnabled = false;
+  } else {
+
+    if(coolant <= (TEMP_HEATER_STOP / 2)) {
+      heaterLoEnabled = heaterHiEnabled = true;
+    } else {
+      heaterLoEnabled = true;
+      heaterHiEnabled = false;
+    }
+
+  }
+
+  if(lastHeaterHiEnabled != heaterHiEnabled) {
+    heater(heaterHiEnabled, O_HEATER_HI);
+    lastHeaterHiEnabled = heaterHiEnabled;
+  }
+  if(lastHeaterLoEnabled != heaterLoEnabled) {
+    heater(heaterLoEnabled, O_HEATER_LO);
+    lastHeaterLoEnabled = heaterLoEnabled;
+  }
+
+}
+
+//-----------------------------------------------------------------------------
+// heated window
+//-----------------------------------------------------------------------------
+
+static bool heatedWindowLEnabled = false;
+static bool heatedWindowPEnabled = false;
+static bool lastHeatedWindowLEnabled = false;
+static bool lastHeatedWindowPEnabled = false;
+static bool waitingForUnpress = false;
+
+static int heatedWindowsOverallTimer = 0;
+static int heatedWindowsSwitchTimer = 0;
+static int lastHeatedWindowsSecond = 0;
+
+void initHeatedWindow(void) {
+  pinMode(A3, INPUT_PULLUP);
+}
+bool isHeatedButtonPressed(void) {
+  return digitalRead(A3);
+}
+
+bool isHeatedWindowEnabled(void) {
+  return (heatedWindowLEnabled || heatedWindowPEnabled);
+}
+
+static void disableHeatedWindows(void) {
+  heatedWindowLEnabled = heatedWindowPEnabled = false;
+  heatedWindowsOverallTimer = heatedWindowsSwitchTimer = 0;
+  lastHeatedWindowsSecond = 0;
+}
+
+void heatedWindowMainLoop(void) {
+
+  if(waitingForUnpress) {
+    if(isHeatedButtonPressed()) {
+      waitingForUnpress = false;
+    }
+    return;
+  } else {
+
+    bool pressed = false;
+
+    if(!isHeatedButtonPressed()) {
+      pressed = true;
+      waitingForUnpress = true;
+    }
+
+    if(pressed) {
+
+      if(isHeatedWindowEnabled()) {
+        disableHeatedWindows();
+      } else {
+        heatedWindowsOverallTimer = HEATED_WINDOWS_TIME;
+        heatedWindowsSwitchTimer = HEATED_WINDOWS_SWITCH_TIME;
+        lastHeatedWindowsSecond = getSeconds();
+
+        //start from the left
+        heatedWindowLEnabled = true;
+        heatedWindowPEnabled = false;
+      }
+
+      pressed = false;
+      return;
+    }
+
+    if(isHeatedWindowEnabled()) {
+      if(lastHeatedWindowsSecond != getSeconds()) {
+        lastHeatedWindowsSecond = getSeconds();
+
+        if(heatedWindowsSwitchTimer-- <= 0) {
+          heatedWindowsSwitchTimer = HEATED_WINDOWS_SWITCH_TIME;
+          heatedWindowLEnabled = !heatedWindowLEnabled;
+          heatedWindowPEnabled = !heatedWindowPEnabled;
+        }
+
+        if(heatedWindowsOverallTimer-- <= 0) {
+          disableHeatedWindows();
+        }
+
+      }
+    }
+
+    //if not enough energy, disable heated windows
+    float volts = valueFields[F_VOLTS];
+    if(volts < MINIMUM_VOLTS_AMOUNT) {
+      disableHeatedWindows();
+    }
+
+    //execute action
+    if(heatedWindowLEnabled != lastHeatedWindowLEnabled) {
+      lastHeatedWindowLEnabled = heatedWindowLEnabled;
+      heatedWindow(heatedWindowLEnabled, O_HEATED_WINDOW_L);
+    }
+
+    if(heatedWindowPEnabled != lastHeatedWindowPEnabled) {
+      lastHeatedWindowPEnabled = heatedWindowPEnabled;
+      heatedWindow(heatedWindowPEnabled, O_HEATED_WINDOW_P);
+    }
+  }
+}
 
 
 
 #ifdef DEBUG
 void debugFunc(void) {
 
-Adafruit_ST7735 tft = returnReference();
+  Adafruit_ST7735 tft = returnReference();
 
-int x = 0;
-int y = 0;
-tft.setTextColor(ST7735_WHITE);
-tft.setCursor(x, y); y += 9;
-tft.println(glowPlugsTime);
+  int x = 0;
+  int y = 0;
+  tft.setTextColor(ST7735_WHITE);
+  tft.setCursor(x, y); y += 9;
+  tft.println(glowPlugsTime);
 
 }
 #endif
