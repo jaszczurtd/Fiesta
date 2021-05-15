@@ -575,7 +575,8 @@ void redrawFuel(void) {
     f_drawOnce = true;
 }
 
-static int currentWidth = 0;
+static int currentFuelWidth = 0;
+static bool fullRedrawNeeded = false;
 
 int f_getBaseX(void) {
     return (OFFSET * 3) + FUEL_WIDTH + OFFSET;
@@ -590,7 +591,7 @@ int f_getWidth(void) {
 }
 
 void drawFuelEmpty(void) {
-    if(currentWidth <= 1) {
+    if(currentFuelWidth <= 1) {
 
         int color = ST7735_WHITE;
         if(seriousAlertSwitch()) {
@@ -610,12 +611,22 @@ void drawFuelEmpty(void) {
 void showFuelAmount(int currentVal, int maxVal) {
     int width = f_getWidth();
     float percent = (currentVal * 100) / maxVal;
-    currentWidth = percentToWidth(percent, width);
+    currentFuelWidth = percentToWidth(percent, width);
+    if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
+        fullRedrawNeeded = true;
+    }
 
     if(f_drawOnce) {
-        int x = f_getBaseX(), y = f_getBaseY(), tw;
+        int x = 0; 
+        int y = y = f_getBaseY();
+        int tw;
+
+        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ST7735_BLACK);
+
+        x = f_getBaseX();
 
         drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned int*)fuelIcon);
+        tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
 
         tft.fillTriangle(x - 6 - FUEL_WIDTH - OFFSET, 
             y + ((FUEL_HEIGHT) / 2), 
@@ -625,7 +636,7 @@ void showFuelAmount(int currentVal, int maxVal) {
             y + (FUEL_HEIGHT - 6), 
             FUEL_COLOR);
 
-        drawChangeableFuelContent(currentWidth);
+        drawChangeableFuelContent(currentFuelWidth);
 
         y += FUEL_HEIGHT + (OFFSET / 2);
 
@@ -651,7 +662,7 @@ void showFuelAmount(int currentVal, int maxVal) {
 
         f_drawOnce = false;
     } else {
-        drawChangeableFuelContent(currentWidth);
+        drawChangeableFuelContent(currentFuelWidth);
     }
 }
 
@@ -669,7 +680,7 @@ void drawChangeableFuelContent(int w) {
 
     int width = f_getWidth();
     int minW = percentToWidth(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
-    if(w <= minW) {
+    if(w <= minW && w >= 1) {
         draw = true;
         if(alertSwitch()) {
             color = ST7735_RED;
@@ -678,8 +689,18 @@ void drawChangeableFuelContent(int w) {
 
     if(draw) {
         int x = f_getBaseX(), y = f_getBaseY(); 
-        tft.fillRect(x, y, w, FUEL_HEIGHT, color);
-        tft.drawLine(x + w, y, x + w, y + FUEL_HEIGHT, ST7735_BLACK);
+
+        if(fullRedrawNeeded) {
+            tft.fillRect(x + 1, y + 1, width - 2, FUEL_HEIGHT - 2, ST7735_BLACK);
+            fullRedrawNeeded = false;
+        }
+
+        tft.fillRect(x, y + 1, w, FUEL_HEIGHT - 2, color);
+        int toFill =  width - w - 1;
+        if(toFill < 0) {
+            toFill = 0;
+        }
+        tft.fillRect(x + w, y + 1, toFill, FUEL_HEIGHT - 2, ST7735_BLACK);
         tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
     }
 }
@@ -759,7 +780,11 @@ float readOilTemp(void) {
 
 float readThrottle(void) {
     set4051ActivePin(2);
-    return ((getAverageValueFrom(A1) - THROTTLE_MIN) * 100) / (THROTTLE_MAX - THROTTLE_MIN);
+    float val = ((getAverageValueFrom(A1) - THROTTLE_MIN) * 100) / (THROTTLE_MAX - THROTTLE_MIN);
+    if(val > 100.0) {
+        val = 100.0;
+    }
+    return val;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -777,4 +802,13 @@ float readAirTemperature(void) {
 
 float readVolts(void) {
     return analogRead(A2) / 53.157142;
+}
+
+//-------------------------------------------------------------------------------------------------
+//Read fuel amount
+//-------------------------------------------------------------------------------------------------
+
+float readFuel(void) {
+    set4051ActivePin(4);
+    return analogRead(A1);
 }

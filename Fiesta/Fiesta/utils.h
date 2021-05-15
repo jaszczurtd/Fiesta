@@ -28,6 +28,6 @@ void i2cScanner(void);
 void init4051(void);
 void set4051ActivePin(unsigned char pin);
 float getAverageValueFrom(int tpin);
-int getSeconds(void);
+unsigned long getSeconds(void);
 
 #endif

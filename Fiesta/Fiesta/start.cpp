@@ -2,6 +2,7 @@
 #include "start.h"
 
 float valueFields[F_LAST];
+static unsigned long alertsStartSecond = 0;
 
 void initialization(void) {
 
@@ -57,11 +58,12 @@ void initialization(void) {
   debugFunc();
   #endif
 
+  alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 }
 
 void drawFunctions(void) {
   #ifndef DEBUG
-  showFuelAmount((int)valueFields[F_FUEL], 1024);
+  showFuelAmount((int)valueFields[F_FUEL], 1023);
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
   showOilAmount((int)valueFields[F_OIL_TEMP], 150);
   showPressureAmount(valueFields[F_PRESSURE]);
@@ -95,6 +97,9 @@ void readValues(void) {
         break;
       case F_VOLTS:
         valueFields[F_VOLTS] = readVolts();
+        break;
+      case F_FUEL:
+        valueFields[F_FUEL] = readFuel();
         break;
     }
     if(currentValue++ > F_LAST) {
@@ -148,7 +153,9 @@ void looper(void) {
   }
 
   if(seriousAlertDraw) {
-    seriousAlertsDrawFunctions();
+    if(alertsStartSecond <= getSeconds()) {
+      seriousAlertsDrawFunctions();
+    }
     seriousAlertDraw = false;
   }
 

@@ -140,6 +140,6 @@ void set4051ActivePin(unsigned char pin) {
     digitalWrite(13, (pin & 0x04) > 0); 
 }
 
-int getSeconds(void) {
+unsigned long getSeconds(void) {
   return ((millis() + 500) / 1000);
 }
