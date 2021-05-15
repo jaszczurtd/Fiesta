@@ -8,6 +8,7 @@
 
 #include "utils.h"
 #include "start.h"
+#include "config.h"
 
 
 #define TFT_CS     2
@@ -54,17 +55,11 @@
 #define BAR_TEXT_X 6
 #define BAR_TEXT_Y 51
 
-#define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
-
 #define OFFSET 4
 
 #define C_INIT_VAL 99999;
 
-#define THROTTLE_MIN 51
-#define THROTTLE_MAX 957
-
 extern const char *err;
-
 
 void initGraphics(void);
 Adafruit_ST7735 returnReference(void);

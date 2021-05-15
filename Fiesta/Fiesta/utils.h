@@ -6,20 +6,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <PCF8574.h>
-#include "graphics.h"
 
-//debug i2c only
-//#define I2C_SCANNER
+#include "graphics.h"
+#include "config.h"
 
 #define PCF8574_ADDR 0x38
-
-// temp. for nominal resistance (almost always 25 C)
-#define TEMPERATURENOMINAL 21   
-// how many samples to take and average, more takes longer
-// but is more 'smooth'
-#define NUMSAMPLES 6
-// The beta coefficient of the thermistor (usually 3000-4000)
-#define BCOEFFICIENT 3600
 
 #define TEMP_BAR_MAXHEIGHT 30
 

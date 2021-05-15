@@ -2,13 +2,11 @@
 #ifndef T_START
 #define T_START
 
-#include "graphics.h"
-#include "utils.h"
 #include <Wire.h>
 
-//#define DEBUG
-
-#define FIESTA_INTRO_TIME 2 //in seconds
+#include "graphics.h"
+#include "utils.h"
+#include "config.h"
 
 extern float valueFields[];
 
@@ -17,8 +15,8 @@ extern float valueFields[];
 #define O_HEATER_HI 2
 #define O_HEATER_LO 3
 #define O_GLOW_PLUGS_LAMP 4
-#define O_HEATED_GLASS_L 5
-#define O_HEATED_GLASS_P 6
+#define O_HEATED_WINDOW_L 5
+#define O_HEATED_WINDOW_P 6
 
 #define F_FUEL 0
 #define F_COOLANT_TEMP 1
@@ -31,25 +29,6 @@ extern float valueFields[];
 #define F_VOLTS 8
 #define F_LAST 9
 
-#define READ_CYCLES_AMOUNT 20
-
-#define TEMP_OIL_MAX 155
-#define TEMP_OIL_OK_HI 115
-
-#define TEMP_MAX 120
-#define TEMP_MIN 45
-
-#define TEMP_OK_LO 70
-#define TEMP_OK_HI 105
-
-#define TEMP_LOWEST -100
-#define TEMP_HIGHEST 170
-
-#define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
-
-#define TEMP_FAN_START  102
-#define TEMP_FAN_STOP   94
-
 void initialization(void);
 void looper(void);
 bool seriousAlertSwitch(void);
@@ -61,7 +40,7 @@ void glowPlugs(bool enable);
 void glowPlugsLamp(bool enable);
 void fan(bool enable);
 void heater(bool enable, int level);
-void heatedGlass(bool enable, int side);
+void heatedWindow(bool enable, int side);
 bool isGlowPlugsHeating(void);
 
 #ifdef DEBUG
@@ -70,6 +49,12 @@ void debugFunc(void);
 
 void initGlowPlugsTime(float temp);
 void glowPlugsMainLoop(void);
+bool isFanEnabled(void);
 void fanMainLoop(void);
+void engineHeaterMainLoop(void);
+void heatedWindowMainLoop(void);
+bool isHeatedWindowEnabled(void);
+void initHeatedWindow(void);
+bool isHeatedButtonPressed(void);
 
 #endif
