@@ -331,9 +331,9 @@ void showPressureAmount(float current) {
             snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%d"), hi, lo);
 
             x = p_getBaseX() + BAR_TEXT_X;
-            y = p_getBaseY() + BAR_TEXT_Y - 11;
+            y = p_getBaseY() + BAR_TEXT_Y - 12;
 
-            tft.fillRect(x, y, 28, 13, BIG_ICONS_BG_COLOR);
+            tft.fillRect(x, y, 28, 15, BIG_ICONS_BG_COLOR);
 
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y;
@@ -811,4 +811,17 @@ float readVolts(void) {
 float readFuel(void) {
     set4051ActivePin(4);
     return analogRead(A1);
+}
+
+//-------------------------------------------------------------------------------------------------
+//Read bar pressure amount
+//-------------------------------------------------------------------------------------------------
+
+float readBarPressure(void) {
+    set4051ActivePin(5);
+    float val = ((float)analogRead(A1) / 300.0) - 1.0;
+    if(val < 0.0) {
+        val = 0.0;
+    } 
+    return val;
 }
