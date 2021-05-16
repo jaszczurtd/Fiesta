@@ -2,7 +2,10 @@
 #include "start.h"
 
 float valueFields[F_LAST];
+float reflectionValueFields[F_LAST];
+
 static unsigned long alertsStartSecond = 0;
+static bool highImportanceValueChanged = false;
 
 void initialization(void) {
 
@@ -61,36 +64,45 @@ void initialization(void) {
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 }
 
-void drawFunctions(void) {
+void drawLowImportanceValues(void) {
   #ifndef DEBUG
   showFuelAmount((int)valueFields[F_FUEL], 1023);
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
   showOilAmount((int)valueFields[F_OIL_TEMP], 150);
-  showPressureAmount(valueFields[F_PRESSURE]);
   showICTemperatureAmount((unsigned char)valueFields[F_INTAKE_TEMP]);
-  showEngineLoadAmount((unsigned char)valueFields[F_ENGINE_LOAD]);
-  showRPMamount((int)valueFields[F_RPM]);
   showEGTTemperatureAmount((int)valueFields[F_EGT]);
   showVolts(valueFields[F_VOLTS]);
+  showRPMamount((int)valueFields[F_RPM]);
   #endif
 }
 
-static int readCycles = 0;
-static int currentValue = 0;
+void drawHighImportanceValues(void) {
+  #ifndef DEBUG
+  showEngineLoadAmount((unsigned char)valueFields[F_ENGINE_LOAD]);
+  #endif
+}
+
+void drawMediumImportanceValues(void) {
+  #ifndef DEBUG
+  showPressureAmount(valueFields[F_PRESSURE]);
+  #endif
+}
+
+static unsigned char lowReadCycles = 0;
+static unsigned char lowCurrentValue = 0;
+static unsigned char highReadCycles = 0;
+static unsigned char mediumReadCycles = 0;
 
 void readValues(void) {
-  if(readCycles++ > READ_CYCLES_AMOUNT) {
-    readCycles = 0;
+  if(lowReadCycles++ > LOW_READ_CYCLES_AMOUNT) {
+    lowReadCycles = 0;
 
-    switch(currentValue) {
+    switch(lowCurrentValue) {
       case F_COOLANT_TEMP:
         valueFields[F_COOLANT_TEMP] = readCoolantTemp();
         break;
       case F_OIL_TEMP:
         valueFields[F_OIL_TEMP] = readOilTemp();
-        break;
-      case F_ENGINE_LOAD:
-        valueFields[F_ENGINE_LOAD] = readThrottle();
         break;
       case F_INTAKE_TEMP:
         valueFields[F_INTAKE_TEMP] = readAirTemperature();
@@ -102,10 +114,31 @@ void readValues(void) {
         valueFields[F_FUEL] = readFuel();
         break;
     }
-    if(currentValue++ > F_LAST) {
-      currentValue = 0;
+    if(lowCurrentValue++ > F_LAST) {
+      lowCurrentValue = 0;
     }
   }
+
+  if(highReadCycles++ > HIGH_READ_CYCLES_AMOUNT) {
+    highReadCycles = 0;
+
+    for(int a = 0; a < F_LAST; a++) {
+      switch(a) {
+        case F_ENGINE_LOAD:
+          valueFields[a] = readThrottle();
+          break;
+        case F_PRESSURE:
+          valueFields[a] = readBarPressure();
+          break;
+      }
+      if(reflectionValueFields[a] != valueFields[a]) {
+        reflectionValueFields[a] = valueFields[a];
+
+        highImportanceValueChanged = true;
+      }
+    }
+  }
+
   readRPM();
 }
 
@@ -117,6 +150,7 @@ void seriousAlertsDrawFunctions() {
 }
 
 static bool draw = false, seriousAlertDraw = false;
+static bool mediumDraw = false;
 
 static bool alertBlink = false, seriousAlertBlink = false;
 bool alertSwitch(void) {
@@ -126,7 +160,7 @@ bool seriousAlertSwitch(void) {
   return seriousAlertBlink;
 }
 
-static long lastSec = -1, lastHalfSec = -1;
+static long lastSec = -1, lastHalfSec = -1, lastHalfHalfSec = -1;
 
 void looper(void) {
 
@@ -134,6 +168,12 @@ void looper(void) {
 
   int sec = (msec % 1000 > 500);
   int halfsec = (msec % 500 > 250);
+  int halfhalfsec = (msec % 250 > 125);
+
+  if(lastHalfHalfSec != halfhalfsec) {
+    lastHalfHalfSec = halfhalfsec;
+    mediumDraw = true;
+  }
 
   if(lastHalfSec != halfsec) {
     lastHalfSec = halfsec;
@@ -147,9 +187,22 @@ void looper(void) {
     draw = true;
   }
 
+  //regular draw - low importance values
   if(draw) {
-    drawFunctions();
+    drawLowImportanceValues();
     draw = false;
+  }
+
+  //draw changes of high importance values
+  if(highImportanceValueChanged) {
+    drawHighImportanceValues();
+    highImportanceValueChanged = false;
+  }
+
+  //draw changes of medium importance values
+  if(mediumDraw) {
+    drawMediumImportanceValues();
+    mediumDraw = false;
   }
 
   if(seriousAlertDraw) {

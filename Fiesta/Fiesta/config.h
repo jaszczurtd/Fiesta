@@ -11,8 +11,11 @@
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 
-//how many main loop cycles between next sensor's read
-#define READ_CYCLES_AMOUNT 20
+//how many main loop cycles between next sensor's read (low importance values)
+#define LOW_READ_CYCLES_AMOUNT 20
+
+//how many main loop cycles between next sensor's read (high importance values)
+#define HIGH_READ_CYCLES_AMOUNT 8
 
 //in seconds
 #define FIESTA_INTRO_TIME 2 
