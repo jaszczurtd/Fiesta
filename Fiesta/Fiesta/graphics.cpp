@@ -819,7 +819,8 @@ float readFuel(void) {
 
 float readBarPressure(void) {
     set4051ActivePin(5);
-    float val = ((float)analogRead(A1) / 300.0) - 1.0;
+
+    float val = ((float)analogRead(A1) / 228.0) - 1.0;
     if(val < 0.0) {
         val = 0.0;
     } 
