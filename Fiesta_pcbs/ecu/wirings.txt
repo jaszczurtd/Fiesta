@@ -1,8 +1,8 @@
 MALE connector (ECU)
 1	3.3v					violet
 2	5v						yellow
-3	oil						green
-4	coolant					white
+3	oil	temp				green
+4	coolant	temp			white
 5	throttle				black
 6	turbo pressure			grey
 7	turbo solenoid			brown
@@ -16,10 +16,10 @@ FEMALE connector (MISC)
 2	SCL						yellow
 3	air condition ON		brown
 4	low washer fluid level	green
-5							red
-6							white
-7							blue
-8							violet
-9							pink
-10							black
+5	idle solenoid			red
+6	DPF start				white
+7	air temp				blue
+8	+12V / ignition			violet
+9	+12V / ignition			pink
+10	halogen ON				black
 braid GND				braid/red/separate
