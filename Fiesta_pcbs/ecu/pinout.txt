@@ -14,9 +14,9 @@
 14	EGT
 15
 16
-17	heated glass
+17	heated window
 18
-19	heated glass
+19	heated window
 20	nc
 21	hall sign
 22	hall gnd
@@ -30,14 +30,14 @@
 29	nc
 30	nc
 31	turbo pressure
-32	"H" glass button
+32	"H" window button
 33	nc
 34	misc 1
 35	EGR
 36	nc
 37	nc
 38	nc
-39	
+39	DPF start
 40	nc
 41	misc 2
 42	turbo
@@ -65,7 +65,7 @@
 63	air temp
 64	nc
 65	nc
-66
+66	DPF lamp
 67	nc
 68	FAN
 69	idle
