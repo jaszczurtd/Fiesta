@@ -24,7 +24,7 @@
 #define TEMPERATURENOMINAL 21   
 // how many samples to take and average, more takes longer
 // but is more 'smooth'
-#define NUMSAMPLES 6
+#define NUMSAMPLES 7
 // The beta coefficient of the thermistor (usually 3000-4000)
 #define BCOEFFICIENT 3600
 

@@ -43,6 +43,9 @@ void initialization(void) {
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
 
+  #ifdef DEBUG
+  debugFunc();
+  #else  
   initHeatedWindow();
   initRPMCount();
   redrawFuel();
@@ -53,15 +56,11 @@ void initialization(void) {
   redrawEngineLoad();
   redrawRPM();
   redrawEGT();
-  
-  Serial.println("\nFiesta MTDDI\n");
-
-  #ifdef DEBUG
-  tft.fillScreen(ST7735_BLACK);
-  debugFunc();
   #endif
-
+  
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
+
+  Serial.println("\nFiesta MTDDI started\n");
 }
 
 void drawLowImportanceValues(void) {
@@ -112,6 +111,9 @@ void readValues(void) {
         break;
       case F_FUEL:
         valueFields[F_FUEL] = readFuel();
+        break;
+      case F_EGT:
+        valueFields[F_EGT] = readEGT();
         break;
     }
     if(lowCurrentValue++ > F_LAST) {
