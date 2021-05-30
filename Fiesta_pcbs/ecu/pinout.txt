@@ -65,11 +65,11 @@
 63	air temp
 64	nc
 65	nc
-66	DPF lamp
+66	Fuel pos
 67	nc
 68	FAN
 69	idle
-70
+70	DPF lamp
 71	+12V / ignition
 72	nc
 73	nc
