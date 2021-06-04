@@ -67,7 +67,7 @@ void valToPWM(unsigned char pin, unsigned char val) {
 }
 
 int percentToWidth(float percent, int maxWidth) {
-    return ((percent / 100) * (maxWidth - 2));
+    return ((percent / 100.0) * maxWidth);
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
