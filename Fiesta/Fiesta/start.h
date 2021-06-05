@@ -41,7 +41,6 @@ void looper(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
 void initRPMCount(void);
-void readRPM(void);
 
 void glowPlugs(bool enable);
 void glowPlugsLamp(bool enable);

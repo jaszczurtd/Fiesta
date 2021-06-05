@@ -141,7 +141,6 @@ void readValues(void) {
     }
   }
 
-  readRPM();
 }
 
 void seriousAlertsDrawFunctions() {
@@ -222,9 +221,7 @@ void looper(void) {
 
 }
 
-#define engineCylinders 4    
-#define engineCycles 4  
-#define refreshInterval 750
+#define refreshInterval 500
 
 static unsigned long previousMillis = 0;
 static volatile int RPMpulses = 0;
@@ -243,21 +240,23 @@ void countRPM(void) {
   } else { 
     shortPulse = nowPulse;
   }
+
+  if(millis() - previousMillis > refreshInterval) {
+    previousMillis = millis();
+
+    int RPM = int(RPMpulses * (60000.0 / float(refreshInterval)) * 4 / 4 / 32.0) - 100; 
+    if(RPM < 0) {
+      RPM = 0;
+    }
+    RPMpulses = 0; 
+    valueFields[F_RPM] = min(99999, RPM); 
+  }  
+
 }
 
 void initRPMCount(void) {
   pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, FALLING);  
-}
-
-void readRPM(void) {
-  if(millis() - previousMillis > refreshInterval) {
-    previousMillis = millis();
-
-    int RPM = int(RPMpulses * (60000.0 / float(refreshInterval)) * engineCycles / engineCylinders / 2.0 ); 
-    RPMpulses = 0; 
-    valueFields[F_RPM] = min(99999, RPM); 
-  }  
+  attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, CHANGE);  
 }
 
 void glowPlugs(bool enable) {
