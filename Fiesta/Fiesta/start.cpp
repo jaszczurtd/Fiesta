@@ -246,8 +246,8 @@ void countRPM(void) {
 }
 
 void initRPMCount(void) {
-  pinMode(4, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(4), countRPM, FALLING);  
+  pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
+  attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, FALLING);  
 }
 
 void readRPM(void) {

@@ -29,6 +29,13 @@ extern float valueFields[];
 #define F_VOLTS 8
 #define F_LAST 9
 
+#define INTERRUPT_HALL 7    //cpu pio number
+
+//cpu pio numbers
+#define A_4051 11
+#define B_4051 12
+#define C_4051 13
+
 void initialization(void);
 void looper(void);
 bool seriousAlertSwitch(void);
