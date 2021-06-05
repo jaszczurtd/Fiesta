@@ -127,17 +127,17 @@ void i2cScanner(void) {
 #endif
 
 void init4051(void) {
-    pinMode(13, OUTPUT);  //C
-    pinMode(12, OUTPUT);  //B  
-    pinMode(11, OUTPUT);  //A
+    pinMode(C_4051, OUTPUT);  //C
+    pinMode(B_4051, OUTPUT);  //B  
+    pinMode(A_4051, OUTPUT);  //A
 
     set4051ActivePin(0);
 }
 
 void set4051ActivePin(unsigned char pin) {
-    digitalWrite(11, (pin & 0x01) > 0); 
-    digitalWrite(12, (pin & 0x02) > 0); 
-    digitalWrite(13, (pin & 0x04) > 0); 
+    digitalWrite(A_4051, (pin & 0x01) > 0); 
+    digitalWrite(B_4051, (pin & 0x02) > 0); 
+    digitalWrite(C_4051, (pin & 0x04) > 0); 
 }
 
 unsigned long getSeconds(void) {
