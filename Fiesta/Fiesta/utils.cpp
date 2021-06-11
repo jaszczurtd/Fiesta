@@ -62,8 +62,8 @@ float ntcToTemp(int tpin, int thermistor, int r) {
     return steinhart;
 }
 
-void valToPWM(unsigned char pin, unsigned char val) {
-    analogWrite(pin, (unsigned char)(255 - val));
+void valToPWM(unsigned char pin, int val) {
+    analogWrite(pin, (PWM_RESOLUTION - val));
 }
 
 int percentToWidth(float percent, int maxWidth) {

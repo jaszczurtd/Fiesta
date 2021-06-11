@@ -30,8 +30,8 @@
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
-#define THROTTLE_MIN 51
-#define THROTTLE_MAX 957
+#define THROTTLE_MIN 50
+#define THROTTLE_MAX 970
 
 #define TEMP_OIL_MAX 155
 #define TEMP_OIL_OK_HI 115
@@ -62,5 +62,8 @@
 #define HEATED_WINDOWS_TIME (60 * 4)
 //time between switch left side / right side
 #define HEATED_WINDOWS_SWITCH_TIME 30
+
+#define PWM_WRITE_RESOLUTION 9
+#define PWM_RESOLUTION 511
 
 #endif
