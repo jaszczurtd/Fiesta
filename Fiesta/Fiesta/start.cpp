@@ -7,6 +7,25 @@ float reflectionValueFields[F_LAST];
 static unsigned long alertsStartSecond = 0;
 static bool highImportanceValueChanged = false;
 
+void setupPWM() {
+
+  REG_GCLK_GENDIV = GCLK_GENDIV_DIV(30) |          // Divide the 48MHz clock source by divisor 3: 48MHz/3=16MHz
+                    GCLK_GENDIV_ID(4);            // Select Generic Clock (GCLK) 4
+  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
+
+  REG_GCLK_GENCTRL = GCLK_GENCTRL_IDC |           // Set the duty cycle to 50/50 HIGH/LOW
+                     GCLK_GENCTRL_GENEN |         // Enable GCLK4
+                     GCLK_GENCTRL_SRC_DFLL48M |   // Set the 48MHz clock source
+                     GCLK_GENCTRL_ID(4);          // Select GCLK4
+  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
+
+  // Feed GCLK4 to TCC0 and TCC1
+  REG_GCLK_CLKCTRL = GCLK_CLKCTRL_CLKEN |         // Enable GCLK4 to TCC0 and TCC1
+                     GCLK_CLKCTRL_GEN_GCLK4 |     // Select GCLK4
+                     GCLK_CLKCTRL_ID_TCC0_TCC1;   // Feed GCLK4 to TCC0 and TCC1*/
+  while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
+}
+
 void initialization(void) {
 
   Wire.begin();
@@ -77,7 +96,7 @@ void drawLowImportanceValues(void) {
 
 void drawHighImportanceValues(void) {
   #ifndef DEBUG
-  showEngineLoadAmount((unsigned char)valueFields[F_ENGINE_LOAD]);
+  showEngineLoadAmount((int)valueFields[F_ENGINE_LOAD]);
   #endif
 }
 
@@ -220,6 +239,7 @@ void looper(void) {
   engineHeaterMainLoop();
   heatedWindowMainLoop();
 
+  engineMainLoop();
 }
 
 #define engineCylinders 4    
@@ -518,7 +538,17 @@ void heatedWindowMainLoop(void) {
   }
 }
 
+void engineMainLoop(void) {
 
+  analogWriteResolution(PWM_WRITE_RESOLUTION);
+
+  int load = (int)valueFields[F_ENGINE_LOAD];
+
+  setupPWM();
+  valToPWM(9, load);
+  valToPWM(10, load);
+
+}
 
 #ifdef DEBUG
 void debugFunc(void) {

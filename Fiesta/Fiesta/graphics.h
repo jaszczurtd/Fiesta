@@ -11,7 +11,7 @@
 #include "config.h"
 
 
-#define TFT_CS     2
+#define TFT_CS     4
 #define TFT_RST    0  // you can also connect this to the Arduino reset
                       // in which case, set this #define pin to 0!
 #define TFT_DC     3
@@ -84,7 +84,7 @@ void drawFuelEmpty(void);
 void showFuelAmount(int currentVal, int maxVal);
 void drawChangeableFuelContent(int w);
 void redrawEngineLoad(void);
-void showEngineLoadAmount(unsigned char currentVal);
+void showEngineLoadAmount(int currentVal);
 void redrawRPM(void);
 void showRPMamount(int currentVal);
 void redrawEGT(void);

@@ -63,5 +63,6 @@ void heatedWindowMainLoop(void);
 bool isHeatedWindowEnabled(void);
 void initHeatedWindow(void);
 bool isHeatedButtonPressed(void);
+void engineMainLoop(void);
 
 #endif

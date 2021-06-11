@@ -374,7 +374,10 @@ const int e_getBaseY(void) {
 
 static int lastLoadAmount = C_INIT_VAL;
 
-void showEngineLoadAmount(unsigned char currentVal) {
+void showEngineLoadAmount(int currentVal) {
+
+    float percent = (currentVal * 100) / PWM_RESOLUTION;
+    unsigned char value = percentToWidth(percent, 100);
 
     if(e_drawOnce) {
         drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)pump);
@@ -390,7 +393,7 @@ void showEngineLoadAmount(unsigned char currentVal) {
             tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d%%"), currentVal);
+            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d%%"), value);
 
             w = textWidth(displayTxt);
 
@@ -788,11 +791,17 @@ float readOilTemp(void) {
 
 float readThrottle(void) {
     set4051ActivePin(2);
-    float val = ((getAverageValueFrom(A1) - THROTTLE_MIN) * 100) / (THROTTLE_MAX - THROTTLE_MIN);
-    if(val > 100.0) {
-        val = 100.0;
+    float initialVal = getAverageValueFrom(A1) - THROTTLE_MIN;
+    if(initialVal < 0) {
+        initialVal = 0;
     }
-    return val;
+    int maxVal = (THROTTLE_MAX - THROTTLE_MIN);
+
+    if(initialVal > maxVal) {
+        initialVal = maxVal;
+    }
+    float divider = maxVal / (float)PWM_RESOLUTION;
+    return (initialVal / divider);
 }
 
 //-------------------------------------------------------------------------------------------------
