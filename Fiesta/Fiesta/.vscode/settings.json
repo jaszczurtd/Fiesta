@@ -18,6 +18,8 @@
         "tuple": "cpp",
         "type_traits": "cpp",
         "utility": "cpp",
-        "atomic": "cpp"
+        "atomic": "cpp",
+        "random": "cpp",
+        "limits": "cpp"
     }
 }
