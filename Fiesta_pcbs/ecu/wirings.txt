@@ -6,7 +6,7 @@ MALE connector (ECU)
 5	throttle				black
 6	turbo pressure			grey
 7	turbo solenoid			brown
-8	egt						pink
+8	misc1					pink
 9	heater lo				red
 10	heater hi				blue
 braid GND					braid/red/separate
@@ -23,3 +23,32 @@ FEMALE connector (MISC)
 9	+12V / ignition			pink
 10	halogen ON				black
 braid GND				braid/red/separate
+
+
+Add. clock
+	red:	low washer fluid level lamp
+	black:	DPF lamp
+	
+Add. exp
+
+1	fuel pos
+2	+3.3V
+3	misc2
+4	96 pin ECU
+5	100 pin ECU
+6	46 pin ECU
+
+Doors
+
+FEMALE
+1	+12V
+2	ground
+3	blue		1
+4	yelow		2
+
+MALE
+1	pink		3
+2	grey		4
+3	green		5
+4	white		6
+
