@@ -66,7 +66,7 @@
 #define PWM_WRITE_RESOLUTION 9
 #define PWM_RESOLUTION 511
 
-#define FUEL_MAX 96
-#define FUEL_MIN 396
+#define FUEL_MAX 97
+#define FUEL_MIN 403
 
 #endif
