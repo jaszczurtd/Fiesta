@@ -820,10 +820,10 @@ float readAirTemperature(void) {
 float readFuel(void) {
     set4051ActivePin(4);
 
-    int result = analogRead(A1) - FUEL_MAX;
+    int result = getAverageValueFrom(A1) - FUEL_MAX;
     result = abs(result - (FUEL_MIN - FUEL_MAX));
 
-//    Serial.println(result);
+    //Serial.println(result);
 
     return result;
 }
