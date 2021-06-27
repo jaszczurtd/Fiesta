@@ -18,22 +18,15 @@ void initGraphics(void) {
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned int*)FiestaLogo);
+  drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
 
   #endif
 }
 
-void drawImage(int x, int y, int width, int height, int background, unsigned int *pointer) {
+void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
     tft.fillRect(x, y, width, height, background);
-
-    for(register int row = 0; row < height; row++) {
-        for(register int col = 0; col < width; col++) {
-            int px = pgm_read_word(pointer++);
-            if(px != background) {
-                tft.drawPixel(col + x, row + y, px);
-            }
-        }      
-    }
+    tft.drawRGBBitmap(x, y, pointer, width,
+                     height);
 }
 
 int textWidth(const char* text) {
@@ -153,7 +146,7 @@ static int lastCoolantHeight = C_INIT_VAL;
 void showTemperatureAmount(int currentVal, int maxVal) {
 
     if(t_drawOnce) {
-        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned int*)temperature);
+        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned short*)temperature);
         t_drawOnce = false;
     } else {
         int x, y, color;
@@ -231,7 +224,7 @@ static int lastOilHeight = C_INIT_VAL;
 void showOilAmount(int currentVal, int maxVal) {
 
     if(o_drawOnce) {
-        drawImage(o_getBaseX(), o_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, 0xf7be, (unsigned int*)oil);
+        drawImage(o_getBaseX(), o_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, 0xf7be, (unsigned short*)oil);
         o_drawOnce = false;
     } else {
         int x, y, color;
@@ -312,7 +305,7 @@ void showPressureAmount(float current) {
     int x, y;
 
     if(p_drawOnce) {
-        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned int*)pressure);
+        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned short*)pressure);
         x = p_getBaseX() + BIG_ICONS_WIDTH;
         tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR);
 
@@ -380,7 +373,7 @@ void showEngineLoadAmount(int currentVal) {
     unsigned char value = percentToWidth(percent, 100);
 
     if(e_drawOnce) {
-        drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)pump);
+        drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)pump);
         e_drawOnce = false;
     } else {
         if(lastLoadAmount != currentVal) {
@@ -430,7 +423,7 @@ static int lastEGTTempVal = C_INIT_VAL;
 void showEGTTemperatureAmount(int currentVal) {
 
     if(egt_drawOnce) {
-        drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)egt);
+        drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)egt);
         egt_drawOnce = false;
     } else {
         if(lastEGTTempVal != currentVal) {
@@ -482,7 +475,7 @@ static int lastICTempVal = C_INIT_VAL;
 void showICTemperatureAmount(unsigned char currentVal) {
 
     if(ic_drawOnce) {
-        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)ic);
+        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)ic);
         ic_drawOnce = false;
     } else {
         if(lastICTempVal != currentVal) {
@@ -541,7 +534,7 @@ static int lastRPMAmount = C_INIT_VAL;
 void showRPMamount(int currentVal) {
 
     if(rpm_drawOnce) {
-        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned int*)rpm);
+        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)rpm);
         rpm_drawOnce = false;
     } else {
         if(lastRPMAmount != currentVal) {
@@ -628,7 +621,7 @@ void showFuelAmount(int currentVal, int maxVal) {
 
         x = f_getBaseX();
 
-        drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned int*)fuelIcon);
+        drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
         tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
 
         tft.fillTriangle(x - 6 - FUEL_WIDTH - OFFSET, 
