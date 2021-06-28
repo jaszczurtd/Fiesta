@@ -11,10 +11,9 @@
 #include "config.h"
 
 
-#define TFT_CS     4
-#define TFT_RST    0  // you can also connect this to the Arduino reset
-                      // in which case, set this #define pin to 0!
-#define TFT_DC     3
+#define TFT_CS     4 //CS
+#define TFT_RST    0 //you can also connect this to the Arduino reset, in which case, set this #define pin to 0!
+#define TFT_DC     3 //A0
 
 #define SCREEN_W 160
 #define SCREEN_H 128
