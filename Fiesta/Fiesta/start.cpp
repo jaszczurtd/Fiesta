@@ -8,7 +8,7 @@ static unsigned long alertsStartSecond = 0;
 static bool highImportanceValueChanged = false;
 
 void setupPWM() {
-
+/*
   REG_GCLK_GENDIV = GCLK_GENDIV_DIV(30) |          // Divide the 48MHz clock source by divisor 3: 48MHz/3=16MHz
                     GCLK_GENDIV_ID(4);            // Select Generic Clock (GCLK) 4
   while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
@@ -22,14 +22,21 @@ void setupPWM() {
   // Feed GCLK4 to TCC0 and TCC1
   REG_GCLK_CLKCTRL = GCLK_CLKCTRL_CLKEN |         // Enable GCLK4 to TCC0 and TCC1
                      GCLK_CLKCTRL_GEN_GCLK4 |     // Select GCLK4
-                     GCLK_CLKCTRL_ID_TCC0_TCC1;   // Feed GCLK4 to TCC0 and TCC1*/
+                     GCLK_CLKCTRL_ID_TCC0_TCC1;   // Feed GCLK4 to TCC0 and TCC1
   while (GCLK->STATUS.bit.SYNCBUSY);              // Wait for synchronization
+
+  */
 }
 
 void initialization(void) {
 
+  Wire.setSDA(0);
+  Wire.setSCL(1);
+
   Wire.begin();
   pcf857_init();
+
+  pinMode(LED_BUILTIN, OUTPUT);
 
   Serial.begin(9600);
  
@@ -204,6 +211,9 @@ void looper(void) {
   if(lastSec != sec) {
     lastSec = sec;
     alertBlink = (alertBlink) ? false : true;
+
+    digitalWrite(LED_BUILTIN, alertBlink);
+
     draw = true;
   }
 
