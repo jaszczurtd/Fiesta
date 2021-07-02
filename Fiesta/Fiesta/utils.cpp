@@ -48,7 +48,7 @@ float ntcToTemp(int tpin, int thermistor, int r) {
     float average = getAverageValueFrom(tpin);
 
     // convert the value to resistance
-    average = 1023 / average - 1;
+    average = 4095 / average - 1;
     average = r / average;
 
     float steinhart;
@@ -63,6 +63,8 @@ float ntcToTemp(int tpin, int thermistor, int r) {
 }
 
 void valToPWM(unsigned char pin, int val) {
+    analogWriteFreq(100);
+    analogWriteResolution(PWM_WRITE_RESOLUTION);
     analogWrite(pin, (PWM_RESOLUTION - val));
 }
 

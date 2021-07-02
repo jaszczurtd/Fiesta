@@ -1,8 +1,8 @@
 {
-    "board": "adafruit:samd:adafruit_itsybitsy_m0",
-    "configuration": "opt=small,usbstack=arduino,debug=off",
-    "port": "COM16",
-    "programmer": "USBasp",
+    "board": "rp2040:rp2040:rpipico",
+    "configuration": "flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk",
+    "port": "COM19",
+    "programmer": "rp2040:edbg",
     "sketch": "main.ino",
     "output": "../ArduinoOutput"
 }

@@ -757,7 +757,7 @@ void showVolts(float volts) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-    return analogRead(A2) / 53.157142;
+    return analogRead(A2) / DIVIDER_VOLTS;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -784,6 +784,7 @@ float readOilTemp(void) {
 
 float readThrottle(void) {
     set4051ActivePin(2);
+
     float initialVal = getAverageValueFrom(A1) - THROTTLE_MIN;
     if(initialVal < 0) {
         initialVal = 0;
@@ -803,7 +804,7 @@ float readThrottle(void) {
 
 float readAirTemperature(void) {
     set4051ActivePin(3);
-    return ntcToTemp(A1, 5050, 5100);
+    return ntcToTemp(A1, 5050, 4700);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -828,7 +829,7 @@ float readFuel(void) {
 float readBarPressure(void) {
     set4051ActivePin(5);
 
-    float val = ((float)analogRead(A1) / 228.0) - 1.0;
+    float val = ((float)analogRead(A1) / DIVIDER_PRESSURE_BAR) - 1.0;
     if(val < 0.0) {
         val = 0.0;
     } 
@@ -841,5 +842,5 @@ float readBarPressure(void) {
 
 float readEGT(void) {
     set4051ActivePin(6);
-    return (((float)getAverageValueFrom(A1)) / 0.577);
+    return (((float)getAverageValueFrom(A1)) / DIVIDER_EGT);
 }
