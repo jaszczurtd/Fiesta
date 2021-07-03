@@ -5,7 +5,6 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Arduino.h>
 #include <Wire.h>
-#include <PCF8574.h>
 
 #include "graphics.h"
 #include "config.h"
@@ -21,7 +20,7 @@ void valToPWM(unsigned char pin, int val);
 int percentToWidth(float percent, int maxWidth);
 int currentValToHeight(int currentVal, int maxVal);
 void pcf857_init(void);
-void pcf8574(unsigned char pin, bool value);
+void pcf8574_write(unsigned char pin, bool value);
 #ifdef I2C_SCANNER
 void i2cScanner(void);
 #endif

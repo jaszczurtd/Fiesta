@@ -9,15 +9,22 @@ static bool highImportanceValueChanged = false;
 
 void initialization(void) {
 
+  //adafruit is messing up something with i2c on rbpi pin 0 & 1
   Wire.setSDA(0);
   Wire.setSCL(1);
-
   Wire.begin();
   pcf857_init();
+  Wire.end();
 
+  initGraphics();
+
+  Wire.setSDA(0);
+  Wire.setSCL(1);
+  Wire.begin();
+ 
   pinMode(LED_BUILTIN, OUTPUT);
 
-  Serial.begin(9600);
+  Serial.begin(115200);
  
   #ifdef I2C_SCANNER
   i2cScanner();
@@ -30,13 +37,13 @@ void initialization(void) {
   }
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
-
+  
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
   initGlowPlugsTime(coolant);
 
-  initGraphics();
+  showLogo();
 
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
@@ -65,7 +72,7 @@ void initialization(void) {
   
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  Serial.println("\nFiesta MTDDI started\n");
+  Serial.println("Fiesta MTDDI started\n");
 }
 
 void drawLowImportanceValues(void) {
@@ -275,23 +282,23 @@ void initRPMCount(void) {
 }
 
 void glowPlugs(bool enable) {
-  pcf8574(O_GLOW_PLUGS, enable);
+  pcf8574_write(O_GLOW_PLUGS, enable);
 }
 
 void glowPlugsLamp(bool enable) {
-  pcf8574(O_GLOW_PLUGS_LAMP, enable);
+  pcf8574_write(O_GLOW_PLUGS_LAMP, enable);
 }
 
 void fan(bool enable) {
-  pcf8574(O_FAN, enable);
+  pcf8574_write(O_FAN, enable);
 }
 
 void heater(bool enable, int level) {
-  pcf8574(level, enable);
+  pcf8574_write(level, enable);
 }
 
 void heatedWindow(bool enable, int side) {
-  pcf8574(side, enable);
+  pcf8574_write(side, enable);
 }
 
 

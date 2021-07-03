@@ -12,7 +12,7 @@
 
 
 #define TFT_CS     4 //CS
-#define TFT_RST    0 //you can also connect this to the Arduino reset, in which case, set this #define pin to 0!
+#define TFT_RST    28 //you can also connect this to the Arduino reset, in which case, set this #define pin to 0!
 #define TFT_DC     3 //A0
 
 #define SCREEN_W 160
@@ -61,6 +61,7 @@
 extern const char *err;
 
 void initGraphics(void);
+void showLogo(void);
 Adafruit_ST7735 returnReference(void);
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
 int textWidth(const char* text);

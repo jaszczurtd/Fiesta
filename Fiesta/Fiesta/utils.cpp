@@ -77,20 +77,40 @@ int currentValToHeight(int currentVal, int maxVal) {
     return percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
 }
 
-PCF8574 expander = PCF8574(PCF8574_ADDR);
+static unsigned char pcf8574State = 0;
+
 void pcf857_init(void) {
-  for(int pin = 0; pin < 8; pin++) {
-    expander.write(pin, false);
-  }
+  pcf8574State = 0;
+
+  Wire.beginTransmission(PCF8574_ADDR);
+  Wire.write(pcf8574State);
+  Wire.endTransmission();
 }
 
-void pcf8574(unsigned char pin, bool value) {
-  expander.write(pin, value);
+void pcf8574_write(unsigned char pin, bool value) {
+  if(value) {
+    bitSet(pcf8574State, pin);
+  }  else {
+    bitClear(pcf8574State, pin);
+  }
+
+  Wire.beginTransmission(PCF8574_ADDR);
+  bool success = Wire.write(pcf8574State);
+  bool notFound = Wire.endTransmission();
+
+  if(!success) {
+    Serial.println("error writting byte to pcf8574");
+  }
+
+  if(notFound) {
+    Serial.println("pcf8574 not found");
+  }
 }
 
 #ifdef I2C_SCANNER
 
 unsigned int loopCounter = 0;
+static bool t = false;
 void i2cScanner(void) {
   byte error, address;
   int nDevices;
