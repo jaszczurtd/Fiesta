@@ -7,11 +7,12 @@ Adafruit_ST7735 returnReference(void) {
 }
 
 void initGraphics(void) {
-
   // Use this initializer if using a 1.8" TFT screen:
   tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
   tft.setRotation(1);
+}
 
+void showLogo(void) {
   #ifndef DEBUG
 
   tft.fillScreen(ST7735_WHITE);
