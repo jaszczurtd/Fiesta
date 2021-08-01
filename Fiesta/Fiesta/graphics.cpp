@@ -473,7 +473,7 @@ const int ic_getBaseY(void) {
 
 static int lastICTempVal = C_INIT_VAL;
 
-void showICTemperatureAmount(unsigned char currentVal) {
+void showICTemperatureAmount(int currentVal) {
 
     if(ic_drawOnce) {
         drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)ic);
@@ -609,6 +609,9 @@ void showFuelAmount(int currentVal, int maxVal) {
     int width = f_getWidth();
     float percent = (currentVal * 100) / maxVal;
     currentFuelWidth = percentToWidth(percent, width);
+    if(currentFuelWidth > width) {
+        currentFuelWidth = width;
+    }
     if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
         fullRedrawNeeded = true;
     }

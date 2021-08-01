@@ -59,6 +59,8 @@
 #define HEATED_WINDOWS_TIME (60 * 4)
 //time between switch left side / right side
 #define HEATED_WINDOWS_SWITCH_TIME 30
+//physical pin of microcontroller for heated windows switch on/off
+#define HEATED_WINDOWS_PIN 20
 
 #define PWM_WRITE_RESOLUTION 16
 #define PWM_RESOLUTION 65535
