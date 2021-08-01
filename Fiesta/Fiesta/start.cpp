@@ -80,7 +80,7 @@ void drawLowImportanceValues(void) {
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
   showOilAmount((int)valueFields[F_OIL_TEMP], 150);
-  showICTemperatureAmount((unsigned char)valueFields[F_INTAKE_TEMP]);
+  showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
   showEGTTemperatureAmount((int)valueFields[F_EGT]);
   showVolts(valueFields[F_VOLTS]);
   showRPMamount((int)valueFields[F_RPM]);
@@ -271,7 +271,11 @@ void countRPM(void) {
       RPM = 0;
     }
     RPMpulses = 0; 
-    valueFields[F_RPM] = min(99999, RPM); 
+
+    RPM = min(99999, RPM);
+    RPM = ((RPM / 10) * 10);
+
+    valueFields[F_RPM] = RPM; 
   }  
 
 }
@@ -453,10 +457,10 @@ static int heatedWindowsSwitchTimer = 0;
 static int lastHeatedWindowsSecond = 0;
 
 void initHeatedWindow(void) {
-  pinMode(A3, INPUT_PULLUP);
+  pinMode(HEATED_WINDOWS_PIN, INPUT_PULLUP);
 }
 bool isHeatedButtonPressed(void) {
-  return digitalRead(A3);
+  return digitalRead(HEATED_WINDOWS_PIN);
 }
 
 bool isHeatedWindowEnabled(void) {

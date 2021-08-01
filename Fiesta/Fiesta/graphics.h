@@ -78,7 +78,7 @@ void showOilAmount(int currentVal, int maxVal);
 void redrawPressure(void);
 void showPressureAmount(float current);
 void redrawIntercooler(void);
-void showICTemperatureAmount(unsigned char currentVal);
+void showICTemperatureAmount(int currentVal);
 void redrawFuel(void);
 void drawFuelEmpty(void);
 void showFuelAmount(int currentVal, int maxVal);
