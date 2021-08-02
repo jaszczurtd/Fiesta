@@ -62,6 +62,11 @@
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
 
+//RPM refresh interval (in miliseconds)
+#define RPM_REFRESH_INTERVAL 400
+//minimum RPM for dependencies to operate on
+#define RPM_MIN 300
+
 #define PWM_WRITE_RESOLUTION 16
 #define PWM_RESOLUTION 65535
 
