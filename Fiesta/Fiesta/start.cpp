@@ -243,8 +243,6 @@ void looper(void) {
   engineMainLoop();
 }
 
-#define refreshInterval 500
-
 static unsigned long previousMillis = 0;
 static volatile int RPMpulses = 0;
 static volatile unsigned long shortPulse = 0;
@@ -263,10 +261,10 @@ void countRPM(void) {
     shortPulse = nowPulse;
   }
 
-  if(millis() - previousMillis > refreshInterval) {
+  if(millis() - previousMillis > RPM_REFRESH_INTERVAL) {
     previousMillis = millis();
 
-    int RPM = int(RPMpulses * (60000.0 / float(refreshInterval)) * 4 / 4 / 32.0) - 100; 
+    int RPM = int(RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL)) * 4 / 4 / 32.0) - 100; 
     if(RPM < 0) {
       RPM = 0;
     }
@@ -391,7 +389,10 @@ void fanMainLoop(void) {
 
   } else {
     //temp sensor read fail, fan enabled by default
-    fanEnabled = true;
+    //but only if engine works
+    if(valueFields[F_RPM] > RPM_MIN) {
+      fanEnabled = true;
+    }
   }
 
   if(lastFanStatus != fanEnabled) {
