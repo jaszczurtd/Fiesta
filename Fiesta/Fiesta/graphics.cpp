@@ -47,12 +47,13 @@ int textHeight(const char* text) {
 void drawTempValue(int x, int y, int valToDisplay) {
     tft.setFont();
     tft.setTextSize(1);
-    tft.setTextColor(ST7735_BLACK);
+    tft.setTextColor(TEXT_COLOR);
     tft.setCursor(x, y);
 
     tft.fillRect(x, y, 24, 8, BIG_ICONS_BG_COLOR);
 
     if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
+        tft.setTextColor(ST77XX_RED);
         tft.println(err);
         return;
     } else {
@@ -143,6 +144,7 @@ const int t_getBaseY(void) {
 }
 
 static int lastCoolantHeight = C_INIT_VAL;
+static int lastCoolantVal = C_INIT_VAL;
 
 void showTemperatureAmount(int currentVal, int maxVal) {
 
@@ -158,7 +160,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         }
 
         bool overheat = false;
-        color = ST7735_BLUE;
+        color = TEMP_INITIAL_COLOR;
         if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
             color = ST77XX_ORANGE;
         } 
@@ -195,11 +197,15 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             y = t_getBaseY() + TEMP_DOT_Y;
 
             tft.fillCircle(x, y, 6, color);
-
         }
-        x = t_getBaseX() + 26;
-        y = t_getBaseY() + 19;
-        drawTempValue(x, y, valToDisplay);
+
+        if(lastCoolantVal != valToDisplay) {
+            lastCoolantVal = valToDisplay;
+
+            x = t_getBaseX() + 26;
+            y = t_getBaseY() + 19;
+            drawTempValue(x, y, valToDisplay);
+        }
    }
 }
 
@@ -221,6 +227,7 @@ const int o_getBaseY(void) {
 }
 
 static int lastOilHeight = C_INIT_VAL;
+static int lastOilVal = C_INIT_VAL;
 
 void showOilAmount(int currentVal, int maxVal) {
 
@@ -236,7 +243,7 @@ void showOilAmount(int currentVal, int maxVal) {
         }
 
         bool overheat = false;
-        color = ST7735_BLUE;
+        color = TEMP_INITIAL_COLOR;
         if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
             color = ST77XX_ORANGE;
         } 
@@ -274,10 +281,14 @@ void showOilAmount(int currentVal, int maxVal) {
 
             tft.fillCircle(x, y, 6, color);
         }
-        
-        x = o_getBaseX() + 25;
-        y = o_getBaseY() + 19;
-        drawTempValue(x, y, valToDisplay);
+
+        if(lastOilVal != valToDisplay) {
+            lastOilVal = valToDisplay;
+
+            x = o_getBaseX() + 25;
+            y = o_getBaseY() + 19;
+            drawTempValue(x, y, valToDisplay);
+        }
     }
 }
 
@@ -334,7 +345,7 @@ void showPressureAmount(float current) {
 
             tft.setFont(&FreeSansBold9pt7b);
             tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
+            tft.setTextColor(TEXT_COLOR);
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
@@ -371,20 +382,20 @@ static int lastLoadAmount = C_INIT_VAL;
 void showEngineLoadAmount(int currentVal) {
 
     float percent = (currentVal * 100) / PWM_RESOLUTION;
-    unsigned char value = percentToWidth(percent, 100);
+    int value = percentToWidth(percent, 100);
 
     if(e_drawOnce) {
         drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)pump);
         e_drawOnce = false;
     } else {
-        if(lastLoadAmount != currentVal) {
-            lastLoadAmount = currentVal;
+        if(lastLoadAmount != value) {
+            lastLoadAmount = value;
 
             int x, y, w, offset;
 
             tft.setFont();
             tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
+            tft.setTextColor(TEXT_COLOR);
 
             memset(displayTxt, 0, sizeof(displayTxt));
             snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d%%"), value);
@@ -434,7 +445,7 @@ void showEGTTemperatureAmount(int currentVal) {
 
             tft.setFont();
             tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
+            tft.setTextColor(TEXT_COLOR);
 
             memset(displayTxt, 0, sizeof(displayTxt));
             snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
@@ -449,7 +460,7 @@ void showEGTTemperatureAmount(int currentVal) {
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
-            tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+            tft.drawCircle(x + w + 2, y, 2, TEXT_COLOR);
         }
     }
 }
@@ -486,14 +497,15 @@ void showICTemperatureAmount(int currentVal) {
 
             tft.setFont();
             tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
 
             memset(displayTxt, 0, sizeof(displayTxt));
 
             bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
             if(error) {
+                tft.setTextColor(ST77XX_RED);
                 snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%s"), err);
             } else {
+                tft.setTextColor(TEXT_COLOR);
                 snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
             }
 
@@ -508,7 +520,7 @@ void showICTemperatureAmount(int currentVal) {
             tft.println(displayTxt);
             
             if(!error) {
-                tft.drawCircle(x + w + 2, y, 2, ST7735_BLACK);
+                tft.drawCircle(x + w + 2, y, 2, TEXT_COLOR);
             }
         }
     }
@@ -545,7 +557,7 @@ void showRPMamount(int currentVal) {
 
             tft.setFont();
             tft.setTextSize(1);
-            tft.setTextColor(ST7735_BLACK);
+            tft.setTextColor(TEXT_COLOR);
 
             memset(displayTxt, 0, sizeof(displayTxt));
             snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
@@ -649,7 +661,7 @@ void showFuelAmount(int currentVal, int maxVal) {
         x = f_getBaseX();
         x += ((width - tw) / 2);
 
-        tft.setTextColor(ST7735_WHITE);
+        tft.setTextColor(TEXT_COLOR);
         tft.setCursor(x, y);
         tft.println(half);
 
