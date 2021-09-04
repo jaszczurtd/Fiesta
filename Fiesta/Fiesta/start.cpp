@@ -55,7 +55,7 @@ void initialization(void) {
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
 
-  #ifdef DEBUG
+  #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
   initHeatedWindow();
@@ -76,7 +76,7 @@ void initialization(void) {
 }
 
 void drawLowImportanceValues(void) {
-  #ifndef DEBUG
+  #ifndef DEBUG_SCREEN
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
   showOilAmount((int)valueFields[F_OIL_TEMP], 150);
@@ -88,13 +88,13 @@ void drawLowImportanceValues(void) {
 }
 
 void drawHighImportanceValues(void) {
-  #ifndef DEBUG
+  #ifndef DEBUG_SCREEN
   showEngineLoadAmount((int)valueFields[F_ENGINE_LOAD]);
   #endif
 }
 
 void drawMediumImportanceValues(void) {
-  #ifndef DEBUG
+  #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
   #endif
 }
@@ -156,7 +156,7 @@ void readValues(void) {
 }
 
 void seriousAlertsDrawFunctions() {
-  #ifndef DEBUG
+  #ifndef DEBUG_SCREEN
   drawFuelEmpty();
 
   #endif
@@ -557,7 +557,7 @@ void engineMainLoop(void) {
 
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_SCREEN
 void debugFunc(void) {
 
   Adafruit_ST7735 tft = returnReference();

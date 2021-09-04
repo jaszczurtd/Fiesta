@@ -13,7 +13,7 @@ void initGraphics(void) {
 }
 
 void showLogo(void) {
-  #ifndef DEBUG
+  #ifndef DEBUG_SCREEN
 
   tft.fillScreen(ST7735_WHITE);
 
@@ -816,7 +816,7 @@ float readThrottle(void) {
     int result = (initialVal / divider);
     result = abs(result - PWM_RESOLUTION);
 
-#ifdef SERIAL
+#ifdef DEBUG
     char buffer[100];
     memset (buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer) - 1, "%d %d", (int)rawVal, result);
