@@ -9,7 +9,7 @@
 //#define DEBUG
 
 //for serial debug
-#define SERIAL
+#define DEBUG
 
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
