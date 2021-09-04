@@ -8,6 +8,9 @@
 //debugFunc() function is invoked, no regular drawings
 //#define DEBUG
 
+//for serial debug
+#define SERIAL
+
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 
@@ -24,7 +27,7 @@
 #define TEMPERATURENOMINAL 21   
 // how many samples to take and average, more takes longer
 // but is more 'smooth'
-#define NUMSAMPLES 7
+#define NUMSAMPLES 8
 // The beta coefficient of the thermistor (usually 3000-4000)
 #define BCOEFFICIENT 3600
 
@@ -70,8 +73,8 @@
 #define PWM_WRITE_RESOLUTION 16
 #define PWM_RESOLUTION 65535
 
-#define THROTTLE_MIN 200
-#define THROTTLE_MAX 3880
+#define THROTTLE_MIN 1610
+#define THROTTLE_MAX 3400
 
 #define FUEL_MAX 388
 #define FUEL_MIN 1612

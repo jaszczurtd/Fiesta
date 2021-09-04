@@ -688,7 +688,7 @@ void drawChangeableFuelContent(int w) {
         draw = true;
     }
 
-    int color = C_GRAY_MEDIUM;
+    int color = FUEL_FILL_COLOR;
 
     int width = f_getWidth();
     int minW = percentToWidth(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
@@ -801,7 +801,9 @@ float readOilTemp(void) {
 float readThrottle(void) {
     set4051ActivePin(2);
 
-    float initialVal = getAverageValueFrom(A1) - THROTTLE_MIN;
+    float rawVal = getAverageValueFrom(A1);
+    float initialVal = rawVal - THROTTLE_MIN;
+
     if(initialVal < 0) {
         initialVal = 0;
     }
@@ -811,7 +813,17 @@ float readThrottle(void) {
         initialVal = maxVal;
     }
     float divider = maxVal / (float)PWM_RESOLUTION;
-    return (initialVal / divider);
+    int result = (initialVal / divider);
+    result = abs(result - PWM_RESOLUTION);
+
+#ifdef SERIAL
+    char buffer[100];
+    memset (buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer) - 1, "%d %d", (int)rawVal, result);
+    Serial.println(buffer);
+#endif
+
+    return result;
 }
 
 //-------------------------------------------------------------------------------------------------
