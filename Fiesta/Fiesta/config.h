@@ -1,15 +1,17 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
+//important: values scaled for rpi SDK ver 1.2.0
+
 //debug i2c only
 //#define I2C_SCANNER
 
 //for debug - display values on LCD
 //debugFunc() function is invoked, no regular drawings
-//#define DEBUG
+#define DEBUG
 
 //for serial debug
-#define DEBUG
+//#define DEBUG
 
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
@@ -77,7 +79,7 @@
 #define THROTTLE_MAX 3400
 
 #define FUEL_MAX 388
-#define FUEL_MIN 1612
+#define FUEL_MIN 1660
 
 //dividers - analog reads
 
