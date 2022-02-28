@@ -819,7 +819,7 @@ float readThrottle(void) {
 #ifdef DEBUG
     char buffer[100];
     memset (buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer) - 1, "%d %d", (int)rawVal, result);
+    snprintf(buffer, sizeof(buffer) - 1, "throttle: %d %d", (int)rawVal, result);
     Serial.println(buffer);
 #endif
 
@@ -842,10 +842,18 @@ float readAirTemperature(void) {
 float readFuel(void) {
     set4051ActivePin(4);
 
-    int result = getAverageValueFrom(A1) - FUEL_MAX;
-    result = abs(result - (FUEL_MIN - FUEL_MAX));
+    int result = getAverageValueFrom(A1);
 
-    //Serial.println(result);
+    //todo: macro
+    #ifdef DEBUG
+    char buffer[100];
+    memset (buffer, 0, sizeof(buffer));
+    snprintf(buffer, sizeof(buffer) - 1, "tank: %d", result);
+    Serial.println(buffer);
+    #endif
+
+    result -= FUEL_MAX;
+    result = abs(result - (FUEL_MIN - FUEL_MAX));
 
     return result;
 }
