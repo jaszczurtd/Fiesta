@@ -13,9 +13,6 @@
 //for serial debug
 //#define DEBUG
 
-//main engine RPM value
-#define NOMINAL_RPM_VALUE 870
-
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 
@@ -75,8 +72,8 @@
 //minimum RPM for dependencies to operate on
 #define RPM_MIN 300
 
-#define PWM_WRITE_RESOLUTION 16
-#define PWM_RESOLUTION 65535
+#define PWM_WRITE_RESOLUTION 11
+#define PWM_RESOLUTION 2047
 
 #define THROTTLE_MIN 1610
 #define THROTTLE_MAX 3400
@@ -89,5 +86,15 @@
 #define DIVIDER_VOLTS 212.628568
 #define DIVIDER_PRESSURE_BAR 912
 #define DIVIDER_EGT 2.308
+
+//main engine RPM value
+#define NOMINAL_RPM_VALUE 870
+
+#define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM
+#define MAX_RPM_PWM PWM_RESOLUTION / 1.1
+#define MIN_RPM_PWM PWM_RESOLUTION / 10.2
+#define ADD_RPM_TIME_VALUE 3
+#define SUB_RPM_TIME_VALUE 5
+#define RESET_RPM_WATCHDOG_TIME 2000
 
 #endif
