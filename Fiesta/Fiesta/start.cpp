@@ -6,6 +6,7 @@ float reflectionValueFields[F_LAST];
 
 static unsigned long alertsStartSecond = 0;
 static bool highImportanceValueChanged = false;
+static bool started = false;
 
 void initialization(void) {
 
@@ -71,6 +72,8 @@ void initialization(void) {
   #endif
   
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
+
+  started = true;
 
   Serial.println("Fiesta MTDDI started\n");
 }
@@ -173,7 +176,7 @@ bool seriousAlertSwitch(void) {
   return seriousAlertBlink;
 }
 
-static long lastSec = -1, lastHalfSec = -1, lastHalfHalfSec = -1;
+static long lastSec = -1, lastHalfSec = -1, lastHalfHalfSec = -1, lastShortTime = -1;
 
 void looper(void) {
 
@@ -182,7 +185,7 @@ void looper(void) {
   int sec = (msec % 1000 > 500);
   int halfsec = (msec % 500 > 250);
   int halfhalfsec = (msec % 250 > 125);
-
+  
   if(lastHalfHalfSec != halfhalfsec) {
     lastHalfHalfSec = halfhalfsec;
     mediumDraw = true;
@@ -235,13 +238,45 @@ void looper(void) {
   }
 
   readValues();
+}
+
+void initialization1(void) {
+  Serial.println("Second core initialized");
+}
+
+static bool shortTimeTrigger = false;
+
+void looper1(void) {
+
+  if(!started) {
+    return;
+  }
+
+  long msec = millis();
+  int shortTime = (msec % 62 > 31);
+
+  if(lastShortTime != shortTime) {
+    lastShortTime = shortTime;
+    shortTimeTrigger = true;
+
+  }
+
+  //Serial.print("Short trigger:");
+  //Serial.println(msec);
+
   glowPlugsMainLoop();
   fanMainLoop();
   engineHeaterMainLoop();
   heatedWindowMainLoop();
 
   engineMainLoop();
+
+  if(shortTimeTrigger) {
+    shortTimeTrigger = false;
+    stabilizeRPM();
+  }
 }
+
 
 static unsigned long previousMillis = 0;
 static volatile int RPMpulses = 0;
@@ -353,10 +388,14 @@ void glowPlugsMainLoop(void) {
 
       if(glowPlugsTime-- <= 0) {
         glowPlugs(false);
+
+        Serial.println("glow plugs disabled");
       }
 
       if(glowPlugsLampTime >= 0 && glowPlugsLampTime-- <= 0) {
         glowPlugsLamp(false);
+
+        Serial.println("glow plugs lamp off");
       }
     }
   }  
@@ -397,7 +436,9 @@ void fanMainLoop(void) {
 
   if(lastFanStatus != fanEnabled) {
     fan(fanEnabled);
-    lastFanStatus = fanEnabled;          
+    lastFanStatus = fanEnabled;     
+
+    Serial.println("fan enabled:" + fanEnabled);     
   }
 
 }
@@ -545,16 +586,46 @@ void heatedWindowMainLoop(void) {
 }
 
 static int lastLoad = 0;
+
 void engineMainLoop(void) {
 
   int load = (int)valueFields[F_ENGINE_LOAD];
   if(load != lastLoad) {
     lastLoad = load;
 
-    valToPWM(9, load);
     valToPWM(10, load);
   }
 
+}
+
+static int currentRPMSolenoid = -1;
+void stabilizeRPM(void) {
+  if(currentRPMSolenoid < 0) {
+    currentRPMSolenoid = 255 / 2;
+  }
+
+  int rpm = (int)valueFields[F_RPM];
+  if(rpm > 0) {
+
+    if(rpm > NOMINAL_RPM_VALUE) {
+      currentRPMSolenoid --;
+    }
+    if(rpm < NOMINAL_RPM_VALUE) {
+      currentRPMSolenoid ++;
+    }
+
+    if(currentRPMSolenoid > 255) {
+      currentRPMSolenoid = 255;
+    }
+    if(currentRPMSolenoid < 0) {
+      currentRPMSolenoid = 0;
+    }
+
+  } else {
+    currentRPMSolenoid = 0;
+  }
+
+  valToPWM(9, currentRPMSolenoid);
 }
 
 #ifdef DEBUG_SCREEN

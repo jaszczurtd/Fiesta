@@ -37,7 +37,9 @@ extern float valueFields[];
 #define C_4051 13
 
 void initialization(void);
+void initialization1(void);
 void looper(void);
+void looper1(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
 void initRPMCount(void);
@@ -63,5 +65,6 @@ bool isHeatedWindowEnabled(void);
 void initHeatedWindow(void);
 bool isHeatedButtonPressed(void);
 void engineMainLoop(void);
+void stabilizeRPM(void);
 
 #endif

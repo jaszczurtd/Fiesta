@@ -10,3 +10,10 @@ void loop() {
 }
 
 
+void setup1() {
+    initialization1();
+}
+
+void loop1() {
+    looper1();
+}

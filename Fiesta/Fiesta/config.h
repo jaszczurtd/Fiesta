@@ -8,10 +8,13 @@
 
 //for debug - display values on LCD
 //debugFunc() function is invoked, no regular drawings
-#define DEBUG
+//#define DEBUG
 
 //for serial debug
 //#define DEBUG
+
+//main engine RPM value
+#define NOMINAL_RPM_VALUE 870
 
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
