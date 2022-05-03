@@ -70,7 +70,7 @@ void initialization(void) {
   redrawRPM();
   redrawEGT();
   #endif
-  
+
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   started = true;
@@ -270,10 +270,10 @@ void looper1(void) {
   heatedWindowMainLoop();
 
   engineMainLoop();
+  stabilizeRPM();
 
   if(shortTimeTrigger) {
     shortTimeTrigger = false;
-    stabilizeRPM();
   }
 }
 
@@ -282,6 +282,7 @@ static unsigned long previousMillis = 0;
 static volatile int RPMpulses = 0;
 static volatile unsigned long shortPulse = 0;
 static volatile unsigned long lastPulse = 0;
+static long rpmAliveTime = 0;
 
 void countRPM(void) {
   unsigned long now = micros();
@@ -295,6 +296,8 @@ void countRPM(void) {
   } else { 
     shortPulse = nowPulse;
   }
+
+  rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
 
   if(millis() - previousMillis > RPM_REFRESH_INTERVAL) {
     previousMillis = millis();
@@ -316,6 +319,109 @@ void countRPM(void) {
 void initRPMCount(void) {
   pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
   attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, CHANGE);  
+  resetRPMEngine();
+}
+
+static int currentRPMSolenoid = 0;
+static long startRPMTime = 0;
+
+static boolean tooLow = false;
+static boolean tooHigh = false;
+static boolean determined = false;
+static boolean suckingDone = false;
+static int rpmTime = 0; 
+
+void resetRPMEngine(void) {
+  rpmTime = 0;
+  tooLow = tooHigh = determined = suckingDone = false;
+  startRPMTime = 0;
+  setMaxRPM();
+}
+
+void setMaxRPM(void) {
+    currentRPMSolenoid = MAX_RPM_PWM;
+    valToPWM(9, currentRPMSolenoid);
+}
+
+void stabilizeRPM(void) {
+
+  if(rpmAliveTime < millis()) {
+    rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
+    valueFields[F_RPM] = 0;
+    resetRPMEngine();
+  }
+
+  int rpm = (int)valueFields[F_RPM];
+  if(rpm > 0) {
+
+    if(!suckingDone){ 
+      if(startRPMTime < 1) {
+        startRPMTime = millis() + 20;
+        rpmTime = SUB_RPM_TIME_VALUE;
+        setMaxRPM();
+      }
+      if(startRPMTime < millis()) {
+        startRPMTime = 0;
+        suckingDone = true;
+      }
+      return;
+    }
+
+    if(startRPMTime < 1) {
+      startRPMTime = millis() + rpmTime;
+    }
+
+    if(startRPMTime < millis()) {
+      startRPMTime = 0;
+
+      if(!determined) {
+        if(rpm != NOMINAL_RPM_VALUE) {
+          if(rpm < NOMINAL_RPM_VALUE) {
+            if(NOMINAL_RPM_VALUE - rpm > MAX_RPM_DIFFERENCE) {
+              tooLow = true;
+              determined = true;
+              rpmTime = ADD_RPM_TIME_VALUE;
+            }
+          }
+
+          if(rpm > NOMINAL_RPM_VALUE) {
+            if(rpm - NOMINAL_RPM_VALUE > MAX_RPM_DIFFERENCE) {
+              tooHigh = true;
+              determined = true;
+              rpmTime = SUB_RPM_TIME_VALUE;
+            }
+          }
+        }
+      }
+      if(determined) {
+        if(tooHigh) {
+          currentRPMSolenoid -= 1;
+          determined = tooHigh = tooLow = false;
+        }
+        if(tooLow) {
+          currentRPMSolenoid += 1;
+          determined = tooHigh = tooLow = false;
+        }
+      }
+
+   }
+    if(currentRPMSolenoid > MAX_RPM_PWM) {
+      currentRPMSolenoid = MAX_RPM_PWM;
+    }
+    if(currentRPMSolenoid < MIN_RPM_PWM) {
+      currentRPMSolenoid = MIN_RPM_PWM;
+    }
+
+  } else {
+    currentRPMSolenoid = 0;
+  }
+
+  valToPWM(9, currentRPMSolenoid);
+
+  char buf[128];
+  snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d", rpm, currentRPMSolenoid);
+  Serial.println(buf);
+
 }
 
 void glowPlugs(bool enable) {
@@ -596,36 +702,6 @@ void engineMainLoop(void) {
     valToPWM(10, load);
   }
 
-}
-
-static int currentRPMSolenoid = -1;
-void stabilizeRPM(void) {
-  if(currentRPMSolenoid < 0) {
-    currentRPMSolenoid = 255 / 2;
-  }
-
-  int rpm = (int)valueFields[F_RPM];
-  if(rpm > 0) {
-
-    if(rpm > NOMINAL_RPM_VALUE) {
-      currentRPMSolenoid --;
-    }
-    if(rpm < NOMINAL_RPM_VALUE) {
-      currentRPMSolenoid ++;
-    }
-
-    if(currentRPMSolenoid > 255) {
-      currentRPMSolenoid = 255;
-    }
-    if(currentRPMSolenoid < 0) {
-      currentRPMSolenoid = 0;
-    }
-
-  } else {
-    currentRPMSolenoid = 0;
-  }
-
-  valToPWM(9, currentRPMSolenoid);
 }
 
 #ifdef DEBUG_SCREEN

@@ -40,6 +40,8 @@ void initialization(void);
 void initialization1(void);
 void looper(void);
 void looper1(void);
+void setMaxRPM(void);
+void resetRPMEngine(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
 void initRPMCount(void);
