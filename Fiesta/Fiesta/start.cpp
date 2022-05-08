@@ -165,6 +165,10 @@ void seriousAlertsDrawFunctions() {
   #endif
 }
 
+int getEnginePercentageLoad(void) {
+  return percentToWidth((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
+}
+
 static bool draw = false, seriousAlertDraw = false;
 static bool mediumDraw = false;
 
@@ -351,14 +355,19 @@ void stabilizeRPM(void) {
     resetRPMEngine();
   }
 
+  int engineLoad = getEnginePercentageLoad();
+  if(engineLoad > 5) {  //percent
+    return;
+  }
+
   int rpm = (int)valueFields[F_RPM];
   if(rpm > 0) {
 
     if(!suckingDone){ 
       if(startRPMTime < 1) {
         startRPMTime = millis() + 20;
-        rpmTime = SUB_RPM_TIME_VALUE;
         setMaxRPM();
+        rpmTime = ADD_RPM_TIME_VALUE;
       }
       if(startRPMTime < millis()) {
         startRPMTime = 0;
@@ -418,10 +427,11 @@ void stabilizeRPM(void) {
 
   valToPWM(9, currentRPMSolenoid);
 
+#if DEBUG
   char buf[128];
-  snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d", rpm, currentRPMSolenoid);
+  snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d engineLoad:%d", rpm, currentRPMSolenoid, engineLoad);
   Serial.println(buf);
-
+#endif
 }
 
 void glowPlugs(bool enable) {

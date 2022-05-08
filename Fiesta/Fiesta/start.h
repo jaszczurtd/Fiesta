@@ -45,6 +45,7 @@ void resetRPMEngine(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
 void initRPMCount(void);
+int getEnginePercentageLoad(void);
 
 void glowPlugs(bool enable);
 void glowPlugsLamp(bool enable);
