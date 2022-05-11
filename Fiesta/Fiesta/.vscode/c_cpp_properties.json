@@ -56,15 +56,14 @@
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
+                "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\arduino-timer\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\onewire\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\DallasTemperature\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\Adafruit_BusIO\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\Adafruit_GFX_Library\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\Adafruit_GFX_Library\\Fonts\\**",
                 "c:\\Users\\ministerq\\Documents\\Arduino\\libraries\\Adafruit_ST7735_and_ST7789_Library\\**",
-
                 "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\**",
-
                 "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\hardware\\samd\\1.6.7\\cores\\arduino\\TinyUSB",
                 "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\hardware\\samd\\1.6.7\\cores\\arduino\\TinyUSB\\Adafruit_TinyUSB_ArduinoCore",
                 "C:\\Users\\ministerq\\AppData\\Local\\Arduino15\\packages\\adafruit\\hardware\\samd\\1.6.7\\cores\\arduino\\TinyUSB\\Adafruit_TinyUSB_ArduinoCore\\tinyusb\\src",
@@ -90,7 +89,7 @@
             "cppStandard": "c++11",
             "defines": [
                 "__SKETCH_NAME__=\"\"\"main.ino\"\"\"",
-                "F_CPU=48000000L",
+                "F_CPU=125000000L",
                 "ARDUINO=10813",
                 "ARDUINO_ITSYBITSY_M0",
                 "ARDUINO_ARCH_SAMD",

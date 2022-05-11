@@ -3,6 +3,7 @@
 #define T_START
 
 #include <Wire.h>
+#include <arduino-timer.h>
 
 #include "graphics.h"
 #include "utils.h"
@@ -35,6 +36,17 @@ extern float valueFields[];
 #define A_4051 11
 #define B_4051 12
 #define C_4051 13
+
+void drawMediumImportanceValues(void);
+void drawHighImportanceValues(void);
+void drawLowImportanceValues(void);
+
+bool callAtEverySecond(void *argument);
+bool callAtEveryHalfSecond(void *argument);
+bool callAtEveryHalfHalfSecond(void *argument);
+
+bool readMediumValues(void *argument);
+bool readHighValues(void *argument);
 
 void initialization(void);
 void initialization1(void);

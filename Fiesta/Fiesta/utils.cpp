@@ -36,7 +36,7 @@ float getAverageValueFrom(int tpin) {
     // take N samples in a row, with a slight delay
     for (i = 0; i < NUMSAMPLES; i++) {
         average += analogRead(tpin);
-        delay(5);
+        delay(2);
     }
     average /= NUMSAMPLES;
 
