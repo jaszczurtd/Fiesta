@@ -8,6 +8,9 @@ static unsigned long alertsStartSecond = 0;
 static bool highImportanceValueChanged = false;
 static bool started = false;
 
+Timer generalTimer;
+Timer importanceTimer;
+
 void initialization(void) {
 
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
@@ -73,6 +76,20 @@ void initialization(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
+  generalTimer = timer_create_default();
+
+  int time = 500;
+
+  generalTimer.every(time, callAtEverySecond);
+  generalTimer.every(time / 2, callAtEveryHalfSecond);
+  generalTimer.every(time / 4, callAtEveryHalfHalfSecond);
+  generalTimer.every(time / 6, readMediumValues);
+  generalTimer.every(time / 8, readHighValues);
+
+  callAtEverySecond(NULL);
+  callAtEveryHalfSecond(NULL);
+  callAtEveryHalfHalfSecond(NULL);
+
   started = true;
 
   Serial.println("Fiesta MTDDI started\n");
@@ -102,62 +119,6 @@ void drawMediumImportanceValues(void) {
   #endif
 }
 
-static unsigned char lowReadCycles = 0;
-static unsigned char lowCurrentValue = 0;
-static unsigned char highReadCycles = 0;
-static unsigned char mediumReadCycles = 0;
-
-void readValues(void) {
-  if(lowReadCycles++ > LOW_READ_CYCLES_AMOUNT) {
-    lowReadCycles = 0;
-
-    switch(lowCurrentValue) {
-      case F_COOLANT_TEMP:
-        valueFields[F_COOLANT_TEMP] = readCoolantTemp();
-        break;
-      case F_OIL_TEMP:
-        valueFields[F_OIL_TEMP] = readOilTemp();
-        break;
-      case F_INTAKE_TEMP:
-        valueFields[F_INTAKE_TEMP] = readAirTemperature();
-        break;
-      case F_VOLTS:
-        valueFields[F_VOLTS] = readVolts();
-        break;
-      case F_FUEL:
-        valueFields[F_FUEL] = readFuel();
-        break;
-      case F_EGT:
-        valueFields[F_EGT] = readEGT();
-        break;
-    }
-    if(lowCurrentValue++ > F_LAST) {
-      lowCurrentValue = 0;
-    }
-  }
-
-  if(highReadCycles++ > HIGH_READ_CYCLES_AMOUNT) {
-    highReadCycles = 0;
-
-    for(int a = 0; a < F_LAST; a++) {
-      switch(a) {
-        case F_ENGINE_LOAD:
-          valueFields[a] = readThrottle();
-          break;
-        case F_PRESSURE:
-          valueFields[a] = readBarPressure();
-          break;
-      }
-      if(reflectionValueFields[a] != valueFields[a]) {
-        reflectionValueFields[a] = valueFields[a];
-
-        highImportanceValueChanged = true;
-      }
-    }
-  }
-
-}
-
 void seriousAlertsDrawFunctions() {
   #ifndef DEBUG_SCREEN
   drawFuelEmpty();
@@ -169,9 +130,6 @@ int getEnginePercentageLoad(void) {
   return percentToWidth((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
 }
 
-static bool draw = false, seriousAlertDraw = false;
-static bool mediumDraw = false;
-
 static bool alertBlink = false, seriousAlertBlink = false;
 bool alertSwitch(void) {
   return alertBlink;
@@ -180,32 +138,60 @@ bool seriousAlertSwitch(void) {
   return seriousAlertBlink;
 }
 
-static long lastSec = -1, lastHalfSec = -1, lastHalfHalfSec = -1, lastShortTime = -1;
+//timer functions
 
-void looper(void) {
-
-  long msec = millis();
-
-  int sec = (msec % 1000 > 500);
-  int halfsec = (msec % 500 > 250);
-  int halfhalfsec = (msec % 250 > 125);
-  
-  if(lastHalfHalfSec != halfhalfsec) {
-    lastHalfHalfSec = halfhalfsec;
-    mediumDraw = true;
+static unsigned char lowCurrentValue = 0;
+bool readMediumValues(void *argument) {
+  switch(lowCurrentValue) {
+    case F_COOLANT_TEMP:
+      valueFields[F_COOLANT_TEMP] = readCoolantTemp();
+      break;
+    case F_OIL_TEMP:
+      valueFields[F_OIL_TEMP] = readOilTemp();
+      break;
+    case F_INTAKE_TEMP:
+      valueFields[F_INTAKE_TEMP] = readAirTemperature();
+      break;
+    case F_VOLTS:
+      valueFields[F_VOLTS] = readVolts();
+      break;
+    case F_FUEL:
+      valueFields[F_FUEL] = readFuel();
+      break;
+    case F_EGT:
+      valueFields[F_EGT] = readEGT();
+      break;
+  }
+  if(lowCurrentValue++ > F_LAST) {
+    lowCurrentValue = 0;
   }
 
-  if(lastHalfSec != halfsec) {
-    lastHalfSec = halfsec;
-    seriousAlertBlink = (seriousAlertBlink) ? false : true;
-    seriousAlertDraw = true;
+  return true;
+}
+
+bool readHighValues(void *argument) {
+  for(int a = 0; a < F_LAST; a++) {
+    switch(a) {
+      case F_ENGINE_LOAD:
+        valueFields[a] = readThrottle();
+        break;
+      case F_PRESSURE:
+        valueFields[a] = readBarPressure();
+        break;
+    }
+    if(reflectionValueFields[a] != valueFields[a]) {
+      reflectionValueFields[a] = valueFields[a];
+
+      highImportanceValueChanged = true;
+    }
   }
 
-  if(lastSec != sec) {
-    lastSec = sec;
-    alertBlink = (alertBlink) ? false : true;
+  return true;
+}
 
-    digitalWrite(LED_BUILTIN, alertBlink);
+bool callAtEverySecond(void *argument) {
+  alertBlink = (alertBlink) ? false : true;
+  digitalWrite(LED_BUILTIN, alertBlink);
 
 #if SYSTEM_TEMP
     Serial.print("System temperature:");
@@ -213,14 +199,31 @@ void looper(void) {
     Serial.println(systemTemp);
 #endif
 
-    draw = true;
-  }
-
   //regular draw - low importance values
-  if(draw) {
-    drawLowImportanceValues();
-    draw = false;
+  drawLowImportanceValues();
+
+  return true; 
+}
+
+bool callAtEveryHalfSecond(void *argument) {
+  seriousAlertBlink = (seriousAlertBlink) ? false : true;
+
+  //draw changes of medium importance values
+  drawMediumImportanceValues();
+
+  return true; 
+}
+
+bool callAtEveryHalfHalfSecond(void *argument) {
+  if(alertsStartSecond <= getSeconds()) {
+    seriousAlertsDrawFunctions();
   }
+  return true; 
+}
+
+void looper(void) {
+
+  generalTimer.tick();
 
   //draw changes of high importance values
   if(highImportanceValueChanged) {
@@ -228,27 +231,16 @@ void looper(void) {
     highImportanceValueChanged = false;
   }
 
-  //draw changes of medium importance values
-  if(mediumDraw) {
-    drawMediumImportanceValues();
-    mediumDraw = false;
-  }
-
-  if(seriousAlertDraw) {
-    if(alertsStartSecond <= getSeconds()) {
-      seriousAlertsDrawFunctions();
-    }
-    seriousAlertDraw = false;
-  }
-
-  readValues();
 }
 
 void initialization1(void) {
+  importanceTimer = timer_create_default();
+
   Serial.println("Second core initialized");
 }
 
 static bool shortTimeTrigger = false;
+static long lastShortTime = -1;
 
 void looper1(void) {
 
