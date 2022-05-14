@@ -53,9 +53,13 @@ void initRPMCount(void) {
   setMaxRPM();
 }
 
-void setMaxRPM(void) {
-  currentRPMSolenoid = percentToGivenVal(100, PWM_RESOLUTION);
+void setRPMPercentage(int percentage) {
+  currentRPMSolenoid = percentToGivenVal(MAX_RPM_PERCENT_VALUE, PWM_RESOLUTION);
   valToPWM(9, currentRPMSolenoid);
+}
+
+void setMaxRPM(void) {
+  setRPMPercentage(MAX_RPM_PERCENT_VALUE);
 }
 
 bool cycleCheck(void *argument) {
@@ -73,8 +77,7 @@ void stabilizeRPM(void) {
 
   int engineLoad = getEnginePercentageLoad();
   if(engineLoad > 5) {  //percent
-    setMaxRPM();
-    rpmPercentValue = 0;
+    setRPMPercentage(70);
     rpmCycle = false;
     return;
   }
@@ -89,12 +92,12 @@ void stabilizeRPM(void) {
         if(!rpmCycle) {
           rpmCycle = true;
 
-          rpmPercentValue += 10;
-          if(rpmPercentValue > 100){
-            rpmPercentValue = 100;
+          rpmPercentValue += 5;
+          if(rpmPercentValue > MAX_RPM_PERCENT_VALUE){
+            rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
           currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
-          rpmTimer.in(250, cycleCheck);
+          rpmTimer.in(500, cycleCheck);
         }
       }
     }
@@ -105,12 +108,12 @@ void stabilizeRPM(void) {
         if(!rpmCycle) {
           rpmCycle = true;
 
-          rpmPercentValue -= 10;
-          if(rpmPercentValue < 0){
-            rpmPercentValue = 0;
+          rpmPercentValue -= 5;
+          if(rpmPercentValue < MIN_RPM_PERCENT_VALUE){
+            rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
           currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
-          rpmTimer.in(500, cycleCheck);
+          rpmTimer.in(600, cycleCheck);
         }
       }
     }

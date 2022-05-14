@@ -64,11 +64,6 @@
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
 
-//RPM refresh interval (in miliseconds)
-#define RPM_REFRESH_INTERVAL 400
-//minimum RPM for dependencies to operate on
-#define RPM_MIN 300
-
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
 
@@ -84,9 +79,13 @@
 #define DIVIDER_PRESSURE_BAR 912
 #define DIVIDER_EGT 2.308
 
-//main engine RPM value
-#define NOMINAL_RPM_VALUE 870
-
+//minimum RPM for dependencies to operate on
+#define RPM_MIN 300//main engine RPM value
+//RPM refresh interval (in miliseconds)
+#define RPM_REFRESH_INTERVAL 150
+#define NOMINAL_RPM_VALUE 880
+#define MAX_RPM_PERCENT_VALUE 100
+#define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM
 #define RESET_RPM_WATCHDOG_TIME 2000
 
