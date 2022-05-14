@@ -9,7 +9,6 @@ static bool highImportanceValueChanged = false;
 static bool started = false;
 
 Timer generalTimer;
-Timer importanceTimer;
 
 void initialization(void) {
 
@@ -63,7 +62,6 @@ void initialization(void) {
   debugFunc();
   #else  
   initHeatedWindow();
-  initRPMCount();
   redrawFuel();
   redrawTemperature();
   redrawOil();
@@ -127,7 +125,7 @@ void seriousAlertsDrawFunctions() {
 }
 
 int getEnginePercentageLoad(void) {
-  return percentToWidth((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
+  return percentToGivenVal((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
 }
 
 static bool alertBlink = false, seriousAlertBlink = false;
@@ -234,31 +232,16 @@ void looper(void) {
 }
 
 void initialization1(void) {
-  importanceTimer = timer_create_default();
+  initRPMCount();
 
   Serial.println("Second core initialized");
 }
-
-static bool shortTimeTrigger = false;
-static long lastShortTime = -1;
 
 void looper1(void) {
 
   if(!started) {
     return;
   }
-
-  long msec = millis();
-  int shortTime = (msec % 62 > 31);
-
-  if(lastShortTime != shortTime) {
-    lastShortTime = shortTime;
-    shortTimeTrigger = true;
-
-  }
-
-  //Serial.print("Short trigger:");
-  //Serial.println(msec);
 
   glowPlugsMainLoop();
   fanMainLoop();
@@ -267,164 +250,8 @@ void looper1(void) {
 
   engineMainLoop();
   stabilizeRPM();
-
-  if(shortTimeTrigger) {
-    shortTimeTrigger = false;
-  }
 }
 
-
-static unsigned long previousMillis = 0;
-static volatile int RPMpulses = 0;
-static volatile unsigned long shortPulse = 0;
-static volatile unsigned long lastPulse = 0;
-static long rpmAliveTime = 0;
-
-void countRPM(void) {
-  unsigned long now = micros();
-  unsigned long nowPulse = now - lastPulse;
-  
-  lastPulse = now;
-
-  if((nowPulse >> 1) > shortPulse){ 
-    RPMpulses++;
-    shortPulse = nowPulse; 
-  } else { 
-    shortPulse = nowPulse;
-  }
-
-  rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
-
-  if(millis() - previousMillis > RPM_REFRESH_INTERVAL) {
-    previousMillis = millis();
-
-    int RPM = int(RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL)) * 4 / 4 / 32.0) - 100; 
-    if(RPM < 0) {
-      RPM = 0;
-    }
-    RPMpulses = 0; 
-
-    RPM = min(99999, RPM);
-    RPM = ((RPM / 10) * 10);
-
-    valueFields[F_RPM] = RPM; 
-  }  
-
-}
-
-void initRPMCount(void) {
-  pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, CHANGE);  
-  resetRPMEngine();
-}
-
-static int currentRPMSolenoid = 0;
-static long startRPMTime = 0;
-
-static boolean tooLow = false;
-static boolean tooHigh = false;
-static boolean determined = false;
-static boolean suckingDone = false;
-static int rpmTime = 0; 
-
-void resetRPMEngine(void) {
-  rpmTime = 0;
-  tooLow = tooHigh = determined = suckingDone = false;
-  startRPMTime = 0;
-  setMaxRPM();
-}
-
-void setMaxRPM(void) {
-    currentRPMSolenoid = MAX_RPM_PWM;
-    valToPWM(9, currentRPMSolenoid);
-}
-
-void stabilizeRPM(void) {
-
-  if(rpmAliveTime < millis()) {
-    rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
-    valueFields[F_RPM] = 0;
-    resetRPMEngine();
-  }
-
-  int engineLoad = getEnginePercentageLoad();
-  if(engineLoad > 5) {  //percent
-    return;
-  }
-
-  int rpm = (int)valueFields[F_RPM];
-  if(rpm > 0) {
-
-    if(!suckingDone){ 
-      if(startRPMTime < 1) {
-        startRPMTime = millis() + 20;
-        setMaxRPM();
-        rpmTime = ADD_RPM_TIME_VALUE;
-      }
-      if(startRPMTime < millis()) {
-        startRPMTime = 0;
-        suckingDone = true;
-      }
-      return;
-    }
-
-    if(startRPMTime < 1) {
-      startRPMTime = millis() + rpmTime;
-    }
-
-    if(startRPMTime < millis()) {
-      startRPMTime = 0;
-
-      if(!determined) {
-        if(rpm != NOMINAL_RPM_VALUE) {
-          if(rpm < NOMINAL_RPM_VALUE) {
-            if(NOMINAL_RPM_VALUE - rpm > MAX_RPM_DIFFERENCE) {
-              tooLow = true;
-              determined = true;
-              rpmTime = ADD_RPM_TIME_VALUE;
-            }
-          }
-
-          if(rpm > NOMINAL_RPM_VALUE) {
-            if(rpm - NOMINAL_RPM_VALUE > MAX_RPM_DIFFERENCE) {
-              tooHigh = true;
-              determined = true;
-              rpmTime = SUB_RPM_TIME_VALUE;
-            }
-          }
-        }
-      }
-      if(determined) {
-        if(tooHigh) {
-          currentRPMSolenoid -= 1;
-          determined = tooHigh = tooLow = false;
-        }
-        if(tooLow) {
-          currentRPMSolenoid += 1;
-          determined = tooHigh = tooLow = false;
-        }
-      }
-
-   }
-    if(currentRPMSolenoid > MAX_RPM_PWM) {
-      currentRPMSolenoid = MAX_RPM_PWM;
-    }
-    if(currentRPMSolenoid < MIN_RPM_PWM) {
-      currentRPMSolenoid = MIN_RPM_PWM;
-    }
-
-  } else {
-    currentRPMSolenoid = 0;
-  }
-
-  valToPWM(9, currentRPMSolenoid);
-
-#if DEBUG
-  char buf[128];
-  snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d engineLoad:%d", rpm, currentRPMSolenoid, engineLoad);
-  Serial.println(buf);
-#endif
-}
 
 void glowPlugs(bool enable) {
   pcf8574_write(O_GLOW_PLUGS, enable);

@@ -8,6 +8,7 @@
 #include "graphics.h"
 #include "utils.h"
 #include "config.h"
+#include "rpm.h"
 
 extern float valueFields[];
 
@@ -52,11 +53,8 @@ void initialization(void);
 void initialization1(void);
 void looper(void);
 void looper1(void);
-void setMaxRPM(void);
-void resetRPMEngine(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
-void initRPMCount(void);
 int getEnginePercentageLoad(void);
 
 void glowPlugs(bool enable);

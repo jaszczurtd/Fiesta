@@ -17,7 +17,7 @@ void floatToDec(float val, int *hi, int *lo);
 float adcToVolt(float basev, int adc);
 float ntcToTemp(int tpin, int thermistor, int r);
 void valToPWM(unsigned char pin, int val);
-int percentToWidth(float percent, int maxWidth);
+int percentToGivenVal(float percent, int maxWidth);
 int currentValToHeight(int currentVal, int maxVal);
 void pcf857_init(void);
 void pcf8574_write(unsigned char pin, bool value);

@@ -88,10 +88,6 @@
 #define NOMINAL_RPM_VALUE 870
 
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM
-#define MAX_RPM_PWM PWM_RESOLUTION / 1.1
-#define MIN_RPM_PWM PWM_RESOLUTION / 10.2
-#define ADD_RPM_TIME_VALUE 3
-#define SUB_RPM_TIME_VALUE 5
 #define RESET_RPM_WATCHDOG_TIME 2000
 
 #endif

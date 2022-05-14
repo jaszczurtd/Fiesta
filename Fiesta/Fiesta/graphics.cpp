@@ -382,7 +382,7 @@ static int lastLoadAmount = C_INIT_VAL;
 void showEngineLoadAmount(int currentVal) {
 
     float percent = (currentVal * 100) / PWM_RESOLUTION;
-    int value = percentToWidth(percent, 100);
+    int value = percentToGivenVal(percent, 100);
 
     if(e_drawOnce) {
         drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)pump);
@@ -620,7 +620,7 @@ void drawFuelEmpty(void) {
 void showFuelAmount(int currentVal, int maxVal) {
     int width = f_getWidth();
     float percent = (currentVal * 100) / maxVal;
-    currentFuelWidth = percentToWidth(percent, width);
+    currentFuelWidth = percentToGivenVal(percent, width);
     if(currentFuelWidth > width) {
         currentFuelWidth = width;
     }
@@ -691,7 +691,7 @@ void drawChangeableFuelContent(int w) {
     int color = FUEL_FILL_COLOR;
 
     int width = f_getWidth();
-    int minW = percentToWidth(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
+    int minW = percentToGivenVal(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
     if(w <= minW && w >= 1) {
         draw = true;
         if(alertSwitch()) {

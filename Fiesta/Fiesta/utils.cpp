@@ -68,13 +68,13 @@ void valToPWM(unsigned char pin, int val) {
     analogWrite(pin, (PWM_RESOLUTION - val));
 }
 
-int percentToWidth(float percent, int maxWidth) {
-    return ((percent / 100.0) * maxWidth);
+int percentToGivenVal(float percent, int givenVal) {
+    return ((percent / 100.0) * givenVal);
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
     float percent = (currentVal * 100) / maxVal;
-    return percentToWidth(percent, TEMP_BAR_MAXHEIGHT);
+    return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
 }
 
 static unsigned char pcf8574State = 0;
