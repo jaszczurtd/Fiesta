@@ -59,8 +59,6 @@
 
 //how long heated windows should heats? (in seconds)
 #define HEATED_WINDOWS_TIME (60 * 4)
-//time between switch left side / right side
-#define HEATED_WINDOWS_SWITCH_TIME 30
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
 
