@@ -79,7 +79,7 @@ void initialization(void) {
   int time = 500;
 
   generalTimer.every(time, callAtEverySecond);
-  generalTimer.every(time / 2, callAtEveryHalfSecond);
+  generalTimer.every(time / 3, callAtEveryHalfSecond);
   generalTimer.every(time / 4, callAtEveryHalfHalfSecond);
   generalTimer.every(time / 6, readMediumValues);
   generalTimer.every(time / 8, readHighValues);
@@ -423,14 +423,11 @@ void engineHeaterMainLoop(void) {
 // heated window
 //-----------------------------------------------------------------------------
 
-static bool heatedWindowLEnabled = false;
-static bool heatedWindowPEnabled = false;
-static bool lastHeatedWindowLEnabled = false;
-static bool lastHeatedWindowPEnabled = false;
+static bool heatedWindowEnabled = false;
+static bool lastHeatedWindowEnabled = false;
 static bool waitingForUnpress = false;
 
 static int heatedWindowsOverallTimer = 0;
-static int heatedWindowsSwitchTimer = 0;
 static int lastHeatedWindowsSecond = 0;
 
 void initHeatedWindow(void) {
@@ -441,12 +438,12 @@ bool isHeatedButtonPressed(void) {
 }
 
 bool isHeatedWindowEnabled(void) {
-  return (heatedWindowLEnabled || heatedWindowPEnabled);
+  return heatedWindowEnabled;
 }
 
 static void disableHeatedWindows(void) {
-  heatedWindowLEnabled = heatedWindowPEnabled = false;
-  heatedWindowsOverallTimer = heatedWindowsSwitchTimer = 0;
+  heatedWindowEnabled = false;
+  heatedWindowsOverallTimer = 0;
   lastHeatedWindowsSecond = 0;
 }
 
@@ -472,12 +469,9 @@ void heatedWindowMainLoop(void) {
         disableHeatedWindows();
       } else {
         heatedWindowsOverallTimer = HEATED_WINDOWS_TIME;
-        heatedWindowsSwitchTimer = HEATED_WINDOWS_SWITCH_TIME;
         lastHeatedWindowsSecond = getSeconds();
 
-        //start from the left
-        heatedWindowLEnabled = true;
-        heatedWindowPEnabled = false;
+        heatedWindowEnabled = true;
       }
 
       pressed = false;
@@ -487,12 +481,6 @@ void heatedWindowMainLoop(void) {
     if(isHeatedWindowEnabled()) {
       if(lastHeatedWindowsSecond != getSeconds()) {
         lastHeatedWindowsSecond = getSeconds();
-
-        if(heatedWindowsSwitchTimer-- <= 0) {
-          heatedWindowsSwitchTimer = HEATED_WINDOWS_SWITCH_TIME;
-          heatedWindowLEnabled = !heatedWindowLEnabled;
-          heatedWindowPEnabled = !heatedWindowPEnabled;
-        }
 
         if(heatedWindowsOverallTimer-- <= 0) {
           disableHeatedWindows();
@@ -508,14 +496,9 @@ void heatedWindowMainLoop(void) {
     }
 
     //execute action
-    if(heatedWindowLEnabled != lastHeatedWindowLEnabled) {
-      lastHeatedWindowLEnabled = heatedWindowLEnabled;
-      heatedWindow(heatedWindowLEnabled, O_HEATED_WINDOW_L);
-    }
-
-    if(heatedWindowPEnabled != lastHeatedWindowPEnabled) {
-      lastHeatedWindowPEnabled = heatedWindowPEnabled;
-      heatedWindow(heatedWindowPEnabled, O_HEATED_WINDOW_P);
+    if(heatedWindowEnabled != lastHeatedWindowEnabled) {
+      heatedWindow(heatedWindowEnabled, O_HEATED_WINDOW_L);
+      heatedWindow(heatedWindowEnabled, O_HEATED_WINDOW_P);
     }
   }
 }
