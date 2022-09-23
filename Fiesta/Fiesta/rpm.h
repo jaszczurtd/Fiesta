@@ -11,5 +11,6 @@
 void initRPMCount(void);
 void setMaxRPM(void);
 void resetRPMEngine(void);
+void stabilizeRPM(void);
 
 #endif

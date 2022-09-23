@@ -9,6 +9,11 @@
 #include "utils.h"
 #include "config.h"
 #include "rpm.h"
+#include "turbo.h"
+#include "engineFan.h"
+#include "engineHeater.h"
+#include "heatedWindshield.h"
+#include "glowPlugs.h"
 
 extern float valueFields[];
 
@@ -57,27 +62,8 @@ bool seriousAlertSwitch(void);
 bool alertSwitch(void);
 int getEnginePercentageLoad(void);
 
-void glowPlugs(bool enable);
-void glowPlugsLamp(bool enable);
-void fan(bool enable);
-void heater(bool enable, int level);
-void heatedWindow(bool enable, int side);
-bool isGlowPlugsHeating(void);
-
 #ifdef DEBUG
 void debugFunc(void);
 #endif
-
-void initGlowPlugsTime(float temp);
-void glowPlugsMainLoop(void);
-bool isFanEnabled(void);
-void fanMainLoop(void);
-void engineHeaterMainLoop(void);
-void heatedWindowMainLoop(void);
-bool isHeatedWindowEnabled(void);
-void initHeatedWindow(void);
-bool isHeatedButtonPressed(void);
-void engineMainLoop(void);
-void stabilizeRPM(void);
 
 #endif
