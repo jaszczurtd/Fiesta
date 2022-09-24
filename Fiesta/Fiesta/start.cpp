@@ -62,6 +62,7 @@ void initialization(void) {
   debugFunc();
   #else  
   initHeatedWindow();
+  initFuelMeasurement();
   redrawFuel();
   redrawTemperature();
   redrawOil();
