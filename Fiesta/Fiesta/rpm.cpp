@@ -82,12 +82,19 @@ void stabilizeRPM(void) {
     return;
   }
 
+  int desiredRPM;
+  if(((int)valueFields[F_COOLANT_TEMP]) <= TEMP_COLD_ENGINE) {
+    desiredRPM = COLD_RPM_VALUE;
+  } else {
+    desiredRPM = NOMINAL_RPM_VALUE;
+  }
+
   int rpm = (int)valueFields[F_RPM];
-  if(rpm != NOMINAL_RPM_VALUE) {
+  if(rpm != desiredRPM) {
     rpmPercentValue = (int)((currentRPMSolenoid * 100) / PWM_RESOLUTION);
 
-    if(rpm < NOMINAL_RPM_VALUE) {
-      if(NOMINAL_RPM_VALUE - rpm > MAX_RPM_DIFFERENCE) {
+    if(rpm < desiredRPM) {
+      if(desiredRPM - rpm > MAX_RPM_DIFFERENCE) {
 
         if(!rpmCycle) {
           rpmCycle = true;
@@ -102,8 +109,8 @@ void stabilizeRPM(void) {
       }
     }
 
-    if(rpm > NOMINAL_RPM_VALUE) {
-      if(rpm - NOMINAL_RPM_VALUE > MAX_RPM_DIFFERENCE) {
+    if(rpm > desiredRPM) {
+      if(rpm - desiredRPM > MAX_RPM_DIFFERENCE) {
 
         if(!rpmCycle) {
           rpmCycle = true;
@@ -123,9 +130,7 @@ void stabilizeRPM(void) {
 
 
 #if DEBUG
-  char buf[128];
-  snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
-  Serial.println(buf);
+  deb("rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
 #endif
 }
 

@@ -90,7 +90,7 @@ void initialization(void) {
 
   started = true;
 
-  Serial.println("Fiesta MTDDI started\n");
+  deb("Fiesta MTDDI started\n");
 }
 
 void drawLowImportanceValues(void) {
@@ -192,9 +192,7 @@ bool callAtEverySecond(void *argument) {
   digitalWrite(LED_BUILTIN, alertBlink);
 
 #if SYSTEM_TEMP
-    Serial.print("System temperature:");
-    float systemTemp = analogReadTemp();
-    Serial.println(systemTemp);
+  deb("System temperature: %f", analogReadTemp());
 #endif
 
   //regular draw - low importance values
@@ -234,7 +232,7 @@ void looper(void) {
 void initialization1(void) {
   initRPMCount();
 
-  Serial.println("Second core initialized");
+  deb("Second core initialized");
 }
 
 //-----------------------------------------------------------------------------

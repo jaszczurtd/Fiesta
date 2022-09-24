@@ -817,10 +817,7 @@ float readThrottle(void) {
     result = abs(result - PWM_RESOLUTION);
 
 #ifdef DEBUG
-    char buffer[100];
-    memset (buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer) - 1, "throttle: %d %d", (int)rawVal, result);
-    Serial.println(buffer);
+    deb("throttle: %d %d", (int)rawVal, result);
 #endif
 
     return result;
@@ -833,29 +830,6 @@ float readThrottle(void) {
 float readAirTemperature(void) {
     set4051ActivePin(3);
     return ntcToTemp(A1, 5050, 4700);
-}
-
-//-------------------------------------------------------------------------------------------------
-//Read fuel amount
-//-------------------------------------------------------------------------------------------------
-
-float readFuel(void) {
-    set4051ActivePin(4);
-
-    int result = getAverageValueFrom(A1);
-
-    //todo: macro
-    #ifdef DEBUG
-    char buffer[100];
-    memset (buffer, 0, sizeof(buffer));
-    snprintf(buffer, sizeof(buffer) - 1, "tank: %d", result);
-    Serial.println(buffer);
-    #endif
-
-    result -= FUEL_MAX;
-    result = abs(result - (FUEL_MIN - FUEL_MAX));
-
-    return result;
 }
 
 //-------------------------------------------------------------------------------------------------
