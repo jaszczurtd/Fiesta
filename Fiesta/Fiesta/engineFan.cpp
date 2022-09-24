@@ -41,7 +41,7 @@ void fanMainLoop(void) {
     fan(fanEnabled);
     lastFanStatus = fanEnabled;     
 
-    Serial.println("fan enabled:" + fanEnabled);     
+    deb("fan enabled: %d", fanEnabled);     
   }
 
 }

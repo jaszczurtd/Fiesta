@@ -46,10 +46,12 @@
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
 
+#define TEMP_COLD_ENGINE 30
+
 //temperature when fan should start
 #define TEMP_FAN_START  102
 //temperature when fan should stop after start
-#define TEMP_FAN_STOP   94
+#define TEMP_FAN_STOP   95
 
 //temperature when engine heater should stop to heat
 #define TEMP_HEATER_STOP 80
@@ -82,6 +84,7 @@
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 150
 #define NOMINAL_RPM_VALUE 880
+#define COLD_RPM_VALUE 1000
 #define MAX_RPM_PERCENT_VALUE 100
 #define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM

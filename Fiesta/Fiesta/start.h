@@ -15,6 +15,13 @@
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
 
+#define deb(format, ...) { \
+    char buffer[100]; \
+    memset (buffer, 0, sizeof(buffer)); \
+    snprintf(buffer, sizeof(buffer) - 1, format); \
+    Serial.println(buffer); \
+    }
+
 extern float valueFields[];
 
 #define O_GLOW_PLUGS 0

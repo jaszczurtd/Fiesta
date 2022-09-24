@@ -59,18 +59,18 @@ void heatedWindowMainLoop(void) {
 
         heatedWindowEnabled = true;
 
-        Serial.println("enable heated windshield");
+        deb("enable heated windshield");
+
+        //if not enough energy, disable heated windshield
+        float volts = valueFields[F_VOLTS];
+        if(volts < MINIMUM_VOLTS_AMOUNT) {
+          deb("low voltage, disabling heated windshield");   
+          disableHeatedWindows();
+        }
       }
 
       pressed = false;
       return;
-    }
-
-    //if not enough energy, disable heated windshield
-    float volts = valueFields[F_VOLTS];
-    if(volts < MINIMUM_VOLTS_AMOUNT) {
-      Serial.println("low voltage, disabling heated windshield");   
-      disableHeatedWindows();
     }
 
     if(isHeatedWindowEnabled()) {

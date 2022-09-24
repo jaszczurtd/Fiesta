@@ -9,6 +9,7 @@
 #include "utils.h"
 #include "start.h"
 #include "config.h"
+#include "engineFuel.h"
 
 
 #define TFT_CS     4 //CS
@@ -102,7 +103,6 @@ float readOilTemp(void);
 float readThrottle(void);
 float readAirTemperature(void);
 float readVolts(void);
-float readFuel(void);
 float readBarPressure(void);
 float readEGT(void);
 
