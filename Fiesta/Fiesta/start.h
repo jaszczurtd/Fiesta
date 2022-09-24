@@ -14,11 +14,12 @@
 #include "engineHeater.h"
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
+#include "engineFuel.h"
 
 #define deb(format, ...) { \
     char buffer[100]; \
     memset (buffer, 0, sizeof(buffer)); \
-    snprintf(buffer, sizeof(buffer) - 1, format); \
+    snprintf(buffer, sizeof(buffer) - 1, format, ## __VA_ARGS__); \
     Serial.println(buffer); \
     }
 
