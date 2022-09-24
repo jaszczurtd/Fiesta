@@ -122,10 +122,10 @@ void stabilizeRPM(void) {
   }
 
 
-//#if DEBUG
+#if DEBUG
   char buf[128];
   snprintf(buf, sizeof(buf) - 1, "rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
-  //Serial.println(buf);
-//#endif
+  Serial.println(buf);
+#endif
 }
 
