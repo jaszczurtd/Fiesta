@@ -23,7 +23,7 @@ bool isGlowPlugsHeating(void) {
 void initGlowPlugsTime(float temp) {
 
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    glowPlugsTime = int((-(temp) + 60.0) / 5.0);
+    glowPlugsTime = int((-(temp) + 60.0) / 3.5);
     if(glowPlugsTime < 0) {
       glowPlugsTime = 0;
     }
