@@ -45,7 +45,7 @@
         },
         {
             "name": "Arduino",
-            "compilerPath": "c:\\Users\\marcin\\AppData\\Local\\Arduino15\\packages\\adafruit\\tools\\arm-none-eabi-gcc\\9-2019q4\\bin\\arm-none-eabi-g++",
+            "compilerPath": "C:\\Users\\${env:Username}\\AppData\\Local\\Arduino15\\packages\\adafruit\\tools\\arm-none-eabi-gcc\\9-2019q4\\bin\\arm-none-eabi-g++",
             "compilerArgs": [
                 "-Os",
                 "-s",
