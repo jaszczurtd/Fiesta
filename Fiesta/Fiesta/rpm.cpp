@@ -54,7 +54,7 @@ void initRPMCount(void) {
 }
 
 void setRPMPercentage(int percentage) {
-  currentRPMSolenoid = percentToGivenVal(MAX_RPM_PERCENT_VALUE, PWM_RESOLUTION);
+  currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
   valToPWM(9, currentRPMSolenoid);
 }
 
@@ -76,8 +76,9 @@ void stabilizeRPM(void) {
   }
 
   int engineLoad = getEnginePercentageLoad();
-  if(engineLoad > 5) {  //percent
-    setRPMPercentage(70);
+  if(engineLoad > 5 ||
+    valueFields[F_RPM] < 400) {  
+    setRPMPercentage(70); //percent
     rpmCycle = false;
     return;
   }

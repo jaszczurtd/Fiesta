@@ -379,10 +379,14 @@ const int e_getBaseY(void) {
 
 static int lastLoadAmount = C_INIT_VAL;
 
+int getThrottlePercentage(int currentVal) {
+    float percent = (currentVal * 100) / PWM_RESOLUTION;
+    return percentToGivenVal(percent, 100);
+}
+
 void showEngineLoadAmount(int currentVal) {
 
-    float percent = (currentVal * 100) / PWM_RESOLUTION;
-    int value = percentToGivenVal(percent, 100);
+    int value = getThrottlePercentage(currentVal);
 
     if(e_drawOnce) {
         drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)pump);
@@ -798,6 +802,7 @@ float readOilTemp(void) {
 //Read throttle
 //-------------------------------------------------------------------------------------------------
 
+static int lastThrottle = 0;
 float readThrottle(void) {
     set4051ActivePin(2);
 
@@ -816,9 +821,11 @@ float readThrottle(void) {
     int result = (initialVal / divider);
     result = abs(result - PWM_RESOLUTION);
 
-#ifdef DEBUG
-    deb("throttle: %d %d", (int)rawVal, result);
-#endif
+    int debugValue = getThrottlePercentage(result);
+    if(lastThrottle != debugValue) {
+        lastThrottle = debugValue;
+        deb("throttle: %d%%", debugValue);
+    }
 
     return result;
 }
