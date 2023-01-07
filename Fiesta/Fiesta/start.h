@@ -4,6 +4,8 @@
 
 #include <Wire.h>
 #include <arduino-timer.h>
+#include <SPI.h>
+#include <mcp_can.h>
 
 #include "graphics.h"
 #include "utils.h"
@@ -15,6 +17,7 @@
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
 #include "engineFuel.h"
+#include "can.h"
 
 #define deb(format, ...) { \
     char buffer[100]; \
