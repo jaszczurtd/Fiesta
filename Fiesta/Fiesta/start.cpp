@@ -58,6 +58,8 @@ void initialization(void) {
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
 
+  canInit();
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
@@ -253,6 +255,8 @@ void looper1(void) {
 
   turboMainLoop();
   stabilizeRPM();
+  canMainLoop();
+
 }
 
 #ifdef DEBUG_SCREEN
