@@ -20,7 +20,8 @@
         "utility": "cpp",
         "atomic": "cpp",
         "random": "cpp",
-        "limits": "cpp"
+        "limits": "cpp",
+        "memory": "cpp"
     },
     "cmake.configureOnOpen": false
 }
