@@ -4,6 +4,8 @@ MCP_CAN CAN(CAN0_GPIO);
 
 void receivedCanMessage(void);
 
+static byte frameNumber = 0;
+
 void canInit(void) {
   int at = 1;
 
@@ -49,7 +51,7 @@ long unsigned int canID = 0x000;
 unsigned char len = 0;
 
 // This the eight byte buffer of the incoming message data payload
-unsigned char buf[8];
+static byte buf[8];
 
 bool interrupt = false;
 void receivedCanMessage(void) {
@@ -79,5 +81,14 @@ void canMainLoop(void) {
                 break;
         }
     }
+}
+
+void sendThrottleValueCAN(int value) {
+    byte buf[2];
+
+    buf[0] = frameNumber++;
+    buf[1] = (byte)value;
+
+    CAN.sendMsgBuf(CAN_ID_ENGINE_LOAD, sizeof(buf), buf);  
 }
 

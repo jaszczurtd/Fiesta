@@ -824,6 +824,7 @@ float readThrottle(void) {
     int debugValue = getThrottlePercentage(result);
     if(lastThrottle != debugValue) {
         lastThrottle = debugValue;
+        sendThrottleValueCAN(lastThrottle);
         deb("throttle: %d%%", debugValue);
     }
 

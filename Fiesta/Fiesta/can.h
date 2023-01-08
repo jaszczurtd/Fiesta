@@ -6,6 +6,7 @@
 #include <mcp_can.h>
 
 #include "config.h"
+#include "start.h"
 #include "utils.h"
 #include "rpm.h"
 #include "../../../canDefinitions.h"
@@ -15,6 +16,7 @@
 
 void canMainLoop(void);
 void canInit(void);
+void sendThrottleValueCAN(int value);
 
 #endif
 
