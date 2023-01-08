@@ -10,6 +10,7 @@
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
+#include "can.h"
 
 
 #define TFT_CS     4 //CS

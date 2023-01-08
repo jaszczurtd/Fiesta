@@ -2,7 +2,7 @@
 
 void canMainLoop(void);
 void receivedCanMessage(void);
-bool callAtEverySecond(void *argument);
+bool callAtSomeTime(void *argument);
 
 //default for raspberry pi pico: SDA GPIO 4, SCL GPIO 5 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -57,7 +57,7 @@ void initialization() {
     attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
 
     generalTimer = timer_create_default();
-    generalTimer.every(1000, callAtEverySecond);
+    generalTimer.every(500, callAtSomeTime);
     
     started = true;
 }
@@ -102,7 +102,7 @@ void quickDisplay(int val1, int val2) {
     display.display();
 }
 
-bool callAtEverySecond(void *argument) {
+bool callAtSomeTime(void *argument) {
 
     //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
 
@@ -124,7 +124,7 @@ long unsigned int canID = 0x000;
 unsigned char len = 0;
 
 // This the eight byte buffer of the incoming message data payload
-unsigned char buf[8];
+static byte buf[8];
 
 bool interrupt = false;
 void receivedCanMessage(void) {
@@ -143,11 +143,13 @@ void canMainLoop(void) {
         lastFrame = buf[CAN_FRAME_NUMBER];
 
         switch(canID) {
-            case CAN_ID_ENGINE: {
+            case CAN_ID_ENGINE_LOAD: {
 
                 throttle = buf[1];
 
                 deb("%d %d", buf[CAN_FRAME_NUMBER], throttle);
+
+                //quickDisplay(frameNumber, throttle);
             }
 
             break;
