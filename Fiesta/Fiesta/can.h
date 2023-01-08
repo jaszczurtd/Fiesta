@@ -8,10 +8,10 @@
 #include "config.h"
 #include "utils.h"
 #include "rpm.h"
+#include "../../../canDefinitions.h"
 
 #define CAN0_GPIO 17
 #define CAN0_INT 15
-#define DPF_CAN_ID 0x123
 
 void canMainLoop(void);
 void canInit(void);

@@ -27,7 +27,7 @@ void initialization(void) {
  
   pinMode(LED_BUILTIN, OUTPUT);
 
-  Serial.begin(115200);
+  Serial.begin(9600);
  
   #ifdef I2C_SCANNER
   i2cScanner();
@@ -229,6 +229,7 @@ void looper(void) {
     drawHighImportanceValues();
     highImportanceValueChanged = false;
   }
+  canMainLoop();
 
 }
 
@@ -255,7 +256,6 @@ void looper1(void) {
 
   turboMainLoop();
   stabilizeRPM();
-  canMainLoop();
 
 }
 

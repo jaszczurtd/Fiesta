@@ -35,9 +35,11 @@ void canInit(void) {
     }
 
     Serial.println("CAN BUS Shield init ok!");
-    CAN.setMode(MCP_NORMAL | MCP_TX_INT); 
+    CAN.setMode(MCP_NORMAL); 
+    CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
+
     pinMode(CAN0_INT, INPUT); 
-    attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);  
+    attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
 }
 
 // Incoming CAN-BUS message
@@ -49,25 +51,33 @@ unsigned char len = 0;
 // This the eight byte buffer of the incoming message data payload
 unsigned char buf[8];
 
+bool interrupt = false;
 void receivedCanMessage(void) {
-
-     deb("interrupt!");
-   
+    interrupt = true;
 }
 
+static byte lastFrame = 0;
 void canMainLoop(void) {
     CAN.readMsgBuf(&canID, &len, buf);
-    
-    switch(canID) {
-        case DPF_CAN_ID:
+    if(canID == 0 || len < 1) {
+        return;
+    }
 
-            deb("%d %d", buf[0], buf[1]);
+    if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
+        interrupt = false;
+        lastFrame = buf[CAN_FRAME_NUMBER];
 
-        break;
+        switch(canID) {
+            case CAN_ID_DPF:
 
-        default:
-            deb("received unknown CAN frame: %d\n", canID);
+                deb("%d %d", buf[CAN_FRAME_NUMBER], buf[1]);
+
             break;
+
+            default:
+                deb("received unknown CAN frame: %d\n", canID);
+                break;
+        }
     }
 }
 

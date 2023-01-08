@@ -21,8 +21,9 @@
                 "limitSymbolsToIncludedHeaders": false,
                 "path": [
                     "${workspaceRoot}",
+                    "${workspaceRoot}/../../../**",
                     "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\libraries\\**",
-                    "${env:userHome}\\Documents\\Arduino\\libraries\\**",
+                    "C:\\Users\\${env:Username}\\Documents\\Arduino\\libraries\\**",
                     "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\avr\\avr\\include\\**",
                     "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino\\**"
                 ]
@@ -56,8 +57,9 @@
                 "-fno-rtti",
                 "-fno-exceptions"
             ],
-            "intelliSenseMode": "gcc-x64",
+            "intelliSenseMode": "windows-gcc-arm",
             "includePath": [
+                "${workspaceRoot}/../../../**",
                 "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\libraries\\avr\\include\\**",
                 "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\libraries\\**",
                 "C:\\Users\\${env:Username}\\Documents\\Arduino\\libraries\\**",
