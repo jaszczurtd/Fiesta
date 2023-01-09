@@ -53,8 +53,8 @@ void initialization() {
     Serial.println("CAN BUS Shield init ok!");
     CAN.setMode(MCP_NORMAL); 
     CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
-    pinMode(CAN0_INT, INPUT); 
-    attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
+    pinMode(CAN1_INT, INPUT); 
+    attachInterrupt(digitalPinToInterrupt(CAN1_INT), receivedCanMessage, FALLING);
 
     generalTimer = timer_create_default();
     generalTimer.every(500, callAtSomeTime);
