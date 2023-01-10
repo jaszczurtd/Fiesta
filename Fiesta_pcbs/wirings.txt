@@ -59,3 +59,31 @@ sck  24/spi0 sck
 gnd  23 
 cs   22/spi0 cs
 miso 21/spi0 rx 
+
+
+CAN connector
+
+1/red +3.3v
+2/black GND
+3/blue SCL
+4/yellow SDA
+
+Additional connector
+
+1/red air conditioner
+2/black MISC1
+3/blue DPF start
+
+DPF connector
+cable     connector
+
+green		green		+12v	6	
+violett		grey		+12v	5
+grey
+
+white		black		GND		2
+red			red			GND		1
+brown
+
+yellow		yellow		CAN HI	4
+blue		blue		CAN LO	3
