@@ -96,11 +96,11 @@
 93	nc
 94	nc
 95	nc
-96
+96  CAN LO
 97	+12V / ignition
 98	nc
 99	nc
-100	
+100	CAN HI
 101	nc
 102	nc
 103	gnd
