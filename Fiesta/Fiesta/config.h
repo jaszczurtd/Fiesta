@@ -60,7 +60,7 @@
 #define MINIMUM_VOLTS_AMOUNT 13.0
 
 //how long heated windows should heats? (in seconds)
-#define HEATED_WINDOWS_TIME (60 * 4)
+#define HEATED_WINDOWS_TIME 4
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
 
