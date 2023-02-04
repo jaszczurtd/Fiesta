@@ -44,6 +44,20 @@ int textHeight(const char* text) {
     return h;
 }
 
+static char displayTxt[8];
+
+int prepareText(const char *format, ...) {
+
+    va_list valist;
+    va_start(valist, format);
+
+    memset(displayTxt, 0, sizeof(displayTxt));
+    vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+    va_end(valist);
+
+    return textWidth((const char*)displayTxt);
+}
+
 void drawTempValue(int x, int y, int valToDisplay) {
     tft.setFont();
     tft.setTextSize(1);
@@ -57,11 +71,8 @@ void drawTempValue(int x, int y, int valToDisplay) {
         tft.println(err);
         return;
     } else {
-        char temp[8];
-        memset(temp, 0, sizeof(temp));
-
-        snprintf(temp, sizeof(temp) - 1, (const char*)F("%d"), valToDisplay);
-        tft.println(temp);
+        prepareText((const char*)F("%d"), valToDisplay);
+        tft.println(displayTxt);
     }
 }
 
@@ -128,8 +139,6 @@ const char *full = (char*)F("F");
 const char *empty = (char*)F("E");
 const char *emptyMessage = (char*)F("Pusty bak!");
 const char *err = (char*)F("ERR");
-
-static char displayTxt[8];
 
 static bool t_drawOnce = true; 
 void redrawTemperature(void) {
@@ -337,8 +346,7 @@ void showPressureAmount(float current) {
             lastHI = hi;
             lastLO = lo;
 
-            memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%d"), hi, lo);
+            prepareText((const char*)F("%d.%d"), hi, lo);
 
             x = p_getBaseX() + BAR_TEXT_X;
             y = p_getBaseY() + BAR_TEXT_Y - 12;
@@ -406,10 +414,7 @@ void showEngineLoadAmount(int currentVal) {
             tft.setTextSize(1);
             tft.setTextColor(TEXT_COLOR);
 
-            memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d%%"), value);
-
-            w = textWidth(displayTxt);
+            w = prepareText((const char*)F("%d%%"), value);
 
             x = e_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
             y = e_getBaseY() + 30;
@@ -474,14 +479,11 @@ void showEGTTemperatureAmount(int currentVal) {
             tft.setTextSize(1);
             tft.setTextColor(color);
 
-            memset(displayTxt, 0, sizeof(displayTxt));
             if(currentVal < TEMP_EGT_MIN) {
-                strncpy(displayTxt, (const char*)F("COLD"), sizeof(displayTxt) - 1);
+                w = prepareText((const char*)F("COLD"));
             } else {
-                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+                w = prepareText((const char*)F("%d"), currentVal);
             }
-
-            w = textWidth(displayTxt);
 
             x = egt_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
             y = egt_getBaseY() + 30;
@@ -531,18 +533,14 @@ void showICTemperatureAmount(int currentVal) {
             tft.setFont();
             tft.setTextSize(1);
 
-            memset(displayTxt, 0, sizeof(displayTxt));
-
             bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
             if(error) {
                 tft.setTextColor(ST77XX_RED);
-                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%s"), err);
+                w = prepareText((const char*)F("%s"), err);
             } else {
                 tft.setTextColor(TEXT_COLOR);
-                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+                w = prepareText((const char*)F("%d"), currentVal);
             }
-
-            w = textWidth(displayTxt);
 
             x = ic_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
             y = ic_getBaseY() + 30;
@@ -592,10 +590,7 @@ void showRPMamount(int currentVal) {
             tft.setTextSize(1);
             tft.setTextColor(TEXT_COLOR);
 
-            memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
-
-            w = textWidth(displayTxt);
+            w = prepareText((const char*)F("%d"), currentVal);
 
             x = rpm_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
             y = rpm_getBaseY() + 30;
@@ -786,10 +781,9 @@ void showVolts(float volts) {
         tft.setTextColor(color);
         tft.setCursor(x, y);
 
-        memset(displayTxt, 0, sizeof(displayTxt));
-        snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d.%dv"), v1, v2);
+        prepareText((const char*)F("%d.%dv"), v1, v2);
 
-        tft.fillRect(x, y, textWidth((const char*)F("14.4v")) + 2, 8, ST7735_BLACK);
+        tft.fillRect(x, y, 30, 8, ST7735_BLACK);
 
         tft.setTextSize(1);
         tft.println(displayTxt);
