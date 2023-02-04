@@ -447,17 +447,39 @@ void showEGTTemperatureAmount(int currentVal) {
         drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)egt);
         egt_drawOnce = false;
     } else {
+        int x, y, w, offset, color = TEXT_COLOR;
+
+        if(currentVal < TEMP_EGT_MIN) {
+            currentVal = TEMP_EGT_MIN - 1;
+        }
+
+        bool draw = false;
         if(lastEGTTempVal != currentVal) {
             lastEGTTempVal = currentVal;
+            draw = true;
+        }
 
-            int x, y, w, offset;
+        bool overheat = false;
+        if(currentVal > TEMP_EGT_OK_HI) {
+            overheat = true;
+        }
 
+        if(overheat) {
+            draw = true;
+            color = (alertSwitch()) ? ST7735_RED : TEXT_COLOR;
+        }
+
+        if(draw) {
             tft.setFont();
             tft.setTextSize(1);
-            tft.setTextColor(TEXT_COLOR);
+            tft.setTextColor(color);
 
             memset(displayTxt, 0, sizeof(displayTxt));
-            snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+            if(currentVal < TEMP_EGT_MIN) {
+                strncpy(displayTxt, (const char*)F("COLD"), sizeof(displayTxt) - 1);
+            } else {
+                snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("%d"), currentVal);
+            }
 
             w = textWidth(displayTxt);
 
@@ -469,7 +491,9 @@ void showEGTTemperatureAmount(int currentVal) {
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
-            tft.drawCircle(x + w + 2, y, 2, TEXT_COLOR);
+            if(currentVal > TEMP_EGT_MIN) {
+                tft.drawCircle(x + w + 2, y, 2, color);
+            }
         }
     }
 }
