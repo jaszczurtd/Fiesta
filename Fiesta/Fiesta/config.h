@@ -48,6 +48,9 @@
 
 #define TEMP_COLD_ENGINE 30
 
+#define TEMP_EGT_OK_HI 750
+#define TEMP_EGT_MIN 100
+
 //temperature when fan should start
 #define TEMP_FAN_START  102
 //temperature when fan should stop after start
