@@ -82,7 +82,7 @@
 //minimum RPM for dependencies to operate on
 #define RPM_MIN 300//main engine RPM value
 //RPM refresh interval (in miliseconds)
-#define RPM_REFRESH_INTERVAL 150
+#define RPM_REFRESH_INTERVAL 100
 #define NOMINAL_RPM_VALUE 880
 #define COLD_RPM_VALUE 1000
 #define MAX_RPM_PERCENT_VALUE 100
