@@ -28,7 +28,7 @@ bool isHeatedWindowEnabled(void) {
 
 static void disableHeatedWindows(void) {
   heatedWindowEnabled = false;
-  lastHeatedWindowEnabled = false;
+  lastHeatedWindowEnabled = !heatedWindowEnabled;
   heatedWindowsOverallTimer = 0;
   lastHeatedWindowsSecond = 0;
 }
@@ -53,8 +53,10 @@ void heatedWindowMainLoop(void) {
 
       if(isHeatedWindowEnabled()) {
         disableHeatedWindows();
+        deb("disable heated windshield");
+
       } else {
-        heatedWindowsOverallTimer = HEATED_WINDOWS_TIME;
+        heatedWindowsOverallTimer = (HEATED_WINDOWS_TIME * 60);
         lastHeatedWindowsSecond = getSeconds();
 
         heatedWindowEnabled = true;
