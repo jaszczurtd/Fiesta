@@ -32,10 +32,10 @@
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
-#define TEMP_OIL_MAX 155
+#define TEMP_OIL_MAX 140
 #define TEMP_OIL_OK_HI 115
 
-#define TEMP_MAX 120
+#define TEMP_MAX 125
 #define TEMP_MIN 45
 
 #define TEMP_OK_LO 70

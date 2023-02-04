@@ -65,6 +65,10 @@
 
 #define C_INIT_VAL 99999;
 
+#define TEMP_BAR_MAXHEIGHT 29
+#define TEMP_BAR_WIDTH 3
+#define TEMP_BAR_DOT_RADIUS 6
+
 extern const char *err;
 
 void initGraphics(void);

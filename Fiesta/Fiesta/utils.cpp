@@ -82,11 +82,11 @@ void valToPWM(unsigned char pin, int val) {
 }
 
 int percentToGivenVal(float percent, int givenVal) {
-    return ((percent / 100.0) * givenVal);
+    return int(((percent / 100.0) * givenVal));
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
-    float percent = (currentVal * 100) / maxVal;
+    float percent = (float)(currentVal * 100) / (float)maxVal;
     return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
 }
 
