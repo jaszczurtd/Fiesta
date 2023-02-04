@@ -66,8 +66,9 @@ void drawTempValue(int x, int y, int valToDisplay) {
 }
 
 void drawTempBar(int x, int y, int currentHeight, int color) {
-    tft.fillRect(x, y, 3, currentHeight, color);
-    tft.fillRect(x, y - 2, 3, 2, BIG_ICONS_BG_COLOR);
+    tft.fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
+    tft.fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
+       -(TEMP_BAR_MAXHEIGHT - currentHeight), BIG_ICONS_BG_COLOR);
 }
 
 void displayErrorWithMessage(int x, int y, const char *msg) {
@@ -174,7 +175,9 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             currentVal = 0;
         }
 
-        int currentHeight = currentValToHeight(currentVal, maxVal);
+        int currentHeight = currentValToHeight(
+            (currentVal < TEMP_MAX) ? currentVal : TEMP_MAX,
+            maxVal);
 
         bool draw = false;
         if(lastCoolantHeight != currentHeight) {
@@ -189,14 +192,14 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 
         if(draw) {
             x = t_getBaseX() + 16;
-            y = t_getBaseY() + 4 + (TEMP_BAR_MAXHEIGHT - currentHeight);
+            y = t_getBaseY() + 4 + TEMP_BAR_MAXHEIGHT;
 
             drawTempBar(x, y, currentHeight, color);
 
             x = t_getBaseX() + TEMP_DOT_X;
             y = t_getBaseY() + TEMP_DOT_Y;
 
-            tft.fillCircle(x, y, 6, color);
+            tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
         }
 
         if(lastCoolantVal != valToDisplay) {
@@ -257,7 +260,9 @@ void showOilAmount(int currentVal, int maxVal) {
             currentVal = 0;
         }
 
-        int currentHeight = currentValToHeight(currentVal, maxVal);
+        int currentHeight = currentValToHeight(
+            (currentVal < TEMP_OIL_MAX) ? currentVal : TEMP_OIL_MAX,
+            maxVal);
 
         bool draw = false;
         if(lastOilHeight != currentHeight) {
@@ -271,15 +276,15 @@ void showOilAmount(int currentVal, int maxVal) {
         }
 
         if(draw) {
-            x = o_getBaseX() + 14;
-            y = o_getBaseY() + 4 + (TEMP_BAR_MAXHEIGHT - currentHeight);
+            x = o_getBaseX() + 13;
+            y = o_getBaseY() + 4 + TEMP_BAR_MAXHEIGHT;
 
             drawTempBar(x, y, currentHeight, color);
 
             x = o_getBaseX() + OIL_DOT_X;
             y = o_getBaseY() + OIL_DOT_Y;
 
-            tft.fillCircle(x, y, 6, color);
+            tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
         }
 
         if(lastOilVal != valToDisplay) {
