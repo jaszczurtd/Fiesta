@@ -14,8 +14,8 @@ static int rpmPercentValue = 0;
 
 void countRPM(void) {
 
-  unsigned long now = micros();
-  unsigned long nowPulse = now - lastPulse;
+  unsigned long _micros = micros();
+  unsigned long nowPulse = _micros - lastPulse;
   
   lastPulse = _micros;
 
@@ -26,6 +26,7 @@ void countRPM(void) {
     shortPulse = nowPulse;
   }
 
+  unsigned long _millis = millis();
   rpmAliveTime = _millis + RESET_RPM_WATCHDOG_TIME;
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
