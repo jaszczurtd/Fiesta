@@ -116,6 +116,12 @@ void drawHighImportanceValues(void) {
 
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
+  //
+  #endif
+}
+
+void drawMediumMediumImportanceValues(void) {
+  #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
   #endif
 }
@@ -217,6 +223,8 @@ bool callAtEveryHalfHalfSecond(void *argument) {
   if(alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
+  drawMediumMediumImportanceValues();
+
   return true; 
 }
 

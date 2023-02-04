@@ -7,6 +7,19 @@
 
 #include "utils.h"
 
+void deb(const char *format, ...) {
+
+  va_list valist;
+  va_start(valist, format);
+
+  char buffer[128];
+  memset (buffer, 0, sizeof(buffer));
+  vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
+  Serial.println(buffer);
+
+  va_end(valist);
+}
+
 void floatToDec(float val, int *hi, int *lo) {
 	int t1 = (int)val;
 	if(t1 > -128) {
@@ -172,3 +185,4 @@ void set4051ActivePin(unsigned char pin) {
 unsigned long getSeconds(void) {
   return ((millis() + 500) / 1000);
 }
+

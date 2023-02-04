@@ -19,13 +19,6 @@
 #include "engineFuel.h"
 #include "can.h"
 
-#define deb(format, ...) { \
-    char buffer[100]; \
-    memset (buffer, 0, sizeof(buffer)); \
-    snprintf(buffer, sizeof(buffer) - 1, format, ## __VA_ARGS__); \
-    Serial.println(buffer); \
-    }
-
 extern float valueFields[];
 
 #define O_GLOW_PLUGS 0
