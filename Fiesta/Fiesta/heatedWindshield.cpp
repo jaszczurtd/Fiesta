@@ -35,6 +35,14 @@ static void disableHeatedWindows(void) {
 
 void heatedWindowMainLoop(void) {
 
+  float volts = valueFields[F_VOLTS];
+  if(volts < MINIMUM_VOLTS_AMOUNT) {
+      if(isHeatedWindowEnabled()) {
+        disableHeatedWindows();
+        return;
+      }
+  }
+
   if(waitingForUnpress) {
     if(isHeatedButtonPressed()) {
       waitingForUnpress = false;
@@ -56,6 +64,12 @@ void heatedWindowMainLoop(void) {
         deb("disable heated windshield");
 
       } else {
+
+        if(volts < MINIMUM_VOLTS_AMOUNT) {
+          deb("voltage too low to enable windshield");
+          return;
+        }
+
         heatedWindowsOverallTimer = (HEATED_WINDOWS_TIME * 60);
         lastHeatedWindowsSecond = getSeconds();
 

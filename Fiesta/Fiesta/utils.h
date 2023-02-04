@@ -13,6 +13,7 @@
 
 #define TEMP_BAR_MAXHEIGHT 29
 
+void deb(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
 float adcToVolt(float basev, int adc);
 float ntcToTemp(int tpin, int thermistor, int r);
