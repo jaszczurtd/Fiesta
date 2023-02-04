@@ -99,7 +99,7 @@ void initialization(void) {
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 120);
+  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], 130);
   showOilAmount((int)valueFields[F_OIL_TEMP], 150);
   showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
   showEGTTemperatureAmount((int)valueFields[F_EGT]);
