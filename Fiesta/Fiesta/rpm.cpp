@@ -2,17 +2,23 @@
 
 Timer rpmTimer;
 
-static unsigned long previousMillis = 0;
-static volatile int RPMpulses = 0;
+static volatile unsigned long previousMillis = 0;
 static volatile unsigned long shortPulse = 0;
 static volatile unsigned long lastPulse = 0;
-static long rpmAliveTime = 0;
+static volatile long rpmAliveTime = 0;
+static volatile int RPMpulses = 0;
+
+static int currentRPMSolenoid = 0;
+static bool rpmCycle = false;
+static int rpmPercentValue = 0;
 
 void countRPM(void) {
-  unsigned long now = micros();
-  unsigned long nowPulse = now - lastPulse;
+
+  unsigned long _millis = millis();
+  unsigned long _micros = micros();
+  unsigned long nowPulse = _micros - lastPulse;
   
-  lastPulse = now;
+  lastPulse = _micros;
 
   if((nowPulse >> 1) > shortPulse){ 
     RPMpulses++;
@@ -21,12 +27,11 @@ void countRPM(void) {
     shortPulse = nowPulse;
   }
 
-  rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
+  rpmAliveTime = _millis + RESET_RPM_WATCHDOG_TIME;
+  if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
+    previousMillis = _millis;
 
-  if(millis() - previousMillis > RPM_REFRESH_INTERVAL) {
-    previousMillis = millis();
-
-    int RPM = int(RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL)) * 4 / 4 / 32.0) - 100; 
+    int RPM = int( (RPMpulses * (60000.0 / RPM_REFRESH_INTERVAL)) / 35.5 ); 
     if(RPM < 0) {
       RPM = 0;
     }
@@ -39,10 +44,6 @@ void countRPM(void) {
   }  
 
 }
-
-static int currentRPMSolenoid = 0;
-static bool rpmCycle = false;
-static int rpmPercentValue = 0;
 
 void initRPMCount(void) {
   pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
