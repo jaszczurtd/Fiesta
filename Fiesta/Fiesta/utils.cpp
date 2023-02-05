@@ -75,12 +75,6 @@ float ntcToTemp(int tpin, int thermistor, int r) {
     return steinhart;
 }
 
-void valToPWM(unsigned char pin, int val) {
-    analogWriteFreq(100);
-    analogWriteResolution(PWM_WRITE_RESOLUTION);
-    analogWrite(pin, (PWM_RESOLUTION - val));
-}
-
 int percentToGivenVal(float percent, int givenVal) {
     return int(((percent / 100.0) * givenVal));
 }
@@ -88,36 +82,6 @@ int percentToGivenVal(float percent, int givenVal) {
 int currentValToHeight(int currentVal, int maxVal) {
     float percent = (float)(currentVal * 100) / (float)maxVal;
     return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
-}
-
-static unsigned char pcf8574State = 0;
-
-void pcf857_init(void) {
-  pcf8574State = 0;
-
-  Wire.beginTransmission(PCF8574_ADDR);
-  Wire.write(pcf8574State);
-  Wire.endTransmission();
-}
-
-void pcf8574_write(unsigned char pin, bool value) {
-  if(value) {
-    bitSet(pcf8574State, pin);
-  }  else {
-    bitClear(pcf8574State, pin);
-  }
-
-  Wire.beginTransmission(PCF8574_ADDR);
-  bool success = Wire.write(pcf8574State);
-  bool notFound = Wire.endTransmission();
-
-  if(!success) {
-    Serial.println("error writting byte to pcf8574");
-  }
-
-  if(notFound) {
-    Serial.println("pcf8574 not found");
-  }
 }
 
 #ifdef I2C_SCANNER

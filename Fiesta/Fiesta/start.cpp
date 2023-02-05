@@ -1,11 +1,7 @@
 
 #include "start.h"
 
-float valueFields[F_LAST];
-float reflectionValueFields[F_LAST];
-
 static unsigned long alertsStartSecond = 0;
-static bool highImportanceValueChanged = false;
 static bool started = false;
 
 Timer generalTimer;
@@ -16,7 +12,7 @@ void initialization(void) {
   Wire.setSDA(0);
   Wire.setSCL(1);
   Wire.begin();
-  pcf857_init();
+  pcf8574_init();
   Wire.end();
 
   initGraphics();
@@ -133,10 +129,6 @@ void seriousAlertsDrawFunctions() {
   #endif
 }
 
-int getEnginePercentageLoad(void) {
-  return percentToGivenVal((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
-}
-
 static bool alertBlink = false, seriousAlertBlink = false;
 bool alertSwitch(void) {
   return alertBlink;
@@ -146,55 +138,6 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-
-static unsigned char lowCurrentValue = 0;
-bool readMediumValues(void *argument) {
-  switch(lowCurrentValue) {
-    case F_COOLANT_TEMP:
-      valueFields[F_COOLANT_TEMP] = readCoolantTemp();
-      break;
-    case F_OIL_TEMP:
-      valueFields[F_OIL_TEMP] = readOilTemp();
-      break;
-    case F_INTAKE_TEMP:
-      valueFields[F_INTAKE_TEMP] = readAirTemperature();
-      break;
-    case F_VOLTS:
-      valueFields[F_VOLTS] = readVolts();
-      break;
-    case F_FUEL:
-      valueFields[F_FUEL] = readFuel();
-      break;
-    case F_EGT:
-      valueFields[F_EGT] = readEGT();
-      break;
-  }
-  if(lowCurrentValue++ > F_LAST) {
-    lowCurrentValue = 0;
-  }
-
-  return true;
-}
-
-bool readHighValues(void *argument) {
-  for(int a = 0; a < F_LAST; a++) {
-    switch(a) {
-      case F_ENGINE_LOAD:
-        valueFields[a] = readThrottle();
-        break;
-      case F_PRESSURE:
-        valueFields[a] = readBarPressure();
-        break;
-    }
-    if(reflectionValueFields[a] != valueFields[a]) {
-      reflectionValueFields[a] = valueFields[a];
-
-      highImportanceValueChanged = true;
-    }
-  }
-
-  return true;
-}
 
 bool callAtEverySecond(void *argument) {
   alertBlink = (alertBlink) ? false : true;
@@ -228,6 +171,11 @@ bool callAtEveryHalfHalfSecond(void *argument) {
   return true; 
 }
 
+static bool highImportanceValueChanged = false;
+void triggerDrawHighImportanceValue(bool state) {
+  highImportanceValueChanged = state;
+}
+
 void looper(void) {
 
   generalTimer.tick();
@@ -235,7 +183,7 @@ void looper(void) {
   //draw changes of high importance values
   if(highImportanceValueChanged) {
     drawHighImportanceValues();
-    highImportanceValueChanged = false;
+    triggerDrawHighImportanceValue(false);
   }
   canMainLoop();
 

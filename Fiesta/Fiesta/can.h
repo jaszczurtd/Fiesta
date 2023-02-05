@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <mcp_can.h>
 
+#include "sensors.h"
 #include "config.h"
 #include "start.h"
 #include "utils.h"

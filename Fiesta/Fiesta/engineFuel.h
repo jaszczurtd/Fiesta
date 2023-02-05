@@ -5,6 +5,7 @@
 #include "config.h"
 #include "start.h"
 #include "graphics.h"
+#include "sensors.h"
 
 #define FUEL_MAX_SAMPLES 128
 #define FUEL_INIT_VALUE -1
