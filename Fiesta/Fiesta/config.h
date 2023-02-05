@@ -46,7 +46,7 @@
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
 
-#define TEMP_COLD_ENGINE 30
+#define TEMP_COLD_ENGINE 45
 
 #define TEMP_EGT_OK_HI 750
 #define TEMP_EGT_MIN 100
@@ -83,7 +83,7 @@
 #define DIVIDER_EGT 2.308
 
 //minimum RPM for dependencies to operate on
-#define RPM_MIN 300//main engine RPM value
+#define RPM_MIN 350//main engine RPM value
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 100
 #define NOMINAL_RPM_VALUE 880
