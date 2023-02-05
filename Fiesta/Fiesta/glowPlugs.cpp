@@ -15,13 +15,13 @@ void glowPlugsLamp(bool enable) {
 static int glowPlugsTime = 0;
 static int glowPlugsLampTime = 0;
 static int lastSecond = 0;
+static bool warmAfterStart = false;
 
 bool isGlowPlugsHeating(void) {
   return (glowPlugsTime > 0);
 }
 
-void initGlowPlugsTime(float temp) {
-
+void calculateGlowPlugsTime(float temp) {
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
     glowPlugsTime = int((-(temp) + 60.0) / 3.5);
     if(glowPlugsTime < 0) {
@@ -30,6 +30,12 @@ void initGlowPlugsTime(float temp) {
   } else {
     glowPlugsTime = 0;
   }
+}
+
+void initGlowPlugsTime(float temp) {
+
+  calculateGlowPlugsTime(temp);
+
   if(glowPlugsTime > 0) {
     glowPlugs(true);
     glowPlugsLamp(true);
@@ -46,6 +52,21 @@ void initGlowPlugsTime(float temp) {
 }
 
 void glowPlugsMainLoop(void) {
+
+  float temp = valueFields[F_COOLANT_TEMP];
+  if(temp > TEMP_COLD_ENGINE) {
+    warmAfterStart = true;
+  }
+
+  if(!warmAfterStart) {
+    if(temp <= TEMP_COLD_ENGINE &&
+      valueFields[F_RPM] > RPM_MIN) {
+        calculateGlowPlugsTime(temp);
+        glowPlugs(true);
+        warmAfterStart = true;
+    }
+  }
+
   if(glowPlugsTime >= 0) {
     if(getSeconds() != lastSecond) {
       lastSecond = getSeconds();

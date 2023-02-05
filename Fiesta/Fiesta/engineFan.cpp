@@ -18,6 +18,8 @@ bool isFanEnabled(void) {
 void fanMainLoop(void) {
 
   float coolant = valueFields[F_COOLANT_TEMP];
+  int rpm = valueFields[F_RPM];
+
   //works only if the temp. sensor is plugged
   if(coolant > TEMP_LOWEST) {
 
@@ -29,10 +31,14 @@ void fanMainLoop(void) {
       fanEnabled = true;
     }
 
+    if(rpm < RPM_MIN) {
+      fanEnabled = false;
+    }
+
   } else {
     //temp sensor read fail, fan enabled by default
     //but only if engine works
-    if(valueFields[F_RPM] > RPM_MIN) {
+    if(rpm > RPM_MIN) {
       fanEnabled = true;
     }
   }

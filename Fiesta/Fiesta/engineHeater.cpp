@@ -16,11 +16,13 @@ static bool lastHeaterHiEnabled = false;
 void engineHeaterMainLoop(void) {
   float coolant = valueFields[F_COOLANT_TEMP];
   float volts = valueFields[F_VOLTS];
+  int engineRPM = valueFields[F_RPM];
 
   if(coolant > TEMP_HEATER_STOP ||
     isFanEnabled() ||
     isGlowPlugsHeating() ||
-    volts < MINIMUM_VOLTS_AMOUNT) {
+    volts < MINIMUM_VOLTS_AMOUNT ||
+    engineRPM < RPM_MIN) {
     heaterLoEnabled = false;
     heaterHiEnabled = false;
   } else {
