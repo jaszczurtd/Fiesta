@@ -31,7 +31,7 @@ void countRPM(void) {
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
 
-    int RPM = int((RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL))) / 32.0) - 100; 
+    int RPM = int((RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL))) / 32.0) - RPM_CORRECTION_VAL; 
     if(RPM < 0) {
       RPM = 0;
     }
