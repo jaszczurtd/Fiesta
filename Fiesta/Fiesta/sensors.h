@@ -24,6 +24,7 @@ extern float valueFields[];
 #define B_4051 12
 #define C_4051 13
 
+void initSensorsData(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
