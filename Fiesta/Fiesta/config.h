@@ -45,6 +45,9 @@
 #define TEMP_HIGHEST 170
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
+//when engine is cold, this is the multiplier of the time
+//when the glow plugs are heating the cylinders
+#define TEMP_HEATING_GLOW_PLUGS_MULTIPLIER 1.5
 
 #define TEMP_COLD_ENGINE 45
 

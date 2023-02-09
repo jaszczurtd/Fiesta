@@ -62,8 +62,11 @@ void glowPlugsMainLoop(void) {
     if(temp <= TEMP_COLD_ENGINE &&
       valueFields[F_RPM] > RPM_MIN) {
         calculateGlowPlugsTime(temp);
-        glowPlugs(true);
-        warmAfterStart = true;
+        if(glowPlugsTime > 0) {
+          glowPlugsTime *= TEMP_HEATING_GLOW_PLUGS_MULTIPLIER;
+          glowPlugs(true);
+          warmAfterStart = true;
+        }
     }
   }
 
