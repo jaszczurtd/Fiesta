@@ -30,10 +30,8 @@ void initialization(void) {
   #endif
 
   init4051();
-
-  for(int a = 0; a < F_LAST; a++) {
-    valueFields[a] = 0.0;
-  }
+  initSensorsData();
+  
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
   

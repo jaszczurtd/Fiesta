@@ -4,6 +4,12 @@
 float valueFields[F_LAST];
 float reflectionValueFields[F_LAST];
 
+void initSensorsData(void) {
+  for(int a = 0; a < F_LAST; a++) {
+    valueFields[a] = reflectionValueFields[a] = 0.0;
+  }
+}
+
 //-------------------------------------------------------------------------------------------------
 //Read volts
 //-------------------------------------------------------------------------------------------------
