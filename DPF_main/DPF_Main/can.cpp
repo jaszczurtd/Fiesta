@@ -1,12 +1,5 @@
 #include "can.h"
 
-void canMainLoop(void);
-void receivedCanMessage(void);
-bool callAtSomeTime(void *argument);
-
-//default for raspberry pi pico: SDA GPIO 4, SCL GPIO 5 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
 //default for raspberry pi pico: 
 //mosi GPIO 19, pin 25/spi0 tx
 //sck  GPIO 18, pin 24/spi0 sck
@@ -14,93 +7,29 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 //miso GPIO 16, pin 21/spi0 rx 
 MCP_CAN CAN(17);
 
-Timer generalTimer;
+const char canError[] PROGMEM = "MCP2515 init problem!";
 
-const char displayError[] PROGMEM = "SSD1306 allocation failed!";
-const char dpfError[] PROGMEM = "MCP2515 init problem!";
-const char hello[] PROGMEM = "DPF Module";
-
-static int textHeight = 0;
 static unsigned char frameNumber = 0;
 
-static bool started = false;
-
-void initialization() {
-    Serial.begin(9600);
-
-    pinMode(LED_BUILTIN, OUTPUT);
-
-    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-        Serial.println(F(displayError));
-        for(;;); 
-    }
-    display.clearDisplay();
-    tx(0, 0, F(hello));
-    textHeight = getTxHeight(F(hello));
-
-    display.display();
-
+void canInit(void) {
     while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
         Serial.println("ERROR!!!! CAN-BUS Shield init fail");
         Serial.println("ERROR!!!! Will try to init CAN-BUS shield again");
 
-        tx(0, textHeight, F(dpfError));
-        display.display();    
+        tx(0, getDefaultTextHeight(), F(canError));
+        show();
 
         delay(1000);
     }
 
-    Serial.println("CAN BUS Shield init ok!");
+    deb("CAN BUS Shield init ok!");
     CAN.setMode(MCP_NORMAL); 
     CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
     pinMode(CAN1_INT, INPUT); 
     attachInterrupt(digitalPinToInterrupt(CAN1_INT), receivedCanMessage, FALLING);
-
-    generalTimer = timer_create_default();
-    generalTimer.every(500, callAtSomeTime);
-    
-    started = true;
 }
 
-void tx(int x, int y, const __FlashStringHelper *txt) {
-    display.setTextSize(1);             // Normal 1:1 pixel scale
-    display.setTextColor(SSD1306_WHITE);        // Draw white text
-    display.setCursor(x, y);             // Start at top-left corner
-    display.println(txt);  
-}
-
-int getTxHeight(const __FlashStringHelper *txt) {
-    uint16_t h;
-    display.getTextBounds(txt, 0, 0, NULL, NULL, NULL, &h);
-    return h;
-}
-
-int getTxWidth(const __FlashStringHelper *txt) {
-    uint16_t w;
-    display.getTextBounds(txt, 0, 0, NULL, NULL, &w, NULL);
-    return w;
-}
-
-static char disp[16];
 static byte throttle = 0;
-
-void looper() {
-    if(!started) {
-        return;
-    }
-    generalTimer.tick();
-
-    canMainLoop();
-}
-
-void quickDisplay(int val1, int val2) {
-    display.fillRect(0, textHeight, 128, textHeight, SSD1306_BLACK);
-
-    memset(disp, 0, sizeof(disp));
-    snprintf(disp, sizeof(disp) - 1, "values: %d %d", val1, val2);
-    tx(0, textHeight, F(disp));
-    display.display();
-}
 
 bool callAtSomeTime(void *argument) {
 
