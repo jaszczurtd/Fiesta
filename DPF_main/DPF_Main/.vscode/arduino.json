@@ -3,6 +3,6 @@
     "configuration": "flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk",
     "port": "COM18",
     "programmer": "rp2040:edbg",
-    "sketch": "main.ino",
+    "sketch": "DPF_main.ino",
     "output": "../ArduinoOutput"
 }
