@@ -1,3 +1,4 @@
+#include "api/Common.h"
 #include "logic.h"
 
 Timer generalTimer;
@@ -38,6 +39,15 @@ void looper(void) {
     generalTimer.tick();
 
     canMainLoop();
+
+    digitalWrite(VALVES, !digitalRead(S_LEFT));
+    digitalWrite(HEATER, !digitalRead(S_RIGHT));
+    
+    double v = analogRead(VOLTS) * (4.75/1023);
+
+    deb("presssure: %d termo: %d v:%f\n", 
+      analogRead(PRESSURE), analogRead(THERMOC), v);
+
     watchdog_update();
 }
 
@@ -46,7 +56,8 @@ bool callAtEverySecond(void *argument) {
 
     state = !state;
 
-    digitalWrite(VALVES, state);
+    //digitalWrite(HEATER, state);
+    //digitalWrite(VALVES, state);
 
     return true;
 }

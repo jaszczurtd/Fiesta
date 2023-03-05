@@ -62,4 +62,8 @@ void quickDisplay(int val1, int val2) {
 
 void hardwareInit(void) {
     pinMode(VALVES, OUTPUT);
+    pinMode(HEATER, OUTPUT);
+
+    pinMode(S_LEFT, INPUT_PULLUP);
+    pinMode(S_RIGHT, INPUT_PULLUP);
 }
