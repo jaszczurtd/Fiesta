@@ -8,15 +8,9 @@
 
 #include "can.h"
 #include "peripherals.h"
+#include "tools.h"
 
-#include "../../../canDefinitions.h"
-
-#define deb(format, ...) { \
-    char buffer[100]; \
-    memset (buffer, 0, sizeof(buffer)); \
-    snprintf(buffer, sizeof(buffer) - 1, format, ## __VA_ARGS__); \
-    Serial.println(buffer); \
-    }
+extern float valueFields[];
 
 void initialization(void);
 void looper(void);

@@ -10,11 +10,15 @@
 
 #include "peripherals.h"
 #include "logic.h"
+#include "tools.h"
+
+//until I figure out how to deal better wit this with Arduino IDE...
+#include "c:\development\projects_git\fiesta\canDefinitions.h"
 
 void canInit(void);
 void canMainLoop(void);
 void receivedCanMessage(void);
-bool callAtSomeTime(void *argument);
+bool callAtHalfSecond(void *argument);
 
 
 #endif

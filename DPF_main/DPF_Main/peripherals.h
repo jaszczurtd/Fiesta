@@ -7,13 +7,27 @@
 
 #include "logic.h"
 #include "can.h"
+#include "tools.h"
 
-#include "../../../canDefinitions.h"
+#include "canDefinitions.h"
 
 //DPF heater
 #define HEATER 14
-
+//fuel valves
 #define VALVES 13
+
+//buttons
+#define S_LEFT 11
+#define S_RIGHT 12
+
+//thermocouple
+#define THERMOC A0
+
+//pressure sensor
+#define PRESSURE A1
+
+//system power supply level (v)
+#define VOLTS A2
 
 //CAN interrupt GPIO number
 #define CAN1_INT 15
@@ -28,9 +42,10 @@ void displayInit(void);
 void tx(int x, int y, const __FlashStringHelper *txt);
 int getTxHeight(const __FlashStringHelper *txt);
 int getTxWidth(const __FlashStringHelper *txt);
-void quickDisplay(int val1, int val2);
+void quickDisplay(int line, const char *format, ...);
 int getDefaultTextHeight(void);
 void show(void);
 void hardwareInit(void);
+bool readPeripherals(void *argument);
 
 #endif
