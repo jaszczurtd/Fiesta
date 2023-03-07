@@ -47,5 +47,6 @@ int getDefaultTextHeight(void);
 void show(void);
 void hardwareInit(void);
 bool readPeripherals(void *argument);
+float adcToVolt(int adc);
 
 #endif

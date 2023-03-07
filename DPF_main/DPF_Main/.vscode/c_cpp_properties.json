@@ -28,7 +28,8 @@
                 "UNICODE",
                 "_UNICODE",
                 "USBCON"
-            ]
+            ],
+            "compileCommands": "C:/development/projects_git/fiesta/DPF_main/ArduinoOutput/compile_commands.json"
         },
         {
             "name": "Arduino",
