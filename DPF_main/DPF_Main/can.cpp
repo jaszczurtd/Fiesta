@@ -13,8 +13,8 @@ static unsigned char frameNumber = 0;
 
 void canInit(void) {
     while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-        Serial.println("ERROR!!!! CAN-BUS Shield init fail");
-        Serial.println("ERROR!!!! Will try to init CAN-BUS shield again");
+        deb("ERROR!!!! CAN-BUS Shield init fail\n");
+        deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
         tx(0, getDefaultTextHeight(), F(canError));
         show();
@@ -31,7 +31,7 @@ void canInit(void) {
 
 static byte throttle = 0;
 
-bool callAtSomeTime(void *argument) {
+bool callAtHalfSecond(void *argument) {
 
     //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
 
@@ -42,7 +42,6 @@ bool callAtSomeTime(void *argument) {
 
     CAN.sendMsgBuf(CAN_ID_DPF, sizeof(buf), buf);  
 
-    quickDisplay(frameNumber, throttle);
     return true; 
 }
 
