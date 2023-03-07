@@ -70,26 +70,28 @@ void quickDisplay(int line, const char *format, ...) {
   va_end(valist);
 }
 
-float adcToVolt(float basev, int adc) {
-    return adc * (basev / 1023.0);    
+float adcToVolt(int adc) {
+    return adc / 215.10741;    
 }
 
 //---------------
 
 void hardwareInit(void) {
-    pinMode(VALVES, OUTPUT);
-    pinMode(HEATER, OUTPUT);
+  analogReadResolution(12);
 
-    pinMode(S_LEFT, INPUT_PULLUP);
-    pinMode(S_RIGHT, INPUT_PULLUP);
+  pinMode(VALVES, OUTPUT);
+  pinMode(HEATER, OUTPUT);
 
-    for(int a = 0; a < F_LAST; a++) {
-      valueFields[a] = 0.0;
-    }
+  pinMode(S_LEFT, INPUT_PULLUP);
+  pinMode(S_RIGHT, INPUT_PULLUP);
+
+  for(int a = 0; a < F_LAST; a++) {
+    valueFields[a] = 0.0;
+  }
 }
 
 bool readPeripherals(void *argument) {
-  valueFields[F_VOLTS] = adcToVolt(4.75, getAverageValueFrom(VOLTS));
+  valueFields[F_VOLTS] = adcToVolt(getAverageValueFrom(VOLTS));
 
   return true;
 }

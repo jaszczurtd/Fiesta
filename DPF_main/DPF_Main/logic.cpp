@@ -45,7 +45,7 @@ void looper(void) {
     int hi, lo;
     floatToDec(valueFields[F_VOLTS], &hi, &lo);
 
-    quickDisplay(0, "(V): %d.%d", hi, lo);
+    quickDisplay(0, "%d.%dV", hi, lo);
 
 //    quickDisplay(3, "vals: %d %d", frameNumber, throttle);
 
@@ -53,10 +53,10 @@ void looper(void) {
 //    digitalWrite(VALVES, !digitalRead(S_LEFT));
 //    digitalWrite(HEATER, !digitalRead(S_RIGHT));
     
-//    float v = getAverageValueFrom(VOLTS) * (4.75/1023);
+    float v = adcToVolt(getAverageValueFrom(VOLTS));
 
-//    deb("presssure: %d termo: %d v:%f\n", 
-//      getAverageValueFrom(PRESSURE), getAverageValueFrom(THERMOC), v);
+    deb("presssure: %d termo: %d v:%f\n", 
+      getAverageValueFrom(PRESSURE), getAverageValueFrom(THERMOC), v);
 
     watchdog_update();
 }
