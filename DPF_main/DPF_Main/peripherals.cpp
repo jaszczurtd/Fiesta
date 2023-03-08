@@ -22,7 +22,13 @@ void displayInit(void) {
     textHeight = getTxHeight(F(hello));
     display.display();
 
-    delay(1000);
+    quickDisplay(2, __DATE__);
+    quickDisplay(3, __TIME__);
+
+    unsigned long time = WATCHDOG_TIME - DISPLAY_INIT_MAX_TIME;
+    if(time > DISPLAY_INIT_MAX_TIME) {
+      delay(time);
+    }
     display.clearDisplay();
 }
 
@@ -91,7 +97,23 @@ void hardwareInit(void) {
 }
 
 bool readPeripherals(void *argument) {
-  valueFields[F_VOLTS] = adcToVolt(getAverageValueFrom(VOLTS));
+
+  int pressureRAW = getAverageValueFrom(PRESSURE);
+  int thermoRAW = getAverageValueFrom(THERMOC);
+  int voltsRAW = getAverageValueFrom(VOLTS);
+
+  valueFields[F_VOLTS] = adcToVolt(voltsRAW);
+  if(valueFields[F_VOLTS] < MINIMUM_VOLTS) {
+    valueFields[F_DPF_TEMP] = 9999.0f;
+  } else {
+    valueFields[F_DPF_TEMP] = (((float)thermoRAW) / 2.67);
+  }
+  valueFields[F_DPF_PRESSURE] = (((float)pressureRAW) / 3500.0f);
+
+  deb("raw presssure: %d (%f) raw termo: %d (%f) v:%d (%f)\n", 
+    pressureRAW, valueFields[F_DPF_PRESSURE], 
+    thermoRAW, valueFields[F_DPF_TEMP], 
+    voltsRAW, valueFields[F_VOLTS]);
 
   return true;
 }

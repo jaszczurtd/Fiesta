@@ -15,7 +15,9 @@
 #define F_EGT 6
 #define F_PRESSURE 7
 #define F_VOLTS 8
-#define F_LAST 9
+#define F_DPF_PRESSURE 9
+#define F_DPF_TEMP 10
+#define F_LAST 11
 
 #endif
 

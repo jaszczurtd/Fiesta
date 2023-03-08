@@ -18,7 +18,7 @@ void initialization(void) {
 
     pinMode(LED_BUILTIN, OUTPUT);
 
-    watchdog_enable(3000, false);
+    watchdog_enable(WATCHDOG_TIME, false);
 
     displayInit();
     canInit();
@@ -27,7 +27,7 @@ void initialization(void) {
 
     generalTimer = timer_create_default();
     
-    generalTimer.every(100, readPeripherals);
+    generalTimer.every(400, readPeripherals);
     generalTimer.every(500, callAtHalfSecond);
     generalTimer.every(1000, callAtEverySecond);
     
@@ -44,20 +44,20 @@ void looper(void) {
 
     int hi, lo;
     floatToDec(valueFields[F_VOLTS], &hi, &lo);
+    quickDisplay(0, "Power supply:%d.%dV", hi, lo);
+    floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
+    quickDisplay(1, "DPF pressure:%d.%d BAR", hi, lo);
 
-    quickDisplay(0, "%d.%dV", hi, lo);
+    int temp = int(valueFields[F_DPF_TEMP]);
+    if(temp > MAX_DPF_TEMP) {
+      quickDisplay(2, "DPF temp ERROR");
+    } else {
+      quickDisplay(2, "DPF temp:%dC", temp);
+    }
 
-//    quickDisplay(3, "vals: %d %d", frameNumber, throttle);
-
-
-//    digitalWrite(VALVES, !digitalRead(S_LEFT));
-//    digitalWrite(HEATER, !digitalRead(S_RIGHT));
+    digitalWrite(VALVES, !digitalRead(S_LEFT));
+    digitalWrite(HEATER, !digitalRead(S_RIGHT));
     
-    float v = adcToVolt(getAverageValueFrom(VOLTS));
-
-    deb("presssure: %d termo: %d v:%f\n", 
-      getAverageValueFrom(PRESSURE), getAverageValueFrom(THERMOC), v);
-
     watchdog_update();
 }
 
