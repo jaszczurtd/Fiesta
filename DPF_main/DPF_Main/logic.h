@@ -10,6 +10,12 @@
 #include "peripherals.h"
 #include "tools.h"
 
+#define WATCHDOG_TIME 3000
+#define DISPLAY_INIT_MAX_TIME 500
+
+#define MINIMUM_VOLTS 6.0
+#define MAX_DPF_TEMP 1200
+
 extern float valueFields[];
 
 void initialization(void);

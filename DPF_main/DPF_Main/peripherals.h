@@ -9,7 +9,8 @@
 #include "can.h"
 #include "tools.h"
 
-#include "canDefinitions.h"
+//until I figure out how to deal better wit this with Arduino IDE...
+#include "c:\development\projects_git\fiesta\canDefinitions.h"
 
 //DPF heater
 #define HEATER 14

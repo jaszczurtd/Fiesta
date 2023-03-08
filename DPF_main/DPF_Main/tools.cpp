@@ -5,7 +5,7 @@ void deb(const char *format, ...) {
   va_list valist;
   va_start(valist, format);
 
-  char buffer[128];
+  char buffer[256];
   memset (buffer, 0, sizeof(buffer));
   vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
   Serial.println(buffer);
@@ -21,7 +21,7 @@ int getAverageValueFrom(int tpin) {
     // take N samples in a row, with a slight delay
     for (i = 0; i < NUMSAMPLES; i++) {
         average += analogRead(tpin);
-        delay(1);
+        delay(5);
     }
     average /= NUMSAMPLES;
 
