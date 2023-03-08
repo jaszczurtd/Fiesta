@@ -29,16 +29,22 @@ void canInit(void) {
     attachInterrupt(digitalPinToInterrupt(CAN1_INT), receivedCanMessage, FALLING);
 }
 
-static byte throttle = 0;
-
 bool callAtHalfSecond(void *argument) {
 
     //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
 
-    byte buf[2];
+    byte buf[5];
 
     buf[0] = frameNumber++;
-    buf[1] = 117;
+
+    short temp = valueFields[F_DPF_TEMP];
+    buf[1] = (temp >> 8) & 0xFF;
+    buf[2] = temp & 0xFF;
+
+    int hi, lo;
+    floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
+    buf[3] = (byte)hi;
+    buf[4] = (byte)lo;
 
     CAN.sendMsgBuf(CAN_ID_DPF, sizeof(buf), buf);  
 
@@ -72,15 +78,11 @@ void canMainLoop(void) {
 
         switch(canID) {
             case CAN_ID_ENGINE_LOAD: {
-
-                throttle = buf[1];
-
-                deb("%d %d", buf[CAN_FRAME_NUMBER], throttle);
-
-                //quickDisplay(frameNumber, throttle);
+                valueFields[F_ENGINE_LOAD] = buf[1];
             }
-
             break;
+
+
 
             default:
                 deb("received unknown CAN frame: %d\n", canID);
