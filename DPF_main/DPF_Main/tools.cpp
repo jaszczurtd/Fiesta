@@ -45,3 +45,12 @@ void floatToDec(float val, int *hi, int *lo) {
 	}
 }
 
+unsigned short byteArrayToWord(unsigned char* bytes) {
+    unsigned short word = ((unsigned short)bytes[0] << 8) | bytes[1];
+    return word;
+}
+
+void wordToByteArray(unsigned short word, unsigned char* bytes) {
+    bytes[0] = (word >> 8) & 0xFF;
+    bytes[1] = word & 0xFF;
+}

@@ -15,6 +15,8 @@
 //until I figure out how to deal better wit this with Arduino IDE...
 #include "c:\development\projects_git\fiesta\canDefinitions.h"
 
+extern float valueFields[];
+
 void canInit(void);
 void canMainLoop(void);
 void receivedCanMessage(void);

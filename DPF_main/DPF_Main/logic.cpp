@@ -55,6 +55,8 @@ void looper(void) {
       quickDisplay(2, "DPF temp:%dC", temp);
     }
 
+    quickDisplay(3, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
+
     digitalWrite(VALVES, !digitalRead(S_LEFT));
     digitalWrite(HEATER, !digitalRead(S_RIGHT));
     
