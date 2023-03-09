@@ -13,6 +13,8 @@
 //for serial debug
 //#define DEBUG
 
+#define WATCHDOG_TIME 4000
+
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 

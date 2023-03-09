@@ -50,6 +50,20 @@ long unsigned int canID = 0x000;
 // This is the length of the incoming CAN-BUS message
 unsigned char len = 0;
 
+bool updateCANrecipients(void *argument) {
+
+    byte buf[2];
+
+    buf[0] = frameNumber++;
+    buf[1] = (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
+
+    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
+
+
+  return true;  
+}
+
+
 // This the eight byte buffer of the incoming message data payload
 static byte buf[8];
 
@@ -83,12 +97,4 @@ void canMainLoop(void) {
     }
 }
 
-void sendThrottleValueCAN(int value) {
-    byte buf[2];
-
-    buf[0] = frameNumber++;
-    buf[1] = (byte)value;
-
-    CAN.sendMsgBuf(CAN_ID_ENGINE_LOAD, sizeof(buf), buf);  
-}
 

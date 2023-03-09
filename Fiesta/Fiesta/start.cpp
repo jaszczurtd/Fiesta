@@ -8,6 +8,16 @@ Timer generalTimer;
 
 void initialization(void) {
 
+  Serial.begin(9600);
+ 
+  if (watchdog_caused_reboot()) {
+      deb("Rebooted by Watchdog!\n");
+  } else {
+      deb("Clean boot\n");
+  }
+
+  watchdog_enable(WATCHDOG_TIME, false);
+  
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
   Wire.setSDA(0);
   Wire.setSCL(1);
@@ -23,14 +33,12 @@ void initialization(void) {
  
   pinMode(LED_BUILTIN, OUTPUT);
 
-  Serial.begin(9600);
- 
   #ifdef I2C_SCANNER
   i2cScanner();
   #endif
 
   init4051();
-  initSensorsData();
+  initSensors();
   
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
@@ -40,7 +48,9 @@ void initialization(void) {
   }
   initGlowPlugsTime(coolant);
 
+  watchdog_update();
   showLogo();
+  watchdog_update();
 
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
@@ -80,7 +90,9 @@ void initialization(void) {
   generalTimer.every(time / 4, callAtEveryHalfHalfSecond);
   generalTimer.every(time / 6, readMediumValues);
   generalTimer.every(time / 8, readHighValues);
+  generalTimer.every(200, updateCANrecipients);
 
+  updateCANrecipients(NULL);
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
@@ -175,6 +187,7 @@ void triggerDrawHighImportanceValue(bool state) {
 }
 
 void looper(void) {
+  watchdog_update();
 
   generalTimer.tick();
 

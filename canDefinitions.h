@@ -4,7 +4,7 @@
 #define CAN_FRAME_NUMBER 0
 
 #define CAN_ID_DPF              0x123
-#define CAN_ID_ENGINE_LOAD      0x124
+#define CAN_ID_ECU_UPDATE 	0x124
 
 #define F_FUEL 0
 #define F_COOLANT_TEMP 1
