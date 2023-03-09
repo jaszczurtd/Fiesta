@@ -77,7 +77,7 @@ void canMainLoop(void) {
         lastFrame = buf[CAN_FRAME_NUMBER];
 
         switch(canID) {
-            case CAN_ID_ENGINE_LOAD: {
+            case CAN_ID_ECU_UPDATE: {
                 valueFields[F_ENGINE_LOAD] = buf[1];
             }
             break;

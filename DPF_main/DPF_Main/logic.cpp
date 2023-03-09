@@ -35,6 +35,8 @@ void initialization(void) {
 }
 
 void looper(void) {
+    watchdog_update();
+
     if(!started) {
         return;
     }
@@ -59,8 +61,6 @@ void looper(void) {
 
     digitalWrite(VALVES, !digitalRead(S_LEFT));
     digitalWrite(HEATER, !digitalRead(S_RIGHT));
-    
-    watchdog_update();
 }
 
 bool state = false;

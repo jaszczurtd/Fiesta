@@ -4,7 +4,9 @@
 float valueFields[F_LAST];
 float reflectionValueFields[F_LAST];
 
-void initSensorsData(void) {
+void initSensors(void) {
+  analogReadResolution(12);
+
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
   }
@@ -40,7 +42,6 @@ float readOilTemp(void) {
 //Read throttle
 //-------------------------------------------------------------------------------------------------
 
-static int lastThrottle = 0;
 float readThrottle(void) {
     set4051ActivePin(2);
 
@@ -57,16 +58,7 @@ float readThrottle(void) {
     }
     float divider = maxVal / (float)PWM_RESOLUTION;
     int result = (initialVal / divider);
-    result = abs(result - PWM_RESOLUTION);
-
-    int debugValue = getThrottlePercentage(result);
-    if(lastThrottle != debugValue) {
-        lastThrottle = debugValue;
-        sendThrottleValueCAN(lastThrottle);
-        deb("throttle: %d%%", debugValue);
-    }
-
-    return result;
+    return abs(result - PWM_RESOLUTION);
 }
 
 int getThrottlePercentage(int currentVal) {

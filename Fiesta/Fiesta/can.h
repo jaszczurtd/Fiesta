@@ -14,12 +14,15 @@
 //until I figure out how to deal better wit this with Arduino IDE...
 #include "c:\development\projects_git\fiesta\canDefinitions.h"
 
+extern float valueFields[];
+
 #define CAN0_GPIO 17
 #define CAN0_INT 15
 
 void canMainLoop(void);
 void canInit(void);
 void sendThrottleValueCAN(int value);
+bool updateCANrecipients(void *argument);
 
 #endif
 
