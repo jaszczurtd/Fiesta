@@ -13,13 +13,14 @@ static unsigned char frameNumber = 0;
 
 void canInit(void) {
     while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-        deb("ERROR!!!! CAN-BUS Shield init fail\n");
-        deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
+      deb("ERROR!!!! CAN-BUS Shield init fail\n");
+      deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
-        tx(0, getDefaultTextHeight(), F(canError));
-        show();
+      tx(0, getDefaultTextHeight(), F(canError));
+      show();
 
-        delay(1000);
+      delay(1000);
+      watchdog_update();
     }
 
     deb("CAN BUS Shield init ok!");
@@ -35,16 +36,16 @@ bool callAtHalfSecond(void *argument) {
 
     byte buf[5];
 
-    buf[0] = frameNumber++;
+    buf[CAN_FRAME_NUMBER] = frameNumber++;
 
     short temp = valueFields[F_DPF_TEMP];
-    buf[1] = (temp >> 8) & 0xFF;
-    buf[2] = temp & 0xFF;
+    buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] = (temp >> 8) & 0xFF;
+    buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO] = temp & 0xFF;
 
     int hi, lo;
     floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
-    buf[3] = (byte)hi;
-    buf[4] = (byte)lo;
+    buf[CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_HI] = (byte)hi;
+    buf[CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_LO] = (byte)lo;
 
     CAN.sendMsgBuf(CAN_ID_DPF, sizeof(buf), buf);  
 
@@ -58,7 +59,7 @@ long unsigned int canID = 0x000;
 unsigned char len = 0;
 
 // This the eight byte buffer of the incoming message data payload
-static byte buf[8];
+static byte buf[CAN_FRAME_MAX_LENGTH];
 
 bool interrupt = false;
 void receivedCanMessage(void) {
@@ -66,10 +67,10 @@ void receivedCanMessage(void) {
 }
 
 static byte lastFrame = 0;
-void canMainLoop(void) {
+bool canMainLoop(void *message) {
     CAN.readMsgBuf(&canID, &len, buf);
     if(canID == 0 || len < 1) {
-        return;
+        return true;
     }
 
     if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
@@ -78,17 +79,22 @@ void canMainLoop(void) {
 
         switch(canID) {
             case CAN_ID_ECU_UPDATE: {
-                valueFields[F_ENGINE_LOAD] = buf[1];
+                valueFields[F_ENGINE_LOAD] = buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD];
+                valueFields[F_RPM] = ((unsigned short)buf[CAN_FRAME_ECU_UPDATE_RPM_HI] << 8) | 
+                  buf[CAN_FRAME_ECU_UPDATE_RPM_LO];
+                valueFields[F_COOLANT_TEMP] = buf[CAN_FRAME_ECU_UPDATE_COOLANT];
+                valueFields[F_OIL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_OIL];
+                valueFields[F_EGT] = ((unsigned short)buf[CAN_FRAME_ECU_UPDATE_EGT_HI] << 8) | 
+                  buf[CAN_FRAME_ECU_UPDATE_EGT_LO];
             }
             break;
-
-
 
             default:
                 deb("received unknown CAN frame: %d\n", canID);
                 break;
         }
     }
+    return true;
 }
 
 

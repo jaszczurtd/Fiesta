@@ -19,7 +19,7 @@ extern float valueFields[];
 #define CAN0_GPIO 17
 #define CAN0_INT 15
 
-void canMainLoop(void);
+bool canMainLoop(void *argument);
 void canInit(void);
 void sendThrottleValueCAN(int value);
 bool updateCANrecipients(void *argument);

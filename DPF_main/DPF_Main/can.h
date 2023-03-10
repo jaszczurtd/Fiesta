@@ -18,7 +18,7 @@
 extern float valueFields[];
 
 void canInit(void);
-void canMainLoop(void);
+bool canMainLoop(void *message);
 void receivedCanMessage(void);
 bool callAtHalfSecond(void *argument);
 
