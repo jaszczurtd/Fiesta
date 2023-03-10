@@ -15,6 +15,8 @@
 
 #define WATCHDOG_TIME 4000
 
+#define ADC_BITS 12
+
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 
@@ -83,7 +85,6 @@
 
 //dividers - analog reads
 
-#define DIVIDER_VOLTS 212.628568
 #define DIVIDER_PRESSURE_BAR 912
 #define DIVIDER_EGT 2.308
 

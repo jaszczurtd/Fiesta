@@ -37,8 +37,11 @@ void floatToDec(float val, int *hi, int *lo) {
 	}
 }
 
-float adcToVolt(float basev, int adc) {
-    return adc * (basev / 1024.0);    
+float adcToVolt(int adc, float r1, float r2) {
+  const float V_REF = 3.3;
+  const float V_DIVIDER_SCALE = (r1 + r2) / r2;
+
+  return adc * (V_REF / pow(2, ADC_BITS)) * V_DIVIDER_SCALE;
 }
 
 float getAverageValueFrom(int tpin) {

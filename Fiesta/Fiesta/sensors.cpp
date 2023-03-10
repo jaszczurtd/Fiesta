@@ -5,7 +5,7 @@ float valueFields[F_LAST];
 float reflectionValueFields[F_LAST];
 
 void initSensors(void) {
-  analogReadResolution(12);
+  analogReadResolution(ADC_BITS);
 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
@@ -17,7 +17,11 @@ void initSensors(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-    return analogRead(A2) / DIVIDER_VOLTS;
+  //real values (resitance)
+  const float V_DIVIDER_R1 = 47710.0;
+  const float V_DIVIDER_R2 = 9700.0;
+
+  return adcToVolt(analogRead(A2), V_DIVIDER_R1, V_DIVIDER_R2); 
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -26,6 +30,7 @@ float readVolts(void) {
 
 float readCoolantTemp(void) {
     set4051ActivePin(0);
+    //real values (resitance)
     return ntcToTemp(A1, 1506, 1500);
 }
 

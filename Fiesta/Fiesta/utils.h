@@ -12,7 +12,7 @@
 
 void deb(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
-float adcToVolt(float basev, int adc);
+float adcToVolt(int adc, float r1, float r2);
 float ntcToTemp(int tpin, int thermistor, int r);
 int percentToGivenVal(float percent, int maxWidth);
 int currentValToHeight(int currentVal, int maxVal);

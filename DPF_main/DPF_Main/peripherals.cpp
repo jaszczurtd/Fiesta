@@ -76,14 +76,17 @@ void quickDisplay(int line, const char *format, ...) {
   va_end(valist);
 }
 
-float adcToVolt(int adc) {
-    return adc / 215.10741;    
+float adcToVolt(int adc, float r1, float r2) {
+  const float V_REF = 3.3;
+  const float V_DIVIDER_SCALE = (r1 + r2) / r2;
+
+  return adc * (V_REF / pow(2, ADC_BITS)) * V_DIVIDER_SCALE;
 }
 
 //---------------
 
 void hardwareInit(void) {
-  analogReadResolution(12);
+  analogReadResolution(ADC_BITS);
 
   pinMode(VALVES, OUTPUT);
   pinMode(HEATER, OUTPUT);
@@ -102,7 +105,10 @@ bool readPeripherals(void *argument) {
   int thermoRAW = getAverageValueFrom(THERMOC);
   int voltsRAW = getAverageValueFrom(VOLTS);
 
-  valueFields[F_VOLTS] = adcToVolt(voltsRAW);
+  const float V_DIVIDER_R1 = 47320.0;
+  const float V_DIVIDER_R2 = 9900.0;
+
+  valueFields[F_VOLTS] = adcToVolt(voltsRAW, V_DIVIDER_R1, V_DIVIDER_R2);
   if(valueFields[F_VOLTS] < MINIMUM_VOLTS) {
     valueFields[F_DPF_TEMP] = 9999.0f;
   } else {

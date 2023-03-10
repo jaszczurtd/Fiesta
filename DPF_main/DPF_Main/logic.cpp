@@ -71,7 +71,7 @@ bool displayUpdate(void *argument) {
   quickDisplay(3, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
   quickDisplay(4, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
   quickDisplay(5, "Engine RPM:%d", int(valueFields[F_RPM]));
-  quickDisplay(6, "Engine EGT:%d", int(valueFields[F_EGT]));
+  quickDisplay(6, "Engine EGT:%dC", int(valueFields[F_EGT]));
 
   return true;
 }
