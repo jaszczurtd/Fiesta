@@ -101,8 +101,6 @@ float readEGT(void) {
 //-------------------------------------------------------------------------------------------------
 
 void valToPWM(unsigned char pin, int val) {
-    analogWriteFreq(100);
-    analogWriteResolution(PWM_WRITE_RESOLUTION);
     analogWrite(pin, (PWM_RESOLUTION - val));
 }
 

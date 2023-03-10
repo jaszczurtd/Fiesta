@@ -8,3 +8,11 @@ void setup(void) {
 void loop() {
     looper();
 }
+
+void setup1() {
+    initialization1();
+}
+
+void loop1() {
+    looper1();
+}

@@ -20,5 +20,7 @@ extern float valueFields[];
 
 void initialization(void);
 void looper(void);
+void initialization1(void);
+void looper1(void);
 
 #endif

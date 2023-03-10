@@ -40,6 +40,9 @@ void initialization(void) {
   init4051();
   initSensors();
   
+  analogWriteFreq(100);
+  analogWriteResolution(PWM_WRITE_RESOLUTION);
+
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
   
@@ -91,8 +94,10 @@ void initialization(void) {
   generalTimer.every(time / 6, readMediumValues);
   generalTimer.every(time / 8, readHighValues);
   generalTimer.every(200, updateCANrecipients);
+  generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
 
   updateCANrecipients(NULL);
+  canMainLoop(NULL);
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
@@ -196,7 +201,6 @@ void looper(void) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
-  canMainLoop();
 
 }
 

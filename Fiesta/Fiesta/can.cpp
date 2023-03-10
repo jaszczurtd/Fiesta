@@ -15,28 +15,29 @@ void canInit(void) {
   tft.setTextSize(1);
 
   while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-        Serial.println("ERROR!!!! CAN-BUS Shield init fail");
-        Serial.println("ERROR!!!! Will try to init CAN-BUS shield again");
+      deb("ERROR!!!! CAN-BUS Shield init fail");
+      deb("Will try to init CAN-BUS shield again");
 
-        tft.fillScreen(ST7735_BLACK);
+      tft.fillScreen(ST7735_BLACK);
 
-        int x = 10;
-        int y = 10;
-        tft.setCursor(x, y);
-        tft.println(F("CAN module init fail"));
-        y += 10;
-        tft.setCursor(x, y);
+      int x = 10;
+      int y = 10;
+      tft.setCursor(x, y);
+      tft.println(F("CAN module init fail"));
+      y += 10;
+      tft.setCursor(x, y);
 
-        char displayTxt[32];
+      char displayTxt[32];
 
-        memset(displayTxt, 0, sizeof(displayTxt));
-        snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("Connection attempt: %d"), at++);
-        tft.println(displayTxt);
+      memset(displayTxt, 0, sizeof(displayTxt));
+      snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("Connection attempt: %d"), at++);
+      tft.println(displayTxt);
 
-        delay(1000);
+      delay(1000);
+      watchdog_update();
     }
 
-    Serial.println("CAN BUS Shield init ok!");
+    deb("CAN BUS Shield init ok!");
     CAN.setMode(MCP_NORMAL); 
     CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
 
@@ -52,13 +53,24 @@ unsigned char len = 0;
 
 bool updateCANrecipients(void *argument) {
 
-    byte buf[2];
+    byte buf[CAN_FRAME_MAX_LENGTH];
+    buf[CAN_FRAME_NUMBER] = frameNumber++;
+    
+    buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
+      (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
 
-    buf[0] = frameNumber++;
-    buf[1] = (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
+    short rpm = valueFields[F_RPM];
+    buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = (rpm >> 8) & 0xFF;
+    buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = rpm & 0xFF;
+
+    buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
+    buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
+
+    short exh = valueFields[F_EGT];
+    buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = (exh >> 8) & 0xFF;
+    buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = exh & 0xFF;
 
     CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
-
 
   return true;  
 }
@@ -73,10 +85,10 @@ void receivedCanMessage(void) {
 }
 
 static byte lastFrame = 0;
-void canMainLoop(void) {
+bool canMainLoop(void *argument) {
     CAN.readMsgBuf(&canID, &len, buf);
     if(canID == 0 || len < 1) {
-        return;
+        return true;
     }
 
     if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
@@ -84,10 +96,14 @@ void canMainLoop(void) {
         lastFrame = buf[CAN_FRAME_NUMBER];
 
         switch(canID) {
-            case CAN_ID_DPF:
+            case CAN_ID_DPF: {
 
-                deb("%d %d", buf[CAN_FRAME_NUMBER], buf[1]);
+                valueFields[F_DPF_TEMP] = 
+                  ((unsigned short)buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] << 8) | 
+                  buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO];            
 
+                  deb("DPF temp: %f", valueFields[F_DPF_TEMP]);
+            }
             break;
 
             default:
@@ -95,6 +111,7 @@ void canMainLoop(void) {
                 break;
         }
     }
+    return true;
 }
 
 
