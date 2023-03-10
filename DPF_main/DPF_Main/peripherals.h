@@ -12,6 +12,8 @@
 //until I figure out how to deal better wit this with Arduino IDE...
 #include "c:\development\projects_git\fiesta\canDefinitions.h"
 
+#define ADC_BITS 12
+
 //DPF heater
 #define HEATER 14
 //fuel valves
@@ -48,6 +50,6 @@ int getDefaultTextHeight(void);
 void show(void);
 void hardwareInit(void);
 bool readPeripherals(void *argument);
-float adcToVolt(int adc);
+float adcToVolt(int adc, float r1, float r2);
 
 #endif
