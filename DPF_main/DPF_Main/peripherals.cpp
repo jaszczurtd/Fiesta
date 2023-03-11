@@ -74,6 +74,7 @@ void quickDisplay(int line, int mode, const char *format, ...) {
     default:
       //below options
       line += 2;
+      break;
   }
 
   int y = line * textHeight;
@@ -104,6 +105,49 @@ void quickDisplay(int line, int mode, const char *format, ...) {
   show();
 
   va_end(valist);
+}
+
+void clearLines(int from, int to, int mode) {
+  switch(mode) {
+    case M_LEFT:
+    case M_RIGHT:
+      break;
+    default:
+      //below options
+      from += 2;
+      to += 2;
+      break;      
+  }
+
+  if(from > to) {
+    return;
+  } 
+  if(from > MAX_LINES) {
+    from = MAX_LINES;
+  }
+  if(to > MAX_LINES) {
+    to = MAX_LINES;
+  }
+  
+  for(int a = from; a < to + 1; a++) {
+    int y = a * textHeight;
+    display.fillRect(0, y, 128, textHeight, SSD1306_BLACK);    
+    show();
+  }  
+}
+
+void clearLine(int line, int mode) {
+  switch(mode) {
+    case M_LEFT:
+    case M_RIGHT:
+      break;
+    default:
+      line += 2;
+      break;      
+  }
+  int y = line * textHeight;
+  display.fillRect(0, y, 128, textHeight, SSD1306_BLACK);    
+  show();
 }
 
 bool displayScreenFrom(const char **strings) {

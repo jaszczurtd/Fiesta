@@ -23,6 +23,8 @@ bool canMainLoop(void *argument);
 void canInit(void);
 void sendThrottleValueCAN(int value);
 bool updateCANrecipients(void *argument);
+bool isDPFConnected(void);
+bool canCheckConnection(void *message);
 
 #endif
 
