@@ -21,7 +21,8 @@ void canInit(void);
 bool canMainLoop(void *message);
 void receivedCanMessage(void);
 bool callAtHalfSecond(void *argument);
-
+bool canCheckConnection(void *message);
+bool isEcuConnected(void);
 
 #endif
 

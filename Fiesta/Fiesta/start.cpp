@@ -95,6 +95,7 @@ void initialization(void) {
   generalTimer.every(time / 8, readHighValues);
   generalTimer.every(200, updateCANrecipients);
   generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
+  generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
 
   updateCANrecipients(NULL);
   canMainLoop(NULL);

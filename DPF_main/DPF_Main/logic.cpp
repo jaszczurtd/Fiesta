@@ -33,7 +33,8 @@ void initialization(void) {
     generalTimer.every(500, callAtHalfSecond);
     generalTimer.every(1000, callAtEverySecond);
     generalTimer.every(400, readPeripherals);
-    generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);    
+    generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);  
+    generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
     generalTimer.every(100, displayUpdate);
 
     displayUpdate(NULL);
@@ -79,9 +80,16 @@ bool displayUpdate(void *argument) {
         quickDisplay(2, M_WHOLE, "DPF temp:%dC", temp);
       }
 
-      quickDisplay(3, M_WHOLE, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
-      quickDisplay(4, M_WHOLE, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
-      quickDisplay(5, M_WHOLE, "RPM:%d EGT:%dC", int(valueFields[F_RPM]), int(valueFields[F_EGT]));
+      if(isEcuConnected()) {
+        quickDisplay(3, M_WHOLE, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
+        quickDisplay(4, M_WHOLE, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
+        quickDisplay(5, M_WHOLE, "RPM:%d EGT:%dC", int(valueFields[F_RPM]), 
+          int(valueFields[F_EGT]));
+      } else {
+        clearLine(3, M_WHOLE);
+        quickDisplay(4, M_WHOLE, "ECU is not connected");
+        clearLine(5, M_WHOLE);
+      }
 
       break;    
     }
