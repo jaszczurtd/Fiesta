@@ -10,7 +10,7 @@ MCP_CAN CAN(17);
 const char canError[] PROGMEM = "MCP2515 init problem!";
 
 static unsigned char frameNumber = 0;
-static int ecuMessages = 0, lastEcuMessages = 0;
+static unsigned long ecuMessages = 0, lastEcuMessages = 0;
 static bool ecuConnected = false;
 
 // Incoming CAN-BUS message
