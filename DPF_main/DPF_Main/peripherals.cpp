@@ -22,14 +22,18 @@ void displayInit(void) {
     textHeight = getTxHeight(F(hello));
     display.display();
 
-    quickDisplay(2, __DATE__);
-    quickDisplay(3, __TIME__);
+    quickDisplay(2, M_WHOLE, __DATE__);
+    quickDisplay(3, M_WHOLE, __TIME__);
 
     unsigned long time = WATCHDOG_TIME - DISPLAY_INIT_MAX_TIME;
     if(time > DISPLAY_INIT_MAX_TIME) {
       delay(time);
     }
     display.clearDisplay();
+}
+
+void clearDisplay(void) {
+  display.clearDisplay();
 }
 
 int getDefaultTextHeight(void) {
@@ -59,21 +63,80 @@ int getTxWidth(const __FlashStringHelper *txt) {
     return w;
 }
 
-void quickDisplay(int line, const char *format, ...) {
+void quickDisplay(int line, int mode, const char *format, ...) {
   va_list valist;
   va_start(valist, format);
 
+  switch(mode) {
+    case M_LEFT:
+    case M_RIGHT:
+      break;
+    default:
+      //below options
+      line += 2;
+  }
+
   int y = line * textHeight;
-  display.fillRect(0, y, 128, textHeight, SSD1306_BLACK);
+  int x;
+  switch(mode) {
+    case M_LEFT:
+      x = 0; 
+      display.fillRect(x, y, 64, textHeight, SSD1306_BLACK);
+      break;
+
+    case M_RIGHT:
+      x = 128 - getTxWidth((const __FlashStringHelper *)format);
+      display.fillRect(x, y, 64, textHeight, SSD1306_BLACK);
+      break;
+
+    case M_WHOLE:
+    default:
+      x = 0;
+      display.fillRect(x, y, 128, textHeight, SSD1306_BLACK);
+      break;
+  }
 
   char buffer[128];
   memset (buffer, 0, sizeof(buffer));
   vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
 
-  tx(0, line * textHeight, F(buffer));
+  tx(x, line * textHeight, F(buffer));
   show();
 
   va_end(valist);
+}
+
+bool displayScreenFrom(const char **strings) {
+  if(strings == NULL) {
+    return false;
+  }
+  int a;
+  for(a = 0; a < MAX_LINES; a++) {
+    if(strings[a]) {
+      quickDisplay(a, M_WHOLE, (const char*)strings[a]);
+    } else {
+      break;
+    }
+  }
+  return a > 0;
+}
+
+bool displayOptions(const char *left, const char *right) {
+  if(left == NULL && right == NULL) {
+    return false;
+  }
+
+  int something = 0;
+  if(left) {
+     quickDisplay(0, M_LEFT, left);
+     something++;
+  }
+
+  if(right) {
+     quickDisplay(0, M_RIGHT, right);
+     something++;
+  }
+  return something > 0;
 }
 
 float adcToVolt(int adc, float r1, float r2) {
