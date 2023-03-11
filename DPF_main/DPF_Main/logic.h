@@ -23,4 +23,11 @@ void looper(void);
 void initialization1(void);
 void looper1(void);
 
+#define STATE_MAIN      0
+#define STATE_ASK       1
+#define STATE_OPERATE   2
+#define STATE_ERROR     3
+#define STATE_QUESTION  4
+
+
 #endif

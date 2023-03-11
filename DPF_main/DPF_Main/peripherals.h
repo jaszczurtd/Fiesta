@@ -41,15 +41,24 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 
+#define MAX_LINES 7
+
+#define M_LEFT 1
+#define M_RIGHT 2
+#define M_WHOLE 0
+
 void displayInit(void);
 void tx(int x, int y, const __FlashStringHelper *txt);
 int getTxHeight(const __FlashStringHelper *txt);
 int getTxWidth(const __FlashStringHelper *txt);
-void quickDisplay(int line, const char *format, ...);
+void quickDisplay(int line, int mode, const char *format, ...);
+bool displayOptions(const char *left, const char *right);
 int getDefaultTextHeight(void);
 void show(void);
 void hardwareInit(void);
 bool readPeripherals(void *argument);
 float adcToVolt(int adc, float r1, float r2);
+void clearDisplay(void);
+bool displayScreenFrom(const char **strings);
 
 #endif

@@ -3,8 +3,9 @@
 
 Timer generalTimer;
 
-static bool started0 = false;
-static bool started1 = false;
+static bool started0 = false, started1 = false;
+static int state = STATE_MAIN;
+static int newState = STATE_MAIN;
 
 bool callAtEverySecond(void *argument);
 bool displayUpdate(void *argument);
@@ -56,30 +57,87 @@ void looper(void) {
 bool displayUpdate(void *argument) {
 
   int hi, lo;
-  floatToDec(valueFields[F_VOLTS], &hi, &lo);
-  quickDisplay(0, "Power supply:%d.%dV", hi, lo);
-  floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
-  quickDisplay(1, "DPF pressure:%d.%d BAR", hi, lo);
 
-  int temp = int(valueFields[F_DPF_TEMP]);
-  if(temp > MAX_DPF_TEMP) {
-    quickDisplay(2, "DPF temp ERROR");
-  } else {
-    quickDisplay(2, "DPF temp:%dC", temp);
+  if(newState != state) {
+    clearDisplay();
+    state = newState;    
   }
 
-  quickDisplay(3, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
-  quickDisplay(4, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
-  quickDisplay(5, "Engine RPM:%d", int(valueFields[F_RPM]));
-  quickDisplay(6, "Engine EGT:%dC", int(valueFields[F_EGT]));
+  switch(state) {
+    case STATE_MAIN: {
+      displayOptions("START", NULL);
+
+      floatToDec(valueFields[F_VOLTS], &hi, &lo);
+      quickDisplay(0, M_WHOLE, "Power supply:%d.%dV", hi, lo);
+      floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
+      quickDisplay(1, M_WHOLE, "DPF pressure:%d.%d BAR", hi, lo);
+
+      int temp = int(valueFields[F_DPF_TEMP]);
+      if(temp > MAX_DPF_TEMP) {
+        quickDisplay(2, M_WHOLE, "DPF temp ERROR");
+      } else {
+        quickDisplay(2, M_WHOLE, "DPF temp:%dC", temp);
+      }
+
+      quickDisplay(3, M_WHOLE, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
+      quickDisplay(4, M_WHOLE, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
+      quickDisplay(5, M_WHOLE, "RPM:%d EGT:%dC", int(valueFields[F_RPM]), int(valueFields[F_EGT]));
+
+      break;    
+    }
+
+    case STATE_QUESTION: {        
+      const char *arr[] = { "Are you sure you", "want to start the", "procedure?", NULL };
+      displayScreenFrom(arr);
+      displayOptions("YES", "NO");
+      break;
+    }
+
+    default:
+      clearDisplay();
+      break;
+  }
 
   return true;
 }
 
-bool state = false;
+static bool leftP = false, rightP = false;
+void performLogic(void) {
+
+  while(!digitalRead(S_LEFT)) {
+    leftP = true;
+    delay(5);
+  }
+  while(!digitalRead(S_RIGHT)) {
+    rightP = true;
+    delay(5);
+  }
+
+  switch(state) {
+    case STATE_MAIN:
+      if(leftP) {
+        newState = STATE_QUESTION;
+      }
+      break;
+
+    case STATE_QUESTION:
+      if(rightP) {
+        newState = STATE_MAIN;
+      }
+      break;
+  }
+
+  leftP = rightP = false;
+
+  //digitalWrite(VALVES, !digitalRead(S_LEFT));
+  //digitalWrite(HEATER, !digitalRead(S_RIGHT));
+
+}
+
+static bool ivert = false;
 bool callAtEverySecond(void *argument) {
-    state = !state;
-    digitalWrite(LED_BUILTIN, state);
+    ivert = !ivert;
+    digitalWrite(LED_BUILTIN, ivert);
     return true;
 }
 
@@ -93,8 +151,6 @@ void looper1(void) {
         return;
     }
 
-    digitalWrite(VALVES, !digitalRead(S_LEFT));
-    digitalWrite(HEATER, !digitalRead(S_RIGHT));
-
+    performLogic();
 }
 
