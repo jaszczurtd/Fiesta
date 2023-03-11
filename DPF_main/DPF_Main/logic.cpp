@@ -37,6 +37,7 @@ void initialization(void) {
     generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
     generalTimer.every(100, displayUpdate);
 
+    canCheckConnection(NULL);
     displayUpdate(NULL);
 
     started0 = true;

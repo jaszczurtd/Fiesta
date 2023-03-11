@@ -17,7 +17,8 @@ static long unsigned int canID = 0x000;
 static unsigned char len = 0;
 
 static bool dpfConnected = false;
-static int dpfMessages = 0, lastDPFMessages = 0;
+static unsigned long dpfMessages = 0, lastDPFMessages = 0;
+static byte lastFrame = 0;
 
 void canInit(void) {
   int at = 1;
@@ -63,24 +64,24 @@ void canInit(void) {
 
 bool updateCANrecipients(void *argument) {
 
-    byte buf[CAN_FRAME_MAX_LENGTH];
-    buf[CAN_FRAME_NUMBER] = frameNumber++;
-    
-    buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
-      (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
+  byte buf[CAN_FRAME_MAX_LENGTH];
+  buf[CAN_FRAME_NUMBER] = frameNumber++;
+  
+  buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
+    (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
 
-    short rpm = valueFields[F_RPM];
-    buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = (rpm >> 8) & 0xFF;
-    buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = rpm & 0xFF;
+  short rpm = valueFields[F_RPM];
+  buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = (rpm >> 8) & 0xFF;
+  buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = rpm & 0xFF;
 
-    buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
-    buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
+  buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
+  buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
 
-    short exh = valueFields[F_EGT];
-    buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = (exh >> 8) & 0xFF;
-    buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = exh & 0xFF;
+  short exh = valueFields[F_EGT];
+  buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = (exh >> 8) & 0xFF;
+  buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = exh & 0xFF;
 
-    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
+  CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
 
   return true;  
 }
@@ -90,7 +91,6 @@ void receivedCanMessage(void) {
     interrupt = true;
 }
 
-static byte lastFrame = 0;
 bool canMainLoop(void *argument) {
     CAN.readMsgBuf(&canID, &len, buf);
     if(canID == 0 || len < 1) {
