@@ -96,11 +96,15 @@ bool displayUpdate(void *argument) {
     }
 
     case STATE_QUESTION: {        
-      const char *arr[] = { "Are you sure you", "want to start the", "procedure?", NULL };
-      displayScreenFrom(arr);
+      displayScreenFrom("Are you sure you", "want to start the", "procedure?", NULL);
       displayOptions("YES", "NO");
       break;
     }
+
+    case STATE_ERROR_NOT_CONNECTED:
+      displayScreenFrom("Can't start. ECU", "is not responding.", NULL);
+      displayOptions("BACK", NULL);
+      break;
 
     default:
       clearDisplay();
@@ -125,7 +129,17 @@ void performLogic(void) {
   switch(state) {
     case STATE_MAIN:
       if(leftP) {
-        newState = STATE_QUESTION;
+        if(isEcuConnected()) {
+          newState = STATE_QUESTION;
+        } else {
+          newState = STATE_ERROR_NOT_CONNECTED;
+        }
+      }
+      break;
+    
+    case STATE_ERROR_NOT_CONNECTED:
+      if(leftP) {
+        newState = STATE_MAIN;
       }
       break;
 

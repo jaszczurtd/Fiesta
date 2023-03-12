@@ -59,7 +59,7 @@ void hardwareInit(void);
 bool readPeripherals(void *argument);
 float adcToVolt(int adc, float r1, float r2);
 void clearDisplay(void);
-bool displayScreenFrom(const char **strings);
+bool displayScreenFrom(const char *first, ...);
 void clearLines(int from, int to, int mode);
 void clearLine(int line, int mode);
 
