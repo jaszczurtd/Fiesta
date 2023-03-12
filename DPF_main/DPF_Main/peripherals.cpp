@@ -22,8 +22,8 @@ void displayInit(void) {
     textHeight = getTxHeight(F(hello));
     display.display();
 
-    quickDisplay(2, M_WHOLE, __DATE__);
-    quickDisplay(3, M_WHOLE, __TIME__);
+    quickDisplay(1, M_WHOLE, __DATE__);
+    quickDisplay(2, M_WHOLE, __TIME__);
 
     unsigned long time = WATCHDOG_TIME - DISPLAY_INIT_MAX_TIME;
     if(time > DISPLAY_INIT_MAX_TIME) {
@@ -150,19 +150,21 @@ void clearLine(int line, int mode) {
   show();
 }
 
-bool displayScreenFrom(const char **strings) {
-  if(strings == NULL) {
-    return false;
-  }
-  int a;
-  for(a = 0; a < MAX_LINES; a++) {
-    if(strings[a]) {
-      quickDisplay(a, M_WHOLE, (const char*)strings[a]);
-    } else {
-      break;
-    }
-  }
-  return a > 0;
+bool displayScreenFrom(const char *first, ...) {
+  va_list args;
+  va_start(args, first);
+  int i = 0;
+
+  const char* string = first;
+  while (string != NULL) {
+    quickDisplay(i, M_WHOLE, string);
+    string = (const char*)va_arg(args, char*);
+    i++;
+  }  
+
+  va_end(args);
+
+  return i > 0;
 }
 
 bool displayOptions(const char *left, const char *right) {
