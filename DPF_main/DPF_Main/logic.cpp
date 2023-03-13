@@ -95,14 +95,18 @@ bool displayUpdate(void *argument) {
       break;    
     }
 
-    case STATE_QUESTION: {        
+    case STATE_QUESTION:     
       displayScreenFrom("Are you sure you", "want to start the", "procedure?", NULL);
-      displayOptions("YES", "NO");
+      displayOptions("NO", "YES");
       break;
-    }
-
+ 
     case STATE_ERROR_NOT_CONNECTED:
       displayScreenFrom("Can't start. ECU", "is not responding.", NULL);
+      displayOptions("BACK", NULL);
+      break;
+
+    case STATE_ERROR_NO_CONDITIONS:
+      displayScreenFrom("Can't start. Engine", "conditions not met.", NULL);
       displayOptions("BACK", NULL);
       break;
 
@@ -130,13 +134,19 @@ void performLogic(void) {
     case STATE_MAIN:
       if(leftP) {
         if(isEcuConnected()) {
-          newState = STATE_QUESTION;
+          if(valueFields[F_RPM] < MINIMUM_RPM ||
+            valueFields[F_VOLTS] < MINIMUM_VOLTS_TO_OPERATE) {
+              newState = STATE_ERROR_NO_CONDITIONS;
+            } else {
+              newState = STATE_QUESTION;
+            }          
         } else {
           newState = STATE_ERROR_NOT_CONNECTED;
         }
       }
       break;
-    
+
+    case STATE_ERROR_NO_CONDITIONS:
     case STATE_ERROR_NOT_CONNECTED:
       if(leftP) {
         newState = STATE_MAIN;
@@ -144,7 +154,7 @@ void performLogic(void) {
       break;
 
     case STATE_QUESTION:
-      if(rightP) {
+      if(leftP) {
         newState = STATE_MAIN;
       }
       break;

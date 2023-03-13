@@ -13,8 +13,10 @@
 #define WATCHDOG_TIME 3000
 #define DISPLAY_INIT_MAX_TIME 500
 
+#define MINIMUM_VOLTS_TO_OPERATE 10.0
 #define MINIMUM_VOLTS 6.0
-#define MAX_DPF_TEMP 1200
+#define MINIMUM_RPM 700
+#define MAX_DPF_TEMP 1100
 
 extern float valueFields[];
 
@@ -29,6 +31,7 @@ void looper1(void);
 #define STATE_ERROR               3
 #define STATE_QUESTION            4
 #define STATE_ERROR_NOT_CONNECTED 5
+#define STATE_ERROR_NO_CONDITIONS 6
 
 
 #endif
