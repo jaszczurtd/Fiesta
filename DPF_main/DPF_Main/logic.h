@@ -32,6 +32,8 @@ void looper1(void);
 #define STATE_QUESTION            4
 #define STATE_ERROR_NOT_CONNECTED 5
 #define STATE_ERROR_NO_CONDITIONS 6
+#define STATE_OPERATING           7
+
 
 
 #endif
