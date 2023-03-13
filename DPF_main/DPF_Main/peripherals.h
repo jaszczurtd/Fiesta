@@ -62,5 +62,7 @@ void clearDisplay(void);
 bool displayScreenFrom(const char *first, ...);
 void clearLines(int from, int to, int mode);
 void clearLine(int line, int mode);
+void enableHeater(bool state);
+void enableValves(bool state);
 
 #endif
