@@ -2,6 +2,7 @@
 #include "logic.h"
 
 Timer generalTimer;
+Timers logicTimer;
 
 static bool started0 = false, started1 = false;
 static int state = STATE_MAIN;
