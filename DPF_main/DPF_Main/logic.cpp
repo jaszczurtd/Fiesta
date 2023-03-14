@@ -7,9 +7,13 @@ Timers logicTimer;
 static bool started0 = false, started1 = false;
 static int state = STATE_MAIN;
 static int newState = STATE_MAIN;
+static int DPF = DPF_IDLE;
+static bool ivert = false;
 
 bool callAtEverySecond(void *argument);
 bool displayUpdate(void *argument);
+void theFlow(void);
+void stopDPF(void);
 
 static bool leftP = false, rightP = false;
 
@@ -22,6 +26,9 @@ void initialization(void) {
         deb("Clean boot\n");
     }
 
+    DPF = DPF_IDLE;
+    state = newState = STATE_MAIN;
+    
     pinMode(LED_BUILTIN, OUTPUT);
 
     watchdog_enable(WATCHDOG_TIME, false);
@@ -37,13 +44,24 @@ void initialization(void) {
     generalTimer.every(400, readPeripherals);
     generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);  
     generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
-    generalTimer.every(100, displayUpdate);
+    generalTimer.every(25, displayUpdate);
 
     readPeripherals(NULL);
     canCheckConnection(NULL);
     displayUpdate(NULL);
 
     started0 = true;
+}
+
+void stopDPF(void) {
+  DPF = DPF_IDLE;
+  logicTimer.abort();
+
+  //just to be sure
+  enableHeater(false);
+  enableValves(false);
+
+  newState = STATE_MAIN;
 }
 
 bool isStarted(void) {
@@ -109,6 +127,14 @@ bool displayUpdate(void *argument) {
     case STATE_OPERATING:
       displayOptions("STOP", NULL);
     
+      char status[32];
+      memset(status, 0, sizeof(status));
+      snprintf(status, sizeof(status) -1,  "%s / %s", 
+                        (DPF & DPF_HEATING_START) ? "HEATING" : "NO_HEATING", 
+                        (DPF & DPF_INJECT_START) ? "INJECTION" : "DRY");
+
+      quickDisplay(0, M_WHOLE, status);
+
       showDPFValues();
       showECUEngineValues();
       break;
@@ -176,27 +202,59 @@ void performLogic(void) {
       }
       if(rightP) {
         newState = STATE_OPERATING;
+        logicTimer.begin(theFlow, SECS(HEATER_TIME_BEFORE_INJECT));
+        DPF |= DPF_HEATING_START;
       }        
       break;
 
     case STATE_OPERATING:
       if(leftP) {
         newState = STATE_MAIN;
-        delay(1000);
-        enableHeater(false);
-        enableValves(false);
+        stopDPF();        
       }
       break;
   }
 
+  logicTimer.tick();
+
+  enableHeater(DPF & DPF_HEATING_START);
+  enableValves(DPF & DPF_INJECT_START);
+   
   leftP = rightP = false;
 }
 
-static bool ivert = false;
+void theFlow(void) {
+
+  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+    stopDPF();
+    return;
+  }
+
+  if(valueFields[F_RPM] > STOP_DPF_RPM &&
+    valueFields[F_DPF_PRESSURE] < STOP_DPF_PRESSURE) {
+    
+    stopDPF();
+    return;
+  }
+
+  if(DPF & DPF_HEATING_START) {
+    DPF = DPF ^ DPF_INJECT_START;
+
+    uint32_t time;  
+    if(DPF & DPF_INJECT_START) {
+      time = FUEL_INJECT_TIME;
+    } else {
+      time = FUEL_INJECT_IDLE;
+    }
+
+    logicTimer.time(time);
+  }
+}
+
 bool callAtEverySecond(void *argument) {
-    ivert = !ivert;
-    digitalWrite(LED_BUILTIN, ivert);
-    return true;
+  ivert = !ivert;
+  digitalWrite(LED_BUILTIN, ivert);
+  return true;
 }
 
 void initialization1(void) {

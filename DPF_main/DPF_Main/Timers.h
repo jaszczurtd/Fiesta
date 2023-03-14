@@ -14,13 +14,16 @@ class Timers
 private:
   uint32_t _time;
   uint32_t _lastTime;
+  void (*clb)(void);
 
 public:
-  void begin(const uint32_t);
+  void begin(void(*callback)(void), const uint32_t);
   void restart();
   bool available();
   uint32_t time();
   void time(const uint32_t);
+  void tick();
+  void abort();
 };
 
 #endif

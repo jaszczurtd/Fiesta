@@ -6,10 +6,26 @@ void Timers::restart()
   _lastTime = millis();
 }
 
-void Timers::begin(const uint32_t interval)
+void Timers::begin(void(*callback)(void), const uint32_t interval)
 {
+  clb = callback; 
   time(interval);
   restart();
+}
+
+void Timers::tick() {
+  if(_lastTime == 0 && _time == 0) {
+    return;
+  }
+
+  if (clb != NULL && available()) {
+    clb();
+    restart();
+  }
+}
+
+void Timers::abort() {
+  _lastTime = _time = 0;
 }
 
 bool Timers::available()
