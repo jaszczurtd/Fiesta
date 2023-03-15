@@ -5,14 +5,13 @@
 #include <SPI.h>
 #include <mcp_can.h>
 
+#include <canDefinitions.h>
+
 #include "sensors.h"
 #include "config.h"
 #include "start.h"
 #include "utils.h"
 #include "rpm.h"
-
-//until I figure out how to deal better wit this with Arduino IDE...
-#include "c:\development\projects_git\fiesta\canDefinitions.h"
 
 extern float valueFields[];
 

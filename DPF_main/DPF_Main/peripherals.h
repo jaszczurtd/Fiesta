@@ -4,13 +4,11 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <mcp_can.h>
+#include <canDefinitions.h>
 
 #include "logic.h"
 #include "can.h"
 #include "tools.h"
-
-//until I figure out how to deal better wit this with Arduino IDE...
-#include "c:\development\projects_git\fiesta\canDefinitions.h"
 
 #define ADC_BITS 12
 
