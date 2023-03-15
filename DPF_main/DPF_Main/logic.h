@@ -9,6 +9,7 @@
 #include "can.h"
 #include "peripherals.h"
 #include "tools.h"
+#include "Timers.h"
 
 #define WATCHDOG_TIME 3000
 #define DISPLAY_INIT_MAX_TIME 500
@@ -32,6 +33,25 @@ void looper1(void);
 #define STATE_QUESTION            4
 #define STATE_ERROR_NOT_CONNECTED 5
 #define STATE_ERROR_NO_CONDITIONS 6
+#define STATE_OPERATING           7
 
+//miliseconds
+#define FUEL_INJECT_TIME    250
+#define FUEL_INJECT_IDLE    2000
+
+//seconds
+#define HEATER_TIME_BEFORE_INJECT 15
+
+#define DPF_IDLE            1<<0
+#define DPF_HEATING_START   1<<1
+#define DPF_HEATING_END     1<<2
+#define DPF_INJECT_START    1<<3
+#define DPF_INJECT_END      1<<4
+
+//conditions to stop DPF regeneration
+
+#define STOP_DPF_TEMP       550   //temperature
+#define STOP_DPF_RPM        3500  //engine rpm  
+#define STOP_DPF_PRESSURE   0.5   //bar pressure
 
 #endif

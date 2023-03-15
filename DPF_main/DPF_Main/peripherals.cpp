@@ -194,11 +194,23 @@ float adcToVolt(int adc, float r1, float r2) {
 
 //---------------
 
+
+void enableHeater(bool state) {
+  digitalWrite(HEATER, state);
+}
+
+void enableValves(bool state) {
+  digitalWrite(VALVES, state);
+}
+
 void hardwareInit(void) {
   analogReadResolution(ADC_BITS);
 
   pinMode(VALVES, OUTPUT);
   pinMode(HEATER, OUTPUT);
+
+  enableHeater(false);
+  enableValves(false);
 
   pinMode(S_LEFT, INPUT_PULLUP);
   pinMode(S_RIGHT, INPUT_PULLUP);
