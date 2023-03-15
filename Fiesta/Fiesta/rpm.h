@@ -3,8 +3,8 @@
 #define T_RPM
 
 #include <arduino-timer.h>
+#include <tools.h>
 
-#include "utils.h"
 #include "config.h"
 #include "start.h"
 #include "sensors.h"

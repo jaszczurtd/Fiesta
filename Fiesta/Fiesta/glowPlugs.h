@@ -1,7 +1,8 @@
 #ifndef T_GLOWPLUGS
 #define T_GLOWPLUGS
 
-#include "utils.h"
+#include <tools.h>
+
 #include "config.h"
 #include "start.h"
 #include "sensors.h"

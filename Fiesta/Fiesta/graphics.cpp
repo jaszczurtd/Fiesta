@@ -24,6 +24,11 @@ void showLogo(void) {
   #endif
 }
 
+int currentValToHeight(int currentVal, int maxVal) {
+    float percent = (float)(currentVal * 100) / (float)maxVal;
+    return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
+}
+
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
     tft.fillRect(x, y, width, height, background);
     tft.drawRGBBitmap(x, y, pointer, width,

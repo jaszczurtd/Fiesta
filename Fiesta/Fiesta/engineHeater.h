@@ -1,7 +1,8 @@
 #ifndef T_HEATER
 #define T_HEATER
 
-#include "utils.h"
+#include <tools.h>
+
 #include "config.h"
 #include "start.h"
 #include "sensors.h"
