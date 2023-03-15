@@ -5,11 +5,11 @@
 #include <SPI.h>
 #include <mcp_can.h>
 #include <hardware/watchdog.h>
+#include <tools.h>
+#include <Timers.h>
 
 #include "can.h"
 #include "peripherals.h"
-#include "tools.h"
-#include "Timers.h"
 
 #define WATCHDOG_TIME 3000
 #define DISPLAY_INIT_MAX_TIME 500

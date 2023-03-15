@@ -5,8 +5,8 @@
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Fonts/FreeSansBold9pt7b.h>
+#include <tools.h>
 
-#include "utils.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
@@ -80,6 +80,7 @@ int textHeight(const char* text);
 void drawTempValue(int x, int y, int valToDisplay);
 void drawTempBar(int x, int y, int currentHeight, int color);
 void displayErrorWithMessage(int x, int y, const char *msg);
+int currentValToHeight(int currentVal, int maxVal);
 
 //indicators
 void redrawTemperature(void);

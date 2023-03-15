@@ -192,3 +192,18 @@ bool readHighValues(void *argument) {
   return true;
 }
 
+void init4051(void) {
+    pinMode(C_4051, OUTPUT);  //C
+    pinMode(B_4051, OUTPUT);  //B  
+    pinMode(A_4051, OUTPUT);  //A
+
+    set4051ActivePin(0);
+}
+
+void set4051ActivePin(unsigned char pin) {
+    digitalWrite(A_4051, (pin & 0x01) > 0); 
+    digitalWrite(B_4051, (pin & 0x02) > 0); 
+    digitalWrite(C_4051, (pin & 0x04) > 0); 
+}
+
+

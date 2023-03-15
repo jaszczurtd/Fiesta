@@ -15,8 +15,6 @@
 
 #define WATCHDOG_TIME 4000
 
-#define ADC_BITS 12
-
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
 
@@ -25,14 +23,6 @@
 
 //in seconds
 #define FIESTA_INTRO_TIME 2 
-
-// temp. for nominal resistance (almost always 25 C)
-#define TEMPERATURENOMINAL 21   
-// how many samples to take and average, more takes longer
-// but is more 'smooth'
-#define NUMSAMPLES 8
-// The beta coefficient of the thermistor (usually 3000-4000)
-#define BCOEFFICIENT 3600
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 

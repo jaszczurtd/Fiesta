@@ -4,13 +4,13 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <mcp_can.h>
+#include <tools.h>
 
 #include <canDefinitions.h>
 
 #include "sensors.h"
 #include "config.h"
 #include "start.h"
-#include "utils.h"
 #include "rpm.h"
 
 extern float valueFields[];

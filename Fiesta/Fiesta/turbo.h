@@ -1,7 +1,7 @@
 #ifndef T_TURBO
 #define T_TURBO
 
-#include "utils.h"
+#include <tools.h>
 #include "config.h"
 #include "start.h"
 #include "rpm.h"

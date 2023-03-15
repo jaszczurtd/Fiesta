@@ -2,12 +2,14 @@
 #define T_SENSORS
 
 #include <Wire.h>
+#include <tools.h>
 
-#include "utils.h"
 #include "config.h"
 #include "start.h"
 
 extern float valueFields[];
+
+#define PCF8574_ADDR 0x38
 
 #define O_GLOW_PLUGS 0
 #define O_FAN 1
@@ -42,5 +44,8 @@ void valToPWM(unsigned char pin, int val);
 int getEnginePercentageLoad(void);
 bool readMediumValues(void *argument);
 bool readHighValues(void *argument);
+
+void init4051(void);
+void set4051ActivePin(unsigned char pin);
 
 #endif

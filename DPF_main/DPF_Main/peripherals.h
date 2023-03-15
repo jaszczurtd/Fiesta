@@ -5,12 +5,10 @@
 #include <SPI.h>
 #include <mcp_can.h>
 #include <canDefinitions.h>
+#include <tools.h>
 
 #include "logic.h"
 #include "can.h"
-#include "tools.h"
-
-#define ADC_BITS 12
 
 //DPF heater
 #define HEATER 14
@@ -55,7 +53,6 @@ int getDefaultTextHeight(void);
 void show(void);
 void hardwareInit(void);
 bool readPeripherals(void *argument);
-float adcToVolt(int adc, float r1, float r2);
 void clearDisplay(void);
 bool displayScreenFrom(const char *first, ...);
 void clearLines(int from, int to, int mode);

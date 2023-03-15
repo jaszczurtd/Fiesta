@@ -6,10 +6,10 @@
 #include <arduino-timer.h>
 #include <SPI.h>
 #include <mcp_can.h>
+#include <tools.h>
 
 #include "sensors.h"
 #include "graphics.h"
-#include "utils.h"
 #include "config.h"
 #include "rpm.h"
 #include "turbo.h"

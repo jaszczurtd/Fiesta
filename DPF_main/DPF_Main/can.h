@@ -10,11 +10,11 @@
 //Michael Contreras
 #include <arduino-timer.h>
 
+#include <tools.h>
 #include <canDefinitions.h>
 
 #include "peripherals.h"
 #include "logic.h"
-#include "tools.h"
 
 extern float valueFields[];
 
