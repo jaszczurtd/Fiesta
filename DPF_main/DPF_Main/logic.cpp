@@ -18,8 +18,6 @@ void checkAutomaticStartConditions(void);
 
 static bool leftP = false, rightP = false;
 
-static mutex_t _mutex;
-
 void initialization(void) {
     Serial.begin(9600);
 
@@ -34,8 +32,6 @@ void initialization(void) {
     DPF = DPF_IDLE;
     state = newState = STATE_MAIN;
 
-    mutex_init(&_mutex);
-    
     pinMode(LED_BUILTIN, OUTPUT);
 
     watchdog_enable(WATCHDOG_TIME, false);
@@ -58,6 +54,7 @@ void initialization(void) {
     generalTimer.every(25, displayUpdate);
 
     readPeripherals(NULL);
+    canMainLoop(NULL);
     canCheckConnection(NULL);
     displayUpdate(NULL);
 
@@ -105,8 +102,6 @@ void showDPFValues(void) {
 }
 
 void displayOperatingStatus(void) {
-  mutex_enter_blocking(&_mutex);
-  
   char status[32];
   memset(status, 0, sizeof(status));
   snprintf(status, sizeof(status) -1,  "%s / %s", 
@@ -114,8 +109,6 @@ void displayOperatingStatus(void) {
                     (DPF & DPF_INJECT_START) ? "INJECTION" : "DRY");
 
   quickDisplay(0, M_WHOLE, status);
-
-  mutex_exit(&_mutex);
 }
 
 bool displayUpdate(void *argument) {
@@ -242,8 +235,6 @@ void performLogic(void) {
 
   enableHeater(DPF & DPF_HEATING_START);
   enableValves(DPF & DPF_INJECT_START);
-
-  displayOperatingStatus();
 
   leftP = rightP = false;
 }
