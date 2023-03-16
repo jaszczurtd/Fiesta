@@ -8,6 +8,9 @@
 #include <tools.h>
 #include <Timers.h>
 
+#include "api/Common.h"
+#include "CoreMutex.h"
+
 #include "can.h"
 #include "peripherals.h"
 
@@ -51,7 +54,9 @@ void looper1(void);
 //conditions to stop DPF regeneration
 
 #define STOP_DPF_TEMP       550   //temperature
+#define START_DPF_RPM       1500
 #define STOP_DPF_RPM        3500  //engine rpm  
 #define STOP_DPF_PRESSURE   0.5   //bar pressure
+#define START_DPF_PRESSURE  0.85  //bar pressure
 
 #endif

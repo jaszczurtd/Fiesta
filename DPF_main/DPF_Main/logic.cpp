@@ -1,4 +1,3 @@
-#include "api/Common.h"
 #include "logic.h"
 
 Timer generalTimer;
@@ -14,20 +13,28 @@ bool callAtEverySecond(void *argument);
 bool displayUpdate(void *argument);
 void theFlow(void);
 void stopDPF(void);
+void startDPF(void);
+void checkAutomaticStartConditions(void);
 
 static bool leftP = false, rightP = false;
+
+static mutex_t _mutex;
 
 void initialization(void) {
     Serial.begin(9600);
 
+    bool rebooted = false;
     if (watchdog_caused_reboot()) {
-        deb("Rebooted by Watchdog!\n");
+      rebooted = true;
+      deb("Rebooted by Watchdog!\n");
     } else {
-        deb("Clean boot\n");
+      deb("Clean boot\n");
     }
 
     DPF = DPF_IDLE;
     state = newState = STATE_MAIN;
+
+    mutex_init(&_mutex);
     
     pinMode(LED_BUILTIN, OUTPUT);
 
@@ -36,6 +43,10 @@ void initialization(void) {
     displayInit();
     canInit();
     hardwareInit();
+
+    if(rebooted) {
+      stopDPF();
+    }
 
     generalTimer = timer_create_default();
     
@@ -53,25 +64,14 @@ void initialization(void) {
     started0 = true;
 }
 
-void stopDPF(void) {
-  DPF = DPF_IDLE;
-  logicTimer.abort();
-
-  //just to be sure
-  enableHeater(false);
-  enableValves(false);
-
-  newState = STATE_MAIN;
-}
-
-bool isStarted(void) {
+bool isEnvironmentStarted(void) {
   return started0 && started1;
 }
 
 void looper(void) {
     watchdog_update();
 
-    if(!isStarted()) {
+    if(!isEnvironmentStarted()) {
         return;
     }
     generalTimer.tick();
@@ -104,6 +104,20 @@ void showDPFValues(void) {
   }
 }
 
+void displayOperatingStatus(void) {
+  mutex_enter_blocking(&_mutex);
+  
+  char status[32];
+  memset(status, 0, sizeof(status));
+  snprintf(status, sizeof(status) -1,  "%s / %s", 
+                    (DPF & DPF_HEATING_START) ? "HEATING" : "NO_HEATING", 
+                    (DPF & DPF_INJECT_START) ? "INJECTION" : "DRY");
+
+  quickDisplay(0, M_WHOLE, status);
+
+  mutex_exit(&_mutex);
+}
+
 bool displayUpdate(void *argument) {
 
   int hi, lo;
@@ -126,15 +140,8 @@ bool displayUpdate(void *argument) {
 
     case STATE_OPERATING:
       displayOptions("STOP", NULL);
-    
-      char status[32];
-      memset(status, 0, sizeof(status));
-      snprintf(status, sizeof(status) -1,  "%s / %s", 
-                        (DPF & DPF_HEATING_START) ? "HEATING" : "NO_HEATING", 
-                        (DPF & DPF_INJECT_START) ? "INJECTION" : "DRY");
 
-      quickDisplay(0, M_WHOLE, status);
-
+      displayOperatingStatus();
       showDPFValues();
       showECUEngineValues();
       break;
@@ -160,6 +167,23 @@ bool displayUpdate(void *argument) {
   }
 
   return true;
+}
+
+void stopDPF(void) {
+  DPF = DPF_IDLE;
+  logicTimer.abort();
+
+  //just to be sure
+  enableHeater(false);
+  enableValves(false);
+
+  newState = STATE_MAIN;
+}
+
+void startDPF(void) {
+  newState = STATE_OPERATING;
+  logicTimer.begin(theFlow, SECS(HEATER_TIME_BEFORE_INJECT));
+  DPF |= DPF_HEATING_START;
 }
 
 void performLogic(void) {
@@ -201,26 +225,42 @@ void performLogic(void) {
         newState = STATE_MAIN;
       }
       if(rightP) {
-        newState = STATE_OPERATING;
-        logicTimer.begin(theFlow, SECS(HEATER_TIME_BEFORE_INJECT));
-        DPF |= DPF_HEATING_START;
+        startDPF();
       }        
       break;
 
     case STATE_OPERATING:
       if(leftP) {
-        newState = STATE_MAIN;
         stopDPF();        
       }
       break;
   }
 
+  checkAutomaticStartConditions();
+
   logicTimer.tick();
 
   enableHeater(DPF & DPF_HEATING_START);
   enableValves(DPF & DPF_INJECT_START);
-   
+
+  displayOperatingStatus();
+
   leftP = rightP = false;
+}
+
+void checkAutomaticStartConditions(void) {
+  if(state == STATE_OPERATING) {
+    return;    
+  }
+  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+    return;
+  }
+  if(valueFields[F_RPM] < START_DPF_RPM || 
+    valueFields[F_DPF_PRESSURE] < START_DPF_PRESSURE) {
+      return;
+    }
+
+  startDPF();
 }
 
 void theFlow(void) {
@@ -235,6 +275,10 @@ void theFlow(void) {
     
     stopDPF();
     return;
+  }
+
+  if(state != STATE_OPERATING) {
+    return;    
   }
 
   if(DPF & DPF_HEATING_START) {
@@ -263,7 +307,7 @@ void initialization1(void) {
 
 void looper1(void) {
 
-    if(!isStarted()) {
+    if(!isEnvironmentStarted()) {
         return;
     }
 
