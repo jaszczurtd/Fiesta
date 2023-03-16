@@ -6,6 +6,7 @@
 #include <mcp_can.h>
 #include <canDefinitions.h>
 #include <tools.h>
+#include "CoreMutex.h"
 
 #include "logic.h"
 #include "can.h"

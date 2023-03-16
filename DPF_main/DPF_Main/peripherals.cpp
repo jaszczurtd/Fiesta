@@ -12,24 +12,29 @@ const char hello[] PROGMEM = "DPF Module";
 
 float valueFields[F_LAST];
 
+static mutex_t _mutex;
+
 void displayInit(void) {
-    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-        Serial.println(F(displayError));
-        for(;;); 
-    }
-    display.clearDisplay();
-    tx(0, 0, F(hello));
-    textHeight = getTxHeight(F(hello));
-    display.display();
 
-    quickDisplay(1, M_WHOLE, __DATE__);
-    quickDisplay(2, M_WHOLE, __TIME__);
+  mutex_init(&_mutex);
+    
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F(displayError));
+    for(;;); 
+  }
+  display.clearDisplay();
+  tx(0, 0, F(hello));
+  textHeight = getTxHeight(F(hello));
+  display.display();
 
-    unsigned long time = WATCHDOG_TIME - DISPLAY_INIT_MAX_TIME;
-    if(time > DISPLAY_INIT_MAX_TIME) {
-      delay(time);
-    }
-    display.clearDisplay();
+  quickDisplay(1, M_WHOLE, __DATE__);
+  quickDisplay(2, M_WHOLE, __TIME__);
+
+  unsigned long time = WATCHDOG_TIME - DISPLAY_INIT_MAX_TIME;
+  if(time > DISPLAY_INIT_MAX_TIME) {
+    delay(time);
+  }
+  display.clearDisplay();
 }
 
 void clearDisplay(void) {
@@ -64,6 +69,8 @@ int getTxWidth(const __FlashStringHelper *txt) {
 }
 
 void quickDisplay(int line, int mode, const char *format, ...) {
+  mutex_enter_blocking(&_mutex);
+
   va_list valist;
   va_start(valist, format);
 
@@ -105,6 +112,8 @@ void quickDisplay(int line, int mode, const char *format, ...) {
   show();
 
   va_end(valist);
+
+  mutex_exit(&_mutex);
 }
 
 void clearLines(int from, int to, int mode) {
