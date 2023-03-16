@@ -41,8 +41,6 @@ void looper1(void);
 #define FUEL_INJECT_TIME    250
 #define FUEL_INJECT_IDLE    2000
 
-//seconds
-#define HEATER_TIME_BEFORE_INJECT 15
 
 #define DPF_IDLE            1<<0
 #define DPF_HEATING_START   1<<1
@@ -50,7 +48,10 @@ void looper1(void);
 #define DPF_INJECT_START    1<<3
 #define DPF_INJECT_END      1<<4
 
-//conditions to stop DPF regeneration
+//seconds: preheating injector before start injection
+#define HEATER_TIME_BEFORE_INJECT 20
+
+//conditions to start/stop DPF regeneration
 
 #define STOP_DPF_TEMP       600   //temperature
 #define START_DPF_RPM       1500
