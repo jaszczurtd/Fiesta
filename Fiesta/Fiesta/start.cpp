@@ -2,9 +2,13 @@
 #include "start.h"
 
 static unsigned long alertsStartSecond = 0;
-static bool started = false;
+static bool started0 = false, started1 = false;
 
 Timer generalTimer;
+
+bool isEnvironmentStarted(void) {
+  return started0 && started1;
+}
 
 void initialization(void) {
 
@@ -96,6 +100,7 @@ void initialization(void) {
   generalTimer.every(200, updateCANrecipients);
   generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
+  generalTimer.every(DPF_SHOW_TIME_INTERVAL, changeEGT);
 
   canCheckConnection(NULL);
   updateCANrecipients(NULL);
@@ -104,7 +109,7 @@ void initialization(void) {
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
 
-  started = true;
+  started0 = true;
 
   deb("Fiesta MTDDI started\n");
 }
@@ -115,7 +120,7 @@ void drawLowImportanceValues(void) {
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
   showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
   showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
-  showEGTTemperatureAmount((int)valueFields[F_EGT]);
+  showEGTTemperatureAmount();
   showVolts(valueFields[F_VOLTS]);
   showRPMamount((int)valueFields[F_RPM]);
   #endif
@@ -196,6 +201,10 @@ void triggerDrawHighImportanceValue(bool state) {
 void looper(void) {
   watchdog_update();
 
+  if(!isEnvironmentStarted()) {
+    return;
+  }
+
   generalTimer.tick();
 
   //draw changes of high importance values
@@ -203,12 +212,13 @@ void looper(void) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
-
 }
 
 void initialization1(void) {
   initRPMCount();
 
+  started1 = true;
+  
   deb("Second core initialized");
 }
 
@@ -218,7 +228,7 @@ void initialization1(void) {
 
 void looper1(void) {
 
-  if(!started) {
+  if(!isEnvironmentStarted()) {
     return;
   }
 

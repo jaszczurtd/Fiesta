@@ -179,6 +179,10 @@ void startDPF(void) {
   DPF |= DPF_HEATING_START;
 }
 
+bool isDPFOperating(void) {
+  return state == STATE_OPERATING;
+}
+
 void performLogic(void) {
 
   while(!digitalRead(S_LEFT)) {
@@ -268,7 +272,7 @@ void theFlow(void) {
     return;
   }
 
-  if(state != STATE_OPERATING) {
+  if(!isDPFOperating()) {
     return;    
   }
 
