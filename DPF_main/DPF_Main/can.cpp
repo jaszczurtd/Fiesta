@@ -51,7 +51,7 @@ bool callAtHalfSecond(void *argument) {
 
   //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
 
-  byte buf[5];
+  byte buf[CAN_FRAME_MAX_LENGTH];
 
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
@@ -63,6 +63,8 @@ bool callAtHalfSecond(void *argument) {
   floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
   buf[CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_HI] = (byte)hi;
   buf[CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_LO] = (byte)lo;
+
+  buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN] = isDPFOperating();
 
   CAN.sendMsgBuf(CAN_ID_DPF, sizeof(buf), buf);  
 

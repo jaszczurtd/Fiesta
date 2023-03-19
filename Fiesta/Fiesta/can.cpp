@@ -107,6 +107,7 @@ bool canMainLoop(void *argument) {
               valueFields[F_DPF_TEMP] = 
                 ((unsigned short)buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] << 8) | 
                 buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO];            
+              valueFields[F_DPF_REGEN] = buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN];
             }
             break;
 

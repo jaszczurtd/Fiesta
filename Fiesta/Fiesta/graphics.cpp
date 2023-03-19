@@ -444,60 +444,88 @@ const int egt_getBaseY(void) {
     return BIG_ICONS_HEIGHT; 
 }
 
+static bool currentIsDPF = false;
+bool changeEGT(void *argument) {
+  if(isDPFConnected()) {
+    currentIsDPF = !currentIsDPF;
+  } else {
+    currentIsDPF = false;
+  }
+  egt_drawOnce = true;
+
+  return true;
+}
+
 static int lastEGTTempVal = C_INIT_VAL;
 
-void showEGTTemperatureAmount(int currentVal) {
+void showEGTTemperatureAmount(void) {
 
-    if(egt_drawOnce) {
-        drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)egt);
-        egt_drawOnce = false;
+  bool draw = false;
+
+  int currentVal = (int)valueFields[F_EGT];
+  if(currentIsDPF) {
+    currentVal = (int)valueFields[F_DPF_TEMP];
+  }  
+
+  if(egt_drawOnce) {
+    unsigned short *img = (unsigned short*)egt;
+    if(currentIsDPF) {
+      img = (unsigned short*)dpf;
+    }      
+    drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, img);
+    egt_drawOnce = false;
+    draw = true;
+  } 
+  int x, y, w, offset, color = TEXT_COLOR;
+
+  if(currentVal < TEMP_EGT_MIN) {
+    currentVal = TEMP_EGT_MIN - 1;
+  }
+
+  if(lastEGTTempVal != currentVal) {
+    lastEGTTempVal = currentVal;
+    draw = true;
+  }
+
+  bool overheat = false;
+  if(currentVal > TEMP_EGT_OK_HI) {
+    overheat = true;
+  }
+
+  if(overheat) {
+    draw = true;
+    color = (alertSwitch()) ? ST7735_RED : TEXT_COLOR;
+  }
+
+  if(draw) {
+    tft.setFont();
+    tft.setTextSize(1);
+    tft.setTextColor(color);
+
+    if(currentVal < TEMP_EGT_MIN) {
+      w = prepareText((const char*)F("COLD"));
     } else {
-        int x, y, w, offset, color = TEXT_COLOR;
-
-        if(currentVal < TEMP_EGT_MIN) {
-            currentVal = TEMP_EGT_MIN - 1;
+      const char *format = (const char*)F("%d");
+      if(currentIsDPF) {
+        if(valueFields[F_DPF_REGEN] > 0) {
+          format = (const char*)F("R/%d");          
         }
-
-        bool draw = false;
-        if(lastEGTTempVal != currentVal) {
-            lastEGTTempVal = currentVal;
-            draw = true;
-        }
-
-        bool overheat = false;
-        if(currentVal > TEMP_EGT_OK_HI) {
-            overheat = true;
-        }
-
-        if(overheat) {
-            draw = true;
-            color = (alertSwitch()) ? ST7735_RED : TEXT_COLOR;
-        }
-
-        if(draw) {
-            tft.setFont();
-            tft.setTextSize(1);
-            tft.setTextColor(color);
-
-            if(currentVal < TEMP_EGT_MIN) {
-                w = prepareText((const char*)F("COLD"));
-            } else {
-                w = prepareText((const char*)F("%d"), currentVal);
-            }
-
-            x = egt_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
-            y = egt_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(egt_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(displayTxt);
-
-            if(currentVal > TEMP_EGT_MIN) {
-                tft.drawCircle(x + w + 2, y, 2, color);
-            }
-        }
+      } 
+      w = prepareText(format, currentVal);
     }
+
+    x = egt_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
+    y = egt_getBaseY() + 30;
+    
+    offset = 2;
+    tft.fillRect(egt_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
+    tft.setCursor(x, y);
+    tft.println(displayTxt);
+
+    if(currentVal > TEMP_EGT_MIN) {
+        tft.drawCircle(x + w + 2, y, 2, color);
+    }
+  }
 }
 
 //-------------------------------------------------------------------------------------------------

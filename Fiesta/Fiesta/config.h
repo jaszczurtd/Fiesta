@@ -89,4 +89,7 @@
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM
 #define RESET_RPM_WATCHDOG_TIME 2000
 
+//time of display: EGT/DPF (if available)
+#define DPF_SHOW_TIME_INTERVAL 5000
+
 #endif

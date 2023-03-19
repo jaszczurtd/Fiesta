@@ -27,6 +27,7 @@ void initialization(void);
 void looper(void);
 void initialization1(void);
 void looper1(void);
+bool isDPFOperating(void);
 
 #define STATE_MAIN                0
 #define STATE_ASK                 1
