@@ -90,13 +90,13 @@ void initialization(void) {
 
   generalTimer = timer_create_default();
 
-  int time = 500;
+  int time = 1000;
 
   generalTimer.every(time, callAtEverySecond);
-  generalTimer.every(time / 3, callAtEveryHalfSecond);
+  generalTimer.every(time / 2, callAtEveryHalfSecond);
   generalTimer.every(time / 4, callAtEveryHalfHalfSecond);
-  generalTimer.every(time / 6, readMediumValues);
-  generalTimer.every(time / 8, readHighValues);
+  generalTimer.every(time / 12, readMediumValues);
+  generalTimer.every(time / 16, readHighValues);
   generalTimer.every(200, updateCANrecipients);
   generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
@@ -117,10 +117,7 @@ void initialization(void) {
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
-  showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
   showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
-  showEGTTemperatureAmount();
   showVolts(valueFields[F_VOLTS]);
   showRPMamount((int)valueFields[F_RPM]);
   #endif
@@ -134,7 +131,9 @@ void drawHighImportanceValues(void) {
 
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  //
+  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
+  showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
+  showEGTTemperatureAmount();
   #endif
 }
 
@@ -240,6 +239,7 @@ void looper1(void) {
   turboMainLoop();
   stabilizeRPM();
 
+  delay(1);  
 }
 
 #ifdef DEBUG_SCREEN

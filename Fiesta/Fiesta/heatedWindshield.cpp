@@ -66,7 +66,7 @@ void heatedWindowMainLoop(void) {
       } else {
 
         if(volts < MINIMUM_VOLTS_AMOUNT) {
-          deb("voltage too low to enable windshield");
+          deb("voltage too low to enable heated windshield");
           return;
         }
 

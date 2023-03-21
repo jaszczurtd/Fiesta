@@ -25,12 +25,14 @@ float readFuel(void) {
     set4051ActivePin(4);
 
     int result = getAverageValueFrom(A1);
-    #ifdef DEBUG
-    deb("tank raw value: %d", result);
-    #endif
+    int r = result;
 
     result -= FUEL_MAX;
     result = abs(result - (FUEL_MIN - FUEL_MAX));
+
+    #ifdef DEBUG
+    deb("tank raw value: %d result: %d", r, result);
+    #endif
 
     measuredValues[measuedValuesIndex] = result;
     measuedValuesIndex++;
@@ -61,7 +63,7 @@ float readFuel(void) {
         }
         average /= i;
 
-        deb("num fuel samples: %d average val: %ld next measurement time: %ds measurements so far:%ld", i, average, fuelMeasurementTime, ++measurements);
+        deb("raw:%d num fuel samples: %d average val: %ld next probe time: %ds probes so far:%ld", result, i, average, fuelMeasurementTime, ++measurements);
 
         lastResult = average;
     }

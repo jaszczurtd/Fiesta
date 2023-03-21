@@ -40,7 +40,7 @@ bool isDPFOperating(void);
 
 //miliseconds
 #define FUEL_INJECT_TIME    250
-#define FUEL_INJECT_IDLE    2000
+#define FUEL_INJECT_IDLE    4000
 
 
 #define DPF_IDLE            1<<0
@@ -50,7 +50,7 @@ bool isDPFOperating(void);
 #define DPF_INJECT_END      1<<4
 
 //seconds: preheating injector before start injection
-#define HEATER_TIME_BEFORE_INJECT 20
+#define HEATER_TIME_BEFORE_INJECT 22
 
 //conditions to start/stop DPF regeneration
 
