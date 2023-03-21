@@ -33,7 +33,7 @@ void turboMainLoop(void) {
     RPM_index = RPM_PRESCALERS - 1;    
   }
 
-  int pressurePercentage = 0;
+  int pressurePercentage = IDLE_BOOST_PERCENTAGE_SET;
 
   for (int i = 0; i < N75_PERCENT_VALS; i++) {
     if (posThrottle == i + 1) {
@@ -43,7 +43,7 @@ void turboMainLoop(void) {
   }
 
   if (!pedalPressed) {
-    pressurePercentage = 0;
+    pressurePercentage = IDLE_BOOST_PERCENTAGE_SET;
   }
 
   int n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
