@@ -176,11 +176,16 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 
         bool overheat = false;
         color = TEMP_INITIAL_COLOR;
-        if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
+        if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OK_HI) {
             color = ST77XX_ORANGE;
         } 
-        if(currentVal > TEMP_OIL_OK_HI) {
+        if(currentVal > TEMP_OK_HI) {
             overheat = true;
+        }
+
+        bool blink = alertSwitch();
+        if(currentVal > TEMP_OK_HI + ((TEMP_MAX - TEMP_OK_HI) / 2)) {
+          blink = seriousAlertSwitch();
         }
 
         currentVal -= TEMP_MIN;
@@ -201,7 +206,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 
         if(overheat) {
             draw = true;
-            color = (alertSwitch()) ? ST7735_RED : ST77XX_ORANGE;
+            color = (blink) ? ST7735_RED : ST77XX_ORANGE;
         }
 
         if(draw) {
@@ -268,6 +273,11 @@ void showOilAmount(int currentVal, int maxVal) {
             overheat = true;
         }
 
+        bool blink = alertSwitch();
+        if(currentVal > TEMP_OIL_OK_HI + ((TEMP_OIL_MAX - TEMP_OIL_OK_HI) / 2)) {
+          blink = seriousAlertSwitch();
+        }
+
         currentVal -= TEMP_MIN;
         maxVal -= TEMP_MIN;
         if(currentVal < 0) {
@@ -286,7 +296,7 @@ void showOilAmount(int currentVal, int maxVal) {
 
         if(overheat) {
             draw = true;
-            color = (alertSwitch()) ? ST7735_RED : ST77XX_ORANGE;
+            color = (blink) ? ST7735_RED : ST77XX_ORANGE;
         }
 
         if(draw) {
@@ -494,7 +504,7 @@ void showEGTTemperatureAmount(void) {
 
   if(overheat) {
     draw = true;
-    color = (alertSwitch()) ? ST7735_RED : TEXT_COLOR;
+    color = (seriousAlertSwitch()) ? ST7735_RED : TEXT_COLOR;
   }
 
   if(draw) {

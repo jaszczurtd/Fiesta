@@ -26,13 +26,18 @@
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
+//minimum temp value for oil and coolant
+#define TEMP_MIN 45
+
+//minimum working temp value for oil and coolant
+#define TEMP_OK_LO 70
+
+//oil temp values
 #define TEMP_OIL_MAX 140
 #define TEMP_OIL_OK_HI 115
 
+//coolant temp values
 #define TEMP_MAX 125
-#define TEMP_MIN 45
-
-#define TEMP_OK_LO 70
 #define TEMP_OK_HI 105
 
 #define TEMP_LOWEST -100
@@ -91,5 +96,8 @@
 
 //time of display: EGT/DPF (if available)
 #define DPF_SHOW_TIME_INTERVAL 5000
+
+//max BAR turbo pressure
+#define MAX_BOOST_PRESSURE 2.0
 
 #endif
