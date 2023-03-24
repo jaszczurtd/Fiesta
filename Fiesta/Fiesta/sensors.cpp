@@ -206,4 +206,7 @@ void set4051ActivePin(unsigned char pin) {
     digitalWrite(C_4051, (pin & 0x04) > 0); 
 }
 
+bool isDPFRegenerating(void) {
+  return valueFields[F_DPF_REGEN] > 0;
+}
 

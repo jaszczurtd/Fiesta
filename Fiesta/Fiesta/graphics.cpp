@@ -519,7 +519,7 @@ void showEGTTemperatureAmount(void) {
     } else {
       const char *format = (const char*)F("%d");
       if(currentIsDPF) {
-        if(valueFields[F_DPF_REGEN] > 0) {
+        if(isDPFRegenerating()) {
           format = (const char*)F("R/%d");          
         }
       } 

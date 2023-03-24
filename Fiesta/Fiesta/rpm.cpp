@@ -2,6 +2,9 @@
 
 Timer rpmTimer;
 
+#define MS_IN_MINUTE 60000.0
+#define CRANK_REVOLUTIONS 32.0
+
 static volatile unsigned long previousMillis = 0;
 static volatile unsigned long shortPulse = 0;
 static volatile unsigned long lastPulse = 0;
@@ -31,18 +34,17 @@ void countRPM(void) {
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
 
-    int RPM = int((RPMpulses * (60000.0 / float(RPM_REFRESH_INTERVAL))) / 32.0) - RPM_CORRECTION_VAL; 
+    int RPM = int((RPMpulses * (MS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
     if(RPM < 0) {
       RPM = 0;
     }
     RPMpulses = 0; 
 
-    RPM = min(99999, RPM);
+    RPM = min(RPM_MAX_EVER, RPM);
     RPM = ((RPM / 10) * 10);
 
     valueFields[F_RPM] = RPM; 
   }  
-
 }
 
 void initRPMCount(void) {
@@ -89,6 +91,10 @@ void stabilizeRPM(void) {
     desiredRPM = COLD_RPM_VALUE;
   } else {
     desiredRPM = NOMINAL_RPM_VALUE;
+  }
+
+  if(isDPFRegenerating()) {
+    desiredRPM = REGEN_RPM_VALUE;
   }
 
   int rpm = (int)valueFields[F_RPM];
