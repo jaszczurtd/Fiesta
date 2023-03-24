@@ -49,6 +49,7 @@
 #define TEMP_HEATING_GLOW_PLUGS_MULTIPLIER 1.5
 
 #define TEMP_EGT_OK_HI 750
+#define TEMP_EGT_MAX 1600
 #define TEMP_EGT_MIN 100
 
 //temperature when fan should start
