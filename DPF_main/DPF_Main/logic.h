@@ -65,7 +65,7 @@ bool isDPFOperating(void);
 
 #define STOP_DPF_TEMP       600   //temperature
 #define START_DPF_RPM       1500
-#define STOP_DPF_RPM        3500  //engine rpm  
+#define STOP_DPF_RPM        3000  //engine rpm  
 #define STOP_DPF_PRESSURE   0.5   //bar pressure
 #define START_DPF_PRESSURE  0.85  //bar pressure
 
