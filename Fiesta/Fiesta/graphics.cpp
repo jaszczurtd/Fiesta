@@ -514,6 +514,8 @@ void showEGTTemperatureAmount(void) {
 
     if(currentVal < TEMP_EGT_MIN) {
       w = prepareText((const char*)F("COLD"));
+    } else if(currentVal > TEMP_EGT_MAX) {
+      w = prepareText((const char*)err);  
     } else {
       const char *format = (const char*)F("%d");
       if(currentIsDPF) {
@@ -532,7 +534,8 @@ void showEGTTemperatureAmount(void) {
     tft.setCursor(x, y);
     tft.println(displayTxt);
 
-    if(currentVal > TEMP_EGT_MIN) {
+    if(currentVal > TEMP_EGT_MIN &&
+      currentVal < TEMP_EGT_MAX) {
         tft.drawCircle(x + w + 2, y, 2, color);
     }
   }
