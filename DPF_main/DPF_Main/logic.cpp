@@ -147,9 +147,14 @@ bool displayUpdate(void *argument) {
       showECUEngineValues();
       break;
 
-    case STATE_QUESTION:     
+    case STATE_QUESTION:
       displayScreenFrom("Are you sure you", "want to start the", "procedure?", NULL);
       displayOptions("NO", "YES");
+      break;
+
+    case STATE_QUESTION_REALLY:
+      displayScreenFrom("Are you REALLY sure", "you want to start the", "procedure?", NULL);
+      displayOptions("YES", "NO");
       break;
  
     case STATE_ERROR_NOT_CONNECTED:
@@ -257,10 +262,28 @@ void performLogic(void) {
         newState = STATE_MAIN;
       }
       if(rightP) {
-        startDPF(DPF_MODE_START_NORMAL);
+        newState = STATE_QUESTION_REALLY;
       }        
       break;
 
+    case STATE_QUESTION_REALLY:
+      if(leftP) {
+        if(isEcuConnected()) {
+          if(valueFields[F_RPM] < MINIMUM_RPM ||
+            valueFields[F_VOLTS] < MINIMUM_VOLTS_TO_OPERATE) {
+              newState = STATE_ERROR_NO_CONDITIONS;
+            } else {
+              startDPF(DPF_MODE_START_NORMAL);
+            }          
+        } else {
+          newState = STATE_ERROR_NOT_CONNECTED;
+        }
+      }
+      if(rightP) {
+        newState = STATE_MAIN;
+      }
+      break;
+      
     case STATE_OPERATING:
       if(leftP) {
         stopDPF();        
@@ -352,14 +375,14 @@ void theColdFlow(void) {
 
 void theNormalFlow(void) {
 
-  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+  int temp = int(valueFields[F_DPF_TEMP]);
+  if(temp > MAX_DPF_TEMP || temp >= STOP_DPF_TEMP) {
     stopDPF();
     return;
   }
 
   if(valueFields[F_RPM] > STOP_DPF_RPM &&
     valueFields[F_DPF_PRESSURE] < STOP_DPF_PRESSURE) {
-    
     stopDPF();
     return;
   }
@@ -376,7 +399,8 @@ void checkAutomaticStartConditions(void) {
   if(state == STATE_OPERATING) {
     return;    
   }
-  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+  int temp = int(valueFields[F_DPF_TEMP]);
+  if(temp > MAX_DPF_TEMP || temp >= STOP_DPF_TEMP) {
     return;
   }
   if(valueFields[F_RPM] < START_DPF_RPM || 

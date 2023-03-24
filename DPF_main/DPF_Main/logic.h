@@ -37,9 +37,10 @@ bool isDPFOperating(void);
 #define STATE_OPERATE             2
 #define STATE_ERROR               3
 #define STATE_QUESTION            4
-#define STATE_ERROR_NOT_CONNECTED 5
-#define STATE_ERROR_NO_CONDITIONS 6
-#define STATE_OPERATING           7
+#define STATE_QUESTION_REALLY     5
+#define STATE_ERROR_NOT_CONNECTED 6
+#define STATE_ERROR_NO_CONDITIONS 7
+#define STATE_OPERATING           8
 
 //miliseconds
 #define FUEL_INJECT_TIME    250
