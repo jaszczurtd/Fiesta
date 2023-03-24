@@ -86,8 +86,14 @@
 
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 150
+
+//maximum RPM for engine
+#define RPM_MAX_EVER 7000
+
 #define NOMINAL_RPM_VALUE 880
 #define COLD_RPM_VALUE 1000
+#define REGEN_RPM_VALUE 1100
+
 #define MAX_RPM_PERCENT_VALUE 100
 #define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM

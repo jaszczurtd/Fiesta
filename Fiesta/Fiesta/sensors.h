@@ -48,4 +48,5 @@ bool readHighValues(void *argument);
 void init4051(void);
 void set4051ActivePin(unsigned char pin);
 
+bool isDPFRegenerating(void);
 #endif
