@@ -239,10 +239,12 @@ bool readPeripherals(void *argument) {
   }
   valueFields[F_DPF_PRESSURE] = (((float)pressureRAW) / 3500.0f);
 
+#ifdef DEBUG
   deb("raw presssure: %d (%f) raw termo: %d (%f) v:%d (%f)\n", 
     pressureRAW, valueFields[F_DPF_PRESSURE], 
     thermoRAW, valueFields[F_DPF_TEMP], 
     voltsRAW, valueFields[F_VOLTS]);
+#endif
 
   return true;
 }

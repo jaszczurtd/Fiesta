@@ -13,6 +13,8 @@
 #include "can.h"
 #include "peripherals.h"
 
+#define COLD_START_SUPPORTED
+
 #define WATCHDOG_TIME 3000
 #define DISPLAY_INIT_MAX_TIME 500
 
@@ -20,6 +22,7 @@
 #define MINIMUM_VOLTS 6.0
 #define MINIMUM_RPM 700
 #define MAX_DPF_TEMP 1100
+#define MIN_DPF_TEMP 350
 
 extern float valueFields[];
 
@@ -42,15 +45,20 @@ bool isDPFOperating(void);
 #define FUEL_INJECT_TIME    250
 #define FUEL_INJECT_IDLE    4000
 
+#define DPF_MODE_START_NONE   0
+#define DPF_MODE_START_COLD   1
+#define DPF_MODE_START_NORMAL 2
 
-#define DPF_IDLE            1<<0
-#define DPF_HEATING_START   1<<1
-#define DPF_HEATING_END     1<<2
-#define DPF_INJECT_START    1<<3
-#define DPF_INJECT_END      1<<4
+#define DPF_OPERATION_IDLE            1<<0
+#define DPF_OPERATION_HEATING_START   1<<1
+#define DPF_OPERATION_HEATING_END     1<<2
+#define DPF_OPERATION_INJECT_START    1<<3
+#define DPF_OPERATION_INJECT_END      1<<4
 
 //seconds: preheating injector before start injection
 #define HEATER_TIME_BEFORE_INJECT 22
+
+#define COLD_INJECTIONS_AMOUNT 4
 
 //conditions to start/stop DPF regeneration
 
