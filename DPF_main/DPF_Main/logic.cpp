@@ -227,11 +227,11 @@ void performLogic(void) {
 
   while(!digitalRead(S_LEFT)) {
     leftP = true;
-    delay(5);
+    delay(KEY_DEBOUNCE_T);
   }
   while(!digitalRead(S_RIGHT)) {
     rightP = true;
-    delay(5);
+    delay(KEY_DEBOUNCE_T);
   }
 
   switch(state) {
@@ -396,7 +396,7 @@ void theNormalFlow(void) {
 //---------------- automatic start ---------------------------
 
 void checkAutomaticStartConditions(void) {
-  if(state == STATE_OPERATING) {
+  if(isDPFOperating()) {
     return;    
   }
   int temp = int(valueFields[F_DPF_TEMP]);
