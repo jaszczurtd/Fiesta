@@ -48,8 +48,6 @@
 //when the glow plugs are heating the cylinders
 #define TEMP_HEATING_GLOW_PLUGS_MULTIPLIER 1.5
 
-#define TEMP_COLD_ENGINE 45
-
 #define TEMP_EGT_OK_HI 750
 #define TEMP_EGT_MIN 100
 
@@ -72,9 +70,11 @@
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
 
+//values from ADC
 #define THROTTLE_MIN 1800
 #define THROTTLE_MAX 3800
 
+//values from ADC
 #define FUEL_MAX 388
 #define FUEL_MIN 1660
 
@@ -83,8 +83,6 @@
 #define DIVIDER_PRESSURE_BAR 912
 #define DIVIDER_EGT 2.308
 
-//minimum RPM for dependencies to operate on
-#define RPM_MIN 350//main engine RPM value
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 150
 #define NOMINAL_RPM_VALUE 880

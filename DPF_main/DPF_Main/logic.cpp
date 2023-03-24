@@ -4,16 +4,23 @@ Timer generalTimer;
 Timers logicTimer;
 
 static bool started0 = false, started1 = false;
-static int state = STATE_MAIN;
-static int newState = STATE_MAIN;
-static int DPF = DPF_IDLE;
+
+static int volatile state = STATE_MAIN;
+static int volatile newState = STATE_MAIN;
+static int volatile DPFOperation = DPF_OPERATION_IDLE;
+static int volatile startMode = DPF_MODE_START_NONE;
+
 static bool ivert = false;
+static bool firstColdStart = false;
+static int coldInjectionsCounter = 0;
 
 bool callAtEverySecond(void *argument);
 bool displayUpdate(void *argument);
-void theFlow(void);
+void theNormalFlow(void);
+void theColdFlow(void);
 void stopDPF(void);
-void startDPF(void);
+void startDPF(int mode);
+bool checkFirstColdStartConditions(void *argument);
 void checkAutomaticStartConditions(void);
 
 static bool leftP = false, rightP = false;
@@ -28,9 +35,6 @@ void initialization(void) {
     } else {
       deb("Clean boot\n");
     }
-
-    DPF = DPF_IDLE;
-    state = newState = STATE_MAIN;
 
     pinMode(LED_BUILTIN, OUTPUT);
 
@@ -47,10 +51,13 @@ void initialization(void) {
     generalTimer = timer_create_default();
     
     generalTimer.every(500, callAtHalfSecond);
-    generalTimer.every(1000, callAtEverySecond);
+    generalTimer.every(SECS(1), callAtEverySecond);
     generalTimer.every(400, readPeripherals);
     generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);  
     generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
+#ifdef COLD_START_SUPPORTED    
+    generalTimer.in(SECS(CAN_CHECK_COLD_START_CONDITIONS), checkFirstColdStartConditions);
+#endif
     generalTimer.every(25, displayUpdate);
 
     readPeripherals(NULL);
@@ -104,9 +111,10 @@ void showDPFValues(void) {
 void displayOperatingStatus(void) {
   char status[32];
   memset(status, 0, sizeof(status));
-  snprintf(status, sizeof(status) -1,  "%s / %s", 
-                    (DPF & DPF_HEATING_START) ? "HEATING" : "NO_HEATING", 
-                    (DPF & DPF_INJECT_START) ? "INJECTION" : "DRY");
+  snprintf(status, sizeof(status) -1,  "M:%d %s / %s",
+                    startMode,
+                    (DPFOperation & DPF_OPERATION_HEATING_START) ? "HEATING" : "NO_HEATING",
+                    (DPFOperation & DPF_OPERATION_INJECT_START) ? "INJECTION" : "DRY");
 
   quickDisplay(0, M_WHOLE, status);
 }
@@ -163,20 +171,47 @@ bool displayUpdate(void *argument) {
 }
 
 void stopDPF(void) {
-  DPF = DPF_IDLE;
+  DPFOperation = DPF_OPERATION_IDLE;
   logicTimer.abort();
 
-  //just to be sure
+  //just to be sure that heater and valves are OFF
   enableHeater(false);
   enableValves(false);
 
   newState = STATE_MAIN;
+  startMode = DPF_MODE_START_NONE;
 }
 
-void startDPF(void) {
-  newState = STATE_OPERATING;
-  logicTimer.begin(theFlow, SECS(HEATER_TIME_BEFORE_INJECT));
-  DPF |= DPF_HEATING_START;
+void startDPF(int mode) {
+
+  deb("start DPF with mode: %d", mode);
+
+  startMode = mode;
+  switch(startMode) {
+
+#ifdef COLD_START_SUPPORTED    
+    case DPF_MODE_START_COLD:
+      newState = STATE_OPERATING;
+      logicTimer.begin(theColdFlow, SECS(HEATER_TIME_BEFORE_INJECT));
+      DPFOperation |= DPF_OPERATION_HEATING_START;
+      break;
+#endif
+
+    case DPF_MODE_START_NORMAL:
+      firstColdStart = true;
+      newState = STATE_OPERATING;
+      logicTimer.begin(theNormalFlow, SECS(HEATER_TIME_BEFORE_INJECT));
+      DPFOperation |= DPF_OPERATION_HEATING_START;
+      break;
+
+    case DPF_MODE_START_NONE:
+      stopDPF();
+      break;
+
+    default:
+      deb("unknown start mode");
+      break;
+  }
 }
 
 bool isDPFOperating(void) {
@@ -222,7 +257,7 @@ void performLogic(void) {
         newState = STATE_MAIN;
       }
       if(rightP) {
-        startDPF();
+        startDPF(DPF_MODE_START_NORMAL);
       }        
       break;
 
@@ -237,28 +272,85 @@ void performLogic(void) {
 
   logicTimer.tick();
 
-  enableHeater(DPF & DPF_HEATING_START);
-  enableValves(DPF & DPF_INJECT_START);
+  enableHeater(DPFOperation & DPF_OPERATION_HEATING_START);
+  enableValves(DPFOperation & DPF_OPERATION_INJECT_START);
 
   leftP = rightP = false;
 }
 
-void checkAutomaticStartConditions(void) {
-  if(state == STATE_OPERATING) {
-    return;    
-  }
-  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
-    return;
-  }
-  if(valueFields[F_RPM] < START_DPF_RPM || 
-    valueFields[F_DPF_PRESSURE] < START_DPF_PRESSURE) {
-      return;
+void manageDPFOperation(void) {
+  if(DPFOperation & DPF_OPERATION_HEATING_START) {
+    DPFOperation ^= DPF_OPERATION_INJECT_START;
+
+    uint32_t time;  
+    if(DPFOperation & DPF_OPERATION_INJECT_START) {
+      time = FUEL_INJECT_TIME;
+    } else {
+      time = FUEL_INJECT_IDLE;
     }
 
-  startDPF();
+    logicTimer.time(time);
+  }
 }
 
-void theFlow(void) {
+//---------------- for cold start mode -------------------
+bool coldStartConditionsStillExists(void) {
+  if(int(valueFields[F_COOLANT_TEMP]) <= TEMP_COLD_ENGINE &&
+    valueFields[F_RPM] > RPM_MIN &&
+    valueFields[F_DPF_TEMP] < MIN_DPF_TEMP) {
+      return true;
+  }
+  return false;
+}
+
+bool checkFirstColdStartConditions(void *argument) {
+  deb("check for cold start conditions");
+  
+  if(!firstColdStart) {
+    if(state == STATE_OPERATING) {
+      return false;
+    }
+    if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+      return false;
+    }
+    if(!isEcuConnected()) {
+      return false;
+    }
+    deb("initial conditions have been met");
+
+    if(coldStartConditionsStillExists()) {
+      startDPF(DPF_MODE_START_COLD);
+    } else {
+      deb("cold start conditions not met");
+    }
+    firstColdStart = true;
+  }
+
+  return false;
+}
+
+void theColdFlow(void) {
+  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+    stopDPF();
+    return;
+  }
+
+  if(!isDPFOperating()) {
+    return;    
+  }
+
+  if(coldInjectionsCounter >= (COLD_INJECTIONS_AMOUNT * 2)) {
+    stopDPF();
+    return;
+  }
+
+  coldInjectionsCounter++;
+  manageDPFOperation();  
+}
+
+//---------------- for normal start mode ---------------------
+
+void theNormalFlow(void) {
 
   if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
     stopDPF();
@@ -275,19 +367,24 @@ void theFlow(void) {
   if(!isDPFOperating()) {
     return;    
   }
+  manageDPFOperation();
+}
 
-  if(DPF & DPF_HEATING_START) {
-    DPF = DPF ^ DPF_INJECT_START;
+//---------------- automatic start ---------------------------
 
-    uint32_t time;  
-    if(DPF & DPF_INJECT_START) {
-      time = FUEL_INJECT_TIME;
-    } else {
-      time = FUEL_INJECT_IDLE;
+void checkAutomaticStartConditions(void) {
+  if(state == STATE_OPERATING) {
+    return;    
+  }
+  if(valueFields[F_DPF_TEMP] >= STOP_DPF_TEMP) {
+    return;
+  }
+  if(valueFields[F_RPM] < START_DPF_RPM || 
+    valueFields[F_DPF_PRESSURE] < START_DPF_PRESSURE) {
+      return;
     }
 
-    logicTimer.time(time);
-  }
+  startDPF(DPF_MODE_START_NORMAL);
 }
 
 bool callAtEverySecond(void *argument) {
