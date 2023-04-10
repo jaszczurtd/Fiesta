@@ -12,8 +12,8 @@
 12	heater hi
 13	heater lo
 14	EGT
-15
-16
+15	OBD-2 (L)
+16	OBD-2 (H) 
 17	heated window
 18
 19	heated window
@@ -33,13 +33,13 @@
 32	"H" window button
 33	nc
 34	vp37 injection angle
-35	EGR
+35	injection (injector)
 36	nc
 37	nc
 38	nc
 39	vp37 ignition
 40	nc
-41	misc 2
+41	4051 4th pin (ADC) 
 42	turbo
 43	nc
 44	nc
