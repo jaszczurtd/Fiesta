@@ -25,12 +25,15 @@ extern float valueFields[];
 #define PIO_VP37_RPM 9
 #define PIO_VP37_ANGLE 5
 
+#define PIO_DPF_LAMP 8
+
 //cpu pio numbers
 #define A_4051 11
 #define B_4051 12
 #define C_4051 13
 
 void initSensors(void);
+void initBasicPIO(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);

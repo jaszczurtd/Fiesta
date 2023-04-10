@@ -35,7 +35,7 @@ void initialization(void) {
   Wire.setSCL(1);
   Wire.begin();
  
-  pinMode(LED_BUILTIN, OUTPUT);
+  initBasicPIO();
 
   #ifdef I2C_SCANNER
   i2cScanner();
@@ -159,7 +159,6 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-
 bool callAtEverySecond(void *argument) {
   alertBlink = (alertBlink) ? false : true;
   digitalWrite(LED_BUILTIN, alertBlink);
@@ -179,6 +178,8 @@ bool callAtEveryHalfSecond(void *argument) {
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
+
+  digitalWrite(PIO_DPF_LAMP, !isDPFRegenerating());
 
   return true; 
 }
@@ -211,6 +212,7 @@ void looper(void) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
+
 }
 
 void initialization1(void) {
