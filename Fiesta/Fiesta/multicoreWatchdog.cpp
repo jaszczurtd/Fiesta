@@ -35,6 +35,10 @@ void triggerSystemReset(void) {
 
 bool watchdogHandle(void *argument) {
 
+  if(externalReset) {
+    return true;
+  }
+
   core0.store(false);
   core1.store(false);
   
