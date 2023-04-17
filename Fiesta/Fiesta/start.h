@@ -20,6 +20,7 @@
 #include "engineFuel.h"
 #include "can.h"
 #include "multicoreWatchdog.h"
+#include "obd-2.h"
 
 void drawMediumImportanceValues(void);
 void drawHighImportanceValues(void);

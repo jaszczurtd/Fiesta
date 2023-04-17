@@ -7,9 +7,13 @@ static unsigned long watchdogCore0_b = 0, watchdogCore1_b = 0;
 static std::atomic<bool> core0(false), core1(false);
 static std::atomic<bool> started_a(false), started_b(false);
 
+static bool externalReset = false;
+
 bool watchdogHandle(void *argument);
 
 void setupWatchdog(Timer<> *timer) {
+
+  externalReset = false;
 
   timer->every(WATCHDOG_TIMER_TIME, watchdogHandle);
 
@@ -23,6 +27,10 @@ void setupWatchdog(Timer<> *timer) {
   }
 
   watchdog_enable(WATCHDOG_TIME, false);
+}
+
+void triggerSystemReset(void) {
+  externalReset = true;
 }
 
 bool watchdogHandle(void *argument) {
