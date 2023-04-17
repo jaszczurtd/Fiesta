@@ -19,6 +19,7 @@
 #include "glowPlugs.h"
 #include "engineFuel.h"
 #include "can.h"
+#include "multicoreWatchdog.h"
 
 void drawMediumImportanceValues(void);
 void drawHighImportanceValues(void);
