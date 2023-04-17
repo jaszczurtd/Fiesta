@@ -82,6 +82,7 @@ void initialization(void) {
   tft.fillScreen(ST7735_BLACK);
 
   canInit();
+  obdInit();
 
   #ifdef DEBUG_SCREEN
   debugFunc();
@@ -212,6 +213,8 @@ void looper(void) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
+
+  obdLoop();
 
   delay(CORE_OPERATION_DELAY);  
 }

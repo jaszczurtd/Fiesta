@@ -19,4 +19,6 @@ void setStartedCore0(void);
 void setStartedCore1(void);
 bool isEnvironmentStarted(void);
 
+void triggerSystemReset(void);
+
 #endif
