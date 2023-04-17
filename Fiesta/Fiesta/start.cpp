@@ -2,26 +2,39 @@
 #include "start.h"
 
 static unsigned long alertsStartSecond = 0;
-static bool started0 = false, started1 = false;
 
 Timer generalTimer;
 
-bool isEnvironmentStarted(void) {
-  return started0 && started1;
+void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
+  generalTimer.every(time, function);
+  watchdog_update();
+  delay(ut);
+  watchdog_update();
+}
+
+void setupTimers(void) {
+  generalTimer = timer_create_default();
+
+  int time = 1000;
+
+  setupTimerWith(UNSYNCHRONIZE_TIME, WATCHDOG_TIMER_TIME, watchdogHandle);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / 12, readMediumValues);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / 16, readHighValues);
+  setupTimerWith(UNSYNCHRONIZE_TIME, 200, updateCANrecipients);
+  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
+  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
+  setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
 }
 
 void initialization(void) {
 
   Serial.begin(9600);
  
-  if (watchdog_caused_reboot()) {
-      deb("Rebooted by Watchdog!\n");
-  } else {
-      deb("Clean boot\n");
-  }
+  setupWatchdog();  
 
-  watchdog_enable(WATCHDOG_TIME, false);
-  
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
   Wire.setSDA(0);
   Wire.setSCL(1);
@@ -88,19 +101,7 @@ void initialization(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  generalTimer = timer_create_default();
-
-  int time = 1000;
-
-  generalTimer.every(time, callAtEverySecond);
-  generalTimer.every(time / 2, callAtEveryHalfSecond);
-  generalTimer.every(time / 4, callAtEveryHalfHalfSecond);
-  generalTimer.every(time / 12, readMediumValues);
-  generalTimer.every(time / 16, readHighValues);
-  generalTimer.every(200, updateCANrecipients);
-  generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
-  generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
-  generalTimer.every(DPF_SHOW_TIME_INTERVAL, changeEGT);
+  setupTimers();
 
   canCheckConnection(NULL);
   updateCANrecipients(NULL);
@@ -109,7 +110,7 @@ void initialization(void) {
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
 
-  started0 = true;
+  setStartedCore0();
 
   deb("Fiesta MTDDI started\n");
 }
@@ -198,7 +199,7 @@ void triggerDrawHighImportanceValue(bool state) {
 }
 
 void looper(void) {
-  watchdog_update();
+  updateWatchdogCore0();
 
   if(!isEnvironmentStarted()) {
     return;
@@ -211,12 +212,14 @@ void looper(void) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
+
+  delay(CORE_OPERATION_DELAY);  
 }
 
 void initialization1(void) {
   initRPMCount();
 
-  started1 = true;
+  setStartedCore1();
   
   deb("Second core initialized");
 }
@@ -226,6 +229,8 @@ void initialization1(void) {
 //-----------------------------------------------------------------------------
 
 void looper1(void) {
+
+  updateWatchdogCore1();
 
   if(!isEnvironmentStarted()) {
     return;
@@ -239,7 +244,7 @@ void looper1(void) {
   turboMainLoop();
   stabilizeRPM();
 
-  delay(1);  
+  delay(CORE_OPERATION_DELAY);  
 }
 
 #ifdef DEBUG_SCREEN

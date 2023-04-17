@@ -14,6 +14,9 @@
 //#define DEBUG
 
 #define WATCHDOG_TIME 4000
+#define WATCHDOG_TIMER_TIME (WATCHDOG_TIME / 10)
+#define UNSYNCHRONIZE_TIME 15
+#define CORE_OPERATION_DELAY 1
 
 //delay time right after start, before first serious alerts will show up (in seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1
