@@ -48,8 +48,8 @@ void countRPM(void) {
 }
 
 void initRPMCount(void) {
-  pinMode(INTERRUPT_HALL, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(INTERRUPT_HALL), countRPM, CHANGE);  
+  pinMode(PIO_INTERRUPT_HALL, INPUT_PULLUP); 
+  attachInterrupt(digitalPinToInterrupt(PIO_INTERRUPT_HALL), countRPM, CHANGE);  
 
   rpmTimer = timer_create_default();
 
@@ -58,7 +58,7 @@ void initRPMCount(void) {
 
 void setRPMPercentage(int percentage) {
   currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
-  valToPWM(9, currentRPMSolenoid);
+  valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
 }
 
 void setMaxRPM(void) {
@@ -133,7 +133,7 @@ void stabilizeRPM(void) {
       }
     }
 
-    valToPWM(9, currentRPMSolenoid);
+    valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
   }
 
 

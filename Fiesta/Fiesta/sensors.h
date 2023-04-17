@@ -19,7 +19,13 @@ extern float valueFields[];
 #define O_HEATED_WINDOW_L 5
 #define O_HEATED_WINDOW_P 6
 
-#define INTERRUPT_HALL 7    //cpu pio number
+//raspberry pi pico pio number
+#define PIO_INTERRUPT_HALL 7    
+#define PIO_TURBO 10
+#define PIO_VP37_RPM 9
+#define PIO_VP37_ANGLE 5
+
+#define PIO_DPF_LAMP 8
 
 //cpu pio numbers
 #define A_4051 11
@@ -27,6 +33,7 @@ extern float valueFields[];
 #define C_4051 13
 
 void initSensors(void);
+void initBasicPIO(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);

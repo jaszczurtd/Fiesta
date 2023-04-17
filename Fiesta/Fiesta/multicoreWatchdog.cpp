@@ -1,17 +1,23 @@
 
 #include "multicoreWatchdog.h"
 
-static volatile unsigned long watchdogCore0_a = 0, watchdogCore1_a = 0;
-static volatile unsigned long watchdogCore0_b = 0, watchdogCore1_b = 0;
+static unsigned long watchdogCore0_a = 0, watchdogCore1_a = 0;
+static unsigned long watchdogCore0_b = 0, watchdogCore1_b = 0;
 
 static std::atomic<bool> core0(false), core1(false);
 static std::atomic<bool> started_a(false), started_b(false);
 
-void setupWatchdog(void) {
+bool watchdogHandle(void *argument);
+
+void setupWatchdog(Timer<> *timer) {
+
+  timer->every(WATCHDOG_TIMER_TIME, watchdogHandle);
+
   if (watchdog_caused_reboot()) {
     deb("Rebooted by Watchdog!\n");
     deb("core 0 started:%d updated:%d \n", started_a.load(), core0.load());
     deb("core 1 started:%d updated:%d \n", started_b.load(), core1.load());
+
   } else {
     deb("Clean boot\n");
   }

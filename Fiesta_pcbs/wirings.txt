@@ -6,7 +6,7 @@ MALE connector (ECU)
 5	throttle				black
 6	turbo pressure			grey
 7	turbo solenoid			brown
-8	misc1					pink
+8	vp37 injection angle	pink
 9	heater lo				red
 10	heater hi				blue
 braid GND					braid/red/separate
@@ -17,7 +17,7 @@ FEMALE connector (MISC)
 3	air condition ON		brown
 4	low washer fluid level	green
 5	idle solenoid			red
-6	DPF start				white
+6	vp37 ignition			white
 7	air temp				blue
 8	+12V / ignition			violet
 9	+12V / ignition			pink
@@ -33,9 +33,9 @@ Add. exp
 
 1	fuel pos
 2	+3.3V
-3	misc2
-4	96 pin ECU
-5	100 pin ECU
+3	41 pin ECU /4051 4th pin (ADC) 
+4	96 pin ECU / CAN (L)
+5	100 pin ECU / CAN (H)
 6	46 pin ECU
 
 Doors

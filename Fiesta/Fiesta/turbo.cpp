@@ -60,5 +60,5 @@ void turboMainLoop(void) {
   deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", engineLoadRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
 #endif
 
-  valToPWM(10, n75);
+  valToPWM(PIO_TURBO, n75);
 }
