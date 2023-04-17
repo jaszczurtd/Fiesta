@@ -6,18 +6,15 @@ static unsigned long alertsStartSecond = 0;
 Timer generalTimer;
 
 void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
-  generalTimer.every(time, function);
   watchdog_update();
+  generalTimer.every(time, function);
   delay(ut);
   watchdog_update();
 }
 
 void setupTimers(void) {
-  generalTimer = timer_create_default();
-
   int time = 1000;
 
-  setupTimerWith(UNSYNCHRONIZE_TIME, WATCHDOG_TIMER_TIME, watchdogHandle);
   setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
@@ -33,7 +30,9 @@ void initialization(void) {
 
   Serial.begin(9600);
  
-  setupWatchdog();  
+  generalTimer = timer_create_default();
+
+  setupWatchdog(&generalTimer);  
 
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
   Wire.setSDA(0);
@@ -48,7 +47,7 @@ void initialization(void) {
   Wire.setSCL(1);
   Wire.begin();
  
-  pinMode(LED_BUILTIN, OUTPUT);
+  initBasicPIO();
 
   #ifdef I2C_SCANNER
   i2cScanner();
@@ -112,7 +111,7 @@ void initialization(void) {
 
   setStartedCore0();
 
-  deb("Fiesta MTDDI started\n");
+  deb("Fiesta MTDDI started: %d\n", isEnvironmentStarted());
 }
 
 void drawLowImportanceValues(void) {
@@ -160,7 +159,6 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-
 bool callAtEverySecond(void *argument) {
   alertBlink = (alertBlink) ? false : true;
   digitalWrite(LED_BUILTIN, alertBlink);
@@ -180,6 +178,8 @@ bool callAtEveryHalfSecond(void *argument) {
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
+
+  digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
 
   return true; 
 }
