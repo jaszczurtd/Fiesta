@@ -50,16 +50,6 @@ int maf_Air_Flow_Rate =  0;
 //Init CAN-BUS and Serial
 //=================================================================
 
-byte uintMSB(unsigned int value)
-{
-  return (byte)((value & 0xFF00) >> 8);
-}
-
-byte uintLSB(unsigned int value)
-{
-  return (byte)(value & 0x00FF);
-}
-
 void obdInit(void) {
 
   while(!(CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
@@ -160,11 +150,11 @@ void obdLoop(void) {
 
   //Build sensor return msg
   byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
-  byte engine_Rpm_Msg[8] = {4, 65, 0x0C, uintMSB(engine_Rpm), uintLSB(engine_Rpm)};
+  byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
   byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
   byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
   byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
-  byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, uintMSB(maf_Air_Flow_Rate), uintMSB(maf_Air_Flow_Rate)};
+  byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
 
   //Serial return message
   String reply;

@@ -71,15 +71,15 @@ bool updateCANrecipients(void *argument) {
     (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
 
   short rpm = valueFields[F_RPM];
-  buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = (rpm >> 8) & 0xFF;
-  buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = rpm & 0xFF;
+  buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = MSB(rpm);
+  buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = LSB(rpm);
 
   buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
   buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
 
   short exh = valueFields[F_EGT];
-  buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = (exh >> 8) & 0xFF;
-  buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = exh & 0xFF;
+  buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
+  buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
 
   CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
 

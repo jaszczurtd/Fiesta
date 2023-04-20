@@ -56,8 +56,8 @@ bool callAtHalfSecond(void *argument) {
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
   short temp = valueFields[F_DPF_TEMP];
-  buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] = (temp >> 8) & 0xFF;
-  buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO] = temp & 0xFF;
+  buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] = MSB(temp);
+  buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO] = LSB(temp);
 
   int hi, lo;
   floatToDec(valueFields[F_DPF_PRESSURE], &hi, &lo);
