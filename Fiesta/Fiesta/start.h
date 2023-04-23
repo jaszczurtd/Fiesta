@@ -7,6 +7,7 @@
 #include <SPI.h>
 #include <mcp_can.h>
 #include <tools.h>
+#include <multicoreWatchdog.h>
 
 #include "sensors.h"
 #include "graphics.h"
@@ -19,7 +20,6 @@
 #include "glowPlugs.h"
 #include "engineFuel.h"
 #include "can.h"
-#include "multicoreWatchdog.h"
 #include "obd-2.h"
 
 void drawMediumImportanceValues(void);
