@@ -31,8 +31,7 @@ void initialization(void) {
   Serial.begin(9600);
  
   generalTimer = timer_create_default();
-
-  setupWatchdog(&generalTimer);  
+  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
 
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
   Wire.setSDA(0);
