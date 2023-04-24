@@ -80,8 +80,8 @@ void initialization(void) {
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
 
-  canInit();
-  obdInit();
+  canInit(CAN_RETRIES);
+  obdInit(CAN_RETRIES);
 
   #ifdef DEBUG_SCREEN
   debugFunc();

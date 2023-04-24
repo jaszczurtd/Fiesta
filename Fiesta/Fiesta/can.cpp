@@ -20,7 +20,8 @@ static bool dpfConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static byte lastFrame = 0;
 
-void canInit(void) {
+static bool initialized = false;
+void canInit(int retries) {
   int at = 1;
 
   dpfConnected = false;
@@ -31,9 +32,13 @@ void canInit(void) {
   tft.setFont();
   tft.setTextSize(1);
 
-  while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-    deb("ERROR!!!! CAN-BUS Shield init fail");
-    deb("Will try to init CAN-BUS shield again");
+  for(int a = 0; a < retries; a++) {
+    initialized = (CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
+    if(initialized) {
+      break;
+    }
+
+    derr("ERROR!!!! CAN-BUS Shield init fail");
 
     tft.fillScreen(ST7735_BLACK);
 
@@ -54,44 +59,50 @@ void canInit(void) {
     watchdog_update();
   }
 
-  deb("CAN BUS Shield init ok!");
-  CAN.setMode(MCP_NORMAL); 
-  CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
+  if(initialized) {
+    deb("CAN BUS Shield init ok!");
+    CAN.setMode(MCP_NORMAL); 
+    CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
 
-  pinMode(CAN0_INT, INPUT); 
-  attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
+    pinMode(CAN0_INT, INPUT); 
+    attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
+  } else {
+    derr("CAN BUS Shield init problem. CAN communication would not be possible.");
+  }
 }
 
 bool updateCANrecipients(void *argument) {
 
-  byte buf[CAN_FRAME_MAX_LENGTH];
-  buf[CAN_FRAME_NUMBER] = frameNumber++;
-  
-  buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
-    (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
+  if(initialized) {
+    byte buf[CAN_FRAME_MAX_LENGTH];
+    buf[CAN_FRAME_NUMBER] = frameNumber++;
+    
+    buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
+      (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
 
-  short rpm = valueFields[F_RPM];
-  buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = MSB(rpm);
-  buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = LSB(rpm);
+    short rpm = valueFields[F_RPM];
+    buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = MSB(rpm);
+    buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = LSB(rpm);
 
-  buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
-  buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
+    buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
+    buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
 
-  short exh = valueFields[F_EGT];
-  buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
-  buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
+    short exh = valueFields[F_EGT];
+    buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
+    buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
 
-  CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
+    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
+  }
 
   return true;  
 }
-
 
 void receivedCanMessage(void) {
     interrupt = true;
 }
 
 bool canMainLoop(void *argument) {
+  if(initialized) {
     CAN.readMsgBuf(&canID, &len, buf);
     if(canID == 0 || len < 1) {
         return true;
@@ -116,7 +127,8 @@ bool canMainLoop(void *argument) {
               break;
         }
     }
-    return true;
+  }
+  return true;
 }
 
 bool isDPFConnected(void) {

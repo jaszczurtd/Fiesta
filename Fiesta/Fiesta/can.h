@@ -22,7 +22,7 @@ extern float valueFields[];
 #define CAN1_INT 14
 
 bool canMainLoop(void *argument);
-void canInit(void);
+void canInit(int retries);
 void sendThrottleValueCAN(int value);
 bool updateCANrecipients(void *argument);
 bool isDPFConnected(void);
