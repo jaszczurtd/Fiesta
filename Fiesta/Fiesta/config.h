@@ -107,6 +107,6 @@
 
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 2.0
-#define IDLE_BOOST_PERCENTAGE_SET 40
+#define IDLE_BOOST_PERCENTAGE_SET 80
 
 #endif
