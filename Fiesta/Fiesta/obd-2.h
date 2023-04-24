@@ -15,7 +15,7 @@
 //Default reply ECU ID
 #define REPLY_ID 0x7E8 
 
-void obdInit(void);
+void obdInit(int retries);
 void obdLoop(void);
 
 #endif

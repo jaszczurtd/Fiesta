@@ -48,8 +48,9 @@ void turboMainLoop(void) {
 
   int n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
-  if(valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
-    float pressureRatio = ((float)pressurePercentage / 100.0) * (MAX_BOOST_PRESSURE / valueFields[F_PRESSURE]);
+  float currentPressure = valueFields[F_PRESSURE];
+  if(currentPressure > MAX_BOOST_PRESSURE) {
+    float pressureRatio = ((float)pressurePercentage / 100.0) * (MAX_BOOST_PRESSURE / currentPressure);
     if (pressureRatio > 1.0) {
       pressureRatio = 1.0;
     }

@@ -50,21 +50,32 @@ int maf_Air_Flow_Rate =  0;
 //Init CAN-BUS and Serial
 //=================================================================
 
-void obdInit(void) {
+static bool initialized = false;
+void obdInit(int retries) {
 
-  while(!(CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-    deb("OBD-2 CAN init error!");
+  for(int a = 0; a < retries; a++) {
+    initialized = (CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
+    if(initialized) {
+      break;
+    }
+    derr("OBD-2 CAN init error!");
     delay(1000);
     watchdog_update();
   }
 
-  deb("OBD-2 CAN Shield init ok!");
-  CAN0.setMode(MCP_NORMAL); 
-  pinMode(CAN1_INT, INPUT); 
-
+  if(initialized) {
+    deb("OBD-2 CAN Shield init ok");
+    CAN0.setMode(MCP_NORMAL); 
+    pinMode(CAN1_INT, INPUT); 
+  } else {
+    derr("OBD0-2 CAN Shield init problem. The OBD-2 connection will not be possible.");
+  }
 }
 
 void obdLoop(void) {
+  if(!initialized) {
+    return;
+  }
 
 //=================================================================
 //Define ECU Supported PID's
