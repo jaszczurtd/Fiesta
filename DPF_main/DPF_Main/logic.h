@@ -7,6 +7,7 @@
 #include <hardware/watchdog.h>
 #include <tools.h>
 #include <Timers.h>
+#include <multicoreWatchdog.h>
 
 #include "api/Common.h"
 
