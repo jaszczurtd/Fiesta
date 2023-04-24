@@ -3,8 +3,6 @@
 Timer generalTimer;
 Timers logicTimer;
 
-static bool started0 = false, started1 = false;
-
 static int volatile state = STATE_MAIN;
 static int volatile newState = STATE_MAIN;
 static int volatile DPFOperation = DPF_OPERATION_IDLE;
@@ -26,59 +24,46 @@ void checkAutomaticStartConditions(void);
 static bool leftP = false, rightP = false;
 
 void initialization(void) {
-    Serial.begin(9600);
+  Serial.begin(9600);
 
-    bool rebooted = false;
-    if (watchdog_caused_reboot()) {
-      rebooted = true;
-      deb("Rebooted by Watchdog!\n");
-    } else {
-      deb("Clean boot\n");
-    }
+  generalTimer = timer_create_default();
+  bool rebooted = setupWatchdog(&generalTimer, WATCHDOG_TIME);  
 
-    pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 
-    watchdog_enable(WATCHDOG_TIME, false);
+  displayInit();
+  canInit();
+  hardwareInit();
 
-    displayInit();
-    canInit();
-    hardwareInit();
+  if(rebooted) {
+    stopDPF();
+  }
 
-    if(rebooted) {
-      stopDPF();
-    }
-
-    generalTimer = timer_create_default();
-    
-    generalTimer.every(500, callAtHalfSecond);
-    generalTimer.every(SECS(1), callAtEverySecond);
-    generalTimer.every(400, readPeripherals);
-    generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);  
-    generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
+  generalTimer.every(500, callAtHalfSecond);
+  generalTimer.every(SECS(1), callAtEverySecond);
+  generalTimer.every(400, readPeripherals);
+  generalTimer.every(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);  
+  generalTimer.every(CAN_CHECK_CONNECTION, canCheckConnection);  
 #ifdef COLD_START_SUPPORTED    
-    generalTimer.in(SECS(CAN_CHECK_COLD_START_CONDITIONS), checkFirstColdStartConditions);
+  generalTimer.in(SECS(CAN_CHECK_COLD_START_CONDITIONS), checkFirstColdStartConditions);
 #endif
-    generalTimer.every(25, displayUpdate);
+  generalTimer.every(25, displayUpdate);
 
-    readPeripherals(NULL);
-    canMainLoop(NULL);
-    canCheckConnection(NULL);
-    displayUpdate(NULL);
+  readPeripherals(NULL);
+  canMainLoop(NULL);
+  canCheckConnection(NULL);
+  displayUpdate(NULL);
 
-    started0 = true;
-}
-
-bool isEnvironmentStarted(void) {
-  return started0 && started1;
+  setStartedCore0();
 }
 
 void looper(void) {
-    watchdog_update();
+  updateWatchdogCore0();  
 
-    if(!isEnvironmentStarted()) {
-        return;
-    }
-    generalTimer.tick();
+  if(!isEnvironmentStarted()) {
+      return;
+  }
+  generalTimer.tick();
 }
 
 void showECUEngineValues(void) {
@@ -418,15 +403,16 @@ bool callAtEverySecond(void *argument) {
 }
 
 void initialization1(void) {
-  started1 = true;
+  setStartedCore1();
 }
 
 void looper1(void) {
+  updateWatchdogCore1();  
 
-    if(!isEnvironmentStarted()) {
-        return;
-    }
+  if(!isEnvironmentStarted()) {
+      return;
+  }
 
-    performLogic();
+  performLogic();
 }
 
