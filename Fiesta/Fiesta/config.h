@@ -50,7 +50,8 @@
 //when the glow plugs are heating the cylinders
 #define TEMP_HEATING_GLOW_PLUGS_MULTIPLIER 1.5
 
-#define TEMP_EGT_OK_HI 750
+//EGT temperatures definitions
+#define TEMP_EGT_OK_HI 950
 #define TEMP_EGT_MAX 1600
 #define TEMP_EGT_MIN 100
 
