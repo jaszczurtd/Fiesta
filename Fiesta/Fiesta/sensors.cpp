@@ -198,11 +198,12 @@ bool readHighValues(void *argument) {
 }
 
 void init4051(void) {
-    pinMode(C_4051, OUTPUT);  //C
-    pinMode(B_4051, OUTPUT);  //B  
-    pinMode(A_4051, OUTPUT);  //A
+  deb("4051 init");
+  pinMode(C_4051, OUTPUT);  //C
+  pinMode(B_4051, OUTPUT);  //B  
+  pinMode(A_4051, OUTPUT);  //A
 
-    set4051ActivePin(0);
+  set4051ActivePin(0);
 }
 
 void set4051ActivePin(unsigned char pin) {

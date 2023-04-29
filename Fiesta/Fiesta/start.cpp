@@ -4,7 +4,6 @@
 static unsigned long alertsStartSecond = 0;
 
 Timer generalTimer;
-bool SDcardInitialized = false;
 
 void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
   watchdog_update();
@@ -31,15 +30,28 @@ void initialization(void) {
 
   Serial.begin(9600);
  
-  generalTimer = timer_create_default();
-  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
-
   //adafruit is messing up something with i2c on rbpi pin 0 & 1
+  //this has to be invoked as soon as possible
   Wire.setSDA(0);
   Wire.setSCL(1);
   Wire.begin();
   pcf8574_init();
   Wire.end();
+
+  //SPI init
+  SPI.setRX(16); //MISO
+  SPI.setTX(19); //MOSI
+  SPI.setSCK(18); //SCK
+
+  initSDLogger(SD_CARD_CS); 
+  if (!isSDLoggerInitialized()) {
+    deb("SD Card failed, or not present");
+  } else {
+    deb("SD Card initialized");
+  }
+
+  generalTimer = timer_create_default();
+  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
 
   initGraphics();
 
@@ -56,16 +68,13 @@ void initialization(void) {
   init4051();
   initSensors();
 
-  //SD card init
-  SPI.setRX(MISO);
-  SPI.setTX(MOSI);
-  SPI.setSCK(SCK);
-  
   analogWriteFreq(100);
   analogWriteResolution(PWM_WRITE_RESOLUTION);
 
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
+  deb("coolant temp is %f", coolant);
+  deb("System temperature: %f", analogReadTemp());
   
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
@@ -81,12 +90,6 @@ void initialization(void) {
   int secDest = sec + FIESTA_INTRO_TIME;
   while(sec < secDest) {
     glowPlugsMainLoop();
-
-    if(!sdCardInit) {
-      SDcardInitialized = SD.begin(SD_CARD_CS);
-      sdCardInit = true;
-    }
-
     sec = getSeconds();
   }
 
@@ -121,12 +124,6 @@ void initialization(void) {
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
-
-  if (!SDcardInitialized) {
-    deb("SD Card failed, or not present");
-  } else {
-    deb("SD Card initialized.");
-  }
 
   setStartedCore0();
 
