@@ -8,7 +8,6 @@
 #include <mcp_can.h>
 #include <tools.h>
 #include <multicoreWatchdog.h>
-#include <SD.h>
 
 #include "sensors.h"
 #include "graphics.h"
