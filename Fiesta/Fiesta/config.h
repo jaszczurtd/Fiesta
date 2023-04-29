@@ -114,4 +114,8 @@
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
+
+//chip select pin - GPIO 26
+#define SD_CARD_CS 26
+
 #endif
