@@ -70,6 +70,12 @@ void initialization(void) {
   showLogo();
   watchdog_update();
 
+  //SD card init
+  SPI.setRX(MISO);
+  SPI.setTX(MOSI);
+  SPI.setSCK(SCK);
+
+  bool sdCardInit = false;
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
   while(sec < secDest) {
@@ -79,6 +85,15 @@ void initialization(void) {
 
   Adafruit_ST7735 tft = returnReference();
   tft.fillScreen(ST7735_BLACK);
+
+    if(!sdCardInit) {
+      if (!SD.begin(SD_CARD_CS)) {
+        deb("Card failed, or not present");
+      } else {
+        deb("card initialized.");
+      }
+      sdCardInit = true;
+    }
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
