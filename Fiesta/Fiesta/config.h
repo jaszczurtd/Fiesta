@@ -110,12 +110,12 @@
 
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 2.0
-#define IDLE_BOOST_PERCENTAGE_SET 80
+#define IDLE_BOOST_PERCENTAGE_SET 65
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
 
-//chip select pin - GPIO 26
-#define SD_CARD_CS 26
+//in seconds
+#define GPS_UPDATE 4 
 
 #endif

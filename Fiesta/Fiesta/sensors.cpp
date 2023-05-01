@@ -200,6 +200,7 @@ bool readHighValues(void *argument) {
     
         triggerDrawHighImportanceValue(true);
     }
+    valueFields[F_CAR_SPEED] = getCurrentCarSpeed();
   }
 
   return true;
@@ -230,16 +231,27 @@ void serialTalks(void) {
   }
 }
 
-void getGPSData(void) {
-  if (gps.location.isUpdated()){
+bool getGPSData(void *arg) {
 
-    deb("Lat=%f Long=%f date:%d/%02d/%02d hour:%02d:%02d:%02d", 
-      gps.location.lat(), gps.location.lng(),
-      gps.date.year(), gps.date.month(), gps.date.day(),
-      gps.time.hour(), gps.time.minute(), gps.time.second());
+  if(isGPSAvailable()) {
+    if (gps.location.isUpdated()){
+
+      deb("Lat=%f Long=%f date:%d/%02d/%02d hour:%02d:%02d:%02d", 
+        gps.location.lat(), gps.location.lng(),
+        gps.date.year(), gps.date.month(), gps.date.day(),
+        gps.time.hour(), gps.time.minute(), gps.time.second());
     }
+  } else {
+    deb("GPS is not available");
+  }
+
+  return true;
+}
+
+float getCurrentCarSpeed(void) {
+  return gps.speed.kmph();
 }
 
 bool isGPSAvailable(void) {
-  return gps.satellites.isValid();
+  return gps.location.isValid();
 }
