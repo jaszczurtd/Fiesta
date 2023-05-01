@@ -4,10 +4,16 @@
 #include <Wire.h>
 #include <tools.h>
 
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+
 #include "config.h"
 #include "start.h"
 
 extern float valueFields[];
+
+#define SERIAL_RX_GPIO 22
+#define SERIAL_TX_GPIO 21
 
 #define PCF8574_ADDR 0x38
 
@@ -56,4 +62,7 @@ void init4051(void);
 void set4051ActivePin(unsigned char pin);
 
 bool isDPFRegenerating(void);
+
+void getGPSData(void);
+bool isGPSAvailable(void);
 #endif
