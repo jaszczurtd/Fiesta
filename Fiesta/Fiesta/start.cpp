@@ -185,7 +185,7 @@ bool callAtEverySecond(void *argument) {
 
   //regular draw - low importance values
   drawLowImportanceValues();
-
+  getGPSData();
   return true; 
 }
 

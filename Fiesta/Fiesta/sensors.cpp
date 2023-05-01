@@ -4,12 +4,20 @@
 float valueFields[F_LAST];
 float reflectionValueFields[F_LAST];
 
+SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
+TinyGPSPlus  gps;
+
+void serialTalks(void);
+
 void initSensors(void) {
   analogReadResolution(ADC_BITS);
 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
   }
+
+  attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
+  gpsSerial.begin(9600);
 }
 
 void initBasicPIO(void) {
@@ -216,3 +224,22 @@ bool isDPFRegenerating(void) {
   return valueFields[F_DPF_REGEN] > 0;
 }
 
+void serialTalks(void) {
+  if(gpsSerial.available() > 0) {
+    gps.encode(gpsSerial.read());
+  }
+}
+
+void getGPSData(void) {
+  if (gps.location.isUpdated()){
+
+    deb("Lat=%f Long=%f date:%d/%02d/%02d hour:%02d:%02d:%02d", 
+      gps.location.lat(), gps.location.lng(),
+      gps.date.year(), gps.date.month(), gps.date.day(),
+      gps.time.hour(), gps.time.minute(), gps.time.second());
+    }
+}
+
+bool isGPSAvailable(void) {
+  return gps.satellites.isValid();
+}
