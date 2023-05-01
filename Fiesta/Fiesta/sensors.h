@@ -12,6 +12,10 @@
 
 extern float valueFields[];
 
+//chip select pin for SD card reader
+#define SD_CARD_CS 26
+
+//for serial - GPS
 #define SERIAL_RX_GPIO 22
 #define SERIAL_TX_GPIO 21
 
@@ -63,6 +67,7 @@ void set4051ActivePin(unsigned char pin);
 
 bool isDPFRegenerating(void);
 
-void getGPSData(void);
+bool getGPSData(void *arg);
+float getCurrentCarSpeed(void);
 bool isGPSAvailable(void);
 #endif

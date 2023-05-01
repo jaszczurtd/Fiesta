@@ -41,7 +41,6 @@ int obd_Std = 11;
 int fuel_Type = 4; //diesel
 
 //Default PID values
-int vehicle_Speed = 0;
 int timing_Advance  = 10;
 int maf_Air_Flow_Rate =  0;
 
@@ -161,6 +160,7 @@ void obdLoop(void) {
   int engine_Rpm = int(valueFields[F_RPM] * 4);
   int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
   int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
+  int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
 
 
   //Build sensor return msg

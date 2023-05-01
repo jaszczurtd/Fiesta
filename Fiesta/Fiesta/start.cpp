@@ -24,6 +24,7 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
+  setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE * 1000, getGPSData);
 }
 
 void initialization(void) {
@@ -185,7 +186,6 @@ bool callAtEverySecond(void *argument) {
 
   //regular draw - low importance values
   drawLowImportanceValues();
-  getGPSData();
   return true; 
 }
 
