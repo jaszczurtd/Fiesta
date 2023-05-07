@@ -65,7 +65,7 @@ void obdInit(int retries) {
   }
 
   if(initialized) {
-    deb("OBD-2 CAN Shield init ok");
+    deb("OBD-2 CAN Shield init ok!");
     CAN0.setMode(MCP_NORMAL); 
     pinMode(CAN1_INT, INPUT); 
   } else {

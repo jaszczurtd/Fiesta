@@ -35,6 +35,7 @@ void initialization(void) {
   //this has to be invoked as soon as possible
   Wire.setSDA(0);
   Wire.setSCL(1);
+  Wire.setClock(I2C_SPEED);
   Wire.begin();
   pcf8574_init();
   Wire.end();
@@ -44,6 +45,16 @@ void initialization(void) {
   SPI.setTX(19); //MOSI
   SPI.setSCK(18); //SCK
 
+  initGraphics();
+
+  generalTimer = timer_create_default();
+  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
+
+  Wire.setSDA(0);
+  Wire.setSCL(1);
+  Wire.setClock(I2C_SPEED);
+  Wire.begin();
+ 
   initSDLogger(SD_CARD_CS); 
   if (!isSDLoggerInitialized()) {
     deb("SD Card failed, or not present");
@@ -51,15 +62,6 @@ void initialization(void) {
     deb("SD Card initialized");
   }
 
-  generalTimer = timer_create_default();
-  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
-
-  initGraphics();
-
-  Wire.setSDA(0);
-  Wire.setSCL(1);
-  Wire.begin();
- 
   initBasicPIO();
 
   #ifdef I2C_SCANNER
@@ -128,7 +130,9 @@ void initialization(void) {
 
   setStartedCore0();
 
-  deb("Fiesta MTDDI started: %d\n", isEnvironmentStarted());
+  deb("Fiesta MTDDI started: %d logger number:%d\n", 
+    isEnvironmentStarted(),
+    getSDLoggerNumber());
 }
 
 void drawLowImportanceValues(void) {
