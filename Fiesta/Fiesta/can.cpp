@@ -123,7 +123,7 @@ bool canMainLoop(void *argument) {
             break;
 
             default:
-              deb("received unknown CAN frame: %d\n", canID);
+              deb("received unknown CAN frame: %d len:%d\n", canID, len);
               break;
         }
     }

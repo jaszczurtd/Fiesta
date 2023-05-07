@@ -75,6 +75,23 @@ void obdInit(int retries) {
 #endif
 }
 
+int getNumberFromMessage(String str) {
+  int len = str.length();
+  int num = 0;
+  int factor = 1;
+  
+  for (int i = len - 2; i >= 0; i--) {
+      if (str[i] == ',') {
+          continue;
+      }
+      
+      int digit = str[i] - '0';
+      num += digit * factor;
+      factor *= 10;
+  }
+  return num;
+}
+
 void obdLoop(void) {
   if(!initialized) {
     return;
@@ -384,3 +401,4 @@ void obdLoop(void) {
     }
 
   }
+

@@ -142,3 +142,7 @@ void stabilizeRPM(void) {
 #endif
 }
 
+bool isEngineRunning(void) {
+  return (int(valueFields[F_RPM]) != 0);
+}
+
