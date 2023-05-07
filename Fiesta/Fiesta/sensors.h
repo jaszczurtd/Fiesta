@@ -1,3 +1,4 @@
+
 #ifndef T_SENSORS
 #define T_SENSORS
 
@@ -9,6 +10,8 @@
 
 #include "config.h"
 #include "start.h"
+
+#define DEBUG_UPDATE 3
 
 extern float valueFields[];
 
@@ -70,4 +73,7 @@ bool isDPFRegenerating(void);
 bool getGPSData(void *arg);
 float getCurrentCarSpeed(void);
 bool isGPSAvailable(void);
+
+bool updateValsForDebug(void *arg);
+
 #endif

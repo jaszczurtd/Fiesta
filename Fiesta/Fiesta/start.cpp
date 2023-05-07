@@ -25,6 +25,7 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE * 1000, getGPSData);
+  setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE * 1000, updateValsForDebug);
 }
 
 void initialization(void) {
@@ -45,10 +46,10 @@ void initialization(void) {
   SPI.setTX(19); //MOSI
   SPI.setSCK(18); //SCK
 
-  initGraphics();
-
   generalTimer = timer_create_default();
   setupWatchdog(&generalTimer, WATCHDOG_TIME);  
+
+  initGraphics();
 
   Wire.setSDA(0);
   Wire.setSCL(1);
@@ -76,8 +77,8 @@ void initialization(void) {
 
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
-  deb("coolant temp is %f", coolant);
-  deb("System temperature: %f", analogReadTemp());
+
+  deb("System temperature: %f", roundz(analogReadTemp(), 1));
   
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
@@ -117,6 +118,8 @@ void initialization(void) {
   redrawEGT();
   #endif
 
+  valueFields[F_VOLTS] = readVolts();
+  
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   setupTimers();
@@ -127,12 +130,11 @@ void initialization(void) {
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
+  updateValsForDebug(NULL);
 
   setStartedCore0();
 
-  deb("Fiesta MTDDI started: %d logger number:%d\n", 
-    isEnvironmentStarted(),
-    getSDLoggerNumber());
+  deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
 }
 
 void drawLowImportanceValues(void) {
@@ -190,6 +192,7 @@ bool callAtEverySecond(void *argument) {
 
   //regular draw - low importance values
   drawLowImportanceValues();
+  
   return true; 
 }
 
