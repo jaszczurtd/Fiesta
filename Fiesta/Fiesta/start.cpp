@@ -24,7 +24,9 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
+  #ifdef ECU_V2
   setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE * 1000, getGPSData);
+  #endif
   setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE * 1000, updateValsForDebug);
 }
 
@@ -56,12 +58,14 @@ void initialization(void) {
   Wire.setClock(I2C_SPEED);
   Wire.begin();
  
+  #ifdef ECU_V2
   initSDLogger(SD_CARD_CS); 
   if (!isSDLoggerInitialized()) {
     deb("SD Card failed, or not present");
   } else {
     deb("SD Card initialized");
   }
+  #endif
 
   initBasicPIO();
 

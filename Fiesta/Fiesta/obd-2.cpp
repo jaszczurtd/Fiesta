@@ -52,7 +52,7 @@ int maf_Air_Flow_Rate =  0;
 static bool initialized = false;
 void obdInit(int retries) {
 
-#ifdef OBD2
+#ifdef ECU_V2
 
   for(int a = 0; a < retries; a++) {
     initialized = (CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
