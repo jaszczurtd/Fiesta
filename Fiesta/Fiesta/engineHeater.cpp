@@ -37,11 +37,11 @@ void engineHeaterMainLoop(void) {
   }
 
   if(lastHeaterHiEnabled != heaterHiEnabled) {
-    heater(heaterHiEnabled, O_HEATER_HI);
+    heater(heaterHiEnabled, PCF8574_O_HEATER_HI);
     lastHeaterHiEnabled = heaterHiEnabled;
   }
   if(lastHeaterLoEnabled != heaterLoEnabled) {
-    heater(heaterLoEnabled, O_HEATER_LO);
+    heater(heaterLoEnabled, PCF8574_O_HEATER_LO);
     lastHeaterLoEnabled = heaterLoEnabled;
   }
 

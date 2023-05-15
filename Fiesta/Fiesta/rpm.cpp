@@ -106,12 +106,12 @@ void stabilizeRPM(void) {
         if(!rpmCycle) {
           rpmCycle = true;
 
-          rpmPercentValue += 5;
+          rpmPercentValue += RPM_PERCENTAGE_CORRECTION_VAL;
           if(rpmPercentValue > MAX_RPM_PERCENT_VALUE){
             rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
           currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
-          rpmTimer.in(500, cycleCheck);
+          rpmTimer.in(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
         }
       }
     }
@@ -122,12 +122,12 @@ void stabilizeRPM(void) {
         if(!rpmCycle) {
           rpmCycle = true;
 
-          rpmPercentValue -= 5;
+          rpmPercentValue -= RPM_PERCENTAGE_CORRECTION_VAL;
           if(rpmPercentValue < MIN_RPM_PERCENT_VALUE){
             rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
           currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
-          rpmTimer.in(600, cycleCheck);
+          rpmTimer.in(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
         }
       }
     }

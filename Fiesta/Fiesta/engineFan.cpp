@@ -5,7 +5,7 @@
 //-----------------------------------------------------------------------------
 
 void fan(bool enable) {
-  pcf8574_write(O_FAN, enable);
+  pcf8574_write(PCF8574_O_FAN, enable);
 }
 
 static bool fanEnabled = false;

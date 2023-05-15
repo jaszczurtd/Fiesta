@@ -103,8 +103,8 @@ void heatedWindowMainLoop(void) {
     //execute action
     if(heatedWindowEnabled != lastHeatedWindowEnabled) {
       lastHeatedWindowEnabled = heatedWindowEnabled;
-      heatedWindow(heatedWindowEnabled, O_HEATED_WINDOW_L);
-      heatedWindow(heatedWindowEnabled, O_HEATED_WINDOW_P);
+      heatedWindow(heatedWindowEnabled, PCF8574_O_HEATED_WINDOW_L);
+      heatedWindow(heatedWindowEnabled, PCF8574_O_HEATED_WINDOW_P);
     }
   }
 }

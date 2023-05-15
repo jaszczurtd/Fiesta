@@ -45,13 +45,24 @@
 //PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
 
-//PCF8574 GPIO functions
-#define O_GLOW_PLUGS 0
-#define O_FAN 1
-#define O_HEATER_HI 2
-#define O_HEATER_LO 3
-#define O_GLOW_PLUGS_LAMP 4
-#define O_HEATED_WINDOW_L 5
-#define O_HEATED_WINDOW_P 6
+//PCF8574 GPIO assignments
+#define PCF8574_O_GLOW_PLUGS 0
+#define PCF8574_O_FAN 1
+#define PCF8574_O_HEATER_HI 2
+#define PCF8574_O_HEATER_LO 3
+#define PCF8574_O_GLOW_PLUGS_LAMP 4
+#define PCF8574_O_HEATED_WINDOW_L 5
+#define PCF8574_O_HEATED_WINDOW_P 6
+#define PCF8574_O_VP37_ENABLE 7
+
+//4051 inputs assignments 
+#define HC4051_I_COOLANT_TEMP 0
+#define HC4051_I_OIL_TEMP 1
+#define HC4051_I_THROTTLE_POS 2
+#define HC4051_I_AIR_TEMP 3
+#define HC4051_I_FUEL_LEVEL 4
+#define HC4051_I_BAR_PRESSURE 5
+#define HC4051_I_EGT 6
+//7 not used ATM
 
 #endif

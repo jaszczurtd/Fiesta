@@ -5,11 +5,11 @@
 //-----------------------------------------------------------------------------
 
 void glowPlugs(bool enable) {
-  pcf8574_write(O_GLOW_PLUGS, enable);
+  pcf8574_write(PCF8574_O_GLOW_PLUGS, enable);
 }
 
 void glowPlugsLamp(bool enable) {
-  pcf8574_write(O_GLOW_PLUGS_LAMP, enable);
+  pcf8574_write(PCF8574_O_GLOW_PLUGS_LAMP, enable);
 }
 
 static int glowPlugsTime = 0;

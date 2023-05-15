@@ -22,7 +22,7 @@ void initFuelMeasurement(void) {
 }
 
 float readFuel(void) {
-    set4051ActivePin(4);
+    set4051ActivePin(HC4051_I_FUEL_LEVEL);
 
     int result = getAverageValueFrom(A1);
     int r = result;
