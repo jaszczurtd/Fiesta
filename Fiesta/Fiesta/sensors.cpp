@@ -55,7 +55,7 @@ float readVolts(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readCoolantTemp(void) {
-    set4051ActivePin(0);
+    set4051ActivePin(HC4051_I_COOLANT_TEMP);
     //real values (resitance)
     return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
 }
@@ -65,7 +65,7 @@ float readCoolantTemp(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readOilTemp(void) {
-    set4051ActivePin(1);
+    set4051ActivePin(HC4051_I_OIL_TEMP);
     return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
 }
 
@@ -74,7 +74,7 @@ float readOilTemp(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readThrottle(void) {
-    set4051ActivePin(2);
+    set4051ActivePin(HC4051_I_THROTTLE_POS);
 
     float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
     float initialVal = rawVal - THROTTLE_MIN;
@@ -102,7 +102,7 @@ int getThrottlePercentage(int currentVal) {
 //-------------------------------------------------------------------------------------------------
 
 float readAirTemperature(void) {
-    set4051ActivePin(3);
+    set4051ActivePin(HC4051_I_AIR_TEMP);
     return ntcToTemp(ADC_SENSORS_PIN, 5050, 4700);
 }
 
@@ -111,7 +111,7 @@ float readAirTemperature(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readBarPressure(void) {
-    set4051ActivePin(5);
+    set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
     float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 1.0;
     if(val < 0.0) {
@@ -125,7 +125,7 @@ float readBarPressure(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readEGT(void) {
-    set4051ActivePin(6);
+    set4051ActivePin(HC4051_I_EGT);
     return (((float)getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
 }
 

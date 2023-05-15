@@ -12,6 +12,15 @@
 //is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
 
+//tweakable value: 
+//by how much percentage should the solenoid position change from RPM?
+#define RPM_PERCENTAGE_CORRECTION_VAL 5
+
+//since solenoid has some time lag we have to compensate it
+//values defined as ms
+#define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 500
+#define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
+
 void initRPMCount(void);
 void setMaxRPM(void);
 void resetRPMEngine(void);
