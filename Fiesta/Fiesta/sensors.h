@@ -11,6 +11,7 @@
 #include "config.h"
 #include "start.h"
 #include "hardwareConfig.h"
+#include "tests.h"
 
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000

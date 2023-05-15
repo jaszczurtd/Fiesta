@@ -8,6 +8,7 @@
 #include "config.h"
 #include "start.h"
 #include "sensors.h"
+#include "tests.h"
 
 //is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50

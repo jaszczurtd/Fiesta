@@ -3,16 +3,6 @@
 
 //important: values scaled for rpi SDK ver 1.2.0
 
-//debug i2c only
-//#define I2C_SCANNER
-
-//for debug - display values on LCD
-//debugFunc() function is invoked, no regular drawings
-//#define DEBUG
-
-//for serial debug
-//#define DEBUG
-
 #define ECU_V2
 
 #define WATCHDOG_TIME 4000

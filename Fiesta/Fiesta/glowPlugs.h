@@ -7,6 +7,7 @@
 #include "config.h"
 #include "start.h"
 #include "sensors.h"
+#include "tests.h"
 
 void glowPlugs(bool enable);
 void glowPlugsLamp(bool enable);
