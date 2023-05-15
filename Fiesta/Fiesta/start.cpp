@@ -82,8 +82,6 @@ void initialization(void) {
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
 
-  deb("System temperature: %f", roundf(analogReadTemp()));
-  
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
@@ -136,6 +134,8 @@ void initialization(void) {
   callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
 
+  deb("System temperature:%.1fC", rroundf(analogReadTemp()));
+  
   setStartedCore0();
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
