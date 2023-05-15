@@ -24,5 +24,5 @@ Project is using:
 Raspberry pi pico core by Earle F. Philhower, III:
 https://github.com/earlephilhower/arduino-pico/
 
-Unity tests framework, Copyright (c) 2007 - 2021 Unity Project by Mike Karlesky, Mark VanderVoord, and Greg Williams
+Unity tests framework, Copyright (c) 2007 - 2021 Unity Project by Mike Karlesky, Mark VanderVoord, and Greg Williams:
 https://github.com/ThrowTheSwitch/Unity/
