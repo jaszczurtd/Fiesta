@@ -23,7 +23,7 @@ bool isGlowPlugsHeating(void) {
 
 void calculateGlowPlugsTime(float temp) {
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    glowPlugsTime = int((-(temp) + 60.0) / 3.5);
+    glowPlugsTime = int((-(temp) + float(SECONDS_IN_MINUTE)) / 3.5);
     if(glowPlugsTime < 0) {
       glowPlugsTime = 0;
     }
@@ -77,13 +77,13 @@ void glowPlugsMainLoop(void) {
       if(glowPlugsTime-- <= 0) {
         glowPlugs(false);
 
-        Serial.println("glow plugs disabled");
+        deb("glow plugs disabled");
       }
 
       if(glowPlugsLampTime >= 0 && glowPlugsLampTime-- <= 0) {
         glowPlugsLamp(false);
 
-        Serial.println("glow plugs lamp off");
+        deb("glow plugs lamp off");
       }
     }
   }  

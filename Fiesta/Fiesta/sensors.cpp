@@ -7,6 +7,19 @@ float reflectionValueFields[F_LAST];
 SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
 TinyGPSPlus  gps;
 
+void initI2C(void) {
+  Wire.setSDA(PIN_SDA);
+  Wire.setSCL(PIN_SCL);
+  Wire.setClock(I2C_SPEED);
+  Wire.begin();
+}
+
+void initSPI(void) {
+  SPI.setRX(PIN_MISO); //MISO
+  SPI.setTX(PIN_MOSI); //MOSI
+  SPI.setSCK(PIN_SCK); //SCK
+}
+
 void serialTalks(void);
 
 void initSensors(void) {
