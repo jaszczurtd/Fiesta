@@ -9,6 +9,7 @@
 #include "start.h"
 #include "sensors.h"
 
+//is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
 
 void initRPMCount(void);

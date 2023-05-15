@@ -8,6 +8,8 @@
 
 #include <arduino-timer.h>
 
+#include "hardwareConfig.h"
+
 void turboMainLoop(void);
 
 #endif

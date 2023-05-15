@@ -2,7 +2,6 @@
 
 Timer rpmTimer;
 
-#define MS_IN_MINUTE 60000.0
 #define CRANK_REVOLUTIONS 32.0
 
 static volatile unsigned long previousMillis = 0;
@@ -34,7 +33,7 @@ void countRPM(void) {
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
 
-    int RPM = int((RPMpulses * (MS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
+    int RPM = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
     if(RPM < 0) {
       RPM = 0;
     }

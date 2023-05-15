@@ -1,10 +1,6 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
-#define SUPPORT_TRANSACTIONS
-
-#define I2C_SPEED 50000
-
 //important: values scaled for rpi SDK ver 1.2.0
 
 //debug i2c only

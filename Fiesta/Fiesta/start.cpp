@@ -34,29 +34,20 @@ void initialization(void) {
 
   Serial.begin(9600);
  
-  //adafruit is messing up something with i2c on rbpi pin 0 & 1
-  //this has to be invoked as soon as possible
-  Wire.setSDA(0);
-  Wire.setSCL(1);
-  Wire.setClock(I2C_SPEED);
-  Wire.begin();
+  //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
+  //this has to be invoked as soon as possible, and twice
+  initI2C();
   pcf8574_init();
   Wire.end();
 
-  //SPI init
-  SPI.setRX(16); //MISO
-  SPI.setTX(19); //MOSI
-  SPI.setSCK(18); //SCK
+  initSPI();
 
   generalTimer = timer_create_default();
   setupWatchdog(&generalTimer, WATCHDOG_TIME);  
 
   initGraphics();
 
-  Wire.setSDA(0);
-  Wire.setSCL(1);
-  Wire.setClock(I2C_SPEED);
-  Wire.begin();
+  initI2C();
  
   #ifdef ECU_V2
   initSDLogger(SD_CARD_CS); 

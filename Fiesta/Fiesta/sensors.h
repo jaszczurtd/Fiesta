@@ -15,36 +15,8 @@
 
 extern float valueFields[];
 
-//chip select pin for SD card reader
-#define SD_CARD_CS 26
-
-//for serial - GPS
-#define SERIAL_RX_GPIO 22
-#define SERIAL_TX_GPIO 21
-
-#define PCF8574_ADDR 0x38
-
-#define O_GLOW_PLUGS 0
-#define O_FAN 1
-#define O_HEATER_HI 2
-#define O_HEATER_LO 3
-#define O_GLOW_PLUGS_LAMP 4
-#define O_HEATED_WINDOW_L 5
-#define O_HEATED_WINDOW_P 6
-
-//raspberry pi pico pio number
-#define PIO_INTERRUPT_HALL 7    
-#define PIO_TURBO 10
-#define PIO_VP37_RPM 9
-#define PIO_VP37_ANGLE 5
-
-#define PIO_DPF_LAMP 8
-
-//cpu pio numbers
-#define A_4051 11
-#define B_4051 12
-#define C_4051 13
-
+void initI2C(void);
+void initSPI(void);
 void initSensors(void);
 void initBasicPIO(void);
 //readers
