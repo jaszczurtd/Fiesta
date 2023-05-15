@@ -18,16 +18,16 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 12, readMediumValues);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 16, readHighValues);
-  setupTimerWith(UNSYNCHRONIZE_TIME, 200, updateCANrecipients);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
+  setupTimerWith(UNSYNCHRONIZE_TIME, time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
+  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_UPDATE_RECIPIENTS, updateCANrecipients);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
   #ifdef ECU_V2
-  setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE * 1000, getGPSData);
+  setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE, getGPSData);
   #endif
-  setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE * 1000, updateValsForDebug);
+  setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
 }
 
 void initialization(void) {
@@ -82,7 +82,6 @@ void initialization(void) {
   showLogo();
   watchdog_update();
 
-  bool sdCardInit = false;
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
   while(sec < secDest) {
@@ -128,6 +127,7 @@ void initialization(void) {
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
   setStartedCore0();
+  enableVP37(true);
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
 }

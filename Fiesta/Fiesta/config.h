@@ -114,8 +114,8 @@
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
 
-//in seconds
-#define GPS_UPDATE 4 
+//in miliseconds
+#define GPS_UPDATE 4 * 1000
 
 #endif
 
