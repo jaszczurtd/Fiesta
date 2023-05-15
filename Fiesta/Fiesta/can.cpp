@@ -78,7 +78,7 @@ bool updateCANrecipients(void *argument) {
     buf[CAN_FRAME_NUMBER] = frameNumber++;
     
     buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
-      (byte)getThrottlePercentage((int)valueFields[F_ENGINE_LOAD]);
+      (byte)valueFields[F_CALCULATED_ENGINE_LOAD];
 
     short rpm = valueFields[F_RPM];
     buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = MSB(rpm);

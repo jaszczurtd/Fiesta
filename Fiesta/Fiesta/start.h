@@ -2,6 +2,7 @@
 #ifndef T_START
 #define T_START
 
+#include <Arduino.h>
 #include <Wire.h>
 #include <arduino-timer.h>
 #include <SPI.h>
@@ -23,6 +24,7 @@
 #include "can.h"
 #include "obd-2.h"
 #include "vp37.h"
+#include "tests.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
@@ -42,9 +44,5 @@ void looper(void);
 void looper1(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
-
-#ifdef DEBUG
-void debugFunc(void);
-#endif
 
 #endif

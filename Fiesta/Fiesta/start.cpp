@@ -34,6 +34,8 @@ void initialization(void) {
 
   Serial.begin(9600);
  
+  initTests();
+
   //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
   initI2C();
@@ -67,7 +69,7 @@ void initialization(void) {
   init4051();
   initSensors();
 
-  analogWriteFreq(100);
+  analogWriteFreq(PWM_FREQUENCY_HZ);
   analogWriteResolution(PWM_WRITE_RESOLUTION);
 
   float coolant = readCoolantTemp();
@@ -111,7 +113,8 @@ void initialization(void) {
   #endif
 
   valueFields[F_VOLTS] = readVolts();
-  
+  TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
+
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   setupTimers();
@@ -130,6 +133,8 @@ void initialization(void) {
   enableVP37(true);
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
+
+  startTests();
 }
 
 void drawLowImportanceValues(void) {
@@ -143,7 +148,7 @@ void drawLowImportanceValues(void) {
 
 void drawHighImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showEngineLoadAmount((int)valueFields[F_ENGINE_LOAD]);
+  showEngineLoadAmount((int)valueFields[F_THROTTLE_POS]);
   #endif
 }
 
@@ -266,18 +271,4 @@ void looper1(void) {
 
   delay(CORE_OPERATION_DELAY);  
 }
-
-#ifdef DEBUG_SCREEN
-void debugFunc(void) {
-
-  Adafruit_ST7735 tft = returnReference();
-
-  int x = 0;
-  int y = 0;
-  tft.setTextColor(ST7735_WHITE);
-  tft.setCursor(x, y); y += 9;
-  tft.println(glowPlugsTime);
-
-}
-#endif
 

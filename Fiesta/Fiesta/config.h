@@ -3,16 +3,6 @@
 
 //important: values scaled for rpi SDK ver 1.2.0
 
-//debug i2c only
-//#define I2C_SCANNER
-
-//for debug - display values on LCD
-//debugFunc() function is invoked, no regular drawings
-//#define DEBUG
-
-//for serial debug
-//#define DEBUG
-
 #define ECU_V2
 
 #define WATCHDOG_TIME 4000
@@ -93,7 +83,7 @@
 #define RPM_REFRESH_INTERVAL 150
 
 //maximum RPM for engine
-#define RPM_MAX_EVER 7000
+#define RPM_MAX_EVER 5000
 
 #define NOMINAL_RPM_VALUE 880
 #define COLD_RPM_VALUE 1000
@@ -109,7 +99,7 @@
 
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 2.0
-#define IDLE_BOOST_PERCENTAGE_SET 65
+#define IDLE_BOOST_PERCENTAGE_SET 85
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4

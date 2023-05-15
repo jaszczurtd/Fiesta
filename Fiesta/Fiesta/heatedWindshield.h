@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "start.h"
+#include "tests.h"
 
 void heatedWindow(bool enable, int side);
 void initHeatedWindow(void);
