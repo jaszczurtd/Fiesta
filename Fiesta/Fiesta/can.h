@@ -5,13 +5,13 @@
 #include <SPI.h>
 #include <mcp_can.h>
 #include <tools.h>
-
 #include <canDefinitions.h>
 
 #include "sensors.h"
 #include "config.h"
 #include "start.h"
 #include "rpm.h"
+#include "tests.h"
 
 extern float valueFields[];
 

@@ -9,6 +9,7 @@
 #include "start.h"
 #include "hardwareConfig.h"
 #include "sensors.h"
+#include "tests.h"
 
 //Default reply ECU ID
 #define REPLY_ID 0x7E8 
