@@ -273,10 +273,10 @@ bool updateValsForDebug(void *arg) {
     stamp += "NL/";
   }
 
-  float volts = valueFields[F_VOLTS];
+  float volts = rroundf(valueFields[F_VOLTS]); 
   if(lastVoltage != volts) {
     lastVoltage = volts;
-    message += stamp + "Voltage update: " + String(volts, 2) + "V\n";
+    message += stamp + "Voltage update: " + String(volts, 1) + "V\n";
   }
 
   int egt = int(valueFields[F_EGT]);
