@@ -11,6 +11,7 @@
 #include "config.h"
 #include "start.h"
 #include "hardwareConfig.h"
+#include "tests.h"
 
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
@@ -30,13 +31,14 @@ float readVolts(void);
 float readBarPressure(void);
 float readEGT(void);
 int getThrottlePercentage(int currentVal);
+int getPercentageEngineLoad(void);
 
 void pcf8574_init(void);
 void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int val);
 
-int getEnginePercentageLoad(void);
+int getEnginePercentageThrottle(void);
 bool readMediumValues(void *argument);
 bool readHighValues(void *argument);
 

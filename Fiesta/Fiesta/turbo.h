@@ -8,6 +8,7 @@
 #include "start.h"
 #include "rpm.h"
 #include "hardwareConfig.h"
+#include "tests.h"
 
 void turboMainLoop(void);
 

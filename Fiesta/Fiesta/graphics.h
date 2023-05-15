@@ -12,6 +12,7 @@
 #include "engineFuel.h"
 #include "can.h"
 #include "sensors.h"
+#include "tests.h"
 
 #define TFT_CS     4 //CS
 #define TFT_RST    -1 //reset

@@ -10,6 +10,7 @@
 #include "obd-2.h"
 #include "turbo.h"
 #include "hardwareConfig.h"
+#include "tests.h"
 
 void enableVP37(bool enable);
 bool isVP37Enabled(void);

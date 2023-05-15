@@ -177,8 +177,8 @@ bool pcf8574_read(unsigned char pin) {
   return retVal;
 }
 
-int getEnginePercentageLoad(void) {
-  return percentToGivenVal((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
+int getEnginePercentageThrottle(void) {
+  return percentToGivenVal((float)( ( (valueFields[F_THROTTLE_POS]) * 100) / PWM_RESOLUTION), 100);  
 }
 
 static unsigned char lowCurrentValue = 0;
@@ -210,10 +210,24 @@ bool readMediumValues(void *argument) {
   return true;
 }
 
+int getPercentageEngineLoad(void) {
+
+  float map = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
+  float load = (map / 255.0f) * (valueFields[F_RPM] / float(RPM_MAX_EVER)) * 100.0f;
+  int roundedLoad = (int)(load + 0.5f);
+
+  if (roundedLoad < 0) {
+      roundedLoad = 0;
+  } else if (roundedLoad > 100) {
+      roundedLoad = 100;
+  }
+  return roundedLoad;
+}
+
 bool readHighValues(void *argument) {
   for(int a = 0; a < F_LAST; a++) {
     switch(a) {
-      case F_ENGINE_LOAD:
+      case F_THROTTLE_POS:
         valueFields[a] = readThrottle();
         break;
       case F_PRESSURE:
@@ -226,6 +240,7 @@ bool readHighValues(void *argument) {
         triggerDrawHighImportanceValue(true);
     }
     valueFields[F_CAR_SPEED] = getCurrentCarSpeed();
+    valueFields[F_CALCULATED_ENGINE_LOAD] = getPercentageEngineLoad();
   }
 
   return true;

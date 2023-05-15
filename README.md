@@ -1,6 +1,6 @@
 # Fiesta
 
-A bunch of tools for 1.8(M)TDDI Ford Fiesta
+A kind of a firmware for 1.8(M)TDDI Ford Fiesta
 
 https://postimg.cc/gallery/ZYtjXdm
 
@@ -19,6 +19,14 @@ The ECU is based on Arduino libraries https://www.arduino.cc/
 Board was originally based on Itsy Bitsy M0 https://learn.adafruit.com/introducing-itsy-bitsy-m0/
 Now is based on Raspberry pi pico https://www.raspberrypi.org/products/raspberry-pi-pico/
 
-Project is using Raspberry pi pico core by Earle F. Philhower, III:
+Project is using:
+
+Raspberry pi pico core by Earle F. Philhower, III:
 https://github.com/earlephilhower/arduino-pico/
 
+Unity tests framework, Copyright (c) 2007 - 2021 Unity Project by Mike Karlesky, Mark VanderVoord, and Greg Williams:
+https://github.com/ThrowTheSwitch/Unity/
+
+![alt text](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/display.JPG?raw=true)
+
+![alt text](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/ecu.jpg?raw=true)

@@ -6,6 +6,7 @@
 #include "config.h"
 #include "start.h"
 #include "sensors.h"
+#include "tests.h"
 
 void heater(bool enable, int level);
 void engineHeaterMainLoop(void);
