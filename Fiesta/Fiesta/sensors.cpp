@@ -47,7 +47,7 @@ float readVolts(void) {
   const float V_DIVIDER_R1 = 47710.0;
   const float V_DIVIDER_R2 = 9700.0;
 
-  return adcToVolt(analogRead(A2), V_DIVIDER_R1, V_DIVIDER_R2); 
+  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ float readVolts(void) {
 float readCoolantTemp(void) {
     set4051ActivePin(0);
     //real values (resitance)
-    return ntcToTemp(A1, 1506, 1500);
+    return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ float readCoolantTemp(void) {
 
 float readOilTemp(void) {
     set4051ActivePin(1);
-    return ntcToTemp(A1, 1506, 1500);
+    return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -76,7 +76,7 @@ float readOilTemp(void) {
 float readThrottle(void) {
     set4051ActivePin(2);
 
-    float rawVal = getAverageValueFrom(A1);
+    float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
     float initialVal = rawVal - THROTTLE_MIN;
 
     if(initialVal < 0) {
@@ -103,7 +103,7 @@ int getThrottlePercentage(int currentVal) {
 
 float readAirTemperature(void) {
     set4051ActivePin(3);
-    return ntcToTemp(A1, 5050, 4700);
+    return ntcToTemp(ADC_SENSORS_PIN, 5050, 4700);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ float readAirTemperature(void) {
 float readBarPressure(void) {
     set4051ActivePin(5);
 
-    float val = ((float)analogRead(A1) / DIVIDER_PRESSURE_BAR) - 1.0;
+    float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 1.0;
     if(val < 0.0) {
         val = 0.0;
     } 
@@ -126,7 +126,7 @@ float readBarPressure(void) {
 
 float readEGT(void) {
     set4051ActivePin(6);
-    return (((float)getAverageValueFrom(A1)) / DIVIDER_EGT);
+    return (((float)getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -157,11 +157,11 @@ void pcf8574_write(unsigned char pin, bool value) {
   bool notFound = Wire.endTransmission();
 
   if(!success) {
-    Serial.println("error writting byte to pcf8574");
+    derr("error writting byte to pcf8574");
   }
 
   if(notFound) {
-    Serial.println("pcf8574 not found");
+    derr("pcf8574 not found");
   }
 }
 

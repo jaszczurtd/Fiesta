@@ -24,6 +24,9 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
+#define ADC_VOLT_PIN A2
+#define ADC_SENSORS_PIN A1
+
 //chip select pin for SD card reader
 #define SD_CARD_CS 26
 
