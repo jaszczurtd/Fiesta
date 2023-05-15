@@ -47,7 +47,7 @@ float readVolts(void) {
   const float V_DIVIDER_R1 = 47710.0;
   const float V_DIVIDER_R2 = 9700.0;
 
-  return roundz(adcToVolt(analogRead(A2), V_DIVIDER_R1, V_DIVIDER_R2), 1); 
+  return adcToVolt(analogRead(A2), V_DIVIDER_R1, V_DIVIDER_R2); 
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ float readVolts(void) {
 float readCoolantTemp(void) {
     set4051ActivePin(0);
     //real values (resitance)
-    return roundz(ntcToTemp(A1, 1506, 1500), 1);
+    return ntcToTemp(A1, 1506, 1500);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ float readCoolantTemp(void) {
 
 float readOilTemp(void) {
     set4051ActivePin(1);
-    return roundz(ntcToTemp(A1, 1506, 1500), 1);
+    return ntcToTemp(A1, 1506, 1500);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ int getThrottlePercentage(int currentVal) {
 
 float readAirTemperature(void) {
     set4051ActivePin(3);
-    return roundz(ntcToTemp(A1, 5050, 4700), 1);
+    return ntcToTemp(A1, 5050, 4700);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ float readBarPressure(void) {
     if(val < 0.0) {
         val = 0.0;
     } 
-    return roundz(val, 1);
+    return val;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -126,7 +126,7 @@ float readBarPressure(void) {
 
 float readEGT(void) {
     set4051ActivePin(6);
-    return roundz((((float)getAverageValueFrom(A1)) / DIVIDER_EGT), 1);
+    return (((float)getAverageValueFrom(A1)) / DIVIDER_EGT);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -286,10 +286,10 @@ bool updateValsForDebug(void *arg) {
     stamp += "NL/";
   }
 
-  float volts = valueFields[F_VOLTS];
+  float volts = rroundf(valueFields[F_VOLTS]); 
   if(lastVoltage != volts) {
     lastVoltage = volts;
-    message += stamp + "Voltage update: " + String(volts, 2) + "V\n";
+    message += stamp + "Voltage update: " + String(volts, 1) + "V\n";
   }
 
   int egt = int(valueFields[F_EGT]);
