@@ -10,8 +10,10 @@
 
 #include "config.h"
 #include "start.h"
+#include "hardwareConfig.h"
 
-#define DEBUG_UPDATE 3
+//in miliseconds, print values into serial
+#define DEBUG_UPDATE 3 * 1000
 
 extern float valueFields[];
 
@@ -31,6 +33,7 @@ int getThrottlePercentage(int currentVal);
 
 void pcf8574_init(void);
 void pcf8574_write(unsigned char pin, bool value);
+bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int val);
 
 int getEnginePercentageLoad(void);

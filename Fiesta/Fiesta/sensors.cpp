@@ -165,6 +165,18 @@ void pcf8574_write(unsigned char pin, bool value) {
   }
 }
 
+bool pcf8574_read(unsigned char pin) {
+  Wire.beginTransmission(PCF8574_ADDR);
+  bool retVal = Wire.read();
+  bool notFound = Wire.endTransmission();
+
+  if(notFound) {
+    derr("pcf8574 not found");
+  }
+
+  return retVal;
+}
+
 int getEnginePercentageLoad(void) {
   return percentToGivenVal((float)( ( (valueFields[F_ENGINE_LOAD]) * 100) / PWM_RESOLUTION), 100);  
 }

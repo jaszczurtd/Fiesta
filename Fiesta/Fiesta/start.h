@@ -22,6 +22,10 @@
 #include "engineFuel.h"
 #include "can.h"
 #include "obd-2.h"
+#include "vp37.h"
+
+#define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
+#define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
 
 void drawMediumImportanceValues(void);
 void drawHighImportanceValues(void);
