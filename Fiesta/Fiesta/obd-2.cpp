@@ -19,9 +19,6 @@ unsigned char len = 0;
 // This the eight byte buffer of the incoming message data payload
 unsigned char buf[8];
 
-//char str[20];
-String canMessageRead = "";
-
 // MIL on and DTC Present 
 bool MIL = true;
 
@@ -156,31 +153,6 @@ void obdLoop(void) {
   //                                V     V     V     V     V      V    V     V
   byte mode9Supported0x00PID[8] = {0x06, 0x49, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00};
 
-//=================================================================
-//Vars to help build msg
-//=================================================================
-
-  ////Build setting return msg
-  byte obd_Std_Msg[8] = {4, 65, 0x1C, (byte)(obd_Std)};
-  byte fuel_Type_Msg[8] = {4, 65, 0x51, (byte)(fuel_Type)};
-
-
-  int engine_Rpm = int(valueFields[F_RPM] * 4);
-  int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
-  int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
-  int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
-
-
-  //Build sensor return msg
-  byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
-  byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
-  byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
-  byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
-  byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
-  byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
-
-  //Serial return message
-  String reply;
 
 //=================================================================
 //Handel Recived CAN-BUS frames from service tool
@@ -198,199 +170,146 @@ void obdLoop(void) {
                         val,
                         buf[0], buf[1], buf[2]);
 
-    for (int i = 0; i < 3; i++) {
-      canMessageRead = canMessageRead + buf[i] + ",";
-    }
-
 //=================================================================
 //Return CAN-BUS Messages - SUPPORTED PID's 
 //=================================================================
 
-    if (canMessageRead == "2,1,0,")
-    {
+  switch(val) {
+    case 0x20100: //2,1,0
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x00PID);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)mode1Supported0x00PID));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
-    if (canMessageRead == "2,1,32,")
-    {
+      break;
+    case 0x20120: //2,1,32
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x20PID);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)mode1Supported0x20PID));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
-    if (canMessageRead == "2,1,64,")
-    {
+      break;
+    case 0x20140: //2,1,64
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)mode1Supported0x40PID));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
+      break;
 
-    if (canMessageRead == "2,9,0,")
-    {
+    case 0x20900: //2,9,0
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)mode9Supported0x00PID));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-    
+      break;
+
 //=================================================================
 //Return CAN-BUS Messages - RETURN PID VALUES - SENSORS 
 //=================================================================
 
     //Engine Coolant
-    if (canMessageRead == "2,1,5,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)engine_Coolant_Temperature_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x20105: { //2,1,5 
+        int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
+        byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
+      }
+      break;
     //Rpm
-    if (canMessageRead == "2,1,12,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)engine_Rpm_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x2010c: { //2,1,12  
+        int engine_Rpm = int(valueFields[F_RPM] * 4);
+        byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
+      }
+      break;
     //Speed
-    if (canMessageRead == "2,1,13,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)vehicle_Speed_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x2010d: { //2,1,13
+        int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
+        byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
+      }
+      break;
     //Timing Adv
-    if (canMessageRead == "2,1,14,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)timing_Advance_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x2010e: { //2,1,14
+        byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
+      }
+      break;
     //Intake Tempture
-    if (canMessageRead == "2,1,15,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)intake_Temp_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x2010f: { //2,1,15
+        int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
+        byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
+      }
+      break;
     //MAF
-    if (canMessageRead == "2,1,16,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)maf_Air_Flow_Rate_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x20110: { //2,1,16
+        byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
+      }
+      break;
     //OBD standard
-    if (canMessageRead == "2,1,28,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)obd_Std_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
-
+    case 0x2011c: { //2,1,28
+        byte obd_Std_Msg[8] = {4, 65, 0x1C, (byte)(obd_Std)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
+      }
+      break;
     //Fuel Type Coding
-    if (canMessageRead == "2,1,58,")
-    {
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
-      reply = String(String(REPLY_ID, HEX) + ",0,8," + String((char*)fuel_Type_Msg));
-      Serial.println("Reply: " + reply);
-      reply = "";
-    }
+    case 0x2013a: { //2,1,58
+        byte fuel_Type_Msg[8] = {4, 65, 0x51, (byte)(fuel_Type)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
+      }
+      break;
 
 //=================================================================
 //Return CAN-BUS Messages - RETURN PID VALUES - DATA 
 //=================================================================
-
     //VIN
-    if (canMessageRead == "2,9,2,")
-    {
+    case 0x20902: { //2,9,2
+        unsigned char frame1[8] = {16, 20, 73, 2, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
+        unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
+        unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
 
-      unsigned char frame1[8] = {16, 20, 73, 2, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
-      unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
-      unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
-
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-    }
-
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+      }
+      break;
     //CAL ID
-    if (canMessageRead == "2,9,4,")
-    {
-       unsigned char frame1[8] = {16, 20, 73, 4, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
-       unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
-       unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
+    case 0x20904: { //2,9,4
+        unsigned char frame1[8] = {16, 20, 73, 4, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
+        unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
+        unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
 
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-    }
-
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+      }
+      break;
     //ECU NAME
-    if (canMessageRead == "2,9,10,")
-    {
+    case 0x2090a: { //2,9,10
+        unsigned char frame1[8] = {10, 14, 49, 10, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
+        unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
+        unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
+        unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
 
-      unsigned char frame1[8] = {10, 14, 49, 10, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
-      unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
-      unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
-      unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
-
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
-    }
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
+      }
+      break;
 
 //=================================================================
 //Return CAN-BUS Messages - RETURN PID VALUES - DTC
 //=================================================================
-
     //DTC
-    if (canMessageRead == "1,3,0,")
-    {
-      if (MIL)
-      {
-        unsigned char DTC[] = {6, 67, 1, 2, 23, 0, 0, 0}; //P0217
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, DTC);
-        reply = String(String(REPLY_ID, HEX) + ",0,8, " + String((char*)DTC));
-        Serial.println("Reply: " + reply);
-        reply = "";
+    case 0x10300: { //1,3,0
+        const byte *DTC = NULL;
+        if (MIL) {
+          //P0217
+          DTC = (const byte[]){6, 67, 1, 2, 23, 0, 0, 0}; 
+        } else {
+          //No Stored DTC
+          DTC = (const byte[]){6, 67, 0, 0, 0, 0, 0, 0}; 
+        }
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
       }
-      else
-      {
-        unsigned char DTC[] = {6, 67, 0, 0, 0, 0, 0, 0}; //No Stored DTC
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, DTC);
-        reply = String(String(REPLY_ID, HEX) + ",0,8, " + String((char*)DTC));
-        Serial.println("Reply: " + reply);
-        reply = "";
-      }
-    }
-
+      break;
     //DTC Clear 
-    if (canMessageRead == "1,4,0,")
-    {
+    case 0x10400: //1,4,0
       MIL = false;
-    }
+      break;
 
-      canMessageRead = "";
+    default:
+      deb("unsupported: %x", val);
+      break;
     }
-
   }
+}
 
