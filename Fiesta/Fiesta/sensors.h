@@ -31,13 +31,14 @@ float readVolts(void);
 float readBarPressure(void);
 float readEGT(void);
 int getThrottlePercentage(int currentVal);
+int getPercentageEngineLoad(void);
 
 void pcf8574_init(void);
 void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int val);
 
-int getEnginePercentageLoad(void);
+int getEnginePercentageThrottle(void);
 bool readMediumValues(void *argument);
 bool readHighValues(void *argument);
 

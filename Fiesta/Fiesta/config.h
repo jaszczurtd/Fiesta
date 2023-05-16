@@ -83,7 +83,7 @@
 #define RPM_REFRESH_INTERVAL 150
 
 //maximum RPM for engine
-#define RPM_MAX_EVER 7000
+#define RPM_MAX_EVER 5000
 
 #define NOMINAL_RPM_VALUE 880
 #define COLD_RPM_VALUE 1000

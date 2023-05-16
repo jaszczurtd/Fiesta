@@ -114,9 +114,10 @@ void obdLoop(void) {
   //                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
   //                                |     |     |     |     |      |    |     |
   //                                V     V     V     V     V      V    V     V
-  byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0x88, 0x1F, 0x00, 0x00, 0x00};
-  byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00};
-  byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0x04, 0x00, 0x00, 0x00, 0x00};
+  byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
+  byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
+  byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
+  byte mode1Supported0x60PID[8] = {0x06, 0x41, 0x60, 0xff, 0xff, 0xff, 0xff, 0xff};
 
   byte SupportedPID1[8] = {0x02, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   byte SupportedPID2[8] = {0x02, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -184,6 +185,9 @@ void obdLoop(void) {
     case 0x20140: //2,1,64
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
       break;
+    case 0x20160: 
+      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x60PID);
+      break;
 
     case 0x20900: //2,9,0
       CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
@@ -212,10 +216,22 @@ void obdLoop(void) {
       break;
     //Throttle position
     case 0x20111: {
-        float percent = (valueFields[F_ENGINE_LOAD] * 100) / PWM_RESOLUTION;
+        float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
         byte throttle_Position = percentToGivenVal(percent, 255);
         byte throttle_Position_Msg[8] = {3, 65, 0x11, (throttle_Position)};
         CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
+      }
+      break;
+    //Engine Load
+    case 0x20104: {
+        byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+        byte engine_Load_Msg[8] = {3, 65, 0x04, (engine_Load)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
+      }
+      break;
+
+    case 0x20142: {
+        deb("VOLTAAAAAG!");
       }
       break;
     //Rpm
