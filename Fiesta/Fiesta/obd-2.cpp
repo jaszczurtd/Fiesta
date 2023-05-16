@@ -200,6 +200,24 @@ void obdLoop(void) {
         CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
       }
       break;
+    //Intake pressure
+    case 0x2010b: {
+        int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
+        if(intake_Pressure > 255) {
+          intake_Pressure = 255;
+        }
+        byte intake_Pressure_Msg[8] = {3, 65, 0x0b, (byte)(intake_Pressure)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
+      }
+      break;
+    //Throttle position
+    case 0x20111: {
+        float percent = (valueFields[F_ENGINE_LOAD] * 100) / PWM_RESOLUTION;
+        byte throttle_Position = percentToGivenVal(percent, 255);
+        byte throttle_Position_Msg[8] = {3, 65, 0x11, (throttle_Position)};
+        CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
+      }
+      break;
     //Rpm
     case 0x2010c: { //2,1,12  
         int engine_Rpm = int(valueFields[F_RPM] * 4);
