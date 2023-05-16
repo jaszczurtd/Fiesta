@@ -75,23 +75,6 @@ void obdInit(int retries) {
 #endif
 }
 
-int getNumberFromMessage(String str) {
-  int len = str.length();
-  int num = 0;
-  int factor = 1;
-  
-  for (int i = len - 2; i >= 0; i--) {
-      if (str[i] == ',') {
-          continue;
-      }
-      
-      int digit = str[i] - '0';
-      num += digit * factor;
-      factor *= 10;
-  }
-  return num;
-}
-
 void obdLoop(void) {
   if(!initialized) {
     return;
@@ -137,6 +120,14 @@ void obdLoop(void) {
   byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0x88, 0x1F, 0x00, 0x00, 0x00};
   byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00};
   byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0x04, 0x00, 0x00, 0x00, 0x00};
+
+  byte SupportedPID1[8] = {0x02, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID2[8] = {0x02, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID3[8] = {0x02, 0x41, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID4[8] = {0x02, 0x41, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID5[8] = {0x02, 0x41, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID6[8] = {0x02, 0x41, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00};
+  byte SupportedPID7[8] = {0x02, 0x41, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00};
 
   // Define the set of PIDs for MODE09 you wish you ECU to support.
   // As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
@@ -196,19 +187,20 @@ void obdLoop(void) {
 //=================================================================
 
   //if(CAN_MSGAVAIL == CAN.checkReceive())
-  if (!digitalRead(CAN1_INT))
-  {
-
+  if (!digitalRead(CAN1_INT))  {
     CAN0.readMsgBuf(&canId, &len, buf);
     //https://en.wikipedia.org/wiki/OBD-II_PIDs#CAN_(11-bit)_bus_format
     
-    Serial.print("Received: "); Serial.print(canId, HEX); Serial.print(",");
+    int val = buf[0] << 16 | buf[1] << 8 | buf[2];
+    deb("received: (%x) %x %x %x / %x / (%hhu,%hhu,%hhu)", 
+                        canId, 
+                        buf[0], buf[1], buf[2],
+                        val,
+                        buf[0], buf[1], buf[2]);
 
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; i++) {
       canMessageRead = canMessageRead + buf[i] + ",";
     }
-    Serial.println(canMessageRead);
 
 //=================================================================
 //Return CAN-BUS Messages - SUPPORTED PID's 
