@@ -22,15 +22,15 @@ static unsigned long lastSolenoidUpdate = 0;
 
 void turboMainLoop(void) {
 
-  int engineLoadRAWValue = int(valueFields[F_ENGINE_LOAD]);
-  int engineLoadPercentageValue = getThrottlePercentage(engineLoadRAWValue);
-  int posThrottle = (engineLoadPercentageValue / 10);
+  int engineThrottleRAWValue = int(valueFields[F_THROTTLE_POS]);
+  int engineThrottlePercentageValue = getThrottlePercentage(engineThrottleRAWValue);
+  int posThrottle = (engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
   int n75;
   int pressurePercentage;
 
   if(valueFields[F_PRESSURE] < MAX_BOOST_PRESSURE) {
-    if(engineLoadPercentageValue > 0) {
+    if(engineThrottlePercentageValue > 0) {
       pedalPressed = true;
     }
 

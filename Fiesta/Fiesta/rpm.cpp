@@ -77,8 +77,8 @@ void stabilizeRPM(void) {
     valueFields[F_RPM] = 0;
   }
 
-  int engineLoad = getEnginePercentageLoad();
-  if(engineLoad > 5 ||
+  int engineThrottle = getEnginePercentageThrottle();
+  if(engineThrottle > 5 ||
     valueFields[F_RPM] < RPM_MIN) {  
     setRPMPercentage(70); //percent
     rpmCycle = false;
