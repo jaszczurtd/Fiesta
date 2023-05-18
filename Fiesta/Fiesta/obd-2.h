@@ -17,10 +17,16 @@
 //OBD standards https://en.wikipedia.org/wiki/OBD-II_PIDs#Service_01_PID_1C
 #define JOBD_OBD_II 11
 #define EOBD_OBD_OBD_II 9
-#define FUEL_TYPE_DIESEL 4
 
 //Fuel Type Coding https://en.wikipedia.org/wiki/OBD-II_PIDs#Fuel_Type_Coding
-static const int fuel_Type = 4; //diesel
+#define FUEL_TYPE_DIESEL 4
+
+#define L1 0x01
+#define L2 0x02
+
+#define MODE1_RESPONSE    0x41
+#define MODE3_RESPONSE    0x43
+#define MODE4_RESPONSE    0x44
 
 #define SHOW_CURRENT_DATA 1
 #define SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES 3
