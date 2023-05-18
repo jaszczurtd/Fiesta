@@ -31,11 +31,6 @@ static unsigned char calibration_ID[18] = "FW00108MHZ1111111";
 //Stored ECU Name
 static unsigned char ecu_Name[19] = "FIESTA_TDI";
 
-//OBD standards https://en.wikipedia.org/wiki/OBD-II_PIDs#Service_01_PID_1C
-static const int obd_Std = 11;
-
-//Fuel Type Coding https://en.wikipedia.org/wiki/OBD-II_PIDs#Fuel_Type_Coding
-static const int fuel_Type = 4; //diesel
 
 //Default PID values
 int timing_Advance  = 10;
@@ -117,16 +112,7 @@ void obdLoop(void) {
   byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
   byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
   byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
-  byte mode1Supported0x60PID[8] = {0x06, 0x41, 0x60, 0xff, 0xff, 0xff, 0xff, 0xff};
-
-  byte SupportedPID1[8] = {0x02, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID2[8] = {0x02, 0x41, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID3[8] = {0x02, 0x41, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID4[8] = {0x02, 0x41, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID5[8] = {0x02, 0x41, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID6[8] = {0x02, 0x41, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00};
-  byte SupportedPID7[8] = {0x02, 0x41, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00};
-
+  
   // Define the set of PIDs for MODE09 you wish you ECU to support.
   // As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
   // Our supported PID value is:
@@ -168,19 +154,22 @@ void obdLoop(void) {
     int service = buf[1];
     int pid = buf[2];
 
-    int val = len << 16 | service << 8 | pid;
-    deb("received: (%x) %x %x %x / %x / (%hhu,%hhu,%hhu)", 
+    char pids[128];
+    if(len == 0x02 && service == SHOW_CURRENT_DATA) {
+      snprintf(pids, sizeof(pids) - 1, "0x%02x/%s", pid, getPIDName(pid));
+    } else {
+      snprintf(pids, sizeof(pids) - 1, "0x%02x", pid);
+    }
+
+    deb("OBD-2/(%x) l:0x%02x service:0x%02x PID:%s / (%hhu,%hhu,%hhu)", 
                         canId, 
-                        len, service, pid,
-                        val,
+                        len, service, pids, 
                         len, service, pid);
 
 //=================================================================
-//Return CAN-BUS Messages - SUPPORTED PID's 
+//DTC support 
 //=================================================================
-
-  switch(len) { 
-    case 0x01:
+    if(len == 0x01) {
       switch(service) { 
         case SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES:
           deb("DTC show");
@@ -208,33 +197,33 @@ void obdLoop(void) {
           }
           break;
       }
-      break;
+    }
 
-    case 0x02:
+//=================================================================
+//Return CAN-BUS Messages - SUPPORTED PID's 
+//=================================================================
+    if(len == 0x02) {
       switch(service) { 
         case SHOW_CURRENT_DATA: {
           switch(pid) {  
-            case 0x00:
+            case PIDS_SUPPORT_01_20:
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x00PID);
               break;
-            case 0x20:
+            case PIDS_SUPPORT_21_40:
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x20PID);
               break;
-            case 0x40:
+            case PIDS_SUPPORT_41_60:
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
               break;
-            case 0x60:
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x60PID);
-              break;
-            //OBD standard
-            case 0x1c: { 
-              byte obd_Std_Msg[8] = {4, 65, 0x1C, (byte)(obd_Std)};
+            case OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO: { 
+              byte obd_Std_Msg[8] = {4, 65, OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO, 
+                EOBD_OBD_OBD_II};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
               break;
             }
-            //Fuel Type Coding
-            case 0x3a: { 
-              byte fuel_Type_Msg[8] = {4, 65, 0x51, (byte)(fuel_Type)};
+            case FUEL_TYPE: { 
+              byte fuel_Type_Msg[8] = {4, 65, FUEL_TYPE, 
+                FUEL_TYPE_DIESEL};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
               break;
             }
@@ -242,76 +231,74 @@ void obdLoop(void) {
             //=================================================================
             //Return CAN-BUS Messages - RETURN PID VALUES - SENSORS 
             //=================================================================
-            //Engine Coolant
-            case 0x05: { 
+            case ENGINE_COOLANT_TEMPERATURE: { 
               int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
-              byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
+              byte engine_Coolant_Temperature_Msg[8] = {3, 65, ENGINE_COOLANT_TEMPERATURE, 
+                (byte)(engine_Coolant_Temperature)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
               break;
             }
-            //Intake pressure
-            case 0x0b: {
+            case INTAKE_MANIFOLD_ABSOLUTE_PRESSURE: {
               int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
               if(intake_Pressure > 255) {
                 intake_Pressure = 255;
               }
-              byte intake_Pressure_Msg[8] = {3, 65, 0x0b, (byte)(intake_Pressure)};
+              byte intake_Pressure_Msg[8] = {3, 65, INTAKE_MANIFOLD_ABSOLUTE_PRESSURE, 
+                (byte)(intake_Pressure)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
               break;
             }
-            //Throttle position
-            case 0x11: {
+            case THROTTLE_POSITION: {
               float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
               byte throttle_Position = percentToGivenVal(percent, 255);
-              byte throttle_Position_Msg[8] = {3, 65, 0x11, (throttle_Position)};
+              byte throttle_Position_Msg[8] = {3, 65, THROTTLE_POSITION, 
+                (throttle_Position)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
               break;
             }
-            //Engine Load
-            case 0x04: {
+            case CALCULATED_ENGINE_LOAD: {
               byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
-              byte engine_Load_Msg[8] = {3, 65, 0x04, (engine_Load)};
+              byte engine_Load_Msg[8] = {3, 65, CALCULATED_ENGINE_LOAD, 
+                (engine_Load)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
               break;
             }
-            //Rpm
-            case 0x0c: { //2,1,12  
+            case ENGINE_RPM: { 
               int engine_Rpm = int(valueFields[F_RPM] * 4);
-              byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
+              byte engine_Rpm_Msg[8] = {4, 65, ENGINE_RPM, 
+                MSB(engine_Rpm), LSB(engine_Rpm)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
               break;
             }
-            //Speed
-            case 0x0d: { //2,1,13
+            case VEHICLE_SPEED: { 
               int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
-              byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
+              byte vehicle_Speed_Msg[8] = {3, 65, VEHICLE_SPEED, 
+                (byte)(vehicle_Speed)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
               break;
             }
-            //Timing Adv
-            case 0x0e: { //2,1,14
-              byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
+            case TIMING_ADVANCE: { 
+              byte timing_Advance_Msg[8] = {3, 65, TIMING_ADVANCE, 
+                (byte)((timing_Advance + 64) * 2)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
               break;
             }
-            //Intake Tempture
-            case 0x0f: { //2,1,15
+            case AIR_INTAKE_TEMPERATURE: { 
               int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
-              byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
+              byte intake_Temp_Msg[8] = {3, 65, AIR_INTAKE_TEMPERATURE, 
+                (byte)(intake_Temp)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
               break;
             }
-            //MAF
-            case 0x10: { //2,1,16
-              byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
+            case MAF_AIR_FLOW_RATE: { 
+              byte maf_Air_Flow_Rate_Msg[8] = {4, 65, MAF_AIR_FLOW_RATE, 
+                MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
               break;
             }
-            case 0x42: {
-              deb("VOLTAAAAAG!");
+            default:
+              deb("unknown device data requested: 0x%02x/%s", pid, getPIDName(pid));
               break;
-            }
-            
           }
         }
         break;
@@ -320,13 +307,13 @@ void obdLoop(void) {
         //Return CAN-BUS Messages - RETURN PID VALUES - DATA 
         //=================================================================
         case REQUEST_VEHICLE_INFORMATION: {
-          switch(pid) {  //pid
-            case 0x00:
+          switch(pid) {  
+            case REQUEST_MODE_9_SUPPORTED:
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
               break;
 
-            case 0x02: { //VIN
-              unsigned char frame1[8] = {16, 20, 73, 2, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
+            case REQUEST_VIN: { 
+              unsigned char frame1[8] = {16, 20, 73, REQUEST_VIN, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
               unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
               unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
 
@@ -336,8 +323,8 @@ void obdLoop(void) {
               break;
             }
 
-            case 0x04: { //calibration ID
-              unsigned char frame1[8] = {16, 20, 73, 4, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
+            case REQUEST_CALLIBRATION_ID: { 
+              unsigned char frame1[8] = {16, 20, 73, REQUEST_CALLIBRATION_ID, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
               unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
               unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
 
@@ -347,8 +334,8 @@ void obdLoop(void) {
               break;
             }
 
-            case 0x0a: { //ECU name
-              unsigned char frame1[8] = {10, 14, 49, 10, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
+            case REQUEST_ECU_NAME: { 
+              unsigned char frame1[8] = {10, 14, 49, REQUEST_ECU_NAME, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
               unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
               unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
               unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
@@ -359,11 +346,18 @@ void obdLoop(void) {
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
               break;
             }
+
+            default:
+              deb("not supported request MODE9: 0x%02x", pid);
+              break;
           }
         }
         break;
+
+        default:
+          deb("not supported service: 0x%02x", service);
+          break;
       }
-      break;
     }
   }
 }
