@@ -32,10 +32,10 @@ static unsigned char calibration_ID[18] = "FW00108MHZ1111111";
 static unsigned char ecu_Name[19] = "FIESTA_TDI";
 
 //OBD standards https://en.wikipedia.org/wiki/OBD-II_PIDs#Service_01_PID_1C
-int obd_Std = 11;
+static const int obd_Std = 11;
 
 //Fuel Type Coding https://en.wikipedia.org/wiki/OBD-II_PIDs#Fuel_Type_Coding
-int fuel_Type = 4; //diesel
+static const int fuel_Type = 4; //diesel
 
 //Default PID values
 int timing_Advance  = 10;
@@ -164,184 +164,205 @@ void obdLoop(void) {
     CAN0.readMsgBuf(&canId, &len, buf);
     //https://en.wikipedia.org/wiki/OBD-II_PIDs#CAN_(11-bit)_bus_format
     
-    int val = buf[0] << 16 | buf[1] << 8 | buf[2];
+    int len = buf[0];
+    int service = buf[1];
+    int pid = buf[2];
+
+    int val = len << 16 | service << 8 | pid;
     deb("received: (%x) %x %x %x / %x / (%hhu,%hhu,%hhu)", 
                         canId, 
-                        buf[0], buf[1], buf[2],
+                        len, service, pid,
                         val,
-                        buf[0], buf[1], buf[2]);
+                        len, service, pid);
 
 //=================================================================
 //Return CAN-BUS Messages - SUPPORTED PID's 
 //=================================================================
 
-  switch(val) {
-    case 0x20100: //2,1,0
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x00PID);
-      break;
-    case 0x20120: //2,1,32
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x20PID);
-      break;
-    case 0x20140: //2,1,64
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
-      break;
-    case 0x20160: 
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x60PID);
-      break;
-
-    case 0x20900: //2,9,0
-      CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
-      break;
-
-//=================================================================
-//Return CAN-BUS Messages - RETURN PID VALUES - SENSORS 
-//=================================================================
-
-    //Engine Coolant
-    case 0x20105: { //2,1,5 
-        int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
-        byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
+  switch(len) { 
+    case 0x01:
+      switch(service) { 
+        case SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES:
+          deb("DTC show");
+          switch(pid) {
+            case 0x00: { 
+              const byte *DTC = NULL;
+              if (MIL) {
+                //P0217
+                DTC = (const byte[]){6, 67, 1, 2, 23, 0, 0, 0}; 
+              } else {
+                //No Stored DTC
+                DTC = (const byte[]){6, 67, 0, 0, 0, 0, 0, 0}; 
+              }
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
+            }
+            break;
+          }
+          break;
+        case CLEAR_DIAGNOSTIC_TROUBLE_CODES_AND_STORED_VALUES:
+          deb("DTC clear");
+          switch(pid) {
+            case 0x00:
+              MIL = false;
+            break;
+          }
+          break;
       }
       break;
-    //Intake pressure
-    case 0x2010b: {
-        int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
-        if(intake_Pressure > 255) {
-          intake_Pressure = 255;
+
+    case 0x02:
+      switch(service) { 
+        case SHOW_CURRENT_DATA: {
+          switch(pid) {  
+            case 0x00:
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x00PID);
+              break;
+            case 0x20:
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x20PID);
+              break;
+            case 0x40:
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
+              break;
+            case 0x60:
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x60PID);
+              break;
+            //OBD standard
+            case 0x1c: { 
+              byte obd_Std_Msg[8] = {4, 65, 0x1C, (byte)(obd_Std)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
+              break;
+            }
+            //Fuel Type Coding
+            case 0x3a: { 
+              byte fuel_Type_Msg[8] = {4, 65, 0x51, (byte)(fuel_Type)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
+              break;
+            }
+
+            //=================================================================
+            //Return CAN-BUS Messages - RETURN PID VALUES - SENSORS 
+            //=================================================================
+            //Engine Coolant
+            case 0x05: { 
+              int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
+              byte engine_Coolant_Temperature_Msg[8] = {3, 65, 0x05, (byte)(engine_Coolant_Temperature)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
+              break;
+            }
+            //Intake pressure
+            case 0x0b: {
+              int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
+              if(intake_Pressure > 255) {
+                intake_Pressure = 255;
+              }
+              byte intake_Pressure_Msg[8] = {3, 65, 0x0b, (byte)(intake_Pressure)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
+              break;
+            }
+            //Throttle position
+            case 0x11: {
+              float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
+              byte throttle_Position = percentToGivenVal(percent, 255);
+              byte throttle_Position_Msg[8] = {3, 65, 0x11, (throttle_Position)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
+              break;
+            }
+            //Engine Load
+            case 0x04: {
+              byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+              byte engine_Load_Msg[8] = {3, 65, 0x04, (engine_Load)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
+              break;
+            }
+            //Rpm
+            case 0x0c: { //2,1,12  
+              int engine_Rpm = int(valueFields[F_RPM] * 4);
+              byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
+              break;
+            }
+            //Speed
+            case 0x0d: { //2,1,13
+              int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
+              byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
+              break;
+            }
+            //Timing Adv
+            case 0x0e: { //2,1,14
+              byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
+              break;
+            }
+            //Intake Tempture
+            case 0x0f: { //2,1,15
+              int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
+              byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
+              break;
+            }
+            //MAF
+            case 0x10: { //2,1,16
+              byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
+              break;
+            }
+            case 0x42: {
+              deb("VOLTAAAAAG!");
+              break;
+            }
+            
+          }
         }
-        byte intake_Pressure_Msg[8] = {3, 65, 0x0b, (byte)(intake_Pressure)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
-      }
-      break;
-    //Throttle position
-    case 0x20111: {
-        float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
-        byte throttle_Position = percentToGivenVal(percent, 255);
-        byte throttle_Position_Msg[8] = {3, 65, 0x11, (throttle_Position)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
-      }
-      break;
-    //Engine Load
-    case 0x20104: {
-        byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
-        byte engine_Load_Msg[8] = {3, 65, 0x04, (engine_Load)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
-      }
-      break;
+        break;
 
-    case 0x20142: {
-        deb("VOLTAAAAAG!");
-      }
-      break;
-    //Rpm
-    case 0x2010c: { //2,1,12  
-        int engine_Rpm = int(valueFields[F_RPM] * 4);
-        byte engine_Rpm_Msg[8] = {4, 65, 0x0C, MSB(engine_Rpm), LSB(engine_Rpm)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
-      }
-      break;
-    //Speed
-    case 0x2010d: { //2,1,13
-        int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
-        byte vehicle_Speed_Msg[8] = {3, 65, 0x0D, (byte)(vehicle_Speed)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
-      }
-      break;
-    //Timing Adv
-    case 0x2010e: { //2,1,14
-        byte timing_Advance_Msg[8] = {3, 65, 0x0E, (byte)((timing_Advance + 64) * 2)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
-      }
-      break;
-    //Intake Tempture
-    case 0x2010f: { //2,1,15
-        int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
-        byte intake_Temp_Msg[8] = {3, 65, 0x0F, (byte)(intake_Temp)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
-      }
-      break;
-    //MAF
-    case 0x20110: { //2,1,16
-        byte maf_Air_Flow_Rate_Msg[8] = {4, 65, 0x10, MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
-      }
-      break;
-    //OBD standard
-    case 0x2011c: { //2,1,28
-        byte obd_Std_Msg[8] = {4, 65, 0x1C, (byte)(obd_Std)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
-      }
-      break;
-    //Fuel Type Coding
-    case 0x2013a: { //2,1,58
-        byte fuel_Type_Msg[8] = {4, 65, 0x51, (byte)(fuel_Type)};
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
-      }
-      break;
+        //=================================================================
+        //Return CAN-BUS Messages - RETURN PID VALUES - DATA 
+        //=================================================================
+        case REQUEST_VEHICLE_INFORMATION: {
+          switch(pid) {  //pid
+            case 0x00:
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
+              break;
 
-//=================================================================
-//Return CAN-BUS Messages - RETURN PID VALUES - DATA 
-//=================================================================
-    //VIN
-    case 0x20902: { //2,9,2
-        unsigned char frame1[8] = {16, 20, 73, 2, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
-        unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
-        unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
+            case 0x02: { //VIN
+              unsigned char frame1[8] = {16, 20, 73, 2, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
+              unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
+              unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
 
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-      }
-      break;
-    //CAL ID
-    case 0x20904: { //2,9,4
-        unsigned char frame1[8] = {16, 20, 73, 4, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
-        unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
-        unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+              break;
+            }
 
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-      }
-      break;
-    //ECU NAME
-    case 0x2090a: { //2,9,10
-        unsigned char frame1[8] = {10, 14, 49, 10, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
-        unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
-        unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
-        unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
+            case 0x04: { //calibration ID
+              unsigned char frame1[8] = {16, 20, 73, 4, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
+              unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
+              unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
 
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
-      }
-      break;
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+              break;
+            }
 
-//=================================================================
-//Return CAN-BUS Messages - RETURN PID VALUES - DTC
-//=================================================================
-    //DTC
-    case 0x10300: { //1,3,0
-        const byte *DTC = NULL;
-        if (MIL) {
-          //P0217
-          DTC = (const byte[]){6, 67, 1, 2, 23, 0, 0, 0}; 
-        } else {
-          //No Stored DTC
-          DTC = (const byte[]){6, 67, 0, 0, 0, 0, 0, 0}; 
+            case 0x0a: { //ECU name
+              unsigned char frame1[8] = {10, 14, 49, 10, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
+              unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
+              unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
+              unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
+
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
+              break;
+            }
+          }
         }
-        CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
+        break;
       }
-      break;
-    //DTC Clear 
-    case 0x10400: //1,4,0
-      MIL = false;
-      break;
-
-    default:
-      deb("unsupported: %x", val);
       break;
     }
   }
