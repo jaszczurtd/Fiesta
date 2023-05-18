@@ -155,7 +155,7 @@ void obdLoop(void) {
     int pid = buf[2];
 
     char pids[128];
-    if(len == 0x02 && service == SHOW_CURRENT_DATA) {
+    if(len == L2 && service == SHOW_CURRENT_DATA) {
       snprintf(pids, sizeof(pids) - 1, "0x%02x/%s", pid, getPIDName(pid));
     } else {
       snprintf(pids, sizeof(pids) - 1, "0x%02x", pid);
@@ -169,7 +169,7 @@ void obdLoop(void) {
 //=================================================================
 //DTC support 
 //=================================================================
-    if(len == 0x01) {
+    if(len == L1) {
       switch(service) { 
         case SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES:
           deb("DTC show");
@@ -178,10 +178,10 @@ void obdLoop(void) {
               const byte *DTC = NULL;
               if (MIL) {
                 //P0217
-                DTC = (const byte[]){6, 67, 1, 2, 23, 0, 0, 0}; 
+                DTC = (const byte[]){6, MODE3_RESPONSE, 1, 2, 23, 0, 0, 0}; 
               } else {
                 //No Stored DTC
-                DTC = (const byte[]){6, 67, 0, 0, 0, 0, 0, 0}; 
+                DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
               }
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
             }
@@ -193,6 +193,9 @@ void obdLoop(void) {
           switch(pid) {
             case 0x00:
               MIL = false;
+              //No Stored DTC
+              DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
+              CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
             break;
           }
           break;
@@ -202,7 +205,7 @@ void obdLoop(void) {
 //=================================================================
 //Return CAN-BUS Messages - SUPPORTED PID's 
 //=================================================================
-    if(len == 0x02) {
+    if(len == L2) {
       switch(service) { 
         case SHOW_CURRENT_DATA: {
           switch(pid) {  
@@ -216,13 +219,13 @@ void obdLoop(void) {
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
               break;
             case OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO: { 
-              byte obd_Std_Msg[8] = {4, 65, OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO, 
+              byte obd_Std_Msg[8] = {4, MODE1_RESPONSE, OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO, 
                 EOBD_OBD_OBD_II};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
               break;
             }
             case FUEL_TYPE: { 
-              byte fuel_Type_Msg[8] = {4, 65, FUEL_TYPE, 
+              byte fuel_Type_Msg[8] = {4, MODE1_RESPONSE, FUEL_TYPE, 
                 FUEL_TYPE_DIESEL};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
               break;
@@ -233,7 +236,7 @@ void obdLoop(void) {
             //=================================================================
             case ENGINE_COOLANT_TEMPERATURE: { 
               int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
-              byte engine_Coolant_Temperature_Msg[8] = {3, 65, ENGINE_COOLANT_TEMPERATURE, 
+              byte engine_Coolant_Temperature_Msg[8] = {3, MODE1_RESPONSE, ENGINE_COOLANT_TEMPERATURE, 
                 (byte)(engine_Coolant_Temperature)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
               break;
@@ -243,7 +246,7 @@ void obdLoop(void) {
               if(intake_Pressure > 255) {
                 intake_Pressure = 255;
               }
-              byte intake_Pressure_Msg[8] = {3, 65, INTAKE_MANIFOLD_ABSOLUTE_PRESSURE, 
+              byte intake_Pressure_Msg[8] = {3, MODE1_RESPONSE, INTAKE_MANIFOLD_ABSOLUTE_PRESSURE, 
                 (byte)(intake_Pressure)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
               break;
@@ -251,47 +254,47 @@ void obdLoop(void) {
             case THROTTLE_POSITION: {
               float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
               byte throttle_Position = percentToGivenVal(percent, 255);
-              byte throttle_Position_Msg[8] = {3, 65, THROTTLE_POSITION, 
+              byte throttle_Position_Msg[8] = {3, MODE1_RESPONSE, THROTTLE_POSITION, 
                 (throttle_Position)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
               break;
             }
             case CALCULATED_ENGINE_LOAD: {
               byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
-              byte engine_Load_Msg[8] = {3, 65, CALCULATED_ENGINE_LOAD, 
+              byte engine_Load_Msg[8] = {3, MODE1_RESPONSE, CALCULATED_ENGINE_LOAD, 
                 (engine_Load)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
               break;
             }
             case ENGINE_RPM: { 
               int engine_Rpm = int(valueFields[F_RPM] * 4);
-              byte engine_Rpm_Msg[8] = {4, 65, ENGINE_RPM, 
+              byte engine_Rpm_Msg[8] = {4, MODE1_RESPONSE, ENGINE_RPM, 
                 MSB(engine_Rpm), LSB(engine_Rpm)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
               break;
             }
             case VEHICLE_SPEED: { 
               int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
-              byte vehicle_Speed_Msg[8] = {3, 65, VEHICLE_SPEED, 
+              byte vehicle_Speed_Msg[8] = {3, MODE1_RESPONSE, VEHICLE_SPEED, 
                 (byte)(vehicle_Speed)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
               break;
             }
             case TIMING_ADVANCE: { 
-              byte timing_Advance_Msg[8] = {3, 65, TIMING_ADVANCE, 
+              byte timing_Advance_Msg[8] = {3, MODE1_RESPONSE, TIMING_ADVANCE, 
                 (byte)((timing_Advance + 64) * 2)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
               break;
             }
             case AIR_INTAKE_TEMPERATURE: { 
               int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
-              byte intake_Temp_Msg[8] = {3, 65, AIR_INTAKE_TEMPERATURE, 
+              byte intake_Temp_Msg[8] = {3, MODE1_RESPONSE, AIR_INTAKE_TEMPERATURE, 
                 (byte)(intake_Temp)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
               break;
             }
             case MAF_AIR_FLOW_RATE: { 
-              byte maf_Air_Flow_Rate_Msg[8] = {4, 65, MAF_AIR_FLOW_RATE, 
+              byte maf_Air_Flow_Rate_Msg[8] = {4, MODE1_RESPONSE, MAF_AIR_FLOW_RATE, 
                 MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
               break;
