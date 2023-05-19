@@ -170,17 +170,16 @@ void obdLoop(void) {
 //DTC support 
 //=================================================================
     if(len == L1) {
+      const byte *DTC = NULL;
       switch(service) { 
         case SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES:
           deb("DTC show");
           switch(pid) {
             case 0x00: { 
-              const byte *DTC = NULL;
               if (MIL) {
                 //P0217
                 DTC = (const byte[]){6, MODE3_RESPONSE, 1, 2, 23, 0, 0, 0}; 
               } else {
-                //No Stored DTC
                 DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
               }
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
@@ -193,7 +192,6 @@ void obdLoop(void) {
           switch(pid) {
             case 0x00:
               MIL = false;
-              //No Stored DTC
               DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
               CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
             break;
