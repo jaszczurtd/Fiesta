@@ -5,7 +5,7 @@
 #include "obd-2.h"
 
 // Set CS to pin 6 for the CAB-BUS sheild                                
-MCP_CAN CAN0(6);                                      
+MCP_CAN CAN0(CAN1_GPIO);                                      
 
 //Current Firmware Version
 char FW_Version[] = "0.10";  
