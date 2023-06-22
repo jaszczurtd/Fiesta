@@ -1,23 +1,19 @@
 #include "turbo.h"
 
-#define SOLENOID_UPDATE_TIME 500
-#define PRESSURE_LIMITER_FACTOR 2
-
 #define RPM_PRESCALERS 8
 #define N75_PERCENT_VALS 10
 
 //*** n75 percentage values in relation to RPM
 uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
-    { 87, 86, 85, 84, 83, 82, 80, 77, 75, 73 }, // 1500 RPM
-    { 85, 84, 83, 82, 80, 78, 75, 72, 69, 66 }, // 2000 RPM
-    { 83, 82, 81, 80, 78, 76, 73, 70, 66, 63 }, // 2500 RPM
-    { 82, 81, 80, 78, 76, 74, 71, 68, 65, 62 }, // 3000 RPM
-    { 81, 80, 78, 76, 74, 72, 69, 66, 63, 60 }, // 3500 RPM
-    { 79, 78, 76, 74, 72, 70, 67, 64, 61, 58 }, // 4000 RPM
-    { 75, 74, 72, 70, 68, 66, 63, 60, 57, 54 }, // 4500 RPM
-    { 72, 70, 68, 66, 64, 62, 59, 56, 53, 50 }  // 5000 RPM
+  { 92, 91, 90, 89, 88, 87, 85, 82, 80, 78 }, // 1500 RPM
+  { 90, 89, 88, 87, 85, 83, 80, 77, 74, 71 }, // 2000 RPM
+  { 88, 87, 86, 85, 83, 81, 78, 75, 71, 68 }, // 2500 RPM
+  { 87, 86, 85, 83, 81, 79, 76, 73, 70, 67 }, // 3000 RPM
+  { 86, 85, 83, 81, 79, 77, 74, 71, 68, 65 }, // 3500 RPM
+  { 84, 83, 81, 79, 77, 75, 72, 69, 66, 63 }, // 4000 RPM
+  { 80, 79, 77, 75, 73, 71, 68, 65, 62, 59 }, // 4500 RPM
+  { 77, 75, 73, 71, 69, 67, 64, 61, 58, 55 }  // 5000 RPM
 };
-
 
 static unsigned long lastSolenoidUpdate = 0;
 
@@ -35,7 +31,12 @@ void turboMainLoop(void) {
       pedalPressed = true;
     }
 
-    int RPM_index = (int(valueFields[F_RPM] - 1500) / 500); // determine RPM index
+    int rpm = int(valueFields[F_RPM]);
+    if(rpm > RPM_MAX_EVER) {
+      rpm = RPM_MAX_EVER;
+    }
+
+    int RPM_index = (int(rpm - 1500) / 500); // determine RPM index
     if(RPM_index < 0) {
       RPM_index = 0;
     }

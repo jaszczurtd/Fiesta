@@ -10,6 +10,9 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#define SOLENOID_UPDATE_TIME 700
+#define PRESSURE_LIMITER_FACTOR 2
+
 void turboMainLoop(void);
 
 #endif
