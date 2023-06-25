@@ -98,8 +98,8 @@
 #define DPF_SHOW_TIME_INTERVAL 5000
 
 //max BAR turbo pressure
-#define MAX_BOOST_PRESSURE 2.0
-#define IDLE_BOOST_PERCENTAGE_SET 85
+#define MAX_BOOST_PRESSURE 1.7
+#define IDLE_BOOST_PERCENTAGE_SET 88
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
