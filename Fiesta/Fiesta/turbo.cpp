@@ -83,11 +83,6 @@ void turboMainLoop(void) {
     }
   }
 
-  pressurePercentage -= correctPressureFactor();
-  if(pressurePercentage < 0) {
-    pressurePercentage = 0;
-  }
-
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
 #ifdef DEBUG
