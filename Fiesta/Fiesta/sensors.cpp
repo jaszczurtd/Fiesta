@@ -7,6 +7,13 @@ float reflectionValueFields[F_LAST];
 SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
 TinyGPSPlus  gps;
 
+static int collantTableIdx = 0;
+static int collantValuesSet = 0;
+static float collantTable[TEMPERATURE_TABLES_SIZE];
+static int oilTableIdx = 0;
+static int oilValuesSet = 0;
+static float oilTable[TEMPERATURE_TABLES_SIZE];
+
 void initI2C(void) {
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
@@ -28,6 +35,9 @@ void initSensors(void) {
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
   }
+
+  collantTableIdx = collantValuesSet = 0;
+  oilTableIdx = oilValuesSet = 0;
 
   attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
   gpsSerial.begin(9600);
@@ -53,11 +63,12 @@ float readVolts(void) {
 //-------------------------------------------------------------------------------------------------
 //Read coolant temperature
 //-------------------------------------------------------------------------------------------------
-
 float readCoolantTemp(void) {
     set4051ActivePin(HC4051_I_COOLANT_TEMP);
-    //real values (resitance)
-    return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
+                                                         
+    return getAverageForTable(&collantTableIdx, &collantValuesSet,
+                              ntcToTemp(ADC_SENSORS_PIN, 1506, 1500), //real values (resitance)
+                              collantTable);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -66,7 +77,10 @@ float readCoolantTemp(void) {
 
 float readOilTemp(void) {
     set4051ActivePin(HC4051_I_OIL_TEMP);
-    return ntcToTemp(ADC_SENSORS_PIN, 1506, 1500);
+
+    return getAverageForTable(&oilTableIdx, &oilValuesSet,
+                              ntcToTemp(ADC_SENSORS_PIN, 1506, 1500), //real values (resitance)
+                              oilTable);
 }
 
 //-------------------------------------------------------------------------------------------------
