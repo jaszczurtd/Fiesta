@@ -52,6 +52,11 @@
 //temperature when fan should stop after start
 #define TEMP_FAN_STOP   95
 
+//air temperature when fan should start
+#define AIR_TEMP_FAN_START 55
+//air temperature when fan should start
+#define AIR_TEMP_FAN_STOP 45
+
 //temperature when engine heater should stop to heat
 #define TEMP_HEATER_STOP 80
 
@@ -101,8 +106,8 @@
 #define DPF_SHOW_TIME_INTERVAL 5000
 
 //max BAR turbo pressure
-#define MAX_BOOST_PRESSURE 1.7
-#define IDLE_BOOST_PERCENTAGE_SET 88
+#define MAX_BOOST_PRESSURE 1.5
+#define IDLE_BOOST_PERCENTAGE_SET 75
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4

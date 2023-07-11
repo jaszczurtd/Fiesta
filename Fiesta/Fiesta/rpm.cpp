@@ -72,6 +72,10 @@ bool cycleCheck(void *argument) {
   return false;
 }
 
+int getCurrentRPM(void) {
+  return (int)valueFields[F_RPM];
+}
+
 void stabilizeRPM(void) {
   rpmTimer.tick();
 
@@ -80,31 +84,32 @@ void stabilizeRPM(void) {
     valueFields[F_RPM] = 0;
   }
 
-  int desiredRPM;
+  int desiredRPM = NOMINAL_RPM_VALUE;
 
   if(((int)valueFields[F_COOLANT_TEMP]) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;
-  } else {
-    desiredRPM = NOMINAL_RPM_VALUE;
-  }
-
-  if(isEngineThrottlePressed() ||
-    valueFields[F_RPM] < RPM_MIN) {  
-      desiredRPM = PRESSED_PEDAL_RPM_VALUE;
-      setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
-      rpmCycle = false;
   }
 
   if(isDPFRegenerating()) {
     desiredRPM = REGEN_RPM_VALUE;
   }
 
-  int rpm = (int)valueFields[F_RPM];
-  if(rpm != desiredRPM && !isEngineThrottlePressed()) {
+  if(isEngineThrottlePressed() ||
+    getCurrentRPM() < RPM_MIN) {  
+      desiredRPM = PRESSED_PEDAL_RPM_VALUE;
+      setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
+      rpmTimer.cancel();
+      rpmCycle = true;
+      rpmTimer.in(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
+      valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
+      return;
+  }
+
+  if(getCurrentRPM() != desiredRPM) {
     rpmPercentValue = (int)((currentRPMSolenoid * 100) / PWM_RESOLUTION);
 
-    if(rpm < desiredRPM) {
-      if(desiredRPM - rpm > MAX_RPM_DIFFERENCE) {
+    if(getCurrentRPM() < desiredRPM) {
+      if(desiredRPM - getCurrentRPM() > MAX_RPM_DIFFERENCE) {
 
         if(!rpmCycle) {
           rpmCycle = true;
@@ -119,8 +124,8 @@ void stabilizeRPM(void) {
       }
     }
 
-    if(rpm > desiredRPM) {
-      if(rpm - desiredRPM > MAX_RPM_DIFFERENCE) {
+    if(getCurrentRPM() > desiredRPM) {
+      if(getCurrentRPM() - desiredRPM > MAX_RPM_DIFFERENCE) {
 
         if(!rpmCycle) {
           rpmCycle = true;

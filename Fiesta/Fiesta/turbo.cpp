@@ -6,14 +6,14 @@
 
 //*** n75 percentage values in relation to RPM
 uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
-  { 92, 91, 90, 89, 88, 87, 85, 82, 80, 78 }, // 1500 RPM
-  { 90, 89, 88, 87, 85, 83, 80, 77, 74, 71 }, // 2000 RPM
-  { 88, 87, 86, 85, 83, 81, 78, 75, 71, 68 }, // 2500 RPM
-  { 87, 86, 85, 83, 81, 79, 76, 73, 70, 67 }, // 3000 RPM
-  { 86, 85, 83, 81, 79, 77, 74, 71, 68, 65 }, // 3500 RPM
-  { 84, 83, 81, 79, 77, 75, 72, 69, 66, 63 }, // 4000 RPM
-  { 80, 79, 77, 75, 73, 71, 68, 65, 62, 59 }, // 4500 RPM
-  { 77, 75, 73, 71, 69, 67, 64, 61, 58, 55 }  // 5000 RPM
+  { 82, 81, 80, 79, 78, 77, 75, 72, 70, 68 }, // 1500 RPM
+  { 80, 79, 78, 77, 75, 73, 70, 67, 64, 61 }, // 2000 RPM
+  { 78, 77, 76, 75, 73, 71, 68, 65, 61, 58 }, // 2500 RPM
+  { 77, 76, 75, 73, 71, 69, 66, 63, 60, 57 }, // 3000 RPM
+  { 76, 75, 73, 71, 69, 67, 64, 61, 58, 55 }, // 3500 RPM
+  { 74, 73, 71, 69, 67, 65, 62, 59, 56, 53 }, // 4000 RPM
+  { 70, 69, 67, 65, 63, 61, 58, 55, 52, 49 }, // 4500 RPM
+  { 67, 65, 63, 61, 59, 57, 54, 51, 48, 45 }  // 5000 RPM
 };
 
 static unsigned long lastSolenoidUpdate = 0;
@@ -83,9 +83,9 @@ void turboMainLoop(void) {
     }
   }
 
-  pressurePercentage += correctPressureFactor();
-  if(pressurePercentage > 100) {
-    pressurePercentage = 100;
+  pressurePercentage -= correctPressureFactor();
+  if(pressurePercentage < 0) {
+    pressurePercentage = 0;
   }
 
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
