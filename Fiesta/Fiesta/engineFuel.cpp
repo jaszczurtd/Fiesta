@@ -63,7 +63,7 @@ float readFuel(void) {
         }
         average /= i;
 
-        deb("raw:%d num fuel samples: %d average val: %ld next probe time: %ds probes so far:%ld", result, i, average, fuelMeasurementTime, ++measurements);
+        deb("raw:%d (%d) num fuel samples: %d average val: %ld next probe time: %ds probes so far:%ld", r, result, i, average, fuelMeasurementTime, ++measurements);
 
         lastResult = average;
     }

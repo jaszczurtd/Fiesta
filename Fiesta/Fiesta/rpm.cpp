@@ -57,11 +57,14 @@ void initRPMCount(void) {
 
 void setAccelRPMPercentage(int percentage) {
   currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
-  valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
 }
 
 void setAccelMaxRPM(void) {
   setAccelRPMPercentage(MAX_RPM_PERCENT_VALUE);
+}
+
+bool isEngineThrottlePressed(void) {
+  return getEnginePercentageThrottle() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
 bool cycleCheck(void *argument) {
@@ -77,19 +80,19 @@ void stabilizeRPM(void) {
     valueFields[F_RPM] = 0;
   }
 
-  int engineThrottle = getEnginePercentageThrottle();
-  if(engineThrottle > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE ||
-    valueFields[F_RPM] < RPM_MIN) {  
-    setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
-    rpmCycle = false;
-    return;
-  }
-
   int desiredRPM;
+
   if(((int)valueFields[F_COOLANT_TEMP]) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;
   } else {
     desiredRPM = NOMINAL_RPM_VALUE;
+  }
+
+  if(isEngineThrottlePressed() ||
+    valueFields[F_RPM] < RPM_MIN) {  
+      desiredRPM = PRESSED_PEDAL_RPM_VALUE;
+      setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
+      rpmCycle = false;
   }
 
   if(isDPFRegenerating()) {
@@ -97,7 +100,7 @@ void stabilizeRPM(void) {
   }
 
   int rpm = (int)valueFields[F_RPM];
-  if(rpm != desiredRPM) {
+  if(rpm != desiredRPM && !isEngineThrottlePressed()) {
     rpmPercentValue = (int)((currentRPMSolenoid * 100) / PWM_RESOLUTION);
 
     if(rpm < desiredRPM) {
@@ -110,7 +113,7 @@ void stabilizeRPM(void) {
           if(rpmPercentValue > MAX_RPM_PERCENT_VALUE){
             rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
-          currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
+          setAccelRPMPercentage(rpmPercentValue);
           rpmTimer.in(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
         }
       }
@@ -126,15 +129,14 @@ void stabilizeRPM(void) {
           if(rpmPercentValue < MIN_RPM_PERCENT_VALUE){
             rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
-          currentRPMSolenoid = percentToGivenVal(rpmPercentValue, PWM_RESOLUTION);
+          setAccelRPMPercentage(rpmPercentValue);
           rpmTimer.in(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
         }
       }
     }
-
-    valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
   }
 
+  valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
 
 #if DEBUG
   deb("rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
