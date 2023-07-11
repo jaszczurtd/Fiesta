@@ -23,7 +23,7 @@
 #define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
 
 void initRPMCount(void);
-void setMaxRPM(void);
+void setAccelMaxRPM(void);
 void resetRPMEngine(void);
 void stabilizeRPM(void);
 bool isEngineRunning(void);
