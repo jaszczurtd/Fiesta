@@ -98,9 +98,6 @@ void stabilizeRPM(void) {
     getCurrentRPM() < RPM_MIN) {  
       desiredRPM = PRESSED_PEDAL_RPM_VALUE;
       setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
-      rpmTimer.cancel();
-      rpmCycle = true;
-      rpmTimer.in(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
       valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
       return;
   }
