@@ -1,3 +1,4 @@
+#include "canDefinitions.h"
 #include "turbo.h"
 
 #define RPM_PRESCALERS 8
@@ -16,6 +17,12 @@ uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
 };
 
 static unsigned long lastSolenoidUpdate = 0;
+
+int correctPressureFactor(void) {
+  int temperature = valueFields[F_INTAKE_TEMP];
+  return (temperature < MIN_TEMPERATURE_CORRECTION) ? 
+      0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1;
+}
 
 void turboMainLoop(void) {
 
@@ -74,6 +81,11 @@ void turboMainLoop(void) {
       }
       lastSolenoidUpdate = currentTime;
     }
+  }
+
+  pressurePercentage += correctPressureFactor();
+  if(pressurePercentage > 100) {
+    pressurePercentage = 100;
   }
 
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);

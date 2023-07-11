@@ -52,16 +52,16 @@ void initRPMCount(void) {
 
   rpmTimer = timer_create_default();
 
-  setMaxRPM();
+  setAccelMaxRPM();
 }
 
-void setRPMPercentage(int percentage) {
+void setAccelRPMPercentage(int percentage) {
   currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
   valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
 }
 
-void setMaxRPM(void) {
-  setRPMPercentage(MAX_RPM_PERCENT_VALUE);
+void setAccelMaxRPM(void) {
+  setAccelRPMPercentage(MAX_RPM_PERCENT_VALUE);
 }
 
 bool cycleCheck(void *argument) {
@@ -78,9 +78,9 @@ void stabilizeRPM(void) {
   }
 
   int engineThrottle = getEnginePercentageThrottle();
-  if(engineThrottle > 5 ||
+  if(engineThrottle > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE ||
     valueFields[F_RPM] < RPM_MIN) {  
-    setRPMPercentage(70); //percent
+    setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
     rpmCycle = false;
     return;
   }

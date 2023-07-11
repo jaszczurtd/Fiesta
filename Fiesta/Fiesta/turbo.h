@@ -12,6 +12,7 @@
 
 #define SOLENOID_UPDATE_TIME 700
 #define PRESSURE_LIMITER_FACTOR 2
+#define MIN_TEMPERATURE_CORRECTION 30
 
 void turboMainLoop(void);
 
