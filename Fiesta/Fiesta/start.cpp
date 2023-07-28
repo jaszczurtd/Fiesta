@@ -91,8 +91,7 @@ void initialization(void) {
     sec = getSeconds();
   }
 
-  Adafruit_ST7735 tft = returnReference();
-  tft.fillScreen(ST7735_BLACK);
+  fillScreenWithColor(COLOR(BLACK));
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);

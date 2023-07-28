@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+#include "displayMapper.h"
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <tools.h>
 
@@ -13,18 +13,6 @@
 #include "can.h"
 #include "sensors.h"
 #include "tests.h"
-
-#define TFT_CS     4 //CS
-#define TFT_RST    -1 //reset
-#define TFT_DC     3 //A0
-
-#define SCREEN_W 160
-#define SCREEN_H 128
-
-#define TEXT_COLOR 0xC618
-
-#define C_GRAY_DARK 0x4208
-#define C_GRAY_MEDIUM 0xA514
 
 #define BIG_ICONS_WIDTH 53
 #define BIG_ICONS_HEIGHT 53
@@ -51,7 +39,7 @@
 
 #define VOLTS_OK_COLOR 0x4228
 #define VOLTS_LOW_ERROR_COLOR 0xA000
-#define VOLTS_BIG_ERROR_COLOR ST7735_RED
+#define VOLTS_BIG_ERROR_COLOR COLOR(RED)
 
 #define TEMP_DOT_X 17
 #define TEMP_DOT_Y 39
@@ -72,9 +60,10 @@
 
 extern const char *err;
 
+TFT returnReference(void);
 void initGraphics(void);
 void showLogo(void);
-Adafruit_ST7735 returnReference(void);
+void fillScreenWithColor(int c);
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
 int textWidth(const char* text);
 int textHeight(const char* text);
