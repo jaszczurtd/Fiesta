@@ -27,7 +27,7 @@ void canInit(int retries) {
   dpfConnected = false;
   dpfMessages = lastDPFMessages = 0;
 
-  Adafruit_ST7735 tft = returnReference();
+  TFT tft = returnReference();
 
   tft.setFont();
   tft.setTextSize(1);
@@ -40,7 +40,7 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    tft.fillScreen(ST7735_BLACK);
+    fillScreenWithColor(COLOR(BLACK));
 
     int x = 10;
     int y = 10;

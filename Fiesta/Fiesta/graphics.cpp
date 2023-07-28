@@ -1,21 +1,26 @@
 
 #include "graphics.h"
 
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
-Adafruit_ST7735 returnReference(void) {
+TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
+TFT returnReference(void) {
   return tft;
 }
 
 void initGraphics(void) {
   // Use this initializer if using a 1.8" TFT screen:
-  tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+  //tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
+  initDisplay();
   tft.setRotation(1);
+}
+
+void fillScreenWithColor(int c) {
+  tft.fillScreen(c);
 }
 
 void showLogo(void) {
   #ifndef DEBUG_SCREEN
 
-  tft.fillScreen(ST7735_WHITE);
+  fillScreenWithColor(COLOR(WHITE));
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
@@ -72,7 +77,7 @@ void drawTempValue(int x, int y, int valToDisplay) {
     tft.fillRect(x, y, 24, 8, BIG_ICONS_BG_COLOR);
 
     if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
-        tft.setTextColor(ST77XX_RED);
+        tft.setTextColor(COLOR(RED));
         tft.println(err);
         return;
     } else {
@@ -91,44 +96,44 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
     int workingx = x; 
     int workingy = y;
 
-    tft.fillCircle(workingx, workingy, 10, ST77XX_RED);
+    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
     workingx += 20;
-    tft.fillCircle(workingx, workingy, 10, ST77XX_RED);
+    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
 
     workingy += 5;
     workingx = x + 4;
 
-    tft.fillRoundRect(workingx, workingy, 15, 40, 6, ST77XX_RED);
+    tft.fillRoundRect(workingx, workingy, 15, 40, 6, COLOR(RED));
     workingy +=30;
-    tft.drawLine(workingx, workingy, workingx + 14, workingy, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx + 14, workingy, COLOR(BLACK));
 
     workingx +=6;
     workingy +=4;
-    tft.drawLine(workingx, workingy, workingx, workingy + 5, ST77XX_BLACK);
-    tft.drawLine(workingx + 1, workingy, workingx + 1, workingy + 5, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx, workingy + 5, COLOR(BLACK));
+    tft.drawLine(workingx + 1, workingy, workingx + 1, workingy + 5, COLOR(BLACK));
 
     workingx = x -16;
     workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
 
     workingy = y - 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y - 2, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx + 15, y - 2, COLOR(BLACK));
 
     workingy = y + 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y + 2, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx + 15, y + 2, COLOR(BLACK));
 
     workingx = x + 23;
     workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
   
     workingy = y - 3;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y - 8, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy + 1, workingx + 15, y - 8, COLOR(BLACK));
 
     workingy = y + 1;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, ST77XX_BLACK);
+    tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, COLOR(BLACK));
 
     tft.setCursor(x + 8, y + 46);
-    tft.setTextColor(ST77XX_BLUE);
+    tft.setTextColor(COLOR(BLUE));
     tft.setTextSize(1);
     tft.println(msg);
 }
@@ -177,7 +182,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         bool overheat = false;
         color = TEMP_INITIAL_COLOR;
         if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OK_HI) {
-            color = ST77XX_ORANGE;
+            color = COLOR(ORANGE);
         } 
         if(currentVal > TEMP_OK_HI) {
             overheat = true;
@@ -206,7 +211,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
 
         if(overheat) {
             draw = true;
-            color = (blink) ? ST7735_RED : ST77XX_ORANGE;
+            color = (blink) ? COLOR(RED) : COLOR(ORANGE);
         }
 
         if(draw) {
@@ -267,7 +272,7 @@ void showOilAmount(int currentVal, int maxVal) {
         bool overheat = false;
         color = TEMP_INITIAL_COLOR;
         if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OIL_OK_HI) {
-            color = ST77XX_ORANGE;
+            color = COLOR(ORANGE);
         } 
         if(currentVal > TEMP_OIL_OK_HI) {
             overheat = true;
@@ -296,7 +301,7 @@ void showOilAmount(int currentVal, int maxVal) {
 
         if(overheat) {
             draw = true;
-            color = (blink) ? ST7735_RED : ST77XX_ORANGE;
+            color = (blink) ? COLOR(RED) : COLOR(ORANGE);
         }
 
         if(draw) {
@@ -504,7 +509,7 @@ void showEGTTemperatureAmount(void) {
 
   if(overheat) {
     draw = true;
-    color = (seriousAlertSwitch()) ? ST7735_RED : TEXT_COLOR;
+    color = (seriousAlertSwitch()) ? COLOR(RED) : TEXT_COLOR;
   }
 
   if(draw) {
@@ -576,7 +581,7 @@ void showICTemperatureAmount(int currentVal) {
 
             bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
             if(error) {
-                tft.setTextColor(ST77XX_RED);
+                tft.setTextColor(COLOR(RED));
                 w = prepareText((const char*)F("%s"), err);
             } else {
                 tft.setTextColor(TEXT_COLOR);
@@ -671,9 +676,9 @@ int f_getWidth(void) {
 void drawFuelEmpty(void) {
     if(currentFuelWidth <= 1) {
 
-        int color = ST7735_WHITE;
+        int color = COLOR(WHITE);
         if(seriousAlertSwitch()) {
-            color = ST7735_RED;
+            color = COLOR(RED);
         }
 
         int x = f_getBaseX() + ((f_getWidth() - textWidth(emptyMessage)) / 2);
@@ -702,7 +707,7 @@ void showFuelAmount(int currentVal, int maxVal) {
         int y = y = f_getBaseY();
         int tw;
 
-        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ST7735_BLACK);
+        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, COLOR(BLACK));
 
         x = f_getBaseX();
 
@@ -722,7 +727,7 @@ void showFuelAmount(int currentVal, int maxVal) {
         y += FUEL_HEIGHT + (OFFSET / 2);
 
         tft.setTextSize(1);
-        tft.setTextColor(ST7735_RED);
+        tft.setTextColor(COLOR(RED));
         tft.setCursor(x, y);
         tft.println(empty);
 
@@ -764,7 +769,7 @@ void drawChangeableFuelContent(int w) {
     if(w <= minW && w >= 1) {
         draw = true;
         if(alertSwitch()) {
-            color = ST7735_RED;
+            color = COLOR(RED);
         }
     }
 
@@ -772,7 +777,7 @@ void drawChangeableFuelContent(int w) {
         int x = f_getBaseX(), y = f_getBaseY(); 
 
         if(fullRedrawNeeded) {
-            tft.fillRect(x + 1, y + 1, width - 2, FUEL_HEIGHT - 2, ST7735_BLACK);
+            tft.fillRect(x + 1, y + 1, width - 2, FUEL_HEIGHT - 2, COLOR(BLACK));
             fullRedrawNeeded = false;
         }
 
@@ -781,7 +786,7 @@ void drawChangeableFuelContent(int w) {
         if(toFill < 0) {
             toFill = 0;
         }
-        tft.fillRect(x + w, y + 1, toFill, FUEL_HEIGHT - 2, ST7735_BLACK);
+        tft.fillRect(x + w, y + 1, toFill, FUEL_HEIGHT - 2, COLOR(BLACK));
         tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
     }
 }
@@ -795,7 +800,7 @@ int v_getBaseX(void) {
 }
 
 int v_getBaseY(void) {
-    return 120; 
+    return SCREEN_H - textHeight(empty) - (OFFSET / 2);
 }
 
 static int lastV1 = -1, lastV2 = -1;
@@ -824,7 +829,7 @@ void showVolts(float volts) {
 
         prepareText((const char*)F("%d.%dv"), v1, v2);
 
-        tft.fillRect(x, y, 30, 8, ST7735_BLACK);
+        tft.fillRect(x, y, 30, 8, COLOR(BLACK));
 
         tft.setTextSize(1);
         tft.println(displayTxt);

@@ -4,6 +4,7 @@
 //important: values scaled for rpi SDK ver 1.2.0
 
 #define ECU_V2
+#define D_ILI9341
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
