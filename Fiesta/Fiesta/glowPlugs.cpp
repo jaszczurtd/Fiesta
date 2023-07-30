@@ -40,6 +40,7 @@ void initGlowPlugsTime(float temp) {
     glowPlugs(true);
     glowPlugsLamp(true);
 
+    //TODO: get rid of these magic values someday
     float divider = 3.0;
     if(temp >= 5.0) {
       divider = 8.0;

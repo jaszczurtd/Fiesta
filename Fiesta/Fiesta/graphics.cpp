@@ -54,6 +54,11 @@ int textHeight(const char* text) {
     return h;
 }
 
+void setDisplayDefaultFont(void) {
+  tft.setFont();
+  tft.setTextSize(1);
+}
+
 static char displayTxt[8];
 
 int prepareText(const char *format, ...) {
@@ -69,8 +74,7 @@ int prepareText(const char *format, ...) {
 }
 
 void drawTempValue(int x, int y, int valToDisplay) {
-    tft.setFont();
-    tft.setTextSize(1);
+    setDisplayDefaultFont();
     tft.setTextColor(TEXT_COLOR);
     tft.setCursor(x, y);
 
@@ -382,8 +386,7 @@ void showPressureAmount(float current) {
             tft.setCursor(x, y);
             tft.println(displayTxt);
 
-            tft.setFont();
-            tft.setTextSize(1);
+            setDisplayDefaultFont();
 
             x = p_getBaseX() + 34;
             y = p_getBaseY() + 45;
@@ -425,8 +428,7 @@ void showEngineLoadAmount(int currentVal) {
 
             int x, y, w, offset;
 
-            tft.setFont();
-            tft.setTextSize(1);
+            setDisplayDefaultFont();
             tft.setTextColor(TEXT_COLOR);
 
             w = prepareText((const char*)F("%d%%"), value);
@@ -513,8 +515,7 @@ void showEGTTemperatureAmount(void) {
   }
 
   if(draw) {
-    tft.setFont();
-    tft.setTextSize(1);
+    setDisplayDefaultFont();
     tft.setTextColor(color);
 
     if(currentVal < TEMP_EGT_MIN) {
@@ -576,8 +577,7 @@ void showICTemperatureAmount(int currentVal) {
 
             int x, y, w, offset;
 
-            tft.setFont();
-            tft.setTextSize(1);
+            setDisplayDefaultFont();
 
             bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
             if(error) {
@@ -632,8 +632,7 @@ void showRPMamount(int currentVal) {
 
             int x, y, w, offset;
 
-            tft.setFont();
-            tft.setTextSize(1);
+            setDisplayDefaultFont();
             tft.setTextColor(TEXT_COLOR);
 
             w = prepareText((const char*)F("%d"), currentVal);
@@ -821,7 +820,7 @@ void showVolts(float volts) {
             color = VOLTS_LOW_ERROR_COLOR;
         }
         if(volts > 14.7) {
-            color = VOLTS_BIG_ERROR_COLOR;
+            color = COLOR(RED);
         }
 
         tft.setTextColor(color);

@@ -7,10 +7,6 @@
 #define TFT_RST    -1 //reset
 #define TFT_DC     3 //A0
 
-#define TEXT_COLOR 0xC618
-
-#define C_GRAY_DARK 0x4208
-#define C_GRAY_MEDIUM 0xA514
 
 #ifdef D_ILI9341
 // Hardware-specific library for display
