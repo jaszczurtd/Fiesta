@@ -14,16 +14,29 @@
 #include "sensors.h"
 #include "tests.h"
 
+//colors
+#define TEXT_COLOR 0xC618
+
+#define C_GRAY_DARK 0x4208
+#define C_GRAY_MEDIUM 0xA514
+
+#define TEMP_INITIAL_COLOR 0x33b7
+
+#define BIG_ICONS_BG_COLOR 0x0000
+#define SMALL_ICONS_BG_COLOR 0x0000
+#define FUEL_COLOR 0xfda0
+
+#define FUEL_BOX_COLOR 0xBDF7
+#define FUEL_FILL_COLOR 0x9CD3
+
+#define VOLTS_OK_COLOR 0x4228
+#define VOLTS_LOW_ERROR_COLOR 0xA000
+
 #define BIG_ICONS_WIDTH 53
 #define BIG_ICONS_HEIGHT 53
 
 #define SMALL_ICONS_WIDTH 40
 #define SMALL_ICONS_HEIGHT 40
-
-#define BIG_ICONS_BG_COLOR 0x0000
-#define SMALL_ICONS_BG_COLOR 0x0000
-
-#define TEMP_INITIAL_COLOR 0x33b7
 
 #define BIG_ICONS_OFFSET 1
 
@@ -32,14 +45,6 @@
 
 #define FUEL_WIDTH 18
 #define FUEL_HEIGHT 18
-#define FUEL_COLOR 0xfda0
-
-#define FUEL_BOX_COLOR 0xBDF7
-#define FUEL_FILL_COLOR 0x9CD3
-
-#define VOLTS_OK_COLOR 0x4228
-#define VOLTS_LOW_ERROR_COLOR 0xA000
-#define VOLTS_BIG_ERROR_COLOR COLOR(RED)
 
 #define TEMP_DOT_X 17
 #define TEMP_DOT_Y 39
@@ -67,6 +72,7 @@ void fillScreenWithColor(int c);
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
 int textWidth(const char* text);
 int textHeight(const char* text);
+void setDisplayDefaultFont(void);
 void drawTempValue(int x, int y, int valToDisplay);
 void drawTempBar(int x, int y, int currentHeight, int color);
 void displayErrorWithMessage(int x, int y, const char *msg);

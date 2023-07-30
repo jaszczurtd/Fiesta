@@ -13,7 +13,7 @@ void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *
 }
 
 void setupTimers(void) {
-  int time = 1000;
+  int time = SECOND;
 
   setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
