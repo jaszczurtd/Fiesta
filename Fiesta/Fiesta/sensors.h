@@ -49,6 +49,8 @@ bool isDPFRegenerating(void);
 
 bool getGPSData(void *arg);
 float getCurrentCarSpeed(void);
+const char *getGPSDate(void);
+const char *getGPSTime(void);
 bool isGPSAvailable(void);
 
 bool updateValsForDebug(void *arg);

@@ -2,8 +2,7 @@
 #include "start.h"
 
 static unsigned long alertsStartSecond = 0;
-
-Timer generalTimer;
+static Timer generalTimer;
 
 void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
   watchdog_update();
@@ -30,6 +29,25 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
 }
 
+void executeByWatchdog(int *values, int size) {
+  #ifdef ECU_V2
+
+  char dateAndTime[32];
+  memset(dateAndTime, 0, sizeof(dateAndTime));
+  if(isGPSAvailable()) {
+    snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", 
+      getGPSDate(), getGPSTime());
+  }
+
+  initCrashLogger(dateAndTime, SD_CARD_CS);
+  //for(int a = 0; a < size; a++) {
+  //  crashReport("value %d from watchdog: %d", a, values[a]);
+  //}
+  //saveCrashLoggerAndClose();
+
+  #endif
+}
+
 void initialization(void) {
 
   Serial.begin(9600);
@@ -45,7 +63,7 @@ void initialization(void) {
   initSPI();
 
   generalTimer = timer_create_default();
-  setupWatchdog(&generalTimer, WATCHDOG_TIME);  
+  setupWatchdog(executeByWatchdog, WATCHDOG_TIME);  
 
   initGraphics();
 

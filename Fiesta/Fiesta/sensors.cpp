@@ -4,8 +4,8 @@
 float valueFields[F_LAST];
 float reflectionValueFields[F_LAST];
 
-SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
-TinyGPSPlus  gps;
+static SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
+static TinyGPSPlus gps;
 
 static int collantTableIdx = 0;
 static int collantValuesSet = 0;
@@ -290,16 +290,35 @@ bool getGPSData(void *arg) {
   if(isGPSAvailable()) {
     if (gps.location.isUpdated()){
 
-      deb("Lat=%f Long=%f date:%d/%02d/%02d hour:%02d:%02d:%02d", 
+      deb("Lat=%f Long=%f date:%s hour:%s", 
         gps.location.lat(), gps.location.lng(),
-        gps.date.year(), gps.date.month(), gps.date.day(),
-        gps.time.hour(), gps.time.minute(), gps.time.second());
+        getGPSDate(), getGPSTime());
     }
   } else {
     deb("GPS is not available");
   }
 
   return true;
+}
+
+static char gpsDate[16];
+const char *getGPSDate(void) {
+  memset(gpsDate, 0, sizeof(gpsDate));
+  if(isGPSAvailable()) {
+    snprintf(gpsDate, sizeof(gpsDate) - 1, "%02d:%02d:%02d", 
+      gps.date.year(), gps.date.month(), gps.date.day());
+  }
+  return gpsDate;
+}
+
+static char gpsTime[16];
+const char *getGPSTime(void) {
+  memset(gpsTime, 0, sizeof(gpsTime));
+  if(isGPSAvailable()) {
+    snprintf(gpsTime, sizeof(gpsTime) - 1, "%d/%02d/%02d", 
+      gps.time.hour(), gps.time.minute(), gps.time.second());
+  }
+  return gpsTime;
 }
 
 float getCurrentCarSpeed(void) {
