@@ -16,12 +16,15 @@
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 
+#define GPS_TIME_DATE_BUFFER_SIZE 16
+
 extern float valueFields[];
 
 void initI2C(void);
 void initSPI(void);
 void initSensors(void);
 void initBasicPIO(void);
+void initGPS(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
@@ -47,6 +50,7 @@ void set4051ActivePin(unsigned char pin);
 
 bool isDPFRegenerating(void);
 
+void initGPSDateAndTime(void);
 bool getGPSData(void *arg);
 float getCurrentCarSpeed(void);
 const char *getGPSDate(void);

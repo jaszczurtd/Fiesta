@@ -39,8 +39,18 @@ void initSensors(void) {
   collantTableIdx = collantValuesSet = 0;
   oilTableIdx = oilValuesSet = 0;
 
-  attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
-  gpsSerial.begin(9600);
+  initGPS();
+}
+
+static bool isGPSInitialized = false;
+void initGPS(void) {
+  #ifdef ECU_V2
+  if(!isGPSInitialized) {
+    attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
+    gpsSerial.begin(9600);
+    isGPSInitialized = true;
+  }
+  #endif
 }
 
 void initBasicPIO(void) {
@@ -301,21 +311,27 @@ bool getGPSData(void *arg) {
   return true;
 }
 
-static char gpsDate[16];
+__attribute__((section(".noinit"))) char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
+__attribute__((section(".noinit"))) char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
+
+void initGPSDateAndTime(void) {
+  memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
+  memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
+}
+
 const char *getGPSDate(void) {
-  memset(gpsDate, 0, sizeof(gpsDate));
   if(isGPSAvailable()) {
-    snprintf(gpsDate, sizeof(gpsDate) - 1, "%02d:%02d:%02d", 
+    memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
+    snprintf(gpsDate, GPS_TIME_DATE_BUFFER_SIZE - 1, "%d/%02d/%02d", 
       gps.date.year(), gps.date.month(), gps.date.day());
   }
   return gpsDate;
 }
 
-static char gpsTime[16];
 const char *getGPSTime(void) {
-  memset(gpsTime, 0, sizeof(gpsTime));
   if(isGPSAvailable()) {
-    snprintf(gpsTime, sizeof(gpsTime) - 1, "%d/%02d/%02d", 
+    memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
+    snprintf(gpsTime, GPS_TIME_DATE_BUFFER_SIZE - 1, "%02d:%02d:%02d", 
       gps.time.hour(), gps.time.minute(), gps.time.second());
   }
   return gpsTime;
