@@ -1,8 +1,8 @@
 
 #include "sensors.h"
 
-float valueFields[F_LAST];
-float reflectionValueFields[F_LAST];
+NOINIT float valueFields[F_LAST];
+NOINIT float reflectionValueFields[F_LAST];
 
 static SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
 static TinyGPSPlus gps;
@@ -311,8 +311,8 @@ bool getGPSData(void *arg) {
   return true;
 }
 
-__attribute__((section(".noinit"))) char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
-__attribute__((section(".noinit"))) char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
+NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
+NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 
 void initGPSDateAndTime(void) {
   memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
