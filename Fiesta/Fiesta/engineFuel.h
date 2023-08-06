@@ -18,4 +18,10 @@
 float readFuel(void);
 void initFuelMeasurement(void);
 
+//gauge
+void redrawFuel(void);
+void drawFuelEmpty(void);
+void showFuelAmount(int currentVal, int maxVal);
+void drawChangeableFuelContent(int w);
+
 #endif

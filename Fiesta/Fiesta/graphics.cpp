@@ -60,6 +60,9 @@ void setDisplayDefaultFont(void) {
 }
 
 static char displayTxt[8];
+const char *getPreparedText(void) {
+  return displayTxt;
+}
 
 int prepareText(const char *format, ...) {
 
@@ -74,11 +77,13 @@ int prepareText(const char *format, ...) {
 }
 
 void drawTempValue(int x, int y, int valToDisplay) {
-    setDisplayDefaultFont();
+    tft.setFont(&FreeSansBold9pt7b);
+    tft.setTextSize(1);
+
     tft.setTextColor(TEXT_COLOR);
     tft.setCursor(x, y);
 
-    tft.fillRect(x, y, 24, 8, BIG_ICONS_BG_COLOR);
+    tft.fillRect(x, y - 14, 35, 16, BIG_ICONS_BG_COLOR);
 
     if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
         tft.setTextColor(COLOR(RED));
@@ -86,8 +91,9 @@ void drawTempValue(int x, int y, int valToDisplay) {
         return;
     } else {
         prepareText((const char*)F("%d"), valToDisplay);
-        tft.println(displayTxt);
+        tft.println(getPreparedText());
     }
+    setDisplayDefaultFont();
 }
 
 void drawTempBar(int x, int y, int currentHeight, int color) {
@@ -148,10 +154,6 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
 //-------------------------------------------------------------------------------------------------
 
 
-const char *half = (char*)F("1/2");
-const char *full = (char*)F("F");
-const char *empty = (char*)F("E");
-const char *emptyMessage = (char*)F("Pusty bak!");
 const char *err = (char*)F("ERR");
 
 static bool t_drawOnce = true; 
@@ -219,8 +221,8 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         }
 
         if(draw) {
-            x = t_getBaseX() + 16;
-            y = t_getBaseY() + 4 + TEMP_BAR_MAXHEIGHT;
+            x = t_getBaseX() + 24;
+            y = t_getBaseY() + 8 + TEMP_BAR_MAXHEIGHT;
 
             drawTempBar(x, y, currentHeight, color);
 
@@ -233,8 +235,8 @@ void showTemperatureAmount(int currentVal, int maxVal) {
         if(lastCoolantVal != valToDisplay) {
             lastCoolantVal = valToDisplay;
 
-            x = t_getBaseX() + 26;
-            y = t_getBaseY() + 19;
+            x = t_getBaseX() + 40;
+            y = t_getBaseY() + 38;
             drawTempValue(x, y, valToDisplay);
         }
    }
@@ -309,8 +311,8 @@ void showOilAmount(int currentVal, int maxVal) {
         }
 
         if(draw) {
-            x = o_getBaseX() + 13;
-            y = o_getBaseY() + 4 + TEMP_BAR_MAXHEIGHT;
+            x = o_getBaseX() + 20;
+            y = o_getBaseY() + 8 + TEMP_BAR_MAXHEIGHT;
 
             drawTempBar(x, y, currentHeight, color);
 
@@ -323,75 +325,9 @@ void showOilAmount(int currentVal, int maxVal) {
         if(lastOilVal != valToDisplay) {
             lastOilVal = valToDisplay;
 
-            x = o_getBaseX() + 25;
-            y = o_getBaseY() + 19;
+            x = o_getBaseX() + 36;
+            y = o_getBaseY() + 38;
             drawTempValue(x, y, valToDisplay);
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-//pressure indicator
-//-------------------------------------------------------------------------------------------------
-
-static bool p_drawOnce = true; 
-void redrawPressure(void) {
-    p_drawOnce = true;
-}
-
-const int p_getBaseX(void) {
-    return (BIG_ICONS_WIDTH * 2);
-}
-
-const int p_getBaseY(void) {
-    return 0; 
-}
-
-static int lastHI = C_INIT_VAL;
-static int lastLO = C_INIT_VAL;
-
-void showPressureAmount(float current) {
-
-    int x, y;
-
-    if(p_drawOnce) {
-        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned short*)pressure);
-        x = p_getBaseX() + BIG_ICONS_WIDTH;
-        tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR);
-
-        p_drawOnce = false;
-    } else {
-
-        int hi, lo;
-
-        floatToDec(current, &hi, &lo);
-
-        if(hi != lastHI || lo != lastLO) {
-            lastHI = hi;
-            lastLO = lo;
-
-            prepareText((const char*)F("%d.%d"), hi, lo);
-
-            x = p_getBaseX() + BAR_TEXT_X;
-            y = p_getBaseY() + BAR_TEXT_Y - 12;
-
-            tft.fillRect(x, y, 28, 15, BIG_ICONS_BG_COLOR);
-
-            x = p_getBaseX() + BAR_TEXT_X;
-            y = p_getBaseY() + BAR_TEXT_Y;
-
-            tft.setFont(&FreeSansBold9pt7b);
-            tft.setTextSize(1);
-            tft.setTextColor(TEXT_COLOR);
-            tft.setCursor(x, y);
-            tft.println(displayTxt);
-
-            setDisplayDefaultFont();
-
-            x = p_getBaseX() + 34;
-            y = p_getBaseY() + 45;
-            tft.setCursor(x, y);
-            tft.println(F("BAR"));
         }
     }
 }
@@ -439,7 +375,7 @@ void showEngineLoadAmount(int currentVal) {
             offset = 5;
             tft.fillRect(e_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
             tft.setCursor(x, y);
-            tft.println(displayTxt);
+            tft.println(getPreparedText());
         }
     }
 }
@@ -538,7 +474,7 @@ void showEGTTemperatureAmount(void) {
     offset = 2;
     tft.fillRect(egt_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
     tft.setCursor(x, y);
-    tft.println(displayTxt);
+    tft.println(getPreparedText());
 
     if(currentVal > TEMP_EGT_MIN &&
       currentVal < TEMP_EGT_MAX) {
@@ -594,199 +530,12 @@ void showICTemperatureAmount(int currentVal) {
             offset = 5;
             tft.fillRect(ic_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
             tft.setCursor(x, y);
-            tft.println(displayTxt);
+            tft.println(getPreparedText());
             
             if(!error) {
                 tft.drawCircle(x + w + 2, y, 2, TEXT_COLOR);
             }
         }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-//engine rpm
-//-------------------------------------------------------------------------------------------------
-
-static bool rpm_drawOnce = true; 
-void redrawRPM(void) {
-    rpm_drawOnce = true;
-}
-
-const int rpm_getBaseX(void) {
-    return SMALL_ICONS_WIDTH;
-}
-
-const int rpm_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
-}
-
-static int lastRPMAmount = C_INIT_VAL;
-void showRPMamount(int currentVal) {
-
-    if(rpm_drawOnce) {
-        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)rpm);
-        rpm_drawOnce = false;
-    } else {
-        if(lastRPMAmount != currentVal) {
-            lastRPMAmount = currentVal;
-
-            int x, y, w, offset;
-
-            setDisplayDefaultFont();
-            tft.setTextColor(TEXT_COLOR);
-
-            w = prepareText((const char*)F("%d"), currentVal);
-
-            x = rpm_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
-            y = rpm_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(rpm_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(displayTxt);
-        }
-    }
-}
-
-//-------------------------------------------------------------------------------------------------
-//fuel indicator
-//-------------------------------------------------------------------------------------------------
-
-static bool f_drawOnce = true; 
-void redrawFuel(void) {
-    f_drawOnce = true;
-}
-
-static int currentFuelWidth = 0;
-static bool fullRedrawNeeded = false;
-
-int f_getBaseX(void) {
-    return (OFFSET * 3) + FUEL_WIDTH + OFFSET;
-}
-
-int f_getBaseY(void) {
-    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - OFFSET; 
-}
-
-int f_getWidth(void) {
-    return SCREEN_W - f_getBaseX() - (OFFSET / 2);
-}
-
-void drawFuelEmpty(void) {
-    if(currentFuelWidth <= 1) {
-
-        int color = COLOR(WHITE);
-        if(seriousAlertSwitch()) {
-            color = COLOR(RED);
-        }
-
-        int x = f_getBaseX() + ((f_getWidth() - textWidth(emptyMessage)) / 2);
-        int y = f_getBaseY() + ((FUEL_HEIGHT - textHeight(emptyMessage)) / 2);
-
-        tft.setTextSize(1);
-        tft.setTextColor(color);
-        tft.setCursor(x, y);
-        tft.println(emptyMessage);
-    }
-}
-
-void showFuelAmount(int currentVal, int maxVal) {
-    int width = f_getWidth();
-    float percent = (currentVal * 100) / maxVal;
-    currentFuelWidth = percentToGivenVal(percent, width);
-    if(currentFuelWidth > width) {
-        currentFuelWidth = width;
-    }
-    if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
-        fullRedrawNeeded = true;
-    }
-
-    if(f_drawOnce) {
-        int x = 0; 
-        int y = y = f_getBaseY();
-        int tw;
-
-        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, COLOR(BLACK));
-
-        x = f_getBaseX();
-
-        drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
-        tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
-
-        tft.fillTriangle(x - 6 - FUEL_WIDTH - OFFSET, 
-            y + ((FUEL_HEIGHT) / 2), 
-            x - FUEL_WIDTH - OFFSET - 1, 
-            y + 6, 
-            x - FUEL_WIDTH - OFFSET - 1, 
-            y + (FUEL_HEIGHT - 6), 
-            FUEL_COLOR);
-
-        drawChangeableFuelContent(currentFuelWidth);
-
-        y += FUEL_HEIGHT + (OFFSET / 2);
-
-        tft.setTextSize(1);
-        tft.setTextColor(COLOR(RED));
-        tft.setCursor(x, y);
-        tft.println(empty);
-
-        tw = textWidth(half);
-        x = f_getBaseX();
-        x += ((width - tw) / 2);
-
-        tft.setTextColor(TEXT_COLOR);
-        tft.setCursor(x, y);
-        tft.println(half);
-
-        x = f_getBaseX() + width;
-        tw = textWidth(full);
-        x -= tw;
-
-        tft.setCursor(x, y);
-        tft.println(full);
-
-        f_drawOnce = false;
-    } else {
-        drawChangeableFuelContent(currentFuelWidth);
-    }
-}
-
-static int lastWidth = 0;
-
-void drawChangeableFuelContent(int w) {
-
-    bool draw = false;
-    if(lastWidth != w) {
-        lastWidth = w;
-        draw = true;
-    }
-
-    int color = FUEL_FILL_COLOR;
-
-    int width = f_getWidth();
-    int minW = percentToGivenVal(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
-    if(w <= minW && w >= 1) {
-        draw = true;
-        if(alertSwitch()) {
-            color = COLOR(RED);
-        }
-    }
-
-    if(draw) {
-        int x = f_getBaseX(), y = f_getBaseY(); 
-
-        if(fullRedrawNeeded) {
-            tft.fillRect(x + 1, y + 1, width - 2, FUEL_HEIGHT - 2, COLOR(BLACK));
-            fullRedrawNeeded = false;
-        }
-
-        tft.fillRect(x, y + 1, w, FUEL_HEIGHT - 2, color);
-        int toFill =  width - w - 1;
-        if(toFill < 0) {
-            toFill = 0;
-        }
-        tft.fillRect(x + w, y + 1, toFill, FUEL_HEIGHT - 2, COLOR(BLACK));
-        tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
     }
 }
 
@@ -799,7 +548,7 @@ int v_getBaseX(void) {
 }
 
 int v_getBaseY(void) {
-    return SCREEN_H - textHeight(empty) - (OFFSET / 2);
+    return SCREEN_H - textHeight(err) - (OFFSET / 2);
 }
 
 static int lastV1 = -1, lastV2 = -1;
@@ -831,7 +580,7 @@ void showVolts(float volts) {
         tft.fillRect(x, y, 30, 8, COLOR(BLACK));
 
         tft.setTextSize(1);
-        tft.println(displayTxt);
+        tft.println(getPreparedText());
     }
 }
 
