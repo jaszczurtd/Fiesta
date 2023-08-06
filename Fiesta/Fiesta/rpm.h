@@ -28,4 +28,7 @@ void resetRPMEngine(void);
 void stabilizeRPM(void);
 bool isEngineRunning(void);
 
+void redrawRPM(void);
+void showRPMamount(int currentVal);
+
 #endif
