@@ -4,6 +4,9 @@
 static unsigned long alertsStartSecond = 0;
 static Timer generalTimer;
 
+__attribute__((section(".noinit"))) int statusVariable0;
+__attribute__((section(".noinit"))) int statusVariable1;
+
 void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
   watchdog_update();
   generalTimer.every(time, function);
@@ -29,22 +32,12 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
 }
 
+static int *wValues = NULL;
+static int wSize = 0;
 void executeByWatchdog(int *values, int size) {
   #ifdef ECU_V2
-
-  char dateAndTime[32];
-  memset(dateAndTime, 0, sizeof(dateAndTime));
-  if(isGPSAvailable()) {
-    snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", 
-      getGPSDate(), getGPSTime());
-  }
-
-  initCrashLogger(dateAndTime, SD_CARD_CS);
-  //for(int a = 0; a < size; a++) {
-  //  crashReport("value %d from watchdog: %d", a, values[a]);
-  //}
-  //saveCrashLoggerAndClose();
-
+  wValues = values;
+  wSize = size;
   #endif
 }
 
@@ -63,18 +56,58 @@ void initialization(void) {
   initSPI();
 
   generalTimer = timer_create_default();
-  setupWatchdog(executeByWatchdog, WATCHDOG_TIME);  
+  bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
+  if(!rebooted) {
+    statusVariable0 = statusVariable1 = 0;
+    initGPSDateAndTime();
+  }
 
   initGraphics();
 
   initI2C();
- 
+
   #ifdef ECU_V2
+
+  #ifdef RESET_EEPROM
+  resetEEPROM();
+  #endif
+
   initSDLogger(SD_CARD_CS); 
   if (!isSDLoggerInitialized()) {
     deb("SD Card failed, or not present");
   } else {
     deb("SD Card initialized");
+  }
+
+  if(wValues != NULL) {
+    char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
+    memset(dateAndTime, 0, sizeof(dateAndTime));
+
+    bool validDateAndTime = isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) && 
+      isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
+
+    if(validDateAndTime) {
+      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", 
+        getGPSDate(), getGPSTime());
+    }
+
+    initCrashLogger(dateAndTime, SD_CARD_CS);
+    if(validDateAndTime) {
+      crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
+    }
+    crashReport("core0 started: %d", wValues[0]);
+    crashReport("core0 was running: %d", wValues[1]);
+    crashReport("core1 started: %d", wValues[2]);
+    crashReport("core1 was running: %d", wValues[3]);
+
+    crashReport("status variable0: %d", statusVariable0);
+    crashReport("status variable1: %d", statusVariable1);
+
+    saveCrashLoggerAndClose();
+    watchdog_update();
+
+    wSize = 0;
+    wValues = NULL;
   }
   #endif
 
@@ -239,22 +272,28 @@ void triggerDrawHighImportanceValue(bool state) {
 }
 
 void looper(void) {
+  statusVariable0 = 0;
   updateWatchdogCore0();
 
   if(!isEnvironmentStarted()) {
+    statusVariable0 = -1;
     return;
   }
 
   generalTimer.tick();
 
+  statusVariable0 = 1;
   //draw changes of high importance values
   if(highImportanceValueChanged) {
     drawHighImportanceValues();
+    statusVariable0 = 2;
     triggerDrawHighImportanceValue(false);
   }
 
+  statusVariable0 = 3;
   obdLoop();
 
+  statusVariable0 = 4;
   delay(CORE_OPERATION_DELAY);  
 }
 
@@ -272,20 +311,29 @@ void initialization1(void) {
 
 void looper1(void) {
 
+  statusVariable1 = 0;
   updateWatchdogCore1();
 
   if(!isEnvironmentStarted()) {
+    statusVariable1 = -1;
     return;
   }
 
+  statusVariable1 = 1;
   glowPlugsMainLoop();
+  statusVariable1 = 2;
   fanMainLoop();
+  statusVariable1 = 3;
   engineHeaterMainLoop();
+  statusVariable1 = 4;
   heatedWindowMainLoop();
 
+  statusVariable1 = 5;
   turboMainLoop();
+  statusVariable1 = 6;
   stabilizeRPM();
 
+  statusVariable1 = 7;
   delay(CORE_OPERATION_DELAY);  
 }
 
