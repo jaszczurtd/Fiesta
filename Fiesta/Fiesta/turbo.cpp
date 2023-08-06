@@ -85,15 +85,10 @@ void turboMainLoop(void) {
     if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
       if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
         pressurePercentage -= PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage < 0) {
-          pressurePercentage = 0;
-        }
       } else {
         pressurePercentage += PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage > 100) {
-          pressurePercentage = 100;
-        }
       }
+      pressurePercentage = constrain(pressurePercentage, 0, 100);
       lastSolenoidUpdate = currentTime;
     }
   }
