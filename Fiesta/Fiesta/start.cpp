@@ -4,8 +4,8 @@
 static unsigned long alertsStartSecond = 0;
 static Timer generalTimer;
 
-__attribute__((section(".noinit"))) int statusVariable0;
-__attribute__((section(".noinit"))) int statusVariable1;
+NOINIT int statusVariable0;
+NOINIT int statusVariable1;
 
 void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
   watchdog_update();
@@ -100,8 +100,8 @@ void initialization(void) {
     crashReport("core1 started: %d", wValues[2]);
     crashReport("core1 was running: %d", wValues[3]);
 
-    crashReport("status variable0: %d", statusVariable0);
-    crashReport("status variable1: %d", statusVariable1);
+    crashReport("sv0: %d", statusVariable0);
+    crashReport("sv1: %d", statusVariable1);
 
     saveCrashLoggerAndClose();
     watchdog_update();
