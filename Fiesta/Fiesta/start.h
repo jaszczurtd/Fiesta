@@ -25,6 +25,7 @@
 #include "can.h"
 #include "obd-2.h"
 #include "vp37.h"
+#include "oil.h"
 #include "tests.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12

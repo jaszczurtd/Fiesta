@@ -80,8 +80,6 @@ const char *getPreparedText(void);
 //indicators
 void redrawTemperature(void);
 void showTemperatureAmount(int currentVal, int maxVal);
-void redrawOil(void);
-void showOilAmount(int currentVal, int maxVal);
 void redrawIntercooler(void);
 void showICTemperatureAmount(int currentVal);
 void redrawEngineLoad(void);

@@ -155,6 +155,7 @@ void initialization(void) {
   redrawFuel();
   redrawTemperature();
   redrawOil();
+  redrawOilPressure();
   redrawPressure();
   redrawIntercooler();
   redrawEngineLoad();
@@ -213,6 +214,7 @@ void drawMediumImportanceValues(void) {
 void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
+  showOilPressureAmount(valueFields[F_OIL_PRESSURE]);
   #endif
 }
 
