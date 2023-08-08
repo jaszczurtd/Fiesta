@@ -116,7 +116,7 @@ void redrawPressure(void) {
 }
 
 const int p_getBaseX(void) {
-    return (BIG_ICONS_WIDTH * 2);
+    return (BIG_ICONS_WIDTH * 3);
 }
 
 const int p_getBaseY(void) {
