@@ -93,7 +93,7 @@ int f_getBaseX(void) {
 }
 
 int f_getBaseY(void) {
-    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - OFFSET; 
+    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - (OFFSET * 2); 
 }
 
 int f_getWidth(void) {
@@ -136,7 +136,7 @@ void showFuelAmount(int currentVal, int maxVal) {
         int tw;
 
         TFT tft = returnReference();
-        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, COLOR(BLACK));
+        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ICONS_BG_COLOR);
 
         x = f_getBaseX();
 

@@ -142,7 +142,7 @@ void initialization(void) {
     sec = getSeconds();
   }
 
-  fillScreenWithColor(COLOR(BLACK));
+  fillScreenWithColor(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -161,6 +161,7 @@ void initialization(void) {
   redrawEngineLoad();
   redrawRPM();
   redrawEGT();
+  redrawGPS();
   #endif
 
   valueFields[F_VOLTS] = readVolts();
@@ -208,6 +209,7 @@ void drawMediumImportanceValues(void) {
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
   showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
   showEGTTemperatureAmount();
+  showGPSStatus();
   #endif
 }
 
