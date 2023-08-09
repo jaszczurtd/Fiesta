@@ -16,7 +16,7 @@ const int o_getBaseX(void) {
 }
 
 const int o_getBaseY(void) {
-    return 0; 
+    return BIG_ICONS_OFFSET; 
 }
 
 static int lastOilHeight = C_INIT_VAL;
@@ -103,13 +103,37 @@ void redrawOilPressure(void) {
 }
 
 const int op_getBaseX(void) {
-    return BIG_ICONS_WIDTH;
+    return (BIG_ICONS_WIDTH * 2);
 }
 
 const int op_getBaseY(void) {
-    return 0; 
+    return BIG_ICONS_OFFSET; 
 }
 
-void showOilPressureAmount(float current) {
+static int lastHI = C_INIT_VAL;
+static int lastLO = C_INIT_VAL;
 
+void showOilPressureAmount(float current) {
+  if(op_drawOnce) {
+    drawImage(op_getBaseX(), op_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)oilPressure);
+    op_drawOnce = false;
+  } else {
+    int hi, lo;
+
+    floatToDec(current, &hi, &lo);
+
+    if(hi != lastHI || lo != lastLO) {
+      lastHI = hi;
+      lastLO = lo;
+      drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+    }
+  }
+}
+
+//-----------------------------------------------
+// read oil pressure
+//-----------------------------------------------
+
+float readOilBarPressure(void) {
+  return 1.2;
 }

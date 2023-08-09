@@ -17,10 +17,6 @@
 //#define JUST_TEST_BY_THROTTLE
 
 void turboMainLoop(void);
-
-#define BAR_TEXT_X 12
-#define BAR_TEXT_Y 72
-
 void redrawPressure(void);
 void showPressureAmount(float current);
 

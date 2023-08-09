@@ -120,7 +120,7 @@ const int p_getBaseX(void) {
 }
 
 const int p_getBaseY(void) {
-    return 0; 
+    return BIG_ICONS_OFFSET; 
 }
 
 static int lastHI = C_INIT_VAL;
@@ -132,9 +132,9 @@ void showPressureAmount(float current) {
     TFT tft = returnReference();
 
     if(p_drawOnce) {
-        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned short*)pressure);
+        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
         x = p_getBaseX() + BIG_ICONS_WIDTH;
-        tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR);
+        tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, ICONS_BG_COLOR);
 
         p_drawOnce = false;
     } else {
@@ -146,30 +146,7 @@ void showPressureAmount(float current) {
         if(hi != lastHI || lo != lastLO) {
             lastHI = hi;
             lastLO = lo;
-
-            prepareText((const char*)F("%d.%d"), hi, lo);
-
-            x = p_getBaseX() + BAR_TEXT_X;
-            y = p_getBaseY() + BAR_TEXT_Y - 12;
-
-            tft.fillRect(x, y, 28, 15, BIG_ICONS_BG_COLOR);
-
-            x = p_getBaseX() + BAR_TEXT_X;
-            y = p_getBaseY() + BAR_TEXT_Y;
-
-            tft.setFont(&FreeSansBold9pt7b);
-            tft.setTextSize(1);
-            tft.setTextColor(TEXT_COLOR);
-            tft.setCursor(x, y);
-            tft.println(getPreparedText());
-
-            tft.setFont();
-            tft.setTextSize(1);
-
-            x = p_getBaseX() + BAR_TEXT_X + 27;
-            y = p_getBaseY() + BAR_TEXT_Y - 12;
-            tft.setCursor(x, y);
-            tft.println(F("BAR"));
+            drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
         }
     }
 }

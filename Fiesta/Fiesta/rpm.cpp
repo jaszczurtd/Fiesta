@@ -163,34 +163,21 @@ const int rpm_getBaseX(void) {
 }
 
 const int rpm_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
+    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
 }
 
 static int lastRPMAmount = C_INIT_VAL;
 void showRPMamount(int currentVal) {
 
     if(rpm_drawOnce) {
-        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)rpm);
+        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)rpm);
         rpm_drawOnce = false;
     } else {
         if(lastRPMAmount != currentVal) {
             lastRPMAmount = currentVal;
 
-            int x, y, w, offset;
-            TFT tft = returnReference();
-
-            setDisplayDefaultFont();
-            tft.setTextColor(TEXT_COLOR);
-
-            w = prepareText((const char*)F("%d"), currentVal);
-
-            x = rpm_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
-            y = rpm_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(rpm_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(getPreparedText());
+            drawTextForMiddleIcons(rpm_getBaseX(), rpm_getBaseY(), 5, 
+                                   TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d"), currentVal);
         }
     }
 }

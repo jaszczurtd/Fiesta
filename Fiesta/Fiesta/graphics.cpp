@@ -77,29 +77,114 @@ int prepareText(const char *format, ...) {
 }
 
 void drawTempValue(int x, int y, int valToDisplay) {
-    tft.setFont(&FreeSansBold9pt7b);
-    tft.setTextSize(1);
+  tft.setFont(&FreeSansBold9pt7b);
+  tft.setTextSize(1);
 
-    tft.setTextColor(TEXT_COLOR);
-    tft.setCursor(x, y);
+  tft.setTextColor(TEXT_COLOR);
+  tft.setCursor(x, y);
 
-    tft.fillRect(x, y - 14, 35, 16, BIG_ICONS_BG_COLOR);
+  tft.fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
 
-    if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
-        tft.setTextColor(COLOR(RED));
-        tft.println(err);
-        return;
-    } else {
-        prepareText((const char*)F("%d"), valToDisplay);
-        tft.println(getPreparedText());
-    }
-    setDisplayDefaultFont();
+  if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
+      tft.setTextColor(COLOR(RED));
+      tft.println(err);
+      return;
+  } else {
+      prepareText((const char*)F("%d"), valToDisplay);
+      tft.println(getPreparedText());
+  }
+  setDisplayDefaultFont();
 }
 
 void drawTempBar(int x, int y, int currentHeight, int color) {
-    tft.fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
-    tft.fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
-       -(TEMP_BAR_MAXHEIGHT - currentHeight), BIG_ICONS_BG_COLOR);
+  tft.fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
+  tft.fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
+      -(TEMP_BAR_MAXHEIGHT - currentHeight), ICONS_BG_COLOR);
+}
+
+int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
+
+  int w1 = 0, kmoffset = 0;
+  const char *km = ((const char*)F("km/h"));
+  if(mode == MODE_M_KILOMETERS) {
+    setDisplayDefaultFont();
+    w1 = textWidth(km);
+    kmoffset = 5;
+  }
+
+  tft.setFont(&FreeSerif9pt7b);
+  tft.setTextSize(1);
+  tft.setTextColor(color);
+
+  memset(displayTxt, 0, sizeof(displayTxt));
+
+  va_list valist;
+  va_start(valist, format);
+  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  va_end(valist);
+
+  int w = textWidth((const char*)displayTxt);
+
+  int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
+  int y1 = y + 59;
+  
+  tft.fillRect(x + offset, 
+              y1 - 14, SMALL_ICONS_WIDTH - (offset * 2), 
+              16, 
+              ICONS_BG_COLOR);
+  tft.setCursor(x1, y1);
+  tft.println(getPreparedText());
+
+  switch(mode) {
+    default:
+    case MODE_M_NORMAL:
+      break;
+    case MODE_M_TEMP:
+      tft.drawCircle(x1 + w + 6, y1 - 10, 3, color);
+      break;
+    case MODE_M_KILOMETERS:
+      setDisplayDefaultFont();
+      tft.setCursor(x1 + w + kmoffset, y1 - 6);
+      tft.println(km);
+      break;
+  }
+
+  setDisplayDefaultFont();
+  return w;
+}
+
+void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
+
+  memset(displayTxt, 0, sizeof(displayTxt));
+
+  va_list valist;
+  va_start(valist, format);
+  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  va_end(valist);
+
+  int w = textWidth((const char*)displayTxt);
+
+  int x1 = x + BAR_TEXT_X;
+  int y1 = y + BAR_TEXT_Y - 12;
+
+  tft.fillRect(x1, y1, 28, 15, ICONS_BG_COLOR);
+
+  x1 = x + BAR_TEXT_X;
+  y1 = y + BAR_TEXT_Y;
+
+  tft.setFont(&FreeSansBold9pt7b);
+  tft.setTextSize(1);
+  tft.setTextColor(TEXT_COLOR);
+  tft.setCursor(x1, y1);
+  tft.println(getPreparedText());
+
+  tft.setFont();
+  tft.setTextSize(1);
+
+  x1 = x + BAR_TEXT_X + 25;
+  y1 = y + BAR_TEXT_Y - 6;
+  tft.setCursor(x1, y1);
+  tft.println(F("BAR"));
 }
 
 void displayErrorWithMessage(int x, int y, const char *msg) {
@@ -148,11 +233,9 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
     tft.println(msg);
 }
 
-
 //-------------------------------------------------------------------------------------------------
 //coolant temperature indicator
 //-------------------------------------------------------------------------------------------------
-
 
 const char *err = (char*)F("ERR");
 
@@ -166,7 +249,7 @@ const int t_getBaseX(void) {
 }
 
 const int t_getBaseY(void) {
-    return 0; 
+    return BIG_ICONS_OFFSET; 
 }
 
 static int lastCoolantHeight = C_INIT_VAL;
@@ -175,7 +258,7 @@ static int lastCoolantVal = C_INIT_VAL;
 void showTemperatureAmount(int currentVal, int maxVal) {
 
     if(t_drawOnce) {
-        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, BIG_ICONS_BG_COLOR, (unsigned short*)temperature);
+        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)temperature);
         t_drawOnce = false;
     } else {
         int x, y, color;
@@ -256,38 +339,25 @@ const int e_getBaseX(void) {
 }
 
 const int e_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
+    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
 }
 
 static int lastLoadAmount = C_INIT_VAL;
 
 void showEngineLoadAmount(int currentVal) {
 
-    int value = getThrottlePercentage(currentVal);
+  int value = getThrottlePercentage(currentVal);
 
-    if(e_drawOnce) {
-        drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)pump);
-        e_drawOnce = false;
-    } else {
-        if(lastLoadAmount != value) {
-            lastLoadAmount = value;
-
-            int x, y, w, offset;
-
-            setDisplayDefaultFont();
-            tft.setTextColor(TEXT_COLOR);
-
-            w = prepareText((const char*)F("%d%%"), value);
-
-            x = e_getBaseX() + ((SMALL_ICONS_WIDTH - w) / 2);
-            y = e_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(e_getBaseX() + offset, y, SMALL_ICONS_WIDTH - (offset * 2), 8, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(getPreparedText());
-        }
+  if(e_drawOnce) {
+    drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pump);
+    e_drawOnce = false;
+  } else {
+    if(lastLoadAmount != value) {
+      lastLoadAmount = value;
+      drawTextForMiddleIcons(e_getBaseX(), e_getBaseY(), 5, 
+                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d%%"), value);
     }
+  }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -304,7 +374,7 @@ const int egt_getBaseX(void) {
 }
 
 const int egt_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
+    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
 }
 
 static bool currentIsDPF = false;
@@ -335,11 +405,11 @@ void showEGTTemperatureAmount(void) {
     if(currentIsDPF) {
       img = (unsigned short*)dpf;
     }      
-    drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, img);
+    drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, img);
     egt_drawOnce = false;
     draw = true;
   } 
-  int x, y, w, offset, color = TEXT_COLOR;
+  int color = TEXT_COLOR;
 
   if(currentVal < TEMP_EGT_MIN) {
     currentVal = TEMP_EGT_MIN - 1;
@@ -361,35 +431,29 @@ void showEGTTemperatureAmount(void) {
   }
 
   if(draw) {
-    setDisplayDefaultFont();
-    tft.setTextColor(color);
+    char *format = NULL;
 
     if(currentVal < TEMP_EGT_MIN) {
-      w = prepareText((const char*)F("COLD"));
+      format = ((char*)F("COLD"));
     } else if(currentVal > TEMP_EGT_MAX) {
-      w = prepareText((const char*)err);  
+      format = ((char*)err);  
     } else {
-      const char *format = (const char*)F("%d");
+      format = (char*)F("%d");
       if(currentIsDPF) {
         if(isDPFRegenerating()) {
-          format = (const char*)F("R/%d");          
+          format = (char*)F("R/%d");          
         }
       } 
-      w = prepareText(format, currentVal);
     }
 
-    x = egt_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
-    y = egt_getBaseY() + 30;
-    
-    offset = 2;
-    tft.fillRect(egt_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
-    tft.setCursor(x, y);
-    tft.println(getPreparedText());
-
-    if(currentVal > TEMP_EGT_MIN &&
-      currentVal < TEMP_EGT_MAX) {
-        tft.drawCircle(x + w + 2, y, 2, color);
+    bool isTemp = (currentVal > TEMP_EGT_MIN && currentVal < TEMP_EGT_MAX);
+    int mode = MODE_M_NORMAL;
+    if(isTemp) {
+      mode = MODE_M_TEMP;
     }
+
+    drawTextForMiddleIcons(egt_getBaseX(), egt_getBaseY(), 2, 
+                           color, mode, format, currentVal);
   }
 }
 
@@ -407,7 +471,7 @@ const int ic_getBaseX(void) {
 }
 
 const int ic_getBaseY(void) {
-    return BIG_ICONS_HEIGHT; 
+    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
 }
 
 static int lastICTempVal = C_INIT_VAL;
@@ -415,36 +479,26 @@ static int lastICTempVal = C_INIT_VAL;
 void showICTemperatureAmount(int currentVal) {
 
     if(ic_drawOnce) {
-        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, SMALL_ICONS_BG_COLOR, (unsigned short*)ic);
+        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)ic);
         ic_drawOnce = false;
     } else {
         if(lastICTempVal != currentVal) {
             lastICTempVal = currentVal;
 
-            int x, y, w, offset;
-
-            setDisplayDefaultFont();
-
+            int color = TEXT_COLOR;
+            char *format = NULL;
             bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
+
             if(error) {
-                tft.setTextColor(COLOR(RED));
-                w = prepareText((const char*)F("%s"), err);
+                color = COLOR(RED);
+                format = (char*)err;
             } else {
-                tft.setTextColor(TEXT_COLOR);
-                w = prepareText((const char*)F("%d"), currentVal);
+                format = ((char*)F("%d"));
             }
 
-            x = ic_getBaseX() + (((SMALL_ICONS_WIDTH - w) / 2) - 2);
-            y = ic_getBaseY() + 30;
-            
-            offset = 5;
-            tft.fillRect(ic_getBaseX() + offset, y - 2, SMALL_ICONS_WIDTH - (offset * 2), 10, SMALL_ICONS_BG_COLOR);
-            tft.setCursor(x, y);
-            tft.println(getPreparedText());
-            
-            if(!error) {
-                tft.drawCircle(x + w + 2, y, 2, TEXT_COLOR);
-            }
+            int mode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
+            drawTextForMiddleIcons(ic_getBaseX(), ic_getBaseY(), 5, 
+                                   color, mode, format, currentVal);
         }
     }
 }
@@ -487,7 +541,7 @@ void showVolts(float volts) {
 
         prepareText((const char*)F("%d.%dv"), v1, v2);
 
-        tft.fillRect(x, y, 30, 8, COLOR(BLACK));
+        tft.fillRect(x, y, 30, 8, ICONS_BG_COLOR);
 
         tft.setTextSize(1);
         tft.println(getPreparedText());
