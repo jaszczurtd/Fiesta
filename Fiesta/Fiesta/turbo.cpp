@@ -18,6 +18,14 @@ uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
 
 static unsigned long lastSolenoidUpdate = 0;
 
+int scaleTurboValues(int value) {
+#ifdef GTB2260VZK  
+  value = map(value, 0, 100, 100, 0);
+  value = map(value, 0, 100, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
+#endif
+  return value;
+}
+
 int correctPressureFactor(void) {
   int temperature = valueFields[F_INTAKE_TEMP];
   return (temperature < MIN_TEMPERATURE_CORRECTION) ? 
@@ -32,7 +40,12 @@ void turboMainLoop(void) {
   bool pedalPressed = false;
   int n75;
   int pressurePercentage;
+  int RPM_index;
 
+#ifdef JUST_TEST_BY_THROTTLE
+  engineThrottlePercentageValue = scaleTurboValues(engineThrottlePercentageValue);
+  n75 = percentToGivenVal(engineThrottlePercentageValue, PWM_RESOLUTION);
+#else
   if(valueFields[F_PRESSURE] < MAX_BOOST_PRESSURE) {
     if(engineThrottlePercentageValue > 0) {
       pedalPressed = true;
@@ -43,7 +56,7 @@ void turboMainLoop(void) {
       rpm = RPM_MAX_EVER;
     }
 
-    int RPM_index = (int(rpm - 1500) / 500); // determine RPM index
+    RPM_index = (int(rpm - 1500) / 500); // determine RPM index
     if(RPM_index < 0) {
       RPM_index = 0;
     }
@@ -72,23 +85,22 @@ void turboMainLoop(void) {
     if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
       if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
         pressurePercentage -= PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage < 0) {
-          pressurePercentage = 0;
-        }
       } else {
         pressurePercentage += PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage > 100) {
-          pressurePercentage = 100;
-        }
       }
+      pressurePercentage = constrain(pressurePercentage, 0, 100);
       lastSolenoidUpdate = currentTime;
     }
   }
 
+  pressurePercentage = scaleTurboValues(pressurePercentage);
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
 #ifdef DEBUG
-  deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", engineLoadRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
+  deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
+    engineThrottleRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
+#endif
+
 #endif
 
   valToPWM(PIO_TURBO, n75);

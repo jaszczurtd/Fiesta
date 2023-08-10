@@ -3,7 +3,7 @@
 
 #define SUPPORT_TRANSACTIONS
 
-#define PWM_FREQUENCY_HZ 100
+#define PWM_FREQUENCY_HZ 300
 #define I2C_SPEED 50000
 
 //rpi pio pin numbers

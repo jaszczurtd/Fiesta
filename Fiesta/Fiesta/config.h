@@ -1,9 +1,12 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
-//important: values scaled for rpi SDK ver 1.2.0
-
+//BASIC CONTROL VALUES!
 #define ECU_V2
+#define D_ILI9341
+#define GTB2260VZK
+
+//#define RESET_EEPROM
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
@@ -79,8 +82,11 @@
 #define FUEL_MAX 410
 #define FUEL_MIN 1660
 
-//dividers - analog reads
+//hella actuator PWM percent: min/max values
+#define TURBO_ACTUATOR_LOW 6
+#define TURBO_ACTUATOR_HIGH 90
 
+//dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 912
 #define DIVIDER_EGT 2.308
 
