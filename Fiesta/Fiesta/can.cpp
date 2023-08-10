@@ -27,11 +27,6 @@ void canInit(int retries) {
   dpfConnected = false;
   dpfMessages = lastDPFMessages = 0;
 
-  Adafruit_ST7735 tft = returnReference();
-
-  tft.setFont();
-  tft.setTextSize(1);
-
   for(int a = 0; a < retries; a++) {
     initialized = (CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
     if(initialized) {
@@ -40,10 +35,12 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    tft.fillScreen(ST7735_BLACK);
+    setDisplayDefaultFont();
+    fillScreenWithColor(COLOR(BLACK));
 
     int x = 10;
     int y = 10;
+    TFT tft = returnReference();
     tft.setCursor(x, y);
     tft.println(F("CAN module init fail"));
     y += 10;
@@ -55,7 +52,7 @@ void canInit(int retries) {
     snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("Connection attempt: %d"), at++);
     tft.println(displayTxt);
 
-    delay(1000);
+    delay(SECOND);
     watchdog_update();
   }
 

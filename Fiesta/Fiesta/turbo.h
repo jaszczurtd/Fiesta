@@ -14,6 +14,8 @@
 #define PRESSURE_LIMITER_FACTOR 2
 #define MIN_TEMPERATURE_CORRECTION 30
 
+//#define JUST_TEST_BY_THROTTLE
+
 void turboMainLoop(void);
 
 #endif

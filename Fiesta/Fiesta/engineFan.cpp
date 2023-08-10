@@ -49,7 +49,7 @@ void fanMainLoop(void) {
     if(!fanEnabled && air > AIR_TEMP_FAN_START) {
       fanEnabled = true;
     }
-    if(fanEnabled && air <= AIR_TEMP_FAN_STOP) {
+    if(fanEnabled && air <= AIR_TEMP_FAN_STOP && coolant <= TEMP_FAN_STOP) {
       fanEnabled = false;
     }
   }
