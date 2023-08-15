@@ -507,44 +507,78 @@ void showICTemperatureAmount(int currentVal) {
 //volt indicator
 //-------------------------------------------------------------------------------------------------
 
+static bool v_drawOnce = true; 
+static bool drawVolts = false;
+void redrawVolts(void) {
+    v_drawOnce = true;
+}
+
 int v_getBaseX(void) {
-    return 0;
+    return 223;
 }
 
 int v_getBaseY(void) {
-    return SCREEN_H - textHeight(err) - (OFFSET / 2);
+    return 185;
 }
 
 static int lastV1 = -1, lastV2 = -1;
+static const unsigned short *lastImg = NULL;
 
 void showVolts(float volts) {
-    int v1, v2;
 
-    floatToDec(volts, &v1, &v2);
-    if(v1 != lastV1 || v2 != lastV2) {
-        lastV1 = v1;
-        lastV2 = v2;
+  const unsigned short *img = NULL;
+  int v1, v2;
 
-        int x = v_getBaseX();
-        int y = v_getBaseY();
+  floatToDec(volts, &v1, &v2);
+  if(v1 != lastV1 || v2 != lastV2) {
+    lastV1 = v1;
+    lastV2 = v2;
 
-        int color = VOLTS_OK_COLOR;
-        if(volts < 11.5) {
-            color = VOLTS_LOW_ERROR_COLOR;
-        }
-        if(volts > 14.7) {
-            color = COLOR(RED);
-        }
-
-        tft.setTextColor(color);
-        tft.setCursor(x, y);
-
-        prepareText((const char*)F("%d.%dv"), v1, v2);
-
-        tft.fillRect(x, y, 30, 8, ICONS_BG_COLOR);
-
-        tft.setTextSize(1);
-        tft.println(getPreparedText());
+    if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
+      img = batteryNotOKIcon;
+    } else {
+      img = batteryOKIcon;
     }
+
+    if(img != lastImg) {
+      lastImg = img;
+      v_drawOnce = true;
+    }
+
+    drawVolts = true;
+  }
+
+  if(v_drawOnce) {
+    drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
+    v_drawOnce = false;
+  }
+
+  if(drawVolts) {
+    int x = v_getBaseX() + BATTERY_WIDTH + 2;
+    int y = v_getBaseY() + 26;
+
+    tft.fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
+
+    int color = VOLTS_OK_COLOR;
+    if(volts < VOLTS_MIN_VAL) {
+        color = VOLTS_LOW_ERROR_COLOR;
+    }
+    if(volts > VOLTS_MAX_VAL) {
+        color = COLOR(RED);
+    }
+
+    tft.setCursor(x, y);
+
+    prepareText((const char*)F("%d.%dv"), v1, v2);
+
+    tft.setFont(&FreeSansBold9pt7b);
+    tft.setTextSize(1);
+    tft.setCursor(x, y);
+
+    tft.setTextColor(color);
+    tft.println(getPreparedText());
+
+    drawVolts = false;
+  }
 }
 

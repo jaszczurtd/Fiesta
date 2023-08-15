@@ -118,7 +118,7 @@ void showOilPressureAmount(float current) {
     drawImage(op_getBaseX(), op_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)oilPressure);
 #ifndef ECU_V2
     drawTextForMiddleIcons(op_getBaseX() - 4, op_getBaseY() + 14, 1, 
-                            TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N/A"));
+                            TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N.A"));
 #endif
     op_drawOnce = false;
   } else {

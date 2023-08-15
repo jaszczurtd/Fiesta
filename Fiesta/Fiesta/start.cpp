@@ -147,6 +147,9 @@ void initialization(void) {
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
 
+  valueFields[F_VOLTS] = readVolts();
+  TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
@@ -161,11 +164,9 @@ void initialization(void) {
   redrawEngineLoad();
   redrawRPM();
   redrawEGT();
+  redrawVolts();
   redrawGPS();
   #endif
-
-  valueFields[F_VOLTS] = readVolts();
-  TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
