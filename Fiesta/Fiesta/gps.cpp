@@ -107,7 +107,7 @@ void showGPSStatus(void) {
 
 #ifndef ECU_V2 
       drawTextForMiddleIcons(gps_getBaseX() - 10, gps_getBaseY() + 1, 1, 
-                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N/A"));
+                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N.A"));
 #endif
         gps_drawOnce = false;
     } else {

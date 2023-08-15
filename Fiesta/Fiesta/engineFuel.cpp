@@ -89,7 +89,7 @@ static int currentFuelWidth = 0;
 static bool fullRedrawNeeded = false;
 
 int f_getBaseX(void) {
-    return (OFFSET * 2) + FUEL_WIDTH + OFFSET;
+    return (OFFSET * 2) + FUEL_WIDTH - 1;
 }
 
 int f_getBaseY(void) {
@@ -97,93 +97,101 @@ int f_getBaseY(void) {
 }
 
 int f_getWidth(void) {
-    return SCREEN_W - f_getBaseX() - (OFFSET * 2);
+    return FUEL_GAUGE_WIDTH - f_getBaseX();
+}
+
+int f_getGaugePos(void) {
+  int center = ((FUEL_HEIGHT - FUEL_GAUGE_HEIGHT) / 2);
+  if(center < 0) {
+    center = 0;
+  }
+  return f_getBaseY() + center;
 }
 
 void drawFuelEmpty(void) {
-    if(currentFuelWidth <= 1) {
+  if(currentFuelWidth <= 1) {
 
-        int color = COLOR(WHITE);
-        if(seriousAlertSwitch()) {
-            color = COLOR(RED);
-        }
-
-        int x = f_getBaseX() + ((f_getWidth() - textWidth(emptyMessage)) / 2);
-        int y = f_getBaseY() + ((FUEL_HEIGHT - textHeight(emptyMessage)) / 2);
-
-        TFT tft = returnReference();
-        tft.setTextSize(1);
-        tft.setTextColor(color);
-        tft.setCursor(x, y);
-        tft.println(emptyMessage);
+    int color = COLOR(WHITE);
+    if(seriousAlertSwitch()) {
+        color = COLOR(RED);
     }
+
+    int x = f_getBaseX() + ((f_getWidth() - textWidth(emptyMessage)) / 2);
+    int y = f_getBaseY() + ((FUEL_HEIGHT - textHeight(emptyMessage)) / 2);
+
+    TFT tft = returnReference();
+    tft.setTextSize(1);
+    tft.setTextColor(color);
+    tft.setCursor(x, y);
+    tft.println(emptyMessage);
+  }
 }
 
 void showFuelAmount(int currentVal, int maxVal) {
-    int width = f_getWidth();
-    float percent = (currentVal * 100) / maxVal;
-    currentFuelWidth = percentToGivenVal(percent, width);
-    if(currentFuelWidth > width) {
-        currentFuelWidth = width;
-    }
-    if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
-        fullRedrawNeeded = true;
-    }
+  int width = f_getWidth();
+  float percent = (currentVal * 100) / maxVal;
+  currentFuelWidth = percentToGivenVal(percent, width);
+  if(currentFuelWidth > width) {
+      currentFuelWidth = width;
+  }
+  if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
+      fullRedrawNeeded = true;
+  }
 
-    if(f_drawOnce) {
-        int x = 0; 
-        int y = y = f_getBaseY();
-        int tw;
+  int center = ((FUEL_HEIGHT - FUEL_GAUGE_HEIGHT) / 2);
+  if(center < 0) {
+    center = 0;
+  }
 
-        TFT tft = returnReference();
-        tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ICONS_BG_COLOR);
+  if(f_drawOnce) {
+    int x = 0; 
+    int y = f_getBaseY();
+    int tw;
 
-        x = f_getBaseX();
+    TFT tft = returnReference();
+    tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ICONS_BG_COLOR);
 
-        drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
-        tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
+    x = f_getBaseX();
 
-        tft.fillTriangle(x - 6 - FUEL_WIDTH - OFFSET, 
-            y + ((FUEL_HEIGHT) / 2), 
-            x - FUEL_WIDTH - OFFSET - 1, 
-            y + 6, 
-            x - FUEL_WIDTH - OFFSET - 1, 
-            y + (FUEL_HEIGHT - 6), 
-            FUEL_COLOR);
+    drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
 
-        drawChangeableFuelContent(currentFuelWidth);
+    y = f_getGaugePos();
 
-        y += FUEL_HEIGHT + (OFFSET / 2);
+    tft.drawRect(x, y, width, FUEL_GAUGE_HEIGHT, FUEL_BOX_COLOR);
 
-        tft.setTextSize(1);
-        tft.setTextColor(COLOR(RED));
-        tft.setCursor(x, y);
-        tft.println(empty);
+    drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, y);
 
-        tw = textWidth(half);
-        x = f_getBaseX();
-        x += ((width - tw) / 2);
+    y += FUEL_GAUGE_HEIGHT + (OFFSET / 2);
 
-        tft.setTextColor(TEXT_COLOR);
-        tft.setCursor(x, y);
-        tft.println(half);
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR(RED));
+    tft.setCursor(x, y);
+    tft.println(empty);
 
-        x = f_getBaseX() + width;
-        tw = textWidth(full);
-        x -= tw;
+    tw = textWidth(half);
+    x = f_getBaseX();
+    x += ((width - tw) / 2);
 
-        tft.setCursor(x, y);
-        tft.println(full);
+    tft.setTextColor(TEXT_COLOR);
+    tft.setCursor(x, y);
+    tft.println(half);
 
-        f_drawOnce = false;
-    } else {
-        drawChangeableFuelContent(currentFuelWidth);
-    }
+    x = f_getBaseX() + width;
+    tw = textWidth(full);
+    x -= tw;
+
+    tft.setCursor(x, y);
+    tft.println(full);
+
+    f_drawOnce = false;
+  } else {
+    drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, f_getGaugePos());
+  }
 }
 
 static int lastWidth = 0;
 
-void drawChangeableFuelContent(int w) {
+void drawChangeableFuelContent(int w, int fh, int y) {
 
     bool draw = false;
     if(lastWidth != w) {
@@ -204,19 +212,19 @@ void drawChangeableFuelContent(int w) {
 
     if(draw) {
       TFT tft = returnReference();
-      int x = f_getBaseX(), y = f_getBaseY(); 
+      int x = f_getBaseX(); 
 
       if(fullRedrawNeeded) {
-          tft.fillRect(x + 1, y + 1, width - 2, FUEL_HEIGHT - 2, COLOR(BLACK));
+          tft.fillRect(x + 1, y + 1, width - 2, fh - 2, COLOR(BLACK));
           fullRedrawNeeded = false;
       }
 
-      tft.fillRect(x, y + 1, w, FUEL_HEIGHT - 2, color);
+      tft.fillRect(x, y + 1, w, fh - 2, color);
       int toFill =  width - w - 1;
       if(toFill < 0) {
           toFill = 0;
       }
-      tft.fillRect(x + w, y + 1, toFill, FUEL_HEIGHT - 2, COLOR(BLACK));
-      tft.drawRect(x, y, width, FUEL_HEIGHT, FUEL_BOX_COLOR);
+      tft.fillRect(x + w, y + 1, toFill, fh - 2, COLOR(BLACK));
+      tft.drawRect(x, y, width, fh, FUEL_BOX_COLOR);
     }
 }
