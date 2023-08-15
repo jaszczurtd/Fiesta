@@ -70,7 +70,7 @@ float getCurrentCarSpeed(void) {
   #ifdef ECU_V2
   return gps.speed.kmph();
   #else
-  return 0f;
+  return 0.0f;
   #endif
 }
 
@@ -104,15 +104,20 @@ void showGPSStatus(void) {
 
     if(gps_drawOnce) {
         drawImage(gps_getBaseX(), gps_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)gpsIcon);
+
+#ifndef ECU_V2 
+      drawTextForMiddleIcons(gps_getBaseX() - 10, gps_getBaseY() + 1, 1, 
+                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N/A"));
+#endif
         gps_drawOnce = false;
     } else {
+#ifdef ECU_V2
       int currentVal = (int)getCurrentCarSpeed();
-
       if(lastGPSSpeed != currentVal) {
           lastGPSSpeed = currentVal;
 
           drawTextForMiddleIcons(gps_getBaseX(), gps_getBaseY(), 1, 
-                                  TEXT_COLOR, MODE_M_KILOMETERS, (const char*)F("%d"), currentVal);
+                                 TEXT_COLOR, MODE_M_KILOMETERS, (const char*)F("%d"), currentVal);
       }
 
       int x, y, color;
@@ -132,6 +137,7 @@ void showGPSStatus(void) {
       y = gps_getBaseY() + posOffset - 1;
 
       tft.fillCircle(x, y, radius, color);
+#endif
     }
 }
 
