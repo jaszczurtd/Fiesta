@@ -141,5 +141,5 @@ void showOilPressureAmount(float current) {
 //-----------------------------------------------
 
 float readOilBarPressure(void) {
-  return 1.2;
+  return 0.0;
 }
