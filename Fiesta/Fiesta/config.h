@@ -2,9 +2,9 @@
 #define T_CONFIG
 
 //BASIC CONTROL VALUES!
-#define ECU_V2
+//#define ECU_V2
 #define D_ILI9341
-#define GTB2260VZK
+//#define GTB2260VZK
 
 //#define RESET_EEPROM
 
