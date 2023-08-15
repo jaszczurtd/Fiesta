@@ -116,8 +116,13 @@ static int lastLO = C_INIT_VAL;
 void showOilPressureAmount(float current) {
   if(op_drawOnce) {
     drawImage(op_getBaseX(), op_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)oilPressure);
+#ifndef ECU_V2
+    drawTextForMiddleIcons(op_getBaseX() - 4, op_getBaseY() + 14, 1, 
+                            TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N/A"));
+#endif
     op_drawOnce = false;
   } else {
+#ifdef ECU_V2
     int hi, lo;
 
     floatToDec(current, &hi, &lo);
@@ -127,6 +132,7 @@ void showOilPressureAmount(float current) {
       lastLO = lo;
       drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
     }
+#endif
   }
 }
 
