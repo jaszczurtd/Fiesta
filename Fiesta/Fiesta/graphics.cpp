@@ -559,11 +559,8 @@ void showVolts(float volts) {
 
     tft.fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
 
-    int color = VOLTS_OK_COLOR;
-    if(volts < VOLTS_MIN_VAL) {
-        color = VOLTS_LOW_ERROR_COLOR;
-    }
-    if(volts > VOLTS_MAX_VAL) {
+    int color = TEXT_COLOR;
+    if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
         color = COLOR(RED);
     }
 
