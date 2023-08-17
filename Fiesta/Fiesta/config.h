@@ -113,7 +113,6 @@
 
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 2.0
-#define IDLE_BOOST_PERCENTAGE_SET 75
 
 //how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
