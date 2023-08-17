@@ -1,19 +1,20 @@
 #include "canDefinitions.h"
 #include "turbo.h"
 
-#define RPM_PRESCALERS 8
+#define RPM_PRESCALERS 9
 #define N75_PERCENT_VALS 10
 
 //*** n75 percentage values in relation to RPM
 uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
-  { 80, 79, 78, 77, 76, 75, 73, 73, 73, 71 }, // 1500 RPM
-  { 78, 77, 76, 75, 73, 71, 68, 67, 67, 66 }, // 2000 RPM
-  { 76, 75, 74, 73, 71, 69, 66, 66, 66, 65 }, // 2500 RPM
-  { 75, 74, 73, 71, 69, 67, 64, 64, 64, 63 }, // 3000 RPM
-  { 74, 73, 71, 69, 67, 65, 63, 63, 63, 62 }, // 3500 RPM
-  { 72, 71, 69, 67, 65, 63, 61, 60, 60, 59 }, // 4000 RPM
-  { 68, 67, 65, 63, 61, 59, 59, 58, 58, 56 }, // 4500 RPM
-  { 65, 63, 61, 59, 57, 55, 53, 52, 51, 50 }  // 5000 RPM
+  { 99, 100, 100, 100, 99, 99, 98, 97, 97, 97 },  // 1000 RPM
+  { 80, 79, 78, 77, 76, 75, 73, 73, 73, 71 },     // 1500 RPM
+  { 78, 77, 76, 75, 73, 71, 68, 67, 67, 66 },     // 2000 RPM
+  { 76, 75, 74, 73, 71, 69, 66, 66, 66, 65 },     // 2500 RPM
+  { 75, 74, 73, 71, 69, 67, 64, 64, 64, 63 },     // 3000 RPM
+  { 74, 73, 71, 69, 67, 65, 63, 63, 63, 62 },     // 3500 RPM
+  { 72, 71, 69, 67, 65, 63, 61, 60, 60, 59 },     // 4000 RPM
+  { 68, 67, 65, 63, 61, 59, 59, 58, 58, 56 },     // 4500 RPM
+  { 65, 63, 61, 59, 57, 55, 53, 52, 51, 50 }      // 5000 RPM
 };
 
 static unsigned long lastSolenoidUpdate = 0;
@@ -56,7 +57,7 @@ void turboMainLoop(void) {
       rpm = RPM_MAX_EVER;
     }
 
-    RPM_index = (int(rpm - 1500) / 500); // determine RPM index
+    RPM_index = (int(rpm - 1000) / 500); // determine RPM index
     if(RPM_index < 0) {
       RPM_index = 0;
     }
@@ -64,7 +65,7 @@ void turboMainLoop(void) {
       RPM_index = RPM_PRESCALERS - 1;    
     }
 
-    pressurePercentage = IDLE_BOOST_PERCENTAGE_SET;
+    pressurePercentage = RPM_table[0][0];
 
     for (int i = 0; i < N75_PERCENT_VALS; i++) {
       if (posThrottle == i + 1) {
@@ -74,7 +75,7 @@ void turboMainLoop(void) {
     }
 
     if (!pedalPressed) {
-      pressurePercentage = IDLE_BOOST_PERCENTAGE_SET;
+      pressurePercentage = RPM_table[0][0];
     }
 
     pressurePercentage -= correctPressureFactor();
@@ -96,10 +97,10 @@ void turboMainLoop(void) {
   pressurePercentage = scaleTurboValues(pressurePercentage);
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
-#ifdef DEBUG
+//#ifdef DEBUG
   deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
     engineThrottleRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
-#endif
+//#endif
 
 #endif
 
