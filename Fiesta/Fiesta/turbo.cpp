@@ -97,10 +97,10 @@ void turboMainLoop(void) {
   pressurePercentage = scaleTurboValues(pressurePercentage);
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
-//#ifdef DEBUG
+#ifdef DEBUG
   deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
     engineThrottleRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
-//#endif
+#endif
 
 #endif
 

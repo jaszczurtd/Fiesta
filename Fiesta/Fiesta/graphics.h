@@ -17,7 +17,7 @@
 #include "displayMapper.h"
 
 //colors
-#define TEXT_COLOR 0xC618
+#define TEXT_COLOR 0xE73C
 
 #define C_GRAY_DARK 0x4208
 #define C_GRAY_MEDIUM 0xA514
