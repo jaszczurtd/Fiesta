@@ -59,7 +59,7 @@ void setDisplayDefaultFont(void) {
   tft.setTextSize(1);
 }
 
-static char displayTxt[8];
+static char displayTxt[32];
 const char *getPreparedText(void) {
   return displayTxt;
 }

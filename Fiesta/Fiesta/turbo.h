@@ -19,5 +19,8 @@
 void turboMainLoop(void);
 void redrawPressure(void);
 void showPressureAmount(float current);
+const int p_getBaseX(void);
+const int p_getBaseY(void);
+void showPressurePercentage(void);
 
 #endif
