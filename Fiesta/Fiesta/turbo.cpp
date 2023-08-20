@@ -157,6 +157,7 @@ void showPressureAmount(float current) {
     showPressurePercentage();
 }
 
+static int lastTurboPress = C_INIT_VAL;
 void showPressurePercentage(void) {
 
   int val = int(valueFields[F_PRESSURE_PERCENTAGE]);
