@@ -95,6 +95,9 @@ void turboMainLoop(void) {
   }
 
   pressurePercentage = scaleTurboValues(pressurePercentage);
+
+  valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
+
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
 #ifdef DEBUG
@@ -150,5 +153,32 @@ void showPressureAmount(float current) {
             drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
         }
     }
+
+    showPressurePercentage();
 }
 
+void showPressurePercentage(void) {
+
+  int val = int(valueFields[F_PRESSURE_PERCENTAGE]);
+  if(lastTurboPress != val) {
+    lastTurboPress = val;
+
+    int x = p_getBaseX();
+    int y = p_getBaseY();
+    TFT tft = returnReference();
+
+    tft.setFont();
+    tft.setTextSize(1);
+    tft.setTextColor(TEXT_COLOR);
+    
+    x = x + 12;
+    y = y + 76;
+
+    int w = prepareText((const char*)F("turbo:%d%%"), val);
+
+    tft.fillRect(x, y, w + 1, 8, ICONS_BG_COLOR);
+
+    tft.setCursor(x, y);
+    tft.println(getPreparedText());
+  }
+}
