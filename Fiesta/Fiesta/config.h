@@ -37,7 +37,7 @@
 #define TEMP_MAX 125
 #define TEMP_OK_HI 105
 
-#define TEMP_LOWEST -100
+#define TEMP_LOWEST -70
 #define TEMP_HIGHEST 170
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
@@ -119,6 +119,9 @@
 
 //in miliseconds
 #define GPS_UPDATE 4 * 1000
+
+//#define PICO_W
+#define WIFI_SSID "Jaszczurowo"
 
 #endif
 

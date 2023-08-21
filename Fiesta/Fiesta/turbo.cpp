@@ -89,12 +89,12 @@ void turboMainLoop(void) {
       } else {
         pressurePercentage += PRESSURE_LIMITER_FACTOR;
       }
-      pressurePercentage = constrain(pressurePercentage, 0, 100);
       lastSolenoidUpdate = currentTime;
     }
   }
 
   pressurePercentage = scaleTurboValues(pressurePercentage);
+  pressurePercentage = constrain(pressurePercentage, 0, 100);
 
   valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
 
@@ -177,7 +177,7 @@ void showPressurePercentage(void) {
 
     int w = prepareText((const char*)F("turbo:%d%%"), val);
 
-    tft.fillRect(x, y, w + 1, 8, ICONS_BG_COLOR);
+    tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
 
     tft.setCursor(x, y);
     tft.println(getPreparedText());

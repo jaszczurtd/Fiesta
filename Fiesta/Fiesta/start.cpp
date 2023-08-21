@@ -150,6 +150,10 @@ void initialization(void) {
   valueFields[F_VOLTS] = readVolts();
   TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
 
+  #ifdef PICO_W
+  scanNetworks(WIFI_SSID);
+  #endif
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
