@@ -2,10 +2,14 @@
 #ifndef T_SENSORS
 #define T_SENSORS
 
+#include "config.h"
+
 #include <Wire.h>
 #include <tools.h>
+#ifdef PICO_W
+#include <WiFi.h>
+#endif
 
-#include "config.h"
 #include "start.h"
 #include "hardwareConfig.h"
 #include "tests.h"
