@@ -1,20 +1,19 @@
 #include "canDefinitions.h"
 #include "turbo.h"
 
-#define RPM_PRESCALERS 9
+#define RPM_PRESCALERS 8
 #define N75_PERCENT_VALS 10
 
 //*** n75 percentage values in relation to RPM
 uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
-  { 88, 87, 86, 85, 84, 83, 82, 81, 80, 79 },    // 1000 RPM
-  { 78, 77, 76, 75, 74, 73, 71, 71, 71, 69 },    // 1500 RPM
-  { 76, 75, 74, 73, 71, 69, 66, 65, 65, 64 },    // 2000 RPM
-  { 74, 73, 72, 71, 69, 67, 64, 64, 64, 63 },    // 2500 RPM
-  { 73, 72, 71, 69, 67, 65, 62, 62, 62, 61 },    // 3000 RPM
-  { 72, 71, 69, 67, 65, 63, 61, 61, 61, 60 },    // 3500 RPM
-  { 70, 69, 67, 65, 63, 61, 59, 58, 58, 57 },    // 4000 RPM
-  { 66, 65, 63, 61, 59, 57, 57, 56, 56, 54 },    // 4500 RPM
-  { 63, 61, 59, 57, 55, 53, 51, 50, 49, 48 }     // 5000 RPM
+  { 75, 74, 73, 72, 71, 70, 68, 65, 63, 61 }, // 1500 RPM
+  { 73, 72, 71, 70, 68, 66, 63, 60, 57, 54 }, // 2000 RPM
+  { 71, 70, 69, 68, 66, 64, 61, 58, 54, 51 }, // 2500 RPM
+  { 70, 69, 68, 66, 64, 62, 59, 56, 53, 50 }, // 3000 RPM
+  { 69, 68, 66, 64, 62, 60, 57, 54, 51, 48 }, // 3500 RPM
+  { 67, 66, 64, 62, 60, 58, 55, 52, 49, 46 }, // 4000 RPM
+  { 63, 62, 60, 58, 56, 54, 51, 48, 45, 42 }, // 4500 RPM
+  { 60, 58, 56, 54, 52, 50, 47, 44, 41, 38 }  // 5000 RPM
 };
 
 static unsigned long lastSolenoidUpdate = 0;
@@ -57,7 +56,7 @@ void turboMainLoop(void) {
       rpm = RPM_MAX_EVER;
     }
 
-    RPM_index = (int(rpm - 1000) / 500); // determine RPM index
+    RPM_index = (int(rpm - 1500) / 500); // determine RPM index
     if(RPM_index < 0) {
       RPM_index = 0;
     }
@@ -86,8 +85,14 @@ void turboMainLoop(void) {
     if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
       if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
         pressurePercentage -= PRESSURE_LIMITER_FACTOR;
+        if (pressurePercentage < 0) {
+          pressurePercentage = 0;
+        }
       } else {
         pressurePercentage += PRESSURE_LIMITER_FACTOR;
+        if (pressurePercentage > 100) {
+          pressurePercentage = 100;
+        }
       }
       lastSolenoidUpdate = currentTime;
     }
