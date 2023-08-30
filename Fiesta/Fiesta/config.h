@@ -2,10 +2,10 @@
 #define T_CONFIG
 
 //BASIC CONTROL VALUES!
-//#define ECU_V2
+#define ECU_V2
 #define D_ILI9341
 //#define GTB2260VZK
-
+//#define I2C_SCANNER
 //#define RESET_EEPROM
 
 #define WATCHDOG_TIME 4000
@@ -120,7 +120,7 @@
 //in miliseconds
 #define GPS_UPDATE 4 * 1000
 
-//#define PICO_W
+#define PICO_W
 #define WIFI_SSID "Jaszczurowo"
 
 #endif
