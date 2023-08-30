@@ -2,6 +2,8 @@
 #ifndef T_START
 #define T_START
 
+#include "config.h"
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <arduino-timer.h>
@@ -14,7 +16,6 @@
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "graphics.h"
-#include "config.h"
 #include "rpm.h"
 #include "turbo.h"
 #include "engineFan.h"
