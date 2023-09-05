@@ -12,7 +12,7 @@ void initGPS(void) {
   #ifdef ECU_V2
   if(!isGPSInitialized) {
     attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
-    gpsSerial.begin(9600);
+    gpsSerial.begin(9600, SERIAL_7N1);
     isGPSInitialized = true;
   }
   #endif
