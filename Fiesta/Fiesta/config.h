@@ -120,7 +120,7 @@
 //in miliseconds
 #define GPS_UPDATE 4 * 1000
 
-#define PICO_W
+//#define PICO_W
 #define WIFI_SSID "Jaszczurowo"
 
 #endif
