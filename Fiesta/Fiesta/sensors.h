@@ -2,6 +2,7 @@
 #ifndef T_SENSORS
 #define T_SENSORS
 
+#include <libConfig.h>
 #include "config.h"
 
 #include <Wire.h>

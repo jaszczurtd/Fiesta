@@ -5,8 +5,6 @@
 #define ECU_V2
 #define D_ILI9341
 //#define GTB2260VZK
-//#define I2C_SCANNER
-//#define RESET_EEPROM
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
@@ -68,11 +66,6 @@
 
 //how long heated windows should heats? (in seconds)
 #define HEATED_WINDOWS_TIME 4
-//physical pin of microcontroller for heated windows switch on/off
-#define HEATED_WINDOWS_PIN 20
-
-#define PWM_WRITE_RESOLUTION 11
-#define PWM_RESOLUTION 2047
 
 //values from ADC
 #define THROTTLE_MIN 1800
@@ -114,14 +107,9 @@
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9
 
-//how many times CAN modules should be initialized in case of error?
-#define CAN_RETRIES 4
-
 //in miliseconds
 #define GPS_UPDATE 4 * 1000
 
-//#define PICO_W
-#define WIFI_SSID "Jaszczurowo"
 
 #endif
 

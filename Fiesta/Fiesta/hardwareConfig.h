@@ -1,10 +1,13 @@
 #ifndef T_HARDWARECONFIG
 #define T_HARDWARECONFIG
 
-#define SUPPORT_TRANSACTIONS
+#include <libConfig.h>
 
 #define PWM_FREQUENCY_HZ 300
 #define I2C_SPEED 50000
+
+#define PWM_WRITE_RESOLUTION 11
+#define PWM_RESOLUTION 2047
 
 //rpi pio pin numbers
 #define PIO_INTERRUPT_HALL 7    
@@ -65,5 +68,8 @@
 #define HC4051_I_BAR_PRESSURE 5
 #define HC4051_I_EGT 6
 //7 not used ATM
+
+//physical pin of microcontroller for heated windows switch on/off
+#define HEATED_WINDOWS_PIN 20
 
 #endif
