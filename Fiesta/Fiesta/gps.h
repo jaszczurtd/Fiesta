@@ -1,6 +1,7 @@
 #ifndef T_GPS
 #define T_GPS
 
+#include <libConfig.h>
 #include <tools.h>
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>

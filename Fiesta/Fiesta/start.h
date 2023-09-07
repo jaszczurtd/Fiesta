@@ -2,6 +2,7 @@
 #ifndef T_START
 #define T_START
 
+#include <libConfig.h>
 #include "config.h"
 
 #include <Arduino.h>
