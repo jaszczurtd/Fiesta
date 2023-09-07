@@ -29,7 +29,7 @@ int scaleTurboValues(int value) {
 int correctPressureFactor(void) {
   int temperature = valueFields[F_INTAKE_TEMP];
   return (temperature < MIN_TEMPERATURE_CORRECTION) ? 
-      0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1;
+      0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1; //each 5 degrees
 }
 
 void turboMainLoop(void) {

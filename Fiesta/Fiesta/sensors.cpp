@@ -47,10 +47,6 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-  //real values (resitance)
-  const float V_DIVIDER_R1 = 47710.0;
-  const float V_DIVIDER_R2 = 9700.0;
-
   return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
 }
 
@@ -61,7 +57,7 @@ float readCoolantTemp(void) {
     set4051ActivePin(HC4051_I_COOLANT_TEMP);
                                                          
     return getAverageForTable(&collantTableIdx, &collantValuesSet,
-                              ntcToTemp(ADC_SENSORS_PIN, 1506, 1500), //real values (resitance)
+                              ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
                               collantTable);
 }
 
@@ -73,7 +69,7 @@ float readOilTemp(void) {
     set4051ActivePin(HC4051_I_OIL_TEMP);
 
     return getAverageForTable(&oilTableIdx, &oilValuesSet,
-                              ntcToTemp(ADC_SENSORS_PIN, 1506, 1500), //real values (resitance)
+                              ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
                               oilTable);
 }
 
@@ -111,7 +107,7 @@ int getThrottlePercentage(int currentVal) {
 
 float readAirTemperature(void) {
     set4051ActivePin(HC4051_I_AIR_TEMP);
-    return ntcToTemp(ADC_SENSORS_PIN, 5050, 4700);
+    return ntcToTemp(ADC_SENSORS_PIN, R_TEMP_AIR_A, R_TEMP_AIR_B);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -121,7 +117,8 @@ float readAirTemperature(void) {
 float readBarPressure(void) {
     set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-    float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 1.0;
+    float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 
+      1.0; //atmospheric pressure
     if(val < 0.0) {
         val = 0.0;
     } 

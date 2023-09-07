@@ -7,8 +7,6 @@ TFT returnReference(void) {
 }
 
 void initGraphics(void) {
-  // Use this initializer if using a 1.8" TFT screen:
-  //tft.initR(INITR_BLACKTAB);      // Init ST7735S chip, black tab
   initDisplay();
   tft.setRotation(1);
 }
