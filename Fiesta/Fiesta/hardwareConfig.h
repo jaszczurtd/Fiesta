@@ -72,4 +72,16 @@
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
 
+//real values (resitance) for ECU main supply voltage measurement
+#define V_DIVIDER_R1 47710.0
+#define V_DIVIDER_R2 9700.0
+
+//real values (resistance) for temperature (coolant/oil) measurement
+
+#define R_TEMP_A 1506 //sensor
+#define R_TEMP_B 1500
+
+#define R_TEMP_AIR_A 5050 //sensor
+#define R_TEMP_AIR_B 4700
+
 #endif
