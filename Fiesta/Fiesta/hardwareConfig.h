@@ -73,8 +73,14 @@
 #define HEATED_WINDOWS_PIN 20
 
 //real values (resitance) for ECU main supply voltage measurement
+
+#ifdef ECU_V2
+#define V_DIVIDER_R1 49750.0
+#define V_DIVIDER_R2 11800.0
+#else
 #define V_DIVIDER_R1 47710.0
 #define V_DIVIDER_R2 9700.0
+#endif
 
 //real values (resistance) for temperature (coolant/oil) measurement
 
