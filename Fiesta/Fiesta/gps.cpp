@@ -68,7 +68,11 @@ const char *getGPSTime(void) {
 
 float getCurrentCarSpeed(void) {
   #ifdef ECU_V2
-  return gps.speed.kmph();
+  double s = gps.speed.kmph();
+  if(s < GPS_MIN_KMPH_SPEED) {
+    return 0.0f;
+  }
+  return float(s);
   #else
   return 0.0f;
   #endif

@@ -109,7 +109,7 @@
 
 //in miliseconds
 #define GPS_UPDATE 4 * 1000
-
+#define GPS_MIN_KMPH_SPEED 5.0
 
 #endif
 
