@@ -93,7 +93,7 @@ int f_getBaseX(void) {
 }
 
 int f_getBaseY(void) {
-    return SCREEN_H - FUEL_HEIGHT - textHeight(empty) - (OFFSET * 2); 
+    return SCREEN_H - FUEL_HEIGHT - 8 - (OFFSET * 2); 
 }
 
 int f_getWidth(void) {

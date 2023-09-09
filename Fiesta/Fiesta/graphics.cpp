@@ -253,6 +253,9 @@ const int t_getBaseY(void) {
 static int lastCoolantHeight = C_INIT_VAL;
 static int lastCoolantVal = C_INIT_VAL;
 
+static unsigned short *lastFanImg = NULL;
+static bool lastFanEnabled = false;
+
 void showTemperatureAmount(int currentVal, int maxVal) {
 
     if(t_drawOnce) {
@@ -301,16 +304,42 @@ void showTemperatureAmount(int currentVal, int maxVal) {
             color = (blink) ? COLOR(RED) : COLOR(ORANGE);
         }
 
+        unsigned short *img = NULL;
+        bool fanEnabled = isFanEnabled();
+        
+        if(fanEnabled) {
+          if(seriousAlertSwitch()) {
+            img = (unsigned short*)fan_b_Icon;
+          } else {
+            img = (unsigned short*)fan_a_Icon;
+          }
+
+          if(img != lastFanImg) {
+            draw = true;
+          }
+        }
+        if(lastFanEnabled != fanEnabled) {
+          lastFanEnabled = fanEnabled;
+          draw = true;
+        }
+
         if(draw) {
             x = t_getBaseX() + 24;
             y = t_getBaseY() + 8 + TEMP_BAR_MAXHEIGHT;
 
             drawTempBar(x, y, currentHeight, color);
+            
+            if(fanEnabled && img != NULL) {
+              x = t_getBaseX() + FAN_COOLANT_X;
+              y = t_getBaseY() + FAN_COOLANT_Y;
 
-            x = t_getBaseX() + TEMP_DOT_X;
-            y = t_getBaseY() + TEMP_DOT_Y;
+              drawImage(x, y, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT, ICONS_BG_COLOR, img);
+            } else {
+              x = t_getBaseX() + TEMP_DOT_X;
+              y = t_getBaseY() + TEMP_DOT_Y;
 
-            tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+              tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+            }
         }
 
         if(lastCoolantVal != valToDisplay) {

@@ -9,11 +9,14 @@ void fan(bool enable) {
   pcf8574_write(PCF8574_O_FAN, enable);
 }
 
-static bool fanEnabled = false;
-static bool lastFanStatus = false;
+static int fanEnabled = FAN_REASON_NONE;
+static int lastFanStatus = FAN_REASON_NONE;
 
+int fanEnabledReason(void) {
+  return fanEnabled;
+}
 bool isFanEnabled(void) {
-  return fanEnabled;  
+  return fanEnabled != FAN_REASON_NONE;  
 }
 
 void fanMainLoop(void) {
@@ -22,43 +25,52 @@ void fanMainLoop(void) {
   int rpm = valueFields[F_RPM];
   int air = valueFields[F_INTAKE_TEMP];
 
-  //works only if the temp. sensor is plugged
-  if(coolant > TEMP_LOWEST) {
-
-    if(fanEnabled && coolant <= TEMP_FAN_STOP) {
-      fanEnabled = false;
-    }
-
-    if(!fanEnabled && coolant >= TEMP_FAN_START) {
-      fanEnabled = true;
-    }
-
-    if(rpm < RPM_MIN) {
-      fanEnabled = false;
-    }
-
-  } else {
-    //temp sensor read fail, fan enabled by default
-    //but only if engine has minimum RPM
-    if(rpm > RPM_MIN) {
-      fanEnabled = true;
-    }
-  }
-
   if(rpm > RPM_MIN) {
-    if(!fanEnabled && air > AIR_TEMP_FAN_START) {
-      fanEnabled = true;
+
+    //works only if the temp. sensor is plugged
+    if(coolant > TEMP_LOWEST) {
+
+      if(isFanEnabled()) {
+        if(fanEnabled & FAN_REASON_AIR) {
+          if(air <= AIR_TEMP_FAN_STOP) {
+            fanEnabled &= ~FAN_REASON_AIR;
+          }
+        }
+
+        if(fanEnabled & FAN_REASON_COOLANT) {
+          if(coolant <= TEMP_FAN_STOP) {
+            fanEnabled &= ~FAN_REASON_COOLANT;
+          }
+        }
+      } else {
+        if((fanEnabled & FAN_REASON_AIR) == false) {
+          if(air > AIR_TEMP_FAN_START) {
+            fanEnabled |= FAN_REASON_AIR;
+          }
+        }
+
+        if((fanEnabled & FAN_REASON_COOLANT) == false) {
+          if(coolant > TEMP_FAN_START) {
+            fanEnabled |= FAN_REASON_COOLANT;
+          }
+        }
+      }
+    } else {
+      //temp sensor read fail, fan enabled by default
+      //but only if engine has minimum RPM
+      if(rpm > RPM_MIN) {
+        fanEnabled |= FAN_REASON_COOLANT;
+      }
     }
-    if(fanEnabled && air <= AIR_TEMP_FAN_STOP && coolant <= TEMP_FAN_STOP) {
-      fanEnabled = false;
-    }
+  } else {
+    fanEnabled = FAN_REASON_NONE;    
   }
 
   if(lastFanStatus != fanEnabled) {
-    fan(fanEnabled);
+    fan(isFanEnabled());
     lastFanStatus = fanEnabled;     
 
-    deb("fan enabled: %d", fanEnabled);     
+    deb("fan enabled: %d reason: %d", isFanEnabled(), fanEnabled);     
   }
 
 }
