@@ -78,6 +78,8 @@
 //hella actuator PWM percent: min/max values
 #define TURBO_ACTUATOR_LOW 6
 #define TURBO_ACTUATOR_HIGH 90
+//for graphic gauge
+#define TURBO_MIN_PRESSURE_FOR_SPINNING 0.15
 
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 150
