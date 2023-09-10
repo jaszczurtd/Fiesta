@@ -315,6 +315,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
           }
 
           if(img != lastFanImg) {
+            lastFanImg - img;
             draw = true;
           }
         }
@@ -408,10 +409,10 @@ static bool currentIsDPF = false;
 bool changeEGT(void *argument) {
   if(isDPFConnected()) {
     currentIsDPF = !currentIsDPF;
+    egt_drawOnce = true;
   } else {
     currentIsDPF = false;
   }
-  egt_drawOnce = true;
 
   return true;
 }
@@ -480,7 +481,7 @@ void showEGTTemperatureAmount(void) {
     }
 
     drawTextForMiddleIcons(egt_getBaseX(), egt_getBaseY(), 2, 
-                           color, mode, format, currentVal);
+                          color, mode, format, currentVal);
   }
 }
 

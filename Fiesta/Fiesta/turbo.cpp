@@ -134,6 +134,7 @@ const int p_getBaseY(void) {
 
 static int lastHI = C_INIT_VAL;
 static int lastLO = C_INIT_VAL;
+static unsigned short *lastTurboImg = NULL;
 
 void showPressureAmount(float current) {
 
@@ -156,6 +157,29 @@ void showPressureAmount(float current) {
             lastHI = hi;
             lastLO = lo;
             drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+        }
+
+        if(current > TURBO_MIN_PRESSURE_FOR_SPINNING) {
+          unsigned short *img = NULL;
+          bool draw = false;
+
+          if(seriousAlertSwitch()) {
+            img = (unsigned short*)pressure_a;
+          } else {
+            img = (unsigned short*)pressure_b;
+          }
+
+          if(img != lastTurboImg) {
+            lastTurboImg = img;
+            draw = true;
+          }
+
+          if(draw && img != NULL) {
+            x = p_getBaseX() + PRESSURE_ICON_X;
+            y = p_getBaseY() + PRESSURE_ICON_Y;
+
+            drawImage(x, y, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT, ICONS_BG_COLOR, img);
+          }
         }
     }
 
