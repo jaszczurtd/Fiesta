@@ -88,6 +88,20 @@
 #define R_TEMP_B 1500
 
 #define R_TEMP_AIR_A 5050 //sensor
+#ifdef ECU_V2
+#define R_TEMP_AIR_B 4800
+#else
 #define R_TEMP_AIR_B 4700
+#endif
+
+//dividers - analog reads
+#ifdef ECU_V2
+#define DIVIDER_PRESSURE_BAR 955
+#define DIVIDER_EGT 2.280
+#else
+#define DIVIDER_PRESSURE_BAR 912
+#define DIVIDER_EGT 2.305
+#endif
+
 
 #endif

@@ -79,10 +79,6 @@
 #define TURBO_ACTUATOR_LOW 6
 #define TURBO_ACTUATOR_HIGH 90
 
-//dividers - analog reads
-#define DIVIDER_PRESSURE_BAR 912
-#define DIVIDER_EGT 2.308
-
 //RPM refresh interval (in miliseconds)
 #define RPM_REFRESH_INTERVAL 150
 
