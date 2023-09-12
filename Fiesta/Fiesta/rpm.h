@@ -27,6 +27,8 @@ void setAccelMaxRPM(void);
 void resetRPMEngine(void);
 void stabilizeRPM(void);
 bool isEngineRunning(void);
+void setAccelRPMPercentage(int percentage);
+int getCurrentRPMSolenoid(void);
 
 void redrawRPM(void);
 void showRPMamount(int currentVal);

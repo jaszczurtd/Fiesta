@@ -340,7 +340,11 @@ void looper1(void) {
   statusVariable1 = 5;
   turboMainLoop();
   statusVariable1 = 6;
+#ifdef VP37
+  vp37Process();
+#else
   stabilizeRPM();
+#endif
 
   statusVariable1 = 7;
   delay(CORE_OPERATION_DELAY);  
