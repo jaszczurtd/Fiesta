@@ -11,3 +11,19 @@ void enableVP37(bool enable) {
 bool isVP37Enabled(void) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
+
+void vp37Process(void) {
+
+  int rpm = int(valueFields[F_RPM]);
+  if(rpm > RPM_MAX_EVER) {
+    enableVP37(false);
+    derr("RPM was too high! (%d)", rpm);
+    return;
+  }
+
+  setAccelRPMPercentage(getEnginePercentageThrottle());
+  int cRPM = getCurrentRPMSolenoid();
+  valToPWM(PIO_VP37_RPM, cRPM);
+  valToPWM(PIO_VP37_ANGLE, cRPM);
+
+}

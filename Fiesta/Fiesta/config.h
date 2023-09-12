@@ -5,6 +5,7 @@
 #define ECU_V2
 #define D_ILI9341
 //#define GTB2260VZK
+//#define VP37
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15

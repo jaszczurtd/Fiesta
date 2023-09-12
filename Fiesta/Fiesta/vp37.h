@@ -14,5 +14,6 @@
 
 void enableVP37(bool enable);
 bool isVP37Enabled(void);
+void vp37Process(void);
 
 #endif

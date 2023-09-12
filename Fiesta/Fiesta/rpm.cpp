@@ -59,6 +59,10 @@ void setAccelRPMPercentage(int percentage) {
   currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
 }
 
+int getCurrentRPMSolenoid(void) {
+  return currentRPMSolenoid;
+}
+
 void setAccelMaxRPM(void) {
   setAccelRPMPercentage(MAX_RPM_PERCENT_VALUE);
 }
