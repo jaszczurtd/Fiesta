@@ -1,0 +1,7 @@
+
+full:
+raw:271 (1389) num fuel samples: 9 average val: 1388 next probe time: 6s probes so far:3
+raw:272 (1388) num fuel samples: 14 average val: 1388 next probe time: 7s probes so far:4
+raw:283 (1377) num fuel samples: 65 average val: 1384 next probe time: 14s probes so far:11
+raw:277 (1383) num fuel samples: 47 average val: 1386 next probe time: 12s probes so far:9
+raw:284 (1376) num fuel samples: 56 average val: 1385 next probe time: 13s probes so far:10
