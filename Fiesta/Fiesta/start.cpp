@@ -91,6 +91,7 @@ void initialization(void) {
         getGPSDate(), getGPSTime());
     }
 
+    watchdog_update();
     initCrashLogger(dateAndTime, SD_CARD_CS);
     if(validDateAndTime) {
       crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
