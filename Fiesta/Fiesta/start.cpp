@@ -214,7 +214,6 @@ void drawMediumImportanceValues(void) {
   showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
   showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
   showEGTTemperatureAmount();
-  showGPSStatus();
   #endif
 }
 
@@ -222,6 +221,7 @@ void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
   showOilPressureAmount(valueFields[F_OIL_PRESSURE]);
+  showGPSStatus();
   #endif
 }
 
