@@ -87,3 +87,14 @@ brown
 
 yellow		yellow		CAN HI	4
 blue		blue		CAN LO	3
+
+LCD 		connector 
+			(superseal 6 pin)
+vcc 	1	6
+gnd 	2	gnd (external superseal 3pin)
+cs		3	5
+reset	4	4
+dc		5	3	
+mosi	6	2	
+sck		7	1	
+LED		8	6	

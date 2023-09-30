@@ -1,5 +1,10 @@
 #include "engineFuel.h"
 
+const char *half = (char*)F("1/2");
+const char *full = (char*)F("F");
+const char *empty = (char*)F("E");
+const char *emptyMessage = (char*)F("Empty tank!");
+
 //-------------------------------------------------------------------------------------------------
 //Read fuel amount
 //-------------------------------------------------------------------------------------------------
@@ -11,6 +16,9 @@ static int nextMeasurement = 0;
 static int fuelMeasurementTime = 0;
 static long measurements = 0;
 
+static int emptyMessageWidth;
+static int emptyMessageHeight;
+
 void initFuelMeasurement(void) {
     memset(measuredValues, FUEL_INIT_VALUE, sizeof(measuredValues));
     measuedValuesIndex = 0;
@@ -19,6 +27,10 @@ void initFuelMeasurement(void) {
     fuelMeasurementTime = FUEL_MEASUREMENT_TIME_START;
     nextMeasurement = getSeconds() + fuelMeasurementTime;
     measurements = 0;
+
+    setDisplayDefaultFont();
+    emptyMessageWidth = textWidth(emptyMessage);
+    emptyMessageHeight = textHeight(emptyMessage);
 }
 
 float readFuel(void) {
@@ -33,6 +45,11 @@ float readFuel(void) {
     #ifdef DEBUG
     deb("tank raw value: %d result: %d", r, result);
     #endif
+
+    #ifdef JUST_RAW_FUEL_VAL
+    deb("tank raw:%d (%d)", r, result);
+    lastResult = result;
+    #else
 
     measuredValues[measuedValuesIndex] = result;
     measuedValuesIndex++;
@@ -68,6 +85,7 @@ float readFuel(void) {
 
         lastResult = average;
     }
+    #endif
 
     return lastResult;
 }
@@ -75,11 +93,6 @@ float readFuel(void) {
 //-------------------------------------------------------------------------------------------------
 //fuel indicator
 //-------------------------------------------------------------------------------------------------
-
-const char *half = (char*)F("1/2");
-const char *full = (char*)F("F");
-const char *empty = (char*)F("E");
-const char *emptyMessage = (char*)F("Pusty bak!");
 
 static bool f_drawOnce = true; 
 void redrawFuel(void) {
@@ -110,18 +123,25 @@ int f_getGaugePos(void) {
 }
 
 void drawFuelEmpty(void) {
-  if(currentFuelWidth <= 1) {
+
+  if(lastResult == FUEL_INIT_VALUE) {
+    return;
+  }
+
+  if(currentFuelWidth <= MIN_FUEL_WIDTH) {
 
     int color = COLOR(WHITE);
     if(seriousAlertSwitch()) {
         color = COLOR(RED);
     }
 
-    int x = f_getBaseX() + ((f_getWidth() - textWidth(emptyMessage)) / 2);
-    int y = f_getBaseY() + ((FUEL_HEIGHT - textHeight(emptyMessage)) / 2);
-
     TFT tft = returnReference();
-    tft.setTextSize(1);
+    tft.setFont();
+    tft.setTextSize(1);    
+
+    int x = f_getBaseX() + ((f_getWidth() - emptyMessageWidth) / 2);
+    int y = f_getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
+
     tft.setTextColor(color);
     tft.setCursor(x, y);
     tft.println(emptyMessage);
@@ -135,7 +155,8 @@ void showFuelAmount(int currentVal, int maxVal) {
   if(currentFuelWidth > width) {
       currentFuelWidth = width;
   }
-  if(currentFuelWidth <= 1 && !fullRedrawNeeded) {
+
+  if(currentFuelWidth <= MIN_FUEL_WIDTH && !fullRedrawNeeded) {
       fullRedrawNeeded = true;
   }
 
@@ -188,6 +209,7 @@ void showFuelAmount(int currentVal, int maxVal) {
   } else {
     drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, f_getGaugePos());
   }
+  drawFuelEmpty();
 }
 
 static int lastWidth = 0;
