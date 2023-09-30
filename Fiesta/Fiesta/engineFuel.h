@@ -9,6 +9,9 @@
 #include "sensors.h"
 #include "tests.h"
 
+//fuel value read without average calculation
+//#define JUST_RAW_FUEL_VAL
+
 #define FUEL_MAX_SAMPLES 128
 #define FUEL_INIT_VALUE -1
 
@@ -20,6 +23,8 @@
 
 #define FUEL_GAUGE_HEIGHT (FUEL_HEIGHT - 4)
 #define FUEL_GAUGE_WIDTH (SCREEN_W - 118)
+
+#define MIN_FUEL_WIDTH 2
 
 float readFuel(void);
 void initFuelMeasurement(void);
