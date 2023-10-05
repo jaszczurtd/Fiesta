@@ -1,8 +1,8 @@
 
 #include "sensors.h"
 
-NOINIT float valueFields[F_LAST];
-NOINIT float reflectionValueFields[F_LAST];
+NOINIT volatile float valueFields[F_LAST];
+NOINIT volatile float reflectionValueFields[F_LAST];
 
 static int collantTableIdx = 0;
 static int collantValuesSet = 0;
