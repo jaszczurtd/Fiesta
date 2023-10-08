@@ -13,7 +13,7 @@
 #include "rpm.h"
 #include "tests.h"
 
-extern float valueFields[];
+extern volatile float valueFields[];
 
 bool canMainLoop(void *argument);
 void canInit(int retries);
