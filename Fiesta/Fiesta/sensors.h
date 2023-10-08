@@ -20,7 +20,7 @@
 
 #define GPS_TIME_DATE_BUFFER_SIZE 16
 
-extern float valueFields[];
+extern volatile float valueFields[];
 
 void initI2C(void);
 void initSPI(void);
