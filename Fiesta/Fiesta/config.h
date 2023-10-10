@@ -73,7 +73,7 @@
 #define THROTTLE_MAX 3800
 
 //values from ADC
-#define FUEL_MAX 278
+#define FUEL_MAX 285
 #define FUEL_MIN 1660
 
 //hella actuator PWM percent: min/max values
