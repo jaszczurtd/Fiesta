@@ -17,6 +17,7 @@ void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *
 void setupTimers(void) {
   int time = SECOND;
 
+  setupTimerWith(UNSYNCHRONIZE_TIME, DISPLAY_SOFTINIT_TIME, softInitDisplay);
   setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
@@ -158,19 +159,7 @@ void initialization(void) {
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
-  initHeatedWindow();
-  initFuelMeasurement();
-  redrawFuel();
-  redrawTemperature();
-  redrawOil();
-  redrawOilPressure();
-  redrawPressure();
-  redrawIntercooler();
-  redrawEngineLoad();
-  redrawRPM();
-  redrawEGT();
-  redrawVolts();
-  redrawGPS();
+  redrawAll();
   #endif
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
