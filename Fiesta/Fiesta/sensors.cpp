@@ -14,7 +14,7 @@ static float oilTable[TEMPERATURE_TABLES_SIZE];
 void initI2C(void) {
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
-  Wire.setClock(I2C_SPEED);
+  Wire.setClock(I2C_SPEED_HZ);
   Wire.begin();
 }
 

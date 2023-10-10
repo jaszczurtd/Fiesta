@@ -4,7 +4,8 @@
 #include <libConfig.h>
 
 #define PWM_FREQUENCY_HZ 300
-#define I2C_SPEED 50000
+#define I2C_SPEED_HZ 50000
+#define DISPLAY_SPI_SPEED_HZ 10000000
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
