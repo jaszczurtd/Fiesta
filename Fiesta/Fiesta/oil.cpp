@@ -12,7 +12,7 @@ void redrawOil(void) {
 }
 
 const int o_getBaseX(void) {
-    return (BIG_ICONS_WIDTH * 3);
+    return BIG_ICONS_WIDTH;
 }
 
 const int o_getBaseY(void) {
@@ -103,7 +103,7 @@ void redrawOilPressure(void) {
 }
 
 const int op_getBaseX(void) {
-    return (BIG_ICONS_WIDTH * 2);
+    return (BIG_ICONS_WIDTH * 3);
 }
 
 const int op_getBaseY(void) {
