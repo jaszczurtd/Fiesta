@@ -16,7 +16,7 @@
 #define SCREEN_H 240
 
 #define DTYPE ILI9341
-#define initDisplay() tft.begin(DISPLAY_SPI_SPEED_HZ)
+#define initDisplay() tft.begin()
 #define TFT Adafruit_ILI9341
 #define COLOR(c) ILI9341_##c
 
