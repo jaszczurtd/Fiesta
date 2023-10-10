@@ -55,7 +55,9 @@ extern const char *err;
 #define MODE_M_KILOMETERS 2
 
 TFT returnReference(void);
+bool softInitDisplay(void *arg);
 void initGraphics(void);
+void redrawAll(void);
 void showLogo(void);
 void fillScreenWithColor(int c);
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
