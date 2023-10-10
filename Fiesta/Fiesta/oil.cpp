@@ -12,7 +12,7 @@ void redrawOil(void) {
 }
 
 const int o_getBaseX(void) {
-    return BIG_ICONS_WIDTH;
+    return (BIG_ICONS_WIDTH * 3);
 }
 
 const int o_getBaseY(void) {

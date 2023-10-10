@@ -96,7 +96,7 @@ void redrawGPS(void) {
 }
 
 const int gps_getBaseX(void) {
-    return (SMALL_ICONS_WIDTH * 4);
+    return 0;
 }
 
 const int gps_getBaseY(void) {
