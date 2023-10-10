@@ -363,7 +363,7 @@ void redrawEngineLoad(void) {
 }
 
 const int e_getBaseX(void) {
-    return 0;
+    return (SMALL_ICONS_WIDTH * 4);
 }
 
 const int e_getBaseY(void) {
