@@ -1,14 +1,26 @@
 
 #include "graphics.h"
 
+static bool gfxInitialized = false;
+
 TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
 TFT returnReference(void) {
   return tft;
 }
 
+bool softInitDisplay(void *arg) {
+  if(gfxInitialized) {
+    tft.softReset(75);
+    tft.setRotation(1);
+  }
+
+  return true;
+}
+
 void initGraphics(void) {
   initDisplay();
   tft.setRotation(1);
+  gfxInitialized = true;
 }
 
 void fillScreenWithColor(int c) {
@@ -25,6 +37,22 @@ void showLogo(void) {
   drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
 
   #endif
+}
+
+void redrawAll(void) {
+  initHeatedWindow();
+  initFuelMeasurement();
+  redrawFuel();
+  redrawTemperature();
+  redrawOil();
+  redrawOilPressure();
+  redrawPressure();
+  redrawIntercooler();
+  redrawEngineLoad();
+  redrawRPM();
+  redrawEGT();
+  redrawVolts();
+  redrawGPS();
 }
 
 int currentValToHeight(int currentVal, int maxVal) {

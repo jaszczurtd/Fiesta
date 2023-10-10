@@ -7,10 +7,11 @@
 #define TFT_RST    -1 //reset
 #define TFT_DC     3 //A0
 
+#define DISPLAY_SOFTINIT_TIME 1500
 
 #ifdef D_ILI9341
 // Hardware-specific library for display
-#include <Adafruit_ILI9341.h>
+#include "Adafruit_ILI9341.h"
 
 #define SCREEN_W 320
 #define SCREEN_H 240
