@@ -10,7 +10,7 @@ TFT returnReference(void) {
 
 bool softInitDisplay(void *arg) {
   if(gfxInitialized) {
-    tft.softReset(75);
+    tft.softInit(75);
     tft.setRotation(1);
   }
 
