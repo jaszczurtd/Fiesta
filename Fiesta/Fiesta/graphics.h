@@ -8,6 +8,7 @@
 #include <Fonts/FreeSerif9pt7b.h>
 #include <tools.h>
 
+#include "TFTExtension.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"

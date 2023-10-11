@@ -11,14 +11,15 @@
 
 #ifdef D_ILI9341
 // Hardware-specific library for display
-#include "Adafruit_ILI9341.h"
+#include <Adafruit_ILI9341.h>
+#include "TFTExtension.h"
 
 #define SCREEN_W 320
 #define SCREEN_H 240
 
 #define DTYPE ILI9341
 #define initDisplay() tft.begin()
-#define TFT Adafruit_ILI9341
+#define TFT TFTExtension
 #define COLOR(c) ILI9341_##c
 
 #else
