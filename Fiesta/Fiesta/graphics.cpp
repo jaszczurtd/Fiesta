@@ -34,7 +34,7 @@ void showLogo(void) {
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
+  tft.drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
 
   #endif
 }
@@ -56,33 +56,24 @@ void redrawAll(void) {
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
-    float percent = (float)(currentVal * 100) / (float)maxVal;
-    return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
+  float percent = (float)(currentVal * 100) / (float)maxVal;
+  return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
 }
 
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
-    tft.fillRect(x, y, width, height, background);
-    tft.drawRGBBitmap(x, y, pointer, width,
-                     height);
+  tft.drawImage(x, y, width, height, background, pointer);
 }
 
 int textWidth(const char* text) {
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-    return w;
+  return tft.textWidth(text);
 }
 
 int textHeight(const char* text) {
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-    return h;
+  return tft.textHeight(text);
 }
 
 void setDisplayDefaultFont(void) {
-  tft.setFont();
-  tft.setTextSize(1);
+  tft.setDisplayDefaultFont();
 }
 
 static char displayTxt[32];
@@ -99,16 +90,11 @@ int prepareText(const char *format, ...) {
     vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
     va_end(valist);
 
-    return textWidth((const char*)displayTxt);
+    return tft.textWidth((const char*)displayTxt);
 }
 
 void drawTempValue(int x, int y, int valToDisplay) {
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.setTextSize(1);
-
-  tft.setTextColor(TEXT_COLOR);
-  tft.setCursor(x, y);
-
+  tft.sansBoldWithPosAndColor(x, y, TEXT_COLOR);
   tft.fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
 
   if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
@@ -119,7 +105,7 @@ void drawTempValue(int x, int y, int valToDisplay) {
       prepareText((const char*)F("%d"), valToDisplay);
       tft.println(getPreparedText());
   }
-  setDisplayDefaultFont();
+  tft.setDisplayDefaultFont();
 }
 
 void drawTempBar(int x, int y, int currentHeight, int color) {
@@ -133,14 +119,11 @@ int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const 
   int w1 = 0, kmoffset = 0;
   const char *km = ((const char*)F("km/h"));
   if(mode == MODE_M_KILOMETERS) {
-    setDisplayDefaultFont();
+    tft.setDisplayDefaultFont();
     w1 = textWidth(km);
     kmoffset = 5;
   }
-
-  tft.setFont(&FreeSerif9pt7b);
-  tft.setTextSize(1);
-  tft.setTextColor(color);
+  tft.serif9ptWithColor(color);
 
   memset(displayTxt, 0, sizeof(displayTxt));
 
@@ -169,13 +152,13 @@ int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const 
       tft.drawCircle(x1 + w + 6, y1 - 10, 3, color);
       break;
     case MODE_M_KILOMETERS:
-      setDisplayDefaultFont();
+      tft.setDisplayDefaultFont();
       tft.setCursor(x1 + w + kmoffset, y1 - 6);
       tft.println(km);
-      break;
+      return w;
   }
 
-  setDisplayDefaultFont();
+  tft.setDisplayDefaultFont();
   return w;
 }
 
@@ -188,7 +171,7 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
   va_end(valist);
 
-  int w = textWidth((const char*)displayTxt);
+  int w = tft.textWidth((const char*)displayTxt);
 
   int x1 = x + BAR_TEXT_X;
   int y1 = y + BAR_TEXT_Y - 12;
@@ -198,18 +181,12 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   x1 = x + BAR_TEXT_X;
   y1 = y + BAR_TEXT_Y;
 
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.setTextSize(1);
-  tft.setTextColor(TEXT_COLOR);
-  tft.setCursor(x1, y1);
+  tft.sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
   tft.println(getPreparedText());
-
-  tft.setFont();
-  tft.setTextSize(1);
 
   x1 = x + BAR_TEXT_X + 25;
   y1 = y + BAR_TEXT_Y - 6;
-  tft.setCursor(x1, y1);
+  tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
   tft.println(F("BAR"));
 }
 
@@ -253,9 +230,7 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
     workingy = y + 1;
     tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, COLOR(BLACK));
 
-    tft.setCursor(x + 8, y + 46);
-    tft.setTextColor(COLOR(BLUE));
-    tft.setTextSize(1);
+    tft.defaultFontWithPosAndColor(x + 8, y + 46, COLOR(BLUE));
     tft.println(msg);
 }
 
@@ -620,15 +595,8 @@ void showVolts(float volts) {
         color = COLOR(RED);
     }
 
-    tft.setCursor(x, y);
-
     prepareText((const char*)F("%d.%dv"), v1, v2);
-
-    tft.setFont(&FreeSansBold9pt7b);
-    tft.setTextSize(1);
-    tft.setCursor(x, y);
-
-    tft.setTextColor(color);
+    tft.sansBoldWithPosAndColor(x, y, color);
     tft.println(getPreparedText());
 
     drawVolts = false;

@@ -197,9 +197,7 @@ void showPressurePercentage(void) {
     int y = p_getBaseY();
     TFT tft = returnReference();
 
-    tft.setFont();
-    tft.setTextSize(1);
-    tft.setTextColor(TEXT_COLOR);
+    tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
     
     x += TURPO_PERCENT_TEXT_POS_X;
     y += TURPO_PERCENT_TEXT_POS_Y;
@@ -208,7 +206,6 @@ void showPressurePercentage(void) {
 
     tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
 
-    tft.setCursor(x, y);
     tft.println(getPreparedText());
   }
 }

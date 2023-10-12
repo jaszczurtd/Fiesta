@@ -135,15 +135,11 @@ void drawFuelEmpty(void) {
         color = COLOR(RED);
     }
 
-    TFT tft = returnReference();
-    tft.setFont();
-    tft.setTextSize(1);    
-
     int x = f_getBaseX() + ((f_getWidth() - emptyMessageWidth) / 2);
     int y = f_getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
 
-    tft.setTextColor(color);
-    tft.setCursor(x, y);
+    TFT tft = returnReference();
+    tft.defaultFontWithPosAndColor(x, y, color);
     tft.println(emptyMessage);
   }
 }
@@ -185,9 +181,7 @@ void showFuelAmount(int currentVal, int maxVal) {
 
     y += FUEL_GAUGE_HEIGHT + (OFFSET / 2);
 
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR(RED));
-    tft.setCursor(x, y);
+    tft.defaultFontWithPosAndColor(x, y, COLOR(RED));
     tft.println(empty);
 
     tw = textWidth(half);
