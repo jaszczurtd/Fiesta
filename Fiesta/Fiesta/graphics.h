@@ -4,8 +4,6 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include "displayMapper.h"
-#include <Fonts/FreeSansBold9pt7b.h>
-#include <Fonts/FreeSerif9pt7b.h>
 #include <tools.h>
 
 #include "TFTExtension.h"

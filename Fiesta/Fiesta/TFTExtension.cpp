@@ -1,8 +1,7 @@
 
 #include "TFTExtension.h"
 
-TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) {
-}
+TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) { }
 
 //unfortunately cannot reuse initcmd from Adafruit_ILI9341 directly
 static const uint8_t PROGMEM initcmd[] = {
@@ -49,3 +48,51 @@ void TFTExtension::softInit(int d) {
   _width = ILI9341_TFTWIDTH;
   _height = ILI9341_TFTHEIGHT;
 }
+
+void TFTExtension::drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
+  fillRect(x, y, width, height, background);
+  drawRGBBitmap(x, y, pointer, width, height);
+}
+
+int TFTExtension::textWidth(const char* text) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  return w;
+}
+
+int TFTExtension::textHeight(const char* text) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  return h;
+}
+
+void TFTExtension::setDisplayDefaultFont(void) {
+  setFont();
+  setTextSize(1);
+}
+
+void TFTExtension::defaultFontWithPosAndColor(int x, int y, int color) {
+  setDisplayDefaultFont();
+  setTextColor(color);
+  setCursor(x, y);
+}
+
+void TFTExtension::setTextSizeOneWithColor(int color) {
+  setTextSize(1);
+  setTextColor(color);
+}
+
+void TFTExtension::sansBoldWithPosAndColor(int x, int y, int color) {
+  setFont(&FreeSansBold9pt7b);
+  setCursor(x, y);
+  setTextSizeOneWithColor(color);
+}
+
+void TFTExtension::serif9ptWithColor(int color) {
+  setFont(&FreeSerif9pt7b);
+  setTextSizeOneWithColor(color);
+}
+
+
