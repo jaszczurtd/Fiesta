@@ -197,11 +197,11 @@ void showPressurePercentage(void) {
     int y = p_getBaseY();
     TFT tft = returnReference();
 
-    tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
-    
     x += TURPO_PERCENT_TEXT_POS_X;
     y += TURPO_PERCENT_TEXT_POS_Y;
 
+    tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
+    
     int w = prepareText((const char*)F("turbo:%d%%"), val);
 
     tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
