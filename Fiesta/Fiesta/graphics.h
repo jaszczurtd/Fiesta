@@ -6,6 +6,7 @@
 #include <tools.h>
 
 #include "TFTExtension.h"
+#include "tempGauge.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
@@ -34,10 +35,6 @@
 #define OFFSET (SCREEN_W / 40)
 
 #define C_INIT_VAL 99999;
-
-#define TEMP_BAR_MAXHEIGHT 40
-#define TEMP_BAR_WIDTH 6
-#define TEMP_BAR_DOT_RADIUS 11
 
 #define BAR_TEXT_X 12
 #define BAR_TEXT_Y 71

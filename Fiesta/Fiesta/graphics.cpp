@@ -8,6 +8,9 @@ TFT returnReference(void) {
   return tft;
 }
 
+TempGauge coolant_g = TempGauge(TEMP_GAUGE_COOLANT, tft);
+TempGauge oil_g = TempGauge(TEMP_GAUGE_OIL, tft);
+
 bool softInitDisplay(void *arg) {
   if(gfxInitialized) {
     tft.softInit(75);
