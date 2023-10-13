@@ -44,8 +44,6 @@ int maf_Air_Flow_Rate =  0;
 static bool initialized = false;
 void obdInit(int retries) {
 
-#ifdef ECU_V2
-
   for(int a = 0; a < retries; a++) {
     initialized = (CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
     if(initialized) {
@@ -63,8 +61,6 @@ void obdInit(int retries) {
   } else {
     derr("OBD0-2 CAN Shield init problem. The OBD-2 connection will not be possible.");
   }
-
-#endif
 }
 
 void obdLoop(void) {

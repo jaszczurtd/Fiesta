@@ -39,7 +39,7 @@ void turboMainLoop(void) {
   int posThrottle = (engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
   int n75;
-  int pressurePercentage;
+  int pressurePercentage = 0;
   int RPM_index;
 
 #ifdef JUST_TEST_BY_THROTTLE

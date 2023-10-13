@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>    // Core graphics library
-#include "displayMapper.h"
 #include <tools.h>
 
 #include "TFTExtension.h"
@@ -13,7 +12,6 @@
 #include "can.h"
 #include "sensors.h"
 #include "tests.h"
-#include "displayMapper.h"
 #include "icons.h"
 
 //colors

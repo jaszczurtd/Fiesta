@@ -27,9 +27,7 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
-  #ifdef ECU_V2
   setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE, getGPSData);
-  #endif
   setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
 }
 

@@ -9,13 +9,11 @@ void serialTalks(void);
 
 static bool isGPSInitialized = false;
 void initGPS(void) {
-  #ifdef ECU_V2
   if(!isGPSInitialized) {
     attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
     gpsSerial.begin(9600, SERIAL_7N1);
     isGPSInitialized = true;
   }
-  #endif
 }
 
 void serialTalks(void) {
@@ -67,23 +65,15 @@ const char *getGPSTime(void) {
 }
 
 float getCurrentCarSpeed(void) {
-  #ifdef ECU_V2
   double s = gps.speed.kmph();
   if(s < GPS_MIN_KMPH_SPEED) {
     return 0.0f;
   }
   return float(s);
-  #else
-  return 0.0f;
-  #endif
 }
 
 bool isGPSAvailable(void) {
-  #ifdef ECU_V2
   return gps.location.isValid();
-  #else
-  return false;
-  #endif
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -108,14 +98,8 @@ void showGPSStatus(void) {
 
     if(gps_drawOnce) {
         drawImage(gps_getBaseX(), gps_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)gpsIcon);
-
-#ifndef ECU_V2 
-      drawTextForMiddleIcons(gps_getBaseX() - 10, gps_getBaseY() + 1, 1, 
-                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("N.A"));
-#endif
         gps_drawOnce = false;
     } else {
-#ifdef ECU_V2
       int currentVal = (int)getCurrentCarSpeed();
       if(lastGPSSpeed != currentVal) {
           lastGPSSpeed = currentVal;
@@ -141,7 +125,6 @@ void showGPSStatus(void) {
       y = gps_getBaseY() + posOffset - 1;
 
       tft.fillCircle(x, y, radius, color);
-#endif
     }
 }
 
