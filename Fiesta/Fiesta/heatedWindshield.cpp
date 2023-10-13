@@ -13,7 +13,7 @@ static bool lastHeatedWindowEnabled = false;
 static bool waitingForUnpress = false;
 
 static int heatedWindowsOverallTimer = 0;
-static int lastHeatedWindowsSecond = 0;
+static unsigned long lastHeatedWindowsSecond = 0;
 
 void initHeatedWindow(void) {
   pinMode(HEATED_WINDOWS_PIN, INPUT_PULLUP);

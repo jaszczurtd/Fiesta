@@ -14,7 +14,7 @@ void glowPlugsLamp(bool enable) {
 
 static int glowPlugsTime = 0;
 static int glowPlugsLampTime = 0;
-static int lastSecond = 0;
+static unsigned long lastSecond = 0;
 static bool warmAfterStart = false;
 
 bool isGlowPlugsHeating(void) {

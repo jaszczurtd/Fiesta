@@ -74,13 +74,8 @@
 
 //real values (resitance) for ECU main supply voltage measurement
 
-#ifdef ECU_V2
 #define V_DIVIDER_R1 49750.0
 #define V_DIVIDER_R2 11800.0
-#else
-#define V_DIVIDER_R1 47710.0
-#define V_DIVIDER_R2 9700.0
-#endif
 
 //real values (resistance) for temperature (coolant/oil) measurement
 
@@ -88,20 +83,15 @@
 #define R_TEMP_B 1500
 
 #define R_TEMP_AIR_A 5050 //sensor
-#ifdef ECU_V2
 #define R_TEMP_AIR_B 4800
-#else
-#define R_TEMP_AIR_B 4700
-#endif
 
 //dividers - analog reads
-#ifdef ECU_V2
 #define DIVIDER_PRESSURE_BAR 955
 #define DIVIDER_EGT 2.280
-#else
-#define DIVIDER_PRESSURE_BAR 912
-#define DIVIDER_EGT 2.305
-#endif
 
+//LCD / display
+#define TFT_CS     4 //CS
+#define TFT_RST    -1 //reset
+#define TFT_DC     3 //A0
 
 #endif

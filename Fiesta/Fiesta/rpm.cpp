@@ -83,7 +83,7 @@ int getCurrentRPM(void) {
 void stabilizeRPM(void) {
   rpmTimer.tick();
 
-  if(rpmAliveTime < millis()) {
+  if(rpmAliveTime < (long)millis()) {
     rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
     valueFields[F_RPM] = 0;
   }

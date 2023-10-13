@@ -171,8 +171,6 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
   va_end(valist);
 
-  int w = tft.textWidth((const char*)displayTxt);
-
   int x1 = x + BAR_TEXT_X;
   int y1 = y + BAR_TEXT_Y - 12;
 
@@ -318,7 +316,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
           }
 
           if(img != lastFanImg) {
-            lastFanImg - img;
+            lastFanImg = img;
             draw = true;
           }
         }

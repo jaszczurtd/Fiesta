@@ -1,9 +1,19 @@
 #ifndef T_TFT_EXTENSION
 #define T_TFT_EXTENSION
 
-#include "displayMapper.h"
+#include <Adafruit_ILI9341.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSerif9pt7b.h>
+#include "hardwareConfig.h"
+
+#define DISPLAY_SOFTINIT_TIME 1500
+
+#define SCREEN_W 320
+#define SCREEN_H 240
+
+#define initDisplay() tft.begin()
+#define TFT TFTExtension
+#define COLOR(c) ILI9341_##c
 
 class TFTExtension : public Adafruit_ILI9341 {
 public:

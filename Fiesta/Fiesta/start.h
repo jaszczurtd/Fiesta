@@ -12,7 +12,6 @@
 #include <mcp_can.h>
 #include <tools.h>
 #include <multicoreWatchdog.h>
-#include "displayMapper.h"
 
 #include "hardwareConfig.h"
 #include "sensors.h"
