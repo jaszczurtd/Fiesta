@@ -178,7 +178,7 @@ void showPressureAmount(float current) {
             x = p_getBaseX() + PRESSURE_ICON_X;
             y = p_getBaseY() + PRESSURE_ICON_Y;
 
-            drawImage(x, y, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT, ICONS_BG_COLOR, img);
+            tft.drawRGBBitmap(x, y, img, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT);
           }
         }
     }
