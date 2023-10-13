@@ -337,7 +337,7 @@ void showTemperatureAmount(int currentVal, int maxVal) {
               x = t_getBaseX() + FAN_COOLANT_X;
               y = t_getBaseY() + FAN_COOLANT_Y;
 
-              drawImage(x, y, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT, ICONS_BG_COLOR, img);
+              tft.drawRGBBitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
             } else {
               x = t_getBaseX() + TEMP_DOT_X;
               y = t_getBaseY() + TEMP_DOT_Y;
