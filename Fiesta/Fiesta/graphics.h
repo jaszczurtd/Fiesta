@@ -60,7 +60,6 @@ int textHeight(const char* text);
 void setDisplayDefaultFont(void);
 int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
-void drawTempValue(int x, int y, int valToDisplay);
 void displayErrorWithMessage(int x, int y, const char *msg);
 int currentValToHeight(int currentVal, int maxVal);
 int prepareText(const char *format, ...);

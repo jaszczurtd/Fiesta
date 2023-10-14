@@ -30,9 +30,13 @@
 
 extern const char *err;
 
+void redrawTempGauges(void);
+void showTempGauges(void);
+
 class TempGauge {
 public:
   TempGauge(int mode);
+  void drawTempValue(int x, int y, int valToDisplay);
   void drawTempBar(int x, int y, int currentHeight, int color);
   void redraw(void);
   int getBaseX(void);
@@ -47,8 +51,5 @@ private:
   bool lastFanEnabled;
   int mode;
 };
-
-TempGauge returnCReference(void);
-TempGauge returnOReference(void);
 
 #endif

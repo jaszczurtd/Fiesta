@@ -194,8 +194,7 @@ void drawHighImportanceValues(void) {
 
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  returnCReference().showTemperatureAmount((int)valueFields[F_COOLANT_TEMP]);
-  returnOReference().showTemperatureAmount((int)valueFields[F_OIL_TEMP]);
+  showTempGauges();
   showEGTTemperatureAmount();
   #endif
 }
