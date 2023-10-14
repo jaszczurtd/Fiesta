@@ -15,15 +15,6 @@
 #define FAN_COOLANT_WIDTH 23
 #define FAN_COOLANT_HEIGHT 23
 
-#define FAN_COOLANT_X 15
-#define FAN_COOLANT_Y 48
-
-#define TEMP_DOT_X 26
-#define TEMP_DOT_Y 59
-
-#define OIL_DOT_X 22
-#define OIL_DOT_Y 59
-
 #define PRESSURE_ICONS_WIDTH 25
 #define PRESSURE_ICONS_HEIGHT 25
 

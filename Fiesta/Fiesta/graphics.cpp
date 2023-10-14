@@ -4,12 +4,9 @@
 static bool gfxInitialized = false;
 
 TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
-TFT returnReference(void) {
+TFT returnTFTReference(void) {
   return tft;
 }
-
-TempGauge coolant_g = TempGauge(TEMP_GAUGE_COOLANT, tft);
-TempGauge oil_g = TempGauge(TEMP_GAUGE_OIL, tft);
 
 bool softInitDisplay(void *arg) {
   if(gfxInitialized) {
@@ -46,8 +43,8 @@ void redrawAll(void) {
   initHeatedWindow();
   initFuelMeasurement();
   redrawFuel();
-  redrawTemperature();
-  redrawOil();
+  returnCReference().redraw();
+  returnOReference().redraw();
   redrawOilPressure();
   redrawPressure();
   redrawIntercooler();
@@ -109,12 +106,6 @@ void drawTempValue(int x, int y, int valToDisplay) {
       tft.println(getPreparedText());
   }
   tft.setDisplayDefaultFont();
-}
-
-void drawTempBar(int x, int y, int currentHeight, int color) {
-  tft.fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
-  tft.fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
-      -(TEMP_BAR_MAXHEIGHT - currentHeight), ICONS_BG_COLOR);
 }
 
 int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
@@ -235,127 +226,6 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
     tft.println(msg);
 }
 
-//-------------------------------------------------------------------------------------------------
-//coolant temperature indicator
-//-------------------------------------------------------------------------------------------------
-
-const char *err = (char*)F("ERR");
-
-static bool t_drawOnce = true; 
-void redrawTemperature(void) {
-    t_drawOnce = true;
-}
-
-const int t_getBaseX(void) {
-    return 0;
-}
-
-const int t_getBaseY(void) {
-    return BIG_ICONS_OFFSET; 
-}
-
-static int lastCoolantHeight = C_INIT_VAL;
-static int lastCoolantVal = C_INIT_VAL;
-
-static unsigned short *lastFanImg = NULL;
-static bool lastFanEnabled = false;
-
-void showTemperatureAmount(int currentVal, int maxVal) {
-
-    if(t_drawOnce) {
-        drawImage(t_getBaseX(), t_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)temperature);
-        t_drawOnce = false;
-    } else {
-        int x, y, color;
-
-        int valToDisplay = currentVal;
-        if(currentVal > TEMP_MAX) {
-            currentVal = TEMP_MAX;
-        }
-
-        bool overheat = false;
-        color = TEMP_INITIAL_COLOR;
-        if(currentVal >= TEMP_OK_LO && currentVal <= TEMP_OK_HI) {
-            color = COLOR(ORANGE);
-        } 
-        if(currentVal > TEMP_OK_HI) {
-            overheat = true;
-        }
-
-        bool blink = alertSwitch();
-        if(currentVal > TEMP_OK_HI + ((TEMP_MAX - TEMP_OK_HI) / 2)) {
-          blink = seriousAlertSwitch();
-        }
-
-        currentVal -= TEMP_MIN;
-        maxVal -= TEMP_MIN;
-        if(currentVal < 0) {
-            currentVal = 0;
-        }
-
-        int currentHeight = currentValToHeight(
-            (currentVal < TEMP_MAX) ? currentVal : TEMP_MAX,
-            maxVal);
-
-        bool draw = false;
-        if(lastCoolantHeight != currentHeight) {
-            lastCoolantHeight = currentHeight;
-            draw = true;
-        }
-
-        if(overheat) {
-            draw = true;
-            color = (blink) ? COLOR(RED) : COLOR(ORANGE);
-        }
-
-        unsigned short *img = NULL;
-        bool fanEnabled = isFanEnabled();
-        
-        if(fanEnabled) {
-          if(seriousAlertSwitch()) {
-            img = (unsigned short*)fan_b_Icon;
-          } else {
-            img = (unsigned short*)fan_a_Icon;
-          }
-
-          if(img != lastFanImg) {
-            lastFanImg = img;
-            draw = true;
-          }
-        }
-        if(lastFanEnabled != fanEnabled) {
-          lastFanEnabled = fanEnabled;
-          draw = true;
-        }
-
-        if(draw) {
-            x = t_getBaseX() + 24;
-            y = t_getBaseY() + 8 + TEMP_BAR_MAXHEIGHT;
-
-            drawTempBar(x, y, currentHeight, color);
-            
-            if(fanEnabled && img != NULL) {
-              x = t_getBaseX() + FAN_COOLANT_X;
-              y = t_getBaseY() + FAN_COOLANT_Y;
-
-              tft.drawRGBBitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
-            } else {
-              x = t_getBaseX() + TEMP_DOT_X;
-              y = t_getBaseY() + TEMP_DOT_Y;
-
-              tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
-            }
-        }
-
-        if(lastCoolantVal != valToDisplay) {
-            lastCoolantVal = valToDisplay;
-
-            x = t_getBaseX() + 40;
-            y = t_getBaseY() + 38;
-            drawTempValue(x, y, valToDisplay);
-        }
-   }
-}
 
 //-------------------------------------------------------------------------------------------------
 //engine load indicator

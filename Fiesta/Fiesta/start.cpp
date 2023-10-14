@@ -34,10 +34,8 @@ void setupTimers(void) {
 static int *wValues = NULL;
 static int wSize = 0;
 void executeByWatchdog(int *values, int size) {
-  #ifdef ECU_V2
   wValues = values;
   wSize = size;
-  #endif
 }
 
 void initialization(void) {
@@ -64,8 +62,6 @@ void initialization(void) {
   initGraphics();
 
   initI2C();
-
-  #ifdef ECU_V2
 
   #ifdef RESET_EEPROM
   resetEEPROM();
@@ -109,7 +105,6 @@ void initialization(void) {
     wSize = 0;
     wValues = NULL;
   }
-  #endif
 
   initBasicPIO();
 
@@ -199,8 +194,8 @@ void drawHighImportanceValues(void) {
 
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showTemperatureAmount((int)valueFields[F_COOLANT_TEMP], TEMP_MAX);
-  showOilAmount((int)valueFields[F_OIL_TEMP], TEMP_OIL_MAX);
+  returnCReference().showTemperatureAmount((int)valueFields[F_COOLANT_TEMP]);
+  returnOReference().showTemperatureAmount((int)valueFields[F_OIL_TEMP]);
   showEGTTemperatureAmount();
   #endif
 }

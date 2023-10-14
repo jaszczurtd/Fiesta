@@ -139,7 +139,7 @@ static unsigned short *lastTurboImg = NULL;
 void showPressureAmount(float current) {
 
     int x, y;
-    TFT tft = returnReference();
+    TFT tft = returnTFTReference();
 
     if(p_drawOnce) {
         drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
@@ -195,7 +195,7 @@ void showPressurePercentage(void) {
 
     int x = p_getBaseX();
     int y = p_getBaseY();
-    TFT tft = returnReference();
+    TFT tft = returnTFTReference();
 
     x += TURPO_PERCENT_TEXT_POS_X;
     y += TURPO_PERCENT_TEXT_POS_Y;

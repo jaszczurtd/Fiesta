@@ -40,7 +40,7 @@ void canInit(int retries) {
 
     int x = 10;
     int y = 10;
-    TFT tft = returnReference();
+    TFT tft = returnTFTReference();
     tft.setCursor(x, y);
     tft.println(F("CAN module init fail"));
     y += 10;

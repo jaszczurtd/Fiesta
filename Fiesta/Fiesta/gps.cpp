@@ -109,7 +109,7 @@ void showGPSStatus(void) {
       }
 
       int x, y, color;
-      TFT tft = returnReference();
+      TFT tft = returnTFTReference();
 
       if(isGPSAvailable()) {
         color = COLOR(GREEN);
