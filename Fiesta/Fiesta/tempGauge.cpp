@@ -2,13 +2,16 @@
 #include "tempGauge.h"
 
 TempGauge coolant_g = TempGauge(TEMP_GAUGE_COOLANT);
-TempGauge returnCReference(void) {
-  return coolant_g;
+TempGauge oil_g = TempGauge(TEMP_GAUGE_OIL);
+
+void redrawTempGauges(void) {
+  coolant_g.redraw();
+  oil_g.redraw();
 }
 
-TempGauge oil_g = TempGauge(TEMP_GAUGE_OIL);
-TempGauge returnOReference(void) {
-  return oil_g;
+void showTempGauges(void) {
+  coolant_g.showTemperatureAmount((int)valueFields[F_COOLANT_TEMP]);
+  oil_g.showTemperatureAmount((int)valueFields[F_OIL_TEMP]);
 }
 
 TempGauge::TempGauge(int mode) {
@@ -50,6 +53,21 @@ int TempGauge::getBaseY(void) {
   return -1;
 }
 
+void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
+  TFT tft = returnTFTReference();
+  tft.sansBoldWithPosAndColor(x, y, TEXT_COLOR);
+  tft.fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
+
+  if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
+      tft.setTextColor(COLOR(RED));
+      tft.println(err);
+      return;
+  } else {
+      prepareText((const char*)F("%d"), valToDisplay);
+      tft.println(getPreparedText());
+  }
+  tft.setDisplayDefaultFont();
+}
 
 void TempGauge::showTemperatureAmount(int currentVal) {
 
@@ -61,6 +79,9 @@ void TempGauge::showTemperatureAmount(int currentVal) {
       case TEMP_GAUGE_COOLANT:
         tempImg = (unsigned short*)temperature;
         break;
+      case TEMP_GAUGE_OIL:
+        tempImg = (unsigned short*)oil;
+        break;        
     }
 
     tft.drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);

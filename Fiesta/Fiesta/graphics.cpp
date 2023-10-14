@@ -43,8 +43,7 @@ void redrawAll(void) {
   initHeatedWindow();
   initFuelMeasurement();
   redrawFuel();
-  returnCReference().redraw();
-  returnOReference().redraw();
+  redrawTempGauges();
   redrawOilPressure();
   redrawPressure();
   redrawIntercooler();
@@ -91,21 +90,6 @@ int prepareText(const char *format, ...) {
     va_end(valist);
 
     return tft.textWidth((const char*)displayTxt);
-}
-
-void drawTempValue(int x, int y, int valToDisplay) {
-  tft.sansBoldWithPosAndColor(x, y, TEXT_COLOR);
-  tft.fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
-
-  if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
-      tft.setTextColor(COLOR(RED));
-      tft.println(err);
-      return;
-  } else {
-      prepareText((const char*)F("%d"), valToDisplay);
-      tft.println(getPreparedText());
-  }
-  tft.setDisplayDefaultFont();
 }
 
 int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
