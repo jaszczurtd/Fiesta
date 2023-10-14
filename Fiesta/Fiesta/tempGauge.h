@@ -19,14 +19,36 @@
 #define TEMP_BAR_WIDTH 6
 #define TEMP_BAR_DOT_RADIUS 11
 
+#define TEMP_DOT_X 26
+#define TEMP_DOT_Y 59
+
+#define OIL_DOT_X 22
+#define OIL_DOT_Y 59
+
+#define FAN_COOLANT_X 15
+#define FAN_COOLANT_Y 48
+
+extern const char *err;
+
 class TempGauge {
 public:
-  TempGauge(int mode, TFT& tft);
+  TempGauge(int mode);
   void drawTempBar(int x, int y, int currentHeight, int color);
+  void redraw(void);
+  int getBaseX(void);
+  int getBaseY(void);
+  void showTemperatureAmount(int currentVal);
 
 private:
-  TFT& tft;
+  bool drawOnce;
+  int lastHeight;
+  int lastVal;
+  unsigned short *lastFanImg;
+  bool lastFanEnabled;
   int mode;
 };
+
+TempGauge returnCReference(void);
+TempGauge returnOReference(void);
 
 #endif

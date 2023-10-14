@@ -8,8 +8,6 @@
 #include "tests.h"
 #include "graphics.h"
 
-void redrawOil(void);
-void showOilAmount(int currentVal, int maxVal);
 void redrawOilPressure(void);
 void showOilPressureAmount(float current);
 float readOilBarPressure(void);

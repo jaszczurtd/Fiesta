@@ -13,6 +13,7 @@
 #include <tools.h>
 #include <multicoreWatchdog.h>
 
+#include "tempGauge.h"
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "graphics.h"

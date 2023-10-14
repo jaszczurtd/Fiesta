@@ -48,7 +48,7 @@ extern const char *err;
 #define MODE_M_TEMP 1
 #define MODE_M_KILOMETERS 2
 
-TFT returnReference(void);
+TFT returnTFTReference(void);
 bool softInitDisplay(void *arg);
 void initGraphics(void);
 void redrawAll(void);
@@ -61,15 +61,12 @@ void setDisplayDefaultFont(void);
 int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
 void drawTempValue(int x, int y, int valToDisplay);
-void drawTempBar(int x, int y, int currentHeight, int color);
 void displayErrorWithMessage(int x, int y, const char *msg);
 int currentValToHeight(int currentVal, int maxVal);
 int prepareText(const char *format, ...);
 const char *getPreparedText(void);
 
 //indicators
-void redrawTemperature(void);
-void showTemperatureAmount(int currentVal, int maxVal);
 void redrawIntercooler(void);
 void showICTemperatureAmount(int currentVal);
 void redrawEngineLoad(void);

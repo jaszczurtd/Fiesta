@@ -138,7 +138,7 @@ void drawFuelEmpty(void) {
     int x = f_getBaseX() + ((f_getWidth() - emptyMessageWidth) / 2);
     int y = f_getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
 
-    TFT tft = returnReference();
+    TFT tft = returnTFTReference();
     tft.defaultFontWithPosAndColor(x, y, color);
     tft.println(emptyMessage);
   }
@@ -166,7 +166,7 @@ void showFuelAmount(int currentVal, int maxVal) {
     int y = f_getBaseY();
     int tw;
 
-    TFT tft = returnReference();
+    TFT tft = returnTFTReference();
     tft.fillRect(x, y, SCREEN_W, SCREEN_H - y, ICONS_BG_COLOR);
 
     x = f_getBaseX();
@@ -228,7 +228,7 @@ void drawChangeableFuelContent(int w, int fh, int y) {
     }
 
     if(draw) {
-      TFT tft = returnReference();
+      TFT tft = returnTFTReference();
       int x = f_getBaseX(); 
 
       if(fullRedrawNeeded) {
