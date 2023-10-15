@@ -57,9 +57,17 @@ const char *getGPSDate(void) {
 
 const char *getGPSTime(void) {
   if(isGPSAvailable()) {
+    int year = gps.date.year();
+    int month = gps.date.month();
+    int day = gps.date.day();
+    int hour = gps.time.hour();
+    int minute = gps.time.minute();
+
+    adjustTime(&year, &month, &day, &hour, &minute);
+
     memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
     snprintf(gpsTime, GPS_TIME_DATE_BUFFER_SIZE - 1, "%02d:%02d:%02d", 
-      gps.time.hour(), gps.time.minute(), gps.time.second());
+      hour, minute, gps.time.second());
   }
   return gpsTime;
 }
