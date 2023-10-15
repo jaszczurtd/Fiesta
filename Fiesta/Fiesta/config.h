@@ -72,7 +72,7 @@
 
 //values from ADC
 #define FUEL_MAX 285
-#define FUEL_MIN 1660
+#define FUEL_MIN 1298
 
 //hella actuator PWM percent: min/max values
 #define TURBO_ACTUATOR_LOW 6
