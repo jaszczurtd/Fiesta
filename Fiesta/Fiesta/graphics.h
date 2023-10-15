@@ -69,7 +69,7 @@ const char *getPreparedText(void);
 void redrawIntercooler(void);
 void showICTemperatureAmount(int currentVal);
 void redrawEngineLoad(void);
-void showEngineLoadAmount(int currentVal);
+void showEngineLoadAmount(void);
 void redrawEGT(void);
 void showEGTTemperatureAmount(void);
 void redrawVolts(void);

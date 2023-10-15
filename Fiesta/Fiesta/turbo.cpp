@@ -34,8 +34,7 @@ int correctPressureFactor(void) {
 
 void turboMainLoop(void) {
 
-  int engineThrottleRAWValue = int(valueFields[F_THROTTLE_POS]);
-  int engineThrottlePercentageValue = getThrottlePercentage(engineThrottleRAWValue);
+  int engineThrottlePercentageValue = getThrottlePercentage();
   int posThrottle = (engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
   int n75;
@@ -107,7 +106,7 @@ void turboMainLoop(void) {
 
 #ifdef DEBUG
   deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
-    engineThrottleRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
+    int(valueFields[F_THROTTLE_POS]), posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
 #endif
 
 #endif

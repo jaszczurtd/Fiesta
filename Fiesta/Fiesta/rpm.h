@@ -25,7 +25,9 @@
 void initRPMCount(void);
 void setAccelMaxRPM(void);
 void resetRPMEngine(void);
+#ifndef VP37
 void stabilizeRPM(void);
+#endif
 bool isEngineRunning(void);
 void setAccelRPMPercentage(int percentage);
 int getCurrentRPMSolenoid(void);

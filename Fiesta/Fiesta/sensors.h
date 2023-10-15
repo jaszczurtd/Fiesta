@@ -34,7 +34,8 @@ float readAirTemperature(void);
 float readVolts(void);
 float readBarPressure(void);
 float readEGT(void);
-int getThrottlePercentage(int currentVal);
+int getRAWThrottle(void);
+int getThrottlePercentage(void);
 int getPercentageEngineLoad(void);
 
 void pcf8574_init(void);

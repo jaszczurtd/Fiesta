@@ -80,6 +80,7 @@ int getCurrentRPM(void) {
   return (int)valueFields[F_RPM];
 }
 
+#ifndef VP37
 void stabilizeRPM(void) {
   rpmTimer.tick();
 
@@ -148,6 +149,7 @@ void stabilizeRPM(void) {
   deb("rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
 #endif
 }
+#endif
 
 bool isEngineRunning(void) {
   return (int(valueFields[F_RPM]) != 0);
