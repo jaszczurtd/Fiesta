@@ -12,6 +12,9 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#define VP37_PWM_MIN 350
+#define VP37_PWM_MAX 620
+
 void enableVP37(bool enable);
 bool isVP37Enabled(void);
 void vp37Process(void);

@@ -4,12 +4,17 @@
 
 void enableVP37(bool enable) {
   pcf8574_write(PCF8574_O_VP37_ENABLE, enable);
-  //delay(1);
   deb("vp37 enabled: %d", isVP37Enabled()); 
 }
 
 bool isVP37Enabled(void) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
+}
+
+int percentToPWMVal(int percent) {
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  return VP37_PWM_MIN + (((VP37_PWM_MAX - VP37_PWM_MIN) * percent) / 100);
 }
 
 void vp37Process(void) {
@@ -21,9 +26,10 @@ void vp37Process(void) {
     return;
   }
 
-  setAccelRPMPercentage(getEnginePercentageThrottle());
-  int cRPM = getCurrentRPMSolenoid();
-  valToPWM(PIO_VP37_RPM, cRPM);
-  valToPWM(PIO_VP37_ANGLE, cRPM);
+  int thr = getThrottlePercentage();
+  int pwm = percentToPWMVal(thr);
+
+  valToPWM(PIO_VP37_RPM, pwm);
+  valToPWM(PIO_VP37_ANGLE, pwm);
 
 }

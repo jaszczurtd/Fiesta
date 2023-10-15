@@ -230,9 +230,9 @@ const int e_getBaseY(void) {
 
 static int lastLoadAmount = C_INIT_VAL;
 
-void showEngineLoadAmount(int currentVal) {
+void showEngineLoadAmount(void) {
 
-  int value = getThrottlePercentage(currentVal);
+  int value = getThrottlePercentage();
 
   if(e_drawOnce) {
     drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pump);

@@ -188,7 +188,7 @@ void drawLowImportanceValues(void) {
 
 void drawHighImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showEngineLoadAmount((int)valueFields[F_THROTTLE_POS]);
+  showEngineLoadAmount();
   #endif
 }
 

@@ -96,9 +96,10 @@ float readThrottle(void) {
     return abs(result - PWM_RESOLUTION);
 }
 
-int getThrottlePercentage(int currentVal) {
-    float percent = (currentVal * 100) / PWM_RESOLUTION;
-    return percentToGivenVal(percent, 100);
+int getThrottlePercentage(void) {
+  int currentVal = int(valueFields[F_THROTTLE_POS]);
+  float percent = (currentVal * 100) / PWM_RESOLUTION;
+  return percentToGivenVal(percent, 100);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -180,6 +181,10 @@ bool pcf8574_read(unsigned char pin) {
   }
 
   return retVal;
+}
+
+int getRAWThrottle(void) {
+  return int(valueFields[F_THROTTLE_POS]);
 }
 
 int getEnginePercentageThrottle(void) {
