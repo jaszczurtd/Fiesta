@@ -7,6 +7,7 @@
 
 #include "TFTExtension.h"
 #include "tempGauge.h"
+#include "simpleGauge.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
@@ -68,7 +69,6 @@ const char *getPreparedText(void);
 //indicators
 void redrawIntercooler(void);
 void showICTemperatureAmount(int currentVal);
-void redrawEngineLoad(void);
 void showEngineLoadAmount(int currentVal);
 void redrawEGT(void);
 void showEGTTemperatureAmount(void);
