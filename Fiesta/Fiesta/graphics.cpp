@@ -47,7 +47,6 @@ void redrawAll(void) {
   redrawOilPressure();
   redrawPressure();
   redrawSimpleGauges();
-  redrawEGT();
   redrawVolts();
 }
 
@@ -115,56 +114,6 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   tft.println(F("BAR"));
 }
 
-int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
-
-  TFT tft = returnTFTReference();
-
-  int w1 = 0, kmoffset = 0;
-  const char *km = ((const char*)F("km/h"));
-  if(mode == MODE_M_KILOMETERS) {
-    tft.setDisplayDefaultFont();
-    w1 = textWidth(km);
-    kmoffset = 5;
-  }
-  tft.serif9ptWithColor(color);
-
-  memset(displayTxt, 0, sizeof(displayTxt));
-
-  va_list valist;
-  va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-  va_end(valist);
-
-  int w = textWidth((const char*)displayTxt);
-
-  int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
-  int y1 = y + 59;
-  
-  tft.fillRect(x + offset, 
-              y1 - 14, SMALL_ICONS_WIDTH - (offset * 2), 
-              16, 
-              ICONS_BG_COLOR);
-  tft.setCursor(x1, y1);
-  tft.println(getPreparedText());
-
-  switch(mode) {
-    default:
-    case MODE_M_NORMAL:
-      break;
-    case MODE_M_TEMP:
-      tft.drawCircle(x1 + w + 6, y1 - 10, 3, color);
-      break;
-    case MODE_M_KILOMETERS:
-      tft.setDisplayDefaultFont();
-      tft.setCursor(x1 + w + kmoffset, y1 - 6);
-      tft.println(km);
-      return w;
-  }
-
-  tft.setDisplayDefaultFont();
-  return w;
-}
-
 void displayErrorWithMessage(int x, int y, const char *msg) {
     int workingx = x; 
     int workingy = y;
@@ -207,103 +156,6 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
 
     tft.defaultFontWithPosAndColor(x + 8, y + 46, COLOR(BLUE));
     tft.println(msg);
-}
-
-//-------------------------------------------------------------------------------------------------
-//engine EGT
-//-------------------------------------------------------------------------------------------------
-
-static bool egt_drawOnce = true; 
-void redrawEGT(void) {
-    egt_drawOnce = true;
-}
-
-const int egt_getBaseX(void) {
-    return (2 * SMALL_ICONS_WIDTH);
-}
-
-const int egt_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static bool currentIsDPF = false;
-bool changeEGT(void *argument) {
-  if(isDPFConnected()) {
-    currentIsDPF = !currentIsDPF;
-    egt_drawOnce = true;
-  } else {
-    currentIsDPF = false;
-  }
-
-  return true;
-}
-
-static int lastEGTTempVal = C_INIT_VAL;
-
-void showEGTTemperatureAmount(void) {
-
-  bool draw = false;
-
-  int currentVal = (int)valueFields[F_EGT];
-  if(currentIsDPF) {
-    currentVal = (int)valueFields[F_DPF_TEMP];
-  }  
-
-  if(egt_drawOnce) {
-    unsigned short *img = (unsigned short*)egt;
-    if(currentIsDPF) {
-      img = (unsigned short*)dpf;
-    }      
-    drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, img);
-    egt_drawOnce = false;
-    draw = true;
-  } 
-  int color = TEXT_COLOR;
-
-  if(currentVal < TEMP_EGT_MIN) {
-    currentVal = TEMP_EGT_MIN - 1;
-  }
-
-  if(lastEGTTempVal != currentVal) {
-    lastEGTTempVal = currentVal;
-    draw = true;
-  }
-
-  bool overheat = false;
-  if(currentVal > TEMP_EGT_OK_HI) {
-    overheat = true;
-  }
-
-  if(overheat) {
-    draw = true;
-    color = (seriousAlertSwitch()) ? COLOR(RED) : TEXT_COLOR;
-  }
-
-  if(draw) {
-    char *format = NULL;
-
-    if(currentVal < TEMP_EGT_MIN) {
-      format = ((char*)F("COLD"));
-    } else if(currentVal > TEMP_EGT_MAX) {
-      format = ((char*)err);  
-    } else {
-      format = (char*)F("%d");
-      if(currentIsDPF) {
-        if(isDPFRegenerating()) {
-          format = (char*)F("R/%d");          
-        }
-      } 
-    }
-
-    bool isTemp = (currentVal > TEMP_EGT_MIN && currentVal < TEMP_EGT_MAX);
-    int mode = MODE_M_NORMAL;
-    if(isTemp) {
-      mode = MODE_M_TEMP;
-    }
-
-    drawTextForMiddleIcons(egt_getBaseX(), egt_getBaseY(), 2, 
-                          color, mode, format, currentVal);
-  }
 }
 
 //-------------------------------------------------------------------------------------------------

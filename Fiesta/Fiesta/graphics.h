@@ -59,7 +59,6 @@ void drawImage(int x, int y, int width, int height, int background, unsigned sho
 int textWidth(const char* text);
 int textHeight(const char* text);
 void setDisplayDefaultFont(void);
-int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
 void displayErrorWithMessage(int x, int y, const char *msg);
 int currentValToHeight(int currentVal, int maxVal);
@@ -67,9 +66,6 @@ int prepareText(const char *format, ...);
 const char *getPreparedText(void);
 
 //indicators
-void redrawEGT(void);
-void showEGTTemperatureAmount(void);
-bool changeEGT(void *argument);
 void redrawVolts(void);
 void showVolts(float volts);
 
