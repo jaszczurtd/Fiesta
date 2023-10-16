@@ -180,9 +180,8 @@ void initialization(void) {
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
   showVolts(valueFields[F_VOLTS]);
-  showRPMamount((int)valueFields[F_RPM]);
+  showSimpleGauges();
   #endif
 }
 
@@ -203,7 +202,7 @@ void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
   showOilPressureAmount(valueFields[F_OIL_PRESSURE]);
-  showGPSStatus();
+  showGPSGauge();
   #endif
 }
 

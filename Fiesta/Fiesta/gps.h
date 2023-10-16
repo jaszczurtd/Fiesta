@@ -20,7 +20,4 @@ const char *getGPSDate(void);
 const char *getGPSTime(void);
 bool isGPSAvailable(void);
 
-void redrawGPS(void);
-void showGPSStatus(void);
-
 #endif
