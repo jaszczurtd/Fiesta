@@ -179,9 +179,9 @@ void initialization(void) {
 
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
+  showSimpleGauges();
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
   showVolts(valueFields[F_VOLTS]);
-  showSimpleGauges();
   #endif
 }
 
@@ -194,7 +194,7 @@ void drawHighImportanceValues(void) {
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showTempGauges();
-  showEGTTemperatureAmount();
+  showEGTGauge();
   #endif
 }
 
