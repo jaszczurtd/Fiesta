@@ -46,12 +46,9 @@ void redrawAll(void) {
   redrawTempGauges();
   redrawOilPressure();
   redrawPressure();
-  redrawIntercooler();
   redrawSimpleGauges();
-  redrawRPM();
   redrawEGT();
   redrawVolts();
-  redrawGPS();
 }
 
 int currentValToHeight(int currentVal, int maxVal) {
@@ -212,12 +209,6 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
     tft.println(msg);
 }
 
-
-//-------------------------------------------------------------------------------------------------
-//engine load indicator
-//-------------------------------------------------------------------------------------------------
-
-
 //-------------------------------------------------------------------------------------------------
 //engine EGT
 //-------------------------------------------------------------------------------------------------
@@ -313,52 +304,6 @@ void showEGTTemperatureAmount(void) {
     drawTextForMiddleIcons(egt_getBaseX(), egt_getBaseY(), 2, 
                           color, mode, format, currentVal);
   }
-}
-
-//-------------------------------------------------------------------------------------------------
-//intercooler - intake temp
-//-------------------------------------------------------------------------------------------------
-
-static bool ic_drawOnce = true; 
-void redrawIntercooler(void) {
-    ic_drawOnce = true;
-}
-
-const int ic_getBaseX(void) {
-    return (3 * SMALL_ICONS_WIDTH);
-}
-
-const int ic_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static int lastICTempVal = C_INIT_VAL;
-
-void showICTemperatureAmount(int currentVal) {
-
-    if(ic_drawOnce) {
-        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)ic);
-        ic_drawOnce = false;
-    } else {
-        if(lastICTempVal != currentVal) {
-            lastICTempVal = currentVal;
-
-            int color = TEXT_COLOR;
-            char *format = NULL;
-            bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
-
-            if(error) {
-                color = COLOR(RED);
-                format = (char*)err;
-            } else {
-                format = ((char*)F("%d"));
-            }
-
-            int mode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
-            drawTextForMiddleIcons(ic_getBaseX(), ic_getBaseY(), 5, 
-                                   color, mode, format, currentVal);
-        }
-    }
 }
 
 //-------------------------------------------------------------------------------------------------

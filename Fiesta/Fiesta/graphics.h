@@ -67,16 +67,11 @@ int prepareText(const char *format, ...);
 const char *getPreparedText(void);
 
 //indicators
-void redrawIntercooler(void);
-void showICTemperatureAmount(int currentVal);
-void showEngineLoadAmount(int currentVal);
 void redrawEGT(void);
 void showEGTTemperatureAmount(void);
+bool changeEGT(void *argument);
 void redrawVolts(void);
 void showVolts(float volts);
-
-bool changeEGT(void *argument);
-
 
 #endif
  

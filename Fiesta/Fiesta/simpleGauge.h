@@ -13,6 +13,11 @@
 
 #define SIMPLE_G_NONE 0
 #define SIMPLE_G_ENGINE_LOAD 1
+#define SIMPLE_G_INTAKE 2
+#define SIMPLE_G_RPM 3
+#define SIMPLE_G_GPS 4
+
+extern const char *err;
 
 class SimpleGauge {
 public:
@@ -25,10 +30,12 @@ public:
 private:
   bool drawOnce;
   int mode;
-  int lastLoadAmount;
+  int lastShowedVal;
 };
 
 void redrawSimpleGauges(void);
 void showEngineLoadGauge(void);
+void showGPSGauge(void);
+void showSimpleGauges(void);
 
 #endif
