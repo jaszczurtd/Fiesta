@@ -47,7 +47,7 @@ void redrawAll(void) {
   redrawOilPressure();
   redrawPressure();
   redrawIntercooler();
-  redrawEngineLoad();
+  redrawSimpleGauges();
   redrawRPM();
   redrawEGT();
   redrawVolts();
@@ -92,7 +92,35 @@ int prepareText(const char *format, ...) {
     return tft.textWidth((const char*)displayTxt);
 }
 
+void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
+
+  memset(displayTxt, 0, sizeof(displayTxt));
+
+  va_list valist;
+  va_start(valist, format);
+  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  va_end(valist);
+
+  int x1 = x + BAR_TEXT_X;
+  int y1 = y + BAR_TEXT_Y - 12;
+
+  tft.fillRect(x1, y1, 28, 15, ICONS_BG_COLOR);
+
+  x1 = x + BAR_TEXT_X;
+  y1 = y + BAR_TEXT_Y;
+
+  tft.sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
+  tft.println(getPreparedText());
+
+  x1 = x + BAR_TEXT_X + 25;
+  y1 = y + BAR_TEXT_Y - 6;
+  tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
+  tft.println(F("BAR"));
+}
+
 int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
+
+  TFT tft = returnTFTReference();
 
   int w1 = 0, kmoffset = 0;
   const char *km = ((const char*)F("km/h"));
@@ -138,32 +166,6 @@ int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const 
 
   tft.setDisplayDefaultFont();
   return w;
-}
-
-void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
-
-  memset(displayTxt, 0, sizeof(displayTxt));
-
-  va_list valist;
-  va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-  va_end(valist);
-
-  int x1 = x + BAR_TEXT_X;
-  int y1 = y + BAR_TEXT_Y - 12;
-
-  tft.fillRect(x1, y1, 28, 15, ICONS_BG_COLOR);
-
-  x1 = x + BAR_TEXT_X;
-  y1 = y + BAR_TEXT_Y;
-
-  tft.sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
-  tft.println(getPreparedText());
-
-  x1 = x + BAR_TEXT_X + 25;
-  y1 = y + BAR_TEXT_Y - 6;
-  tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
-  tft.println(F("BAR"));
 }
 
 void displayErrorWithMessage(int x, int y, const char *msg) {
@@ -215,36 +217,6 @@ void displayErrorWithMessage(int x, int y, const char *msg) {
 //engine load indicator
 //-------------------------------------------------------------------------------------------------
 
-static bool e_drawOnce = true; 
-void redrawEngineLoad(void) {
-    e_drawOnce = true;
-}
-
-const int e_getBaseX(void) {
-    return (SMALL_ICONS_WIDTH * 4);
-}
-
-const int e_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static int lastLoadAmount = C_INIT_VAL;
-
-void showEngineLoadAmount(int currentVal) {
-
-  int value = getThrottlePercentage(currentVal);
-
-  if(e_drawOnce) {
-    drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pump);
-    e_drawOnce = false;
-  } else {
-    if(lastLoadAmount != value) {
-      lastLoadAmount = value;
-      drawTextForMiddleIcons(e_getBaseX(), e_getBaseY(), 5, 
-                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d%%"), value);
-    }
-  }
-}
 
 //-------------------------------------------------------------------------------------------------
 //engine EGT
