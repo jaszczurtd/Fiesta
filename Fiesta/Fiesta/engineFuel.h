@@ -26,6 +26,11 @@
 
 #define MIN_FUEL_WIDTH 2
 
+#define FUEL_COLOR 0xfda0
+
+#define FUEL_BOX_COLOR 0xBDF7
+#define FUEL_FILL_COLOR 0x9CD3
+
 float readFuel(void);
 void initFuelMeasurement(void);
 

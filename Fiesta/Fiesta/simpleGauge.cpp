@@ -177,7 +177,7 @@ void SimpleGauge::showSimpleGauge(void) {
 
   switch(mode) {
     case SIMPLE_G_ENGINE_LOAD:
-      currentVal = getThrottlePercentage(int(valueFields[F_THROTTLE_POS]));
+      currentVal = getThrottlePercentage();
       break;
     case SIMPLE_G_INTAKE:
       currentVal = int(valueFields[F_INTAKE_TEMP]);

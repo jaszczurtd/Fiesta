@@ -96,9 +96,10 @@ float readThrottle(void) {
     return abs(result - PWM_RESOLUTION);
 }
 
-int getThrottlePercentage(int currentVal) {
-    float percent = (currentVal * 100) / PWM_RESOLUTION;
-    return percentToGivenVal(percent, 100);
+int getThrottlePercentage(void) {
+  int currentVal = int(valueFields[F_THROTTLE_POS]);
+  float percent = (currentVal * 100) / PWM_RESOLUTION;
+  return percentToGivenVal(percent, 100);
 }
 
 //-------------------------------------------------------------------------------------------------

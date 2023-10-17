@@ -34,8 +34,7 @@ int correctPressureFactor(void) {
 
 void turboMainLoop(void) {
 
-  int engineThrottleRAWValue = int(valueFields[F_THROTTLE_POS]);
-  int engineThrottlePercentageValue = getThrottlePercentage(engineThrottleRAWValue);
+  int engineThrottlePercentageValue = getThrottlePercentage();
   int posThrottle = (engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
   int n75;
@@ -107,7 +106,7 @@ void turboMainLoop(void) {
 
 #ifdef DEBUG
   deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
-    engineThrottleRAWValue, posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
+    int(valueFields[F_THROTTLE_POS]), posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
 #endif
 
 #endif
@@ -154,7 +153,7 @@ void showPressureAmount(float current) {
         if(hi != lastHI || lo != lastLO) {
             lastHI = hi;
             lastLO = lo;
-            drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+            tft.drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
         }
 
         if(current > TURBO_MIN_PRESSURE_FOR_SPINNING) {
@@ -200,10 +199,9 @@ void showPressurePercentage(void) {
 
     tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
     
-    int w = prepareText((const char*)F("turbo:%d%%"), val);
+    int w = tft.prepareText((const char*)F("turbo:%d%%"), val);
 
     tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
-
-    tft.println(getPreparedText());
+    tft.printlnFromPreparedText();
   }
 }
