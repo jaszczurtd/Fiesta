@@ -69,6 +69,11 @@ void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
   tft.setDisplayDefaultFont();
 }
 
+int TempGauge::currentValToHeight(int currentVal, int maxVal) {
+  float percent = (float)(currentVal * 100) / (float)maxVal;
+  return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
+}
+
 void TempGauge::showTemperatureAmount(int currentVal) {
 
   TFT tft = returnTFTReference();

@@ -36,7 +36,7 @@ private:
   bool drawOnce;
   int lastShowedVal;
   bool currentIsDPF;
-  char displayTxt[32];
+  char displayTxt[16];
 };
 
 void redrawSimpleGauges(void);

@@ -23,14 +23,10 @@ void initGraphics(void) {
   gfxInitialized = true;
 }
 
-void fillScreenWithColor(int c) {
-  tft.fillScreen(c);
-}
-
 void showLogo(void) {
   #ifndef DEBUG_SCREEN
 
-  fillScreenWithColor(COLOR(WHITE));
+  tft.fillScreen(COLOR(WHITE));
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
@@ -48,27 +44,6 @@ void redrawAll(void) {
   redrawPressure();
   redrawSimpleGauges();
   redrawVolts();
-}
-
-int currentValToHeight(int currentVal, int maxVal) {
-  float percent = (float)(currentVal * 100) / (float)maxVal;
-  return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
-}
-
-void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
-  tft.drawImage(x, y, width, height, background, pointer);
-}
-
-int textWidth(const char* text) {
-  return tft.textWidth(text);
-}
-
-int textHeight(const char* text) {
-  return tft.textHeight(text);
-}
-
-void setDisplayDefaultFont(void) {
-  tft.setDisplayDefaultFont();
 }
 
 static char displayTxt[32];
@@ -112,50 +87,6 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   y1 = y + BAR_TEXT_Y - 6;
   tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
   tft.println(F("BAR"));
-}
-
-void displayErrorWithMessage(int x, int y, const char *msg) {
-    int workingx = x; 
-    int workingy = y;
-
-    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
-    workingx += 20;
-    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
-
-    workingy += 5;
-    workingx = x + 4;
-
-    tft.fillRoundRect(workingx, workingy, 15, 40, 6, COLOR(RED));
-    workingy +=30;
-    tft.drawLine(workingx, workingy, workingx + 14, workingy, COLOR(BLACK));
-
-    workingx +=6;
-    workingy +=4;
-    tft.drawLine(workingx, workingy, workingx, workingy + 5, COLOR(BLACK));
-    tft.drawLine(workingx + 1, workingy, workingx + 1, workingy + 5, COLOR(BLACK));
-
-    workingx = x -16;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
-
-    workingy = y - 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y - 2, COLOR(BLACK));
-
-    workingy = y + 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y + 2, COLOR(BLACK));
-
-    workingx = x + 23;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
-  
-    workingy = y - 3;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y - 8, COLOR(BLACK));
-
-    workingy = y + 1;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, COLOR(BLACK));
-
-    tft.defaultFontWithPosAndColor(x + 8, y + 46, COLOR(BLUE));
-    tft.println(msg);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -204,7 +135,7 @@ void showVolts(float volts) {
   }
 
   if(v_drawOnce) {
-    drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
+    tft.drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
     v_drawOnce = false;
   }
 

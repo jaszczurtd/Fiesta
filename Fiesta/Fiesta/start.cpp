@@ -137,7 +137,8 @@ void initialization(void) {
     sec = getSeconds();
   }
 
-  fillScreenWithColor(ICONS_BG_COLOR);
+  TFT tft = returnTFTReference();
+  tft.fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);

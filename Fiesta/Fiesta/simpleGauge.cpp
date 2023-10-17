@@ -143,10 +143,6 @@ void SimpleGauge::resetCurrentEGTMode(void) {
 void SimpleGauge::showSimpleGauge(void) {
 
   TFT tft = returnTFTReference();
-  int txtMode = 0;
-  int color = TEXT_COLOR;
-  char *format = NULL;
-  int currentVal = 0;
   bool draw = false;
 
   if(drawOnce) {
@@ -172,96 +168,96 @@ void SimpleGauge::showSimpleGauge(void) {
         }
         break;
     }
-    drawImage(getBaseX(), getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+    tft.drawImage(getBaseX(), getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
     draw = true;
-  } else {
+  }
+
+  int currentVal = 0;
+
+  switch(mode) {
+    case SIMPLE_G_ENGINE_LOAD:
+      currentVal = getThrottlePercentage(int(valueFields[F_THROTTLE_POS]));
+      break;
+    case SIMPLE_G_INTAKE:
+      currentVal = int(valueFields[F_INTAKE_TEMP]);
+      break;
+    case SIMPLE_G_RPM:
+      currentVal = int(valueFields[F_RPM]);
+      break;
+    case SIMPLE_G_GPS:
+      currentVal = int(getCurrentCarSpeed());
+      break;
+  }
+
+  const char *format = NULL;
+  int txtMode = MODE_M_NORMAL;
+  int color = TEXT_COLOR;
+  int offset = 5;
+
+  if(lastShowedVal != currentVal) {
+    switch(mode) {
+      case SIMPLE_G_ENGINE_LOAD:
+        format = (const char*)F("%d%%");
+        break;
+
+      case SIMPLE_G_RPM:
+        format = (const char*)F("%d");
+        break;
+
+      case SIMPLE_G_GPS:
+        offset = 1;
+        format = (const char*)F("%d");
+        txtMode = MODE_M_KILOMETERS;
+        break;
+      
+      case SIMPLE_G_INTAKE:
+        bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
+
+        if(error) {
+          color = COLOR(RED);
+          format = (const char*)err;
+        } else {
+          format = ((const char*)F("%d"));
+        }
+
+        txtMode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
+        break;
+    }
 
     switch(mode) {
       case SIMPLE_G_ENGINE_LOAD:
-        currentVal = (int)valueFields[F_THROTTLE_POS];
-        currentVal = getThrottlePercentage(currentVal);
-        break;
-      case SIMPLE_G_INTAKE:
-        currentVal = (int)valueFields[F_INTAKE_TEMP];
-        break;
       case SIMPLE_G_RPM:
-        currentVal = (int)valueFields[F_RPM];
-        break;
       case SIMPLE_G_GPS:
-        currentVal = (int)getCurrentCarSpeed();
-        break;
-    }
-
-    if(lastShowedVal != currentVal) {
-      switch(mode) {
-        case SIMPLE_G_ENGINE_LOAD:
-          drawTextForMiddleIcons(getBaseX(), getBaseY(), 5, 
-                                 TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d%%"), currentVal);
-          break;
-
-        case SIMPLE_G_RPM:
-          drawTextForMiddleIcons(getBaseX(), getBaseY(), 5, 
-                                 TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d"), currentVal);
-          break;
-
-        case SIMPLE_G_GPS:
-          drawTextForMiddleIcons(getBaseX(), getBaseY(), 1, 
-                                 TEXT_COLOR, MODE_M_KILOMETERS, (const char*)F("%d"), currentVal);
-          break;
-        
-        case SIMPLE_G_INTAKE:
-
-          bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
-
-          if(error) {
-            color = COLOR(RED);
-            format = (char*)err;
-          } else {
-            format = ((char*)F("%d"));
-          }
-
-          txtMode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
-          drawTextForMiddleIcons(getBaseX(), getBaseY(), 5, 
-                                 color, txtMode, format, currentVal);
-          break;
-      }
-
-      switch(mode) {
-        case SIMPLE_G_ENGINE_LOAD:
-        case SIMPLE_G_RPM:
-        case SIMPLE_G_GPS:
-        case SIMPLE_G_INTAKE:
-          lastShowedVal = currentVal;
-          break;
-      }
-    }
-
-    switch(mode) {
-      case SIMPLE_G_GPS:
-        int x, y;
-
-        if(isGPSAvailable()) {
-          color = COLOR(GREEN);
-        } else {
-          color = (alertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
-        }
-
-        int posOffset = 10;
-        int radius = 4;
-
-        x = getBaseX() + SMALL_ICONS_WIDTH - posOffset - radius;
-        y = getBaseY() + posOffset - 1;
-
-        tft.fillCircle(x, y, radius, color);
-
-        break;
+      case SIMPLE_G_INTAKE:
+        drawTextForMiddleIcons(getBaseX(), getBaseY(), offset, 
+                                color, txtMode, format, currentVal);
+        lastShowedVal = currentVal;
     }
   }
 
   switch(mode) {
-    case SIMPLE_G_EGT:
+    case SIMPLE_G_GPS: {
+      int x, y;
 
+      if(isGPSAvailable()) {
+        color = COLOR(GREEN);
+      } else {
+        color = (alertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+      }
+
+      int posOffset = 10;
+      int radius = 4;
+
+      x = getBaseX() + SMALL_ICONS_WIDTH - posOffset - radius;
+      y = getBaseY() + posOffset - 1;
+
+      tft.fillCircle(x, y, radius, color);
+
+    }
+    break;
+
+    case SIMPLE_G_EGT: {
       currentVal = (int)valueFields[F_EGT];
       if(currentIsDPF) {
         currentVal = (int)valueFields[F_DPF_TEMP];
@@ -287,7 +283,6 @@ void SimpleGauge::showSimpleGauge(void) {
       }
 
       if(draw) {
-
         if(currentVal < TEMP_EGT_MIN) {
           format = ((char*)F("COLD"));
         } else if(currentVal > TEMP_EGT_MAX) {
@@ -308,9 +303,10 @@ void SimpleGauge::showSimpleGauge(void) {
         }
 
         drawTextForMiddleIcons(getBaseX(), getBaseY(), 2, 
-                               color, txtMode, format, currentVal);
+                              color, txtMode, format, currentVal);
       }
-      break;
+    }
+    break;
   }
 }
 
