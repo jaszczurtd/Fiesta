@@ -16,7 +16,6 @@
 #include "tempGauge.h"
 #include "hardwareConfig.h"
 #include "sensors.h"
-#include "graphics.h"
 #include "rpm.h"
 #include "turbo.h"
 #include "engineFan.h"
@@ -30,6 +29,7 @@
 #include "oil.h"
 #include "gps.h"
 #include "tests.h"
+#include "TFTExtension.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16

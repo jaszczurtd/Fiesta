@@ -10,7 +10,7 @@
 #include "start.h"
 #include "sensors.h"
 #include "tests.h"
-#include "graphics.h"
+#include "TFTExtension.h"
 
 void initGPS(void);
 void initGPSDateAndTime(void);

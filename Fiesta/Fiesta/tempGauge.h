@@ -9,7 +9,6 @@
 #include "TFTExtension.h"
 #include "config.h"
 #include "icons.h"
-#include "graphics.h"
 
 #define TEMP_GAUGE_NONE     0
 #define TEMP_GAUGE_OIL      1

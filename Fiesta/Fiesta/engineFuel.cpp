@@ -169,7 +169,10 @@ void showFuelAmount(int currentVal, int maxVal) {
     int tw;
 
     TFT *tft = returnTFTReference();
-    tft->fillRect(x, y, SCREEN_W, SCREEN_H - y, ICONS_BG_COLOR);
+    tft->fillRect(FUEL_WIDTH + OFFSET + (OFFSET / 2),
+                  y, 
+                  f_getWidth() + OFFSET, SCREEN_H - y, 
+                  ICONS_BG_COLOR);
 
     x = f_getBaseX();
 
