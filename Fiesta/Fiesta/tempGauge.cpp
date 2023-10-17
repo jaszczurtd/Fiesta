@@ -24,9 +24,9 @@ TempGauge::TempGauge(int mode) {
 }
 
 void TempGauge::drawTempBar(int x, int y, int currentHeight, int color) {
-  TFT tft = returnTFTReference();
-  tft.fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
-  tft.fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
+  TFT *tft = returnTFTReference();
+  tft->fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
+  tft->fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
       -(TEMP_BAR_MAXHEIGHT - currentHeight), ICONS_BG_COLOR);
 }
 
@@ -54,19 +54,19 @@ int TempGauge::getBaseY(void) {
 }
 
 void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
-  TFT tft = returnTFTReference();
-  tft.sansBoldWithPosAndColor(x, y, TEXT_COLOR);
-  tft.fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
+  TFT *tft = returnTFTReference();
+  tft->sansBoldWithPosAndColor(x, y, TEXT_COLOR);
+  tft->fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
 
   if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
-      tft.setTextColor(COLOR(RED));
-      tft.println(err);
+      tft->setTextColor(COLOR(RED));
+      tft->println(err);
       return;
   } else {
-      tft.prepareText((const char*)F("%d"), valToDisplay);
-      tft.printlnFromPreparedText();
+      tft->prepareText((const char*)F("%d"), valToDisplay);
+      tft->printlnFromPreparedText();
   }
-  tft.setDisplayDefaultFont();
+  tft->setDisplayDefaultFont();
 }
 
 int TempGauge::currentValToHeight(int currentVal, int maxVal) {
@@ -76,7 +76,7 @@ int TempGauge::currentValToHeight(int currentVal, int maxVal) {
 
 void TempGauge::showTemperatureAmount(int currentVal) {
 
-  TFT tft = returnTFTReference();
+  TFT *tft = returnTFTReference();
   unsigned short *tempImg = NULL;
 
   if(drawOnce) {
@@ -89,7 +89,7 @@ void TempGauge::showTemperatureAmount(int currentVal) {
         break;        
     }
 
-    tft.drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+    tft->drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
   } else {
     
@@ -195,19 +195,19 @@ void TempGauge::showTemperatureAmount(int currentVal) {
             x = getBaseX() + FAN_COOLANT_X;
             y = getBaseY() + FAN_COOLANT_Y;
 
-            tft.drawRGBBitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
+            tft->drawRGBBitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
           } else {
             x = getBaseX() + TEMP_DOT_X;
             y = getBaseY() + TEMP_DOT_Y;
 
-            tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+            tft->fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
           }
           break;
         case TEMP_GAUGE_OIL:
           x = getBaseX() + OIL_DOT_X;
           y = getBaseY() + OIL_DOT_Y;
 
-          tft.fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+          tft->fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
           break;
       }
     }

@@ -35,22 +35,22 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    TFT tft = returnTFTReference();
-    tft.setDisplayDefaultFont();
-    tft.fillScreen(COLOR(BLACK));
+    TFT *tft = returnTFTReference();
+    tft->setDisplayDefaultFont();
+    tft->fillScreen(COLOR(BLACK));
 
     int x = 10;
     int y = 10;
-    tft.setCursor(x, y);
-    tft.println(F("CAN module init fail"));
+    tft->setCursor(x, y);
+    tft->println(F("CAN module init fail"));
     y += 10;
-    tft.setCursor(x, y);
+    tft->setCursor(x, y);
 
     char displayTxt[32];
 
     memset(displayTxt, 0, sizeof(displayTxt));
     snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("Connection attempt: %d"), at++);
-    tft.println(displayTxt);
+    tft->println(displayTxt);
 
     delay(SECOND);
     watchdog_update();
