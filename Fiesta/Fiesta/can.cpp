@@ -35,12 +35,12 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    setDisplayDefaultFont();
-    fillScreenWithColor(COLOR(BLACK));
+    TFT tft = returnTFTReference();
+    tft.setDisplayDefaultFont();
+    tft.fillScreen(COLOR(BLACK));
 
     int x = 10;
     int y = 10;
-    TFT tft = returnTFTReference();
     tft.setCursor(x, y);
     tft.println(F("CAN module init fail"));
     y += 10;

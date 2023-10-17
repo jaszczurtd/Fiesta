@@ -54,14 +54,7 @@ bool softInitDisplay(void *arg);
 void initGraphics(void);
 void redrawAll(void);
 void showLogo(void);
-void fillScreenWithColor(int c);
-void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
-int textWidth(const char* text);
-int textHeight(const char* text);
-void setDisplayDefaultFont(void);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
-void displayErrorWithMessage(int x, int y, const char *msg);
-int currentValToHeight(int currentVal, int maxVal);
 int prepareText(const char *format, ...);
 const char *getPreparedText(void);
 

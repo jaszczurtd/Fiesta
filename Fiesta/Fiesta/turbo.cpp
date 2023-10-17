@@ -142,10 +142,8 @@ void showPressureAmount(float current) {
     TFT tft = returnTFTReference();
 
     if(p_drawOnce) {
-        drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
+        tft.drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
         x = p_getBaseX() + BIG_ICONS_WIDTH;
-        tft.drawLine(x, p_getBaseY(), x, BIG_ICONS_HEIGHT, ICONS_BG_COLOR);
-
         p_drawOnce = false;
     } else {
 

@@ -37,6 +37,7 @@ class TempGauge {
 public:
   TempGauge(int mode);
   void drawTempValue(int x, int y, int valToDisplay);
+  int currentValToHeight(int currentVal, int maxVal);
   void drawTempBar(int x, int y, int currentHeight, int color);
   void redraw(void);
   int getBaseX(void);

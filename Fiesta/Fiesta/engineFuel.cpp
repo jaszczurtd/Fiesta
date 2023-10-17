@@ -20,17 +20,19 @@ static int emptyMessageWidth;
 static int emptyMessageHeight;
 
 void initFuelMeasurement(void) {
-    memset(measuredValues, FUEL_INIT_VALUE, sizeof(measuredValues));
-    measuedValuesIndex = 0;
-    lastResult = FUEL_INIT_VALUE;
+  memset(measuredValues, FUEL_INIT_VALUE, sizeof(measuredValues));
+  measuedValuesIndex = 0;
+  lastResult = FUEL_INIT_VALUE;
 
-    fuelMeasurementTime = FUEL_MEASUREMENT_TIME_START;
-    nextMeasurement = getSeconds() + fuelMeasurementTime;
-    measurements = 0;
+  fuelMeasurementTime = FUEL_MEASUREMENT_TIME_START;
+  nextMeasurement = getSeconds() + fuelMeasurementTime;
+  measurements = 0;
 
-    setDisplayDefaultFont();
-    emptyMessageWidth = textWidth(emptyMessage);
-    emptyMessageHeight = textHeight(emptyMessage);
+  TFT tft = returnTFTReference();
+
+  tft.setDisplayDefaultFont();
+  emptyMessageWidth = tft.textWidth(emptyMessage);
+  emptyMessageHeight = tft.textHeight(emptyMessage);
 }
 
 float readFuel(void) {
@@ -171,7 +173,7 @@ void showFuelAmount(int currentVal, int maxVal) {
 
     x = f_getBaseX();
 
-    drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
+    tft.drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
 
     y = f_getGaugePos();
 
@@ -184,7 +186,7 @@ void showFuelAmount(int currentVal, int maxVal) {
     tft.defaultFontWithPosAndColor(x, y, COLOR(RED));
     tft.println(empty);
 
-    tw = textWidth(half);
+    tw = tft.textWidth(half);
     x = f_getBaseX();
     x += ((width - tw) / 2);
 
@@ -193,7 +195,7 @@ void showFuelAmount(int currentVal, int maxVal) {
     tft.println(half);
 
     x = f_getBaseX() + width;
-    tw = textWidth(full);
+    tw = tft.textWidth(full);
     x -= tw;
 
     tft.setCursor(x, y);
