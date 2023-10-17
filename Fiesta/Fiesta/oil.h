@@ -6,7 +6,7 @@
 #include "start.h"
 #include "sensors.h"
 #include "tests.h"
-#include "graphics.h"
+#include "TFTExtension.h"
 
 void redrawOilPressure(void);
 void showOilPressureAmount(float current);

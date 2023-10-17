@@ -6,6 +6,7 @@ SimpleGauge intake_g = SimpleGauge(SIMPLE_G_INTAKE);
 SimpleGauge rpm_g = SimpleGauge(SIMPLE_G_RPM);
 SimpleGauge gps_g = SimpleGauge(SIMPLE_G_GPS);
 SimpleGauge egt_g = SimpleGauge(SIMPLE_G_EGT);
+SimpleGauge volts_g = SimpleGauge(SIMPLE_G_VOLTS);
 
 void redrawSimpleGauges(void) {
   engineLoad_g.redraw();
@@ -13,6 +14,7 @@ void redrawSimpleGauges(void) {
   rpm_g.redraw();
   gps_g.redraw();
   egt_g.redraw();
+  volts_g.redraw();
 }
 
 void showEngineLoadGauge(void) {
@@ -26,6 +28,7 @@ void showGPSGauge(void) {
 void showSimpleGauges(void) {
   intake_g.showSimpleGauge();
   rpm_g.showSimpleGauge();
+  volts_g.showSimpleGauge();
 }
 
 void showEGTGauge(void) {
@@ -47,6 +50,7 @@ SimpleGauge::SimpleGauge(int mode) {
   drawOnce = true;
   lastShowedVal = C_INIT_VAL;
   resetCurrentEGTMode();
+  lastV1 = lastV2 = C_INIT_VAL;
 }
 
 int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
@@ -111,6 +115,8 @@ int SimpleGauge::getBaseX(void) {
       return (SMALL_ICONS_WIDTH * 3);
     case SIMPLE_G_ENGINE_LOAD:
       return (SMALL_ICONS_WIDTH * 4);
+    case SIMPLE_G_VOLTS:
+      return 223;
   }
   return -1;
 }
@@ -123,6 +129,8 @@ int SimpleGauge::getBaseY(void) {
     case SIMPLE_G_INTAKE:
     case SIMPLE_G_ENGINE_LOAD:
       return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2);
+    case SIMPLE_G_VOLTS:
+      return 185;
   }
   return -1;
 }
@@ -143,11 +151,35 @@ void SimpleGauge::resetCurrentEGTMode(void) {
 void SimpleGauge::showSimpleGauge(void) {
 
   TFT *tft = returnTFTReference();
+  unsigned short *tempImg = NULL;
   bool draw = false;
+  int x, y;
 
+  float volts = valueFields[F_VOLTS];
+  int v1, v2;
+
+  switch(mode) {
+    case SIMPLE_G_VOLTS:
+      floatToDec(volts, &v1, &v2);
+      if(v1 != lastV1 || v2 != lastV2) {
+        lastV1 = v1;
+        lastV2 = v2;
+
+        if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
+          tempImg = (unsigned short *)batteryNotOKIcon;
+        } else {
+          tempImg = (unsigned short *)batteryOKIcon;
+        }
+
+        drawOnce = true;
+        draw = true;
+      }
+      break;
+  }
+
+  int w = SMALL_ICONS_WIDTH;
+  int h = SMALL_ICONS_HEIGHT;
   if(drawOnce) {
-    unsigned short *tempImg = NULL;
-
     switch(mode) {
       case SIMPLE_G_ENGINE_LOAD:
         tempImg = (unsigned short*)pump;
@@ -167,8 +199,13 @@ void SimpleGauge::showSimpleGauge(void) {
           tempImg = (unsigned short*)dpf;
         }
         break;
+      case SIMPLE_G_VOLTS:
+        w = BATTERY_WIDTH;
+        h = BATTERY_HEIGHT;
+        break;
     }
-    tft->drawImage(getBaseX(), getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+
+    tft->drawImage(getBaseX(), getBaseY(), w, h, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
     draw = true;
   }
@@ -238,7 +275,6 @@ void SimpleGauge::showSimpleGauge(void) {
 
   switch(mode) {
     case SIMPLE_G_GPS: {
-      int x, y;
 
       if(isGPSAvailable()) {
         color = COLOR(GREEN);
@@ -304,6 +340,25 @@ void SimpleGauge::showSimpleGauge(void) {
 
         drawTextForMiddleIcons(getBaseX(), getBaseY(), 2, 
                               color, txtMode, format, currentVal);
+      }
+    }
+    break;
+
+    case SIMPLE_G_VOLTS: {
+      if(draw) {
+        x = getBaseX() + BATTERY_WIDTH + 2;
+        y = getBaseY() + 26;
+
+        tft->fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
+
+        color = TEXT_COLOR;
+        if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
+            color = COLOR(RED);
+        }
+
+        tft->prepareText((const char*)F("%d.%dv"), v1, v2);
+        tft->sansBoldWithPosAndColor(x, y, color);
+        tft->printlnFromPreparedText();
       }
     }
     break;

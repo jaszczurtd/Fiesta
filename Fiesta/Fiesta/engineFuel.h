@@ -5,9 +5,9 @@
 
 #include "config.h"
 #include "start.h"
-#include "graphics.h"
 #include "sensors.h"
 #include "tests.h"
+#include "TFTExtension.h"
 
 //fuel value read without average calculation
 //#define JUST_RAW_FUEL_VAL

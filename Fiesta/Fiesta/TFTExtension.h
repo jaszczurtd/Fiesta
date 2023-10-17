@@ -67,6 +67,4 @@ TFT *returnTFTReference(void);
 bool softInitDisplay(void *arg);
 void redrawAllGauges(void);
 
-#include "graphics.h"
-
 #endif

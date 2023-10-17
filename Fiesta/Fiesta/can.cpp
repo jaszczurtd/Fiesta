@@ -61,7 +61,7 @@ void canInit(int retries) {
     pinMode(CAN0_INT, INPUT); 
     attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
   } else {
-    tft->fillScreen(COLOR(BLACK));
+    tft->fillScreen(ICONS_BG_COLOR);
     derr("CAN BUS Shield init problem. CAN communication would not be possible.");
   }
 }

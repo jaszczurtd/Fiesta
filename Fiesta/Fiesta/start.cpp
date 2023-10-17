@@ -156,6 +156,9 @@ void initialization(void) {
   scanNetworks(WIFI_SSID);
   #endif
 
+  initHeatedWindow();
+  initFuelMeasurement();
+  
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
@@ -188,7 +191,6 @@ void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showSimpleGauges();
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showVolts(valueFields[F_VOLTS]);
   #endif
 }
 

@@ -25,14 +25,11 @@ bool softInitDisplay(void *arg) {
 }
 
 void redrawAllGauges(void) {
-  initHeatedWindow();
-  initFuelMeasurement();
   redrawFuel();
   redrawTempGauges();
   redrawOilPressure();
   redrawPressure();
   redrawSimpleGauges();
-  redrawVolts();
 }
 
 TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) { }
