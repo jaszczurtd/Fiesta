@@ -1,11 +1,6 @@
 
 #include "TFTExtension.h"
 
-TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
-TFT returnTFTReference(void) {
-  return tft;
-}
-
 TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) { }
 
 //unfortunately cannot reuse initcmd from Adafruit_ILI9341 directly

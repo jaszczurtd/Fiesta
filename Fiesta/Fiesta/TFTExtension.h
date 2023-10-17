@@ -5,7 +5,6 @@
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSerif9pt7b.h>
 #include "hardwareConfig.h"
-#include "graphics.h"
 
 #define DISPLAY_SOFTINIT_TIME 1500
 
@@ -51,6 +50,6 @@ private:
   char displayTxt[32];
 };
 
-TFT returnTFTReference(void);
+#include "graphics.h"
 
 #endif

@@ -23,8 +23,10 @@
 
 extern const char *err;
 
+TFT returnTFTReference(void);
 bool softInitDisplay(void *arg);
 void initGraphics(void);
+
 void redrawAll(void);
 void showLogo(void);
 
