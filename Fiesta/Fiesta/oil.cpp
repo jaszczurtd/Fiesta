@@ -23,10 +23,10 @@ static int lastHI = C_INIT_VAL;
 static int lastLO = C_INIT_VAL;
 
 void showOilPressureAmount(float current) {
-  TFT tft = returnTFTReference();
+  TFT *tft = returnTFTReference();
   
   if(op_drawOnce) {
-    tft.drawImage(op_getBaseX(), op_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)oilPressure);
+    tft->drawImage(op_getBaseX(), op_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)oilPressure);
     op_drawOnce = false;
   } else {
     int hi, lo;
@@ -36,7 +36,7 @@ void showOilPressureAmount(float current) {
     if(hi != lastHI || lo != lastLO) {
       lastHI = hi;
       lastLO = lo;
-      tft.drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+      tft->drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
     }
   }
 }

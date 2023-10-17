@@ -43,6 +43,7 @@ void initialization(void) {
   Serial.begin(9600);
  
   initTests();
+  initTFT();
 
   //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
@@ -58,8 +59,6 @@ void initialization(void) {
     statusVariable0 = statusVariable1 = 0;
     initGPSDateAndTime();
   }
-
-  initGraphics();
 
   initI2C();
 
@@ -137,8 +136,8 @@ void initialization(void) {
     sec = getSeconds();
   }
 
-  TFT tft = returnTFTReference();
-  tft.fillScreen(ICONS_BG_COLOR);
+  TFT *tft = returnTFTReference();
+  tft->fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);

@@ -51,16 +51,16 @@ SimpleGauge::SimpleGauge(int mode) {
 
 int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
 
-  TFT tft = returnTFTReference();
+  TFT *tft = returnTFTReference();
 
   int w1 = 0, kmoffset = 0;
   const char *km = ((const char*)F("km/h"));
   if(mode == MODE_M_KILOMETERS) {
-    tft.setDisplayDefaultFont();
-    w1 = tft.textWidth(km);
+    tft->setDisplayDefaultFont();
+    w1 = tft->textWidth(km);
     kmoffset = 5;
   }
-  tft.serif9ptWithColor(color);
+  tft->serif9ptWithColor(color);
 
   memset(displayTxt, 0, sizeof(displayTxt));
 
@@ -69,33 +69,33 @@ int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int
   vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
   va_end(valist);
 
-  int w = tft.textWidth((const char*)displayTxt);
+  int w = tft->textWidth((const char*)displayTxt);
 
   int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
   int y1 = y + 59;
   
-  tft.fillRect(x + offset, 
+  tft->fillRect(x + offset, 
               y1 - 14, SMALL_ICONS_WIDTH - (offset * 2), 
               16, 
               ICONS_BG_COLOR);
-  tft.setCursor(x1, y1);
-  tft.println(displayTxt);
+  tft->setCursor(x1, y1);
+  tft->println(displayTxt);
 
   switch(mode) {
     default:
     case MODE_M_NORMAL:
       break;
     case MODE_M_TEMP:
-      tft.drawCircle(x1 + w + 6, y1 - 10, 3, color);
+      tft->drawCircle(x1 + w + 6, y1 - 10, 3, color);
       break;
     case MODE_M_KILOMETERS:
-      tft.setDisplayDefaultFont();
-      tft.setCursor(x1 + w + kmoffset, y1 - 6);
-      tft.println(km);
+      tft->setDisplayDefaultFont();
+      tft->setCursor(x1 + w + kmoffset, y1 - 6);
+      tft->println(km);
       return w;
   }
 
-  tft.setDisplayDefaultFont();
+  tft->setDisplayDefaultFont();
   return w;
 }
 
@@ -142,7 +142,7 @@ void SimpleGauge::resetCurrentEGTMode(void) {
 
 void SimpleGauge::showSimpleGauge(void) {
 
-  TFT tft = returnTFTReference();
+  TFT *tft = returnTFTReference();
   bool draw = false;
 
   if(drawOnce) {
@@ -168,7 +168,7 @@ void SimpleGauge::showSimpleGauge(void) {
         }
         break;
     }
-    tft.drawImage(getBaseX(), getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+    tft->drawImage(getBaseX(), getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
     draw = true;
   }
@@ -252,7 +252,7 @@ void SimpleGauge::showSimpleGauge(void) {
       x = getBaseX() + SMALL_ICONS_WIDTH - posOffset - radius;
       y = getBaseY() + posOffset - 1;
 
-      tft.fillCircle(x, y, radius, color);
+      tft->fillCircle(x, y, radius, color);
 
     }
     break;

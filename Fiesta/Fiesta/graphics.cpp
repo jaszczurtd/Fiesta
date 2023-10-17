@@ -1,37 +1,37 @@
 
 #include "graphics.h"
 
-TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
-TFT returnTFTReference(void) {
+TFT *tft;
+void initTFT(void) {
+  tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
+  tft->begin();
+  tft->setRotation(1);
+}
+
+TFT *returnTFTReference(void) {
+  if(tft == NULL) {
+    initTFT();
+  }
   return tft;
 }
 
-static bool gfxInitialized = false;
-
 bool softInitDisplay(void *arg) {
-  if(gfxInitialized) {
-    tft.softInit(75);
-    tft.setRotation(1);
-  }
+  TFT *tft = returnTFTReference();
+  tft->softInit(75);
+  tft->setRotation(1);
 
   return true;
-}
-
-void initGraphics(void) {
-  tft.begin();
-  tft.setRotation(1);
-  gfxInitialized = true;
 }
 
 void showLogo(void) {
   #ifndef DEBUG_SCREEN
   
-  TFT tft = returnTFTReference();
-  tft.fillScreen(COLOR(WHITE));
+  TFT *tft = returnTFTReference();
+  tft->fillScreen(COLOR(WHITE));
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  tft.drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
+  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
 
   #endif
 }
@@ -70,7 +70,7 @@ static const unsigned short *lastImg = NULL;
 
 void showVolts(float volts) {
 
-  TFT tft = returnTFTReference();
+  TFT *tft = returnTFTReference();
   const unsigned short *img = NULL;
   int v1, v2;
 
@@ -94,7 +94,7 @@ void showVolts(float volts) {
   }
 
   if(v_drawOnce) {
-    tft.drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
+    tft->drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
     v_drawOnce = false;
   }
 
@@ -102,16 +102,16 @@ void showVolts(float volts) {
     int x = v_getBaseX() + BATTERY_WIDTH + 2;
     int y = v_getBaseY() + 26;
 
-    tft.fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
+    tft->fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
 
     int color = TEXT_COLOR;
     if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
         color = COLOR(RED);
     }
 
-    tft.prepareText((const char*)F("%d.%dv"), v1, v2);
-    tft.sansBoldWithPosAndColor(x, y, color);
-    tft.printlnFromPreparedText();
+    tft->prepareText((const char*)F("%d.%dv"), v1, v2);
+    tft->sansBoldWithPosAndColor(x, y, color);
+    tft->printlnFromPreparedText();
 
     drawVolts = false;
   }
