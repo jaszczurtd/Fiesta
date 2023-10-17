@@ -1,10 +1,14 @@
 
 #include "graphics.h"
 
+TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
+TFT returnTFTReference(void) {
+  return tft;
+}
+
 static bool gfxInitialized = false;
 
 bool softInitDisplay(void *arg) {
-  TFT tft = returnTFTReference();
   if(gfxInitialized) {
     tft.softInit(75);
     tft.setRotation(1);
@@ -14,7 +18,6 @@ bool softInitDisplay(void *arg) {
 }
 
 void initGraphics(void) {
-  TFT tft = returnTFTReference();
   tft.begin();
   tft.setRotation(1);
   gfxInitialized = true;
