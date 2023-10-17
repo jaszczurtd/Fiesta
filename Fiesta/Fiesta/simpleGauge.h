@@ -18,6 +18,11 @@
 #define SIMPLE_G_GPS 4
 #define SIMPLE_G_EGT 5
 
+//text modes
+#define MODE_M_NORMAL 0
+#define MODE_M_TEMP 1
+#define MODE_M_KILOMETERS 2
+
 extern const char *err;
 
 class SimpleGauge {
