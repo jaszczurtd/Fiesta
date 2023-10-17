@@ -1,52 +1,6 @@
 
 #include "graphics.h"
 
-TFT *tft;
-void initTFT(void) {
-  tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
-  tft->begin();
-  tft->setRotation(1);
-}
-
-TFT *returnTFTReference(void) {
-  if(tft == NULL) {
-    initTFT();
-  }
-  return tft;
-}
-
-bool softInitDisplay(void *arg) {
-  TFT *tft = returnTFTReference();
-  tft->softInit(75);
-  tft->setRotation(1);
-
-  return true;
-}
-
-void showLogo(void) {
-  #ifndef DEBUG_SCREEN
-  
-  TFT *tft = returnTFTReference();
-  tft->fillScreen(COLOR(WHITE));
-
-  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
-  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-
-  #endif
-}
-
-void redrawAll(void) {
-  initHeatedWindow();
-  initFuelMeasurement();
-  redrawFuel();
-  redrawTempGauges();
-  redrawOilPressure();
-  redrawPressure();
-  redrawSimpleGauges();
-  redrawVolts();
-}
-
 //-------------------------------------------------------------------------------------------------
 //volt indicator
 //-------------------------------------------------------------------------------------------------

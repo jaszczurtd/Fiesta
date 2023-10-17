@@ -43,7 +43,7 @@ void initialization(void) {
   Serial.begin(9600);
  
   initTests();
-  initTFT();
+  TFT *tft = initTFT();
 
   //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
@@ -126,7 +126,14 @@ void initialization(void) {
   initGlowPlugsTime(coolant);
 
   watchdog_update();
-  showLogo();
+
+  #ifndef DEBUG_SCREEN
+  tft->fillScreen(COLOR(WHITE));
+  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
+  #endif
+
   watchdog_update();
 
   int sec = getSeconds();
@@ -134,9 +141,9 @@ void initialization(void) {
   while(sec < secDest) {
     glowPlugsMainLoop();
     sec = getSeconds();
+    watchdog_update();
   }
 
-  TFT *tft = returnTFTReference();
   tft->fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
@@ -152,7 +159,7 @@ void initialization(void) {
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
-  redrawAll();
+  redrawAllGauges();
   #endif
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
