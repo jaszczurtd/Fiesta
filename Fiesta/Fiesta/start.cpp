@@ -43,6 +43,7 @@ void initialization(void) {
   Serial.begin(9600);
  
   initTests();
+  TFT *tft = initTFT();
 
   //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
@@ -58,8 +59,6 @@ void initialization(void) {
     statusVariable0 = statusVariable1 = 0;
     initGPSDateAndTime();
   }
-
-  initGraphics();
 
   initI2C();
 
@@ -127,7 +126,14 @@ void initialization(void) {
   initGlowPlugsTime(coolant);
 
   watchdog_update();
-  showLogo();
+
+  #ifndef DEBUG_SCREEN
+  tft->fillScreen(COLOR(WHITE));
+  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
+  #endif
+
   watchdog_update();
 
   int sec = getSeconds();
@@ -135,10 +141,10 @@ void initialization(void) {
   while(sec < secDest) {
     glowPlugsMainLoop();
     sec = getSeconds();
+    watchdog_update();
   }
 
-  TFT tft = returnTFTReference();
-  tft.fillScreen(ICONS_BG_COLOR);
+  tft->fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -150,10 +156,13 @@ void initialization(void) {
   scanNetworks(WIFI_SSID);
   #endif
 
+  initHeatedWindow();
+  initFuelMeasurement();
+  
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
-  redrawAll();
+  redrawAllGauges();
   #endif
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
@@ -182,7 +191,6 @@ void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showSimpleGauges();
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showVolts(valueFields[F_VOLTS]);
   #endif
 }
 

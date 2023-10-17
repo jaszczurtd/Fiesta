@@ -9,7 +9,6 @@
 #include "TFTExtension.h"
 #include "config.h"
 #include "icons.h"
-#include "graphics.h"
 
 #define SIMPLE_G_NONE 0
 #define SIMPLE_G_ENGINE_LOAD 1
@@ -17,11 +16,15 @@
 #define SIMPLE_G_RPM 3
 #define SIMPLE_G_GPS 4
 #define SIMPLE_G_EGT 5
+#define SIMPLE_G_VOLTS 6
 
 //text modes
 #define MODE_M_NORMAL 0
 #define MODE_M_TEMP 1
 #define MODE_M_KILOMETERS 2
+
+#define VOLTS_OK_COLOR 0x4228
+#define VOLTS_LOW_ERROR_COLOR 0xA000
 
 extern const char *err;
 
@@ -41,6 +44,8 @@ private:
   bool drawOnce;
   int lastShowedVal;
   bool currentIsDPF;
+  int lastV1;
+  int lastV2;
   char displayTxt[16];
 };
 

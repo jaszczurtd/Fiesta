@@ -15,6 +15,8 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#define C_INIT_VAL 0xdeadbeef;
+
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 

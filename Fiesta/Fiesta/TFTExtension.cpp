@@ -1,6 +1,37 @@
 
 #include "TFTExtension.h"
 
+TFT *tft;
+TFT *initTFT(void) {
+  tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
+  tft->begin();
+  tft->setRotation(1);
+  return tft;
+}
+
+TFT *returnTFTReference(void) {
+  if(tft == NULL) {
+    tft = initTFT();
+  }
+  return tft;
+}
+
+bool softInitDisplay(void *arg) {
+  TFT *tft = returnTFTReference();
+  tft->softInit(75);
+  tft->setRotation(1);
+
+  return true;
+}
+
+void redrawAllGauges(void) {
+  redrawFuel();
+  redrawTempGauges();
+  redrawOilPressure();
+  redrawPressure();
+  redrawSimpleGauges();
+}
+
 TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) { }
 
 //unfortunately cannot reuse initcmd from Adafruit_ILI9341 directly
