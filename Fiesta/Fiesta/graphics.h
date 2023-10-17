@@ -2,9 +2,7 @@
 #define T_GFX
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
-
 #include "TFTExtension.h"
 #include "tempGauge.h"
 #include "simpleGauge.h"
@@ -22,13 +20,6 @@
 #define C_INIT_VAL 99999;
 
 extern const char *err;
-
-void initTFT(void);
-TFT *returnTFTReference(void);
-bool softInitDisplay(void *arg);
-
-void redrawAll(void);
-void showLogo(void);
 
 //indicators
 void redrawVolts(void);
