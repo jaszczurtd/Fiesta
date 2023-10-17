@@ -154,37 +154,3 @@ void stabilizeRPM(void) {
 bool isEngineRunning(void) {
   return (int(valueFields[F_RPM]) != 0);
 }
-
-//-------------------------------------------------------------------------------------------------
-//engine rpm
-//-------------------------------------------------------------------------------------------------
-
-static bool rpm_drawOnce = true; 
-void redrawRPM(void) {
-    rpm_drawOnce = true;
-}
-
-const int rpm_getBaseX(void) {
-    return SMALL_ICONS_WIDTH;
-}
-
-const int rpm_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static int lastRPMAmount = C_INIT_VAL;
-void showRPMamount(int currentVal) {
-
-    if(rpm_drawOnce) {
-        drawImage(rpm_getBaseX(), rpm_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)rpm);
-        rpm_drawOnce = false;
-    } else {
-        if(lastRPMAmount != currentVal) {
-            lastRPMAmount = currentVal;
-
-            drawTextForMiddleIcons(rpm_getBaseX(), rpm_getBaseY(), 5, 
-                                   TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d"), currentVal);
-        }
-    }
-}
-

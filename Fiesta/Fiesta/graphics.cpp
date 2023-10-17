@@ -23,14 +23,10 @@ void initGraphics(void) {
   gfxInitialized = true;
 }
 
-void fillScreenWithColor(int c) {
-  tft.fillScreen(c);
-}
-
 void showLogo(void) {
   #ifndef DEBUG_SCREEN
 
-  fillScreenWithColor(COLOR(WHITE));
+  tft.fillScreen(COLOR(WHITE));
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
@@ -46,33 +42,8 @@ void redrawAll(void) {
   redrawTempGauges();
   redrawOilPressure();
   redrawPressure();
-  redrawIntercooler();
-  redrawEngineLoad();
-  redrawRPM();
-  redrawEGT();
+  redrawSimpleGauges();
   redrawVolts();
-  redrawGPS();
-}
-
-int currentValToHeight(int currentVal, int maxVal) {
-  float percent = (float)(currentVal * 100) / (float)maxVal;
-  return percentToGivenVal(percent, TEMP_BAR_MAXHEIGHT);
-}
-
-void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer) {
-  tft.drawImage(x, y, width, height, background, pointer);
-}
-
-int textWidth(const char* text) {
-  return tft.textWidth(text);
-}
-
-int textHeight(const char* text) {
-  return tft.textHeight(text);
-}
-
-void setDisplayDefaultFont(void) {
-  tft.setDisplayDefaultFont();
 }
 
 static char displayTxt[32];
@@ -90,54 +61,6 @@ int prepareText(const char *format, ...) {
     va_end(valist);
 
     return tft.textWidth((const char*)displayTxt);
-}
-
-int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
-
-  int w1 = 0, kmoffset = 0;
-  const char *km = ((const char*)F("km/h"));
-  if(mode == MODE_M_KILOMETERS) {
-    tft.setDisplayDefaultFont();
-    w1 = textWidth(km);
-    kmoffset = 5;
-  }
-  tft.serif9ptWithColor(color);
-
-  memset(displayTxt, 0, sizeof(displayTxt));
-
-  va_list valist;
-  va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-  va_end(valist);
-
-  int w = textWidth((const char*)displayTxt);
-
-  int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
-  int y1 = y + 59;
-  
-  tft.fillRect(x + offset, 
-              y1 - 14, SMALL_ICONS_WIDTH - (offset * 2), 
-              16, 
-              ICONS_BG_COLOR);
-  tft.setCursor(x1, y1);
-  tft.println(getPreparedText());
-
-  switch(mode) {
-    default:
-    case MODE_M_NORMAL:
-      break;
-    case MODE_M_TEMP:
-      tft.drawCircle(x1 + w + 6, y1 - 10, 3, color);
-      break;
-    case MODE_M_KILOMETERS:
-      tft.setDisplayDefaultFont();
-      tft.setCursor(x1 + w + kmoffset, y1 - 6);
-      tft.println(km);
-      return w;
-  }
-
-  tft.setDisplayDefaultFont();
-  return w;
 }
 
 void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
@@ -164,229 +87,6 @@ void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   y1 = y + BAR_TEXT_Y - 6;
   tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
   tft.println(F("BAR"));
-}
-
-void displayErrorWithMessage(int x, int y, const char *msg) {
-    int workingx = x; 
-    int workingy = y;
-
-    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
-    workingx += 20;
-    tft.fillCircle(workingx, workingy, 10, COLOR(RED));
-
-    workingy += 5;
-    workingx = x + 4;
-
-    tft.fillRoundRect(workingx, workingy, 15, 40, 6, COLOR(RED));
-    workingy +=30;
-    tft.drawLine(workingx, workingy, workingx + 14, workingy, COLOR(BLACK));
-
-    workingx +=6;
-    workingy +=4;
-    tft.drawLine(workingx, workingy, workingx, workingy + 5, COLOR(BLACK));
-    tft.drawLine(workingx + 1, workingy, workingx + 1, workingy + 5, COLOR(BLACK));
-
-    workingx = x -16;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
-
-    workingy = y - 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y - 2, COLOR(BLACK));
-
-    workingy = y + 8;
-    tft.drawLine(workingx, workingy, workingx + 15, y + 2, COLOR(BLACK));
-
-    workingx = x + 23;
-    workingy = y;
-    tft.drawLine(workingx, workingy, workingx + 15, workingy, COLOR(BLACK));
-  
-    workingy = y - 3;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y - 8, COLOR(BLACK));
-
-    workingy = y + 1;
-    tft.drawLine(workingx, workingy + 1, workingx + 15, y + 8, COLOR(BLACK));
-
-    tft.defaultFontWithPosAndColor(x + 8, y + 46, COLOR(BLUE));
-    tft.println(msg);
-}
-
-
-//-------------------------------------------------------------------------------------------------
-//engine load indicator
-//-------------------------------------------------------------------------------------------------
-
-static bool e_drawOnce = true; 
-void redrawEngineLoad(void) {
-    e_drawOnce = true;
-}
-
-const int e_getBaseX(void) {
-    return (SMALL_ICONS_WIDTH * 4);
-}
-
-const int e_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static int lastLoadAmount = C_INIT_VAL;
-
-void showEngineLoadAmount(void) {
-
-  int value = getThrottlePercentage();
-
-  if(e_drawOnce) {
-    drawImage(e_getBaseX(), e_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pump);
-    e_drawOnce = false;
-  } else {
-    if(lastLoadAmount != value) {
-      lastLoadAmount = value;
-      drawTextForMiddleIcons(e_getBaseX(), e_getBaseY(), 5, 
-                             TEXT_COLOR, MODE_M_NORMAL, (const char*)F("%d%%"), value);
-    }
-  }
-}
-
-//-------------------------------------------------------------------------------------------------
-//engine EGT
-//-------------------------------------------------------------------------------------------------
-
-static bool egt_drawOnce = true; 
-void redrawEGT(void) {
-    egt_drawOnce = true;
-}
-
-const int egt_getBaseX(void) {
-    return (2 * SMALL_ICONS_WIDTH);
-}
-
-const int egt_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static bool currentIsDPF = false;
-bool changeEGT(void *argument) {
-  if(isDPFConnected()) {
-    currentIsDPF = !currentIsDPF;
-    egt_drawOnce = true;
-  } else {
-    currentIsDPF = false;
-  }
-
-  return true;
-}
-
-static int lastEGTTempVal = C_INIT_VAL;
-
-void showEGTTemperatureAmount(void) {
-
-  bool draw = false;
-
-  int currentVal = (int)valueFields[F_EGT];
-  if(currentIsDPF) {
-    currentVal = (int)valueFields[F_DPF_TEMP];
-  }  
-
-  if(egt_drawOnce) {
-    unsigned short *img = (unsigned short*)egt;
-    if(currentIsDPF) {
-      img = (unsigned short*)dpf;
-    }      
-    drawImage(egt_getBaseX(), egt_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, img);
-    egt_drawOnce = false;
-    draw = true;
-  } 
-  int color = TEXT_COLOR;
-
-  if(currentVal < TEMP_EGT_MIN) {
-    currentVal = TEMP_EGT_MIN - 1;
-  }
-
-  if(lastEGTTempVal != currentVal) {
-    lastEGTTempVal = currentVal;
-    draw = true;
-  }
-
-  bool overheat = false;
-  if(currentVal > TEMP_EGT_OK_HI) {
-    overheat = true;
-  }
-
-  if(overheat) {
-    draw = true;
-    color = (seriousAlertSwitch()) ? COLOR(RED) : TEXT_COLOR;
-  }
-
-  if(draw) {
-    char *format = NULL;
-
-    if(currentVal < TEMP_EGT_MIN) {
-      format = ((char*)F("COLD"));
-    } else if(currentVal > TEMP_EGT_MAX) {
-      format = ((char*)err);  
-    } else {
-      format = (char*)F("%d");
-      if(currentIsDPF) {
-        if(isDPFRegenerating()) {
-          format = (char*)F("R/%d");          
-        }
-      } 
-    }
-
-    bool isTemp = (currentVal > TEMP_EGT_MIN && currentVal < TEMP_EGT_MAX);
-    int mode = MODE_M_NORMAL;
-    if(isTemp) {
-      mode = MODE_M_TEMP;
-    }
-
-    drawTextForMiddleIcons(egt_getBaseX(), egt_getBaseY(), 2, 
-                          color, mode, format, currentVal);
-  }
-}
-
-//-------------------------------------------------------------------------------------------------
-//intercooler - intake temp
-//-------------------------------------------------------------------------------------------------
-
-static bool ic_drawOnce = true; 
-void redrawIntercooler(void) {
-    ic_drawOnce = true;
-}
-
-const int ic_getBaseX(void) {
-    return (3 * SMALL_ICONS_WIDTH);
-}
-
-const int ic_getBaseY(void) {
-    return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2); 
-}
-
-static int lastICTempVal = C_INIT_VAL;
-
-void showICTemperatureAmount(int currentVal) {
-
-    if(ic_drawOnce) {
-        drawImage(ic_getBaseX(), ic_getBaseY(), SMALL_ICONS_WIDTH, SMALL_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)ic);
-        ic_drawOnce = false;
-    } else {
-        if(lastICTempVal != currentVal) {
-            lastICTempVal = currentVal;
-
-            int color = TEXT_COLOR;
-            char *format = NULL;
-            bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
-
-            if(error) {
-                color = COLOR(RED);
-                format = (char*)err;
-            } else {
-                format = ((char*)F("%d"));
-            }
-
-            int mode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
-            drawTextForMiddleIcons(ic_getBaseX(), ic_getBaseY(), 5, 
-                                   color, mode, format, currentVal);
-        }
-    }
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -435,7 +135,7 @@ void showVolts(float volts) {
   }
 
   if(v_drawOnce) {
-    drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
+    tft.drawImage(v_getBaseX(), v_getBaseY(), BATTERY_WIDTH, BATTERY_HEIGHT, ICONS_BG_COLOR, (unsigned short*)img);
     v_drawOnce = false;
   }
 
