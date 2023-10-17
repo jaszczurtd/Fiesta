@@ -68,6 +68,52 @@ int TFTExtension::textHeight(const char* text) {
   return h;
 }
 
+const char *TFTExtension::getPreparedText(void) {
+  return displayTxt;
+}
+
+void TFTExtension::printlnFromPreparedText(void) {
+  println(getPreparedText());
+}
+
+int TFTExtension::prepareText(const char *format, ...) {
+
+    va_list valist;
+    va_start(valist, format);
+
+    memset(displayTxt, 0, sizeof(displayTxt));
+    vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+    va_end(valist);
+
+    return textWidth((const char*)displayTxt);
+}
+
+void TFTExtension::drawTextForPressureIndicators(int x, int y, const char *format, ...) {
+
+  memset(displayTxt, 0, sizeof(displayTxt));
+
+  va_list valist;
+  va_start(valist, format);
+  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  va_end(valist);
+
+  int x1 = x + BAR_TEXT_X;
+  int y1 = y + BAR_TEXT_Y - 12;
+
+  fillRect(x1, y1, 28, 15, ICONS_BG_COLOR);
+
+  x1 = x + BAR_TEXT_X;
+  y1 = y + BAR_TEXT_Y;
+
+  sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
+  printlnFromPreparedText();
+
+  x1 = x + BAR_TEXT_X + 25;
+  y1 = y + BAR_TEXT_Y - 6;
+  defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
+  println(F("BAR"));
+}
+
 void TFTExtension::setDisplayDefaultFont(void) {
   setFont();
   setTextSize(1);

@@ -63,8 +63,8 @@ void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
       tft.println(err);
       return;
   } else {
-      prepareText((const char*)F("%d"), valToDisplay);
-      tft.println(getPreparedText());
+      tft.prepareText((const char*)F("%d"), valToDisplay);
+      tft.printlnFromPreparedText();
   }
   tft.setDisplayDefaultFont();
 }

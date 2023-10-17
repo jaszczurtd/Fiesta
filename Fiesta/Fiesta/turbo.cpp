@@ -153,7 +153,7 @@ void showPressureAmount(float current) {
         if(hi != lastHI || lo != lastLO) {
             lastHI = hi;
             lastLO = lo;
-            drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+            tft.drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
         }
 
         if(current > TURBO_MIN_PRESSURE_FOR_SPINNING) {
@@ -199,10 +199,9 @@ void showPressurePercentage(void) {
 
     tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
     
-    int w = prepareText((const char*)F("turbo:%d%%"), val);
+    int w = tft.prepareText((const char*)F("turbo:%d%%"), val);
 
     tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
-
-    tft.println(getPreparedText());
+    tft.printlnFromPreparedText();
   }
 }

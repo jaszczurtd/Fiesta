@@ -36,7 +36,7 @@ void showOilPressureAmount(float current) {
     if(hi != lastHI || lo != lastLO) {
       lastHI = hi;
       lastLO = lo;
-      drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+      tft.drawTextForPressureIndicators(op_getBaseX(), op_getBaseY(), (const char*)F("%d.%d"), hi, lo);
     }
   }
 }
