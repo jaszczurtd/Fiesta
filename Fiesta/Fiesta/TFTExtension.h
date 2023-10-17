@@ -1,10 +1,22 @@
 #ifndef T_TFT_EXTENSION
 #define T_TFT_EXTENSION
 
+#include <Arduino.h>
+#include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ILI9341.h>
 #include <Fonts/FreeSansBold9pt7b.h>
 #include <Fonts/FreeSerif9pt7b.h>
+#include <tools.h>
 #include "hardwareConfig.h"
+#include "tempGauge.h"
+#include "simpleGauge.h"
+#include "start.h"
+#include "config.h"
+#include "engineFuel.h"
+#include "can.h"
+#include "sensors.h"
+#include "tests.h"
+#include "icons.h"
 
 #define DISPLAY_SOFTINIT_TIME 1500
 
@@ -50,6 +62,9 @@ private:
   char displayTxt[32];
 };
 
-#include "graphics.h"
+TFT *initTFT(void);
+TFT *returnTFTReference(void);
+bool softInitDisplay(void *arg);
+void redrawAllGauges(void);
 
 #endif

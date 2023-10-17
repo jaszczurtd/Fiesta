@@ -138,10 +138,10 @@ static unsigned short *lastTurboImg = NULL;
 void showPressureAmount(float current) {
 
     int x, y;
-    TFT tft = returnTFTReference();
+    TFT *tft = returnTFTReference();
 
     if(p_drawOnce) {
-        tft.drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
+        tft->drawImage(p_getBaseX(), p_getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, (unsigned short*)pressure);
         x = p_getBaseX() + BIG_ICONS_WIDTH;
         p_drawOnce = false;
     } else {
@@ -153,7 +153,7 @@ void showPressureAmount(float current) {
         if(hi != lastHI || lo != lastLO) {
             lastHI = hi;
             lastLO = lo;
-            tft.drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
+            tft->drawTextForPressureIndicators(p_getBaseX(), p_getBaseY(), (const char*)F("%d.%d"), hi, lo);
         }
 
         if(current > TURBO_MIN_PRESSURE_FOR_SPINNING) {
@@ -175,7 +175,7 @@ void showPressureAmount(float current) {
             x = p_getBaseX() + PRESSURE_ICON_X;
             y = p_getBaseY() + PRESSURE_ICON_Y;
 
-            tft.drawRGBBitmap(x, y, img, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT);
+            tft->drawRGBBitmap(x, y, img, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT);
           }
         }
     }
@@ -192,16 +192,16 @@ void showPressurePercentage(void) {
 
     int x = p_getBaseX();
     int y = p_getBaseY();
-    TFT tft = returnTFTReference();
+    TFT *tft = returnTFTReference();
 
     x += TURPO_PERCENT_TEXT_POS_X;
     y += TURPO_PERCENT_TEXT_POS_Y;
 
-    tft.defaultFontWithPosAndColor(x, y, TEXT_COLOR);
+    tft->defaultFontWithPosAndColor(x, y, TEXT_COLOR);
     
-    int w = tft.prepareText((const char*)F("turbo:%d%%"), val);
+    int w = tft->prepareText((const char*)F("turbo:%d%%"), val);
 
-    tft.fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
-    tft.printlnFromPreparedText();
+    tft->fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
+    tft->printlnFromPreparedText();
   }
 }

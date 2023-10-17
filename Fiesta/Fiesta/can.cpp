@@ -27,6 +27,7 @@ void canInit(int retries) {
   dpfConnected = false;
   dpfMessages = lastDPFMessages = 0;
 
+  TFT *tft = returnTFTReference();
   for(int a = 0; a < retries; a++) {
     initialized = (CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
     if(initialized) {
@@ -35,22 +36,18 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    TFT tft = returnTFTReference();
-    tft.setDisplayDefaultFont();
-    tft.fillScreen(COLOR(BLACK));
+    tft->setDisplayDefaultFont();
+    tft->fillScreen(COLOR(BLACK));
 
     int x = 10;
     int y = 10;
-    tft.setCursor(x, y);
-    tft.println(F("CAN module init fail"));
+    tft->setCursor(x, y);
+    tft->println(F("CAN module init fail"));
     y += 10;
-    tft.setCursor(x, y);
+    tft->setCursor(x, y);
 
-    char displayTxt[32];
-
-    memset(displayTxt, 0, sizeof(displayTxt));
-    snprintf(displayTxt, sizeof(displayTxt) - 1, (const char*)F("Connection attempt: %d"), at++);
-    tft.println(displayTxt);
+    tft->prepareText((const char*)F("Connection attempt: %d"), at++);
+    tft->printlnFromPreparedText();
 
     delay(SECOND);
     watchdog_update();
@@ -64,6 +61,7 @@ void canInit(int retries) {
     pinMode(CAN0_INT, INPUT); 
     attachInterrupt(digitalPinToInterrupt(CAN0_INT), receivedCanMessage, FALLING);
   } else {
+    tft->fillScreen(ICONS_BG_COLOR);
     derr("CAN BUS Shield init problem. CAN communication would not be possible.");
   }
 }
