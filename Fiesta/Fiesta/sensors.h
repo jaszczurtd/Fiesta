@@ -34,7 +34,6 @@ float readAirTemperature(void);
 float readVolts(void);
 float readBarPressure(void);
 float readEGT(void);
-int getRAWThrottle(void);
 int getThrottlePercentage(void);
 int getPercentageEngineLoad(void);
 

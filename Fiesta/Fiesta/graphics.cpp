@@ -1,12 +1,12 @@
 
 #include "graphics.h"
 
-static bool gfxInitialized = false;
-
 TFT tft = TFT(TFT_CS, TFT_DC, TFT_RST);
 TFT returnTFTReference(void) {
   return tft;
 }
+
+static bool gfxInitialized = false;
 
 bool softInitDisplay(void *arg) {
   if(gfxInitialized) {
@@ -18,14 +18,15 @@ bool softInitDisplay(void *arg) {
 }
 
 void initGraphics(void) {
-  initDisplay();
+  tft.begin();
   tft.setRotation(1);
   gfxInitialized = true;
 }
 
 void showLogo(void) {
   #ifndef DEBUG_SCREEN
-
+  
+  TFT tft = returnTFTReference();
   tft.fillScreen(COLOR(WHITE));
 
   int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
@@ -44,49 +45,6 @@ void redrawAll(void) {
   redrawPressure();
   redrawSimpleGauges();
   redrawVolts();
-}
-
-static char displayTxt[32];
-const char *getPreparedText(void) {
-  return displayTxt;
-}
-
-int prepareText(const char *format, ...) {
-
-    va_list valist;
-    va_start(valist, format);
-
-    memset(displayTxt, 0, sizeof(displayTxt));
-    vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-    va_end(valist);
-
-    return tft.textWidth((const char*)displayTxt);
-}
-
-void drawTextForPressureIndicators(int x, int y, const char *format, ...) {
-
-  memset(displayTxt, 0, sizeof(displayTxt));
-
-  va_list valist;
-  va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-  va_end(valist);
-
-  int x1 = x + BAR_TEXT_X;
-  int y1 = y + BAR_TEXT_Y - 12;
-
-  tft.fillRect(x1, y1, 28, 15, ICONS_BG_COLOR);
-
-  x1 = x + BAR_TEXT_X;
-  y1 = y + BAR_TEXT_Y;
-
-  tft.sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
-  tft.println(getPreparedText());
-
-  x1 = x + BAR_TEXT_X + 25;
-  y1 = y + BAR_TEXT_Y - 6;
-  tft.defaultFontWithPosAndColor(x1, y1, TEXT_COLOR);
-  tft.println(F("BAR"));
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -112,6 +70,7 @@ static const unsigned short *lastImg = NULL;
 
 void showVolts(float volts) {
 
+  TFT tft = returnTFTReference();
   const unsigned short *img = NULL;
   int v1, v2;
 
@@ -150,9 +109,9 @@ void showVolts(float volts) {
         color = COLOR(RED);
     }
 
-    prepareText((const char*)F("%d.%dv"), v1, v2);
+    tft.prepareText((const char*)F("%d.%dv"), v1, v2);
     tft.sansBoldWithPosAndColor(x, y, color);
-    tft.println(getPreparedText());
+    tft.printlnFromPreparedText();
 
     drawVolts = false;
   }
