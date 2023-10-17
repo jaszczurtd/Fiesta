@@ -7,6 +7,7 @@
 
 #include "TFTExtension.h"
 #include "tempGauge.h"
+#include "simpleGauge.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
@@ -53,30 +54,13 @@ bool softInitDisplay(void *arg);
 void initGraphics(void);
 void redrawAll(void);
 void showLogo(void);
-void fillScreenWithColor(int c);
-void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
-int textWidth(const char* text);
-int textHeight(const char* text);
-void setDisplayDefaultFont(void);
-int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
-void displayErrorWithMessage(int x, int y, const char *msg);
-int currentValToHeight(int currentVal, int maxVal);
 int prepareText(const char *format, ...);
 const char *getPreparedText(void);
 
 //indicators
-void redrawIntercooler(void);
-void showICTemperatureAmount(int currentVal);
-void redrawEngineLoad(void);
-void showEngineLoadAmount(void);
-void redrawEGT(void);
-void showEGTTemperatureAmount(void);
 void redrawVolts(void);
 void showVolts(float volts);
-
-bool changeEGT(void *argument);
-
 
 #endif
  

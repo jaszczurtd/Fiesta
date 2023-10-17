@@ -137,7 +137,8 @@ void initialization(void) {
     sec = getSeconds();
   }
 
-  fillScreenWithColor(ICONS_BG_COLOR);
+  TFT tft = returnTFTReference();
+  tft.fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -179,23 +180,22 @@ void initialization(void) {
 
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
+  showSimpleGauges();
   showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  showICTemperatureAmount((int)valueFields[F_INTAKE_TEMP]);
   showVolts(valueFields[F_VOLTS]);
-  showRPMamount((int)valueFields[F_RPM]);
   #endif
 }
 
 void drawHighImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showEngineLoadAmount();
+  showEngineLoadGauge();
   #endif
 }
 
 void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showTempGauges();
-  showEGTTemperatureAmount();
+  showEGTGauge();
   #endif
 }
 
@@ -203,7 +203,7 @@ void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showPressureAmount(valueFields[F_PRESSURE]);
   showOilPressureAmount(valueFields[F_OIL_PRESSURE]);
-  showGPSStatus();
+  showGPSGauge();
   #endif
 }
 
