@@ -112,5 +112,8 @@
 #define VOLTS_MIN_VAL 11.6
 #define VOLTS_MAX_VAL 14.7
 
+//just a general timer tasks info message on main thread
+#define THREAD_CONTROL_SECONDS 5
+
 #endif
 
