@@ -1,7 +1,7 @@
 
 #include "TFTExtension.h"
 
-TFT *tft;
+static TFT *tft;
 TFT *initTFT(void) {
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();

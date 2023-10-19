@@ -2,6 +2,7 @@
 #include "start.h"
 
 static unsigned long alertsStartSecond = 0;
+static unsigned long lastThreadSeconds = 0;
 static Timer generalTimer;
 
 NOINIT int statusVariable0;
@@ -293,6 +294,13 @@ void looper(void) {
   obdLoop();
 
   statusVariable0 = 4;
+
+  if(lastThreadSeconds < getSeconds()) {
+    lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
+
+    deb("thread is alive, active tasks: %d", generalTimer.size());
+  }
+    
   delay(CORE_OPERATION_DELAY);  
 }
 

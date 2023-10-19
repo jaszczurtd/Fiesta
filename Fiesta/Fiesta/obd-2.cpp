@@ -63,79 +63,78 @@ void obdInit(int retries) {
   }
 }
 
-void obdLoop(void) {
-  if(!initialized) {
-    return;
-  }
-
 //=================================================================
 //Define ECU Supported PID's
 //=================================================================
 
-  // Define the set of PIDs for MODE01 you wish you ECU to support.  For more information, see:
-  // https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00
-  //
-  // PID 0x01 (1) - Monitor status since DTCs cleared. (Includes malfunction indicator lamp (MIL) status and number of DTCs.)
-  // |   PID 0x05 (05) - Engine Coolant Temperature
-  // |   |      PID 0x0C (12) - Engine RPM
-  // |   |      |PID 0x0D (13) - Vehicle speed
-  // |   |      ||PID 0x0E (14) - Timing advance
-  // |   |      |||PID 0x0F (15) - Intake air temperature
-  // |   |      ||||PID 0x10 (16) - MAF Air Flow Rate
-  // |   |      |||||            PID 0x1C (28) - OBD standards this vehicle conforms to
-  // |   |      |||||            |                              PID 0x51 (58) - Fuel Type
-  // |   |      |||||            |                              |
-  // v   V      VVVVV            V                              v
-  // 10001000000111110000:000000010000000000000:0000000000000000100
-  // Converted to hex, that is the following four byte value binary to hex
-  // 0x881F0000 0x00 PID 01 -20
-  // 0x02000000 0x20 PID 21 - 40
-  // 0x04000000 0x40 PID 41 - 60
+// Define the set of PIDs for MODE01 you wish you ECU to support.  For more information, see:
+// https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00
+//
+// PID 0x01 (1) - Monitor status since DTCs cleared. (Includes malfunction indicator lamp (MIL) status and number of DTCs.)
+// |   PID 0x05 (05) - Engine Coolant Temperature
+// |   |      PID 0x0C (12) - Engine RPM
+// |   |      |PID 0x0D (13) - Vehicle speed
+// |   |      ||PID 0x0E (14) - Timing advance
+// |   |      |||PID 0x0F (15) - Intake air temperature
+// |   |      ||||PID 0x10 (16) - MAF Air Flow Rate
+// |   |      |||||            PID 0x1C (28) - OBD standards this vehicle conforms to
+// |   |      |||||            |                              PID 0x51 (58) - Fuel Type
+// |   |      |||||            |                              |
+// v   V      VVVVV            V                              v
+// 10001000000111110000:000000010000000000000:0000000000000000100
+// Converted to hex, that is the following four byte value binary to hex
+// 0x881F0000 0x00 PID 01 -20
+// 0x02000000 0x20 PID 21 - 40
+// 0x04000000 0x40 PID 41 - 60
 
-  // Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-  // we determined above (0x081F0000):
+// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
+// we determined above (0x081F0000):
 
-  //                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-  //                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-  //                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-  //                                |     |     |    0x88 - The first of four bytes of the Supported PIDS value
-  //                                |     |     |     |    0x1F - The second of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-  //                                |     |     |     |     |      |    |     |
-  //                                V     V     V     V     V      V    V     V
-  byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
-  byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
-  byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
-  
-  // Define the set of PIDs for MODE09 you wish you ECU to support.
-  // As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
-  // Our supported PID value is:
-  //
-  //  PID 0x02 - Vehicle Identification Number (VIN)
-  //  | PID 0x04 (04) - Calibration ID
-  //  | |     PID 0x0C (12) - ECU NAME
-  //  | |     |
-  //  V V     V
-  // 01010000010  // Converted to hex, that is the following four byte value binary to hex
-  // 0x28200000 0x00 PID 01-11
+//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
+//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
+//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
+//                                |     |     |    0x88 - The first of four bytes of the Supported PIDS value
+//                                |     |     |     |    0x1F - The second of four bytes of the Supported PIDS value
+//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
+//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
+//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
+//                                |     |     |     |     |      |    |     |
+//                                V     V     V     V     V      V    V     V
+byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
+byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
+byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-  // Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-  // we determined above (0x28200000):
+// Define the set of PIDs for MODE09 you wish you ECU to support.
+// As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
+// Our supported PID value is:
+//
+//  PID 0x02 - Vehicle Identification Number (VIN)
+//  | PID 0x04 (04) - Calibration ID
+//  | |     PID 0x0C (12) - ECU NAME
+//  | |     |
+//  V V     V
+// 01010000010  // Converted to hex, that is the following four byte value binary to hex
+// 0x28200000 0x00 PID 01-11
 
-  //                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-  //                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-  //                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-  //                                |     |     |    0x28 - The first of four bytes of the Supported PIDS value
-  //                                |     |     |     |    0x20 - The second of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-  //                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-  //                                |     |     |     |     |      |    |     |
-  //                                V     V     V     V     V      V    V     V
-  byte mode9Supported0x00PID[8] = {0x06, 0x49, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00};
+// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
+// we determined above (0x28200000):
 
+//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
+//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
+//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
+//                                |     |     |    0x28 - The first of four bytes of the Supported PIDS value
+//                                |     |     |     |    0x20 - The second of four bytes of the Supported PIDS value
+//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
+//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
+//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
+//                                |     |     |     |     |      |    |     |
+//                                V     V     V     V     V      V    V     V
+byte mode9Supported0x00PID[8] = {0x06, 0x49, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00};
+
+void obdLoop(void) {
+  if(!initialized) {
+    return;
+  }
 
 //=================================================================
 //Handel Recived CAN-BUS frames from service tool
