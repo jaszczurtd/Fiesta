@@ -1,7 +1,7 @@
 
 #include "TFTExtension.h"
 
-static TFT *tft;
+static TFT *tft = NULL;
 TFT *initTFT(void) {
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();
@@ -27,9 +27,8 @@ bool softInitDisplay(void *arg) {
 void redrawAllGauges(void) {
   redrawFuel();
   redrawTempGauges();
-  redrawOilPressure();
-  redrawPressure();
   redrawSimpleGauges();
+  redrawPressureGauges();
 }
 
 TFTExtension::TFTExtension(uint8_t cs, uint8_t dc, uint8_t rst) : Adafruit_ILI9341(cs, dc, rst) { }

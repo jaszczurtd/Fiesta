@@ -13,7 +13,10 @@
 #include <tools.h>
 #include <multicoreWatchdog.h>
 
+#include "TFTExtension.h"
 #include "tempGauge.h"
+#include "simpleGauge.h"
+#include "pressureGauge.h"
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "rpm.h"
@@ -29,7 +32,6 @@
 #include "oil.h"
 #include "gps.h"
 #include "tests.h"
-#include "TFTExtension.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16

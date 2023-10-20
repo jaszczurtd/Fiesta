@@ -210,8 +210,7 @@ void drawMediumImportanceValues(void) {
 
 void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showPressureAmount(valueFields[F_PRESSURE]);
-  showOilPressureAmount(valueFields[F_OIL_PRESSURE]);
+  showPressureGauges();
   showGPSGauge();
   #endif
 }
