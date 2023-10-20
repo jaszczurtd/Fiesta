@@ -10,6 +10,7 @@
 #include "hardwareConfig.h"
 #include "tempGauge.h"
 #include "simpleGauge.h"
+#include "pressureGauge.h"
 #include "start.h"
 #include "config.h"
 #include "engineFuel.h"
