@@ -8,8 +8,6 @@
 #include "tests.h"
 #include "TFTExtension.h"
 
-void redrawOilPressure(void);
-void showOilPressureAmount(float current);
 float readOilBarPressure(void);
 
 #endif

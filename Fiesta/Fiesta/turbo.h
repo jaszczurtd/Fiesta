@@ -15,16 +15,8 @@
 #define PRESSURE_LIMITER_FACTOR 2
 #define MIN_TEMPERATURE_CORRECTION 30
 
-#define TURPO_PERCENT_TEXT_POS_X 12
-#define TURPO_PERCENT_TEXT_POS_Y 76
-
 //#define JUST_TEST_BY_THROTTLE
 
 void turboMainLoop(void);
-void redrawPressure(void);
-void showPressureAmount(float current);
-const int p_getBaseX(void);
-const int p_getBaseY(void);
-void showPressurePercentage(void);
 
 #endif
