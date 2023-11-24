@@ -2,9 +2,9 @@
 #define biled 2
 
 #define MIN 120
-#define MAX 251
+#define MAX 252
 #define STEP 1
-#define DEL 35
+#define DEL 36
 
 static bool lastRead = false;
 static unsigned char fadeValue = MIN;
