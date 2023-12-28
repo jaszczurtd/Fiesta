@@ -16,6 +16,8 @@ static int rpmPercentValue = 0;
 
 void countRPM(void) {
 
+  detachInterrupt(PIO_INTERRUPT_HALL);
+
   unsigned long _micros = micros();
   unsigned long nowPulse = _micros - lastPulse;
   
@@ -44,11 +46,13 @@ void countRPM(void) {
 
     valueFields[F_RPM] = RPM; 
   }  
+  
+  attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 }
 
 void initRPMCount(void) {
   pinMode(PIO_INTERRUPT_HALL, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(PIO_INTERRUPT_HALL), countRPM, CHANGE);  
+  attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 
   rpmTimer = timer_create_default();
 

@@ -14,6 +14,7 @@
 #define PIO_TURBO 10
 #define PIO_VP37_RPM 9
 #define PIO_VP37_ANGLE 5
+#define PIO_VP37_ADJUSTOMETER 28
 
 #define PIO_DPF_LAMP 8
 
@@ -28,7 +29,6 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
-#define ADC_VOLT_PIN A2
 #define ADC_SENSORS_PIN A1
 
 //chip select pin for SD card reader
