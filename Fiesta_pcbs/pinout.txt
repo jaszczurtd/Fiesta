@@ -39,7 +39,7 @@
 38	nc
 39	vp37 ignition
 40	nc
-41	4051 4th pin (ADC) 
+41	(?)
 42	turbo
 43	nc
 44	nc

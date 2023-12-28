@@ -181,6 +181,7 @@ void initialization(void) {
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
   setStartedCore0();
+  initVP37();
   enableVP37(true);
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
