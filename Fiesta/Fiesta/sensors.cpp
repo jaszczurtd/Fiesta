@@ -24,10 +24,8 @@ void initSPI(void) {
   SPI.setSCK(PIN_SCK); //SCK
 }
 
-static mutex_t pcf8574Mutex;
 void initSensors(void) {
   analogReadResolution(ADC_BITS);
-  mutex_init(&pcf8574Mutex);
 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
@@ -49,8 +47,7 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-  set4051ActivePin(HC4051_I_VOLTS);
-  return adcToVolt(analogRead(ADC_SENSORS_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
+  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2);   
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -155,7 +152,6 @@ void pcf8574_init(void) {
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
-  mutex_enter_blocking(&pcf8574Mutex);
   if(value) {
     bitSet(pcf8574State, pin);
   }  else {
@@ -173,12 +169,9 @@ void pcf8574_write(unsigned char pin, bool value) {
   if(notFound) {
     derr("pcf8574 not found");
   }
-  mutex_exit(&pcf8574Mutex);
 }
 
 bool pcf8574_read(unsigned char pin) {
-  mutex_enter_blocking(&pcf8574Mutex);
-
   Wire.beginTransmission(PCF8574_ADDR);
   bool retVal = Wire.read();
   bool notFound = Wire.endTransmission();
@@ -186,8 +179,6 @@ bool pcf8574_read(unsigned char pin) {
   if(notFound) {
     derr("pcf8574 not found");
   }
-
-  mutex_exit(&pcf8574Mutex);
   return retVal;
 }
 
