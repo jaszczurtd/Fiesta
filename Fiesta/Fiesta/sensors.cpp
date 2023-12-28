@@ -47,7 +47,8 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
+  set4051ActivePin(HC4051_I_VOLTS);
+  return adcToVolt(analogRead(ADC_SENSORS_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
 }
 
 //-------------------------------------------------------------------------------------------------
