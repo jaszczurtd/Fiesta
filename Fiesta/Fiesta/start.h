@@ -6,6 +6,11 @@
 #include "config.h"
 
 #include <Arduino.h>
+#include <FreeRTOS.h>
+#include <queue.h>
+#include <task.h>
+#include <timers.h>
+
 #include <Wire.h>
 #include <arduino-timer.h>
 #include <SPI.h>
@@ -41,9 +46,9 @@ void drawHighImportanceValues(void);
 void drawLowImportanceValues(void);
 void triggerDrawHighImportanceValue(bool state);
 
-bool callAtEverySecond(void *argument);
-bool callAtEveryHalfSecond(void *argument);
-bool callAtEveryHalfHalfSecond(void *argument);
+void callAtEverySecond(TimerHandle_t xTimer);
+void callAtEveryHalfSecond(TimerHandle_t xTimert);
+void callAtEveryHalfHalfSecond(TimerHandle_t xTimert);
 
 void initialization(void);
 void initialization1(void);

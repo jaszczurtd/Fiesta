@@ -3,25 +3,29 @@
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
-static Timer generalTimer;
+//static Timer generalTimer;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
-  watchdog_update();
-  generalTimer.every(time, function);
-  delay(ut);
-  watchdog_update();
+void setupTimerWith(const char *name, unsigned long time, void(*function)(TimerHandle_t xTimer)) {
+  TimerHandle_t xTimer = xTimerCreate(name, pdMS_TO_TICKS(time), pdTRUE, 0, function);
+  if (xTimer != NULL) {
+    if (xTimerStart(xTimer, 0) == pdPASS) {
+        deb("%s started!\n", name);
+    }
+  }
 }
 
 void setupTimers(void) {
-  int time = SECOND;
 
-  setupTimerWith(UNSYNCHRONIZE_TIME, DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
+  int time = SECOND;
+  setupTimerWith("one_second", time, callAtEverySecond);
+  setupTimerWith("half_second", time / 2, callAtEveryHalfSecond);
+  setupTimerWith("one_quarter_second", time / 4, callAtEveryHalfHalfSecond);
+  setupTimerWith("softinit_display", DISPLAY_SOFTINIT_TIME, softInitDisplay);
+
+  /*
   setupTimerWith(UNSYNCHRONIZE_TIME, time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
   setupTimerWith(UNSYNCHRONIZE_TIME, time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
   setupTimerWith(UNSYNCHRONIZE_TIME, CAN_UPDATE_RECIPIENTS, updateCANrecipients);
@@ -30,6 +34,7 @@ void setupTimers(void) {
   setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE, getGPSData);
   setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
+  */
 }
 
 static int *wValues = NULL;
@@ -54,7 +59,7 @@ void initialization(void) {
   TFT *tft = initTFT();
   initSPI();
 
-  generalTimer = timer_create_default();
+  //generalTimer = timer_create_default();
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
     statusVariable0 = statusVariable1 = 0;
@@ -168,8 +173,6 @@ void initialization(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  setupTimers();
-
   canCheckConnection(NULL);
   updateCANrecipients(NULL);
   canMainLoop(NULL);
@@ -177,6 +180,8 @@ void initialization(void) {
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
+
+  setupTimers();
 
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
@@ -231,7 +236,7 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-bool callAtEverySecond(void *argument) {
+void callAtEverySecond(TimerHandle_t xTimer) {
   alertBlink = (alertBlink) ? false : true;
   digitalWrite(LED_BUILTIN, alertBlink);
 
@@ -240,29 +245,23 @@ bool callAtEverySecond(void *argument) {
 #endif
 
   //regular draw - low importance values
-  drawLowImportanceValues();
-  
-  return true; 
+  //drawLowImportanceValues();
 }
 
-bool callAtEveryHalfSecond(void *argument) {
+void callAtEveryHalfSecond(TimerHandle_t xTimer) {
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
 
   digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
-
-  return true; 
 }
 
-bool callAtEveryHalfHalfSecond(void *argument) {
+void callAtEveryHalfHalfSecond(TimerHandle_t xTimert) {
   if(alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();
-
-  return true; 
 }
 
 static bool highImportanceValueChanged = false;
@@ -279,7 +278,7 @@ void looper(void) {
     return;
   }
 
-  generalTimer.tick();
+  //generalTimer.tick();
 
   statusVariable0 = 1;
   //draw changes of high importance values
@@ -297,7 +296,7 @@ void looper(void) {
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
-    deb("thread is alive, active tasks: %d", generalTimer.size());
+    //deb("thread is alive, active tasks: %d", generalTimer.size());
   }
     
   delay(CORE_OPERATION_DELAY);  
