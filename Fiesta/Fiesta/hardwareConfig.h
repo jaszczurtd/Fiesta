@@ -67,7 +67,7 @@
 #define HC4051_I_FUEL_LEVEL 4
 #define HC4051_I_BAR_PRESSURE 5
 #define HC4051_I_EGT 6
-//7 not used ATM
+#define HC4051_I_VOLTS 7
 
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
