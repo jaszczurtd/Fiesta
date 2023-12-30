@@ -65,7 +65,7 @@ private:
 
 TFT *initTFT(void);
 TFT *returnTFTReference(void);
-void softInitDisplay(TimerHandle_t xTimer);
+bool softInitDisplay(void *arg);
 void redrawAllGauges(void);
 
 #endif

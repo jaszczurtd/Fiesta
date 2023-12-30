@@ -16,10 +16,11 @@ TFT *returnTFTReference(void) {
   return tft;
 }
 
-void softInitDisplay(TimerHandle_t xTimer) {
+bool softInitDisplay(void *arg) {
   TFT *tft = returnTFTReference();
   tft->softInit(75);
   tft->setRotation(1);
+  return true;
 }
 
 void redrawAllGauges(void) {
