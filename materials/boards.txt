@@ -2,3 +2,4 @@ https://github.com/stm32duino/BoardManagerFiles/raw/master/package_stmicroelectr
 https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
 https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 http://digistump.com/package_digistump_index.json -> Atiny85
+https://arduino-pico.readthedocs.io/en/latest/freertos.html
