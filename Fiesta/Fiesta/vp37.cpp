@@ -49,15 +49,12 @@ void vp37Calibrate(void) {
 
   VP37_ADJUST_MAX = VP37_ADJUST_MIN = 0;
 
-  valToPWM(PIO_VP37_RPM, 0);
-  makeCalibrationTable();
-  VP37_ADJUST_MIN = getMinFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
   valToPWM(PIO_VP37_RPM, map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION));
   makeCalibrationTable();
   VP37_ADJUST_MAX = getMinFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
-
   valToPWM(PIO_VP37_RPM, 0);
-
+  makeCalibrationTable();
+  VP37_ADJUST_MIN = getMinFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
 
   enableVP37(true);
 }
@@ -158,5 +155,5 @@ void vp37Process(void) {
 }
 
 void idleTask(void) {
-  // delay(CORE_OPERATION_DELAY);  
+  delay(CORE_OPERATION_DELAY);  
 }
