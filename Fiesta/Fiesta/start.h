@@ -39,11 +39,12 @@
 void drawMediumImportanceValues(void);
 void drawHighImportanceValues(void);
 void drawLowImportanceValues(void);
+void drawHighImportanceValuesIfChanged(void);
 void triggerDrawHighImportanceValue(bool state);
 
-bool callAtEverySecond(void *argument);
-bool callAtEveryHalfSecond(void *argument);
-bool callAtEveryHalfHalfSecond(void *argument);
+bool callAtEverySecond(void *arg);
+bool callAtEveryHalfSecond(void *arg);
+bool callAtEveryHalfHalfSecond(void *arg);
 
 void initialization(void);
 void initialization1(void);

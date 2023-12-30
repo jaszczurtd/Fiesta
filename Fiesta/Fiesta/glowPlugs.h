@@ -2,7 +2,7 @@
 #define T_GLOWPLUGS
 
 #include <tools.h>
-#include <Timers.h>
+#include <SmartTimers.h>
 
 #include "config.h"
 #include "start.h"

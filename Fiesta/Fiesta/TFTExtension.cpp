@@ -20,7 +20,6 @@ bool softInitDisplay(void *arg) {
   TFT *tft = returnTFTReference();
   tft->softInit(75);
   tft->setRotation(1);
-
   return true;
 }
 

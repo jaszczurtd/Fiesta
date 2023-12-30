@@ -8,28 +8,28 @@ static Timer generalTimer;
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-void setupTimerWith(unsigned long ut, unsigned long time, bool(*function)(void *argument)) {
+void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
   watchdog_update();
   generalTimer.every(time, function);
-  delay(ut);
-  watchdog_update();
 }
 
 void setupTimers(void) {
-  int time = SECOND;
 
-  setupTimerWith(UNSYNCHRONIZE_TIME, DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time, callAtEverySecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 2, callAtEveryHalfSecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / 4, callAtEveryHalfHalfSecond);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
-  setupTimerWith(UNSYNCHRONIZE_TIME, time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
-  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_UPDATE_RECIPIENTS, updateCANrecipients);
-  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
-  setupTimerWith(UNSYNCHRONIZE_TIME, CAN_CHECK_CONNECTION, canCheckConnection);  
-  setupTimerWith(UNSYNCHRONIZE_TIME, DPF_SHOW_TIME_INTERVAL, changeEGT);
-  setupTimerWith(UNSYNCHRONIZE_TIME, GPS_UPDATE, getGPSData);
-  setupTimerWith(UNSYNCHRONIZE_TIME, DEBUG_UPDATE, updateValsForDebug);
+  generalTimer = timer_create_default();
+
+  int time = SECOND;
+  setupTimerWith(time, callAtEverySecond);
+  setupTimerWith(time / 2, callAtEveryHalfSecond);
+  setupTimerWith(time / 4, callAtEveryHalfHalfSecond);
+  setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
+  setupTimerWith(time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
+  setupTimerWith(time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
+  setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
+  setupTimerWith(GPS_UPDATE, getGPSData);
+  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
+  setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
+  setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
+  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
 }
 
 static int *wValues = NULL;
@@ -41,7 +41,7 @@ void executeByWatchdog(int *values, int size) {
 
 void initialization(void) {
 
-  Serial.begin(9600);
+  debugInit();
  
   initTests();
 
@@ -54,7 +54,6 @@ void initialization(void) {
   TFT *tft = initTFT();
   initSPI();
 
-  generalTimer = timer_create_default();
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
     statusVariable0 = statusVariable1 = 0;
@@ -168,8 +167,6 @@ void initialization(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  setupTimers();
-
   canCheckConnection(NULL);
   updateCANrecipients(NULL);
   canMainLoop(NULL);
@@ -177,6 +174,8 @@ void initialization(void) {
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
+
+  setupTimers();
 
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
@@ -232,7 +231,7 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-bool callAtEverySecond(void *argument) {
+bool callAtEverySecond(void *arg) {
   alertBlink = (alertBlink) ? false : true;
   digitalWrite(LED_BUILTIN, alertBlink);
 
@@ -242,33 +241,38 @@ bool callAtEverySecond(void *argument) {
 
   //regular draw - low importance values
   drawLowImportanceValues();
-  
-  return true; 
+  return true;
 }
 
-bool callAtEveryHalfSecond(void *argument) {
+bool callAtEveryHalfSecond(void *arg) {
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
 
   digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
-
-  return true; 
+  return true;
 }
 
-bool callAtEveryHalfHalfSecond(void *argument) {
+bool callAtEveryHalfHalfSecond(void *arg) {
   if(alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();
-
-  return true; 
+  return true;
 }
 
 static bool highImportanceValueChanged = false;
 void triggerDrawHighImportanceValue(bool state) {
   highImportanceValueChanged = state;
+}
+
+void drawHighImportanceValuesIfChanged(void) {
+  //draw changes of high importance values
+  if(highImportanceValueChanged) {
+    drawHighImportanceValues();
+    triggerDrawHighImportanceValue(false);
+  }
 }
 
 void looper(void) {
@@ -280,27 +284,27 @@ void looper(void) {
     return;
   }
 
-  generalTimer.tick();
-
   statusVariable0 = 1;
-  //draw changes of high importance values
-  if(highImportanceValueChanged) {
-    drawHighImportanceValues();
-    statusVariable0 = 2;
-    triggerDrawHighImportanceValue(false);
-  }
 
-  statusVariable0 = 3;
-  obdLoop();
-
-  statusVariable0 = 4;
-
+  generalTimer.tick();
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
     deb("thread is alive, active tasks: %d", generalTimer.size());
   }
-    
+  statusVariable0 = 2;
+  drawHighImportanceValuesIfChanged();
+  obdLoop();
+  statusVariable0 = 3;
+  glowPlugsMainLoop();
+  statusVariable0 = 4;
+  fanMainLoop();
+  statusVariable0 = 5;
+  engineHeaterMainLoop();
+  statusVariable0 = 6;
+  heatedWindowMainLoop();
+  statusVariable0 = 7;
+
   delay(CORE_OPERATION_DELAY);  
 }
 
@@ -327,24 +331,15 @@ void looper1(void) {
   }
 
   statusVariable1 = 1;
-  glowPlugsMainLoop();
-  statusVariable1 = 2;
-  fanMainLoop();
-  statusVariable1 = 3;
-  engineHeaterMainLoop();
-  statusVariable1 = 4;
-  heatedWindowMainLoop();
-
-  statusVariable1 = 5;
   turboMainLoop();
-  statusVariable1 = 6;
+  statusVariable1 = 2;
 #ifdef VP37
   vp37Process();
 #else
   stabilizeRPM();
 #endif
 
-  statusVariable1 = 7;
+  statusVariable1 = 3;
   delay(CORE_OPERATION_DELAY);  
 }
 
