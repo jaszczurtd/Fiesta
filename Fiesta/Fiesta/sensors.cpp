@@ -27,8 +27,13 @@ void initSPI(void) {
 static mutex_t pcf8574Mutex;
 void initSensors(void) {
   analogReadResolution(ADC_BITS);
+  analogWriteFreq(PWM_FREQUENCY_HZ);
+  analogWriteResolution(PWM_WRITE_RESOLUTION);
+
   mutex_init(&pcf8574Mutex);
 
+  init4051();
+  
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
   }
