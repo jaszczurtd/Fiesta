@@ -111,11 +111,7 @@ void initialization(void) {
   i2cScanner();
   #endif
 
-  init4051();
   initSensors();
-
-  analogWriteFreq(PWM_FREQUENCY_HZ);
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
 
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
@@ -138,6 +134,7 @@ void initialization(void) {
 
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
+  vp37Calibrate();
   while(sec < secDest) {
     glowPlugsMainLoop();
     sec = getSeconds();
@@ -180,8 +177,6 @@ void initialization(void) {
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
   setStartedCore0();
-  initVP37();
-  enableVP37(true);
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
 
@@ -338,8 +333,8 @@ void looper1(void) {
 #else
   stabilizeRPM();
 #endif
-
   statusVariable1 = 3;
-  delay(CORE_OPERATION_DELAY);  
+
+  idleTask();
 }
 

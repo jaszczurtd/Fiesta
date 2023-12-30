@@ -12,18 +12,18 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
-#define VP37_MIN_ADJUSTOMETER_VAL 0
-#define VP37_MAX_ADJUSTOMETER_VAL 1024
+#define VP37_CALIBRATION_MAX_PERCENTAGE 60
+#define VP37_CALIBRATION_CYCLES 10
 
 #define VP37_PWM_MIN 350
-#define VP37_PWM_MAX 620
+#define VP37_PWM_MAX 600
 
-#define VP37_ADJUST_MAX 2000
-#define VP37_ADJUST_MIN 4810
-#define VP37_ADJUST_TIMER 100
+#define VP37_ADJUST_TIMER 50
 
+void vp37Calibrate(void);
 void enableVP37(bool enable);
 bool isVP37Enabled(void);
 void vp37Process(void);
+void idleTask(void);
 
 #endif
