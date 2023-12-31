@@ -1,19 +1,20 @@
 
 #include "vp37.h"
 
-#define THROTTLE_DELAY 2
+#define THROTTLE_DELAY 500
 
 Timer throttleTimer;
 static bool vp37Initialized = false;
 static volatile unsigned int adjustAngleCounter = 0;
 static volatile unsigned long adjTime = 0;
-static int adjustometerVal = 0;
 static int adjustometerRAWval = 0;
 static int currentVP37PWM = 0;
 static int lastThrottle = -1;
+static int lastDesired = -1;
+static int lastDirection = D_NONE;
+static int pwmval;
 
-static int VP37_ADJUST_MIN;
-static int VP37_ADJUST_MAX;
+static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX;
 static int calibrationTab[VP37_CALIBRATION_CYCLES];
 
 bool throttleCycle(void *arg);
@@ -26,11 +27,26 @@ void initVP37(void) {
     currentVP37PWM = 0;
     throttleTimer = timer_create_default();
     throttleTimer.every(THROTTLE_DELAY, throttleCycle);
+    pwmval = 0;
+    valToPWM(PIO_VP37_RPM, pwmval);
 
     pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
     attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
     vp37Initialized = true; 
   }
+}
+
+int getAdjustometerVal(void) {
+  int val = ((adjustometerRAWval / 10) * 10);
+
+  val = map(val, VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
+  if(val < 0) {
+    val = 0;
+  }
+  if(val > PWM_RESOLUTION) {
+    val = PWM_RESOLUTION;
+  }
+  return val;
 }
 
 void makeCalibrationTable(void) {
@@ -44,18 +60,28 @@ void makeCalibrationTable(void) {
   watchdog_update();  
 }
 
+int getCalibrationError(int from) {
+  return (int)((float)from * PERCENTAGE_ERROR / 100.0f);  
+}
+
+bool isInRange(int pos) {
+  int v = getAdjustometerVal();
+  return (v >= (pos - (getCalibrationError(pos) / 2)) &&
+          v <= (pos + (getCalibrationError(pos) / 2)) );
+}
+
 void vp37Calibrate(void) {
   initVP37();
 
-  VP37_ADJUST_MAX = VP37_ADJUST_MIN = 0;
+  VP37_ADJUST_MAX = VP37_ADJUST_MIDDLE = VP37_ADJUST_MIN = 0;
 
   valToPWM(PIO_VP37_RPM, map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION));
   makeCalibrationTable();
-  VP37_ADJUST_MAX = getMinFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MAX = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
   valToPWM(PIO_VP37_RPM, 0);
   makeCalibrationTable();
-  VP37_ADJUST_MIN = getMinFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
-
+  VP37_ADJUST_MIN = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MIN - VP37_ADJUST_MAX) / 2) + VP37_ADJUST_MAX;
   enableVP37(true);
 }
 
@@ -65,47 +91,13 @@ void adjustometerInterrupt(void) {
   unsigned long currentMillis = millis();
   if (adjTime <= currentMillis) {
     adjTime = currentMillis + VP37_ADJUST_TIMER;
-    adjustometerRAWval = ((adjustAngleCounter / 10) * 10);
+    adjustometerRAWval = adjustAngleCounter;
     adjustAngleCounter = 0;
-
-    int val = map(adjustometerRAWval, VP37_ADJUST_MIN, VP37_ADJUST_MAX,
-                           0, PWM_RESOLUTION);
-    if(val < 0) {
-      val = 0;
-    }
-    if(val > PWM_RESOLUTION) {
-      val = PWM_RESOLUTION;
-    }
-    adjustometerVal = val;
-
   } else {
     adjustAngleCounter++;
   }
 
   attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
-}
-
-bool throttleCycle(void *arg) {
-
-  bool status = true;
-
-  
-  if(lastThrottle > adjustometerVal) {
-    currentVP37PWM += 1;
-    if(currentVP37PWM > PWM_RESOLUTION) {
-      currentVP37PWM = PWM_RESOLUTION;
-    }
-  }
-
-  if(lastThrottle < adjustometerVal) {
-    currentVP37PWM -= 1;
-    if(currentVP37PWM < 0) {
-      currentVP37PWM = 0;
-    }
-  }
-
-  //valToPWM(PIO_VP37_RPM, currentVP37PWM);
-  return status;
 }
 
 void enableVP37(bool enable) {
@@ -138,22 +130,41 @@ void vp37Process(void) {
 
   int thr = getThrottlePercentage();
   int val = map(thr, 0, 100, VP37_PWM_MIN, VP37_PWM_MAX);
-  if(lastThrottle != val) {
+  int desired = map(map(thr, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX), 
+                    VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
+
+  if(lastThrottle != val || lastDesired != desired) {
+    lastDirection = (lastDesired < desired) ? D_ADD : D_SUB;
     lastThrottle = val;
+    lastDesired = desired;
 
-    //throttleTimer.cancel();
-    //throttleTimer.every(THROTTLE_DELAY, throttleCycle);
+    //valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
 
-    //valToPWM(PIO_VP37_RPM, lastThrottle);
+    deb("thr:%d val:%d adj:%d desired:%d dir:%d", thr, val, getAdjustometerVal(), desired, lastDirection);
+  }
+}
 
+int ppp = 0;
+bool dir = true;
+bool throttleCycle(void *arg) {
+  bool status = true;
+
+  int val = map(ppp, 0, 100, VP37_PWM_MIN, VP37_PWM_MAX);
+  valToPWM(PIO_VP37_RPM, val);
+
+  if(dir) {
+    ppp += 5;
+    if(ppp > 100) {
+      dir = false;
+    }
+  }
+  if(!dir) {
+    ppp-= 5;
+    if(ppp < 0) {
+      dir = true;
+    }
   }
 
-
- 
-
-  deb("adjustometerVal:%d %d / %d %d", thr, val, adjustometerRAWval, adjustometerVal);
+  return status;
 }
 
-void idleTask(void) {
-  delay(CORE_OPERATION_DELAY);  
-}

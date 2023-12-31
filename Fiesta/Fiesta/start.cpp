@@ -334,7 +334,6 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
-
-  idleTask();
+  delay(CORE_OPERATION_DELAY);  
 }
 
