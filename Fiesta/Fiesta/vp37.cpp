@@ -1,7 +1,7 @@
 
 #include "vp37.h"
 
-#define TIMER_UPDATE 100
+#define VP37_TIMER_UPDATE 100
 
 Timer throttleTimer;
 static bool vp37Initialized = false;
@@ -27,7 +27,7 @@ void initVP37(void) {
     adjTime = 0;
     currentVP37PWM = 0;
     throttleTimer = timer_create_default();
-    throttleTimer.every(TIMER_UPDATE, throttleCycle);
+    throttleTimer.every(VP37_TIMER_UPDATE, throttleCycle);
     pwmval = 0;
 
     pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
@@ -71,6 +71,7 @@ bool isInRangeOf(int desired, int val) {
 
 int aaa;
 void vp37Calibrate(void) {
+
   if(calibrationDone) {
     return;
   }
@@ -85,7 +86,7 @@ void vp37Calibrate(void) {
   makeCalibrationTable();
   VP37_ADJUST_MIN = getHalfwayBetweenMinMax(calibrationTab, VP37_CALIBRATION_CYCLES);
   VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MIN - VP37_ADJUST_MAX) / 2) + VP37_ADJUST_MAX;
-  calibrationDone = VP37_ADJUST_MAX > 0 && VP37_ADJUST_MIN > 0; 
+  calibrationDone = VP37_ADJUST_MIDDLE > 0;
 
   enableVP37(true);
 }
@@ -154,9 +155,7 @@ void vp37Process(void) {
   if(lastThrottle != val || lastDesired != desired) {
     lastThrottle = val;
     lastDesired = desired;
-    isInRange = false;
-    pwmval = 0;
-    valToPWM(PIO_VP37_RPM, lastThrottle);
+    valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
   }
 
   //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
@@ -166,19 +165,16 @@ bool throttleCycle(void *arg) {
   bool status = true;
 
   int val = map(1, 0, 100, 0, VP37_PWM_MAX - VP37_PWM_MIN);
-  bool inRange = isInRange || isInRangeOf(lastDesired, getAdjustometerVal());
+  bool inRange = isInRangeOf(lastDesired, getAdjustometerVal());
   if(!inRange) {
-
     if(lastDesired < getAdjustometerVal()) {
       pwmval -= val;
     } else {
       pwmval += val;
     }
-  } else {
-    isInRange = true;
   }
 
-  deb("in range:%d desired:%d adj:%d corr:%d", isInRange, lastDesired, getAdjustometerVal(), val);
+  deb("in range:%d desired:%d adj:%d corr:%d", inRange, lastDesired, getAdjustometerVal(), val);
   
   valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
 
