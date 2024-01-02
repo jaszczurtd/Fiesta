@@ -1,6 +1,8 @@
 
 #include "vp37.h"
 
+#define TIMER_UPDATE 100
+
 Timer throttleTimer;
 static bool vp37Initialized = false;
 static volatile unsigned int adjustAngleCounter = 0;
@@ -25,7 +27,7 @@ void initVP37(void) {
     adjTime = 0;
     currentVP37PWM = 0;
     throttleTimer = timer_create_default();
-    throttleTimer.every(VP37_ADJUST_TIMER * 4, throttleCycle);
+    throttleTimer.every(TIMER_UPDATE, throttleCycle);
     pwmval = 0;
 
     pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
@@ -78,10 +80,10 @@ void vp37Calibrate(void) {
 
   valToPWM(PIO_VP37_RPM, map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION));
   makeCalibrationTable();
-  VP37_ADJUST_MAX = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MAX = getHalfwayBetweenMinMax(calibrationTab, VP37_CALIBRATION_CYCLES);
   valToPWM(PIO_VP37_RPM, 0);
   makeCalibrationTable();
-  VP37_ADJUST_MIN = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MIN = getHalfwayBetweenMinMax(calibrationTab, VP37_CALIBRATION_CYCLES);
   VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MIN - VP37_ADJUST_MAX) / 2) + VP37_ADJUST_MAX;
   calibrationDone = VP37_ADJUST_MAX > 0 && VP37_ADJUST_MIN > 0; 
 
@@ -123,6 +125,8 @@ int percentToPWMVal(int percent) {
   return VP37_PWM_MIN + (((VP37_PWM_MAX - VP37_PWM_MIN) * percent) / 100);
 }
 
+bool isInRange = false;
+
 void vp37Process(void) {
   if(!vp37Initialized) {
     return;
@@ -150,28 +154,33 @@ void vp37Process(void) {
   if(lastThrottle != val || lastDesired != desired) {
     lastThrottle = val;
     lastDesired = desired;
-
+    isInRange = false;
+    pwmval = 0;
     valToPWM(PIO_VP37_RPM, lastThrottle);
-
-//    pwmval = desired - getAdjustometerVal();
-    
   }
 
-  deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
+  //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
 }
 
 bool throttleCycle(void *arg) {
   bool status = true;
 
-//  if(!isInRange(getAdjustometerVal())) {
-//    if(lastDesired < getAdjustometerVal()) {
-//      pwmval += map(1, 0, 100, VP37_PWM_MIN, VP37_PWM_MAX);
-//    } else {
-//      pwmval -= map(1, 0, 100, VP37_PWM_MIN, VP37_PWM_MAX);
-//    }
+  int val = map(1, 0, 100, 0, VP37_PWM_MAX - VP37_PWM_MIN);
+  bool inRange = isInRange || isInRangeOf(lastDesired, getAdjustometerVal());
+  if(!inRange) {
 
-//    valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
-//  }
+    if(lastDesired < getAdjustometerVal()) {
+      pwmval -= val;
+    } else {
+      pwmval += val;
+    }
+  } else {
+    isInRange = true;
+  }
+
+  deb("in range:%d desired:%d adj:%d corr:%d", isInRange, lastDesired, getAdjustometerVal(), val);
+  
+  valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
 
   return status;
 }
