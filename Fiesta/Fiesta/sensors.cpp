@@ -142,8 +142,10 @@ void valToPWM(unsigned char pin, int val) {
 }
 
 static unsigned char pcf8574State = 0;
+static mutex_t pcf8574Mutex;
 
 void pcf8574_init(void) {
+  mutex_init(&pcf8574Mutex);
   pcf8574State = 0;
 
   Wire.beginTransmission(PCF8574_ADDR);
@@ -152,6 +154,7 @@ void pcf8574_init(void) {
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
+  mutex_enter_blocking(&pcf8574Mutex);
   if(value) {
     bitSet(pcf8574State, pin);
   }  else {
@@ -162,6 +165,7 @@ void pcf8574_write(unsigned char pin, bool value) {
   bool success = Wire.write(pcf8574State);
   bool notFound = Wire.endTransmission();
 
+  mutex_exit(&pcf8574Mutex);
   if(!success) {
     derr("error writting byte to pcf8574");
   }
@@ -172,9 +176,11 @@ void pcf8574_write(unsigned char pin, bool value) {
 }
 
 bool pcf8574_read(unsigned char pin) {
+  mutex_enter_blocking(&pcf8574Mutex);
   Wire.beginTransmission(PCF8574_ADDR);
   bool retVal = Wire.read();
   bool notFound = Wire.endTransmission();
+  mutex_exit(&pcf8574Mutex);
 
   if(notFound) {
     derr("pcf8574 not found");
