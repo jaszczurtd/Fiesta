@@ -165,7 +165,10 @@ void vp37Process(void) {
 
   //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
 
-  deb("thr: %d p: %d", val, obliczProcent(val));
+  int p = (readAdjustometer() / 10);
+
+
+  deb("thr: %d p: %d v:%d", val, obliczProcent(val), p);
 
 }
 

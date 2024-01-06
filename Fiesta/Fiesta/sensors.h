@@ -31,11 +31,12 @@ void initBasicPIO(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
-float readThrottle(void);
+int readThrottle(void);
 float readAirTemperature(void);
 float readVolts(void);
 float readBarPressure(void);
-float readEGT(void);
+int readEGT(void);
+int readAdjustometer(void);
 int getThrottlePercentage(void);
 int getPercentageEngineLoad(void);
 
