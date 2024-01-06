@@ -11,6 +11,10 @@ static int oilTableIdx = 0;
 static int oilValuesSet = 0;
 static float oilTable[TEMPERATURE_TABLES_SIZE];
 
+static unsigned char pcf8574State = 0;
+static mutex_t pcf8574Mutex;
+static mutex_t analog4051Mutex;
+
 void initI2C(void) {
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
@@ -51,18 +55,22 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2);   
+  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2);
 }
 
 //-------------------------------------------------------------------------------------------------
 //Read coolant temperature
 //-------------------------------------------------------------------------------------------------
 float readCoolantTemp(void) {
-    set4051ActivePin(HC4051_I_COOLANT_TEMP);
-                                                         
-    return getAverageForTable(&collantTableIdx, &collantValuesSet,
-                              ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                              collantTable);
+  float a = 0.0;
+  mutex_enter_blocking(&analog4051Mutex);
+
+  set4051ActivePin(HC4051_I_COOLANT_TEMP);
+  a = getAverageForTable(&collantTableIdx, &collantValuesSet,
+                        ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
+                        collantTable);
+  mutex_exit(&analog4051Mutex);  
+  return a;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -70,34 +78,41 @@ float readCoolantTemp(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readOilTemp(void) {
-    set4051ActivePin(HC4051_I_OIL_TEMP);
+  float a = 0.0;
+  mutex_enter_blocking(&analog4051Mutex);
+  set4051ActivePin(HC4051_I_OIL_TEMP);
 
-    return getAverageForTable(&oilTableIdx, &oilValuesSet,
-                              ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                              oilTable);
+  a = getAverageForTable(&oilTableIdx, &oilValuesSet,
+                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
+                         oilTable);
+  mutex_exit(&analog4051Mutex);  
+  return a;
 }
 
 //-------------------------------------------------------------------------------------------------
 //Read throttle
 //-------------------------------------------------------------------------------------------------
 
-float readThrottle(void) {
-    set4051ActivePin(HC4051_I_THROTTLE_POS);
+int readThrottle(void) {
+  mutex_enter_blocking(&analog4051Mutex);
+  set4051ActivePin(HC4051_I_THROTTLE_POS);
 
-    float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
-    float initialVal = rawVal - THROTTLE_MIN;
+  float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
+  mutex_exit(&analog4051Mutex);
 
-    if(initialVal < 0) {
-        initialVal = 0;
-    }
-    int maxVal = (THROTTLE_MAX - THROTTLE_MIN);
+  float initialVal = rawVal - THROTTLE_MIN;
 
-    if(initialVal > maxVal) {
-        initialVal = maxVal;
-    }
-    float divider = maxVal / (float)PWM_RESOLUTION;
-    int result = (initialVal / divider);
-    return abs(result - PWM_RESOLUTION);
+  if(initialVal < 0) {
+      initialVal = 0;
+  }
+  int maxVal = (THROTTLE_MAX - THROTTLE_MIN);
+
+  if(initialVal > maxVal) {
+      initialVal = maxVal;
+  }
+  float divider = maxVal / (float)PWM_RESOLUTION;
+  int result = (initialVal / divider);
+  return abs(result - PWM_RESOLUTION);
 }
 
 int getThrottlePercentage(void) {
@@ -111,8 +126,13 @@ int getThrottlePercentage(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readAirTemperature(void) {
-    set4051ActivePin(HC4051_I_AIR_TEMP);
-    return ntcToTemp(ADC_SENSORS_PIN, R_TEMP_AIR_A, R_TEMP_AIR_B);
+  float a = 0.0;
+  mutex_enter_blocking(&analog4051Mutex);
+
+  set4051ActivePin(HC4051_I_AIR_TEMP);
+  a = ntcToTemp(ADC_SENSORS_PIN, R_TEMP_AIR_A, R_TEMP_AIR_B);
+  mutex_exit(&analog4051Mutex);
+  return a;
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -120,33 +140,48 @@ float readAirTemperature(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readBarPressure(void) {
-    set4051ActivePin(HC4051_I_BAR_PRESSURE);
+  mutex_enter_blocking(&analog4051Mutex);
+  set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-    float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 
+  float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 
       1.0; //atmospheric pressure
-    if(val < 0.0) {
-        val = 0.0;
-    } 
-    return val;
+  mutex_exit(&analog4051Mutex);
+
+  if(val < 0.0) {
+      val = 0.0;
+  } 
+  return val;
 }
 
 //-------------------------------------------------------------------------------------------------
 //Read EGT temperature
 //-------------------------------------------------------------------------------------------------
 
-float readEGT(void) {
-    set4051ActivePin(HC4051_I_EGT);
-    return (((float)getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
+int readEGT(void) {
+  int a = 0;
+  mutex_enter_blocking(&analog4051Mutex);
+
+  set4051ActivePin(HC4051_I_EGT);
+  a = ((getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
+  mutex_exit(&analog4051Mutex);
+  return a;
+}
+
+int readAdjustometer(void) {
+  int a = 0;
+  mutex_enter_blocking(&analog4051Mutex);
+
+  set4051ActivePin(HC4051_I_ADJUSTOMETER);
+  a = getAverageValueFrom(ADC_SENSORS_PIN);
+  mutex_exit(&analog4051Mutex);
+  return a;
 }
 
 //-------------------------------------------------------------------------------------------------
 
 void valToPWM(unsigned char pin, int val) {
-    analogWrite(pin, (PWM_RESOLUTION - val));
+  analogWrite(pin, (PWM_RESOLUTION - val));
 }
-
-static unsigned char pcf8574State = 0;
-static mutex_t pcf8574Mutex;
 
 void pcf8574_init(void) {
   mutex_init(&pcf8574Mutex);
@@ -270,6 +305,9 @@ bool readHighValues(void *argument) {
 
 void init4051(void) {
   deb("4051 init");
+
+  mutex_init(&analog4051Mutex);
+
   pinMode(C_4051, OUTPUT);  //C
   pinMode(B_4051, OUTPUT);  //B  
   pinMode(A_4051, OUTPUT);  //A
@@ -278,9 +316,9 @@ void init4051(void) {
 }
 
 void set4051ActivePin(unsigned char pin) {
-    digitalWrite(A_4051, (pin & 0x01) > 0); 
-    digitalWrite(B_4051, (pin & 0x02) > 0); 
-    digitalWrite(C_4051, (pin & 0x04) > 0); 
+  digitalWrite(A_4051, (pin & 0x01) > 0); 
+  digitalWrite(B_4051, (pin & 0x02) > 0); 
+  digitalWrite(C_4051, (pin & 0x04) > 0); 
 }
 
 bool isDPFRegenerating(void) {
