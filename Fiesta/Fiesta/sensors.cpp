@@ -24,13 +24,10 @@ void initSPI(void) {
   SPI.setSCK(PIN_SCK); //SCK
 }
 
-static mutex_t pcf8574Mutex;
 void initSensors(void) {
   analogReadResolution(ADC_BITS);
   analogWriteFreq(PWM_FREQUENCY_HZ);
   analogWriteResolution(PWM_WRITE_RESOLUTION);
-
-  mutex_init(&pcf8574Mutex);
 
   init4051();
   
@@ -54,8 +51,7 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readVolts(void) {
-  set4051ActivePin(HC4051_I_VOLTS);
-  return adcToVolt(analogRead(ADC_SENSORS_PIN), V_DIVIDER_R1, V_DIVIDER_R2); 
+  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2);   
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -150,8 +146,10 @@ void valToPWM(unsigned char pin, int val) {
 }
 
 static unsigned char pcf8574State = 0;
+static mutex_t pcf8574Mutex;
 
 void pcf8574_init(void) {
+  mutex_init(&pcf8574Mutex);
   pcf8574State = 0;
 
   Wire.beginTransmission(PCF8574_ADDR);
@@ -171,6 +169,7 @@ void pcf8574_write(unsigned char pin, bool value) {
   bool success = Wire.write(pcf8574State);
   bool notFound = Wire.endTransmission();
 
+  mutex_exit(&pcf8574Mutex);
   if(!success) {
     derr("error writting byte to pcf8574");
   }
@@ -178,21 +177,18 @@ void pcf8574_write(unsigned char pin, bool value) {
   if(notFound) {
     derr("pcf8574 not found");
   }
-  mutex_exit(&pcf8574Mutex);
 }
 
 bool pcf8574_read(unsigned char pin) {
   mutex_enter_blocking(&pcf8574Mutex);
-
   Wire.beginTransmission(PCF8574_ADDR);
   bool retVal = Wire.read();
   bool notFound = Wire.endTransmission();
+  mutex_exit(&pcf8574Mutex);
 
   if(notFound) {
     derr("pcf8574 not found");
   }
-
-  mutex_exit(&pcf8574Mutex);
   return retVal;
 }
 

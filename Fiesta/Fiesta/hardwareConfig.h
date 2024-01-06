@@ -29,6 +29,7 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
+#define ADC_VOLT_PIN A2
 #define ADC_SENSORS_PIN A1
 
 //chip select pin for SD card reader
@@ -67,7 +68,7 @@
 #define HC4051_I_FUEL_LEVEL 4
 #define HC4051_I_BAR_PRESSURE 5
 #define HC4051_I_EGT 6
-#define HC4051_I_VOLTS 7
+#define HC4051_I_ADJUSTOMETER 7
 
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
