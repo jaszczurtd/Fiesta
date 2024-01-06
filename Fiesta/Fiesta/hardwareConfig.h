@@ -3,7 +3,7 @@
 
 #include <libConfig.h>
 
-#define PWM_FREQUENCY_HZ 300
+#define PWM_FREQUENCY_HZ 150
 #define I2C_SPEED_HZ 50000
 
 #define PWM_WRITE_RESOLUTION 11
