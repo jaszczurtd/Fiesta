@@ -12,7 +12,6 @@ static int adjustometerRAWval = 0;
 static int currentVP37PWM = 0;
 static int lastThrottle = -1;
 static int lastDesired = -1;
-static int lastDirection = D_NONE;
 static int pwmval;
 static bool calibrationDone = false;
 
@@ -20,7 +19,10 @@ static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MA
 static int calibrationTab[VP37_CALIBRATION_CYCLES];
 
 bool throttleCycle(void *arg);
-void adjustometerInterrupt(void);
+bool measureFuelTemp(void *arg) {
+  valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
+  return true;
+}
 
 void initVP37(void) {
   if(!vp37Initialized) {
@@ -28,33 +30,21 @@ void initVP37(void) {
     adjTime = 0;
     currentVP37PWM = 0;
     throttleTimer = timer_create_default();
+    measureFuelTemp(NULL);
+    throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
+
     throttleTimer.every(VP37_TIMER_UPDATE, throttleCycle);
     pwmval = 0;
 
-    pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
-    attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
     vp37Initialized = true; 
   }
-}
-
-int getAdjustometerVal(void) {
-  int val = ((adjustometerRAWval / 10) * 10);
-
-  val = map(val, VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
-  if(val < 0) {
-    val = 0;
-  }
-  if(val > PWM_RESOLUTION) {
-    val = PWM_RESOLUTION;
-  }
-  return val;
 }
 
 void makeCalibrationTable(void) {
   watchdog_update();
   delay(VP37_ADJUST_TIMER);
   for(int a = 0; a < VP37_CALIBRATION_CYCLES; a++) {
-    calibrationTab[a] = adjustometerRAWval;
+    calibrationTab[a] = getVP37Adjustometer();
     delay(VP37_ADJUST_TIMER);
   }
   delay(VP37_ADJUST_TIMER);
@@ -70,7 +60,6 @@ bool isInRangeOf(int desired, int val) {
          val <= (desired + (getCalibrationError(desired) / 2)) );
 }
 
-int aaa;
 void vp37Calibrate(void) {
 
   if(calibrationDone) {
@@ -82,10 +71,10 @@ void vp37Calibrate(void) {
 
   valToPWM(PIO_VP37_RPM, map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION));
   makeCalibrationTable();
-  VP37_ADJUST_MAX = getHalfwayBetweenMinMax(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MAX = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
   valToPWM(PIO_VP37_RPM, 0);
   makeCalibrationTable();
-  VP37_ADJUST_MIN = getHalfwayBetweenMinMax(calibrationTab, VP37_CALIBRATION_CYCLES);
+  VP37_ADJUST_MIN = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
   VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MIN - VP37_ADJUST_MAX) / 2) + VP37_ADJUST_MAX;
   calibrationDone = VP37_ADJUST_MIDDLE > 0;
 
@@ -95,21 +84,6 @@ void vp37Calibrate(void) {
 int getDesiredCalibrationValForPercent(int p) {
   return map(map(p, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX), 
                  VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
-}
-
-void adjustometerInterrupt(void) {
-  detachInterrupt(PIO_VP37_ADJUSTOMETER);
-
-  unsigned long currentMillis = millis();
-  if (adjTime <= currentMillis) {
-    adjTime = currentMillis + VP37_ADJUST_TIMER;
-    adjustometerRAWval = adjustAngleCounter;
-    adjustAngleCounter = 0;
-  } else {
-    adjustAngleCounter++;
-  }
-
-  attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
 }
 
 void enableVP37(bool enable) {
@@ -133,7 +107,12 @@ int obliczProcent(int wartosc) {
   return int(((double)wartosc / PWM_RESOLUTION) * 100.0);
 }
 
+float minSupplyVoltage = 16.0;  // Maksymalne napięcie zasilania
+float maxSupplyVoltage = 9.0;   // Minimalne napięcie zasilania
+
 void vp37Process(void) {
+  int vcorrection = 0;
+
   if(!vp37Initialized) {
     return;
   }
@@ -143,6 +122,7 @@ void vp37Process(void) {
     adjustometerRAWval != 0) {
       vp37Calibrate();
   }
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
 
   throttleTimer.tick();  
 
@@ -160,61 +140,33 @@ void vp37Process(void) {
   if(lastThrottle != val || lastDesired != desired) {
     lastThrottle = val;
     lastDesired = desired;
-    valToPWM(PIO_VP37_RPM, lastThrottle);
   }
 
-  //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
+  vcorrection = int(mapfloat(valueFields[F_VOLTS], 10.0, 15.0, 0, 750 - 522));
+  valToPWM(PIO_VP37_RPM, lastThrottle - vcorrection);
 
-  deb("thr: %d p: %d", val, obliczProcent(val));
+  int solenoidFeedback = getVP37Adjustometer();
+
+
+
+
+  //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getVP37Adjustometer(), desired, VP37_OPERATE_MAX, aaa);
+
+
+  deb("thr: %d prc:%d adj:%d V:%.1f corr:%d temp:%.1f", val, 
+      obliczProcent(val), solenoidFeedback, valueFields[F_VOLTS], vcorrection, valueFields[F_FUEL_TEMP]);
 
 }
 
 bool throttleCycle(void *arg) {
   bool status = true;
 
-  int val = map(1, 0, 100, 0, VP37_PWM_MAX - VP37_PWM_MIN);
-  bool inRange = isInRangeOf(lastDesired, getAdjustometerVal());
-  if(!inRange) {
-    if(lastDesired < getAdjustometerVal()) {
-      pwmval -= val;
-    } else {
-      pwmval += val;
-    }
-  }
+  //int val = map(1, 0, 100, 0, VP37_PWM_MAX - VP37_PWM_MIN);
 
-  //deb("in range:%d desired:%d adj:%d corr:%d", inRange, lastDesired, getAdjustometerVal(), val);
+  //deb("in range:%d desired:%d adj:%d corr:%d", inRange, lastDesired, getVP37Adjustometer(), val);
   
   //valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
 
   return status;
 }
 
-void p(void) {
-// Konfiguracja pinów PWM
-    gpio_set_function(2, GPIO_FUNC_PWM);  // Ustawia GPIO 2 jako pin PWM
-    gpio_set_function(3, GPIO_FUNC_PWM);  // Ustawia GPIO 3 jako pin PWM
-
-    // Inicjalizacja konfiguracji PWM
-    pwm_config config1 = pwm_get_default_config();  // Konfiguracja dla PWM1
-    pwm_config config2 = pwm_get_default_config();  // Konfiguracja dla PWM2
-
-    // Ustawienie różnych częstotliwości
-    pwm_config_set_clkdiv(&config1, 50.0f);  // Ustawia częstotliwość PWM1 na 50 Hz
-    pwm_config_set_clkdiv(&config2, 500.0f);  // Ustawia częstotliwość PWM2 na 500 Hz
-
-    // Inicjalizacja kanałów PWM
-    pwm_init(pwm_gpio_to_slice_num(2), &config1, false);
-    pwm_init(pwm_gpio_to_slice_num(3), &config2, false);
-
-    // Ustawienie wypełnienia (duty cycle)
-    pwm_set_gpio_level(2, pwm_gpio_to_slice_num(2) >> 1);  // Ustawia wypełnienie PWM1
-    pwm_set_gpio_level(3, pwm_gpio_to_slice_num(3) >> 2);  // Ustawia wypełnienie PWM2
-
-    // Czekaj
-    sleep_ms(5000);  // Czekaj 5000 milisekund (5 sekund)
-
-    // Wyłącz PWM
-    //pwm_deinit(pwm_gpio_to_slice_num(2));
-    //pwm_deinit(pwm_gpio_to_slice_num(3));
-
-}
