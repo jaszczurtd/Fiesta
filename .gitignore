@@ -91,6 +91,4 @@ Fiesta_pcbs/ecu/~ecu.pcb
 Fiesta_pcbs/ecu/~rppico.pcb
 DPF_main/ArduinoOutput/
 Fiesta_pcbs/ecu/ecuv2 (PCB - Design Rule Check Report).txt
-Fiesta_pcbs/ecu/~ecuv2.pcb
-Fiesta_pcbs/ecu/~LCD_buffer.pcb
-Fiesta_pcbs/ecu/~vp37_adjustometer.pcb
+Fiesta_pcbs/ecu/~*
