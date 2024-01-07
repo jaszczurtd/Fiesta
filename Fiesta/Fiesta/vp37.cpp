@@ -31,8 +31,8 @@ void initVP37(void) {
     throttleTimer.every(VP37_TIMER_UPDATE, throttleCycle);
     pwmval = 0;
 
-    pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
-    attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
+    //pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
+    //attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
     vp37Initialized = true; 
   }
 }
@@ -98,7 +98,7 @@ int getDesiredCalibrationValForPercent(int p) {
 }
 
 void adjustometerInterrupt(void) {
-  detachInterrupt(PIO_VP37_ADJUSTOMETER);
+  //detachInterrupt(PIO_VP37_ADJUSTOMETER);
 
   unsigned long currentMillis = millis();
   if (adjTime <= currentMillis) {
@@ -109,7 +109,7 @@ void adjustometerInterrupt(void) {
     adjustAngleCounter++;
   }
 
-  attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
+  //attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
 }
 
 void enableVP37(bool enable) {
@@ -165,7 +165,7 @@ void vp37Process(void) {
 
   //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
 
-  int p = (readAdjustometer() / 10);
+  int p = (readAdjustometer());
 
 
   deb("thr: %d p: %d v:%d", val, obliczProcent(val), p);
@@ -192,32 +192,3 @@ bool throttleCycle(void *arg) {
   return status;
 }
 
-void p(void) {
-// Konfiguracja pinów PWM
-    gpio_set_function(2, GPIO_FUNC_PWM);  // Ustawia GPIO 2 jako pin PWM
-    gpio_set_function(3, GPIO_FUNC_PWM);  // Ustawia GPIO 3 jako pin PWM
-
-    // Inicjalizacja konfiguracji PWM
-    pwm_config config1 = pwm_get_default_config();  // Konfiguracja dla PWM1
-    pwm_config config2 = pwm_get_default_config();  // Konfiguracja dla PWM2
-
-    // Ustawienie różnych częstotliwości
-    pwm_config_set_clkdiv(&config1, 50.0f);  // Ustawia częstotliwość PWM1 na 50 Hz
-    pwm_config_set_clkdiv(&config2, 500.0f);  // Ustawia częstotliwość PWM2 na 500 Hz
-
-    // Inicjalizacja kanałów PWM
-    pwm_init(pwm_gpio_to_slice_num(2), &config1, false);
-    pwm_init(pwm_gpio_to_slice_num(3), &config2, false);
-
-    // Ustawienie wypełnienia (duty cycle)
-    pwm_set_gpio_level(2, pwm_gpio_to_slice_num(2) >> 1);  // Ustawia wypełnienie PWM1
-    pwm_set_gpio_level(3, pwm_gpio_to_slice_num(3) >> 2);  // Ustawia wypełnienie PWM2
-
-    // Czekaj
-    sleep_ms(5000);  // Czekaj 5000 milisekund (5 sekund)
-
-    // Wyłącz PWM
-    //pwm_deinit(pwm_gpio_to_slice_num(2));
-    //pwm_deinit(pwm_gpio_to_slice_num(3));
-
-}

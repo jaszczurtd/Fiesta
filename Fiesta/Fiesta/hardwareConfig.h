@@ -3,8 +3,11 @@
 
 #include <libConfig.h>
 
-#define PWM_FREQUENCY_HZ 150
-#define I2C_SPEED_HZ 50000
+#define VP37_PWM_FREQUENCY_HZ 150
+#define TURBO_PWM_FREQUENCY_HZ 300
+#define ANGLE_PWM_FREQUENCY_HZ 200
+
+#define I2C_SPEED_HZ 150000
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
@@ -14,7 +17,6 @@
 #define PIO_TURBO 10
 #define PIO_VP37_RPM 9
 #define PIO_VP37_ANGLE 5
-#define PIO_VP37_ADJUSTOMETER 28
 
 #define PIO_DPF_LAMP 8
 

@@ -15,6 +15,10 @@ static unsigned char pcf8574State = 0;
 static mutex_t pcf8574Mutex;
 static mutex_t analog4051Mutex;
 
+static pwmConfig pwmVp37;
+static pwmConfig pwmTurbo;
+static pwmConfig pwmAngle;
+
 void initI2C(void) {
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
@@ -30,8 +34,7 @@ void initSPI(void) {
 
 void initSensors(void) {
   analogReadResolution(ADC_BITS);
-  analogWriteFreq(PWM_FREQUENCY_HZ);
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
+  pwm_init();
 
   init4051();
   
@@ -178,10 +181,6 @@ int readAdjustometer(void) {
 }
 
 //-------------------------------------------------------------------------------------------------
-
-void valToPWM(unsigned char pin, int val) {
-  analogWrite(pin, (PWM_RESOLUTION - val));
-}
 
 void pcf8574_init(void) {
   mutex_init(&pcf8574Mutex);
@@ -381,3 +380,79 @@ bool updateValsForDebug(void *arg) {
   return true;
 }
 
+void pwm_configure_channel(pwmConfig *cfg) {
+
+  cfg->analogScale = PWM_RESOLUTION;
+  cfg->analogWritePseudoScale = 1;
+  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) > 255.0) && (cfg->analogScale < 32678)) {
+      cfg->analogWritePseudoScale++;
+      cfg->analogScale *= 2;
+  }
+  cfg->analogWriteSlowScale = 1;
+  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) < 1.0) && (cfg->analogScale >= 6)) {
+      cfg->analogWriteSlowScale++;
+      cfg->analogScale /= 2;
+  }
+
+  if (!(cfg->pwmInitted & (1 << pwm_gpio_to_slice_num(cfg->pin)))) {
+    pwm_config c = pwm_get_default_config();
+    pwm_config_set_clkdiv(&c, clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq));
+    pwm_config_set_wrap(&c, cfg->analogScale - 1);
+    pwm_init(pwm_gpio_to_slice_num(cfg->pin), &c, true);
+    cfg->pwmInitted |= 1 << pwm_gpio_to_slice_num(cfg->pin);
+  }
+}
+
+void pwm_init(void) {
+
+  pwmVp37.pin = PIO_VP37_RPM;
+  pwmVp37.analogFreq = VP37_PWM_FREQUENCY_HZ;
+  pwm_configure_channel(&pwmVp37);
+
+  pwmTurbo.pin = PIO_TURBO;
+  pwmTurbo.analogFreq = TURBO_PWM_FREQUENCY_HZ;
+  pwm_configure_channel(&pwmTurbo);
+
+  pwmAngle.pin = PIO_VP37_ANGLE;
+  pwmAngle.analogFreq = ANGLE_PWM_FREQUENCY_HZ;
+  pwm_configure_channel(&pwmAngle);
+}
+
+void pwm_write(pwmConfig *cfg, int val) {
+
+  val <<= cfg->analogWritePseudoScale;
+  val >>= cfg->analogWriteSlowScale;
+
+  if (val < 0) {
+      val = 0;
+  } else if ((uint32_t)val > cfg->analogScale) {
+      val = cfg->analogScale;
+  }
+
+  gpio_set_function(cfg->pin, GPIO_FUNC_PWM);
+  pwm_set_gpio_level(cfg->pin, val);
+}
+
+void valToPWM(unsigned char pin, int val) {
+
+  pwmConfig *cfg = NULL;
+  switch(pin) {
+    case PIO_TURBO:
+      cfg = &pwmTurbo;
+      break;
+    case PIO_VP37_RPM:
+      cfg = &pwmVp37;
+      break;
+    case PIO_VP37_ANGLE:
+      cfg = &pwmAngle;
+      break;
+    default:
+      break;
+  }
+  if(cfg != NULL) {
+    pwm_write(cfg, (PWM_RESOLUTION - val));
+  } else {
+    derr("config for this pwm is not initialized!");
+  }
+
+}
