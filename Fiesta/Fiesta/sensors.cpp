@@ -12,7 +12,9 @@ static int oilValuesSet = 0;
 static float oilTable[TEMPERATURE_TABLES_SIZE];
 
 static unsigned char pcf8574State = 0;
-static mutex_t pcf8574Mutex;
+
+static mutex_t i2cMutex;
+static mutex_t pwmMutex;
 static mutex_t analog4051Mutex;
 
 static pwmConfig pwmVp37;
@@ -183,7 +185,7 @@ int readAdjustometer(void) {
 //-------------------------------------------------------------------------------------------------
 
 void pcf8574_init(void) {
-  mutex_init(&pcf8574Mutex);
+  mutex_init(&i2cMutex);
   pcf8574State = 0;
 
   Wire.beginTransmission(PCF8574_ADDR);
@@ -192,7 +194,7 @@ void pcf8574_init(void) {
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
-  mutex_enter_blocking(&pcf8574Mutex);
+  mutex_enter_blocking(&i2cMutex);
   if(value) {
     bitSet(pcf8574State, pin);
   }  else {
@@ -203,7 +205,7 @@ void pcf8574_write(unsigned char pin, bool value) {
   bool success = Wire.write(pcf8574State);
   bool notFound = Wire.endTransmission();
 
-  mutex_exit(&pcf8574Mutex);
+  mutex_exit(&i2cMutex);
   if(!success) {
     derr("error writting byte to pcf8574");
   }
@@ -214,11 +216,11 @@ void pcf8574_write(unsigned char pin, bool value) {
 }
 
 bool pcf8574_read(unsigned char pin) {
-  mutex_enter_blocking(&pcf8574Mutex);
+  mutex_enter_blocking(&i2cMutex);
   Wire.beginTransmission(PCF8574_ADDR);
   bool retVal = Wire.read();
   bool notFound = Wire.endTransmission();
-  mutex_exit(&pcf8574Mutex);
+  mutex_exit(&i2cMutex);
 
   if(notFound) {
     derr("pcf8574 not found");
@@ -401,9 +403,12 @@ void pwm_configure_channel(pwmConfig *cfg) {
     pwm_init(pwm_gpio_to_slice_num(cfg->pin), &c, true);
     cfg->pwmInitted |= 1 << pwm_gpio_to_slice_num(cfg->pin);
   }
+  gpio_set_function(cfg->pin, GPIO_FUNC_PWM);  
 }
 
 void pwm_init(void) {
+
+  mutex_init(&pwmMutex);
 
   pwmVp37.pin = PIO_VP37_RPM;
   pwmVp37.analogFreq = VP37_PWM_FREQUENCY_HZ;
@@ -420,6 +425,8 @@ void pwm_init(void) {
 
 void pwm_write(pwmConfig *cfg, int val) {
 
+  mutex_enter_blocking(&pwmMutex);
+
   val <<= cfg->analogWritePseudoScale;
   val >>= cfg->analogWriteSlowScale;
 
@@ -429,8 +436,9 @@ void pwm_write(pwmConfig *cfg, int val) {
       val = cfg->analogScale;
   }
 
-  gpio_set_function(cfg->pin, GPIO_FUNC_PWM);
   pwm_set_gpio_level(cfg->pin, val);
+
+  mutex_exit(&pwmMutex);
 }
 
 void valToPWM(unsigned char pin, int val) {
@@ -454,5 +462,4 @@ void valToPWM(unsigned char pin, int val) {
   } else {
     derr("config for this pwm is not initialized!");
   }
-
 }
