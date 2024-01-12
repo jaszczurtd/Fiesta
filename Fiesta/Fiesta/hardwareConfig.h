@@ -49,6 +49,14 @@
 #define CAN1_GPIO 6
 #define CAN1_INT 14
 
+//ADS1115
+//values for ECU voltage 
+#define R1 3300.0  // 3.3k / ohm
+#define R2 470.0   // 470R / ohm
+#define ADC_RANGE 0.1875  
+
+#define ADS1115_ADDR 0x48
+
 //PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
 
