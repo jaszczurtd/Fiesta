@@ -146,7 +146,7 @@ void initialization(void) {
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
 
-  valueFields[F_VOLTS] = readVolts();
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
   TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
 
   #ifdef PICO_W

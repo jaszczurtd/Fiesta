@@ -17,6 +17,7 @@
 
 #include "hardware/pwm.h"
 #include "hardware/gpio.h"
+#include <ADS1X15.h>
 
 typedef struct {
   uint32_t pwmInitted;
@@ -45,10 +46,8 @@ float readCoolantTemp(void);
 float readOilTemp(void);
 int readThrottle(void);
 float readAirTemperature(void);
-float readVolts(void);
 float readBarPressure(void);
 int readEGT(void);
-int readAdjustometer(void);
 int getThrottlePercentage(void);
 int getPercentageEngineLoad(void);
 
@@ -69,4 +68,8 @@ bool isDPFRegenerating(void);
 bool updateValsForDebug(void *arg);
 void pwm_init(void);
 
+float getSystemSupplyVoltage(void);
+float getVP37Adjustometer(void);
+
+void testADS(void);
 #endif

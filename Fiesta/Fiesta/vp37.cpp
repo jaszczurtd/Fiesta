@@ -12,7 +12,6 @@ static int adjustometerRAWval = 0;
 static int currentVP37PWM = 0;
 static int lastThrottle = -1;
 static int lastDesired = -1;
-static int lastDirection = D_NONE;
 static int pwmval;
 static bool calibrationDone = false;
 
@@ -20,7 +19,6 @@ static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MA
 static int calibrationTab[VP37_CALIBRATION_CYCLES];
 
 bool throttleCycle(void *arg);
-void adjustometerInterrupt(void);
 
 void initVP37(void) {
   if(!vp37Initialized) {
@@ -31,8 +29,6 @@ void initVP37(void) {
     throttleTimer.every(VP37_TIMER_UPDATE, throttleCycle);
     pwmval = 0;
 
-    //pinMode(PIO_VP37_ADJUSTOMETER, INPUT_PULLUP); 
-    //attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
     vp37Initialized = true; 
   }
 }
@@ -70,7 +66,6 @@ bool isInRangeOf(int desired, int val) {
          val <= (desired + (getCalibrationError(desired) / 2)) );
 }
 
-int aaa;
 void vp37Calibrate(void) {
 
   if(calibrationDone) {
@@ -95,21 +90,6 @@ void vp37Calibrate(void) {
 int getDesiredCalibrationValForPercent(int p) {
   return map(map(p, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX), 
                  VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
-}
-
-void adjustometerInterrupt(void) {
-  //detachInterrupt(PIO_VP37_ADJUSTOMETER);
-
-  unsigned long currentMillis = millis();
-  if (adjTime <= currentMillis) {
-    adjTime = currentMillis + VP37_ADJUST_TIMER;
-    adjustometerRAWval = adjustAngleCounter;
-    adjustAngleCounter = 0;
-  } else {
-    adjustAngleCounter++;
-  }
-
-  //attachInterrupt(PIO_VP37_ADJUSTOMETER, adjustometerInterrupt, FALLING);
 }
 
 void enableVP37(bool enable) {
@@ -143,6 +123,7 @@ void vp37Process(void) {
     adjustometerRAWval != 0) {
       vp37Calibrate();
   }
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
 
   throttleTimer.tick();  
 
@@ -165,10 +146,10 @@ void vp37Process(void) {
 
   //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
 
-  int p = (readAdjustometer());
+  int p = (getVP37Adjustometer());
 
 
-  deb("thr: %d p: %d v:%d", val, obliczProcent(val), p);
+  deb("thr: %d p: %d v:%f V:%f", val, obliczProcent(val), p, valueFields[F_VOLTS]);
 
 }
 

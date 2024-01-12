@@ -4,6 +4,8 @@
 NOINIT volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];
 
+ADS1115 ADS(ADS1115_ADDR);
+
 static int collantTableIdx = 0;
 static int collantValuesSet = 0;
 static float collantTable[TEMPERATURE_TABLES_SIZE];
@@ -39,7 +41,8 @@ void initSensors(void) {
   pwm_init();
 
   init4051();
-  
+  ADS.begin();
+
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
   }
@@ -53,14 +56,6 @@ void initSensors(void) {
 void initBasicPIO(void) {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PIO_DPF_LAMP, OUTPUT);
-}
-
-//-------------------------------------------------------------------------------------------------
-//Read volts
-//-------------------------------------------------------------------------------------------------
-
-float readVolts(void) {
-  return adcToVolt(analogRead(ADC_VOLT_PIN), V_DIVIDER_R1, V_DIVIDER_R2);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -172,25 +167,17 @@ int readEGT(void) {
   return a;
 }
 
-int readAdjustometer(void) {
-  int a = 0;
-  mutex_enter_blocking(&analog4051Mutex);
-
-  set4051ActivePin(HC4051_I_ADJUSTOMETER);
-  a = getAverageValueFrom(ADC_SENSORS_PIN);
-  mutex_exit(&analog4051Mutex);
-  return a;
-}
-
 //-------------------------------------------------------------------------------------------------
 
 void pcf8574_init(void) {
   mutex_init(&i2cMutex);
   pcf8574State = 0;
 
+  mutex_enter_blocking(&i2cMutex);
   Wire.beginTransmission(PCF8574_ADDR);
   Wire.write(pcf8574State);
   Wire.endTransmission();
+  mutex_exit(&i2cMutex);
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
@@ -247,9 +234,6 @@ bool readMediumValues(void *argument) {
       break;
     case F_INTAKE_TEMP:
       valueFields[F_INTAKE_TEMP] = readAirTemperature();
-      break;
-    case F_VOLTS:
-      valueFields[F_VOLTS] = readVolts();
       break;
     case F_FUEL:
       valueFields[F_FUEL] = readFuel();
@@ -386,12 +370,14 @@ void pwm_configure_channel(pwmConfig *cfg) {
 
   cfg->analogScale = PWM_RESOLUTION;
   cfg->analogWritePseudoScale = 1;
-  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) > 255.0) && (cfg->analogScale < 32678)) {
+  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) > 255.0) && 
+          (cfg->analogScale < 32678)) {
       cfg->analogWritePseudoScale++;
       cfg->analogScale *= 2;
   }
   cfg->analogWriteSlowScale = 1;
-  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) < 1.0) && (cfg->analogScale >= 6)) {
+  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) < 1.0) && 
+        (cfg->analogScale >= 6)) {
       cfg->analogWriteSlowScale++;
       cfg->analogScale /= 2;
   }
@@ -463,3 +449,26 @@ void valToPWM(unsigned char pin, int val) {
     derr("config for this pwm is not initialized!");
   }
 }
+
+float calculateVoltage(int adcValue) {
+    float voltage = (adcValue * ADC_RANGE) / 1000;
+    return voltage / (R2 / (R1 + R2));
+}
+
+float getSystemSupplyVoltage(void) {
+  mutex_enter_blocking(&i2cMutex);
+  ADS.setGain(0);
+  float val = calculateVoltage(ADS.readADC(1));
+  mutex_exit(&i2cMutex);
+  return val;
+}
+
+float getVP37Adjustometer(void) {
+  mutex_enter_blocking(&i2cMutex);
+  ADS.setGain(0);
+  float val = (ADS.readADC(0) * ADC_RANGE) / 1000;
+  mutex_exit(&i2cMutex);
+  return val;
+}
+
+
