@@ -146,10 +146,8 @@ void vp37Process(void) {
 
   //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getAdjustometerVal(), desired, VP37_OPERATE_MAX, aaa);
 
-  int p = (getVP37Adjustometer());
 
-
-  deb("thr: %d p: %d v:%f V:%f", val, obliczProcent(val), p, valueFields[F_VOLTS]);
+  deb("thr: %d prc:%d adj:%d V:%f", val, obliczProcent(val), getVP37Adjustometer(), valueFields[F_VOLTS]);
 
 }
 
