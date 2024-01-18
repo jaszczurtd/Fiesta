@@ -455,20 +455,22 @@ float calculateVoltage(int adcValue) {
     return voltage / (R2 / (R1 + R2));
 }
 
-float getSystemSupplyVoltage(void) {
+static int16_t readADC(uint8_t pin) {
   mutex_enter_blocking(&i2cMutex);
   ADS.setGain(0);
-  float val = calculateVoltage(ADS.readADC(1));
+  int16_t v = ADS.readADC(pin);
   mutex_exit(&i2cMutex);
-  return val;
+  return v;
 }
 
-float getVP37Adjustometer(void) {
-  mutex_enter_blocking(&i2cMutex);
-  ADS.setGain(0);
-  float val = (ADS.readADC(0) * ADC_RANGE) / 1000;
-  mutex_exit(&i2cMutex);
-  return val;
+float getSystemSupplyVoltage(void) {
+  float val = calculateVoltage(readADC(ADS1115_PIN_1));
+  return roundfWithPrecisionTo(val, 1);
+}
+
+int getVP37Adjustometer(void) {
+  float val = (readADC(ADS1115_PIN_2) * ADC_RANGE) / 1000;
+  return (int)(roundfWithPrecisionTo(val, 3) * 1000);
 }
 
 

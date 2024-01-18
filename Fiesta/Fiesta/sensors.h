@@ -69,7 +69,7 @@ bool updateValsForDebug(void *arg);
 void pwm_init(void);
 
 float getSystemSupplyVoltage(void);
-float getVP37Adjustometer(void);
+int getVP37Adjustometer(void);
 
 void testADS(void);
 #endif

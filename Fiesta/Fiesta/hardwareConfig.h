@@ -55,6 +55,11 @@
 #define R2 470.0   // 470R / ohm
 #define ADC_RANGE 0.1875  
 
+#define ADS1115_PIN_0 0 //vp37 fuel temp
+#define ADS1115_PIN_1 1 //system supply voltage
+#define ADS1115_PIN_2 2 //vp37 adjustometer
+#define ADS1115_PIN_3 3 //not used atm
+
 #define ADS1115_ADDR 0x48
 
 //PCF8574 i2c addr
