@@ -18,13 +18,15 @@
 
 #define PERCENTAGE_ERROR 5
 
+#define VP37_FUEL_TEMP_UPDATE 500
+
 #define VP37_CALIBRATION_MAX_PERCENTAGE 60
 #define VP37_CALIBRATION_CYCLES 10
 
 #define VP37_PWM_MIN 350
-#define VP37_PWM_MAX 650
+#define VP37_PWM_MAX 750
 
-#define VP37_ADJUST_TIMER 50
+#define VP37_ADJUST_TIMER 25
 
 void vp37Calibrate(void);
 void enableVP37(bool enable);

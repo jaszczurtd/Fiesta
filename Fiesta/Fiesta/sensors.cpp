@@ -473,4 +473,9 @@ int getVP37Adjustometer(void) {
   return (int)(roundfWithPrecisionTo(val, 3) * 1000);
 }
 
+float getVP37FuelTemperature(void) {
+  float val = (readADC(ADS1115_PIN_0) * ADC_RANGE) / 1000;
+  val = steinhart(val, R_VP37_FUEL_A, R_VP37_FUEL_B, false);
+  return roundfWithPrecisionTo(val, 1);
+}
 

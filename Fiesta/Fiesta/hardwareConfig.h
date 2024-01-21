@@ -101,6 +101,9 @@
 #define R_TEMP_AIR_A 5050 //sensor
 #define R_TEMP_AIR_B 4800
 
+#define R_VP37_FUEL_A 2300 //sensor
+#define R_VP37_FUEL_B 3300
+
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
 #define DIVIDER_EGT 2.280
