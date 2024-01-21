@@ -70,6 +70,6 @@ void pwm_init(void);
 
 float getSystemSupplyVoltage(void);
 int getVP37Adjustometer(void);
+float getVP37FuelTemperature(void);
 
-void testADS(void);
 #endif
