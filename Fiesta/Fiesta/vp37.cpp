@@ -1,63 +1,86 @@
 
 #include "vp37.h"
-#include "hardware/pwm.h"
-
-#define VP37_TIMER_UPDATE 100
 
 Timer throttleTimer;
 static bool vp37Initialized = false;
-static volatile unsigned int adjustAngleCounter = 0;
-static volatile unsigned long adjTime = 0;
-static int adjustometerRAWval = 0;
-static int currentVP37PWM = 0;
 static int lastThrottle = -1;
-static int lastDesired = -1;
-static int pwmval;
 static bool calibrationDone = false;
+static int desiredAdjustometer = -1;
+static float pwmValue = VP37_PWM_MIN;
+static float voltageCorrection = 0;
+static int finalPWM = VP37_PWM_MIN;
+static float lastVolts = 0.0;
 
 static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
-static int calibrationTab[VP37_CALIBRATION_CYCLES];
+static PIDController controller;
 
-bool throttleCycle(void *arg);
+void initPIDcontroller(void) {
+  controller.kp = PID_KP;
+  controller.ki = PID_KI;
+  controller.kd = PID_KD;
+  controller.last_time = 0;
+}
+
+void updatePIDtime(PIDController *c) {
+  float now = millis();
+  c->dt = (now - c->last_time)/100.00;
+  c->last_time = now;
+}
+
+float updatePIDcontroller(PIDController *c, float error) {
+  float proportional = error;
+  c->integral += error * c->dt;
+  float derivative = (error - c->previous) / c->dt;
+  c->previous = error;
+  return (c->kp * proportional) + (c->ki * c->integral) + (c->kd * derivative);
+}
+
 bool measureFuelTemp(void *arg) {
   valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
   return true;
 }
 
+bool measureVoltage(void *arg) {
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
+  return true;
+}
+
+int getMaxAdjustometerPWMVal(void) {
+  return map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
+}
+
 void initVP37(void) {
   if(!vp37Initialized) {
-    adjustAngleCounter = 0;
-    adjTime = 0;
-    currentVP37PWM = 0;
     throttleTimer = timer_create_default();
+    desiredAdjustometer = -1;
     measureFuelTemp(NULL);
-    throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
+    measureVoltage(NULL);
 
-    throttleTimer.every(VP37_TIMER_UPDATE, throttleCycle);
-    pwmval = 0;
+    initPIDcontroller();
+
+    throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
+    throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
 
     vp37Initialized = true; 
   }
 }
 
-void makeCalibrationTable(void) {
-  watchdog_update();
+int makeCalibrationValue(void) {
   delay(VP37_ADJUST_TIMER);
-  for(int a = 0; a < VP37_CALIBRATION_CYCLES; a++) {
-    calibrationTab[a] = getVP37Adjustometer();
-    delay(VP37_ADJUST_TIMER);
-  }
+  watchdog_update();
+  int val = getVP37Adjustometer();
   delay(VP37_ADJUST_TIMER);
   watchdog_update();  
+  return val;
 }
 
-int getCalibrationError(int from) {
-  return (int)((float)from * PERCENTAGE_ERROR / 100.0f);  
+float getCalibrationError(int from) {
+  return (float)((float)from * PERCENTAGE_ERROR / 100.0f);  
 }
 
-bool isInRangeOf(int desired, int val) {
-  return (val >= (desired - (getCalibrationError(desired) / 2)) &&
-         val <= (desired + (getCalibrationError(desired) / 2)) );
+bool isInRangeOf(float desired, float val) {
+  return (val >= (desired - (getCalibrationError(desired) / 2.0)) &&
+         val <= (desired + (getCalibrationError(desired) / 2.0)) );
 }
 
 void vp37Calibrate(void) {
@@ -69,21 +92,14 @@ void vp37Calibrate(void) {
 
   VP37_ADJUST_MAX = VP37_ADJUST_MIDDLE = VP37_ADJUST_MIN = VP37_OPERATE_MAX = -1;
 
-  valToPWM(PIO_VP37_RPM, map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION));
-  makeCalibrationTable();
-  VP37_ADJUST_MAX = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
+  valToPWM(PIO_VP37_RPM, getMaxAdjustometerPWMVal());
+  VP37_ADJUST_MAX = percentToGivenVal(VP37_PERCENTAGE_LIMITER, makeCalibrationValue());
   valToPWM(PIO_VP37_RPM, 0);
-  makeCalibrationTable();
-  VP37_ADJUST_MIN = getAverageFrom(calibrationTab, VP37_CALIBRATION_CYCLES);
-  VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MIN - VP37_ADJUST_MAX) / 2) + VP37_ADJUST_MAX;
+  VP37_ADJUST_MIN = makeCalibrationValue();
+  VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MAX - VP37_ADJUST_MIN) / 2) + VP37_ADJUST_MIN;
   calibrationDone = VP37_ADJUST_MIDDLE > 0;
 
   enableVP37(true);
-}
-
-int getDesiredCalibrationValForPercent(int p) {
-  return map(map(p, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX), 
-                 VP37_ADJUST_MIN, VP37_ADJUST_MAX, 0, PWM_RESOLUTION);
 }
 
 void enableVP37(bool enable) {
@@ -95,78 +111,61 @@ bool isVP37Enabled(void) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-int percentToPWMVal(int percent) {
-  if (percent < 0) percent = 0;
-  if (percent > 100) percent = 100;
-  return VP37_PWM_MIN + (((VP37_PWM_MAX - VP37_PWM_MIN) * percent) / 100);
+void throttleCycle(void) {
+  updatePIDtime(&controller);
+
+  float error = desiredAdjustometer - getVP37Adjustometer();
+  float output = updatePIDcontroller(&controller, error);
+
+  float maxPWMValue = VP37_PWM_MIN * 2;
+  pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, maxPWMValue);
+  pwmValue = constrain(pwmValue, VP37_PWM_MIN, maxPWMValue);
+
+  float diff = 0.0;
+  if(valueFields[F_VOLTS] != lastVolts) {
+    diff = fabs(valueFields[F_VOLTS] - lastVolts);
+    lastVolts = valueFields[F_VOLTS];
+  }
+
+  if(diff > VOLT_MIN_DIFF) {
+    voltageCorrection = (valueFields[F_VOLTS] - 12.0) / VOLT_PER_PWM;
+  }
+  finalPWM = int(pwmValue - voltageCorrection);
+
+  valToPWM(PIO_VP37_RPM, finalPWM);
 }
-
-bool isInRange = false;
-
-int obliczProcent(int wartosc) {
-  return int(((double)wartosc / PWM_RESOLUTION) * 100.0);
-}
-
-float minSupplyVoltage = 16.0;  // Maksymalne napięcie zasilania
-float maxSupplyVoltage = 9.0;   // Minimalne napięcie zasilania
 
 void vp37Process(void) {
-  int vcorrection = 0;
+  if(vp37Initialized) {
+    if((VP37_ADJUST_MAX <= 0 || 
+      VP37_ADJUST_MIDDLE <= 0 || 
+      VP37_ADJUST_MIN <= 0) && 
+      getVP37Adjustometer() > MIN_ADJUSTOMETER_VAL) {
+        vp37Calibrate();
+    }
 
-  if(!vp37Initialized) {
-    return;
+    throttleTimer.tick();  
+
+    int rpm = int(valueFields[F_RPM]);
+    if(rpm > RPM_MAX_EVER) {
+      enableVP37(false);
+      derr("RPM was too high! (%d)", rpm);
+      return;
+    }
+
+    int thr = getThrottlePercentage();
+    if(lastThrottle != thr || desiredAdjustometer < 0) {
+      lastThrottle = thr;
+      desiredAdjustometer = map(thr, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX);
+    }
+
+    throttleCycle();
   }
-  if((VP37_ADJUST_MAX <= 0 || 
-    VP37_ADJUST_MIDDLE <= 0 || 
-    VP37_ADJUST_MIN <= 0) && 
-    adjustometerRAWval != 0) {
-      vp37Calibrate();
-  }
-  valueFields[F_VOLTS] = getSystemSupplyVoltage();
-
-  throttleTimer.tick();  
-
-  int rpm = int(valueFields[F_RPM]);
-  if(rpm > RPM_MAX_EVER) {
-    enableVP37(false);
-    derr("RPM was too high! (%d)", rpm);
-    return;
-  }
-
-  int thr = getThrottlePercentage();
-  int val = map(thr, 0, 100, VP37_PWM_MIN, VP37_PWM_MAX);
-  int desired = getDesiredCalibrationValForPercent(thr);
-
-  if(lastThrottle != val || lastDesired != desired) {
-    lastThrottle = val;
-    lastDesired = desired;
-  }
-
-  vcorrection = int(mapfloat(valueFields[F_VOLTS], 10.0, 15.0, 0, 750 - 522));
-  valToPWM(PIO_VP37_RPM, lastThrottle - vcorrection);
-
-  int solenoidFeedback = getVP37Adjustometer();
-
-
-
-
-  //deb("thr:%d val:%d adj:%d desired:%d middle:%d %d", thr, val, getVP37Adjustometer(), desired, VP37_OPERATE_MAX, aaa);
-
-
-  deb("thr: %d prc:%d adj:%d V:%.1f corr:%d temp:%.1f", val, 
-      obliczProcent(val), solenoidFeedback, valueFields[F_VOLTS], vcorrection, valueFields[F_FUEL_TEMP]);
-
+  delayMicroseconds(VP37_OPERATION_DELAY);  
 }
 
-bool throttleCycle(void *arg) {
-  bool status = true;
-
-  //int val = map(1, 0, 100, 0, VP37_PWM_MAX - VP37_PWM_MIN);
-
-  //deb("in range:%d desired:%d adj:%d corr:%d", inRange, lastDesired, getVP37Adjustometer(), val);
-  
-  //valToPWM(PIO_VP37_RPM, lastThrottle + pwmval);
-
-  return status;
+void showVP37Debug(void) {
+  deb("thr:%d des:%d adj:%d V:%.1f t:%.1f pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
+      getVP37Adjustometer(), valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], (int)finalPWM,
+      (int)voltageCorrection);
 }
-

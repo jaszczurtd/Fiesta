@@ -300,6 +300,7 @@ void looper(void) {
   heatedWindowMainLoop();
   statusVariable0 = 7;
 
+  showVP37Debug();
   delay(CORE_OPERATION_DELAY);  
 }
 
@@ -334,6 +335,5 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
-  delay(CORE_OPERATION_DELAY);  
 }
 
