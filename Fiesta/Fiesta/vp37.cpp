@@ -142,6 +142,7 @@ void vp37Process(void) {
       VP37_ADJUST_MIN <= 0) && 
       getVP37Adjustometer() > MIN_ADJUSTOMETER_VAL) {
         vp37Calibrate();
+        lastThrottle = desiredAdjustometer = -1;
     }
 
     throttleTimer.tick();  
