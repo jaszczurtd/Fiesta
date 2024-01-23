@@ -179,6 +179,11 @@ void initialization(void) {
   setStartedCore0();
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
+#ifdef INC_FREERTOS_H
+  deb("FreeRTOS is active!");
+#else 
+  deb("Normal Arduino build.");
+#endif
 
   startTests();
 }

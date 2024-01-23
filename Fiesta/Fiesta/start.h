@@ -6,6 +6,13 @@
 #include "config.h"
 
 #include <Arduino.h>
+
+#ifdef INC_FREERTOS_H
+#include <FreeRTOS.h>
+#include "task.h"
+#include "semphr.h"
+#endif
+
 #include <Wire.h>
 #include <arduino-timer.h>
 #include <SPI.h>
