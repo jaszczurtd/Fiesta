@@ -356,9 +356,10 @@ void SimpleGauge::showSimpleGauge(void) {
             color = COLOR(RED);
         }
 
-        tft->prepareText((const char*)F("%d.%dv"), v1, v2);
+        char txt[DISPLAY_TXT_SIZE];
+        tft->prepareText(txt, (const char*)F("%d.%dv"), v1, v2);
         tft->sansBoldWithPosAndColor(x, y, color);
-        tft->printlnFromPreparedText();
+        tft->printlnFromPreparedText(txt);
       }
     }
     break;

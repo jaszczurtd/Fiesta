@@ -137,6 +137,7 @@ void vp37Process(void) {
     if(rpm > RPM_MAX_EVER) {
       enableVP37(false);
       derr("RPM was too high! (%d)", rpm);
+      m_delay_microseconds(VP37_OPERATION_DELAY);  
       return;
     }
 
@@ -148,7 +149,7 @@ void vp37Process(void) {
 
     throttleCycle();
   }
-  delayMicroseconds(VP37_OPERATION_DELAY);  
+  m_delay_microseconds(VP37_OPERATION_DELAY);  
 }
 
 void showVP37Debug(void) {

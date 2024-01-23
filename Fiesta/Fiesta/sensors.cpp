@@ -15,9 +15,9 @@ static float oilTable[TEMPERATURE_TABLES_SIZE];
 
 static unsigned char pcf8574State = 0;
 
-static mutex_t i2cMutex;
-static mutex_t pwmMutex;
-static mutex_t analog4051Mutex;
+m_mutex_def(i2cMutex);
+m_mutex_def(pwmMutex);
+m_mutex_def(analog4051Mutex);
 
 static pwmConfig pwmVp37;
 static pwmConfig pwmTurbo;
@@ -63,13 +63,13 @@ void initBasicPIO(void) {
 //-------------------------------------------------------------------------------------------------
 float readCoolantTemp(void) {
   float a = 0.0;
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_COOLANT_TEMP);
   a = getAverageForTable(&collantTableIdx, &collantValuesSet,
                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
                         collantTable);
-  mutex_exit(&analog4051Mutex);  
+  m_mutex_exit(analog4051Mutex);  
   return a;
 }
 
@@ -79,13 +79,13 @@ float readCoolantTemp(void) {
 
 float readOilTemp(void) {
   float a = 0.0;
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_OIL_TEMP);
 
   a = getAverageForTable(&oilTableIdx, &oilValuesSet,
                          ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
                          oilTable);
-  mutex_exit(&analog4051Mutex);  
+  m_mutex_exit(analog4051Mutex);  
   return a;
 }
 
@@ -94,11 +94,11 @@ float readOilTemp(void) {
 //-------------------------------------------------------------------------------------------------
 
 int readThrottle(void) {
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_THROTTLE_POS);
 
   float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
-  mutex_exit(&analog4051Mutex);
+  m_mutex_exit(analog4051Mutex);
 
   float initialVal = rawVal - THROTTLE_MIN;
 
@@ -127,11 +127,11 @@ int getThrottlePercentage(void) {
 
 float readAirTemperature(void) {
   float a = 0.0;
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_AIR_TEMP);
   a = ntcToTemp(ADC_SENSORS_PIN, R_TEMP_AIR_A, R_TEMP_AIR_B);
-  mutex_exit(&analog4051Mutex);
+  m_mutex_exit(analog4051Mutex);
   return a;
 }
 
@@ -140,12 +140,12 @@ float readAirTemperature(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readBarPressure(void) {
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
   float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 
       1.0; //atmospheric pressure
-  mutex_exit(&analog4051Mutex);
+  m_mutex_exit(analog4051Mutex);
 
   if(val < 0.0) {
       val = 0.0;
@@ -159,29 +159,29 @@ float readBarPressure(void) {
 
 int readEGT(void) {
   int a = 0;
-  mutex_enter_blocking(&analog4051Mutex);
+  m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_EGT);
   a = ((getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
-  mutex_exit(&analog4051Mutex);
+  m_mutex_exit(analog4051Mutex);
   return a;
 }
 
 //-------------------------------------------------------------------------------------------------
 
 void pcf8574_init(void) {
-  mutex_init(&i2cMutex);
+  m_mutex_init(i2cMutex);
   pcf8574State = 0;
 
-  mutex_enter_blocking(&i2cMutex);
+  m_mutex_enter_blocking(i2cMutex);
   Wire.beginTransmission(PCF8574_ADDR);
   Wire.write(pcf8574State);
   Wire.endTransmission();
-  mutex_exit(&i2cMutex);
+  m_mutex_exit(i2cMutex);
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
-  mutex_enter_blocking(&i2cMutex);
+  m_mutex_enter_blocking(i2cMutex);
   if(value) {
     bitSet(pcf8574State, pin);
   }  else {
@@ -192,7 +192,7 @@ void pcf8574_write(unsigned char pin, bool value) {
   bool success = Wire.write(pcf8574State);
   bool notFound = Wire.endTransmission();
 
-  mutex_exit(&i2cMutex);
+  m_mutex_exit(i2cMutex);
   if(!success) {
     derr("error writting byte to pcf8574");
   }
@@ -203,11 +203,11 @@ void pcf8574_write(unsigned char pin, bool value) {
 }
 
 bool pcf8574_read(unsigned char pin) {
-  mutex_enter_blocking(&i2cMutex);
+  m_mutex_enter_blocking(i2cMutex);
   Wire.beginTransmission(PCF8574_ADDR);
   bool retVal = Wire.read();
   bool notFound = Wire.endTransmission();
-  mutex_exit(&i2cMutex);
+  m_mutex_exit(i2cMutex);
 
   if(notFound) {
     derr("pcf8574 not found");
@@ -291,7 +291,7 @@ bool readHighValues(void *argument) {
 void init4051(void) {
   deb("4051 init");
 
-  mutex_init(&analog4051Mutex);
+  m_mutex_init(analog4051Mutex);
 
   pinMode(C_4051, OUTPUT);  //C
   pinMode(B_4051, OUTPUT);  //B  
@@ -394,7 +394,7 @@ void pwm_configure_channel(pwmConfig *cfg) {
 
 void pwm_init(void) {
 
-  mutex_init(&pwmMutex);
+  m_mutex_init(pwmMutex);
 
   pwmVp37.pin = PIO_VP37_RPM;
   pwmVp37.analogFreq = VP37_PWM_FREQUENCY_HZ;
@@ -411,7 +411,7 @@ void pwm_init(void) {
 
 void pwm_write(pwmConfig *cfg, int val) {
 
-  mutex_enter_blocking(&pwmMutex);
+  m_mutex_enter_blocking(pwmMutex);
 
   val <<= cfg->analogWritePseudoScale;
   val >>= cfg->analogWriteSlowScale;
@@ -424,7 +424,7 @@ void pwm_write(pwmConfig *cfg, int val) {
 
   pwm_set_gpio_level(cfg->pin, val);
 
-  mutex_exit(&pwmMutex);
+  m_mutex_exit(pwmMutex);
 }
 
 void valToPWM(unsigned char pin, int val) {
@@ -456,10 +456,10 @@ float calculateVoltage(int adcValue) {
 }
 
 static int16_t readADC(uint8_t pin) {
-  mutex_enter_blocking(&i2cMutex);
+  m_mutex_enter_blocking(i2cMutex);
   ADS.setGain(0);
   int16_t v = ADS.readADC(pin);
-  mutex_exit(&i2cMutex);
+  m_mutex_exit(i2cMutex);
   return v;
 }
 

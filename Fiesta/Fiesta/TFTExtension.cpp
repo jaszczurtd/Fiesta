@@ -1,8 +1,11 @@
 
 #include "TFTExtension.h"
 
+m_mutex_def(displayMutex);
+
 static TFT *tft = NULL;
 TFT *initTFT(void) {
+  m_mutex_init(displayMutex);
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();
   tft->setRotation(1);
@@ -64,15 +67,17 @@ static const uint8_t PROGMEM initcmd[] = {
 void TFTExtension::softInit(int d) {
   uint8_t cmd, x, numArgs;
   const uint8_t *addr = initcmd;
+  m_mutex_enter_blocking(displayMutex);
   while ((cmd = pgm_read_byte(addr++)) > 0) {
     x = pgm_read_byte(addr++);
     numArgs = x & 0x7F;
     sendCommand(cmd, addr, numArgs);
     addr += numArgs;
     if (x & 0x80) {
-      delay(d);  
+      m_delay(d);  
     }
   }
+  m_mutex_exit(displayMutex);
 
   _width = ILI9341_TFTWIDTH;
   _height = ILI9341_TFTHEIGHT;
@@ -97,33 +102,28 @@ int TFTExtension::textHeight(const char* text) {
   return h;
 }
 
-const char *TFTExtension::getPreparedText(void) {
-  return displayTxt;
+void TFTExtension::printlnFromPreparedText(char *displayTxt) {
+  println(displayTxt);
 }
 
-void TFTExtension::printlnFromPreparedText(void) {
-  println(getPreparedText());
-}
+int TFTExtension::prepareText(char *displayTxt, const char *format, ...) {
+  va_list valist;
+  va_start(valist, format);
 
-int TFTExtension::prepareText(const char *format, ...) {
+  memset(displayTxt, 0, DISPLAY_TXT_SIZE);
+  vsnprintf(displayTxt, DISPLAY_TXT_SIZE - 1, format, valist);
+  va_end(valist);
 
-    va_list valist;
-    va_start(valist, format);
-
-    memset(displayTxt, 0, sizeof(displayTxt));
-    vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
-    va_end(valist);
-
-    return textWidth((const char*)displayTxt);
+  return textWidth((const char*)displayTxt);
 }
 
 void TFTExtension::drawTextForPressureIndicators(int x, int y, const char *format, ...) {
-
-  memset(displayTxt, 0, sizeof(displayTxt));
+  char displayTxt[DISPLAY_TXT_SIZE];
+  memset(displayTxt, 0, DISPLAY_TXT_SIZE);
 
   va_list valist;
   va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  vsnprintf(displayTxt, DISPLAY_TXT_SIZE - 1, format, valist);
   va_end(valist);
 
   int x1 = x + BAR_TEXT_X;
@@ -135,7 +135,7 @@ void TFTExtension::drawTextForPressureIndicators(int x, int y, const char *forma
   y1 = y + BAR_TEXT_Y;
 
   sansBoldWithPosAndColor(x1, y1, TEXT_COLOR);
-  printlnFromPreparedText();
+  printlnFromPreparedText(displayTxt);
 
   x1 = x + BAR_TEXT_X + 25;
   y1 = y + BAR_TEXT_Y - 6;
