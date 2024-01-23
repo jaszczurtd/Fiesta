@@ -123,10 +123,11 @@ void PressureGauge::showPressureGauge(void) {
 
         tft->defaultFontWithPosAndColor(x, y, TEXT_COLOR);
         
-        w = tft->prepareText((const char*)F("turbo:%d%%"), val);
+        char txt[DISPLAY_TXT_SIZE];
+        w = tft->prepareText(txt, (const char*)F("turbo:%d%%"), val);
 
         tft->fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
-        tft->printlnFromPreparedText();
+        tft->printlnFromPreparedText(txt);
       }
     }
     break;

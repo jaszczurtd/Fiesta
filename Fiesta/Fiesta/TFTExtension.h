@@ -19,6 +19,7 @@
 #include "tests.h"
 #include "icons.h"
 
+#define DISPLAY_TXT_SIZE 32
 #define DISPLAY_SOFTINIT_TIME 1500
 
 #define SCREEN_W 320
@@ -49,9 +50,8 @@ void softInit(int d);
 void drawImage(int x, int y, int width, int height, int background, unsigned short *pointer);
 int textWidth(const char* text);
 int textHeight(const char* text);
-const char *getPreparedText(void);
-void printlnFromPreparedText(void);
-int prepareText(const char *format, ...);
+void printlnFromPreparedText(char *displayTxt);
+int prepareText(char *displayTxt, const char *format, ...);
 void drawTextForPressureIndicators(int x, int y, const char *format, ...);
 void setDisplayDefaultFont(void);
 void defaultFontWithPosAndColor(int x, int y, int color);
@@ -59,8 +59,6 @@ void setTextSizeOneWithColor(int color);
 void sansBoldWithPosAndColor(int x, int y, int color);
 void serif9ptWithColor(int color);
 
-private:
-  char displayTxt[32];
 };
 
 TFT *initTFT(void);

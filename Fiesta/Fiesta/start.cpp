@@ -276,6 +276,7 @@ void looper(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
+    m_delay(CORE_OPERATION_DELAY);  
     return;
   }
 
@@ -301,7 +302,7 @@ void looper(void) {
   statusVariable0 = 7;
 
   showVP37Debug();
-  delay(CORE_OPERATION_DELAY);  
+  m_delay(CORE_OPERATION_DELAY);  
 }
 
 void initialization1(void) {
@@ -323,6 +324,7 @@ void looper1(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
+    m_delay(CORE_OPERATION_DELAY);  
     return;
   }
 

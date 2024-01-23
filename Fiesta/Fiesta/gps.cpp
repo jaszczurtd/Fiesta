@@ -17,9 +17,11 @@ void initGPS(void) {
 }
 
 void serialTalks(void) {
+  detachInterrupt(SERIAL_RX_GPIO);
   if(gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
   }
+  attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
 }
 
 bool getGPSData(void *arg) {
