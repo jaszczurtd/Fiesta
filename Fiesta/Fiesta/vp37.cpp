@@ -10,30 +10,9 @@ static float pwmValue = VP37_PWM_MIN;
 static float voltageCorrection = 0;
 static int finalPWM = VP37_PWM_MIN;
 static float lastVolts = 0.0;
-
+static int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
 static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
-static PIDController controller;
-
-void initPIDcontroller(void) {
-  controller.kp = PID_KP;
-  controller.ki = PID_KI;
-  controller.kd = PID_KD;
-  controller.last_time = 0;
-}
-
-void updatePIDtime(PIDController *c) {
-  float now = millis();
-  c->dt = (now - c->last_time)/100.00;
-  c->last_time = now;
-}
-
-float updatePIDcontroller(PIDController *c, float error) {
-  float proportional = error;
-  c->integral += error * c->dt;
-  float derivative = (error - c->previous) / c->dt;
-  c->previous = error;
-  return (c->kp * proportional) + (c->ki * c->integral) + (c->kd * derivative);
-}
+static PIDController adjustController;
 
 bool measureFuelTemp(void *arg) {
   valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
@@ -49,6 +28,13 @@ int getMaxAdjustometerPWMVal(void) {
   return map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
+int getAdjustometerStable(void) {
+  for(int a = 0; a < STABILITY_ADJUSTOMETER_TAB_SIZE; a++) {
+    adjustStabilityTable[a] = getVP37Adjustometer();
+  }
+  return getAverageFrom(adjustStabilityTable, STABILITY_ADJUSTOMETER_TAB_SIZE);
+}
+
 void initVP37(void) {
   if(!vp37Initialized) {
     throttleTimer = timer_create_default();
@@ -56,7 +42,7 @@ void initVP37(void) {
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
-    initPIDcontroller();
+    initPIDcontroller(&adjustController, PID_KP, PID_KI, PID_KD);
 
     throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
     throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
@@ -68,7 +54,7 @@ void initVP37(void) {
 int makeCalibrationValue(void) {
   delay(VP37_ADJUST_TIMER);
   watchdog_update();
-  int val = getVP37Adjustometer();
+  int val = getAdjustometerStable();
   delay(VP37_ADJUST_TIMER);
   watchdog_update();  
   return val;
@@ -112,15 +98,13 @@ bool isVP37Enabled(void) {
 }
 
 void throttleCycle(void) {
-  updatePIDtime(&controller);
+  float output;
 
-  float error = desiredAdjustometer - getVP37Adjustometer();
-  float output = updatePIDcontroller(&controller, error);
+  updatePIDtime(&adjustController, PID_TIME_UPDATE);
+  output = updatePIDcontroller(&adjustController, desiredAdjustometer - getVP37Adjustometer());
 
-  float maxPWMValue = VP37_PWM_MIN * 2;
-  pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, maxPWMValue);
-  pwmValue = constrain(pwmValue, VP37_PWM_MIN, maxPWMValue);
-
+  pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
+  
   float diff = 0.0;
   if(valueFields[F_VOLTS] != lastVolts) {
     diff = fabs(valueFields[F_VOLTS] - lastVolts);
@@ -130,7 +114,9 @@ void throttleCycle(void) {
   if(diff > VOLT_MIN_DIFF) {
     voltageCorrection = (valueFields[F_VOLTS] - 12.0) / VOLT_PER_PWM;
   }
+
   finalPWM = int(pwmValue - voltageCorrection);
+  finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
 
   valToPWM(PIO_VP37_RPM, finalPWM);
 }
