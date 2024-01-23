@@ -153,7 +153,7 @@ void vp37Process(void) {
 }
 
 void showVP37Debug(void) {
-  deb("thr:%d des:%d adj:%d V:%.1f t:%.1f pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
+  deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
       getVP37Adjustometer(), valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], (int)finalPWM,
       (int)voltageCorrection);
 }
