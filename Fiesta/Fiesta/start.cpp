@@ -125,15 +125,19 @@ void initialization(void) {
 
   #ifndef DEBUG_SCREEN
   tft->fillScreen(COLOR(WHITE));
-  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
-  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
   tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-  #endif
+  #ifdef INC_FREERTOS_H
+  tft->drawRGBBitmap(SCREEN_W - FREERTOS_WIDTH - 1, SCREEN_H - FREERTOS_HEIGHT - 1, 
+                      (unsigned short*)freertos, FREERTOS_WIDTH, FREERTOS_HEIGHT);
+  #endif //INC_FREERTOS_H
+  #endif //DEBUG_SCREEN
 
   watchdog_feed();
 
   int sec = getSeconds();
-  int secDest = sec + FIESTA_INTRO_TIME;
+  const int secDest = sec + FIESTA_INTRO_TIME;
   vp37Calibrate();
   while(sec < secDest) {
     glowPlugsMainLoop();
