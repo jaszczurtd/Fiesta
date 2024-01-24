@@ -52,11 +52,11 @@ void initVP37(void) {
 }
 
 int makeCalibrationValue(void) {
-  delay(VP37_ADJUST_TIMER);
-  watchdog_update();
+  m_delay(VP37_ADJUST_TIMER);
+  watchdog_feed();
   int val = getAdjustometerStable();
-  delay(VP37_ADJUST_TIMER);
-  watchdog_update();  
+  m_delay(VP37_ADJUST_TIMER);
+  watchdog_feed();  
   return val;
 }
 
@@ -85,7 +85,7 @@ void vp37Calibrate(void) {
   VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MAX - VP37_ADJUST_MIN) / 2) + VP37_ADJUST_MIN;
   calibrationDone = VP37_ADJUST_MIDDLE > 0;
 
-  enableVP37(true);
+  enableVP37(calibrationDone);
 }
 
 void enableVP37(bool enable) {
@@ -137,7 +137,6 @@ void vp37Process(void) {
     if(rpm > RPM_MAX_EVER) {
       enableVP37(false);
       derr("RPM was too high! (%d)", rpm);
-      m_delay_microseconds(VP37_OPERATION_DELAY);  
       return;
     }
 
@@ -149,7 +148,6 @@ void vp37Process(void) {
 
     throttleCycle();
   }
-  m_delay_microseconds(VP37_OPERATION_DELAY);  
 }
 
 void showVP37Debug(void) {

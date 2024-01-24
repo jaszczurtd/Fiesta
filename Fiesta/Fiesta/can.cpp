@@ -51,7 +51,7 @@ void canInit(int retries) {
     tft->printlnFromPreparedText(txt);
 
     m_delay(SECOND);
-    watchdog_update();
+    watchdog_feed();
   }
 
   if(initialized) {

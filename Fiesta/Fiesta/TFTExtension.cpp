@@ -67,7 +67,6 @@ static const uint8_t PROGMEM initcmd[] = {
 void TFTExtension::softInit(int d) {
   uint8_t cmd, x, numArgs;
   const uint8_t *addr = initcmd;
-  m_mutex_enter_blocking(displayMutex);
   while ((cmd = pgm_read_byte(addr++)) > 0) {
     x = pgm_read_byte(addr++);
     numArgs = x & 0x7F;
@@ -77,7 +76,6 @@ void TFTExtension::softInit(int d) {
       m_delay(d);  
     }
   }
-  m_mutex_exit(displayMutex);
 
   _width = ILI9341_TFTWIDTH;
   _height = ILI9341_TFTHEIGHT;
