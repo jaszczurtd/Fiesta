@@ -51,7 +51,7 @@ void obdInit(int retries) {
     }
     derr("OBD-2 CAN init error!");
     m_delay(SECOND);
-    watchdog_update();
+    watchdog_feed();
   }
 
   if(initialized) {

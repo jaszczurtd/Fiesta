@@ -24,6 +24,7 @@ static pwmConfig pwmTurbo;
 static pwmConfig pwmAngle;
 
 void initI2C(void) {
+  m_mutex_init(i2cMutex);
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
   Wire.setClock(I2C_SPEED_HZ);
@@ -170,7 +171,6 @@ int readEGT(void) {
 //-------------------------------------------------------------------------------------------------
 
 void pcf8574_init(void) {
-  m_mutex_init(i2cMutex);
   pcf8574State = 0;
 
   m_mutex_enter_blocking(i2cMutex);

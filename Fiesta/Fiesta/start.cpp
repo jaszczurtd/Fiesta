@@ -9,21 +9,21 @@ NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
 void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  watchdog_update();
+  watchdog_feed();
   generalTimer.every(time, function);
+  m_delay(CORE_OPERATION_DELAY);
 }
 
 void setupTimers(void) {
 
   generalTimer = timer_create_default();
 
-  int time = SECOND;
-  setupTimerWith(time, callAtEverySecond);
-  setupTimerWith(time / 2, callAtEveryHalfSecond);
-  setupTimerWith(time / 4, callAtEveryHalfHalfSecond);
+  setupTimerWith(SECOND, callAtEverySecond);
+  setupTimerWith(SECOND / 2, callAtEveryHalfSecond);
+  setupTimerWith(SECOND / 4, callAtEveryHalfHalfSecond);
   setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
-  setupTimerWith(time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
+  setupTimerWith(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
+  setupTimerWith(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
   setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(GPS_UPDATE, getGPSData);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
@@ -85,7 +85,7 @@ void initialization(void) {
         getGPSDate(), getGPSTime());
     }
 
-    watchdog_update();
+    watchdog_feed();
     initCrashLogger(dateAndTime, SD_CARD_CS);
     if(validDateAndTime) {
       crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
@@ -99,7 +99,7 @@ void initialization(void) {
     crashReport("sv1: %d", statusVariable1);
 
     saveCrashLoggerAndClose();
-    watchdog_update();
+    watchdog_feed();
 
     wSize = 0;
     wValues = NULL;
@@ -121,7 +121,7 @@ void initialization(void) {
   }
   initGlowPlugsTime(coolant);
 
-  watchdog_update();
+  watchdog_feed();
 
   #ifndef DEBUG_SCREEN
   tft->fillScreen(COLOR(WHITE));
@@ -130,15 +130,15 @@ void initialization(void) {
   tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
   #endif
 
-  watchdog_update();
+  watchdog_feed();
 
   int sec = getSeconds();
   int secDest = sec + FIESTA_INTRO_TIME;
   vp37Calibrate();
   while(sec < secDest) {
     glowPlugsMainLoop();
+    watchdog_feed();
     sec = getSeconds();
-    watchdog_update();
   }
 
   tft->fillScreen(ICONS_BG_COLOR);
@@ -342,5 +342,6 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
+  m_delay_microseconds(VP37_OPERATION_DELAY);  
 }
 
