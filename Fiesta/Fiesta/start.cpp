@@ -119,9 +119,8 @@ void initialization(void) {
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
-  initGlowPlugsTime(coolant);
-
-  watchdog_feed();
+  int sec = getSeconds();
+  const int secDest = sec + FIESTA_INTRO_TIME;
 
   #ifndef DEBUG_SCREEN
   tft->fillScreen(COLOR(WHITE));
@@ -134,18 +133,16 @@ void initialization(void) {
   #endif //INC_FREERTOS_H
   #endif //DEBUG_SCREEN
 
+  vp37Calibrate();
+  initGlowPlugsTime(coolant);
+
   watchdog_feed();
 
-  int sec = getSeconds();
-  const int secDest = sec + FIESTA_INTRO_TIME;
-  vp37Calibrate();
   while(sec < secDest) {
     glowPlugsMainLoop();
     watchdog_feed();
     sec = getSeconds();
   }
-
-  tft->fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -160,6 +157,9 @@ void initialization(void) {
   initHeatedWindow();
   initFuelMeasurement();
   
+  softInitDisplay(NULL);
+  tft->fillScreen(ICONS_BG_COLOR);
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  

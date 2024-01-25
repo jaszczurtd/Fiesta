@@ -32,12 +32,12 @@
 31	turbo pressure
 32	"H" window button
 33	nc
-34	vp37 injection angle
+34	vp37 pin 9 / injection angle
 35	injection (injector)
 36	nc
 37	nc
 38	nc
-39	vp37 ignition
+39	vp37 pin 8/ ignition
 40	nc
 41	(?)
 42	turbo
@@ -68,7 +68,7 @@
 66	Fuel pos
 67	nc
 68	FAN
-69	vp37 RPM
+69	vp37 pin 6 / RPM
 70	DPF lamp
 71	+12V / ignition
 72	nc
@@ -81,10 +81,10 @@
 
 79	nc
 80	glow plugs lamp
-81	nc
-82	nc
+81	vp37 pin 1
+82	vp37 pin 2
 83	3.3V
-84	nc
+84	vp37 pin 4
 85	nc
 86	nc
 87	nc
@@ -107,7 +107,18 @@
 104	nc
 
 
-
+vp37 pinout
+1	81 ECU
+2	82 ECU
+3	GND ECU
+4	84 ECU
+5	+12V
+6	69 ECU
+7	GND ECU
+8	39 ECU
+9	34 ECU
+10	+12V
+body GND
 
 
 
