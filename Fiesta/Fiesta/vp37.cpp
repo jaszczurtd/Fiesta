@@ -8,6 +8,7 @@ static bool calibrationDone = false;
 static int desiredAdjustometer = -1;
 static float pwmValue = VP37_PWM_MIN;
 static float voltageCorrection = 0;
+static int lastPWMval = -1;
 static int finalPWM = VP37_PWM_MIN;
 static float lastVolts = 0.0;
 static int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
@@ -118,7 +119,10 @@ void throttleCycle(void) {
   finalPWM = int(pwmValue - voltageCorrection);
   finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
 
-  valToPWM(PIO_VP37_RPM, finalPWM);
+  if(lastPWMval != finalPWM) {
+    lastPWMval = finalPWM;
+    valToPWM(PIO_VP37_RPM, finalPWM);
+  }
 }
 
 void vp37Process(void) {
