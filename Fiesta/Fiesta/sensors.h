@@ -15,6 +15,19 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#include "hardware/pwm.h"
+#include "hardware/gpio.h"
+#include <ADS1X15.h>
+
+typedef struct {
+  uint32_t pwmInitted;
+  uint16_t analogWritePseudoScale;
+  uint16_t analogWriteSlowScale;
+  uint32_t pin;
+  uint32_t analogFreq; 
+  uint32_t analogScale;
+} pwmConfig;
+
 #define C_INIT_VAL 0xdeadbeef;
 
 //in miliseconds, print values into serial
@@ -31,11 +44,10 @@ void initBasicPIO(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
-float readThrottle(void);
+int readThrottle(void);
 float readAirTemperature(void);
-float readVolts(void);
 float readBarPressure(void);
-float readEGT(void);
+int readEGT(void);
 int getThrottlePercentage(void);
 int getPercentageEngineLoad(void);
 
@@ -54,5 +66,10 @@ void set4051ActivePin(unsigned char pin);
 bool isDPFRegenerating(void);
 
 bool updateValsForDebug(void *arg);
+void pwm_init(void);
+
+float getSystemSupplyVoltage(void);
+int getVP37Adjustometer(void);
+float getVP37FuelTemperature(void);
 
 #endif
