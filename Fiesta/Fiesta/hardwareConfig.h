@@ -3,8 +3,17 @@
 
 #include <libConfig.h>
 
-#define PWM_FREQUENCY_HZ 300
-#define I2C_SPEED_HZ 50000
+#ifdef VP37
+#define VP37_PWM_FREQUENCY_HZ 200
+#define TURBO_PWM_FREQUENCY_HZ 300
+#define ANGLE_PWM_FREQUENCY_HZ 200
+#else
+#define VP37_PWM_FREQUENCY_HZ 300
+#define TURBO_PWM_FREQUENCY_HZ 300
+#define ANGLE_PWM_FREQUENCY_HZ 300
+#endif
+
+#define I2C_SPEED_HZ 200000
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
@@ -46,6 +55,19 @@
 #define CAN1_GPIO 6
 #define CAN1_INT 14
 
+//ADS1115
+//values for ECU voltage 
+#define R1 3300.0  // 3.3k / ohm
+#define R2 470.0   // 470R / ohm
+#define ADC_RANGE 0.1875  
+
+#define ADS1115_PIN_0 0 //vp37 fuel temp
+#define ADS1115_PIN_1 1 //system supply voltage
+#define ADS1115_PIN_2 2 //vp37 adjustometer
+#define ADS1115_PIN_3 3 //not used atm
+
+#define ADS1115_ADDR 0x48
+
 //PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
 
@@ -84,6 +106,9 @@
 
 #define R_TEMP_AIR_A 5050 //sensor
 #define R_TEMP_AIR_B 4800
+
+#define R_VP37_FUEL_A 2300 //sensor
+#define R_VP37_FUEL_B 3300
 
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
