@@ -46,11 +46,12 @@ void canInit(int retries) {
     y += 10;
     tft->setCursor(x, y);
 
-    tft->prepareText((const char*)F("Connection attempt: %d"), at++);
-    tft->printlnFromPreparedText();
+    char txt[DISPLAY_TXT_SIZE];
+    tft->prepareText(txt, (const char*)F("Connection attempt: %d"), at++);
+    tft->printlnFromPreparedText(txt);
 
-    delay(SECOND);
-    watchdog_update();
+    m_delay(SECOND);
+    watchdog_feed();
   }
 
   if(initialized) {

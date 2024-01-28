@@ -17,6 +17,7 @@
 
 //#define JUST_TEST_BY_THROTTLE
 
+void initVP37(void);
 void turboMainLoop(void);
 
 #endif
