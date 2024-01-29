@@ -12,9 +12,13 @@ static volatile int RPMpulses = 0;
 
 static int currentRPMSolenoid = 0;
 static bool rpmCycle = false;
+#ifndef VP37
 static int rpmPercentValue = 0;
+#endif
 
 void countRPM(void) {
+
+  detachInterrupt(PIO_INTERRUPT_HALL);
 
   unsigned long _micros = micros();
   unsigned long nowPulse = _micros - lastPulse;
@@ -44,11 +48,13 @@ void countRPM(void) {
 
     valueFields[F_RPM] = RPM; 
   }  
+  
+  attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 }
 
 void initRPMCount(void) {
   pinMode(PIO_INTERRUPT_HALL, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(PIO_INTERRUPT_HALL), countRPM, CHANGE);  
+  attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 
   rpmTimer = timer_create_default();
 
@@ -80,6 +86,7 @@ int getCurrentRPM(void) {
   return (int)valueFields[F_RPM];
 }
 
+#ifndef VP37
 void stabilizeRPM(void) {
   rpmTimer.tick();
 
@@ -148,6 +155,7 @@ void stabilizeRPM(void) {
   deb("rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
 #endif
 }
+#endif
 
 bool isEngineRunning(void) {
   return (int(valueFields[F_RPM]) != 0);
