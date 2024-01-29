@@ -9,21 +9,21 @@ NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
 void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  watchdog_update();
+  watchdog_feed();
   generalTimer.every(time, function);
+  m_delay(CORE_OPERATION_DELAY);
 }
 
 void setupTimers(void) {
 
   generalTimer = timer_create_default();
 
-  int time = SECOND;
-  setupTimerWith(time, callAtEverySecond);
-  setupTimerWith(time / 2, callAtEveryHalfSecond);
-  setupTimerWith(time / 4, callAtEveryHalfHalfSecond);
+  setupTimerWith(SECOND, callAtEverySecond);
+  setupTimerWith(SECOND / 2, callAtEveryHalfSecond);
+  setupTimerWith(SECOND / 4, callAtEveryHalfHalfSecond);
   setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(time / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
-  setupTimerWith(time / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
+  setupTimerWith(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
+  setupTimerWith(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
   setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(GPS_UPDATE, getGPSData);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
@@ -85,7 +85,7 @@ void initialization(void) {
         getGPSDate(), getGPSTime());
     }
 
-    watchdog_update();
+    watchdog_feed();
     initCrashLogger(dateAndTime, SD_CARD_CS);
     if(validDateAndTime) {
       crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
@@ -99,7 +99,7 @@ void initialization(void) {
     crashReport("sv1: %d", statusVariable1);
 
     saveCrashLoggerAndClose();
-    watchdog_update();
+    watchdog_feed();
 
     wSize = 0;
     wValues = NULL;
@@ -111,11 +111,7 @@ void initialization(void) {
   i2cScanner();
   #endif
 
-  init4051();
   initSensors();
-
-  analogWriteFreq(PWM_FREQUENCY_HZ);
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
 
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
@@ -123,33 +119,37 @@ void initialization(void) {
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
-  initGlowPlugsTime(coolant);
-
-  watchdog_update();
+  int sec = getSeconds();
+  const int secDest = sec + FIESTA_INTRO_TIME;
 
   #ifndef DEBUG_SCREEN
   tft->fillScreen(COLOR(WHITE));
-  int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
-  int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
   tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-  #endif
+  #ifdef INC_FREERTOS_H
+  tft->drawRGBBitmap(SCREEN_W - FREERTOS_WIDTH - 1, SCREEN_H - FREERTOS_HEIGHT - 1, 
+                      (unsigned short*)freertos, FREERTOS_WIDTH, FREERTOS_HEIGHT);
+  #endif //INC_FREERTOS_H
+  #endif //DEBUG_SCREEN
 
-  watchdog_update();
+#ifdef VP37
+  vp37Calibrate();
+#endif
+  initGlowPlugsTime(coolant);
 
-  int sec = getSeconds();
-  int secDest = sec + FIESTA_INTRO_TIME;
+  watchdog_feed();
+
   while(sec < secDest) {
     glowPlugsMainLoop();
+    watchdog_feed();
     sec = getSeconds();
-    watchdog_update();
   }
-
-  tft->fillScreen(ICONS_BG_COLOR);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
 
-  valueFields[F_VOLTS] = readVolts();
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
   TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
 
   #ifdef PICO_W
@@ -159,6 +159,9 @@ void initialization(void) {
   initHeatedWindow();
   initFuelMeasurement();
   
+  softInitDisplay(NULL);
+  tft->fillScreen(ICONS_BG_COLOR);
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
@@ -180,9 +183,13 @@ void initialization(void) {
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
   
   setStartedCore0();
-  enableVP37(true);
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
+#ifdef INC_FREERTOS_H
+  deb("FreeRTOS is active!");
+#else 
+  deb("Normal Arduino build.");
+#endif
 
   startTests();
 }
@@ -280,6 +287,7 @@ void looper(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
+    m_delay(CORE_OPERATION_DELAY);  
     return;
   }
 
@@ -304,7 +312,10 @@ void looper(void) {
   heatedWindowMainLoop();
   statusVariable0 = 7;
 
-  delay(CORE_OPERATION_DELAY);  
+#ifdef VP37
+  showVP37Debug();
+#endif
+  m_delay(CORE_OPERATION_DELAY);  
 }
 
 void initialization1(void) {
@@ -326,6 +337,7 @@ void looper1(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
+    m_delay(CORE_OPERATION_DELAY);  
     return;
   }
 
@@ -337,8 +349,7 @@ void looper1(void) {
 #else
   stabilizeRPM();
 #endif
-
   statusVariable1 = 3;
-  delay(CORE_OPERATION_DELAY);  
+  m_delay_microseconds(VP37_OPERATION_DELAY);  
 }
 
