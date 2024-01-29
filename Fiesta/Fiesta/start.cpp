@@ -350,6 +350,10 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
+#ifdef VP37
   m_delay_microseconds(VP37_OPERATION_DELAY);  
+#else
+  m_delay(CORE_OPERATION_DELAY);
+#endif
 }
 
