@@ -241,6 +241,11 @@ bool readMediumValues(void *argument) {
     case F_EGT:
       valueFields[F_EGT] = readEGT();
       break;
+#ifndef VP37
+    case F_VOLTS:
+      valueFields[F_VOLTS] = getSystemSupplyVoltage();
+      break;
+#endif
   }
   if(lowCurrentValue++ > F_LAST) {
     lowCurrentValue = 0;
