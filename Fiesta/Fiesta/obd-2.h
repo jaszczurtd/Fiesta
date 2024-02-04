@@ -166,6 +166,7 @@ enum {
 #define FUEL_TIMING         0x5D    //
 #define FUEL_RATE           0x5E    //
 #define EMISSIONS_STANDARD  0x5F    ///
+#define PID_61_80           0x60
 #define DEMANDED_TORQUE     0x61    ///
 #define ACTUAL_TORQUE       0x62    ///
 #define REFERENCE_TORQUE    0x63    //
@@ -197,6 +198,7 @@ enum {
 #define P_NOX_NTE_STATUS    0x7D    ///
 #define P_PM_NTE_STATUS     0x7E    ///
 #define P_ENGINE_RUNTUME    0x7F    ///
+#define PID_81_A0           0x80
 #define P_ENGINE_AECD_1     0x81    ///
 #define P_ENGINE_AECD_2     0x82    ///
 #define P_NOX_SENSOR        0x83    ///
@@ -204,8 +206,18 @@ enum {
 #define P_NOX_SYSTEM        0x85    ///
 #define P_PM_SENSOR         0x86    ///
 #define P_IN_MANIF_TEMP     0x87    ///
-
+#define PID_A1_C0           0xA0     
+#define PID_C1_E0           0xC0
+#define PID_E1_FF           0xE0
 #define PID_LAST 0x5f
+
+#define EURO_0 0x00 
+#define EURO_1 0x01
+#define EURO_2 0x02
+#define EURO_3 0x03
+#define EURO_4 0x04
+#define EURO_5 0x05
+#define EURO_6 0x06
 
 void obdInit(int retries);
 void obdLoop(void);

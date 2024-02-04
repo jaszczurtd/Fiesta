@@ -13,6 +13,8 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#define DEFAULT_INJECTION_PRESSURE 300 //bar
+
 #define PID_TIME_UPDATE 90.0
 #define PID_KP 0.45
 #define PID_KI 0.28
