@@ -4,7 +4,7 @@
 #include <libConfig.h>
 
 #ifdef VP37
-#define VP37_PWM_FREQUENCY_HZ 200
+#define VP37_PWM_FREQUENCY_HZ 160
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 200
 #else
