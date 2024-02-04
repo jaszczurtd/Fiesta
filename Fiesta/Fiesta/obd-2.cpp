@@ -14,12 +14,6 @@ void negAck(byte mode, byte reason);
 // Set CS to pin 6 for the CAB-BUS sheild                                
 MCP_CAN CAN0(CAN1_GPIO);                                      
 
-//Stored Vechicle VIN 
-static const char *vehicle_Vin = "WF0BXXGAJB1R32583";
-
-//Stored ECU Name
-static const char *ecu_Name = "JASZCZUR FIESTA";
-
 // CAN RX Variables
 static unsigned long rxId;
 static byte dlc;
@@ -92,7 +86,7 @@ void obdLoop(void) {
 }
 
 void storeECUName(byte *tab, int idx) {
-  for(int a = 0; a < strlen(ecu_Name); a++) {
+  for(int a = 0; a < (int)strlen(ecu_Name); a++) {
     tab[a + idx] = (byte)ecu_Name[a];
   }
 }
@@ -102,7 +96,7 @@ void obdReq(byte *data){
   byte mode = data[1] & 0x0F;
   byte pid = data[2];
   bool tx = false;
-  byte txData[] = {0x00,(0x40 | mode),pid,PAD,PAD,PAD,PAD,PAD};
+  byte txData[] = {0x00,(byte)(0x40 | mode),pid,PAD,PAD,PAD,PAD,PAD};
 
   deb("OBD-2 pid:0x%02x (%s) length:0x%02x mode:0x%02x",  pid, getPIDName(pid), numofBytes, mode);
   
@@ -122,7 +116,7 @@ void obdReq(byte *data){
       txData[6] = 0xff;
       tx = true;
     }
-    else if(pid == 0x01){    // Monitor status since DTs cleared.
+    else if(pid == STATUS_DTC){    // Monitor status since DTs cleared.
       bool MIL = true;
       byte DTC = 5;
       txData[0] = 0x06;
@@ -133,10 +127,10 @@ void obdReq(byte *data){
       txData[6] = 0x00;
       tx = true;
     }
-    else if(pid == 0x03){    // Fuel system status
-      txData[0] = 0x03;
-      
-      txData[3] = 0xFA;
+    else if(pid == FUEL_SYS_STATUS){    // Fuel system status
+      txData[0] = 0x04;
+      txData[3] = 0;
+      txData[4] = 0;
       tx = true;
     }
     else if(pid == ENGINE_LOAD){    // Calculated engine load
@@ -144,9 +138,41 @@ void obdReq(byte *data){
       txData[3] = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
       tx = true;
     }
+    else if(pid == ABSOLUTE_LOAD) {
+      txData[0] = 0x04;
+      int l = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+      txData[3] = MSB(l);
+      txData[4] = LSB(l);
+      tx = true;
+    }
     else if(pid == ENGINE_COOLANT_TEMP){    // Engine coolant temperature
       txData[0] = 0x03;
       txData[3] = int(valueFields[F_COOLANT_TEMP] + 40);
+      tx = true;
+    }
+    else if(pid == FUEL_PRESSURE) {
+      txData[0] = 0x04;
+      int p = isEngineRunning() ? DEFAULT_INJECTION_PRESSURE : 0;
+      txData[3] = MSB(p);
+      txData[4] = LSB(p);
+      tx = true;
+    }
+    else if(pid == FUEL_RAIL_PRES_ALT ||
+        pid == ABS_FUEL_RAIL_PRES) {
+      txData[0] = 0x04;
+      int p = isEngineRunning() ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
+      txData[3] = MSB(p);
+      txData[4] = LSB(p);
+      tx = true;
+    }
+    else if(pid == FUEL_LEVEL) {
+      txData[0] = 0x03;
+      int fuelPercentage = ( (int(valueFields[F_FUEL]) * 100) / (FUEL_MIN - FUEL_MAX));
+      if(fuelPercentage > 100) {
+        fuelPercentage = 100;
+      }
+      txData[3] = percentToGivenVal(fuelPercentage, 255);
+
       tx = true;
     }
     else if(pid == INTAKE_PRESSURE){    // Intake manifold absolute pressure
@@ -171,12 +197,21 @@ void obdReq(byte *data){
       txData[3] = int(valueFields[F_CAR_SPEED]);
       tx = true;
     }
-    else if(pid == INTAKE_TEMP){    // Intake air temperature
+    else if(pid == INTAKE_TEMP ||
+        pid == AMB_AIR_TEMP){    // Intake air temperature
       txData[0] = 0x03;
       txData[3] = int(valueFields[F_INTAKE_TEMP] + 40);
       tx = true;
     }
-    else if(pid == THROTTLE){    // Throttle position
+    else if(pid == THROTTLE ||
+        pid == REL_ACCEL_POS ||
+        pid == REL_THROTTLE_POS ||
+        pid == ABS_THROTTLE_POS_B ||
+        pid == ABS_THROTTLE_POS_C ||
+        pid == ACCEL_POS_D ||
+        pid == ACCEL_POS_E ||
+        pid == ACCEL_POS_F ||
+        pid == COMMANDED_THROTTLE) { // Throttle position
       txData[0] = 0x03;
       float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
       txData[3] = percentToGivenVal(percent, 255);
@@ -185,6 +220,12 @@ void obdReq(byte *data){
     else if(pid == OBDII_STANDARDS){    // OBD standards this vehicle conforms to
       txData[0] = 0x04;
       txData[3] = EOBD_OBD_OBD_II;
+      tx = true;
+    }
+    else if(pid == ENGINE_RUNTIME){
+      txData[0] = 0x04;
+      txData[3] = 10;
+      txData[4] = 10;
       tx = true;
     }
     else if(pid == PID_21_40){    // Supported PIDs 21-40
@@ -196,11 +237,15 @@ void obdReq(byte *data){
       txData[6] = 0xff;
       tx = true;
     }
-    else if(pid == 0x21){    // Distance traveled with MIL on
+    else if(pid == CAT_TEMP_B1S1 ||
+      pid == CAT_TEMP_B1S2 ||
+      pid == CAT_TEMP_B2S1 ||
+      pid == CAT_TEMP_B2S2) {
       txData[0] = 0x04;
-      
-      txData[3] = 0x00;
-      txData[4] = 0x23;
+
+      int temp = (int(valueFields[F_EGT]) + 40) * 10;
+      txData[3] = MSB(temp);
+      txData[4] = LSB(temp);
       tx = true;
     }
     else if(pid == PID_41_60){    // Supported PIDs 41-60
@@ -221,17 +266,9 @@ void obdReq(byte *data){
       txData[4] = LSB(volt);
       tx = true;    
     }
-    else if(pid == 0x4D){    // Time run with MIL on
-      txData[0] = 0x04;
-      
-      txData[3] = 0x00;
-      txData[4] = 0x3C;
-      tx = true;
-    }
     else if(pid == FUEL_TYPE){    // Fuel Type
-      txData[0] = 0x04;
-      txData[3] = 0x00;
-      txData[4] = FUEL_TYPE_DIESEL;
+      txData[0] = 0x03;
+      txData[3] = FUEL_TYPE_DIESEL;
       tx = true;
     }
     else if(pid == ENGINE_OIL_TEMP){    // Engine oil Temperature
@@ -239,23 +276,26 @@ void obdReq(byte *data){
       txData[3] = int(valueFields[F_OIL_TEMP] + 40);
       tx = true;
     }
-    else if(pid == 0x5D){    // Fuel injection timing
+    else if(pid == FUEL_TIMING){    // Fuel injection timing
       txData[0] = 0x04;
       
       txData[3] = 0x61;
       txData[4] = 0x80;
       tx = true;
     }
-    else if(pid == 0x5E){    // Engine fuel rate
+    else if(pid == FUEL_RATE){    // Engine fuel rate
       txData[0] = 0x04;
       
       txData[3] = 0x07;
       txData[4] = 0xD0;
       tx = true;
     }
-//    else if(pid == 0x5F){    // Emissions requirements to which vehicle is designed
-//    }
-    else if(pid == 0x60){    // Supported PIDs 61-80
+    else if(pid == EMISSIONS_STANDARD){    // Emissions requirements to which vehicle is designed
+      txData[0] = 0x03;
+      txData[3] = EURO_3;
+      tx = true;
+    }
+    else if(pid == PID_61_80){    // Supported PIDs 61-80
       txData[0] = 0x06;
       
       txData[3] = 0xff;
@@ -267,7 +307,7 @@ void obdReq(byte *data){
     else if(pid == P_DPF_TEMP) {
 
       txData[0] = 0x04;
-      int engine_Rpm = 100;
+
       txData[3] = 0x40;
       txData[4] = 0x00;
       txData[5] = 0x00;
@@ -275,7 +315,7 @@ void obdReq(byte *data){
 
       tx = true;
     }
-    else if(pid == 0x80){    // Supported PIDs 81-A0
+    else if(pid == PID_81_A0){    // Supported PIDs 81-A0
       txData[0] = 0x06;
       
       txData[3] = 0x00;
@@ -284,7 +324,7 @@ void obdReq(byte *data){
       txData[6] = 0x01;
       tx = true;
     }
-    else if(pid == 0xA0){    // Supported PIDs A1-C0
+    else if(pid == PID_A1_C0){    // Supported PIDs A1-C0
       txData[0] = 0x06;
       
       txData[3] = 0x00;
@@ -293,7 +333,7 @@ void obdReq(byte *data){
       txData[6] = 0x01;
       tx = true;
     }
-    else if(pid == 0xC0){    // Supported PIDs C1-E0
+    else if(pid == PID_C1_E0){    // Supported PIDs C1-E0
       txData[0] = 0x06;
       
       txData[3] = 0x00;
@@ -302,7 +342,7 @@ void obdReq(byte *data){
       txData[6] = 0x01;
       tx = true;
     }
-    else if(pid == 0xE0){    // Supported PIDs E1-FF?
+    else if(pid == PID_E1_FF){    // Supported PIDs E1-FF?
       txData[0] = 0x06;
       
       txData[3] = 0x00;
@@ -327,7 +367,7 @@ void obdReq(byte *data){
   // MODE $03 - Show stored DTCs
   //=============================================================================
   else if(mode == L3){
-      byte DTCs[] = {(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
@@ -369,7 +409,7 @@ void obdReq(byte *data){
   // MODE $07 - Show pending DTCs (Detected during current or last driving cycle)
   //=============================================================================
   else if(mode == L7){
-      byte DTCs[] = {(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
@@ -396,20 +436,23 @@ void obdReq(byte *data){
 //    else if(pid == 0x01){    // VIN message count for PID 02. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == REQUEST_VIN){    // VIN (17 to 20 Bytes) Uses ISO-TP
-      byte VIN[] = {(0x40 | mode), pid, 0x01, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2], vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9], vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
+      byte VIN[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      for(int a = 0; a < (int)strlen(vehicle_Vin); a++) {
+        VIN[a + 3] = (byte)vehicle_Vin[a];
+      }
       iso_tp(mode, pid, 20, VIN);
     }
 //    else if(pid == 0x03){    // Calibration ID message count for PID 04. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == 0x04){    // Calibration ID
-      byte CID[] = {(0x40 | mode), pid, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      byte CID[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(CID, 3);
       iso_tp(mode, pid, 18, CID);
     }
 //    else if(pid == 0x05){    // Calibration Verification Number (CVN) message count for PID 06. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == 0x06){    // CVN
-      byte CVN[] = {(0x40 | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
+      byte CVN[] = {(byte)(0x40 | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
       iso_tp(mode, pid, 11, CVN);
     }
 //    else if(pid == 0x07){    // In-use performance tracking message count for PID 08 and 0B. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
@@ -417,12 +460,12 @@ void obdReq(byte *data){
 //    else if(pid == 0x08){    // In-use performance tracking for spark ignition vehicles.
 //    }
     else if(pid == 0x09){    // ECU name message count for PID 0A.
-      byte ECUname[] = {(0x40 | mode), pid, 0x01, 'E', 'C', 'U', 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      byte ECUname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'U', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(ECUname, 7);
       iso_tp(mode, pid, 23, ECUname);
     }
     else if(pid == 0x0A){    // ECM Name
-      byte ECMname[] = {(0x40 | mode), pid, 0x01, 'E', 'C', 'M', 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      byte ECMname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'M', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(ECMname, 7);
       iso_tp(mode, pid, 23, ECMname);
     }
@@ -431,7 +474,7 @@ void obdReq(byte *data){
 //    else if(pid == 0x0C){    // ESN message count for PID 0D.
 //    }
     else if(pid == 0x0D){    // ESN
-      byte ESN[] = {(0x40 | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
+      byte ESN[] = {(byte)(0x40 | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
       iso_tp(mode, pid, 20, ESN);
     }
     else{
@@ -443,7 +486,7 @@ void obdReq(byte *data){
   // MODE $0A - Show permanent DTCs 
   //=============================================================================
   else if(mode == L10){
-      byte DTCs[] = {(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
