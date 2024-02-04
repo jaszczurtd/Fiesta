@@ -1,360 +1,886 @@
 
 //based on Open-Ecu-Sim-OBD2-FW
 //https://github.com/spoonieau/OBD2-ECU-Simulator
+// and CAN OBD & UDS Simulator Written By: Cory J. Fowler  December 20th, 2016
 
 #include "obd-2.h"
+
+void obdReq(byte *data);
+void unsupported(byte mode, byte pid);
+void unsupportedPrint(byte mode, byte pid);
+void iso_tp(byte mode, byte pid, int len, byte *data);
+void negAck(byte mode, byte reason);
 
 // Set CS to pin 6 for the CAB-BUS sheild                                
 MCP_CAN CAN0(CAN1_GPIO);                                      
 
-//Current Firmware Version
-char FW_Version[] = "0.10";  
-
-// Incoming CAN-BUS message
-long unsigned int canId = 0x000;
-
-// This is the length of the incoming CAN-BUS message
-unsigned char len = 0;
-
-// This the eight byte buffer of the incoming message data payload
-unsigned char buf[8];
-
-// MIL on and DTC Present 
-bool MIL = true;
-
-//Stored Vechicle VIN 
-static unsigned char vehicle_Vin[18] = "JASZCZUR FIESTA";
-
-//Stored Calibration ID
-static unsigned char calibration_ID[18] = "FW00108MHZ1111111";
-
-//Stored ECU Name
-static unsigned char ecu_Name[19] = "FIESTA_TDI";
-
-
-//Default PID values
-int timing_Advance  = 10;
-int maf_Air_Flow_Rate =  0;
-
-
-//=================================================================
-//Init CAN-BUS and Serial
-//=================================================================
+// CAN RX Variables
+static unsigned long rxId;
+static byte dlc;
+static byte rxBuf[8];
 
 static bool initialized = false;
 void obdInit(int retries) {
 
   for(int a = 0; a < retries; a++) {
-    initialized = (CAN_OK == CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ));
+    initialized = (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK);
+    if(initialized) {
+      deb("MCP2515 Initialized Successfully!");
+    }
+    else {
+      derr("Error Initializing MCP2515...");
+    }
     if(initialized) {
       break;
     }
-    derr("OBD-2 CAN init error!");
     m_delay(SECOND);
     watchdog_feed();
   }
 
-  if(initialized) {
-    deb("OBD-2 CAN Shield init ok!");
-    CAN0.setMode(MCP_NORMAL); 
-    pinMode(CAN1_INT, INPUT); 
-  } else {
-    derr("OBD0-2 CAN Shield init problem. The OBD-2 connection will not be possible.");
-  }
+#if standard == 1
+  // Standard ID Filters
+  CAN0.init_Mask(0,0xFFfffff);                // Init first mask...
+  CAN0.init_Filt(0,0xFFFffff);                // Init first filter...
+  CAN0.init_Filt(1,0xFFfffff);                // Init second filter...
+  
+  CAN0.init_Mask(1,0xFFfffff);                // Init second mask... 
+  CAN0.init_Filt(2,0xFFFffff);                // Init third filter...
+  CAN0.init_Filt(3,0xFFfffff);                // Init fourth filter...
+  CAN0.init_Filt(4,0xFFfffff);                // Init fifth filter...
+  CAN0.init_Filt(5,0xFFfffff);                // Init sixth filter...
+
+#else
+  // Extended ID Filters
+  CAN0.init_Mask(0,0x90FFFF00);                // Init first mask...
+  CAN0.init_Filt(0,0x90DB3300);                // Init first filter...
+  CAN0.init_Filt(1,0x90DA0100);                // Init second filter...
+  
+  CAN0.init_Mask(1,0x90FFFF00);                // Init second mask... 
+  CAN0.init_Filt(2,0x90DB3300);                // Init third filter...
+  CAN0.init_Filt(3,0x90DA0100);                // Init fourth filter...
+  CAN0.init_Filt(4,0x90DB3300);                // Init fifth filter...
+  CAN0.init_Filt(5,0x90DA0100);                // Init sixth filter...
+#endif
+  
+  CAN0.setMode(MCP_NORMAL);                          // Set operation mode to normal so the MCP2515 sends acks to received data.
+
+  pinMode(CAN1_INT, INPUT);                          // Configuring pin for /INT input
+  
+  deb("OBD-2 CAN Shield init ok!");
 }
-
-//=================================================================
-//Define ECU Supported PID's
-//=================================================================
-
-// Define the set of PIDs for MODE01 you wish you ECU to support.  For more information, see:
-// https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00
-//
-// PID 0x01 (1) - Monitor status since DTCs cleared. (Includes malfunction indicator lamp (MIL) status and number of DTCs.)
-// |   PID 0x05 (05) - Engine Coolant Temperature
-// |   |      PID 0x0C (12) - Engine RPM
-// |   |      |PID 0x0D (13) - Vehicle speed
-// |   |      ||PID 0x0E (14) - Timing advance
-// |   |      |||PID 0x0F (15) - Intake air temperature
-// |   |      ||||PID 0x10 (16) - MAF Air Flow Rate
-// |   |      |||||            PID 0x1C (28) - OBD standards this vehicle conforms to
-// |   |      |||||            |                              PID 0x51 (58) - Fuel Type
-// |   |      |||||            |                              |
-// v   V      VVVVV            V                              v
-// 10001000000111110000:000000010000000000000:0000000000000000100
-// Converted to hex, that is the following four byte value binary to hex
-// 0x881F0000 0x00 PID 01 -20
-// 0x02000000 0x20 PID 21 - 40
-// 0x04000000 0x40 PID 41 - 60
-
-// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-// we determined above (0x081F0000):
-
-//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-//                                |     |     |    0x88 - The first of four bytes of the Supported PIDS value
-//                                |     |     |     |    0x1F - The second of four bytes of the Supported PIDS value
-//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-//                                |     |     |     |     |      |    |     |
-//                                V     V     V     V     V      V    V     V
-byte mode1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
-byte mode1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
-byte mode1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
-
-// Define the set of PIDs for MODE09 you wish you ECU to support.
-// As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
-// Our supported PID value is:
-//
-//  PID 0x02 - Vehicle Identification Number (VIN)
-//  | PID 0x04 (04) - Calibration ID
-//  | |     PID 0x0C (12) - ECU NAME
-//  | |     |
-//  V V     V
-// 01010000010  // Converted to hex, that is the following four byte value binary to hex
-// 0x28200000 0x00 PID 01-11
-
-// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-// we determined above (0x28200000):
-
-//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-//                                |     |     |    0x28 - The first of four bytes of the Supported PIDS value
-//                                |     |     |     |    0x20 - The second of four bytes of the Supported PIDS value
-//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-//                                |     |     |     |     |      |    |     |
-//                                V     V     V     V     V      V    V     V
-byte mode9Supported0x00PID[8] = {0x06, 0x49, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00};
 
 void obdLoop(void) {
   if(!initialized) {
     return;
   }
-
-//=================================================================
-//Handel Recived CAN-BUS frames from service tool
-//=================================================================
-
-  //if(CAN_MSGAVAIL == CAN.checkReceive())
-  if (!digitalRead(CAN1_INT))  {
-    CAN0.readMsgBuf(&canId, &len, buf);
-    //https://en.wikipedia.org/wiki/OBD-II_PIDs#CAN_(11-bit)_bus_format
+  
+  if(!digitalRead(CAN1_INT))                         // If CAN1_INT pin is low, read receive buffer
+  {
+    CAN0.readMsgBuf(&rxId, &dlc, rxBuf);             // Get CAN data
     
-    int len = buf[0];
-    int service = buf[1];
-    int pid = buf[2];
+    // First request from most adapters...
+    if(rxId == FUNCTIONAL_ID){
+      obdReq(rxBuf);
+    }       
+  }
+}
 
-    char pids[128];
-    if(len == L2 && service == SHOW_CURRENT_DATA) {
-      snprintf(pids, sizeof(pids) - 1, "0x%02x/%s", pid, getPIDName(pid));
-    } else {
-      snprintf(pids, sizeof(pids) - 1, "0x%02x", pid);
+void storeECUName(byte *tab, int idx) {
+  for(int a = 0; a < (int)strlen(ecu_Name); a++) {
+    tab[a + idx] = (byte)ecu_Name[a];
+  }
+}
+
+void obdReq(byte *data){
+  byte numofBytes = data[0];
+  byte mode = data[1] & 0x0F;
+  byte pid = data[2];
+  bool tx = false;
+  byte txData[] = {0x00,(byte)(0x40 | mode),pid,PAD,PAD,PAD,PAD,PAD};
+
+  deb("OBD-2 pid:0x%02x (%s) length:0x%02x mode:0x%02x",  pid, getPIDName(pid), numofBytes, mode);
+  
+  //txData[1] = 0x40 | mode;
+  //txData[2] = pid; 
+  
+  //=============================================================================
+  // MODE $01 - Show current data
+  //=============================================================================
+  if(mode == L1){
+    if(pid == PID_0_20){        // Supported PIDs 01-20
+      txData[0] = 0x06;
+      
+      txData[3] = 0xff;
+      txData[4] = 0xff;
+      txData[5] = 0xff;
+      txData[6] = 0xff;
+      tx = true;
     }
+    else if(pid == STATUS_DTC){    // Monitor status since DTs cleared.
+      bool MIL = true;
+      byte DTC = 5;
+      txData[0] = 0x06;
+      
+      txData[3] = (MIL << 7) | (DTC & 0x7F);
+      txData[4] = 0x07;
+      txData[5] = 0xFF;
+      txData[6] = 0x00;
+      tx = true;
+    }
+    else if(pid == FUEL_SYS_STATUS){    // Fuel system status
+      txData[0] = 0x04;
+      txData[3] = 0;
+      txData[4] = 0;
+      tx = true;
+    }
+    else if(pid == ENGINE_LOAD){    // Calculated engine load
+      txData[0] = 0x03;
+      txData[3] = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+      tx = true;
+    }
+    else if(pid == ABSOLUTE_LOAD) {
+      txData[0] = 0x04;
+      int l = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+      txData[3] = MSB(l);
+      txData[4] = LSB(l);
+      tx = true;
+    }
+    else if(pid == ENGINE_COOLANT_TEMP){    // Engine coolant temperature
+      txData[0] = 0x03;
+      txData[3] = int(valueFields[F_COOLANT_TEMP] + 40);
+      tx = true;
+    }
+    else if(pid == FUEL_PRESSURE) {
+      txData[0] = 0x04;
+      int p = isEngineRunning() ? DEFAULT_INJECTION_PRESSURE : 0;
+      txData[3] = MSB(p);
+      txData[4] = LSB(p);
+      tx = true;
+    }
+    else if(pid == FUEL_RAIL_PRES_ALT ||
+        pid == ABS_FUEL_RAIL_PRES) {
+      txData[0] = 0x04;
+      int p = isEngineRunning() ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
+      txData[3] = MSB(p);
+      txData[4] = LSB(p);
+      tx = true;
+    }
+    else if(pid == FUEL_LEVEL) {
+      txData[0] = 0x03;
+      int fuelPercentage = ( (int(valueFields[F_FUEL]) * 100) / (FUEL_MIN - FUEL_MAX));
+      if(fuelPercentage > 100) {
+        fuelPercentage = 100;
+      }
+      txData[3] = percentToGivenVal(fuelPercentage, 255);
 
-    deb("OBD-2/(%x) l:0x%02x service:0x%02x PID:%s / (%hhu,%hhu,%hhu)", 
-                        canId, 
-                        len, service, pids, 
-                        len, service, pid);
+      tx = true;
+    }
+    else if(pid == INTAKE_PRESSURE){    // Intake manifold absolute pressure
+      txData[0] = 0x03;
+      
+      int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
+      if(intake_Pressure > 255) {
+        intake_Pressure = 255;
+      }
+      txData[3] = intake_Pressure;
+      tx = true;
+    }
+    else if(pid == ENGINE_RPM){    // Engine RPM
+      txData[0] = 0x04;
+      int engine_Rpm = int(valueFields[F_RPM] * 4);
+      txData[3] = MSB(engine_Rpm);
+      txData[4] = LSB(engine_Rpm);
+      tx = true;
+    }
+    else if(pid == VEHICLE_SPEED){    // Vehicle speed
+      txData[0] = 0x03;
+      txData[3] = int(valueFields[F_CAR_SPEED]);
+      tx = true;
+    }
+    else if(pid == INTAKE_TEMP ||
+        pid == AMB_AIR_TEMP){    // Intake air temperature
+      txData[0] = 0x03;
+      txData[3] = int(valueFields[F_INTAKE_TEMP] + 40);
+      tx = true;
+    }
+    else if(pid == THROTTLE ||
+        pid == REL_ACCEL_POS ||
+        pid == REL_THROTTLE_POS ||
+        pid == ABS_THROTTLE_POS_B ||
+        pid == ABS_THROTTLE_POS_C ||
+        pid == ACCEL_POS_D ||
+        pid == ACCEL_POS_E ||
+        pid == ACCEL_POS_F ||
+        pid == COMMANDED_THROTTLE) { // Throttle position
+      txData[0] = 0x03;
+      float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
+      txData[3] = percentToGivenVal(percent, 255);
+      tx = true;
+    }
+    else if(pid == OBDII_STANDARDS){    // OBD standards this vehicle conforms to
+      txData[0] = 0x04;
+      txData[3] = EOBD_OBD_OBD_II;
+      tx = true;
+    }
+    else if(pid == ENGINE_RUNTIME){
+      txData[0] = 0x04;
+      txData[3] = 10;
+      txData[4] = 10;
+      tx = true;
+    }
+    else if(pid == PID_21_40){    // Supported PIDs 21-40
+      txData[0] = 0x06;
+      
+      txData[3] = 0xff;
+      txData[4] = 0xff;
+      txData[5] = 0xff;
+      txData[6] = 0xff;
+      tx = true;
+    }
+    else if(pid == CAT_TEMP_B1S1 ||
+      pid == CAT_TEMP_B1S2 ||
+      pid == CAT_TEMP_B2S1 ||
+      pid == CAT_TEMP_B2S2) {
+      txData[0] = 0x04;
 
-//=================================================================
-//DTC support 
-//=================================================================
-    if(len == L1) {
-      const byte *DTC = NULL;
-      switch(service) { 
-        case SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES:
-          deb("DTC show");
-          switch(pid) {
-            case 0x00: { 
-              if (MIL) {
-                //P0217
-                DTC = (const byte[]){6, MODE3_RESPONSE, 1, 2, 23, 0, 0, 0}; 
-              } else {
-                DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
-              }
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
-            }
-            break;
-          }
-          break;
-        case CLEAR_DIAGNOSTIC_TROUBLE_CODES_AND_STORED_VALUES:
-          deb("DTC clear");
-          switch(pid) {
-            case 0x00:
-              MIL = false;
-              DTC = (const byte[]){6, MODE3_RESPONSE, 0, 0, 0, 0, 0, 0}; 
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, (byte*)DTC);
-            break;
-          }
-          break;
+      int temp = (int(valueFields[F_EGT]) + 40) * 10;
+      txData[3] = MSB(temp);
+      txData[4] = LSB(temp);
+      tx = true;
+    }
+    else if(pid == PID_41_60){    // Supported PIDs 41-60
+      txData[0] = 0x06;
+      
+      txData[3] = 0xff;
+      txData[4] = 0xff;
+      txData[5] = 0xff;
+      txData[6] = 0xff;
+      tx = true;
+    }
+    else if(pid == ECU_VOLTAGE){    // Control module voltage
+
+      txData[0] = 0x04;
+      
+      int volt = int(valueFields[F_VOLTS] * 1024);
+      txData[3] = MSB(volt);
+      txData[4] = LSB(volt);
+      tx = true;    
+    }
+    else if(pid == FUEL_TYPE){    // Fuel Type
+      txData[0] = 0x03;
+      txData[3] = FUEL_TYPE_DIESEL;
+      tx = true;
+    }
+    else if(pid == ENGINE_OIL_TEMP){    // Engine oil Temperature
+      txData[0] = 0x03;
+      txData[3] = int(valueFields[F_OIL_TEMP] + 40);
+      tx = true;
+    }
+    else if(pid == FUEL_TIMING){    // Fuel injection timing
+      txData[0] = 0x04;
+      
+      txData[3] = 0x61;
+      txData[4] = 0x80;
+      tx = true;
+    }
+    else if(pid == FUEL_RATE){    // Engine fuel rate
+      txData[0] = 0x04;
+      
+      txData[3] = 0x07;
+      txData[4] = 0xD0;
+      tx = true;
+    }
+    else if(pid == EMISSIONS_STANDARD){    // Emissions requirements to which vehicle is designed
+      txData[0] = 0x03;
+      txData[3] = EURO_3;
+      tx = true;
+    }
+    else if(pid == PID_61_80){    // Supported PIDs 61-80
+      txData[0] = 0x06;
+      
+      txData[3] = 0xff;
+      txData[4] = 0xff;
+      txData[5] = 0xff;
+      txData[6] = 0xff;
+      tx = true;
+    }
+    else if(pid == P_DPF_TEMP) {
+
+      txData[0] = 0x04;
+
+      txData[3] = 0x40;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x00;
+
+      tx = true;
+    }
+    else if(pid == PID_81_A0){    // Supported PIDs 81-A0
+      txData[0] = 0x06;
+      
+      txData[3] = 0x00;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x01;
+      tx = true;
+    }
+    else if(pid == PID_A1_C0){    // Supported PIDs A1-C0
+      txData[0] = 0x06;
+      
+      txData[3] = 0x00;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x01;
+      tx = true;
+    }
+    else if(pid == PID_C1_E0){    // Supported PIDs C1-E0
+      txData[0] = 0x06;
+      
+      txData[3] = 0x00;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x01;
+      tx = true;
+    }
+    else if(pid == PID_E1_FF){    // Supported PIDs E1-FF?
+      txData[0] = 0x06;
+      
+      txData[3] = 0x00;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x00;
+      tx = true;
+    }
+    else{
+      unsupported(mode, pid);
+    }
+  }
+  
+  //=============================================================================
+  // MODE $02 - Show freeze frame data
+  //=============================================================================
+  else if(mode == L2){
+      unsupported(mode, pid);
+  }
+  
+  //=============================================================================
+  // MODE $03 - Show stored DTCs
+  //=============================================================================
+  else if(mode == L3){
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      iso_tp(mode, pid, 12, DTCs);
+  }
+  
+  //=============================================================================
+  // MODE $04 - Clear DTCs and stored values
+  //=============================================================================
+  else if(mode == L4){
+      // Need to cleat DTCs.  We just acknowledge the command for now.
+      txData[0] = 0x01;
+      tx = true;
+  }
+  
+  //=============================================================================
+  // MODE $05 - Test Results, oxygen sensor monitoring (non CAN only)
+  //=============================================================================
+  else if(mode == L5){
+      unsupported(mode, pid);
+  }
+  
+  //=============================================================================
+  // MODE $06 - Test Results, On-Board Monitoring (Oxygen sensor monitoring for CAN only)
+  //=============================================================================
+  else if(mode == L6){
+    if(pid == 0x00){        // Supported PIDs 01-20
+      txData[0] = 0x06;
+      
+      txData[3] = 0x00;
+      txData[4] = 0x00;
+      txData[5] = 0x00;
+      txData[6] = 0x00;
+      tx = true;
+    }
+    else{
+      unsupported(mode, pid);
+    }
+  }
+  
+  //=============================================================================
+  // MODE $07 - Show pending DTCs (Detected during current or last driving cycle)
+  //=============================================================================
+  else if(mode == L7){
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      iso_tp(mode, pid, 12, DTCs);
+  }
+  
+  //=============================================================================
+  // MODE $08 - Control operation of on-board component/system
+  //=============================================================================
+  else if(mode == L8){
+      unsupported(mode, pid);
+  }
+  
+  //=============================================================================
+  // MODE $09 - Request vehcile information
+  //=============================================================================
+  else if(mode == L9){
+    if(pid == 0x00){        // Supported PIDs 01-20
+      txData[0] = 0x06;
+      
+      txData[3] = 0x54;
+      txData[4] = 0x40;
+      txData[5] = 0x00;
+      txData[6] = 0x00;
+      tx = true;
+    }
+//    else if(pid == 0x01){    // VIN message count for PID 02. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
+//    }
+    else if(pid == REQUEST_VIN){    // VIN (17 to 20 Bytes) Uses ISO-TP
+      byte VIN[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      for(int a = 0; a < (int)strlen(vehicle_Vin); a++) {
+        VIN[a + 3] = (byte)vehicle_Vin[a];
+      }
+      iso_tp(mode, pid, 20, VIN);
+    }
+//    else if(pid == 0x03){    // Calibration ID message count for PID 04. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
+//    }
+    else if(pid == 0x04){    // Calibration ID
+      byte CID[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      storeECUName(CID, 3);
+      iso_tp(mode, pid, 18, CID);
+    }
+//    else if(pid == 0x05){    // Calibration Verification Number (CVN) message count for PID 06. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
+//    }
+    else if(pid == 0x06){    // CVN
+      byte CVN[] = {(byte)(0x40 | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
+      iso_tp(mode, pid, 11, CVN);
+    }
+//    else if(pid == 0x07){    // In-use performance tracking message count for PID 08 and 0B. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
+//    }
+//    else if(pid == 0x08){    // In-use performance tracking for spark ignition vehicles.
+//    }
+    else if(pid == 0x09){    // ECU name message count for PID 0A.
+      byte ECUname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'U', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      storeECUName(ECUname, 7);
+      iso_tp(mode, pid, 23, ECUname);
+    }
+    else if(pid == 0x0A){    // ECM Name
+      byte ECMname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'M', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      storeECUName(ECMname, 7);
+      iso_tp(mode, pid, 23, ECMname);
+    }
+//    else if(pid == 0x0B){    // In-use performance tracking for compression ignition vehicles.
+//    }
+//    else if(pid == 0x0C){    // ESN message count for PID 0D.
+//    }
+    else if(pid == 0x0D){    // ESN
+      byte ESN[] = {(byte)(0x40 | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
+      iso_tp(mode, pid, 20, ESN);
+    }
+    else{
+      unsupported(mode, pid); 
+    }
+  }
+  
+  //=============================================================================
+  // MODE $0A - Show permanent DTCs 
+  //=============================================================================
+  else if(mode == L10){
+      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      iso_tp(mode, pid, 12, DTCs);
+  }
+  
+  // UDS Modes: Diagonstic and Communications Management =======================================
+  //=============================================================================
+  // MODE $10 - Diagnostic Session Control
+  //=============================================================================
+//  else if(mode == 0x10){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $11 - ECU Reset
+  //=============================================================================
+//  else if(mode == 0x11){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $27 - Security Access
+  //=============================================================================
+//  else if(mode == 0x27){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $28 - Communication Control
+  //=============================================================================
+//  else if(mode == 0x28){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $3E - Tester Present
+  //=============================================================================
+//  else if(mode == 0x3E){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $83 - Access Timing Parameters
+  //=============================================================================
+//  else if(mode == 0x83){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $84 - Secured Data Transmission
+  //=============================================================================
+//  else if(mode == 0x84){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+//  
+  //=============================================================================
+  // MODE $85 - Control DTC Sentings
+  //=============================================================================
+//  else if(mode == 0x85){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $86 - Response On Event
+  //=============================================================================
+//  else if(mode == 0x86){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $87 - Link Control
+  //=============================================================================
+//  else if(mode == 0x87){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  // UDS Modes: Data Transmission ==============================================================
+  //=============================================================================
+  // MODE $22 - Read Data By Identifier
+  //=============================================================================
+//  else if(mode == 0x22){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $23 - Read Memory By Address
+  //=============================================================================
+//  else if(mode == 0x23){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $24 - Read Scaling Data By Identifier
+  //=============================================================================
+//  else if(mode == 0x24){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $2A - Read Data By Periodic Identifier
+  //=============================================================================
+//  else if(mode == 0x2A){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $2C - Dynamically Define Data Identifier
+  //=============================================================================
+//  else if(mode == 0x2C){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $2E - Write Data By Identifier
+  //=============================================================================
+//  else if(mode == 0x2E){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $3D - Write Memory By Address
+  //=============================================================================
+//  else if(mode == 0x3D){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  // UDS Modes: Stored Data Transmission =======================================================
+  //=============================================================================
+  // MODE $14 - Clear Diagnostic Information
+  //=============================================================================
+//  else if(mode == 0x14){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $19 - Read DTC Information
+  //=============================================================================
+//  else if(mode == 0x19){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      tx = true;
+//  }
+  
+  // UDS Modes: Input Output Control ===========================================================
+  //=============================================================================
+  // MODE $2F - Input Output Control By Identifier
+  //=============================================================================
+//  else if(mode == 0x2F){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  // UDS Modes: Remote Activation of Routine ===================================================
+  //=============================================================================
+  // MODE $31 - Routine Control
+  //=============================================================================
+//  else if(mode == 0x2F){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  // UDS Modes: Upload / Download ==============================================================
+  //=============================================================================
+  // MODE $34 - Request Download
+  //=============================================================================
+//  else if(mode == 0x34){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $35 - Request Upload
+  //=============================================================================
+//  else if(mode == 0x35){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $36 - Transfer Data
+  //=============================================================================
+//  else if(mode == 0x36){
+//      txData[0] = 0x02;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $37 - Request Transfer Exit
+  //=============================================================================
+//  else if(mode == 0x37){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  
+  //=============================================================================
+  // MODE $38 - Request File Transfer
+  //=============================================================================
+//  else if(mode == 0x38){
+//      txData[0] = 0x03;
+//      
+//      txData[2] = mode;
+//      txData[3] = 0x00;
+//      tx = true;
+//  }
+  else { 
+    unsupported(mode, pid);
+  }
+  
+  if(tx)
+    CAN0.sendMsgBuf(REPLY_ID, 8, txData);
+}
+
+
+// Generic debug serial output
+void unsupported(byte mode, byte pid){
+  negAck(mode, 0x12);
+  unsupportedPrint(mode, pid);  
+}
+
+// Generic debug serial output
+void negAck(byte mode, byte reason){
+  byte txData[] = {0x03,0x7F,mode,reason,PAD,PAD,PAD,PAD};
+  CAN0.sendMsgBuf(REPLY_ID, 8, txData);
+}
+
+
+// Generic debug serial output
+void unsupportedPrint(byte mode, byte pid){
+  char msgstring[64];
+  snprintf(msgstring, sizeof(msgstring) - 1, "Mode $%02X: Unsupported PID $%02X requested!", mode, pid);
+  deb(msgstring);
+}
+
+
+// Blocking example of ISO transport
+void iso_tp(byte mode, byte pid, int len, byte *data){
+  byte tpData[8];
+  int offset = 0;
+  byte index = 0;
+//  byte packetcnt = ((len & 0x0FFF) - 6) / 7;
+//  if((((len & 0x0FFF) - 6) % 7) > 0)
+//    packetcnt++;
+
+  // First frame
+  tpData[0] = 0x10 | ((len >> 8) & 0x0F);
+  tpData[1] = 0x00FF & len;
+  for(byte i=2; i<8; i++){
+    tpData[i] = data[offset++];
+  }
+  CAN0.sendMsgBuf(REPLY_ID, 8, tpData);
+  index++; // We sent a packet so increase our index.
+  
+  bool not_done = true;
+  unsigned long sepPrev = millis();
+  byte sepInvl = 0;
+  byte frames = 0;
+  bool lockout = false;
+  while(not_done){
+    // Need to wait for flow frame
+    if(!digitalRead(CAN1_INT)){
+      CAN0.readMsgBuf(&rxId, &dlc, rxBuf);
+    
+      if((rxId == LISTEN_ID) && ((rxBuf[0] & 0xF0) == 0x30)){
+        if((rxBuf[0] & 0x0F) == 0x00){
+          // Continue
+          frames = rxBuf[1];
+          sepInvl = rxBuf[2];
+          lockout = true;
+        } else if((rxBuf[0] & 0x0F) == 0x01){
+          // Wait
+          lockout = false;
+          delay(rxBuf[2]);
+        } else if((rxBuf[0] & 0x0F) == 0x03){
+          // Abort
+          not_done = false;
+          return;
+        }
       }
     }
 
-//=================================================================
-//Return CAN-BUS Messages - SUPPORTED PID's 
-//=================================================================
-    if(len == L2) {
-      switch(service) { 
-        case SHOW_CURRENT_DATA: {
-          switch(pid) {  
-            case PIDS_SUPPORT_01_20:
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x00PID);
-              break;
-            case PIDS_SUPPORT_21_40:
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x20PID);
-              break;
-            case PIDS_SUPPORT_41_60:
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode1Supported0x40PID);
-              break;
-            case OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO: { 
-              byte obd_Std_Msg[8] = {4, MODE1_RESPONSE, OBD_STANDARDS_THIS_VEHICLE_CONFORMS_TO, 
-                EOBD_OBD_OBD_II};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, obd_Std_Msg);
-              break;
-            }
-            case FUEL_TYPE: { 
-              byte fuel_Type_Msg[8] = {4, MODE1_RESPONSE, FUEL_TYPE, 
-                FUEL_TYPE_DIESEL};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, fuel_Type_Msg);
-              break;
-            }
+    if(((millis() - sepPrev) >= sepInvl) && lockout){
+      sepPrev = millis();
 
-            //=================================================================
-            //Return CAN-BUS Messages - RETURN PID VALUES - SENSORS 
-            //=================================================================
-            case ENGINE_COOLANT_TEMPERATURE: { 
-              int engine_Coolant_Temperature = int(valueFields[F_COOLANT_TEMP] + 40);
-              byte engine_Coolant_Temperature_Msg[8] = {3, MODE1_RESPONSE, ENGINE_COOLANT_TEMPERATURE, 
-                (byte)(engine_Coolant_Temperature)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Coolant_Temperature_Msg);
-              break;
-            }
-            case INTAKE_MANIFOLD_ABSOLUTE_PRESSURE: {
-              int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
-              if(intake_Pressure > 255) {
-                intake_Pressure = 255;
-              }
-              byte intake_Pressure_Msg[8] = {3, MODE1_RESPONSE, INTAKE_MANIFOLD_ABSOLUTE_PRESSURE, 
-                (byte)(intake_Pressure)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Pressure_Msg);
-              break;
-            }
-            case THROTTLE_POSITION: {
-              float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
-              byte throttle_Position = percentToGivenVal(percent, 255);
-              byte throttle_Position_Msg[8] = {3, MODE1_RESPONSE, THROTTLE_POSITION, 
-                (throttle_Position)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, throttle_Position_Msg);
-              break;
-            }
-            case CALCULATED_ENGINE_LOAD: {
-              byte engine_Load = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
-              byte engine_Load_Msg[8] = {3, MODE1_RESPONSE, CALCULATED_ENGINE_LOAD, 
-                (engine_Load)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Load_Msg);
-              break;
-            }
-            case ENGINE_RPM: { 
-              int engine_Rpm = int(valueFields[F_RPM] * 4);
-              byte engine_Rpm_Msg[8] = {4, MODE1_RESPONSE, ENGINE_RPM, 
-                MSB(engine_Rpm), LSB(engine_Rpm)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, engine_Rpm_Msg);
-              break;
-            }
-            case VEHICLE_SPEED: { 
-              int vehicle_Speed = int(valueFields[F_CAR_SPEED]);
-              byte vehicle_Speed_Msg[8] = {3, MODE1_RESPONSE, VEHICLE_SPEED, 
-                (byte)(vehicle_Speed)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, vehicle_Speed_Msg);
-              break;
-            }
-            case TIMING_ADVANCE: { 
-              byte timing_Advance_Msg[8] = {3, MODE1_RESPONSE, TIMING_ADVANCE, 
-                (byte)((timing_Advance + 64) * 2)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, timing_Advance_Msg);
-              break;
-            }
-            case AIR_INTAKE_TEMPERATURE: { 
-              int intake_Temp = int(valueFields[F_INTAKE_TEMP] + 40);
-              byte intake_Temp_Msg[8] = {3, MODE1_RESPONSE, AIR_INTAKE_TEMPERATURE, 
-                (byte)(intake_Temp)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, intake_Temp_Msg);
-              break;
-            }
-            case MAF_AIR_FLOW_RATE: { 
-              byte maf_Air_Flow_Rate_Msg[8] = {4, MODE1_RESPONSE, MAF_AIR_FLOW_RATE, 
-                MSB(maf_Air_Flow_Rate), LSB(maf_Air_Flow_Rate)};
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, maf_Air_Flow_Rate_Msg);
-              break;
-            }
-            default:
-              deb("unknown device data requested: 0x%02x/%s", pid, getPIDName(pid));
-              break;
-          }
-        }
-        break;
-
-        //=================================================================
-        //Return CAN-BUS Messages - RETURN PID VALUES - DATA 
-        //=================================================================
-        case REQUEST_VEHICLE_INFORMATION: {
-          switch(pid) {  
-            case REQUEST_MODE_9_SUPPORTED:
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, mode9Supported0x00PID);
-              break;
-
-            case REQUEST_VIN: { 
-              unsigned char frame1[8] = {16, 20, 73, REQUEST_VIN, 1, vehicle_Vin[0], vehicle_Vin[1], vehicle_Vin[2]};
-              unsigned char frame2[8] = {33, vehicle_Vin[3], vehicle_Vin[4], vehicle_Vin[5], vehicle_Vin[6], vehicle_Vin[7], vehicle_Vin[8], vehicle_Vin[9]};
-              unsigned char frame3[8] = {34, vehicle_Vin[10], vehicle_Vin[11], vehicle_Vin[12], vehicle_Vin[13], vehicle_Vin[14], vehicle_Vin[15], vehicle_Vin[16]};
-
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-              break;
-            }
-
-            case REQUEST_CALLIBRATION_ID: { 
-              unsigned char frame1[8] = {16, 20, 73, REQUEST_CALLIBRATION_ID, 1, calibration_ID[0], calibration_ID[1], calibration_ID[2]};
-              unsigned char frame2[8] = {33, calibration_ID[3], calibration_ID[4], calibration_ID[5], calibration_ID[6], calibration_ID[7], calibration_ID[8], calibration_ID[9]};
-              unsigned char frame3[8] = {34, calibration_ID[10], calibration_ID[11], calibration_ID[12], calibration_ID[13], calibration_ID[14], calibration_ID[15], calibration_ID[16]};
-
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-              break;
-            }
-
-            case REQUEST_ECU_NAME: { 
-              unsigned char frame1[8] = {10, 14, 49, REQUEST_ECU_NAME, 01, ecu_Name[0], ecu_Name[1], ecu_Name[2]};
-              unsigned char frame2[8] = {21, ecu_Name[3], ecu_Name[4], ecu_Name[5], ecu_Name[6], ecu_Name[7], ecu_Name[8], ecu_Name[9]};
-              unsigned char frame3[8] = {22, ecu_Name[10], ecu_Name[11], ecu_Name[12], ecu_Name[13], ecu_Name[14], ecu_Name[15], ecu_Name[16]};
-              unsigned char frame4[8] = {23, ecu_Name[17], ecu_Name[18]};
-
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame1);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame2);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame3);
-              CAN0.sendMsgBuf(REPLY_ID, 0, 8, frame4);
-              break;
-            }
-
-            default:
-              deb("not supported request MODE9: 0x%02x", pid);
-              break;
-          }
-        }
-        break;
-
-        default:
-          deb("not supported service: 0x%02x", service);
-          break;
+      tpData[0] = 0x20 | index++;
+      for(byte i=1; i<8; i++){
+        if(offset != len)
+          tpData[i] = data[offset++];
+        else
+          tpData[i] = 0x00;
       }
+      
+      // Do consecutive frames as instructed via flow frame
+      CAN0.sendMsgBuf(REPLY_ID, 8, tpData);
+      
+      if(frames-- == 1)
+        lockout = false;
     }
+
+    if(offset == len)
+      not_done = false;
+    else{
+      char msgstring[32];
+      snprintf(msgstring, sizeof(msgstring) - 1, "Offset: 0x%04X\tLen: 0x%04X", offset, len);
+      Serial.println(msgstring);
+    }
+    // Timeout
+    if((millis() - sepPrev) >= 1000)
+      not_done = false;
   }
 }
 

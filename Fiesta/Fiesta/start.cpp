@@ -133,7 +133,9 @@ void initialization(void) {
   #endif //INC_FREERTOS_H
   #endif //DEBUG_SCREEN
 
+#ifdef VP37
   vp37Calibrate();
+#endif
   initGlowPlugsTime(coolant);
 
   watchdog_feed();
@@ -310,7 +312,9 @@ void looper(void) {
   heatedWindowMainLoop();
   statusVariable0 = 7;
 
+#ifdef VP37
   showVP37Debug();
+#endif
   m_delay(CORE_OPERATION_DELAY);  
 }
 
@@ -346,6 +350,10 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
+#ifdef VP37
   m_delay_microseconds(VP37_OPERATION_DELAY);  
+#else
+  m_delay(CORE_OPERATION_DELAY);
+#endif
 }
 

@@ -3,9 +3,15 @@
 
 #include <libConfig.h>
 
-#define VP37_PWM_FREQUENCY_HZ 200
+#ifdef VP37
+#define VP37_PWM_FREQUENCY_HZ 160
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 200
+#else
+#define VP37_PWM_FREQUENCY_HZ 300
+#define TURBO_PWM_FREQUENCY_HZ 300
+#define ANGLE_PWM_FREQUENCY_HZ 300
+#endif
 
 #define I2C_SPEED_HZ 200000
 
