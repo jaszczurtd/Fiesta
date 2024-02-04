@@ -12,6 +12,9 @@ static volatile int RPMpulses = 0;
 
 static int currentRPMSolenoid = 0;
 static bool rpmCycle = false;
+#ifndef VP37
+static int rpmPercentValue = 0;
+#endif
 
 void countRPM(void) {
 

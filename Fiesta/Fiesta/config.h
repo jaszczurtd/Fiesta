@@ -1,6 +1,9 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
+#define vehicle_Vin "WF0BXXGAJB1R32583"
+#define ecu_Name "JASZCZUR FIESTA"
+
 //BASIC CONTROL VALUES!
 //#define GTB2260VZK
 #define VP37
