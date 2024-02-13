@@ -2,6 +2,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <ArtronShop_BH1750.h>
 #include <Wire.h>
+#include <tools.h>
 
 #define PIN_RGB 16
 #define NUMPIXELS 1
@@ -15,8 +16,11 @@
 
 #define ANALOG_WRITE_RESOLUTION 9
 
-#define R1 3300 // Rezystor górny (3.3kΩ)
-#define R2 470 // Rezystor dolny (470Ω)
+#define MAX_VOLTAGE 16.0
+
+#define ADC_VREF 3.3
+#define R1 3300 // R up (3.3kΩ)
+#define R2 470 // R down (470Ω)
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
 ArtronShop_BH1750 bh1750(0x23, &Wire); // Non Jump ADDR: 0x23, Jump ADDR: 0x5C
@@ -34,7 +38,6 @@ void setup()
 
   analogReadResolution(ADC_BITS);
   analogWriteResolution(ANALOG_WRITE_RESOLUTION);
-  analogWrite(PIN_LAMP, 508);
 
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
@@ -48,6 +51,9 @@ void setup()
 
 }
  
+#define PWM_10V 300
+#define PWM_16V 490
+
 void loop()
 {
   switch (ledColor) {
@@ -76,20 +82,40 @@ void loop()
     ledColor = NONE;
   }
 
-  int v = analogRead(A0);
-  float napiecieDzielnika = (v * 3.3) / 4095.0;
-  float napiecieZasilacza = napiecieDzielnika * (R1 + R2) / R2;  
+  int v = getAverageValueFrom(A0);
+  float dividerVoltge = (v * ADC_VREF) / ((1 << ADC_BITS) - 1);
+  float voltage = dividerVoltge * (R1 + R2) / R2;  
+  voltage = roundfWithPrecisionTo(voltage, 1);
+
+  int adcValuePot = getAverageValueFrom(A1);
+  adcValuePot = 3580;
+
+  float slope = (PWM_16V - PWM_10V) / (17.0 - 10.0);
+  float yIntercept = PWM_10V - slope * 10.0;
+
+  int pwmValueCorrected = round(slope * voltage + yIntercept);
+  int pwmValueFinal = adcValuePot + pwmValueCorrected;
+  
+  pwmValueFinal = map(pwmValueFinal, 0, (1 << ADC_BITS), 0, (1 << ANALOG_WRITE_RESOLUTION));
+
+
+  analogWrite(PIN_LAMP, pwmValueFinal);
 
   Serial.print("Light: ");
   Serial.print(bh1750.light());
   Serial.print(" lx");
   Serial.print(" voltage:");
-  Serial.print(napiecieZasilacza);
+  Serial.print(voltage);
+  Serial.print(" ");
+  Serial.print(pwmValueFinal);
+  Serial.print(" ");
+  Serial.print(adcValuePot);
+
 
   Serial.println();
 
 
 
-  delay(200);
+  delay(100);
 
 }
