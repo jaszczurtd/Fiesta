@@ -5,6 +5,8 @@
 #include <tools.h>
 
 #define PIN_RGB 16
+#define PIN_LAMP 2
+
 #define NUMPIXELS 1
 
 #define ADC_BITS 12
@@ -12,7 +14,7 @@
 #define PIN_SCL 1
 #define I2C_SPEED_HZ 50000
 
-#define PIN_LAMP 2
+#define MAX_RETRIES 3
 
 #define ANALOG_WRITE_RESOLUTION 9
 
@@ -28,34 +30,7 @@ ArtronShop_BH1750 bh1750(0x23, &Wire); // Non Jump ADDR: 0x23, Jump ADDR: 0x5C
 enum {NONE, RED, GREEN, BLUE};
 int ledColor = NONE;
 
-bool state = false;
-
-void setup()
-{
-  Serial.begin(9600);
-
-  pixels.begin();
-
-  analogReadResolution(ADC_BITS);
-  analogWriteResolution(ANALOG_WRITE_RESOLUTION);
-
-  Wire.setSDA(PIN_SDA);
-  Wire.setSCL(PIN_SCL);
-  Wire.setClock(I2C_SPEED_HZ);
-  Wire.begin();
-  
-  while (!bh1750.begin()) {
-    Serial.println("BH1750 not found !");
-    delay(1000);
-  }
-
-}
- 
-#define PWM_10V 300
-#define PWM_16V 490
-
-void loop()
-{
+void setLEDColor(int ledColor) {
   switch (ledColor) {
     case NONE:
       pixels.setPixelColor(0, pixels.Color(0, 0, 0));
@@ -76,33 +51,72 @@ void loop()
     default:
       break;
   }
- 
-  ledColor++;
-  if (ledColor == 4) {
-    ledColor = NONE;
+}
+
+void setup()
+{
+  Serial.begin(9600);
+
+  pixels.begin();
+
+  analogReadResolution(ADC_BITS);
+  analogWriteResolution(ANALOG_WRITE_RESOLUTION);
+
+  Wire.setSDA(PIN_SDA);
+  Wire.setSCL(PIN_SCL);
+  Wire.setClock(I2C_SPEED_HZ);
+  Wire.begin();
+
+  bool error = false;  
+  int bh1750Retries = 0;
+  while (!bh1750.begin()) {
+    error = true;
+    bh1750Retries++;
+    if(bh1750Retries == MAX_RETRIES) {
+      break;
+    }
+    Serial.println("BH1750 not found !");
+    delay(1000);
   }
 
+  setLEDColor((error) ? RED : GREEN);
+
+}
+ 
+#define PWM_10V 180
+#define PWM_16V 450
+
+float light;
+float voltage;
+int pwmValueFinal;
+int adcValuePot;
+
+void loop()
+{
+  light = bh1750.light();
+
   int v = getAverageValueFrom(A0);
-  float dividerVoltge = (v * ADC_VREF) / ((1 << ADC_BITS) - 1);
-  float voltage = dividerVoltge * (R1 + R2) / R2;  
-  voltage = roundfWithPrecisionTo(voltage, 1);
-
-  int adcValuePot = getAverageValueFrom(A1);
-  adcValuePot = 3580;
-
-  float slope = (PWM_16V - PWM_10V) / (17.0 - 10.0);
-  float yIntercept = PWM_10V - slope * 10.0;
-
-  int pwmValueCorrected = round(slope * voltage + yIntercept);
-  int pwmValueFinal = adcValuePot + pwmValueCorrected;
   
-  pwmValueFinal = map(pwmValueFinal, 0, (1 << ADC_BITS), 0, (1 << ANALOG_WRITE_RESOLUTION));
+  float dividerVoltge = (v * ADC_VREF) / ((1 << ADC_BITS) - 1);
+  float local_voltage = dividerVoltge * (R1 + R2) / R2;  
+  voltage = roundfWithPrecisionTo(local_voltage, 1);
 
+  adcValuePot = getAverageValueFrom(A1);
+
+  int cor = mapfloat(voltage, 9.0, 16.0, 0.0, 100.0);
+  int pwmValue = adcValuePot + cor;
+  
+  pwmValueFinal = map(pwmValue, 0, (1 << ADC_BITS), 0, (1 << ANALOG_WRITE_RESOLUTION));
+
+  pwmValueFinal = mapfloat(light, 15000, 1000, 400, 30);
 
   analogWrite(PIN_LAMP, pwmValueFinal);
+  delay(10);
+}
 
+void loop1() {
   Serial.print("Light: ");
-  Serial.print(bh1750.light());
+  Serial.print(light);
   Serial.print(" lx");
   Serial.print(" voltage:");
   Serial.print(voltage);
@@ -110,12 +124,6 @@ void loop()
   Serial.print(pwmValueFinal);
   Serial.print(" ");
   Serial.print(adcValuePot);
-
-
   Serial.println();
-
-
-
-  delay(100);
-
+  delay(5);
 }
