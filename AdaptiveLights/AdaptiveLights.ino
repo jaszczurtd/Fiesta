@@ -108,7 +108,11 @@ void loop()
   
   pwmValueFinal = map(pwmValue, 0, (1 << ADC_BITS), 0, (1 << ANALOG_WRITE_RESOLUTION));
 
-  pwmValueFinal = mapfloat(light, 15000, 1000, 400, 30);
+  int max = 18000;
+  if(light > max) {
+    light = max;
+  }
+  pwmValueFinal = mapfloat(light, max, 1000, 400, 30);
 
   analogWrite(PIN_LAMP, pwmValueFinal);
   delay(10);
