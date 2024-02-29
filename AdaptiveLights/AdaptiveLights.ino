@@ -112,7 +112,7 @@ void loop()
   if(light > max) {
     light = max;
   }
-  pwmValueFinal = mapfloat(light, max, 1000, 400, 30);
+  //pwmValueFinal = mapfloat(light, max, 1000, pwmValueFinal, 30);
 
   analogWrite(PIN_LAMP, pwmValueFinal);
   delay(10);
