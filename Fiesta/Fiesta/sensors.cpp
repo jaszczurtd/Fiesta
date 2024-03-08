@@ -219,10 +219,6 @@ int getRAWThrottle(void) {
   return int(valueFields[F_THROTTLE_POS]);
 }
 
-int getEnginePercentageThrottle(void) {
-  return percentToGivenVal((float)( ( (valueFields[F_THROTTLE_POS]) * 100) / PWM_RESOLUTION), 100);  
-}
-
 static unsigned char lowCurrentValue = 0;
 bool readMediumValues(void *argument) {
   switch(lowCurrentValue) {

@@ -70,7 +70,7 @@ void setAccelMaxRPM(void) {
 }
 
 bool isEngineThrottlePressed(void) {
-  return getEnginePercentageThrottle() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
+  return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
 bool cycleCheck(void *argument) {
