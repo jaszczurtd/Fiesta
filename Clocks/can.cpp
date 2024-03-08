@@ -1,6 +1,6 @@
 #include "can.h"
 
-MCP_CAN CAN(&SPI1, CAN_CS);
+MCP_CAN CAN(CAN_CS);
 
 static unsigned char frameNumber = 0;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;
