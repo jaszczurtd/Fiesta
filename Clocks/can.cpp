@@ -26,6 +26,7 @@ bool canInit(void) {
   bool error = false;
 
   while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
+    watchdog_feed();
     canRetries++;
     if(canRetries == MAX_RETRIES) {
       error = true;
@@ -35,19 +36,19 @@ bool canInit(void) {
     deb("ERROR!!!! CAN-BUS Shield init fail\n");
     deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
-    delay(1000);
+    m_delay(1000);
   }
   if(!error) {
     deb("CAN BUS Shield init ok!");
     CAN.setMode(MCP_NORMAL); 
     CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
-    pinMode(CAN1_INT, INPUT); 
-    attachInterrupt(digitalPinToInterrupt(CAN1_INT), receivedCanMessage, FALLING);
+    pinMode(CAN_INT, INPUT); 
+    attachInterrupt(digitalPinToInterrupt(CAN_INT), receivedCanMessage, FALLING);
   }
   return error;
 }
 
-bool callAtHalfSecond(void *argument) {
+bool updateCANrecipients(void *argument) {
 
   //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
 
@@ -105,3 +106,26 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
+bool isFanEnabled(void) {
+  return false;
+}
+
+bool isDPFRegenerating(void) {
+  return valueFields[F_DPF_REGEN] > 0;
+}
+
+bool isDPFConnected(void) {
+  return false;
+}
+
+float readFuel(void) {
+  return 0.0;
+}
+
+int getCurrentCarSpeed(void) {
+  return 0;
+}
+
+bool isGPSAvailable(void) {
+  return false;
+}
