@@ -56,7 +56,6 @@ void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int val);
 
-int getEnginePercentageThrottle(void);
 bool readMediumValues(void *argument);
 bool readHighValues(void *argument);
 
