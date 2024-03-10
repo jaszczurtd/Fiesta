@@ -273,14 +273,12 @@ bool readHighValues(void *argument) {
       case F_PRESSURE:
         valueFields[a] = readBarPressure();
         break;
-      case F_OIL_PRESSURE:
-        valueFields[a] = readOilBarPressure();
-        break;
     }
     if(reflectionValueFields[a] != valueFields[a]) {
         reflectionValueFields[a] = valueFields[a];
     
         triggerDrawHighImportanceValue(true);
+        CAN_sendThrottleUpdate();
     }
     valueFields[F_CAR_SPEED] = getCurrentCarSpeed();
     valueFields[F_CALCULATED_ENGINE_LOAD] = getPercentageEngineLoad();

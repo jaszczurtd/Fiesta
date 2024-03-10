@@ -66,32 +66,32 @@ bool callAtHalfSecond(void *argument) {
 }
 
 void receivedCanMessage(void) {
-    interrupt = true;
+  interrupt = true;
 }
 
 static byte lastFrame = 0;
 bool canMainLoop(void *message) {
-    CAN.readMsgBuf(&canID, &len, buf);
-    if(canID == 0 || len < 1) {
-        return true;
-    }
-
-    if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
-        interrupt = false;
-        lastFrame = buf[CAN_FRAME_NUMBER];
-
-        switch(canID) {
-            case CAN_ID_ECU_UPDATE: {
-              ecuMessages++;
-            }
-            break;
-
-            default:
-              deb("received unknown CAN frame: %d\n", canID);
-              break;
-        }
-    }
+  CAN.readMsgBuf(&canID, &len, buf);
+  if(canID == 0 || len < 1) {
     return true;
+  }
+
+  if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
+    interrupt = false;
+    lastFrame = buf[CAN_FRAME_NUMBER];
+
+    switch(canID) {
+      case CAN_ID_ECU_UPDATE_01: {
+        ecuMessages++;
+      }
+      break;
+
+      default:
+        deb("received unknown CAN frame: %d\n", canID);
+        break;
+    }
+  }
+  return true;
 }
 
 bool isEcuConnected(void) {

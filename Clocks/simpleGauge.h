@@ -10,18 +10,25 @@
 #include "config.h"
 #include "icons.h"
 
-#define SIMPLE_G_NONE 0
-#define SIMPLE_G_ENGINE_LOAD 1
-#define SIMPLE_G_INTAKE 2
-#define SIMPLE_G_RPM 3
-#define SIMPLE_G_GPS 4
-#define SIMPLE_G_EGT 5
-#define SIMPLE_G_VOLTS 6
+enum {
+  SIMPLE_G_NONE,
+  SIMPLE_G_ENGINE_LOAD,
+  SIMPLE_G_INTAKE,
+  SIMPLE_G_RPM,
+  SIMPLE_G_GPS,
+  SIMPLE_G_EGT,
+  SIMPLE_G_VOLTS,
+  SIMPLE_G_ECU
+};
 
 //text modes
-#define MODE_M_NORMAL 0
-#define MODE_M_TEMP 1
-#define MODE_M_KILOMETERS 2
+enum {
+  MODE_M_NORMAL,
+  MODE_M_TEMP,
+  MODE_M_KILOMETERS
+};
+
+#define ECU_CONNECTION_RADIUS 4
 
 #define VOLTS_OK_COLOR 0x4228
 #define VOLTS_LOW_ERROR_COLOR 0xA000
@@ -55,5 +62,6 @@ void showGPSGauge(void);
 void showSimpleGauges(void);
 void showEGTGauge(void);
 bool changeEGT(void *argument);
+void showECUConnectionGauge(void);
 
 #endif

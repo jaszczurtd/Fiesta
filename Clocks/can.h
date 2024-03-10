@@ -25,6 +25,7 @@ bool isDPFRegenerating(void);
 float readFuel(void);
 int getCurrentCarSpeed(void);
 bool isGPSAvailable(void);
+bool isEngineRunning(void);
 
 #endif
 
