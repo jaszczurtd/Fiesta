@@ -27,6 +27,7 @@ void initBasicPIO(void) {
 }
 
 void lcdBrightness(int val) {
+  valueFields[F_CLOCK_BRIGHTNESS] = val;
   analogWrite(PIN_BRIGHTNESS, ((1 << PWM_WRITE_RESOLUTION) - 1) - val);
 }
 
