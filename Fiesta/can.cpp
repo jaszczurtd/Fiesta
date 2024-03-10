@@ -67,7 +67,15 @@ void canInit(int retries) {
   }
 }
 
-bool updateCANrecipients(void *argument) {
+void CAN_sendAll(void) {
+  CAN_updaterecipients_01(NULL);
+  m_delay(CORE_OPERATION_DELAY);
+  CAN_updaterecipients_02();
+  m_delay(CORE_OPERATION_DELAY);
+  CAN_sendThrottleUpdate();
+}
+
+bool CAN_updaterecipients_01(void *argument) {
 
   if(initialized) {
     int hi, lo;
@@ -89,36 +97,63 @@ bool updateCANrecipients(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
     buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
 
-    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE, sizeof(buf), buf);  
-  }
+    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
+    buf[CAN_FRAME_NUMBER] = frameNumber++;
+    buf[CAN_FRAME_ECU_UPDATE_INTAKE] = (byte)valueFields[F_INTAKE_TEMP];
+
+    floatToDec(valueFields[F_PRESSURE], &hi, &lo);
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (byte)hi;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (byte)lo;
+
+    short fuel = valueFields[F_FUEL];
+    buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
+    buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
+
+    buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
+    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = valueFields[F_CAR_SPEED];
+    
+    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf); 
+
+    buf[CAN_FRAME_NUMBER] = frameNumber++;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] = valueFields[F_PRESSURE_PERCENTAGE];
+    buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = valueFields[F_FUEL_TEMP];
+    buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = valueFields[F_FAN_ENABLED];
+
+    CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf); 
+  }
   return true;  
 }
 
-static int cLastRPM = C_INIT_VAL;
+static int lastRPM = C_INIT_VAL;
+void CAN_updaterecipients_02(void) {
+  if(initialized) {
+    int rpm = int(valueFields[F_RPM]);
+    if(lastRPM != rpm) {
+      lastRPM = rpm;
+
+      byte buf[CAN_FRAME_MAX_LENGTH];
+      buf[CAN_FRAME_NUMBER] = frameNumber++;
+      buf[CAN_FRAME_RPM_UPDATE_HI] = MSB(rpm);
+      buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
+
+      CAN.sendMsgBuf(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);  
+    }
+  }
+}
+
 static int cLastThrottle = C_INIT_VAL;
-void CAN_sendUpdate(void) {
+void CAN_sendThrottleUpdate(void) {
   if(initialized) {
     byte buf[CAN_FRAME_MAX_LENGTH];
 
-    int rpm = valueFields[F_RPM];
-    if(cLastRPM != rpm) {
-      cLastRPM = rpm;
-
-      buf[CAN_FRAME_NUMBER] = frameNumber++;
-      buf[CAN_ID_RPM_UPDATE_HI] = MSB(rpm);
-      buf[CAN_ID_RPM_UPDATE_LO] = LSB(rpm);
-
-      CAN.sendMsgBuf(CAN_ID_RPM, sizeof(buf), buf);  
-    }
-
-    int throttle = valueFields[F_THROTTLE_POS];
+    int throttle = int(valueFields[F_THROTTLE_POS]);
     if(cLastThrottle != throttle) {
       cLastThrottle = throttle;
 
       buf[CAN_FRAME_NUMBER] = frameNumber++;
-      buf[CAN_ID_THROTTLE_UPDATE_HI] = MSB(rpm);
-      buf[CAN_ID_THROTTLE_UPDATE_LO] = LSB(rpm);
+      buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
+      buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
       CAN.sendMsgBuf(CAN_ID_THROTTLE, sizeof(buf), buf); 
     }
@@ -159,8 +194,14 @@ bool canMainLoop(void *argument) {
 
             case CAN_ID_LUMENS: {
               valueFields[F_OUTSIDE_LUMENS] =
-                MsbLsbToInt(buf[CAN_FRAME_LIGHTS_UPDATE_HI], 
-                            buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
+                decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI], 
+                           buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
+            }
+            break;
+
+            case CAN_ID_OIL_PRESURE: {
+              valueFields[F_OIL_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
+                                                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
             }
             break;
 

@@ -36,7 +36,6 @@
 #include "can.h"
 #include "obd-2.h"
 #include "vp37.h"
-#include "oil.h"
 #include "gps.h"
 #include "tests.h"
 

@@ -15,8 +15,6 @@
 #include "hardwareConfig.h"
 #include "can.h"
 
-#define C_INIT_VAL -1
-
 void setup_a(void);
 void loop_a(void);
 void setup_b(void);

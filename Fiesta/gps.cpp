@@ -81,7 +81,9 @@ float getCurrentCarSpeed(void) {
 }
 
 bool isGPSAvailable(void) {
-  return gps.location.isValid();
+  bool isavail = gps.location.isValid();
+  valueFields[F_IS_GPS_AVAILABLE] = isavail;
+  return isavail;
 }
 
 

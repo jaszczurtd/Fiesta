@@ -66,6 +66,7 @@ void fanMainLoop(void) {
     fanEnabled = FAN_REASON_NONE;    
   }
 
+  valueFields[F_FAN_ENABLED] = fanEnabled;
   if(lastFanStatus != fanEnabled) {
     fan(isFanEnabled());
     lastFanStatus = fanEnabled;     

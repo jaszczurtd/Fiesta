@@ -4,8 +4,6 @@
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
 
-float valueFields[F_LAST];
-
 void setupOnboardLed(void) {
   pixels.begin();
   setLEDColor(BLUE);

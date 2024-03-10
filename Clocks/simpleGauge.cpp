@@ -7,6 +7,7 @@ SimpleGauge rpm_g = SimpleGauge(SIMPLE_G_RPM);
 SimpleGauge gps_g = SimpleGauge(SIMPLE_G_GPS);
 SimpleGauge egt_g = SimpleGauge(SIMPLE_G_EGT);
 SimpleGauge volts_g = SimpleGauge(SIMPLE_G_VOLTS);
+SimpleGauge ecu_g = SimpleGauge(SIMPLE_G_ECU);
 
 void redrawSimpleGauges(void) {
   engineLoad_g.redraw();
@@ -15,6 +16,7 @@ void redrawSimpleGauges(void) {
   gps_g.redraw();
   egt_g.redraw();
   volts_g.redraw();
+  ecu_g.redraw();
 }
 
 void showEngineLoadGauge(void) {
@@ -29,6 +31,10 @@ void showSimpleGauges(void) {
   intake_g.showSimpleGauge();
   rpm_g.showSimpleGauge();
   volts_g.showSimpleGauge();
+}
+
+void showECUConnectionGauge(void) {
+  ecu_g.showSimpleGauge();
 }
 
 void showEGTGauge(void) {
@@ -48,9 +54,13 @@ bool changeEGT(void *argument) {
 SimpleGauge::SimpleGauge(int mode) {
   this->mode = mode;
   drawOnce = true;
-  lastShowedVal = C_INIT_VAL;
   resetCurrentEGTMode();
   lastV1 = lastV2 = C_INIT_VAL;
+  if(mode == SIMPLE_G_ECU) {
+    lastShowedVal = isEcuConnected();
+  } else {
+    lastShowedVal = C_INIT_VAL;
+  }
 }
 
 int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
@@ -117,6 +127,8 @@ int SimpleGauge::getBaseX(void) {
       return (SMALL_ICONS_WIDTH * 4);
     case SIMPLE_G_VOLTS:
       return 223;
+    case SIMPLE_G_ECU:
+      return SCREEN_W - (3 * ECU_CONNECTION_RADIUS);
   }
   return -1;
 }
@@ -131,6 +143,8 @@ int SimpleGauge::getBaseY(void) {
       return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2);
     case SIMPLE_G_VOLTS:
       return 185;
+    case SIMPLE_G_ECU:
+      return SCREEN_H - (3 * ECU_CONNECTION_RADIUS);
   }
   return -1;
 }
@@ -157,8 +171,10 @@ void SimpleGauge::showSimpleGauge(void) {
 
   float volts = valueFields[F_VOLTS];
   int v1, v2;
+  int color = TEXT_COLOR;
 
   switch(mode) {
+
     case SIMPLE_G_VOLTS:
       floatToDec(volts, &v1, &v2);
       if(v1 != lastV1 || v2 != lastV2) {
@@ -172,6 +188,12 @@ void SimpleGauge::showSimpleGauge(void) {
         }
 
         drawOnce = true;
+        draw = true;
+      }
+      break;
+
+    case SIMPLE_G_ECU:
+      if(!isEcuConnected()) {
         draw = true;
       }
       break;
@@ -205,7 +227,9 @@ void SimpleGauge::showSimpleGauge(void) {
         break;
     }
 
-    tft->drawImage(getBaseX(), getBaseY(), w, h, ICONS_BG_COLOR, tempImg);
+    if(tempImg != NULL) {
+      tft->drawImage(getBaseX(), getBaseY(), w, h, ICONS_BG_COLOR, tempImg);
+    }
     drawOnce = false;
     draw = true;
   }
@@ -225,11 +249,13 @@ void SimpleGauge::showSimpleGauge(void) {
     case SIMPLE_G_GPS:
       currentVal = int(getCurrentCarSpeed());
       break;
+    case SIMPLE_G_ECU:
+      currentVal = isEcuConnected();
+      break;
   }
 
   const char *format = NULL;
   int txtMode = MODE_M_NORMAL;
-  int color = TEXT_COLOR;
   int offset = 5;
 
   if(lastShowedVal != currentVal) {
@@ -270,6 +296,13 @@ void SimpleGauge::showSimpleGauge(void) {
         drawTextForMiddleIcons(getBaseX(), getBaseY(), offset, 
                                 color, txtMode, format, currentVal);
         lastShowedVal = currentVal;
+        break;
+
+      case SIMPLE_G_ECU:
+        draw = true;
+        drawOnce = true;
+        lastShowedVal = currentVal;
+        break;
     }
   }
 
@@ -363,6 +396,25 @@ void SimpleGauge::showSimpleGauge(void) {
       }
     }
     break;
+
+    case SIMPLE_G_ECU: {
+      x = getBaseX();
+      y = getBaseY();
+
+      if(draw) {      
+        color = (seriousAlertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+        tft->fillCircle(x, y, ECU_CONNECTION_RADIUS, color);
+        draw = false;
+      }
+
+      if(drawOnce) {
+        tft->fillRect(x - ECU_CONNECTION_RADIUS, y - ECU_CONNECTION_RADIUS, 
+                      ECU_CONNECTION_RADIUS * 3, ECU_CONNECTION_RADIUS * 3, ICONS_BG_COLOR);
+        drawOnce = false;
+      }
+    }
+    break;
+
   }
 }
 

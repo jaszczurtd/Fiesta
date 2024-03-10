@@ -89,6 +89,8 @@ void setup_a(void) {
   softInitDisplay(NULL);
   tft->fillScreen(ICONS_BG_COLOR);
 
+  canCheckConnection(NULL);
+
   #ifdef DEBUG_SCREEN
   debugFunc();
   #else  
@@ -98,7 +100,6 @@ void setup_a(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  canCheckConnection(NULL);
   updateCANrecipients(NULL);
   canMainLoop(NULL);
   callAtEverySecond(NULL);
@@ -107,7 +108,7 @@ void setup_a(void) {
   updateValsForDebug(NULL);
 
   watchdog_feed();
-  
+
   setupTimers();
 
   setStartedCore0();
@@ -211,6 +212,7 @@ void drawMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showTempGauges();
   showEGTGauge();
+  showECUConnectionGauge();
   #endif
 }
 
