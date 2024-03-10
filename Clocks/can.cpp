@@ -56,13 +56,11 @@ bool updateCANrecipients(void *argument) {
 
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
-  /*
-  int hi, lo;
-  floatToDec(valueFields[F_OUTSIDE_LUMENS], &hi, &lo);
-  buf[CAN_FRAME_LIGHTS_UPDATE_HI] = (byte)hi;
-  buf[CAN_FRAME_LIGHTS_UPDATE_LO] = (byte)lo;
-  */
-  CAN.sendMsgBuf(CAN_ID_LUMENS, sizeof(buf), buf);  
+  unsigned short br = (unsigned short)valueFields[F_CLOCK_BRIGHTNESS];
+  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
+  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
+
+  CAN.sendMsgBuf(CAN_ID_CLOCK_BRIGHTNESS, sizeof(buf), buf);  
 
   return true; 
 }
@@ -85,11 +83,21 @@ bool canMainLoop(void *message) {
         switch(canID) {
             case CAN_ID_ECU_UPDATE: {
               ecuMessages++;
+
+              valueFields[F_CALCULATED_ENGINE_LOAD] = buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD];
+              valueFields[F_VOLTS] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI],
+                                                 buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
+              valueFields[F_COOLANT_TEMP] = buf[CAN_FRAME_ECU_UPDATE_COOLANT];
+              valueFields[F_OIL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_OIL];
+              valueFields[F_EGT] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_EGT_HI],
+                                               buf[CAN_FRAME_ECU_UPDATE_EGT_LO]);
+
             }
             break;
 
             default:
-              deb("received unknown CAN frame: %d\n", canID);
+              deb("received unknown CAN frame:%03x len:%d\n", canID, len);
+
               break;
         }
     }

@@ -315,6 +315,9 @@ void looper(void) {
 #ifdef VP37
   showVP37Debug();
 #endif
+
+  CAN_sendUpdate();
+
   m_delay(CORE_OPERATION_DELAY);  
 }
 

@@ -70,15 +70,17 @@ void canInit(int retries) {
 bool updateCANrecipients(void *argument) {
 
   if(initialized) {
+    int hi, lo;
+
     byte buf[CAN_FRAME_MAX_LENGTH];
     buf[CAN_FRAME_NUMBER] = frameNumber++;
     
     buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] = 
       (byte)valueFields[F_CALCULATED_ENGINE_LOAD];
 
-    short rpm = valueFields[F_RPM];
-    buf[CAN_FRAME_ECU_UPDATE_RPM_HI] = MSB(rpm);
-    buf[CAN_FRAME_ECU_UPDATE_RPM_LO] = LSB(rpm);
+    floatToDec(valueFields[F_VOLTS], &hi, &lo);
+    buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI] = (byte)hi;
+    buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO] = (byte)lo;
 
     buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (byte)valueFields[F_COOLANT_TEMP];
     buf[CAN_FRAME_ECU_UPDATE_OIL] = (byte)valueFields[F_OIL_TEMP];
@@ -91,6 +93,36 @@ bool updateCANrecipients(void *argument) {
   }
 
   return true;  
+}
+
+static int cLastRPM = C_INIT_VAL;
+static int cLastThrottle = C_INIT_VAL;
+void CAN_sendUpdate(void) {
+  if(initialized) {
+    byte buf[CAN_FRAME_MAX_LENGTH];
+
+    int rpm = valueFields[F_RPM];
+    if(cLastRPM != rpm) {
+      cLastRPM = rpm;
+
+      buf[CAN_FRAME_NUMBER] = frameNumber++;
+      buf[CAN_ID_RPM_UPDATE_HI] = MSB(rpm);
+      buf[CAN_ID_RPM_UPDATE_LO] = LSB(rpm);
+
+      CAN.sendMsgBuf(CAN_ID_RPM, sizeof(buf), buf);  
+    }
+
+    int throttle = valueFields[F_THROTTLE_POS];
+    if(cLastThrottle != throttle) {
+      cLastThrottle = throttle;
+
+      buf[CAN_FRAME_NUMBER] = frameNumber++;
+      buf[CAN_ID_THROTTLE_UPDATE_HI] = MSB(rpm);
+      buf[CAN_ID_THROTTLE_UPDATE_LO] = LSB(rpm);
+
+      CAN.sendMsgBuf(CAN_ID_THROTTLE, sizeof(buf), buf); 
+    }
+  }
 }
 
 void receivedCanMessage(void) {
@@ -112,14 +144,28 @@ bool canMainLoop(void *argument) {
             case CAN_ID_DPF: {
               dpfMessages++;
               valueFields[F_DPF_TEMP] = 
-                ((unsigned short)buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI] << 8) | 
-                buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO];            
+                MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI], 
+                            buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]);
               valueFields[F_DPF_REGEN] = buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN];
             }
             break;
 
+            case CAN_ID_CLOCK_BRIGHTNESS: {
+              valueFields[F_CLOCK_BRIGHTNESS] =
+                MsbLsbToInt(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI], 
+                            buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]);
+            }
+            break;
+
+            case CAN_ID_LUMENS: {
+              valueFields[F_OUTSIDE_LUMENS] =
+                MsbLsbToInt(buf[CAN_FRAME_LIGHTS_UPDATE_HI], 
+                            buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
+            }
+            break;
+
             default:
-              deb("received unknown CAN frame: %d len:%d\n", canID, len);
+              deb("received unknown CAN frame:%03x len:%d\n", canID, len);
               break;
         }
     }
