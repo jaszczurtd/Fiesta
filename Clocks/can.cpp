@@ -153,6 +153,12 @@ bool canMainLoop(void *message) {
       }
       break;
 
+      case CAN_ID_LUMENS: {
+        valueFields[F_OUTSIDE_LUMENS] =
+          decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI], 
+                      buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
+      }
+      break;
       default:
         deb("received unknown CAN frame:%03x len:%d\n", canID, len);
 
