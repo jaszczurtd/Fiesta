@@ -286,7 +286,7 @@ void looper(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
+    tight_loop_contents();
     return;
   }
 
@@ -339,7 +339,7 @@ void looper1(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
+    tight_loop_contents();
     return;
   }
 
@@ -352,10 +352,7 @@ void looper1(void) {
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
-#ifdef VP37
-  m_delay_microseconds(VP37_OPERATION_DELAY);  
-#else
-  m_delay(CORE_OPERATION_DELAY);
-#endif
+
+  tight_loop_contents();
 }
 

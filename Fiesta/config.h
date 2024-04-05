@@ -111,6 +111,9 @@
 #define GPS_UPDATE 4 * 1000
 #define GPS_MIN_KMPH_SPEED 5.0
 
+//used for determine if GPS is available
+#define MAX_GPS_AGE 4000
+
 //min-max value for indicator
 #define VOLTS_MIN_VAL 11.6
 #define VOLTS_MAX_VAL 14.7
