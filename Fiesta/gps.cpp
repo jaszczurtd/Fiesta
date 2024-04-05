@@ -2,6 +2,9 @@
 #include "gps.h"
 
 
+NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
+NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
+
 static SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
 static TinyGPSPlus gps;
 
@@ -24,7 +27,7 @@ void serialTalks(void) {
 
 bool getGPSData(void *arg) {
 
-  if(isGPSAvailable()) {
+  if(gps.location.isValid()) {
     if (gps.location.isUpdated()){
 
       deb("Lat=%f Long=%f date:%s hour:%s", 
@@ -35,11 +38,11 @@ bool getGPSData(void *arg) {
     deb("GPS is not available");
   }
 
+  deb("GPS: valid:%d updated:%d age:%d", gps.location.isValid(), gps.location.isUpdated(),
+    gps.location.age());
+
   return true;
 }
-
-NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
-NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 
 void initGPSDateAndTime(void) {
   memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
@@ -47,7 +50,7 @@ void initGPSDateAndTime(void) {
 }
 
 const char *getGPSDate(void) {
-  if(isGPSAvailable()) {
+  if(gps.location.isValid()) {
     memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
     snprintf(gpsDate, GPS_TIME_DATE_BUFFER_SIZE - 1, "%d/%02d/%02d", 
       gps.date.year(), gps.date.month(), gps.date.day());
@@ -56,7 +59,7 @@ const char *getGPSDate(void) {
 }
 
 const char *getGPSTime(void) {
-  if(isGPSAvailable()) {
+  if(gps.location.isValid()) {
     int year = gps.date.year();
     int month = gps.date.month();
     int day = gps.date.day();
@@ -73,15 +76,23 @@ const char *getGPSTime(void) {
 }
 
 float getCurrentCarSpeed(void) {
-  double s = gps.speed.kmph();
-  if(s < GPS_MIN_KMPH_SPEED) {
-    return 0.0f;
+  if(isGPSAvailable()) {
+    double s = gps.speed.kmph();
+    if(s < GPS_MIN_KMPH_SPEED) {
+      return 0.0f;
+    }
+    return float(s);
   }
-  return float(s);
+  return 0.0;
 }
 
 bool isGPSAvailable(void) {
   bool isavail = gps.location.isValid();
+  if(isavail) {
+    if(gps.location.age() > MAX_GPS_AGE) {
+      isavail = false;
+    }
+  }
   valueFields[F_IS_GPS_AVAILABLE] = isavail;
   return isavail;
 }

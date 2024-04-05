@@ -219,6 +219,9 @@ bool isDPFConnected(void) {
 }
 
 bool canCheckConnection(void *message) {
+  lastRPM = C_INIT_VAL;
+  cLastThrottle = C_INIT_VAL;
+
   dpfConnected = (dpfMessages != lastDPFMessages);
   lastDPFMessages = dpfMessages;
   return true;  
