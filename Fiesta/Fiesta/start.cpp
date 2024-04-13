@@ -27,7 +27,7 @@ void setupTimers(void) {
   setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(GPS_UPDATE, getGPSData);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
-  setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
+  setupTimerWith(CAN_UPDATE_RECIPIENTS, CAN_updaterecipients_01);
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
 }
@@ -171,13 +171,13 @@ void initialization(void) {
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   canCheckConnection(NULL);
-  updateCANrecipients(NULL);
   canMainLoop(NULL);
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
 
+  CAN_sendAll();
   setupTimers();
 
   deb("System temperature:%.1fC", rroundf(analogReadTemp()));
@@ -311,7 +311,9 @@ void looper(void) {
   statusVariable0 = 6;
   heatedWindowMainLoop();
   statusVariable0 = 7;
-
+  CAN_updaterecipients_02();
+  statusVariable0 = 8;
+  
 #ifdef VP37
   showVP37Debug();
 #endif

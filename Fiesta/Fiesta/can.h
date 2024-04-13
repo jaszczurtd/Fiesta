@@ -17,8 +17,11 @@ extern volatile float valueFields[];
 
 bool canMainLoop(void *argument);
 void canInit(int retries);
+void CAN_sendAll(void);
+void CAN_sendThrottleUpdate(void);
+bool CAN_updaterecipients_01(void *argument);
+void CAN_updaterecipients_02(void);
 void sendThrottleValueCAN(int value);
-bool updateCANrecipients(void *argument);
 bool isDPFConnected(void);
 bool canCheckConnection(void *message);
 
