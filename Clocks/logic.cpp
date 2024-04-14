@@ -63,8 +63,6 @@ void setup_a(void) {
 
   TFT *tft = initTFT();
 
-  setLEDColor(canInit() ? RED: GREEN);
-
   int sec = getSeconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
 
@@ -80,6 +78,8 @@ void setup_a(void) {
   #endif //DEBUG_SCREEN
 
   watchdog_feed();
+
+  setLEDColor(canInit() ? RED: GREEN);
 
   while(sec < secDest) {
     watchdog_feed();

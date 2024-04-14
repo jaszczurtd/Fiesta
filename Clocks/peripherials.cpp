@@ -17,6 +17,11 @@ void initSPI(void) {
   SPI.setTX(PIN_MOSI); //MOSI
   SPI.setSCK(PIN_SCK); //SCK
   SPI.begin(true);
+
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
+  m_delay(100);
+  digitalWrite(TFT_RST, HIGH);
 }
 
 void initBasicPIO(void) {
