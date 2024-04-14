@@ -1,6 +1,6 @@
 #include "can.h"
 
-MCP_CAN CAN(CAN_CS);
+static MCP_CAN *CAN = NULL;
 
 float valueFields[F_LAST];
 
@@ -22,6 +22,7 @@ static byte buf[CAN_FRAME_MAX_LENGTH];
 static bool interrupt = false;
 
 bool canInit(void) {
+  CAN = new MCP_CAN(CAN_CS);
   ecuConnected = false;
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
@@ -30,7 +31,7 @@ bool canInit(void) {
   int canRetries = 0;
   bool error = false;
 
-  while(!(CAN_OK == CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
+  while(!(CAN_OK == CAN->begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
     watchdog_feed();
     canRetries++;
     if(canRetries == MAX_RETRIES) {
@@ -41,14 +42,16 @@ bool canInit(void) {
     deb("ERROR!!!! CAN-BUS Shield init fail\n");
     deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
-    m_delay(1000);
+    m_delay(SECOND);
   }
   if(!error) {
+    watchdog_feed();
     deb("CAN BUS Shield init ok!");
-    CAN.setMode(MCP_NORMAL); 
-    CAN.setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
+    CAN->setMode(MCP_NORMAL); 
+    CAN->setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
     pinMode(CAN_INT, INPUT); 
     attachInterrupt(digitalPinToInterrupt(CAN_INT), receivedCanMessage, FALLING);
+    canMainLoop(NULL);
   }
   return error;
 }
@@ -65,7 +68,7 @@ bool updateCANrecipients(void *argument) {
   buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
   buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
 
-  CAN.sendMsgBuf(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, buf);
+  CAN->sendMsgBuf(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, buf);
 
   return true; 
 }
@@ -76,7 +79,7 @@ void receivedCanMessage(void) {
 
 static byte lastFrame = 0;
 bool canMainLoop(void *message) {
-  CAN.readMsgBuf(&canID, &len, buf);
+  CAN->readMsgBuf(&canID, &len, buf);
   if(canID == 0 || len < 1) {
     return true;
   }
