@@ -6,7 +6,7 @@
 #include <mcp_can.h>
 #include <hardware/watchdog.h>
 #include <tools.h>
-#include <Timers.h>
+#include <SmartTimers.h>
 #include <multicoreWatchdog.h>
 
 #include "api/Common.h"

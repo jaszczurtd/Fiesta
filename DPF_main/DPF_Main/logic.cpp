@@ -1,7 +1,7 @@
 #include "logic.h"
 
 Timer generalTimer;
-Timers logicTimer;
+SmartTimers logicTimer;
 
 static int volatile state = STATE_MAIN;
 static int volatile newState = STATE_MAIN;
@@ -27,7 +27,7 @@ void initialization(void) {
   Serial.begin(9600);
 
   generalTimer = timer_create_default();
-  bool rebooted = setupWatchdog(&generalTimer, WATCHDOG_TIME);  
+  bool rebooted = setupWatchdog(NULL, WATCHDOG_TIME);  
 
   pinMode(LED_BUILTIN, OUTPUT);
 
@@ -68,7 +68,7 @@ void looper(void) {
 
 void showECUEngineValues(void) {
   if(isEcuConnected()) {
-    quickDisplay(3, M_WHOLE, "Engine load:%d%%", int(valueFields[F_ENGINE_LOAD]));
+    quickDisplay(3, M_WHOLE, "Engine load:%d%%", int(valueFields[F_THROTTLE_POS]));
     quickDisplay(4, M_WHOLE, "Coolant temp:%dC", int(valueFields[F_COOLANT_TEMP]));
     quickDisplay(5, M_WHOLE, "RPM:%d EGT:%dC", int(valueFields[F_RPM]), 
       int(valueFields[F_EGT]));
