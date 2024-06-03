@@ -44,7 +44,7 @@ void initVP37(void) {
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
-    adjustController = new PIDController(PID_KP, PID_KI, PID_KD);
+    adjustController = new PIDController(PID_KP, PID_KI, PID_KD, MAX_INTEGRAL);
 
     throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
     throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
@@ -107,17 +107,11 @@ void throttleCycle(void) {
 
   pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
   
-  float diff = 0.0;
-  if(valueFields[F_VOLTS] != lastVolts) {
-    diff = fabs(valueFields[F_VOLTS] - lastVolts);
+  if (fabs(valueFields[F_VOLTS] - lastVolts) > VOLTAGE_THRESHOLD) {
     lastVolts = valueFields[F_VOLTS];
   }
 
-  if(diff > VOLT_MIN_DIFF) {
-    voltageCorrection = (valueFields[F_VOLTS] - 12.0) / VOLT_PER_PWM;
-  }
-
-  finalPWM = int(pwmValue - voltageCorrection);
+  finalPWM = pwmValue * (12.0 / lastVolts);  
   finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
 
   if(lastPWMval != finalPWM) {
