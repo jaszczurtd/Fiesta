@@ -15,10 +15,10 @@
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-#define PID_TIME_UPDATE 90.0
+#define PID_TIME_UPDATE 25.0
 #define PID_KP 0.45
-#define PID_KI 0.28
-#define PID_KD 0.001
+#define PID_KI 0.18
+#define PID_KD 0.01
 
 //calibration / stabilization values
 #define VOLT_PER_PWM 0.0421
