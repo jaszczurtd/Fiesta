@@ -1,7 +1,9 @@
 
 #include "vp37.h"
 
-Timer throttleTimer;
+static Timer throttleTimer;
+static PIDController *adjustController;
+
 static bool vp37Initialized = false;
 static int lastThrottle = -1;
 static bool calibrationDone = false;
@@ -13,7 +15,6 @@ static int finalPWM = VP37_PWM_MIN;
 static float lastVolts = 0.0;
 static int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
 static int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
-static PIDController adjustController;
 
 bool measureFuelTemp(void *arg) {
   valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
@@ -43,7 +44,7 @@ void initVP37(void) {
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
-    initPIDcontroller(&adjustController, PID_KP, PID_KI, PID_KD);
+    adjustController = new PIDController(PID_KP, PID_KI, PID_KD);
 
     throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
     throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
@@ -101,8 +102,8 @@ bool isVP37Enabled(void) {
 void throttleCycle(void) {
   float output;
 
-  updatePIDtime(&adjustController, PID_TIME_UPDATE);
-  output = updatePIDcontroller(&adjustController, desiredAdjustometer - getVP37Adjustometer());
+  adjustController->updatePIDtime(PID_TIME_UPDATE);
+  output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer());
 
   pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
   
