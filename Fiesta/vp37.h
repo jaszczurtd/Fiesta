@@ -15,8 +15,6 @@
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-#define VOLTAGE_THRESHOLD 0.3
-
 #define PID_TIME_UPDATE 30.0
 #define PID_KP 0.45
 #define PID_KI 0.18
@@ -25,7 +23,7 @@
 
 //calibration / stabilization values
 #define VOLT_PER_PWM 0.0421
-#define VOLT_MIN_DIFF 0.2
+#define VOLTAGE_THRESHOLD 0.2
 #define PERCENTAGE_ERROR 3.0
 
 #define VP37_OPERATION_DELAY 5 //microseconds
