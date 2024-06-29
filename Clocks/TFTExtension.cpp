@@ -1,11 +1,8 @@
 
 #include "TFTExtension.h"
 
-m_mutex_def(displayMutex);
-
 static TFT *tft = NULL;
 TFT *initTFT(void) {
-  m_mutex_init(displayMutex);
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();
   tft->setRotation(1);

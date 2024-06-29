@@ -17,7 +17,7 @@
 #include "icons.h"
 
 #define DISPLAY_TXT_SIZE 32
-#define DISPLAY_SOFTINIT_TIME 1500
+#define DISPLAY_SOFTINIT_TIME 3500
 
 #define SCREEN_W 320
 #define SCREEN_H 240
