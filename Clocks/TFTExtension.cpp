@@ -3,6 +3,12 @@
 
 static TFT *tft = NULL;
 TFT *initTFT(void) {
+
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
+  m_delay(100);
+  digitalWrite(TFT_RST, HIGH);
+  
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();
   tft->setRotation(1);

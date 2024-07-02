@@ -12,6 +12,10 @@
 
 enum {NONE, RED, GREEN, BLUE};
 
+enum {
+  BUZZER_NONE, BUZZER_FUEL, BUZZER_ENGINE_TEMP_TOO_HIGH, BUZZER_EXHAUST_TEMP_TOO_HIGH 
+};
+
 extern float valueFields[];
 
 //in miliseconds, print values into serial
@@ -25,5 +29,7 @@ void initBasicPIO(void);
 int getThrottlePercentage(void);
 void lcdBrightness(int val);
 void setLEDColor(int ledColor);
+void buzzerOn(bool state);
+void buzzerLoop(void);
 
 #endif
