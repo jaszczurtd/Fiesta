@@ -3,6 +3,7 @@
 #include "peripherials.h"
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
+static int buzzerType;
 
 void setupOnboardLed(void) {
   pixels.begin();
@@ -17,16 +18,37 @@ void initSPI(void) {
   SPI.setTX(PIN_MOSI); //MOSI
   SPI.setSCK(PIN_SCK); //SCK
   SPI.begin(true);
-
-  pinMode(TFT_RST, OUTPUT);
-  digitalWrite(TFT_RST, LOW);
-  m_delay(100);
-  digitalWrite(TFT_RST, HIGH);
 }
 
 void initBasicPIO(void) {
   analogWriteResolution(PWM_WRITE_RESOLUTION);
   lcdBrightness(INITIAL_BRIGHTNESS);
+
+  buzzerType = BUZZER_NONE;
+  pinMode(BUZZER, OUTPUT);
+  buzzerOn(false);
+}
+
+void buzzerOn(bool state) {
+  digitalWrite(BUZZER, !state);
+}
+
+void setBuzzerAlarm(int type) {
+  
+}
+
+void buzzerLoop(void) {
+  switch(buzzerType) {
+    case BUZZER_FUEL:
+    break;
+    case BUZZER_ENGINE_TEMP_TOO_HIGH:
+    break;
+    case BUZZER_EXHAUST_TEMP_TOO_HIGH:
+    break;
+    case BUZZER_NONE:
+    default:
+    break;
+  }
 }
 
 void lcdBrightness(int val) {

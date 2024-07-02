@@ -21,4 +21,6 @@
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
 
+#define BUZZER 14
+
 #endif

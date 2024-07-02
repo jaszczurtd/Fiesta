@@ -249,6 +249,8 @@ void loop_b(void) {
   }
   statusVariable1 = 1;
 
+  buzzerLoop();
+
   m_delay(CORE_OPERATION_DELAY);  
   //tight_loop_contents();
 }
