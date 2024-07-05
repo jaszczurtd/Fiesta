@@ -2,8 +2,7 @@
 
 #include "peripherials.h"
 
-Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
-static int buzzerType;
+static Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_RGB + NEO_KHZ800);
 
 void setupOnboardLed(void) {
   pixels.begin();
@@ -24,31 +23,8 @@ void initBasicPIO(void) {
   analogWriteResolution(PWM_WRITE_RESOLUTION);
   lcdBrightness(INITIAL_BRIGHTNESS);
 
-  buzzerType = BUZZER_NONE;
-  pinMode(BUZZER, OUTPUT);
-  buzzerOn(false);
-}
-
-void buzzerOn(bool state) {
-  digitalWrite(BUZZER, !state);
-}
-
-void setBuzzerAlarm(int type) {
-  
-}
-
-void buzzerLoop(void) {
-  switch(buzzerType) {
-    case BUZZER_FUEL:
-    break;
-    case BUZZER_ENGINE_TEMP_TOO_HIGH:
-    break;
-    case BUZZER_EXHAUST_TEMP_TOO_HIGH:
-    break;
-    case BUZZER_NONE:
-    default:
-    break;
-  }
+  Buzzer::initHardware(BUZZER);
+  initBuzzers();
 }
 
 void lcdBrightness(int val) {
@@ -69,15 +45,23 @@ void setLEDColor(int ledColor) {
       pixels.show();
       break;
     case RED:
-      pixels.setPixelColor(0, pixels.Color(20, 0, 0));
+      pixels.setPixelColor(0, pixels.Color(30, 0, 0));
       pixels.show();
       break;
     case GREEN:
-      pixels.setPixelColor(0, pixels.Color(0, 20, 0));
+      pixels.setPixelColor(0, pixels.Color(0, 30, 0));
       pixels.show();
       break;
     case BLUE:
-      pixels.setPixelColor(0, pixels.Color(0, 0, 20));
+      pixels.setPixelColor(0, pixels.Color(0, 0, 30));
+      pixels.show();
+      break;
+    case YELLOW:
+      pixels.setPixelColor(0, pixels.Color(30, 30, 0));
+      pixels.show();
+      break;
+    case WHITE:
+      pixels.setPixelColor(0, pixels.Color(30, 30, 30));
       pixels.show();
       break;
     default:
