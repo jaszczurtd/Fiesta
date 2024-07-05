@@ -112,6 +112,8 @@ void setup_a(void) {
   setupTimers();
 
   setStartedCore0();
+
+  startBuzzer(BUZZER_SHORT);
 }
 
 void loop_a(void) {

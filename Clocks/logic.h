@@ -14,6 +14,7 @@
 #include "peripherials.h"
 #include "hardwareConfig.h"
 #include "can.h"
+#include "buzzer.h"
 
 void setup_a(void);
 void loop_a(void);
