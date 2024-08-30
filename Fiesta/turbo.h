@@ -11,13 +11,15 @@
 #include "tests.h"
 #include "TFTExtension.h"
 
-#define SOLENOID_UPDATE_TIME 700
-#define PRESSURE_LIMITER_FACTOR 2
-#define MIN_TEMPERATURE_CORRECTION 30
-
 //#define JUST_TEST_BY_THROTTLE
 
-void initVP37(void);
+#define TURBO_PID_TIME_UPDATE 20.0
+#define TURBO_PID_KP 0.4
+#define TURBO_PID_KI 0.1
+#define TURBO_PID_KD 0.01
+
+void turboInit(void);
+void turboTest(void);
 void turboMainLoop(void);
 
 #endif

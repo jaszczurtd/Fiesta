@@ -44,7 +44,7 @@ void initVP37(void) {
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
-    adjustController = new PIDController(PID_KP, PID_KI, PID_KD, MAX_INTEGRAL);
+    adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, PID_MAX_INTEGRAL);
 
     throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
     throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
@@ -102,7 +102,7 @@ bool isVP37Enabled(void) {
 void throttleCycle(void) {
   float output;
 
-  adjustController->updatePIDtime(PID_TIME_UPDATE);
+  adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
   output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer());
 
   pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);

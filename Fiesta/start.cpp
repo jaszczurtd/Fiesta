@@ -136,6 +136,7 @@ void initialization(void) {
 #ifdef VP37
   vp37Calibrate();
 #endif
+  turboInit();
   initGlowPlugsTime(coolant);
 
   watchdog_feed();
