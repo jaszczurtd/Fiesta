@@ -3,9 +3,11 @@
 
 #include <tools.h>
 #include <arduino-timer.h>
+#include <float.h>
 
 #include "config.h"
 #include "start.h"
+#include "canDefinitions.h"
 #include "rpm.h"
 #include "hardwareConfig.h"
 #include "tests.h"
@@ -13,12 +15,10 @@
 
 //#define JUST_TEST_BY_THROTTLE
 
-#define TURBO_PID_TIME_UPDATE 20.0
-#define TURBO_PID_KP 0.4
-#define TURBO_PID_KI 0.1
-#define TURBO_PID_KD 0.01
+
 
 void turboInit(void);
+void turboTestTrigger(void);
 void turboTest(void);
 void turboMainLoop(void);
 

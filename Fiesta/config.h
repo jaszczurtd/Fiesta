@@ -80,7 +80,7 @@
 #define FUEL_MIN 1280
 
 //hella turbo actuator PWM percent: min/max values (percentage)
-#define TURBO_ACTUATOR_LOW ((2.44) * PWM_RESOLUTION / 100.0)
+#define TURBO_ACTUATOR_LOW ((2.45) * PWM_RESOLUTION / 100.0)
 #define TURBO_ACTUATOR_HIGH ((95.75) * PWM_RESOLUTION / 100.0)
 
 //for graphic gauge
