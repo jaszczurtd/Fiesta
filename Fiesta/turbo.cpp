@@ -1,16 +1,14 @@
 #include "turbo.h"
 
-#define TURBO_PID_TIME_UPDATE 30.0
-#define TURBO_PID_KP 0.8
+#define TURBO_PID_TIME_UPDATE 6.0
+#define TURBO_PID_KP 0.7
 #define TURBO_PID_KI 0.1
-#define TURBO_PID_KD 0.01
+#define TURBO_PID_KD 0.05
 
 #define RPM_ROWS 9
-#define TPS_COLUMNS 21  // tps position each 5% from 0% to 100%
+#define TPS_COLUMNS 21  //TPS position in 5% increments from 0% to 100%
 #define MIN_TPS 0    // 0%
 #define MAX_TPS 100  // 100%
-#define MIN_RPM NOMINAL_RPM_VALUE
-#define MAX_RPM RPM_MAX_EVER
 
 static float boostMap[RPM_ROWS][TPS_COLUMNS] = {
     {0.10, 0.12, 0.14, 0.16, 0.18, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 1.00},
@@ -26,11 +24,11 @@ static float boostMap[RPM_ROWS][TPS_COLUMNS] = {
 
 static PIDController *turboController;
 static bool turboInitialized = false;
-static int turbo;
 static float minBoost, maxBoost;
+static int lastTurboPWM = -1;
 
 int getRPMIndex(int rpm) {
-  int rpmIndex = (rpm - MIN_RPM) * (RPM_ROWS - 1) / (MAX_RPM - MIN_RPM);
+  int rpmIndex = (rpm - NOMINAL_RPM_VALUE) * (RPM_ROWS - 1) / (RPM_MAX_EVER - NOMINAL_RPM_VALUE);
   if (rpmIndex < 0) rpmIndex = 0;
   if (rpmIndex >= RPM_ROWS) rpmIndex = RPM_ROWS - 1;
   return rpmIndex;
@@ -65,8 +63,6 @@ int scaleTurboValues(float value, bool reverse) {
 
 void turboInit(void) {
   if(!turboInitialized) {
-    turboController = new PIDController(TURBO_PID_KP, TURBO_PID_KI, TURBO_PID_KD, FLT_MAX);
-
     minBoost = FLT_MAX; 
     maxBoost = FLT_MIN;
 
@@ -83,6 +79,8 @@ void turboInit(void) {
     deb("min turbo val: %f", minBoost);
     deb("max turbo val: %f", maxBoost);
     
+    turboController = new PIDController(TURBO_PID_KP, TURBO_PID_KI, TURBO_PID_KD, maxBoost * 10);
+
     turboTest();
 
     turboInitialized = true;
@@ -95,28 +93,21 @@ void turboInit(void) {
 #define STEP_PERCENT 5
 #define UPDATE_INTERVAL_MS 50
 
-static unsigned long previousMillis = 0;
-static unsigned long startTime = 0;
-static int currentPWMValue = 0;
-static int pwmDirection = 1;
-
 void turboTest(void) {
-  unsigned long startTime = millis();  
+  unsigned long startTime = millis();
   int currentPWMValue = TURBO_ACTUATOR_LOW;
-  int pwmDirection = 1;
+  int pwmStep = (STEP_PERCENT * TURBO_ACTUATOR_HIGH) / 100;
 
   while (millis() - startTime < TEST_DURATION_MS) {
     valToPWM(PIO_TURBO, currentPWMValue);
+    m_delay(UPDATE_INTERVAL_MS);
 
-    delay(UPDATE_INTERVAL_MS);
-
-    currentPWMValue += (STEP_PERCENT * TURBO_ACTUATOR_HIGH / 100) * pwmDirection;
-
+    currentPWMValue += pwmStep;
     if (currentPWMValue >= TURBO_ACTUATOR_HIGH || currentPWMValue <= TURBO_ACTUATOR_LOW) {
-      pwmDirection *= -1;  
-      currentPWMValue = constrain(currentPWMValue, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH); 
+      pwmStep = -pwmStep; 
+      currentPWMValue = constrain(currentPWMValue, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
     }
-  }  
+  }
 }
 
 void turboMainLoop(void) {
@@ -124,17 +115,24 @@ void turboMainLoop(void) {
     return;
   }
 
-  float desiredPressure;
   float turbo;
 
-  desiredPressure = getBoostPressure(int(valueFields[F_RPM]), getThrottlePercentage());
+  valueFields[F_PRESSURE_DESIRED] = getBoostPressure(int(valueFields[F_RPM]), getThrottlePercentage());
   turboController->updatePIDtime(TURBO_PID_TIME_UPDATE);
-  turbo = turboController->updatePIDcontroller(desiredPressure - valueFields[F_PRESSURE]);
+  turbo = constrain(turboController->updatePIDcontroller(
+                    valueFields[F_PRESSURE_DESIRED] - valueFields[F_PRESSURE]), minBoost, maxBoost);
 
-  valueFields[F_PRESSURE_PERCENTAGE] = ((constrain(turbo, minBoost, maxBoost) - minBoost) / (maxBoost - minBoost)) * 100.0;
+  valueFields[F_PRESSURE_PERCENTAGE] = ((turbo - minBoost) / (maxBoost - minBoost)) * 100.0;
 
-  deb("%f %f %f", desiredPressure, valueFields[F_PRESSURE], turbo);
+  int pwm = scaleTurboValues(turbo, false);
 
-  valToPWM(PIO_TURBO, scaleTurboValues(turbo, false));
+#ifdef DEBUG
+  deb("%f %f %f", valueFields[F_PRESSURE_DESIRED], valueFields[F_PRESSURE], turbo);
+#endif
+
+  if(lastTurboPWM != pwm) {
+    valToPWM(PIO_TURBO, pwm);
+    lastTurboPWM = pwm;
+  }
 }
 

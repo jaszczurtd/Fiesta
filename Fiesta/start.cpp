@@ -319,6 +319,7 @@ void looper(void) {
   showVP37Debug();
 #endif
 
+  tight_loop_contents();
   m_delay(CORE_OPERATION_DELAY);  
 }
 
@@ -356,5 +357,6 @@ void looper1(void) {
   statusVariable1 = 3;
 
   tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);  
 }
 
