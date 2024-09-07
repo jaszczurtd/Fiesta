@@ -5,49 +5,29 @@
 #define TURBO_PID_KI 0.1
 #define TURBO_PID_KD 0.05
 
-#define RPM_ROWS 9
-#define TPS_COLUMNS 21  //TPS position in 5% increments from 0% to 100%
-#define MIN_TPS 0    // 0%
-#define MAX_TPS 100  // 100%
+Turbo::Turbo() { }
 
-float boostMap[RPM_ROWS][TPS_COLUMNS] = {
-    {0.0, 0.0, 0.0, 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85},   // 850 rpm
-    {0.0, 0.0, 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9},   // 1200 rpm
-    {0.0, 0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95},  // 1500 rpm
-    {0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0},   // 1800 rpm
-    {0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05},   // 2200 rpm
-    {0.0, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1},   // 2600 rpm
-    {0.0, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15},  // 3000 rpm
-    {0.0, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2},   // 3500 rpm
-    {0.0, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25}    // 4000 rpm
-};
-
-static PIDController *turboController;
-static bool turboInitialized = false;
-static float minBoost, maxBoost;
-static int lastTurboPWM = -1;
-
-int getRPMIndex(int rpm) {
+int Turbo::getRPMIndex(int rpm) {
   int rpmIndex = (rpm - NOMINAL_RPM_VALUE) * (RPM_ROWS - 1) / (RPM_MAX_EVER - NOMINAL_RPM_VALUE);
   if (rpmIndex < 0) rpmIndex = 0;
   if (rpmIndex >= RPM_ROWS) rpmIndex = RPM_ROWS - 1;
   return rpmIndex;
 }
 
-int getTPSIndex(int tps) {
+int Turbo::getTPSIndex(int tps) {
   int tpsIndex = tps * (TPS_COLUMNS - 1) / MAX_TPS;
   if (tpsIndex < 0) tpsIndex = 0;
   if (tpsIndex >= TPS_COLUMNS) tpsIndex = TPS_COLUMNS - 1;
   return tpsIndex;
 }
 
-float getBoostPressure(int rpm, int tps) {
+float Turbo::getBoostPressure(int rpm, int tps) {
   int rpmIndex = getRPMIndex(rpm);
   int tpsIndex = getTPSIndex(tps);
   return boostMap[rpmIndex][tpsIndex];
 }
 
-int scaleTurboValues(float value, bool reverse) {
+int Turbo::scaleTurboValues(float value, bool reverse) {
   if(value < minBoost) {
     value = minBoost;
   }
@@ -61,8 +41,8 @@ int scaleTurboValues(float value, bool reverse) {
   return pwmValue;
 }
 
-void turboInit(void) {
-  if(!turboInitialized) {
+void Turbo::init() {
+  if (!turboInitialized) {
     minBoost = FLT_MAX; 
     maxBoost = FLT_MIN;
 
@@ -87,13 +67,7 @@ void turboInit(void) {
   }
 }
 
-#define TEST_DURATION_MS 1000 
-#define PWM_MIN_PERCENT 0
-#define PWM_MAX_PERCENT 100 
-#define STEP_PERCENT 5
-#define UPDATE_INTERVAL_MS 50
-
-void turboTest(void) {
+void Turbo::turboTest(void) {
   unsigned long startTime = millis();
   int currentPWMValue = TURBO_ACTUATOR_LOW;
   int pwmStep = (STEP_PERCENT * TURBO_ACTUATOR_HIGH) / 100;
@@ -110,7 +84,7 @@ void turboTest(void) {
   }
 }
 
-void turboMainLoop(void) {
+void Turbo::process() {
   if(!turboInitialized) {
     return;
   }

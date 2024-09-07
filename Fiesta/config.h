@@ -7,8 +7,7 @@
 #define ecu_Name "JASZCZUR FIESTA"
 
 //BASIC CONTROL VALUES!
-#define GTB2260VZK
-//#define VP37
+#define VP37
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
