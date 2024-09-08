@@ -120,6 +120,17 @@ bool canMainLoop(void *message) {
       }
       break;
 
+      case CAN_ID_TURBO_PRESSURE: {
+        ecuMessages++; ecuConnected = true;
+
+        valueFields[F_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI],
+                                              buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO]);
+        valueFields[F_PRESSURE_DESIRED] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI],
+                                              buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO]);
+        triggerDrawHighImportanceValue(true);
+      }
+      break;
+
       case CAN_ID_RPM: {
         ecuMessages++; ecuConnected = true;
 
@@ -132,8 +143,6 @@ bool canMainLoop(void *message) {
         ecuMessages++; ecuConnected = true;
 
         valueFields[F_INTAKE_TEMP] = buf[CAN_FRAME_ECU_UPDATE_INTAKE];
-        valueFields[F_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI],
-                                              buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO]);
         valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                           buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
         valueFields[F_IS_GPS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
@@ -147,9 +156,6 @@ bool canMainLoop(void *message) {
         valueFields[F_PRESSURE_PERCENTAGE] = buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE];
         valueFields[F_FUEL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP];
         valueFields[F_FAN_ENABLED] = buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED];
-        valueFields[F_PRESSURE_DESIRED] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI],
-                                              buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO]);
-
       }
       break;
       
