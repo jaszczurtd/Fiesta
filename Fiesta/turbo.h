@@ -28,25 +28,28 @@
 #define STEP_PERCENT 5
 #define UPDATE_INTERVAL_MS 50
 
+#define SOLENOID_UPDATE_TIME 700
+#define PRESSURE_LIMITER_FACTOR 2
+#define MIN_TEMPERATURE_CORRECTION 30
+
 class Turbo : public EngineController {
 private:
 
-  PIDController *turboController;
-  float minBoost, maxBoost;
-  int lastTurboPWM;
-  bool turboInitialized;
-  float valueDesired;
+  int scaleTurboValues(int value, bool reverse);
 
-  int getRPMIndex(int rpm);
-  int getTPSIndex(int tps);
-  float getBoostPressure(int rpm, int tps);
-  int scaleTurboValues(float value, bool reverse);
+  int desiredPWM;
+  int engineThrottlePercentageValue;
+  int posThrottle;
+  bool pedalPressed;
+  int pressurePercentage;
+  int RPM_index;
+  unsigned long lastSolenoidUpdate;
 
 public:
   Turbo();
   void init() override;  
   void process() override;
-  void turboTest(void);
+  int correctPressureFactor(void);
   void showDebug(void);
 };
 
