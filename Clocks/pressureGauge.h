@@ -34,7 +34,8 @@ private:
   int lastShowedVal;
   int lastHI;
   int lastLO;
-  int lastVal;
+  int lastHI_d;
+  int lastLO_d;
   unsigned short *lastAnimImg; 
 };
 
