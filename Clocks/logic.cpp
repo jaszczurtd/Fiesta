@@ -112,6 +112,8 @@ void setup_a(void) {
   setupTimers();
 
   setStartedCore0();
+
+  startBuzzer(BUZZER_SHORT);
 }
 
 void loop_a(void) {
@@ -122,7 +124,7 @@ void loop_a(void) {
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
     m_delay(CORE_OPERATION_DELAY);  
-    //tight_loop_contents();
+    tight_loop_contents();
     return;
   }
 
@@ -144,9 +146,10 @@ void loop_a(void) {
     setLEDColor(alertSwitch() ? NONE : RED);
   }
 
-  m_delay(CORE_OPERATION_DELAY);  
+  loopBuzzers();
 
-  //tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);  
+  tight_loop_contents();
 }
 
 void seriousAlertsDrawFunctions() {
@@ -244,13 +247,13 @@ void loop_b(void) {
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
     m_delay(CORE_OPERATION_DELAY);  
-    //tight_loop_contents();
+    tight_loop_contents();
     return;
   }
   statusVariable1 = 1;
 
   m_delay(CORE_OPERATION_DELAY);  
-  //tight_loop_contents();
+  tight_loop_contents();
 }
 
 bool updateValsForDebug(void *arg) {

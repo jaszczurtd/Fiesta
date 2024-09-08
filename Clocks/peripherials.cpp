@@ -2,7 +2,7 @@
 
 #include "peripherials.h"
 
-Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
+static Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_RGB + NEO_KHZ800);
 
 void setupOnboardLed(void) {
   pixels.begin();
@@ -17,16 +17,14 @@ void initSPI(void) {
   SPI.setTX(PIN_MOSI); //MOSI
   SPI.setSCK(PIN_SCK); //SCK
   SPI.begin(true);
-
-  pinMode(TFT_RST, OUTPUT);
-  digitalWrite(TFT_RST, LOW);
-  m_delay(100);
-  digitalWrite(TFT_RST, HIGH);
 }
 
 void initBasicPIO(void) {
   analogWriteResolution(PWM_WRITE_RESOLUTION);
   lcdBrightness(INITIAL_BRIGHTNESS);
+
+  Buzzer::initHardware(BUZZER);
+  initBuzzers();
 }
 
 void lcdBrightness(int val) {
@@ -47,15 +45,23 @@ void setLEDColor(int ledColor) {
       pixels.show();
       break;
     case RED:
-      pixels.setPixelColor(0, pixels.Color(20, 0, 0));
+      pixels.setPixelColor(0, pixels.Color(30, 0, 0));
       pixels.show();
       break;
     case GREEN:
-      pixels.setPixelColor(0, pixels.Color(0, 20, 0));
+      pixels.setPixelColor(0, pixels.Color(0, 30, 0));
       pixels.show();
       break;
     case BLUE:
-      pixels.setPixelColor(0, pixels.Color(0, 0, 20));
+      pixels.setPixelColor(0, pixels.Color(0, 0, 30));
+      pixels.show();
+      break;
+    case YELLOW:
+      pixels.setPixelColor(0, pixels.Color(30, 30, 0));
+      pixels.show();
+      break;
+    case WHITE:
+      pixels.setPixelColor(0, pixels.Color(30, 30, 30));
       pixels.show();
       break;
     default:

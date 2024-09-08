@@ -1,11 +1,12 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
+#include "hardwareConfig.h"
+
 #define vehicle_Vin "WF0BXXGAJB1R32583"
 #define ecu_Name "JASZCZUR FIESTA"
 
 //BASIC CONTROL VALUES!
-//#define GTB2260VZK
 #define VP37
 
 #define WATCHDOG_TIME 4000
@@ -77,9 +78,10 @@
 #define FUEL_MAX 320
 #define FUEL_MIN 1280
 
-//hella actuator PWM percent: min/max values
-#define TURBO_ACTUATOR_LOW 6
-#define TURBO_ACTUATOR_HIGH 90
+//hella turbo actuator PWM percent: min/max values (percentage)
+#define TURBO_ACTUATOR_LOW ((2.45) * PWM_RESOLUTION / 100.0)
+#define TURBO_ACTUATOR_HIGH ((95.75) * PWM_RESOLUTION / 100.0)
+
 //for graphic gauge
 #define TURBO_MIN_PRESSURE_FOR_SPINNING 0.15
 
@@ -120,6 +122,8 @@
 
 //just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
+
+#define PID_MAX_INTEGRAL 16384
 
 #endif
 
