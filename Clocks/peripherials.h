@@ -9,8 +9,9 @@
 
 #include "config.h"
 #include "hardwareConfig.h"
+#include "buzzer.h"
 
-enum {NONE, RED, GREEN, BLUE};
+enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE};
 
 extern float valueFields[];
 

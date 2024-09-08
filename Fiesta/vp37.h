@@ -13,12 +13,15 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
+#include "engineMaps.h"
+#include "EngineController.h"
+
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-#define PID_TIME_UPDATE 30.0
-#define PID_KP 0.45
-#define PID_KI 0.18
-#define PID_KD 0.01
+#define VP37_PID_TIME_UPDATE 30.0
+#define VP37_PID_KP 0.45
+#define VP37_PID_KI 0.18
+#define VP37_PID_KD 0.01
 #define MAX_INTEGRAL 16384
 
 //calibration / stabilization values
@@ -45,10 +48,40 @@
 
 #define VP37_ADJUST_TIMER 200
 
-void vp37Calibrate(void);
-void enableVP37(bool enable);
-bool isVP37Enabled(void);
-void vp37Process(void);
-void showVP37Debug(void);
+bool measureFuelTemp(void *arg);
+bool measureVoltage(void *arg);
+
+class VP37Pump : public EngineController {
+private:
+  PIDController *adjustController;
+
+  bool vp37Initialized;
+  int lastThrottle;
+  bool calibrationDone;
+  int desiredAdjustometer;
+  float pwmValue;
+  float voltageCorrection;
+  int lastPWMval;
+  int finalPWM;
+  float lastVolts;
+  int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
+  int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
+
+  int getMaxAdjustometerPWMVal(void);
+  int getAdjustometerStable(void);
+  int makeCalibrationValue(void);
+  float getCalibrationError(int from);
+  bool isInRangeOf(float desired, float val);
+  void throttleCycle(void);
+  void initVP37(void);
+  
+public:
+  VP37Pump();
+  void init() override;  
+  void process() override;
+  void enableVP37(bool enable);
+  bool isVP37Enabled(void);
+  void showVP37Debug(void);
+};
 
 #endif

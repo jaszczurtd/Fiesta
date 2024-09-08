@@ -1,115 +1,112 @@
-#include "canDefinitions.h"
 #include "turbo.h"
 
-#define RPM_PRESCALERS 8
-#define N75_PERCENT_VALS 10
+#define TURBO_PID_TIME_UPDATE 6.0
+#define TURBO_PID_KP 0.7
+#define TURBO_PID_KI 0.1
+#define TURBO_PID_KD 0.05
 
-//*** n75 percentage values in relation to RPM
-uint8_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
-  { 75, 74, 73, 72, 71, 70, 68, 65, 63, 61 }, // 1500 RPM
-  { 73, 72, 71, 70, 68, 66, 63, 60, 57, 54 }, // 2000 RPM
-  { 71, 70, 69, 68, 66, 64, 61, 58, 54, 51 }, // 2500 RPM
-  { 70, 69, 68, 66, 64, 62, 59, 56, 53, 50 }, // 3000 RPM
-  { 69, 68, 66, 64, 62, 60, 57, 54, 51, 48 }, // 3500 RPM
-  { 67, 66, 64, 62, 60, 58, 55, 52, 49, 46 }, // 4000 RPM
-  { 63, 62, 60, 58, 56, 54, 51, 48, 45, 42 }, // 4500 RPM
-  { 60, 58, 56, 54, 52, 50, 47, 44, 41, 38 }  // 5000 RPM
-};
+Turbo::Turbo() { }
 
-static unsigned long lastSolenoidUpdate = 0;
-
-int scaleTurboValues(int value) {
-#ifdef GTB2260VZK  
-  value = map(value, 0, 100, 100, 0);
-  value = map(value, 0, 100, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
-#endif
-  return value;
+int Turbo::getRPMIndex(int rpm) {
+  int rpmIndex = (rpm - NOMINAL_RPM_VALUE) * (RPM_ROWS - 1) / (RPM_MAX_EVER - NOMINAL_RPM_VALUE);
+  if (rpmIndex < 0) rpmIndex = 0;
+  if (rpmIndex >= RPM_ROWS) rpmIndex = RPM_ROWS - 1;
+  return rpmIndex;
 }
 
-int correctPressureFactor(void) {
-  int temperature = valueFields[F_INTAKE_TEMP];
-  return (temperature < MIN_TEMPERATURE_CORRECTION) ? 
-      0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1; //each 5 degrees
+int Turbo::getTPSIndex(int tps) {
+  int tpsIndex = tps * (TPS_COLUMNS - 1) / MAX_TPS;
+  if (tpsIndex < 0) tpsIndex = 0;
+  if (tpsIndex >= TPS_COLUMNS) tpsIndex = TPS_COLUMNS - 1;
+  return tpsIndex;
 }
 
-void turboMainLoop(void) {
+float Turbo::getBoostPressure(int rpm, int tps) {
+  int rpmIndex = getRPMIndex(rpm);
+  int tpsIndex = getTPSIndex(tps);
+  return boostMap[rpmIndex][tpsIndex];
+}
 
-  int engineThrottlePercentageValue = getThrottlePercentage();
-  int posThrottle = (engineThrottlePercentageValue / 10);
-  bool pedalPressed = false;
-  int n75;
-  int pressurePercentage = 0;
-  int RPM_index;
+int Turbo::scaleTurboValues(float value, bool reverse) {
+  if(value < minBoost) {
+    value = minBoost;
+  }
+  if(value > maxBoost) {
+    value = maxBoost;
+  }
+  int pwmValue = mapfloat(value, minBoost, maxBoost, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
+  if(reverse) {
+    pwmValue = map(pwmValue, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH, TURBO_ACTUATOR_HIGH, TURBO_ACTUATOR_LOW);
+  }
+  return pwmValue;
+}
 
-#ifdef JUST_TEST_BY_THROTTLE
-  engineThrottlePercentageValue = scaleTurboValues(engineThrottlePercentageValue);
-  n75 = percentToGivenVal(engineThrottlePercentageValue, PWM_RESOLUTION);
-#else
-  if(valueFields[F_PRESSURE] < MAX_BOOST_PRESSURE) {
-    if(engineThrottlePercentageValue > 0) {
-      pedalPressed = true;
-    }
+void Turbo::init() {
+  if (!turboInitialized) {
+    minBoost = FLT_MAX; 
+    maxBoost = FLT_MIN;
 
-    int rpm = int(valueFields[F_RPM]);
-    if(rpm > RPM_MAX_EVER) {
-      rpm = RPM_MAX_EVER;
-    }
-
-    RPM_index = (int(rpm - 1500) / 500); // determine RPM index
-    if(RPM_index < 0) {
-      RPM_index = 0;
-    }
-    if(RPM_index > RPM_PRESCALERS - 1) {
-      RPM_index = RPM_PRESCALERS - 1;    
-    }
-
-    pressurePercentage = RPM_table[0][0];
-
-    for (int i = 0; i < N75_PERCENT_VALS; i++) {
-      if (posThrottle == i + 1) {
-        pressurePercentage = RPM_table[RPM_index][i];
-        break;
-      }
-    }
-
-    if (!pedalPressed) {
-      pressurePercentage = RPM_table[0][0];
-    }
-
-    pressurePercentage -= correctPressureFactor();
-
-  } else {
-
-    unsigned long currentTime = millis();
-    if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
-      if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
-        pressurePercentage -= PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage < 0) {
-          pressurePercentage = 0;
+    for (int i = 0; i < RPM_ROWS; i++) {
+      for (int j = 0; j < TPS_COLUMNS; j++) {
+        if (boostMap[i][j] < minBoost) {
+            minBoost = boostMap[i][j];
         }
-      } else {
-        pressurePercentage += PRESSURE_LIMITER_FACTOR;
-        if (pressurePercentage > 100) {
-          pressurePercentage = 100;
+        if (boostMap[i][j] > maxBoost) {
+            maxBoost = boostMap[i][j];
         }
       }
-      lastSolenoidUpdate = currentTime;
+    }
+    deb("min turbo val: %f", minBoost);
+    deb("max turbo val: %f", maxBoost);
+    
+    turboController = new PIDController(TURBO_PID_KP, TURBO_PID_KI, TURBO_PID_KD, maxBoost * 10);
+
+    turboTest();
+
+    turboInitialized = true;
+  }
+}
+
+void Turbo::turboTest(void) {
+  unsigned long startTime = millis();
+  int currentPWMValue = TURBO_ACTUATOR_LOW;
+  int pwmStep = (STEP_PERCENT * TURBO_ACTUATOR_HIGH) / 100;
+
+  while (millis() - startTime < TEST_DURATION_MS) {
+    valToPWM(PIO_TURBO, currentPWMValue);
+    m_delay(UPDATE_INTERVAL_MS);
+
+    currentPWMValue += pwmStep;
+    if (currentPWMValue >= TURBO_ACTUATOR_HIGH || currentPWMValue <= TURBO_ACTUATOR_LOW) {
+      pwmStep = -pwmStep; 
+      currentPWMValue = constrain(currentPWMValue, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
     }
   }
+}
 
-  pressurePercentage = scaleTurboValues(pressurePercentage);
-  pressurePercentage = constrain(pressurePercentage, 0, 100);
+void Turbo::process() {
+  if(!turboInitialized) {
+    return;
+  }
 
-  valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
+  float turbo;
 
-  n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
+  valueFields[F_PRESSURE_DESIRED] = getBoostPressure(int(valueFields[F_RPM]), getThrottlePercentage());
+  turboController->updatePIDtime(TURBO_PID_TIME_UPDATE);
+  turbo = constrain(turboController->updatePIDcontroller(
+                    valueFields[F_PRESSURE_DESIRED] - valueFields[F_PRESSURE]), minBoost, maxBoost);
+
+  valueFields[F_PRESSURE_PERCENTAGE] = ((turbo - minBoost) / (maxBoost - minBoost)) * 100.0;
+
+  int pwm = scaleTurboValues(turbo, false);
 
 #ifdef DEBUG
-  deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d", 
-    int(valueFields[F_THROTTLE_POS]), posThrottle, pedalPressed, RPM_index, pressurePercentage, n75);
+  deb("%f %f %f", valueFields[F_PRESSURE_DESIRED], valueFields[F_PRESSURE], turbo);
 #endif
 
-#endif
-
-  valToPWM(PIO_TURBO, n75);
+  if(lastTurboPWM != pwm) {
+    valToPWM(PIO_TURBO, pwm);
+    lastTurboPWM = pwm;
+  }
 }
+

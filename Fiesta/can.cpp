@@ -120,6 +120,10 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = valueFields[F_FUEL_TEMP];
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = valueFields[F_FAN_ENABLED];
 
+    floatToDec(valueFields[F_PRESSURE_DESIRED], &hi, &lo);
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (byte)hi;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (byte)lo;
+
     CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf); 
   }
   return true;  

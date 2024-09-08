@@ -4,6 +4,8 @@
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
 static Timer generalTimer;
+static Turbo turbo;
+static VP37Pump injectionPump;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -134,8 +136,12 @@ void initialization(void) {
   #endif //DEBUG_SCREEN
 
 #ifdef VP37
-  vp37Calibrate();
+  injectionPump.init();
 #endif
+  watchdog_feed();
+
+  turbo.init();
+
   initGlowPlugsTime(coolant);
 
   watchdog_feed();
@@ -314,9 +320,10 @@ void looper(void) {
   statusVariable0 = 8;
 
 #ifdef VP37
-  showVP37Debug();
+  injectionPump.showVP37Debug();
 #endif
 
+  tight_loop_contents();
   m_delay(CORE_OPERATION_DELAY);  
 }
 
@@ -344,15 +351,16 @@ void looper1(void) {
   }
 
   statusVariable1 = 1;
-  turboMainLoop();
+  turbo.process();
   statusVariable1 = 2;
 #ifdef VP37
-  vp37Process();
+  injectionPump.process();
 #else
   stabilizeRPM();
 #endif
   statusVariable1 = 3;
 
   tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);  
 }
 
