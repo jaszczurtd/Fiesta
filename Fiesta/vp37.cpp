@@ -1,6 +1,12 @@
 
 #include "vp37.h"
 
+#define VP37_PID_TIME_UPDATE 20.0
+#define VP37_PID_KP 0.55
+#define VP37_PID_KI 0.18
+#define VP37_PID_KD 0.1
+#define MAX_INTEGRAL 16384
+
 Timer throttleTimer;
 
 bool measureFuelTemp(void *arg) {
