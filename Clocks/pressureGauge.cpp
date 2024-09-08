@@ -17,8 +17,7 @@ void showPressureGauges(void) {
 PressureGauge::PressureGauge(int mode) {
   this->mode = mode;
   drawOnce = true;
-  lastVal = C_INIT_VAL;
-  lastHI = lastLO = C_INIT_VAL;
+  lastHI = lastLO = lastHI_d = lastLO_d = C_INIT_VAL;
   lastAnimImg = NULL; 
 }
 
@@ -50,6 +49,8 @@ void PressureGauge::showPressureGauge(void) {
   TFT *tft = returnTFTReference();
   unsigned short *tempImg = NULL;
   int x, y, w;
+  int hi, lo;
+  float current = 0.0;
 
   if(drawOnce) {
     switch(mode) {
@@ -64,9 +65,6 @@ void PressureGauge::showPressureGauge(void) {
     tft->drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
   } else {
-    int hi, lo;
-    float current = 0.0;
-
     switch(mode) {
       case PRESSURE_G_TURBO:
         current = valueFields[F_PRESSURE];
@@ -77,7 +75,6 @@ void PressureGauge::showPressureGauge(void) {
     }
 
     floatToDec(current, &hi, &lo);
-
     if(hi != lastHI || lo != lastLO) {
       lastHI = hi;
       lastLO = lo;
@@ -114,9 +111,11 @@ void PressureGauge::showPressureGauge(void) {
 
   switch(mode) {
     case PRESSURE_G_TURBO: {
-      int val = int(valueFields[F_PRESSURE_PERCENTAGE]);
-      if(lastVal != val) {
-        lastVal = val;
+      current = valueFields[F_PRESSURE_DESIRED];
+      floatToDec(current, &hi, &lo);
+      if(hi != lastHI_d || lo != lastLO_d) {
+        lastHI_d = hi;
+        lastLO_d = lo;
 
         x = getBaseX() + TURPO_PERCENT_TEXT_POS_X;
         y = getBaseY() + TURPO_PERCENT_TEXT_POS_Y;
@@ -124,7 +123,7 @@ void PressureGauge::showPressureGauge(void) {
         tft->defaultFontWithPosAndColor(x, y, TEXT_COLOR);
         
         char txt[DISPLAY_TXT_SIZE];
-        w = tft->prepareText(txt, (const char*)F("turbo:%d%%"), val);
+        w = tft->prepareText(txt, (const char*)F("req:%d.%dBAR"), hi, lo);
 
         tft->fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
         tft->printlnFromPreparedText(txt);
