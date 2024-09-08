@@ -1,10 +1,5 @@
 #include "turbo.h"
 
-//#define TURBO_PID_TIME_UPDATE 6.0
-//#define TURBO_PID_KP 0.7
-//#define TURBO_PID_KI 0.1
-//#define TURBO_PID_KD 0.05
-
 Turbo::Turbo() { }
 
 int Turbo::scaleTurboValues(int value, bool reversed) {
@@ -89,12 +84,11 @@ void Turbo::process() {
     }
   }
 
-  pressurePercentage = scaleTurboValues(pressurePercentage, true);
   pressurePercentage = constrain(pressurePercentage, PWM_MIN_PERCENT, PWM_MAX_PERCENT);
 
   valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
 
-  desiredPWM = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
+  desiredPWM = scaleTurboValues(pressurePercentage, false);
 #endif
 
   valToPWM(PIO_TURBO, desiredPWM);
