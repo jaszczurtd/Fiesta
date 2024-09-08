@@ -320,8 +320,9 @@ void looper(void) {
   statusVariable0 = 8;
 
 #ifdef VP37
-  injectionPump.showVP37Debug();
+  injectionPump.showDebug();
 #endif
+  turbo.showDebug();
 
   tight_loop_contents();
   m_delay(CORE_OPERATION_DELAY);  

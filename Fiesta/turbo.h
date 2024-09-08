@@ -35,6 +35,7 @@ private:
   float minBoost, maxBoost;
   int lastTurboPWM;
   bool turboInitialized;
+  float valueDesired;
 
   int getRPMIndex(int rpm);
   int getTPSIndex(int tps);
@@ -46,6 +47,7 @@ public:
   void init() override;  
   void process() override;
   void turboTest(void);
+  void showDebug(void);
 };
 
 #endif // TURBO_CONTROL_H

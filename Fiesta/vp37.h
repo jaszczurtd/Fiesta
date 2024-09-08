@@ -80,7 +80,7 @@ public:
   void process() override;
   void enableVP37(bool enable);
   bool isVP37Enabled(void);
-  void showVP37Debug(void);
+  void showDebug(void);
 };
 
 #endif
