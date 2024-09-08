@@ -279,6 +279,7 @@ bool readHighValues(void *argument) {
     
         triggerDrawHighImportanceValue(true);
         CAN_sendThrottleUpdate();
+        CAN_sendTurboUpdate();
     }
     valueFields[F_CAR_SPEED] = getCurrentCarSpeed();
     valueFields[F_CALCULATED_ENGINE_LOAD] = getPercentageEngineLoad();
