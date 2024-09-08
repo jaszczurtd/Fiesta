@@ -146,7 +146,7 @@ void VP37Pump::process(void) {
   }
 }
 
-void VP37Pump::showVP37Debug(void) {
+void VP37Pump::showDebug(void) {
   deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
       getVP37Adjustometer(), valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], (int)finalPWM,
       (int)voltageCorrection);
