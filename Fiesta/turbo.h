@@ -19,6 +19,11 @@
 
 //#define JUST_TEST_BY_THROTTLE
 
+//#define TURBO_PID_TIME_UPDATE 6.0
+//#define TURBO_PID_KP 0.7
+//#define TURBO_PID_KI 0.1
+//#define TURBO_PID_KD 0.05
+
 #define MIN_TPS 0    // 0%
 #define MAX_TPS 100  // 100%
 
