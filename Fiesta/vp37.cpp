@@ -29,7 +29,6 @@ int VP37Pump::getAdjustometerStable(void) {
 void VP37Pump::initVP37(void) {
   if(!vp37Initialized) {
 
-    vp37Initialized = false;
     lastThrottle = -1;
     calibrationDone = false;
     desiredAdjustometer = -1;
