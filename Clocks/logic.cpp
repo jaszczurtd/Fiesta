@@ -220,6 +220,7 @@ void drawMediumImportanceValues(void) {
   showTempGauges();
   showEGTGauge();
   showECUConnectionGauge();
+  drawHighImportanceValues();
   #endif
 }
 
