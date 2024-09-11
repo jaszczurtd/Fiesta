@@ -1,25 +1,40 @@
-#include "canDefinitions.h"
 #include "engineFan.h"
 
 //-----------------------------------------------------------------------------
 // fan
 //-----------------------------------------------------------------------------
 
-void fan(bool enable) {
+static engineFan *fan = nullptr;
+void createFan(void) {
+  fan = new engineFan();
+  fan->init();
+}
+
+engineFan *getFanInstance(void) {
+  if(fan == nullptr) {
+    createFan();
+  }
+  return fan;
+}
+
+engineFan::engineFan() { }
+
+void engineFan::init(void) {
+  fanEnabled = lastFanStatus = FAN_REASON_NONE;
+}
+
+void engineFan::fan(bool enable) {
   pcf8574_write(PCF8574_O_FAN, enable);
 }
 
-static int fanEnabled = FAN_REASON_NONE;
-static int lastFanStatus = FAN_REASON_NONE;
-
-int fanEnabledReason(void) {
+int engineFan::fanEnabledReason(void) {
   return fanEnabled;
 }
-bool isFanEnabled(void) {
+bool engineFan::isFanEnabled(void) {
   return fanEnabled != FAN_REASON_NONE;  
 }
 
-void fanMainLoop(void) {
+void engineFan::process(void) {
 
   float coolant = valueFields[F_COOLANT_TEMP];
   int rpm = valueFields[F_RPM];
@@ -71,8 +86,11 @@ void fanMainLoop(void) {
     fan(isFanEnabled());
     lastFanStatus = fanEnabled;     
 
-    deb("fan enabled: %d reason: %d", isFanEnabled(), fanEnabled);     
+    showDebug();
   }
 
 }
 
+void engineFan::showDebug(void) {
+  deb("fan enabled: %d reason: %d", isFanEnabled(), fanEnabled);     
+}

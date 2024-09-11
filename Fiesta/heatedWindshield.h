@@ -7,9 +7,31 @@
 #include "start.h"
 #include "tests.h"
 
-void heatedWindow(bool enable, int side);
-void initHeatedWindow(void);
-bool isHeatedWindowEnabled(void);
-void heatedWindowMainLoop(void);
+#include "EngineController.h"
+
+class heatedWindshields : public EngineController {
+public:
+  heatedWindshields();
+  void init() override;  
+  void process() override;
+  void showDebug() override;
+  void heatedWindow(bool enable, int side);
+  bool isHeatedWindowEnabled(void);
+  void heatedWindowMainLoop(void);
+
+private:
+  bool heatedWindowEnabled = false;
+  bool lastHeatedWindowEnabled = false;
+  bool waitingForUnpress = false;
+
+  int heatedWindowsOverallTimer = 0;
+  unsigned long lastHeatedWindowsSecond = 0;
+
+  void disableHeatedWindows(void);
+  bool isHeatedButtonPressed(void);
+};
+
+heatedWindshields *getHeatedWindshieldsInstance(void);
+void createHeatedWindshields(void);
 
 #endif
