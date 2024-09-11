@@ -333,7 +333,7 @@ void looper(void) {
 }
 
 void initialization1(void) {
-  initRPMCount();
+  createRPM();
 
   setStartedCore1();
   
@@ -361,7 +361,7 @@ void looper1(void) {
 #ifdef VP37
   injectionPump.process();
 #else
-  stabilizeRPM();
+  getRPMInstance()->process();
 #endif
   statusVariable1 = 3;
 

@@ -92,6 +92,7 @@ void storeECUName(byte *tab, int idx) {
 }
 
 void obdReq(byte *data){
+  RPM *rpm = getRPMInstance();
   byte numofBytes = data[0];
   byte mode = data[1] & 0x0F;
   byte pid = data[2];
@@ -152,7 +153,7 @@ void obdReq(byte *data){
     }
     else if(pid == FUEL_PRESSURE) {
       txData[0] = 0x04;
-      int p = isEngineRunning() ? DEFAULT_INJECTION_PRESSURE : 0;
+      int p = rpm->isEngineRunning() ? DEFAULT_INJECTION_PRESSURE : 0;
       txData[3] = MSB(p);
       txData[4] = LSB(p);
       tx = true;
@@ -160,7 +161,7 @@ void obdReq(byte *data){
     else if(pid == FUEL_RAIL_PRES_ALT ||
         pid == ABS_FUEL_RAIL_PRES) {
       txData[0] = 0x04;
-      int p = isEngineRunning() ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
+      int p = rpm->isEngineRunning() ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
       txData[3] = MSB(p);
       txData[4] = LSB(p);
       tx = true;
