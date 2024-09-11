@@ -9,10 +9,31 @@
 #include "sensors.h"
 #include "tests.h"
 
-void glowPlugs(bool enable);
-void glowPlugsLamp(bool enable);
-bool isGlowPlugsHeating(void);
-void initGlowPlugsTime(float temp);
-void glowPlugsMainLoop(void);
+#include "EngineController.h"
+
+class glowPlugs : public EngineController {
+public:
+  glowPlugs();
+  void init() override;  
+  void process() override;
+  void showDebug() override;
+  void enableGlowPlugs(bool enable);
+  void glowPlugsLamp(bool enable);
+  bool isGlowPlugsHeating(void);
+  void initGlowPlugsTime(float temp);
+  void glowPlugsMainLoop(void);
+
+private:
+  int glowPlugsTime;
+  int glowPlugsLampTime;
+  unsigned long lastSecond;
+  bool warmAfterStart;
+
+  void calculateGlowPlugsTime(float temp);
+};
+
+glowPlugs *getGlowPlugsInstance(void);
+void createGlowPlugs(void);
+
 
 #endif
