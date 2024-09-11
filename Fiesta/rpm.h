@@ -10,6 +10,8 @@
 #include "sensors.h"
 #include "tests.h"
 
+#include "EngineController.h"
+
 //is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
 
@@ -22,14 +24,42 @@
 #define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 500
 #define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
 
-void initRPMCount(void);
-void setAccelMaxRPM(void);
-void resetRPMEngine(void);
+class RPM : public EngineController {
+public:
+  RPM();
+  void init() override;  
+  void process() override;
+  void showDebug() override;
+  void setAccelMaxRPM(void);
+  void resetRPMEngine(void);
 #ifndef VP37
-void stabilizeRPM(void);
+  void stabilizeRPM(void);
 #endif
-bool isEngineRunning(void);
-void setAccelRPMPercentage(int percentage);
-int getCurrentRPMSolenoid(void);
+  bool isEngineRunning(void);
+  void setAccelRPMPercentage(int percentage);
+  int getCurrentRPMSolenoid(void);
+  void interrupt(void);
+  void resetRPMCycle(void);
+
+private:
+  volatile unsigned long previousMillis;
+  volatile unsigned long shortPulse;
+  volatile unsigned long lastPulse;
+  volatile long rpmAliveTime;
+  volatile int RPMpulses;
+
+  int currentRPMSolenoid;
+  bool rpmCycle;
+#ifndef VP37
+  int rpmPercentValue;
+#endif
+
+  bool isEngineThrottlePressed(void);
+  int getCurrentRPM(void);
+};
+
+RPM *getRPMInstance(void);
+void createRPM(void);
+
 
 #endif

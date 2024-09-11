@@ -1,22 +1,39 @@
 #include "rpm.h"
 
-Timer rpmTimer;
-
 #define CRANK_REVOLUTIONS 32.0
 
-static volatile unsigned long previousMillis = 0;
-static volatile unsigned long shortPulse = 0;
-static volatile unsigned long lastPulse = 0;
-static volatile long rpmAliveTime = 0;
-static volatile int RPMpulses = 0;
+static Timer rpmTimer;
 
-static int currentRPMSolenoid = 0;
-static bool rpmCycle = false;
-#ifndef VP37
-static int rpmPercentValue = 0;
-#endif
+static RPM *engineRPM = nullptr;
+void createRPM(void) {
+  engineRPM = new RPM();
+  engineRPM->init();
+}
+
+RPM *getRPMInstance(void) {
+  if(engineRPM == nullptr) {
+    createRPM();
+  }
+  return engineRPM;
+}
 
 void countRPM(void) {
+  getRPMInstance()->interrupt();
+}
+
+bool cycleCheck(void *argument) {
+  getRPMInstance()->resetRPMCycle();
+  return false;
+}
+
+void RPM::resetRPMCycle(void) {
+  rpmCycle = false;
+}
+
+RPM::RPM() { }
+
+void RPM::interrupt(void) {
+  noInterrupts();
 
   unsigned long _micros = micros();
   unsigned long nowPulse = _micros - lastPulse;
@@ -35,21 +52,35 @@ void countRPM(void) {
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
 
-    int RPM = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
-    if(RPM < 0) {
-      RPM = 0;
+    int rpm = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
+    if(rpm < 0) {
+      rpm = 0;
     }
     RPMpulses = 0; 
 
-    RPM = min(RPM_MAX_EVER, RPM);
-    RPM = ((RPM / 10) * 10);
+    rpm = min(RPM_MAX_EVER, rpm);
+    rpm = ((rpm / 10) * 10);
 
-    valueFields[F_RPM] = RPM; 
-  }  
+    valueFields[F_RPM] = rpm; 
+  } 
+  interrupts(); 
 }
 
-void initRPMCount(void) {
+void RPM::init(void) {
   pinMode(PIO_INTERRUPT_HALL, INPUT_PULLUP); 
+
+  previousMillis = 0;
+  shortPulse = 0;
+  lastPulse = 0;
+  rpmAliveTime = 0;
+  RPMpulses = 0;
+
+  currentRPMSolenoid = 0;
+  rpmCycle = false;
+#ifndef VP37
+  rpmPercentValue = 0;
+#endif
+
   attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 
   rpmTimer = timer_create_default();
@@ -57,33 +88,28 @@ void initRPMCount(void) {
   setAccelMaxRPM();
 }
 
-void setAccelRPMPercentage(int percentage) {
+void RPM::setAccelRPMPercentage(int percentage) {
   currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
 }
 
-int getCurrentRPMSolenoid(void) {
+int RPM::getCurrentRPMSolenoid(void) {
   return currentRPMSolenoid;
 }
 
-void setAccelMaxRPM(void) {
+void RPM::setAccelMaxRPM(void) {
   setAccelRPMPercentage(MAX_RPM_PERCENT_VALUE);
 }
 
-bool isEngineThrottlePressed(void) {
+bool RPM::isEngineThrottlePressed(void) {
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
-bool cycleCheck(void *argument) {
-  rpmCycle = false;
-  return false;
-}
-
-int getCurrentRPM(void) {
+int RPM::getCurrentRPM(void) {
   return (int)valueFields[F_RPM];
 }
 
 #ifndef VP37
-void stabilizeRPM(void) {
+void RPM::process(void) {
   rpmTimer.tick();
 
   if(rpmAliveTime < (long)millis()) {
@@ -148,11 +174,17 @@ void stabilizeRPM(void) {
   valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
 
 #if DEBUG
-  deb("rpm:%d current:%d engineLoad:%d", (int)valueFields[F_RPM], currentRPMSolenoid, engineLoad);
+  showDebug();
 #endif
 }
+#else
+  void RPM::process(void) { }
 #endif
 
-bool isEngineRunning(void) {
-  return (int(valueFields[F_RPM]) != 0);
+bool RPM::isEngineRunning(void) {
+  return (getCurrentRPM() != 0);
+}
+
+void RPM::showDebug() {
+  deb("rpm:%d current:%d", (int)valueFields[F_RPM], currentRPMSolenoid);
 }
