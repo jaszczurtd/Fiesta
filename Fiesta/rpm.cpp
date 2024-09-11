@@ -2,7 +2,9 @@
 
 #define CRANK_REVOLUTIONS 32.0
 
+#ifndef VP37
 static Timer rpmTimer;
+#endif
 
 static RPM *engineRPM = nullptr;
 void createRPM(void) {
@@ -83,7 +85,9 @@ void RPM::init(void) {
 
   attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
 
+#ifndef VP37
   rpmTimer = timer_create_default();
+#endif
 
   setAccelMaxRPM();
 }
