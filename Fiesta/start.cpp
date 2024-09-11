@@ -115,6 +115,11 @@ void initialization(void) {
 
   initSensors();
 
+  createFan();
+  createHeater();
+  createGlowPlugs();
+  createHeatedWindshields();
+
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
 
@@ -142,12 +147,12 @@ void initialization(void) {
 
   turbo.init();
 
-  initGlowPlugsTime(coolant);
+  getGlowPlugsInstance()->initGlowPlugsTime(coolant);
 
   watchdog_feed();
 
   while(sec < secDest) {
-    glowPlugsMainLoop();
+    getGlowPlugsInstance()->process();
     watchdog_feed();
     sec = getSeconds();
   }
@@ -162,7 +167,6 @@ void initialization(void) {
   scanNetworks(WIFI_SSID);
   #endif
 
-  initHeatedWindow();
   initFuelMeasurement();
   
   softInitDisplay(NULL);
@@ -308,13 +312,13 @@ void looper(void) {
   drawHighImportanceValuesIfChanged();
   obdLoop();
   statusVariable0 = 3;
-  glowPlugsMainLoop();
+  getGlowPlugsInstance()->process();
   statusVariable0 = 4;
-  fanMainLoop();
+  getFanInstance()->process();
   statusVariable0 = 5;
-  engineHeaterMainLoop();
+  getHeaterInstance()->process();
   statusVariable0 = 6;
-  heatedWindowMainLoop();
+  getHeatedWindshieldsInstance()->process();
   statusVariable0 = 7;
   CAN_updaterecipients_02();
   statusVariable0 = 8;

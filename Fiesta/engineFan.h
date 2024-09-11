@@ -7,13 +7,31 @@
 #include "start.h"
 #include "sensors.h"
 #include "tests.h"
+#include "canDefinitions.h"
 
-#define FAN_REASON_NONE     0x00
-#define FAN_REASON_COOLANT  0x01
-#define FAN_REASON_AIR      0x02
+#include "EngineController.h"
 
-bool isFanEnabled(void);
-void fanMainLoop(void);
-void fan(bool enable);
+enum {
+  FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR
+};
+
+class engineFan : public EngineController {
+public:
+  engineFan();
+  void init() override;  
+  void process() override;
+  void showDebug() override;
+  bool isFanEnabled(void);
+  void fan(bool enable);
+
+private:
+  int fanEnabled;
+  int lastFanStatus;
+
+  int fanEnabledReason(void);
+};
+
+engineFan *getFanInstance(void);
+void createFan(void);
 
 #endif
