@@ -211,6 +211,7 @@ void drawLowImportanceValues(void) {
 void drawHighImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showEngineLoadGauge();
+  showPressureGauges();
   #endif
 }
 
@@ -219,12 +220,12 @@ void drawMediumImportanceValues(void) {
   showTempGauges();
   showEGTGauge();
   showECUConnectionGauge();
+  drawHighImportanceValues();
   #endif
 }
 
 void drawMediumMediumImportanceValues(void) {
   #ifndef DEBUG_SCREEN
-  showPressureGauges();
   showGPSGauge();
   #endif
 }

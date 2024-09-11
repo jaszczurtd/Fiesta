@@ -4,36 +4,52 @@
 // heated windshield
 //-----------------------------------------------------------------------------
 
-void heatedWindow(bool enable, int side) {
+static heatedWindshields *windows = nullptr;
+void createHeatedWindshields(void) {
+  windows = new heatedWindshields();
+  windows->init();
+}
+
+heatedWindshields *getHeatedWindshieldsInstance(void) {
+  if(windows == nullptr) {
+    createHeatedWindshields();
+  }
+  return windows;
+}
+
+heatedWindshields::heatedWindshields() { }
+
+void heatedWindshields::heatedWindow(bool enable, int side) {
   pcf8574_write(side, enable);
 }
 
-static bool heatedWindowEnabled = false;
-static bool lastHeatedWindowEnabled = false;
-static bool waitingForUnpress = false;
-
-static int heatedWindowsOverallTimer = 0;
-static unsigned long lastHeatedWindowsSecond = 0;
-
-void initHeatedWindow(void) {
+void heatedWindshields::init(void) {
   pinMode(HEATED_WINDOWS_PIN, INPUT_PULLUP);
+  
+  heatedWindowEnabled = false;
+  lastHeatedWindowEnabled = false;
+  waitingForUnpress = false;
+
+  heatedWindowsOverallTimer = 0;
+  lastHeatedWindowsSecond = 0;
 }
-bool isHeatedButtonPressed(void) {
+
+bool heatedWindshields::isHeatedButtonPressed(void) {
   return digitalRead(HEATED_WINDOWS_PIN);
 }
 
-bool isHeatedWindowEnabled(void) {
+bool heatedWindshields::isHeatedWindowEnabled(void) {
   return heatedWindowEnabled;
 }
 
-static void disableHeatedWindows(void) {
+void heatedWindshields::disableHeatedWindows(void) {
   heatedWindowEnabled = false;
   lastHeatedWindowEnabled = !heatedWindowEnabled;
   heatedWindowsOverallTimer = 0;
   lastHeatedWindowsSecond = 0;
 }
 
-void heatedWindowMainLoop(void) {
+void heatedWindshields::process(void) {
 
   float volts = valueFields[F_VOLTS];
   if(volts < MINIMUM_VOLTS_AMOUNT) {
@@ -109,3 +125,6 @@ void heatedWindowMainLoop(void) {
   }
 }
 
+void heatedWindshields::showDebug() {
+  deb("heatedWindshields enabled:%d", heatedWindowEnabled);
+}

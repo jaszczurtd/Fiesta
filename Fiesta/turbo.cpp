@@ -89,24 +89,24 @@ void Turbo::process() {
     return;
   }
 
-  float turbo;
-
   valueFields[F_PRESSURE_DESIRED] = getBoostPressure(int(valueFields[F_RPM]), getThrottlePercentage());
   turboController->updatePIDtime(TURBO_PID_TIME_UPDATE);
-  turbo = constrain(turboController->updatePIDcontroller(
+  valueDesired = constrain(turboController->updatePIDcontroller(
                     valueFields[F_PRESSURE_DESIRED] - valueFields[F_PRESSURE]), minBoost, maxBoost);
 
-  valueFields[F_PRESSURE_PERCENTAGE] = ((turbo - minBoost) / (maxBoost - minBoost)) * 100.0;
+  valueDesired = 0.5;
 
-  int pwm = scaleTurboValues(turbo, false);
+  valueFields[F_PRESSURE_PERCENTAGE] = ((valueDesired - minBoost) / (maxBoost - minBoost)) * 100.0;
 
-#ifdef DEBUG
-  deb("%f %f %f", valueFields[F_PRESSURE_DESIRED], valueFields[F_PRESSURE], turbo);
-#endif
+  int pwm = scaleTurboValues(valueDesired, true);
 
   if(lastTurboPWM != pwm) {
     valToPWM(PIO_TURBO, pwm);
     lastTurboPWM = pwm;
   }
+}
+
+void Turbo::showDebug(void) {
+  deb("actual:%f desired:%f valDesired:%f", valueFields[F_PRESSURE], valueFields[F_PRESSURE_DESIRED], valueDesired);
 }
 
