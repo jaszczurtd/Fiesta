@@ -153,7 +153,7 @@ void TempGauge::showTemperatureAmount(int currentVal) {
         color = (blink) ? COLOR(RED) : COLOR(ORANGE);
     }
 
-    bool fanEnabled = isFanEnabled();
+    bool fanEnabled = getFanInstance()->isFanEnabled();
     unsigned short *img = NULL;
 
     switch(mode) {

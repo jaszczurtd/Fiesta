@@ -7,8 +7,28 @@
 #include "start.h"
 #include "sensors.h"
 #include "tests.h"
+#include "engineFan.h"
 
-void heater(bool enable, int level);
-void engineHeaterMainLoop(void);
+#include "EngineController.h"
+
+class engineHeater : public EngineController {
+public:
+  engineHeater();
+  void init() override;  
+  void process() override;
+  void showDebug() override;
+  void heater(bool enable, int level);
+
+private:
+  bool heaterLoEnabled;
+  bool heaterHiEnabled;
+  bool lastHeaterLoEnabled;
+  bool lastHeaterHiEnabled;
+
+};
+
+engineHeater *getHeaterInstance(void);
+void createHeater(void);
+
 
 #endif

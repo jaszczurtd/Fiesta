@@ -73,6 +73,8 @@ void CAN_sendAll(void) {
   CAN_updaterecipients_02();
   m_delay(CORE_OPERATION_DELAY);
   CAN_sendThrottleUpdate();
+  m_delay(CORE_OPERATION_DELAY);
+  CAN_sendTurboUpdate();
 }
 
 bool CAN_updaterecipients_01(void *argument) {
@@ -102,10 +104,6 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_NUMBER] = frameNumber++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] = (byte)valueFields[F_INTAKE_TEMP];
 
-    floatToDec(valueFields[F_PRESSURE], &hi, &lo);
-    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (byte)hi;
-    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (byte)lo;
-
     short fuel = valueFields[F_FUEL];
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
@@ -119,10 +117,6 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] = valueFields[F_PRESSURE_PERCENTAGE];
     buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = valueFields[F_FUEL_TEMP];
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = valueFields[F_FAN_ENABLED];
-
-    floatToDec(valueFields[F_PRESSURE_DESIRED], &hi, &lo);
-    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (byte)hi;
-    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (byte)lo;
 
     CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf); 
   }
@@ -142,6 +136,36 @@ void CAN_updaterecipients_02(void) {
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
 
       CAN.sendMsgBuf(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);  
+    }
+  }
+}
+
+static float cLastTurboHI = C_INIT_VAL;
+static float cLastTurboLO = C_INIT_VAL;
+static float cLastTurboHI_d = C_INIT_VAL;
+static float cLastTurboLO_d = C_INIT_VAL;
+void CAN_sendTurboUpdate(void) {
+  if(initialized) {
+    byte buf[CAN_FRAME_MAX_LENGTH];
+    int hi, lo;
+    int hi_d, lo_d;
+
+    floatToDec(valueFields[F_PRESSURE], &hi, &lo);
+    floatToDec(valueFields[F_PRESSURE_DESIRED], &hi_d, &lo_d);
+    if(lo != cLastTurboLO || hi != cLastTurboHI || hi_d != cLastTurboHI_d || lo_d != cLastTurboLO_d) {
+      cLastTurboLO = lo;
+      cLastTurboHI = hi;
+
+      cLastTurboLO_d = lo_d;
+      cLastTurboHI_d = hi_d;
+
+      buf[CAN_FRAME_NUMBER] = frameNumber++;
+      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (byte)hi;
+      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (byte)lo;      
+      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (byte)hi_d;
+      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (byte)lo_d;
+
+      CAN.sendMsgBuf(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf); 
     }
   }
 }
