@@ -350,10 +350,11 @@ bool updateValsForDebug(void *arg) {
     lastOilTemp = oil;
     message += stamp + "Oil temp. update: " + String(oil) + "C\n";
   }
+  RPM *rpm = getRPMInstance();
 
-  if(lastIsEngineRunning != isEngineRunning()) {
-    lastIsEngineRunning= isEngineRunning();
-    message += stamp + "Engine is running: " + (isEngineRunning() ? "yes" : "no") + "\n";
+  if(lastIsEngineRunning != rpm->isEngineRunning()) {
+    lastIsEngineRunning= rpm->isEngineRunning();
+    message += stamp + "Engine is running: " + (rpm->isEngineRunning() ? "yes" : "no") + "\n";
   }
 
   if(message.length() > 0) {
