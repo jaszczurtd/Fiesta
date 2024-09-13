@@ -18,9 +18,6 @@
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-//calibration / stabilization values
-#define VOLT_PER_PWM 0.0421
-#define VOLTAGE_THRESHOLD 0.2
 #define PERCENTAGE_ERROR 3.0
 
 #define VP37_OPERATION_DELAY 5 //microseconds
@@ -30,7 +27,7 @@
 
 //miliseconds
 #define VP37_FUEL_TEMP_UPDATE 500
-#define VP37_VOLTAGE_UPDATE 10
+#define VP37_VOLTAGE_UPDATE 8
 
 #define VP37_CALIBRATION_MAX_PERCENTAGE 50
 #define VP37_AVERAGE_VALUES_AMOUNT 5
@@ -38,7 +35,8 @@
 #define VP37_PERCENTAGE_LIMITER 95
 
 #define VP37_PWM_MIN 378
-#define VP37_PWM_MAX VP37_PWM_MIN * 2.5
+#define VP37_PWM_BASE_FACTOR 2.5 //how many times PWM_MAX should be bigger than PWM_MIN
+#define VP37_TEMP_LIMIT_FACTOR 3.0 //limit (tweakable) for calculating PWM_MAX
 
 #define VP37_ADJUST_TIMER 200
 
@@ -53,11 +51,9 @@ private:
   int lastThrottle;
   bool calibrationDone;
   int desiredAdjustometer;
-  float pwmValue;
   float voltageCorrection;
   int lastPWMval;
   int finalPWM;
-  float lastVolts;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
 
@@ -68,7 +64,8 @@ private:
   bool isInRangeOf(float desired, float val);
   void throttleCycle(void);
   void initVP37(void);
-  
+  float calculateVP37PWMmax(float temperature);
+
 public:
   VP37Pump();
   void init() override;  

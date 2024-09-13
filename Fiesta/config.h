@@ -24,6 +24,9 @@
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
+//typical outside temperature
+#define TEMP_BASE 26
+
 //minimum temp value for oil and coolant
 #define TEMP_MIN 45
 
@@ -40,6 +43,9 @@
 
 #define TEMP_LOWEST -70
 #define TEMP_HIGHEST 170
+
+//normal engine temperature
+#define TEMP_OPERATION 88
 
 #define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
 //when engine is cold, this is the multiplier of the time

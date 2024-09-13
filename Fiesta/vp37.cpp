@@ -4,10 +4,11 @@
 #define VP37_PID_TIME_UPDATE 20.0
 #define VP37_PID_KP 0.55
 #define VP37_PID_KI 0.18
-#define VP37_PID_KD 0.1
+#define VP37_PID_KD 0.05
 #define MAX_INTEGRAL 16384
+#define VOLTAGE_THRESHOLD 1.0 //voltage fastforward/stabilization
 
-Timer throttleTimer;
+static Timer vp37MainTimer;
 
 bool measureFuelTemp(void *arg) {
   valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
@@ -38,19 +39,18 @@ void VP37Pump::initVP37(void) {
     lastThrottle = -1;
     calibrationDone = false;
     desiredAdjustometer = -1;
-    pwmValue = VP37_PWM_MIN;
     voltageCorrection = 0;
     lastPWMval = -1;
     finalPWM = VP37_PWM_MIN;
 
-    throttleTimer = timer_create_default();
+    vp37MainTimer = timer_create_default();
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
     adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, PID_MAX_INTEGRAL);
 
-    throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
-    throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
+    vp37MainTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
+    vp37MainTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
 
     vp37Initialized = true; 
   }
@@ -90,6 +90,9 @@ void VP37Pump::init(void) {
   VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MAX - VP37_ADJUST_MIN) / 2) + VP37_ADJUST_MIN;
   calibrationDone = VP37_ADJUST_MIDDLE > 0;
 
+  adjustController->setOutputLimits(VP37_ADJUST_MIN, VP37_ADJUST_MAX);
+  adjustController->setVoltageCompensation(VOLTAGE_THRESHOLD, 14.4);
+
   enableVP37(calibrationDone);
 }
 
@@ -102,20 +105,30 @@ bool VP37Pump::isVP37Enabled(void) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-void VP37Pump::throttleCycle(void) {
-  float output;
+float VP37Pump::calculateVP37PWMmax(float temperature) {
+  float base_temp = float(TEMP_BASE);
+  float base_factor = VP37_PWM_BASE_FACTOR;
 
-  adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
-  output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer());
+  float increment_per_degree = (base_factor / (float(TEMP_OPERATION) - base_temp)) / VP37_TEMP_LIMIT_FACTOR;
 
-  pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
-  
-  if (fabs(valueFields[F_VOLTS] - lastVolts) > VOLTAGE_THRESHOLD) {
-    lastVolts = valueFields[F_VOLTS];
+  if (temperature > base_temp) {
+      base_factor += (temperature - base_temp) * increment_per_degree;
   }
 
-  finalPWM = pwmValue * (12.0 / lastVolts);  
-  finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
+  return VP37_PWM_MIN * base_factor;
+}
+
+void VP37Pump::throttleCycle(void) {
+  float output, pwmValue;
+
+  adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
+  output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer(), 
+                                                  valueFields[F_VOLTS]);
+
+  pwmValue = mapfloat(output, 
+                        VP37_ADJUST_MIN, VP37_ADJUST_MAX, 
+                        VP37_PWM_MIN, calculateVP37PWMmax(valueFields[F_FUEL_TEMP]));
+  finalPWM = pwmValue * adjustController->compensateVoltageThreshold(valueFields[F_VOLTS]);
 
   if(lastPWMval != finalPWM) {
     lastPWMval = finalPWM;
@@ -133,7 +146,7 @@ void VP37Pump::process(void) {
         lastThrottle = desiredAdjustometer = -1;
     }
 
-    throttleTimer.tick();  
+    vp37MainTimer.tick();  
 
     int rpm = int(valueFields[F_RPM]);
     if(rpm > RPM_MAX_EVER) {
