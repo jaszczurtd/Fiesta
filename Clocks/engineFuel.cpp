@@ -1,25 +1,30 @@
 #include "engineFuel.h"
 
-const char *half = (char*)F("1/2");
-const char *full = (char*)F("F");
-const char *empty = (char*)F("E");
-const char *emptyMessage = (char*)F("Empty tank!");
-
 //-------------------------------------------------------------------------------------------------
 //Read fuel amount
 //-------------------------------------------------------------------------------------------------
 
-static int measuredValues[FUEL_MAX_SAMPLES];
-static int measuedValuesIndex = 0;
-static int lastResult = FUEL_INIT_VALUE;
-static int nextMeasurement = 0;
-static int fuelMeasurementTime = 0;
-static long measurements = 0;
+EngineFuelGauge fuel_g = EngineFuelGauge();
 
-static int emptyMessageWidth;
-static int emptyMessageHeight;
+void redrawFuel(void) {
+  fuel_g.redraw();
+}
+
+void drawFuelEmpty(void) {
+  fuel_g.drawFuelEmpty();
+}
+
+void showFuelAmount(void) {
+  fuel_g.showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
+}
 
 void initFuelMeasurement(void) {
+  fuel_g.init();
+}
+
+EngineFuelGauge::EngineFuelGauge(void) { }
+
+void EngineFuelGauge::init() {
   memset(measuredValues, FUEL_INIT_VALUE, sizeof(measuredValues));
   measuedValuesIndex = 0;
   lastResult = FUEL_INIT_VALUE;
@@ -33,41 +38,41 @@ void initFuelMeasurement(void) {
   tft->setDisplayDefaultFont();
   emptyMessageWidth = tft->textWidth(emptyMessage);
   emptyMessageHeight = tft->textHeight(emptyMessage);
+
+  currentFuelWidth = 0;
+  fullRedrawNeeded = false;
+  lastWidth = 0;
 }
 
 //-------------------------------------------------------------------------------------------------
 //fuel indicator
 //-------------------------------------------------------------------------------------------------
 
-static bool f_drawOnce = true; 
-void redrawFuel(void) {
+void EngineFuelGauge::redraw(void) {
     f_drawOnce = true;
 }
 
-static int currentFuelWidth = 0;
-static bool fullRedrawNeeded = false;
-
-int f_getBaseX(void) {
+int EngineFuelGauge::getBaseX(void) {
     return (OFFSET * 2) + FUEL_WIDTH - 1;
 }
 
-int f_getBaseY(void) {
+int EngineFuelGauge::getBaseY(void) {
     return SCREEN_H - FUEL_HEIGHT - 8 - (OFFSET * 2); 
 }
 
-int f_getWidth(void) {
-    return FUEL_GAUGE_WIDTH - f_getBaseX();
+int EngineFuelGauge::getWidth(void) {
+    return FUEL_GAUGE_WIDTH - getBaseX();
 }
 
-int f_getGaugePos(void) {
+int EngineFuelGauge::getGaugePos(void) {
   int center = ((FUEL_HEIGHT - FUEL_GAUGE_HEIGHT) / 2);
   if(center < 0) {
     center = 0;
   }
-  return f_getBaseY() + center;
+  return getBaseY() + center;
 }
 
-void drawFuelEmpty(void) {
+void EngineFuelGauge::drawFuelEmpty(void) {
 
   if(lastResult == FUEL_INIT_VALUE) {
     return;
@@ -80,8 +85,8 @@ void drawFuelEmpty(void) {
         color = COLOR(RED);
     }
 
-    int x = f_getBaseX() + ((f_getWidth() - emptyMessageWidth) / 2);
-    int y = f_getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
+    int x = getBaseX() + ((getWidth() - emptyMessageWidth) / 2);
+    int y = getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
 
     TFT *tft = returnTFTReference();
     tft->defaultFontWithPosAndColor(x, y, color);
@@ -89,8 +94,8 @@ void drawFuelEmpty(void) {
   }
 }
 
-void showFuelAmount(int currentVal, int maxVal) {
-  int width = f_getWidth();
+void EngineFuelGauge::showFuelAmount(int currentVal, int maxVal) {
+  int width = getWidth();
   float percent = (currentVal * 100) / maxVal;
   currentFuelWidth = percentToGivenVal(percent, width);
   if(currentFuelWidth > width) {
@@ -108,20 +113,20 @@ void showFuelAmount(int currentVal, int maxVal) {
 
   if(f_drawOnce) {
     int x = 0; 
-    int y = f_getBaseY();
+    int y = getBaseY();
     int tw;
 
     TFT *tft = returnTFTReference();
     tft->fillRect(FUEL_WIDTH + OFFSET + (OFFSET / 2),
                   y, 
-                  f_getWidth() + OFFSET, SCREEN_H - y, 
+                  getWidth() + OFFSET, SCREEN_H - y, 
                   ICONS_BG_COLOR);
 
-    x = f_getBaseX();
+    x = getBaseX();
 
     tft->drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
 
-    y = f_getGaugePos();
+    y = getGaugePos();
 
     tft->drawRect(x, y, width, FUEL_GAUGE_HEIGHT, FUEL_BOX_COLOR);
 
@@ -133,14 +138,14 @@ void showFuelAmount(int currentVal, int maxVal) {
     tft->println(empty);
 
     tw = tft->textWidth(half);
-    x = f_getBaseX();
+    x = getBaseX();
     x += ((width - tw) / 2);
 
     tft->setTextColor(TEXT_COLOR);
     tft->setCursor(x, y);
     tft->println(half);
 
-    x = f_getBaseX() + width;
+    x = getBaseX() + width;
     tw = tft->textWidth(full);
     x -= tw;
 
@@ -149,14 +154,12 @@ void showFuelAmount(int currentVal, int maxVal) {
 
     f_drawOnce = false;
   } else {
-    drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, f_getGaugePos());
+    drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, getGaugePos());
   }
   drawFuelEmpty();
 }
 
-static int lastWidth = 0;
-
-void drawChangeableFuelContent(int w, int fh, int y) {
+void EngineFuelGauge::drawChangeableFuelContent(int w, int fh, int y) {
 
     bool draw = false;
     if(lastWidth != w) {
@@ -166,7 +169,7 @@ void drawChangeableFuelContent(int w, int fh, int y) {
 
     int color = FUEL_FILL_COLOR;
 
-    int width = f_getWidth();
+    int width = getWidth();
     int minW = percentToGivenVal(MINIMUM_FUEL_AMOUNT_PERCENTAGE, width);
     if(w <= minW && w >= 1) {
         draw = true;
@@ -177,7 +180,7 @@ void drawChangeableFuelContent(int w, int fh, int y) {
 
     if(draw) {
       TFT *tft = returnTFTReference();
-      int x = f_getBaseX(); 
+      int x = getBaseX(); 
 
       if(fullRedrawNeeded) {
           tft->fillRect(x + 1, y + 1, width - 2, fh - 2, COLOR(BLACK));
