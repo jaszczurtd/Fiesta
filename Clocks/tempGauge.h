@@ -10,6 +10,8 @@
 #include "config.h"
 #include "icons.h"
 
+#include "Gauge.h"
+
 #define TEMP_GAUGE_NONE     0
 #define TEMP_GAUGE_OIL      1
 #define TEMP_GAUGE_COOLANT  2
@@ -34,7 +36,7 @@ extern const char *err;
 void redrawTempGauges(void);
 void showTempGauges(void);
 
-class TempGauge {
+class TempGauge : public Gauge {
 public:
   TempGauge(int mode);
   void drawTempValue(int x, int y, int valToDisplay);

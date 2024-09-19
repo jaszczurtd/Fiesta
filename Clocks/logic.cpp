@@ -89,6 +89,7 @@ void setup_a(void) {
   softInitDisplay(NULL);
   tft->fillScreen(ICONS_BG_COLOR);
 
+  initFuelMeasurement();
   canCheckConnection(NULL);
 
   #ifdef DEBUG_SCREEN
@@ -204,7 +205,7 @@ void triggerDrawHighImportanceValue(bool state) {
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showSimpleGauges();
-  showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
+  showFuelAmount();
   #endif
 }
 

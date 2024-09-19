@@ -10,6 +10,8 @@
 #include "config.h"
 #include "icons.h"
 
+#include "Gauge.h"
+
 #define PRESSURE_G_NONE 0
 #define PRESSURE_G_TURBO 1
 #define PRESSURE_G_OIL 2
@@ -19,7 +21,7 @@
 
 extern const char *err;
 
-class PressureGauge {
+class PressureGauge : public Gauge {
 public:
   PressureGauge(int mode);
   void redraw(void);
