@@ -89,6 +89,7 @@ void setup_a(void) {
   softInitDisplay(NULL);
   tft->fillScreen(ICONS_BG_COLOR);
 
+  initFuelMeasurement();
   canCheckConnection(NULL);
 
   #ifdef DEBUG_SCREEN

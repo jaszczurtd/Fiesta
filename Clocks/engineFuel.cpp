@@ -18,7 +18,13 @@ void showFuelAmount(void) {
   fuel_g.showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
 }
 
-EngineFuelGauge::EngineFuelGauge(void) {
+void initFuelMeasurement(void) {
+  fuel_g.init();
+}
+
+EngineFuelGauge::EngineFuelGauge(void) { }
+
+void EngineFuelGauge::init() {
   memset(measuredValues, FUEL_INIT_VALUE, sizeof(measuredValues));
   measuedValuesIndex = 0;
   lastResult = FUEL_INIT_VALUE;

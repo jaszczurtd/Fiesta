@@ -32,6 +32,7 @@
 class EngineFuelGauge : public Gauge {
 public:
   EngineFuelGauge(void);
+  void init(void);
   void redraw(void);
   int getBaseX(void);
   int getBaseY(void);
@@ -64,6 +65,7 @@ private:
   int lastWidth;
 };
 
+void initFuelMeasurement(void);
 void redrawFuel(void);
 void drawFuelEmpty(void);
 void showFuelAmount(void);
