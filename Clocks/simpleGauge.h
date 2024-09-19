@@ -10,6 +10,8 @@
 #include "config.h"
 #include "icons.h"
 
+#include "Gauge.h"
+
 enum {
   SIMPLE_G_NONE,
   SIMPLE_G_ENGINE_LOAD,
@@ -35,7 +37,7 @@ enum {
 
 extern const char *err;
 
-class SimpleGauge {
+class SimpleGauge : public Gauge {
 public:
   SimpleGauge(int mode);
   int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);

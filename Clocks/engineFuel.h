@@ -29,15 +29,44 @@
 #define FUEL_BOX_COLOR 0xBDF7
 #define FUEL_FILL_COLOR 0x9CD3
 
-void initFuelMeasurement(void);
+class EngineFuelGauge : public Gauge {
+public:
+  EngineFuelGauge(void);
+  void redraw(void);
+  int getBaseX(void);
+  int getBaseY(void);
+  int getWidth(void);
+  int getGaugePos(void);
+  void drawFuelEmpty(void);
+  void showFuelAmount(int currentVal, int maxVal);
+  void drawChangeableFuelContent(int w, int fh, int y);
 
-//gauge
-int f_getWidth(void);
-int f_getBaseX(void);
-int f_getGaugePos(void);
+private:
+  bool f_drawOnce; 
+
+  const char *half = (char*)F("1/2");
+  const char *full = (char*)F("F");
+  const char *empty = (char*)F("E");
+  const char *emptyMessage = (char*)F("Empty tank!");
+
+  int measuredValues[FUEL_MAX_SAMPLES];
+  int measuedValuesIndex;
+  int lastResult;
+  int nextMeasurement;
+  int fuelMeasurementTime;
+  long measurements;
+
+  int emptyMessageWidth;
+  int emptyMessageHeight;
+
+  int currentFuelWidth;
+  bool fullRedrawNeeded;
+  int lastWidth;
+};
+
 void redrawFuel(void);
 void drawFuelEmpty(void);
-void showFuelAmount(int currentVal, int maxVal);
-void drawChangeableFuelContent(int w, int fh, int y);
+void showFuelAmount(void);
+
 
 #endif
