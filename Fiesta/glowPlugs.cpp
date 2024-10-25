@@ -40,10 +40,7 @@ bool glowPlugs::isGlowPlugsHeating(void) {
 
 void glowPlugs::calculateGlowPlugsTime(float temp) {
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    glowPlugsTime = int((-(temp) + float(SECONDS_IN_MINUTE)) / 3.5);
-    if(glowPlugsTime < 0) {
-      glowPlugsTime = 0;
-    }
+    glowPlugsTime = (int)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
   } else {
     glowPlugsTime = 0;
   }

@@ -11,6 +11,8 @@
 
 #include "EngineController.h"
 
+#define MAX_GLOW_PLUGS_TIME SECONDS_IN_MINUTE
+
 class glowPlugs : public EngineController {
 public:
   glowPlugs();
