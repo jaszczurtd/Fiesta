@@ -11,8 +11,6 @@
 
 #include "EngineController.h"
 
-#define MAX_GLOW_PLUGS_TIME SECONDS_IN_MINUTE
-
 class glowPlugs : public EngineController {
 public:
   glowPlugs();
@@ -30,8 +28,10 @@ private:
   int glowPlugsLampTime;
   unsigned long lastSecond;
   bool warmAfterStart;
+  bool initialized;
 
   void calculateGlowPlugsTime(float temp);
+  void calculateGlowPlugLampTime(float temp);
 };
 
 glowPlugs *getGlowPlugsInstance(void);
