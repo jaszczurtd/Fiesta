@@ -41,11 +41,6 @@
 #define TEMP_LOWEST -70
 #define TEMP_HIGHEST 170
 
-#define TEMP_MINIMUM_FOR_GLOW_PLUGS 50
-//when engine is cold, this is the multiplier of the time
-//when the glow plugs are heating the cylinders
-#define TEMP_HEATING_GLOW_PLUGS_MULTIPLIER 1.5
-
 //EGT temperatures definitions
 #define TEMP_EGT_OK_HI 950
 #define TEMP_EGT_MAX 1600
@@ -123,7 +118,20 @@
 //just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
 
+//for PID controller
 #define PID_MAX_INTEGRAL 16384
+
+
+//glow plugs values
+#define MAX_GLOW_PLUGS_TIME SECONDS_IN_MINUTE
+
+//glow plugs threshold temperature definitions
+#define TEMP_VERY_LOW             -25.0   // Very low temperature, requiring the maximum glow plug lamp time
+#define TEMP_MINIMUM_FOR_GLOW_PLUGS TEMP_COLD_ENGINE  // Minimum temperature, at which the lamp lights for the minimum time
+
+//glow plugs lamp time definitions
+#define MAX_LAMP_TIME             10      // Maximum lamp time in seconds
+#define MIN_LAMP_TIME             1       // Minimum lamp time in seconds
 
 #endif
 

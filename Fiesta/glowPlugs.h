@@ -28,8 +28,10 @@ private:
   int glowPlugsLampTime;
   unsigned long lastSecond;
   bool warmAfterStart;
+  bool initialized;
 
   void calculateGlowPlugsTime(float temp);
+  void calculateGlowPlugLampTime(float temp);
 };
 
 glowPlugs *getGlowPlugsInstance(void);
