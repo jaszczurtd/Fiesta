@@ -273,6 +273,12 @@ bool readHighValues(void *argument) {
       case F_PRESSURE:
         valueFields[a] = readBarPressure();
         break;
+      case F_CAR_SPEED:
+        valueFields[a] = getCurrentCarSpeed();
+        break;
+      case F_CALCULATED_ENGINE_LOAD:
+        valueFields[a] = getPercentageEngineLoad();
+        break;
     }
     if(reflectionValueFields[a] != valueFields[a]) {
         reflectionValueFields[a] = valueFields[a];
@@ -281,8 +287,6 @@ bool readHighValues(void *argument) {
         CAN_sendThrottleUpdate();
         CAN_sendTurboUpdate();
     }
-    valueFields[F_CAR_SPEED] = getCurrentCarSpeed();
-    valueFields[F_CALCULATED_ENGINE_LOAD] = getPercentageEngineLoad();
   }
 
   return true;
