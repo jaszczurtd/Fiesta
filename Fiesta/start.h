@@ -32,12 +32,12 @@
 #include "engineHeater.h"
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
-#include "engineFuel.h"
 #include "can.h"
 #include "obd-2.h"
 #include "vp37.h"
 #include "gps.h"
 #include "tests.h"
+#include "engineFuel.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16

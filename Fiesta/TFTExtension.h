@@ -8,14 +8,8 @@
 #include <Fonts/FreeSerif9pt7b.h>
 #include <tools.h>
 #include "hardwareConfig.h"
-#include "tempGauge.h"
-#include "simpleGauge.h"
-#include "pressureGauge.h"
-#include "start.h"
 #include "config.h"
-#include "engineFuel.h"
 #include "can.h"
-#include "sensors.h"
 #include "tests.h"
 #include "icons.h"
 
@@ -25,7 +19,6 @@
 #define SCREEN_W 320
 #define SCREEN_H 240
 
-#define TFT TFTExtension
 #define COLOR(c) ILI9341_##c
 
 //colors
@@ -60,6 +53,10 @@ void sansBoldWithPosAndColor(int x, int y, int color);
 void serif9ptWithColor(int color);
 
 };
+
+#ifndef TFT
+#define TFT TFTExtension
+#endif
 
 TFT *initTFT(void);
 TFT *returnTFTReference(void);
