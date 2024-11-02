@@ -148,12 +148,9 @@ void initialization(void) {
   turbo.init();
 
   getGlowPlugsInstance()->initGlowPlugsTime(coolant);
-
-  watchdog_feed();
-
   while(sec < secDest) {
-    getGlowPlugsInstance()->process();
     watchdog_feed();
+    getGlowPlugsInstance()->process();
     sec = getSeconds();
   }
 
@@ -294,13 +291,15 @@ void looper(void) {
   statusVariable0 = 0;
   updateWatchdogCore0();
 
+  statusVariable0 = 1;
+  getGlowPlugsInstance()->process();
+
+  statusVariable0 = 2;
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
     tight_loop_contents();
     return;
   }
-
-  statusVariable0 = 1;
 
   generalTimer.tick();
   if(lastThreadSeconds < getSeconds()) {
@@ -308,11 +307,9 @@ void looper(void) {
 
     deb("thread is alive, active tasks: %d", generalTimer.size());
   }
-  statusVariable0 = 2;
+  statusVariable0 = 3;
   drawHighImportanceValuesIfChanged();
   obdLoop();
-  statusVariable0 = 3;
-  getGlowPlugsInstance()->process();
   statusVariable0 = 4;
   getFanInstance()->process();
   statusVariable0 = 5;

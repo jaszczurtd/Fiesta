@@ -3,11 +3,12 @@
 
 #include <tools.h>
 
+#include "TFTExtension.h"
+
 #include "config.h"
 #include "start.h"
 #include "sensors.h"
 #include "tests.h"
-#include "TFTExtension.h"
 
 //fuel value read without average calculation
 //#define JUST_RAW_FUEL_VAL
@@ -31,16 +32,43 @@
 #define FUEL_BOX_COLOR 0xBDF7
 #define FUEL_FILL_COLOR 0x9CD3
 
-float readFuel(void);
-void initFuelMeasurement(void);
+class FuelGauge {
+public:
+  FuelGauge();
+  void init(void);
+  float readFuel(void);
+  void redraw(void);
+  void drawFuelEmpty(void);
+  void showFuelAmount(int currentVal, int maxVal);
+  void drawChangeableFuelContent(int w, int fh, int y);
 
-//gauge
-int f_getWidth(void);
-int f_getBaseX(void);
-int f_getGaugePos(void);
+private:
+  int getBaseX(void);
+  int getBaseY(void);
+  int getWidth(void);
+  int getGaugePos(void);
+  
+  bool f_drawOnce = true; 
+  int currentFuelWidth = 0;
+  bool fullRedrawNeeded = false;
+
+  int measuredValues[FUEL_MAX_SAMPLES];
+  int measuedValuesIndex = 0;
+  int lastResult = FUEL_INIT_VALUE;
+  int nextMeasurement = 0;
+  int fuelMeasurementTime = 0;
+  long measurements = 0;
+
+  int emptyMessageWidth;
+  int emptyMessageHeight;
+
+  int lastWidth = 0;
+};
+
 void redrawFuel(void);
-void drawFuelEmpty(void);
+float readFuel(void);
 void showFuelAmount(int currentVal, int maxVal);
-void drawChangeableFuelContent(int w, int fh, int y);
+void initFuelMeasurement(void);
+void drawFuelEmpty(void);
 
 #endif
