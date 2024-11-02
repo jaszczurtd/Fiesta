@@ -10,6 +10,7 @@
 #ifdef PICO_W
 #include <WiFi.h>
 #endif
+#include <ADS1X15.h>
 
 #include "start.h"
 #include "hardwareConfig.h"
@@ -17,7 +18,6 @@
 
 #include "hardware/pwm.h"
 #include "hardware/gpio.h"
-#include <ADS1X15.h>
 
 typedef struct {
   uint32_t pwmInitted;
