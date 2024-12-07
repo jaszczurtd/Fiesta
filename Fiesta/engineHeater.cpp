@@ -41,7 +41,7 @@ void engineHeater::process(void) {
     heaterHiEnabled = false;
   } else {
 
-    if(coolant <= (TEMP_HEATER_STOP / 2)) {
+    if(coolant <= int(float(TEMP_HEATER_STOP) / 1.5)) {
       heaterLoEnabled = heaterHiEnabled = true;
     } else {
       heaterLoEnabled = true;
