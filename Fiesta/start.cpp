@@ -150,6 +150,7 @@ void initialization(void) {
   getGlowPlugsInstance()->initGlowPlugsTime(coolant);
   while(sec < secDest) {
     watchdog_feed();
+    getGlowPlugsInstance()->process();
     sec = getSeconds();
   }
 
