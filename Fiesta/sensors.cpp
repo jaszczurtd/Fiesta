@@ -484,3 +484,26 @@ float getVP37FuelTemperature(void) {
   return roundfWithPrecisionTo(val, 1);
 }
 
+unsigned char readKeyboard(void) {
+  unsigned char pinStates = 0xFF; 
+  
+  m_mutex_enter_blocking(i2cMutex);
+
+  Wire.beginTransmission(I2C_KEYBOARD);
+  bool notFound = Wire.endTransmission();
+
+  if (notFound) {
+    derr("Keyboard not found");
+  } else {
+    Wire.requestFrom(I2C_KEYBOARD, 1); 
+    if (Wire.available()) {
+      pinStates = Wire.read(); 
+    }
+  }
+
+  m_mutex_exit(i2cMutex);
+
+  return pinStates;
+}
+
+

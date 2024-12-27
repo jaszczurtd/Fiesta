@@ -2,10 +2,8 @@
 #include "start.h"
 
 static unsigned long alertsStartSecond = 0;
-static unsigned long lastThreadSeconds = 0;
 static Timer generalTimer;
-static Turbo turbo;
-static VP37Pump injectionPump;
+static EngineOperation engineOperation;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -45,8 +43,6 @@ void initialization(void) {
 
   debugInit();
  
-  initTests();
-
   //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
   initI2C();
@@ -140,12 +136,8 @@ void initialization(void) {
   #endif //INC_FREERTOS_H
   #endif //DEBUG_SCREEN
 
-#ifdef VP37
-  injectionPump.init();
-#endif
+  engineOperation.init();
   watchdog_feed();
-
-  turbo.init();
 
   getGlowPlugsInstance()->initGlowPlugsTime(coolant);
   while(sec < secDest) {
@@ -168,6 +160,8 @@ void initialization(void) {
   
   softInitDisplay(NULL);
   tft->fillScreen(ICONS_BG_COLOR);
+
+  initTests();
 
   #ifdef DEBUG_SCREEN
   debugFunc();
@@ -302,11 +296,8 @@ void looper(void) {
   }
 
   generalTimer.tick();
-  if(lastThreadSeconds < getSeconds()) {
-    lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
+  engineOperation.tickPumpTimer();
 
-    deb("thread is alive, active tasks: %d", generalTimer.size());
-  }
   statusVariable0 = 3;
   drawHighImportanceValuesIfChanged();
   obdLoop();
@@ -320,10 +311,9 @@ void looper(void) {
   CAN_updaterecipients_02();
   statusVariable0 = 8;
 
-#ifdef VP37
-  injectionPump.showDebug();
-#endif
-  turbo.showDebug();
+  engineOperation.showDebug();
+
+  tickTests();
 
   tight_loop_contents();
   m_delay(CORE_OPERATION_DELAY);  
@@ -353,14 +343,8 @@ void looper1(void) {
   }
 
   statusVariable1 = 1;
-  turbo.process();
+  engineOperation.process();
   statusVariable1 = 2;
-#ifdef VP37
-  injectionPump.process();
-#else
-  getRPMInstance()->process();
-#endif
-  statusVariable1 = 3;
 
   tight_loop_contents();
 }

@@ -1,0 +1,32 @@
+#ifndef VP37_DEFS
+#define VP37_DEFS
+
+#define VP37_PID_TIME_UPDATE 15
+#define VP37_PID_KP 0.095f
+#define VP37_PID_KI 0.0551f
+#define VP37_PID_KD 0.111f
+#define VP37_PID_TF 0.05f
+#define MAX_INTEGRAL 16000
+
+#define MIN_ADJUSTOMETER_VAL 10
+
+//TBD
+#define TIMING_PWM_MIN 200
+#define TIMING_PWM_MAX 1200
+
+//miliseconds
+#define VP37_FUEL_TEMP_UPDATE 500
+#define VP37_VOLTAGE_UPDATE 20
+
+#define VP37_CALIBRATION_MAX_PERCENTAGE 50
+
+#define VP37_PWM_MIN 378
+#define VP37_PWM_MAX PWM_RESOLUTION
+
+//for calibration
+#define VP37_ADJUST_TIMER 250
+
+#define VP37_ACCELERATION_MIN 0
+#define VP37_ACCELERATION_MAX 1024
+
+#endif

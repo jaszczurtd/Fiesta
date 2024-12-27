@@ -3,17 +3,11 @@
 
 #include <libConfig.h>
 
-#ifdef VP37
-#define VP37_PWM_FREQUENCY_HZ 160
+#define VP37_PWM_FREQUENCY_HZ 150
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 200
-#else
-#define VP37_PWM_FREQUENCY_HZ 300
-#define TURBO_PWM_FREQUENCY_HZ 300
-#define ANGLE_PWM_FREQUENCY_HZ 300
-#endif
 
-#define I2C_SPEED_HZ 200000
+#define I2C_SPEED_HZ 500000
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
@@ -118,5 +112,8 @@
 #define TFT_CS     4 //CS
 #define TFT_RST    -1 //reset
 #define TFT_DC     3 //A0
+
+//Keyboard (optional)
+#define I2C_KEYBOARD 0x24
 
 #endif

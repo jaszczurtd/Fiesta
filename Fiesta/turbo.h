@@ -7,9 +7,7 @@
 #include <pidController.h>
 
 #include "config.h"
-#include "start.h"
 #include "canDefinitions.h"
-#include "rpm.h"
 #include "hardwareConfig.h"
 #include "tests.h"
 #include "TFTExtension.h"
@@ -36,6 +34,9 @@ private:
   int lastTurboPWM;
   bool turboInitialized;
   float valueDesired;
+
+  int lastThrottle;
+  int currentPWMValue;
 
   int getRPMIndex(int rpm);
   int getTPSIndex(int tps);

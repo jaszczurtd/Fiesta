@@ -66,7 +66,7 @@
 #define TEMP_HEATER_STOP 80
 
 //minimum voltage amount - below this value no engine heater, or heated windows
-#define MINIMUM_VOLTS_AMOUNT 13.0
+#define MINIMUM_VOLTS_AMOUNT_FOR_HEATERS 13.0
 
 //how long heated windows should heats? (in seconds)
 #define HEATED_WINDOWS_TIME 4
@@ -120,9 +120,6 @@
 //min-max value for indicator
 #define VOLTS_MIN_VAL 11.6
 #define VOLTS_MAX_VAL 14.7
-
-//just a general timer tasks info message on main thread
-#define THREAD_CONTROL_SECONDS 5
 
 //for PID controller
 #define PID_MAX_INTEGRAL 16384

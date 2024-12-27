@@ -68,6 +68,7 @@ void Turbo::init() {
 }
 
 void Turbo::turboTest(void) {
+  /*
   unsigned long startTime = millis();
   int currentPWMValue = TURBO_ACTUATOR_LOW;
   int pwmStep = (STEP_PERCENT * TURBO_ACTUATOR_HIGH) / 100;
@@ -82,9 +83,22 @@ void Turbo::turboTest(void) {
       currentPWMValue = constrain(currentPWMValue, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
     }
   }
+  */
 }
 
 void Turbo::process() {
+
+  int thr = getThrottlePercentage();
+  if(lastThrottle != thr) {
+    lastThrottle = thr;
+
+    currentPWMValue = map(thr, 0, 100, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
+
+    valToPWM(PIO_TURBO, currentPWMValue);
+  }
+
+
+  /*
   if(!turboInitialized) {
     return;
   }
@@ -104,9 +118,15 @@ void Turbo::process() {
     valToPWM(PIO_TURBO, pwm);
     lastTurboPWM = pwm;
   }
+  */
 }
 
 void Turbo::showDebug(void) {
-  deb("actual:%f desired:%f valDesired:%f", valueFields[F_PRESSURE], valueFields[F_PRESSURE_DESIRED], valueDesired);
+
+  //deb("1800 %d", currentPWMValue);
+
+//  deb("currentPWMValue: %d", currentPWMValue);
+
+  //deb("turbo: actual:%f desired:%f valDesired:%f", valueFields[F_PRESSURE], valueFields[F_PRESSURE_DESIRED], valueDesired);
 }
 
