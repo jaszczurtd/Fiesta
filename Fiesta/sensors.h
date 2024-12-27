@@ -69,4 +69,6 @@ float getSystemSupplyVoltage(void);
 int getVP37Adjustometer(void);
 float getVP37FuelTemperature(void);
 
+unsigned char readKeyboard(void);
+
 #endif

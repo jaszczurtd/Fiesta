@@ -52,7 +52,7 @@ void heatedWindshields::disableHeatedWindows(void) {
 void heatedWindshields::process(void) {
 
   float volts = valueFields[F_VOLTS];
-  if(volts < MINIMUM_VOLTS_AMOUNT) {
+  if(volts < MINIMUM_VOLTS_AMOUNT_FOR_HEATERS) {
       if(isHeatedWindowEnabled()) {
         disableHeatedWindows();
         return;
@@ -81,7 +81,7 @@ void heatedWindshields::process(void) {
 
       } else {
 
-        if(volts < MINIMUM_VOLTS_AMOUNT) {
+        if(volts < MINIMUM_VOLTS_AMOUNT_FOR_HEATERS) {
           deb("voltage too low to enable heated windshield");
           return;
         }
@@ -94,8 +94,8 @@ void heatedWindshields::process(void) {
         deb("enable heated windshield");
 
         //if not enough energy, disable heated windshield
-        float volts = valueFields[F_VOLTS];
-        if(volts < MINIMUM_VOLTS_AMOUNT) {
+        volts = valueFields[F_VOLTS];
+        if(volts < MINIMUM_VOLTS_AMOUNT_FOR_HEATERS) {
           deb("low voltage, disabling heated windshield");   
           disableHeatedWindows();
         }

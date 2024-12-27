@@ -27,17 +27,18 @@
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "rpm.h"
-#include "turbo.h"
 #include "engineFan.h"
 #include "engineHeater.h"
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
 #include "can.h"
 #include "obd-2.h"
-#include "vp37.h"
 #include "gps.h"
 #include "tests.h"
 #include "engineFuel.h"
+#include "turbo.h"
+#include "vp37.h"
+#include "engineOperation.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16

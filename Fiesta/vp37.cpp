@@ -1,12 +1,6 @@
 
 #include "vp37.h"
-
-#define VP37_PID_TIME_UPDATE 20.0
-#define VP37_PID_KP 0.55
-#define VP37_PID_KI 0.18
-#define VP37_PID_KD 0.05
-#define MAX_INTEGRAL 16384
-#define VOLTAGE_THRESHOLD 1.0 //voltage fastforward/stabilization
+#include "vp37_defs.h"
 
 static Timer vp37MainTimer;
 
@@ -22,78 +16,97 @@ bool measureVoltage(void *arg) {
 
 VP37Pump::VP37Pump() { }
 
+VP37Pump::~VP37Pump() {
+  if(adjustController) {
+    delete adjustController;
+    adjustController = nullptr;
+  }
+}
+
 int VP37Pump::getMaxAdjustometerPWMVal(void) {
   return map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
 int VP37Pump::getAdjustometerStable(void) {
-  for(int a = 0; a < STABILITY_ADJUSTOMETER_TAB_SIZE; a++) {
-    adjustStabilityTable[a] = getVP37Adjustometer();
+  int sum = 0;
+  int minVal = INT_MAX; 
+  int maxVal = INT_MIN; 
+  int count = STABILITY_ADJUSTOMETER_TAB_SIZE;
+
+  for (int i = 0; i < count; i++) {
+    int value = getVP37Adjustometer();
+    sum += value;
+
+    if (value < minVal) {
+      minVal = value;
+    }
+    if (value > maxVal) {
+      maxVal = value;
+    }
   }
-  return getAverageFrom(adjustStabilityTable, STABILITY_ADJUSTOMETER_TAB_SIZE);
+
+  sum -= minVal;
+  sum -= maxVal;
+
+  return sum / (count - 2); 
 }
 
-void VP37Pump::initVP37(void) {
-  if(!vp37Initialized) {
-
-    lastThrottle = -1;
-    calibrationDone = false;
-    desiredAdjustometer = -1;
-    voltageCorrection = 0;
-    lastPWMval = -1;
-    finalPWM = VP37_PWM_MIN;
-
-    vp37MainTimer = timer_create_default();
-    measureFuelTemp(NULL);
-    measureVoltage(NULL);
-
-    adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, PID_MAX_INTEGRAL);
-
-    vp37MainTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
-    vp37MainTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
-
-    vp37Initialized = true; 
-  }
+void VP37Pump::applyDelay(void) {
+  m_delay(VP37_ADJUST_TIMER);
+  watchdog_feed();
 }
 
 int VP37Pump::makeCalibrationValue(void) {
-  m_delay(VP37_ADJUST_TIMER);
-  watchdog_feed();
+  //delay is not an issue here
+  applyDelay();
   int val = getAdjustometerStable();
-  m_delay(VP37_ADJUST_TIMER);
-  watchdog_feed();  
+  applyDelay();
   return val;
-}
-
-float VP37Pump::getCalibrationError(int from) {
-  return (float)((float)from * PERCENTAGE_ERROR / 100.0f);  
-}
-
-bool VP37Pump::isInRangeOf(float desired, float val) {
-  return (val >= (desired - (getCalibrationError(desired) / 2.0)) &&
-         val <= (desired + (getCalibrationError(desired) / 2.0)) );
 }
 
 void VP37Pump::init(void) {
 
-  if(calibrationDone) {
+  if(vp37Initialized) {
     return;
   }
-  initVP37();
 
-  VP37_ADJUST_MAX = VP37_ADJUST_MIDDLE = VP37_ADJUST_MIN = VP37_OPERATE_MAX = -1;
+  valToPWM(PIO_VP37_ANGLE, 0);
 
-  valToPWM(PIO_VP37_RPM, getMaxAdjustometerPWMVal());
-  VP37_ADJUST_MAX = percentToGivenVal(VP37_PERCENTAGE_LIMITER, makeCalibrationValue());
-  valToPWM(PIO_VP37_RPM, 0);
-  VP37_ADJUST_MIN = makeCalibrationValue();
-  VP37_ADJUST_MIDDLE = ((VP37_ADJUST_MAX - VP37_ADJUST_MIN) / 2) + VP37_ADJUST_MIN;
-  calibrationDone = VP37_ADJUST_MIDDLE > 0;
+  calibrationDone = false;
+  lastPWMval = -1;
+  finalPWM = VP37_PWM_MIN;
 
-  adjustController->setOutputLimits(VP37_ADJUST_MIN, VP37_ADJUST_MAX);
-  adjustController->setVoltageCompensation(VOLTAGE_THRESHOLD, 14.4);
+  if(!calibrationDone) {
+    makeVP37Calibration();
+  }
+
+  adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, MAX_INTEGRAL);
+  adjustController->setOutputLimits(vp37AdjustMin, vp37AdjustMax);
+  adjustController->setTf(VP37_PID_TF);
+
+  vp37MainTimer = timer_create_default();
+  measureFuelTemp(NULL);
+  measureVoltage(NULL);
+
+  vp37MainTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
+  vp37MainTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
+  updateVP37AdjustometerPosition();
+  desiredAdjustometer = -1;
+
+  vp37Initialized = true; 
 
   enableVP37(calibrationDone);
+}
+
+void VP37Pump::makeVP37Calibration(void) {
+  vp37AdjustMax = vp37AdjustMiddle = vp37AdjustMin = -1;
+
+  valToPWM(PIO_VP37_RPM, getMaxAdjustometerPWMVal());
+  vp37AdjustMax = makeCalibrationValue();
+  valToPWM(PIO_VP37_RPM, 0);
+  vp37AdjustMin = makeCalibrationValue();
+  vp37AdjustMiddle = ((vp37AdjustMax - vp37AdjustMin) / 2) + vp37AdjustMin;
+  calibrationDone = vp37AdjustMiddle > 0;
 }
 
 void VP37Pump::enableVP37(bool enable) {
@@ -105,68 +118,118 @@ bool VP37Pump::isVP37Enabled(void) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-float VP37Pump::calculateVP37PWMmax(float temperature) {
-  float base_temp = float(TEMP_BASE);
-  float base_factor = VP37_PWM_BASE_FACTOR;
-
-  float increment_per_degree = (base_factor / (float(TEMP_OPERATION) - base_temp)) / VP37_TEMP_LIMIT_FACTOR;
-
-  if (temperature > base_temp) {
-      base_factor += (temperature - base_temp) * increment_per_degree;
+void VP37Pump::VP37TickMainTimer(void) {
+  if(vp37Initialized) {
+    vp37MainTimer.tick();  
   }
-
-  return VP37_PWM_MIN * base_factor;
 }
 
-void VP37Pump::throttleCycle(void) {
-  float output, pwmValue;
+void VP37Pump::setInjectionTiming(int angle) {
+  angle = constrain(angle, 0, 100);
+  valToPWM(PIO_VP37_ANGLE, 
+    map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
+}
 
-  adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
-  output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer(), 
-                                                  valueFields[F_VOLTS]);
-
-  pwmValue = mapfloat(output, 
-                        VP37_ADJUST_MIN, VP37_ADJUST_MAX, 
-                        VP37_PWM_MIN, calculateVP37PWMmax(valueFields[F_FUEL_TEMP]));
-  finalPWM = pwmValue * adjustController->compensateVoltageThreshold(valueFields[F_VOLTS]);
-
-  if(lastPWMval != finalPWM) {
-    lastPWMval = finalPWM;
-    valToPWM(PIO_VP37_RPM, finalPWM);
-  }
+void VP37Pump::updateVP37AdjustometerPosition(void) {
+  currentAdjustometerPosition = getVP37Adjustometer();  
 }
 
 void VP37Pump::process(void) {
-  if(vp37Initialized) {
-    if((VP37_ADJUST_MAX <= 0 || 
-      VP37_ADJUST_MIDDLE <= 0 || 
-      VP37_ADJUST_MIN <= 0) && 
-      getVP37Adjustometer() > MIN_ADJUSTOMETER_VAL) {
-        init();
-        lastThrottle = desiredAdjustometer = -1;
+  if (vp37Initialized) {
+    if(currentAdjustometerPosition < MIN_ADJUSTOMETER_VAL) {
+      updateVP37AdjustometerPosition();
     }
 
-    vp37MainTimer.tick();  
+    if ((vp37AdjustMax <= 0 || 
+         vp37AdjustMiddle <= 0 || 
+         vp37AdjustMin <= 0) && 
+         currentAdjustometerPosition > MIN_ADJUSTOMETER_VAL) {
+      makeVP37Calibration();
+      updateVP37AdjustometerPosition();
+      desiredAdjustometer = currentAdjustometerPosition;
+    }
 
     int rpm = int(valueFields[F_RPM]);
-    if(rpm > RPM_MAX_EVER) {
+    if (rpm > RPM_MAX_EVER) {
+      vp37Initialized = false;
       enableVP37(false);
       derr("RPM was too high! (%d)", rpm);
       return;
     }
 
-    int thr = getThrottlePercentage();
-    if(lastThrottle != thr || desiredAdjustometer < 0) {
-      lastThrottle = thr;
-      desiredAdjustometer = map(thr, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX);
-    }
+    adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
 
-    throttleCycle();
+    updateVP37AdjustometerPosition();
+    pidErr = desiredAdjustometer - currentAdjustometerPosition;
+
+    float pidOutput = adjustController->updatePIDcontroller(pidErr);
+    float normalized = (pidOutput - vp37AdjustMin) / (vp37AdjustMax - vp37AdjustMin);
+    finalPWM = VP37_PWM_MIN + normalized * (VP37_PWM_MAX - VP37_PWM_MIN);
+    finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
+
+    if (lastPWMval != finalPWM) {
+      lastPWMval = finalPWM;
+      valToPWM(PIO_VP37_RPM, finalPWM);
+    }
   }
 }
 
+void VP37Pump::setVP37Throttle(int accel) {
+  if(!calibrationDone) {
+    derr("Calibration not done!");
+    return;
+  }
+  accel = constrain(accel, VP37_ACCELERATION_MIN, VP37_ACCELERATION_MAX);
+
+  desiredAdjustometer = map(accel, 
+                            VP37_ACCELERATION_MIN, VP37_ACCELERATION_MAX, 
+                            vp37AdjustMin, vp37AdjustMax);
+}
+
+int VP37Pump::getMinVP37ThrottleValue(void) {
+  return VP37_ACCELERATION_MIN;
+}
+int VP37Pump::getMaxVP37ThrottleValue(void) {
+  return VP37_ACCELERATION_MAX;
+}
+
+void VP37Pump::setVP37PID(float kp, float ki, float kd, bool shouldTriggerReset) {
+  if(adjustController != nullptr) {
+    adjustController->setKp(kp);
+    adjustController->setKi(ki);
+    adjustController->setKd(kd);
+    if(shouldTriggerReset) {
+      adjustController->reset();
+      lastPWMval = -1;
+      finalPWM = VP37_PWM_MIN;
+    }
+  }
+}
+
+void VP37Pump::getVP37PIDValues(float *kp, float *ki, float *kd) {
+  if(adjustController != nullptr) {
+    *kp = adjustController->getKp();
+    *ki = adjustController->getKi();
+    *kd = adjustController->getKd();
+  }
+}
+
+int VP37Pump::getVP37PIDTimeUpdate(void) {
+  return VP37_PID_TIME_UPDATE;
+}
+
 void VP37Pump::showDebug(void) {
-  deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
-      getVP37Adjustometer(), valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], (int)finalPWM,
-      (int)voltageCorrection);
+
+#ifdef DEBUG_NORMAL
+  deb("max:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %d %.2f/%.2f/%.2f", getVP37AdjustMax(), 
+      desiredAdjustometer, currentAdjustometerPosition, valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], 
+      (int)finalPWM, pidErr,
+      adjustController->getKp(), adjustController->getKi(), adjustController->getKd());
+#endif
+
+  deb("%d %d %d %d %d %d %f %f %f", finalPWM,
+                              vp37AdjustMax, desiredAdjustometer, currentAdjustometerPosition, pidErr,
+                              (int)valueFields[F_FUEL_TEMP],
+                              adjustController->getKp(), adjustController->getKi(), adjustController->getKd());
+
 }

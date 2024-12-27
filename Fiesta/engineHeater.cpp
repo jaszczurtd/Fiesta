@@ -35,13 +35,13 @@ void engineHeater::process(void) {
   if(coolant > TEMP_HEATER_STOP ||
     getFanInstance()->isFanEnabled() ||
     getGlowPlugsInstance()->isGlowPlugsHeating() ||
-    volts < MINIMUM_VOLTS_AMOUNT ||
+    volts < MINIMUM_VOLTS_AMOUNT_FOR_HEATERS ||
     engineRPM < RPM_MIN) {
     heaterLoEnabled = false;
     heaterHiEnabled = false;
   } else {
 
-    if(coolant <= (TEMP_HEATER_STOP / 2)) {
+    if(coolant <= int(float(TEMP_HEATER_STOP) / 1.5)) {
       heaterLoEnabled = heaterHiEnabled = true;
     } else {
       heaterLoEnabled = true;

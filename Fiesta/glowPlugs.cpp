@@ -103,7 +103,13 @@ void glowPlugs::process(void) {
     }
   }
 
-  deb("glowPlugsTime: %d %d", glowPlugsTime, glowPlugsLampTime);
+  if(glowPlugsTime > 0 || glowPlugsLampTime > 0) {
+    if(glowPlugsTime != lastglowPlugsTime || glowPlugsLampTime != lastglowPlugsLampTime) {
+      lastglowPlugsTime = glowPlugsTime;
+      lastglowPlugsLampTime = glowPlugsLampTime;
+      deb("glowPlugsTime: %d %d", glowPlugsTime, glowPlugsLampTime);
+    }
+  }
 
   if(glowPlugsTime >= 0) {
     if(getSeconds() != lastSecond) {
