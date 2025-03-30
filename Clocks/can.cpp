@@ -206,8 +206,12 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
+int getEngineRPM(void) {
+  return int(valueFields[F_RPM]);
+}
+
 bool isEngineRunning(void) {
-  return (int(valueFields[F_RPM]) != 0);
+  return (getEngineRPM() != 0);
 }
 
 bool isFanEnabled(void) {

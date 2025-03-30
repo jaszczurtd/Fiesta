@@ -16,6 +16,7 @@ void drawHighImportanceValuesIfChanged(void);
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
 static Timer generalTimer;
+static Cluster cluster;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -148,6 +149,8 @@ void loop_a(void) {
   }
 
   loopBuzzers();
+
+  cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
   m_delay(CORE_OPERATION_DELAY);  
   tight_loop_contents();

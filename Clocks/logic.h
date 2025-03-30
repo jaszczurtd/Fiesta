@@ -15,6 +15,7 @@
 #include "hardwareConfig.h"
 #include "can.h"
 #include "buzzer.h"
+#include "Cluster.h"
 
 void setup_a(void);
 void loop_a(void);
