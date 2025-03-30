@@ -23,4 +23,7 @@
 
 #define BUZZER 14
 
+#define SPEED_OUTPUT_PIN  12
+#define TACHO_OUTPUT_PIN  11
+
 #endif

@@ -244,10 +244,10 @@ void SimpleGauge::showSimpleGauge(void) {
       currentVal = int(valueFields[F_INTAKE_TEMP]);
       break;
     case SIMPLE_G_RPM:
-      currentVal = int(valueFields[F_RPM]);
+      currentVal = getEngineRPM();
       break;
     case SIMPLE_G_GPS:
-      currentVal = int(getCurrentCarSpeed());
+      currentVal = getCurrentCarSpeed();
       break;
     case SIMPLE_G_ECU:
       currentVal = isEcuConnected();
