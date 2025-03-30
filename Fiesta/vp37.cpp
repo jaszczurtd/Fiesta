@@ -2,25 +2,14 @@
 #include "vp37.h"
 #include "vp37_defs.h"
 
-static Timer vp37MainTimer;
-
-bool measureFuelTemp(void *arg) {
-  valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
-  return true;
-}
-
-bool measureVoltage(void *arg) {
-  valueFields[F_VOLTS] = getSystemSupplyVoltage();
-  return true;
-}
-
 VP37Pump::VP37Pump() { }
 
-VP37Pump::~VP37Pump() {
-  if(adjustController) {
-    delete adjustController;
-    adjustController = nullptr;
-  }
+void VP37Pump::measureFuelTemp(void) {
+  valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
+}
+
+void VP37Pump::measureVoltage(void) {
+  valueFields[F_VOLTS] = getSystemSupplyVoltage();
 }
 
 int VP37Pump::getMaxAdjustometerPWMVal(void) {
@@ -80,16 +69,30 @@ void VP37Pump::init(void) {
     makeVP37Calibration();
   }
 
-  adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, MAX_INTEGRAL);
-  adjustController->setOutputLimits(vp37AdjustMin, vp37AdjustMax);
-  adjustController->setTf(VP37_PID_TF);
+  adjustController.setKp(VP37_PID_KP);
+  adjustController.setKi(VP37_PID_KI);
+  adjustController.setKd(VP37_PID_KD);
+  adjustController.setMaxIntegral(MAX_INTEGRAL);
+
+  adjustController.setOutputLimits(vp37AdjustMin, vp37AdjustMax);
+  adjustController.setTf(VP37_PID_TF);
 
   vp37MainTimer = timer_create_default();
-  measureFuelTemp(NULL);
-  measureVoltage(NULL);
+  vp37MainTimer.every(VP37_FUEL_TEMP_UPDATE, [](void* ctx) -> bool {
+    auto* pump = static_cast<VP37Pump*>(ctx);
+    pump->measureFuelTemp();
+    return true;
+  }, this);
 
-  vp37MainTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
-  vp37MainTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
+  vp37MainTimer.every(VP37_VOLTAGE_UPDATE, [](void* ctx) -> bool {
+    auto* pump = static_cast<VP37Pump*>(ctx);
+    pump->measureVoltage();
+    return true;
+  }, this);
+
+  measureFuelTemp();
+  measureVoltage();
+
   updateVP37AdjustometerPosition();
   desiredAdjustometer = -1;
 
@@ -157,12 +160,12 @@ void VP37Pump::process(void) {
       return;
     }
 
-    adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
+    adjustController.updatePIDtime(VP37_PID_TIME_UPDATE);
 
     updateVP37AdjustometerPosition();
     pidErr = desiredAdjustometer - currentAdjustometerPosition;
 
-    float pidOutput = adjustController->updatePIDcontroller(pidErr);
+    float pidOutput = adjustController.updatePIDcontroller(pidErr);
     float normalized = (pidOutput - vp37AdjustMin) / (vp37AdjustMax - vp37AdjustMin);
     finalPWM = VP37_PWM_MIN + normalized * (VP37_PWM_MAX - VP37_PWM_MIN);
     finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
@@ -194,24 +197,20 @@ int VP37Pump::getMaxVP37ThrottleValue(void) {
 }
 
 void VP37Pump::setVP37PID(float kp, float ki, float kd, bool shouldTriggerReset) {
-  if(adjustController != nullptr) {
-    adjustController->setKp(kp);
-    adjustController->setKi(ki);
-    adjustController->setKd(kd);
-    if(shouldTriggerReset) {
-      adjustController->reset();
-      lastPWMval = -1;
-      finalPWM = VP37_PWM_MIN;
-    }
+  adjustController.setKp(kp);
+  adjustController.setKi(ki);
+  adjustController.setKd(kd);
+  if(shouldTriggerReset) {
+    adjustController.reset();
+    lastPWMval = -1;
+    finalPWM = VP37_PWM_MIN;
   }
 }
 
 void VP37Pump::getVP37PIDValues(float *kp, float *ki, float *kd) {
-  if(adjustController != nullptr) {
-    *kp = adjustController->getKp();
-    *ki = adjustController->getKi();
-    *kd = adjustController->getKd();
-  }
+  *kp = adjustController.getKp();
+  *ki = adjustController.getKi();
+  *kd = adjustController.getKd();
 }
 
 int VP37Pump::getVP37PIDTimeUpdate(void) {
@@ -224,12 +223,12 @@ void VP37Pump::showDebug(void) {
   deb("max:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %d %.2f/%.2f/%.2f", getVP37AdjustMax(), 
       desiredAdjustometer, currentAdjustometerPosition, valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], 
       (int)finalPWM, pidErr,
-      adjustController->getKp(), adjustController->getKi(), adjustController->getKd());
+      adjustController.getKp(), adjustController.getKi(), adjustController.getKd());
 #endif
 
   deb("%d %d %d %d %d %d %f %f %f", finalPWM,
                               vp37AdjustMax, desiredAdjustometer, currentAdjustometerPosition, pidErr,
                               (int)valueFields[F_FUEL_TEMP],
-                              adjustController->getKp(), adjustController->getKi(), adjustController->getKd());
+                              adjustController.getKp(), adjustController.getKi(), adjustController.getKd());
 
 }

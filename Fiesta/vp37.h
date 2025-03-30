@@ -17,12 +17,13 @@
 #define STABILITY_ADJUSTOMETER_TAB_SIZE 6
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-bool measureFuelTemp(void *arg);
-bool measureVoltage(void *arg);
-
 class VP37Pump : public EngineController {
 private:
-  PIDController *adjustController;
+  void measureFuelTemp(void);
+  void measureVoltage(void);
+
+  PIDController adjustController;
+  Timer<> vp37MainTimer;
 
   bool vp37Initialized;
   bool calibrationDone;
@@ -42,7 +43,6 @@ private:
 
 public:
   VP37Pump();
-  ~VP37Pump();
   void init() override;  
   void process() override;
   void enableVP37(bool enable);
