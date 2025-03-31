@@ -4,8 +4,8 @@
 cluster_s Cluster::speedometer;
 cluster_s Cluster::tachometer;
 
-static constexpr float SPEED_COEFFICIENT = 1.3425f;
-static constexpr float SPEED_OFFSET = -2.58f;
+static constexpr float SPEED_COEFFICIENT = 1.2884f;
+static constexpr float SPEED_OFFSET = 1.86f;
 
 static constexpr float RPM_COEFFICIENT = 0.0332143f;
 static constexpr float RPM_OFFSET = 2.14286f;
