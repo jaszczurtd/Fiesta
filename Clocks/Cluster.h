@@ -10,23 +10,24 @@
 
 typedef struct {
   volatile uint32_t half_period_us;  
-  bool state;
+  volatile bool state;
   uint pin;
-  uint freq;
+  volatile uint freq;
 } cluster_s;
 
 class Cluster {
 public:
   Cluster();
-  void update(int speed, int rpm);
+  void update(uint speed, uint rpm);
 
 private:
   static cluster_s speedometer;
   static cluster_s tachometer;
-  void init_output(uint pin, int value);
+  void init_output(uint pin);
   uint32_t calculate_period(uint freq);
-  uint calculate_freq_from_speed(float speed);
-  uint calculate_freq_from_rpm(float rpm);
+  uint calculate_freq_from_speed(uint speed);
+  uint calculate_freq_from_rpm(uint rpm);
+  void calculate_freq_half_period(uint pin, uint value);
 };
 
 
