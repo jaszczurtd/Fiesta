@@ -37,9 +37,9 @@ void TempGauge::redraw(void) {
 int TempGauge::getBaseX(void) {
   switch(mode) {
     case TEMP_GAUGE_COOLANT:
-      return 0;
+      return 8;
     case TEMP_GAUGE_OIL:
-      return BIG_ICONS_WIDTH;
+      return BIG_ICONS_WIDTH + 8;
   }
   return -1;
 }

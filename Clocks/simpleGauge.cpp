@@ -116,9 +116,9 @@ int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int
 int SimpleGauge::getBaseX(void) {
   switch(mode) {
     case SIMPLE_G_GPS:
-      return (SMALL_ICONS_WIDTH * 0);
+      return (SMALL_ICONS_WIDTH * 0) + 8;
     case SIMPLE_G_RPM:
-      return (SMALL_ICONS_WIDTH * 1);
+      return (SMALL_ICONS_WIDTH * 1) + 1;
     case SIMPLE_G_EGT:
       return (SMALL_ICONS_WIDTH * 2);
     case SIMPLE_G_INTAKE:
