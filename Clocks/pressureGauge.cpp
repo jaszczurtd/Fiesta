@@ -24,7 +24,7 @@ PressureGauge::PressureGauge(int mode) {
 int PressureGauge::getBaseX(void) {
   switch(mode) {
     case PRESSURE_G_TURBO:
-      return (BIG_ICONS_WIDTH * 2);
+      return (BIG_ICONS_WIDTH * 2) + 6;
     case PRESSURE_G_OIL:
       return (BIG_ICONS_WIDTH * 3);
   }

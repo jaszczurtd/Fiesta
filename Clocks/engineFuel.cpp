@@ -53,7 +53,7 @@ void EngineFuelGauge::redraw(void) {
 }
 
 int EngineFuelGauge::getBaseX(void) {
-    return (OFFSET * 2) + FUEL_WIDTH - 1;
+    return (OFFSET * 2) + FUEL_WIDTH + 4;
 }
 
 int EngineFuelGauge::getBaseY(void) {
