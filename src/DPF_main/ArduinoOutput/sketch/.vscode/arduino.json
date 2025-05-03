@@ -1,0 +1,9 @@
+#line 1 "C:\\development\\projects_git\\fiesta\\DPF_main\\DPF_Main\\.vscode\\arduino.json"
+{
+    "board": "rp2040:rp2040:rpipico",
+    "configuration": "flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk",
+    "port": "COM3",
+    "programmer": "rp2040:edbg",
+    "sketch": "DPF_main.ino",
+    "output": "../ArduinoOutput"
+}
