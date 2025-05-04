@@ -70,7 +70,7 @@ void PressureGauge::showPressureGauge(void) {
         current = valueFields[F_PRESSURE];
         break;
       case PRESSURE_G_OIL:
-        current = valueFields[F_OIL_PRESSURE];
+        current = getOilPressure();
         break;
     }
 

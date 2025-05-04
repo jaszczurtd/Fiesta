@@ -17,6 +17,13 @@ void initSPI(void) {
   SPI.setTX(PIN_MOSI); //MOSI
   SPI.setSCK(PIN_SCK); //SCK
   SPI.begin(true);
+
+  pinMode(OIL_OUTPUT_PIN, OUTPUT);
+  enableOilLamp(true);
+}
+
+void enableOilLamp(bool enable) {
+  digitalWrite(OIL_OUTPUT_PIN, enable);
 }
 
 void initBasicPIO(void) {

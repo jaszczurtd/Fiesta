@@ -20,7 +20,8 @@ enum {
   SIMPLE_G_GPS,
   SIMPLE_G_EGT,
   SIMPLE_G_VOLTS,
-  SIMPLE_G_ECU
+  SIMPLE_G_ECU,
+  SIMPLE_G_SPEED_AND_OIL
 };
 
 //text modes

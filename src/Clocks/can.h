@@ -20,6 +20,7 @@ bool updateCANrecipients(void *argument);
 bool canCheckConnection(void *message);
 bool isEcuConnected(void);
 bool isDPFConnected(void);
+bool isOilSpeedModuleConnected(void);
 bool isFanEnabled(void);
 bool isDPFRegenerating(void);
 float readFuel(void);
@@ -27,6 +28,7 @@ int getCurrentCarSpeed(void);
 bool isGPSAvailable(void);
 bool isEngineRunning(void);
 int getEngineRPM(void);
+float getOilPressure(void);
 
 #endif
 

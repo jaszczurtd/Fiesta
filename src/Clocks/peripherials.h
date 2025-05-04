@@ -23,6 +23,7 @@ extern float valueFields[];
 void setupOnboardLed(void);
 void initSPI(void);
 void initBasicPIO(void);
+void enableOilLamp(bool enable);
 int getThrottlePercentage(void);
 void lcdBrightness(int val);
 void setLEDColor(int ledColor);

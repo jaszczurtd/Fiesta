@@ -185,6 +185,9 @@ bool callAtEverySecond(void *arg) {
 }
 
 bool callAtEveryHalfSecond(void *arg) {
+
+  enableOilLamp((getOilPressure() < MIN_OIL_PRESSURE));
+
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
   //draw changes of medium importance values
@@ -264,6 +267,7 @@ void loop_b(void) {
 bool updateValsForDebug(void *arg) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
+  deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
 
   return true;
 }
