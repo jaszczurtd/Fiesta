@@ -113,5 +113,7 @@
 
 #define MAX_RETRIES 15
 
+#define MIN_OIL_PRESSURE 0.2
+
 #endif
 

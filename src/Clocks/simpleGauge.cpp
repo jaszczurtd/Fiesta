@@ -8,6 +8,7 @@ SimpleGauge gps_g = SimpleGauge(SIMPLE_G_GPS);
 SimpleGauge egt_g = SimpleGauge(SIMPLE_G_EGT);
 SimpleGauge volts_g = SimpleGauge(SIMPLE_G_VOLTS);
 SimpleGauge ecu_g = SimpleGauge(SIMPLE_G_ECU);
+SimpleGauge oil_speed_g = SimpleGauge(SIMPLE_G_SPEED_AND_OIL);
 
 void redrawSimpleGauges(void) {
   engineLoad_g.redraw();
@@ -35,6 +36,7 @@ void showSimpleGauges(void) {
 
 void showECUConnectionGauge(void) {
   ecu_g.showSimpleGauge();
+  oil_speed_g.showSimpleGauge();
 }
 
 void showEGTGauge(void) {
@@ -56,10 +58,19 @@ SimpleGauge::SimpleGauge(int mode) {
   drawOnce = true;
   resetCurrentEGTMode();
   lastV1 = lastV2 = C_INIT_VAL;
-  if(mode == SIMPLE_G_ECU) {
-    lastShowedVal = isEcuConnected();
-  } else {
-    lastShowedVal = C_INIT_VAL;
+
+  switch(mode) {
+    case SIMPLE_G_ECU:
+      lastShowedVal = isEcuConnected();
+    break;
+
+    case SIMPLE_G_SPEED_AND_OIL:
+      lastShowedVal = isOilSpeedModuleConnected();
+    break;
+
+    default:
+      lastShowedVal = C_INIT_VAL;
+    break;
   }
 }
 
@@ -129,6 +140,8 @@ int SimpleGauge::getBaseX(void) {
       return 223;
     case SIMPLE_G_ECU:
       return SCREEN_W - (3 * ECU_CONNECTION_RADIUS);
+    case SIMPLE_G_SPEED_AND_OIL:
+      return SCREEN_W - (6 * ECU_CONNECTION_RADIUS);
   }
   return -1;
 }
@@ -143,6 +156,7 @@ int SimpleGauge::getBaseY(void) {
       return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2);
     case SIMPLE_G_VOLTS:
       return 185;
+    case SIMPLE_G_SPEED_AND_OIL:
     case SIMPLE_G_ECU:
       return SCREEN_H - (3 * ECU_CONNECTION_RADIUS);
   }
@@ -194,6 +208,12 @@ void SimpleGauge::showSimpleGauge(void) {
 
     case SIMPLE_G_ECU:
       if(!isEcuConnected()) {
+        draw = true;
+      }
+      break;
+
+    case SIMPLE_G_SPEED_AND_OIL:
+      if(!isOilSpeedModuleConnected()) {
         draw = true;
       }
       break;
@@ -252,6 +272,9 @@ void SimpleGauge::showSimpleGauge(void) {
     case SIMPLE_G_ECU:
       currentVal = isEcuConnected();
       break;
+    case SIMPLE_G_SPEED_AND_OIL:
+      currentVal = isOilSpeedModuleConnected();
+      break;
   }
 
   const char *format = NULL;
@@ -298,6 +321,7 @@ void SimpleGauge::showSimpleGauge(void) {
         lastShowedVal = currentVal;
         break;
 
+      case SIMPLE_G_SPEED_AND_OIL:
       case SIMPLE_G_ECU:
         draw = true;
         drawOnce = true;
@@ -397,12 +421,24 @@ void SimpleGauge::showSimpleGauge(void) {
     }
     break;
 
+    case SIMPLE_G_SPEED_AND_OIL:
     case SIMPLE_G_ECU: {
       x = getBaseX();
       y = getBaseY();
 
-      if(draw) {      
-        color = (seriousAlertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+      if(draw) {    
+
+        switch(mode) {
+          case SIMPLE_G_ECU:
+          default:
+            color = (seriousAlertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+          break;
+
+          case SIMPLE_G_SPEED_AND_OIL:
+            color = (!seriousAlertSwitch()) ? COLOR(PURPLE) : ICONS_BG_COLOR;
+          break;
+        }
+
         tft->fillCircle(x, y, ECU_CONNECTION_RADIUS, color);
         draw = false;
       }

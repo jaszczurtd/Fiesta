@@ -7,8 +7,13 @@ float valueFields[F_LAST];
 static unsigned char frameNumber = 0;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;
 static bool ecuConnected = false;
+static bool lastConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static bool dpfConnected = false;
+
+static unsigned long oilSpeedModuleMessages = 0, lastOilSpeedModuleMessages = 0; 
+static bool oilSpeedModuleConnected = false;
+static bool lastOilSpeedModuleConnected = false;
 
 // Incoming CAN-BUS message
 static long unsigned int canID = 0x000;
@@ -145,8 +150,8 @@ bool canMainLoop(void *message) {
         valueFields[F_INTAKE_TEMP] = buf[CAN_FRAME_ECU_UPDATE_INTAKE];
         valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                           buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
-        valueFields[F_IS_GPS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
-        valueFields[F_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
+        valueFields[F_GPS_IS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
+        valueFields[F_GPS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
       }
       break;
 
@@ -159,9 +164,12 @@ bool canMainLoop(void *message) {
       }
       break;
       
-      case CAN_ID_OIL_PRESURE: {
+      case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
+        oilSpeedModuleMessages++; oilSpeedModuleConnected = true;
+
         valueFields[F_OIL_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
                                                   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+        valueFields[F_ABS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED];
       }
       break;
 
@@ -184,20 +192,44 @@ bool isEcuConnected(void) {
   return ecuConnected;
 }
 
-static bool lastConnected = false;
+bool isOilSpeedModuleConnected(void) {
+  return oilSpeedModuleConnected;
+}
+
 bool canCheckConnection(void *message) {
+  oilSpeedModuleConnected = (oilSpeedModuleMessages != lastOilSpeedModuleMessages);
+  lastOilSpeedModuleMessages = oilSpeedModuleMessages;
+
   ecuConnected = (ecuMessages != lastEcuMessages);
   lastEcuMessages = ecuMessages;
 
   dpfConnected = (dpfMessages != lastDPFMessages);
   lastDPFMessages = dpfMessages;
 
+  if(lastOilSpeedModuleConnected != oilSpeedModuleConnected) {
+    lastOilSpeedModuleConnected = oilSpeedModuleConnected;
+
+    if(!lastOilSpeedModuleConnected) {
+      valueFields[F_ABS_CAR_SPEED] = 0.0;
+      valueFields[F_OIL_PRESSURE] = 0.0;
+    }
+  }
+
   if(lastConnected != ecuConnected) {
     lastConnected = ecuConnected;
 
     if(!ecuConnected) {
       for(int a = 0; a < F_LAST; a++) {
-        valueFields[a] = 0.0;
+
+        switch(a) {
+          case F_ABS_CAR_SPEED:
+          case F_OIL_PRESSURE:
+            break;
+          default:
+            valueFields[a] = 0.0;
+            break;
+        }
+
       }
     }
     triggerDrawHighImportanceValue(true);
@@ -231,9 +263,13 @@ float readFuel(void) {
 }
 
 int getCurrentCarSpeed(void) {
-  return int(valueFields[F_CAR_SPEED]);
+  return int(valueFields[F_ABS_CAR_SPEED]);
+}
+
+float getOilPressure(void) {
+  return valueFields[F_OIL_PRESSURE];  
 }
 
 bool isGPSAvailable(void) {
-  return valueFields[F_IS_GPS_AVAILABLE] > 0;
+  return valueFields[F_GPS_IS_AVAILABLE] > 0;
 }
