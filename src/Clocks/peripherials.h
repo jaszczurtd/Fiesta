@@ -15,9 +15,6 @@ enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE};
 
 extern float valueFields[];
 
-//in miliseconds, print values into serial
-#define DEBUG_UPDATE 3 * SECOND
-
 #define INITIAL_BRIGHTNESS ((1 << PWM_WRITE_RESOLUTION) - 1)
 
 void setupOnboardLed(void);

@@ -109,7 +109,7 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
 
     buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
-    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = valueFields[F_CAR_SPEED];
+    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = valueFields[F_GPS_CAR_SPEED];
     
     CAN.sendMsgBuf(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf); 
 
@@ -227,9 +227,10 @@ bool canMainLoop(void *argument) {
             }
             break;
 
-            case CAN_ID_OIL_PRESURE: {
+            case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
               valueFields[F_OIL_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                                                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+                                                        buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+              valueFields[F_ABS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED];
             }
             break;
 

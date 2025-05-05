@@ -8,4 +8,7 @@
 
 #define MAX_RETRIES 15
 
+//in miliseconds, print values into serial
+#define DEBUG_UPDATE 3 * SECOND
+
 #endif

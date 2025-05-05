@@ -64,11 +64,13 @@ bool updateCANrecipients(void *argument) {
 
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
-  unsigned short br = (unsigned short)valueFields[F_CLOCK_BRIGHTNESS];
-  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
-  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
+  int hi, lo;
+  floatToDec(valueFields[F_OIL_PRESSURE], &hi, &lo);
+  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (byte)hi;
+  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (byte)lo;      
+  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (byte)valueFields[F_ABS_CAR_SPEED];
 
-  CAN->sendMsgBuf(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, buf);
+  CAN->sendMsgBuf(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
 
   return true; 
 }
@@ -95,14 +97,8 @@ bool canMainLoop(void *message) {
         valueFields[F_INTAKE_TEMP] = buf[CAN_FRAME_ECU_UPDATE_INTAKE];
         valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                           buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
-        valueFields[F_IS_GPS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
-        valueFields[F_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
-      }
-      break;
-
-      case CAN_ID_OIL_PRESURE: {
-        valueFields[F_OIL_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                                                  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+        valueFields[F_GPS_IS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
+        valueFields[F_GPS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
       }
       break;
 
@@ -140,7 +136,7 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
-int getCurrentCarSpeed(void) {
-  return int(valueFields[F_CAR_SPEED]);
-}
+// int getCurrentCarSpeed(void) {
+//   return int(valueFields[F_CAR_SPEED]);
+// }
 
