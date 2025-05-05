@@ -15,7 +15,7 @@ static int64_t toggle_callback(alarm_id_t id, void *user_data) {
   if(data != nullptr) {
     gpio_put(data->pin, data->state);
     data->state = !data->state;
-    add_alarm_in_us(data->half_period_us, toggle_callback, user_data, false);
+    data->alarm = add_alarm_in_us(data->half_period_us, toggle_callback, user_data, false);
   }
   return 0;
 }
@@ -62,17 +62,40 @@ void Cluster::init_output(uint pin) {
   switch(pin) {
     case SPEED_OUTPUT_PIN:
       speedometer.pin = pin;
-      add_alarm_in_us(speedometer.half_period_us, toggle_callback, &speedometer, false);
+      speedometer.alarm = add_alarm_in_us(speedometer.half_period_us, toggle_callback, &speedometer, false);
     break;
 
     case TACHO_OUTPUT_PIN:
       tachometer.pin = pin;
-      add_alarm_in_us(tachometer.half_period_us, toggle_callback, &tachometer, false);
+      tachometer.alarm = add_alarm_in_us(tachometer.half_period_us, toggle_callback, &tachometer, false);
     break;
   }
 }
 
 void Cluster::update(uint speed, uint rpm) {
-  calculate_freq_half_period(SPEED_OUTPUT_PIN, speed);
-  calculate_freq_half_period(TACHO_OUTPUT_PIN, rpm);
+  if(speed < 1) {
+    if(speedometer.alarm != -1) {
+      cancel_alarm(speedometer.alarm);
+      speedometer.alarm = -1;
+      gpio_put(speedometer.pin, 0);
+    }
+  } else {
+    calculate_freq_half_period(SPEED_OUTPUT_PIN, speed);
+    if(speedometer.alarm == -1) {
+      speedometer.alarm = add_alarm_in_us(speedometer.half_period_us, toggle_callback, &speedometer, false);
+    }
+  }
+
+  if(rpm < 1) {
+    if(tachometer.alarm != -1) {
+      cancel_alarm(tachometer.alarm);
+      tachometer.alarm = -1;
+      gpio_put(tachometer.pin, 0);
+    }
+  } else {
+    calculate_freq_half_period(TACHO_OUTPUT_PIN, rpm);
+    if(tachometer.alarm == -1) {
+      tachometer.alarm = add_alarm_in_us(tachometer.half_period_us, toggle_callback, &tachometer, false);
+    }
+  }
 }

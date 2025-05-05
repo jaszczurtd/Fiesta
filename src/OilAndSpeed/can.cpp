@@ -150,9 +150,29 @@ bool canCheckConnection(void *message) {
 bool canSendLoop(void *arg) {
 
 #ifdef ABS_CAR_SPEED_PACKET_TEST
+  static int amountCounter = 0;
   static int lastSpeed = 0;
-  int speed = getRandomEverySomeMillis(4500, 200);
+  static unsigned long pauseUntil = 0;
+
+  unsigned long now = millis();  
+
+  if (pauseUntil != 0) {
+    if (now < pauseUntil) {
+      getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
+      return true; 
+    } else {
+      pauseUntil = 0; 
+    }
+  }
+
+  int speed = getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
   if(lastSpeed != speed) {
+    amountCounter++;
+    if(amountCounter == 4) {
+      amountCounter = 0;
+      speed = 0;
+      pauseUntil = now + ABS_CAR_SPEED_SEQUENCE_DELAY;
+    }
     lastSpeed = speed;
     deb("new speed: %d", speed);
     valueFields[F_ABS_CAR_SPEED] = speed;
