@@ -25,6 +25,7 @@ bool isFanEnabled(void);
 bool isDPFRegenerating(void);
 float readFuel(void);
 int getCurrentCarSpeed(void);
+int getGPSSpeed(void);
 bool isGPSAvailable(void);
 bool isEngineRunning(void);
 int getEngineRPM(void);

@@ -13,7 +13,8 @@
 #define DEBUG_UPDATE 3 * SECOND
 
 //#define ABS_CAR_SPEED_PACKET_TEST true
-#define OIL_PRESSURE_PACKET_TEST true
+#define ABS_CAR_SPEED_SEQUENCE_DELAY 4500
+//#define OIL_PRESSURE_PACKET_TEST true
 
 //tire dimensions:
 #define TIRE_DIMENSIONS "205/55 R16"

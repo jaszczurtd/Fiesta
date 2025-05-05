@@ -267,7 +267,7 @@ void SimpleGauge::showSimpleGauge(void) {
       currentVal = getEngineRPM();
       break;
     case SIMPLE_G_GPS:
-      currentVal = getCurrentCarSpeed();
+      currentVal = getGPSSpeed();
       break;
     case SIMPLE_G_ECU:
       currentVal = isEcuConnected();

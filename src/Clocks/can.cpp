@@ -266,6 +266,10 @@ int getCurrentCarSpeed(void) {
   return int(valueFields[F_ABS_CAR_SPEED]);
 }
 
+int getGPSSpeed(void) {
+  return int(valueFields[F_GPS_CAR_SPEED]);
+}
+
 float getOilPressure(void) {
   return valueFields[F_OIL_PRESSURE];  
 }
