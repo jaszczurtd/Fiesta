@@ -273,7 +273,7 @@ bool readHighValues(void *argument) {
       case F_PRESSURE:
         valueFields[a] = readBarPressure();
         break;
-      case F_CAR_SPEED:
+      case F_GPS_CAR_SPEED:
         valueFields[a] = getCurrentCarSpeed();
         break;
       case F_CALCULATED_ENGINE_LOAD:

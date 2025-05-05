@@ -115,5 +115,8 @@
 
 #define MIN_OIL_PRESSURE 0.2
 
+//in miliseconds, print values into serial
+#define DEBUG_UPDATE 3 * SECOND
+
 #endif
 

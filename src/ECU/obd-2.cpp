@@ -195,7 +195,7 @@ void obdReq(byte *data){
     }
     else if(pid == VEHICLE_SPEED){    // Vehicle speed
       txData[0] = 0x03;
-      txData[3] = int(valueFields[F_CAR_SPEED]);
+      txData[3] = int(valueFields[F_ABS_CAR_SPEED]);
       tx = true;
     }
     else if(pid == INTAKE_TEMP ||

@@ -93,7 +93,7 @@ bool isGPSAvailable(void) {
       isavail = false;
     }
   }
-  valueFields[F_IS_GPS_AVAILABLE] = isavail;
+  valueFields[F_GPS_IS_AVAILABLE] = isavail;
   return isavail;
 }
 

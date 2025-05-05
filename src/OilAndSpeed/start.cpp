@@ -1,6 +1,8 @@
 
 #include "start.h"
 
+bool updateValsForDebug(void *arg);
+
 static Timer generalTimer;
 
 NOINIT int statusVariable0;
@@ -26,6 +28,7 @@ void setupTimers(void) {
   setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
 }
 
 void initialization(void) {
@@ -45,6 +48,7 @@ void initialization(void) {
 
   updateCANrecipients(NULL);
   canMainLoop(NULL);
+  updateValsForDebug(NULL);
 
   watchdog_feed();
   setupTimers();
@@ -89,4 +93,11 @@ void looper1() {
 
   m_delay(CORE_OPERATION_DELAY);  
   tight_loop_contents();
+}
+
+bool updateValsForDebug(void *arg) {
+
+  deb("ECU:%s", isEcuConnected() ? "on" : "off");
+
+  return true;
 }
