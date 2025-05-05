@@ -14,7 +14,6 @@
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
 
-#define SPEED_INPUT_PIN  12
-#define TACHO_INPUT_PIN  11
+#define ABS_INPUT_PIN  14
 
 #endif

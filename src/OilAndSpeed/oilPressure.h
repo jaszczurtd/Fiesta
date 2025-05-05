@@ -3,6 +3,6 @@
 
 #include "can.h"
 #include "speed.h"
-
+#include "config.h"
 
 #endif

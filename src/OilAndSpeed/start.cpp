@@ -29,13 +29,13 @@ void setupTimers(void) {
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
+  setupTimerWith(CAN_MAIN_LOOP_SEND_INTERVAL, canSendLoop);
 }
 
 void initialization(void) {
   debugInit();
   setupOnboardLed();
   initBasicPIO();
-
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
@@ -52,6 +52,8 @@ void initialization(void) {
 
   watchdog_feed();
   setupTimers();
+  setupSpeedometer();
+
   setStartedCore0();
 }
 
@@ -70,6 +72,7 @@ void looper() {
   statusVariable0 = 1;
 
   generalTimer.tick();
+  onImpulseTranslating();
 
   m_delay(CORE_OPERATION_DELAY);  
   tight_loop_contents();
@@ -97,7 +100,7 @@ void looper1() {
 
 bool updateValsForDebug(void *arg) {
 
-  deb("ECU:%s", isEcuConnected() ? "on" : "off");
+  deb("ECU:%s, circumference: %f ", isEcuConnected() ? "on" : "off", getCircumference());
 
   return true;
 }
