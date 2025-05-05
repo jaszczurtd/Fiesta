@@ -91,6 +91,17 @@ bool canMainLoop(void *message) {
     lastFrame = buf[CAN_FRAME_NUMBER];
 
     switch(canID) {
+
+      case CAN_ID_ECU_UPDATE_01:
+      case CAN_ID_DPF:
+      case CAN_ID_LUMENS:
+      case CAN_ID_CLOCK_BRIGHTNESS:
+      case CAN_ID_RPM:
+      case CAN_ID_THROTTLE:
+      case CAN_ID_ECU_UPDATE_03:
+      case CAN_ID_TURBO_PRESSURE:
+        break;
+
       case CAN_ID_ECU_UPDATE_02: {
         ecuMessages++; ecuConnected = true;
 
@@ -136,7 +147,32 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
-// int getCurrentCarSpeed(void) {
-//   return int(valueFields[F_CAR_SPEED]);
-// }
+bool canSendLoop(void *arg) {
+
+#ifdef ABS_CAR_SPEED_PACKET_TEST
+  static int lastSpeed = 0;
+  int speed = getRandomEverySomeMillis(4500, 200);
+  if(lastSpeed != speed) {
+    lastSpeed = speed;
+    deb("new speed: %d", speed);
+    valueFields[F_ABS_CAR_SPEED] = speed;
+    updateCANrecipients(NULL);
+  }
+#endif
+
+#ifdef OIL_PRESSURE_PACKET_TEST
+  static float lastPressure = 0.0f;
+  float pressure = getRandomFloatEverySomeMillis(4500, 4.0);
+  if(lastPressure != pressure) {
+    lastPressure = pressure;
+    deb("new pressure: %f", pressure);
+    valueFields[F_OIL_PRESSURE] = pressure;
+    updateCANrecipients(NULL);
+  }
+#endif
+
+
+  return true;
+}
+
 

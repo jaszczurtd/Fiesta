@@ -19,7 +19,6 @@ void initSPI(void) {
 
 void initBasicPIO(void) {
   analogWriteResolution(PWM_WRITE_RESOLUTION);
-
 }
 
 void setLEDColor(int ledColor) {
@@ -52,3 +51,4 @@ void setLEDColor(int ledColor) {
       break;
   }
 }
+
