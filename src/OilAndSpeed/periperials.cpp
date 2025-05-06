@@ -47,6 +47,9 @@ void setLEDColor(int ledColor) {
       pixels.setPixelColor(0, pixels.Color(30, 30, 30));
       pixels.show();
       break;
+    case PURPLE:
+      pixels.setPixelColor(0, pixels.Color(30, 0, 30));
+      pixels.show();
     default:
       break;
   }

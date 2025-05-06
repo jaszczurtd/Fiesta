@@ -6,7 +6,7 @@
 #include "oilPressure.h"
 #include "config.h"
 
-void setupSpeedometer(void);
+bool setupSpeedometer(void);
 void onImpulseTranslating(void);
 bool calculateCircumferenceMeters(const char *tireString, double correctionFactor);
 double getCircumference(void);

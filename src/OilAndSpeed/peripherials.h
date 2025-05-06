@@ -12,7 +12,7 @@
 
 #define IMPULSES_PER_ROTATION 48 
 
-enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE};
+enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE, PURPLE};
 
 void setupOnboardLed(void);
 void initSPI(void);

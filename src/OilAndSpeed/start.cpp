@@ -33,6 +33,8 @@ void setupTimers(void) {
 }
 
 void initialization(void) {
+  bool result = false;
+
   debugInit();
   setupOnboardLed();
   initBasicPIO();
@@ -43,8 +45,13 @@ void initialization(void) {
   }
 
   initSPI();
-
-  setLEDColor(canInit() ? RED: GREEN);
+  
+  result = canInit();
+  setLEDColor(result ? RED: GREEN);
+  if(result) {
+    deb("cannot setup CAN, exiting");
+    return;
+  }
 
   updateCANrecipients(NULL);
   canMainLoop(NULL);
@@ -52,7 +59,12 @@ void initialization(void) {
 
   watchdog_feed();
   setupTimers();
-  setupSpeedometer();
+  result = setupSpeedometer();
+  setLEDColor(result ? GREEN: YELLOW);
+  if(!result) {
+    deb("cannot setup speedometer, exiting");
+    return;
+  }
 
   setStartedCore0();
 }
@@ -100,7 +112,10 @@ void looper1() {
 
 bool updateValsForDebug(void *arg) {
 
-  deb("ECU:%s, circumference: %f ", isEcuConnected() ? "on" : "off", getCircumference());
+  deb("ECU:%s, cluster:%s, circumference: %f ", isEcuConnected() ? "on" : "off", 
+                                                isClusterConnected() ? "on" : "off",
+                                                getCircumference());
+  
 
   return true;
 }

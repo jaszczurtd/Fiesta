@@ -9,6 +9,8 @@ static unsigned long ecuMessages = 0, lastEcuMessages = 0;
 static bool ecuConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static bool dpfConnected = false;
+static unsigned long clusterMessages = 0, lastClusterMessages = 0;
+static bool clusterConnected = false;
 
 // Incoming CAN-BUS message
 static long unsigned int canID = 0x000;
@@ -94,12 +96,16 @@ bool canMainLoop(void *message) {
 
       case CAN_ID_ECU_UPDATE_01:
       case CAN_ID_DPF:
-      case CAN_ID_LUMENS:
       case CAN_ID_CLOCK_BRIGHTNESS:
       case CAN_ID_RPM:
       case CAN_ID_THROTTLE:
       case CAN_ID_ECU_UPDATE_03:
       case CAN_ID_TURBO_PRESSURE:
+        ecuMessages++; ecuConnected = true;
+        break;
+
+      case CAN_ID_LUMENS:
+        clusterMessages++; clusterConnected = true;
         break;
 
       case CAN_ID_ECU_UPDATE_02: {
@@ -122,26 +128,42 @@ bool canMainLoop(void *message) {
   return true;
 }
 
+bool isClusterConnected(void) {
+  return clusterConnected;
+}
+
 bool isEcuConnected(void) {
   return ecuConnected;
 }
 
-static bool lastConnected = false;
 bool canCheckConnection(void *message) {
+  static int lastColor = 0;
+  static bool state = false;
+
   ecuConnected = (ecuMessages != lastEcuMessages);
   lastEcuMessages = ecuMessages;
 
   dpfConnected = (dpfMessages != lastDPFMessages);
   lastDPFMessages = dpfMessages;
 
-  if(lastConnected != ecuConnected) {
-    lastConnected = ecuConnected;
+  clusterConnected = (clusterMessages != lastClusterMessages);
+  lastClusterMessages = clusterMessages;
 
-    if(!ecuConnected) {
-      for(int a = 0; a < F_LAST; a++) {
-        valueFields[a] = 0.0;
-      }
-    }
+  int color = GREEN;
+  if(!clusterConnected && ecuConnected) {
+    color = (state) ? GREEN : PURPLE;
+  }
+  if(clusterConnected && !ecuConnected) {
+    color = (state) ? GREEN : YELLOW;
+  }
+  if(!clusterConnected && !ecuConnected) {
+    color = (state) ? GREEN : RED;
+  }
+  
+  state = !state;
+  if(color != lastColor) {
+    lastColor = color;
+    setLEDColor(color);
   }
 
   return true;  
