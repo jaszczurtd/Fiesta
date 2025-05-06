@@ -21,6 +21,7 @@ void receivedCanMessage(void);
 bool updateCANrecipients(void *argument);
 bool canCheckConnection(void *message);
 bool isEcuConnected(void);
+bool isClusterConnected(void);
 bool isDPFConnected(void);
 bool isFanEnabled(void);
 bool isDPFRegenerating(void);

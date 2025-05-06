@@ -49,13 +49,14 @@ bool calculateCircumferenceMeters(const char *tireString, double correctionFacto
   return true;
 }
 
-void setupSpeedometer(void) {
+bool setupSpeedometer(void) {
   bool success = calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
   if(success) {
     attachInterrupt(digitalPinToInterrupt(ABS_INPUT_PIN), onImpulse, RISING);
-    return;
+    return success;
   }
   derr("error while calculating tire dimension");
+  return 0;
 }
 
 void onImpulse(void) {
