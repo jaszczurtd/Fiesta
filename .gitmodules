@@ -1,0 +1,6 @@
+[submodule "src/library/arduinoTools"]
+	path = src/library/arduinoTools
+	url = git@github.com:jaszczurtd/arduinoTools.git
+[submodule "src/library/canDefinitions"]
+	path = src/library/canDefinitions
+	url = git@github.com:jaszczurtd/canDefinitions.git
