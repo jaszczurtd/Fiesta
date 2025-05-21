@@ -1,14 +1,15 @@
 #include "speed.h"
 
-#define IMPULSES_PER_ROTATION 43 
+#define IMPULSES_PER_ROTATION 43
+#define CALC_INTERVAL 125
 
 void onImpulse(void);
 
 static volatile unsigned long impulseCount = 0;
 static unsigned long lastImpulseCount = 0;
 static unsigned long lastCalcTime = 0;
-static int lastKmph = 0;
 static double circumferenceMeters = 0.0f;
+
 
 double getCircumference(void) {
   return circumferenceMeters;
@@ -69,20 +70,19 @@ void onImpulseTranslating(void) {
   if(circumferenceMeters > 0) {
     unsigned long currentTime = millis();
 
-    if (currentTime - lastCalcTime >= 250) { //ms
+    if (currentTime - lastCalcTime >= CALC_INTERVAL) {
       noInterrupts(); 
       unsigned long count = impulseCount;
       interrupts();
-
-      //deb("count: %ld", count);
 
       unsigned long impulsesInInterval = count - lastImpulseCount;
       lastImpulseCount = count;
       lastCalcTime = currentTime;
 
-      float rotationsPerSecond = (impulsesInInterval * 2.0f) / IMPULSES_PER_ROTATION;
+      float intervalSec = CALC_INTERVAL / 1000.0f;
+      float rotationsPerSecond = (float)impulsesInInterval / IMPULSES_PER_ROTATION / intervalSec;
       float speed_mps = rotationsPerSecond * circumferenceMeters;
-      float speed_kph = speed_mps * 3.6f; // km/h
+      float speed_kph = speed_mps * 3.6f;
 
       if(valueFields[F_ABS_CAR_SPEED] != speed_kph) {
         valueFields[F_ABS_CAR_SPEED] = speed_kph;
@@ -91,3 +91,4 @@ void onImpulseTranslating(void) {
     }  
   }
 }
+
