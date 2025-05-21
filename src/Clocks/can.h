@@ -14,7 +14,7 @@
 extern float valueFields[];
 
 bool canInit(void);
-bool canMainLoop(void *message);
+bool canMainLoop(void);
 void receivedCanMessage(void);
 bool updateCANrecipients(void *argument);
 bool canCheckConnection(void *message);
