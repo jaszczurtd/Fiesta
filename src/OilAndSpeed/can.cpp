@@ -169,7 +169,19 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
+static float lastSpeed = 0.0;
+static float lastOilPressure = 0.0;
 bool canSendLoop(void *arg) {
+
+  if(lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
+    lastSpeed = valueFields[F_ABS_CAR_SPEED];
+    updateCANrecipients(nullptr);
+  }
+
+  if(lastOilPressure != valueFields[F_OIL_PRESSURE]) {
+    lastOilPressure = valueFields[F_OIL_PRESSURE];
+    updateCANrecipients(nullptr);
+  }
 
 #ifdef ABS_CAR_SPEED_PACKET_TEST
   static int amountCounter = 0;
