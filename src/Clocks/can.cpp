@@ -56,7 +56,7 @@ bool canInit(void) {
     CAN->setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
     pinMode(CAN_INT, INPUT); 
     attachInterrupt(digitalPinToInterrupt(CAN_INT), receivedCanMessage, FALLING);
-    canMainLoop(NULL);
+    canMainLoop();
   }
   return error;
 }
@@ -83,7 +83,7 @@ void receivedCanMessage(void) {
 }
 
 static byte lastFrame = 0;
-bool canMainLoop(void *message) {
+bool canMainLoop(void) {
   CAN->readMsgBuf(&canID, &len, buf);
   if(canID == 0 || len < 1) {
     return true;

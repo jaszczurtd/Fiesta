@@ -29,7 +29,6 @@ void setupTimers(void) {
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
-  setupTimerWith(CAN_MAIN_LOOP_SEND_INTERVAL, canSendLoop);
 }
 
 void initialization(void) {
@@ -85,6 +84,7 @@ void looper() {
 
   generalTimer.tick();
   onImpulseTranslating();
+  canSendLoop();
 
   m_delay(CORE_OPERATION_DELAY);  
   tight_loop_contents();

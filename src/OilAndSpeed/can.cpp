@@ -169,9 +169,9 @@ bool canCheckConnection(void *message) {
   return true;  
 }
 
-static float lastSpeed = 0.0;
-static float lastOilPressure = 0.0;
-bool canSendLoop(void *arg) {
+bool canSendLoop(void) {
+  static float lastSpeed = 0.0;
+  static float lastOilPressure = 0.0;
 
   if(lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
     lastSpeed = valueFields[F_ABS_CAR_SPEED];
@@ -212,6 +212,24 @@ bool canSendLoop(void *arg) {
     valueFields[F_ABS_CAR_SPEED] = speed;
     updateCANrecipients(NULL);
   }
+#endif
+
+#ifdef ABS_CAR_SPEED_PACKET_LINEAR_TEST
+  static int val = 20;
+  static unsigned long lastUpdate = 0;  
+
+  unsigned long current = millis();
+
+  if (current - lastUpdate >= ABS_CAR_SPEED_SEQUENCE_DELAY) {
+      lastUpdate = current;
+
+      val += 10;
+      if (val > 220) {
+          val = 20;
+      }
+  }
+
+  valueFields[F_ABS_CAR_SPEED] = val;
 #endif
 
 #ifdef OIL_PRESSURE_PACKET_TEST

@@ -29,7 +29,7 @@ float readFuel(void);
 bool isGPSAvailable(void);
 bool isEngineRunning(void);
 int getEngineRPM(void);
-bool canSendLoop(void *arg);
+bool canSendLoop(void);
 
 #endif
 

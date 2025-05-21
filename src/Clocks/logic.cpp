@@ -38,7 +38,6 @@ void setupTimers(void) {
   setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
   setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
-  setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
 }
 
@@ -102,12 +101,13 @@ void setup_a(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  updateCANrecipients(NULL);
-  canMainLoop(NULL);
   callAtEverySecond(NULL);
   callAtEveryHalfSecond(NULL);
   callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
+
+  updateCANrecipients(NULL);
+  canMainLoop();
 
   watchdog_feed();
 
@@ -150,6 +150,7 @@ void loop_a(void) {
 
   loopBuzzers();
 
+  canMainLoop();
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
   m_delay(CORE_OPERATION_DELAY);  

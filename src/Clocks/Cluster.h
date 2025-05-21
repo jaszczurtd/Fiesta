@@ -4,6 +4,10 @@
 #include <Arduino.h>
 #include <tools.h>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+
 #include "hardwareConfig.h"
 
 #include "hardware/timer.h"
