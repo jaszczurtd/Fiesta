@@ -1,5 +1,7 @@
 #include "speed.h"
 
+#define IMPULSES_PER_ROTATION 43 
+
 void onImpulse(void);
 
 static volatile unsigned long impulseCount = 0;
@@ -67,22 +69,24 @@ void onImpulseTranslating(void) {
   if(circumferenceMeters > 0) {
     unsigned long currentTime = millis();
 
-    if (currentTime - lastCalcTime >= 500) { //ms
+    if (currentTime - lastCalcTime >= 250) { //ms
       noInterrupts(); 
       unsigned long count = impulseCount;
       interrupts();
+
+      //deb("count: %ld", count);
 
       unsigned long impulsesInInterval = count - lastImpulseCount;
       lastImpulseCount = count;
       lastCalcTime = currentTime;
 
-      float rotationsPerSecond = (impulsesInInterval * 2.0f) / IMPULSES_PER_ROTATION; // 0.5 sec
-      float speed_mps = rotationsPerSecond * circumferenceMeters; // m/s
+      float rotationsPerSecond = (impulsesInInterval * 2.0f) / IMPULSES_PER_ROTATION;
+      float speed_mps = rotationsPerSecond * circumferenceMeters;
       float speed_kph = speed_mps * 3.6f; // km/h
 
-      if(lastKmph != speed_kph) {
-        lastKmph = speed_kph;
-        deb("Speed: %dkm/h", speed_kph);
+      if(valueFields[F_ABS_CAR_SPEED] != speed_kph) {
+        valueFields[F_ABS_CAR_SPEED] = speed_kph;
+        deb("Speed: %fkm/h %f %f", valueFields[F_ABS_CAR_SPEED], rotationsPerSecond, speed_mps);
       }
     }  
   }
