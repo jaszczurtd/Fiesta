@@ -10,7 +10,6 @@
 #include "config.h"
 #include "hardwareConfig.h"
 
-#define IMPULSES_PER_ROTATION 48 
 
 enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE, PURPLE};
 
