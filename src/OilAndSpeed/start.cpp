@@ -35,6 +35,7 @@ void initialization(void) {
   bool result = false;
 
   debugInit();
+  setDebugPrefix("OIL&SPD:");
   setupOnboardLed();
   initBasicPIO();
 

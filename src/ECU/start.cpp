@@ -44,6 +44,7 @@ void executeByWatchdog(int *values, int size) {
 void initialization(void) {
 
   debugInit();
+  setDebugPrefix("ECU:");
  
   initTests();
 

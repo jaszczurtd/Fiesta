@@ -51,6 +51,7 @@ void executeByWatchdog(int *values, int size) {
 void setup_a(void) {
 
   debugInit();
+  setDebugPrefix("Clocks:");
   setupOnboardLed();
   initBasicPIO();
 
