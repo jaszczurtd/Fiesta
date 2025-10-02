@@ -26,6 +26,9 @@ public:
 private:
   int glowPlugsTime;
   int glowPlugsLampTime;
+  int lastGlowPlugsTime;
+  int lastGlowPlugsLampTime;  
+
   unsigned long lastSecond;
   bool warmAfterStart;
   bool initialized;

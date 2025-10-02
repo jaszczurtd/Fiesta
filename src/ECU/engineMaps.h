@@ -2,9 +2,11 @@
 #ifndef ENGINE_MAPS
 #define ENGINE_MAPS
 
-#define RPM_ROWS 9
-#define TPS_COLUMNS 21  //TPS position in 5% increments from 0% to 100%
+#include <tools.h>
 
-extern float boostMap[RPM_ROWS][TPS_COLUMNS];
+#define RPM_PRESCALERS 8
+#define N75_PERCENT_VALS 10
+
+extern int RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS];
 
 #endif

@@ -19,28 +19,32 @@
 
 //#define JUST_TEST_BY_THROTTLE
 
-#define MIN_TPS 0    // 0%
-#define MAX_TPS 100  // 100%
 
-#define TEST_DURATION_MS 1000 
-#define PWM_MIN_PERCENT 0
-#define PWM_MAX_PERCENT 100 
-#define STEP_PERCENT 5
-#define UPDATE_INTERVAL_MS 50
+#define SOLENOID_UPDATE_TIME 700
+#define PRESSURE_LIMITER_FACTOR 2
+#define MIN_TEMPERATURE_CORRECTION 30
 
 class Turbo : public EngineController {
 private:
 
-  PIDController *turboController;
-  float minBoost, maxBoost;
-  int lastTurboPWM;
-  bool turboInitialized;
-  float valueDesired;
+  unsigned long lastSolenoidUpdate = 0;
 
-  int getRPMIndex(int rpm);
-  int getTPSIndex(int tps);
-  float getBoostPressure(int rpm, int tps);
-  int scaleTurboValues(float value, bool reverse);
+  int scaleTurboValues(int value);
+  int correctPressureFactor(void);
+
+  int engineThrottlePercentageValue;
+  int posThrottle;
+  bool pedalPressed;
+  int n75;
+  int pressurePercentage;
+  int RPM_index;
+
+  int lastThrottlePos;
+  int lastPosThrottle;
+  bool lastPedalPressed;
+  int lastRPM_index;
+  int lastPressurePercentage;
+  int lastN75;
 
 public:
   Turbo();
@@ -48,6 +52,8 @@ public:
   void process() override;
   void turboTest(void);
   void showDebug(void);
+
+
 };
 
 #endif // TURBO_CONTROL_H
