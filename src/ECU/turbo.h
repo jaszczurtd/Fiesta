@@ -34,9 +34,7 @@ private:
 
   int engineThrottlePercentageValue;
   int posThrottle;
-  bool pedalPressed;
   int n75;
-  int pressurePercentage;
   int RPM_index;
 
   int lastThrottlePos;

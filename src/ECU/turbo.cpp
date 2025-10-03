@@ -34,8 +34,8 @@ void Turbo::process() {
 
   engineThrottlePercentageValue = getThrottlePercentage();
   posThrottle = (engineThrottlePercentageValue / 10);
-  pedalPressed = false;
-  pressurePercentage = 0;
+  bool pedalPressed = false;
+  bool pressurePercentage = 0;
 
 #ifdef JUST_TEST_BY_THROTTLE
   engineThrottlePercentageValue = scaleTurboValues(engineThrottlePercentageValue);
@@ -116,16 +116,17 @@ void Turbo::showDebug(void) {
     lastPosThrottle = posThrottle;
     pr = true;
   }
-  if(pedalPressed != lastPedalPressed) {
-    lastPedalPressed = pedalPressed;
+  bool pp = getThrottlePercentage() > 0;
+  if(pp != lastPedalPressed) {
+    lastPedalPressed = pp;
     pr = true;
   }
   if(RPM_index != lastRPM_index) {
     lastRPM_index = RPM_index;
     pr = true;
   }
-  if(pressurePercentage != lastPressurePercentage) {
-    lastPressurePercentage = pressurePercentage;
+  if(int(valueFields[F_PRESSURE_PERCENTAGE]) != lastPressurePercentage) {
+    lastPressurePercentage = int(valueFields[F_PRESSURE_PERCENTAGE]);
     pr = true;
   }
   if(n75 != lastN75) {
