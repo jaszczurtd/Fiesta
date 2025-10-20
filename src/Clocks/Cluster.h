@@ -33,6 +33,8 @@ private:
   uint calculate_freq_from_speed(uint speed);
   uint calculate_freq_from_rpm(uint rpm);
   void calculate_freq_half_period(uint pin, uint value);
+  uint lastSpeed;
+  uint lastRpm;
 };
 
 
