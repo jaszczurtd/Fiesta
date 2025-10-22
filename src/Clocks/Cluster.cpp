@@ -101,6 +101,8 @@ uint Cluster::calculate_freq_from_rpm(uint rpm) {
 Cluster::Cluster() {
   init_output(SPEED_OUTPUT_PIN);
   init_output(TACHO_OUTPUT_PIN);
+  resetSpeed();
+  resetRPM();
 }
 
 uint32_t Cluster::calculate_period(uint freq) {
@@ -140,16 +142,28 @@ void Cluster::init_output(uint pin) {
   }
 }
 
+void Cluster::resetSpeed() {
+  if(speedometer.alarm != -1) {
+    cancel_alarm(speedometer.alarm);
+    speedometer.alarm = -1;
+  }
+  gpio_put(speedometer.pin, 0);
+}
+
+void Cluster::resetRPM() {
+  if(tachometer.alarm != -1) {
+    cancel_alarm(tachometer.alarm);
+    tachometer.alarm = -1;
+  }
+  gpio_put(tachometer.pin, 0);
+}
+
 void Cluster::update(uint speed, uint rpm) {
   if(lastSpeed != speed) {
     lastSpeed = speed;
 
     if(speed < 1) {
-      if(speedometer.alarm != -1) {
-        cancel_alarm(speedometer.alarm);
-        speedometer.alarm = -1;
-        gpio_put(speedometer.pin, 0);
-      }
+      resetSpeed();
     } else {
       calculate_freq_half_period(SPEED_OUTPUT_PIN, speed);
       if(speedometer.alarm == -1) {
@@ -162,11 +176,7 @@ void Cluster::update(uint speed, uint rpm) {
     lastRpm = rpm;
     
     if(rpm < 1) {
-      if(tachometer.alarm != -1) {
-        cancel_alarm(tachometer.alarm);
-        tachometer.alarm = -1;
-        gpio_put(tachometer.pin, 0);
-      }
+      resetRPM();
     } else {
       calculate_freq_half_period(TACHO_OUTPUT_PIN, rpm);
       if(tachometer.alarm == -1) {
