@@ -270,6 +270,7 @@ bool updateValsForDebug(void *arg) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
   deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
+  deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(), getEngineRPM());
 
   return true;
 }
