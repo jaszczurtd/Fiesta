@@ -283,7 +283,6 @@ bool readHighValues(void *argument) {
     if(reflectionValueFields[a] != valueFields[a]) {
         reflectionValueFields[a] = valueFields[a];
     
-        triggerDrawHighImportanceValue(true);
         CAN_sendThrottleUpdate();
         CAN_sendTurboUpdate();
     }

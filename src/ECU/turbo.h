@@ -12,7 +12,6 @@
 #include "rpm.h"
 #include "hardwareConfig.h"
 #include "tests.h"
-#include "TFTExtension.h"
 
 #include "engineMaps.h"
 #include "EngineController.h"
