@@ -21,12 +21,8 @@ void setupTimers(void) {
   generalTimer = timer_create_default();
 
   setupTimerWith(SECOND, callAtEverySecond);
-  setupTimerWith(SECOND / 2, callAtEveryHalfSecond);
-  setupTimerWith(SECOND / 4, callAtEveryHalfHalfSecond);
-  setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
   setupTimerWith(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
   setupTimerWith(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
-  setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
   setupTimerWith(GPS_UPDATE, getGPSData);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
   setupTimerWith(CAN_UPDATE_RECIPIENTS, CAN_updaterecipients_01);
@@ -54,7 +50,6 @@ void initialization(void) {
   pcf8574_init();
   Wire.end();
 
-  TFT *tft = initTFT();
   initSPI();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
@@ -130,17 +125,6 @@ void initialization(void) {
   int sec = getSeconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
 
-  #ifndef DEBUG_SCREEN
-  tft->fillScreen(COLOR(WHITE));
-  const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
-  const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-  #ifdef INC_FREERTOS_H
-  tft->drawRGBBitmap(SCREEN_W - FREERTOS_WIDTH - 1, SCREEN_H - FREERTOS_HEIGHT - 1, 
-                      (unsigned short*)freertos, FREERTOS_WIDTH, FREERTOS_HEIGHT);
-  #endif //INC_FREERTOS_H
-  #endif //DEBUG_SCREEN
-
 #ifdef VP37
   injectionPump.init();
 #endif
@@ -167,22 +151,11 @@ void initialization(void) {
 
   initFuelMeasurement();
   
-  softInitDisplay(NULL);
-  tft->fillScreen(ICONS_BG_COLOR);
-
-  #ifdef DEBUG_SCREEN
-  debugFunc();
-  #else  
-  redrawAllGauges();
-  #endif
-
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   canCheckConnection(NULL);
   canMainLoop(NULL);
   callAtEverySecond(NULL);
-  callAtEveryHalfSecond(NULL);
-  callAtEveryHalfHalfSecond(NULL);
   updateValsForDebug(NULL);
   CAN_sendAll();
   setupTimers();
@@ -201,91 +174,19 @@ void initialization(void) {
   startTests();
 }
 
-void drawLowImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
-  showSimpleGauges();
-  showFuelAmount((int)valueFields[F_FUEL], FUEL_MIN - FUEL_MAX);
-  #endif
-}
-
-void drawHighImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
-  showEngineLoadGauge();
-  #endif
-}
-
-void drawMediumImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
-  showTempGauges();
-  showEGTGauge();
-  #endif
-}
-
-void drawMediumMediumImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
-  showPressureGauges();
-  showGPSGauge();
-  #endif
-}
-
-void seriousAlertsDrawFunctions() {
-  #ifndef DEBUG_SCREEN
-  drawFuelEmpty();
-
-  #endif
-}
-
-static bool alertBlink = false, seriousAlertBlink = false;
-bool alertSwitch(void) {
-  return alertBlink;
-}
-bool seriousAlertSwitch(void) {
-  return seriousAlertBlink;
-}
+static bool alertBlink = false;
 
 //timer functions
 bool callAtEverySecond(void *arg) {
   alertBlink = (alertBlink) ? false : true;
   digitalWrite(LED_BUILTIN, alertBlink);
+  digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
 
 #if SYSTEM_TEMP
   deb("System temperature: %f", analogReadTemp());
 #endif
 
-  //regular draw - low importance values
-  drawLowImportanceValues();
   return true;
-}
-
-bool callAtEveryHalfSecond(void *arg) {
-  seriousAlertBlink = (seriousAlertBlink) ? false : true;
-
-  //draw changes of medium importance values
-  drawMediumImportanceValues();
-
-  digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
-  return true;
-}
-
-bool callAtEveryHalfHalfSecond(void *arg) {
-  if(alertsStartSecond <= getSeconds()) {
-    seriousAlertsDrawFunctions();
-  }
-  drawMediumMediumImportanceValues();
-  return true;
-}
-
-static bool highImportanceValueChanged = false;
-void triggerDrawHighImportanceValue(bool state) {
-  highImportanceValueChanged = state;
-}
-
-void drawHighImportanceValuesIfChanged(void) {
-  //draw changes of high importance values
-  if(highImportanceValueChanged) {
-    drawHighImportanceValues();
-    triggerDrawHighImportanceValue(false);
-  }
 }
 
 void looper(void) {
@@ -309,7 +210,6 @@ void looper(void) {
     deb("thread is alive, active tasks: %d", generalTimer.size());
   }
   statusVariable0 = 3;
-  drawHighImportanceValuesIfChanged();
   obdLoop();
   statusVariable0 = 4;
   getFanInstance()->process();

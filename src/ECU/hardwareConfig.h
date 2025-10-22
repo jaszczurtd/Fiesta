@@ -114,9 +114,4 @@
 #define DIVIDER_PRESSURE_BAR 955
 #define DIVIDER_EGT 2.280
 
-//LCD / display
-#define TFT_CS     4 //CS
-#define TFT_RST    -1 //reset
-#define TFT_DC     3 //A0
-
 #endif
