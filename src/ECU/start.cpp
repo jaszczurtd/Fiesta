@@ -43,7 +43,6 @@ void initialization(void) {
  
   initTests();
 
-  //adafruit LCD driver is messing up something with i2c on rpi pin 0 & 1
   //this has to be invoked as soon as possible, and twice
   initI2C();
   pcf8574_init();
