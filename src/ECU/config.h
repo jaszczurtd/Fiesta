@@ -13,14 +13,9 @@
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
 
-//delay time right after start, before first serious alerts will show up (in seconds)
-#define SERIOUS_ALERTS_DELAY_TIME 1
 
 //how many main loop cycles between next sensor's read (high importance values)
 #define HIGH_READ_CYCLES_AMOUNT 8
-
-//in seconds
-#define FIESTA_INTRO_TIME 2 
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
@@ -97,9 +92,6 @@
 #define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM
 #define RESET_RPM_WATCHDOG_TIME 2000
-
-//time of display: EGT/DPF (if available)
-#define DPF_SHOW_TIME_INTERVAL 5000
 
 //max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9
