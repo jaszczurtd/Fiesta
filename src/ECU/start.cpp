@@ -1,7 +1,6 @@
 
 #include "start.h"
 
-static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
 static Timer generalTimer;
 static Turbo turbo;
@@ -118,12 +117,10 @@ void initialization(void) {
 
   float coolant = readCoolantTemp();
   valueFields[F_COOLANT_TEMP] = coolant;
-
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
-  int sec = getSeconds();
-  const int secDest = sec + FIESTA_INTRO_TIME;
+  getGlowPlugsInstance()->initGlowPlugsTime(coolant);
 
 #ifdef VP37
   injectionPump.init();
@@ -131,13 +128,6 @@ void initialization(void) {
   watchdog_feed();
 
   turbo.init();
-
-  getGlowPlugsInstance()->initGlowPlugsTime(coolant);
-  while(sec < secDest) {
-    watchdog_feed();
-    getGlowPlugsInstance()->process();
-    sec = getSeconds();
-  }
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -150,8 +140,6 @@ void initialization(void) {
   #endif
 
   initFuelMeasurement();
-  
-  alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   canCheckConnection(NULL);
   canMainLoop(NULL);
