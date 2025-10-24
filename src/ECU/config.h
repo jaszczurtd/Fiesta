@@ -61,8 +61,8 @@
 #define HEATED_WINDOWS_TIME 4
 
 //values from ADC
-#define THROTTLE_MIN 1800
-#define THROTTLE_MAX 3800
+#define THROTTLE_MIN 1795
+#define THROTTLE_MAX 3730
 
 //values from ADC
 #define FUEL_MAX 320
