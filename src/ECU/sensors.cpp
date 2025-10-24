@@ -98,10 +98,12 @@ int readThrottle(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_THROTTLE_POS);
 
-  float rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
+  int rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
   m_mutex_exit(analog4051Mutex);
 
-  float initialVal = rawVal - THROTTLE_MIN;
+  //deb("rawVal %d", int(rawVal));
+
+  int initialVal = rawVal - THROTTLE_MIN;
 
   if(initialVal < 0) {
       initialVal = 0;
