@@ -1,8 +1,12 @@
 #ifndef S_OIL_PRESSURE_H
 #define S_OIL_PRESSURE_H
 
-#include "can.h"
-#include "speed.h"
+#include <Arduino.h>
+
 #include "config.h"
+#include "hardwareConfig.h"
+
+bool setupOilPressure(void);
+bool readOilPressure(void *arg);
 
 #endif

@@ -28,6 +28,7 @@ void setupTimers(void) {
   setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
   setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  setupTimerWith(OIL_PRESSURE_READ_INTERVAL, readOilPressure);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
 }
 
@@ -58,7 +59,15 @@ void initialization(void) {
   updateValsForDebug(NULL);
 
   watchdog_feed();
+
+  result = setupOilPressure();
+  if(!result) {
+    deb("cannot setup oil pressure readout, exiting");
+    return;
+  }
+
   setupTimers();
+
   result = setupSpeedometer();
   setLEDColor(result ? GREEN: YELLOW);
   if(!result) {
@@ -113,9 +122,10 @@ void looper1() {
 
 bool updateValsForDebug(void *arg) {
 
-  deb("ECU:%s, cluster:%s, circumference: %f ", isEcuConnected() ? "on" : "off", 
-                                                isClusterConnected() ? "on" : "off",
-                                                getCircumference());
+  deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off", 
+                                                          isClusterConnected() ? "on" : "off",
+                                                          getCircumference(),
+                                                          valueFields[F_OIL_PRESSURE]);
   
 
   return true;
