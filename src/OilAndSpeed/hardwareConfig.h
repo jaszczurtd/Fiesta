@@ -16,4 +16,7 @@
 
 #define ABS_INPUT_PIN  14
 
+// ADC input for resistive oil pressure sender (0..10 bar, nominal 10..180 Ohm)
+#define OIL_PRESSURE_ADC_PIN A0
+
 #endif
