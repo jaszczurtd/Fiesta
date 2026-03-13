@@ -12,8 +12,30 @@ static float mapResistanceToBars(float resistanceOhm) {
   return normalized * OIL_PRESSURE_MAX_BAR;
 }
 
+static float readSenderResistanceOhm(int raw) {
+  constexpr float minVoltage = 0.001f;
+
+  const float adcMax = float((1u << OIL_PRESSURE_ADC_BITS) - 1u);
+  float voltage = (float(raw) / adcMax) * OIL_PRESSURE_ADC_REF_V;
+
+  voltage = constrain(voltage, minVoltage, OIL_PRESSURE_ADC_REF_V - minVoltage);
+
+#if OIL_PRESSURE_DIVIDER_PULLUP
+  // Rp -> Vref, Rs(sensor) -> GND, ADC on divider node
+  // Vadc = Vref * Rs / (Rp + Rs)
+  // Rs = (Vadc * Rp) / (Vref - Vadc)
+  float denominator = OIL_PRESSURE_ADC_REF_V - voltage;
+  return (voltage * OIL_PRESSURE_PULLUP_OHM) / denominator;
+#else
+  // Rs(sensor) -> Vref, Rp -> GND, ADC on divider node
+  // Vadc = Vref * Rp / (Rp + Rs)
+  // Rs = Rp * (Vref - Vadc) / Vadc
+  return (OIL_PRESSURE_PULLUP_OHM * (OIL_PRESSURE_ADC_REF_V - voltage)) / voltage;
+#endif
+}
+
 bool setupOilPressure(void) {
-  analogReadResolution(12);
+  analogReadResolution(OIL_PRESSURE_ADC_BITS);
   pinMode(OIL_PRESSURE_ADC_PIN, INPUT);
   valueFields[F_OIL_PRESSURE] = 0.0f;
   filteredPressure = 0.0f;
@@ -24,20 +46,11 @@ bool readOilPressure(void *arg) {
   (void)arg;
 
   int raw = analogRead(OIL_PRESSURE_ADC_PIN);
-  if(raw <= 0) {
+  if(raw < 0) {
     return true;
   }
 
-  constexpr float adcMax = 4095.0f;
-  float voltage = (float(raw) / adcMax) * OIL_PRESSURE_ADC_REF_V;
-
-  const float minDenominator = 0.001f;
-  float denominator = OIL_PRESSURE_ADC_REF_V - voltage;
-  if(denominator < minDenominator) {
-    denominator = minDenominator;
-  }
-
-  float senderResistance = (voltage * OIL_PRESSURE_PULLUP_OHM) / denominator;
+  float senderResistance = readSenderResistanceOhm(raw);
   float oilPressure = mapResistanceToBars(senderResistance);
 
   filteredPressure = (filteredPressure * (1.0f - OIL_PRESSURE_FILTER_ALPHA)) +

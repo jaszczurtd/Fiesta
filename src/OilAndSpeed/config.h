@@ -26,6 +26,11 @@
 #define OIL_PRESSURE_SENSOR_RES_MAX_OHM 180.0f
 #define OIL_PRESSURE_PULLUP_OHM 220.0f
 #define OIL_PRESSURE_ADC_REF_V 3.3f
+
+#define OIL_PRESSURE_ADC_BITS 12
+// true  -> pull-up resistor to Vref, sensor to GND
+// false -> pull-down resistor to GND, sensor to Vref
+#define OIL_PRESSURE_DIVIDER_PULLUP 1
 //tire dimensions:
 #define TIRE_DIMENSIONS "185/55 R15"
 #define TIRE_CORRECTION_FACTOR 0.98
