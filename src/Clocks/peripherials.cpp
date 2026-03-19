@@ -46,6 +46,10 @@ int getThrottlePercentage(void) {
 }
 
 void setLEDColor(int ledColor) {
+  static int lastColor = -1;
+  if(ledColor == lastColor) return;
+  lastColor = ledColor;
+
   switch (ledColor) {
     case NONE:
       pixels.setPixelColor(0, pixels.Color(0, 0, 0));

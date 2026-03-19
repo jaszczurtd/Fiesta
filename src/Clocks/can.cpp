@@ -141,6 +141,7 @@ bool canMainLoop(void) {
 
         valueFields[F_RPM] = MsbLsbToInt(buf[CAN_FRAME_RPM_UPDATE_HI],
                                           buf[CAN_FRAME_RPM_UPDATE_LO]);
+        updateCluster();
       }
       break;
 
@@ -170,6 +171,7 @@ bool canMainLoop(void) {
         valueFields[F_OIL_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
                                                   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
         valueFields[F_ABS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED];
+        updateCluster();
       }
       break;
 

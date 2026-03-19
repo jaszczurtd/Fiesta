@@ -17,7 +17,7 @@ typedef struct {
   volatile bool state;
   uint pin;
   volatile uint freq;
-  alarm_id_t alarm;
+  volatile alarm_id_t alarm;
 } cluster_s;
 
 class Cluster {

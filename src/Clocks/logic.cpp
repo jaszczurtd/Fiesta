@@ -210,6 +210,10 @@ void triggerDrawHighImportanceValue(bool state) {
   highImportanceValueChanged = state;
 }
 
+void updateCluster(void) {
+  cluster.update(getCurrentCarSpeed(), getEngineRPM());
+}
+
 void drawLowImportanceValues(void) {
   #ifndef DEBUG_SCREEN
   showSimpleGauges();

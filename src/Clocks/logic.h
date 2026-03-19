@@ -25,5 +25,6 @@ void loop_b(void);
 bool alertSwitch(void);
 bool seriousAlertSwitch(void);
 void triggerDrawHighImportanceValue(bool state);
+void updateCluster(void);
 
 #endif
