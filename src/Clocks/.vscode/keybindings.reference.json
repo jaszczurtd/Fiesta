@@ -1,0 +1,84 @@
+// =====================================================================
+// Skróty klawiszowe Arduino dla VS Code
+//
+// Aktywne gdy edytujesz plik .ino lub C/C++.
+//
+// Instalacja:
+//   Ctrl+K Ctrl+S  → otwórz edytor skrótów
+//   Kliknij ikonę {} (prawy górny róg) → otwórz keybindings.json
+//   Wklej wpisy poniżej do tablicy [].
+// =====================================================================
+[
+    {
+        "key": "ctrl+alt+b",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Kompiluj (Build)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+u",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Upload",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+shift+u",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Upload (UF2 / BOOTSEL)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+m",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Monitor (persistent)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+shift+m",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Monitor (Debug Probe)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+t",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Wybierz płytkę (GUI)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+shift+t",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Wybierz płytkę (interaktywnie)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+i",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Odśwież IntelliSense",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+l",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Zainstaluj bibliotekę",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+c",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Clean",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+p",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Lista portów",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+alt+shift+p",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Zmień port",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    }
+]
