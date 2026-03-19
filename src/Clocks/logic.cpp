@@ -78,12 +78,12 @@ void setup_a(void) {
   #endif //INC_FREERTOS_H
   #endif //DEBUG_SCREEN
 
-  watchdog_feed();
+  hal_watchdog_feed();
 
   setLEDColor(canInit() ? RED: GREEN);
 
   while(sec < secDest) {
-    watchdog_feed();
+    hal_watchdog_feed();
     sec = getSeconds();
   }
 
@@ -110,7 +110,7 @@ void setup_a(void) {
   updateCANrecipients(NULL);
   canMainLoop();
 
-  watchdog_feed();
+  hal_watchdog_feed();
 
   setupTimers();
 
@@ -127,7 +127,7 @@ void loop_a(void) {
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
     m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    hal_idle();
     return;
   }
 
@@ -261,7 +261,7 @@ void loop_b(void) {
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
     m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    hal_idle();
     return;
   }
   statusVariable1 = 1;

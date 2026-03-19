@@ -1,7 +1,5 @@
 #include "can.h"
 
-static MCP_CAN *CAN = NULL;
-
 float valueFields[F_LAST];
 
 static unsigned char frameNumber = 0;
@@ -11,23 +9,22 @@ static bool lastConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static bool dpfConnected = false;
 
-static unsigned long oilSpeedModuleMessages = 0, lastOilSpeedModuleMessages = 0; 
+static unsigned long oilSpeedModuleMessages = 0, lastOilSpeedModuleMessages = 0;
 static bool oilSpeedModuleConnected = false;
 static bool lastOilSpeedModuleConnected = false;
 
 // Incoming CAN-BUS message
-static long unsigned int canID = 0x000;
+static uint32_t canID = 0x000;
 
 // This is the length of the incoming CAN-BUS message
-static unsigned char len = 0;
+static uint8_t len = 0;
 
 // This the eight byte buffer of the incoming message data payload
-static byte buf[CAN_FRAME_MAX_LENGTH];
+static uint8_t buf[CAN_FRAME_MAX_LENGTH];
 
 static bool interrupt = false;
 
 bool canInit(void) {
-  CAN = new MCP_CAN(CAN_CS);
   ecuConnected = false;
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
@@ -36,8 +33,8 @@ bool canInit(void) {
   int canRetries = 0;
   bool error = false;
 
-  while(!(CAN_OK == CAN->begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
-    watchdog_feed();
+  while (!hal_can_init(CAN_CS)) {
+    hal_watchdog_feed();
     canRetries++;
     if(canRetries == MAX_RETRIES) {
       error = true;
@@ -47,45 +44,39 @@ bool canInit(void) {
     deb("ERROR!!!! CAN-BUS Shield init fail\n");
     deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
-    m_delay(SECOND);
+    hal_delay_ms(SECOND);
   }
   if(!error) {
-    watchdog_feed();
+    hal_watchdog_feed();
     deb("CAN BUS Shield init ok!");
-    CAN->setMode(MCP_NORMAL); 
-    CAN->setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
-    pinMode(CAN_INT, INPUT); 
-    attachInterrupt(digitalPinToInterrupt(CAN_INT), receivedCanMessage, FALLING);
+    hal_gpio_set_mode(CAN_INT, HAL_GPIO_INPUT);
+    hal_gpio_attach_interrupt(CAN_INT, receivedCanMessage, HAL_GPIO_IRQ_FALLING);
     canMainLoop();
   }
   return error;
 }
 
 bool updateCANrecipients(void *argument) {
+  uint8_t out[CAN_FRAME_MAX_LENGTH] = {};
 
-  //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
-
-  byte buf[CAN_FRAME_MAX_LENGTH];
-
-  buf[CAN_FRAME_NUMBER] = frameNumber++;
+  out[CAN_FRAME_NUMBER] = frameNumber++;
 
   unsigned short br = (unsigned short)valueFields[F_CLOCK_BRIGHTNESS];
-  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
-  buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
+  out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
+  out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
 
-  CAN->sendMsgBuf(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, buf);
+  hal_can_send(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, out);
 
-  return true; 
+  return true;
 }
 
 void receivedCanMessage(void) {
   interrupt = true;
 }
 
-static byte lastFrame = 0;
+static uint8_t lastFrame = 0;
 bool canMainLoop(void) {
-  CAN->readMsgBuf(&canID, &len, buf);
-  if(canID == 0 || len < 1) {
+  if (!hal_can_receive(&canID, &len, buf)) {
     return true;
   }
 
@@ -109,8 +100,8 @@ bool canMainLoop(void) {
 
       case CAN_ID_DPF: {
         dpfMessages++;
-        valueFields[F_DPF_TEMP] = 
-          MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI], 
+        valueFields[F_DPF_TEMP] =
+          MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
                       buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]);
         valueFields[F_DPF_REGEN] = buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN];
       }
@@ -164,7 +155,7 @@ bool canMainLoop(void) {
         valueFields[F_FAN_ENABLED] = buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED];
       }
       break;
-      
+
       case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
         oilSpeedModuleMessages++; oilSpeedModuleConnected = true;
 
@@ -177,13 +168,12 @@ bool canMainLoop(void) {
 
       case CAN_ID_LUMENS: {
         valueFields[F_OUTSIDE_LUMENS] =
-          decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI], 
+          decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
                       buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
       }
       break;
       default:
         deb("received unknown CAN frame:%03x len:%d\n", canID, len);
-
         break;
     }
   }
@@ -222,7 +212,6 @@ bool canCheckConnection(void *message) {
 
     if(!ecuConnected) {
       for(int a = 0; a < F_LAST; a++) {
-
         switch(a) {
           case F_ABS_CAR_SPEED:
           case F_OIL_PRESSURE:
@@ -231,13 +220,12 @@ bool canCheckConnection(void *message) {
             valueFields[a] = 0.0;
             break;
         }
-
       }
     }
     triggerDrawHighImportanceValue(true);
   }
 
-  return true;  
+  return true;
 }
 
 int getEngineRPM(void) {
@@ -273,7 +261,7 @@ int getGPSSpeed(void) {
 }
 
 float getOilPressure(void) {
-  return valueFields[F_OIL_PRESSURE];  
+  return valueFields[F_OIL_PRESSURE];
 }
 
 bool isGPSAvailable(void) {

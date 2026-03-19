@@ -1,7 +1,6 @@
 #ifndef C_PERIPHERIALS
 #define C_PERIPHERIALS
 
-#include <Arduino.h>
 #include <tools.h>
 #include <SPI.h>
 #include <canDefinitions.h>
@@ -9,6 +8,7 @@
 
 #include "config.h"
 #include "hardwareConfig.h"
+#include <hal/hal.h>
 #include "buzzer.h"
 
 enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE};

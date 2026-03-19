@@ -1,13 +1,14 @@
 
 #include "TFTExtension.h"
+#include <hal/hal.h>
 
 static TFT *tft = NULL;
 TFT *initTFT(void) {
 
-  pinMode(TFT_RST, OUTPUT);
-  digitalWrite(TFT_RST, LOW);
+  hal_gpio_set_mode(TFT_RST, HAL_GPIO_OUTPUT);
+  hal_gpio_write(TFT_RST, false);
   m_delay(100);
-  digitalWrite(TFT_RST, HIGH);
+  hal_gpio_write(TFT_RST, true);
   
   tft = new TFTExtension(TFT_CS, TFT_DC, TFT_RST);
   tft->begin();

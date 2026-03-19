@@ -1,5 +1,3 @@
-#include "Arduino.h"
-
 #include "peripherials.h"
 
 static Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_RGB + NEO_KHZ800);
@@ -10,24 +8,24 @@ void setupOnboardLed(void) {
 }
 
 void initSPI(void) {
-  pinMode(CAN_CS, OUTPUT);
-  digitalWrite(CAN_CS, HIGH);
+  hal_gpio_set_mode(CAN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(CAN_CS, true);
 
   SPI.setRX(PIN_MISO); //MISO
   SPI.setTX(PIN_MOSI); //MOSI
   SPI.setSCK(PIN_SCK); //SCK
   SPI.begin(true);
 
-  pinMode(OIL_OUTPUT_PIN, OUTPUT);
+  hal_gpio_set_mode(OIL_OUTPUT_PIN, HAL_GPIO_OUTPUT);
   enableOilLamp(true);
 }
 
 void enableOilLamp(bool enable) {
-  digitalWrite(OIL_OUTPUT_PIN, enable);
+  hal_gpio_write(OIL_OUTPUT_PIN, enable);
 }
 
 void initBasicPIO(void) {
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
+  hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
   lcdBrightness(INITIAL_BRIGHTNESS);
 
   Buzzer::initHardware(BUZZER);
@@ -36,7 +34,7 @@ void initBasicPIO(void) {
 
 void lcdBrightness(int val) {
   valueFields[F_CLOCK_BRIGHTNESS] = val;
-  analogWrite(PIN_BRIGHTNESS, ((1 << PWM_WRITE_RESOLUTION) - 1) - val);
+  hal_pwm_write(PIN_BRIGHTNESS, ((1 << PWM_WRITE_RESOLUTION) - 1) - val);
 }
 
 int getThrottlePercentage(void) {

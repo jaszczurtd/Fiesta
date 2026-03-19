@@ -120,7 +120,7 @@
                 "/home/jaszczurtd/development/projects_git/libraries/TinyGPSPlus/src",
                 "/home/jaszczurtd/development/projects_git/libraries/arduino-timer/src",
                 "/home/jaszczurtd/development/projects_git/libraries/arduino-wireguard-pico-w/src",
-                "/home/jaszczurtd/development/projects_git/libraries/arduinoTools",
+                "/home/jaszczurtd/development/projects_git/libraries/JaszczurHAL",
                 "/home/jaszczurtd/development/projects_git/libraries/canDefinitions",
                 "/home/jaszczurtd/development/projects_git/libraries/mcp_can",
                 "${workspaceFolder}/**"

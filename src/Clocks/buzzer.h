@@ -1,12 +1,10 @@
 #ifndef T_BUZZER
 #define T_BUZZER
 
-#include <Arduino.h>
 #include <tools.h>
 
 #include "config.h"
-#include "logic.h"
-#include "peripherials.h"
+#include <hal/hal.h>
 
 enum {
   BUZZER_SHORT, BUZZER_MIDDLE, BUZZER_LONG, BUZZER_COUNT 
