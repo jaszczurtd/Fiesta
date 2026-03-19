@@ -72,11 +72,7 @@ void setup_a(void) {
   const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
   tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-  #ifdef INC_FREERTOS_H
-  tft->drawRGBBitmap(SCREEN_W - FREERTOS_WIDTH - 1, SCREEN_H - FREERTOS_HEIGHT - 1, 
-                      (unsigned short*)freertos, FREERTOS_WIDTH, FREERTOS_HEIGHT);
-  #endif //INC_FREERTOS_H
-  #endif //DEBUG_SCREEN
+#endif //DEBUG_SCREEN
 
   hal_watchdog_feed();
 
