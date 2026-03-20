@@ -13,7 +13,7 @@ void serialTalks(void);
 static bool isGPSInitialized = false;
 void initGPS(void) {
   if(!isGPSInitialized) {
-    attachInterrupt(SERIAL_RX_GPIO, serialTalks, FALLING);  
+    hal_gpio_attach_interrupt(SERIAL_RX_GPIO, serialTalks, HAL_GPIO_IRQ_FALLING);
     gpsSerial.begin(9600, SERIAL_7N1);
     isGPSInitialized = true;
   }

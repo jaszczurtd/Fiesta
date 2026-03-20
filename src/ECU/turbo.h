@@ -45,8 +45,8 @@ private:
 
 public:
   Turbo();
-  void init() override;  
-  void process() override;
+  void init();  
+  void process();
   void turboTest(void);
   void showDebug(void);
 

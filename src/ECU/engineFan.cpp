@@ -4,17 +4,13 @@
 // fan
 //-----------------------------------------------------------------------------
 
-static engineFan *fan = nullptr;
+static engineFan fan;
 void createFan(void) {
-  fan = new engineFan();
-  fan->init();
+  fan.init();
 }
 
 engineFan *getFanInstance(void) {
-  if(fan == nullptr) {
-    createFan();
-  }
-  return fan;
+  return &fan;
 }
 
 engineFan::engineFan() { }

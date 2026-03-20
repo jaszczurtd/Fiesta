@@ -64,7 +64,7 @@ void obdInit(int retries) {
   
   CAN0.setMode(MCP_NORMAL);                          // Set operation mode to normal so the MCP2515 sends acks to received data.
 
-  pinMode(CAN1_INT, INPUT);                          // Configuring pin for /INT input
+  hal_gpio_set_mode(CAN1_INT, HAL_GPIO_INPUT);       // Configuring pin for /INT input
   
   deb("OBD-2 CAN Shield init ok!");
 }
@@ -74,7 +74,7 @@ void obdLoop(void) {
     return;
   }
   
-  if(!digitalRead(CAN1_INT))                         // If CAN1_INT pin is low, read receive buffer
+  if(!hal_gpio_read(CAN1_INT))                       // If CAN1_INT pin is low, read receive buffer
   {
     CAN0.readMsgBuf(&rxId, &dlc, rxBuf);             // Get CAN data
     
@@ -828,13 +828,13 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
   index++; // We sent a packet so increase our index.
   
   bool not_done = true;
-  unsigned long sepPrev = millis();
+  unsigned long sepPrev = hal_millis();
   byte sepInvl = 0;
   byte frames = 0;
   bool lockout = false;
   while(not_done){
     // Need to wait for flow frame
-    if(!digitalRead(CAN1_INT)){
+    if(!hal_gpio_read(CAN1_INT)){
       CAN0.readMsgBuf(&rxId, &dlc, rxBuf);
     
       if((rxId == LISTEN_ID) && ((rxBuf[0] & 0xF0) == 0x30)){
@@ -846,7 +846,7 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
         } else if((rxBuf[0] & 0x0F) == 0x01){
           // Wait
           lockout = false;
-          delay(rxBuf[2]);
+          hal_delay_ms(rxBuf[2]);
         } else if((rxBuf[0] & 0x0F) == 0x03){
           // Abort
           not_done = false;
@@ -855,8 +855,8 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
       }
     }
 
-    if(((millis() - sepPrev) >= sepInvl) && lockout){
-      sepPrev = millis();
+    if(((hal_millis() - sepPrev) >= sepInvl) && lockout){
+      sepPrev = hal_millis();
 
       tpData[0] = 0x20 | index++;
       for(byte i=1; i<8; i++){
@@ -878,10 +878,10 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
     else{
       char msgstring[32];
       snprintf(msgstring, sizeof(msgstring) - 1, "Offset: 0x%04X\tLen: 0x%04X", offset, len);
-      Serial.println(msgstring);
+      deb("%s", msgstring);
     }
     // Timeout
-    if((millis() - sepPrev) >= 1000)
+    if((hal_millis() - sepPrev) >= 1000)
       not_done = false;
   }
 }

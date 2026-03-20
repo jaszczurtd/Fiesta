@@ -4,17 +4,13 @@
 // glow plugs
 //-----------------------------------------------------------------------------
 
-static glowPlugs *glowP = nullptr;
+static glowPlugs glowP;
 void createGlowPlugs(void) {
-  glowP = new glowPlugs();
-  glowP->init();
+  glowP.init();
 }
 
 glowPlugs *getGlowPlugsInstance(void) {
-  if(glowP == nullptr) {
-    createGlowPlugs();
-  }
-  return glowP;
+  return &glowP;
 }
 
 glowPlugs::glowPlugs() { }

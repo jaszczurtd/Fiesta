@@ -52,7 +52,7 @@ bool measureVoltage(void *arg);
 
 class VP37Pump : public EngineController {
 private:
-  PIDController *adjustController;
+  PIDController adjustController;
 
   bool vp37Initialized;
   int lastThrottle;
@@ -76,8 +76,8 @@ private:
   
 public:
   VP37Pump();
-  void init() override;  
-  void process() override;
+  void init();  
+  void process();
   void enableVP37(bool enable);
   bool isVP37Enabled(void);
   void showDebug(void);

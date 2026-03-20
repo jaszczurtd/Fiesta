@@ -5,8 +5,6 @@
 #include <libConfig.h>
 #include "config.h"
 
-#include <Arduino.h>
-
 #ifdef INC_FREERTOS_H
 #include <FreeRTOS.h>
 #include "task.h"

@@ -27,9 +27,9 @@
 class RPM : public EngineController {
 public:
   RPM();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
+  void init();  
+  void process();
+  void showDebug();
   void setAccelMaxRPM(void);
   void resetRPMEngine(void);
 #ifndef VP37

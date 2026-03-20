@@ -14,9 +14,9 @@
 class engineHeater : public EngineController {
 public:
   engineHeater();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
+  void init();  
+  void process();
+  void showDebug();
   void heater(bool enable, int level);
 
 private:

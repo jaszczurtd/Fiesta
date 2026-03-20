@@ -19,9 +19,9 @@ m_mutex_def(i2cMutex);
 m_mutex_def(pwmMutex);
 m_mutex_def(analog4051Mutex);
 
-static pwmConfig pwmVp37;
-static pwmConfig pwmTurbo;
-static pwmConfig pwmAngle;
+static hal_pwm_freq_channel_t pwmVp37  = NULL;
+static hal_pwm_freq_channel_t pwmTurbo = NULL;
+static hal_pwm_freq_channel_t pwmAngle = NULL;
 
 void initI2C(void) {
   m_mutex_init(i2cMutex);
@@ -38,7 +38,7 @@ void initSPI(void) {
 }
 
 void initSensors(void) {
-  analogReadResolution(ADC_BITS);
+  hal_adc_set_resolution(ADC_BITS);
   pwm_init();
 
   init4051();
@@ -55,8 +55,8 @@ void initSensors(void) {
 }
 
 void initBasicPIO(void) {
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(PIO_DPF_LAMP, OUTPUT);
+  hal_gpio_set_mode(LED_BUILTIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(PIO_DPF_LAMP, HAL_GPIO_OUTPUT);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -146,7 +146,7 @@ float readBarPressure(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-  float val = ((float)analogRead(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) - 
+  float val = ((float)hal_adc_read(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
       1.0; //atmospheric pressure
   m_mutex_exit(analog4051Mutex);
 
@@ -298,17 +298,17 @@ void init4051(void) {
 
   m_mutex_init(analog4051Mutex);
 
-  pinMode(C_4051, OUTPUT);  //C
-  pinMode(B_4051, OUTPUT);  //B  
-  pinMode(A_4051, OUTPUT);  //A
+  hal_gpio_set_mode(C_4051, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(B_4051, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(A_4051, HAL_GPIO_OUTPUT);
 
   set4051ActivePin(0);
 }
 
 void set4051ActivePin(unsigned char pin) {
-  digitalWrite(A_4051, (pin & 0x01) > 0); 
-  digitalWrite(B_4051, (pin & 0x02) > 0); 
-  digitalWrite(C_4051, (pin & 0x04) > 0); 
+  hal_gpio_write(A_4051, (pin & 0x01) > 0);
+  hal_gpio_write(B_4051, (pin & 0x02) > 0);
+  hal_gpio_write(C_4051, (pin & 0x04) > 0);
 }
 
 bool isDPFRegenerating(void) {
@@ -372,85 +372,26 @@ bool updateValsForDebug(void *arg) {
   return true;
 }
 
-void pwm_configure_channel(pwmConfig *cfg) {
-
-  cfg->analogScale = PWM_RESOLUTION;
-  cfg->analogWritePseudoScale = 1;
-  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) > 255.0) && 
-          (cfg->analogScale < 32678)) {
-      cfg->analogWritePseudoScale++;
-      cfg->analogScale *= 2;
-  }
-  cfg->analogWriteSlowScale = 1;
-  while (((clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq)) < 1.0) && 
-        (cfg->analogScale >= 6)) {
-      cfg->analogWriteSlowScale++;
-      cfg->analogScale /= 2;
-  }
-
-  if (!(cfg->pwmInitted & (1 << pwm_gpio_to_slice_num(cfg->pin)))) {
-    pwm_config c = pwm_get_default_config();
-    pwm_config_set_clkdiv(&c, clock_get_hz(clk_sys) / ((float)cfg->analogScale * cfg->analogFreq));
-    pwm_config_set_wrap(&c, cfg->analogScale - 1);
-    pwm_init(pwm_gpio_to_slice_num(cfg->pin), &c, true);
-    cfg->pwmInitted |= 1 << pwm_gpio_to_slice_num(cfg->pin);
-  }
-  gpio_set_function(cfg->pin, GPIO_FUNC_PWM);  
-}
-
 void pwm_init(void) {
-
   m_mutex_init(pwmMutex);
 
-  pwmVp37.pin = PIO_VP37_RPM;
-  pwmVp37.analogFreq = VP37_PWM_FREQUENCY_HZ;
-  pwm_configure_channel(&pwmVp37);
-
-  pwmTurbo.pin = PIO_TURBO;
-  pwmTurbo.analogFreq = TURBO_PWM_FREQUENCY_HZ;
-  pwm_configure_channel(&pwmTurbo);
-
-  pwmAngle.pin = PIO_VP37_ANGLE;
-  pwmAngle.analogFreq = ANGLE_PWM_FREQUENCY_HZ;
-  pwm_configure_channel(&pwmAngle);
-}
-
-void pwm_write(pwmConfig *cfg, int val) {
-
-  m_mutex_enter_blocking(pwmMutex);
-
-  val <<= cfg->analogWritePseudoScale;
-  val >>= cfg->analogWriteSlowScale;
-
-  if (val < 0) {
-      val = 0;
-  } else if ((uint32_t)val > cfg->analogScale) {
-      val = cfg->analogScale;
-  }
-
-  pwm_set_gpio_level(cfg->pin, val);
-
-  m_mutex_exit(pwmMutex);
+  pwmVp37  = hal_pwm_freq_create(PIO_VP37_RPM,  VP37_PWM_FREQUENCY_HZ,  PWM_RESOLUTION);
+  pwmTurbo = hal_pwm_freq_create(PIO_TURBO,     TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
 void valToPWM(unsigned char pin, int val) {
-
-  pwmConfig *cfg = NULL;
+  hal_pwm_freq_channel_t ch = NULL;
   switch(pin) {
-    case PIO_TURBO:
-      cfg = &pwmTurbo;
-      break;
-    case PIO_VP37_RPM:
-      cfg = &pwmVp37;
-      break;
-    case PIO_VP37_ANGLE:
-      cfg = &pwmAngle;
-      break;
-    default:
-      break;
+    case PIO_TURBO:      ch = pwmTurbo; break;
+    case PIO_VP37_RPM:   ch = pwmVp37;  break;
+    case PIO_VP37_ANGLE: ch = pwmAngle; break;
+    default: break;
   }
-  if(cfg != NULL) {
-    pwm_write(cfg, (PWM_RESOLUTION - val));
+  if(ch != NULL) {
+    m_mutex_enter_blocking(pwmMutex);
+    hal_pwm_freq_write(ch, (PWM_RESOLUTION - val));
+    m_mutex_exit(pwmMutex);
   } else {
     derr("config for this pwm is not initialized!");
   }

@@ -6,17 +6,13 @@
 static Timer rpmTimer;
 #endif
 
-static RPM *engineRPM = nullptr;
+static RPM engineRPM;
 void createRPM(void) {
-  engineRPM = new RPM();
-  engineRPM->init();
+  engineRPM.init();
 }
 
 RPM *getRPMInstance(void) {
-  if(engineRPM == nullptr) {
-    createRPM();
-  }
-  return engineRPM;
+  return &engineRPM;
 }
 
 void countRPM(void) {
@@ -35,21 +31,21 @@ void RPM::resetRPMCycle(void) {
 RPM::RPM() { }
 
 void RPM::interrupt(void) {
-  noInterrupts();
+  hal_critical_section_enter();
 
-  unsigned long _micros = micros();
+  unsigned long _micros = hal_micros();
   unsigned long nowPulse = _micros - lastPulse;
-  
+
   lastPulse = _micros;
 
-  if((nowPulse >> 1) > shortPulse){ 
+  if((nowPulse >> 1) > shortPulse){
     RPMpulses++;
-    shortPulse = nowPulse; 
-  } else { 
+    shortPulse = nowPulse;
+  } else {
     shortPulse = nowPulse;
   }
 
-  unsigned long _millis = millis();
+  unsigned long _millis = hal_millis();
   rpmAliveTime = _millis + RESET_RPM_WATCHDOG_TIME;
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
@@ -65,11 +61,11 @@ void RPM::interrupt(void) {
 
     valueFields[F_RPM] = rpm; 
   } 
-  interrupts(); 
+  hal_critical_section_exit();
 }
 
 void RPM::init(void) {
-  pinMode(PIO_INTERRUPT_HALL, INPUT_PULLUP); 
+  hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
 
   previousMillis = 0;
   shortPulse = 0;
@@ -83,7 +79,7 @@ void RPM::init(void) {
   rpmPercentValue = 0;
 #endif
 
-  attachInterrupt(PIO_INTERRUPT_HALL, countRPM, CHANGE);  
+  hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
 
 #ifndef VP37
   rpmTimer = timer_create_default();
@@ -116,8 +112,8 @@ int RPM::getCurrentRPM(void) {
 void RPM::process(void) {
   rpmTimer.tick();
 
-  if(rpmAliveTime < (long)millis()) {
-    rpmAliveTime = millis() + RESET_RPM_WATCHDOG_TIME;
+  if(rpmAliveTime < (long)hal_millis()) {
+    rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
     valueFields[F_RPM] = 0;
   }
 

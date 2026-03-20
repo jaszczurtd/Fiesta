@@ -12,9 +12,9 @@
 class heatedWindshields : public EngineController {
 public:
   heatedWindshields();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
+  void init();  
+  void process();
+  void showDebug();
   void heatedWindow(bool enable, int side);
   bool isHeatedWindowEnabled(void);
   void heatedWindowMainLoop(void);

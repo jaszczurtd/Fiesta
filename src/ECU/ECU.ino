@@ -1,4 +1,3 @@
-#include <Arduino.h>
 #include "start.h"
 
 void setup(void) {

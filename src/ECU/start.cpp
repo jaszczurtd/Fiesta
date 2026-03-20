@@ -166,8 +166,8 @@ static bool alertBlink = false;
 //timer functions
 bool callAtEverySecond(void *arg) {
   alertBlink = (alertBlink) ? false : true;
-  digitalWrite(LED_BUILTIN, alertBlink);
-  digitalWrite(PIO_DPF_LAMP, isDPFRegenerating());
+  hal_gpio_write(LED_BUILTIN, alertBlink);
+  hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
 
 #if SYSTEM_TEMP
   deb("System temperature: %f", analogReadTemp());
@@ -186,7 +186,7 @@ void looper(void) {
   statusVariable0 = 2;
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    tight_loop_contents();
+    hal_idle();
     return;
   }
 
@@ -236,7 +236,7 @@ void looper1(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    tight_loop_contents();
+    hal_idle();
     return;
   }
 

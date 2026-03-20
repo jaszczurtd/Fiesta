@@ -41,7 +41,10 @@ void VP37Pump::initVP37(void) {
     measureFuelTemp(NULL);
     measureVoltage(NULL);
 
-    adjustController = new PIDController(VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, PID_MAX_INTEGRAL);
+    adjustController.setKp(VP37_PID_KP);
+    adjustController.setKi(VP37_PID_KI);
+    adjustController.setKd(VP37_PID_KD);
+    adjustController.setMaxIntegral(PID_MAX_INTEGRAL);
 
     throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
     throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
@@ -99,8 +102,8 @@ bool VP37Pump::isVP37Enabled(void) {
 void VP37Pump::throttleCycle(void) {
   float output;
 
-  adjustController->updatePIDtime(VP37_PID_TIME_UPDATE);
-  output = adjustController->updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer());
+  adjustController.updatePIDtime(VP37_PID_TIME_UPDATE);
+  output = adjustController.updatePIDcontroller(desiredAdjustometer - getVP37Adjustometer());
 
   pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
   
@@ -109,7 +112,7 @@ void VP37Pump::throttleCycle(void) {
   }
 
   finalPWM = pwmValue * (12.0 / lastVolts);  
-  finalPWM = constrain(finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
+  finalPWM = hal_constrain<int>(finalPWM, VP37_PWM_MIN, (int)VP37_PWM_MAX);
 
   if(lastPWMval != finalPWM) {
     lastPWMval = finalPWM;

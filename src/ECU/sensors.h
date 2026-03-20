@@ -16,18 +16,6 @@
 #include "hardwareConfig.h"
 #include "tests.h"
 
-#include "hardware/pwm.h"
-#include "hardware/gpio.h"
-
-typedef struct {
-  uint32_t pwmInitted;
-  uint16_t analogWritePseudoScale;
-  uint16_t analogWriteSlowScale;
-  uint32_t pin;
-  uint32_t analogFreq; 
-  uint32_t analogScale;
-} pwmConfig;
-
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 

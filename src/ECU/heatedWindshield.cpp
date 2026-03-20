@@ -4,17 +4,13 @@
 // heated windshield
 //-----------------------------------------------------------------------------
 
-static heatedWindshields *windows = nullptr;
+static heatedWindshields windows;
 void createHeatedWindshields(void) {
-  windows = new heatedWindshields();
-  windows->init();
+  windows.init();
 }
 
 heatedWindshields *getHeatedWindshieldsInstance(void) {
-  if(windows == nullptr) {
-    createHeatedWindshields();
-  }
-  return windows;
+  return &windows;
 }
 
 heatedWindshields::heatedWindshields() { }
@@ -24,7 +20,7 @@ void heatedWindshields::heatedWindow(bool enable, int side) {
 }
 
 void heatedWindshields::init(void) {
-  pinMode(HEATED_WINDOWS_PIN, INPUT_PULLUP);
+  hal_gpio_set_mode(HEATED_WINDOWS_PIN, HAL_GPIO_INPUT_PULLUP);
   
   heatedWindowEnabled = false;
   lastHeatedWindowEnabled = false;
@@ -35,7 +31,7 @@ void heatedWindshields::init(void) {
 }
 
 bool heatedWindshields::isHeatedButtonPressed(void) {
-  return digitalRead(HEATED_WINDOWS_PIN);
+  return hal_gpio_read(HEATED_WINDOWS_PIN);
 }
 
 bool heatedWindshields::isHeatedWindowEnabled(void) {

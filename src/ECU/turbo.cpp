@@ -35,7 +35,7 @@ void Turbo::process() {
   engineThrottlePercentageValue = getThrottlePercentage();
   posThrottle = (engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
-  bool pressurePercentage = 0;
+  int pressurePercentage = 0;
 
 #ifdef JUST_TEST_BY_THROTTLE
   engineThrottlePercentageValue = scaleTurboValues(engineThrottlePercentageValue);
@@ -76,7 +76,7 @@ void Turbo::process() {
 
   } else {
 
-   unsigned long currentTime = millis();
+   unsigned long currentTime = hal_millis();
     if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
       if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
         pressurePercentage -= PRESSURE_LIMITER_FACTOR;
@@ -94,7 +94,7 @@ void Turbo::process() {
   }
 
   pressurePercentage = scaleTurboValues(pressurePercentage);
-  pressurePercentage = constrain(pressurePercentage, 0, 100);
+  pressurePercentage = hal_constrain<int>(pressurePercentage, 0, 100);
 
   valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
 

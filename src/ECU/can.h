@@ -1,9 +1,6 @@
 #ifndef T_CAN
 #define T_CAN
 
-#include <Wire.h>
-#include <SPI.h>
-#include <mcp_can.h>
 #include <tools.h>
 #include <canDefinitions.h>
 

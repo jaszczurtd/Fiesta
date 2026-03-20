@@ -4,17 +4,13 @@
 // engine heater
 //-----------------------------------------------------------------------------
 
-static engineHeater *heat = nullptr;
+static engineHeater heat;
 void createHeater(void) {
-  heat = new engineHeater();
-  heat->init();
+  heat.init();
 }
 
 engineHeater *getHeaterInstance(void) {
-  if(heat == nullptr) {
-    createHeater();
-  }
-  return heat;
+  return &heat;
 }
 
 engineHeater::engineHeater() { }

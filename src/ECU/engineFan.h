@@ -18,9 +18,9 @@ enum {
 class engineFan : public EngineController {
 public:
   engineFan();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
+  void init();  
+  void process();
+  void showDebug();
   bool isFanEnabled(void);
   void fan(bool enable);
 

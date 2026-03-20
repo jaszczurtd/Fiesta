@@ -14,9 +14,9 @@
 class glowPlugs : public EngineController {
 public:
   glowPlugs();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
+  void init();  
+  void process();
+  void showDebug();
   void enableGlowPlugs(bool enable);
   void glowPlugsLamp(bool enable);
   bool isGlowPlugsHeating(void);
