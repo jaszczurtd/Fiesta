@@ -1,9 +1,0 @@
-{
-  "additionalFiles": "../../..,../../..,../../..,../../..,../../..,../../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..,../..",
-  "compiler.optimization_flags": "",
-  "customBuildProperties": "",
-  "fqbn": "rp2040:rp2040:rpipico",
-  "hardwareFolders": "/home/jaszczurtd/.arduino15/packages/rp2040/hardware/rp2040/5.5.1,/home/jaszczurtd/.arduino15/packages/rp2040/hardware/rp2040/5.5.1",
-  "otherLibrariesFolders": "/home/jaszczurtd/development/projects_git/libraries,/home/jaszczurtd/Arduino/libraries",
-  "sketchLocation": "/home/jaszczurtd/development/projects_git/Fiesta/src/Clocks"
-}
