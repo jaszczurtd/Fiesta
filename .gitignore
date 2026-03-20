@@ -98,3 +98,5 @@ Fiesta_pcbs/ecu/~lamp_dimmer.pcb
 Fiesta_pcbs/ecu/~clocks.pcb
 *~*
 src/Clocks/.build/
+src/ECU/.build/
+src/OilAndSpeed/.build/

@@ -1,0 +1,304 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "boardChoice",
+            "description": "Wybierz płytkę docelową",
+            "type": "pickString",
+            "options": [
+                "rp2040:rp2040:rpipico          — Raspberry Pi Pico",
+                "rp2040:rp2040:rpipicow         — Raspberry Pi Pico W",
+                "rp2040:rp2040:rpipico2         — Raspberry Pi Pico 2",
+                "rp2040:rp2040:rpipico2w        — Raspberry Pi Pico 2 W",
+                "rp2040:rp2040:waveshare_rp2040_zero — Waveshare RP2040-Zero",
+                "rp2040:rp2040:waveshare_rp2040_plus — Waveshare RP2040-Plus"
+            ],
+            "default": "rp2040:rp2040:rpipico          — Raspberry Pi Pico"
+        },
+        {
+            "id": "libraryName",
+            "description": "Nazwa biblioteki (np. 'Adafruit MCP9600')",
+            "type": "promptString",
+            "default": ""
+        },
+        {
+            "id": "uploadPort",
+            "description": "Port szeregowy (np. /dev/ttyACM0)",
+            "type": "promptString",
+            "default": "/dev/ttyACM0"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "Arduino: Kompiluj (Build)",
+            "detail": "Ctrl+Shift+B / Ctrl+R — kompilacja sketcha",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; VERBOSE='${config:arduino.verbose}'; VFLAG=''; if [ \"$VERBOSE\" = \"true\" ]; then VFLAG='-v'; fi; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --warnings all $VFLAG '${workspaceFolder}'"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "arduino",
+                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Arduino: Kompiluj (Debug)",
+            "detail": "Kompilacja z symbolami debugowymi (F5/Run uruchamia automatycznie)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --optimize-for-debug --warnings all '${workspaceFolder}'"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "arduino",
+                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Arduino: Upload",
+            "detail": "Ctrl+U — kompilacja + upload przez port szeregowy (auto-reset)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; PORT='${config:arduino.uploadPort}'; VERBOSE='${config:arduino.verbose}'; VFLAG=''; if [ \"$VERBOSE\" = \"true\" ]; then VFLAG='-v'; fi; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --upload --port \"$PORT\" --warnings all $VFLAG '${workspaceFolder}'"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "arduino",
+                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Arduino: Upload (UF2 / BOOTSEL)",
+            "detail": "Ctrl+Shift+U — kompilacja + kopiowanie UF2 na dysk BOOTSEL",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/upload-uf2.sh",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Monitor (persistent)",
+            "detail": "Ctrl+Shift+M — czeka na Pico (VID:PID), łączy, po odłączeniu czeka ponownie",
+            "type": "shell",
+            "command": "python3",
+            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "pico"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Monitor (Debug Probe)",
+            "detail": "Monitor dla Raspberry Pi Debug Probe / Picoprobe",
+            "type": "shell",
+            "command": "python3",
+            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "probe"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Monitor (dowolny port)",
+            "detail": "Monitor dla dowolnego /dev/ttyACM* lub /dev/ttyUSB*",
+            "type": "shell",
+            "command": "python3",
+            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "any"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Wybierz płytkę (GUI)",
+            "detail": "Ctrl+Alt+B — szybki wybór z dropdowna VS Code",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *—.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*— *//'); echo \"Ustawiam board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json zaktualizowany'); print('Uruchom: Arduino: Odśwież IntelliSense')\""
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Wybierz płytkę (interaktywnie)",
+            "detail": "Pełne menu z opcjami zaawansowanymi (flash, freq, USB, debug)",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/select-board.sh",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Odśwież IntelliSense",
+            "detail": "Ctrl+Alt+I — kompiluje projekt i generuje c_cpp_properties.json",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Zainstaluj bibliotekę",
+            "detail": "Ctrl+Alt+L — instalacja biblioteki przez arduino-cli",
+            "type": "shell",
+            "command": "${config:arduino.cliPath}",
+            "args": [
+                "lib", "install", "${input:libraryName}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Clean",
+            "detail": "Ctrl+Alt+K — usuwa folder .build",
+            "type": "shell",
+            "command": "rm",
+            "args": ["-rf", "${workspaceFolder}/.build"],
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Lista portów",
+            "detail": "Ctrl+Alt+P — wyświetla podłączone urządzenia Arduino",
+            "type": "shell",
+            "command": "${config:arduino.cliPath}",
+            "args": ["board", "list"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Arduino: Zmień port",
+            "detail": "Ustawia port uploadu w settings.json",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "PORT='${input:uploadPort}'; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.uploadPort']='$PORT'; json.dump(s,open(f,'w'),indent=4); print('Port ustawiony na: $PORT')\""
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        }
+    ]
+}
