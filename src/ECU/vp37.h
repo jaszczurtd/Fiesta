@@ -14,7 +14,6 @@
 #include "tests.h"
 
 #include "engineMaps.h"
-#include "EngineController.h"
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
@@ -50,7 +49,7 @@
 bool measureFuelTemp(void *arg);
 bool measureVoltage(void *arg);
 
-class VP37Pump : public EngineController {
+class VP37Pump {
 private:
   PIDController adjustController;
 

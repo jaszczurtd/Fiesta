@@ -9,9 +9,7 @@
 #include "sensors.h"
 #include "tests.h"
 
-#include "EngineController.h"
-
-class glowPlugs : public EngineController {
+class glowPlugs {
 public:
   glowPlugs();
   void init();  

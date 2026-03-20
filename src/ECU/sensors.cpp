@@ -146,7 +146,7 @@ float readBarPressure(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-  float val = ((float)hal_adc_read(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
+  float val = ((float)getAverageValueFrom(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
       1.0; //atmospheric pressure
   m_mutex_exit(analog4051Mutex);
 
@@ -269,6 +269,9 @@ int getPercentageEngineLoad(void) {
 bool readHighValues(void *argument) {
   for(int a = 0; a < F_LAST; a++) {
     switch(a) {
+      case F_RPM:
+        valueFields[a] = getRPMInstance()->getCurrentRPM();
+        break;
       case F_THROTTLE_POS:
         valueFields[a] = readThrottle();
         break;
@@ -323,52 +326,43 @@ static bool lastIsEngineRunning = false;
 
 bool updateValsForDebug(void *arg) {
 
-  String message = "";
-  String stamp = "";
-
+  char stamp[24];
   if(isSDLoggerInitialized()) {
-    stamp += "LN:" + String(getSDLoggerNumber() - 1) + " ";
+    snprintf(stamp, sizeof(stamp), "LN:%d ", getSDLoggerNumber() - 1);
   } else {
-    stamp += "NL/";
+    snprintf(stamp, sizeof(stamp), "NL/");
   }
 
-  float volts = rroundf(valueFields[F_VOLTS]); 
+  float volts = rroundf(valueFields[F_VOLTS]);
   if(lastVoltage != volts) {
     lastVoltage = volts;
-    message += stamp + "Voltage update: " + String(volts, 1) + "V\n";
+    deb("%sVoltage update: %.1fV", stamp, volts);
   }
 
-  int egt = int(valueFields[F_EGT]);
+  int egt = (int)valueFields[F_EGT];
   if(lastEGTTemp != egt) {
     lastEGTTemp = egt;
-    message += stamp + "EGT update: " + String(egt) + "C\n";
+    deb("%sEGT update: %dC", stamp, egt);
   }
 
-  int coolant = int(valueFields[F_COOLANT_TEMP]);
+  int coolant = (int)valueFields[F_COOLANT_TEMP];
   if(lastCoolantTemp != coolant) {
     lastCoolantTemp = coolant;
-    message += stamp + "Coolant temp. update: " + String(coolant) + "C\n";
+    deb("%sCoolant temp. update: %dC", stamp, coolant);
   }
 
-  int oil = int(valueFields[F_OIL_TEMP]);
+  int oil = (int)valueFields[F_OIL_TEMP];
   if(lastOilTemp != oil) {
     lastOilTemp = oil;
-    message += stamp + "Oil temp. update: " + String(oil) + "C\n";
-  }
-  RPM *rpm = getRPMInstance();
-
-  if(lastIsEngineRunning != rpm->isEngineRunning()) {
-    lastIsEngineRunning= rpm->isEngineRunning();
-    message += stamp + "Engine is running: " + (rpm->isEngineRunning() ? "yes" : "no") + "\n";
+    deb("%sOil temp. update: %dC", stamp, oil);
   }
 
-  if(message.length() > 0) {
-    if (message.endsWith("\n")) {
-      message.remove(message.length() - 1);
-    }    
-    deb(message.c_str());
+  bool running = getRPMInstance()->isEngineRunning();
+  if(lastIsEngineRunning != running) {
+    lastIsEngineRunning = running;
+    deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
   }
-  
+
   return true;
 }
 

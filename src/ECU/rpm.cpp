@@ -28,11 +28,9 @@ void RPM::resetRPMCycle(void) {
   rpmCycle = false;
 }
 
-RPM::RPM() { }
+RPM::RPM() : rpmValue(0) { }
 
 void RPM::interrupt(void) {
-  hal_critical_section_enter();
-
   unsigned long _micros = hal_micros();
   unsigned long nowPulse = _micros - lastPulse;
 
@@ -50,23 +48,23 @@ void RPM::interrupt(void) {
   if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
     previousMillis = _millis;
 
-    int rpm = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL; 
+    int rpm = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL;
     if(rpm < 0) {
       rpm = 0;
     }
-    RPMpulses = 0; 
+    RPMpulses = 0;
 
     rpm = min(RPM_MAX_EVER, rpm);
     rpm = ((rpm / 10) * 10);
 
-    valueFields[F_RPM] = rpm; 
-  } 
-  hal_critical_section_exit();
+    rpmValue = rpm;
+  }
 }
 
 void RPM::init(void) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
 
+  rpmValue = 0;
   previousMillis = 0;
   shortPulse = 0;
   lastPulse = 0;
@@ -105,7 +103,7 @@ bool RPM::isEngineThrottlePressed(void) {
 }
 
 int RPM::getCurrentRPM(void) {
-  return (int)valueFields[F_RPM];
+  return rpmValue;
 }
 
 #ifndef VP37
@@ -114,7 +112,7 @@ void RPM::process(void) {
 
   if(rpmAliveTime < (long)hal_millis()) {
     rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
-    valueFields[F_RPM] = 0;
+    rpmValue = 0;
   }
 
   int desiredRPM = NOMINAL_RPM_VALUE;
@@ -186,5 +184,5 @@ bool RPM::isEngineRunning(void) {
 }
 
 void RPM::showDebug() {
-  deb("rpm:%d current:%d", (int)valueFields[F_RPM], currentRPMSolenoid);
+  deb("rpm:%d current:%d", getCurrentRPM(), currentRPMSolenoid);
 }

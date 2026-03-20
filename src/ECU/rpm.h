@@ -10,8 +10,6 @@
 #include "sensors.h"
 #include "tests.h"
 
-#include "EngineController.h"
-
 //is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
 
@@ -24,7 +22,7 @@
 #define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 500
 #define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
 
-class RPM : public EngineController {
+class RPM {
 public:
   RPM();
   void init();  
@@ -40,8 +38,10 @@ public:
   int getCurrentRPMSolenoid(void);
   void interrupt(void);
   void resetRPMCycle(void);
+  int getCurrentRPM(void);
 
 private:
+  volatile int rpmValue;
   volatile unsigned long previousMillis;
   volatile unsigned long shortPulse;
   volatile unsigned long lastPulse;
@@ -55,7 +55,6 @@ private:
 #endif
 
   bool isEngineThrottlePressed(void);
-  int getCurrentRPM(void);
 };
 
 RPM *getRPMInstance(void);

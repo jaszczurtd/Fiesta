@@ -14,7 +14,6 @@
 #include "tests.h"
 
 #include "engineMaps.h"
-#include "EngineController.h"
 
 //#define JUST_TEST_BY_THROTTLE
 
@@ -23,10 +22,10 @@
 #define PRESSURE_LIMITER_FACTOR 2
 #define MIN_TEMPERATURE_CORRECTION 30
 
-class Turbo : public EngineController {
+class Turbo {
 private:
 
-  unsigned long lastSolenoidUpdate = 0;
+  unsigned long lastSolenoidUpdate;
 
   int scaleTurboValues(int value);
   int correctPressureFactor(void);

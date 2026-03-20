@@ -54,13 +54,13 @@ void engineFan::process(void) {
           }
         }
       } else {
-        if((fanEnabled & FAN_REASON_AIR) == false) {
+        if(!(fanEnabled & FAN_REASON_AIR)) {
           if(air > AIR_TEMP_FAN_START) {
             fanEnabled |= FAN_REASON_AIR;
           }
         }
 
-        if((fanEnabled & FAN_REASON_COOLANT) == false) {
+        if(!(fanEnabled & FAN_REASON_COOLANT)) {
           if(coolant > TEMP_FAN_START) {
             fanEnabled |= FAN_REASON_COOLANT;
           }
@@ -68,10 +68,7 @@ void engineFan::process(void) {
       }
     } else {
       //temp sensor read fail, fan enabled by default
-      //but only if engine has minimum RPM
-      if(rpm > RPM_MIN) {
-        fanEnabled |= FAN_REASON_COOLANT;
-      }
+      fanEnabled |= FAN_REASON_COOLANT;
     }
   } else {
     fanEnabled = FAN_REASON_NONE;    

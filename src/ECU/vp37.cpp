@@ -63,7 +63,7 @@ int VP37Pump::makeCalibrationValue(void) {
 }
 
 float VP37Pump::getCalibrationError(int from) {
-  return (float)((float)from * PERCENTAGE_ERROR / 100.0f);  
+  return (float)from * PERCENTAGE_ERROR / 100.0f;
 }
 
 bool VP37Pump::isInRangeOf(float desired, float val) {
@@ -112,7 +112,7 @@ void VP37Pump::throttleCycle(void) {
   }
 
   finalPWM = pwmValue * (12.0 / lastVolts);  
-  finalPWM = hal_constrain<int>(finalPWM, VP37_PWM_MIN, (int)VP37_PWM_MAX);
+  finalPWM = constrain(finalPWM, VP37_PWM_MIN, (int)VP37_PWM_MAX);
 
   if(lastPWMval != finalPWM) {
     lastPWMval = finalPWM;

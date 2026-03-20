@@ -94,7 +94,7 @@ void Turbo::process() {
   }
 
   pressurePercentage = scaleTurboValues(pressurePercentage);
-  pressurePercentage = hal_constrain<int>(pressurePercentage, 0, 100);
+  pressurePercentage = constrain(pressurePercentage, 0, 100);
 
   valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
 

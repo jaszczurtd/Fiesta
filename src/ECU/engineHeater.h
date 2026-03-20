@@ -9,9 +9,7 @@
 #include "tests.h"
 #include "engineFan.h"
 
-#include "EngineController.h"
-
-class engineHeater : public EngineController {
+class engineHeater {
 public:
   engineHeater();
   void init();  

@@ -9,13 +9,11 @@
 #include "tests.h"
 #include "canDefinitions.h"
 
-#include "EngineController.h"
-
 enum {
   FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR
 };
 
-class engineFan : public EngineController {
+class engineFan {
 public:
   engineFan();
   void init();  
