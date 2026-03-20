@@ -8,8 +8,8 @@ void setupOnboardLed(void) {
 }
 
 void initSPI(void) {
-  pinMode(CAN_CS, OUTPUT);
-  digitalWrite(CAN_CS, HIGH);
+  hal_gpio_set_mode(CAN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(CAN_CS, true);
 
   SPI.setRX(PIN_MISO); //MISO
   SPI.setTX(PIN_MOSI); //MOSI
@@ -18,7 +18,7 @@ void initSPI(void) {
 }
 
 void initBasicPIO(void) {
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
+  hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
 }
 
 void setLEDColor(int ledColor) {
@@ -54,4 +54,3 @@ void setLEDColor(int ledColor) {
       break;
   }
 }
-

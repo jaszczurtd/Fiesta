@@ -16,7 +16,6 @@ void executeByWatchdog(int *values, int size) {
 }
 
 void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  //watchdog_feed();
   generalTimer.every(time, function);
   m_delay(CORE_OPERATION_DELAY);
 }
@@ -27,7 +26,7 @@ void setupTimers(void) {
 
   setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
   setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
-  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);
   setupTimerWith(OIL_PRESSURE_READ_INTERVAL, readOilPressure);
   setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
 }
@@ -41,15 +40,15 @@ void initialization(void) {
   initBasicPIO();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
-  if(!rebooted) {
+  if (!rebooted) {
     statusVariable0 = statusVariable1 = 0;
   }
 
   initSPI();
-  
+
   result = canInit();
   setLEDColor(result ? RED: GREEN);
-  if(result) {
+  if (result) {
     derr("cannot setup CAN, exiting");
     return;
   }
@@ -61,7 +60,7 @@ void initialization(void) {
   watchdog_feed();
 
   result = setupOilPressure();
-  if(!result) {
+  if (!result) {
     derr("cannot setup oil pressure readout, exiting");
     return;
   }
@@ -70,7 +69,7 @@ void initialization(void) {
 
   result = setupSpeedometer();
   setLEDColor(result ? GREEN: YELLOW);
-  if(!result) {
+  if (!result) {
     derr("cannot setup speedometer, exiting");
     return;
   }
@@ -83,10 +82,10 @@ void looper() {
   statusVariable0 = 0;
   updateWatchdogCore0();
 
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    m_delay(CORE_OPERATION_DELAY);
+    hal_idle();
     return;
   }
 
@@ -96,8 +95,8 @@ void looper() {
   onImpulseTranslating();
   canSendLoop();
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
 
@@ -108,21 +107,21 @@ void initialization1() {
 void looper1() {
   updateWatchdogCore1();
 
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    m_delay(CORE_OPERATION_DELAY);
+    hal_idle();
     return;
   }
   statusVariable1 = 1;
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
 bool updateValsForDebug(void *arg) {
 
-  deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off", 
+  deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off",
                                                           isClusterConnected() ? "on" : "off",
                                                           getCircumference(),
                                                           valueFields[F_OIL_PRESSURE]);

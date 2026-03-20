@@ -1,7 +1,6 @@
 #ifndef S_PERIPHERIALS_H
 #define S_PERIPHERIALS_H
 
-#include <Arduino.h>
 #include <tools.h>
 #include <SPI.h>
 #include <canDefinitions.h>

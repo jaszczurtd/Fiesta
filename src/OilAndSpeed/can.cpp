@@ -1,7 +1,5 @@
 #include "can.h"
 
-static MCP_CAN *CAN = NULL;
-
 float valueFields[F_LAST];
 
 static unsigned char frameNumber = 0;
@@ -12,31 +10,18 @@ static bool dpfConnected = false;
 static unsigned long clusterMessages = 0, lastClusterMessages = 0;
 static bool clusterConnected = false;
 
-// Incoming CAN-BUS message
-static long unsigned int canID = 0x000;
-
-// This is the length of the incoming CAN-BUS message
-static unsigned char len = 0;
-
-// This the eight byte buffer of the incoming message data payload
-static byte buf[CAN_FRAME_MAX_LENGTH];
-
-static bool interrupt = false;
-
 bool canInit(void) {
-  CAN = new MCP_CAN(CAN_CS);
   ecuConnected = false;
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
-  interrupt = false;
 
   int canRetries = 0;
   bool error = false;
 
-  while(!(CAN_OK == CAN->begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ))) {
+  while (!hal_can_init(CAN_CS)) {
     watchdog_feed();
     canRetries++;
-    if(canRetries == MAX_RETRIES) {
+    if (canRetries == MAX_RETRIES) {
       error = true;
       break;
     }
@@ -46,13 +31,10 @@ bool canInit(void) {
 
     m_delay(SECOND);
   }
-  if(!error) {
+  if (!error) {
     watchdog_feed();
     deb("CAN BUS Shield init ok!");
-    CAN->setMode(MCP_NORMAL); 
-    CAN->setSleepWakeup(1); // Enable wake up interrupt when in sleep mode
-    pinMode(CAN_INT, INPUT); 
-    attachInterrupt(digitalPinToInterrupt(CAN_INT), receivedCanMessage, FALLING);
+    hal_gpio_set_mode(CAN_INT, HAL_GPIO_INPUT);
     canMainLoop(NULL);
   }
   return error;
@@ -60,39 +42,43 @@ bool canInit(void) {
 
 bool updateCANrecipients(void *argument) {
 
-  //INT8U sendMsgBuf(INT32U id, INT8U len, INT8U *buf); 
-
-  byte buf[CAN_FRAME_MAX_LENGTH];
+  uint8_t buf[CAN_FRAME_MAX_LENGTH] = {};
 
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
   int hi, lo;
   floatToDec(valueFields[F_OIL_PRESSURE], &hi, &lo);
-  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (byte)hi;
-  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (byte)lo;      
-  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (byte)valueFields[F_ABS_CAR_SPEED];
+  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (uint8_t)hi;
+  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
+  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)valueFields[F_ABS_CAR_SPEED];
 
-  CAN->sendMsgBuf(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
+  hal_can_send(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
 
-  return true; 
-}
-
-void receivedCanMessage(void) {
-  interrupt = true;
+  return true;
 }
 
 static byte lastFrame = 0;
 bool canMainLoop(void *message) {
-  CAN->readMsgBuf(&canID, &len, buf);
-  if(canID == 0 || len < 1) {
+  if (!hal_can_available()) {
     return true;
   }
 
-  if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
-    interrupt = false;
+  long unsigned int canID = 0;
+  unsigned char len = 0;
+  byte buf[CAN_FRAME_MAX_LENGTH] = {};
+
+  if (!hal_can_receive(&canID, &len, buf)) {
+    return true;
+  }
+
+  if (canID == 0 || len < 1) {
+    return true;
+  }
+
+  if (lastFrame != buf[CAN_FRAME_NUMBER]) {
     lastFrame = buf[CAN_FRAME_NUMBER];
 
-    switch(canID) {
+    switch (canID) {
 
       case CAN_ID_ECU_UPDATE_01:
       case CAN_ID_DPF:
@@ -121,7 +107,6 @@ bool canMainLoop(void *message) {
 
       default:
         deb("received unknown CAN frame:%03x len:%d\n", canID, len);
-
         break;
     }
   }
@@ -150,35 +135,35 @@ bool canCheckConnection(void *message) {
   lastClusterMessages = clusterMessages;
 
   int color = GREEN;
-  if(!clusterConnected && ecuConnected) {
+  if (!clusterConnected && ecuConnected) {
     color = (state) ? GREEN : PURPLE;
   }
-  if(clusterConnected && !ecuConnected) {
+  if (clusterConnected && !ecuConnected) {
     color = (state) ? GREEN : YELLOW;
   }
-  if(!clusterConnected && !ecuConnected) {
+  if (!clusterConnected && !ecuConnected) {
     color = (state) ? GREEN : RED;
   }
-  
+
   state = !state;
-  if(color != lastColor) {
+  if (color != lastColor) {
     lastColor = color;
     setLEDColor(color);
   }
 
-  return true;  
+  return true;
 }
 
 bool canSendLoop(void) {
   static float lastSpeed = 0.0;
   static float lastOilPressure = 0.0;
 
-  if(lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
+  if (lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
     lastSpeed = valueFields[F_ABS_CAR_SPEED];
     updateCANrecipients(nullptr);
   }
 
-  if(lastOilPressure != valueFields[F_OIL_PRESSURE]) {
+  if (lastOilPressure != valueFields[F_OIL_PRESSURE]) {
     lastOilPressure = valueFields[F_OIL_PRESSURE];
     updateCANrecipients(nullptr);
   }
@@ -188,21 +173,21 @@ bool canSendLoop(void) {
   static int lastSpeed = 0;
   static unsigned long pauseUntil = 0;
 
-  unsigned long now = millis();  
+  unsigned long now = hal_millis();
 
   if (pauseUntil != 0) {
     if (now < pauseUntil) {
       getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
-      return true; 
+      return true;
     } else {
-      pauseUntil = 0; 
+      pauseUntil = 0;
     }
   }
 
   int speed = getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
-  if(lastSpeed != speed) {
+  if (lastSpeed != speed) {
     amountCounter++;
-    if(amountCounter == 4) {
+    if (amountCounter == 4) {
       amountCounter = 0;
       speed = 0;
       pauseUntil = now + ABS_CAR_SPEED_SEQUENCE_DELAY;
@@ -216,17 +201,17 @@ bool canSendLoop(void) {
 
 #ifdef ABS_CAR_SPEED_PACKET_LINEAR_TEST
   static int val = 20;
-  static unsigned long lastUpdate = 0;  
+  static unsigned long lastUpdate = 0;
 
-  unsigned long current = millis();
+  unsigned long current = hal_millis();
 
   if (current - lastUpdate >= ABS_CAR_SPEED_SEQUENCE_DELAY) {
-      lastUpdate = current;
+    lastUpdate = current;
 
-      val += 10;
-      if (val > 220) {
-          val = 20;
-      }
+    val += 10;
+    if (val > 220) {
+      val = 20;
+    }
   }
 
   valueFields[F_ABS_CAR_SPEED] = val;
@@ -235,7 +220,7 @@ bool canSendLoop(void) {
 #ifdef OIL_PRESSURE_PACKET_TEST
   static float lastPressure = 0.0f;
   float pressure = getRandomFloatEverySomeMillis(4500, 4.0);
-  if(lastPressure != pressure) {
+  if (lastPressure != pressure) {
     lastPressure = pressure;
     deb("new pressure: %f", pressure);
     valueFields[F_OIL_PRESSURE] = pressure;
@@ -243,8 +228,5 @@ bool canSendLoop(void) {
   }
 #endif
 
-
   return true;
 }
-
-

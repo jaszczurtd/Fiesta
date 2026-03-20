@@ -54,8 +54,8 @@ bool calculateCircumferenceMeters(const char *tireString, double correctionFacto
 
 bool setupSpeedometer(void) {
   bool success = calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
-  if(success) {
-    attachInterrupt(digitalPinToInterrupt(ABS_INPUT_PIN), onImpulse, RISING);
+  if (success) {
+    hal_gpio_attach_interrupt(ABS_INPUT_PIN, onImpulse, HAL_GPIO_IRQ_RISING);
     return success;
   }
   derr("error while calculating tire dimension");
@@ -67,13 +67,13 @@ void onImpulse(void) {
 }
 
 void onImpulseTranslating(void) {
-  if(circumferenceMeters > 0) {
-    unsigned long currentTime = millis();
+  if (circumferenceMeters > 0) {
+    unsigned long currentTime = hal_millis();
 
     if (currentTime - lastCalcTime >= CALC_INTERVAL) {
-      noInterrupts(); 
+      hal_critical_section_enter();
       unsigned long count = impulseCount;
-      interrupts();
+      hal_critical_section_exit();
 
       unsigned long impulsesInInterval = count - lastImpulseCount;
       lastImpulseCount = count;
@@ -84,11 +84,10 @@ void onImpulseTranslating(void) {
       float speed_mps = rotationsPerSecond * circumferenceMeters;
       float speed_kph = speed_mps * 3.6f;
 
-      if(valueFields[F_ABS_CAR_SPEED] != speed_kph) {
+      if (valueFields[F_ABS_CAR_SPEED] != speed_kph) {
         valueFields[F_ABS_CAR_SPEED] = speed_kph;
         deb("Speed: %fkm/h %f %f", valueFields[F_ABS_CAR_SPEED], rotationsPerSecond, speed_mps);
       }
-    }  
+    }
   }
 }
-

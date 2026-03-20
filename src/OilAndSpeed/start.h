@@ -1,7 +1,6 @@
 #ifndef S_START_H
 #define S_START_H
 
-#include <Arduino.h>
 #include <tools.h>
 #include <canDefinitions.h>
 #include <arduino-timer.h>
