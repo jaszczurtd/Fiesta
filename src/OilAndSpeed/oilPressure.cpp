@@ -41,12 +41,10 @@ bool setupOilPressure(void) {
   return true;
 }
 
-bool readOilPressure(void *arg) {
-  (void)arg;
-
+void readOilPressure(void) {
   int raw = hal_adc_read(OIL_PRESSURE_ADC_PIN);
   if (raw < 0) {
-    return true;
+    return;
   }
 
   float senderResistance = readSenderResistanceOhm(raw);
@@ -56,6 +54,4 @@ bool readOilPressure(void *arg) {
                      (oilPressure * OIL_PRESSURE_FILTER_ALPHA);
 
   valueFields[F_OIL_PRESSURE] = filteredPressure;
-
-  return true;
 }

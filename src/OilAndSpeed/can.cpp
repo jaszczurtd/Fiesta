@@ -1,6 +1,7 @@
 #include "can.h"
 
 float valueFields[F_LAST];
+static hal_can_t canHandle = NULL;
 
 static unsigned char frameNumber = 0;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;
@@ -18,7 +19,7 @@ bool canInit(void) {
   int canRetries = 0;
   bool error = false;
 
-  while (!hal_can_init(CAN_CS)) {
+  while (!(canHandle = hal_can_create(CAN_CS))) {
     watchdog_feed();
     canRetries++;
     if (canRetries == MAX_RETRIES) {
@@ -35,12 +36,12 @@ bool canInit(void) {
     watchdog_feed();
     deb("CAN BUS Shield init ok!");
     hal_gpio_set_mode(CAN_INT, HAL_GPIO_INPUT);
-    canMainLoop(NULL);
+    canMainLoop();
   }
   return error;
 }
 
-bool updateCANrecipients(void *argument) {
+void updateCANrecipients(void) {
 
   uint8_t buf[CAN_FRAME_MAX_LENGTH] = {};
 
@@ -52,27 +53,25 @@ bool updateCANrecipients(void *argument) {
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
   buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)valueFields[F_ABS_CAR_SPEED];
 
-  hal_can_send(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
-
-  return true;
+  hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
 }
 
 static byte lastFrame = 0;
-bool canMainLoop(void *message) {
-  if (!hal_can_available()) {
-    return true;
+void canMainLoop(void) {
+  if (!hal_can_available(canHandle)) {
+    return;
   }
 
-  long unsigned int canID = 0;
-  unsigned char len = 0;
-  byte buf[CAN_FRAME_MAX_LENGTH] = {};
+  uint32_t canID = 0;
+  uint8_t len = 0;
+  uint8_t buf[CAN_FRAME_MAX_LENGTH] = {};
 
-  if (!hal_can_receive(&canID, &len, buf)) {
-    return true;
+  if (!hal_can_receive(canHandle, &canID, &len, buf)) {
+    return;
   }
 
   if (canID == 0 || len < 1) {
-    return true;
+    return;
   }
 
   if (lastFrame != buf[CAN_FRAME_NUMBER]) {
@@ -110,7 +109,6 @@ bool canMainLoop(void *message) {
         break;
     }
   }
-  return true;
 }
 
 bool isClusterConnected(void) {
@@ -121,7 +119,7 @@ bool isEcuConnected(void) {
   return ecuConnected;
 }
 
-bool canCheckConnection(void *message) {
+void canCheckConnection(void) {
   static int lastColor = 0;
   static bool state = false;
 
@@ -150,8 +148,6 @@ bool canCheckConnection(void *message) {
     lastColor = color;
     setLEDColor(color);
   }
-
-  return true;
 }
 
 bool canSendLoop(void) {
@@ -160,12 +156,12 @@ bool canSendLoop(void) {
 
   if (lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
     lastSpeed = valueFields[F_ABS_CAR_SPEED];
-    updateCANrecipients(nullptr);
+    updateCANrecipients();
   }
 
   if (lastOilPressure != valueFields[F_OIL_PRESSURE]) {
     lastOilPressure = valueFields[F_OIL_PRESSURE];
-    updateCANrecipients(nullptr);
+    updateCANrecipients();
   }
 
 #ifdef ABS_CAR_SPEED_PACKET_TEST
@@ -195,7 +191,7 @@ bool canSendLoop(void) {
     lastSpeed = speed;
     deb("new speed: %d", speed);
     valueFields[F_ABS_CAR_SPEED] = speed;
-    updateCANrecipients(NULL);
+    updateCANrecipients();
   }
 #endif
 
@@ -224,7 +220,7 @@ bool canSendLoop(void) {
     lastPressure = pressure;
     deb("new pressure: %f", pressure);
     valueFields[F_OIL_PRESSURE] = pressure;
-    updateCANrecipients(NULL);
+    updateCANrecipients();
   }
 #endif
 

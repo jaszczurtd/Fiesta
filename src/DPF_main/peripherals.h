@@ -1,7 +1,6 @@
 #ifndef PERIP_F_0
 #define PERIP_F_0
 
-#include <Wire.h>
 #include <SPI.h>
 #include <mcp_can.h>
 #include <canDefinitions.h>

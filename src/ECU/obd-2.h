@@ -2,8 +2,6 @@
 #ifndef T_OBD
 #define T_OBD
 
-#include <mcp_can.h>
-#include <SPI.h>
 #include <tools.h>
 
 #include "start.h"

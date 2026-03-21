@@ -2,31 +2,29 @@
 #include "start.h"
 
 static unsigned long lastThreadSeconds = 0;
-static Timer generalTimer;
+static SmartTimers timerEverySecond;
+static SmartTimers timerMedium;
+static SmartTimers timerHigh;
+static SmartTimers timerGPS;
+static SmartTimers timerDebug;
+static SmartTimers timerCANUpdate;
+static SmartTimers timerCANLoop;
+static SmartTimers timerCANCheck;
 static Turbo turbo;
 static VP37Pump injectionPump;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  watchdog_feed();
-  generalTimer.every(time, function);
-  m_delay(CORE_OPERATION_DELAY);
-}
-
 void setupTimers(void) {
-
-  generalTimer = timer_create_default();
-
-  setupTimerWith(SECOND, callAtEverySecond);
-  setupTimerWith(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER, readMediumValues);
-  setupTimerWith(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER, readHighValues);
-  setupTimerWith(GPS_UPDATE, getGPSData);
-  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
-  setupTimerWith(CAN_UPDATE_RECIPIENTS, CAN_updaterecipients_01);
-  setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
-  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                           m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER); m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);   m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                       m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                           m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);         m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                 m_delay(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
 }
 
 static int *wValues = NULL;
@@ -46,7 +44,7 @@ void initialization(void) {
   //this has to be invoked as soon as possible, and twice
   initI2C();
   pcf8574_init();
-  Wire.end();
+  hal_i2c_deinit();
 
   initSPI();
 
@@ -140,14 +138,14 @@ void initialization(void) {
 
   initFuelMeasurement();
 
-  canCheckConnection(NULL);
-  canMainLoop(NULL);
-  callAtEverySecond(NULL);
-  updateValsForDebug(NULL);
+  canCheckConnection();
+  canMainLoop();
+  callAtEverySecond();
+  updateValsForDebug();
   CAN_sendAll();
   setupTimers();
 
-  deb("System temperature:%.1fC", rroundf(analogReadTemp()));
+  deb("System temperature:%.1fC", rroundf(hal_read_chip_temp()));
   
   setStartedCore0();
 
@@ -164,16 +162,14 @@ void initialization(void) {
 static bool alertBlink = false;
 
 //timer functions
-bool callAtEverySecond(void *arg) {
+void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
   hal_gpio_write(LED_BUILTIN, alertBlink);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
 
 #if SYSTEM_TEMP
-  deb("System temperature: %f", analogReadTemp());
+  deb("System temperature: %f", hal_read_chip_temp());
 #endif
-
-  return true;
 }
 
 void looper(void) {
@@ -190,11 +186,18 @@ void looper(void) {
     return;
   }
 
-  generalTimer.tick();
+  timerEverySecond.tick();
+  timerMedium.tick();
+  timerHigh.tick();
+  timerGPS.tick();
+  timerDebug.tick();
+  timerCANUpdate.tick();
+  timerCANLoop.tick();
+  timerCANCheck.tick();
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
-    deb("thread is alive, active tasks: %d", generalTimer.size());
+    deb("thread is alive");
   }
   statusVariable0 = 3;
   obdLoop();
@@ -213,8 +216,8 @@ void looper(void) {
 #endif
   turbo.showDebug();
 
-  tight_loop_contents();
-  m_delay(CORE_OPERATION_DELAY);  
+  hal_idle();
+  m_delay(CORE_OPERATION_DELAY);
 }
 
 void initialization1(void) {
@@ -250,6 +253,6 @@ void looper1(void) {
 #endif
   statusVariable1 = 3;
 
-  tight_loop_contents();
+  hal_idle();
 }
 

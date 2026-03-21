@@ -2,7 +2,6 @@
 #ifndef T_PRESSURE_GAUGE
 #define T_PRESSURE_GAUGE
 
-#include <Arduino.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
 

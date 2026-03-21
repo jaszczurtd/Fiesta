@@ -11,62 +11,32 @@ void unsupportedPrint(byte mode, byte pid);
 void iso_tp(byte mode, byte pid, int len, byte *data);
 void negAck(byte mode, byte reason);
 
-// Set CS to pin 6 for the CAB-BUS sheild                                
-MCP_CAN CAN0(CAN1_GPIO);                                      
+static hal_can_t obdCan = NULL;
 
 // CAN RX Variables
-static unsigned long rxId;
-static byte dlc;
-static byte rxBuf[8];
+static uint32_t rxId;
+static uint8_t dlc;
+static uint8_t rxBuf[HAL_CAN_MAX_DATA_LEN];
 
 static bool initialized = false;
 void obdInit(int retries) {
 
   for(int a = 0; a < retries; a++) {
-    initialized = (CAN0.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) == CAN_OK);
+    obdCan = hal_can_create(CAN1_GPIO);
+    initialized = (obdCan != NULL);
     if(initialized) {
       deb("MCP2515 Initialized Successfully!");
-    }
-    else {
-      derr("Error Initializing MCP2515...");
-    }
-    if(initialized) {
       break;
     }
+    derr("Error Initializing MCP2515...");
     m_delay(SECOND);
     watchdog_feed();
   }
 
-#if standard == 1
-  // Standard ID Filters
-  CAN0.init_Mask(0,0xFFfffff);                // Init first mask...
-  CAN0.init_Filt(0,0xFFFffff);                // Init first filter...
-  CAN0.init_Filt(1,0xFFfffff);                // Init second filter...
-  
-  CAN0.init_Mask(1,0xFFfffff);                // Init second mask... 
-  CAN0.init_Filt(2,0xFFFffff);                // Init third filter...
-  CAN0.init_Filt(3,0xFFfffff);                // Init fourth filter...
-  CAN0.init_Filt(4,0xFFfffff);                // Init fifth filter...
-  CAN0.init_Filt(5,0xFFfffff);                // Init sixth filter...
-
-#else
-  // Extended ID Filters
-  CAN0.init_Mask(0,0x90FFFF00);                // Init first mask...
-  CAN0.init_Filt(0,0x90DB3300);                // Init first filter...
-  CAN0.init_Filt(1,0x90DA0100);                // Init second filter...
-  
-  CAN0.init_Mask(1,0x90FFFF00);                // Init second mask... 
-  CAN0.init_Filt(2,0x90DB3300);                // Init third filter...
-  CAN0.init_Filt(3,0x90DA0100);                // Init fourth filter...
-  CAN0.init_Filt(4,0x90DB3300);                // Init fifth filter...
-  CAN0.init_Filt(5,0x90DA0100);                // Init sixth filter...
-#endif
-  
-  CAN0.setMode(MCP_NORMAL);                          // Set operation mode to normal so the MCP2515 sends acks to received data.
-
-  hal_gpio_set_mode(CAN1_INT, HAL_GPIO_INPUT);       // Configuring pin for /INT input
-  
-  deb("OBD-2 CAN Shield init ok!");
+  if(initialized) {
+    hal_gpio_set_mode(CAN1_INT, HAL_GPIO_INPUT);     // Configuring pin for /INT input
+    deb("OBD-2 CAN Shield init ok!");
+  }
 }
 
 void obdLoop(void) {
@@ -76,12 +46,13 @@ void obdLoop(void) {
   
   if(!hal_gpio_read(CAN1_INT))                       // If CAN1_INT pin is low, read receive buffer
   {
-    CAN0.readMsgBuf(&rxId, &dlc, rxBuf);             // Get CAN data
-    
-    // First request from most adapters...
-    if(rxId == FUNCTIONAL_ID){
-      obdReq(rxBuf);
-    }       
+    if(hal_can_receive(obdCan, &rxId, &dlc, rxBuf)) // Get CAN data
+    {
+      // First request from most adapters...
+      if(rxId == FUNCTIONAL_ID){
+        obdReq(rxBuf);
+      }
+    }
   }
 }
 
@@ -783,7 +754,7 @@ void obdReq(byte *data){
   }
   
   if(tx)
-    CAN0.sendMsgBuf(REPLY_ID, 8, txData);
+    hal_can_send(obdCan, REPLY_ID, 8, txData);
 }
 
 
@@ -797,7 +768,7 @@ void unsupported(byte mode, byte pid){
 // Generic debug serial output
 void negAck(byte mode, byte reason){
   byte txData[] = {0x03,0x7F,mode,reason,PAD,PAD,PAD,PAD};
-  CAN0.sendMsgBuf(REPLY_ID, 8, txData);
+  hal_can_send(obdCan, REPLY_ID, 8, txData);
 }
 
 
@@ -824,7 +795,7 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
   for(byte i=2; i<8; i++){
     tpData[i] = data[offset++];
   }
-  CAN0.sendMsgBuf(REPLY_ID, 8, tpData);
+  hal_can_send(obdCan, REPLY_ID, 8, tpData);
   index++; // We sent a packet so increase our index.
   
   bool not_done = true;
@@ -835,7 +806,7 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
   while(not_done){
     // Need to wait for flow frame
     if(!hal_gpio_read(CAN1_INT)){
-      CAN0.readMsgBuf(&rxId, &dlc, rxBuf);
+      hal_can_receive(obdCan, &rxId, &dlc, rxBuf);
     
       if((rxId == LISTEN_ID) && ((rxBuf[0] & 0xF0) == 0x30)){
         if((rxBuf[0] & 0x0F) == 0x00){
@@ -867,7 +838,7 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
       }
       
       // Do consecutive frames as instructed via flow frame
-      CAN0.sendMsgBuf(REPLY_ID, 8, tpData);
+      hal_can_send(obdCan, REPLY_ID, 8, tpData);
       
       if(frames-- == 1)
         lockout = false;

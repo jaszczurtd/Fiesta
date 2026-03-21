@@ -23,6 +23,7 @@ static uint8_t len = 0;
 static uint8_t buf[CAN_FRAME_MAX_LENGTH];
 
 static bool interrupt = false;
+static hal_can_t canHandle = NULL;
 
 bool canInit(void) {
   ecuConnected = false;
@@ -33,7 +34,8 @@ bool canInit(void) {
   int canRetries = 0;
   bool error = false;
 
-  while (!hal_can_init(CAN_CS)) {
+  canHandle = hal_can_create(CAN_CS);
+  while (!canHandle) {
     hal_watchdog_feed();
     canRetries++;
     if(canRetries == MAX_RETRIES) {
@@ -45,6 +47,7 @@ bool canInit(void) {
     deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
 
     hal_delay_ms(SECOND);
+    canHandle = hal_can_create(CAN_CS);
   }
   if(!error) {
     hal_watchdog_feed();
@@ -56,7 +59,7 @@ bool canInit(void) {
   return error;
 }
 
-bool updateCANrecipients(void *argument) {
+void updateCANrecipients(void) {
   uint8_t out[CAN_FRAME_MAX_LENGTH] = {};
 
   out[CAN_FRAME_NUMBER] = frameNumber++;
@@ -65,9 +68,7 @@ bool updateCANrecipients(void *argument) {
   out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
   out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
 
-  hal_can_send(CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, out);
-
-  return true;
+  hal_can_send(canHandle, CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, out);
 }
 
 void receivedCanMessage(void) {
@@ -76,7 +77,7 @@ void receivedCanMessage(void) {
 
 static uint8_t lastFrame = 0;
 bool canMainLoop(void) {
-  if (!hal_can_receive(&canID, &len, buf)) {
+  if (!hal_can_receive(canHandle, &canID, &len, buf)) {
     return true;
   }
 
@@ -188,7 +189,7 @@ bool isOilSpeedModuleConnected(void) {
   return oilSpeedModuleConnected;
 }
 
-bool canCheckConnection(void *message) {
+void canCheckConnection(void) {
   oilSpeedModuleConnected = (oilSpeedModuleMessages != lastOilSpeedModuleMessages);
   lastOilSpeedModuleMessages = oilSpeedModuleMessages;
 
@@ -224,8 +225,6 @@ bool canCheckConnection(void *message) {
     }
     triggerDrawHighImportanceValue(true);
   }
-
-  return true;
 }
 
 int getEngineRPM(void) {

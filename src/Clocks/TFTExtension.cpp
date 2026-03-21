@@ -11,7 +11,7 @@ TFT *initTFT(void) {
     hal_gpio_write(TFT_RST, true);
 
     hal_display_init(TFT_CS, TFT_DC, TFT_RST);
-    hal_display_set_rotation(1);
+    hal_display_configure(SCREEN_W, SCREEN_H, 1, false, false);
 
     tft = new TFTExtension();
     return tft;
@@ -24,10 +24,9 @@ TFT *returnTFTReference(void) {
     return tft;
 }
 
-bool softInitDisplay(void *arg) {
+void softInitDisplay(void) {
     hal_display_soft_init(75);
     hal_display_set_rotation(1);
-    return true;
 }
 
 void redrawAllGauges(void) {

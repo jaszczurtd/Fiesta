@@ -5,7 +5,7 @@
 NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
 NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 
-static SoftwareSerial gpsSerial(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
+static hal_swserial_t gpsSerial = NULL;
 static TinyGPSPlus gps;
 
 void serialTalks(void);
@@ -13,19 +13,20 @@ void serialTalks(void);
 static bool isGPSInitialized = false;
 void initGPS(void) {
   if(!isGPSInitialized) {
+    gpsSerial = hal_swserial_create(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
     hal_gpio_attach_interrupt(SERIAL_RX_GPIO, serialTalks, HAL_GPIO_IRQ_FALLING);
-    gpsSerial.begin(9600, SERIAL_7N1);
+    hal_swserial_begin(gpsSerial, 9600, SERIAL_7N1);
     isGPSInitialized = true;
   }
 }
 
 void serialTalks(void) {
-  if(gpsSerial.available() > 0) {
-    gps.encode(gpsSerial.read());
+  if(hal_swserial_available(gpsSerial) > 0) {
+    gps.encode(hal_swserial_read(gpsSerial));
   }
 }
 
-bool getGPSData(void *arg) {
+void getGPSData(void) {
 
   if(gps.location.isValid()) {
     if (gps.location.isUpdated()){
@@ -40,8 +41,6 @@ bool getGPSData(void *arg) {
 
   deb("GPS: valid:%d updated:%d age:%d", gps.location.isValid(), gps.location.isUpdated(),
     gps.location.age());
-
-  return true;
 }
 
 void initGPSDateAndTime(void) {

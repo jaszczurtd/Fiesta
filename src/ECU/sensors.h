@@ -5,12 +5,10 @@
 #include <libConfig.h>
 #include "config.h"
 
-#include <Wire.h>
 #include <tools.h>
 #ifdef PICO_W
 #include <WiFi.h>
 #endif
-#include <ADS1X15.h>
 
 #include "start.h"
 #include "hardwareConfig.h"
@@ -42,15 +40,15 @@ void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int val);
 
-bool readMediumValues(void *argument);
-bool readHighValues(void *argument);
+void readMediumValues(void);
+void readHighValues(void);
 
 void init4051(void);
 void set4051ActivePin(unsigned char pin);
 
 bool isDPFRegenerating(void);
 
-bool updateValsForDebug(void *arg);
+void updateValsForDebug(void);
 void pwm_init(void);
 
 float getSystemSupplyVoltage(void);

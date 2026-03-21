@@ -18,13 +18,15 @@ static bool dpfConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static byte lastFrame = 0;
 
+static hal_can_t canBus = NULL;
 static bool initialized = false;
 void canInit(int retries) {
   dpfConnected = false;
   dpfMessages = lastDPFMessages = 0;
 
   for(int a = 0; a < retries; a++) {
-    initialized = hal_can_init(CAN0_GPIO);
+    canBus = hal_can_create(CAN0_GPIO);
+    initialized = (canBus != NULL);
     if(initialized) {
       break;
     }
@@ -46,7 +48,7 @@ void canInit(int retries) {
 }
 
 void CAN_sendAll(void) {
-  CAN_updaterecipients_01(NULL);
+  CAN_updaterecipients_01();
   m_delay(CORE_OPERATION_DELAY);
   CAN_updaterecipients_02();
   m_delay(CORE_OPERATION_DELAY);
@@ -55,7 +57,7 @@ void CAN_sendAll(void) {
   CAN_sendTurboUpdate();
 }
 
-bool CAN_updaterecipients_01(void *argument) {
+void CAN_updaterecipients_01(void) {
 
   if(initialized) {
     int hi, lo;
@@ -77,7 +79,7 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
     buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
 
-    hal_can_send(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
+    hal_can_send(canBus, CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = frameNumber++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] = (byte)valueFields[F_INTAKE_TEMP];
@@ -89,16 +91,15 @@ bool CAN_updaterecipients_01(void *argument) {
     buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
     buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = valueFields[F_GPS_CAR_SPEED];
 
-    hal_can_send(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
+    hal_can_send(canBus, CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = frameNumber++;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] = valueFields[F_PRESSURE_PERCENTAGE];
     buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = valueFields[F_FUEL_TEMP];
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = valueFields[F_FAN_ENABLED];
 
-    hal_can_send(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
+    hal_can_send(canBus, CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
   }
-  return true;  
 }
 
 static int lastRPM = C_INIT_VAL;
@@ -113,7 +114,7 @@ void CAN_updaterecipients_02(void) {
       buf[CAN_FRAME_RPM_UPDATE_HI] = MSB(rpm);
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
 
-      hal_can_send(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);
+      hal_can_send(canBus, CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);
     }
   }
 }
@@ -143,7 +144,7 @@ void CAN_sendTurboUpdate(void) {
       buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (byte)hi_d;
       buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (byte)lo_d;
 
-      hal_can_send(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
+      hal_can_send(canBus, CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
     }
   }
 }
@@ -161,7 +162,7 @@ void CAN_sendThrottleUpdate(void) {
       buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
       buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
-      hal_can_send(CAN_ID_THROTTLE, sizeof(buf), buf);
+      hal_can_send(canBus, CAN_ID_THROTTLE, sizeof(buf), buf);
     }
   }
 }
@@ -170,13 +171,13 @@ void receivedCanMessage(void) {
     interrupt = true;
 }
 
-bool canMainLoop(void *argument) {
+void canMainLoop(void) {
   if(initialized) {
-    if(!hal_can_receive(&canID, &len, buf)) {
-        return true;
+    if(!hal_can_receive(canBus, &canID, &len, buf)) {
+        return;
     }
     if(canID == 0 || len < 1) {
-        return true;
+        return;
     }
 
     if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
@@ -220,20 +221,18 @@ bool canMainLoop(void *argument) {
         }
     }
   }
-  return true;
 }
 
 bool isDPFConnected(void) {
   return dpfConnected;
 }
 
-bool canCheckConnection(void *message) {
+void canCheckConnection(void) {
   lastRPM = C_INIT_VAL;
   cLastThrottle = C_INIT_VAL;
 
   dpfConnected = (dpfMessages != lastDPFMessages);
   lastDPFMessages = dpfMessages;
-  return true;  
 }
 
 

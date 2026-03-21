@@ -3,10 +3,10 @@
 
 const char *err = (char*)F("ERR");
 
-bool callAtEverySecond(void *arg);
-bool callAtEveryHalfSecond(void *arg);
-bool callAtEveryHalfHalfSecond(void *arg);
-bool updateValsForDebug(void *arg);
+void callAtEverySecond(void);
+void callAtEveryHalfSecond(void);
+void callAtEveryHalfHalfSecond(void);
+void updateValsForDebug(void);
 
 void drawLowImportanceValues(void);
 void drawMediumImportanceValues(void);
@@ -15,30 +15,28 @@ void drawHighImportanceValuesIfChanged(void);
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
-static Timer generalTimer;
+static SmartTimers timerEverySecond;
+static SmartTimers timerHalfSecond;
+static SmartTimers timerQuarterSecond;
+static SmartTimers timerSoftInit;
+static SmartTimers timerEGT;
+static SmartTimers timerDebug;
+static SmartTimers timerCANUpdate;
+static SmartTimers timerCANCheck;
 static Cluster cluster;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  //watchdog_feed();
-  generalTimer.every(time, function);
-  m_delay(CORE_OPERATION_DELAY);
-}
-
 void setupTimers(void) {
-
-  generalTimer = timer_create_default();
-
-  setupTimerWith(SECOND, callAtEverySecond);
-  setupTimerWith(SECOND / 2, callAtEveryHalfSecond);
-  setupTimerWith(SECOND / 4, callAtEveryHalfHalfSecond);
-  setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
-  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
-  setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
-  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  timerEverySecond.begin(callAtEverySecond, SECOND);           m_delay(CORE_OPERATION_DELAY);
+  timerHalfSecond.begin(callAtEveryHalfSecond, SECOND / 2);   m_delay(CORE_OPERATION_DELAY);
+  timerQuarterSecond.begin(callAtEveryHalfHalfSecond, SECOND / 4); m_delay(CORE_OPERATION_DELAY);
+  timerSoftInit.begin(softInitDisplay, DISPLAY_SOFTINIT_TIME); m_delay(CORE_OPERATION_DELAY);
+  timerEGT.begin(changeEGT, DPF_SHOW_TIME_INTERVAL);          m_delay(CORE_OPERATION_DELAY);
+  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);          m_delay(CORE_OPERATION_DELAY);
+  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS); m_delay(CORE_OPERATION_DELAY);
+  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
 }
 
 static int *wValues = NULL;
@@ -76,18 +74,18 @@ void setup_a(void) {
 
   hal_watchdog_feed();
 
-  setLEDColor(canInit() ? RED: GREEN);
+  hal_rgb_led_set_color(canInit() ? HAL_RGB_LED_RED : HAL_RGB_LED_GREEN);
 
   while(sec < secDest) {
     hal_watchdog_feed();
     sec = getSeconds();
   }
 
-  softInitDisplay(NULL);
+  softInitDisplay();
   tft->fillScreen(ICONS_BG_COLOR);
 
   initFuelMeasurement();
-  canCheckConnection(NULL);
+  canCheckConnection();
 
   #ifdef DEBUG_SCREEN
   debugFunc();
@@ -98,12 +96,12 @@ void setup_a(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  callAtEverySecond(NULL);
-  callAtEveryHalfSecond(NULL);
-  callAtEveryHalfHalfSecond(NULL);
-  updateValsForDebug(NULL);
+  callAtEverySecond();
+  callAtEveryHalfSecond();
+  callAtEveryHalfHalfSecond();
+  updateValsForDebug();
 
-  updateCANrecipients(NULL);
+  updateCANrecipients();
   canMainLoop();
 
   hal_watchdog_feed();
@@ -129,20 +127,27 @@ void loop_a(void) {
 
   statusVariable0 = 1;
 
-  generalTimer.tick();
+  timerEverySecond.tick();
+  timerHalfSecond.tick();
+  timerQuarterSecond.tick();
+  timerSoftInit.tick();
+  timerEGT.tick();
+  timerDebug.tick();
+  timerCANUpdate.tick();
+  timerCANCheck.tick();
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
-    deb("thread is alive, active tasks: %d", generalTimer.size());
+    deb("thread is alive");
   }
   statusVariable0 = 2;
   drawHighImportanceValuesIfChanged();
   statusVariable0 = 3;
 
   if(isEcuConnected()) {
-    setLEDColor(GREEN);
+    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
   } else {
-    setLEDColor(alertSwitch() ? NONE : RED);
+    hal_rgb_led_set_color(alertSwitch() ? HAL_RGB_LED_NONE : HAL_RGB_LED_RED);
   }
 
   loopBuzzers();
@@ -150,8 +155,8 @@ void loop_a(void) {
   canMainLoop();
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
 void seriousAlertsDrawFunctions() {
@@ -170,19 +175,18 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-bool callAtEverySecond(void *arg) {
+void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
 
 #if SYSTEM_TEMP
-  deb("System temperature: %f", analogReadTemp());
+  deb("System temperature: %f", hal_read_chip_temp());
 #endif
 
   //regular draw - low importance values
   drawLowImportanceValues();
-  return true;
 }
 
-bool callAtEveryHalfSecond(void *arg) {
+void callAtEveryHalfSecond(void) {
 
   enableOilLamp((getOilPressure() < MIN_OIL_PRESSURE));
 
@@ -190,15 +194,13 @@ bool callAtEveryHalfSecond(void *arg) {
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
-  return true;
 }
 
-bool callAtEveryHalfHalfSecond(void *arg) {
+void callAtEveryHalfHalfSecond(void) {
   if(alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();
-  return true;
 }
 
 static bool highImportanceValueChanged = false;
@@ -262,15 +264,13 @@ void loop_b(void) {
   }
   statusVariable1 = 1;
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  m_delay(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
-bool updateValsForDebug(void *arg) {
+void updateValsForDebug(void) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
   deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
   deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(), getEngineRPM());
-
-  return true;
 }

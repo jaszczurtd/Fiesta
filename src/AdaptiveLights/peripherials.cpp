@@ -1,4 +1,5 @@
 #include "peripherials.h"
+#include <Wire.h>  // required by ArtronShop_BH1750 constructor (&Wire)
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_GRB + NEO_KHZ800);
 ArtronShop_BH1750 bh1750(BH1750_ADDR, &Wire); // Non Jump ADDR: 0x23, Jump ADDR: 0x5C
@@ -8,17 +9,11 @@ void initSPI(void) {
   pinMode(CAN_CS, OUTPUT);
   digitalWrite(CAN_CS, HIGH);
 
-  SPI1.setRX(PIN_MISO); //MISO
-  SPI1.setTX(PIN_MOSI); //MOSI
-  SPI1.setSCK(PIN_SCK); //SCK
-  SPI1.begin(true);
+  hal_spi_init(1, PIN_MISO, PIN_MOSI, PIN_SCK);
 }
 
 void initI2C(void) {
-  Wire.setSDA(PIN_SDA);
-  Wire.setSCL(PIN_SCL);
-  Wire.setClock(I2C_SPEED_HZ);
-  Wire.begin();
+  hal_i2c_init(PIN_SDA, PIN_SCL, I2C_SPEED_HZ);
 }
 
 bool setupPeripherials(void) {

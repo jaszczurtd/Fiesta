@@ -11,9 +11,7 @@
 #include "semphr.h"
 #endif
 
-#include <Wire.h>
-#include <arduino-timer.h>
-#include <SPI.h>
+#include <SmartTimers.h>
 #include <mcp_can.h>
 #include <tools.h>
 #include <multicoreWatchdog.h>
@@ -36,7 +34,7 @@
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
 
-bool callAtEverySecond(void *arg);
+void callAtEverySecond(void);
 
 void initialization(void);
 void initialization1(void);

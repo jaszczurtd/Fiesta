@@ -43,14 +43,12 @@ void showEGTGauge(void) {
   egt_g.showSimpleGauge();
 }
 
-bool changeEGT(void *argument) {
+void changeEGT(void) {
   if(isDPFConnected()) {
     egt_g.switchCurrentEGTMode();
   } else {
     egt_g.resetCurrentEGTMode();
   }
-
-  return true;
 }
 
 SimpleGauge::SimpleGauge(int mode) {

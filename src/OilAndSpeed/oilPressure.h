@@ -20,6 +20,6 @@
 #define OIL_PRESSURE_DIVIDER_PULLUP 1
 
 bool setupOilPressure(void);
-bool readOilPressure(void *arg);
+void readOilPressure(void);
 
 #endif

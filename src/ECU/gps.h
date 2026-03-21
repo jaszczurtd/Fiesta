@@ -3,7 +3,7 @@
 
 #include <libConfig.h>
 #include <tools.h>
-#include <SoftwareSerial.h>
+#include <hal/hal_swserial.h>
 #include <TinyGPS++.h>
 
 #include "config.h"
@@ -13,7 +13,7 @@
 
 void initGPS(void);
 void initGPSDateAndTime(void);
-bool getGPSData(void *arg);
+void getGPSData(void);
 float getCurrentCarSpeed(void);
 const char *getGPSDate(void);
 const char *getGPSTime(void);

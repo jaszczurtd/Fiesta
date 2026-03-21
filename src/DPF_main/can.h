@@ -1,7 +1,6 @@
 #ifndef CAN_F_0
 #define CAN_F_0
 
-#include <Wire.h>
 #include <SPI.h>
 //coryjfowler
 #include <mcp_can.h>

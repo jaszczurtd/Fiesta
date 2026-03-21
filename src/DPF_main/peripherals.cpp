@@ -1,4 +1,5 @@
 #include "peripherals.h"
+#include <Wire.h>  // required by Adafruit_SSD1306 constructor (&Wire)
 
 //default for raspberry pi pico: SDA GPIO 4, SCL GPIO 5 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);

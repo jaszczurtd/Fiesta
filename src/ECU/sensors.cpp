@@ -4,7 +4,6 @@
 NOINIT volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];
 
-ADS1115 ADS(ADS1115_ADDR);
 
 static int collantTableIdx = 0;
 static int collantValuesSet = 0;
@@ -15,8 +14,6 @@ static float oilTable[TEMPERATURE_TABLES_SIZE];
 
 static unsigned char pcf8574State = 0;
 
-m_mutex_def(i2cMutex);
-m_mutex_def(pwmMutex);
 m_mutex_def(analog4051Mutex);
 
 static hal_pwm_freq_channel_t pwmVp37  = NULL;
@@ -24,17 +21,11 @@ static hal_pwm_freq_channel_t pwmTurbo = NULL;
 static hal_pwm_freq_channel_t pwmAngle = NULL;
 
 void initI2C(void) {
-  m_mutex_init(i2cMutex);
-  Wire.setSDA(PIN_SDA);
-  Wire.setSCL(PIN_SCL);
-  Wire.setClock(I2C_SPEED_HZ);
-  Wire.begin();
+  hal_i2c_init(PIN_SDA, PIN_SCL, I2C_SPEED_HZ);
 }
 
 void initSPI(void) {
-  SPI.setRX(PIN_MISO); //MISO
-  SPI.setTX(PIN_MOSI); //MOSI
-  SPI.setSCK(PIN_SCK); //SCK
+  hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
 }
 
 void initSensors(void) {
@@ -42,7 +33,7 @@ void initSensors(void) {
   pwm_init();
 
   init4051();
-  ADS.begin();
+  hal_ext_adc_init(ADS1115_ADDR, ADC_RANGE);
 
   for(int a = 0; a < F_LAST; a++) {
     valueFields[a] = reflectionValueFields[a] = 0.0;
@@ -175,26 +166,22 @@ int readEGT(void) {
 void pcf8574_init(void) {
   pcf8574State = 0;
 
-  m_mutex_enter_blocking(i2cMutex);
-  Wire.beginTransmission(PCF8574_ADDR);
-  Wire.write(pcf8574State);
-  Wire.endTransmission();
-  m_mutex_exit(i2cMutex);
+  hal_i2c_begin_transmission(PCF8574_ADDR);
+  hal_i2c_write(pcf8574State);
+  hal_i2c_end_transmission();
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
-  m_mutex_enter_blocking(i2cMutex);
   if(value) {
     bitSet(pcf8574State, pin);
   }  else {
     bitClear(pcf8574State, pin);
   }
 
-  Wire.beginTransmission(PCF8574_ADDR);
-  bool success = Wire.write(pcf8574State);
-  bool notFound = Wire.endTransmission();
+  hal_i2c_begin_transmission(PCF8574_ADDR);
+  bool success = hal_i2c_write(pcf8574State);
+  bool notFound = hal_i2c_end_transmission();
 
-  m_mutex_exit(i2cMutex);
   if(!success) {
     derr("error writting byte to pcf8574");
   }
@@ -205,11 +192,9 @@ void pcf8574_write(unsigned char pin, bool value) {
 }
 
 bool pcf8574_read(unsigned char pin) {
-  m_mutex_enter_blocking(i2cMutex);
-  Wire.beginTransmission(PCF8574_ADDR);
-  bool retVal = Wire.read();
-  bool notFound = Wire.endTransmission();
-  m_mutex_exit(i2cMutex);
+  hal_i2c_begin_transmission(PCF8574_ADDR);
+  bool retVal = hal_i2c_read();
+  bool notFound = hal_i2c_end_transmission();
 
   if(notFound) {
     derr("pcf8574 not found");
@@ -222,7 +207,7 @@ int getRAWThrottle(void) {
 }
 
 static unsigned char lowCurrentValue = 0;
-bool readMediumValues(void *argument) {
+void readMediumValues(void) {
   switch(lowCurrentValue) {
     case F_COOLANT_TEMP:
       valueFields[F_COOLANT_TEMP] = readCoolantTemp();
@@ -248,8 +233,6 @@ bool readMediumValues(void *argument) {
   if(lowCurrentValue++ > F_LAST) {
     lowCurrentValue = 0;
   }
-
-  return true;
 }
 
 int getPercentageEngineLoad(void) {
@@ -266,7 +249,7 @@ int getPercentageEngineLoad(void) {
   return roundedLoad;
 }
 
-bool readHighValues(void *argument) {
+void readHighValues(void) {
   for(int a = 0; a < F_LAST; a++) {
     switch(a) {
       case F_RPM:
@@ -292,8 +275,6 @@ bool readHighValues(void *argument) {
         CAN_sendTurboUpdate();
     }
   }
-
-  return true;
 }
 
 void init4051(void) {
@@ -324,7 +305,7 @@ static int lastCoolantTemp = 0;
 static int lastOilTemp = 0;
 static bool lastIsEngineRunning = false;
 
-bool updateValsForDebug(void *arg) {
+void updateValsForDebug(void) {
 
   char stamp[24];
   if(isSDLoggerInitialized()) {
@@ -362,13 +343,9 @@ bool updateValsForDebug(void *arg) {
     lastIsEngineRunning = running;
     deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
   }
-
-  return true;
 }
 
 void pwm_init(void) {
-  m_mutex_init(pwmMutex);
-
   pwmVp37  = hal_pwm_freq_create(PIO_VP37_RPM,  VP37_PWM_FREQUENCY_HZ,  PWM_RESOLUTION);
   pwmTurbo = hal_pwm_freq_create(PIO_TURBO,     TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
   pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
@@ -383,39 +360,24 @@ void valToPWM(unsigned char pin, int val) {
     default: break;
   }
   if(ch != NULL) {
-    m_mutex_enter_blocking(pwmMutex);
     hal_pwm_freq_write(ch, (PWM_RESOLUTION - val));
-    m_mutex_exit(pwmMutex);
   } else {
     derr("config for this pwm is not initialized!");
   }
 }
 
-float calculateVoltage(int adcValue) {
-    float voltage = (adcValue * ADC_RANGE) / 1000;
-    return voltage / (R2 / (R1 + R2));
-}
-
-static int16_t readADC(uint8_t pin) {
-  m_mutex_enter_blocking(i2cMutex);
-  ADS.setGain(0);
-  int16_t v = ADS.readADC(pin);
-  m_mutex_exit(i2cMutex);
-  return v;
-}
-
 float getSystemSupplyVoltage(void) {
-  float val = calculateVoltage(readADC(ADS1115_PIN_1));
+  float val = hal_ext_adc_read_scaled(ADS1115_PIN_1) / (R2 / (R1 + R2));
   return roundfWithPrecisionTo(val, 1);
 }
 
 int getVP37Adjustometer(void) {
-  float val = (readADC(ADS1115_PIN_2) * ADC_RANGE) / 1000;
+  float val = hal_ext_adc_read_scaled(ADS1115_PIN_2);
   return (int)(roundfWithPrecisionTo(val, 3) * 1000);
 }
 
 float getVP37FuelTemperature(void) {
-  float val = (readADC(ADS1115_PIN_0) * ADC_RANGE) / 1000;
+  float val = hal_ext_adc_read_scaled(ADS1115_PIN_0);
   val = steinhart(val, R_VP37_FUEL_A, R_VP37_FUEL_B, false);
   return roundfWithPrecisionTo(val, 1);
 }

@@ -1,7 +1,6 @@
 #ifndef LOGIC_F_0
 #define LOGIC_F_0
 
-#include <Wire.h>
 #include <SPI.h>
 #include <mcp_can.h>
 #include <hardware/watchdog.h>

@@ -3,7 +3,7 @@
 
 #include <tools.h>
 #include <canDefinitions.h>
-#include <arduino-timer.h>
+#include <SmartTimers.h>
 #include <multicoreWatchdog.h>
 
 #include "can.h"

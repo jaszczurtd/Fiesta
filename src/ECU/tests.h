@@ -1,7 +1,6 @@
 #ifndef T_TESTS
 #define T_TESTS
 
-#include <Arduino.h>
 #include <tools.h>
 #include <arduino-timer.h>
 #include <unity.h>

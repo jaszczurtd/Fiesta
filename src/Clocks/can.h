@@ -3,8 +3,6 @@
 
 #include <tools.h>
 #include <canDefinitions.h>
-#include <arduino-timer.h>
-
 #include <hal/hal.h>
 #include "logic.h"
 
@@ -13,8 +11,8 @@ extern float valueFields[];
 bool canInit(void);
 bool canMainLoop(void);
 void receivedCanMessage(void);
-bool updateCANrecipients(void *argument);
-bool canCheckConnection(void *message);
+void updateCANrecipients(void);
+void canCheckConnection(void);
 bool isEcuConnected(void);
 bool isDPFConnected(void);
 bool isOilSpeedModuleConnected(void);

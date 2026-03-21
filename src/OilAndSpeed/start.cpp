@@ -1,9 +1,13 @@
 
 #include "start.h"
 
-bool updateValsForDebug(void *arg);
+void updateValsForDebug(void);
 
-static Timer generalTimer;
+static SmartTimers timerCANUpdate;
+static SmartTimers timerCANLoop;
+static SmartTimers timerCANCheck;
+static SmartTimers timerOilPressure;
+static SmartTimers timerDebug;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -15,20 +19,12 @@ void executeByWatchdog(int *values, int size) {
   wSize = size;
 }
 
-void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  generalTimer.every(time, function);
-  m_delay(CORE_OPERATION_DELAY);
-}
-
 void setupTimers(void) {
-
-  generalTimer = timer_create_default();
-
-  setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
-  setupTimerWith(CAN_MAIN_LOOP_READ_INTERVAL, canMainLoop);
-  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);
-  setupTimerWith(OIL_PRESSURE_READ_INTERVAL, readOilPressure);
-  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
+  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS);    m_delay(CORE_OPERATION_DELAY);
+  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);        m_delay(CORE_OPERATION_DELAY);
+  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);       m_delay(CORE_OPERATION_DELAY);
+  timerOilPressure.begin(readOilPressure, OIL_PRESSURE_READ_INTERVAL); m_delay(CORE_OPERATION_DELAY);
+  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);
 }
 
 void initialization(void) {
@@ -53,9 +49,9 @@ void initialization(void) {
     return;
   }
 
-  updateCANrecipients(NULL);
-  canMainLoop(NULL);
-  updateValsForDebug(NULL);
+  updateCANrecipients();
+  canMainLoop();
+  updateValsForDebug();
 
   watchdog_feed();
 
@@ -91,7 +87,11 @@ void looper() {
 
   statusVariable0 = 1;
 
-  generalTimer.tick();
+  timerCANUpdate.tick();
+  timerCANLoop.tick();
+  timerCANCheck.tick();
+  timerOilPressure.tick();
+  timerDebug.tick();
   onImpulseTranslating();
   canSendLoop();
 
@@ -119,12 +119,9 @@ void looper1() {
   hal_idle();
 }
 
-bool updateValsForDebug(void *arg) {
-
+void updateValsForDebug(void) {
   deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off",
                                                           isClusterConnected() ? "on" : "off",
                                                           getCircumference(),
                                                           valueFields[F_OIL_PRESSURE]);
-
-  return true;
 }

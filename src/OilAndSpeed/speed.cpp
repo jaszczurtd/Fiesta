@@ -15,15 +15,6 @@ double getCircumference(void) {
   return circumferenceMeters;
 }
 
-int parseNumber(const char **str) {
-  int value = 0;
-  while (isdigit(**str)) {
-    value = value * 10 + (**str - '0');
-    (*str)++;
-  }
-  return value;
-}
-
 bool calculateCircumferenceMeters(const char *tireString, double correctionFactor) {
   char buffer[32];
   strncpy(buffer, tireString, sizeof(buffer) - 1);

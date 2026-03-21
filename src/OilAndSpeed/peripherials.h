@@ -2,9 +2,7 @@
 #define S_PERIPHERIALS_H
 
 #include <tools.h>
-#include <SPI.h>
 #include <canDefinitions.h>
-#include <Adafruit_NeoPixel.h>
 
 #include "config.h"
 #include "hardwareConfig.h"

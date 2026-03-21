@@ -3,8 +3,6 @@
 
 #include <tools.h>
 #include <canDefinitions.h>
-#include <arduino-timer.h>
-
 #include "hardwareConfig.h"
 
 #include "start.h"
@@ -12,9 +10,9 @@
 extern float valueFields[];
 
 bool canInit(void);
-bool canMainLoop(void *message);
-bool updateCANrecipients(void *argument);
-bool canCheckConnection(void *message);
+void canMainLoop(void);
+void updateCANrecipients(void);
+void canCheckConnection(void);
 bool isEcuConnected(void);
 bool isClusterConnected(void);
 bool isDPFConnected(void);

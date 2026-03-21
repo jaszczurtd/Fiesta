@@ -1,6 +1,7 @@
 #ifndef T_TFT_EXTENSION
 #define T_TFT_EXTENSION
 
+#define HAL_DISPLAY_ILI9341
 #include <tools.h>
 #include <hal/hal_display.h>
 #include "hardwareConfig.h"
@@ -71,6 +72,11 @@ public:
     void fillCircle(int x, int y, int r, uint16_t color)            { hal_display_fill_circle(x, y, r, color); }
     void drawCircle(int x, int y, int r, uint16_t color)            { hal_display_draw_circle(x, y, r, color); }
     void drawRGBBitmap(int x, int y, uint16_t *d, int w, int h)     { hal_display_draw_rgb_bitmap(x, y, d, w, h); }
+    void fillRoundRect(int x, int y, int w, int h, int r, uint16_t color) { hal_display_fill_round_rect(x, y, w, h, r, color); }
+    void drawLine(int x0, int y0, int x1, int y1, uint16_t color)   { hal_display_draw_line(x0, y0, x1, y1, color); }
+    void invert(bool inv)                                            { hal_display_invert(inv); }
+    int  width(void)                                                 { return hal_display_get_width(); }
+    int  height(void)                                                { return hal_display_get_height(); }
     void setCursor(int x, int y)                                     { hal_display_set_cursor(x, y); }
     void setTextColor(uint16_t color)                                { hal_display_set_text_color(color); }
     void println(const char *s)                                      { hal_display_println(s); }
@@ -78,7 +84,7 @@ public:
 
 TFT *initTFT(void);
 TFT *returnTFTReference(void);
-bool softInitDisplay(void *arg);
+void softInitDisplay(void);
 void redrawAllGauges(void);
 
 #endif
