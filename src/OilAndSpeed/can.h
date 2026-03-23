@@ -7,8 +7,6 @@
 
 #include "start.h"
 
-extern float valueFields[];
-
 bool canInit(void);
 void canMainLoop(void);
 void updateCANrecipients(void);

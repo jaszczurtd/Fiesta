@@ -37,8 +37,8 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
-#define ADC_VOLT_PIN A2
-#define ADC_SENSORS_PIN A1
+#define ADC_VOLT_PIN 28
+#define ADC_SENSORS_PIN 27
 
 //chip select pin for SD card reader
 #define SD_CARD_CS 26
@@ -93,6 +93,8 @@
 
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
+
+#define HAL_LED_PIN 25
 
 //real values (resitance) for ECU main supply voltage measurement
 

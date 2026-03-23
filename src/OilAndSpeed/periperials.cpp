@@ -1,5 +1,8 @@
 #include "peripherials.h"
 
+static volatile float valueFields[F_LAST];
+m_mutex_def(valueFieldsMutex);
+
 void setupOnboardLed(void) {
   hal_rgb_led_init(PIN_RGB, NUMPIXELS);
   setLEDColor(BLUE);
@@ -13,6 +16,7 @@ void initSPI(void) {
 }
 
 void initBasicPIO(void) {
+  m_mutex_init(valueFieldsMutex);
   hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
 }
 
@@ -28,3 +32,17 @@ void setLEDColor(int ledColor) {
     default:     break;
   }
 }
+
+void setGlobalValue(int idx, float val) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  valueFields[idx] = val;
+  m_mutex_exit(valueFieldsMutex);
+}
+
+float getGlobalValue(int idx) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  float v = valueFields[idx];
+  m_mutex_exit(valueFieldsMutex);
+  return v;
+}
+

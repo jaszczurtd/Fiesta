@@ -83,14 +83,14 @@ void glowPlugs::process(void) {
     return;
   }
 
-  float temp = valueFields[F_COOLANT_TEMP];
+  float temp = getGlobalValue(F_COOLANT_TEMP);
   if(temp > TEMP_COLD_ENGINE) {
     warmAfterStart = true;
   }
 
   if(!warmAfterStart) {
     if(temp <= TEMP_COLD_ENGINE &&
-      valueFields[F_RPM] > RPM_MIN) {
+      getGlobalValue(F_RPM) > RPM_MIN) {
         calculateGlowPlugsTime(temp);
         if(glowPlugsTime > 0) {
           enableGlowPlugs(true);

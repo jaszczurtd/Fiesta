@@ -10,6 +10,8 @@
 
 enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE, PURPLE};
 
+void  setGlobalValue(int idx, float val);
+float getGlobalValue(int idx);
 void setupOnboardLed(void);
 void initSPI(void);
 void initBasicPIO(void);

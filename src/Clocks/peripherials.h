@@ -9,7 +9,7 @@
 #include <hal/hal.h>
 #include "buzzer.h"
 
-extern float valueFields[];
+extern volatile float valueFields[];
 
 #define INITIAL_BRIGHTNESS ((1 << PWM_WRITE_RESOLUTION) - 1)
 

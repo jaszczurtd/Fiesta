@@ -14,7 +14,7 @@ static long measurements = 0;
 float readFuel(void) {
   set4051ActivePin(HC4051_I_FUEL_LEVEL);
 
-  int result = getAverageValueFrom(A1);
+  int result = getAverageValueFrom(ADC_SENSORS_PIN);
   int r = result;
 
   result -= FUEL_MAX;

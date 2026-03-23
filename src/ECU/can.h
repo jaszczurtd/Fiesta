@@ -10,8 +10,6 @@
 #include "rpm.h"
 #include "tests.h"
 
-extern volatile float valueFields[];
-
 void canMainLoop(void);
 void canInit(int retries);
 void CAN_sendAll(void);

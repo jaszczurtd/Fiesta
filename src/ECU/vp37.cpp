@@ -1,22 +1,21 @@
 
 #include "vp37.h"
 
-Timer throttleTimer;
+static SmartTimers fuelTempTimer;
+static SmartTimers voltageTimer;
 
-bool measureFuelTemp(void *arg) {
-  valueFields[F_FUEL_TEMP] = getVP37FuelTemperature();
-  return true;
+void measureFuelTemp(void) {
+  setGlobalValue(F_FUEL_TEMP, getVP37FuelTemperature());
 }
 
-bool measureVoltage(void *arg) {
-  valueFields[F_VOLTS] = getSystemSupplyVoltage();
-  return true;
+void measureVoltage(void) {
+  setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
 }
 
 VP37Pump::VP37Pump() { }
 
 int VP37Pump::getMaxAdjustometerPWMVal(void) {
-  return map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
+  return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
 int VP37Pump::getAdjustometerStable(void) {
@@ -37,17 +36,16 @@ void VP37Pump::initVP37(void) {
     lastPWMval = -1;
     finalPWM = VP37_PWM_MIN;
 
-    throttleTimer = timer_create_default();
-    measureFuelTemp(NULL);
-    measureVoltage(NULL);
+    measureFuelTemp();
+    measureVoltage();
 
     adjustController.setKp(VP37_PID_KP);
     adjustController.setKi(VP37_PID_KI);
     adjustController.setKd(VP37_PID_KD);
     adjustController.setMaxIntegral(PID_MAX_INTEGRAL);
 
-    throttleTimer.every(VP37_FUEL_TEMP_UPDATE, measureFuelTemp);
-    throttleTimer.every(VP37_VOLTAGE_UPDATE, measureVoltage);
+    fuelTempTimer.begin(measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
+    voltageTimer.begin(measureVoltage, VP37_VOLTAGE_UPDATE);
 
     vp37Initialized = true; 
   }
@@ -107,12 +105,13 @@ void VP37Pump::throttleCycle(void) {
 
   pwmValue = mapfloat(output, VP37_ADJUST_MIN, VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
   
-  if (fabs(valueFields[F_VOLTS] - lastVolts) > VOLTAGE_THRESHOLD) {
-    lastVolts = valueFields[F_VOLTS];
+  float volts = getGlobalValue(F_VOLTS);
+  if (fabs(volts - lastVolts) > VOLTAGE_THRESHOLD) {
+    lastVolts = volts;
   }
 
   finalPWM = pwmValue * (12.0 / lastVolts);  
-  finalPWM = constrain(finalPWM, VP37_PWM_MIN, (int)VP37_PWM_MAX);
+  finalPWM = hal_constrain(finalPWM, (int)VP37_PWM_MIN, (int)(VP37_PWM_MAX));
 
   if(lastPWMval != finalPWM) {
     lastPWMval = finalPWM;
@@ -130,9 +129,10 @@ void VP37Pump::process(void) {
         lastThrottle = desiredAdjustometer = -1;
     }
 
-    throttleTimer.tick();  
+    fuelTempTimer.tick();
+    voltageTimer.tick();
 
-    int rpm = int(valueFields[F_RPM]);
+    int rpm = int(getGlobalValue(F_RPM));
     if(rpm > RPM_MAX_EVER) {
       enableVP37(false);
       derr("RPM was too high! (%d)", rpm);
@@ -142,7 +142,7 @@ void VP37Pump::process(void) {
     int thr = getThrottlePercentage();
     if(lastThrottle != thr || desiredAdjustometer < 0) {
       lastThrottle = thr;
-      desiredAdjustometer = map(thr, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX);
+      desiredAdjustometer = hal_map(thr, 0, 100, VP37_ADJUST_MIN, VP37_ADJUST_MAX);
     }
 
     throttleCycle();
@@ -151,6 +151,6 @@ void VP37Pump::process(void) {
 
 void VP37Pump::showDebug(void) {
   deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", lastThrottle, desiredAdjustometer,
-      getVP37Adjustometer(), valueFields[F_VOLTS], valueFields[F_FUEL_TEMP], (int)finalPWM,
+      getVP37Adjustometer(), getGlobalValue(F_VOLTS), getGlobalValue(F_FUEL_TEMP), (int)finalPWM,
       (int)voltageCorrection);
 }

@@ -113,7 +113,7 @@ void initialization(void) {
   createHeatedWindshields();
 
   float coolant = readCoolantTemp();
-  valueFields[F_COOLANT_TEMP] = coolant;
+  setGlobalValue(F_COOLANT_TEMP, coolant);
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
@@ -129,12 +129,8 @@ void initialization(void) {
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
 
-  valueFields[F_VOLTS] = getSystemSupplyVoltage();
-  TEST_ASSERT_TRUE(valueFields[F_VOLTS] > 0);
-
-  #ifdef PICO_W
-  scanNetworks(WIFI_SSID);
-  #endif
+  setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
+  TEST_ASSERT_TRUE(getGlobalValue(F_VOLTS) > 0);
 
   initFuelMeasurement();
 
@@ -150,11 +146,6 @@ void initialization(void) {
   setStartedCore0();
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
-#ifdef INC_FREERTOS_H
-  deb("FreeRTOS is active!");
-#else 
-  deb("Normal Arduino build.");
-#endif
 
   startTests();
 }
@@ -164,7 +155,7 @@ static bool alertBlink = false;
 //timer functions
 void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
-  hal_gpio_write(LED_BUILTIN, alertBlink);
+  hal_gpio_write(HAL_LED_PIN, alertBlink);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
 
 #if SYSTEM_TEMP

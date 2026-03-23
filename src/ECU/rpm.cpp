@@ -54,7 +54,7 @@ void RPM::interrupt(void) {
     }
     RPMpulses = 0;
 
-    rpm = min(RPM_MAX_EVER, rpm);
+    rpm = hal_min(RPM_MAX_EVER, rpm);
     rpm = ((rpm / 10) * 10);
 
     rpmValue = rpm;
@@ -117,7 +117,7 @@ void RPM::process(void) {
 
   int desiredRPM = NOMINAL_RPM_VALUE;
 
-  if(((int)valueFields[F_COOLANT_TEMP]) <= TEMP_COLD_ENGINE) {
+  if(((int)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;
   }
 

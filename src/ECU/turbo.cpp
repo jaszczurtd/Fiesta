@@ -10,14 +10,14 @@ Turbo::Turbo() { }
 
 int Turbo::scaleTurboValues(int value) {
 #ifdef GTB2260VZK  
-  value = map(value, 0, 100, 100, 0);
-  value = map(value, 0, 100, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
+  value = hal_map(value, 0, 100, 100, 0);
+  value = hal_map(value, 0, 100, TURBO_ACTUATOR_LOW, TURBO_ACTUATOR_HIGH);
 #endif
   return value;
 }
 
 int Turbo::correctPressureFactor(void) {
-  int temperature = valueFields[F_INTAKE_TEMP];
+  int temperature = getGlobalValue(F_INTAKE_TEMP);
   return (temperature < MIN_TEMPERATURE_CORRECTION) ? 
       0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1; //each 5 degrees
 }
@@ -41,12 +41,12 @@ void Turbo::process() {
   engineThrottlePercentageValue = scaleTurboValues(engineThrottlePercentageValue);
   n75 = percentToGivenVal(engineThrottlePercentageValue, PWM_RESOLUTION);
 #else
-  if(valueFields[F_PRESSURE] < MAX_BOOST_PRESSURE) {
+  if(getGlobalValue(F_PRESSURE) < MAX_BOOST_PRESSURE) {
     if(engineThrottlePercentageValue > 0) {
       pedalPressed = true;
     }
 
-    int rpm = int(valueFields[F_RPM]);
+    int rpm = int(getGlobalValue(F_RPM));
     if(rpm > RPM_MAX_EVER) {
       rpm = RPM_MAX_EVER;
     }
@@ -78,7 +78,7 @@ void Turbo::process() {
 
    unsigned long currentTime = hal_millis();
     if (currentTime - lastSolenoidUpdate >= SOLENOID_UPDATE_TIME) {
-      if (valueFields[F_PRESSURE] > MAX_BOOST_PRESSURE) {
+      if (getGlobalValue(F_PRESSURE) > MAX_BOOST_PRESSURE) {
         pressurePercentage -= PRESSURE_LIMITER_FACTOR;
         if (pressurePercentage < 0) {
           pressurePercentage = 0;
@@ -94,9 +94,9 @@ void Turbo::process() {
   }
 
   pressurePercentage = scaleTurboValues(pressurePercentage);
-  pressurePercentage = constrain(pressurePercentage, 0, 100);
+  pressurePercentage = hal_constrain(pressurePercentage, 0, 100);
 
-  valueFields[F_PRESSURE_PERCENTAGE] = pressurePercentage;
+  setGlobalValue(F_PRESSURE_PERCENTAGE, pressurePercentage);
 
   n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
 
@@ -108,8 +108,8 @@ void Turbo::process() {
 void Turbo::showDebug(void) {
   bool pr = false;
 
-  if(int(valueFields[F_THROTTLE_POS]) != lastThrottlePos){
-    lastThrottlePos = int(valueFields[F_THROTTLE_POS]);
+  if(int(getGlobalValue(F_THROTTLE_POS)) != lastThrottlePos){
+    lastThrottlePos = int(getGlobalValue(F_THROTTLE_POS));
     pr = true;
   }
   if(posThrottle != lastPosThrottle) {
@@ -125,8 +125,8 @@ void Turbo::showDebug(void) {
     lastRPM_index = RPM_index;
     pr = true;
   }
-  if(int(valueFields[F_PRESSURE_PERCENTAGE]) != lastPressurePercentage) {
-    lastPressurePercentage = int(valueFields[F_PRESSURE_PERCENTAGE]);
+  if(int(getGlobalValue(F_PRESSURE_PERCENTAGE)) != lastPressurePercentage) {
+    lastPressurePercentage = int(getGlobalValue(F_PRESSURE_PERCENTAGE));
     pr = true;
   }
   if(n75 != lastN75) {

@@ -1,6 +1,6 @@
 #include "can.h"
 
-float valueFields[F_LAST];
+volatile float valueFields[F_LAST];
 
 static unsigned char frameNumber = 0;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;

@@ -3,8 +3,7 @@
 
 #include <libConfig.h>
 #include <tools.h>
-#include <hal/hal_swserial.h>
-#include <TinyGPS++.h>
+#include <hal/hal_gps.h>
 
 #include "config.h"
 #include "start.h"

@@ -5,11 +5,11 @@
 
 #include "obd-2.h"
 
-void obdReq(byte *data);
-void unsupported(byte mode, byte pid);
-void unsupportedPrint(byte mode, byte pid);
-void iso_tp(byte mode, byte pid, int len, byte *data);
-void negAck(byte mode, byte reason);
+void obdReq(uint8_t *data);
+void unsupported(uint8_t mode, uint8_t pid);
+void unsupportedPrint(uint8_t mode, uint8_t pid);
+void iso_tp(uint8_t mode, uint8_t pid, int len, uint8_t *data);
+void negAck(uint8_t mode, uint8_t reason);
 
 static hal_can_t obdCan = NULL;
 
@@ -56,19 +56,19 @@ void obdLoop(void) {
   }
 }
 
-void storeECUName(byte *tab, int idx) {
+void storeECUName(uint8_t *tab, int idx) {
   for(int a = 0; a < (int)strlen(ecu_Name); a++) {
-    tab[a + idx] = (byte)ecu_Name[a];
+    tab[a + idx] = (uint8_t)ecu_Name[a];
   }
 }
 
-void obdReq(byte *data){
+void obdReq(uint8_t *data){
   RPM *rpm = getRPMInstance();
-  byte numofBytes = data[0];
-  byte mode = data[1] & 0x0F;
-  byte pid = data[2];
+  uint8_t numofBytes = data[0];
+  uint8_t mode = data[1] & 0x0F;
+  uint8_t pid = data[2];
   bool tx = false;
-  byte txData[] = {0x00,(byte)(0x40 | mode),pid,PAD,PAD,PAD,PAD,PAD};
+  uint8_t txData[] = {0x00,(uint8_t)(0x40 | mode),pid,PAD,PAD,PAD,PAD,PAD};
 
   deb("OBD-2 pid:0x%02x (%s) length:0x%02x mode:0x%02x",  pid, getPIDName(pid), numofBytes, mode);
   
@@ -90,7 +90,7 @@ void obdReq(byte *data){
     }
     else if(pid == STATUS_DTC){    // Monitor status since DTs cleared.
       bool MIL = true;
-      byte DTC = 5;
+      uint8_t DTC = 5;
       txData[0] = 0x06;
       
       txData[3] = (MIL << 7) | (DTC & 0x7F);
@@ -107,19 +107,19 @@ void obdReq(byte *data){
     }
     else if(pid == ENGINE_LOAD){    // Calculated engine load
       txData[0] = 0x03;
-      txData[3] = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+      txData[3] = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
       tx = true;
     }
     else if(pid == ABSOLUTE_LOAD) {
       txData[0] = 0x04;
-      int l = percentToGivenVal(valueFields[F_CALCULATED_ENGINE_LOAD], 255);
+      int l = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
       txData[3] = MSB(l);
       txData[4] = LSB(l);
       tx = true;
     }
     else if(pid == ENGINE_COOLANT_TEMP){    // Engine coolant temperature
       txData[0] = 0x03;
-      txData[3] = int(valueFields[F_COOLANT_TEMP] + 40);
+      txData[3] = int(getGlobalValue(F_COOLANT_TEMP) + 40);
       tx = true;
     }
     else if(pid == FUEL_PRESSURE) {
@@ -139,7 +139,7 @@ void obdReq(byte *data){
     }
     else if(pid == FUEL_LEVEL) {
       txData[0] = 0x03;
-      int fuelPercentage = ( (int(valueFields[F_FUEL]) * 100) / (FUEL_MIN - FUEL_MAX));
+      int fuelPercentage = ( (int(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
       if(fuelPercentage > 100) {
         fuelPercentage = 100;
       }
@@ -150,7 +150,7 @@ void obdReq(byte *data){
     else if(pid == INTAKE_PRESSURE){    // Intake manifold absolute pressure
       txData[0] = 0x03;
       
-      int intake_Pressure = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
+      int intake_Pressure = (getGlobalValue(F_PRESSURE) * 255.0f / 2.55f);
       if(intake_Pressure > 255) {
         intake_Pressure = 255;
       }
@@ -159,20 +159,20 @@ void obdReq(byte *data){
     }
     else if(pid == ENGINE_RPM){    // Engine RPM
       txData[0] = 0x04;
-      int engine_Rpm = int(valueFields[F_RPM] * 4);
+      int engine_Rpm = int(getGlobalValue(F_RPM) * 4);
       txData[3] = MSB(engine_Rpm);
       txData[4] = LSB(engine_Rpm);
       tx = true;
     }
     else if(pid == VEHICLE_SPEED){    // Vehicle speed
       txData[0] = 0x03;
-      txData[3] = int(valueFields[F_ABS_CAR_SPEED]);
+      txData[3] = int(getGlobalValue(F_ABS_CAR_SPEED));
       tx = true;
     }
     else if(pid == INTAKE_TEMP ||
         pid == AMB_AIR_TEMP){    // Intake air temperature
       txData[0] = 0x03;
-      txData[3] = int(valueFields[F_INTAKE_TEMP] + 40);
+      txData[3] = int(getGlobalValue(F_INTAKE_TEMP) + 40);
       tx = true;
     }
     else if(pid == THROTTLE ||
@@ -185,7 +185,7 @@ void obdReq(byte *data){
         pid == ACCEL_POS_F ||
         pid == COMMANDED_THROTTLE) { // Throttle position
       txData[0] = 0x03;
-      float percent = (valueFields[F_THROTTLE_POS] * 100) / PWM_RESOLUTION;
+      float percent = (getGlobalValue(F_THROTTLE_POS) * 100) / PWM_RESOLUTION;
       txData[3] = percentToGivenVal(percent, 255);
       tx = true;
     }
@@ -215,7 +215,7 @@ void obdReq(byte *data){
       pid == CAT_TEMP_B2S2) {
       txData[0] = 0x04;
 
-      int temp = (int(valueFields[F_EGT]) + 40) * 10;
+      int temp = (int(getGlobalValue(F_EGT)) + 40) * 10;
       txData[3] = MSB(temp);
       txData[4] = LSB(temp);
       tx = true;
@@ -233,7 +233,7 @@ void obdReq(byte *data){
 
       txData[0] = 0x04;
       
-      int volt = int(valueFields[F_VOLTS] * 1024);
+      int volt = int(getGlobalValue(F_VOLTS) * 1024);
       txData[3] = MSB(volt);
       txData[4] = LSB(volt);
       tx = true;    
@@ -245,7 +245,7 @@ void obdReq(byte *data){
     }
     else if(pid == ENGINE_OIL_TEMP){    // Engine oil Temperature
       txData[0] = 0x03;
-      txData[3] = int(valueFields[F_OIL_TEMP] + 40);
+      txData[3] = int(getGlobalValue(F_OIL_TEMP) + 40);
       tx = true;
     }
     else if(pid == FUEL_TIMING){    // Fuel injection timing
@@ -339,7 +339,7 @@ void obdReq(byte *data){
   // MODE $03 - Show stored DTCs
   //=============================================================================
   else if(mode == L3){
-      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      uint8_t DTCs[] = {(uint8_t)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
@@ -381,7 +381,7 @@ void obdReq(byte *data){
   // MODE $07 - Show pending DTCs (Detected during current or last driving cycle)
   //=============================================================================
   else if(mode == L7){
-      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      uint8_t DTCs[] = {(uint8_t)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
@@ -408,23 +408,23 @@ void obdReq(byte *data){
 //    else if(pid == 0x01){    // VIN message count for PID 02. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == REQUEST_VIN){    // VIN (17 to 20 Bytes) Uses ISO-TP
-      byte VIN[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      uint8_t VIN[] = {(uint8_t)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       for(int a = 0; a < (int)strlen(vehicle_Vin); a++) {
-        VIN[a + 3] = (byte)vehicle_Vin[a];
+        VIN[a + 3] = (uint8_t)vehicle_Vin[a];
       }
       iso_tp(mode, pid, 20, VIN);
     }
 //    else if(pid == 0x03){    // Calibration ID message count for PID 04. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == 0x04){    // Calibration ID
-      byte CID[] = {(byte)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      uint8_t CID[] = {(uint8_t)(0x40 | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(CID, 3);
       iso_tp(mode, pid, 18, CID);
     }
 //    else if(pid == 0x05){    // Calibration Verification Number (CVN) message count for PID 06. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
 //    }
     else if(pid == 0x06){    // CVN
-      byte CVN[] = {(byte)(0x40 | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
+      uint8_t CVN[] = {(uint8_t)(0x40 | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
       iso_tp(mode, pid, 11, CVN);
     }
 //    else if(pid == 0x07){    // In-use performance tracking message count for PID 08 and 0B. (Only for ISO 9141-2, ISO 14230-4 and SAE J1850.)
@@ -432,12 +432,12 @@ void obdReq(byte *data){
 //    else if(pid == 0x08){    // In-use performance tracking for spark ignition vehicles.
 //    }
     else if(pid == 0x09){    // ECU name message count for PID 0A.
-      byte ECUname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'U', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      uint8_t ECUname[] = {(uint8_t)(0x40 | mode), pid, 0x01, 'E', 'C', 'U', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(ECUname, 7);
       iso_tp(mode, pid, 23, ECUname);
     }
     else if(pid == 0x0A){    // ECM Name
-      byte ECMname[] = {(byte)(0x40 | mode), pid, 0x01, 'E', 'C', 'M', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
+      uint8_t ECMname[] = {(uint8_t)(0x40 | mode), pid, 0x01, 'E', 'C', 'M', 0x00, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
       storeECUName(ECMname, 7);
       iso_tp(mode, pid, 23, ECMname);
     }
@@ -446,7 +446,7 @@ void obdReq(byte *data){
 //    else if(pid == 0x0C){    // ESN message count for PID 0D.
 //    }
     else if(pid == 0x0D){    // ESN
-      byte ESN[] = {(byte)(0x40 | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
+      uint8_t ESN[] = {(uint8_t)(0x40 | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
       iso_tp(mode, pid, 20, ESN);
     }
     else{
@@ -458,7 +458,7 @@ void obdReq(byte *data){
   // MODE $0A - Show permanent DTCs 
   //=============================================================================
   else if(mode == L10){
-      byte DTCs[] = {(byte)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
+      uint8_t DTCs[] = {(uint8_t)(0x40 | mode), 0x05, 0xC0, 0xBA, 0x00, 0x11, 0x80, 0x13, 0x90, 0x45, 0xA0, 0x31};
       iso_tp(mode, pid, 12, DTCs);
   }
   
@@ -759,21 +759,21 @@ void obdReq(byte *data){
 
 
 // Generic debug serial output
-void unsupported(byte mode, byte pid){
+void unsupported(uint8_t mode, uint8_t pid){
   negAck(mode, 0x12);
   unsupportedPrint(mode, pid);  
 }
 
 
 // Generic debug serial output
-void negAck(byte mode, byte reason){
-  byte txData[] = {0x03,0x7F,mode,reason,PAD,PAD,PAD,PAD};
+void negAck(uint8_t mode, uint8_t reason){
+  uint8_t txData[] = {0x03,0x7F,mode,reason,PAD,PAD,PAD,PAD};
   hal_can_send(obdCan, REPLY_ID, 8, txData);
 }
 
 
 // Generic debug serial output
-void unsupportedPrint(byte mode, byte pid){
+void unsupportedPrint(uint8_t mode, uint8_t pid){
   char msgstring[64];
   snprintf(msgstring, sizeof(msgstring) - 1, "Mode $%02X: Unsupported PID $%02X requested!", mode, pid);
   deb(msgstring);
@@ -781,18 +781,18 @@ void unsupportedPrint(byte mode, byte pid){
 
 
 // Blocking example of ISO transport
-void iso_tp(byte mode, byte pid, int len, byte *data){
-  byte tpData[8];
+void iso_tp(uint8_t mode, uint8_t pid, int len, uint8_t *data){
+  uint8_t tpData[8];
   int offset = 0;
-  byte index = 0;
-//  byte packetcnt = ((len & 0x0FFF) - 6) / 7;
+  uint8_t index = 0;
+//  uint8_t packetcnt = ((len & 0x0FFF) - 6) / 7;
 //  if((((len & 0x0FFF) - 6) % 7) > 0)
 //    packetcnt++;
 
   // First frame
   tpData[0] = 0x10 | ((len >> 8) & 0x0F);
   tpData[1] = 0x00FF & len;
-  for(byte i=2; i<8; i++){
+  for(uint8_t i=2; i<8; i++){
     tpData[i] = data[offset++];
   }
   hal_can_send(obdCan, REPLY_ID, 8, tpData);
@@ -800,8 +800,8 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
   
   bool not_done = true;
   unsigned long sepPrev = hal_millis();
-  byte sepInvl = 0;
-  byte frames = 0;
+  uint8_t sepInvl = 0;
+  uint8_t frames = 0;
   bool lockout = false;
   while(not_done){
     // Need to wait for flow frame
@@ -830,7 +830,7 @@ void iso_tp(byte mode, byte pid, int len, byte *data){
       sepPrev = hal_millis();
 
       tpData[0] = 0x20 | index++;
-      for(byte i=1; i<8; i++){
+      for(uint8_t i=1; i<8; i++){
         if(offset != len)
           tpData[i] = data[offset++];
         else

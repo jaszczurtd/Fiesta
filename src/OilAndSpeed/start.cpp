@@ -123,5 +123,5 @@ void updateValsForDebug(void) {
   deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off",
                                                           isClusterConnected() ? "on" : "off",
                                                           getCircumference(),
-                                                          valueFields[F_OIL_PRESSURE]);
+                                                          getGlobalValue(F_OIL_PRESSURE));
 }

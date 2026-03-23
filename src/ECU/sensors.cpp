@@ -1,7 +1,7 @@
 
 #include "sensors.h"
 
-NOINIT volatile float valueFields[F_LAST];
+NOINIT static volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];
 
 
@@ -15,6 +15,7 @@ static float oilTable[TEMPERATURE_TABLES_SIZE];
 static unsigned char pcf8574State = 0;
 
 m_mutex_def(analog4051Mutex);
+m_mutex_def(valueFieldsMutex);
 
 static hal_pwm_freq_channel_t pwmVp37  = NULL;
 static hal_pwm_freq_channel_t pwmTurbo = NULL;
@@ -28,7 +29,21 @@ void initSPI(void) {
   hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
 }
 
+void setGlobalValue(int idx, float val) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  valueFields[idx] = val;
+  m_mutex_exit(valueFieldsMutex);
+}
+
+float getGlobalValue(int idx) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  float v = valueFields[idx];
+  m_mutex_exit(valueFieldsMutex);
+  return v;
+}
+
 void initSensors(void) {
+  m_mutex_init(valueFieldsMutex);
   hal_adc_set_resolution(ADC_BITS);
   pwm_init();
 
@@ -46,7 +61,7 @@ void initSensors(void) {
 }
 
 void initBasicPIO(void) {
-  hal_gpio_set_mode(LED_BUILTIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(HAL_LED_PIN, HAL_GPIO_OUTPUT);
   hal_gpio_set_mode(PIO_DPF_LAMP, HAL_GPIO_OUTPUT);
 }
 
@@ -110,7 +125,7 @@ int readThrottle(void) {
 }
 
 int getThrottlePercentage(void) {
-  int currentVal = int(valueFields[F_THROTTLE_POS]);
+  int currentVal = int(getGlobalValue(F_THROTTLE_POS));
   float percent = (currentVal * 100) / PWM_RESOLUTION;
   return percentToGivenVal(percent, 100);
 }
@@ -203,30 +218,30 @@ bool pcf8574_read(unsigned char pin) {
 }
 
 int getRAWThrottle(void) {
-  return int(valueFields[F_THROTTLE_POS]);
+  return int(getGlobalValue(F_THROTTLE_POS));
 }
 
 static unsigned char lowCurrentValue = 0;
 void readMediumValues(void) {
   switch(lowCurrentValue) {
     case F_COOLANT_TEMP:
-      valueFields[F_COOLANT_TEMP] = readCoolantTemp();
+      setGlobalValue(F_COOLANT_TEMP, readCoolantTemp());
       break;
     case F_OIL_TEMP:
-      valueFields[F_OIL_TEMP] = readOilTemp();
+      setGlobalValue(F_OIL_TEMP, readOilTemp());
       break;
     case F_INTAKE_TEMP:
-      valueFields[F_INTAKE_TEMP] = readAirTemperature();
+      setGlobalValue(F_INTAKE_TEMP, readAirTemperature());
       break;
     case F_FUEL:
-      valueFields[F_FUEL] = readFuel();
+      setGlobalValue(F_FUEL, readFuel());
       break;
     case F_EGT:
-      valueFields[F_EGT] = readEGT();
+      setGlobalValue(F_EGT, readEGT());
       break;
 #ifndef VP37
     case F_VOLTS:
-      valueFields[F_VOLTS] = getSystemSupplyVoltage();
+      setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
       break;
 #endif
   }
@@ -237,8 +252,8 @@ void readMediumValues(void) {
 
 int getPercentageEngineLoad(void) {
 
-  float map = (valueFields[F_PRESSURE] * 255.0f / 2.55f);
-  float load = (map / 255.0f) * (valueFields[F_RPM] / float(RPM_MAX_EVER)) * 100.0f;
+  float map = (getGlobalValue(F_PRESSURE) * 255.0f / 2.55f);
+  float load = (map / 255.0f) * (getGlobalValue(F_RPM) / float(RPM_MAX_EVER)) * 100.0f;
   int roundedLoad = (int)(load + 0.5f);
 
   if (roundedLoad < 0) {
@@ -251,26 +266,32 @@ int getPercentageEngineLoad(void) {
 
 void readHighValues(void) {
   for(int a = 0; a < F_LAST; a++) {
+    float v = getGlobalValue(a);
     switch(a) {
       case F_RPM:
-        valueFields[a] = getRPMInstance()->getCurrentRPM();
+        v = getRPMInstance()->getCurrentRPM();
+        setGlobalValue(a, v);
         break;
       case F_THROTTLE_POS:
-        valueFields[a] = readThrottle();
+        v = readThrottle();
+        setGlobalValue(a, v);
         break;
       case F_PRESSURE:
-        valueFields[a] = readBarPressure();
+        v = readBarPressure();
+        setGlobalValue(a, v);
         break;
       case F_GPS_CAR_SPEED:
-        valueFields[a] = getCurrentCarSpeed();
+        v = getCurrentCarSpeed();
+        setGlobalValue(a, v);
         break;
       case F_CALCULATED_ENGINE_LOAD:
-        valueFields[a] = getPercentageEngineLoad();
+        v = getPercentageEngineLoad();
+        setGlobalValue(a, v);
         break;
     }
-    if(reflectionValueFields[a] != valueFields[a]) {
-        reflectionValueFields[a] = valueFields[a];
-    
+    if(reflectionValueFields[a] != v) {
+        reflectionValueFields[a] = v;
+
         CAN_sendThrottleUpdate();
         CAN_sendTurboUpdate();
     }
@@ -296,7 +317,7 @@ void set4051ActivePin(unsigned char pin) {
 }
 
 bool isDPFRegenerating(void) {
-  return valueFields[F_DPF_REGEN] > 0;
+  return getGlobalValue(F_DPF_REGEN) > 0;
 }
 
 static float lastVoltage = 0;
@@ -314,25 +335,25 @@ void updateValsForDebug(void) {
     snprintf(stamp, sizeof(stamp), "NL/");
   }
 
-  float volts = rroundf(valueFields[F_VOLTS]);
+  float volts = rroundf(getGlobalValue(F_VOLTS));
   if(lastVoltage != volts) {
     lastVoltage = volts;
     deb("%sVoltage update: %.1fV", stamp, volts);
   }
 
-  int egt = (int)valueFields[F_EGT];
+  int egt = (int)getGlobalValue(F_EGT);
   if(lastEGTTemp != egt) {
     lastEGTTemp = egt;
     deb("%sEGT update: %dC", stamp, egt);
   }
 
-  int coolant = (int)valueFields[F_COOLANT_TEMP];
+  int coolant = (int)getGlobalValue(F_COOLANT_TEMP);
   if(lastCoolantTemp != coolant) {
     lastCoolantTemp = coolant;
     deb("%sCoolant temp. update: %dC", stamp, coolant);
   }
 
-  int oil = (int)valueFields[F_OIL_TEMP];
+  int oil = (int)getGlobalValue(F_OIL_TEMP);
   if(lastOilTemp != oil) {
     lastOilTemp = oil;
     deb("%sOil temp. update: %dC", stamp, oil);

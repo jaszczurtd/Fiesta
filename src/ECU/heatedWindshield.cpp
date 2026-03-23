@@ -47,7 +47,7 @@ void heatedWindshields::disableHeatedWindows(void) {
 
 void heatedWindshields::process(void) {
 
-  float volts = valueFields[F_VOLTS];
+  float volts = getGlobalValue(F_VOLTS);
   if(volts < MINIMUM_VOLTS_AMOUNT) {
       if(isHeatedWindowEnabled()) {
         disableHeatedWindows();

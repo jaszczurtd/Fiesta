@@ -2,7 +2,6 @@
 #define T_TESTS
 
 #include <tools.h>
-#include <arduino-timer.h>
 #include <unity.h>
 #include <unity_config.h>
 
@@ -16,10 +15,6 @@
 //for serial debug
 //#define DEBUG
 
-
-#ifdef DEBUG_SCREEN
-void debugFunc(void);
-#endif
 
 bool initTests(void);
 bool startTests(void);

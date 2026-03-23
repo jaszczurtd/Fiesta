@@ -2,7 +2,6 @@
 #ifndef T_RPM
 #define T_RPM
 
-#include <arduino-timer.h>
 #include <tools.h>
 
 #include "config.h"

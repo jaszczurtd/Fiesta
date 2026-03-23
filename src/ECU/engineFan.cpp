@@ -32,9 +32,9 @@ bool engineFan::isFanEnabled(void) {
 
 void engineFan::process(void) {
 
-  float coolant = valueFields[F_COOLANT_TEMP];
-  int rpm = valueFields[F_RPM];
-  int air = valueFields[F_INTAKE_TEMP];
+  float coolant = getGlobalValue(F_COOLANT_TEMP);
+  int rpm = getGlobalValue(F_RPM);
+  int air = getGlobalValue(F_INTAKE_TEMP);
 
   if(rpm > RPM_MIN) {
 
@@ -74,7 +74,7 @@ void engineFan::process(void) {
     fanEnabled = FAN_REASON_NONE;    
   }
 
-  valueFields[F_FAN_ENABLED] = fanEnabled;
+  setGlobalValue(F_FAN_ENABLED, fanEnabled);
   if(lastFanStatus != fanEnabled) {
     fan(isFanEnabled());
     lastFanStatus = fanEnabled;     

@@ -1,6 +1,5 @@
 #include "can.h"
 
-float valueFields[F_LAST];
 static hal_can_t canHandle = NULL;
 
 static unsigned char frameNumber = 0;
@@ -48,10 +47,10 @@ void updateCANrecipients(void) {
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
   int hi, lo;
-  floatToDec(valueFields[F_OIL_PRESSURE], &hi, &lo);
+  floatToDec(getGlobalValue(F_OIL_PRESSURE), &hi, &lo);
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (uint8_t)hi;
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
-  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)valueFields[F_ABS_CAR_SPEED];
+  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)getGlobalValue(F_ABS_CAR_SPEED);
 
   hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
 }
@@ -96,11 +95,11 @@ void canMainLoop(void) {
       case CAN_ID_ECU_UPDATE_02: {
         ecuMessages++; ecuConnected = true;
 
-        valueFields[F_INTAKE_TEMP] = buf[CAN_FRAME_ECU_UPDATE_INTAKE];
-        valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
-                                          buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
-        valueFields[F_GPS_IS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
-        valueFields[F_GPS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
+        setGlobalValue(F_INTAKE_TEMP, buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
+        setGlobalValue(F_FUEL, MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
+                                           buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
+        setGlobalValue(F_GPS_IS_AVAILABLE, buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
+        setGlobalValue(F_GPS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
       }
       break;
 
@@ -154,13 +153,15 @@ bool canSendLoop(void) {
   static float lastSpeed = 0.0;
   static float lastOilPressure = 0.0;
 
-  if (lastSpeed != valueFields[F_ABS_CAR_SPEED]) {
-    lastSpeed = valueFields[F_ABS_CAR_SPEED];
+  float curSpeed = getGlobalValue(F_ABS_CAR_SPEED);
+  if (lastSpeed != curSpeed) {
+    lastSpeed = curSpeed;
     updateCANrecipients();
   }
 
-  if (lastOilPressure != valueFields[F_OIL_PRESSURE]) {
-    lastOilPressure = valueFields[F_OIL_PRESSURE];
+  float curOilPressure = getGlobalValue(F_OIL_PRESSURE);
+  if (lastOilPressure != curOilPressure) {
+    lastOilPressure = curOilPressure;
     updateCANrecipients();
   }
 
@@ -190,7 +191,7 @@ bool canSendLoop(void) {
     }
     lastSpeed = speed;
     deb("new speed: %d", speed);
-    valueFields[F_ABS_CAR_SPEED] = speed;
+    setGlobalValue(F_ABS_CAR_SPEED, speed);
     updateCANrecipients();
   }
 #endif
@@ -210,7 +211,7 @@ bool canSendLoop(void) {
     }
   }
 
-  valueFields[F_ABS_CAR_SPEED] = val;
+  setGlobalValue(F_ABS_CAR_SPEED, val);
 #endif
 
 #ifdef OIL_PRESSURE_PACKET_TEST
@@ -219,7 +220,7 @@ bool canSendLoop(void) {
   if (lastPressure != pressure) {
     lastPressure = pressure;
     deb("new pressure: %f", pressure);
-    valueFields[F_OIL_PRESSURE] = pressure;
+    setGlobalValue(F_OIL_PRESSURE, pressure);
     updateCANrecipients();
   }
 #endif

@@ -75,9 +75,9 @@ void onImpulseTranslating(void) {
       float speed_mps = rotationsPerSecond * circumferenceMeters;
       float speed_kph = speed_mps * 3.6f;
 
-      if (valueFields[F_ABS_CAR_SPEED] != speed_kph) {
-        valueFields[F_ABS_CAR_SPEED] = speed_kph;
-        deb("Speed: %fkm/h %f %f", valueFields[F_ABS_CAR_SPEED], rotationsPerSecond, speed_mps);
+      if (getGlobalValue(F_ABS_CAR_SPEED) != speed_kph) {
+        setGlobalValue(F_ABS_CAR_SPEED, speed_kph);
+        deb("Speed: %fkm/h %f %f", speed_kph, rotationsPerSecond, speed_mps);
       }
     }
   }

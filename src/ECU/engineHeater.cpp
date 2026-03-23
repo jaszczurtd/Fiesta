@@ -24,9 +24,9 @@ void engineHeater::heater(bool enable, int level) {
 }
 
 void engineHeater::process(void) {
-  float coolant = valueFields[F_COOLANT_TEMP];
-  float volts = valueFields[F_VOLTS];
-  int engineRPM = valueFields[F_RPM];
+  float coolant = getGlobalValue(F_COOLANT_TEMP);
+  float volts = getGlobalValue(F_VOLTS);
+  int engineRPM = getGlobalValue(F_RPM);
 
   if(coolant > TEMP_HEATER_STOP ||
     getFanInstance()->isFanEnabled() ||

@@ -6,9 +6,6 @@
 #include "config.h"
 
 #include <tools.h>
-#ifdef PICO_W
-#include <WiFi.h>
-#endif
 
 #include "start.h"
 #include "hardwareConfig.h"
@@ -19,7 +16,8 @@
 
 #define GPS_TIME_DATE_BUFFER_SIZE 16
 
-extern volatile float valueFields[];
+void  setGlobalValue(int idx, float val);
+float getGlobalValue(int idx);
 
 void initI2C(void);
 void initSPI(void);

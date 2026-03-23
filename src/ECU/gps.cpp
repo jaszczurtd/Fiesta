@@ -5,42 +5,31 @@
 NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
 NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 
-static hal_swserial_t gpsSerial = NULL;
-static TinyGPSPlus gps;
-
-void serialTalks(void);
-
 static bool isGPSInitialized = false;
 void initGPS(void) {
   if(!isGPSInitialized) {
-    gpsSerial = hal_swserial_create(SERIAL_RX_GPIO, SERIAL_TX_GPIO);
-    hal_gpio_attach_interrupt(SERIAL_RX_GPIO, serialTalks, HAL_GPIO_IRQ_FALLING);
-    hal_swserial_begin(gpsSerial, 9600, SERIAL_7N1);
+    hal_gps_init(SERIAL_RX_GPIO, SERIAL_TX_GPIO, 9600, HAL_GPS_DEFAULT_UART_CONFIG);
     isGPSInitialized = true;
-  }
-}
-
-void serialTalks(void) {
-  if(hal_swserial_available(gpsSerial) > 0) {
-    gps.encode(hal_swserial_read(gpsSerial));
   }
 }
 
 void getGPSData(void) {
 
-  if(gps.location.isValid()) {
-    if (gps.location.isUpdated()){
+  hal_gps_update();
+
+  if(hal_gps_location_is_valid()) {
+    if (hal_gps_location_is_updated()){
 
       deb("Lat=%f Long=%f date:%s hour:%s", 
-        gps.location.lat(), gps.location.lng(),
+        hal_gps_latitude(), hal_gps_longitude(),
         getGPSDate(), getGPSTime());
     }
   } else {
     deb("GPS is not available");
   }
 
-  deb("GPS: valid:%d updated:%d age:%d", gps.location.isValid(), gps.location.isUpdated(),
-    gps.location.age());
+  deb("GPS: valid:%d updated:%d age:%d", hal_gps_location_is_valid(), hal_gps_location_is_updated(),
+    hal_gps_location_age());
 }
 
 void initGPSDateAndTime(void) {
@@ -48,35 +37,42 @@ void initGPSDateAndTime(void) {
   memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
 }
 
+static void getAdjustedDateTime(int *year, int *month, int *day,
+                                int *hour, int *minute, int *second) {
+  *year   = hal_gps_date_year();
+  *month  = hal_gps_date_month();
+  *day    = hal_gps_date_day();
+  *hour   = hal_gps_time_hour();
+  *minute = hal_gps_time_minute();
+  *second = hal_gps_time_second();
+  adjustTime(year, month, day, hour, minute);
+}
+
 const char *getGPSDate(void) {
-  if(gps.location.isValid()) {
+  if(hal_gps_location_is_valid()) {
+    int year, month, day, hour, minute, second;
+    getAdjustedDateTime(&year, &month, &day, &hour, &minute, &second);
     memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
     snprintf(gpsDate, GPS_TIME_DATE_BUFFER_SIZE - 1, "%d/%02d/%02d", 
-      gps.date.year(), gps.date.month(), gps.date.day());
+      year, month, day);
   }
   return gpsDate;
 }
 
 const char *getGPSTime(void) {
-  if(gps.location.isValid()) {
-    int year = gps.date.year();
-    int month = gps.date.month();
-    int day = gps.date.day();
-    int hour = gps.time.hour();
-    int minute = gps.time.minute();
-
-    adjustTime(&year, &month, &day, &hour, &minute);
-
+  if(hal_gps_location_is_valid()) {
+    int year, month, day, hour, minute, second;
+    getAdjustedDateTime(&year, &month, &day, &hour, &minute, &second);
     memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
     snprintf(gpsTime, GPS_TIME_DATE_BUFFER_SIZE - 1, "%02d:%02d:%02d", 
-      hour, minute, gps.time.second());
+      hour, minute, second);
   }
   return gpsTime;
 }
 
 float getCurrentCarSpeed(void) {
   if(isGPSAvailable()) {
-    double s = gps.speed.kmph();
+    double s = hal_gps_speed_kmph();
     if(s < GPS_MIN_KMPH_SPEED) {
       return 0.0f;
     }
@@ -86,13 +82,13 @@ float getCurrentCarSpeed(void) {
 }
 
 bool isGPSAvailable(void) {
-  bool isavail = gps.location.isValid();
+  bool isavail = hal_gps_location_is_valid();
   if(isavail) {
-    if(gps.location.age() > MAX_GPS_AGE) {
+    if(hal_gps_location_age() > MAX_GPS_AGE) {
       isavail = false;
     }
   }
-  valueFields[F_GPS_IS_AVAILABLE] = isavail;
+  setGlobalValue(F_GPS_IS_AVAILABLE, isavail);
   return isavail;
 }
 

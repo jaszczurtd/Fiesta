@@ -2,7 +2,6 @@
 #define T_VP37
 
 #include <tools.h>
-#include <arduino-timer.h>
 #include <pidController.h>
 
 #include "config.h"
@@ -46,8 +45,8 @@
 
 #define VP37_ADJUST_TIMER 200
 
-bool measureFuelTemp(void *arg);
-bool measureVoltage(void *arg);
+void measureFuelTemp(void);
+void measureVoltage(void);
 
 class VP37Pump {
 private:

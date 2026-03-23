@@ -6,7 +6,7 @@
 #include <hal/hal.h>
 #include "logic.h"
 
-extern float valueFields[];
+extern volatile float valueFields[];
 
 bool canInit(void);
 bool canMainLoop(void);
