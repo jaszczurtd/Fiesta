@@ -10,75 +10,75 @@
 // =====================================================================
 [
     {
-        "key": "ctrl+shift+b",
+        "key": "ctrl+shift+1",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Kompiluj (Build)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+u",
+        "key": "ctrl+shift+2",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Upload",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+alt+u",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Upload (UF2 / BOOTSEL)",
-        "when": "resourceExtname == .ino || editorLangId == cpp"
-    },
-    {
-        "key": "ctrl+shift+m",
+        "key": "ctrl+shift+3",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Monitor (persistent)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+alt+m",
+        "key": "ctrl+shift+4",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Upload (UF2 / BOOTSEL)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+5",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Monitor (Debug Probe)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+t",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Wybierz płytkę (GUI)",
-        "when": "resourceExtname == .ino || editorLangId == cpp"
-    },
-    {
-        "key": "ctrl+shift+alt+t",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Wybierz płytkę (interaktywnie)",
-        "when": "resourceExtname == .ino || editorLangId == cpp"
-    },
-    {
-        "key": "ctrl+shift+i",
+        "key": "ctrl+shift+6",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Odśwież IntelliSense",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+l",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Zainstaluj bibliotekę",
-        "when": "resourceExtname == .ino || editorLangId == cpp"
-    },
-    {
-        "key": "ctrl+shift+c",
+        "key": "ctrl+shift+7",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Clean",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+p",
+        "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Lista portów",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
-        "key": "ctrl+shift+alt+p",
+        "key": "ctrl+shift+9",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Zmień port",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+0",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Zainstaluj bibliotekę",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+alt+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Wybierz płytkę (GUI)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+alt+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Wybierz płytkę (interaktywnie)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     }
 ]

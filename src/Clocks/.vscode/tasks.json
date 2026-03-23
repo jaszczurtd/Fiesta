@@ -31,7 +31,7 @@
     "tasks": [
         {
             "label": "Arduino: Kompiluj (Build)",
-            "detail": "Ctrl+Shift+B / Ctrl+R — kompilacja sketcha",
+            "detail": "Ctrl+Shift+1 — kompilacja sketcha",
             "type": "shell",
             "command": "bash",
             "args": [
@@ -96,7 +96,7 @@
         },
         {
             "label": "Arduino: Upload",
-            "detail": "Ctrl+U — kompilacja + upload przez port szeregowy (auto-reset)",
+            "detail": "Ctrl+Shift+2 — kompilacja + upload przez port szeregowy (auto-reset)",
             "type": "shell",
             "command": "bash",
             "args": [
@@ -126,7 +126,7 @@
         },
         {
             "label": "Arduino: Upload (UF2 / BOOTSEL)",
-            "detail": "Ctrl+Shift+U — kompilacja + kopiowanie UF2 na dysk BOOTSEL",
+            "detail": "Ctrl+Shift+4 — kompilacja + kopiowanie UF2 na dysk BOOTSEL",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/upload-uf2.sh",
             "presentation": {
@@ -141,7 +141,7 @@
         },
         {
             "label": "Arduino: Monitor (persistent)",
-            "detail": "Ctrl+Shift+M — czeka na Pico (VID:PID), łączy, po odłączeniu czeka ponownie",
+            "detail": "Ctrl+Shift+3 — czeka na Pico (VID:PID), łączy, po odłączeniu czeka ponownie",
             "type": "shell",
             "command": "python3",
             "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "pico"],
@@ -157,7 +157,7 @@
         },
         {
             "label": "Arduino: Monitor (Debug Probe)",
-            "detail": "Monitor dla Raspberry Pi Debug Probe / Picoprobe",
+            "detail": "Ctrl+Shift+5 — Monitor dla Raspberry Pi Debug Probe / Picoprobe",
             "type": "shell",
             "command": "python3",
             "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "probe"],
@@ -189,7 +189,7 @@
         },
         {
             "label": "Arduino: Wybierz płytkę (GUI)",
-            "detail": "Ctrl+Alt+B — szybki wybór z dropdowna VS Code",
+            "detail": "Ctrl+Shift+Alt+1 — szybki wybór z dropdowna VS Code",
             "type": "shell",
             "command": "bash",
             "args": [
@@ -208,7 +208,7 @@
         },
         {
             "label": "Arduino: Wybierz płytkę (interaktywnie)",
-            "detail": "Pełne menu z opcjami zaawansowanymi (flash, freq, USB, debug)",
+            "detail": "Ctrl+Shift+Alt+2 — pełne menu z opcjami zaawansowanymi (flash, freq, USB, debug)",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/select-board.sh",
             "presentation": {
@@ -222,7 +222,7 @@
         },
         {
             "label": "Arduino: Odśwież IntelliSense",
-            "detail": "Ctrl+Alt+I — kompiluje projekt i generuje c_cpp_properties.json",
+            "detail": "Ctrl+Shift+6 — kompiluje projekt i generuje c_cpp_properties.json",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
             "presentation": {
@@ -237,7 +237,7 @@
         },
         {
             "label": "Arduino: Zainstaluj bibliotekę",
-            "detail": "Ctrl+Alt+L — instalacja biblioteki przez arduino-cli",
+            "detail": "Ctrl+Shift+0 — instalacja biblioteki przez arduino-cli",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
             "args": [
@@ -255,7 +255,7 @@
         },
         {
             "label": "Arduino: Clean",
-            "detail": "Ctrl+Alt+K — usuwa folder .build",
+            "detail": "Ctrl+Shift+7 — usuwa folder .build",
             "type": "shell",
             "command": "rm",
             "args": ["-rf", "${workspaceFolder}/.build"],
@@ -269,7 +269,7 @@
         },
         {
             "label": "Arduino: Lista portów",
-            "detail": "Ctrl+Alt+P — wyświetla podłączone urządzenia Arduino",
+            "detail": "Ctrl+Shift+8 — wyświetla podłączone urządzenia Arduino",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
             "args": ["board", "list"],
@@ -284,7 +284,7 @@
         },
         {
             "label": "Arduino: Zmień port",
-            "detail": "Ustawia port uploadu w settings.json",
+            "detail": "Ctrl+Shift+9 — ustawia port uploadu w settings.json",
             "type": "shell",
             "command": "bash",
             "args": [
