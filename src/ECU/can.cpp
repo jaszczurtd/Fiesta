@@ -1,4 +1,5 @@
 #include "can.h"
+#include "dtcManager.h"
 
 void receivedCanMessage(void);
 
@@ -15,6 +16,7 @@ static uint32_t canID = 0x000;
 static uint8_t len = 0;
 
 static bool dpfConnected = false;
+static bool dpfEverSeen = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 static uint8_t lastFrame = 0;
 
@@ -187,6 +189,7 @@ void canMainLoop(void) {
         switch(canID) {
             case CAN_ID_DPF: {
               dpfMessages++;
+              dpfEverSeen = true;
               setGlobalValue(F_DPF_TEMP,
                 MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
                             buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]));
@@ -233,6 +236,9 @@ void canCheckConnection(void) {
 
   dpfConnected = (dpfMessages != lastDPFMessages);
   lastDPFMessages = dpfMessages;
+
+  bool dpfCommLost = dpfEverSeen && !dpfConnected;
+  dtcManagerSetActive(DTC_DPF_COMM_LOST, dpfCommLost);
 }
 
 

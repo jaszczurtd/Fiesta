@@ -1,5 +1,6 @@
 
 #include "start.h"
+#include "dtcManager.h"
 
 static unsigned long lastThreadSeconds = 0;
 static SmartTimers timerEverySecond;
@@ -38,6 +39,12 @@ void initialization(void) {
 
   debugInit();
   setDebugPrefix("ECU:");
+
+  // Force local flash-backed EEPROM for this ECU build.
+  hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
+  deb("EEPROM backend: RP2040 (%u bytes)", (unsigned)hal_eeprom_size());
+
+  dtcManagerInit();
  
   initTests();
 

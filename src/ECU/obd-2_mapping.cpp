@@ -1,5 +1,6 @@
 
 #include "obd-2.h"
+#include "obd-2_mapping.h"
 
 const char PID_NAME_0x00[] PROGMEM = "PIDs supported [01 - 20]";
 const char PID_NAME_0x01[] PROGMEM = "Monitor status since DTCs cleared";
@@ -202,4 +203,19 @@ const char *getPIDName(int pid) {
     return "unknown";
   }
   return PID_NAME_MAPPER[pid];
+}
+
+const char *getDtcName(uint16_t code) {
+  switch(code) {
+    case DTC_OBD_CAN_INIT_FAIL:
+      return "U1900 Network CAN communication fault";
+    case DTC_PCF8574_COMM_FAIL:
+      return "U0073 Control module communication bus off";
+    case DTC_PWM_CHANNEL_NOT_INIT:
+      return "P0657 Actuator supply voltage A circuit/open";
+    case DTC_DPF_COMM_LOST:
+      return "U0100 Lost communication with ECM/PCM A";
+    default:
+      return "Unknown DTC";
+  }
 }

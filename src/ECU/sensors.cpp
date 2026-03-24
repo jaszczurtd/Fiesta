@@ -1,5 +1,6 @@
 
 #include "sensors.h"
+#include "dtcManager.h"
 
 NOINIT static volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];
@@ -204,6 +205,8 @@ void pcf8574_write(unsigned char pin, bool value) {
   if(notFound) {
     derr("pcf8574 not found");
   }
+
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, (!success || notFound));
 }
 
 bool pcf8574_read(unsigned char pin) {
@@ -214,6 +217,7 @@ bool pcf8574_read(unsigned char pin) {
   if(notFound) {
     derr("pcf8574 not found");
   }
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, notFound);
   return retVal;
 }
 
@@ -382,8 +386,10 @@ void valToPWM(unsigned char pin, int val) {
   }
   if(ch != NULL) {
     hal_pwm_freq_write(ch, (PWM_RESOLUTION - val));
+    dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, false);
   } else {
     derr("config for this pwm is not initialized!");
+    dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
   }
 }
 

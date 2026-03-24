@@ -8,6 +8,7 @@
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "tests.h"
+#include "obd-2_mapping.h"
 
 #define PAD 0x00
 
@@ -18,8 +19,8 @@
 // 7E1/9 = Transmission ECM
 
 #if standard == 1
-  #define REPLY_ID 0x7E9
-  #define LISTEN_ID 0x7E1
+  #define REPLY_ID 0x7E8
+  #define LISTEN_ID 0x7E0
   #define FUNCTIONAL_ID 0x7DF  
 #else
   #define REPLY_ID 0x98DAF101
@@ -219,7 +220,6 @@ enum {
 
 void obdInit(int retries);
 void obdLoop(void);
-const char *getPIDName(int pid);
 
 //=================================================================
 //Define ECU Supported PID's
