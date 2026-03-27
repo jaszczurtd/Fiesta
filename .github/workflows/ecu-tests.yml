@@ -1,0 +1,41 @@
+name: ECU Tests
+
+on:
+  push:
+    paths:
+      - "src/ECU/**"
+      - ".github/workflows/ecu-tests.yml"
+  pull_request:
+    paths:
+      - "src/ECU/**"
+      - ".github/workflows/ecu-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test-ecu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v4
+
+      - name: Clone ECU dependencies
+        run: |
+          set -eux
+          mkdir -p ../libraries
+          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+          git clone --depth 1 https://github.com/jaszczurtd/canDefinitions.git ../libraries/canDefinitions
+
+      - name: Configure
+        run: |
+          cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build src/ECU/build_test --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir src/ECU/build_test --output-on-failure

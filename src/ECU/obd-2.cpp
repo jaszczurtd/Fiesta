@@ -61,7 +61,7 @@ typedef struct {
   iso_tp_state_t state;
 } iso_tp_ctx_t;
 
-static iso_tp_ctx_t s_isoTp = {.state = ISO_TP_IDLE};
+static iso_tp_ctx_t s_isoTp = {};
 
 static bool initialized = false;
 void obdInit(int retries) {

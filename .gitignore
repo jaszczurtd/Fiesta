@@ -100,3 +100,25 @@ Fiesta_pcbs/ecu/~clocks.pcb
 src/Clocks/.build/
 src/ECU/.build/
 src/OilAndSpeed/.build/
+
+# ECU documentation dumps (kept locally, not versioned)
+src/ECU/Strategy-Documents-main-Ford/
+src/ECU/LVCAN Protocol P145_20_40/
+src/ECU/ISO-15765-OBD2-Ford/
+src/ECU/OBD-context-provider.txt
+
+# ECU host-tests and CMake artifacts
+src/ECU/build_test/
+src/ECU/CMakeFiles/
+src/ECU/CMakeCache.txt
+src/ECU/CTestTestfile.cmake
+src/ECU/cmake_install.cmake
+src/ECU/Makefile
+
+# Prevent accidental in-source build outputs inside test sources dir
+src/ECU/tests/CMakeFiles/
+src/ECU/tests/Testing/
+src/ECU/tests/CMakeCache.txt
+src/ECU/tests/CTestTestfile.cmake
+src/ECU/tests/cmake_install.cmake
+src/ECU/tests/Makefile
