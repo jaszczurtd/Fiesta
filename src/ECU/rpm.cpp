@@ -3,7 +3,13 @@
 #define CRANK_REVOLUTIONS 32.0
 
 #ifndef VP37
-static Timer rpmTimer;
+static SmartTimers rpmCycleTimer;
+
+static void cycleCheckTimerCallback(void) {
+  getRPMInstance()->resetRPMCycle();
+  // SmartTimers is periodic by default, so stop it after first fire.
+  rpmCycleTimer.abort();
+}
 #endif
 
 static RPM engineRPM;
@@ -17,11 +23,6 @@ RPM *getRPMInstance(void) {
 
 void countRPM(void) {
   getRPMInstance()->interrupt();
-}
-
-bool cycleCheck(void *argument) {
-  getRPMInstance()->resetRPMCycle();
-  return false;
 }
 
 void RPM::resetRPMCycle(void) {
@@ -80,7 +81,7 @@ void RPM::init(void) {
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
 
 #ifndef VP37
-  rpmTimer = timer_create_default();
+  rpmCycleTimer.begin(cycleCheckTimerCallback, STOP);
 #endif
 
   setAccelMaxRPM();
@@ -108,7 +109,7 @@ int RPM::getCurrentRPM(void) {
 
 #ifndef VP37
 void RPM::process(void) {
-  rpmTimer.tick();
+  rpmCycleTimer.tick();
 
   if(rpmAliveTime < (long)hal_millis()) {
     rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
@@ -147,7 +148,8 @@ void RPM::process(void) {
             rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
           setAccelRPMPercentage(rpmPercentValue);
-          rpmTimer.in(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
+          rpmCycleTimer.time(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE);
+          rpmCycleTimer.restart();
         }
       }
     }
@@ -163,7 +165,8 @@ void RPM::process(void) {
             rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
           setAccelRPMPercentage(rpmPercentValue);
-          rpmTimer.in(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE, cycleCheck);
+          rpmCycleTimer.time(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE);
+          rpmCycleTimer.restart();
         }
       }
     }
