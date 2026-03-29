@@ -28,14 +28,21 @@ static Cluster cluster;
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
+
+#ifdef DEBUG_SCREEN
+void debugFunc(void) {
+  deb("Debug function called");
+}
+#endif
+
 void setupTimers(void) {
-  timerEverySecond.begin(callAtEverySecond, SECOND);           m_delay(CORE_OPERATION_DELAY);
-  timerHalfSecond.begin(callAtEveryHalfSecond, SECOND / 2);   m_delay(CORE_OPERATION_DELAY);
-  timerQuarterSecond.begin(callAtEveryHalfHalfSecond, SECOND / 4); m_delay(CORE_OPERATION_DELAY);
-  timerSoftInit.begin(softInitDisplay, DISPLAY_SOFTINIT_TIME); m_delay(CORE_OPERATION_DELAY);
-  timerEGT.begin(changeEGT, DPF_SHOW_TIME_INTERVAL);          m_delay(CORE_OPERATION_DELAY);
-  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);          m_delay(CORE_OPERATION_DELAY);
-  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS); m_delay(CORE_OPERATION_DELAY);
+  timerEverySecond.begin(callAtEverySecond, SECOND);                hal_delay_ms(CORE_OPERATION_DELAY);
+  timerHalfSecond.begin(callAtEveryHalfSecond, SECOND / 2);         hal_delay_ms(CORE_OPERATION_DELAY);
+  timerQuarterSecond.begin(callAtEveryHalfHalfSecond, SECOND / 4);  hal_delay_ms(CORE_OPERATION_DELAY);
+  timerSoftInit.begin(softInitDisplay, DISPLAY_SOFTINIT_TIME);      hal_delay_ms(CORE_OPERATION_DELAY);
+  timerEGT.begin(changeEGT, DPF_SHOW_TIME_INTERVAL);                hal_delay_ms(CORE_OPERATION_DELAY);
+  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);               hal_delay_ms(CORE_OPERATION_DELAY);
+  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS); hal_delay_ms(CORE_OPERATION_DELAY);
   timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
 }
 
@@ -59,17 +66,16 @@ void setup_a(void) {
   }
 
   initSPI();
-
-  TFT *tft = initTFT();
+  initTFT();
 
   int sec = getSeconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
 
-  #ifndef DEBUG_SCREEN
-  tft->fillScreen(COLOR(WHITE));
+#ifndef DEBUG_SCREEN
+  hal_display_fill_screen(HAL_COLOR(WHITE));
   const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
+  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, HAL_COLOR(WHITE), (uint16_t*)FiestaLogo);
 #endif //DEBUG_SCREEN
 
   hal_watchdog_feed();
@@ -82,7 +88,7 @@ void setup_a(void) {
   }
 
   softInitDisplay();
-  tft->fillScreen(ICONS_BG_COLOR);
+  hal_display_fill_screen(ICONS_BG_COLOR);
 
   initFuelMeasurement();
   canCheckConnection();
@@ -120,7 +126,7 @@ void loop_a(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
+    hal_delay_ms(CORE_OPERATION_DELAY);  
     hal_idle();
     return;
   }
@@ -155,7 +161,7 @@ void loop_a(void) {
   canMainLoop();
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
 }
 
@@ -258,13 +264,13 @@ void loop_b(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
+    hal_delay_ms(CORE_OPERATION_DELAY);  
     hal_idle();
     return;
   }
   statusVariable1 = 1;
 
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
 }
 

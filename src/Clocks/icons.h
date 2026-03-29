@@ -1,6 +1,8 @@
 #ifndef T_ICONS
 #define T_ICONS
 
+#define ICONS_BG_COLOR 0x0841
+
 #define BIG_ICONS_WIDTH 80
 #define BIG_ICONS_HEIGHT 80
 

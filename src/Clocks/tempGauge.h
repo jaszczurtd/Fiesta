@@ -28,6 +28,8 @@
 #define FAN_COOLANT_X 15
 #define FAN_COOLANT_Y 48
 
+#define TEMP_INITIAL_COLOR 0x33b7
+
 #define OFFSET (SCREEN_W / 40)
 
 extern const char *err;

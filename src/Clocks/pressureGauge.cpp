@@ -1,6 +1,11 @@
 
 #include "pressureGauge.h"
 
+namespace {
+constexpr int kBarTextX = 12;
+constexpr int kBarTextY = 71;
+}
+
 PressureGauge turbop_g = PressureGauge(PRESSURE_G_TURBO);
 PressureGauge oilp_g = PressureGauge(PRESSURE_G_OIL);
 
@@ -19,6 +24,32 @@ PressureGauge::PressureGauge(int mode) {
   drawOnce = true;
   lastHI = lastLO = lastHI_d = lastLO_d = C_INIT_VAL;
   lastAnimImg = NULL; 
+}
+
+void PressureGauge::drawTextForPressureIndicators(int x, int y, const char *format, ...) {
+  char displayTxt[DISPLAY_TXT_SIZE];
+  memset(displayTxt, 0, DISPLAY_TXT_SIZE);
+
+  va_list valist;
+  va_start(valist, format);
+  vsnprintf(displayTxt, DISPLAY_TXT_SIZE - 1, format, valist);
+  va_end(valist);
+
+  int x1 = x + kBarTextX;
+  int y1 = y + kBarTextY - 12;
+
+  hal_display_fill_rect(x1, y1, 28, 15, ICONS_BG_COLOR);
+
+  x1 = x + kBarTextX;
+  y1 = y + kBarTextY;
+
+  hal_display_set_sans_bold_with_pos_and_color(x1, y1, TEXT_COLOR);
+  hal_display_println(displayTxt);
+
+  x1 = x + kBarTextX + 25;
+  y1 = y + kBarTextY - 6;
+  hal_display_set_default_font_with_pos_and_color(x1, y1, TEXT_COLOR);
+  hal_display_println("BAR");
 }
 
 int PressureGauge::getBaseX(void) {
@@ -46,7 +77,6 @@ void PressureGauge::redraw(void) {
 
 void PressureGauge::showPressureGauge(void) {
 
-  TFT *tft = returnTFTReference();
   unsigned short *tempImg = NULL;
   int x, y, w;
   int hi, lo;
@@ -62,7 +92,7 @@ void PressureGauge::showPressureGauge(void) {
         break;
     }
 
-    tft->drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+    hal_display_draw_image(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
   } else {
     switch(mode) {
@@ -78,7 +108,7 @@ void PressureGauge::showPressureGauge(void) {
     if(hi != lastHI || lo != lastLO) {
       lastHI = hi;
       lastLO = lo;
-      tft->drawTextForPressureIndicators(getBaseX(), getBaseY(), (const char*)F("%d.%d"), hi, lo);
+      drawTextForPressureIndicators(getBaseX(), getBaseY(), (const char*)F("%d.%d"), hi, lo);
     }
 
     switch(mode) {
@@ -102,7 +132,7 @@ void PressureGauge::showPressureGauge(void) {
             x = getBaseX() + PRESSURE_ICON_X;
             y = getBaseY() + PRESSURE_ICON_Y;
 
-            tft->drawRGBBitmap(x, y, img, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT);
+            hal_display_draw_rgb_bitmap(x, y, img, PRESSURE_ICONS_WIDTH, PRESSURE_ICONS_HEIGHT);
           }
         }
         break;
@@ -120,13 +150,13 @@ void PressureGauge::showPressureGauge(void) {
         x = getBaseX() + TURPO_PERCENT_TEXT_POS_X;
         y = getBaseY() + TURPO_PERCENT_TEXT_POS_Y;
 
-        tft->defaultFontWithPosAndColor(x, y, TEXT_COLOR);
+        hal_display_set_default_font_with_pos_and_color(x, y, TEXT_COLOR);
         
         char txt[DISPLAY_TXT_SIZE];
-        w = tft->prepareText(txt, (const char*)F("req:%d.%dBAR"), hi, lo);
+        w = hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("req:%d.%dBAR"), hi, lo);
 
-        tft->fillRect(x, y, w + 10, 8, ICONS_BG_COLOR);
-        tft->printlnFromPreparedText(txt);
+        hal_display_fill_rect(x, y, w + 10, 8, ICONS_BG_COLOR);
+        hal_display_println_prepared_text(txt);
       }
     }
     break;

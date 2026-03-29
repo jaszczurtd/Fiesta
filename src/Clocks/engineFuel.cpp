@@ -33,11 +33,9 @@ void EngineFuelGauge::init() {
   nextMeasurement = getSeconds() + fuelMeasurementTime;
   measurements = 0;
 
-  TFT *tft = returnTFTReference();
-
-  tft->setDisplayDefaultFont();
-  emptyMessageWidth = tft->textWidth(emptyMessage);
-  emptyMessageHeight = tft->textHeight(emptyMessage);
+  hal_display_set_default_font();
+  emptyMessageWidth = hal_display_text_width(emptyMessage);
+  emptyMessageHeight = hal_display_text_height(emptyMessage);
 
   currentFuelWidth = 0;
   fullRedrawNeeded = false;
@@ -80,17 +78,16 @@ void EngineFuelGauge::drawFuelEmpty(void) {
 
   if(currentFuelWidth <= MIN_FUEL_WIDTH) {
 
-    int color = COLOR(WHITE);
+    int color = HAL_COLOR(WHITE);
     if(seriousAlertSwitch()) {
-        color = COLOR(RED);
+        color = HAL_COLOR(RED);
     }
 
     int x = getBaseX() + ((getWidth() - emptyMessageWidth) / 2);
     int y = getBaseY() + ((FUEL_HEIGHT - emptyMessageHeight) / 2);
 
-    TFT *tft = returnTFTReference();
-    tft->defaultFontWithPosAndColor(x, y, color);
-    tft->println(emptyMessage);
+    hal_display_set_default_font_with_pos_and_color(x, y, (uint16_t)color);
+    hal_display_println(emptyMessage);
   }
 }
 
@@ -116,41 +113,40 @@ void EngineFuelGauge::showFuelAmount(int currentVal, int maxVal) {
     int y = getBaseY();
     int tw;
 
-    TFT *tft = returnTFTReference();
-    tft->fillRect(FUEL_WIDTH + OFFSET + (OFFSET / 2),
-                  y, 
-                  getWidth() + OFFSET, SCREEN_H - y, 
-                  ICONS_BG_COLOR);
+    hal_display_fill_rect(FUEL_WIDTH + OFFSET + (OFFSET / 2),
+                y,
+                getWidth() + OFFSET, SCREEN_H - y,
+                ICONS_BG_COLOR);
 
     x = getBaseX();
 
-    tft->drawImage(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (unsigned short*)fuelIcon);
+    hal_display_draw_image(x - FUEL_WIDTH - OFFSET, y, FUEL_WIDTH, FUEL_HEIGHT, 0, (uint16_t*)fuelIcon);
 
     y = getGaugePos();
 
-    tft->drawRect(x, y, width, FUEL_GAUGE_HEIGHT, FUEL_BOX_COLOR);
+    hal_display_draw_rect(x, y, width, FUEL_GAUGE_HEIGHT, FUEL_BOX_COLOR);
 
     drawChangeableFuelContent(currentFuelWidth, FUEL_GAUGE_HEIGHT, y);
 
     y += FUEL_GAUGE_HEIGHT + (OFFSET / 2);
 
-    tft->defaultFontWithPosAndColor(x, y, COLOR(RED));
-    tft->println(empty);
+    hal_display_set_default_font_with_pos_and_color(x, y, HAL_COLOR(RED));
+    hal_display_println(empty);
 
-    tw = tft->textWidth(half);
+    tw = hal_display_text_width(half);
     x = getBaseX();
     x += ((width - tw) / 2);
 
-    tft->setTextColor(TEXT_COLOR);
-    tft->setCursor(x, y);
-    tft->println(half);
+    hal_display_set_text_color(TEXT_COLOR);
+    hal_display_set_cursor(x, y);
+    hal_display_println(half);
 
     x = getBaseX() + width;
-    tw = tft->textWidth(full);
+    tw = hal_display_text_width(full);
     x -= tw;
 
-    tft->setCursor(x, y);
-    tft->println(full);
+    hal_display_set_cursor(x, y);
+    hal_display_println(full);
 
     f_drawOnce = false;
   } else {
@@ -174,25 +170,24 @@ void EngineFuelGauge::drawChangeableFuelContent(int w, int fh, int y) {
     if(w <= minW && w >= 1) {
         draw = true;
         if(alertSwitch()) {
-            color = COLOR(RED);
+            color = HAL_COLOR(RED);
         }
     }
 
     if(draw) {
-      TFT *tft = returnTFTReference();
       int x = getBaseX(); 
 
       if(fullRedrawNeeded) {
-          tft->fillRect(x + 1, y + 1, width - 2, fh - 2, COLOR(BLACK));
+          hal_display_fill_rect(x + 1, y + 1, width - 2, fh - 2, HAL_COLOR(BLACK));
           fullRedrawNeeded = false;
       }
 
-      tft->fillRect(x, y + 1, w, fh - 2, color);
+      hal_display_fill_rect(x, y + 1, w, fh - 2, color);
       int toFill =  width - w - 1;
       if(toFill < 0) {
           toFill = 0;
       }
-      tft->fillRect(x + w, y + 1, toFill, fh - 2, COLOR(BLACK));
-      tft->drawRect(x, y, width, fh, FUEL_BOX_COLOR);
+      hal_display_fill_rect(x + w, y + 1, toFill, fh - 2, HAL_COLOR(BLACK));
+      hal_display_draw_rect(x, y, width, fh, FUEL_BOX_COLOR);
     }
 }

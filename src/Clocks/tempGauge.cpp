@@ -24,9 +24,8 @@ TempGauge::TempGauge(int mode) {
 }
 
 void TempGauge::drawTempBar(int x, int y, int currentHeight, int color) {
-  TFT *tft = returnTFTReference();
-  tft->fillRect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
-  tft->fillRect(x, y - currentHeight, TEMP_BAR_WIDTH, 
+  hal_display_fill_rect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
+  hal_display_fill_rect(x, y - currentHeight, TEMP_BAR_WIDTH,
       -(TEMP_BAR_MAXHEIGHT - currentHeight), ICONS_BG_COLOR);
 }
 
@@ -54,20 +53,19 @@ int TempGauge::getBaseY(void) {
 }
 
 void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
-  TFT *tft = returnTFTReference();
-  tft->sansBoldWithPosAndColor(x, y, TEXT_COLOR);
-  tft->fillRect(x, y - 14, 35, 16, ICONS_BG_COLOR);
+  hal_display_set_sans_bold_with_pos_and_color(x, y, TEXT_COLOR);
+  hal_display_fill_rect(x, y - 14, 35, 16, ICONS_BG_COLOR);
 
   if(valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
-      tft->setTextColor(COLOR(RED));
-      tft->println(err);
+      hal_display_set_text_color(HAL_COLOR(RED));
+      hal_display_println(err);
       return;
   } else {
       char txt[DISPLAY_TXT_SIZE];
-      tft->prepareText(txt, (const char*)F("%d"), valToDisplay);
-      tft->printlnFromPreparedText(txt);
+      hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("%d"), valToDisplay);
+      hal_display_println_prepared_text(txt);
   }
-  tft->setDisplayDefaultFont();
+    hal_display_set_default_font();
 }
 
 int TempGauge::currentValToHeight(int currentVal, int maxVal) {
@@ -77,7 +75,6 @@ int TempGauge::currentValToHeight(int currentVal, int maxVal) {
 
 void TempGauge::showTemperatureAmount(int currentVal) {
 
-  TFT *tft = returnTFTReference();
   unsigned short *tempImg = NULL;
 
   if(drawOnce) {
@@ -90,7 +87,7 @@ void TempGauge::showTemperatureAmount(int currentVal) {
         break;        
     }
 
-    tft->drawImage(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
+    hal_display_draw_image(getBaseX(), getBaseY(), BIG_ICONS_WIDTH, BIG_ICONS_HEIGHT, ICONS_BG_COLOR, tempImg);
     drawOnce = false;
   } else {
     
@@ -121,7 +118,7 @@ void TempGauge::showTemperatureAmount(int currentVal) {
     bool overheat = false;
     color = TEMP_INITIAL_COLOR;
     if(currentVal >= TEMP_OK_LO && currentVal <= temp_ok_hi) {
-        color = COLOR(ORANGE);
+        color = HAL_COLOR(ORANGE);
     } 
     if(currentVal > temp_ok_hi) {
         overheat = true;
@@ -150,7 +147,7 @@ void TempGauge::showTemperatureAmount(int currentVal) {
 
     if(overheat) {
         draw = true;
-        color = (blink) ? COLOR(RED) : COLOR(ORANGE);
+        color = (blink) ? HAL_COLOR(RED) : HAL_COLOR(ORANGE);
     }
 
     bool fanEnabled = isFanEnabled();
@@ -196,19 +193,19 @@ void TempGauge::showTemperatureAmount(int currentVal) {
             x = getBaseX() + FAN_COOLANT_X;
             y = getBaseY() + FAN_COOLANT_Y;
 
-            tft->drawRGBBitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
+            hal_display_draw_rgb_bitmap(x, y, img, FAN_COOLANT_WIDTH, FAN_COOLANT_HEIGHT);
           } else {
             x = getBaseX() + TEMP_DOT_X;
             y = getBaseY() + TEMP_DOT_Y;
 
-            tft->fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+            hal_display_fill_circle(x, y, TEMP_BAR_DOT_RADIUS, color);
           }
           break;
         case TEMP_GAUGE_OIL:
           x = getBaseX() + OIL_DOT_X;
           y = getBaseY() + OIL_DOT_Y;
 
-          tft->fillCircle(x, y, TEMP_BAR_DOT_RADIUS, color);
+          hal_display_fill_circle(x, y, TEMP_BAR_DOT_RADIUS, color);
           break;
       }
     }

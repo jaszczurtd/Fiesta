@@ -8,6 +8,7 @@
 #include <multicoreWatchdog.h>
 
 #include <hal/hal.h>
+#include <hal/hal_display.h>
 #include "TFTExtension.h"
 #include "config.h"
 #include "hardwareConfig.h"

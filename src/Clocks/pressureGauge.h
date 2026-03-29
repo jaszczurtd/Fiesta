@@ -38,6 +38,8 @@ private:
   int lastHI_d;
   int lastLO_d;
   unsigned short *lastAnimImg; 
+
+  static void drawTextForPressureIndicators(int x, int y, const char *format, ...);
 };
 
 void redrawPressureGauges(void);

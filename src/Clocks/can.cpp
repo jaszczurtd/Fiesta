@@ -43,8 +43,8 @@ bool canInit(void) {
       break;
     }
 
-    deb("ERROR!!!! CAN-BUS Shield init fail\n");
-    deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
+    derr("CAN-BUS Shield init fail");
+    derr("Will try to init CAN-BUS shield again");
 
     hal_delay_ms(SECOND);
     canHandle = hal_can_create(CAN_CS);

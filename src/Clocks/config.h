@@ -118,5 +118,14 @@
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * SECOND
 
+//Graphics definitions
+#define DISPLAY_TXT_SIZE 32
+#define DISPLAY_SOFTINIT_TIME 10000
+
+#define SCREEN_W 320
+#define SCREEN_H 240
+
+#define TEXT_COLOR 0xE73C
+
 #endif
 

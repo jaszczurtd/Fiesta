@@ -286,10 +286,12 @@
             "label": "Arduino: Zmień port",
             "detail": "Ctrl+Shift+9 — ustawia port uploadu w settings.json",
             "type": "shell",
-            "command": "bash",
+            "command": "python3",
             "args": [
                 "-c",
-                "PORT='${input:uploadPort}'; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.uploadPort']='$PORT'; json.dump(s,open(f,'w'),indent=4); print('Port ustawiony na: $PORT')\""
+                "import json, sys; f = sys.argv[1]; port = sys.argv[2]; s = json.load(open(f)); s[\"arduino.uploadPort\"] = port; json.dump(s, open(f, \"w\"), indent=4); print(\"Port ustawiony na: \" + port)",
+                "${workspaceFolder}/.vscode/settings.json",
+                "${input:uploadPort}"
             ],
             "presentation": {
                 "echo": true,
