@@ -26,10 +26,10 @@ bool canInit(void) {
       break;
     }
 
-    deb("ERROR!!!! CAN-BUS Shield init fail\n");
-    deb("ERROR!!!! Will try to init CAN-BUS shield again\n");
+    derr("CAN-BUS Shield init fail\n");
+    derr("Will try to init CAN-BUS shield again\n");
 
-    m_delay(SECOND);
+    hal_delay_ms(SECOND);
   }
   if (!error) {
     watchdog_feed();

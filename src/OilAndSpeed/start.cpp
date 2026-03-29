@@ -20,10 +20,10 @@ void executeByWatchdog(int *values, int size) {
 }
 
 void setupTimers(void) {
-  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS);    m_delay(CORE_OPERATION_DELAY);
-  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);        m_delay(CORE_OPERATION_DELAY);
-  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);       m_delay(CORE_OPERATION_DELAY);
-  timerOilPressure.begin(readOilPressure, OIL_PRESSURE_READ_INTERVAL); m_delay(CORE_OPERATION_DELAY);
+  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS);    hal_delay_ms(CORE_OPERATION_DELAY);
+  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);        hal_delay_ms(CORE_OPERATION_DELAY);
+  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);       hal_delay_ms(CORE_OPERATION_DELAY);
+  timerOilPressure.begin(readOilPressure, OIL_PRESSURE_READ_INTERVAL); hal_delay_ms(CORE_OPERATION_DELAY);
   timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);
 }
 
@@ -80,7 +80,7 @@ void looper() {
 
   if (!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    m_delay(CORE_OPERATION_DELAY);
+    hal_delay_ms(CORE_OPERATION_DELAY);
     hal_idle();
     return;
   }
@@ -95,7 +95,7 @@ void looper() {
   onImpulseTranslating();
   canSendLoop();
 
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
 }
 
@@ -109,13 +109,13 @@ void looper1() {
 
   if (!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    m_delay(CORE_OPERATION_DELAY);
+    hal_delay_ms(CORE_OPERATION_DELAY);
     hal_idle();
     return;
   }
   statusVariable1 = 1;
 
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
 }
 
