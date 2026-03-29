@@ -35,7 +35,7 @@ void canInit(int retries) {
 
     derr("ERROR!!!! CAN-BUS Shield init fail");
 
-    m_delay(SECOND);
+    hal_delay_ms(SECOND);
     watchdog_feed();
   }
 
@@ -51,11 +51,11 @@ void canInit(int retries) {
 
 void CAN_sendAll(void) {
   CAN_updaterecipients_01();
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   CAN_updaterecipients_02();
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   CAN_sendThrottleUpdate();
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
   CAN_sendTurboUpdate();
 }
 

@@ -18,14 +18,14 @@ NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
 void setupTimers(void) {
-  watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                           m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER); m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);   m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                       m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                           m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);         m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                 m_delay(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
+watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                               hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER);  hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);    hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                        hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                            hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);          hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                  hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);                 hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
 static int *wValues = NULL;
@@ -215,7 +215,7 @@ void looper(void) {
   turbo.showDebug();
 
   hal_idle();
-  m_delay(CORE_OPERATION_DELAY);
+  hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
 void initialization1(void) {

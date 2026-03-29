@@ -52,10 +52,10 @@ void VP37Pump::initVP37(void) {
 }
 
 int VP37Pump::makeCalibrationValue(void) {
-  m_delay(VP37_ADJUST_TIMER);
+  hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();
   int val = getAdjustometerStable();
-  m_delay(VP37_ADJUST_TIMER);
+  hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();  
   return val;
 }

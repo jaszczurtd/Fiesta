@@ -74,7 +74,7 @@ void obdInit(int retries) {
       break;
     }
     derr("Error Initializing MCP2515...");
-    m_delay(SECOND);
+    hal_delay_ms(SECOND);
     watchdog_feed();
   }
 
