@@ -38,6 +38,12 @@ add_library(clocks_mock STATIC
 target_include_directories(clocks_mock PUBLIC
     ${CLOCKS_SRC}
     ${UNITY_INCLUDE_DIR}
+    ${HAL_LIB_SUBMODULE}
+    ${HAL_LIB_SUBMODULE}/src
+    ${HAL_LIB_SUBMODULE}/src/utils
+    ${HAL_LIB_EXTERNAL}
+    ${HAL_LIB_EXTERNAL}/src
+    ${HAL_LIB_EXTERNAL}/src/utils
 )
 
 target_compile_definitions(clocks_mock PUBLIC
