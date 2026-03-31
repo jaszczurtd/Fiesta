@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Odświeżenie konfiguracji IntelliSense
+# Refresh IntelliSense configuration
 #
-# Strategia:
-# 1. Kompiluj projekt z --libraries żeby arduino-cli widział wszystko
-# 2. Wygeneruj compile_commands.json (--only-compilation-database)
-# 3. Parsuj WYŁĄCZNIE compile_commands.json — wyciągnij -I, -D, kompilator
-# 4. Wygeneruj c_cpp_properties.json BEZ pola compileCommands
-#    (cpptools nie radzi sobie z .ino → .ino.cpp remapowaniem)
+# Strategy:
+# 1. Compile with --libraries so arduino-cli resolves all dependencies
+# 2. Generate compile_commands.json (--only-compilation-database)
+# 3. Parse ONLY compile_commands.json to extract -I, -D, and compiler path
+# 4. Generate c_cpp_properties.json with robust include/define fallback
 # =============================================================================
 set -euo pipefail
 
@@ -51,7 +50,7 @@ print(s.get('arduino.cliPath', ''))
         echo "$HOME/.local/bin/arduino-cli"
         return
     fi
-    err "arduino-cli nie znalezione"
+    err "arduino-cli not found"
     exit 1
 }
 
@@ -72,14 +71,14 @@ find_sketch() {
     local sketch
     sketch=$(find "$PROJECT_DIR" -maxdepth 2 -name "*.ino" -not -path "*/.build/*" | head -1)
     if [[ -z "$sketch" ]]; then
-        err "Nie znaleziono pliku .ino w projekcie"
+        err "No .ino file found in the project"
         exit 1
     fi
     echo "$sketch"
 }
 
 # ---------------------------------------------------------------------------
-# Kompilacja + generowanie compile_commands.json
+# Compile + generate compile_commands.json
 # ---------------------------------------------------------------------------
 generate_compile_db() {
     local cli="$1"
@@ -95,38 +94,42 @@ generate_compile_db() {
 
     mkdir -p "$BUILD_DIR"
 
-    info "Kompilacja projektu..."
+    info "Compiling project..."
     if ! "$cli" compile \
         --fqbn "$fqbn" \
         --build-path "$BUILD_DIR" \
         "${lib_args[@]}" \
+        --build-property "compiler.cpp.extra_flags=-I '$(dirname "$sketch")'" \
+        --build-property "compiler.c.extra_flags=-I '$(dirname "$sketch")'" \
         --warnings all \
         "$(dirname "$sketch")" 2>&1; then
-        warn "Kompilacja nie powiodła się"
-        warn "IntelliSense może być niekompletne, ale próbuję dalej..."
+        warn "Compilation failed"
+        warn "IntelliSense may be incomplete, continuing anyway..."
     fi
 
-    info "Generowanie compile_commands.json..."
+    info "Generating compile_commands.json..."
     if "$cli" compile \
         --fqbn "$fqbn" \
         --build-path "$BUILD_DIR" \
         "${lib_args[@]}" \
+        --build-property "compiler.cpp.extra_flags=-I '$(dirname "$sketch")'" \
+        --build-property "compiler.c.extra_flags=-I '$(dirname "$sketch")'" \
         --only-compilation-database \
         "$(dirname "$sketch")" 2>&1; then
-        ok "compile_commands.json wygenerowany"
+        ok "compile_commands.json generated"
     else
-        err "Nie udało się wygenerować compile_commands.json"
+        err "Failed to generate compile_commands.json"
         exit 1
     fi
 
     if [[ ! -f "$BUILD_DIR/compile_commands.json" ]]; then
-        err "Plik compile_commands.json nie istnieje po generacji"
+        err "compile_commands.json does not exist after generation"
         exit 1
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Parsowanie compile_commands.json i generowanie c_cpp_properties.json
+# Parse compile_commands.json and generate c_cpp_properties.json
 # ---------------------------------------------------------------------------
 generate_cpp_properties() {
     python3 << 'PYEOF'
@@ -140,14 +143,14 @@ settings_path = os.path.join(project_dir, ".vscode", "settings.json")
 cpp_props_path = os.path.join(project_dir, ".vscode", "c_cpp_properties.json")
 compile_db_path = os.path.join(build_dir, "compile_commands.json")
 
-# Wczytaj settings
+# Read settings
 with open(settings_path) as f:
     settings = json.load(f)
 
 board_desc = settings.get("arduino.boardDescription", "Arduino-Pico")
 sketchbook_path = settings.get("arduino.sketchbookPath", "")
 
-# Parsuj compile_commands.json
+# Parse compile_commands.json
 with open(compile_db_path) as f:
     commands = json.load(f)
 
@@ -157,7 +160,7 @@ compiler_path = ""
 iprefix = ""
 
 def process_response_file(resp_file, includes, defines, iprefix):
-    """Parsuj response file — obsługuje -I, -D, -iwithprefixbefore."""
+    """Parse response file handling -I, -D, and -iwithprefixbefore."""
     if not os.path.isfile(resp_file):
         return
     with open(resp_file) as rf:
@@ -180,11 +183,11 @@ def process_response_file(resp_file, includes, defines, iprefix):
                     defines.add(d)
 
 for entry in commands:
-    # compile_commands.json ma albo "arguments" (lista) albo "command" (string)
+    # compile_commands.json can have either "arguments" (list) or "command" (string)
     args = entry.get("arguments", [])
     if not args:
         cmd = entry.get("command", "")
-        # Podziel z uwzględnieniem cudzysłowów
+        # Split while preserving quoted values
         import shlex
         try:
             args = shlex.split(cmd)
@@ -194,7 +197,7 @@ for entry in commands:
     if not args:
         continue
 
-    # Pierwszy argument to kompilator
+    # First argument should be the compiler executable
     if not compiler_path and args[0].endswith(("g++", "gcc", "arm-none-eabi-g++", "arm-none-eabi-gcc")):
         compiler_path = args[0]
 
@@ -202,11 +205,11 @@ for entry in commands:
     while i < len(args):
         arg = args[i]
 
-        # -I/ścieżka lub -I ścieżka
+        # -I/path or -I path
         if arg.startswith("-I"):
             path = arg[2:] if len(arg) > 2 else (args[i+1] if i+1 < len(args) else "")
             if path:
-                # Rozwiąż ścieżkę względną
+            # Resolve relative path from command directory
                 if not os.path.isabs(path):
                     directory = entry.get("directory", "")
                     if directory:
@@ -215,27 +218,27 @@ for entry in commands:
                 if len(arg) == 2:
                     i += 1
 
-        # -isystem ścieżka
+        # -isystem path
         elif arg == "-isystem":
             if i+1 < len(args):
                 includes.add(args[i+1])
                 i += 1
 
-        # -iprefix — zapamiętaj prefix do użycia z -iwithprefixbefore
+        # -iprefix used later by -iwithprefixbefore
         elif arg.startswith("-iprefix"):
             iprefix = arg[8:] if len(arg) > 8 else (args[i+1] if i+1 < len(args) else "")
             if len(arg) == 8:
                 i += 1
 
-        # @plik — response file (arduino-pico używa platform_inc.txt z -iwithprefixbefore)
+        # @file response (arduino-pico uses platform_inc.txt with -iwithprefixbefore)
         elif arg.startswith("@") and arg.endswith(".txt"):
             process_response_file(arg[1:], includes, defines, iprefix)
 
-        # -D definy
+        # -D defines
         elif arg.startswith("-D"):
             d = arg[2:] if len(arg) > 2 else (args[i+1] if i+1 < len(args) else "")
             if d:
-                # Oczyść z cudzysłowów
+                # Strip wrapping quotes
                 d = d.strip('"').strip("'")
                 defines.add(d)
                 if len(arg) == 2:
@@ -243,7 +246,7 @@ for entry in commands:
 
         i += 1
 
-# Dodaj ścieżki ze sketchbooka
+# Add sketchbook library include paths
 if sketchbook_path:
     user_libs = os.path.join(sketchbook_path, "libraries")
     if os.path.isdir(user_libs):
@@ -256,33 +259,32 @@ if sketchbook_path:
                 else:
                     includes.add(lib_path)
 
-# Dodaj katalog build (wygenerowane headery)
+# Add build directory (generated headers)
 if os.path.isdir(build_dir):
     includes.add(build_dir)
     core_dir = os.path.join(build_dir, "core")
     if os.path.isdir(core_dir):
         includes.add(core_dir)
 
-# Filtruj — zachowaj tylko istniejące katalogi + wzorce ${...}
+# Keep only existing directories (plus workspace wildcard added later)
 includes_list = sorted([p for p in includes if os.path.isdir(p)])
 defines_list = sorted(defines)
 
-# Dodaj workspace do include
+# Add workspace fallback include
 includes_list.append("${workspaceFolder}/**")
 
-# Określ IntelliSense mode
+# IntelliSense mode
 intellisense_mode = "gcc-arm-none-eabi"
 
 # Generuj c_cpp_properties.json
 #
-# Strategia: compileCommands dla precyzyjnych flag per-plik (.c, .cpp),
-# a includePath + defines jako fallback dla plików które nie mają
-# wpisu w compile_commands.json (np. headery .h, .hpp).
+# Strategy: compileCommands for per-file precision (.c/.cpp),
+# with includePath + defines fallback for files not present in
+# compile_commands.json (e.g. .h/.hpp headers).
 #
-# Problem .ino: arduino-cli w compile_commands.json rejestruje
-# sketch.ino jako sketch.ino.cpp w build dir. Cpptools nie potrafi
-# tego zmapować. Rozwiązanie: patchujemy compile_commands.json —
-# dodajemy zduplikowane wpisy z oryginalną ścieżką .ino.
+# .ino issue: arduino-cli records sketch.ino as sketch.ino.cpp in build dir.
+# cpptools cannot map that reliably, so we patch compile_commands by adding
+# duplicated entries that point to original .ino paths.
 
 # --- Patch compile_commands.json ---
 patched_db_path = os.path.join(build_dir, "compile_commands_patched.json")
@@ -294,20 +296,20 @@ patched_commands = list(original_commands)
 
 for entry in original_commands:
     src_file = entry.get("file", "")
-    # Szukaj plików .ino.cpp w build dir — to są skonwertowane .ino
+    # Find .ino.cpp files in build dir (converted Arduino sketch units)
     if src_file.endswith(".ino.cpp"):
-        # Znajdź oryginalny .ino w projekcie
+        # Find original .ino in project
         basename = os.path.basename(src_file)  # np. sketch.ino.cpp
         ino_name = basename.replace(".ino.cpp", ".ino")  # → sketch.ino
 
-        # Szukaj tego .ino w katalogu projektu
+        # Search for this .ino in project tree
         for root, dirs, files in os.walk(project_dir):
-            # Pomiń .build
+            # Skip build artifacts
             if ".build" in root:
                 continue
             if ino_name in files:
                 original_ino = os.path.join(root, ino_name)
-                # Dodaj zduplikowany wpis z oryginalną ścieżką
+                # Add duplicated entry with original .ino path
                 patched_entry = dict(entry)
                 patched_entry["file"] = original_ino
                 patched_commands.append(patched_entry)
@@ -338,9 +340,9 @@ with open(cpp_props_path, "w") as f:
     json.dump(config, f, indent=4)
     f.write("\n")
 
-print(f"  Include paths:    {len(includes_list) - 1}")  # -1 bo workspaceFolder
+print(f"  Include paths:    {len(includes_list) - 1}")  # -1 excludes workspace wildcard
 print(f"  Defines:          {len(defines_list)}")
-print(f"  Compiler:         {compiler_path or 'nie znaleziony'}")
+print(f"  Compiler:         {compiler_path or 'not found'}")
 print(f"  compile_commands: {patched_db_path} ({len(patched_commands)} entries, {len(patched_commands) - len(original_commands)} added for .ino)")
 print(f"  Output:           {cpp_props_path}")
 PYEOF
@@ -351,7 +353,7 @@ PYEOF
 # ---------------------------------------------------------------------------
 main() {
     echo ""
-    info "Odświeżanie konfiguracji IntelliSense..."
+    info "Refreshing IntelliSense configuration..."
     echo ""
 
     export PROJECT_DIR
@@ -364,7 +366,7 @@ main() {
 
     fqbn=$(read_setting "arduino.fqbn")
     if [[ -z "$fqbn" ]]; then
-        err "Brak FQBN w settings.json. Uruchom: ./scripts/select-board.sh"
+        err "Missing FQBN in settings.json. Run: ./scripts/select-board.sh"
         exit 1
     fi
     info "FQBN: $fqbn"
@@ -378,13 +380,13 @@ main() {
     generate_compile_db "$cli" "$fqbn" "$sketch" "$sketchbook"
 
     echo ""
-    info "Generowanie c_cpp_properties.json..."
+    info "Generating c_cpp_properties.json..."
     generate_cpp_properties
 
     echo ""
-    ok "Konfiguracja IntelliSense odświeżona!"
+    ok "IntelliSense configuration refreshed"
     echo ""
-    echo "  Następne kroki w VS Code:"
+    echo "  Next steps in VS Code:"
     echo "  1. Ctrl+Shift+P → C/C++: Reset IntelliSense Database"
     echo "  2. Ctrl+Shift+P → Developer: Reload Window"
     echo ""

@@ -1,18 +1,18 @@
 // =====================================================================
-// Skróty klawiszowe Arduino dla VS Code
+// Arduino keyboard shortcuts for VS Code
 //
-// Aktywne gdy edytujesz plik .ino lub C/C++.
+// Active when editing .ino or C/C++ files.
 //
-// Instalacja:
-//   Ctrl+K Ctrl+S  → otwórz edytor skrótów
-//   Kliknij ikonę {} (prawy górny róg) → otwórz keybindings.json
-//   Wklej wpisy poniżej do tablicy [].
+// Installation:
+//   Ctrl+K Ctrl+S  -> open keyboard shortcuts editor
+//   Click the {} icon (top-right) -> open keybindings.json
+//   Paste entries below into the [] array.
 // =====================================================================
 [
     {
         "key": "ctrl+shift+1",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Kompiluj (Build)",
+        "args": "Arduino: Build",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
@@ -42,7 +42,7 @@
     {
         "key": "ctrl+shift+6",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Odśwież IntelliSense",
+        "args": "Arduino: Refresh IntelliSense",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
@@ -54,31 +54,31 @@
     {
         "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Lista portów",
+        "args": "Arduino: List ports",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
         "key": "ctrl+shift+9",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Zmień port",
+        "args": "Arduino: Change port",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
         "key": "ctrl+shift+0",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Zainstaluj bibliotekę",
+        "args": "Arduino: Install library",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
         "key": "ctrl+shift+alt+1",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Wybierz płytkę (GUI)",
+        "args": "Arduino: Select board (GUI)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     },
     {
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Wybierz płytkę (interaktywnie)",
+        "args": "Arduino: Select board (interactive)",
         "when": "resourceExtname == .ino || editorLangId == cpp"
     }
 ]

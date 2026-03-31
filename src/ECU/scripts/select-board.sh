@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Wybór płytki docelowej (target board)
-# Aktualizuje .vscode/settings.json z wybranym FQBN i opcjami boardu
+# Target board selector
+# Updates .vscode/settings.json with selected FQBN and board options
 # =============================================================================
 set -euo pipefail
 
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SETTINGS_FILE="$PROJECT_DIR/.vscode/settings.json"
 
-# Kolory
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -18,8 +18,8 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ---------------------------------------------------------------------------
-# Predefiniowane płytki
-# Format: "ID|FQBN|Opis|Chip"
+# Predefined boards
+# Format: "ID|FQBN|Description|Chip"
 # ---------------------------------------------------------------------------
 BOARDS=(
     "1|rp2040:rp2040:rpipico|Raspberry Pi Pico|RP2040"
@@ -31,12 +31,12 @@ BOARDS=(
 )
 
 # ---------------------------------------------------------------------------
-# Opcje menu boardu (z boards.txt)
-# Kluczowe opcje, które mogą być zmieniane per-projekt
+# Board menu options (from boards.txt)
+# Key options that can be changed per project
 # ---------------------------------------------------------------------------
-# Domyślne wartości odpowiadające defaults z boards.txt
-DEFAULT_FLASH=""       # pusty = użyj domyślnej dla boardu
-DEFAULT_FREQ=""        # pusty = użyj domyślnej (133MHz dla RP2040, 150MHz dla RP2350)
+# Default values matching boards.txt defaults
+DEFAULT_FLASH=""       # empty = use board default
+DEFAULT_FREQ=""        # empty = use board default (133MHz RP2040, 150MHz RP2350)
 DEFAULT_OPT="Small"    # Small, Optimize, Optimize2, Optimize3, Debug
 DEFAULT_DBGPORT="Disabled"  # Disabled, Serial, Serial1, Serial2
 DEFAULT_DBGLVL="None"       # None, Core, SPI, Wire, All, NDEBUG
@@ -44,12 +44,12 @@ DEFAULT_USBSTACK="picosdk"  # picosdk, tinyusb, nousb
 DEFAULT_IPSTACK="ipv4only"  # ipv4only, ipv4ipv6
 
 # ---------------------------------------------------------------------------
-# Wyświetlenie menu
+# Show menu
 # ---------------------------------------------------------------------------
 show_menu() {
     echo ""
     echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║          Wybór płytki docelowej (Target Board)          ║${NC}"
+    echo -e "${BOLD}║                  Select Target Board                    ║${NC}"
     echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -59,22 +59,22 @@ show_menu() {
     done
 
     echo ""
-    echo -e "  ${CYAN}c${NC}) Konfiguracja niestandardowa (podaj FQBN ręcznie)"
-    echo -e "  ${CYAN}q${NC}) Wyjście"
+    echo -e "  ${CYAN}c${NC}) Custom configuration (enter FQBN manually)"
+    echo -e "  ${CYAN}q${NC}) Quit"
     echo ""
 }
 
 # ---------------------------------------------------------------------------
-# Zapytanie o opcje zaawansowane
+# Prompt for advanced options
 # ---------------------------------------------------------------------------
 ask_advanced_options() {
     local fqbn="$1"
     local chip="$2"
 
     echo "" >&2
-    read -rp "  Skonfigurować opcje zaawansowane (flash/freq/USB/debug)? [t/N] " advanced
+    read -rp "  Configure advanced options (flash/freq/USB/debug)? [y/N] " advanced
 
-    if [[ ! "$advanced" =~ ^[tTyY]$ ]]; then
+    if [[ ! "$advanced" =~ ^[yY]$ ]]; then
         echo "$fqbn"
         return
     fi
@@ -85,18 +85,18 @@ ask_advanced_options() {
     echo "" >&2
     echo -e "  ${BOLD}Flash Size / Filesystem:${NC}" >&2
     if [[ "$chip" == "RP2040" ]]; then
-        echo "    1) 2MB (no FS)  [domyślne dla Pico]" >&2
+        echo "    1) 2MB (no FS)  [Pico default]" >&2
         echo "    2) 2MB (64KB FS)" >&2
         echo "    3) 2MB (128KB FS)" >&2
         echo "    4) 2MB (256KB FS)" >&2
         echo "    5) 2MB (512KB FS)" >&2
     else
-        echo "    1) 4MB (no FS)  [domyślne dla Pico 2]" >&2
+        echo "    1) 4MB (no FS)  [Pico 2 default]" >&2
         echo "    2) 4MB (2MB FS)" >&2
         echo "    3) 4MB (3MB FS)" >&2
     fi
-    echo "    Enter) Zostaw domyślne" >&2
-    read -rp "    Wybór: " flash_choice
+    echo "    Enter) Keep default" >&2
+    read -rp "    Choice: " flash_choice
 
     case "$flash_choice" in
         1) ;;
@@ -111,21 +111,21 @@ ask_advanced_options() {
     echo "" >&2
     echo -e "  ${BOLD}CPU Frequency:${NC}" >&2
     if [[ "$chip" == "RP2040" ]]; then
-        echo "    1) 133 MHz [domyślne]" >&2
+        echo "    1) 133 MHz [default]" >&2
         echo "    2) 50 MHz" >&2
         echo "    3) 125 MHz" >&2
         echo "    4) 150 MHz (overclock)" >&2
         echo "    5) 200 MHz (overclock)" >&2
         echo "    6) 250 MHz (overclock)" >&2
     else
-        echo "    1) 150 MHz [domyślne]" >&2
+        echo "    1) 150 MHz [default]" >&2
         echo "    2) 125 MHz" >&2
         echo "    3) 200 MHz (overclock)" >&2
         echo "    4) 250 MHz (overclock)" >&2
         echo "    5) 300 MHz (overclock)" >&2
     fi
-    echo "    Enter) Zostaw domyślne" >&2
-    read -rp "    Wybór: " freq_choice
+    echo "    Enter) Keep default" >&2
+    read -rp "    Choice: " freq_choice
 
     case "$freq_choice" in
         1) ;;
@@ -140,11 +140,11 @@ ask_advanced_options() {
     # --- USB Stack ---
     echo "" >&2
     echo -e "  ${BOLD}USB Stack:${NC}" >&2
-    echo "    1) Pico SDK USB [domyślne]" >&2
+    echo "    1) Pico SDK USB [default]" >&2
     echo "    2) Adafruit TinyUSB" >&2
     echo "    3) No USB" >&2
-    echo "    Enter) Zostaw domyślne" >&2
-    read -rp "    Wybór: " usb_choice
+    echo "    Enter) Keep default" >&2
+    read -rp "    Choice: " usb_choice
 
     case "$usb_choice" in
         2) options="${options:+$options,}usbstack=tinyusb" ;;
@@ -155,12 +155,12 @@ ask_advanced_options() {
     # --- Debug Port ---
     echo "" >&2
     echo -e "  ${BOLD}Debug Port:${NC}" >&2
-    echo "    1) Disabled [domyślne]" >&2
+    echo "    1) Disabled [default]" >&2
     echo "    2) Serial (USB)" >&2
     echo "    3) Serial1 (UART0, pins 0/1)" >&2
     echo "    4) Serial2 (UART1, pins 4/5)" >&2
-    echo "    Enter) Zostaw domyślne" >&2
-    read -rp "    Wybór: " dbg_choice
+    echo "    Enter) Keep default" >&2
+    read -rp "    Choice: " dbg_choice
 
     case "$dbg_choice" in
         2) options="${options:+$options,}dbgport=Serial" ;;
@@ -172,11 +172,11 @@ ask_advanced_options() {
     # --- Debug Level ---
     echo "" >&2
     echo -e "  ${BOLD}Debug Level:${NC}" >&2
-    echo "    1) None [domyślne]" >&2
+    echo "    1) None [default]" >&2
     echo "    2) Core" >&2
     echo "    3) All" >&2
-    echo "    Enter) Zostaw domyślne" >&2
-    read -rp "    Wybór: " dbglvl_choice
+    echo "    Enter) Keep default" >&2
+    read -rp "    Choice: " dbglvl_choice
 
     case "$dbglvl_choice" in
         2) options="${options:+$options,}dbglvl=Core" ;;
@@ -184,14 +184,14 @@ ask_advanced_options() {
         *) ;;
     esac
 
-    # --- IP Stack (dla boardów z WiFi) ---
+    # --- IP Stack (for WiFi boards) ---
     if [[ "$fqbn" == *"picow"* || "$fqbn" == *"pico2w"* ]]; then
         echo "" >&2
         echo -e "  ${BOLD}IP Stack:${NC}" >&2
-        echo "    1) IPv4 only [domyślne]" >&2
+        echo "    1) IPv4 only [default]" >&2
         echo "    2) IPv4 + IPv6" >&2
-        echo "    Enter) Zostaw domyślne" >&2
-        read -rp "    Wybór: " ip_choice
+        echo "    Enter) Keep default" >&2
+        read -rp "    Choice: " ip_choice
 
         case "$ip_choice" in
             2) options="${options:+$options,}ipstack=ipv4ipv6" ;;
@@ -199,7 +199,7 @@ ask_advanced_options() {
         esac
     fi
 
-    # Na stdout TYLKO wynikowy FQBN
+    # Print ONLY the resulting FQBN to stdout
     if [[ -n "$options" ]]; then
         echo "${fqbn}:${options}"
     else
@@ -208,7 +208,7 @@ ask_advanced_options() {
 }
 
 # ---------------------------------------------------------------------------
-# Aktualizacja settings.json
+# Update settings.json
 # ---------------------------------------------------------------------------
 update_settings() {
     local fqbn="$1"
@@ -217,7 +217,7 @@ update_settings() {
     mkdir -p "$(dirname "$SETTINGS_FILE")"
 
     if [[ -f "$SETTINGS_FILE" ]]; then
-        # Przekaż zmienne przez env — bezpieczne dla dowolnych wartości
+        # Pass values via environment variables for safe quoting
         FQBN_VAL="$fqbn" DESC_VAL="$board_desc" SFILE="$SETTINGS_FILE" \
         python3 << 'PYEOF'
 import json, os
@@ -239,17 +239,17 @@ with open(settings_file, "w") as f:
 print("OK")
 PYEOF
     else
-        echo "  Plik settings.json nie istnieje. Uruchom ten skrypt z katalogu projektu."
-        echo "  Oczekiwana ścieżka: $SETTINGS_FILE"
+        echo "  settings.json does not exist. Run this script from your project directory."
+        echo "  Expected path: $SETTINGS_FILE"
         exit 1
     fi
 
     echo ""
-    echo -e "  ${GREEN}✓${NC} Board ustawiony: ${BOLD}${board_desc}${NC}"
+    echo -e "  ${GREEN}✓${NC} Board set: ${BOLD}${board_desc}${NC}"
     echo -e "  ${GREEN}✓${NC} FQBN: ${fqbn}"
     echo ""
-    echo -e "  ${YELLOW}Następny krok:${NC} uruchom ${CYAN}./scripts/refresh-intellisense.sh${NC}"
-    echo "  aby odświeżyć konfigurację IntelliSense dla nowego boardu."
+    echo -e "  ${YELLOW}Next step:${NC} run ${CYAN}./scripts/refresh-intellisense.sh${NC}"
+    echo "  to refresh IntelliSense configuration for the new board."
 }
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ PYEOF
 # ---------------------------------------------------------------------------
 main() {
     show_menu
-    read -rp "  Wybierz płytkę: " choice
+    read -rp "  Select board: " choice
 
     case "$choice" in
         [1-6])
@@ -273,16 +273,16 @@ main() {
             ;;
         c|C)
             echo ""
-            read -rp "  Podaj pełny FQBN (np. rp2040:rp2040:rpipico): " custom_fqbn
-            read -rp "  Podaj opis boardu: " custom_desc
+            read -rp "  Enter full FQBN (e.g. rp2040:rp2040:rpipico): " custom_fqbn
+            read -rp "  Enter board description: " custom_desc
             update_settings "$custom_fqbn" "$custom_desc"
             ;;
         q|Q)
-            echo "  Anulowano."
+            echo "  Cancelled."
             exit 0
             ;;
         *)
-            echo -e "  ${RED}Nieprawidłowy wybór${NC}"
+            echo -e "  ${RED}Invalid selection${NC}"
             exit 1
             ;;
     esac

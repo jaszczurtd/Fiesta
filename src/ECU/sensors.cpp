@@ -1,6 +1,5 @@
 
 #include "sensors.h"
-#include "dtcManager.h"
 
 NOINIT static volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];

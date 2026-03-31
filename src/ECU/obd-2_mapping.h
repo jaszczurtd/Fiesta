@@ -2,6 +2,7 @@
 #define T_OBD2_MAPPING
 
 #include <tools.h>
+#include "obd-2_mapping.h"
 
 // DTC codes mapped to OBD-2/U-code format for better tester compatibility.
 // Encoding follows SAE J2012 2-byte layout: system + code digits.

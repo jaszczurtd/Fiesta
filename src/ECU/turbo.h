@@ -3,7 +3,6 @@
 
 #include <tools.h>
 #include <float.h>
-#include <pidController.h>
 
 #include "config.h"
 #include "start.h"

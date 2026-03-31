@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "glowPlugs.h"
 #include "sensors.h"
+#include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 /*
@@ -131,6 +132,7 @@ int main(void) {
     /* initSensors() creates mutexes and zeros the global value array.
      * It must be called once before any test that uses setGlobalValue(). */
     initSensors();
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
 
     UNITY_BEGIN();
 

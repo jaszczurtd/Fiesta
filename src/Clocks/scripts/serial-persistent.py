@@ -26,17 +26,17 @@ try:
     import serial
     from serial.tools import list_ports
 except ImportError:
-    print("Brak pyserial.")
-    print("Zainstaluj: pip install pyserial --break-system-packages")
+    print("pyserial is not installed.")
+    print("Install it with: pip install pyserial --break-system-packages")
     sys.exit(1)
 
-CYAN = "\033[0;36m"
-GREEN = "\033[0;32m"
+CYAN   = "\033[0;36m"
+GREEN  = "\033[0;32m"
 YELLOW = "\033[1;33m"
-RED = "\033[0;31m"
-DIM = "\033[2m"
-BOLD = "\033[1m"
-NC = "\033[0m"
+RED    = "\033[0;31m"
+DIM    = "\033[2m"
+BOLD   = "\033[1m"
+NC     = "\033[0m"
 
 PICO_USB_IDS = {
     "2e8a:000a",  # Pico
@@ -167,7 +167,7 @@ def wait_for_device(mode, preferred_port=""):
             print(f"\r{' ' * 140}\r", end="", flush=True)
             time.sleep(0.3)
             if os.path.exists(port):
-                print(f"{GREEN}Znaleziono port: {port} [{reason}]{NC}")
+                print(f"{GREEN}Found port: {port} [{reason}]{NC}")
                 return port
 
         ports = list_serial_ports()
@@ -179,7 +179,7 @@ def wait_for_device(mode, preferred_port=""):
             suffix = f" ({', '.join(fallback)})" if fallback else ""
 
         print(
-            f"\r{YELLOW}Czekam na urządzenie [{mode}]... "
+            f"\r{YELLOW}Waiting for device [{mode}]... "
             f"{DIM}{spinner[i % len(spinner)]}{suffix}{NC}   ",
             end="",
             flush=True,
@@ -190,14 +190,18 @@ def wait_for_device(mode, preferred_port=""):
 
 
 def _clear_hupcl(fd: int) -> None:
-    """Clear HUPCL so the kernel does not drop DTR on close (Linux only)."""
+    """Clear HUPCL so the kernel does not drop DTR on close (Linux only).
+
+    Without this, closing the serial port lowers DTR, which causes the
+    RP2040 USB CDC to reset and re-enumerate — triggering a spurious
+    disconnect/reconnect cycle in the monitor.
+    """
     import fcntl
     import struct
 
     TCGETS = 0x5401
     TCSETS = 0x5402
-    HUPCL = 0x0400
-
+    HUPCL  = 0x0400
     try:
         buf = bytearray(60)
         fcntl.ioctl(fd, TCGETS, buf)
@@ -211,13 +215,13 @@ def _clear_hupcl(fd: int) -> None:
 
 def open_serial(port, baud):
     ser = serial.Serial()
-    ser.port = port
-    ser.baudrate = baud
-    ser.timeout = 0.5
+    ser.port         = port
+    ser.baudrate     = baud
+    ser.timeout      = 0.5
     ser.write_timeout = 0.5
-    ser.xonxoff = False
-    ser.dsrdtr = False
-    ser.rtscts = False
+    ser.xonxoff      = False
+    ser.dsrdtr       = False
+    ser.rtscts       = False
 
     try:
         ser.exclusive = True
@@ -225,6 +229,7 @@ def open_serial(port, baud):
         pass
 
     ser.open()
+    _clear_hupcl(ser.fd)
 
     try:
         ser.setRTS(False)
@@ -250,10 +255,10 @@ def monitor(port, baud):
     try:
         ser = open_serial(port, baud)
     except serial.SerialException as e:
-        print(f"{RED}Nie mogę otworzyć {port}: {e}{NC}")
+        print(f"{RED}Cannot open {port}: {e}{NC}")
         return "error"
 
-    print(f"{GREEN}Połączono z {port} @ {baud}{NC}")
+    print(f"{GREEN}Connected to {port} @ {baud}{NC}")
     print(f"{DIM}{'─' * 80}{NC}")
 
     try:
@@ -302,15 +307,13 @@ def parse_args():
         help="Explicit serial port, e.g. /dev/ttyACM0 or /dev/ttyUSB0",
     )
     parser.add_argument(
-        "-b",
-        "--baud",
+        "-b", "--baud",
         type=int,
         default=115200,
         help="Baud rate (default: 115200)",
     )
     parser.add_argument(
-        "-m",
-        "--mode",
+        "-m", "--mode",
         choices=["pico", "probe", "any"],
         default="pico",
         help="Autodetection mode (default: pico)",
@@ -329,7 +332,7 @@ def main():
     print(f"  Baud:   {GREEN}{args.baud}{NC}")
     print(f"  Mode:   {GREEN}{args.mode}{NC}")
     print(f"  Port:   {GREEN}{preferred if preferred else 'auto'}{NC}")
-    print(f"  {YELLOW}Ctrl+C{NC} aby zakończyć")
+    print(f"  {YELLOW}Ctrl+C{NC} to stop")
     print()
 
     while True:
@@ -341,19 +344,19 @@ def main():
         result = monitor(port, args.baud)
 
         if result == "quit":
-            print(f"\n{CYAN}Zakończono.{NC}")
+            print(f"\n{CYAN}Done.{NC}")
             break
 
         if result == "disconnected":
             print(f"\n{DIM}{'─' * 80}{NC}")
-            print(f"{YELLOW}Urządzenie odłączone: {port}{NC}\n")
+            print(f"{YELLOW}Device disconnected: {port}{NC}\n")
             time.sleep(0.5)
             continue
 
         if result == "error":
-            time.sleep(1.0)
+            time.sleep(2.0)
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, lambda s, f: (print(f"\n{CYAN}Zakończono.{NC}"), sys.exit(0)))
+    signal.signal(signal.SIGINT, lambda s, f: (print(f"\n{CYAN}Done.{NC}"), sys.exit(0)))
     main()

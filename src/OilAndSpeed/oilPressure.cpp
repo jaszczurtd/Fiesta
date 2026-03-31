@@ -1,5 +1,4 @@
 #include "oilPressure.h"
-#include <pidController.h>
 
 static float filteredPressure = 0.0f;
 

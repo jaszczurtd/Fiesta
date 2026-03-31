@@ -9,6 +9,7 @@
 #include "sensors.h"
 #include "tests.h"
 #include "obd-2_mapping.h"
+#include "dtcManager.h"
 
 #define PAD 0x00
 

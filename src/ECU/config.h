@@ -4,7 +4,7 @@
 #include "hardwareConfig.h"
 
 #define vehicle_Vin "WF0BXXGAJB1R32583"
-#define ecu_Name "JASZCZUR FIESTA"
+#define ecu_Name "JASZCZUR FORD FIESTA"
 
 //BASIC CONTROL VALUES!
 //#define VP37

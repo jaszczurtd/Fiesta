@@ -26,8 +26,8 @@ try:
     import serial
     from serial.tools import list_ports
 except ImportError:
-    print("Brak pyserial.")
-    print("Zainstaluj: pip install pyserial --break-system-packages")
+    print("pyserial is not installed.")
+    print("Install it with: pip install pyserial --break-system-packages")
     sys.exit(1)
 
 CYAN   = "\033[0;36m"
@@ -164,10 +164,10 @@ def wait_for_device(mode, preferred_port=""):
         port, reason = find_port(mode, preferred_port)
 
         if port:
-            print(f"\r{' ' * 120}\r", end="", flush=True)
-            time.sleep(1.0)
+            print(f"\r{' ' * 140}\r", end="", flush=True)
+            time.sleep(0.3)
             if os.path.exists(port):
-                print(f"{GREEN}Znaleziono port: {port} [{reason}]{NC}")
+                print(f"{GREEN}Found port: {port} [{reason}]{NC}")
                 return port
 
         ports = list_serial_ports()
@@ -179,7 +179,7 @@ def wait_for_device(mode, preferred_port=""):
             suffix = f" ({', '.join(fallback)})" if fallback else ""
 
         print(
-            f"\r{YELLOW}Czekam na urządzenie [{mode}]... "
+            f"\r{YELLOW}Waiting for device [{mode}]... "
             f"{DIM}{spinner[i % len(spinner)]}{suffix}{NC}   ",
             end="",
             flush=True,
@@ -189,42 +189,97 @@ def wait_for_device(mode, preferred_port=""):
         time.sleep(0.5)
 
 
+def _clear_hupcl(fd: int) -> None:
+    """Clear HUPCL so the kernel does not drop DTR on close (Linux only).
+
+    Without this, closing the serial port lowers DTR, which causes the
+    RP2040 USB CDC to reset and re-enumerate — triggering a spurious
+    disconnect/reconnect cycle in the monitor.
+    """
+    import fcntl
+    import struct
+
+    TCGETS = 0x5401
+    TCSETS = 0x5402
+    HUPCL  = 0x0400
+    try:
+        buf = bytearray(60)
+        fcntl.ioctl(fd, TCGETS, buf)
+        cflag = struct.unpack_from("I", buf, 8)[0]
+        cflag &= ~HUPCL
+        struct.pack_into("I", buf, 8, cflag)
+        fcntl.ioctl(fd, TCSETS, buf)
+    except Exception:
+        pass
+
+
 def open_serial(port, baud):
-    return serial.Serial(
-        port=port,
-        baudrate=baud,
-        timeout=0.5,
-        dsrdtr=False,
-        rtscts=False,
-        xonxoff=False,
-    )
+    ser = serial.Serial()
+    ser.port         = port
+    ser.baudrate     = baud
+    ser.timeout      = 0.5
+    ser.write_timeout = 0.5
+    ser.xonxoff      = False
+    ser.dsrdtr       = False
+    ser.rtscts       = False
+
+    try:
+        ser.exclusive = True
+    except Exception:
+        pass
+
+    ser.open()
+    _clear_hupcl(ser.fd)
+
+    try:
+        ser.setRTS(False)
+    except Exception:
+        pass
+
+    try:
+        ser.setDTR(True)
+    except Exception:
+        pass
+
+    time.sleep(0.2)
+
+    try:
+        ser.reset_input_buffer()
+    except Exception:
+        pass
+
+    return ser
 
 
 def monitor(port, baud):
     try:
         ser = open_serial(port, baud)
     except serial.SerialException as e:
-        print(f"{RED}Nie mogę otworzyć {port}: {e}{NC}")
+        print(f"{RED}Cannot open {port}: {e}{NC}")
         return "error"
 
-    print(f"{GREEN}Połączono z {port} @ {baud}{NC}")
+    print(f"{GREEN}Connected to {port} @ {baud}{NC}")
     print(f"{DIM}{'─' * 80}{NC}")
 
     try:
         while True:
-            if not os.path.exists(port):
-                break
-
             try:
-                waiting = ser.in_waiting
-                data = ser.read(waiting if waiting > 0 else 1)
-
-                if data:
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
-
+                raw = ser.readline()
             except (serial.SerialException, OSError):
                 break
+
+            if not raw:
+                continue
+
+            raw = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+            try:
+                text = raw.decode("utf-8", errors="replace").rstrip("\n")
+            except Exception:
+                text = repr(raw)
+
+            if text:
+                print(text)
 
     except KeyboardInterrupt:
         try:
@@ -277,7 +332,7 @@ def main():
     print(f"  Baud:   {GREEN}{args.baud}{NC}")
     print(f"  Mode:   {GREEN}{args.mode}{NC}")
     print(f"  Port:   {GREEN}{preferred if preferred else 'auto'}{NC}")
-    print(f"  {YELLOW}Ctrl+C{NC} aby zakończyć")
+    print(f"  {YELLOW}Ctrl+C{NC} to stop")
     print()
 
     while True:
@@ -289,13 +344,13 @@ def main():
         result = monitor(port, args.baud)
 
         if result == "quit":
-            print(f"\n{CYAN}Zakończono.{NC}")
+            print(f"\n{CYAN}Done.{NC}")
             break
 
         if result == "disconnected":
             print(f"\n{DIM}{'─' * 80}{NC}")
-            print(f"{YELLOW}Urządzenie odłączone: {port}{NC}\n")
-            time.sleep(1.0)
+            print(f"{YELLOW}Device disconnected: {port}{NC}\n")
+            time.sleep(0.5)
             continue
 
         if result == "error":
@@ -303,5 +358,5 @@ def main():
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, lambda s, f: (print(f"\n{CYAN}Zakończono.{NC}"), sys.exit(0)))
+    signal.signal(signal.SIGINT, lambda s, f: (print(f"\n{CYAN}Done.{NC}"), sys.exit(0)))
     main()

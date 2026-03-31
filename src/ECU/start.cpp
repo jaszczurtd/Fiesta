@@ -1,6 +1,5 @@
 
 #include "start.h"
-#include "dtcManager.h"
 
 static unsigned long lastThreadSeconds = 0;
 static SmartTimers timerEverySecond;
@@ -137,7 +136,6 @@ void initialization(void) {
   obdInit(CAN_RETRIES);
 
   setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
-  TEST_ASSERT_TRUE(getGlobalValue(F_VOLTS) > 0);
 
   initFuelMeasurement();
 

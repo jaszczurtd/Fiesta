@@ -5,9 +5,7 @@
 #include <libConfig.h>
 #include "config.h"
 
-#include <SmartTimers.h>
 #include <tools.h>
-#include <multicoreWatchdog.h>
 
 #include "hardwareConfig.h"
 #include "sensors.h"
@@ -23,6 +21,7 @@
 #include "gps.h"
 #include "engineFuel.h"
 #include "tests.h"
+#include "dtcManager.h"
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16

@@ -2,8 +2,6 @@
 #define T_TESTS
 
 #include <tools.h>
-#include <unity.h>
-#include <unity_config.h>
 
 //debug i2c only
 //#define I2C_SCANNER

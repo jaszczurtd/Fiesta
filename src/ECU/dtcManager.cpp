@@ -1,12 +1,18 @@
 #include "dtcManager.h"
 
-#define DTC_EEPROM_MAGIC       0x4454434Du // "DTCM"
-#define DTC_EEPROM_VERSION     2u
-#define DTC_EEPROM_BASE        (EEPROM_FIRST_ADDR + 96)
-#define DTC_EEPROM_HEADER_SIZE 5u
-#define DTC_EEPROM_SLOT_SIZE   2u
-#define DTC_FLAG_STORED        0x01u
-#define DTC_FLAG_PERMANENT     0x02u
+#define DTC_EEPROM_MAGIC         0x4454434Du // "DTCM"
+#define DTC_EEPROM_VERSION       2u
+#define DTC_EEPROM_BASE          (EEPROM_FIRST_ADDR + 96)
+#define DTC_EEPROM_HEADER_SIZE   5u
+#define DTC_EEPROM_SLOT_SIZE     2u
+#define DTC_FLAG_STORED          0x01u
+#define DTC_FLAG_PERMANENT       0x02u
+
+#define DTC_KV_BASE              DTC_EEPROM_BASE
+#define DTC_KV_SIZE              256u
+#define DTC_KV_SCHEMA_KEY        0xD700u
+#define DTC_KV_SCHEMA_VERSION    1u
+#define DTC_KV_KEY_FLAGS_BASE    0xD800u
 
 typedef struct {
   uint16_t code;
@@ -29,6 +35,10 @@ static uint16_t dtcSlotAddr(uint8_t idx) {
   return (uint16_t)(DTC_EEPROM_BASE + DTC_EEPROM_HEADER_SIZE + (idx * DTC_EEPROM_SLOT_SIZE));
 }
 
+static uint16_t dtcKvKey(uint8_t idx) {
+  return (uint16_t)(DTC_KV_KEY_FLAGS_BASE + idx);
+}
+
 static int findDtcIndex(uint16_t code) {
   for(uint8_t i = 0; i < s_dtcCount; i++) {
     if(s_dtcs[i].code == code) {
@@ -38,25 +48,32 @@ static int findDtcIndex(uint16_t code) {
   return -1;
 }
 
-static void saveDtcToEeprom(uint8_t idx) {
-  uint8_t flags = 0;
+static uint8_t makeFlagsForIndex(uint8_t idx) {
+  uint8_t flags = 0u;
   if(s_dtcs[idx].stored) {
     flags |= DTC_FLAG_STORED;
   }
   if(s_dtcs[idx].permanent) {
     flags |= DTC_FLAG_PERMANENT;
   }
-
-  uint16_t addr = dtcSlotAddr(idx);
-  hal_eeprom_write_byte(addr, flags);
-  hal_eeprom_write_byte((uint16_t)(addr + 1), 0);
+  return flags;
 }
 
-static void saveAllToEeprom(void) {
+static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
+  s_dtcs[idx].stored = (flags & DTC_FLAG_STORED) != 0u;
+  s_dtcs[idx].permanent = (flags & DTC_FLAG_PERMANENT) != 0u;
+}
+
+static bool saveDtcToKv(uint8_t idx) {
+  return hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
+}
+
+static bool saveAllToKv(void) {
+  bool ok = true;
   for(uint8_t i = 0; i < s_dtcCount; i++) {
-    saveDtcToEeprom(i);
+    ok = saveDtcToKv(i) && ok;
   }
-  hal_eeprom_commit();
+  return ok;
 }
 
 static void resetAllState(void) {
@@ -67,9 +84,40 @@ static void resetAllState(void) {
   }
 }
 
-static void writeHeader(void) {
-  hal_eeprom_write_int(DTC_EEPROM_BASE, (int32_t)DTC_EEPROM_MAGIC);
-  hal_eeprom_write_byte((uint16_t)(DTC_EEPROM_BASE + 4), DTC_EEPROM_VERSION);
+static bool legacyHeaderIsValid(void) {
+  int32_t magic = hal_eeprom_read_int(DTC_EEPROM_BASE);
+  uint8_t version = hal_eeprom_read_byte((uint16_t)(DTC_EEPROM_BASE + 4));
+  return (magic == (int32_t)DTC_EEPROM_MAGIC) && (version == DTC_EEPROM_VERSION);
+}
+
+static bool tryMigrateLegacyFromEeprom(void) {
+  if(!legacyHeaderIsValid()) {
+    return false;
+  }
+
+  for(uint8_t i = 0; i < s_dtcCount; i++) {
+    uint8_t flags = hal_eeprom_read_byte(dtcSlotAddr(i));
+    applyFlagsToIndex(i, flags);
+    s_dtcs[i].active = false;
+  }
+
+  return saveAllToKv();
+}
+
+static bool loadAllFromKv(void) {
+  for(uint8_t i = 0; i < s_dtcCount; i++) {
+    uint32_t flags = 0u;
+    if(!hal_kv_get_u32(dtcKvKey(i), &flags)) {
+      flags = 0u;
+    }
+    applyFlagsToIndex(i, (uint8_t)flags);
+    s_dtcs[i].active = false;
+  }
+  return true;
+}
+
+static bool writeKvSchemaVersion(void) {
+  return hal_kv_set_u32(DTC_KV_SCHEMA_KEY, DTC_KV_SCHEMA_VERSION);
 }
 
 void dtcManagerInit(void) {
@@ -77,24 +125,33 @@ void dtcManagerInit(void) {
     return;
   }
 
-  int32_t magic = hal_eeprom_read_int(DTC_EEPROM_BASE);
-  uint8_t version = hal_eeprom_read_byte((uint16_t)(DTC_EEPROM_BASE + 4));
-  bool validHeader = (magic == (int32_t)DTC_EEPROM_MAGIC) && (version == DTC_EEPROM_VERSION);
-
-  if(!validHeader) {
+  if(!hal_kv_init(DTC_KV_BASE, DTC_KV_SIZE)) {
+    derr("DTC: hal_kv_init failed (base=%u size=%u)",
+      (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE);
     resetAllState();
-    writeHeader();
-    saveAllToEeprom();
     s_dtcInitialized = true;
     return;
   }
 
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
-    uint8_t flags = hal_eeprom_read_byte(dtcSlotAddr(i));
-    s_dtcs[i].stored = (flags & DTC_FLAG_STORED) != 0;
-    s_dtcs[i].permanent = (flags & DTC_FLAG_PERMANENT) != 0;
-    s_dtcs[i].active = false;
+  uint32_t schemaVersion = 0u;
+  bool hasSchema = hal_kv_get_u32(DTC_KV_SCHEMA_KEY, &schemaVersion);
+  if(!hasSchema || schemaVersion != DTC_KV_SCHEMA_VERSION) {
+    resetAllState();
+
+    bool migrated = tryMigrateLegacyFromEeprom();
+    bool wroteSchema = writeKvSchemaVersion();
+    if(!migrated) {
+      saveAllToKv();
+    }
+    if(!wroteSchema) {
+      derr("DTC: failed to write KV schema version");
+    }
+
+    s_dtcInitialized = true;
+    return;
   }
+
+  loadAllFromKv();
 
   s_dtcInitialized = true;
 }
@@ -128,8 +185,9 @@ void dtcManagerSetActive(uint16_t code, bool active) {
   }
 
   if(changed) {
-    saveDtcToEeprom((uint8_t)idx);
-    hal_eeprom_commit();
+    if(!saveDtcToKv((uint8_t)idx)) {
+      derr("DTC: failed to persist key=%u", (unsigned)dtcKvKey((uint8_t)idx));
+    }
   }
 }
 
@@ -139,7 +197,10 @@ void dtcManagerClearAll(void) {
   }
 
   resetAllState();
-  saveAllToEeprom();
+  for(uint8_t i = 0; i < s_dtcCount; i++) {
+    hal_kv_delete(dtcKvKey(i));
+  }
+  writeKvSchemaVersion();
   deb("DTC memory cleared");
 }
 

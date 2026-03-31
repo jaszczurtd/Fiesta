@@ -19,9 +19,10 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 # ── HAL utility sources (no Arduino dependency) ────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
-    ${HAL_SRC}/SmartTimers.cpp
-    ${HAL_SRC}/pidController.cpp
-    ${HAL_SRC}/unity.c
+    ${HAL_SRC}/hal/hal_kv.cpp
+    ${HAL_SRC}/utils/SmartTimers.cpp
+    ${HAL_SRC}/utils/pidController.cpp
+    ${HAL_SRC}/utils/unity.c
 )
 
 # ── ECU sources compilable without arduino-timer / multicoreWatchdog ───────────
@@ -55,7 +56,7 @@ add_library(ecu_mock STATIC
     ${ECU_SOURCES}
     ${ECU_STUBS}/ecu_stubs.cpp
     # tools.cpp requires arduino_host_stubs so <Arduino.h>/<SD.h>/<SPI.h> resolve
-    ${HAL_SRC}/tools.cpp
+    ${HAL_SRC}/utils/tools.cpp
 )
 
 # ECU_STUBS first: provides arduino-timer.h stub that shadows the real library
@@ -66,6 +67,7 @@ target_include_directories(ecu_mock BEFORE PUBLIC
 )
 target_include_directories(ecu_mock PUBLIC
     ${HAL_SRC}
+    ${HAL_SRC}/utils
     ${ECU_SRC}
     ${CANDEFS}
 )

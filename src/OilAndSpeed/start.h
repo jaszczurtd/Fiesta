@@ -3,8 +3,6 @@
 
 #include <tools.h>
 #include <canDefinitions.h>
-#include <SmartTimers.h>
-#include <multicoreWatchdog.h>
 
 #include "can.h"
 #include "oilPressure.h"

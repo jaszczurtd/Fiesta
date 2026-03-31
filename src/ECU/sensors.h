@@ -10,6 +10,7 @@
 #include "start.h"
 #include "hardwareConfig.h"
 #include "tests.h"
+#include "dtcManager.h"
 
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000

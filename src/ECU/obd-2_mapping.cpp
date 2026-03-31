@@ -1,6 +1,5 @@
 
 #include "obd-2.h"
-#include "obd-2_mapping.h"
 
 const char PID_NAME_0x00[] PROGMEM = "PIDs supported [01 - 20]";
 const char PID_NAME_0x01[] PROGMEM = "Monitor status since DTCs cleared";

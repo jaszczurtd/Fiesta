@@ -1,5 +1,6 @@
 
 #include "logic.h"
+#include "buzzerStrategy.h"
 
 const char *err = (char*)F("ERR");
 
@@ -7,6 +8,7 @@ void callAtEverySecond(void);
 void callAtEveryHalfSecond(void);
 void callAtEveryHalfHalfSecond(void);
 void updateValsForDebug(void);
+void processTemperatureBuzzerAlerts(void);
 
 void drawLowImportanceValues(void);
 void drawMediumImportanceValues(void);
@@ -24,6 +26,7 @@ static SmartTimers timerDebug;
 static SmartTimers timerCANUpdate;
 static SmartTimers timerCANCheck;
 static Cluster cluster;
+static BuzzerStrategy buzzerStrategy;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -57,8 +60,11 @@ void setup_a(void) {
 
   debugInit();
   setDebugPrefix("Clocks:");
+  deb("Setup started");
+
   setupOnboardLed();
   initBasicPIO();
+  buzzerStrategy.reset();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
@@ -117,6 +123,7 @@ void setup_a(void) {
   setStartedCore0();
 
   startBuzzer(BUZZER_SHORT);
+  deb("Setup finished");
 }
 
 void loop_a(void) {
@@ -195,11 +202,30 @@ void callAtEverySecond(void) {
 void callAtEveryHalfSecond(void) {
 
   enableOilLamp((getOilPressure() < MIN_OIL_PRESSURE));
+  processTemperatureBuzzerAlerts();
 
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
+}
+
+void processTemperatureBuzzerAlerts(void) {
+  BuzzerStrategyInput input;
+  input.engineRunning = isEngineRunning();
+  input.nowMs = hal_millis();
+  input.coolantTemp = int(valueFields[F_COOLANT_TEMP]);
+  input.oilTemp = int(valueFields[F_OIL_TEMP]);
+  input.egtTemp = int(valueFields[F_EGT]);
+
+  switch(buzzerStrategy.process(input)) {
+    case BUZZER_STRATEGY_MIDDLE:
+      startBuzzer(BUZZER_MIDDLE);
+      break;
+    case BUZZER_STRATEGY_LONG:
+      startBuzzer(BUZZER_LONG);
+      break;
+  }
 }
 
 void callAtEveryHalfHalfSecond(void) {

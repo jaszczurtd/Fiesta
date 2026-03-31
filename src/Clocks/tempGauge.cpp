@@ -24,9 +24,21 @@ TempGauge::TempGauge(int mode) {
 }
 
 void TempGauge::drawTempBar(int x, int y, int currentHeight, int color) {
-  hal_display_fill_rect(x, y, TEMP_BAR_WIDTH, -currentHeight, color);
-  hal_display_fill_rect(x, y - currentHeight, TEMP_BAR_WIDTH,
-      -(TEMP_BAR_MAXHEIGHT - currentHeight), ICONS_BG_COLOR);
+  if (currentHeight < 0) {
+    currentHeight = 0;
+  } else if (currentHeight > TEMP_BAR_MAXHEIGHT) {
+    currentHeight = TEMP_BAR_MAXHEIGHT;
+  }
+
+  if (currentHeight > 0) {
+    // y is the bottom edge of the bar; HAL rectangles require positive height.
+    hal_display_fill_rect(x, y - currentHeight, TEMP_BAR_WIDTH, currentHeight, color);
+  }
+
+  int remainingHeight = TEMP_BAR_MAXHEIGHT - currentHeight;
+  if (remainingHeight > 0) {
+    hal_display_fill_rect(x, y - TEMP_BAR_MAXHEIGHT, TEMP_BAR_WIDTH, remainingHeight, ICONS_BG_COLOR);
+  }
 }
 
 void TempGauge::redraw(void) {

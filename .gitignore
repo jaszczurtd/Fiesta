@@ -122,3 +122,6 @@ src/ECU/tests/CMakeCache.txt
 src/ECU/tests/CTestTestfile.cmake
 src/ECU/tests/cmake_install.cmake
 src/ECU/tests/Makefile
+.codex
+build*
+

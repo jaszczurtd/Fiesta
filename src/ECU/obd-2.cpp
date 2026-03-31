@@ -4,7 +4,6 @@
 // and CAN OBD & UDS Simulator Written By: Cory J. Fowler  December 20th, 2016
 
 #include "obd-2.h"
-#include "dtcManager.h"
 
 // UDS negative response codes used by this dispatcher.
 #define NRC_SERVICE_NOT_SUPPORTED      0x11

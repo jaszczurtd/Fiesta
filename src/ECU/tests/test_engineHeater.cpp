@@ -3,6 +3,7 @@
 #include "engineFan.h"
 #include "glowPlugs.h"
 #include "sensors.h"
+#include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <string.h>
@@ -163,6 +164,7 @@ void test_heater_hi_boundary_exactly_at_split(void) {
 
 int main(void) {
     initSensors();
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
 
     UNITY_BEGIN();
 

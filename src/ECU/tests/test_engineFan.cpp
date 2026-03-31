@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "engineFan.h"
 #include "sensors.h"
+#include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 /*
@@ -160,6 +161,7 @@ void test_fan_not_forced_on_just_above_lowest(void) {
 
 int main(void) {
     initSensors();
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
 
     UNITY_BEGIN();
 

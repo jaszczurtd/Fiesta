@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Upload przez BOOTSEL (UF2)
-# Kompiluje projekt i kopiuje .uf2 na zamontowany dysk BOOTSEL
+# BOOTSEL (UF2) upload helper
+# Compiles the project and copies .uf2 to mounted BOOTSEL storage
 # =============================================================================
 set -euo pipefail
 
@@ -21,7 +21,7 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
-# Wczytaj ustawienia
+# Read settings
 read_setting() {
     python3 -c "
 import json
@@ -40,31 +40,31 @@ if [[ -n "$SKETCHBOOK" && -d "$SKETCHBOOK/libraries" ]]; then
     LIB_ARGS="--libraries $SKETCHBOOK/libraries"
 fi
 
-# Kompilacja
-info "Kompilacja..."
+# Compile
+info "Compiling..."
 info "  FQBN: $FQBN"
 if ! $CLI compile --fqbn "$FQBN" --build-path "$BUILD_DIR" $LIB_ARGS \
     --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR'" \
     --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR'" \
     "$PROJECT_DIR"; then
-    err "Kompilacja nie powiodła się"
+    err "Compilation failed"
     exit 1
 fi
 
-# Szukaj pliku UF2
+# Find UF2 artifact
 echo ""
-info "Szukam pliku UF2..."
+info "Searching for UF2 file..."
 UF2=$(find "$BUILD_DIR" -name '*.uf2' -type f | head -1)
 
 if [[ -z "$UF2" ]]; then
-    err "Nie znaleziono pliku .uf2 w $BUILD_DIR"
+    err "No .uf2 file found in $BUILD_DIR"
     exit 1
 fi
 
-ok "Znaleziono: $UF2"
+ok "Found: $UF2"
 
-# Szukaj dysku BOOTSEL
-info "Szukam dysku BOOTSEL..."
+# Find BOOTSEL drive
+info "Searching for BOOTSEL drive..."
 MOUNT=""
 for name in RPI-RP2 RP2350 RPI-RP2350; do
     MOUNT=$(find /media/"$USER" -maxdepth 1 -name "$name" -type d 2>/dev/null | head -1)
@@ -74,7 +74,7 @@ for name in RPI-RP2 RP2350 RPI-RP2350; do
 done
 
 if [[ -z "$MOUNT" ]]; then
-    # Sprawdź też /run/media (niektóre distro)
+    # Also check /run/media (some distros)
     for name in RPI-RP2 RP2350 RPI-RP2350; do
         MOUNT=$(find /run/media/"$USER" -maxdepth 1 -name "$name" -type d 2>/dev/null | head -1)
         if [[ -n "$MOUNT" ]]; then
@@ -84,25 +84,25 @@ if [[ -z "$MOUNT" ]]; then
 fi
 
 if [[ -z "$MOUNT" ]]; then
-    err "Nie znaleziono dysku BOOTSEL"
+    err "BOOTSEL drive not found"
     echo ""
-    echo "  Instrukcja:"
-    echo "  1. Odłącz płytkę od USB"
-    echo "  2. Przytrzymaj przycisk BOOTSEL"
-    echo "  3. Podłącz USB (trzymając BOOTSEL)"
-    echo "  4. Puść BOOTSEL — powinien pojawić się dysk RPI-RP2"
-    echo "  5. Uruchom ten skrypt ponownie"
+    echo "  Instructions:"
+    echo "  1. Unplug the board from USB"
+    echo "  2. Hold the BOOTSEL button"
+    echo "  3. Plug USB in while holding BOOTSEL"
+    echo "  4. Release BOOTSEL - an RPI-RP2 drive should appear"
+    echo "  5. Run this script again"
     echo ""
-    echo "  Podłączone dyski w /media/$USER/:"
-    ls /media/"$USER"/ 2>/dev/null || echo "    (brak)"
+    echo "  Mounted drives in /media/$USER/:"
+    ls /media/"$USER"/ 2>/dev/null || echo "    (none)"
     exit 1
 fi
 
-# Kopiuj UF2
-info "Kopiuję na $MOUNT..."
+# Copy UF2
+info "Copying to $MOUNT..."
 cp "$UF2" "$MOUNT/"
 sync
 
 echo ""
-ok "Upload UF2 zakończony!"
-ok "Plik: $(basename "$UF2") → $MOUNT/"
+ok "UF2 upload finished"
+ok "File: $(basename "$UF2") -> $MOUNT/"
