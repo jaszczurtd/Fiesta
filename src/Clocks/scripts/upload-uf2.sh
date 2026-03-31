@@ -43,7 +43,10 @@ fi
 # Kompilacja
 info "Kompilacja..."
 info "  FQBN: $FQBN"
-if ! $CLI compile --fqbn "$FQBN" --build-path "$BUILD_DIR" $LIB_ARGS "$PROJECT_DIR"; then
+if ! $CLI compile --fqbn "$FQBN" --build-path "$BUILD_DIR" $LIB_ARGS \
+    --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR'" \
+    --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR'" \
+    "$PROJECT_DIR"; then
     err "Kompilacja nie powiodła się"
     exit 1
 fi

@@ -34,8 +34,7 @@ void EngineFuelGauge::init() {
   measurements = 0;
 
   hal_display_set_default_font();
-  emptyMessageWidth = hal_display_text_width(emptyMessage);
-  emptyMessageHeight = hal_display_text_height(emptyMessage);
+  hal_display_get_text_bounds(emptyMessage, &emptyMessageWidth, &emptyMessageHeight);
 
   currentFuelWidth = 0;
   fullRedrawNeeded = false;
@@ -138,15 +137,13 @@ void EngineFuelGauge::showFuelAmount(int currentVal, int maxVal) {
     x += ((width - tw) / 2);
 
     hal_display_set_text_color(TEXT_COLOR);
-    hal_display_set_cursor(x, y);
-    hal_display_println(half);
+    hal_display_print_at(x, y, half);
 
     x = getBaseX() + width;
     tw = hal_display_text_width(full);
     x -= tw;
 
-    hal_display_set_cursor(x, y);
-    hal_display_println(full);
+    hal_display_print_at(x, y, full);
 
     f_drawOnce = false;
   } else {

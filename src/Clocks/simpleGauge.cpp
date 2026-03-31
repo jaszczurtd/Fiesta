@@ -83,14 +83,10 @@ int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int
   }
   hal_display_set_serif9pt_with_color((uint16_t)color);
 
-  memset(displayTxt, 0, sizeof(displayTxt));
-
   va_list valist;
   va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  int w = hal_display_prepare_text_v(displayTxt, sizeof(displayTxt), format, valist);
   va_end(valist);
-
-  int w = hal_display_text_width((const char*)displayTxt);
 
   int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
   int y1 = y + 59;
@@ -99,8 +95,7 @@ int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int
                         y1 - 14, SMALL_ICONS_WIDTH - (offset * 2),
                         16,
                         ICONS_BG_COLOR);
-  hal_display_set_cursor(x1, y1);
-  hal_display_println(displayTxt);
+  hal_display_print_at(x1, y1, displayTxt);
 
   switch(mode) {
     default:
@@ -111,8 +106,7 @@ int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int
       break;
     case MODE_M_KILOMETERS:
       hal_display_set_default_font();
-      hal_display_set_cursor(x1 + w + kmoffset, y1 - 6);
-      hal_display_println(km);
+      hal_display_print_at(x1 + w + kmoffset, y1 - 6, km);
       return w;
   }
 

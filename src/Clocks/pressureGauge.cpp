@@ -28,11 +28,10 @@ PressureGauge::PressureGauge(int mode) {
 
 void PressureGauge::drawTextForPressureIndicators(int x, int y, const char *format, ...) {
   char displayTxt[DISPLAY_TXT_SIZE];
-  memset(displayTxt, 0, DISPLAY_TXT_SIZE);
 
   va_list valist;
   va_start(valist, format);
-  vsnprintf(displayTxt, DISPLAY_TXT_SIZE - 1, format, valist);
+  hal_display_prepare_text_v(displayTxt, DISPLAY_TXT_SIZE, format, valist);
   va_end(valist);
 
   int x1 = x + kBarTextX;

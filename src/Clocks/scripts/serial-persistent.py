@@ -30,13 +30,13 @@ except ImportError:
     print("Zainstaluj: pip install pyserial --break-system-packages")
     sys.exit(1)
 
-CYAN   = "\033[0;36m"
-GREEN  = "\033[0;32m"
+CYAN = "\033[0;36m"
+GREEN = "\033[0;32m"
 YELLOW = "\033[1;33m"
-RED    = "\033[0;31m"
-DIM    = "\033[2m"
-BOLD   = "\033[1m"
-NC     = "\033[0m"
+RED = "\033[0;31m"
+DIM = "\033[2m"
+BOLD = "\033[1m"
+NC = "\033[0m"
 
 PICO_USB_IDS = {
     "2e8a:000a",  # Pico
@@ -164,8 +164,8 @@ def wait_for_device(mode, preferred_port=""):
         port, reason = find_port(mode, preferred_port)
 
         if port:
-            print(f"\r{' ' * 120}\r", end="", flush=True)
-            time.sleep(1.0)
+            print(f"\r{' ' * 140}\r", end="", flush=True)
+            time.sleep(0.3)
             if os.path.exists(port):
                 print(f"{GREEN}Znaleziono port: {port} [{reason}]{NC}")
                 return port
@@ -189,15 +189,61 @@ def wait_for_device(mode, preferred_port=""):
         time.sleep(0.5)
 
 
+def _clear_hupcl(fd: int) -> None:
+    """Clear HUPCL so the kernel does not drop DTR on close (Linux only)."""
+    import fcntl
+    import struct
+
+    TCGETS = 0x5401
+    TCSETS = 0x5402
+    HUPCL = 0x0400
+
+    try:
+        buf = bytearray(60)
+        fcntl.ioctl(fd, TCGETS, buf)
+        cflag = struct.unpack_from("I", buf, 8)[0]
+        cflag &= ~HUPCL
+        struct.pack_into("I", buf, 8, cflag)
+        fcntl.ioctl(fd, TCSETS, buf)
+    except Exception:
+        pass
+
+
 def open_serial(port, baud):
-    return serial.Serial(
-        port=port,
-        baudrate=baud,
-        timeout=0.5,
-        dsrdtr=False,
-        rtscts=False,
-        xonxoff=False,
-    )
+    ser = serial.Serial()
+    ser.port = port
+    ser.baudrate = baud
+    ser.timeout = 0.5
+    ser.write_timeout = 0.5
+    ser.xonxoff = False
+    ser.dsrdtr = False
+    ser.rtscts = False
+
+    try:
+        ser.exclusive = True
+    except Exception:
+        pass
+
+    ser.open()
+
+    try:
+        ser.setRTS(False)
+    except Exception:
+        pass
+
+    try:
+        ser.setDTR(True)
+    except Exception:
+        pass
+
+    time.sleep(0.2)
+
+    try:
+        ser.reset_input_buffer()
+    except Exception:
+        pass
+
+    return ser
 
 
 def monitor(port, baud):
@@ -212,19 +258,23 @@ def monitor(port, baud):
 
     try:
         while True:
-            if not os.path.exists(port):
-                break
-
             try:
-                waiting = ser.in_waiting
-                data = ser.read(waiting if waiting > 0 else 1)
-
-                if data:
-                    sys.stdout.buffer.write(data)
-                    sys.stdout.buffer.flush()
-
+                raw = ser.readline()
             except (serial.SerialException, OSError):
                 break
+
+            if not raw:
+                continue
+
+            raw = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+            try:
+                text = raw.decode("utf-8", errors="replace").rstrip("\n")
+            except Exception:
+                text = repr(raw)
+
+            if text:
+                print(text)
 
     except KeyboardInterrupt:
         try:
@@ -252,13 +302,15 @@ def parse_args():
         help="Explicit serial port, e.g. /dev/ttyACM0 or /dev/ttyUSB0",
     )
     parser.add_argument(
-        "-b", "--baud",
+        "-b",
+        "--baud",
         type=int,
         default=115200,
         help="Baud rate (default: 115200)",
     )
     parser.add_argument(
-        "-m", "--mode",
+        "-m",
+        "--mode",
         choices=["pico", "probe", "any"],
         default="pico",
         help="Autodetection mode (default: pico)",
@@ -295,11 +347,11 @@ def main():
         if result == "disconnected":
             print(f"\n{DIM}{'─' * 80}{NC}")
             print(f"{YELLOW}Urządzenie odłączone: {port}{NC}\n")
-            time.sleep(1.0)
+            time.sleep(0.5)
             continue
 
         if result == "error":
-            time.sleep(2.0)
+            time.sleep(1.0)
 
 
 if __name__ == "__main__":

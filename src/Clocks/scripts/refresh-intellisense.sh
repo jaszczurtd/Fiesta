@@ -100,6 +100,8 @@ generate_compile_db() {
         --fqbn "$fqbn" \
         --build-path "$BUILD_DIR" \
         "${lib_args[@]}" \
+        --build-property "compiler.cpp.extra_flags=-I '$(dirname "$sketch")'" \
+        --build-property "compiler.c.extra_flags=-I '$(dirname "$sketch")'" \
         --warnings all \
         "$(dirname "$sketch")" 2>&1; then
         warn "Kompilacja nie powiodła się"
@@ -111,6 +113,8 @@ generate_compile_db() {
         --fqbn "$fqbn" \
         --build-path "$BUILD_DIR" \
         "${lib_args[@]}" \
+        --build-property "compiler.cpp.extra_flags=-I '$(dirname "$sketch")'" \
+        --build-property "compiler.c.extra_flags=-I '$(dirname "$sketch")'" \
         --only-compilation-database \
         "$(dirname "$sketch")" 2>&1; then
         ok "compile_commands.json wygenerowany"

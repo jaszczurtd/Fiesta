@@ -2,7 +2,6 @@
 #ifndef T_TEMP_GAUGE
 #define T_TEMP_GAUGE
 
-#include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
 
 #include "TFTExtension.h"
