@@ -11,21 +11,33 @@ set(HAL_LIB_SUBMODULE ${CMAKE_CURRENT_SOURCE_DIR}/../library/JaszczurHAL)
 set(HAL_LIB_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 
 if(EXISTS ${HAL_LIB_SUBMODULE}/unity.c)
-    set(HAL_LIB ${HAL_LIB_SUBMODULE})
+    set(UNITY_SOURCE ${HAL_LIB_SUBMODULE}/unity.c)
+    set(UNITY_INCLUDE_DIR ${HAL_LIB_SUBMODULE})
+elseif(EXISTS ${HAL_LIB_SUBMODULE}/src/utils/unity.c)
+    set(UNITY_SOURCE ${HAL_LIB_SUBMODULE}/src/utils/unity.c)
+    set(UNITY_INCLUDE_DIR ${HAL_LIB_SUBMODULE}/src/utils)
 elseif(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
-    set(HAL_LIB ${HAL_LIB_EXTERNAL})
+    set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
+    set(UNITY_INCLUDE_DIR ${HAL_LIB_EXTERNAL})
+elseif(EXISTS ${HAL_LIB_EXTERNAL}/src/utils/unity.c)
+    set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/src/utils/unity.c)
+    set(UNITY_INCLUDE_DIR ${HAL_LIB_EXTERNAL}/src/utils)
 else()
-    message(FATAL_ERROR "JaszczurHAL not found. Expected at ${HAL_LIB_SUBMODULE} or ${HAL_LIB_EXTERNAL}")
+    message(FATAL_ERROR "JaszczurHAL not found. Expected unity.c at:
+  ${HAL_LIB_SUBMODULE}/unity.c
+  ${HAL_LIB_SUBMODULE}/src/utils/unity.c
+  ${HAL_LIB_EXTERNAL}/unity.c
+  ${HAL_LIB_EXTERNAL}/src/utils/unity.c")
 endif()
 
 add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
-    ${HAL_LIB}/unity.c
+    ${UNITY_SOURCE}
 )
 
 target_include_directories(clocks_mock PUBLIC
     ${CLOCKS_SRC}
-    ${HAL_LIB}
+    ${UNITY_INCLUDE_DIR}
 )
 
 target_compile_definitions(clocks_mock PUBLIC
