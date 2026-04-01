@@ -3,8 +3,20 @@
 
 #include "hardwareConfig.h"
 
-#define vehicle_Vin "WF0BXXGAJB1R32583"
-#define ecu_Name "JASZCZUR FORD FIESTA"
+#define vehicle_Vin     "WF0BXXGAJB1R32583"
+#define ecu_Name        "JASZCZUR FORD FIESTA"
+
+// ECU identification strings (Ford EEC-V / KWP2000 / UDS)
+#define ecu_CalibrationId   "XS4A-12A650-AXB"
+#define ecu_PartNumber      "XS4A-12A650-AXB"
+#define ecu_SwVersion       "1.00"
+#define ecu_SwDate          "20101201"
+#define ecu_HardwareId      "H1.0"
+#define ecu_Model           "EEC-V"
+#define ecu_Type            "DEM"
+#define ecu_SubType         "VP37"
+#define ecu_Copyright       "FORD MOTOR CO"
+#define ecu_CatchCode       "FD18A3C5"
 
 //BASIC CONTROL VALUES!
 //#define VP37
