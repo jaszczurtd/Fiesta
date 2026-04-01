@@ -19,6 +19,7 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 # ── HAL utility sources (no Arduino dependency) ────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp
     ${HAL_SRC}/utils/SmartTimers.cpp
     ${HAL_SRC}/utils/pidController.cpp
