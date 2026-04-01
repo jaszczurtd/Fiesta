@@ -13,61 +13,208 @@
 
 #define PAD 0x00
 
-// What CAN ID type?  Standard or Extended
-#define standard 1
+// ── CAN addressing (11-bit standard, Ford PCM) ─────────────────────
+// 7E0/7E8 = Engine ECM (PCM), 7E1/7E9 = Transmission ECM
+#define REPLY_ID       0x7E8
+#define LISTEN_ID      0x7E0
+#define FUNCTIONAL_ID  0x7DF
 
-// 7E0/8 = Engine ECM
-// 7E1/9 = Transmission ECM
+// ── UDS / ISO 14229 positive-response offset ────────────────────────
+#define UDS_POSITIVE_RESPONSE_OFFSET  0x40
 
-#if standard == 1
-  #define REPLY_ID 0x7E8
-  #define LISTEN_ID 0x7E0
-  #define FUNCTIONAL_ID 0x7DF  
-#else
-  #define REPLY_ID 0x98DAF101
-  #define LISTEN_ID 0x98DA01F1
-  #define FUNCTIONAL_ID 0x98DB33F1
-#endif
+// ── UDS negative response codes (ISO 14229 §A.1) ───────────────────
+#define NRC_SERVICE_NOT_SUPPORTED      0x11
+#define NRC_SUBFUNCTION_NOT_SUPPORTED  0x12
+#define NRC_INCORRECT_LENGTH           0x13
+#define NRC_CONDITIONS_NOT_CORRECT     0x22
+#define NRC_REQUEST_OUT_OF_RANGE       0x31
+#define NRC_SVC_NOT_SUPPORTED_IN_SESSION 0x7F
 
+// ── UDS / KWP service IDs ───────────────────────────────────────────
+#define UDS_SVC_DIAGNOSTIC_SESSION     0x10
+#define UDS_SVC_ECU_RESET              0x11
+#define UDS_SVC_READ_DATA_BY_LOCAL_ID  0x12   // KWP2000
+#define UDS_SVC_CLEAR_DTC              0x14
+#define UDS_SVC_READ_DTC_INFO          0x19
+#define UDS_SVC_READ_DATA_BY_ID        0x22
+#define UDS_SVC_READ_MEMORY_BY_ADDR    0x23   // Ford SCP DMR
+#define UDS_SVC_SECURITY_ACCESS        0x27
+#define UDS_SVC_COMM_CONTROL           0x28
+#define UDS_SVC_WRITE_DATA_BY_ID       0x2E
+#define UDS_SVC_IO_CONTROL             0x2F
+#define UDS_SVC_ROUTINE_CONTROL        0x31
+#define UDS_SVC_TESTER_PRESENT         0x3E
+#define UDS_SVC_CONTROL_DTC_SETTING    0x85
 
-//OBD standards https://en.wikipedia.org/wiki/OBD-II_PIDs#Service_01_PID_1C
-#define JOBD_OBD_II 11
-#define EOBD_OBD_OBD_II 9
+// ── UDS positive response SIDs (service + 0x40) ────────────────────
+#define UDS_RSP_DIAGNOSTIC_SESSION     0x50
+#define UDS_RSP_ECU_RESET              0x51
+#define UDS_RSP_READ_DATA_BY_LOCAL_ID  0x52   // KWP2000
+#define UDS_RSP_CLEAR_DTC              0x54
+#define UDS_RSP_READ_DTC_INFO          0x59
+#define UDS_RSP_READ_DATA_BY_ID        0x62
+#define UDS_RSP_READ_MEMORY_BY_ADDR    0x63   // Ford SCP DMR
+#define UDS_RSP_SECURITY_ACCESS        0x67
+#define UDS_RSP_COMM_CONTROL           0x68
+#define UDS_RSP_WRITE_DATA_BY_ID       0x6E
+#define UDS_RSP_IO_CONTROL             0x6F
+#define UDS_RSP_ROUTINE_CONTROL        0x71
+#define UDS_RSP_TESTER_PRESENT         0x7E
+#define UDS_RSP_CONTROL_DTC_SETTING    0xC5
+#define UDS_RSP_NEGATIVE               0x7F
 
-//Fuel Type Coding https://en.wikipedia.org/wiki/OBD-II_PIDs#Fuel_Type_Coding
-#define FUEL_TYPE_DIESEL 4
+// ── UDS session types (DiagnosticSessionControl) ────────────────────
+#define UDS_SESSION_DEFAULT            0x01
+#define UDS_SESSION_PROGRAMMING        0x02
+#define UDS_SESSION_EXTENDED           0x03
 
-enum {
-  L1 = 0x01,
-  L2 = 0x02,
-  L3 = 0x03,
-  L4 = 0x04,
-  L5 = 0x05,
-  L6 = 0x06,
-  L7 = 0x07,
-  L8 = 0x08,
-  L9 = 0x09,
-  L10 = 0x0a,
-  L11 = 0x0b,
-  L12 = 0x0c,
-  L13 = 0x0d,
-  L14 = 0x0e,
-  L15 = 0x0f,
-};
+// ── UDS suppress-positive-response bit ──────────────────────────────
+#define UDS_SUPPRESS_POSITIVE_RSP      0x80
 
-#define MODE1_RESPONSE    0x41
-#define MODE3_RESPONSE    0x43
-#define MODE4_RESPONSE    0x44
+// ── OBD-II service modes (SAE J1979) ───────────────────────────────
+#define OBD_MODE_CURRENT_DATA          0x01
+#define OBD_MODE_FREEZE_FRAME          0x02
+#define OBD_MODE_STORED_DTC            0x03
+#define OBD_MODE_CLEAR_DTC             0x04
+#define OBD_MODE_O2_MONITORING         0x05
+#define OBD_MODE_ONBOARD_MONITORING    0x06
+#define OBD_MODE_PENDING_DTC           0x07
+#define OBD_MODE_CONTROL_OPERATIONS    0x08
+#define OBD_MODE_VEHICLE_INFO          0x09
+#define OBD_MODE_PERMANENT_DTC         0x0A
 
-#define SHOW_CURRENT_DATA 1
-#define SHOW_STORED_DIAGNOSTIC_TROUBLE_CODES 3
-#define CLEAR_DIAGNOSTIC_TROUBLE_CODES_AND_STORED_VALUES 4
-#define REQUEST_VEHICLE_INFORMATION 9
+// ── OBD-II standards (PID 0x1C) ────────────────────────────────────
+#define EOBD_OBD_OBD_II  9
 
-#define REQUEST_MODE_9_SUPPORTED 0x00
-#define REQUEST_VIN 0x02
-#define REQUEST_CALLIBRATION_ID 0x04
-#define REQUEST_ECU_NAME 0x0a
+// ── Fuel type coding (PID 0x51) ────────────────────────────────────
+#define FUEL_TYPE_DIESEL  4
+
+// ── Mode 09 PIDs ───────────────────────────────────────────────────
+#define MODE09_PID_VIN       0x02
+#define MODE09_PID_CALID     0x04
+#define MODE09_PID_CVN       0x06
+#define MODE09_PID_ECU_COUNT 0x09
+#define MODE09_PID_ECU_NAME  0x0A
+#define MODE09_PID_ESN       0x0D
+#define MODE09_PID_TYPE_APPR 0x0F   // Exhaust regulation type approval number
+
+// ── Ford EEC-V KWP 0x12 local identifiers ──────────────────────────
+#define KWP_LID_CALIB_BLOCK       0x33
+#define KWP_LID_CALIBRATION_ID    0x80
+#define KWP_LID_SW_DATE           0x81
+#define KWP_LID_PART_NUMBER       0x82
+#define KWP_LID_MODEL_16          0x86
+#define KWP_LID_VIN               0x90
+#define KWP_LID_MODEL             0x91
+#define KWP_LID_TYPE              0x92
+#define KWP_LID_SUBTYPE           0x93
+#define KWP_LID_CATCH_CODE        0x94
+#define KWP_LID_VIN_ALT           0x95
+#define KWP_LID_SW_VERSION        0x96
+#define KWP_LID_SW_DATE_ALT       0x97
+#define KWP_LID_CALIBRATION_ALT   0x98
+#define KWP_LID_PART_NUMBER_ALT   0x99
+#define KWP_LID_HARDWARE_ID       0x9A
+#define KWP_LID_ROM_SIZE          0x9B
+#define KWP_LID_COPYRIGHT         0x9C
+#define KWP_LID_COMPACT_IDENT     0xFE
+#define KWP_LID_SUPPORTED_LIST    0xFF
+
+// ── Ford EEC-V UDS DIDs — standard identification ──────────────────
+#define DID_ACTIVE_SESSION         0xF186
+#define DID_SPARE_PART_NUMBER      0xF187
+#define DID_SW_VERSION             0xF188
+#define DID_SW_VERSION_ALT         0xF189
+#define DID_SUPPLIER_ID            0xF18A
+#define DID_MANUFACTURE_DATE       0xF18B
+#define DID_SERIAL_NUMBER          0xF18C
+#define DID_VIN                    0xF190
+#define DID_HW_VERSION             0xF191
+#define DID_SYSTEM_NAME            0xF197
+#define DID_ODX_FILE_ID            0xF19E
+#define DID_PART_NUMBER            0xF113
+#define DID_BOOT_SW_ID             0xF180
+
+// ── Ford EEC-V UDS DIDs — manufacturer-specific ────────────────────
+#define DID_ECU_CAPABILITIES       0x0200
+
+#define DID_FORD_MODEL             0xE6F3
+#define DID_FORD_TYPE              0xE300
+#define DID_FORD_VIN_CHUNK_BASE    0xE301   // E301-E305
+#define DID_FORD_VIN_CHUNK_LAST    0xE305
+#define DID_FORD_SW_DATE           0xE200
+#define DID_FORD_CALIBRATION_ID    0xE217
+#define DID_FORD_ROM_SIZE          0xE219
+#define DID_FORD_HARDWARE_ID       0xE21A
+#define DID_FORD_CATCH_CODE        0xC92E
+#define DID_FORD_PART_NUMBER       0xC900
+
+// Ford F4xx identification block DIDs
+#define DID_F4_MODEL               0xF400
+#define DID_F4_TYPE                0xF401
+#define DID_F4_SUBTYPE             0xF402
+#define DID_F4_CATCH_CODE          0xF403
+#define DID_F4_SW_DATE             0xF404
+#define DID_F4_CALIBRATION_ID      0xF405
+#define DID_F4_PART_NUMBER         0xF406
+#define DID_F4_HARDWARE_ID         0xF407
+#define DID_F4_ROM_SIZE            0xF408
+#define DID_F4_COPYRIGHT           0xF409
+#define DID_F4_MODEL_16            0xF40B
+#define DID_F4_TYPE_ALT            0xF40C
+#define DID_F4_SUBTYPE_ALT         0xF40D
+#define DID_F4_CATCH_CODE_ALT      0xF40F
+#define DID_F4_SW_DATE_ALT         0xF410
+#define DID_F4_CALIBRATION_ID_ALT  0xF411
+#define DID_F4_HARDWARE_ID_ALT     0xF414
+#define DID_F4_ROM_SIZE_ALT        0xF442
+#define DID_F4_PART_NUMBER_ALT     0xF444
+#define DID_F4_SW_VERSION          0xF445
+#define DID_F4_COPYRIGHT_ALT       0xF449
+
+// ── Ford SCP PIDs (2-byte, manufacturer namespace) ─────────────────
+#define SCP_PID_IDBLOCK_ADDR       0x1100
+#define SCP_PID_ACT                0x1123   // Air Charge Temp
+#define SCP_PID_BP                 0x1127   // Barometric Pressure
+#define SCP_PID_ECT                0x1139   // Engine Coolant Temp
+#define SCP_PID_TP_ENG             0x1154   // Throttle Position A/D
+#define SCP_PID_KAMRF1             0x1156   // KAM fuel ratio bank 1
+#define SCP_PID_KAMRF2             0x1157   // KAM fuel ratio bank 2
+#define SCP_PID_LAMBSE1            0x1158   // Lambda sensor 1
+#define SCP_PID_LAMBSE2            0x1159   // Lambda sensor 2
+#define SCP_PID_LOAD               0x115A   // Engine Load
+#define SCP_PID_RPM                0x1165   // Engine RPM
+#define SCP_PID_RATCH              0x1169   // Throttle ratchet
+#define SCP_PID_VBAT               0x1172   // Battery Voltage
+#define SCP_PID_NORPM              0x11B5   // Neutral output RPM
+#define SCP_PID_VS                 0x11C1   // Vehicle Speed
+#define SCP_PID_IMAF               0x1633   // MAF sensor A/D
+#define SCP_PID_SECURITY_STATUS    0xC115   // Security Access Status
+#define SCP_PID_PATS_STATUS        0xC124   // PATS Status
+
+// ── Ford SCP PIDs — diesel-specific (CDAN2 PID MAP) ────────────────
+#define SCP_PID_TRIP_COUNT         0x0100   // OBDII trip count, Byte
+#define SCP_PID_CODES_COUNT        0x0200   // DTC code count, Byte
+#define SCP_PID_EGRDC              0x113C   // EGR duty cycle, 100/32768 %
+#define SCP_PID_FUELPW1            0x1141   // Fuel pulsewidth 1, 32 ticks
+#define SCP_PID_VMAF               0x1177   // MAF voltage, 0.000244V (CRAI8)
+#define SCP_PID_MAF_RATE           0x1671   // j1979_01_10, 0.01 g/s
+
+// ── Ford SCP DMR (Direct Memory Request) constants ─────────────────
+#define SCP_IDBLOCK_BANK           0x09
+#define SCP_IDBLOCK_ADDR           0xFF00
+#define SCP_IDBLOCK_ADDR_ALT       0x9F00
+#define SCP_IDBLOCK_FMT_DEFAULT    0xFF
+#define SCP_IDBLOCK_SIZE           256
+#define SCP_IDBLOCK_VIN_OFFSET     0x85   // VIN start (17 bytes, ends at 0x95)
+#define SCP_IDBLOCK_COPYRIGHT_OFS  0x97   // Copyright start (32 bytes)
+#define SCP_IDBLOCK_CHKSUM_OFS     0xFE   // Checksum correction word
+
+// ── Ford EEC-V ROM size (512 KB) ───────────────────────────────────
+#define FORD_ROM_SIZE_512K         0x00080000u
+
+// ── Ford EEC-V identification field padding ────────────────────────
+#define FORD_IDENT_PAD             0x20   // space padding for ident fields
 
 /* Details from http://en.wikipedia.org/wiki/OBD-II_PIDs */
 #define PID_0_20            0x00    //PID 0 - 20 supported
@@ -221,73 +368,5 @@ enum {
 
 void obdInit(int retries);
 void obdLoop(void);
-
-//=================================================================
-//Define ECU Supported PID's
-//=================================================================
-
-// Define the set of PIDs for MODE01 you wish you ECU to support.  For more information, see:
-// https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00
-//
-// PID 0x01 (1) - Monitor status since DTCs cleared. (Includes malfunction indicator lamp (MIL) status and number of DTCs.)
-// |   PID 0x05 (05) - Engine Coolant Temperature
-// |   |      PID 0x0C (12) - Engine RPM
-// |   |      |PID 0x0D (13) - Vehicle speed
-// |   |      ||PID 0x0E (14) - Timing advance
-// |   |      |||PID 0x0F (15) - Intake air temperature
-// |   |      ||||PID 0x10 (16) - MAF Air Flow Rate
-// |   |      |||||            PID 0x1C (28) - OBD standards this vehicle conforms to
-// |   |      |||||            |                              PID 0x51 (58) - Fuel Type
-// |   |      |||||            |                              |
-// v   V      VVVVV            V                              v
-// 10001000000111110000:000000010000000000000:0000000000000000100
-// Converted to hex, that is the following four byte value binary to hex
-// 0x881F0000 0x00 PID 01 -20
-// 0x02000000 0x20 PID 21 - 40
-// 0x04000000 0x40 PID 41 - 60
-
-// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-// we determined above (0x081F0000):
-
-//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-//                                |     |     |    0x88 - The first of four bytes of the Supported PIDS value
-//                                |     |     |     |    0x1F - The second of four bytes of the Supported PIDS value
-//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-//                                |     |     |     |     |      |    |     |
-//                                V     V     V     V     V      V    V     V
-//byte md1Supported0x00PID[8] = {0x06, 0x41, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff};
-//byte md1Supported0x20PID[8] = {0x06, 0x41, 0x20, 0xff, 0xff, 0xff, 0xff, 0xff};
-//byte md1Supported0x40PID[8] = {0x06, 0x41, 0x40, 0xff, 0xff, 0xff, 0xff, 0xff};
-
-// Define the set of PIDs for MODE09 you wish you ECU to support.
-// As per the information on bitwise encoded PIDs (https://en.wikipedia.org/wiki/OBD-II_PIDs#Mode_1_PID_00)
-// Our supported PID value is:
-//
-//  PID 0x02 - Vehicle Identification Number (VIN)
-//  | PID 0x04 (04) - Calibration ID
-//  | |     PID 0x0C (12) - ECU NAME
-//  | |     |
-//  V V     V
-// 01010000010  // Converted to hex, that is the following four byte value binary to hex
-// 0x28200000 0x00 PID 01-11
-
-// Next, we'll create the bytearray that will be the Supported PID query response data payload using the four bye supported pi hex value
-// we determined above (0x28200000):
-
-//                               0x06 - additional meaningful bytes after this one (1 byte Service Mode, 1 byte PID we are sending, and the four by Supported PID value)
-//                                |    0x41 - This is a response (0x40) to a service mode 1 (0x01) query.  0x40 + 0x01 = 0x41
-//                                |     |    0x00 - The response is for PID 0x00 (Supported PIDS 1-20)
-//                                |     |     |    0x28 - The first of four bytes of the Supported PIDS value
-//                                |     |     |     |    0x20 - The second of four bytes of the Supported PIDS value
-//                                |     |     |     |     |    0x00 - The third of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |   0x00 - The fourth of four bytes of the Supported PIDS value
-//                                |     |     |     |     |      |    |    0x00 - OPTIONAL - Just extra zeros to fill up the 8 byte CAN message data payload)
-//                                |     |     |     |     |      |    |     |
-//                                V     V     V     V     V      V    V     V
-//byte md9Supported0x00PID[8] = {0x06, 0x49, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00};
 
 #endif

@@ -124,4 +124,5 @@ src/ECU/tests/cmake_install.cmake
 src/ECU/tests/Makefile
 .codex
 build*
+src/ECU/doc/*
 
