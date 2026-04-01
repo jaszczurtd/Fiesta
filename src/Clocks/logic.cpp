@@ -23,6 +23,7 @@ static SmartTimers timerQuarterSecond;
 static SmartTimers timerSoftInit;
 static SmartTimers timerEGT;
 static SmartTimers timerDebug;
+static SmartTimers timerCANLoop;
 static SmartTimers timerCANUpdate;
 static SmartTimers timerCANCheck;
 static Cluster cluster;
@@ -45,6 +46,7 @@ void setupTimers(void) {
   timerSoftInit.begin(softInitDisplay, DISPLAY_SOFTINIT_TIME);      hal_delay_ms(CORE_OPERATION_DELAY);
   timerEGT.begin(changeEGT, DPF_SHOW_TIME_INTERVAL);                hal_delay_ms(CORE_OPERATION_DELAY);
   timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);               hal_delay_ms(CORE_OPERATION_DELAY);
+  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);    hal_delay_ms(CORE_OPERATION_DELAY);
   timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS); hal_delay_ms(CORE_OPERATION_DELAY);
   timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
 }
@@ -146,6 +148,7 @@ void loop_a(void) {
   timerSoftInit.tick();
   timerEGT.tick();
   timerDebug.tick();
+  timerCANLoop.tick();
   timerCANUpdate.tick();
   timerCANCheck.tick();
   if(lastThreadSeconds < getSeconds()) {
@@ -165,7 +168,6 @@ void loop_a(void) {
 
   loopBuzzers();
 
-  canMainLoop();
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
   hal_delay_ms(CORE_OPERATION_DELAY);

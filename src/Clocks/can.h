@@ -9,7 +9,7 @@
 extern volatile float valueFields[];
 
 bool canInit(void);
-bool canMainLoop(void);
+void canMainLoop(void);
 void receivedCanMessage(void);
 void updateCANrecipients(void);
 void canCheckConnection(void);
@@ -27,4 +27,3 @@ int getEngineRPM(void);
 float getOilPressure(void);
 
 #endif
-

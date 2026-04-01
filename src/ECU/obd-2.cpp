@@ -63,21 +63,13 @@ static uint32_t s_activeRequestId = LISTEN_ID;
 static bool initialized = false;
 void obdInit(int retries) {
 
-  for(int a = 0; a < retries; a++) {
-    obdCan = hal_can_create(CAN1_GPIO);
-    initialized = (obdCan != NULL);
-    if(initialized) {
-      deb("MCP2515 Initialized Successfully!");
-      break;
-    }
-    derr("Error Initializing MCP2515...");
-    hal_delay_ms(SECOND);
-    watchdog_feed();
-  }
+  obdCan = hal_can_create_with_retry(CAN1_GPIO, CAN1_INT, NULL,
+                                      retries > 0 ? retries - 1 : 0,
+                                      watchdog_feed);
+  initialized = (obdCan != NULL);
 
   if(initialized) {
     hal_can_set_std_filters(obdCan, LISTEN_ID, FUNCTIONAL_ID);
-    hal_gpio_set_mode(CAN1_INT, HAL_GPIO_INPUT);     // Configuring pin for /INT input
     deb("OBD-2 CAN Shield init ok!");
     dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, false);
   } else {

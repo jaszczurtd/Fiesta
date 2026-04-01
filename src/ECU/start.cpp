@@ -196,15 +196,15 @@ void looper(void) {
     deb("thread is alive");
   }
   statusVariable0 = 3;
-  obdLoop();
-  statusVariable0 = 4;
-  getFanInstance()->process();
-  statusVariable0 = 5;
-  getHeaterInstance()->process();
-  statusVariable0 = 6;
-  getHeatedWindshieldsInstance()->process();
-  statusVariable0 = 7;
   CAN_updaterecipients_02();
+  statusVariable0 = 4;
+  obdLoop();
+  statusVariable0 = 5;
+  getFanInstance()->process();
+  statusVariable0 = 6;
+  getHeaterInstance()->process();
+  statusVariable0 = 7;
+  getHeatedWindshieldsInstance()->process();
   statusVariable0 = 8;
 
 #ifdef VP37

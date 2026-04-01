@@ -4,21 +4,12 @@
 void receivedCanMessage(void);
 
 static uint8_t frameNumber = 0;
-// This the eight byte buffer of the incoming message data payload
-static uint8_t buf[CAN_FRAME_MAX_LENGTH];
 
 static bool interrupt = false;
-
-// Incoming CAN-BUS message
-static uint32_t canID = 0x000;
-
-// This is the length of the incoming CAN-BUS message
-static uint8_t len = 0;
 
 static bool dpfConnected = false;
 static bool dpfEverSeen = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
-static uint8_t lastFrame = 0;
 
 static hal_can_t canBus = NULL;
 static bool initialized = false;
@@ -26,24 +17,13 @@ void canInit(int retries) {
   dpfConnected = false;
   dpfMessages = lastDPFMessages = 0;
 
-  for(int a = 0; a < retries; a++) {
-    canBus = hal_can_create(CAN0_GPIO);
-    initialized = (canBus != NULL);
-    if(initialized) {
-      break;
-    }
-
-    derr("ERROR!!!! CAN-BUS Shield init fail");
-
-    hal_delay_ms(SECOND);
-    watchdog_feed();
-  }
+  canBus = hal_can_create_with_retry(CAN0_GPIO, CAN0_INT, receivedCanMessage,
+                                      retries > 0 ? retries - 1 : 0,
+                                      watchdog_feed);
+  initialized = (canBus != NULL);
 
   if(initialized) {
     deb("CAN BUS Shield init ok!");
-
-    hal_gpio_set_mode(CAN0_INT, HAL_GPIO_INPUT);
-    hal_gpio_attach_interrupt(CAN0_INT, receivedCanMessage, HAL_GPIO_IRQ_FALLING);
   } else {
     derr("CAN BUS Shield init problem. CAN communication would not be possible.");
   }
@@ -173,56 +153,50 @@ void receivedCanMessage(void) {
     interrupt = true;
 }
 
+static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
+  interrupt = false;
+
+  switch(canID) {
+    case CAN_ID_DPF: {
+      dpfMessages++;
+      dpfEverSeen = true;
+      setGlobalValue(F_DPF_TEMP,
+        MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
+                    buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]));
+      setGlobalValue(F_DPF_REGEN, buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN]);
+    }
+    break;
+
+    case CAN_ID_CLOCK_BRIGHTNESS: {
+      setGlobalValue(F_CLOCK_BRIGHTNESS,
+        MsbLsbToInt(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI],
+                    buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]));
+    }
+    break;
+
+    case CAN_ID_LUMENS: {
+      setGlobalValue(F_OUTSIDE_LUMENS,
+        decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
+                   buf[CAN_FRAME_LIGHTS_UPDATE_LO]));
+    }
+    break;
+
+    case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
+      setGlobalValue(F_OIL_PRESSURE, decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
+                                              buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
+      setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
+    }
+    break;
+
+    default:
+      deb("received unknown CAN frame:%03x len:%d\n", canID, len);
+      break;
+  }
+}
+
 void canMainLoop(void) {
   if(initialized) {
-    if(!hal_can_receive(canBus, &canID, &len, buf)) {
-        return;
-    }
-    if(canID == 0 || len < 1) {
-        return;
-    }
-
-    if(lastFrame != buf[CAN_FRAME_NUMBER] || interrupt) {
-        interrupt = false;
-        lastFrame = buf[CAN_FRAME_NUMBER];
-
-        switch(canID) {
-            case CAN_ID_DPF: {
-              dpfMessages++;
-              dpfEverSeen = true;
-              setGlobalValue(F_DPF_TEMP,
-                MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
-                            buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]));
-              setGlobalValue(F_DPF_REGEN, buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN]);
-            }
-            break;
-
-            case CAN_ID_CLOCK_BRIGHTNESS: {
-              setGlobalValue(F_CLOCK_BRIGHTNESS,
-                MsbLsbToInt(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI],
-                            buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]));
-            }
-            break;
-
-            case CAN_ID_LUMENS: {
-              setGlobalValue(F_OUTSIDE_LUMENS,
-                decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
-                           buf[CAN_FRAME_LIGHTS_UPDATE_LO]));
-            }
-            break;
-
-            case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
-              setGlobalValue(F_OIL_PRESSURE, decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                                                  buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
-              setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
-            }
-            break;
-
-            default:
-              deb("received unknown CAN frame:%03x len:%d\n", canID, len);
-              break;
-        }
-    }
+    hal_can_process_all(canBus, onCanFrame);
   }
 }
 
