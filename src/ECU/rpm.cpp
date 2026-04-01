@@ -1,6 +1,13 @@
 #include "rpm.h"
 
-#define CRANK_REVOLUTIONS 32.0
+// RPM formula (integer-only, no floats):
+// original: pulses * (60000 / RPM_REFRESH_INTERVAL) / CRANK_REVOLUTIONS - RPM_CORRECTION_VAL
+//         = pulses * (60000 / 150) / 32 - 50
+//         = pulses * 12.5 - 50
+//         = (pulses * 25 - 100) / 2
+#define RPM_PULSES_MULTIPLIER  25
+#define RPM_PULSES_OFFSET      100
+#define RPM_PULSES_DIVISOR     2
 
 #ifndef VP37
 static SmartTimers rpmCycleTimer;
@@ -31,34 +38,32 @@ void RPM::resetRPMCycle(void) {
 
 RPM::RPM() : rpmValue(0) { }
 
+/*
+ Hall sensor ISR — called on every crankshaft pulse edge.
+ The 150ms time-window check and pulse snapshot MUST stay inside the ISR.
+ Moving them to main loop causes jitter because the main loop 
+ iteration time varies with CAN, OBD, turbo, etc. workload. That makes
+ the counting window non-deterministic and RPM readings unstable.
+ hal_millis() is just a timer register read — cheap enough for an ISR.
+ Only the integer RPM math is deferred to process() via the rpmReady flag.
+*/
 void RPM::interrupt(void) {
-  unsigned long _micros = hal_micros();
-  unsigned long nowPulse = _micros - lastPulse;
+  unsigned long now = hal_micros();
+  unsigned long pulse = now - lastPulse;
+  lastPulse = now;
 
-  lastPulse = _micros;
-
-  if((nowPulse >> 1) > shortPulse){
+  if ((pulse >> 1) > shortPulse) {
     RPMpulses++;
-    shortPulse = nowPulse;
-  } else {
-    shortPulse = nowPulse;
   }
+  shortPulse = pulse;
 
-  unsigned long _millis = hal_millis();
-  rpmAliveTime = _millis + RESET_RPM_WATCHDOG_TIME;
-  if(_millis - previousMillis >= RPM_REFRESH_INTERVAL) {
-    previousMillis = _millis;
-
-    int rpm = int((RPMpulses * (MILIS_IN_MINUTE / float(RPM_REFRESH_INTERVAL))) / CRANK_REVOLUTIONS) - RPM_CORRECTION_VAL;
-    if(rpm < 0) {
-      rpm = 0;
-    }
+  unsigned long ms = hal_millis();
+  rpmAliveTime = ms + RESET_RPM_WATCHDOG_TIME;
+  if (ms - previousMillis >= RPM_REFRESH_INTERVAL) {
+    previousMillis = ms;
+    snapshotPulses = RPMpulses;
     RPMpulses = 0;
-
-    rpm = hal_min(RPM_MAX_EVER, rpm);
-    rpm = ((rpm / 10) * 10);
-
-    rpmValue = rpm;
+    rpmReady = true;
   }
 }
 
@@ -71,6 +76,8 @@ void RPM::init(void) {
   lastPulse = 0;
   rpmAliveTime = 0;
   RPMpulses = 0;
+  snapshotPulses = 0;
+  rpmReady = false;
 
   currentRPMSolenoid = 0;
   rpmCycle = false;
@@ -107,14 +114,25 @@ int RPM::getCurrentRPM(void) {
   return rpmValue;
 }
 
-#ifndef VP37
 void RPM::process(void) {
-  rpmCycleTimer.tick();
+  if (rpmReady) {
+    rpmReady = false;
 
-  if(rpmAliveTime < (long)hal_millis()) {
+    int rpm = (snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
+    if (rpm < 0) rpm = 0;
+    if (rpm > RPM_MAX_EVER) rpm = RPM_MAX_EVER;
+    rpm = (rpm / 10) * 10;
+
+    rpmValue = rpm;
+  }
+
+  if (rpmAliveTime < (long)hal_millis()) {
     rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
     rpmValue = 0;
   }
+
+#ifndef VP37
+  rpmCycleTimer.tick();
 
   int desiredRPM = NOMINAL_RPM_VALUE;
 
@@ -177,10 +195,9 @@ void RPM::process(void) {
 #if DEBUG
   showDebug();
 #endif
+
+#endif /*VP37*/
 }
-#else
-  void RPM::process(void) { }
-#endif
 
 bool RPM::isEngineRunning(void) {
   return (getCurrentRPM() != 0);

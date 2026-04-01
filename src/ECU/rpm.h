@@ -41,11 +41,13 @@ public:
 
 private:
   volatile int rpmValue;
-  volatile unsigned long previousMillis;
   volatile unsigned long shortPulse;
   volatile unsigned long lastPulse;
+  volatile unsigned long previousMillis;
   volatile long rpmAliveTime;
   volatile int RPMpulses;
+  volatile int snapshotPulses;
+  volatile bool rpmReady;
 
   int currentRPMSolenoid;
   bool rpmCycle;

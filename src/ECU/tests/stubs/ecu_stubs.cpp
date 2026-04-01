@@ -14,11 +14,13 @@
 
 RPM::RPM()
     : rpmValue(0)
-    , previousMillis(0)
     , shortPulse(0)
     , lastPulse(0)
+    , previousMillis(0)
     , rpmAliveTime(0)
     , RPMpulses(0)
+    , snapshotPulses(0)
+    , rpmReady(false)
     , currentRPMSolenoid(0)
     , rpmCycle(false)
 #ifndef VP37

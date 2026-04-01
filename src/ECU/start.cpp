@@ -242,10 +242,9 @@ void looper1(void) {
   statusVariable1 = 1;
   turbo.process();
   statusVariable1 = 2;
+  getRPMInstance()->process();
 #ifdef VP37
   injectionPump.process();
-#else
-  getRPMInstance()->process();
 #endif
   statusVariable1 = 3;
 

@@ -297,7 +297,9 @@ static void encodeMode01CatalystTemp(uint8_t *txData) {
 
 static void encodeMode01Pid_41_60(uint8_t *txData) {
   txData[0] = 0x06;
-  txData[3] = 0x6F;
+  // 0x46 (Ambient air temperature) is intentionally not advertised,
+  // because ECU has only intake temperature input (F_INTAKE_TEMP).
+  txData[3] = 0x6B;
   txData[4] = 0xF0;
   txData[5] = 0x80;
   txData[6] = 0xDF;
@@ -400,7 +402,8 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {ENGINE_RPM, encodeMode01EngineRpm},
   {VEHICLE_SPEED, encodeMode01VehicleSpeed},
   {INTAKE_TEMP, encodeMode01IntakeTemp},
-  {AMB_AIR_TEMP, encodeMode01IntakeTemp},
+  //(Ambient air temperature) is intentionally not advertised,
+  // because ECU has only intake temperature input (F_INTAKE_TEMP).
   {THROTTLE, encodeMode01ThrottlePos},
   {REL_ACCEL_POS, encodeMode01ThrottlePos},
   {REL_THROTTLE_POS, encodeMode01ThrottlePos},
@@ -1111,30 +1114,11 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       send22Field(responseId, did, ecu_Model, (int)strlen(ecu_Model));
     } else if(did == DID_FORD_MODEL) {
       send22IdentField(responseId, did, ecu_Model, 8);
-    } else if(did == DID_F4_MODEL_16) {
-      send22IdentField(responseId, did, ecu_Model, 16);
-    } else if(did == DID_F4_TYPE_ALT) {
-      send22IdentField(responseId, did, ecu_Type, 8);
-    } else if(did == DID_F4_SUBTYPE_ALT) {
-      send22IdentField(responseId, did, ecu_SubType, 8);
-    } else if(did == DID_F4_CATCH_CODE_ALT) {
-      send22IdentField(responseId, did, ecu_CatchCode, 8);
-    } else if(did == DID_F4_SW_DATE_ALT) {
-      send22IdentField(responseId, did, ecu_SwDate, 8);
-    } else if(did == DID_F4_CALIBRATION_ID_ALT) {
-      send22IdentField(responseId, did, ecu_CalibrationId, 16);
-    } else if(did == DID_F4_HARDWARE_ID_ALT) {
-      send22IdentField(responseId, did, ecu_HardwareId, 8);
-    } else if(did == DID_F4_ROM_SIZE_ALT) {
-      send22U32(responseId, did, FORD_ROM_SIZE_512K);
-    } else if(did == DID_F4_PART_NUMBER_ALT) {
-      send22IdentField(responseId, did, ecu_PartNumber, 16);
-    } else if(did == DID_F4_SW_VERSION) {
-      send22IdentField(responseId, did, ecu_SwVersion, 4);
-    } else if(did == DID_F4_COPYRIGHT_ALT) {
-      send22IdentField(responseId, did, ecu_Copyright, 16);
-    } else if((did & 0xFF00) == 0xF400 && did >= 0xF40A) {
-      // ForDiag live-data mirror: DID F4xx -> OBD mode 01 PID xx payload.
+    } else if((did >> 8) == (DID_F4_MODEL >> 8) && did > DID_F4_COPYRIGHT) {
+      // F4xx live-data mirror takes priority over ALT ident DIDs.
+      // ALT ident DIDs (F40B, F40C, …F449) share the same address space,
+      // so we must try live-data encoding first to avoid e.g. 0xF40F returning
+      // the catch-code string instead of PID 0x0F (IAT) temperature data.
       uint8_t pid = (uint8_t)(did & 0x00FF);
       uint8_t dataBytes[4] = {0};
       int dataLen = 0;
@@ -1142,6 +1126,28 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
         uint8_t payload[3 + 4] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did};
         memcpy(&payload[3], dataBytes, (size_t)dataLen);
         iso_tp(responseId, 3 + dataLen, payload);
+      } else if(did == DID_F4_MODEL_16) {
+        send22IdentField(responseId, did, ecu_Model, 16);
+      } else if(did == DID_F4_TYPE_ALT) {
+        send22IdentField(responseId, did, ecu_Type, 8);
+      } else if(did == DID_F4_SUBTYPE_ALT) {
+        send22IdentField(responseId, did, ecu_SubType, 8);
+      } else if(did == DID_F4_CATCH_CODE_ALT) {
+        send22IdentField(responseId, did, ecu_CatchCode, 8);
+      } else if(did == DID_F4_SW_DATE_ALT) {
+        send22IdentField(responseId, did, ecu_SwDate, 8);
+      } else if(did == DID_F4_CALIBRATION_ID_ALT) {
+        send22IdentField(responseId, did, ecu_CalibrationId, 16);
+      } else if(did == DID_F4_HARDWARE_ID_ALT) {
+        send22IdentField(responseId, did, ecu_HardwareId, 8);
+      } else if(did == DID_F4_ROM_SIZE_ALT) {
+        send22U32(responseId, did, FORD_ROM_SIZE_512K);
+      } else if(did == DID_F4_PART_NUMBER_ALT) {
+        send22IdentField(responseId, did, ecu_PartNumber, 16);
+      } else if(did == DID_F4_SW_VERSION) {
+        send22IdentField(responseId, did, ecu_SwVersion, 4);
+      } else if(did == DID_F4_COPYRIGHT_ALT) {
+        send22IdentField(responseId, did, ecu_Copyright, 16);
       } else {
         // Keep alive with a deterministic zero payload for unknown F4xx PIDs.
         uint8_t payload[] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did, 0x00};
