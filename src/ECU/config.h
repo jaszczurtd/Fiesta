@@ -7,8 +7,8 @@
 #define ecu_Name        "JASZCZUR FORD FIESTA"
 
 // ECU identification strings (Ford EEC-V / KWP2000 / UDS)
-#define ecu_CalibrationId   "XS4A-12A650-AXB"
-#define ecu_PartNumber      "XS4A-12A650-AXB"
+#define ecu_CalibrationId   "YS6F-12A650-FA"
+#define ecu_PartNumber      "YS6F-12A650-FA"
 #define ecu_SwVersion       "1.00"
 #define ecu_SwDate          "20101201"
 #define ecu_HardwareId      "H1.0"
@@ -17,6 +17,17 @@
 #define ecu_SubType         "VP37"
 #define ecu_Copyright       "FORD MOTOR CO"
 #define ecu_CatchCode       "FD18A3C5"
+
+// Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
+// This steers Fordiag toward E217/E21A/E219 part number DB lookup.
+#define FORDIAG_COMPAT_NO_UDS_DTC
+
+// Ford E217 binary representation of part number middle section.
+// Each byte → hex with leading zero stripped → concatenated = middle string.
+// For "12A650": {0x12,0x0A,0x06,0x50} → "12"+"A"+"6"+"50" = "12A650"
+// If changing ecu_PartNumber, update these bytes to match the new middle section.
+#define ecu_PartNumMiddleHex   0x12, 0x0A, 0x06, 0x50
+#define ecu_PartNumMiddleLen   4
 
 //BASIC CONTROL VALUES!
 //#define VP37

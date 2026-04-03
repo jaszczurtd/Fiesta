@@ -158,7 +158,7 @@ static bool isFordDiagIdentificationDid(uint16_t did) {
   if(did >= DID_FORD_TYPE && did <= DID_FORD_VIN_CHUNK_LAST) {
     return true;
   }
-  if(did == DID_FORD_SW_DATE || did == DID_FORD_CALIBRATION_ID || did == DID_FORD_ROM_SIZE || did == DID_FORD_HARDWARE_ID) {
+  if(did == DID_FORD_SW_DATE || did == DID_FORD_PARTNUM_MIDDLE || did == DID_FORD_PARTNUM_SUFFIX || did == DID_FORD_PARTNUM_PREFIX) {
     return true;
   }
   return false;
@@ -177,8 +177,8 @@ typedef struct {
 
 static void encodeMode01Pid_00(uint8_t *txData) {
   txData[0] = 0x06;
-  txData[3] = 0xB8;
-  txData[4] = 0x3A;
+  txData[3] = 0x98;    // PIDs 01,04,05 (removed 03=FuelSysStatus for diesel)
+  txData[4] = 0x1A;    // PIDs 0C,0D,0F (removed 0B=MAP to avoid "MAP system" label)
   txData[5] = 0x80;
   txData[6] = 0x13;
 }
@@ -398,7 +398,8 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {FUEL_RAIL_PRES_ALT, encodeMode01FuelRailPressureAlt},
   {ABS_FUEL_RAIL_PRES, encodeMode01FuelRailPressureAlt},
   {FUEL_LEVEL, encodeMode01FuelLevel},
-  {INTAKE_PRESSURE, encodeMode01IntakePressure},
+  // INTAKE_PRESSURE (PID 0x0B) intentionally removed: Fordiag probes it
+  // regardless of bitmap and any positive response triggers "MAP system" label.
   {ENGINE_RPM, encodeMode01EngineRpm},
   {VEHICLE_SPEED, encodeMode01VehicleSpeed},
   {INTAKE_TEMP, encodeMode01IntakeTemp},
@@ -656,6 +657,137 @@ static void send22U32(uint32_t responseId, uint16_t did, uint32_t value) {
     deb("UDS 0x22 ident response DID=0x%04X U32=0x%08lX", did, (unsigned long)value);
     hal_deb_hex("UDS 0x22 ident resp payload", payload, (int)sizeof(payload), 16);
   }
+  iso_tp(responseId, (int)sizeof(payload), payload);
+}
+
+// ── Ford Part Number encoding for E217/E21A/E219 identification ──────
+// Fordiag reads the Ford part number in three pieces:
+//   E21A → ASCII prefix      (e.g. "XS4A")
+//   E217 → binary middle     (e.g. "12A650" → {0x12,0x0A,0x06,0x50})
+//   E219 → encoded suffix    (e.g. "AXB" → 2-byte Ford encoding)
+// It reconstructs PREFIX-MIDDLE-SUFFIX, looks it up in an internal
+// database, and fills model/type/subtype/etc. fields from the match.
+
+// Ford part number suffix character set (22 chars, no I/O/Q/W).
+static const char FORD_PARTNUM_CHARS[] = "ABCDEFGHJKLMNPRSTUVXYZ";
+#define FORD_PARTNUM_CHARSET_LEN 22
+
+// Reverse-lookup: character → index in FORD_PARTNUM_CHARS, or -1.
+static int fordPartCharIndex(char c) {
+  for(int i = 0; i < FORD_PARTNUM_CHARSET_LEN; i++) {
+    if(FORD_PARTNUM_CHARS[i] == c) return i;
+  }
+  return -1;
+}
+
+// Encode a 1-or-2-char suffix fragment into one byte.
+// "B" → high=0, low=1 → byte=1.  "AX" → high=1,low=19 → byte=1*22+19=41.
+static uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
+  if(len == 1) {
+    int idx = fordPartCharIndex(s[0]);
+    return (uint8_t)(idx >= 0 ? idx : 0);
+  }
+  if(len >= 2) {
+    int hi = fordPartCharIndex(s[0]);
+    int lo = fordPartCharIndex(s[1]);
+    if(hi < 0) hi = 0;
+    if(lo < 0) lo = 0;
+    return (uint8_t)((hi + 1) * FORD_PARTNUM_CHARSET_LEN + lo);
+  }
+  return 0;
+}
+
+// Split a Ford part number "PREFIX-MIDDLE-SUFFIX" into its three components.
+// Returns true on success. Pointers receive start positions and lengths.
+static bool fordPartNumberSplit(const char *pn,
+                                const char **prefixOut, int *prefixLen,
+                                const char **middleOut, int *middleLen,
+                                const char **suffixOut, int *suffixLen) {
+  if(pn == NULL) return false;
+  const char *dash1 = NULL, *dash2 = NULL;
+  for(const char *p = pn; *p; p++) {
+    if(*p == '-') {
+      if(!dash1)      dash1 = p;
+      else if(!dash2) dash2 = p;
+    }
+  }
+  if(!dash1 || !dash2) return false;
+  *prefixOut = pn;
+  *prefixLen = (int)(dash1 - pn);
+  *middleOut = dash1 + 1;
+  *middleLen = (int)(dash2 - dash1 - 1);
+  *suffixOut = dash2 + 1;
+  *suffixLen = (int)strlen(dash2 + 1);
+  return true;
+}
+
+// Send DID 0xE217 response: binary middle bytes of Ford part number.
+// The raw bytes are defined in config.h (ecu_PartNumMiddleHex) because
+// the Ford byte→string encoding (hex per byte, strip leading zero) is
+// ambiguous to reverse from the string alone.
+// Example: "XS4A-12A650-AXB" → response: 62 E2 17 12 0A 06 50
+static void sendE217PartNumMiddle(uint32_t responseId, uint16_t did) {
+  static const uint8_t midBytes[] = {ecu_PartNumMiddleHex};
+  int midLen = ecu_PartNumMiddleLen;
+  if(midLen > 8) midLen = 8;
+  uint8_t payload[3 + 8] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
+  memcpy(&payload[3], midBytes, (size_t)midLen);
+  deb("UDS 0x22 E217 partnum middle len=%d", midLen);
+  hal_deb_hex("UDS 0x22 E217 response", payload, 3 + midLen, 16);
+  iso_tp(responseId, 3 + midLen, payload);
+}
+
+// Send DID 0xE21A response: ASCII prefix of Ford part number.
+// Example: "XS4A-12A650-AXB" → response: 62 E2 1A 58 53 34 41 ("XS4A")
+static void sendE21APartNumPrefix(uint32_t responseId, uint16_t did) {
+  const char *prefix, *middle, *suffix;
+  int prefixLen, middleLen, suffixLen;
+  if(!fordPartNumberSplit(ecu_PartNumber, &prefix, &prefixLen, &middle, &middleLen, &suffix, &suffixLen)) {
+    negAck(responseId, UDS_SVC_READ_DATA_BY_ID, NRC_CONDITIONS_NOT_CORRECT);
+    return;
+  }
+  if(prefixLen > 16) prefixLen = 16;
+  uint8_t payload[3 + 16] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
+  memcpy(&payload[3], prefix, (size_t)prefixLen);
+  deb("UDS 0x22 E21A partnum prefix len=%d", prefixLen);
+  hal_deb_hex("UDS 0x22 E21A response", payload, 3 + prefixLen, 16);
+  iso_tp(responseId, 3 + prefixLen, payload);
+}
+
+// Send DID 0xE219 response: 2-byte encoded suffix of Ford part number.
+// Encoding per Fordiag's FordPartNumE219/FordPartNumByteToChars:
+//   Suffix is split into left part and right part (e.g. "AXB" → "AX","B").
+//   Each part → byte via charset lookup. Left byte is doubled (×2) per convention.
+// Example: "AXB" → leftByte=41*2=82=0x52, rightByte=1 → {0x52, 0x01}
+static void sendE219PartNumSuffix(uint32_t responseId, uint16_t did) {
+  const char *prefix, *middle, *suffix;
+  int prefixLen, middleLen, suffixLen;
+  if(!fordPartNumberSplit(ecu_PartNumber, &prefix, &prefixLen, &middle, &middleLen, &suffix, &suffixLen)) {
+    negAck(responseId, UDS_SVC_READ_DATA_BY_ID, NRC_CONDITIONS_NOT_CORRECT);
+    return;
+  }
+
+  uint8_t leftByte = 0, rightByte = 0;
+  if(suffixLen >= 3) {
+    // 3-char suffix like "AXB": left="AX"(2 chars), right="B"(1 char)
+    leftByte = fordPartSuffixCharsToByte(suffix, 2);
+    rightByte = fordPartSuffixCharsToByte(&suffix[2], suffixLen - 2);
+  } else if(suffixLen == 2) {
+    // 2-char suffix like "FC": left="F"(1 char), right="C"(1 char)
+    leftByte = fordPartSuffixCharsToByte(suffix, 1);
+    rightByte = fordPartSuffixCharsToByte(&suffix[1], 1);
+  } else if(suffixLen == 1) {
+    rightByte = fordPartSuffixCharsToByte(suffix, 1);
+  }
+  // Left byte is always even (doubled) per Ford convention.
+  leftByte = (uint8_t)(leftByte * 2);
+
+  uint8_t payload[5] = {
+    UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+    leftByte, rightByte
+  };
+  deb("UDS 0x22 E219 partnum suffix left=0x%02X right=0x%02X", leftByte, rightByte);
+  hal_deb_hex("UDS 0x22 E219 response", payload, (int)sizeof(payload), 8);
   iso_tp(responseId, (int)sizeof(payload), payload);
 }
 
@@ -983,6 +1115,14 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
   }
 
   if(mode == UDS_SVC_READ_DTC_INFO) {
+#ifdef FORDIAG_COMPAT_NO_UDS_DTC
+    // Fordiag author: "after connect do not response to command 19 = not support UDS".
+    // Returning NRC here tells Fordiag the ECU is not a UDS ECU,
+    // steering it toward the EEC-V identification path (E217/E21A/E219).
+    // DTCs remain accessible via standard OBD Modes 0x03/0x07/0x0A.
+    negAck(responseId, mode, NRC_SERVICE_NOT_SUPPORTED);
+    return true;
+#endif
     // Accept 1-byte "probe" requests: Fordiag sends just service 0x19
     // to check DTC support before the full identification sequence.
     if(numofBytes < 2) {
@@ -1180,12 +1320,18 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       send22FordDiagE3xx(responseId, did);
     } else if(did == DID_FORD_SW_DATE) {
       send22IdentField(responseId, did, ecu_SwDate, 8);
-    } else if(did == DID_FORD_CALIBRATION_ID) {
-      send22IdentField(responseId, did, ecu_CalibrationId, 16);
-    } else if(did == DID_FORD_HARDWARE_ID) {
-      send22IdentField(responseId, did, ecu_HardwareId, 8);
-    } else if(did == DID_FORD_ROM_SIZE) {
-      send22U32(responseId, did, FORD_ROM_SIZE_512K);
+    } else if(did == DID_FORD_PARTNUM_MIDDLE) {
+      // E217: Fordiag reads binary middle bytes of Ford part number
+      // (e.g. "12A650" → {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
+      sendE217PartNumMiddle(responseId, did);
+    } else if(did == DID_FORD_PARTNUM_PREFIX) {
+      // E21A: Fordiag reads ASCII prefix of Ford part number
+      // (e.g. "XS4A") for ECU identification.
+      sendE21APartNumPrefix(responseId, did);
+    } else if(did == DID_FORD_PARTNUM_SUFFIX) {
+      // E219: Fordiag reads 2-byte encoded suffix of Ford part number
+      // (e.g. "AXB" → {0x52, 0x01}) for ECU identification.
+      sendE219PartNumSuffix(responseId, did);
     } else if(did == DID_FORD_CATCH_CODE) {
       send22IdentField(responseId, did, ecu_CatchCode, 8);
     } else if(did == DID_FORD_PART_NUMBER) {

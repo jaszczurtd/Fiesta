@@ -143,9 +143,11 @@
 #define DID_FORD_VIN_CHUNK_BASE    0xE301   // E301-E305
 #define DID_FORD_VIN_CHUNK_LAST    0xE305
 #define DID_FORD_SW_DATE           0xE200
-#define DID_FORD_CALIBRATION_ID    0xE217
-#define DID_FORD_ROM_SIZE          0xE219
-#define DID_FORD_HARDWARE_ID       0xE21A
+// E217/E21A/E219: Fordiag uses these to read Ford part number components
+// for ECU identification (prefix-middle-suffix lookup in internal DB).
+#define DID_FORD_PARTNUM_MIDDLE    0xE217   // binary middle  (e.g. 12A650→0x120A0650)
+#define DID_FORD_PARTNUM_SUFFIX    0xE219   // encoded suffix  (2-byte Ford encoding)
+#define DID_FORD_PARTNUM_PREFIX    0xE21A   // ASCII prefix    (e.g. "XS4A")
 #define DID_FORD_CATCH_CODE        0xC92E
 #define DID_FORD_PART_NUMBER       0xC900
 
