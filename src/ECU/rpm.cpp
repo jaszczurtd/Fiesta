@@ -1,4 +1,5 @@
 #include "rpm.h"
+#include "ecuContext.h"
 
 // RPM formula (integer-only, no floats):
 // original: pulses * (60000 / RPM_REFRESH_INTERVAL) / CRANK_REVOLUTIONS - RPM_CORRECTION_VAL
@@ -13,76 +14,73 @@
 static SmartTimers rpmCycleTimer;
 
 static void cycleCheckTimerCallback(void) {
-  getRPMInstance()->resetRPMCycle();
+  RPM_resetRPMCycle(getRPMInstance());
   // SmartTimers is periodic by default, so stop it after first fire.
   rpmCycleTimer.abort();
 }
 #endif
 
-static RPM engineRPM;
 void createRPM(void) {
-  engineRPM.init();
+  RPM_init(getRPMInstance());
 }
 
 RPM *getRPMInstance(void) {
-  return &engineRPM;
+  return &getECUContext()->rpm;
 }
 
 void countRPM(void) {
-  getRPMInstance()->interrupt();
+  RPM_interrupt(getRPMInstance());
 }
 
-void RPM::resetRPMCycle(void) {
-  rpmCycle = false;
+void RPM_resetRPMCycle(RPM *self) {
+  self->rpmCycle = false;
 }
-
-RPM::RPM() : rpmValue(0) { }
 
 /*
  Hall sensor ISR — called on every crankshaft pulse edge.
  The 150ms time-window check and pulse snapshot MUST stay inside the ISR.
- Moving them to main loop causes jitter because the main loop 
+ Moving them to main loop causes jitter because the main loop
  iteration time varies with CAN, OBD, turbo, etc. workload. That makes
  the counting window non-deterministic and RPM readings unstable.
  hal_millis() is just a timer register read — cheap enough for an ISR.
  Only the integer RPM math is deferred to process() via the rpmReady flag.
 */
-void RPM::interrupt(void) {
+void RPM_interrupt(RPM *self) {
   unsigned long now = hal_micros();
-  unsigned long pulse = now - lastPulse;
-  lastPulse = now;
+  unsigned long pulse = now - self->lastPulse;
+  self->lastPulse = now;
 
-  if ((pulse >> 1) > shortPulse) {
-    RPMpulses++;
+  if ((pulse >> 1) > self->shortPulse) {
+    self->RPMpulses++;
   }
-  shortPulse = pulse;
+  self->shortPulse = pulse;
 
   unsigned long ms = hal_millis();
-  rpmAliveTime = ms + RESET_RPM_WATCHDOG_TIME;
-  if (ms - previousMillis >= RPM_REFRESH_INTERVAL) {
-    previousMillis = ms;
-    snapshotPulses = RPMpulses;
-    RPMpulses = 0;
-    rpmReady = true;
+  self->rpmAliveTime = ms + RESET_RPM_WATCHDOG_TIME;
+  if (ms - self->previousMillis >= RPM_REFRESH_INTERVAL) {
+    self->previousMillis = ms;
+    self->snapshotPulses = self->RPMpulses;
+    self->RPMpulses = 0;
+    self->rpmReady = true;
   }
 }
 
-void RPM::init(void) {
+void RPM_init(RPM *self) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
 
-  rpmValue = 0;
-  previousMillis = 0;
-  shortPulse = 0;
-  lastPulse = 0;
-  rpmAliveTime = 0;
-  RPMpulses = 0;
-  snapshotPulses = 0;
-  rpmReady = false;
+  self->rpmValue = 0;
+  self->previousMillis = 0;
+  self->shortPulse = 0;
+  self->lastPulse = 0;
+  self->rpmAliveTime = 0;
+  self->RPMpulses = 0;
+  self->snapshotPulses = 0;
+  self->rpmReady = false;
 
-  currentRPMSolenoid = 0;
-  rpmCycle = false;
+  self->currentRPMSolenoid = 0;
+  self->rpmCycle = false;
 #ifndef VP37
-  rpmPercentValue = 0;
+  self->rpmPercentValue = 0;
 #endif
 
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
@@ -91,44 +89,45 @@ void RPM::init(void) {
   rpmCycleTimer.begin(cycleCheckTimerCallback, STOP);
 #endif
 
-  setAccelMaxRPM();
+  RPM_setAccelMaxRPM(self);
 }
 
-void RPM::setAccelRPMPercentage(int percentage) {
-  currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
+void RPM_setAccelRPMPercentage(RPM *self, int percentage) {
+  self->currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
 }
 
-int RPM::getCurrentRPMSolenoid(void) {
-  return currentRPMSolenoid;
+int RPM_getCurrentRPMSolenoid(RPM *self) {
+  return self->currentRPMSolenoid;
 }
 
-void RPM::setAccelMaxRPM(void) {
-  setAccelRPMPercentage(MAX_RPM_PERCENT_VALUE);
+void RPM_setAccelMaxRPM(RPM *self) {
+  RPM_setAccelRPMPercentage(self, MAX_RPM_PERCENT_VALUE);
 }
 
-bool RPM::isEngineThrottlePressed(void) {
+static bool RPM_isEngineThrottlePressed(RPM *self) {
+  (void)self;
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
-int RPM::getCurrentRPM(void) {
-  return rpmValue;
+int RPM_getCurrentRPM(RPM *self) {
+  return self->rpmValue;
 }
 
-void RPM::process(void) {
-  if (rpmReady) {
-    rpmReady = false;
+void RPM_process(RPM *self) {
+  if (self->rpmReady) {
+    self->rpmReady = false;
 
-    int rpm = (snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
+    int rpm = (self->snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
     if (rpm < 0) rpm = 0;
     if (rpm > RPM_MAX_EVER) rpm = RPM_MAX_EVER;
     rpm = (rpm / 10) * 10;
 
-    rpmValue = rpm;
+    self->rpmValue = rpm;
   }
 
-  if (rpmAliveTime < (long)hal_millis()) {
-    rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
-    rpmValue = 0;
+  if (self->rpmAliveTime < (long)hal_millis()) {
+    self->rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
+    self->rpmValue = 0;
   }
 
 #ifndef VP37
@@ -144,45 +143,45 @@ void RPM::process(void) {
     desiredRPM = REGEN_RPM_VALUE;
   }
 
-  if(isEngineThrottlePressed() ||
-    getCurrentRPM() < RPM_MIN) {  
+  if(RPM_isEngineThrottlePressed(self) ||
+    RPM_getCurrentRPM(self) < RPM_MIN) {
       desiredRPM = PRESSED_PEDAL_RPM_VALUE;
-      setAccelRPMPercentage(ACCELLERATE_RPM_PERCENT_VALUE); //percent
-      valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
+      RPM_setAccelRPMPercentage(self, ACCELLERATE_RPM_PERCENT_VALUE); //percent
+      valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
       return;
   }
 
-  if(getCurrentRPM() != desiredRPM) {
-    rpmPercentValue = (int)((currentRPMSolenoid * 100) / PWM_RESOLUTION);
+  if(RPM_getCurrentRPM(self) != desiredRPM) {
+    self->rpmPercentValue = (int)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
 
-    if(getCurrentRPM() < desiredRPM) {
-      if(desiredRPM - getCurrentRPM() > MAX_RPM_DIFFERENCE) {
+    if(RPM_getCurrentRPM(self) < desiredRPM) {
+      if(desiredRPM - RPM_getCurrentRPM(self) > MAX_RPM_DIFFERENCE) {
 
-        if(!rpmCycle) {
-          rpmCycle = true;
+        if(!self->rpmCycle) {
+          self->rpmCycle = true;
 
-          rpmPercentValue += RPM_PERCENTAGE_CORRECTION_VAL;
-          if(rpmPercentValue > MAX_RPM_PERCENT_VALUE){
-            rpmPercentValue = MAX_RPM_PERCENT_VALUE;
+          self->rpmPercentValue += RPM_PERCENTAGE_CORRECTION_VAL;
+          if(self->rpmPercentValue > MAX_RPM_PERCENT_VALUE){
+            self->rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
-          setAccelRPMPercentage(rpmPercentValue);
+          RPM_setAccelRPMPercentage(self, self->rpmPercentValue);
           rpmCycleTimer.time(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE);
           rpmCycleTimer.restart();
         }
       }
     }
 
-    if(getCurrentRPM() > desiredRPM) {
-      if(getCurrentRPM() - desiredRPM > MAX_RPM_DIFFERENCE) {
+    if(RPM_getCurrentRPM(self) > desiredRPM) {
+      if(RPM_getCurrentRPM(self) - desiredRPM > MAX_RPM_DIFFERENCE) {
 
-        if(!rpmCycle) {
-          rpmCycle = true;
+        if(!self->rpmCycle) {
+          self->rpmCycle = true;
 
-          rpmPercentValue -= RPM_PERCENTAGE_CORRECTION_VAL;
-          if(rpmPercentValue < MIN_RPM_PERCENT_VALUE){
-            rpmPercentValue = MIN_RPM_PERCENT_VALUE;
+          self->rpmPercentValue -= RPM_PERCENTAGE_CORRECTION_VAL;
+          if(self->rpmPercentValue < MIN_RPM_PERCENT_VALUE){
+            self->rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
-          setAccelRPMPercentage(rpmPercentValue);
+          RPM_setAccelRPMPercentage(self, self->rpmPercentValue);
           rpmCycleTimer.time(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE);
           rpmCycleTimer.restart();
         }
@@ -190,19 +189,19 @@ void RPM::process(void) {
     }
   }
 
-  valToPWM(PIO_VP37_RPM, currentRPMSolenoid);
+  valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
 
 #if DEBUG
-  showDebug();
+  RPM_showDebug(self);
 #endif
 
 #endif /*VP37*/
 }
 
-bool RPM::isEngineRunning(void) {
-  return (getCurrentRPM() != 0);
+bool RPM_isEngineRunning(RPM *self) {
+  return (RPM_getCurrentRPM(self) != 0);
 }
 
-void RPM::showDebug() {
-  deb("rpm:%d current:%d", getCurrentRPM(), currentRPMSolenoid);
+void RPM_showDebug(RPM *self) {
+  deb("rpm:%d current:%d", RPM_getCurrentRPM(self), self->currentRPMSolenoid);
 }

@@ -9,24 +9,19 @@
 #include "tests.h"
 #include "engineFan.h"
 
-class engineHeater {
-public:
-  engineHeater();
-  void init();  
-  void process();
-  void showDebug();
-  void heater(bool enable, int level);
-
-private:
+typedef struct {
   bool heaterLoEnabled;
   bool heaterHiEnabled;
   bool lastHeaterLoEnabled;
   bool lastHeaterHiEnabled;
+} engineHeater;
 
-};
+void engineHeater_init(engineHeater *self);
+void engineHeater_process(engineHeater *self);
+void engineHeater_showDebug(engineHeater *self);
+void engineHeater_heater(engineHeater *self, bool enable, int level);
 
 engineHeater *getHeaterInstance(void);
 void createHeater(void);
-
 
 #endif

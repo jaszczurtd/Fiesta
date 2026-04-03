@@ -27,16 +27,16 @@
  */
 
 /* Helper: run process() then showDebug(), return true if lo heater is on */
-static bool heaterLoOn(engineHeater &h) {
-    h.process();
-    h.showDebug();
+static bool heaterLoOn(engineHeater *h) {
+    engineHeater_process(h);
+    engineHeater_showDebug(h);
     return strstr(hal_mock_deb_last_line(), "loEnabled:1") != NULL;
 }
 
 /* Helper: return true if hi heater is on (call after heaterLoOn or showDebug) */
-static bool heaterHiOn(engineHeater &h) {
-    h.process();
-    h.showDebug();
+static bool heaterHiOn(engineHeater *h) {
+    engineHeater_process(h);
+    engineHeater_showDebug(h);
     return strstr(hal_mock_deb_last_line(), "hiEnabled:1") != NULL;
 }
 
@@ -50,9 +50,9 @@ void setUp(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10)); /* engine running */
 
     /* Reset singleton states so fan and glow plugs start disabled */
-    getFanInstance()->init();
-    getGlowPlugsInstance()->init();
-    eheater.init();
+    engineFan_init(getFanInstance());
+    glowPlugs_init(getGlowPlugsInstance());
+    engineHeater_init(&eheater);
 }
 
 void tearDown(void) {}
@@ -61,14 +61,14 @@ void tearDown(void) {}
 
 void test_heater_off_above_stop_temp(void) {
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_HEATER_STOP + 1));
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 void test_heater_lo_on_at_stop_temp_boundary(void) {
     /* condition is strict >, so exactly TEMP_HEATER_STOP still allows Lo */
     setGlobalValue(F_COOLANT_TEMP, (float)TEMP_HEATER_STOP);
-    eheater.process();
-    eheater.showDebug();
+    engineHeater_process(&eheater);
+    engineHeater_showDebug(&eheater);
     const char *dbg = hal_mock_deb_last_line();
     TEST_ASSERT_NOT_NULL(strstr(dbg, "loEnabled:1"));
     TEST_ASSERT_NOT_NULL(strstr(dbg, "hiEnabled:0"));
@@ -76,23 +76,23 @@ void test_heater_lo_on_at_stop_temp_boundary(void) {
 
 void test_heater_off_low_voltage(void) {
     setGlobalValue(F_VOLTS, MINIMUM_VOLTS_AMOUNT - 0.5f);
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 void test_heater_off_engine_stopped(void) {
     setGlobalValue(F_RPM, 0.0f);
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 void test_heater_on_rpm_at_min_boundary(void) {
     /* strict < check: RPM == RPM_MIN still allows heating */
     setGlobalValue(F_RPM, (float)RPM_MIN);
-    TEST_ASSERT_TRUE(heaterLoOn(eheater));
+    TEST_ASSERT_TRUE(heaterLoOn(&eheater));
 }
 
 void test_heater_off_rpm_below_min_boundary(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN - 1));
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 void test_heater_off_when_fan_is_on(void) {
@@ -102,17 +102,17 @@ void test_heater_off_when_fan_is_on(void) {
      */
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
     setGlobalValue(F_COOLANT_TEMP, 30.0f);  /* valid, below FAN_START */
-    getFanInstance()->process();            /* turns fan on by air reason */
-    TEST_ASSERT_TRUE(getFanInstance()->isFanEnabled());
+    engineFan_process(getFanInstance());            /* turns fan on by air reason */
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(getFanInstance()));
 
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 void test_heater_off_when_glow_plugs_active(void) {
-    getGlowPlugsInstance()->initGlowPlugsTime(-10.0f);  /* starts heating */
-    TEST_ASSERT_TRUE(getGlowPlugsInstance()->isGlowPlugsHeating());
+    glowPlugs_initGlowPlugsTime(getGlowPlugsInstance(), -10.0f);  /* starts heating */
+    TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(getGlowPlugsInstance()));
 
-    TEST_ASSERT_FALSE(heaterLoOn(eheater));
+    TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
 // ── On-conditions and Hi/Lo selection ────────────────────────────────────────
@@ -120,13 +120,13 @@ void test_heater_off_when_glow_plugs_active(void) {
 void test_heater_lo_on_normal_cold_conditions(void) {
     /* 30°C: <= 53 → both lo and hi should be on */
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
-    TEST_ASSERT_TRUE(heaterLoOn(eheater));
+    TEST_ASSERT_TRUE(heaterLoOn(&eheater));
 }
 
 void test_heater_hi_on_very_cold_coolant(void) {
     /* coolant <= (int)(80/1.5) = 53 → hi also enabled */
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
-    TEST_ASSERT_TRUE(heaterHiOn(eheater));
+    TEST_ASSERT_TRUE(heaterHiOn(&eheater));
 }
 
 void test_heater_lo_only_when_moderately_cold(void) {
@@ -136,8 +136,8 @@ void test_heater_lo_only_when_moderately_cold(void) {
      * call process() — call process() once and then check the debug line.
      */
     setGlobalValue(F_COOLANT_TEMP, 60.0f);
-    eheater.process();
-    eheater.showDebug();
+    engineHeater_process(&eheater);
+    engineHeater_showDebug(&eheater);
     const char *dbg = hal_mock_deb_last_line();
     TEST_ASSERT_NOT_NULL(strstr(dbg, "loEnabled:1"));
     TEST_ASSERT_NOT_NULL(strstr(dbg, "hiEnabled:0"));
@@ -149,14 +149,14 @@ void test_heater_hi_boundary_exactly_at_split(void) {
      * At coolant == 54: condition fails → hi off.
      */
     setGlobalValue(F_COOLANT_TEMP, 53.0f);
-    eheater.process();
-    eheater.showDebug();
+    engineHeater_process(&eheater);
+    engineHeater_showDebug(&eheater);
     TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "hiEnabled:1"));
 
-    eheater.init();  /* reset lastHeater flags so next process() writes again */
+    engineHeater_init(&eheater);  /* reset lastHeater flags so next process() writes again */
     setGlobalValue(F_COOLANT_TEMP, 54.0f);
-    eheater.process();
-    eheater.showDebug();
+    engineHeater_process(&eheater);
+    engineHeater_showDebug(&eheater);
     TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "hiEnabled:0"));
 }
 

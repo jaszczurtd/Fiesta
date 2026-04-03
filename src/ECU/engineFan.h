@@ -13,21 +13,16 @@ enum {
   FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR
 };
 
-class engineFan {
-public:
-  engineFan();
-  void init();  
-  void process();
-  void showDebug();
-  bool isFanEnabled(void);
-  void fan(bool enable);
-
-private:
+typedef struct {
   int fanEnabled;
   int lastFanStatus;
+} engineFan;
 
-  int fanEnabledReason(void);
-};
+void engineFan_init(engineFan *self);
+void engineFan_process(engineFan *self);
+void engineFan_showDebug(engineFan *self);
+bool engineFan_isFanEnabled(engineFan *self);
+void engineFan_fan(engineFan *self, bool enable);
 
 engineFan *getFanInstance(void);
 void createFan(void);

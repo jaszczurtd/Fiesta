@@ -7,27 +7,20 @@
 #include "start.h"
 #include "tests.h"
 
-class heatedWindshields {
-public:
-  heatedWindshields();
-  void init();  
-  void process();
-  void showDebug();
-  void heatedWindow(bool enable, int side);
-  bool isHeatedWindowEnabled(void);
-  void heatedWindowMainLoop(void);
-
-private:
+typedef struct {
   bool heatedWindowEnabled;
   bool lastHeatedWindowEnabled;
   bool waitingForUnpress;
 
   int heatedWindowsOverallTimer;
   unsigned long lastHeatedWindowsSecond;
+} heatedWindshields;
 
-  void disableHeatedWindows(void);
-  bool isHeatedButtonPressed(void);
-};
+void heatedWindshields_init(heatedWindshields *self);
+void heatedWindshields_process(heatedWindshields *self);
+void heatedWindshields_showDebug(heatedWindshields *self);
+void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int side);
+bool heatedWindshields_isHeatedWindowEnabled(heatedWindshields *self);
 
 heatedWindshields *getHeatedWindshieldsInstance(void);
 void createHeatedWindshields(void);

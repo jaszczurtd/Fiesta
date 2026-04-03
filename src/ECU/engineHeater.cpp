@@ -1,63 +1,62 @@
 #include "engineHeater.h"
+#include "ecuContext.h"
 
 //-----------------------------------------------------------------------------
 // engine heater
 //-----------------------------------------------------------------------------
 
-static engineHeater heat;
 void createHeater(void) {
-  heat.init();
+  engineHeater_init(getHeaterInstance());
 }
 
 engineHeater *getHeaterInstance(void) {
-  return &heat;
+  return &getECUContext()->heater;
 }
 
-engineHeater::engineHeater() { }
-
-void engineHeater::init() {
-  heaterLoEnabled = heaterHiEnabled= lastHeaterLoEnabled = lastHeaterHiEnabled = false;
+void engineHeater_init(engineHeater *self) {
+  self->heaterLoEnabled = self->heaterHiEnabled =
+    self->lastHeaterLoEnabled = self->lastHeaterHiEnabled = false;
 }
 
-void engineHeater::heater(bool enable, int level) {
+void engineHeater_heater(engineHeater *self, bool enable, int level) {
+  (void)self;
   pcf8574_write(level, enable);
 }
 
-void engineHeater::process(void) {
+void engineHeater_process(engineHeater *self) {
   float coolant = getGlobalValue(F_COOLANT_TEMP);
   float volts = getGlobalValue(F_VOLTS);
   int engineRPM = getGlobalValue(F_RPM);
 
   if(coolant > TEMP_HEATER_STOP ||
-    getFanInstance()->isFanEnabled() ||
-    getGlowPlugsInstance()->isGlowPlugsHeating() ||
+    engineFan_isFanEnabled(getFanInstance()) ||
+    glowPlugs_isGlowPlugsHeating(getGlowPlugsInstance()) ||
     volts < MINIMUM_VOLTS_AMOUNT ||
     engineRPM < RPM_MIN) {
-    heaterLoEnabled = false;
-    heaterHiEnabled = false;
+    self->heaterLoEnabled = false;
+    self->heaterHiEnabled = false;
   } else {
 
     if(coolant <= (int)((float)(TEMP_HEATER_STOP) / 1.5f)) {
-      heaterLoEnabled = heaterHiEnabled = true;
+      self->heaterLoEnabled = self->heaterHiEnabled = true;
     } else {
-      heaterLoEnabled = true;
-      heaterHiEnabled = false;
+      self->heaterLoEnabled = true;
+      self->heaterHiEnabled = false;
     }
 
   }
 
-  if(lastHeaterHiEnabled != heaterHiEnabled) {
-    heater(heaterHiEnabled, PCF8574_O_HEATER_HI);
-    lastHeaterHiEnabled = heaterHiEnabled;
+  if(self->lastHeaterHiEnabled != self->heaterHiEnabled) {
+    engineHeater_heater(self, self->heaterHiEnabled, PCF8574_O_HEATER_HI);
+    self->lastHeaterHiEnabled = self->heaterHiEnabled;
   }
-  if(lastHeaterLoEnabled != heaterLoEnabled) {
-    heater(heaterLoEnabled, PCF8574_O_HEATER_LO);
-    lastHeaterLoEnabled = heaterLoEnabled;
+  if(self->lastHeaterLoEnabled != self->heaterLoEnabled) {
+    engineHeater_heater(self, self->heaterLoEnabled, PCF8574_O_HEATER_LO);
+    self->lastHeaterLoEnabled = self->heaterLoEnabled;
   }
 
 }
 
-void engineHeater::showDebug() {
-  deb("heaterStatus: loEnabled:%d hiEnabled:%d", heaterLoEnabled, heaterHiEnabled);
+void engineHeater_showDebug(engineHeater *self) {
+  deb("heaterStatus: loEnabled:%d hiEnabled:%d", self->heaterLoEnabled, self->heaterHiEnabled);
 }
-

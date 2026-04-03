@@ -1,36 +1,36 @@
 #include "engineFan.h"
+#include "ecuContext.h"
 
 //-----------------------------------------------------------------------------
 // fan
 //-----------------------------------------------------------------------------
 
-static engineFan fan;
 void createFan(void) {
-  fan.init();
+  engineFan_init(getFanInstance());
 }
 
 engineFan *getFanInstance(void) {
-  return &fan;
+  return &getECUContext()->fan;
 }
 
-engineFan::engineFan() { }
-
-void engineFan::init(void) {
-  fanEnabled = lastFanStatus = FAN_REASON_NONE;
+static int engineFan_fanEnabledReason(engineFan *self) {
+  return self->fanEnabled;
 }
 
-void engineFan::fan(bool enable) {
+void engineFan_init(engineFan *self) {
+  self->fanEnabled = self->lastFanStatus = FAN_REASON_NONE;
+}
+
+void engineFan_fan(engineFan *self, bool enable) {
+  (void)self;
   pcf8574_write(PCF8574_O_FAN, enable);
 }
 
-int engineFan::fanEnabledReason(void) {
-  return fanEnabled;
-}
-bool engineFan::isFanEnabled(void) {
-  return fanEnabled != FAN_REASON_NONE;  
+bool engineFan_isFanEnabled(engineFan *self) {
+  return self->fanEnabled != FAN_REASON_NONE;
 }
 
-void engineFan::process(void) {
+void engineFan_process(engineFan *self) {
 
   float coolant = getGlobalValue(F_COOLANT_TEMP);
   int rpm = getGlobalValue(F_RPM);
@@ -41,49 +41,49 @@ void engineFan::process(void) {
     //works only if the temp. sensor is plugged
     if(coolant > TEMP_LOWEST) {
 
-      if(isFanEnabled()) {
-        if(fanEnabled & FAN_REASON_AIR) {
+      if(engineFan_isFanEnabled(self)) {
+        if(self->fanEnabled & FAN_REASON_AIR) {
           if(air <= AIR_TEMP_FAN_STOP) {
-            fanEnabled &= ~FAN_REASON_AIR;
+            self->fanEnabled &= ~FAN_REASON_AIR;
           }
         }
 
-        if(fanEnabled & FAN_REASON_COOLANT) {
+        if(self->fanEnabled & FAN_REASON_COOLANT) {
           if(coolant <= TEMP_FAN_STOP) {
-            fanEnabled &= ~FAN_REASON_COOLANT;
+            self->fanEnabled &= ~FAN_REASON_COOLANT;
           }
         }
       } else {
-        if(!(fanEnabled & FAN_REASON_AIR)) {
+        if(!(self->fanEnabled & FAN_REASON_AIR)) {
           if(air > AIR_TEMP_FAN_START) {
-            fanEnabled |= FAN_REASON_AIR;
+            self->fanEnabled |= FAN_REASON_AIR;
           }
         }
 
-        if(!(fanEnabled & FAN_REASON_COOLANT)) {
+        if(!(self->fanEnabled & FAN_REASON_COOLANT)) {
           if(coolant > TEMP_FAN_START) {
-            fanEnabled |= FAN_REASON_COOLANT;
+            self->fanEnabled |= FAN_REASON_COOLANT;
           }
         }
       }
     } else {
       //temp sensor read fail, fan enabled by default
-      fanEnabled |= FAN_REASON_COOLANT;
+      self->fanEnabled |= FAN_REASON_COOLANT;
     }
   } else {
-    fanEnabled = FAN_REASON_NONE;    
+    self->fanEnabled = FAN_REASON_NONE;
   }
 
-  setGlobalValue(F_FAN_ENABLED, fanEnabled);
-  if(lastFanStatus != fanEnabled) {
-    fan(isFanEnabled());
-    lastFanStatus = fanEnabled;     
+  setGlobalValue(F_FAN_ENABLED, self->fanEnabled);
+  if(self->lastFanStatus != self->fanEnabled) {
+    engineFan_fan(self, engineFan_isFanEnabled(self));
+    self->lastFanStatus = self->fanEnabled;
 
-    showDebug();
+    engineFan_showDebug(self);
   }
 
 }
 
-void engineFan::showDebug(void) {
-  deb("fan enabled: %d reason: %d", isFanEnabled(), fanEnabled);     
+void engineFan_showDebug(engineFan *self) {
+  deb("fan enabled: %d reason: %d", engineFan_isFanEnabled(self), engineFan_fanEnabledReason(self));
 }

@@ -272,7 +272,7 @@ void readHighValues(void) {
     float v = getGlobalValue(a);
     switch(a) {
       case F_RPM:
-        v = getRPMInstance()->getCurrentRPM();
+        v = RPM_getCurrentRPM(getRPMInstance());
         setGlobalValue(a, v);
         break;
       case F_THROTTLE_POS:
@@ -362,7 +362,7 @@ void updateValsForDebug(void) {
     deb("%sOil temp. update: %dC", stamp, oil);
   }
 
-  bool running = getRPMInstance()->isEngineRunning();
+  bool running = RPM_isEngineRunning(getRPMInstance());
   if(lastIsEngineRunning != running) {
     lastIsEngineRunning = running;
     deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
@@ -407,4 +407,3 @@ float getVP37FuelTemperature(void) {
   val = steinhart(val, R_VP37_FUEL_A, R_VP37_FUEL_B, false);
   return roundfWithPrecisionTo(val, 1);
 }
-

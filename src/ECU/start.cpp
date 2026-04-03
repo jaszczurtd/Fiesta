@@ -1,5 +1,18 @@
 
 #include "start.h"
+#include "ecuContext.h"
+
+//-----------------------------------------------------------------------------
+// Central ECU context — single owner of all module instances
+//-----------------------------------------------------------------------------
+
+static ecu_context_t s_ctx;
+
+ecu_context_t *getECUContext(void) {
+  return &s_ctx;
+}
+
+//-----------------------------------------------------------------------------
 
 static unsigned long lastThreadSeconds = 0;
 static SmartTimers timerEverySecond;
@@ -10,21 +23,19 @@ static SmartTimers timerDebug;
 static SmartTimers timerCANUpdate;
 static SmartTimers timerCANLoop;
 static SmartTimers timerCANCheck;
-static Turbo turbo;
-static VP37Pump injectionPump;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
 void setupTimers(void) {
-watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                               hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER);  hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);    hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                        hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                            hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);          hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                  hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);                 hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                               hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER);    hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);      hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                          hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                              hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);            hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                    hal_delay_ms(CORE_OPERATION_DELAY);
+  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);                   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
 static int *wValues = NULL;
@@ -44,7 +55,7 @@ void initialization(void) {
   deb("EEPROM backend: RP2040 (%u bytes)", (unsigned)hal_eeprom_size());
 
   dtcManagerInit();
- 
+
   initTests();
 
   //this has to be invoked as soon as possible, and twice
@@ -66,7 +77,7 @@ void initialization(void) {
   resetEEPROM();
   #endif
 
-  initSDLogger(SD_CARD_CS); 
+  initSDLogger(SD_CARD_CS);
   if (!isSDLoggerInitialized()) {
     deb("SD Card failed, or not present");
   } else {
@@ -77,11 +88,11 @@ void initialization(void) {
     char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
     memset(dateAndTime, 0, sizeof(dateAndTime));
 
-    bool validDateAndTime = isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) && 
+    bool validDateAndTime = isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
       isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
 
     if(validDateAndTime) {
-      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", 
+      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s",
         getGPSDate(), getGPSTime());
     }
 
@@ -123,14 +134,14 @@ void initialization(void) {
   if(coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
-  getGlowPlugsInstance()->initGlowPlugsTime(coolant);
+  glowPlugs_initGlowPlugsTime(getGlowPlugsInstance(), coolant);
 
 #ifdef VP37
-  injectionPump.init();
+  VP37Pump_init(&s_ctx.injectionPump);
 #endif
   watchdog_feed();
 
-  turbo.init();
+  Turbo_init(&s_ctx.turbo);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -147,7 +158,7 @@ void initialization(void) {
   setupTimers();
 
   deb("System temperature:%.1fC", rroundf(hal_read_chip_temp()));
-  
+
   setStartedCore0();
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
@@ -174,7 +185,7 @@ void looper(void) {
   updateWatchdogCore0();
 
   statusVariable0 = 1;
-  getGlowPlugsInstance()->process();
+  glowPlugs_process(getGlowPlugsInstance());
 
   // Drain GPS serial FIFO every iteration — the PIO SoftwareSerial
   // buffer is only 32 bytes; at 9600 baud it overflows in ~33 ms.
@@ -205,17 +216,17 @@ void looper(void) {
   statusVariable0 = 4;
   obdLoop();
   statusVariable0 = 5;
-  getFanInstance()->process();
+  engineFan_process(getFanInstance());
   statusVariable0 = 6;
-  getHeaterInstance()->process();
+  engineHeater_process(getHeaterInstance());
   statusVariable0 = 7;
-  getHeatedWindshieldsInstance()->process();
+  heatedWindshields_process(getHeatedWindshieldsInstance());
   statusVariable0 = 8;
 
 #ifdef VP37
-  injectionPump.showDebug();
+  VP37Pump_showDebug(&s_ctx.injectionPump);
 #endif
-  turbo.showDebug();
+  Turbo_showDebug(&s_ctx.turbo);
 
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);
@@ -225,7 +236,7 @@ void initialization1(void) {
   createRPM();
 
   setStartedCore1();
-  
+
   deb("Second core initialized");
 }
 
@@ -245,14 +256,13 @@ void looper1(void) {
   }
 
   statusVariable1 = 1;
-  turbo.process();
+  Turbo_process(&s_ctx.turbo);
   statusVariable1 = 2;
-  getRPMInstance()->process();
+  RPM_process(getRPMInstance());
 #ifdef VP37
-  injectionPump.process();
+  VP37Pump_process(&s_ctx.injectionPump);
 #endif
   statusVariable1 = 3;
 
   hal_idle();
 }
-

@@ -47,9 +47,8 @@
 void measureFuelTemp(void);
 void measureVoltage(void);
 
-class VP37Pump {
-private:
-  PIDController adjustController;
+typedef struct {
+  PIDController adjustController;  // C++ type — stays for Phase 1
 
   bool vp37Initialized;
   int lastThrottle;
@@ -62,22 +61,12 @@ private:
   float lastVolts;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
+} VP37Pump;
 
-  int getMaxAdjustometerPWMVal(void);
-  int getAdjustometerStable(void);
-  int makeCalibrationValue(void);
-  float getCalibrationError(int from);
-  bool isInRangeOf(float desired, float val);
-  void throttleCycle(void);
-  void initVP37(void);
-  
-public:
-  VP37Pump();
-  void init();  
-  void process();
-  void enableVP37(bool enable);
-  bool isVP37Enabled(void);
-  void showDebug(void);
-};
+void VP37Pump_init(VP37Pump *self);
+void VP37Pump_process(VP37Pump *self);
+void VP37Pump_enableVP37(VP37Pump *self, bool enable);
+bool VP37Pump_isVP37Enabled(VP37Pump *self);
+void VP37Pump_showDebug(VP37Pump *self);
 
 #endif

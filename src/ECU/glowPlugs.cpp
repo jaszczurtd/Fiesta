@@ -1,141 +1,142 @@
 #include "glowPlugs.h"
+#include "ecuContext.h"
 
 //-----------------------------------------------------------------------------
 // glow plugs
 //-----------------------------------------------------------------------------
 
-static glowPlugs glowP;
 void createGlowPlugs(void) {
-  glowP.init();
+  glowPlugs_init(getGlowPlugsInstance());
 }
 
 glowPlugs *getGlowPlugsInstance(void) {
-  return &glowP;
+  return &getECUContext()->glowP;
 }
 
-glowPlugs::glowPlugs() { }
-
-void glowPlugs::init() {
-  glowPlugsTime = 0;
-  glowPlugsLampTime = 0;
-  lastSecond = 0;
-  warmAfterStart = false;
-  initialized = false;
-}
-
-void glowPlugs::enableGlowPlugs(bool enable) {
-  pcf8574_write(PCF8574_O_GLOW_PLUGS, enable);
-}
-
-void glowPlugs::glowPlugsLamp(bool enable) {
-  pcf8574_write(PCF8574_O_GLOW_PLUGS_LAMP, enable);
-}
-
-bool glowPlugs::isGlowPlugsHeating(void) {
-  return (glowPlugsTime > 0);
-}
-
-void glowPlugs::calculateGlowPlugsTime(float temp) {
+static void glowPlugs_calculateGlowPlugsTime(glowPlugs *self, float temp) {
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    glowPlugsTime = (int)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
+    self->glowPlugsTime = (int)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
   } else {
-    glowPlugsTime = 0;
+    self->glowPlugsTime = 0;
   }
 }
 
-void glowPlugs::calculateGlowPlugLampTime(float temp) {
+static void glowPlugs_calculateGlowPlugLampTime(glowPlugs *self, float temp) {
   if (temp <= TEMP_VERY_LOW) {
     // Maximum time at very low temperature
-    glowPlugsLampTime = MAX_LAMP_TIME;
+    self->glowPlugsLampTime = MAX_LAMP_TIME;
   } else if (temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
     // Proportional reduction in time within the range -20 to 10 degrees
     float tempDiff = TEMP_MINIMUM_FOR_GLOW_PLUGS - temp;
-    float scaleFactor = tempDiff / (TEMP_MINIMUM_FOR_GLOW_PLUGS * 2);  // Scale factor based on temperature difference
-    glowPlugsLampTime = MAX_LAMP_TIME * scaleFactor;
+    float scaleFactor = tempDiff / (TEMP_MINIMUM_FOR_GLOW_PLUGS * 2);
+    self->glowPlugsLampTime = MAX_LAMP_TIME * scaleFactor;
   } else {
     // Minimum lamp time for higher temperatures
-    glowPlugsLampTime = MIN_LAMP_TIME;
+    self->glowPlugsLampTime = MIN_LAMP_TIME;
   }
 
   // Ensure the lamp time is non-negative
-  glowPlugsLampTime = (glowPlugsLampTime < 0) ? 0 : glowPlugsLampTime;
+  self->glowPlugsLampTime = (self->glowPlugsLampTime < 0) ? 0 : self->glowPlugsLampTime;
 }
 
-void glowPlugs::initGlowPlugsTime(float temp) {
+void glowPlugs_init(glowPlugs *self) {
+  self->glowPlugsTime = 0;
+  self->glowPlugsLampTime = 0;
+  self->lastGlowPlugsTime = 0;
+  self->lastGlowPlugsLampTime = 0;
+  self->lastSecond = 0;
+  self->warmAfterStart = false;
+  self->initialized = false;
+}
 
-  calculateGlowPlugsTime(temp);
+void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable) {
+  (void)self;
+  pcf8574_write(PCF8574_O_GLOW_PLUGS, enable);
+}
 
-  if(glowPlugsTime > 0) {
-    enableGlowPlugs(true);
-    glowPlugsLamp(true);
+void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable) {
+  (void)self;
+  pcf8574_write(PCF8574_O_GLOW_PLUGS_LAMP, enable);
+}
 
-    calculateGlowPlugLampTime(temp);
+bool glowPlugs_isGlowPlugsHeating(glowPlugs *self) {
+  return (self->glowPlugsTime > 0);
+}
 
-    lastSecond = getSeconds();
+void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp) {
+
+  glowPlugs_calculateGlowPlugsTime(self, temp);
+
+  if(self->glowPlugsTime > 0) {
+    glowPlugs_enableGlowPlugs(self, true);
+    glowPlugs_glowPlugsLamp(self, true);
+
+    glowPlugs_calculateGlowPlugLampTime(self, temp);
+
+    self->lastSecond = getSeconds();
   }
 
-  initialized = true;
+  self->initialized = true;
 }
 
-void glowPlugs::process(void) {
+void glowPlugs_process(glowPlugs *self) {
 
-  if(!initialized) {
+  if(!self->initialized) {
     return;
   }
 
   float temp = getGlobalValue(F_COOLANT_TEMP);
   if(temp > TEMP_COLD_ENGINE) {
-    warmAfterStart = true;
+    self->warmAfterStart = true;
   }
 
-  if(!warmAfterStart) {
+  if(!self->warmAfterStart) {
     if(temp <= TEMP_COLD_ENGINE &&
       getGlobalValue(F_RPM) > RPM_MIN) {
-        calculateGlowPlugsTime(temp);
-        if(glowPlugsTime > 0) {
-          enableGlowPlugs(true);
-          warmAfterStart = true;
+        glowPlugs_calculateGlowPlugsTime(self, temp);
+        if(self->glowPlugsTime > 0) {
+          glowPlugs_enableGlowPlugs(self, true);
+          self->warmAfterStart = true;
         }
     }
   }
 
-  if(glowPlugsTime >= 0 || glowPlugsLampTime >= 0) {
+  if(self->glowPlugsTime >= 0 || self->glowPlugsLampTime >= 0) {
     bool pr = false;
 
-    if(lastGlowPlugsTime != glowPlugsTime) {
-      lastGlowPlugsTime = glowPlugsTime;
+    if(self->lastGlowPlugsTime != self->glowPlugsTime) {
+      self->lastGlowPlugsTime = self->glowPlugsTime;
       pr = true;
     }
-    if(lastGlowPlugsLampTime != glowPlugsLampTime) {
-      lastGlowPlugsLampTime = glowPlugsLampTime;
+    if(self->lastGlowPlugsLampTime != self->glowPlugsLampTime) {
+      self->lastGlowPlugsLampTime = self->glowPlugsLampTime;
       pr = true;
     }
 
     if(pr) {
-      deb("glowPlugsTime: %d %d", glowPlugsTime, glowPlugsLampTime);
+      deb("glowPlugsTime: %d %d", self->glowPlugsTime, self->glowPlugsLampTime);
     }
   }
 
-  if(glowPlugsTime >= 0) {
-    if(getSeconds() != lastSecond) {
-      lastSecond = getSeconds();
+  if(self->glowPlugsTime >= 0) {
+    if(getSeconds() != self->lastSecond) {
+      self->lastSecond = getSeconds();
 
-      if(glowPlugsTime-- <= 0) {
-        enableGlowPlugs(false);
+      if(self->glowPlugsTime-- <= 0) {
+        glowPlugs_enableGlowPlugs(self, false);
 
         deb("glow plugs disabled");
       }
 
-      if(glowPlugsLampTime >= 0 && glowPlugsLampTime-- <= 0) {
-        glowPlugsLamp(false);
+      if(self->glowPlugsLampTime >= 0 && self->glowPlugsLampTime-- <= 0) {
+        glowPlugs_glowPlugsLamp(self, false);
 
         deb("glow plugs lamp off");
       }
     }
-  }  
+  }
 }
 
-void glowPlugs::showDebug() {
-  deb("glowPlugs: %d", isGlowPlugsHeating());
+void glowPlugs_showDebug(glowPlugs *self) {
+  deb("glowPlugs: %d", glowPlugs_isGlowPlugsHeating(self));
 }
-

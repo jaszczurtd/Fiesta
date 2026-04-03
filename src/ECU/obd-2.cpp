@@ -249,7 +249,7 @@ static void encodeMode01FuelPressure(uint8_t *txData) {
 static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[0] = 0x04;
   RPM *rpm = getRPMInstance();
-  int p = rpm->isEngineRunning() ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
+  int p = RPM_isEngineRunning(rpm) ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
   txData[3] = MSB(p);
   txData[4] = LSB(p);
 }

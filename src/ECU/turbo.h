@@ -15,18 +15,12 @@
 
 //#define JUST_TEST_BY_THROTTLE
 
-
 #define SOLENOID_UPDATE_TIME 700
 #define PRESSURE_LIMITER_FACTOR 2
 #define MIN_TEMPERATURE_CORRECTION 30
 
-class Turbo {
-private:
-
+typedef struct {
   unsigned long lastSolenoidUpdate;
-
-  int scaleTurboValues(int value);
-  int correctPressureFactor(void);
 
   int engineThrottlePercentageValue;
   int posThrottle;
@@ -39,16 +33,11 @@ private:
   int lastRPM_index;
   int lastPressurePercentage;
   int lastN75;
+} Turbo;
 
-public:
-  Turbo();
-  void init();  
-  void process();
-  void turboTest(void);
-  void showDebug(void);
+void Turbo_init(Turbo *self);
+void Turbo_process(Turbo *self);
+void Turbo_turboTest(Turbo *self);
+void Turbo_showDebug(Turbo *self);
 
-
-};
-
-#endif // TURBO_CONTROL_H
-
+#endif

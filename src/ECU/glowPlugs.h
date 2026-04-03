@@ -8,34 +8,26 @@
 #include "sensors.h"
 #include "tests.h"
 
-class glowPlugs {
-public:
-  glowPlugs();
-  void init();  
-  void process();
-  void showDebug();
-  void enableGlowPlugs(bool enable);
-  void glowPlugsLamp(bool enable);
-  bool isGlowPlugsHeating(void);
-  void initGlowPlugsTime(float temp);
-  void glowPlugsMainLoop(void);
-
-private:
+typedef struct {
   int glowPlugsTime;
   int glowPlugsLampTime;
   int lastGlowPlugsTime;
-  int lastGlowPlugsLampTime;  
+  int lastGlowPlugsLampTime;
 
   unsigned long lastSecond;
   bool warmAfterStart;
   bool initialized;
+} glowPlugs;
 
-  void calculateGlowPlugsTime(float temp);
-  void calculateGlowPlugLampTime(float temp);
-};
+void glowPlugs_init(glowPlugs *self);
+void glowPlugs_process(glowPlugs *self);
+void glowPlugs_showDebug(glowPlugs *self);
+void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable);
+void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable);
+bool glowPlugs_isGlowPlugsHeating(glowPlugs *self);
+void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp);
 
 glowPlugs *getGlowPlugsInstance(void);
 void createGlowPlugs(void);
-
 
 #endif

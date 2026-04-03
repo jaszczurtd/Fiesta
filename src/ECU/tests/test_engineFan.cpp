@@ -31,7 +31,7 @@ void setUp(void) {
     setGlobalValue(F_COOLANT_TEMP, 0.0f);
     setGlobalValue(F_RPM, 0.0f);
     setGlobalValue(F_INTAKE_TEMP, 0.0f);
-    efan.init();
+    engineFan_init(&efan);
 }
 
 void tearDown(void) {}
@@ -41,28 +41,28 @@ void tearDown(void) {}
 void test_fan_off_when_engine_stopped(void) {
     setGlobalValue(F_RPM, 0.0f);
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 5));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_off_at_rpm_min_boundary(void) {
     /* RPM == RPM_MIN: condition is strict > so fan must remain off */
     setGlobalValue(F_RPM, (float)RPM_MIN);
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 5));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_disabled_when_rpm_drops(void) {
     /* Turn on fan, then drop RPM → must turn off */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 5));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 
     setGlobalValue(F_RPM, 0.0f);
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 // ── Coolant temperature reason ────────────────────────────────────────────────
@@ -70,39 +70,39 @@ void test_fan_disabled_when_rpm_drops(void) {
 void test_fan_off_below_coolant_start_threshold(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START - 1));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_on_by_coolant_overheating(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_off_after_coolant_cools_down(void) {
     /* Enable via coolant, then cool below stop threshold */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_STOP - 1));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_hysteresis_coolant_stays_on_between_thresholds(void) {
     /* Enable, then set coolant between stop and start → must stay on */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_STOP + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 }
 
 // ── Air temperature reason ────────────────────────────────────────────────────
@@ -111,32 +111,32 @@ void test_fan_on_by_high_intake_air(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, 30.0f);  /* below coolant start */
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_off_after_intake_air_cools(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_STOP - 1));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_hysteresis_air_stays_on_between_thresholds(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 
     setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_STOP + 1));
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 }
 
 // ── Sensor failure ────────────────────────────────────────────────────────────
@@ -145,16 +145,16 @@ void test_fan_forced_on_with_sensor_fault(void) {
     /* coolant == TEMP_LOWEST signals a disconnected sensor → force fan on */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)TEMP_LOWEST);
-    efan.process();
-    TEST_ASSERT_TRUE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
 }
 
 void test_fan_not_forced_on_just_above_lowest(void) {
     /* One degree above sentinel is still cold but a valid reading → no force */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_LOWEST + 1));
-    efan.process();
-    TEST_ASSERT_FALSE(efan.isFanEnabled());
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────

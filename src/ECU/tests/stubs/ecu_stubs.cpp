@@ -9,43 +9,89 @@
  */
 
 #include "rpm.h"
+#include "ecuContext.h"
 
-// ── RPM class stub implementations ────────────────────────────────────────────
+// ── Central context stub (start.cpp is excluded in tests) ────────────────────
 
-RPM::RPM()
-    : rpmValue(0)
-    , shortPulse(0)
-    , lastPulse(0)
-    , previousMillis(0)
-    , rpmAliveTime(0)
-    , RPMpulses(0)
-    , snapshotPulses(0)
-    , rpmReady(false)
-    , currentRPMSolenoid(0)
-    , rpmCycle(false)
+static ecu_context_t s_ctx;
+
+ecu_context_t *getECUContext(void) {
+    return &s_ctx;
+}
+
+// ── RPM stub implementations ─────────────────────────────────────────────────
+
+void RPM_init(RPM *self) {
+    self->rpmValue = 0;
+    self->shortPulse = 0;
+    self->lastPulse = 0;
+    self->previousMillis = 0;
+    self->rpmAliveTime = 0;
+    self->RPMpulses = 0;
+    self->snapshotPulses = 0;
+    self->rpmReady = false;
+    self->currentRPMSolenoid = 0;
+    self->rpmCycle = false;
 #ifndef VP37
-    , rpmPercentValue(0)
+    self->rpmPercentValue = 0;
 #endif
-{}
+}
 
-void RPM::init()                         {}
-void RPM::process()                      {}
-void RPM::showDebug()                    {}
-void RPM::setAccelMaxRPM()               {}
-void RPM::resetRPMEngine()               {}
-void RPM::interrupt()                    {}
-void RPM::resetRPMCycle()                {}
-void RPM::setAccelRPMPercentage(int)     {}
-int  RPM::getCurrentRPMSolenoid()        { return 0; }
-int  RPM::getCurrentRPM()               { return rpmValue; }
-bool RPM::isEngineRunning()              { return rpmValue != 0; }
-bool RPM::isEngineThrottlePressed()      { return false; }
+void RPM_process(RPM *self) {
+    (void)self;
+}
+
+void RPM_showDebug(RPM *self) {
+    (void)self;
+}
+
+void RPM_setAccelMaxRPM(RPM *self) {
+    (void)self;
+}
+
+void RPM_resetRPMEngine(RPM *self) {
+    (void)self;
+}
+
+void RPM_interrupt(RPM *self) {
+    (void)self;
+}
+
+void RPM_resetRPMCycle(RPM *self) {
+    if (self) {
+        self->rpmCycle = false;
+    }
+}
+
+void RPM_setAccelRPMPercentage(RPM *self, int percentage) {
+    (void)self;
+    (void)percentage;
+}
+
+int RPM_getCurrentRPMSolenoid(RPM *self) {
+    return self->currentRPMSolenoid;
+}
+
+int RPM_getCurrentRPM(RPM *self) {
+    return self->rpmValue;
+}
+
+bool RPM_isEngineRunning(RPM *self) {
+    return RPM_getCurrentRPM(self) != 0;
+}
+
 #ifndef VP37
-void RPM::stabilizeRPM()                 {}
+void RPM_stabilizeRPM(RPM *self) {
+    (void)self;
+}
 #endif
 
 void watchdog_feed(void) {}
 
-static RPM s_engineRPM;
-RPM  *getRPMInstance(void) { return &s_engineRPM; }
-void  createRPM(void)      { s_engineRPM.init(); }
+RPM *getRPMInstance(void) {
+    return &getECUContext()->rpm;
+}
+
+void createRPM(void) {
+    RPM_init(getRPMInstance());
+}
