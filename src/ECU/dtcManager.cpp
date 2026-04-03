@@ -1,4 +1,5 @@
 #include "dtcManager.h"
+#include "gps.h"
 
 #define DTC_EEPROM_MAGIC         0x4454434Du // "DTCM"
 #define DTC_EEPROM_VERSION       2u
@@ -13,19 +14,21 @@
 #define DTC_KV_SCHEMA_KEY        0xD700u
 #define DTC_KV_SCHEMA_VERSION    1u
 #define DTC_KV_KEY_FLAGS_BASE    0xD800u
+#define DTC_KV_KEY_TIMESTAMP_BASE 0xD900u
 
 typedef struct {
   uint16_t code;
   bool active;
   bool stored;
   bool permanent;
+  uint32_t firstOccurrence;  // unix epoch from GPS, 0 = unknown
 } dtc_entry_t;
 
 static dtc_entry_t s_dtcs[] = {
-  {DTC_OBD_CAN_INIT_FAIL, false, false, false},
-  {DTC_PCF8574_COMM_FAIL, false, false, false},
-  {DTC_PWM_CHANNEL_NOT_INIT, false, false, false},
-  {DTC_DPF_COMM_LOST, false, false, false},
+  {DTC_OBD_CAN_INIT_FAIL, false, false, false, 0},
+  {DTC_PCF8574_COMM_FAIL, false, false, false, 0},
+  {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0},
+  {DTC_DPF_COMM_LOST, false, false, false, 0},
 };
 
 static const uint8_t s_dtcCount = sizeof(s_dtcs) / sizeof(s_dtcs[0]);
@@ -37,6 +40,10 @@ static uint16_t dtcSlotAddr(uint8_t idx) {
 
 static uint16_t dtcKvKey(uint8_t idx) {
   return (uint16_t)(DTC_KV_KEY_FLAGS_BASE + idx);
+}
+
+static uint16_t dtcKvTimestampKey(uint8_t idx) {
+  return (uint16_t)(DTC_KV_KEY_TIMESTAMP_BASE + idx);
 }
 
 static int findDtcIndex(uint16_t code) {
@@ -65,7 +72,11 @@ static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
 }
 
 static bool saveDtcToKv(uint8_t idx) {
-  return hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
+  bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
+  if(s_dtcs[idx].firstOccurrence != 0) {
+    ok = hal_kv_set_u32(dtcKvTimestampKey(idx), s_dtcs[idx].firstOccurrence) && ok;
+  }
+  return ok;
 }
 
 static bool saveAllToKv(void) {
@@ -81,6 +92,7 @@ static void resetAllState(void) {
     s_dtcs[i].active = false;
     s_dtcs[i].stored = false;
     s_dtcs[i].permanent = false;
+    s_dtcs[i].firstOccurrence = 0;
   }
 }
 
@@ -112,6 +124,10 @@ static bool loadAllFromKv(void) {
     }
     applyFlagsToIndex(i, (uint8_t)flags);
     s_dtcs[i].active = false;
+
+    uint32_t ts = 0u;
+    hal_kv_get_u32(dtcKvTimestampKey(i), &ts);
+    s_dtcs[i].firstOccurrence = ts;
   }
   return true;
 }
@@ -177,6 +193,10 @@ void dtcManagerSetActive(uint16_t code, bool active) {
     if(!s_dtcs[idx].stored) {
       s_dtcs[idx].stored = true;
       changed = true;
+      // Record GPS timestamp on first occurrence
+      if(s_dtcs[idx].firstOccurrence == 0) {
+        s_dtcs[idx].firstOccurrence = gpsGetEpoch();
+      }
     }
     if(!s_dtcs[idx].permanent) {
       s_dtcs[idx].permanent = true;
@@ -199,6 +219,7 @@ void dtcManagerClearAll(void) {
   resetAllState();
   for(uint8_t i = 0; i < s_dtcCount; i++) {
     hal_kv_delete(dtcKvKey(i));
+    hal_kv_delete(dtcKvTimestampKey(i));
   }
   writeKvSchemaVersion();
   deb("DTC memory cleared");
@@ -266,4 +287,16 @@ uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes
   }
 
   return idx;
+}
+
+uint32_t dtcManagerGetTimestamp(uint16_t code) {
+  if(!s_dtcInitialized) {
+    dtcManagerInit();
+  }
+
+  int idx = findDtcIndex(code);
+  if(idx < 0) {
+    return 0;
+  }
+  return s_dtcs[idx].firstOccurrence;
 }

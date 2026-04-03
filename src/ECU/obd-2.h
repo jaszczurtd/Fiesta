@@ -35,6 +35,7 @@
 #define UDS_SVC_ECU_RESET              0x11
 #define UDS_SVC_READ_DATA_BY_LOCAL_ID  0x12   // KWP2000
 #define UDS_SVC_CLEAR_DTC              0x14
+#define KWP_SVC_READ_DTC_BY_STATUS     0x18   // KWP2000
 #define UDS_SVC_READ_DTC_INFO          0x19
 #define UDS_SVC_READ_DATA_BY_ID        0x22
 #define UDS_SVC_READ_MEMORY_BY_ADDR    0x23   // Ford SCP DMR
@@ -51,6 +52,7 @@
 #define UDS_RSP_ECU_RESET              0x51
 #define UDS_RSP_READ_DATA_BY_LOCAL_ID  0x52   // KWP2000
 #define UDS_RSP_CLEAR_DTC              0x54
+#define KWP_RSP_READ_DTC_BY_STATUS     0x58   // KWP2000
 #define UDS_RSP_READ_DTC_INFO          0x59
 #define UDS_RSP_READ_DATA_BY_ID        0x62
 #define UDS_RSP_READ_MEMORY_BY_ADDR    0x63   // Ford SCP DMR
@@ -153,7 +155,13 @@
 
 // ── Ford DD0x DIDs — vehicle telemetry (CAN ECU specific) ──────────
 #define DID_FORD_TOTDIST           0xDD01   // Total distance (3 bytes, km)
+#define DID_FORD_FUEL_TEMP         0xDD02   // Fuel temperature (1 byte, +40 offset, °C)
+#define DID_FORD_OIL_PRESSURE      0xDD03   // Oil pressure (2 bytes, kPa ×10)
+#define DID_FORD_BOOST             0xDD04   // Boost pressure (2 bytes, bar ×1000)
 #define DID_FORD_OUTTMP            0xDD05   // External temperature (1 byte, +40 offset)
+#define DID_FORD_DPF_PRESSURE      0xDD06   // DPF differential pressure (2 bytes, Pa)
+#define DID_FORD_BOOST_DESIRED     0xDD07   // Desired boost pressure (2 bytes, bar ×1000)
+#define DID_FORD_BOOST_PERCENT     0xDD08   // Boost duty cycle (1 byte, 0-100 %)
 
 // Ford F4xx identification block DIDs
 #define DID_F4_MODEL               0xF400
@@ -374,5 +382,23 @@
 
 void obdInit(int retries);
 void obdLoop(void);
+
+#ifdef OBD_ENABLE_TOTDIST
+uint32_t obdGetTotalDistanceKm(void);
+void     obdSetTotalDistanceKm(uint32_t km);
+#endif
+
+// Mode 01 PID encoder (payload bytes only, without service/PID header).
+bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen);
+
+// DTC payload builder for Modes 03/07/0A.
+int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, int maxLen);
+
+// Ford part number helpers (used by E217/E21A/E219 encoding).
+bool fordPartNumberSplit(const char *pn,
+                         const char **prefixOut, int *prefixLen,
+                         const char **middleOut, int *middleLen,
+                         const char **suffixOut, int *suffixLen);
+uint8_t fordPartSuffixCharsToByte(const char *s, int len);
 
 #endif

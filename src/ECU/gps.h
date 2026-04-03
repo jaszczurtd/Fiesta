@@ -17,5 +17,6 @@ float getCurrentCarSpeed(void);
 const char *getGPSDate(void);
 const char *getGPSTime(void);
 bool isGPSAvailable(void);
+uint32_t gpsGetEpoch(void);
 
 #endif

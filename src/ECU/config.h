@@ -20,11 +20,18 @@
 
 // Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
 // Approximate mileage for a 2001 Ford Fiesta Mk5.
-#define ecu_TotalDistanceKm  200000u
+// Enable OBD_ENABLE_TOTDIST to expose via DID DD01; use getter/setter at runtime.
+// Disabled: ForDiag shows hardcoded value with no way to read real odometer.
+//#define OBD_ENABLE_TOTDIST
+#define ecu_TotalDistanceKmDefault  200000u
 
 // Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
 // This steers Fordiag toward E217/E21A/E219 part number DB lookup.
 #define FORDIAG_COMPAT_NO_UDS_DTC
+
+// Optional verbose debug output (uncomment to enable):
+//#define OBD_VERBOSE_IDENT_DEBUG   // detailed identification field hex dumps
+//#define OBD_VERBOSE_RX_DEBUG      // raw hex of every incoming CAN frame
 
 // Ford E217 binary representation of part number middle section.
 // Each byte → hex with leading zero stripped → concatenated = middle string.

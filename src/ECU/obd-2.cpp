@@ -60,6 +60,18 @@ typedef struct {
 static iso_tp_ctx_t s_isoTp = {};
 static uint32_t s_activeRequestId = LISTEN_ID;
 
+#ifdef OBD_ENABLE_TOTDIST
+static uint32_t s_totalDistanceKm = ecu_TotalDistanceKmDefault;
+
+uint32_t obdGetTotalDistanceKm(void) {
+  return s_totalDistanceKm;
+}
+
+void obdSetTotalDistanceKm(uint32_t km) {
+  s_totalDistanceKm = km;
+}
+#endif
+
 static bool initialized = false;
 void obdInit(int retries) {
 
@@ -143,6 +155,7 @@ static uint8_t stMinToMs(uint8_t stMin) {
   return 0;
 }
 
+#ifdef OBD_VERBOSE_IDENT_DEBUG
 static bool isFordDiagIdentificationDid(uint16_t did) {
   if(did == DID_FORD_MODEL || did == DID_PART_NUMBER || did == DID_SW_VERSION || did == DID_VIN || did == DID_FORD_CATCH_CODE) {
     return true;
@@ -167,6 +180,7 @@ static bool isFordDiagIdentificationDid(uint16_t did) {
 static bool isFordDiagIdentificationLocalId(uint8_t localId) {
   return (localId == KWP_LID_CALIB_BLOCK || localId == KWP_LID_COMPACT_IDENT || localId == KWP_LID_SUPPORTED_LIST || (localId >= KWP_LID_CALIBRATION_ID && localId <= KWP_LID_COPYRIGHT));
 }
+#endif
 
 typedef void (*mode01_encoder_t)(uint8_t *txData);
 
@@ -178,7 +192,7 @@ typedef struct {
 static void encodeMode01Pid_00(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x98;    // PIDs 01,04,05 (removed 03=FuelSysStatus for diesel)
-  txData[4] = 0x1A;    // PIDs 0C,0D,0F (removed 0B=MAP to avoid "MAP system" label)
+  txData[4] = 0x3A;    // PIDs 0B,0C,0D,0F
   txData[5] = 0x80;
   txData[6] = 0x13;
 }
@@ -216,6 +230,16 @@ static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[3] = int(getGlobalValue(F_COOLANT_TEMP) + 40);
 }
 
+static void encodeMode01IntakePressure(uint8_t *txData) {
+  // PID 0x0B: 1 byte, kPa absolute (0-255)
+  // F_PRESSURE is gauge bar (above atmosphere); convert: kPa_abs = bar*100 + 101
+  int kpa = int(getGlobalValue(F_PRESSURE) * 100.0f) + 101;
+  if(kpa < 0) kpa = 0;
+  if(kpa > 255) kpa = 255;
+  txData[0] = 0x03;
+  txData[3] = (uint8_t)kpa;
+}
+
 static void encodeMode01FuelPressure(uint8_t *txData) {
   // PID 0x0A: gauge fuel pressure, 1 byte, kPa = 3*A. Not applicable for diesel VP37.
   txData[0] = 0x03;
@@ -237,13 +261,6 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
     fuelPercentage = 100;
   }
   txData[3] = percentToGivenVal(fuelPercentage, 255);
-}
-
-static void encodeMode01IntakePressure(uint8_t *txData) {
-  txData[0] = 0x03;
-  // F_PRESSURE is gauge pressure in bar; OBD PID 0x0B expects absolute kPa.
-  int intake_Pressure = hal_constrain((int)((getGlobalValue(F_PRESSURE) + 1.013f) * 100.0f), 0, 255);
-  txData[3] = intake_Pressure;
 }
 
 static void encodeMode01EngineRpm(uint8_t *txData) {
@@ -349,10 +366,12 @@ static void encodeMode01Pid_61_80(uint8_t *txData) {
 
 static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[0] = 0x04;
-  txData[3] = 0x40;
-  txData[4] = 0x00;
-  txData[5] = 0x00;
-  txData[6] = 0x00;
+  // PID 0x7C: DPF temperature bank 1, formula = (A*256+B)/10 - 40 °C
+  int raw = (int)((getGlobalValue(F_DPF_TEMP) + 40.0f) * 10.0f);
+  if(raw < 0) raw = 0;
+  if(raw > 65535) raw = 65535;
+  txData[3] = MSB(raw);
+  txData[4] = LSB(raw);
 }
 
 static void encodeMode01Pid_81_A0(uint8_t *txData) {
@@ -398,8 +417,7 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {FUEL_RAIL_PRES_ALT, encodeMode01FuelRailPressureAlt},
   {ABS_FUEL_RAIL_PRES, encodeMode01FuelRailPressureAlt},
   {FUEL_LEVEL, encodeMode01FuelLevel},
-  // INTAKE_PRESSURE (PID 0x0B) intentionally removed: Fordiag probes it
-  // regardless of bitmap and any positive response triggers "MAP system" label.
+  {INTAKE_PRESSURE, encodeMode01IntakePressure},
   {ENGINE_RPM, encodeMode01EngineRpm},
   {VEHICLE_SPEED, encodeMode01VehicleSpeed},
   {INTAKE_TEMP, encodeMode01IntakeTemp},
@@ -453,7 +471,7 @@ static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
 
 // Encode mode 01 PID payload bytes only (without 0x41 and PID).
 // Returns true when PID has a registered encoder.
-static bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
+bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
   if(out == NULL || outLen == NULL) {
     return false;
   }
@@ -624,10 +642,12 @@ static void send22Field(uint32_t responseId, uint16_t did, const char *str, int 
 
   uint8_t payload[3 + 40] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
   packField(&payload[3], str, width);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   if(isFordDiagIdentificationDid(did)) {
     deb("UDS 0x22 ident response DID=0x%04X width=%d", did, width);
     hal_deb_hex("UDS 0x22 ident resp payload", payload, 3 + width, 36);
   }
+#endif
   iso_tp(responseId, 3 + width, payload);
 }
 
@@ -639,10 +659,12 @@ static void send22IdentField(uint32_t responseId, uint16_t did, const char *str,
 
   uint8_t payload[3 + 40] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
   packFieldPad(&payload[3], str, width, FORD_IDENT_PAD);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   if(isFordDiagIdentificationDid(did)) {
     deb("UDS 0x22 ident response DID=0x%04X width=%d", did, width);
     hal_deb_hex("UDS 0x22 ident resp payload", payload, 3 + width, 36);
   }
+#endif
   iso_tp(responseId, 3 + width, payload);
 }
 
@@ -653,10 +675,12 @@ static void send22U32(uint32_t responseId, uint16_t did, uint32_t value) {
     0, 0, 0, 0
   };
   hal_u32_to_bytes_be(value, &payload[3]);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   if(isFordDiagIdentificationDid(did)) {
     deb("UDS 0x22 ident response DID=0x%04X U32=0x%08lX", did, (unsigned long)value);
     hal_deb_hex("UDS 0x22 ident resp payload", payload, (int)sizeof(payload), 16);
   }
+#endif
   iso_tp(responseId, (int)sizeof(payload), payload);
 }
 
@@ -682,7 +706,7 @@ static int fordPartCharIndex(char c) {
 
 // Encode a 1-or-2-char suffix fragment into one byte.
 // "B" → high=0, low=1 → byte=1.  "AX" → high=1,low=19 → byte=1*22+19=41.
-static uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
+uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
   if(len == 1) {
     int idx = fordPartCharIndex(s[0]);
     return (uint8_t)(idx >= 0 ? idx : 0);
@@ -699,7 +723,7 @@ static uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
 
 // Split a Ford part number "PREFIX-MIDDLE-SUFFIX" into its three components.
 // Returns true on success. Pointers receive start positions and lengths.
-static bool fordPartNumberSplit(const char *pn,
+bool fordPartNumberSplit(const char *pn,
                                 const char **prefixOut, int *prefixLen,
                                 const char **middleOut, int *middleLen,
                                 const char **suffixOut, int *suffixLen) {
@@ -732,8 +756,10 @@ static void sendE217PartNumMiddle(uint32_t responseId, uint16_t did) {
   if(midLen > 8) midLen = 8;
   uint8_t payload[3 + 8] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
   memcpy(&payload[3], midBytes, (size_t)midLen);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   deb("UDS 0x22 E217 partnum middle len=%d", midLen);
   hal_deb_hex("UDS 0x22 E217 response", payload, 3 + midLen, 16);
+#endif
   iso_tp(responseId, 3 + midLen, payload);
 }
 
@@ -749,8 +775,10 @@ static void sendE21APartNumPrefix(uint32_t responseId, uint16_t did) {
   if(prefixLen > 16) prefixLen = 16;
   uint8_t payload[3 + 16] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF)};
   memcpy(&payload[3], prefix, (size_t)prefixLen);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   deb("UDS 0x22 E21A partnum prefix len=%d", prefixLen);
   hal_deb_hex("UDS 0x22 E21A response", payload, 3 + prefixLen, 16);
+#endif
   iso_tp(responseId, 3 + prefixLen, payload);
 }
 
@@ -786,8 +814,10 @@ static void sendE219PartNumSuffix(uint32_t responseId, uint16_t did) {
     UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
     leftByte, rightByte
   };
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   deb("UDS 0x22 E219 partnum suffix left=0x%02X right=0x%02X", leftByte, rightByte);
   hal_deb_hex("UDS 0x22 E219 response", payload, (int)sizeof(payload), 8);
+#endif
   iso_tp(responseId, (int)sizeof(payload), payload);
 }
 
@@ -799,7 +829,9 @@ static void send12LocalField(uint32_t responseId, uint8_t localId, const char *s
 
   uint8_t payload[2 + 60] = {UDS_RSP_READ_DATA_BY_LOCAL_ID, localId};
   packFieldPad(&payload[2], str, width, FORD_IDENT_PAD);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   hal_deb_hex("KWP 0x12 local response", payload, 2 + width, 40);
+#endif
   iso_tp(responseId, 2 + width, payload);
 }
 
@@ -900,7 +932,9 @@ static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrTy
   readScpDmrByte(dmrType, (uint16_t)(addr + 3), &b3);
 
   uint8_t rsp[8] = {0x07, UDS_RSP_READ_MEMORY_BY_ADDR, MSB(addr), LSB(addr), b0, b1, b2, b3};
+#ifdef OBD_VERBOSE_IDENT_DEBUG
   hal_deb_hex("SCP 0x23/0x63 response", rsp, (int)sizeof(rsp), 16);
+#endif
   hal_can_send(obdCan, responseId, 8, rsp);
 }
 
@@ -1114,6 +1148,45 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     return true;
   }
 
+  if(mode == KWP_SVC_READ_DTC_BY_STATUS) {
+    // KWP2000 readDiagnosticTroubleCodesByStatus (ISO 14230-3)
+    // Request: 18 statusOfDTC groupHi groupLo
+    if(!requireMinLength(responseId, mode, numofBytes, 4)) {
+      return true;
+    }
+
+    uint8_t statusOfDtc = data[2];
+    uint16_t group = ((uint16_t)data[3] << 8) | (uint16_t)data[4];
+    (void)group; // FF00/FFFF = powertrain/all; we report all regardless
+
+    // statusOfDtc is a bitmask: 0x00 = report all, 0x01 = testFailed (active),
+    // 0x08 = confirmedDTC (stored). Treat 0x00 as "all stored".
+    dtc_kind_t kind = DTC_KIND_STORED;
+    if(statusOfDtc & 0x01) {
+      kind = DTC_KIND_ACTIVE;
+    }
+
+    uint16_t codes[8] = {0};
+    uint8_t count = dtcManagerGetCodes(kind, codes, 8);
+    deb("KWP 0x18 statusOfDtc=0x%02X group=0x%04X kind=%d count=%u",
+        statusOfDtc, group, (int)kind, count);
+
+    // Response (ISO 14230-3): 58 numberOfDTC [dtcHi dtcLo statusOfDTC]...
+    uint8_t payload[40] = {0};
+    int p = 0;
+    payload[p++] = KWP_RSP_READ_DTC_BY_STATUS;
+    payload[p++] = count;
+
+    for(uint8_t i = 0; i < count && (p + 2) < (int)sizeof(payload); i++) {
+      payload[p++] = MSB(codes[i]);
+      payload[p++] = LSB(codes[i]);
+      payload[p++] = (kind == DTC_KIND_ACTIVE) ? 0x01 : 0x08;
+    }
+
+    iso_tp(responseId, p, payload);
+    return true;
+  }
+
   if(mode == UDS_SVC_READ_DTC_INFO) {
 #ifdef FORDIAG_COMPAT_NO_UDS_DTC
     // Fordiag author: "after connect do not response to command 19 = not support UDS".
@@ -1206,14 +1279,18 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     deb("UDS 0x22 DID=0x%04X len=%d", did, numofBytes);
     // Detect multi-DID requests: service(1) + N*DID(2) means numofBytes > 3 for N>1.
     if(numofBytes > 3) {
+#ifdef OBD_VERBOSE_IDENT_DEBUG
       int didCount = (numofBytes - 1) / 2;
       deb("UDS 0x22 MULTI-DID detected: %d DIDs in request (only 1st processed!)", didCount);
       hal_deb_hex("UDS 0x22 multi-DID raw", data, (int)numofBytes + 1, 16);
+#endif
     }
+#ifdef OBD_VERBOSE_IDENT_DEBUG
     if(isFordDiagIdentificationDid(did)) {
       deb("UDS 0x22 ident request DID=0x%04X reqId=0x%03lX", did, (unsigned long)s_activeRequestId);
       hal_deb_hex("UDS 0x22 ident request raw", data, (int)numofBytes + 1, 16);
     }
+#endif
     if(did == DID_VIN) {
       uint8_t payload[] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_VIN >> 8), (uint8_t)(DID_VIN & 0xFF),
@@ -1223,8 +1300,10 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       for(int a = 0; a < 17 && a < (int)strlen(vehicle_Vin); a++) {
         payload[3 + a] = uint8_t(vehicle_Vin[a]);
       }
+#ifdef OBD_VERBOSE_IDENT_DEBUG
       deb("UDS 0x22 F190 VIN='%s'", vehicle_Vin);
       hal_deb_hex("UDS 0x22 F190 payload", payload, 20, 24);
+#endif
       iso_tp(responseId, 20, payload);
     } else if(did == DID_ACTIVE_SESSION) {
       uint8_t udsRsp[] = {0x04, UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_ACTIVE_SESSION >> 8), (uint8_t)(DID_ACTIVE_SESSION & 0xFF), udsSession, PAD, PAD, PAD};
@@ -1358,9 +1437,10 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     } else if(did == DID_FORD_PART_NUMBER) {
       send22IdentField(responseId, did, ecu_PartNumber, 16);
     } else if(did == DID_FORD_TOTDIST) {
+#ifdef OBD_ENABLE_TOTDIST
       // DD01: Total distance (odometer), 3 bytes big-endian unsigned km.
       // Per Fordiag author: "3bytova!" — unusual 3-byte format.
-      uint32_t km = ecu_TotalDistanceKm;
+      uint32_t km = obdGetTotalDistanceKm();
       uint8_t payload[6] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)((km >> 16) & 0xFF),
@@ -1369,6 +1449,9 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       };
       deb("UDS 0x22 DD01 TOTDIST=%lu km", (unsigned long)km);
       iso_tp(responseId, (int)sizeof(payload), payload);
+#else
+      negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+#endif
     } else if(did == DID_FORD_OUTTMP) {
       // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
       // ECU has no outside temp sensor; use intake temp as best proxy.
@@ -1378,6 +1461,54 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
         (uint8_t)raw
       };
       deb("UDS 0x22 DD05 OUTTMP raw=%d (%.1f°C)", raw, getGlobalValue(F_INTAKE_TEMP));
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_FUEL_TEMP) {
+      // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
+      int raw = hal_constrain((int)(getGlobalValue(F_FUEL_TEMP) + 40.0f), 0, 255);
+      uint8_t payload[4] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)raw
+      };
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_OIL_PRESSURE) {
+      // DD03: Oil pressure, 2 bytes big-endian, kPa × 10.
+      int raw = hal_constrain((int)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
+      uint8_t payload[5] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+      };
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_BOOST) {
+      // DD04: Boost/intake pressure, 2 bytes big-endian, bar × 1000.
+      int raw = hal_constrain((int)(getGlobalValue(F_PRESSURE) * 1000.0f), 0, 65535);
+      uint8_t payload[5] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+      };
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_DPF_PRESSURE) {
+      // DD06: DPF differential pressure, 2 bytes big-endian, Pa.
+      int raw = hal_constrain((int)(getGlobalValue(F_DPF_PRESSURE) * 1000.0f), 0, 65535);
+      uint8_t payload[5] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+      };
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_BOOST_DESIRED) {
+      // DD07: Desired boost pressure, 2 bytes big-endian, bar × 1000.
+      int raw = hal_constrain((int)(getGlobalValue(F_PRESSURE_DESIRED) * 1000.0f), 0, 65535);
+      uint8_t payload[5] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+      };
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_BOOST_PERCENT) {
+      // DD08: Boost duty cycle percentage, 1 byte 0-100.
+      int pct = hal_constrain((int)getGlobalValue(F_PRESSURE_PERCENTAGE), 0, 100);
+      uint8_t payload[4] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)pct
+      };
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_ECU_CAPABILITIES) {
       // DID 0x0200 collides with SCP_PID_CODES_COUNT — must return NRC here
@@ -1401,10 +1532,12 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
 
     uint8_t localId = data[2];
     deb("KWP 0x12 localId=0x%02X", localId);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
     if(isFordDiagIdentificationLocalId(localId)) {
       deb("KWP 0x12 ident request localId=0x%02X reqId=0x%03lX", localId, (unsigned long)s_activeRequestId);
       hal_deb_hex("KWP 0x12 ident request raw", data, (int)numofBytes + 1, 16);
     }
+#endif
 
     switch(localId) {
       case KWP_LID_CALIBRATION_ID:  send12LocalField(responseId, localId, ecu_CalibrationId, 16); return true;
@@ -1441,8 +1574,10 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
         packFieldPad(&resp[2],  ecu_SwVersion,       4, FORD_IDENT_PAD);
         packFieldPad(&resp[6],  ecu_SwDate,          8, FORD_IDENT_PAD);
         packFieldPad(&resp[14], ecu_CalibrationId,  16, FORD_IDENT_PAD);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
         deb("KWP 0x12/0x33 fields: sw=%s swDate=%s cal=%s", ecu_SwVersion, ecu_SwDate, ecu_CalibrationId);
         hal_deb_hex("KWP 0x12/0x33 response", resp, (int)sizeof(resp), 40);
+#endif
         iso_tp(responseId, (int)sizeof(resp), resp);
         return true;
       }
@@ -1461,7 +1596,9 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
           KWP_LID_VIN, KWP_LID_MODEL, KWP_LID_TYPE, KWP_LID_SUBTYPE, KWP_LID_CATCH_CODE, KWP_LID_VIN_ALT,
           KWP_LID_SW_VERSION, KWP_LID_SW_DATE_ALT, KWP_LID_CALIBRATION_ALT, KWP_LID_PART_NUMBER_ALT, KWP_LID_HARDWARE_ID, KWP_LID_ROM_SIZE, KWP_LID_COPYRIGHT
         };
+#ifdef OBD_VERBOSE_IDENT_DEBUG
         hal_deb_hex("KWP 0x12/0xFF response", resp, (int)sizeof(resp), 8);
+#endif
         iso_tp(responseId, (int)sizeof(resp), resp);
         return true;
       }
@@ -1564,8 +1701,9 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
 void obdReq(uint32_t requestId, uint8_t *data){
   uint8_t numofBytes = data[0];
 
-  // Log raw hex of every incoming frame for diagnostics.
+#ifdef OBD_VERBOSE_RX_DEBUG
   hal_deb_hex("RX raw", data, (numofBytes <= 8) ? (numofBytes + 1) : 8, 16);
+#endif
 
   // Ignore ISO-TP control/segmentation frames arriving as normal OBD requests.
   if(numofBytes > 8) {
