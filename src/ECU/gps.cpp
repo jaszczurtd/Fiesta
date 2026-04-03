@@ -6,6 +6,9 @@
 NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
 NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 
+static void getAdjustedDateTime(int *year, int *month, int *day,
+                                int *hour, int *minute, int *second);
+
 static bool isGPSInitialized = false;
 void initGPS(void) {
   if(!isGPSInitialized) {
@@ -17,6 +20,21 @@ void initGPS(void) {
 void getGPSData(void) {
 
   hal_gps_update();
+
+  bool gpsAvailable = isGPSAvailable();
+  if(gpsAvailable) {
+    int year, month, day, hour, minute, second;
+    getAdjustedDateTime(&year, &month, &day, &hour, &minute, &second);
+    setGlobalValue(F_LATITUDE, (float)hal_gps_latitude());
+    setGlobalValue(F_LONGITUDE, (float)hal_gps_longitude());
+    setGlobalValue(F_GPS_TIME, (float)(hour * 100 + minute));
+    setGlobalValue(F_GPS_DATE, (float)(((year % 100) * 10000) + (month * 100) + day));
+  } else {
+    setGlobalValue(F_LATITUDE, 0.0f);
+    setGlobalValue(F_LONGITUDE, 0.0f);
+    setGlobalValue(F_GPS_TIME, 0.0f);
+    setGlobalValue(F_GPS_DATE, 0.0f);
+  }
 
   if(hal_gps_location_is_valid()) {
     if (hal_gps_location_is_updated()){

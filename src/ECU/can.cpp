@@ -11,6 +11,7 @@ static bool dpfConnected = false;
 static bool dpfEverSeen = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
 
+
 static hal_can_t canBus = NULL;
 static bool initialized = false;
 void canInit(int retries) {
@@ -26,6 +27,98 @@ void canInit(int retries) {
     deb("CAN BUS Shield init ok!");
   } else {
     derr("CAN BUS Shield init problem. CAN communication would not be possible.");
+  }
+}
+
+uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
+  int yy = (int)(dateYYMMDD / 10000u);
+  int mm = (int)((dateYYMMDD / 100u) % 100u);
+  int dd = (int)(dateYYMMDD % 100u);
+  int hh = (int)(timeHHMM / 100u);
+  int mi = (int)(timeHHMM % 100u);
+
+  if(mm < 1 || mm > 12 || dd < 1 || dd > 31 || hh < 0 || hh > 23 || mi < 0 || mi > 59) {
+    return 0u;
+  }
+
+  int yearOffset = yy - 20; // base year 2020
+  if(yearOffset < 0) {
+    yearOffset = 0;
+  } else if(yearOffset > 15) {
+    yearOffset = 15;
+  }
+
+  return ((uint32_t)yearOffset << 20)
+       | ((uint32_t)mm << 16)
+       | ((uint32_t)dd << 11)
+       | ((uint32_t)hh << 6)
+       | (uint32_t)mi;
+}
+
+static int32_t gpsCoordToMicroDeg(float coord, int32_t minVal, int32_t maxVal) {
+  int32_t scaled = (int32_t)roundf(coord * 1000000.0f);
+  if(scaled < minVal) {
+    return minVal;
+  }
+  if(scaled > maxVal) {
+    return maxVal;
+  }
+  return scaled;
+}
+
+bool CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
+  if(outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
+    return false;
+  }
+
+  int32_t latMicro = gpsCoordToMicroDeg(getGlobalValue(F_LATITUDE), -90000000, 90000000);
+  uint32_t latRaw = (uint32_t)latMicro;
+
+  memset(outBuf, 0, (size_t)outLen);
+  outBuf[CAN_FRAME_NUMBER] = frameNo;
+  outBuf[CAN_FRAME_GPS_EXT_LAT_B3] = (uint8_t)((latRaw >> 24) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LAT_B2] = (uint8_t)((latRaw >> 16) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LAT_B1] = (uint8_t)((latRaw >> 8) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LAT_B0] = (uint8_t)(latRaw & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_STATUS] = (uint8_t)getGlobalValue(F_GPS_IS_AVAILABLE);
+  return true;
+}
+
+bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
+  if(outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
+    return false;
+  }
+
+  int32_t lonMicro = gpsCoordToMicroDeg(getGlobalValue(F_LONGITUDE), -180000000, 180000000);
+  uint32_t lonRaw = (uint32_t)lonMicro;
+  uint32_t packedDt = CAN_packGpsDateTime((uint32_t)getGlobalValue(F_GPS_DATE),
+                                          (uint32_t)getGlobalValue(F_GPS_TIME));
+
+  memset(outBuf, 0, (size_t)outLen);
+  outBuf[CAN_FRAME_NUMBER] = frameNo;
+  outBuf[CAN_FRAME_GPS_EXT_LON_B3] = (uint8_t)((lonRaw >> 24) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LON_B2] = (uint8_t)((lonRaw >> 16) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LON_B1] = (uint8_t)((lonRaw >> 8) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_LON_B0] = (uint8_t)(lonRaw & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_DT_HI] = (uint8_t)((packedDt >> 16) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_DT_MD] = (uint8_t)((packedDt >> 8) & 0xFFu);
+  outBuf[CAN_FRAME_GPS_EXT_DT_LO] = (uint8_t)(packedDt & 0xFFu);
+  return true;
+}
+
+void CAN_sendGpsExtended(void) {
+  if(!initialized) {
+    return;
+  }
+
+  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
+  uint8_t lonTimeBuf[CAN_FRAME_MAX_LENGTH] = {0};
+
+  if(CAN_buildGpsLatFrame(frameNumber++, latBuf, (int)sizeof(latBuf))) {
+    hal_can_send(canBus, CAN_ID_GPS_EXT_LAT, CAN_FRAME_MAX_LENGTH, latBuf);
+  }
+  if(CAN_buildGpsLonTimeFrame(frameNumber++, lonTimeBuf, (int)sizeof(lonTimeBuf))) {
+    hal_can_send(canBus, CAN_ID_GPS_EXT_LON_TIME, CAN_FRAME_MAX_LENGTH, lonTimeBuf);
   }
 }
 

@@ -162,6 +162,7 @@ void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
   hal_gpio_write(HAL_LED_PIN, alertBlink);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
+  CAN_sendGpsExtended();
 
 #if SYSTEM_TEMP
   deb("System temperature: %f", hal_read_chip_temp());
