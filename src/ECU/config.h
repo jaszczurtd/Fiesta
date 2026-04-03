@@ -18,6 +18,10 @@
 #define ecu_Copyright       "FORD MOTOR CO"
 #define ecu_CatchCode       "FD18A3C5"
 
+// Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
+// Approximate mileage for a 2001 Ford Fiesta Mk5.
+#define ecu_TotalDistanceKm  200000u
+
 // Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
 // This steers Fordiag toward E217/E21A/E219 part number DB lookup.
 #define FORDIAG_COMPAT_NO_UDS_DTC

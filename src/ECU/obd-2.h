@@ -151,6 +151,10 @@
 #define DID_FORD_CATCH_CODE        0xC92E
 #define DID_FORD_PART_NUMBER       0xC900
 
+// ── Ford DD0x DIDs — vehicle telemetry (CAN ECU specific) ──────────
+#define DID_FORD_TOTDIST           0xDD01   // Total distance (3 bytes, km)
+#define DID_FORD_OUTTMP            0xDD05   // External temperature (1 byte, +40 offset)
+
 // Ford F4xx identification block DIDs
 #define DID_F4_MODEL               0xF400
 #define DID_F4_TYPE                0xF401

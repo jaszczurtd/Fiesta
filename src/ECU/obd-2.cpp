@@ -1319,7 +1319,28 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     } else if(did >= DID_FORD_TYPE && did <= DID_FORD_VIN_CHUNK_LAST) {
       send22FordDiagE3xx(responseId, did);
     } else if(did == DID_FORD_SW_DATE) {
-      send22IdentField(responseId, did, ecu_SwDate, 8);
+      // E200: Fordiag decodes SW date as 3 binary bytes (NOT ASCII!):
+      //   byte 0 = month (lower nibble), byte 1 = day, byte 2 = year-1900.
+      // Per Fordiag author's ECU_ReadSWVersion FoxPro source.
+      // Parse ecu_SwDate "YYYYMMDD" → binary {month, day, year-1900}.
+      {
+        int year = 0, month = 0, day = 0;
+        if(strlen(ecu_SwDate) >= 8) {
+          year  = (ecu_SwDate[0]-'0')*1000 + (ecu_SwDate[1]-'0')*100 +
+                  (ecu_SwDate[2]-'0')*10   + (ecu_SwDate[3]-'0');
+          month = (ecu_SwDate[4]-'0')*10   + (ecu_SwDate[5]-'0');
+          day   = (ecu_SwDate[6]-'0')*10   + (ecu_SwDate[7]-'0');
+        }
+        uint8_t payload[6] = {
+          UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+          (uint8_t)(month & 0x0F),
+          (uint8_t)day,
+          (uint8_t)(year - 1900)
+        };
+        deb("UDS 0x22 E200 SW date: %d-%02d-%02d → {0x%02X,0x%02X,0x%02X}",
+            year, month, day, payload[3], payload[4], payload[5]);
+        iso_tp(responseId, (int)sizeof(payload), payload);
+      }
     } else if(did == DID_FORD_PARTNUM_MIDDLE) {
       // E217: Fordiag reads binary middle bytes of Ford part number
       // (e.g. "12A650" → {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
@@ -1336,6 +1357,28 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       send22IdentField(responseId, did, ecu_CatchCode, 8);
     } else if(did == DID_FORD_PART_NUMBER) {
       send22IdentField(responseId, did, ecu_PartNumber, 16);
+    } else if(did == DID_FORD_TOTDIST) {
+      // DD01: Total distance (odometer), 3 bytes big-endian unsigned km.
+      // Per Fordiag author: "3bytova!" — unusual 3-byte format.
+      uint32_t km = ecu_TotalDistanceKm;
+      uint8_t payload[6] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)((km >> 16) & 0xFF),
+        (uint8_t)((km >> 8) & 0xFF),
+        (uint8_t)(km & 0xFF)
+      };
+      deb("UDS 0x22 DD01 TOTDIST=%lu km", (unsigned long)km);
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    } else if(did == DID_FORD_OUTTMP) {
+      // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
+      // ECU has no outside temp sensor; use intake temp as best proxy.
+      int raw = hal_constrain((int)(getGlobalValue(F_INTAKE_TEMP) + 40.0f), 0, 255);
+      uint8_t payload[4] = {
+        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+        (uint8_t)raw
+      };
+      deb("UDS 0x22 DD05 OUTTMP raw=%d (%.1f°C)", raw, getGlobalValue(F_INTAKE_TEMP));
+      iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_ECU_CAPABILITIES) {
       // DID 0x0200 collides with SCP_PID_CODES_COUNT — must return NRC here
       // so Fordiag falls back to Mode 01 PID 0x51 for diesel type detection.
