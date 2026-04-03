@@ -4,8 +4,12 @@
 #include <tools.h>
 
 #include "config.h"
-#include "start.h"
+#include "canDefinitions.h"
 #include "tests.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   bool heatedWindowEnabled;
@@ -24,5 +28,9 @@ bool heatedWindshields_isHeatedWindowEnabled(heatedWindshields *self);
 
 heatedWindshields *getHeatedWindshieldsInstance(void);
 void createHeatedWindshields(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

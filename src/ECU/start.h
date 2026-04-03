@@ -23,6 +23,10 @@
 #include "tests.h"
 #include "dtcManager.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
 
@@ -34,5 +38,9 @@ void looper(void);
 void looper1(void);
 bool seriousAlertSwitch(void);
 bool alertSwitch(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

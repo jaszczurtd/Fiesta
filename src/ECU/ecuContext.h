@@ -20,6 +20,10 @@
 #include "turbo.h"
 #include "vp37.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     engineFan         fan;
     engineHeater      heater;
@@ -31,5 +35,9 @@ typedef struct {
 } ecu_context_t;
 
 ecu_context_t *getECUContext(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

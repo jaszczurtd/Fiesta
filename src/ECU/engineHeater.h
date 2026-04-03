@@ -4,10 +4,13 @@
 #include <tools.h>
 
 #include "config.h"
-#include "start.h"
 #include "sensors.h"
 #include "tests.h"
 #include "engineFan.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   bool heaterLoEnabled;
@@ -23,5 +26,9 @@ void engineHeater_heater(engineHeater *self, bool enable, int level);
 
 engineHeater *getHeaterInstance(void);
 void createHeater(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -2,9 +2,9 @@
 #define T_VP37
 
 #include <tools.h>
+#include <hal/hal_pid_controller.h>
 
 #include "config.h"
-#include "start.h"
 #include "rpm.h"
 #include "obd-2.h"
 #include "turbo.h"
@@ -12,6 +12,10 @@
 #include "tests.h"
 
 #include "engineMaps.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
@@ -48,7 +52,7 @@ void measureFuelTemp(void);
 void measureVoltage(void);
 
 typedef struct {
-  PIDController adjustController;  // C++ type — stays for Phase 1
+  hal_pid_controller_t adjustController;
 
   bool vp37Initialized;
   int lastThrottle;
@@ -68,5 +72,9 @@ void VP37Pump_process(VP37Pump *self);
 void VP37Pump_enableVP37(VP37Pump *self, bool enable);
 bool VP37Pump_isVP37Enabled(VP37Pump *self);
 void VP37Pump_showDebug(VP37Pump *self);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

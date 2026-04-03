@@ -5,13 +5,16 @@
 #include <float.h>
 
 #include "config.h"
-#include "start.h"
 #include "canDefinitions.h"
 #include "rpm.h"
 #include "hardwareConfig.h"
 #include "tests.h"
 
 #include "engineMaps.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //#define JUST_TEST_BY_THROTTLE
 
@@ -39,5 +42,9 @@ void Turbo_init(Turbo *self);
 void Turbo_process(Turbo *self);
 void Turbo_turboTest(Turbo *self);
 void Turbo_showDebug(Turbo *self);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

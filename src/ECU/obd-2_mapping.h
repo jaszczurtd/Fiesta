@@ -4,6 +4,10 @@
 #include <tools.h>
 #include "obd-2_mapping.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // DTC codes mapped to OBD-2/U-code format for better tester compatibility.
 // Encoding follows SAE J2012 2-byte layout: system + code digits.
 #define DTC_OBD_CAN_INIT_FAIL      0xD900  // U1900 Network/CAN communication fault
@@ -13,5 +17,9 @@
 
 const char *getPIDName(int pid);
 const char *getDtcName(uint16_t code);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

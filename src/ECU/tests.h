@@ -3,6 +3,10 @@
 
 #include <tools.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 //debug i2c only
 //#define I2C_SCANNER
 
@@ -16,5 +20,9 @@
 
 bool initTests(void);
 bool startTests(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

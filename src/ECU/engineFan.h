@@ -4,10 +4,13 @@
 #include <tools.h>
 
 #include "config.h"
-#include "start.h"
 #include "sensors.h"
 #include "tests.h"
 #include "canDefinitions.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum {
   FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR
@@ -26,5 +29,9 @@ void engineFan_fan(engineFan *self, bool enable);
 
 engineFan *getFanInstance(void);
 void createFan(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

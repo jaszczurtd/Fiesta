@@ -4,6 +4,10 @@
 #include <tools.h>
 #include "obd-2_mapping.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   DTC_KIND_STORED = 0,
   DTC_KIND_PENDING,
@@ -18,5 +22,9 @@ void dtcManagerClearAll(void);
 uint8_t dtcManagerCount(dtc_kind_t kind);
 uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes);
 uint32_t dtcManagerGetTimestamp(uint16_t code);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

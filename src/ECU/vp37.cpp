@@ -1,8 +1,9 @@
 
 #include "vp37.h"
+#include <hal/hal_soft_timer.h>
 
-static SmartTimers fuelTempTimer;
-static SmartTimers voltageTimer;
+static hal_soft_timer_t fuelTempTimer = NULL;
+static hal_soft_timer_t voltageTimer = NULL;
 
 void measureFuelTemp(void) {
   setGlobalValue(F_FUEL_TEMP, getVP37FuelTemperature());
@@ -38,13 +39,22 @@ static void VP37Pump_initVP37(VP37Pump *self) {
     measureFuelTemp();
     measureVoltage();
 
-    self->adjustController.setKp(VP37_PID_KP);
-    self->adjustController.setKi(VP37_PID_KI);
-    self->adjustController.setKd(VP37_PID_KD);
-    self->adjustController.setMaxIntegral(PID_MAX_INTEGRAL);
+    if(self->adjustController == NULL) {
+      self->adjustController = hal_pid_controller_create();
+    }
+    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
+    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
+    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
+    hal_pid_controller_set_max_integral(self->adjustController, PID_MAX_INTEGRAL);
 
-    fuelTempTimer.begin(measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
-    voltageTimer.begin(measureVoltage, VP37_VOLTAGE_UPDATE);
+    if(fuelTempTimer == NULL) {
+      fuelTempTimer = hal_soft_timer_create();
+    }
+    if(voltageTimer == NULL) {
+      voltageTimer = hal_soft_timer_create();
+    }
+    (void)hal_soft_timer_begin(fuelTempTimer, measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
+    (void)hal_soft_timer_begin(voltageTimer, measureVoltage, VP37_VOLTAGE_UPDATE);
 
     self->vp37Initialized = true;
   }
@@ -62,8 +72,9 @@ static int VP37Pump_makeCalibrationValue(VP37Pump *self) {
 static void VP37Pump_throttleCycle(VP37Pump *self) {
   float output;
 
-  self->adjustController.updatePIDtime(VP37_PID_TIME_UPDATE);
-  output = self->adjustController.updatePIDcontroller(self->desiredAdjustometer - getVP37Adjustometer());
+  hal_pid_controller_update_time(self->adjustController, VP37_PID_TIME_UPDATE);
+  output = hal_pid_controller_update(self->adjustController,
+                                     (float)(self->desiredAdjustometer - getVP37Adjustometer()));
 
   self->pwmValue = mapfloat(output, self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX, VP37_PWM_MIN, VP37_PWM_MAX);
 
@@ -121,8 +132,8 @@ void VP37Pump_process(VP37Pump *self) {
         self->lastThrottle = self->desiredAdjustometer = -1;
     }
 
-    fuelTempTimer.tick();
-    voltageTimer.tick();
+    hal_soft_timer_tick(fuelTempTimer);
+    hal_soft_timer_tick(voltageTimer);
 
     int rpm = (int)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {

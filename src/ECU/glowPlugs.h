@@ -4,9 +4,13 @@
 #include <tools.h>
 
 #include "config.h"
-#include "start.h"
+#include "canDefinitions.h"
 #include "sensors.h"
 #include "tests.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   int glowPlugsTime;
@@ -29,5 +33,9 @@ void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp);
 
 glowPlugs *getGlowPlugsInstance(void);
 void createGlowPlugs(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

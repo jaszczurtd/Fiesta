@@ -1,5 +1,9 @@
 
 #include "sensors.h"
+#include "can.h"
+#include "engineFuel.h"
+#include "gps.h"
+#include "rpm.h"
 
 NOINIT static volatile float valueFields[F_LAST];
 NOINIT volatile float reflectionValueFields[F_LAST];

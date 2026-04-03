@@ -6,9 +6,12 @@
 
 #include "sensors.h"
 #include "config.h"
-#include "start.h"
 #include "rpm.h"
 #include "tests.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void canMainLoop(void);
 void canInit(int retries);
@@ -25,5 +28,8 @@ void CAN_sendGpsExtended(void);
 bool isDPFConnected(void);
 void canCheckConnection(void);
 
+#ifdef __cplusplus
+}
 #endif
 
+#endif

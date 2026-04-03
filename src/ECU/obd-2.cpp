@@ -4,6 +4,8 @@
 // and CAN OBD & UDS Simulator Written By: Cory J. Fowler  December 20th, 2016
 
 #include "obd-2.h"
+#include "rpm.h"
+#include "vp37.h"
 
 void obdReq(uint32_t requestId, uint8_t *data);
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason);

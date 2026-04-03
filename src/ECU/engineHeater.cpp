@@ -1,4 +1,5 @@
 #include "engineHeater.h"
+#include "glowPlugs.h"
 #include "ecuContext.h"
 
 //-----------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 #include "rpm.h"
 #include "ecuContext.h"
+#include <hal/hal_soft_timer.h>
 
 // RPM formula (integer-only, no floats):
 // original: pulses * (60000 / RPM_REFRESH_INTERVAL) / CRANK_REVOLUTIONS - RPM_CORRECTION_VAL
@@ -11,12 +12,12 @@
 #define RPM_PULSES_DIVISOR     2
 
 #ifndef VP37
-static SmartTimers rpmCycleTimer;
+static hal_soft_timer_t rpmCycleTimer = NULL;
 
 static void cycleCheckTimerCallback(void) {
   RPM_resetRPMCycle(getRPMInstance());
-  // SmartTimers is periodic by default, so stop it after first fire.
-  rpmCycleTimer.abort();
+  // Software timer is periodic by default, so stop it after first fire.
+  hal_soft_timer_abort(rpmCycleTimer);
 }
 #endif
 
@@ -86,7 +87,10 @@ void RPM_init(RPM *self) {
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
 
 #ifndef VP37
-  rpmCycleTimer.begin(cycleCheckTimerCallback, STOP);
+  if(rpmCycleTimer == NULL) {
+    rpmCycleTimer = hal_soft_timer_create();
+  }
+  (void)hal_soft_timer_begin(rpmCycleTimer, cycleCheckTimerCallback, HAL_SOFT_TIMER_STOP);
 #endif
 
   RPM_setAccelMaxRPM(self);
@@ -131,7 +135,7 @@ void RPM_process(RPM *self) {
   }
 
 #ifndef VP37
-  rpmCycleTimer.tick();
+  hal_soft_timer_tick(rpmCycleTimer);
 
   int desiredRPM = NOMINAL_RPM_VALUE;
 
@@ -165,8 +169,8 @@ void RPM_process(RPM *self) {
             self->rpmPercentValue = MAX_RPM_PERCENT_VALUE;
           }
           RPM_setAccelRPMPercentage(self, self->rpmPercentValue);
-          rpmCycleTimer.time(RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE);
-          rpmCycleTimer.restart();
+          hal_soft_timer_set_interval(rpmCycleTimer, RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE);
+          hal_soft_timer_restart(rpmCycleTimer);
         }
       }
     }
@@ -182,8 +186,8 @@ void RPM_process(RPM *self) {
             self->rpmPercentValue = MIN_RPM_PERCENT_VALUE;
           }
           RPM_setAccelRPMPercentage(self, self->rpmPercentValue);
-          rpmCycleTimer.time(RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE);
-          rpmCycleTimer.restart();
+          hal_soft_timer_set_interval(rpmCycleTimer, RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE);
+          hal_soft_timer_restart(rpmCycleTimer);
         }
       }
     }

@@ -4,12 +4,15 @@
 
 #include <tools.h>
 
-#include "start.h"
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "tests.h"
 #include "obd-2_mapping.h"
 #include "dtcManager.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define PAD 0x00
 
@@ -400,5 +403,9 @@ bool fordPartNumberSplit(const char *pn,
                          const char **middleOut, int *middleLen,
                          const char **suffixOut, int *suffixLen);
 uint8_t fordPartSuffixCharsToByte(const char *s, int len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

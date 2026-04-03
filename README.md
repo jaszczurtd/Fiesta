@@ -1,90 +1,93 @@
 # Fiesta
 
-Firmware ecosystem for Ford Fiesta 1.8(M)TDDI custom electronics.
+Firmware ecosystem for Ford Fiesta 1.8 (M)TDDI custom electronics.
 
-The repository contains multiple MCU applications (ECU, clocks, indicators), hardware assets (PCBs/wiring), and materials used to build and validate the project.
+The repository contains multiple embedded applications, shared libraries, hardware projects, and validation materials used to build a complete custom vehicle electronics stack.
 
 Gallery:
 https://postimg.cc/gallery/pHF4jy2
 
-## What Is In This Repository
+## Repository scope
 
-Fiesta is not a single source code. It is a set of cooperating firmware modules designed for vehicle functions such as:
+Fiesta is not a single firmware binary. It is a set of cooperating modules:
 
-- engine control and diagnostics,
-- dashboard and gauge control,
-- dedicated oil pressure and speed module,
-- related PCB and wiring documentation.
+- engine ECU and diagnostics,
+- cluster/dashboard control,
+- oil pressure + speed instrumentation,
+- related PCB and wiring assets,
+- common libraries (including HAL layer).
 
-## Current Features (2026-03)
+## Active modules
 
-- Modular architecture with separate apps in `src/`:
-	`ECU`, `Clocks`, `OilAndSpeed`, `Fiesta_clock`.
-- Dual-core style runtime pattern in major modules (`setup/loop` plus `setup1/loop1`) for split workloads.
-- ECU feature set:
-	sensor processing, RPM/turbo logic, fan/heater/glow plugs/heated windshield control, VP37 support, GPS integration.
-- OBD-II over CAN support in ECU (`src/ECU/obd-2.*`) with PID handling, VIN/ECU name responses and DTC integration.
-- Dedicated DTC manager (`src/ECU/dtcManager.*`) with active/stored/pending/permanent code handling.
-- Dashboard/cluster stack (`src/Clocks`) including TFT abstractions, buzzer, gauge rendering and physical cluster signal generation.
-- Oil pressure and speed module (`src/OilAndSpeed`) for dedicated instrumentation and CAN communication.
-- ECU host-side unit tests (Unity + CMake) with CI workflow in `.github/workflows/ecu-tests.yml`.
+Primary code is in `src/`:
 
-## Code Structure
+- `src/ECU` - engine control logic, diagnostics (OBD/UDS over CAN), DTC manager, actuator logic.
+- `src/Clocks` - dashboard/cluster rendering and signaling.
+- `src/OilAndSpeed` - dedicated oil pressure and speed module.
+- `src/Fiesta_clock` - legacy/specialized clock firmware.
+- `src/library` - shared libraries and submodules (`JaszczurHAL`, `canDefinitions`).
 
-Top-level layout:
+## Current status (2026-04-03)
 
-- `src/` - firmware source code.
-- `Fiesta_pcbs/` - PCB projects and wiring/pinout notes.
-- `materials/` - reference notes, graphics, schematics, examples, and supporting assets.
+### ECU
 
-Main firmware modules in `src/`:
+- C-style architecture migration in progress (MISRA-oriented).
+- `PIDController` and `SmartTimers` usage migrated through HAL C wrappers.
+- Public ECU headers now include `extern "C"` guards.
+- Host-side ECU tests (CMake + Unity) currently pass: `7/7` suites.
 
-- `src/ECU/` - main engine control logic.
-	Key files:
-	`start.*`, `sensors.*`, `rpm.*`, `turbo.*`, `engineFuel.*`, `engineFan.*`, `engineHeater.*`,
-	`glowPlugs.*`, `heatedWindshield.*`, `obd-2.*`, `obd-2_mapping.*`, `dtcManager.*`, `can.*`.
-- `src/Clocks/` - dashboard/cluster and display logic.
-	Key files:
-	`logic.*`, `Cluster.*`, `TFTExtension.*`, `pressureGauge.*`, `tempGauge.*`, `simpleGauge.*`, `buzzer.*`, `can.*`.
-- `src/OilAndSpeed/` - oil pressure + speed module, CAN handling and start/runtime orchestration.
-- `src/Fiesta_clock/` - legacy/specialized clock-related firmware in C.
-- `src/library/` - shared libraries and submodules (see dependencies section).
+Covered suites include:
+
+- `test_glowPlugs`
+- `test_engineFan`
+- `test_engineHeater`
+- `test_sensors_calc`
+- `test_obd2`
+- `test_can`
+- `test_hal_wrappers`
+
+### MISRA-C migration estimate (ECU)
+
+Estimated MISRA-C compatibility: **~70%**.
+
+Important:
+
+- this is an engineering progress estimate, not a formal compliance certification,
+- exact compliance requires a dedicated MISRA checker and a documented deviation register.
+
+Main completed areas:
+
+- class-to-struct migration for core ECU modules,
+- central state ownership (`ecu_context_t`),
+- HAL C wrappers for PID and soft timers,
+- `extern "C"` guards in public ECU headers.
+
+Main pending areas:
+
+- staged `.cpp` to `.c` migration for selected modules,
+- MISRA hardening pass (fixed-width casts, bounds checks, overflow safeguards, naming consistency, volatile/mutex review).
+
+## MISRA documentation policy (mandatory)
+
+For every MISRA-related change, update in the same change set:
+
+1. repository root `README.md` (this file),
+2. `src/ECU/README.md`,
+3. `src/ECU/doc/misra-context-provider.en.txt`.
+
+MISRA-related code changes should not be merged without these documentation updates.
 
 ## Dependencies
 
 Project uses Arduino ecosystem components and custom libraries.
 
-- Arduino platform:
-	https://www.arduino.cc/
-- RP2040 core (Earle F. Philhower, III):
-	https://github.com/earlephilhower/arduino-pico/
-- Unity test framework:
-	https://github.com/ThrowTheSwitch/Unity/
-- OBD-2 simulator inspiration/base:
-	https://github.com/spoonieau/OBD2-ECU-Simulator
+- Arduino platform: https://www.arduino.cc/
+- RP2040 core (Earle Philhower): https://github.com/earlephilhower/arduino-pico/
+- Unity test framework: https://github.com/ThrowTheSwitch/Unity/
 
-### Required: JaszczurHAL
+Required shared dependency:
 
-`JaszczurHAL` is a required dependency for this project:
-https://github.com/jaszczurtd/JaszczurHAL
-
-What it is:
-
-- a shared hardware abstraction layer used by Fiesta modules,
-- a common place for low-level hardware helpers, timers, tools, and platform-specific adapters,
-- a compatibility bridge that allows the same higher-level logic to be reused across firmware modules.
-
-Why this solution is used:
-
-- it reduces duplicated low-level code in each module,
-- it keeps application logic (ECU, Clocks, OilAndSpeed) cleaner and easier to maintain,
-- it improves testability by enabling host-side stubs/mocks used by ECU CMake tests,
-- it makes migration and board/platform changes easier because hardware-specific details are centralized.
-
-Current status and direction:
-
-- today the project runs on Arduino-based stack,
-- thanks to `JaszczurHAL` and the abstraction layer approach, the codebase is prepared for future ports to other platforms such as ESP and STM32.
+- `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
 
 Git submodules declared in `.gitmodules`:
 
@@ -103,24 +106,26 @@ If already cloned:
 git submodule update --init --recursive
 ```
 
-## Build and Development Workflow
+## Build and development
 
-### Firmware Build/Upload
+### Firmware build/upload
 
-Each module is organized as a standalone Arduino-style app (`*.ino` + companion `.cpp/.h`).
+Each module is organized as a standalone Arduino-style app (`*.ino` + companion sources).
 
-Utility scripts are available in module-specific `scripts/` directories (for example in `src/ECU/scripts/`, `src/Clocks/scripts/`, `src/OilAndSpeed/scripts/`):
+Utility scripts are available in module-specific `scripts/` directories, for example:
+
+- `src/ECU/scripts/`
+- `src/Clocks/scripts/`
+- `src/OilAndSpeed/scripts/`
+
+Typical helpers:
 
 - `select-board.sh`
 - `upload-uf2.sh`
 - `serial-monitor.sh` / `serial-monitor.py`
 - `refresh-intellisense.sh`
 
-Exact board/port setup depends on your local environment and toolchain.
-
-### ECU Host Tests
-
-ECU includes host-side tests via CMake in `src/ECU/CMakeLists.txt`.
+### ECU host tests
 
 Run locally:
 
@@ -130,20 +135,11 @@ cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure
 ```
 
-Current tested areas include:
+## Hardware and materials
 
-- glow plugs,
-- engine fan,
-- engine heater,
-- sensor calculations.
-
-CI automatically runs these tests for ECU changes via `.github/workflows/ecu-tests.yml`.
-
-## Hardware and Materials
-
-- PCB projects and variants are under `Fiesta_pcbs/`.
-- Wiring/pinout notes are included in `Fiesta_pcbs/pinout.txt` and `Fiesta_pcbs/wirings.txt`.
-- Supporting docs, graphics and examples are under `materials/`.
+- PCB projects and variants: `Fiesta_pcbs/`
+- wiring/pinout notes: `Fiesta_pcbs/pinout.txt`, `Fiesta_pcbs/wirings.txt`
+- supporting docs/graphics/examples: `materials/`
 
 ## Credits
 

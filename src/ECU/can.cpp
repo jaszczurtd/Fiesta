@@ -1,5 +1,6 @@
 #include "can.h"
 #include "dtcManager.h"
+#include "gps.h"
 
 void receivedCanMessage(void);
 
@@ -307,6 +308,5 @@ void canCheckConnection(void) {
   bool dpfCommLost = dpfEverSeen && !dpfConnected;
   dtcManagerSetActive(DTC_DPF_COMM_LOST, dpfCommLost);
 }
-
 
 

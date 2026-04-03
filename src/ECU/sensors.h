@@ -6,11 +6,15 @@
 #include "config.h"
 
 #include <tools.h>
+#include "canDefinitions.h"
 
-#include "start.h"
 #include "hardwareConfig.h"
 #include "tests.h"
 #include "dtcManager.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
@@ -53,5 +57,9 @@ void pwm_init(void);
 float getSystemSupplyVoltage(void);
 int getVP37Adjustometer(void);
 float getVP37FuelTemperature(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

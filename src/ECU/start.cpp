@@ -1,6 +1,7 @@
 
 #include "start.h"
 #include "ecuContext.h"
+#include <hal/hal_soft_timer.h>
 
 //-----------------------------------------------------------------------------
 // Central ECU context — single owner of all module instances
@@ -15,27 +16,66 @@ ecu_context_t *getECUContext(void) {
 //-----------------------------------------------------------------------------
 
 static unsigned long lastThreadSeconds = 0;
-static SmartTimers timerEverySecond;
-static SmartTimers timerMedium;
-static SmartTimers timerHigh;
-static SmartTimers timerGPS;
-static SmartTimers timerDebug;
-static SmartTimers timerCANUpdate;
-static SmartTimers timerCANLoop;
-static SmartTimers timerCANCheck;
+static hal_soft_timer_t timerEverySecond = NULL;
+static hal_soft_timer_t timerMedium = NULL;
+static hal_soft_timer_t timerHigh = NULL;
+static hal_soft_timer_t timerGPS = NULL;
+static hal_soft_timer_t timerDebug = NULL;
+static hal_soft_timer_t timerCANUpdate = NULL;
+static hal_soft_timer_t timerCANLoop = NULL;
+static hal_soft_timer_t timerCANCheck = NULL;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
+static void start_ensureTimerCreated(hal_soft_timer_t *timer) {
+  if(*timer == NULL) {
+    *timer = hal_soft_timer_create();
+  }
+}
+
+typedef struct {
+  hal_soft_timer_t *timer;
+  hal_soft_timer_callback_t callback;
+  uint32_t intervalMs;
+} start_timer_init_t;
+
+static const start_timer_init_t startTimerInitTable[] = {
+  { &timerEverySecond, callAtEverySecond, (uint32_t)SECOND },
+  { &timerMedium, readMediumValues,
+    (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER) },
+  { &timerHigh, readHighValues,
+    (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER) },
+  { &timerGPS, getGPSData, (uint32_t)GPS_UPDATE },
+  { &timerDebug, updateValsForDebug, (uint32_t)DEBUG_UPDATE },
+  { &timerCANUpdate, CAN_updaterecipients_01, (uint32_t)CAN_UPDATE_RECIPIENTS },
+  { &timerCANLoop, canMainLoop, (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
+  { &timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
+};
+
+static void start_setupSingleTimer(hal_soft_timer_t *timer,
+                                   hal_soft_timer_callback_t callback,
+                                   uint32_t intervalMs) {
+  watchdog_feed();
+  start_ensureTimerCreated(timer);
+  (void)hal_soft_timer_begin(*timer, callback, intervalMs);
+  hal_delay_ms(CORE_OPERATION_DELAY);
+}
+
+static void start_tickAllTimers(void) {
+  for(uint32_t i = 0u; i < COUNTOF(startTimerInitTable); i++) {
+    hal_soft_timer_tick(*startTimerInitTable[i].timer);
+  }
+}
+
 void setupTimers(void) {
-  watchdog_feed(); timerEverySecond.begin(callAtEverySecond, SECOND);                               hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerMedium.begin(readMediumValues, SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER);    hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerHigh.begin(readHighValues, SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER);      hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerGPS.begin(getGPSData, GPS_UPDATE);                                          hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);                              hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANUpdate.begin(CAN_updaterecipients_01, CAN_UPDATE_RECIPIENTS);            hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);                    hal_delay_ms(CORE_OPERATION_DELAY);
-  watchdog_feed(); timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);                   hal_delay_ms(CORE_OPERATION_DELAY);
+  const uint32_t timerCount = COUNTOF(startTimerInitTable);
+
+  for(uint32_t i = 0u; i < timerCount; i++) {
+    start_setupSingleTimer(startTimerInitTable[i].timer,
+                           startTimerInitTable[i].callback,
+                           startTimerInitTable[i].intervalMs);
+  }
 }
 
 static int *wValues = NULL;
@@ -198,14 +238,7 @@ void looper(void) {
     return;
   }
 
-  timerEverySecond.tick();
-  timerMedium.tick();
-  timerHigh.tick();
-  timerGPS.tick();
-  timerDebug.tick();
-  timerCANUpdate.tick();
-  timerCANLoop.tick();
-  timerCANCheck.tick();
+  start_tickAllTimers();
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 

@@ -5,9 +5,12 @@
 #include <tools.h>
 
 #include "config.h"
-#include "start.h"
 #include "sensors.h"
 #include "tests.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
@@ -55,6 +58,10 @@ int RPM_getCurrentRPM(RPM *self);
 
 RPM *getRPMInstance(void);
 void createRPM(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

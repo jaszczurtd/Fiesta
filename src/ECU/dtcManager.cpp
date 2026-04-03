@@ -31,7 +31,7 @@ static dtc_entry_t s_dtcs[] = {
   {DTC_DPF_COMM_LOST, false, false, false, 0},
 };
 
-static const uint8_t s_dtcCount = sizeof(s_dtcs) / sizeof(s_dtcs[0]);
+static const uint8_t s_dtcCount = COUNTOF(s_dtcs);
 static bool s_dtcInitialized = false;
 
 static uint16_t dtcSlotAddr(uint8_t idx) {
