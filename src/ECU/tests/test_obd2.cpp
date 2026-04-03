@@ -2,6 +2,7 @@
 #include "obd-2.h"
 #include "obd-2_mapping.h"
 #include "sensors.h"
+#include "gps.h"
 #include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -260,6 +261,40 @@ void test_fill_dtc_payload_small_buffer(void) {
     TEST_ASSERT_EQUAL_INT(0, fillDtcPayload(0x43, DTC_KIND_STORED, buf, 1));
 }
 
+void test_dtc_timestamp_first_occurrence_from_gps(void) {
+    dtcManagerClearAll();
+    hal_mock_gps_reset();
+    hal_mock_gps_set_valid(true);
+    hal_mock_gps_set_age(0);
+    hal_mock_gps_set_date(2026, 1, 1);
+    hal_mock_gps_set_time(12, 0, 0);
+
+    uint32_t expected = gpsGetEpoch();
+    TEST_ASSERT_GREATER_THAN_UINT32(0u, expected);
+
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    TEST_ASSERT_EQUAL_UINT32(expected, dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL));
+}
+
+void test_dtc_timestamp_not_overwritten_on_reactivation(void) {
+    dtcManagerClearAll();
+    hal_mock_gps_reset();
+    hal_mock_gps_set_valid(true);
+    hal_mock_gps_set_age(0);
+    hal_mock_gps_set_date(2026, 1, 1);
+    hal_mock_gps_set_time(12, 0, 0);
+
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+    uint32_t firstTs = dtcManagerGetTimestamp(DTC_PCF8574_COMM_FAIL);
+    TEST_ASSERT_GREATER_THAN_UINT32(0u, firstTs);
+
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
+    hal_mock_gps_set_time(13, 0, 0);
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+
+    TEST_ASSERT_EQUAL_UINT32(firstTs, dtcManagerGetTimestamp(DTC_PCF8574_COMM_FAIL));
+}
+
 // ── TOTDIST getter/setter ─────────────────────────────────────────────────────
 
 #ifdef OBD_ENABLE_TOTDIST
@@ -327,6 +362,8 @@ int main(void) {
     RUN_TEST(test_fill_dtc_payload_with_codes);
     RUN_TEST(test_fill_dtc_payload_null_safety);
     RUN_TEST(test_fill_dtc_payload_small_buffer);
+    RUN_TEST(test_dtc_timestamp_first_occurrence_from_gps);
+    RUN_TEST(test_dtc_timestamp_not_overwritten_on_reactivation);
 
     // TOTDIST
 #ifdef OBD_ENABLE_TOTDIST

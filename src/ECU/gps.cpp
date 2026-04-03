@@ -1,5 +1,6 @@
 
 #include "gps.h"
+#include <hal/hal_time.h>
 
 
 NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
@@ -104,27 +105,7 @@ uint32_t gpsGetEpoch(void) {
     return 0;
   }
 
-  // Days from 1970-01-01 to the start of the given year
-  uint32_t days = 0;
-  for(int y = 1970; y < year; y++) {
-    bool leap = ((y % 4 == 0) && (y % 100 != 0)) || (y % 400 == 0);
-    days += leap ? 366 : 365;
-  }
-
-  static const int daysBeforeMonth[] = {0,31,59,90,120,151,181,212,243,273,304,334};
-  if(month >= 1 && month <= 12) {
-    days += (uint32_t)daysBeforeMonth[month - 1];
-  }
-  // Leap day adjustment for current year
-  if(month > 2) {
-    bool leap = ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
-    if(leap) {
-      days++;
-    }
-  }
-  days += (uint32_t)(day - 1);
-
-  return days * 86400u + (uint32_t)hour * 3600u + (uint32_t)minute * 60u + (uint32_t)second;
+  return hal_time_from_components(year, month, day, hour, minute, second);
 }
 
 
