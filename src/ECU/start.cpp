@@ -175,6 +175,10 @@ void looper(void) {
   statusVariable0 = 1;
   getGlowPlugsInstance()->process();
 
+  // Drain GPS serial FIFO every iteration — the PIO SoftwareSerial
+  // buffer is only 32 bytes; at 9600 baud it overflows in ~33 ms.
+  hal_gps_update();
+
   statusVariable0 = 2;
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;

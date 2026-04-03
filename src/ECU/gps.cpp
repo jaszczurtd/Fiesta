@@ -8,7 +8,7 @@ NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
 static bool isGPSInitialized = false;
 void initGPS(void) {
   if(!isGPSInitialized) {
-    hal_gps_init(SERIAL_RX_GPIO, SERIAL_TX_GPIO, 9600, HAL_GPS_DEFAULT_UART_CONFIG);
+    hal_gps_init(SERIAL_RX_GPIO, SERIAL_TX_GPIO, 9600, HAL_UART_CFG_8N1);
     isGPSInitialized = true;
   }
 }
@@ -28,8 +28,8 @@ void getGPSData(void) {
     deb("GPS is not available");
   }
 
-  deb("GPS: valid:%d updated:%d age:%d", hal_gps_location_is_valid(), hal_gps_location_is_updated(),
-    hal_gps_location_age());
+  deb("GPS: valid:%d updated:%d age:%lu", hal_gps_location_is_valid(), hal_gps_location_is_updated(),
+    (unsigned long)hal_gps_location_age());
 }
 
 void initGPSDateAndTime(void) {
