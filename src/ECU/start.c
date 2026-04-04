@@ -15,18 +15,60 @@ ecu_context_t *getECUContext(void) {
 
 //-----------------------------------------------------------------------------
 
-static unsigned long lastThreadSeconds = 0;
-static hal_soft_timer_t timerEverySecond = NULL;
-static hal_soft_timer_t timerMedium = NULL;
-static hal_soft_timer_t timerHigh = NULL;
-static hal_soft_timer_t timerGPS = NULL;
-static hal_soft_timer_t timerDebug = NULL;
-static hal_soft_timer_t timerCANUpdate = NULL;
-static hal_soft_timer_t timerCANLoop = NULL;
-static hal_soft_timer_t timerCANCheck = NULL;
+typedef struct {
+  unsigned long lastThreadSecondsVal;
+  hal_soft_timer_t timerEverySecondHandle;
+  hal_soft_timer_t timerMediumHandle;
+  hal_soft_timer_t timerHighHandle;
+  hal_soft_timer_t timerGPSHandle;
+  hal_soft_timer_t timerDebugHandle;
+  hal_soft_timer_t timerCANUpdateHandle;
+  hal_soft_timer_t timerCANLoopHandle;
+  hal_soft_timer_t timerCANCheckHandle;
+  int *wValuesPtr;
+  int wSizeVal;
+  bool alertBlinkState;
+} start_runtime_state_t;
 
-NOINIT int statusVariable0;
-NOINIT int statusVariable1;
+typedef struct {
+  int statusVariable0Val;
+  int statusVariable1Val;
+} start_persistent_state_t;
+
+static start_runtime_state_t s_startRuntimeState = {
+  .lastThreadSecondsVal = 0uL,
+  .timerEverySecondHandle = NULL,
+  .timerMediumHandle = NULL,
+  .timerHighHandle = NULL,
+  .timerGPSHandle = NULL,
+  .timerDebugHandle = NULL,
+  .timerCANUpdateHandle = NULL,
+  .timerCANLoopHandle = NULL,
+  .timerCANCheckHandle = NULL,
+  .wValuesPtr = NULL,
+  .wSizeVal = 0,
+  .alertBlinkState = false
+};
+
+NOINIT static start_persistent_state_t s_startPersistentState;
+
+m_mutex_def(turboStateMutex);
+#ifdef VP37
+m_mutex_def(vp37StateMutex);
+#endif
+
+static void start_initContextMutexes(void) {
+  hal_critical_section_enter();
+  if(turboStateMutex == NULL) {
+    m_mutex_init(turboStateMutex);
+  }
+#ifdef VP37
+  if(vp37StateMutex == NULL) {
+    m_mutex_init(vp37StateMutex);
+  }
+#endif
+  hal_critical_section_exit();
+}
 
 static void start_ensureTimerCreated(hal_soft_timer_t *timer) {
   if(*timer == NULL) {
@@ -41,16 +83,16 @@ typedef struct {
 } start_timer_init_t;
 
 static const start_timer_init_t startTimerInitTable[] = {
-  { &timerEverySecond, callAtEverySecond, (uint32_t)SECOND },
-  { &timerMedium, readMediumValues,
+  { &s_startRuntimeState.timerEverySecondHandle, callAtEverySecond, (uint32_t)SECOND },
+  { &s_startRuntimeState.timerMediumHandle, readMediumValues,
     (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER) },
-  { &timerHigh, readHighValues,
+  { &s_startRuntimeState.timerHighHandle, readHighValues,
     (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER) },
-  { &timerGPS, getGPSData, (uint32_t)GPS_UPDATE },
-  { &timerDebug, updateValsForDebug, (uint32_t)DEBUG_UPDATE },
-  { &timerCANUpdate, CAN_updaterecipients_01, (uint32_t)CAN_UPDATE_RECIPIENTS },
-  { &timerCANLoop, canMainLoop, (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
-  { &timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
+  { &s_startRuntimeState.timerGPSHandle, getGPSData, (uint32_t)GPS_UPDATE },
+  { &s_startRuntimeState.timerDebugHandle, updateValsForDebug, (uint32_t)DEBUG_UPDATE },
+  { &s_startRuntimeState.timerCANUpdateHandle, CAN_updaterecipients_01, (uint32_t)CAN_UPDATE_RECIPIENTS },
+  { &s_startRuntimeState.timerCANLoopHandle, canMainLoop, (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
+  { &s_startRuntimeState.timerCANCheckHandle, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
 };
 
 static void start_setupSingleTimer(hal_soft_timer_t *timer,
@@ -78,17 +120,16 @@ void setupTimers(void) {
   }
 }
 
-static int *wValues = NULL;
-static int wSize = 0;
 void executeByWatchdog(int *values, int size) {
-  wValues = values;
-  wSize = size;
+  s_startRuntimeState.wValuesPtr = values;
+  s_startRuntimeState.wSizeVal = size;
 }
 
 void initialization(void) {
 
   debugInit();
   setDebugPrefix("ECU:");
+  deb("Build timestamp: %s", ecu_BuildDateTime);
 
   // Force local flash-backed EEPROM for this ECU build.
   hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
@@ -97,6 +138,7 @@ void initialization(void) {
   dtcManagerInit();
 
   initTests();
+  start_initContextMutexes();
 
   //this has to be invoked as soon as possible, and twice
   initI2C();
@@ -107,7 +149,7 @@ void initialization(void) {
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
-    statusVariable0 = statusVariable1 = 0;
+    s_startPersistentState.statusVariable0Val = s_startPersistentState.statusVariable1Val = 0;
     initGPSDateAndTime();
   }
 
@@ -124,9 +166,10 @@ void initialization(void) {
     deb("SD Card initialized");
   }
 
-  if(wValues != NULL) {
+  if(s_startRuntimeState.wValuesPtr != NULL) {
     char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
     memset(dateAndTime, 0, sizeof(dateAndTime));
+    const bool hasWatchdogSnapshot = (s_startRuntimeState.wSizeVal >= 4);
 
     bool validDateAndTime = isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
       isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
@@ -141,19 +184,24 @@ void initialization(void) {
     if(validDateAndTime) {
       crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
     }
-    crashReport("core0 started: %d", wValues[0]);
-    crashReport("core0 was running: %d", wValues[1]);
-    crashReport("core1 started: %d", wValues[2]);
-    crashReport("core1 was running: %d", wValues[3]);
+    if(hasWatchdogSnapshot) {
+      crashReport("core0 started: %d", s_startRuntimeState.wValuesPtr[0]);
+      crashReport("core0 was running: %d", s_startRuntimeState.wValuesPtr[1]);
+      crashReport("core1 started: %d", s_startRuntimeState.wValuesPtr[2]);
+      crashReport("core1 was running: %d", s_startRuntimeState.wValuesPtr[3]);
+    } else {
+      crashReport("watchdog snapshot truncated: size=%d", s_startRuntimeState.wSizeVal);
+    }
+    crashReport("build: %s", ecu_BuildDateTime);
 
-    crashReport("sv0: %d", statusVariable0);
-    crashReport("sv1: %d", statusVariable1);
+    crashReport("sv0: %d", s_startPersistentState.statusVariable0Val);
+    crashReport("sv1: %d", s_startPersistentState.statusVariable1Val);
 
     saveCrashLoggerAndClose();
     watchdog_feed();
 
-    wSize = 0;
-    wValues = NULL;
+    s_startRuntimeState.wSizeVal = 0;
+    s_startRuntimeState.wValuesPtr = NULL;
   }
 
   initBasicPIO();
@@ -177,11 +225,15 @@ void initialization(void) {
   glowPlugs_initGlowPlugsTime(getGlowPlugsInstance(), coolant);
 
 #ifdef VP37
+  m_mutex_enter_blocking(vp37StateMutex);
   VP37Pump_init(&s_ctx.injectionPump);
+  m_mutex_exit(vp37StateMutex);
 #endif
   watchdog_feed();
 
+  m_mutex_enter_blocking(turboStateMutex);
   Turbo_init(&s_ctx.turbo);
+  m_mutex_exit(turboStateMutex);
 
   canInit(CAN_RETRIES);
   obdInit(CAN_RETRIES);
@@ -206,12 +258,10 @@ void initialization(void) {
   startTests();
 }
 
-static bool alertBlink = false;
-
 //timer functions
 void callAtEverySecond(void) {
-  alertBlink = (alertBlink) ? false : true;
-  hal_gpio_write(HAL_LED_PIN, alertBlink);
+  s_startRuntimeState.alertBlinkState = (s_startRuntimeState.alertBlinkState) ? false : true;
+  hal_gpio_write(HAL_LED_PIN, s_startRuntimeState.alertBlinkState);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
   CAN_sendGpsExtended();
 
@@ -221,51 +271,56 @@ void callAtEverySecond(void) {
 }
 
 void looper(void) {
-  statusVariable0 = 0;
+  s_startPersistentState.statusVariable0Val = 0;
   updateWatchdogCore0();
 
-  statusVariable0 = 1;
+  s_startPersistentState.statusVariable0Val = 1;
   glowPlugs_process(getGlowPlugsInstance());
 
   // Drain GPS serial FIFO every iteration — the PIO SoftwareSerial
   // buffer is only 32 bytes; at 9600 baud it overflows in ~33 ms.
   hal_gps_update();
 
-  statusVariable0 = 2;
+  s_startPersistentState.statusVariable0Val = 2;
   if(!isEnvironmentStarted()) {
-    statusVariable0 = -1;
+    s_startPersistentState.statusVariable0Val = -1;
     hal_idle();
     return;
   }
 
   start_tickAllTimers();
-  if(lastThreadSeconds < getSeconds()) {
-    lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
+  if(s_startRuntimeState.lastThreadSecondsVal < getSeconds()) {
+    s_startRuntimeState.lastThreadSecondsVal = getSeconds() + THREAD_CONTROL_SECONDS;
 
     deb("thread is alive");
   }
-  statusVariable0 = 3;
+  s_startPersistentState.statusVariable0Val = 3;
   CAN_updaterecipients_02();
-  statusVariable0 = 4;
+  s_startPersistentState.statusVariable0Val = 4;
   obdLoop();
-  statusVariable0 = 5;
+  s_startPersistentState.statusVariable0Val = 5;
   engineFan_process(getFanInstance());
-  statusVariable0 = 6;
+  s_startPersistentState.statusVariable0Val = 6;
   engineHeater_process(getHeaterInstance());
-  statusVariable0 = 7;
+  s_startPersistentState.statusVariable0Val = 7;
   heatedWindshields_process(getHeatedWindshieldsInstance());
-  statusVariable0 = 8;
+  s_startPersistentState.statusVariable0Val = 8;
 
 #ifdef VP37
+  m_mutex_enter_blocking(vp37StateMutex);
   VP37Pump_showDebug(&s_ctx.injectionPump);
+  m_mutex_exit(vp37StateMutex);
 #endif
+  m_mutex_enter_blocking(turboStateMutex);
   Turbo_showDebug(&s_ctx.turbo);
+  m_mutex_exit(turboStateMutex);
 
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
 void initialization1(void) {
+  start_initContextMutexes();
   createRPM();
 
   setStartedCore1();
@@ -279,23 +334,27 @@ void initialization1(void) {
 
 void looper1(void) {
 
-  statusVariable1 = 0;
+  s_startPersistentState.statusVariable1Val = 0;
   updateWatchdogCore1();
 
   if(!isEnvironmentStarted()) {
-    statusVariable1 = -1;
+    s_startPersistentState.statusVariable1Val = -1;
     hal_idle();
     return;
   }
 
-  statusVariable1 = 1;
+  s_startPersistentState.statusVariable1Val = 1;
+  m_mutex_enter_blocking(turboStateMutex);
   Turbo_process(&s_ctx.turbo);
-  statusVariable1 = 2;
+  m_mutex_exit(turboStateMutex);
+  s_startPersistentState.statusVariable1Val = 2;
   RPM_process(getRPMInstance());
 #ifdef VP37
+  m_mutex_enter_blocking(vp37StateMutex);
   VP37Pump_process(&s_ctx.injectionPump);
+  m_mutex_exit(vp37StateMutex);
 #endif
-  statusVariable1 = 3;
+  s_startPersistentState.statusVariable1Val = 3;
 
   hal_idle();
 }

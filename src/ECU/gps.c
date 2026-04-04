@@ -1,19 +1,28 @@
-
 #include "gps.h"
 #include <hal/hal_time.h>
 
+typedef struct {
+  bool isGPSInitialized;
+} gps_runtime_state_t;
 
-NOINIT char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
-NOINIT char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
+typedef struct {
+  char gpsDate[GPS_TIME_DATE_BUFFER_SIZE];
+  char gpsTime[GPS_TIME_DATE_BUFFER_SIZE];
+} gps_persistent_state_t;
+
+static gps_runtime_state_t s_gpsRuntime = {
+  .isGPSInitialized = false
+};
+
+NOINIT static gps_persistent_state_t s_gpsPersistent;
 
 static void getAdjustedDateTime(int *year, int *month, int *day,
                                 int *hour, int *minute, int *second);
 
-static bool isGPSInitialized = false;
 void initGPS(void) {
-  if(!isGPSInitialized) {
+  if(!s_gpsRuntime.isGPSInitialized) {
     hal_gps_init(SERIAL_RX_GPIO, SERIAL_TX_GPIO, 9600, HAL_UART_CFG_8N1);
-    isGPSInitialized = true;
+    s_gpsRuntime.isGPSInitialized = true;
   }
 }
 
@@ -52,8 +61,8 @@ void getGPSData(void) {
 }
 
 void initGPSDateAndTime(void) {
-  memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
-  memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
+  memset(s_gpsPersistent.gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
+  memset(s_gpsPersistent.gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
 }
 
 static void getAdjustedDateTime(int *year, int *month, int *day,
@@ -71,22 +80,22 @@ const char *getGPSDate(void) {
   if(hal_gps_location_is_valid()) {
     int year, month, day, hour, minute, second;
     getAdjustedDateTime(&year, &month, &day, &hour, &minute, &second);
-    memset(gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
-    snprintf(gpsDate, GPS_TIME_DATE_BUFFER_SIZE - 1, "%d/%02d/%02d", 
+    memset(s_gpsPersistent.gpsDate, 0, GPS_TIME_DATE_BUFFER_SIZE);
+    snprintf(s_gpsPersistent.gpsDate, GPS_TIME_DATE_BUFFER_SIZE - 1, "%d/%02d/%02d",
       year, month, day);
   }
-  return gpsDate;
+  return s_gpsPersistent.gpsDate;
 }
 
 const char *getGPSTime(void) {
   if(hal_gps_location_is_valid()) {
     int year, month, day, hour, minute, second;
     getAdjustedDateTime(&year, &month, &day, &hour, &minute, &second);
-    memset(gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
-    snprintf(gpsTime, GPS_TIME_DATE_BUFFER_SIZE - 1, "%02d:%02d:%02d", 
+    memset(s_gpsPersistent.gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
+    snprintf(s_gpsPersistent.gpsTime, GPS_TIME_DATE_BUFFER_SIZE - 1, "%02d:%02d:%02d",
       hour, minute, second);
   }
-  return gpsTime;
+  return s_gpsPersistent.gpsTime;
 }
 
 float getCurrentCarSpeed(void) {
@@ -95,7 +104,7 @@ float getCurrentCarSpeed(void) {
     if(s < GPS_MIN_KMPH_SPEED) {
       return 0.0f;
     }
-    return float(s);
+    return (float)(s);
   }
   return 0.0;
 }
@@ -125,5 +134,4 @@ uint32_t gpsGetEpoch(void) {
 
   return hal_time_from_components(year, month, day, hour, minute, second);
 }
-
 

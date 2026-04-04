@@ -128,6 +128,20 @@ void test_dpf_not_regenerating_after_flag_clear(void) {
     TEST_ASSERT_FALSE(isDPFRegenerating());
 }
 
+// ── global value index guards ──────────────────────────────────────────────────
+
+void test_get_global_value_invalid_index_returns_zero(void) {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, getGlobalValue(-1));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, getGlobalValue(F_LAST));
+}
+
+void test_set_global_value_invalid_index_does_not_modify_valid_slot(void) {
+    setGlobalValue(F_RPM, 321.0f);
+    setGlobalValue(-1, 999.0f);
+    setGlobalValue(F_LAST, 999.0f);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 321.0f, getGlobalValue(F_RPM));
+}
+
 // ── readThrottle — ADC-based mapping ─────────────────────────────────────────
 
 void test_throttle_adc_at_idle_gives_zero(void) {
@@ -182,6 +196,8 @@ int main(void) {
     RUN_TEST(test_dpf_not_regenerating_by_default);
     RUN_TEST(test_dpf_regenerating_when_flag_set);
     RUN_TEST(test_dpf_not_regenerating_after_flag_clear);
+    RUN_TEST(test_get_global_value_invalid_index_returns_zero);
+    RUN_TEST(test_set_global_value_invalid_index_does_not_modify_valid_slot);
 
     RUN_TEST(test_throttle_adc_at_idle_gives_zero);
     RUN_TEST(test_throttle_adc_at_full_gives_max);

@@ -2,9 +2,6 @@
 #include "vp37.h"
 #include <hal/hal_soft_timer.h>
 
-static hal_soft_timer_t fuelTempTimer = NULL;
-static hal_soft_timer_t voltageTimer = NULL;
-
 void measureFuelTemp(void) {
   setGlobalValue(F_FUEL_TEMP, getVP37FuelTemperature());
 }
@@ -35,6 +32,8 @@ static void VP37Pump_initVP37(VP37Pump *self) {
     self->voltageCorrection = 0;
     self->lastPWMval = -1;
     self->finalPWM = VP37_PWM_MIN;
+    self->fuelTempTimer = NULL;
+    self->voltageTimer = NULL;
 
     measureFuelTemp();
     measureVoltage();
@@ -47,14 +46,14 @@ static void VP37Pump_initVP37(VP37Pump *self) {
     hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
     hal_pid_controller_set_max_integral(self->adjustController, PID_MAX_INTEGRAL);
 
-    if(fuelTempTimer == NULL) {
-      fuelTempTimer = hal_soft_timer_create();
+    if(self->fuelTempTimer == NULL) {
+      self->fuelTempTimer = hal_soft_timer_create();
     }
-    if(voltageTimer == NULL) {
-      voltageTimer = hal_soft_timer_create();
+    if(self->voltageTimer == NULL) {
+      self->voltageTimer = hal_soft_timer_create();
     }
-    (void)hal_soft_timer_begin(fuelTempTimer, measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
-    (void)hal_soft_timer_begin(voltageTimer, measureVoltage, VP37_VOLTAGE_UPDATE);
+    (void)hal_soft_timer_begin(self->fuelTempTimer, measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
+    (void)hal_soft_timer_begin(self->voltageTimer, measureVoltage, VP37_VOLTAGE_UPDATE);
 
     self->vp37Initialized = true;
   }
@@ -132,8 +131,8 @@ void VP37Pump_process(VP37Pump *self) {
         self->lastThrottle = self->desiredAdjustometer = -1;
     }
 
-    hal_soft_timer_tick(fuelTempTimer);
-    hal_soft_timer_tick(voltageTimer);
+    hal_soft_timer_tick(self->fuelTempTimer);
+    hal_soft_timer_tick(self->voltageTimer);
 
     int rpm = (int)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {

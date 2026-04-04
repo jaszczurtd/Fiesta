@@ -18,6 +18,11 @@
 #define ecu_Copyright       "FORD MOTOR CO"
 #define ecu_CatchCode       "FD18A3C5"
 
+// Build metadata (updated automatically at compile time).
+#define ecu_BuildDate       __DATE__
+#define ecu_BuildTime       __TIME__
+#define ecu_BuildDateTime   ecu_BuildDate " " ecu_BuildTime
+
 // Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
 // Approximate mileage for a 2001 Ford Fiesta Mk5.
 // Enable OBD_ENABLE_TOTDIST to expose via DID DD01; use getter/setter at runtime.
@@ -160,4 +165,3 @@
 #define MIN_LAMP_TIME             1       // Minimum lamp time in seconds
 
 #endif
-

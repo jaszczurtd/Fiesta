@@ -1,7 +1,7 @@
 #ifndef T_FUEL
 #define T_FUEL
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
 #include "sensors.h"

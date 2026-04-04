@@ -1,7 +1,7 @@
 #ifndef T_CAN
 #define T_CAN
 
-#include <tools.h>
+#include <tools_c.h>
 #include <canDefinitions.h>
 
 #include "sensors.h"

@@ -1,8 +1,4 @@
 
-//based on Open-Ecu-Sim-OBD2-FW
-//https://github.com/spoonieau/OBD2-ECU-Simulator
-// and CAN OBD & UDS Simulator Written By: Cory J. Fowler  December 20th, 2016
-
 #include "obd-2.h"
 #include "rpm.h"
 #include "vp37.h"
@@ -25,15 +21,6 @@ static void sendScpGeneralResponse(uint32_t responseId, uint8_t requestMode, uin
 static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrType);
 static void unsupportedPrint(uint8_t mode, uint8_t pid);
 static void unsupportedServicePrint(uint8_t mode);
-
-static hal_can_t obdCan = NULL;
-
-// CAN RX Variables
-static uint32_t rxId;
-static uint8_t dlc;
-static uint8_t rxBuf[HAL_CAN_MAX_DATA_LEN];
-
-static uint8_t udsSession = UDS_SESSION_DEFAULT;
 
 #define ISO_TP_MAX_PAYLOAD 160
 #define ISO_TP_FC_TIMEOUT_MS 1000
@@ -59,31 +46,67 @@ typedef struct {
   iso_tp_state_t state;
 } iso_tp_ctx_t;
 
-static iso_tp_ctx_t s_isoTp = {};
-static uint32_t s_activeRequestId = LISTEN_ID;
+typedef struct {
+  hal_can_t canHandle;
+  uint32_t rxIdValue;
+  uint8_t dlcValue;
+  uint8_t rxBufValue[HAL_CAN_MAX_DATA_LEN];
+  uint8_t udsSessionValue;
+  iso_tp_ctx_t isoTpState;
+  uint32_t activeRequestIdValue;
+  bool initializedFlag;
+#ifdef OBD_ENABLE_TOTDIST
+  uint32_t totalDistanceKmValue;
+#endif
+} obd_state_t;
+
+static obd_state_t s_obdState = {
+  .canHandle = NULL,
+  .rxIdValue = 0u,
+  .dlcValue = 0u,
+  .rxBufValue = {0u},
+  .udsSessionValue = UDS_SESSION_DEFAULT,
+  .isoTpState = {
+    .data = {0u},
+    .len = 0,
+    .offset = 0,
+    .responseId = 0u,
+    .requestId = 0u,
+    .index = 0u,
+    .stMin = 0u,
+    .blockSize = 0u,
+    .blockSent = 0u,
+    .fcWaitStart = 0uL,
+    .lastCfTime = 0uL,
+    .state = ISO_TP_IDLE
+  },
+  .activeRequestIdValue = LISTEN_ID,
+  .initializedFlag = false
+#ifdef OBD_ENABLE_TOTDIST
+  , .totalDistanceKmValue = ecu_TotalDistanceKmDefault
+#endif
+};
 
 #ifdef OBD_ENABLE_TOTDIST
-static uint32_t s_totalDistanceKm = ecu_TotalDistanceKmDefault;
 
 uint32_t obdGetTotalDistanceKm(void) {
-  return s_totalDistanceKm;
+  return s_obdState.totalDistanceKmValue;
 }
 
 void obdSetTotalDistanceKm(uint32_t km) {
-  s_totalDistanceKm = km;
+  s_obdState.totalDistanceKmValue = km;
 }
 #endif
 
-static bool initialized = false;
 void obdInit(int retries) {
 
-  obdCan = hal_can_create_with_retry(CAN1_GPIO, CAN1_INT, NULL,
+  s_obdState.canHandle = hal_can_create_with_retry(CAN1_GPIO, CAN1_INT, NULL,
                                       retries > 0 ? retries - 1 : 0,
                                       watchdog_feed);
-  initialized = (obdCan != NULL);
+  s_obdState.initializedFlag = (s_obdState.canHandle != NULL);
 
-  if(initialized) {
-    hal_can_set_std_filters(obdCan, LISTEN_ID, FUNCTIONAL_ID);
+  if(s_obdState.initializedFlag) {
+    hal_can_set_std_filters(s_obdState.canHandle, LISTEN_ID, FUNCTIONAL_ID);
     deb("OBD-2 CAN Shield init ok!");
     dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, false);
   } else {
@@ -92,21 +115,21 @@ void obdInit(int retries) {
 }
 
 void obdLoop(void) {
-  if(!initialized) {
+  if(!s_obdState.initializedFlag) {
     return;
   }
 
   iso_tp_process();
 
   // Block new requests while a multi-frame transfer is in progress.
-  if(s_isoTp.state != ISO_TP_IDLE) {
+  if(s_obdState.isoTpState.state != ISO_TP_IDLE) {
     return;
   }
 
   if(!hal_gpio_read(CAN1_INT)) {
-    if(hal_can_receive(obdCan, &rxId, &dlc, rxBuf)) {
-      if(rxId == FUNCTIONAL_ID || rxId == LISTEN_ID) {
-        obdReq(rxId, rxBuf);
+    if(hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue)) {
+      if(s_obdState.rxIdValue == FUNCTIONAL_ID || s_obdState.rxIdValue == LISTEN_ID) {
+        obdReq(s_obdState.rxIdValue, s_obdState.rxBufValue);
       }
     }
   }
@@ -229,13 +252,13 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
 
 static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = int(getGlobalValue(F_COOLANT_TEMP) + 40);
+  txData[3] = (int)(getGlobalValue(F_COOLANT_TEMP) + 40);
 }
 
 static void encodeMode01IntakePressure(uint8_t *txData) {
   // PID 0x0B: 1 byte, kPa absolute (0-255)
   // F_PRESSURE is gauge bar (above atmosphere); convert: kPa_abs = bar*100 + 101
-  int kpa = int(getGlobalValue(F_PRESSURE) * 100.0f) + 101;
+  int kpa = (int)(getGlobalValue(F_PRESSURE) * 100.0f) + 101;
   if(kpa < 0) kpa = 0;
   if(kpa > 255) kpa = 255;
   txData[0] = 0x03;
@@ -258,7 +281,7 @@ static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
 
 static void encodeMode01FuelLevel(uint8_t *txData) {
   txData[0] = 0x03;
-  int fuelPercentage = ( (int(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
+  int fuelPercentage = ( ((int)(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
   if(fuelPercentage > 100) {
     fuelPercentage = 100;
   }
@@ -267,19 +290,19 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
 
 static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[0] = 0x04;
-  int engine_Rpm = int(getGlobalValue(F_RPM) * 4);
+  int engine_Rpm = (int)(getGlobalValue(F_RPM) * 4);
   txData[3] = MSB(engine_Rpm);
   txData[4] = LSB(engine_Rpm);
 }
 
 static void encodeMode01VehicleSpeed(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = int(getGlobalValue(F_ABS_CAR_SPEED));
+  txData[3] = (int)(getGlobalValue(F_ABS_CAR_SPEED));
 }
 
 static void encodeMode01IntakeTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = int(getGlobalValue(F_INTAKE_TEMP) + 40);
+  txData[3] = (int)(getGlobalValue(F_INTAKE_TEMP) + 40);
 }
 
 static void encodeMode01ThrottlePos(uint8_t *txData) {
@@ -309,7 +332,7 @@ static void encodeMode01Pid_21_40(uint8_t *txData) {
 
 static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[0] = 0x04;
-  int temp = (int(getGlobalValue(F_EGT)) + 40) * 10;
+  int temp = ((int)(getGlobalValue(F_EGT)) + 40) * 10;
   txData[3] = MSB(temp);
   txData[4] = LSB(temp);
 }
@@ -326,7 +349,7 @@ static void encodeMode01Pid_41_60(uint8_t *txData) {
 
 static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[0] = 0x04;
-  int volt = int(getGlobalValue(F_VOLTS) * 1000.0f);
+  int volt = (int)(getGlobalValue(F_VOLTS) * 1000.0f);
   txData[3] = MSB(volt);
   txData[4] = LSB(volt);
 }
@@ -338,7 +361,7 @@ static void encodeMode01FuelType(uint8_t *txData) {
 
 static void encodeMode01EngineOilTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = int(getGlobalValue(F_OIL_TEMP) + 40);
+  txData[3] = (int)(getGlobalValue(F_OIL_TEMP) + 40);
 }
 
 static void encodeMode01FuelTiming(uint8_t *txData) {
@@ -486,7 +509,7 @@ bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
     uint8_t txData[8] = {0};
     s_mode01PidHandlers[i].encoder(txData);
 
-    int dataLen = int(txData[0]) - 2; // len includes service + pid
+    int dataLen = (int)(txData[0]) - 2; // len includes service + pid
     if(dataLen < 0) {
       dataLen = 0;
     }
@@ -837,6 +860,23 @@ static void send12LocalField(uint32_t responseId, uint8_t localId, const char *s
   iso_tp(responseId, 2 + width, payload);
 }
 
+static void writeAsciiField(uint8_t *block,
+                            int len,
+                            int offset,
+                            int width,
+                            const char *value) {
+  if(block == NULL || value == NULL || width <= 0 || offset < 0 || (offset + width) > len) {
+    return;
+  }
+
+  int n = (int)strlen(value);
+  if(n > width) {
+    n = width;
+  }
+
+  memcpy(&block[offset], value, (size_t)n);
+}
+
 // Build a compact synthetic SCP ID block that can be accessed via service 0x23.
 // Layout follows Ford EEC-V conventions documented in CRAI8:
 //   Bottom half (0x00-0x7F): non-checksummed identification fields
@@ -852,33 +892,23 @@ static void buildScpIdBlock(uint8_t *block, int len) {
   block[0x13] = SCP_IDBLOCK_FMT_DEFAULT;
 
   // Store commonly requested identification values in a deterministic layout.
-  auto writeAscii = [&](int offset, int width, const char *value) {
-    if(value == NULL || width <= 0 || offset < 0 || (offset + width) > len) {
-      return;
-    }
-
-    int n = (int)strlen(value);
-    if(n > width) n = width;
-    memcpy(&block[offset], value, (size_t)n);
-  };
-
   // Bottom half: identification fields (not in checksummed range)
-  writeAscii(0x20, 16, ecu_Model);
-  writeAscii(0x30, 8, ecu_Type);
-  writeAscii(0x38, 8, ecu_SubType);
-  writeAscii(0x40, 8, ecu_CatchCode);
-  writeAscii(0x48, 8, ecu_SwDate);
-  writeAscii(0x50, 16, ecu_CalibrationId);
-  writeAscii(0x60, 16, ecu_PartNumber);
-  writeAscii(0x70, 8, ecu_HardwareId);
+  writeAsciiField(block, len, 0x20, 16, ecu_Model);
+  writeAsciiField(block, len, 0x30, 8, ecu_Type);
+  writeAsciiField(block, len, 0x38, 8, ecu_SubType);
+  writeAsciiField(block, len, 0x40, 8, ecu_CatchCode);
+  writeAsciiField(block, len, 0x48, 8, ecu_SwDate);
+  writeAsciiField(block, len, 0x50, 16, ecu_CalibrationId);
+  writeAsciiField(block, len, 0x60, 16, ecu_PartNumber);
+  writeAsciiField(block, len, 0x70, 8, ecu_HardwareId);
   block[0x78] = 0x00;
   block[0x79] = 0x08;
   block[0x7A] = 0x00;
   block[0x7B] = 0x00;
 
   // Upper half: checksummed — VIN at 0x85..0x95, Copyright at 0x97
-  writeAscii(SCP_IDBLOCK_VIN_OFFSET, 17, vehicle_Vin);
-  writeAscii(SCP_IDBLOCK_COPYRIGHT_OFS, 32, ecu_Copyright);
+  writeAsciiField(block, len, SCP_IDBLOCK_VIN_OFFSET, 17, vehicle_Vin);
+  writeAsciiField(block, len, SCP_IDBLOCK_COPYRIGHT_OFS, 32, ecu_Copyright);
 
   // Vidblock checksum (CRAI8 §35.7.3.2): word-by-word sum of bytes
   // 128..255 must equal 0 (mod 65536). Compute correction word at 0xFE.
@@ -920,7 +950,7 @@ static bool readScpDmrByte(uint8_t dmrType, uint16_t addr, uint8_t *outValue) {
 
 static void sendScpGeneralResponse(uint32_t responseId, uint8_t requestMode, uint8_t arg1, uint8_t arg2, uint8_t arg3, uint8_t responseCode) {
   uint8_t rsp[8] = {0x06, UDS_RSP_NEGATIVE, requestMode, arg1, arg2, arg3, responseCode, PAD};
-  hal_can_send(obdCan, responseId, 8, rsp);
+  hal_can_send(s_obdState.canHandle, responseId, 8, rsp);
 }
 
 static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrType) {
@@ -937,7 +967,7 @@ static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrTy
 #ifdef OBD_VERBOSE_IDENT_DEBUG
   hal_deb_hex("SCP 0x23/0x63 response", rsp, (int)sizeof(rsp), 16);
 #endif
-  hal_can_send(obdCan, responseId, 8, rsp);
+  hal_can_send(s_obdState.canHandle, responseId, 8, rsp);
 }
 
 // Encode a known Ford SCP PID into data bytes.
@@ -1114,9 +1144,9 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
 
     uint8_t subFunction = data[2] & 0x7F;
     if(subFunction == UDS_SESSION_DEFAULT || subFunction == UDS_SESSION_PROGRAMMING || subFunction == UDS_SESSION_EXTENDED) {
-      udsSession = subFunction;
+      s_obdState.udsSessionValue = subFunction;
       uint8_t udsRsp[] = {0x06, UDS_RSP_DIAGNOSTIC_SESSION, subFunction, 0x00, 0x32, 0x01, 0xF4, PAD};
-      hal_can_send(obdCan, responseId, 8, udsRsp);
+      hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
     } else {
       negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
     }
@@ -1259,7 +1289,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     }
 
     uint8_t dmrType = data[2];
-    uint16_t addr = (uint16_t(data[3]) << 8) | uint16_t(data[4]);
+    uint16_t addr = ((uint16_t)(data[3]) << 8) | (uint16_t)(data[4]);
     deb("SCP 0x23 DMR type=0x%02X addr=0x%04X", dmrType, addr);
 
     bool validType = (dmrType == 0x00 || dmrType == 0x01 || dmrType == 0x08 || dmrType == 0x09);
@@ -1277,7 +1307,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       return true;
     }
 
-    uint16_t did = (uint16_t(data[2]) << 8) | uint16_t(data[3]);
+    uint16_t did = ((uint16_t)(data[2]) << 8) | (uint16_t)(data[3]);
     deb("UDS 0x22 DID=0x%04X len=%d", did, numofBytes);
     // Detect multi-DID requests: service(1) + N*DID(2) means numofBytes > 3 for N>1.
     if(numofBytes > 3) {
@@ -1289,7 +1319,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     }
 #ifdef OBD_VERBOSE_IDENT_DEBUG
     if(isFordDiagIdentificationDid(did)) {
-      deb("UDS 0x22 ident request DID=0x%04X reqId=0x%03lX", did, (unsigned long)s_activeRequestId);
+      deb("UDS 0x22 ident request DID=0x%04X reqId=0x%03lX", did, (unsigned long)s_obdState.activeRequestIdValue);
       hal_deb_hex("UDS 0x22 ident request raw", data, (int)numofBytes + 1, 16);
     }
 #endif
@@ -1300,7 +1330,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
         PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD
       };
       for(int a = 0; a < 17 && a < (int)strlen(vehicle_Vin); a++) {
-        payload[3 + a] = uint8_t(vehicle_Vin[a]);
+        payload[3 + a] = (uint8_t)(vehicle_Vin[a]);
       }
 #ifdef OBD_VERBOSE_IDENT_DEBUG
       deb("UDS 0x22 F190 VIN='%s'", vehicle_Vin);
@@ -1308,8 +1338,8 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
 #endif
       iso_tp(responseId, 20, payload);
     } else if(did == DID_ACTIVE_SESSION) {
-      uint8_t udsRsp[] = {0x04, UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_ACTIVE_SESSION >> 8), (uint8_t)(DID_ACTIVE_SESSION & 0xFF), udsSession, PAD, PAD, PAD};
-      hal_can_send(obdCan, responseId, 8, udsRsp);
+      uint8_t udsRsp[] = {0x04, UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_ACTIVE_SESSION >> 8), (uint8_t)(DID_ACTIVE_SESSION & 0xFF), s_obdState.udsSessionValue, PAD, PAD, PAD};
+      hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
     } else if(did == DID_SPARE_PART_NUMBER) {
       send22Field(responseId, did, ecu_PartNumber, (int)strlen(ecu_PartNumber));
     } else if(did == DID_SW_VERSION) {
@@ -1536,7 +1566,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     deb("KWP 0x12 localId=0x%02X", localId);
 #ifdef OBD_VERBOSE_IDENT_DEBUG
     if(isFordDiagIdentificationLocalId(localId)) {
-      deb("KWP 0x12 ident request localId=0x%02X reqId=0x%03lX", localId, (unsigned long)s_activeRequestId);
+      deb("KWP 0x12 ident request localId=0x%02X reqId=0x%03lX", localId, (unsigned long)s_obdState.activeRequestIdValue);
       hal_deb_hex("KWP 0x12 ident request raw", data, (int)numofBytes + 1, 16);
     }
 #endif
@@ -1720,7 +1750,7 @@ void obdReq(uint32_t requestId, uint8_t *data){
   if(requestId == LISTEN_ID) {
     responseId = REPLY_ID;
   }
-  s_activeRequestId = requestId;
+  s_obdState.activeRequestIdValue = requestId;
 
   uint8_t mode = data[1];
   uint8_t pid = (numofBytes > 1) ? data[2] : 0;
@@ -1735,14 +1765,14 @@ void obdReq(uint32_t requestId, uint8_t *data){
   
   if(handleObdService(mode, pid, responseId, txData, &tx)) {
     if(tx) {
-      hal_can_send(obdCan, responseId, 8, txData);
+      hal_can_send(s_obdState.canHandle, responseId, 8, txData);
     }
     return;
   }
 
   if(handleUdsService(mode, numofBytes, data, responseId, txData, &tx)) {
     if(tx) {
-      hal_can_send(obdCan, responseId, 8, txData);
+      hal_can_send(s_obdState.canHandle, responseId, 8, txData);
     }
     return;
   }
@@ -1756,7 +1786,7 @@ void obdReq(uint32_t requestId, uint8_t *data){
 // Generic debug serial output
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason){
   uint8_t txData[] = {0x03,UDS_RSP_NEGATIVE,mode,reason,PAD,PAD,PAD,PAD};
-  hal_can_send(obdCan, responseId, 8, txData);
+  hal_can_send(s_obdState.canHandle, responseId, 8, txData);
 }
 
 
@@ -1784,7 +1814,7 @@ static void iso_tp(uint32_t responseId, int len, uint8_t *data) {
     for(int i = 0; i < len; i++) {
       sf[i + 1] = data[i];
     }
-    hal_can_send(obdCan, responseId, 8, sf);
+    hal_can_send(s_obdState.canHandle, responseId, 8, sf);
     return;
   }
 
@@ -1793,71 +1823,71 @@ static void iso_tp(uint32_t responseId, int len, uint8_t *data) {
     // Keep announced length consistent with transmitted data when clamping.
     derr("ISO-TP payload truncated from %d to %d bytes", len, copyLen);
   }
-  memcpy(s_isoTp.data, data, (size_t)copyLen);
-  s_isoTp.len        = copyLen;
-  s_isoTp.offset     = 0;
-  s_isoTp.responseId = responseId;
-  s_isoTp.requestId  = s_activeRequestId;
-  s_isoTp.index      = 1;
-  s_isoTp.stMin      = 0;
-  s_isoTp.blockSize  = 0;
-  s_isoTp.blockSent  = 0;
-  s_isoTp.lastCfTime = 0;
+  memcpy(s_obdState.isoTpState.data, data, (size_t)copyLen);
+  s_obdState.isoTpState.len        = copyLen;
+  s_obdState.isoTpState.offset     = 0;
+  s_obdState.isoTpState.responseId = responseId;
+  s_obdState.isoTpState.requestId  = s_obdState.activeRequestIdValue;
+  s_obdState.isoTpState.index      = 1;
+  s_obdState.isoTpState.stMin      = 0;
+  s_obdState.isoTpState.blockSize  = 0;
+  s_obdState.isoTpState.blockSent  = 0;
+  s_obdState.isoTpState.lastCfTime = 0;
 
   uint8_t tpData[8] = {0};
   tpData[0] = 0x10 | ((copyLen >> 8) & 0x0F);
   tpData[1] = (uint8_t)(copyLen & 0xFF);
-  for(uint8_t i = 2; i < 8 && s_isoTp.offset < copyLen; i++) {
-    tpData[i] = s_isoTp.data[s_isoTp.offset++];
+  for(uint8_t i = 2; i < 8 && s_obdState.isoTpState.offset < copyLen; i++) {
+    tpData[i] = s_obdState.isoTpState.data[s_obdState.isoTpState.offset++];
   }
-  hal_can_send(obdCan, responseId, 8, tpData);
+  hal_can_send(s_obdState.canHandle, responseId, 8, tpData);
 
-  s_isoTp.fcWaitStart = hal_millis();
-  s_isoTp.state = ISO_TP_WAIT_FC;
+  s_obdState.isoTpState.fcWaitStart = hal_millis();
+  s_obdState.isoTpState.state = ISO_TP_WAIT_FC;
 }
 
 // Called every obdLoop() iteration; sends one CF per call, handles FC frames.
 static void iso_tp_process(void) {
-  if(s_isoTp.state == ISO_TP_IDLE) {
+  if(s_obdState.isoTpState.state == ISO_TP_IDLE) {
     return;
   }
 
-  if(s_isoTp.state == ISO_TP_WAIT_FC) {
-    if((hal_millis() - s_isoTp.fcWaitStart) >= ISO_TP_FC_TIMEOUT_MS) {
-      derr("ISO-TP timeout waiting for FC (len=%d)", s_isoTp.len);
-      s_isoTp.state = ISO_TP_IDLE;
+  if(s_obdState.isoTpState.state == ISO_TP_WAIT_FC) {
+    if((hal_millis() - s_obdState.isoTpState.fcWaitStart) >= ISO_TP_FC_TIMEOUT_MS) {
+      derr("ISO-TP timeout waiting for FC (len=%d)", s_obdState.isoTpState.len);
+      s_obdState.isoTpState.state = ISO_TP_IDLE;
       return;
     }
     // Drain up to several frames per call so that stale/non-OBD traffic
     // cannot keep the MCP2515 RX buffers occupied while we wait for FC.
     for(int drain = 0; drain < 8; drain++) {
       if(hal_gpio_read(CAN1_INT)) break;            // no more frames
-      bool gotFrame = hal_can_receive(obdCan, &rxId, &dlc, rxBuf);
+      bool gotFrame = hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue);
       if(!gotFrame) break;
-      bool idMatches = (rxId == s_isoTp.requestId) || (rxId == LISTEN_ID) || (rxId == FUNCTIONAL_ID);
+      bool idMatches = (s_obdState.rxIdValue == s_obdState.isoTpState.requestId) || (s_obdState.rxIdValue == LISTEN_ID) || (s_obdState.rxIdValue == FUNCTIONAL_ID);
       if(gotFrame && idMatches) {
-        if(dlc >= 3 && ((rxBuf[0] & 0xF0) == 0x30)) {
-          uint8_t fcType = rxBuf[0] & 0x0F;
+        if(s_obdState.dlcValue >= 3 && ((s_obdState.rxBufValue[0] & 0xF0) == 0x30)) {
+          uint8_t fcType = s_obdState.rxBufValue[0] & 0x0F;
           if(fcType == 0x00) {
-            s_isoTp.blockSize  = rxBuf[1];
-            s_isoTp.stMin      = stMinToMs(rxBuf[2]);
-            s_isoTp.blockSent  = 0;
-            s_isoTp.lastCfTime = 0;
-            s_isoTp.state      = ISO_TP_SEND_CF;
+            s_obdState.isoTpState.blockSize  = s_obdState.rxBufValue[1];
+            s_obdState.isoTpState.stMin      = stMinToMs(s_obdState.rxBufValue[2]);
+            s_obdState.isoTpState.blockSent  = 0;
+            s_obdState.isoTpState.lastCfTime = 0;
+            s_obdState.isoTpState.state      = ISO_TP_SEND_CF;
             return;
           } else if(fcType == 0x01) {
-            s_isoTp.fcWaitStart = hal_millis(); // extend wait window
+            s_obdState.isoTpState.fcWaitStart = hal_millis(); // extend wait window
             return;
           } else if(fcType == 0x02) {
             derr("ISO-TP FC abort from tester");
-            s_isoTp.state = ISO_TP_IDLE;
+            s_obdState.isoTpState.state = ISO_TP_IDLE;
             return;
           }
         } else {
           // Non-FC frame arrived while waiting for FC - tester sent a new request.
-          derr("ISO-TP WAIT_FC: non-FC frame LOST rxId=0x%03lX PCI=0x%02X",
-               (unsigned long)rxId, rxBuf[0]);
-          hal_deb_hex("ISO-TP lost frame", rxBuf, (dlc < 8) ? dlc : 8, 8);
+          derr("ISO-TP WAIT_FC: non-FC frame LOST s_obdState.rxIdValue=0x%03lX PCI=0x%02X",
+               (unsigned long)s_obdState.rxIdValue, s_obdState.rxBufValue[0]);
+          hal_deb_hex("ISO-TP lost frame", s_obdState.rxBufValue, (s_obdState.dlcValue < 8) ? s_obdState.dlcValue : 8, 8);
         }
       }
       // Non-matching ID or non-FC: discard and try next frame.
@@ -1866,36 +1896,36 @@ static void iso_tp_process(void) {
   }
 
   // ISO_TP_SEND_CF: send at most one CF per call, respecting stMin.
-  if(s_isoTp.lastCfTime != 0 &&
-     (hal_millis() - s_isoTp.lastCfTime) < s_isoTp.stMin) {
+  if(s_obdState.isoTpState.lastCfTime != 0 &&
+     (hal_millis() - s_obdState.isoTpState.lastCfTime) < s_obdState.isoTpState.stMin) {
     return;
   }
 
   uint8_t tpData[8] = {0};
-  tpData[0] = 0x20 | (s_isoTp.index & 0x0F);
-  s_isoTp.index = (uint8_t)((s_isoTp.index + 1) & 0x0F);
+  tpData[0] = 0x20 | (s_obdState.isoTpState.index & 0x0F);
+  s_obdState.isoTpState.index = (uint8_t)((s_obdState.isoTpState.index + 1) & 0x0F);
 
   for(uint8_t i = 1; i < 8; i++) {
-    if(s_isoTp.offset < s_isoTp.len) {
-      tpData[i] = s_isoTp.data[s_isoTp.offset++];
+    if(s_obdState.isoTpState.offset < s_obdState.isoTpState.len) {
+      tpData[i] = s_obdState.isoTpState.data[s_obdState.isoTpState.offset++];
     }
   }
 
-  hal_can_send(obdCan, s_isoTp.responseId, 8, tpData);
-  s_isoTp.lastCfTime = hal_millis();
+  hal_can_send(s_obdState.canHandle, s_obdState.isoTpState.responseId, 8, tpData);
+  s_obdState.isoTpState.lastCfTime = hal_millis();
 
-  if(s_isoTp.offset >= s_isoTp.len) {
-    deb("ISO-TP TX done %d bytes", s_isoTp.len);
-    s_isoTp.state = ISO_TP_IDLE;
+  if(s_obdState.isoTpState.offset >= s_obdState.isoTpState.len) {
+    deb("ISO-TP TX done %d bytes", s_obdState.isoTpState.len);
+    s_obdState.isoTpState.state = ISO_TP_IDLE;
     return;
   }
 
-  if(s_isoTp.blockSize != 0) {
-    s_isoTp.blockSent++;
-    if(s_isoTp.blockSent >= s_isoTp.blockSize) {
-      s_isoTp.blockSent   = 0;
-      s_isoTp.fcWaitStart = hal_millis();
-      s_isoTp.state       = ISO_TP_WAIT_FC;
+  if(s_obdState.isoTpState.blockSize != 0) {
+    s_obdState.isoTpState.blockSent++;
+    if(s_obdState.isoTpState.blockSent >= s_obdState.isoTpState.blockSize) {
+      s_obdState.isoTpState.blockSent   = 0;
+      s_obdState.isoTpState.fcWaitStart = hal_millis();
+      s_obdState.isoTpState.state       = ISO_TP_WAIT_FC;
     }
   }
 }

@@ -1,7 +1,7 @@
 #ifndef T_FAN
 #define T_FAN
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
 #include "sensors.h"

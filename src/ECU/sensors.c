@@ -5,25 +5,61 @@
 #include "gps.h"
 #include "rpm.h"
 
-NOINIT static volatile float valueFields[F_LAST];
-NOINIT volatile float reflectionValueFields[F_LAST];
+typedef struct {
+  volatile float valueFields[F_LAST];
+  volatile float reflectionValueFields[F_LAST];
+} sensors_persistent_state_t;
 
+typedef struct {
+  int collantTableIdx;
+  int collantValuesSet;
+  float collantTable[HAL_TOOLS_TEMPERATURE_TABLES_SIZE];
+  int oilTableIdx;
+  int oilValuesSet;
+  float oilTable[HAL_TOOLS_TEMPERATURE_TABLES_SIZE];
+  unsigned char pcf8574State;
+  hal_pwm_freq_channel_t pwmVp37;
+  hal_pwm_freq_channel_t pwmTurbo;
+  hal_pwm_freq_channel_t pwmAngle;
+  unsigned char lowCurrentValue;
+  float lastVoltage;
+  int lastEGTTemp;
+  int lastCoolantTemp;
+  int lastOilTemp;
+  bool lastIsEngineRunning;
+} sensors_runtime_state_t;
 
-static int collantTableIdx = 0;
-static int collantValuesSet = 0;
-static float collantTable[TEMPERATURE_TABLES_SIZE];
-static int oilTableIdx = 0;
-static int oilValuesSet = 0;
-static float oilTable[TEMPERATURE_TABLES_SIZE];
-
-static unsigned char pcf8574State = 0;
+NOINIT static sensors_persistent_state_t s_sensorsPersistent;
+static sensors_runtime_state_t s_sensorsState = {
+  .collantTableIdx = 0,
+  .collantValuesSet = 0,
+  .collantTable = {0.0f},
+  .oilTableIdx = 0,
+  .oilValuesSet = 0,
+  .oilTable = {0.0f},
+  .pcf8574State = 0,
+  .pwmVp37 = NULL,
+  .pwmTurbo = NULL,
+  .pwmAngle = NULL,
+  .lowCurrentValue = 0,
+  .lastVoltage = 0.0f,
+  .lastEGTTemp = 0,
+  .lastCoolantTemp = 0,
+  .lastOilTemp = 0,
+  .lastIsEngineRunning = false
+};
 
 m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
 
-static hal_pwm_freq_channel_t pwmVp37  = NULL;
-static hal_pwm_freq_channel_t pwmTurbo = NULL;
-static hal_pwm_freq_channel_t pwmAngle = NULL;
+static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
+  if((idx < 0) || (idx >= F_LAST)) {
+    derr_limited("sensors", "%s invalid value index: %d (valid: 0..%d)",
+                 caller, idx, (F_LAST - 1));
+    return false;
+  }
+  return true;
+}
 
 void initI2C(void) {
   hal_i2c_init(PIN_SDA, PIN_SCL, I2C_SPEED_HZ);
@@ -34,32 +70,44 @@ void initSPI(void) {
 }
 
 void setGlobalValue(int idx, float val) {
+  if(!sensors_isGlobalValueIndexValid(idx, "setGlobalValue")) {
+    return;
+  }
   m_mutex_enter_blocking(valueFieldsMutex);
-  valueFields[idx] = val;
+  s_sensorsPersistent.valueFields[idx] = val;
   m_mutex_exit(valueFieldsMutex);
 }
 
 float getGlobalValue(int idx) {
+  if(!sensors_isGlobalValueIndexValid(idx, "getGlobalValue")) {
+    return 0.0f;
+  }
   m_mutex_enter_blocking(valueFieldsMutex);
-  float v = valueFields[idx];
+  float v = s_sensorsPersistent.valueFields[idx];
   m_mutex_exit(valueFieldsMutex);
   return v;
 }
 
 void initSensors(void) {
   m_mutex_init(valueFieldsMutex);
-  hal_adc_set_resolution(ADC_BITS);
+  hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
   pwm_init();
 
   init4051();
   hal_ext_adc_init(ADS1115_ADDR, ADC_RANGE);
 
   for(int a = 0; a < F_LAST; a++) {
-    valueFields[a] = reflectionValueFields[a] = 0.0;
+    s_sensorsPersistent.valueFields[a] = s_sensorsPersistent.reflectionValueFields[a] = 0.0;
   }
 
-  collantTableIdx = collantValuesSet = 0;
-  oilTableIdx = oilValuesSet = 0;
+  s_sensorsState.collantTableIdx = s_sensorsState.collantValuesSet = 0;
+  s_sensorsState.oilTableIdx = s_sensorsState.oilValuesSet = 0;
+  s_sensorsState.lowCurrentValue = 0;
+  s_sensorsState.lastVoltage = 0.0f;
+  s_sensorsState.lastEGTTemp = 0;
+  s_sensorsState.lastCoolantTemp = 0;
+  s_sensorsState.lastOilTemp = 0;
+  s_sensorsState.lastIsEngineRunning = false;
 
   initGPS();
 }
@@ -77,9 +125,9 @@ float readCoolantTemp(void) {
   m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_COOLANT_TEMP);
-  a = getAverageForTable(&collantTableIdx, &collantValuesSet,
+  a = getAverageForTable(&s_sensorsState.collantTableIdx, &s_sensorsState.collantValuesSet,
                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                        collantTable);
+                        s_sensorsState.collantTable);
   m_mutex_exit(analog4051Mutex);  
   return a;
 }
@@ -93,9 +141,9 @@ float readOilTemp(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_OIL_TEMP);
 
-  a = getAverageForTable(&oilTableIdx, &oilValuesSet,
+  a = getAverageForTable(&s_sensorsState.oilTableIdx, &s_sensorsState.oilValuesSet,
                          ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                         oilTable);
+                         s_sensorsState.oilTable);
   m_mutex_exit(analog4051Mutex);  
   return a;
 }
@@ -111,7 +159,7 @@ int readThrottle(void) {
   int rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
   m_mutex_exit(analog4051Mutex);
 
-  //deb("rawVal %d", int(rawVal));
+  //deb("rawVal %d", (int)(rawVal));
 
   int initialVal = rawVal - THROTTLE_MIN;
 
@@ -129,7 +177,7 @@ int readThrottle(void) {
 }
 
 int getThrottlePercentage(void) {
-  int currentVal = int(getGlobalValue(F_THROTTLE_POS));
+  int currentVal = (int)(getGlobalValue(F_THROTTLE_POS));
   float percent = (currentVal * 100) / PWM_RESOLUTION;
   return percentToGivenVal(percent, 100);
 }
@@ -183,22 +231,22 @@ int readEGT(void) {
 //-------------------------------------------------------------------------------------------------
 
 void pcf8574_init(void) {
-  pcf8574State = 0;
+  s_sensorsState.pcf8574State = 0;
 
   hal_i2c_begin_transmission(PCF8574_ADDR);
-  hal_i2c_write(pcf8574State);
+  hal_i2c_write(s_sensorsState.pcf8574State);
   hal_i2c_end_transmission();
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
   if(value) {
-    bitSet(pcf8574State, pin);
+    bitSet(s_sensorsState.pcf8574State, pin);
   }  else {
-    bitClear(pcf8574State, pin);
+    bitClear(s_sensorsState.pcf8574State, pin);
   }
 
   hal_i2c_begin_transmission(PCF8574_ADDR);
-  bool success = hal_i2c_write(pcf8574State);
+  bool success = hal_i2c_write(s_sensorsState.pcf8574State);
   bool notFound = hal_i2c_end_transmission();
 
   if(!success) {
@@ -225,12 +273,11 @@ bool pcf8574_read(unsigned char pin) {
 }
 
 int getRAWThrottle(void) {
-  return int(getGlobalValue(F_THROTTLE_POS));
+  return (int)(getGlobalValue(F_THROTTLE_POS));
 }
 
-static unsigned char lowCurrentValue = 0;
 void readMediumValues(void) {
-  switch(lowCurrentValue) {
+  switch(s_sensorsState.lowCurrentValue) {
     case F_COOLANT_TEMP:
       setGlobalValue(F_COOLANT_TEMP, readCoolantTemp());
       break;
@@ -252,15 +299,15 @@ void readMediumValues(void) {
       break;
 #endif
   }
-  if(lowCurrentValue++ > F_LAST) {
-    lowCurrentValue = 0;
+  if(s_sensorsState.lowCurrentValue++ > F_LAST) {
+    s_sensorsState.lowCurrentValue = 0;
   }
 }
 
 int getPercentageEngineLoad(void) {
 
   float map = (getGlobalValue(F_PRESSURE) * 255.0f / 2.55f);
-  float load = (map / 255.0f) * (getGlobalValue(F_RPM) / float(RPM_MAX_EVER)) * 100.0f;
+  float load = (map / 255.0f) * (getGlobalValue(F_RPM) / (float)(RPM_MAX_EVER)) * 100.0f;
   int roundedLoad = (int)(load + 0.5f);
 
   if (roundedLoad < 0) {
@@ -296,8 +343,8 @@ void readHighValues(void) {
         setGlobalValue(a, v);
         break;
     }
-    if(reflectionValueFields[a] != v) {
-        reflectionValueFields[a] = v;
+    if(s_sensorsPersistent.reflectionValueFields[a] != v) {
+        s_sensorsPersistent.reflectionValueFields[a] = v;
 
         CAN_sendThrottleUpdate();
         CAN_sendTurboUpdate();
@@ -327,12 +374,6 @@ bool isDPFRegenerating(void) {
   return getGlobalValue(F_DPF_REGEN) > 0;
 }
 
-static float lastVoltage = 0;
-static int lastEGTTemp = 0;
-static int lastCoolantTemp = 0;
-static int lastOilTemp = 0;
-static bool lastIsEngineRunning = false;
-
 void updateValsForDebug(void) {
 
   char stamp[24];
@@ -343,48 +384,48 @@ void updateValsForDebug(void) {
   }
 
   float volts = rroundf(getGlobalValue(F_VOLTS));
-  if(lastVoltage != volts) {
-    lastVoltage = volts;
+  if(s_sensorsState.lastVoltage != volts) {
+    s_sensorsState.lastVoltage = volts;
     deb("%sVoltage update: %.1fV", stamp, volts);
   }
 
   int egt = (int)getGlobalValue(F_EGT);
-  if(lastEGTTemp != egt) {
-    lastEGTTemp = egt;
+  if(s_sensorsState.lastEGTTemp != egt) {
+    s_sensorsState.lastEGTTemp = egt;
     deb("%sEGT update: %dC", stamp, egt);
   }
 
   int coolant = (int)getGlobalValue(F_COOLANT_TEMP);
-  if(lastCoolantTemp != coolant) {
-    lastCoolantTemp = coolant;
+  if(s_sensorsState.lastCoolantTemp != coolant) {
+    s_sensorsState.lastCoolantTemp = coolant;
     deb("%sCoolant temp. update: %dC", stamp, coolant);
   }
 
   int oil = (int)getGlobalValue(F_OIL_TEMP);
-  if(lastOilTemp != oil) {
-    lastOilTemp = oil;
+  if(s_sensorsState.lastOilTemp != oil) {
+    s_sensorsState.lastOilTemp = oil;
     deb("%sOil temp. update: %dC", stamp, oil);
   }
 
   bool running = RPM_isEngineRunning(getRPMInstance());
-  if(lastIsEngineRunning != running) {
-    lastIsEngineRunning = running;
+  if(s_sensorsState.lastIsEngineRunning != running) {
+    s_sensorsState.lastIsEngineRunning = running;
     deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
   }
 }
 
 void pwm_init(void) {
-  pwmVp37  = hal_pwm_freq_create(PIO_VP37_RPM,  VP37_PWM_FREQUENCY_HZ,  PWM_RESOLUTION);
-  pwmTurbo = hal_pwm_freq_create(PIO_TURBO,     TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
-  pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmVp37  = hal_pwm_freq_create(PIO_VP37_RPM,  VP37_PWM_FREQUENCY_HZ,  PWM_RESOLUTION);
+  s_sensorsState.pwmTurbo = hal_pwm_freq_create(PIO_TURBO,     TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
 void valToPWM(unsigned char pin, int val) {
   hal_pwm_freq_channel_t ch = NULL;
   switch(pin) {
-    case PIO_TURBO:      ch = pwmTurbo; break;
-    case PIO_VP37_RPM:   ch = pwmVp37;  break;
-    case PIO_VP37_ANGLE: ch = pwmAngle; break;
+    case PIO_TURBO:      ch = s_sensorsState.pwmTurbo; break;
+    case PIO_VP37_RPM:   ch = s_sensorsState.pwmVp37;  break;
+    case PIO_VP37_ANGLE: ch = s_sensorsState.pwmAngle; break;
     default: break;
   }
   if(ch != NULL) {

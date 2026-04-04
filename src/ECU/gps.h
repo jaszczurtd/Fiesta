@@ -2,7 +2,7 @@
 #define T_GPS
 
 #include <libConfig.h>
-#include <tools.h>
+#include <tools_c.h>
 #include <hal/hal_gps.h>
 #include "canDefinitions.h"
 

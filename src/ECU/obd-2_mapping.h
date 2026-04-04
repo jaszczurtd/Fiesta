@@ -1,7 +1,7 @@
 #ifndef T_OBD2_MAPPING
 #define T_OBD2_MAPPING
 
-#include <tools.h>
+#include <tools_c.h>
 #include "obd-2_mapping.h"
 
 #ifdef __cplusplus

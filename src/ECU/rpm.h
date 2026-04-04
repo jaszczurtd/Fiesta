@@ -2,7 +2,7 @@
 #ifndef T_RPM
 #define T_RPM
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
 #include "sensors.h"
@@ -38,6 +38,7 @@ typedef struct {
   bool rpmCycle;
 #ifndef VP37
   int rpmPercentValue;
+  hal_soft_timer_t rpmCycleTimer;
 #endif
 } RPM;
 

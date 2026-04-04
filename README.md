@@ -27,14 +27,24 @@ Primary code is in `src/`:
 - `src/Fiesta_clock` - legacy/specialized clock firmware.
 - `src/library` - shared libraries and submodules (`JaszczurHAL`, `canDefinitions`).
 
-## Current status (2026-04-03)
+## Current status (2026-04-04)
+
+### Overall repository state
+
+- primary firmware modules compile successfully with current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`).
+- ECU host-side test suite currently passes: `10/10` suites.
+- ECU startup now reports compile build timestamp (`__DATE__` + `__TIME__`).
 
 ### ECU
 
 - C-style architecture migration in progress (MISRA-oriented).
 - `PIDController` and `SmartTimers` usage migrated through HAL C wrappers.
 - Public ECU headers now include `extern "C"` guards.
-- Host-side ECU tests (CMake + Unity) currently pass: `7/7` suites.
+- ECU source files have been renamed from `.cpp` to `.c`.
+- module-local static runtime/persistent data is being consolidated into
+  explicit state structs (already done for `engineFuel`, `dtcManager`, `gps`,
+  `sensors`, `can`, `start`, `obd-2`).
+- Host-side ECU tests (CMake + Unity) currently pass: `10/10` suites.
 
 Covered suites include:
 
@@ -45,26 +55,50 @@ Covered suites include:
 - `test_obd2`
 - `test_can`
 - `test_hal_wrappers`
+- `test_engineFuel`
+- `test_dtcManager`
+- `test_turbo`
 
 ### MISRA-C migration estimate (ECU)
 
-Estimated MISRA-C compatibility: **~70%**.
+Two-level estimate is used to keep status honest:
+
+- engineering/architecture alignment with MISRA-C intent: **~75-80%**,
+- formal compliance readiness (tooling + evidence): **~45-50%**.
+
+Safety/MISRA scope (important):
+
+- only `src/ECU` is treated as safety-critical and in-scope for MISRA-C migration,
+- `src/Clocks` and `src/OilAndSpeed` are not currently required to be ported to MISRA-C.
+- MISRA findings in `src/Clocks` / `src/OilAndSpeed` should not block ECU safety
+  releases unless project scope is explicitly changed.
 
 Important:
 
 - this is an engineering progress estimate, not a formal compliance certification,
-- exact compliance requires a dedicated MISRA checker and a documented deviation register.
+- exact compliance requires a dedicated MISRA checker and a documented deviation register,
+- current Arduino build flow still compiles ECU `.c` files in transitional C++ mode and links C++ HAL utilities.
 
 Main completed areas:
 
 - class-to-struct migration for core ECU modules,
 - central state ownership (`ecu_context_t`),
 - HAL C wrappers for PID and soft timers,
-- `extern "C"` guards in public ECU headers.
+- `extern "C"` guards in public ECU headers,
+- ECU source files renamed from `.cpp` to `.c`.
+- module-local static runtime/persistent data consolidated into dedicated
+  module state structs (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`,
+  `start`, `obd-2`),
+- migration to explicit `HAL_TOOLS_*` config macros (legacy aliases retained in HAL for compatibility).
+- targeted runtime hardening in ECU:
+  - fixed fuel ring-buffer boundary condition,
+  - added watchdog crash-snapshot bounds guard and Turbo/VP37 cross-core mutex guards,
+  - added bounds validation for `sensors` global value index accessors with regression tests.
 
 Main pending areas:
 
-- staged `.cpp` to `.c` migration for selected modules,
+- full C linkage path for required HAL/tool APIs (current ECU `.c` sources are
+  compiled in transitional C++ mode),
 - MISRA hardening pass (fixed-width casts, bounds checks, overflow safeguards, naming consistency, volatile/mutex review).
 
 ## MISRA documentation policy (mandatory)
@@ -79,15 +113,13 @@ MISRA-related code changes should not be merged without these documentation upda
 
 ## Dependencies
 
-Project uses Arduino ecosystem components and custom libraries.
-
-- Arduino platform: https://www.arduino.cc/
-- RP2040 core (Earle Philhower): https://github.com/earlephilhower/arduino-pico/
-- Unity test framework: https://github.com/ThrowTheSwitch/Unity/
-
-Required shared dependency:
+Runtime code dependency:
 
 - `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
+
+Project submodule dependency:
+
+- `canDefinitions` (CAN IDs/signals shared headers used across firmware modules)
 
 Git submodules declared in `.gitmodules`:
 

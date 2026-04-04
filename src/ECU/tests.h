@@ -1,7 +1,7 @@
 #ifndef T_TESTS
 #define T_TESTS
 
-#include <tools.h>
+#include <tools_c.h>
 
 #ifdef __cplusplus
 extern "C" {

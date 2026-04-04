@@ -1,7 +1,7 @@
 #ifndef T_TURBO
 #define T_TURBO
 
-#include <tools.h>
+#include <tools_c.h>
 #include <float.h>
 
 #include "config.h"

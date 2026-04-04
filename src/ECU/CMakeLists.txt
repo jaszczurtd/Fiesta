@@ -30,27 +30,32 @@ set(HAL_UTIL_SOURCES
 
 # ── ECU sources compilable without arduino-timer / multicoreWatchdog ───────────
 #
-# rpm.cpp   — excluded: uses arduino-timer (Timer class)
-# start.cpp — excluded: uses multicoreWatchdog (which uses arduino-timer)
-# tests.cpp — excluded: placeholder only (empty initTests / startTests)
+# rpm.c   — excluded: uses arduino-timer (Timer class)
+# start.c — excluded: uses multicoreWatchdog (which uses arduino-timer)
+# tests.c — excluded: placeholder only (empty initTests / startTests)
 #
 set(ECU_SOURCES
-    ${ECU_SRC}/sensors.cpp
-    ${ECU_SRC}/glowPlugs.cpp
-    ${ECU_SRC}/engineFan.cpp
-    ${ECU_SRC}/engineHeater.cpp
-    ${ECU_SRC}/engineFuel.cpp
-    ${ECU_SRC}/heatedWindshield.cpp
-    ${ECU_SRC}/obd-2_mapping.cpp
-    ${ECU_SRC}/obd-2.cpp
-    ${ECU_SRC}/dtcManager.cpp
-    ${ECU_SRC}/engineMaps.cpp
-    ${ECU_SRC}/config.cpp
-    ${ECU_SRC}/gps.cpp
-    ${ECU_SRC}/can.cpp
-    ${ECU_SRC}/turbo.cpp
-    ${ECU_SRC}/vp37.cpp
+    ${ECU_SRC}/sensors.c
+    ${ECU_SRC}/glowPlugs.c
+    ${ECU_SRC}/engineFan.c
+    ${ECU_SRC}/engineHeater.c
+    ${ECU_SRC}/engineFuel.c
+    ${ECU_SRC}/heatedWindshield.c
+    ${ECU_SRC}/obd-2_mapping.c
+    ${ECU_SRC}/obd-2.c
+    ${ECU_SRC}/dtcManager.c
+    ${ECU_SRC}/engineMaps.c
+    ${ECU_SRC}/config.c
+    ${ECU_SRC}/gps.c
+    ${ECU_SRC}/can.c
+    ${ECU_SRC}/turbo.c
+    ${ECU_SRC}/vp37.c
 )
+
+# Transitional mode:
+# Sources are renamed to .c as part of MISRA step 3, but still compiled as C++
+# until full C linkage is provided across all required JaszczurHAL APIs.
+set_source_files_properties(${ECU_SOURCES} PROPERTIES LANGUAGE CXX)
 
 # ── ecu_mock: hal mock + tools + ECU sources + stubs for excluded modules ──────
 add_library(ecu_mock STATIC

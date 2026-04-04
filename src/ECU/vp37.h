@@ -1,7 +1,7 @@
 #ifndef T_VP37
 #define T_VP37
 
-#include <tools.h>
+#include <tools_c.h>
 #include <hal/hal_pid_controller.h>
 
 #include "config.h"
@@ -63,6 +63,8 @@ typedef struct {
   int lastPWMval;
   int finalPWM;
   float lastVolts;
+  hal_soft_timer_t fuelTempTimer;
+  hal_soft_timer_t voltageTimer;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
 } VP37Pump;

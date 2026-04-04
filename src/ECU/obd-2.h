@@ -2,7 +2,7 @@
 #ifndef T_OBD
 #define T_OBD
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "hardwareConfig.h"
 #include "sensors.h"

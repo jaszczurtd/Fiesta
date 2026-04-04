@@ -1,7 +1,7 @@
 #ifndef T_GLOWPLUGS
 #define T_GLOWPLUGS
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
 #include "canDefinitions.h"

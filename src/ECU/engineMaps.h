@@ -2,7 +2,7 @@
 #ifndef ENGINE_MAPS
 #define ENGINE_MAPS
 
-#include <tools.h>
+#include <tools_c.h>
 
 #ifdef __cplusplus
 extern "C" {

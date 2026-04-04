@@ -5,7 +5,7 @@
 #include <libConfig.h>
 #include "config.h"
 
-#include <tools.h>
+#include <tools_c.h>
 #include "canDefinitions.h"
 
 #include "hardwareConfig.h"

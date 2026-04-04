@@ -1,7 +1,7 @@
 #ifndef T_DTC_MANAGER
 #define T_DTC_MANAGER
 
-#include <tools.h>
+#include <tools_c.h>
 #include "obd-2_mapping.h"
 
 #ifdef __cplusplus

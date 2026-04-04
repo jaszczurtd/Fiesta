@@ -1,7 +1,7 @@
 #ifndef T_HEATED_WINDSHIELD
 #define T_HEATED_WINDSHIELD
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
 #include "canDefinitions.h"

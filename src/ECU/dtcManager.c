@@ -3,7 +3,7 @@
 
 #define DTC_EEPROM_MAGIC         0x4454434Du // "DTCM"
 #define DTC_EEPROM_VERSION       2u
-#define DTC_EEPROM_BASE          (EEPROM_FIRST_ADDR + 96)
+#define DTC_EEPROM_BASE          (HAL_TOOLS_EEPROM_FIRST_ADDR + 96)
 #define DTC_EEPROM_HEADER_SIZE   5u
 #define DTC_EEPROM_SLOT_SIZE     2u
 #define DTC_FLAG_STORED          0x01u
@@ -24,15 +24,22 @@ typedef struct {
   uint32_t firstOccurrence;  // unix epoch from GPS, 0 = unknown
 } dtc_entry_t;
 
-static dtc_entry_t s_dtcs[] = {
-  {DTC_OBD_CAN_INIT_FAIL, false, false, false, 0},
-  {DTC_PCF8574_COMM_FAIL, false, false, false, 0},
-  {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0},
-  {DTC_DPF_COMM_LOST, false, false, false, 0},
+typedef struct {
+  dtc_entry_t dtcs[4];
+  bool initialized;
+} dtc_manager_state_t;
+
+static dtc_manager_state_t s_dtcState = {
+  .dtcs = {
+    {DTC_OBD_CAN_INIT_FAIL, false, false, false, 0},
+    {DTC_PCF8574_COMM_FAIL, false, false, false, 0},
+    {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0},
+    {DTC_DPF_COMM_LOST, false, false, false, 0}
+  },
+  .initialized = false
 };
 
-static const uint8_t s_dtcCount = COUNTOF(s_dtcs);
-static bool s_dtcInitialized = false;
+#define DTC_COUNT ((uint8_t)COUNTOF(s_dtcState.dtcs))
 
 static uint16_t dtcSlotAddr(uint8_t idx) {
   return (uint16_t)(DTC_EEPROM_BASE + DTC_EEPROM_HEADER_SIZE + (idx * DTC_EEPROM_SLOT_SIZE));
@@ -47,8 +54,8 @@ static uint16_t dtcKvTimestampKey(uint8_t idx) {
 }
 
 static int findDtcIndex(uint16_t code) {
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
-    if(s_dtcs[i].code == code) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
+    if(s_dtcState.dtcs[i].code == code) {
       return i;
     }
   }
@@ -57,42 +64,42 @@ static int findDtcIndex(uint16_t code) {
 
 static uint8_t makeFlagsForIndex(uint8_t idx) {
   uint8_t flags = 0u;
-  if(s_dtcs[idx].stored) {
+  if(s_dtcState.dtcs[idx].stored) {
     flags |= DTC_FLAG_STORED;
   }
-  if(s_dtcs[idx].permanent) {
+  if(s_dtcState.dtcs[idx].permanent) {
     flags |= DTC_FLAG_PERMANENT;
   }
   return flags;
 }
 
 static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
-  s_dtcs[idx].stored = (flags & DTC_FLAG_STORED) != 0u;
-  s_dtcs[idx].permanent = (flags & DTC_FLAG_PERMANENT) != 0u;
+  s_dtcState.dtcs[idx].stored = (flags & DTC_FLAG_STORED) != 0u;
+  s_dtcState.dtcs[idx].permanent = (flags & DTC_FLAG_PERMANENT) != 0u;
 }
 
 static bool saveDtcToKv(uint8_t idx) {
   bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
-  if(s_dtcs[idx].firstOccurrence != 0) {
-    ok = hal_kv_set_u32(dtcKvTimestampKey(idx), s_dtcs[idx].firstOccurrence) && ok;
+  if(s_dtcState.dtcs[idx].firstOccurrence != 0) {
+    ok = hal_kv_set_u32(dtcKvTimestampKey(idx), s_dtcState.dtcs[idx].firstOccurrence) && ok;
   }
   return ok;
 }
 
 static bool saveAllToKv(void) {
   bool ok = true;
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
     ok = saveDtcToKv(i) && ok;
   }
   return ok;
 }
 
 static void resetAllState(void) {
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
-    s_dtcs[i].active = false;
-    s_dtcs[i].stored = false;
-    s_dtcs[i].permanent = false;
-    s_dtcs[i].firstOccurrence = 0;
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
+    s_dtcState.dtcs[i].active = false;
+    s_dtcState.dtcs[i].stored = false;
+    s_dtcState.dtcs[i].permanent = false;
+    s_dtcState.dtcs[i].firstOccurrence = 0;
   }
 }
 
@@ -107,27 +114,27 @@ static bool tryMigrateLegacyFromEeprom(void) {
     return false;
   }
 
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
     uint8_t flags = hal_eeprom_read_byte(dtcSlotAddr(i));
     applyFlagsToIndex(i, flags);
-    s_dtcs[i].active = false;
+    s_dtcState.dtcs[i].active = false;
   }
 
   return saveAllToKv();
 }
 
 static bool loadAllFromKv(void) {
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
     uint32_t flags = 0u;
     if(!hal_kv_get_u32(dtcKvKey(i), &flags)) {
       flags = 0u;
     }
     applyFlagsToIndex(i, (uint8_t)flags);
-    s_dtcs[i].active = false;
+    s_dtcState.dtcs[i].active = false;
 
     uint32_t ts = 0u;
     hal_kv_get_u32(dtcKvTimestampKey(i), &ts);
-    s_dtcs[i].firstOccurrence = ts;
+    s_dtcState.dtcs[i].firstOccurrence = ts;
   }
   return true;
 }
@@ -137,7 +144,7 @@ static bool writeKvSchemaVersion(void) {
 }
 
 void dtcManagerInit(void) {
-  if(s_dtcInitialized) {
+  if(s_dtcState.initialized) {
     return;
   }
 
@@ -145,7 +152,7 @@ void dtcManagerInit(void) {
     derr("DTC: hal_kv_init failed (base=%u size=%u)",
       (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE);
     resetAllState();
-    s_dtcInitialized = true;
+    s_dtcState.initialized = true;
     return;
   }
 
@@ -163,17 +170,17 @@ void dtcManagerInit(void) {
       derr("DTC: failed to write KV schema version");
     }
 
-    s_dtcInitialized = true;
+    s_dtcState.initialized = true;
     return;
   }
 
   loadAllFromKv();
 
-  s_dtcInitialized = true;
+  s_dtcState.initialized = true;
 }
 
 void dtcManagerSetActive(uint16_t code, bool active) {
-  if(!s_dtcInitialized) {
+  if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
 
@@ -184,22 +191,22 @@ void dtcManagerSetActive(uint16_t code, bool active) {
 
   bool changed = false;
 
-  if(s_dtcs[idx].active != active) {
-    s_dtcs[idx].active = active;
+  if(s_dtcState.dtcs[idx].active != active) {
+    s_dtcState.dtcs[idx].active = active;
     deb("DTC 0x%04X (%s) active=%d", code, getDtcName(code), active ? 1 : 0);
   }
 
   if(active) {
-    if(!s_dtcs[idx].stored) {
-      s_dtcs[idx].stored = true;
+    if(!s_dtcState.dtcs[idx].stored) {
+      s_dtcState.dtcs[idx].stored = true;
       changed = true;
       // Record GPS timestamp on first occurrence
-      if(s_dtcs[idx].firstOccurrence == 0) {
-        s_dtcs[idx].firstOccurrence = gpsGetEpoch();
+      if(s_dtcState.dtcs[idx].firstOccurrence == 0) {
+        s_dtcState.dtcs[idx].firstOccurrence = gpsGetEpoch();
       }
     }
-    if(!s_dtcs[idx].permanent) {
-      s_dtcs[idx].permanent = true;
+    if(!s_dtcState.dtcs[idx].permanent) {
+      s_dtcState.dtcs[idx].permanent = true;
       changed = true;
     }
   }
@@ -212,12 +219,12 @@ void dtcManagerSetActive(uint16_t code, bool active) {
 }
 
 void dtcManagerClearAll(void) {
-  if(!s_dtcInitialized) {
+  if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
 
   resetAllState();
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
     hal_kv_delete(dtcKvKey(i));
     hal_kv_delete(dtcKvTimestampKey(i));
   }
@@ -226,26 +233,26 @@ void dtcManagerClearAll(void) {
 }
 
 uint8_t dtcManagerCount(dtc_kind_t kind) {
-  if(!s_dtcInitialized) {
+  if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
 
   uint8_t count = 0;
-  for(uint8_t i = 0; i < s_dtcCount; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT; i++) {
     switch(kind) {
       case DTC_KIND_STORED:
-        if(s_dtcs[i].stored) {
+        if(s_dtcState.dtcs[i].stored) {
           count++;
         }
         break;
       case DTC_KIND_PENDING:
       case DTC_KIND_ACTIVE:
-        if(s_dtcs[i].active) {
+        if(s_dtcState.dtcs[i].active) {
           count++;
         }
         break;
       case DTC_KIND_PERMANENT:
-        if(s_dtcs[i].permanent) {
+        if(s_dtcState.dtcs[i].permanent) {
           count++;
         }
         break;
@@ -257,7 +264,7 @@ uint8_t dtcManagerCount(dtc_kind_t kind) {
 }
 
 uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes) {
-  if(!s_dtcInitialized) {
+  if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
   if(outCodes == NULL || maxCodes == 0) {
@@ -265,24 +272,24 @@ uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes
   }
 
   uint8_t idx = 0;
-  for(uint8_t i = 0; i < s_dtcCount && idx < maxCodes; i++) {
+  for(uint8_t i = 0; i < DTC_COUNT && idx < maxCodes; i++) {
     bool take = false;
     switch(kind) {
       case DTC_KIND_STORED:
-        take = s_dtcs[i].stored;
+        take = s_dtcState.dtcs[i].stored;
         break;
       case DTC_KIND_PENDING:
       case DTC_KIND_ACTIVE:
-        take = s_dtcs[i].active;
+        take = s_dtcState.dtcs[i].active;
         break;
       case DTC_KIND_PERMANENT:
-        take = s_dtcs[i].permanent;
+        take = s_dtcState.dtcs[i].permanent;
         break;
       default:
         break;
     }
     if(take) {
-      outCodes[idx++] = s_dtcs[i].code;
+      outCodes[idx++] = s_dtcState.dtcs[i].code;
     }
   }
 
@@ -290,7 +297,7 @@ uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes
 }
 
 uint32_t dtcManagerGetTimestamp(uint16_t code) {
-  if(!s_dtcInitialized) {
+  if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
 
@@ -298,5 +305,5 @@ uint32_t dtcManagerGetTimestamp(uint16_t code) {
   if(idx < 0) {
     return 0;
   }
-  return s_dtcs[idx].firstOccurrence;
+  return s_dtcState.dtcs[idx].firstOccurrence;
 }
