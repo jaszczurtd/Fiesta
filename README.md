@@ -7,6 +7,15 @@ The repository contains multiple embedded applications, shared libraries, hardwa
 Gallery:
 https://postimg.cc/gallery/pHF4jy2
 
+## Safety-First Engineering
+
+Safety is treated as a top-level project requirement.
+
+- We treat `src/ECU` as a safety-critical module and actively align it with MISRA-C.
+- We prioritize defensive coding, predictable behavior, and runtime hardening over quick shortcuts.
+- We continuously expand test coverage (host tests + firmware build validation) to reduce regression risk.
+- We keep safety-related documentation synchronized with code changes so project status reflects reality.
+
 ## Repository scope
 
 Fiesta is not a single firmware binary. It is a set of cooperating modules:
