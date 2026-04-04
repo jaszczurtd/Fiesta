@@ -17,6 +17,7 @@ c/*.test
 cpp/*.test
 
 build/
+src/ECU/.build_diag/*
 
 client/mosquitto_pub
 client/mosquitto_rr
