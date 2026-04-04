@@ -232,7 +232,7 @@ void initialization(void) {
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
-  VP37Pump_init(&s_ctx.injectionPump);
+  VP37_init(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 #endif
   watchdog_feed();
@@ -316,7 +316,7 @@ void looper(void) {
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
-  VP37Pump_showDebug(&s_ctx.injectionPump);
+  VP37_showDebug(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 #endif
   m_mutex_enter_blocking(turboStateMutex);
@@ -329,7 +329,7 @@ void looper(void) {
 
 void initialization1(void) {
   start_initContextMutexes();
-  createRPM();
+  RPM_create();
 
   setStartedCore1();
 
@@ -359,7 +359,7 @@ void looper1(void) {
   RPM_process(getRPMInstance());
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
-  VP37Pump_process(&s_ctx.injectionPump);
+  VP37_process(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 #endif
   s_startPersistentState.statusVariable1Val = 3;

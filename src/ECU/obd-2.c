@@ -252,13 +252,13 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
 
 static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (int)(getGlobalValue(F_COOLANT_TEMP) + 40);
+  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_COOLANT_TEMP) + 40.0f));
 }
 
 static void encodeMode01IntakePressure(uint8_t *txData) {
   // PID 0x0B: 1 byte, kPa absolute (0-255)
   // F_PRESSURE is gauge bar (above atmosphere); convert: kPa_abs = bar*100 + 101
-  int kpa = (int)(getGlobalValue(F_PRESSURE) * 100.0f) + 101;
+  int32_t kpa = (int32_t)(getGlobalValue(F_PRESSURE) * 100.0f) + 101;
   if(kpa < 0) kpa = 0;
   if(kpa > 255) kpa = 255;
   txData[0] = 0x03;
@@ -281,7 +281,7 @@ static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
 
 static void encodeMode01FuelLevel(uint8_t *txData) {
   txData[0] = 0x03;
-  int fuelPercentage = ( ((int)(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
+  int32_t fuelPercentage = (((int32_t)(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
   if(fuelPercentage > 100) {
     fuelPercentage = 100;
   }
@@ -290,19 +290,19 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
 
 static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[0] = 0x04;
-  int engine_Rpm = (int)(getGlobalValue(F_RPM) * 4);
+  int32_t engine_Rpm = (int32_t)(getGlobalValue(F_RPM) * 4.0f);
   txData[3] = MSB(engine_Rpm);
   txData[4] = LSB(engine_Rpm);
 }
 
 static void encodeMode01VehicleSpeed(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (int)(getGlobalValue(F_ABS_CAR_SPEED));
+  txData[3] = (uint8_t)((int32_t)getGlobalValue(F_ABS_CAR_SPEED));
 }
 
 static void encodeMode01IntakeTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (int)(getGlobalValue(F_INTAKE_TEMP) + 40);
+  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_INTAKE_TEMP) + 40.0f));
 }
 
 static void encodeMode01ThrottlePos(uint8_t *txData) {
@@ -332,7 +332,7 @@ static void encodeMode01Pid_21_40(uint8_t *txData) {
 
 static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[0] = 0x04;
-  int temp = ((int)(getGlobalValue(F_EGT)) + 40) * 10;
+  int32_t temp = ((int32_t)(getGlobalValue(F_EGT)) + 40) * 10;
   txData[3] = MSB(temp);
   txData[4] = LSB(temp);
 }
@@ -349,7 +349,7 @@ static void encodeMode01Pid_41_60(uint8_t *txData) {
 
 static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[0] = 0x04;
-  int volt = (int)(getGlobalValue(F_VOLTS) * 1000.0f);
+  int32_t volt = (int32_t)(getGlobalValue(F_VOLTS) * 1000.0f);
   txData[3] = MSB(volt);
   txData[4] = LSB(volt);
 }
@@ -361,7 +361,7 @@ static void encodeMode01FuelType(uint8_t *txData) {
 
 static void encodeMode01EngineOilTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (int)(getGlobalValue(F_OIL_TEMP) + 40);
+  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_OIL_TEMP) + 40.0f));
 }
 
 static void encodeMode01FuelTiming(uint8_t *txData) {
@@ -392,7 +392,7 @@ static void encodeMode01Pid_61_80(uint8_t *txData) {
 static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[0] = 0x04;
   // PID 0x7C: DPF temperature bank 1, formula = (A*256+B)/10 - 40 °C
-  int raw = (int)((getGlobalValue(F_DPF_TEMP) + 40.0f) * 10.0f);
+  int32_t raw = (int32_t)((getGlobalValue(F_DPF_TEMP) + 40.0f) * 10.0f);
   if(raw < 0) raw = 0;
   if(raw > 65535) raw = 65535;
   txData[3] = MSB(raw);
@@ -980,7 +980,7 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
       return 2;
     }
     case SCP_PID_VBAT: { // VBAT - Battery Voltage, 0.0625V resolution, Byte
-      int raw = hal_constrain((int)(getGlobalValue(F_VOLTS) * 16.0f), 0, 255);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_VOLTS) * 16.0f), 0, 255);
       out[0] = (uint8_t)raw;
       return 1;
     }
@@ -1501,7 +1501,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     } else if(did == DID_FORD_OUTTMP) {
       // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
       // ECU has no outside temp sensor; use intake temp as best proxy.
-      int raw = hal_constrain((int)(getGlobalValue(F_INTAKE_TEMP) + 40.0f), 0, 255);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_INTAKE_TEMP) + 40.0f), 0, 255);
       uint8_t payload[4] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)raw
@@ -1510,7 +1510,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_FUEL_TEMP) {
       // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
-      int raw = hal_constrain((int)(getGlobalValue(F_FUEL_TEMP) + 40.0f), 0, 255);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_FUEL_TEMP) + 40.0f), 0, 255);
       uint8_t payload[4] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)raw
@@ -1518,7 +1518,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_OIL_PRESSURE) {
       // DD03: Oil pressure, 2 bytes big-endian, kPa × 10.
-      int raw = hal_constrain((int)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
       uint8_t payload[5] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
@@ -1526,7 +1526,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_BOOST) {
       // DD04: Boost/intake pressure, 2 bytes big-endian, bar × 1000.
-      int raw = hal_constrain((int)(getGlobalValue(F_PRESSURE) * 1000.0f), 0, 65535);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE) * 1000.0f), 0, 65535);
       uint8_t payload[5] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
@@ -1534,7 +1534,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_DPF_PRESSURE) {
       // DD06: DPF differential pressure, 2 bytes big-endian, Pa.
-      int raw = hal_constrain((int)(getGlobalValue(F_DPF_PRESSURE) * 1000.0f), 0, 65535);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_DPF_PRESSURE) * 1000.0f), 0, 65535);
       uint8_t payload[5] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
@@ -1542,7 +1542,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_BOOST_DESIRED) {
       // DD07: Desired boost pressure, 2 bytes big-endian, bar × 1000.
-      int raw = hal_constrain((int)(getGlobalValue(F_PRESSURE_DESIRED) * 1000.0f), 0, 65535);
+      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE_DESIRED) * 1000.0f), 0, 65535);
       uint8_t payload[5] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
@@ -1550,7 +1550,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_BOOST_PERCENT) {
       // DD08: Boost duty cycle percentage, 1 byte 0-100.
-      int pct = hal_constrain((int)getGlobalValue(F_PRESSURE_PERCENTAGE), 0, 100);
+      int32_t pct = hal_constrain((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE), 0, 100);
       uint8_t payload[4] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
         (uint8_t)pct

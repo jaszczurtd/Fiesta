@@ -58,7 +58,7 @@ void RPM_resetRPMCycle(RPM *self);
 int32_t RPM_getCurrentRPM(RPM *self);
 
 RPM *getRPMInstance(void);
-void createRPM(void);
+void RPM_create(void);
 
 #ifdef __cplusplus
 }

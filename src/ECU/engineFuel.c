@@ -67,6 +67,9 @@ float readFuel(void) {
           }
           average += v;
       }
+      if(i == 0) {
+          i = 1; // prevent division by zero, if no valid samples, return 0
+      }
       average /= i;
 
       deb("raw:%d (%d) num fuel samples: %d average val: %ld next probe time: %ds probes so far:%ld", 

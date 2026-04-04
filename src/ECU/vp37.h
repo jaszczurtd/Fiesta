@@ -69,11 +69,11 @@ typedef struct {
   int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
 } VP37Pump;
 
-void VP37Pump_init(VP37Pump *self);
-void VP37Pump_process(VP37Pump *self);
-void VP37Pump_enableVP37(VP37Pump *self, bool enable);
-bool VP37Pump_isVP37Enabled(VP37Pump *self);
-void VP37Pump_showDebug(VP37Pump *self);
+void VP37_init(VP37Pump *self);
+void VP37_process(VP37Pump *self);
+void VP37_enableVP37(VP37Pump *self, bool enable);
+bool VP37_isVP37Enabled(VP37Pump *self);
+void VP37_showDebug(VP37Pump *self);
 
 #ifdef __cplusplus
 }

@@ -19,7 +19,7 @@ static void cycleCheckTimerCallback(void) {
 }
 #endif
 
-void createRPM(void) {
+void RPM_create(void) {
   RPM_init(getRPMInstance());
 }
 

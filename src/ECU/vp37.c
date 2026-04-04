@@ -10,19 +10,19 @@ void measureVoltage(void) {
   setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
 }
 
-static int32_t VP37Pump_getMaxAdjustometerPWMVal(VP37Pump *self) {
+static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {
   (void)self;
   return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
-static int32_t VP37Pump_getAdjustometerStable(VP37Pump *self) {
+static int32_t VP37_getAdjustometerStable(VP37Pump *self) {
   for(int a = 0; a < STABILITY_ADJUSTOMETER_TAB_SIZE; a++) {
     self->adjustStabilityTable[a] = getVP37Adjustometer();
   }
   return getAverageFrom(self->adjustStabilityTable, STABILITY_ADJUSTOMETER_TAB_SIZE);
 }
 
-static void VP37Pump_initVP37(VP37Pump *self) {
+static void VP37_initVP37(VP37Pump *self) {
   if(!self->vp37Initialized) {
 
     self->lastThrottle = -1;
@@ -59,16 +59,16 @@ static void VP37Pump_initVP37(VP37Pump *self) {
   }
 }
 
-static int32_t VP37Pump_makeCalibrationValue(VP37Pump *self) {
+static int32_t VP37_makeCalibrationValue(VP37Pump *self) {
   hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();
-  int val = VP37Pump_getAdjustometerStable(self);
+  int val = VP37_getAdjustometerStable(self);
   hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();
   return val;
 }
 
-static void VP37Pump_throttleCycle(VP37Pump *self) {
+static void VP37_throttleCycle(VP37Pump *self) {
   float output;
 
   hal_pid_controller_update_time(self->adjustController, VP37_PID_TIME_UPDATE);
@@ -91,43 +91,43 @@ static void VP37Pump_throttleCycle(VP37Pump *self) {
   }
 }
 
-void VP37Pump_init(VP37Pump *self) {
+void VP37_init(VP37Pump *self) {
 
   if(self->calibrationDone) {
     return;
   }
-  VP37Pump_initVP37(self);
+  VP37_initVP37(self);
 
   self->VP37_ADJUST_MAX = self->VP37_ADJUST_MIDDLE = self->VP37_ADJUST_MIN = self->VP37_OPERATE_MAX = -1;
 
-  valToPWM(PIO_VP37_RPM, VP37Pump_getMaxAdjustometerPWMVal(self));
-  self->VP37_ADJUST_MAX = percentToGivenVal(VP37_PERCENTAGE_LIMITER, VP37Pump_makeCalibrationValue(self));
+  valToPWM(PIO_VP37_RPM, VP37_getMaxAdjustometerPWMVal(self));
+  self->VP37_ADJUST_MAX = percentToGivenVal(VP37_PERCENTAGE_LIMITER, VP37_makeCalibrationValue(self));
   valToPWM(PIO_VP37_RPM, 0);
-  self->VP37_ADJUST_MIN = VP37Pump_makeCalibrationValue(self);
+  self->VP37_ADJUST_MIN = VP37_makeCalibrationValue(self);
   self->VP37_ADJUST_MIDDLE = ((self->VP37_ADJUST_MAX - self->VP37_ADJUST_MIN) / 2) + self->VP37_ADJUST_MIN;
   self->calibrationDone = self->VP37_ADJUST_MIDDLE > 0;
 
-  VP37Pump_enableVP37(self, self->calibrationDone);
+  VP37_enableVP37(self, self->calibrationDone);
 }
 
-void VP37Pump_enableVP37(VP37Pump *self, bool enable) {
+void VP37_enableVP37(VP37Pump *self, bool enable) {
   (void)self;
   pcf8574_write(PCF8574_O_VP37_ENABLE, enable);
-  deb("vp37 enabled: %d", VP37Pump_isVP37Enabled(self));
+  deb("vp37 enabled: %d", VP37_isVP37Enabled(self));
 }
 
-bool VP37Pump_isVP37Enabled(VP37Pump *self) {
+bool VP37_isVP37Enabled(VP37Pump *self) {
   (void)self;
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-void VP37Pump_process(VP37Pump *self) {
+void VP37_process(VP37Pump *self) {
   if(self->vp37Initialized) {
     if((self->VP37_ADJUST_MAX <= 0 ||
       self->VP37_ADJUST_MIDDLE <= 0 ||
       self->VP37_ADJUST_MIN <= 0) &&
       getVP37Adjustometer() > MIN_ADJUSTOMETER_VAL) {
-        VP37Pump_init(self);
+        VP37_init(self);
         self->lastThrottle = self->desiredAdjustometer = -1;
     }
 
@@ -136,7 +136,7 @@ void VP37Pump_process(VP37Pump *self) {
 
     int32_t rpm = (int32_t)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {
-      VP37Pump_enableVP37(self, false);
+      VP37_enableVP37(self, false);
       derr("RPM was too high! (%d)", rpm);
       return;
     }
@@ -147,11 +147,11 @@ void VP37Pump_process(VP37Pump *self) {
       self->desiredAdjustometer = hal_map(thr, 0, 100, self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX);
     }
 
-    VP37Pump_throttleCycle(self);
+    VP37_throttleCycle(self);
   }
 }
 
-void VP37Pump_showDebug(VP37Pump *self) {
+void VP37_showDebug(VP37Pump *self) {
   deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", self->lastThrottle, self->desiredAdjustometer,
       getVP37Adjustometer(), getGlobalValue(F_VOLTS), getGlobalValue(F_FUEL_TEMP), self->finalPWM,
       (int32_t)self->voltageCorrection);
