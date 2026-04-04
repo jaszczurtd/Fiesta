@@ -16,14 +16,14 @@ typedef struct {
   bool lastHeatedWindowEnabled;
   bool waitingForUnpress;
 
-  int heatedWindowsOverallTimer;
+  int32_t heatedWindowsOverallTimer;
   unsigned long lastHeatedWindowsSecond;
 } heatedWindshields;
 
 void heatedWindshields_init(heatedWindshields *self);
 void heatedWindshields_process(heatedWindshields *self);
 void heatedWindshields_showDebug(heatedWindshields *self);
-void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int side);
+void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int32_t side);
 bool heatedWindshields_isHeatedWindowEnabled(heatedWindshields *self);
 
 heatedWindshields *getHeatedWindshieldsInstance(void);

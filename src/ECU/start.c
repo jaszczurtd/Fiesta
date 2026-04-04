@@ -134,6 +134,12 @@ void initialization(void) {
   // Force local flash-backed EEPROM for this ECU build.
   hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
   deb("EEPROM backend: RP2040 (%u bytes)", (unsigned)hal_eeprom_size());
+  deb("EEPROM layout: FIRST_ADDR=%u", (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
+#ifdef HAL_TOOLS_EEPROM_LOGGER_ADDR
+  deb("EEPROM layout: LOGGER_ADDR=%u CRASH_ADDR=%u",
+    (unsigned)HAL_TOOLS_EEPROM_LOGGER_ADDR,
+    (unsigned)HAL_TOOLS_EEPROM_CRASH_ADDR);
+#endif
 
   dtcManagerInit();
 
@@ -254,6 +260,8 @@ void initialization(void) {
   setStartedCore0();
 
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
+
+  dtcManagerLogStorageStats();
 
   startTests();
 }

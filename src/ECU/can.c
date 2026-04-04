@@ -13,12 +13,12 @@ typedef struct {
   unsigned long lastDpfMessagesCount;
   hal_can_t canBusHandle;
   bool isInitialized;
-  int lastRpmSent;
+  int32_t lastRpmSent;
   float lastTurboHiSent;
   float lastTurboLoSent;
   float lastTurboHiDesiredSent;
   float lastTurboLoDesiredSent;
-  int lastThrottleSent;
+  int32_t lastThrottleSent;
 } can_state_t;
 
 static can_state_t s_canState = {
@@ -30,12 +30,12 @@ static can_state_t s_canState = {
   .lastDpfMessagesCount = 0uL,
   .canBusHandle = NULL,
   .isInitialized = false,
-  .lastRpmSent = (int)C_INIT_VAL,
+  .lastRpmSent = (int32_t)C_INIT_VAL,
   .lastTurboHiSent = (float)C_INIT_VAL,
   .lastTurboLoSent = (float)C_INIT_VAL,
   .lastTurboHiDesiredSent = (float)C_INIT_VAL,
   .lastTurboLoDesiredSent = (float)C_INIT_VAL,
-  .lastThrottleSent = (int)C_INIT_VAL
+  .lastThrottleSent = (int32_t)C_INIT_VAL
 };
 
 void canInit(int retries) {
@@ -58,17 +58,17 @@ void canInit(int retries) {
 }
 
 uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
-  int yy = (int)(dateYYMMDD / 10000u);
-  int mm = (int)((dateYYMMDD / 100u) % 100u);
-  int dd = (int)(dateYYMMDD % 100u);
-  int hh = (int)(timeHHMM / 100u);
-  int mi = (int)(timeHHMM % 100u);
+  int32_t yy = (int32_t)(dateYYMMDD / 10000u);
+  int32_t mm = (int32_t)((dateYYMMDD / 100u) % 100u);
+  int32_t dd = (int32_t)(dateYYMMDD % 100u);
+  int32_t hh = (int32_t)(timeHHMM / 100u);
+  int32_t mi = (int32_t)(timeHHMM % 100u);
 
   if(mm < 1 || mm > 12 || dd < 1 || dd > 31 || hh < 0 || hh > 23 || mi < 0 || mi > 59) {
     return 0u;
   }
 
-  int yearOffset = yy - 20; // base year 2020
+  int32_t yearOffset = yy - 20; // base year 2020
   if(yearOffset < 0) {
     yearOffset = 0;
   } else if(yearOffset > 15) {
@@ -177,7 +177,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (uint8_t)getGlobalValue(F_COOLANT_TEMP);
     buf[CAN_FRAME_ECU_UPDATE_OIL] = (uint8_t)getGlobalValue(F_OIL_TEMP);
 
-    short exh = getGlobalValue(F_EGT);
+    int16_t exh = (int16_t)getGlobalValue(F_EGT);
     buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
     buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
 
@@ -186,7 +186,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] = (uint8_t)getGlobalValue(F_INTAKE_TEMP);
 
-    short fuel = getGlobalValue(F_FUEL);
+    int16_t fuel = (int16_t)getGlobalValue(F_FUEL);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
 
@@ -206,7 +206,7 @@ void CAN_updaterecipients_01(void) {
 
 void CAN_updaterecipients_02(void) {
   if(s_canState.isInitialized) {
-    int rpm = (int)(getGlobalValue(F_RPM));
+    int32_t rpm = (int32_t)(getGlobalValue(F_RPM));
     if(s_canState.lastRpmSent != rpm) {
       s_canState.lastRpmSent = rpm;
 
@@ -250,7 +250,7 @@ void CAN_sendThrottleUpdate(void) {
   if(s_canState.isInitialized) {
     uint8_t buf[CAN_FRAME_MAX_LENGTH];
 
-    int throttle = (int)(getGlobalValue(F_THROTTLE_POS));
+    int32_t throttle = (int32_t)(getGlobalValue(F_THROTTLE_POS));
     if(s_canState.lastThrottleSent != throttle) {
       s_canState.lastThrottleSent = throttle;
 

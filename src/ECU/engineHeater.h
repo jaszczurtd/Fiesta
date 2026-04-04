@@ -22,7 +22,7 @@ typedef struct {
 void engineHeater_init(engineHeater *self);
 void engineHeater_process(engineHeater *self);
 void engineHeater_showDebug(engineHeater *self);
-void engineHeater_heater(engineHeater *self, bool enable, int level);
+void engineHeater_heater(engineHeater *self, bool enable, int32_t level);
 
 engineHeater *getHeaterInstance(void);
 void createHeater(void);

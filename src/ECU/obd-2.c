@@ -1167,9 +1167,23 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
   }
 
   if(mode == UDS_SVC_CLEAR_DTC) {
-    // Most testers send 0x14 + 3-byte groupOfDTC.
-    if(!requireMinLength(responseId, mode, numofBytes, 4)) {
-      return true;
+    // ISO 14229 request is 0x14 + 3-byte groupOfDTC, but some testers
+    // send shortened variants (for example only service byte). For
+    // compatibility we accept all variants and clear all DTCs.
+    if(numofBytes >= 4) {
+      uint32_t group = ((uint32_t)data[2] << 16)
+                     | ((uint32_t)data[3] << 8)
+                     | (uint32_t)data[4];
+      deb("UDS 0x14 clearDTC group=0x%06lX", (unsigned long)group);
+    } else if(numofBytes >= 2) {
+      uint32_t group = 0;
+      for(uint8_t i = 2; i <= numofBytes; i++) {
+        group = (group << 8) | (uint32_t)data[i];
+      }
+      deb("UDS 0x14 clearDTC shortGroup bytes=%u value=0x%06lX",
+          (unsigned)(numofBytes - 1), (unsigned long)group);
+    } else {
+      deb("UDS 0x14 clearDTC (no group bytes)");
     }
 
     dtcManagerClearAll();

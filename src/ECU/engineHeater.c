@@ -19,7 +19,7 @@ void engineHeater_init(engineHeater *self) {
     self->lastHeaterLoEnabled = self->lastHeaterHiEnabled = false;
 }
 
-void engineHeater_heater(engineHeater *self, bool enable, int level) {
+void engineHeater_heater(engineHeater *self, bool enable, int32_t level) {
   (void)self;
   pcf8574_write(level, enable);
 }
@@ -27,7 +27,7 @@ void engineHeater_heater(engineHeater *self, bool enable, int level) {
 void engineHeater_process(engineHeater *self) {
   float coolant = getGlobalValue(F_COOLANT_TEMP);
   float volts = getGlobalValue(F_VOLTS);
-  int engineRPM = getGlobalValue(F_RPM);
+  int32_t engineRPM = (int32_t)getGlobalValue(F_RPM);
 
   if(coolant > TEMP_HEATER_STOP ||
     engineFan_isFanEnabled(getFanInstance()) ||
@@ -38,7 +38,7 @@ void engineHeater_process(engineHeater *self) {
     self->heaterHiEnabled = false;
   } else {
 
-    if(coolant <= (int)((float)(TEMP_HEATER_STOP) / 1.5f)) {
+    if(coolant <= (float)(TEMP_HEATER_STOP) / 1.5f) {
       self->heaterLoEnabled = self->heaterHiEnabled = true;
     } else {
       self->heaterLoEnabled = true;

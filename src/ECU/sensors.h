@@ -31,17 +31,17 @@ void initBasicPIO(void);
 //readers
 float readCoolantTemp(void);
 float readOilTemp(void);
-int readThrottle(void);
+int32_t readThrottle(void);
 float readAirTemperature(void);
 float readBarPressure(void);
-int readEGT(void);
-int getThrottlePercentage(void);
-int getPercentageEngineLoad(void);
+int32_t readEGT(void);
+int32_t getThrottlePercentage(void);
+int32_t getPercentageEngineLoad(void);
 
 void pcf8574_init(void);
 void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
-void valToPWM(unsigned char pin, int val);
+void valToPWM(unsigned char pin, int32_t val);
 
 void readMediumValues(void);
 void readHighValues(void);
@@ -55,7 +55,7 @@ void updateValsForDebug(void);
 void pwm_init(void);
 
 float getSystemSupplyVoltage(void);
-int getVP37Adjustometer(void);
+int32_t getVP37Adjustometer(void);
 float getVP37FuelTemperature(void);
 
 #ifdef __cplusplus

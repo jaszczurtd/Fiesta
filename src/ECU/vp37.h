@@ -55,18 +55,18 @@ typedef struct {
   hal_pid_controller_t adjustController;
 
   bool vp37Initialized;
-  int lastThrottle;
+  int32_t lastThrottle;
   bool calibrationDone;
-  int desiredAdjustometer;
+  int32_t desiredAdjustometer;
   float pwmValue;
   float voltageCorrection;
-  int lastPWMval;
-  int finalPWM;
+  int32_t lastPWMval;
+  int32_t finalPWM;
   float lastVolts;
   hal_soft_timer_t fuelTempTimer;
   hal_soft_timer_t voltageTimer;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
-  int VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
+  int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
 } VP37Pump;
 
 void VP37Pump_init(VP37Pump *self);

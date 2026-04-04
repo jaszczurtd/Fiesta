@@ -3,7 +3,7 @@
 
 
 //*** n75 percentage values in relation to RPM
-int RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
+int32_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS] = {
   { 75, 74, 73, 72, 71, 70, 68, 65, 63, 61 }, // 1500 RPM
   { 73, 72, 71, 70, 68, 66, 63, 60, 57, 54 }, // 2000 RPM
   { 71, 70, 69, 68, 66, 64, 61, 58, 54, 51 }, // 2500 RPM

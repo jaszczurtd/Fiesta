@@ -5,7 +5,7 @@
 #define TURBO_PID_KI 0.1
 #define TURBO_PID_KD 0.05
 
-static int Turbo_scaleTurboValues(Turbo *self, int value) {
+static int32_t Turbo_scaleTurboValues(Turbo *self, int32_t value) {
   (void)self;
 #ifdef GTB2260VZK
   value = hal_map(value, 0, 100, 100, 0);
@@ -14,9 +14,9 @@ static int Turbo_scaleTurboValues(Turbo *self, int value) {
   return value;
 }
 
-static int Turbo_correctPressureFactor(Turbo *self) {
+static int32_t Turbo_correctPressureFactor(Turbo *self) {
   (void)self;
-  int temperature = getGlobalValue(F_INTAKE_TEMP);
+  int32_t temperature = (int32_t)getGlobalValue(F_INTAKE_TEMP);
   return (temperature < MIN_TEMPERATURE_CORRECTION) ?
       0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1; //each 5 degrees
 }
@@ -34,7 +34,7 @@ void Turbo_process(Turbo *self) {
   self->engineThrottlePercentageValue = getThrottlePercentage();
   self->posThrottle = (self->engineThrottlePercentageValue / 10);
   bool pedalPressed = false;
-  int pressurePercentage = 0;
+  int32_t pressurePercentage = 0;
 
 #ifdef JUST_TEST_BY_THROTTLE
   self->engineThrottlePercentageValue = Turbo_scaleTurboValues(self, self->engineThrottlePercentageValue);
@@ -45,12 +45,12 @@ void Turbo_process(Turbo *self) {
       pedalPressed = true;
     }
 
-    int rpm = (int)getGlobalValue(F_RPM);
+    int32_t rpm = (int32_t)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {
       rpm = RPM_MAX_EVER;
     }
 
-    self->RPM_index = ((int)rpm - 1500) / 500; // determine RPM index
+    self->RPM_index = (rpm - 1500) / 500; // determine RPM index
     if(self->RPM_index < 0) {
       self->RPM_index = 0;
     }
@@ -107,8 +107,8 @@ void Turbo_process(Turbo *self) {
 void Turbo_showDebug(Turbo *self) {
   bool pr = false;
 
-  if((int)getGlobalValue(F_THROTTLE_POS) != self->lastThrottlePos){
-    self->lastThrottlePos = (int)getGlobalValue(F_THROTTLE_POS);
+  if((int32_t)getGlobalValue(F_THROTTLE_POS) != self->lastThrottlePos){
+    self->lastThrottlePos = (int32_t)getGlobalValue(F_THROTTLE_POS);
     pr = true;
   }
   if(self->posThrottle != self->lastPosThrottle) {
@@ -124,8 +124,8 @@ void Turbo_showDebug(Turbo *self) {
     self->lastRPM_index = self->RPM_index;
     pr = true;
   }
-  if((int)getGlobalValue(F_PRESSURE_PERCENTAGE) != self->lastPressurePercentage) {
-    self->lastPressurePercentage = (int)getGlobalValue(F_PRESSURE_PERCENTAGE);
+  if((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE) != self->lastPressurePercentage) {
+    self->lastPressurePercentage = (int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE);
     pr = true;
   }
   if(self->n75 != self->lastN75) {

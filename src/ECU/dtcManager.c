@@ -10,11 +10,15 @@
 #define DTC_FLAG_PERMANENT       0x02u
 
 #define DTC_KV_BASE              DTC_EEPROM_BASE
-#define DTC_KV_SIZE              256u
+#define DTC_KV_SIZE              (ECU_EEPROM_SIZE_BYTES / 2)
 #define DTC_KV_SCHEMA_KEY        0xD700u
 #define DTC_KV_SCHEMA_VERSION    1u
 #define DTC_KV_KEY_FLAGS_BASE    0xD800u
 #define DTC_KV_KEY_TIMESTAMP_BASE 0xD900u
+
+#if ECU_EEPROM_SIZE_BYTES < 1024u
+#error "DTC KV requires at least 1024B EEPROM"
+#endif
 
 typedef struct {
   uint16_t code;
@@ -143,14 +147,116 @@ static bool writeKvSchemaVersion(void) {
   return hal_kv_set_u32(DTC_KV_SCHEMA_KEY, DTC_KV_SCHEMA_VERSION);
 }
 
+static uint16_t dtcKvEffectiveSpan(void) {
+  uint32_t start = (uint32_t)DTC_KV_BASE;
+  uint32_t end = start + (uint32_t)DTC_KV_SIZE;
+  uint16_t eepromSize = hal_eeprom_size();
+  uint32_t maxEnd = (uint32_t)eepromSize;
+
+  if(start >= maxEnd) {
+    return 0u;
+  }
+
+  if(end > maxEnd) {
+    end = maxEnd;
+  }
+
+  uint16_t span = (uint16_t)(end - start);
+  if((span & 1u) != 0u) {
+    span--;
+  }
+  return span;
+}
+
+static bool resetDtcKvRegion(void) {
+  uint32_t start = (uint32_t)DTC_KV_BASE;
+  uint16_t eepromSize = hal_eeprom_size();
+  uint16_t span = dtcKvEffectiveSpan();
+
+  if(span == 0u) {
+    derr("DTC: KV reset failed, base out of EEPROM range (base=%lu size=%u eeprom=%u)",
+      (unsigned long)start, (unsigned)DTC_KV_SIZE, (unsigned)eepromSize);
+    return false;
+  }
+
+  if(span < 2u) {
+    derr("DTC: KV reset failed, effective KV span too small (%u)", (unsigned)span);
+    return false;
+  }
+
+  for(uint32_t addr = start; addr < (start + span); addr++) {
+    hal_eeprom_write_byte((uint16_t)addr, 0u);
+  }
+  hal_eeprom_commit();
+
+  if(!hal_kv_init((uint16_t)start, span)) {
+    derr("DTC: hal_kv_init failed after KV reset (base=%lu size=%u)",
+      (unsigned long)start, (unsigned)span);
+    return false;
+  }
+
+  return true;
+}
+
+void dtcManagerLogStorageStats(void) {
+  const uint16_t eepromSize = hal_eeprom_size();
+  const uint32_t kvStart = (uint32_t)DTC_KV_BASE;
+  const uint16_t kvSpan = dtcKvEffectiveSpan();
+  const uint32_t kvEndExclusive = kvStart + (uint32_t)kvSpan;
+  const uint16_t bankSize = kvSpan / 2u;
+  const uint16_t approxKeys = 1u + ((uint16_t)DTC_COUNT * 2u); // schema + flags + timestamps
+  const uint32_t approxMinBytes = (uint32_t)approxKeys * 21u;   // ~u32 record footprint
+
+  deb("DTC storage: EEPROM=%uB, FIRST_ADDR=%u", (unsigned)eepromSize, (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
+  if(kvSpan > 0u) {
+    deb("DTC storage: KV base=%lu size=%uB range=[%lu..%lu], bank=%uB",
+      (unsigned long)kvStart,
+      (unsigned)kvSpan,
+      (unsigned long)kvStart,
+      (unsigned long)(kvEndExclusive - 1u),
+      (unsigned)bankSize);
+  } else {
+    deb("DTC storage: KV base=%lu size=0B (out of EEPROM range)", (unsigned long)kvStart);
+  }
+
+  deb("DTC storage: approx u32 keys=%u, approx min live footprint=%luB (active bank)",
+    (unsigned)approxKeys, (unsigned long)approxMinBytes);
+
+  hal_kv_stats_t stats;
+  if(hal_kv_get_stats(&stats)) {
+    uint16_t freeBytes = 0u;
+    if(stats.capacity_bytes > stats.used_bytes) {
+      freeBytes = (uint16_t)(stats.capacity_bytes - stats.used_bytes);
+    }
+    deb("DTC storage: KV stats gen=%lu used=%uB free=%uB cap=%uB keys=%u nextSeq=%lu",
+      (unsigned long)stats.generation,
+      (unsigned)stats.used_bytes,
+      (unsigned)freeBytes,
+      (unsigned)stats.capacity_bytes,
+      (unsigned)stats.key_count,
+      (unsigned long)stats.next_sequence);
+  } else {
+    derr("DTC storage: hal_kv_get_stats failed");
+  }
+}
+
 void dtcManagerInit(void) {
   if(s_dtcState.initialized) {
     return;
   }
 
-  if(!hal_kv_init(DTC_KV_BASE, DTC_KV_SIZE)) {
-    derr("DTC: hal_kv_init failed (base=%u size=%u)",
-      (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE);
+  uint16_t kvSpan = dtcKvEffectiveSpan();
+  if(kvSpan < 2u) {
+    derr("DTC: invalid KV span (base=%u requested=%u effective=%u eeprom=%u)",
+      (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE, (unsigned)kvSpan, (unsigned)hal_eeprom_size());
+    resetAllState();
+    s_dtcState.initialized = true;
+    return;
+  }
+
+  if(!hal_kv_init(DTC_KV_BASE, kvSpan)) {
+    derr("DTC: hal_kv_init failed (base=%u requested=%u effective=%u)",
+      (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE, (unsigned)kvSpan);
     resetAllState();
     s_dtcState.initialized = true;
     return;
@@ -163,9 +269,7 @@ void dtcManagerInit(void) {
 
     bool migrated = tryMigrateLegacyFromEeprom();
     bool wroteSchema = writeKvSchemaVersion();
-    if(!migrated) {
-      saveAllToKv();
-    }
+    (void)migrated;
     if(!wroteSchema) {
       derr("DTC: failed to write KV schema version");
     }
@@ -224,12 +328,17 @@ void dtcManagerClearAll(void) {
   }
 
   resetAllState();
-  for(uint8_t i = 0; i < DTC_COUNT; i++) {
-    hal_kv_delete(dtcKvKey(i));
-    hal_kv_delete(dtcKvTimestampKey(i));
+  if(!resetDtcKvRegion()) {
+    derr("DTC: KV region reset failed");
   }
-  writeKvSchemaVersion();
+
+  if(!writeKvSchemaVersion()) {
+    derr("DTC: failed to write KV schema after clear");
+  }
+
   deb("DTC memory cleared");
+
+  dtcManagerLogStorageStats();
 }
 
 uint8_t dtcManagerCount(dtc_kind_t kind) {

@@ -15,7 +15,7 @@ glowPlugs *getGlowPlugsInstance(void) {
 
 static void glowPlugs_calculateGlowPlugsTime(glowPlugs *self, float temp) {
   if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    self->glowPlugsTime = (int)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
+    self->glowPlugsTime = (int32_t)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
   } else {
     self->glowPlugsTime = 0;
   }

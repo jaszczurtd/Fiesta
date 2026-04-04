@@ -10,12 +10,12 @@ void measureVoltage(void) {
   setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
 }
 
-static int VP37Pump_getMaxAdjustometerPWMVal(VP37Pump *self) {
+static int32_t VP37Pump_getMaxAdjustometerPWMVal(VP37Pump *self) {
   (void)self;
   return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
-static int VP37Pump_getAdjustometerStable(VP37Pump *self) {
+static int32_t VP37Pump_getAdjustometerStable(VP37Pump *self) {
   for(int a = 0; a < STABILITY_ADJUSTOMETER_TAB_SIZE; a++) {
     self->adjustStabilityTable[a] = getVP37Adjustometer();
   }
@@ -59,7 +59,7 @@ static void VP37Pump_initVP37(VP37Pump *self) {
   }
 }
 
-static int VP37Pump_makeCalibrationValue(VP37Pump *self) {
+static int32_t VP37Pump_makeCalibrationValue(VP37Pump *self) {
   hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();
   int val = VP37Pump_getAdjustometerStable(self);
@@ -83,7 +83,7 @@ static void VP37Pump_throttleCycle(VP37Pump *self) {
   }
 
   self->finalPWM = self->pwmValue * (12.0f / self->lastVolts);
-  self->finalPWM = hal_constrain(self->finalPWM, (int)VP37_PWM_MIN, (int)(VP37_PWM_MAX));
+  self->finalPWM = hal_constrain(self->finalPWM, (int32_t)VP37_PWM_MIN, (int32_t)(VP37_PWM_MAX));
 
   if(self->lastPWMval != self->finalPWM) {
     self->lastPWMval = self->finalPWM;
@@ -134,7 +134,7 @@ void VP37Pump_process(VP37Pump *self) {
     hal_soft_timer_tick(self->fuelTempTimer);
     hal_soft_timer_tick(self->voltageTimer);
 
-    int rpm = (int)getGlobalValue(F_RPM);
+    int32_t rpm = (int32_t)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {
       VP37Pump_enableVP37(self, false);
       derr("RPM was too high! (%d)", rpm);
@@ -153,6 +153,6 @@ void VP37Pump_process(VP37Pump *self) {
 
 void VP37Pump_showDebug(VP37Pump *self) {
   deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d %vc:%d", self->lastThrottle, self->desiredAdjustometer,
-      getVP37Adjustometer(), getGlobalValue(F_VOLTS), getGlobalValue(F_FUEL_TEMP), (int)self->finalPWM,
-      (int)self->voltageCorrection);
+      getVP37Adjustometer(), getGlobalValue(F_VOLTS), getGlobalValue(F_FUEL_TEMP), self->finalPWM,
+      (int32_t)self->voltageCorrection);
 }

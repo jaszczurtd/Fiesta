@@ -95,11 +95,11 @@ void RPM_init(RPM *self) {
   RPM_setAccelMaxRPM(self);
 }
 
-void RPM_setAccelRPMPercentage(RPM *self, int percentage) {
+void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage) {
   self->currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
 }
 
-int RPM_getCurrentRPMSolenoid(RPM *self) {
+int32_t RPM_getCurrentRPMSolenoid(RPM *self) {
   return self->currentRPMSolenoid;
 }
 
@@ -112,7 +112,7 @@ static bool RPM_isEngineThrottlePressed(RPM *self) {
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
-int RPM_getCurrentRPM(RPM *self) {
+int32_t RPM_getCurrentRPM(RPM *self) {
   return self->rpmValue;
 }
 
@@ -120,7 +120,7 @@ void RPM_process(RPM *self) {
   if (self->rpmReady) {
     self->rpmReady = false;
 
-    int rpm = (self->snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
+    int32_t rpm = (self->snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
     if (rpm < 0) rpm = 0;
     if (rpm > RPM_MAX_EVER) rpm = RPM_MAX_EVER;
     rpm = (rpm / 10) * 10;
@@ -138,7 +138,7 @@ void RPM_process(RPM *self) {
 
   int desiredRPM = NOMINAL_RPM_VALUE;
 
-  if(((int)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
+  if(((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;
   }
 
@@ -155,7 +155,7 @@ void RPM_process(RPM *self) {
   }
 
   if(RPM_getCurrentRPM(self) != desiredRPM) {
-    self->rpmPercentValue = (int)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
+    self->rpmPercentValue = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
 
     if(RPM_getCurrentRPM(self) < desiredRPM) {
       if(desiredRPM - RPM_getCurrentRPM(self) > MAX_RPM_DIFFERENCE) {

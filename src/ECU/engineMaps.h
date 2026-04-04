@@ -11,7 +11,7 @@ extern "C" {
 #define RPM_PRESCALERS 8
 #define N75_PERCENT_VALS 10
 
-extern int RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS];
+extern int32_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS];
 
 #ifdef __cplusplus
 }

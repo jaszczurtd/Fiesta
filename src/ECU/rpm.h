@@ -25,19 +25,19 @@ extern "C" {
 #define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
 
 typedef struct {
-  volatile int rpmValue;
+  volatile int32_t rpmValue;
   volatile unsigned long shortPulse;
   volatile unsigned long lastPulse;
   volatile unsigned long previousMillis;
   volatile long rpmAliveTime;
-  volatile int RPMpulses;
-  volatile int snapshotPulses;
+  volatile int32_t RPMpulses;
+  volatile int32_t snapshotPulses;
   volatile bool rpmReady;
 
-  int currentRPMSolenoid;
+  int32_t currentRPMSolenoid;
   bool rpmCycle;
 #ifndef VP37
-  int rpmPercentValue;
+  int32_t rpmPercentValue;
   hal_soft_timer_t rpmCycleTimer;
 #endif
 } RPM;
@@ -51,11 +51,11 @@ void RPM_resetRPMEngine(RPM *self);
 void RPM_stabilizeRPM(RPM *self);
 #endif
 bool RPM_isEngineRunning(RPM *self);
-void RPM_setAccelRPMPercentage(RPM *self, int percentage);
-int RPM_getCurrentRPMSolenoid(RPM *self);
+void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage);
+int32_t RPM_getCurrentRPMSolenoid(RPM *self);
 void RPM_interrupt(RPM *self);
 void RPM_resetRPMCycle(RPM *self);
-int RPM_getCurrentRPM(RPM *self);
+int32_t RPM_getCurrentRPM(RPM *self);
 
 RPM *getRPMInstance(void);
 void createRPM(void);

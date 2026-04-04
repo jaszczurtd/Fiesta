@@ -18,6 +18,7 @@ typedef enum {
 void dtcManagerInit(void);
 void dtcManagerSetActive(uint16_t code, bool active);
 void dtcManagerClearAll(void);
+void dtcManagerLogStorageStats(void);
 
 uint8_t dtcManagerCount(dtc_kind_t kind);
 uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes);

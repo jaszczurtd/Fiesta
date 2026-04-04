@@ -17,8 +17,8 @@ enum {
 };
 
 typedef struct {
-  int fanEnabled;
-  int lastFanStatus;
+  int32_t fanEnabled;
+  int32_t lastFanStatus;
 } engineFan;
 
 void engineFan_init(engineFan *self);

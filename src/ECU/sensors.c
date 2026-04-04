@@ -23,9 +23,9 @@ typedef struct {
   hal_pwm_freq_channel_t pwmAngle;
   unsigned char lowCurrentValue;
   float lastVoltage;
-  int lastEGTTemp;
-  int lastCoolantTemp;
-  int lastOilTemp;
+  int32_t lastEGTTemp;
+  int32_t lastCoolantTemp;
+  int32_t lastOilTemp;
   bool lastIsEngineRunning;
 } sensors_runtime_state_t;
 
@@ -152,32 +152,30 @@ float readOilTemp(void) {
 //Read throttle
 //-------------------------------------------------------------------------------------------------
 
-int readThrottle(void) {
+int32_t readThrottle(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_THROTTLE_POS);
 
-  int rawVal = getAverageValueFrom(ADC_SENSORS_PIN);
+  int32_t rawVal = (int32_t)getAverageValueFrom(ADC_SENSORS_PIN);
   m_mutex_exit(analog4051Mutex);
 
-  //deb("rawVal %d", (int)(rawVal));
-
-  int initialVal = rawVal - THROTTLE_MIN;
+  int32_t initialVal = rawVal - THROTTLE_MIN;
 
   if(initialVal < 0) {
       initialVal = 0;
   }
-  int maxVal = (THROTTLE_MAX - THROTTLE_MIN);
+  int32_t maxVal = (THROTTLE_MAX - THROTTLE_MIN);
 
   if(initialVal > maxVal) {
       initialVal = maxVal;
   }
   float divider = maxVal / (float)PWM_RESOLUTION;
-  int result = (initialVal / divider);
+  int32_t result = (int32_t)(initialVal / divider);
   return abs(result - PWM_RESOLUTION);
 }
 
-int getThrottlePercentage(void) {
-  int currentVal = (int)(getGlobalValue(F_THROTTLE_POS));
+int32_t getThrottlePercentage(void) {
+  int32_t currentVal = (int32_t)(getGlobalValue(F_THROTTLE_POS));
   float percent = (currentVal * 100) / PWM_RESOLUTION;
   return percentToGivenVal(percent, 100);
 }
@@ -218,12 +216,12 @@ float readBarPressure(void) {
 //Read EGT temperature
 //-------------------------------------------------------------------------------------------------
 
-int readEGT(void) {
-  int a = 0;
+int32_t readEGT(void) {
+  int32_t a = 0;
   m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_EGT);
-  a = ((getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
+  a = (int32_t)((getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
   m_mutex_exit(analog4051Mutex);
   return a;
 }
@@ -272,8 +270,8 @@ bool pcf8574_read(unsigned char pin) {
   return retVal;
 }
 
-int getRAWThrottle(void) {
-  return (int)(getGlobalValue(F_THROTTLE_POS));
+int32_t getRAWThrottle(void) {
+  return (int32_t)(getGlobalValue(F_THROTTLE_POS));
 }
 
 void readMediumValues(void) {
@@ -304,11 +302,11 @@ void readMediumValues(void) {
   }
 }
 
-int getPercentageEngineLoad(void) {
+int32_t getPercentageEngineLoad(void) {
 
   float map = (getGlobalValue(F_PRESSURE) * 255.0f / 2.55f);
   float load = (map / 255.0f) * (getGlobalValue(F_RPM) / (float)(RPM_MAX_EVER)) * 100.0f;
-  int roundedLoad = (int)(load + 0.5f);
+  int32_t roundedLoad = (int32_t)(load + 0.5f);
 
   if (roundedLoad < 0) {
       roundedLoad = 0;
@@ -389,19 +387,19 @@ void updateValsForDebug(void) {
     deb("%sVoltage update: %.1fV", stamp, volts);
   }
 
-  int egt = (int)getGlobalValue(F_EGT);
+  int32_t egt = (int32_t)getGlobalValue(F_EGT);
   if(s_sensorsState.lastEGTTemp != egt) {
     s_sensorsState.lastEGTTemp = egt;
     deb("%sEGT update: %dC", stamp, egt);
   }
 
-  int coolant = (int)getGlobalValue(F_COOLANT_TEMP);
+  int32_t coolant = (int32_t)getGlobalValue(F_COOLANT_TEMP);
   if(s_sensorsState.lastCoolantTemp != coolant) {
     s_sensorsState.lastCoolantTemp = coolant;
     deb("%sCoolant temp. update: %dC", stamp, coolant);
   }
 
-  int oil = (int)getGlobalValue(F_OIL_TEMP);
+  int32_t oil = (int32_t)getGlobalValue(F_OIL_TEMP);
   if(s_sensorsState.lastOilTemp != oil) {
     s_sensorsState.lastOilTemp = oil;
     deb("%sOil temp. update: %dC", stamp, oil);
@@ -420,7 +418,7 @@ void pwm_init(void) {
   s_sensorsState.pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
-void valToPWM(unsigned char pin, int val) {
+void valToPWM(unsigned char pin, int32_t val) {
   hal_pwm_freq_channel_t ch = NULL;
   switch(pin) {
     case PIO_TURBO:      ch = s_sensorsState.pwmTurbo; break;
@@ -442,9 +440,9 @@ float getSystemSupplyVoltage(void) {
   return roundfWithPrecisionTo(val, 1);
 }
 
-int getVP37Adjustometer(void) {
+int32_t getVP37Adjustometer(void) {
   float val = hal_ext_adc_read_scaled(ADS1115_PIN_2);
-  return (int)(roundfWithPrecisionTo(val, 3) * 1000);
+  return (int32_t)(roundfWithPrecisionTo(val, 3) * 1000);
 }
 
 float getVP37FuelTemperature(void) {

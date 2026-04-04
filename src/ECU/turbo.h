@@ -25,17 +25,17 @@ extern "C" {
 typedef struct {
   unsigned long lastSolenoidUpdate;
 
-  int engineThrottlePercentageValue;
-  int posThrottle;
-  int n75;
-  int RPM_index;
+  int32_t engineThrottlePercentageValue;
+  int32_t posThrottle;
+  int32_t n75;
+  int32_t RPM_index;
 
-  int lastThrottlePos;
-  int lastPosThrottle;
+  int32_t lastThrottlePos;
+  int32_t lastPosThrottle;
   bool lastPedalPressed;
-  int lastRPM_index;
-  int lastPressurePercentage;
-  int lastN75;
+  int32_t lastRPM_index;
+  int32_t lastPressurePercentage;
+  int32_t lastN75;
 } Turbo;
 
 void Turbo_init(Turbo *self);

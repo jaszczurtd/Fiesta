@@ -13,10 +13,10 @@ extern "C" {
 #endif
 
 typedef struct {
-  int glowPlugsTime;
-  int glowPlugsLampTime;
-  int lastGlowPlugsTime;
-  int lastGlowPlugsLampTime;
+  int32_t glowPlugsTime;
+  int32_t glowPlugsLampTime;
+  int32_t lastGlowPlugsTime;
+  int32_t lastGlowPlugsLampTime;
 
   unsigned long lastSecond;
   bool warmAfterStart;

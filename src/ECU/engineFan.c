@@ -33,8 +33,8 @@ bool engineFan_isFanEnabled(engineFan *self) {
 void engineFan_process(engineFan *self) {
 
   float coolant = getGlobalValue(F_COOLANT_TEMP);
-  int rpm = getGlobalValue(F_RPM);
-  int air = getGlobalValue(F_INTAKE_TEMP);
+  int32_t rpm = (int32_t)getGlobalValue(F_RPM);
+  int32_t air = (int32_t)getGlobalValue(F_INTAKE_TEMP);
 
   if(rpm > RPM_MIN) {
 
