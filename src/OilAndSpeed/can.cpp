@@ -42,12 +42,26 @@ void updateCANrecipients(void) {
   hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
 }
 
+void updateEGTrecipients(void) {
+  uint8_t buf[CAN_FRAME_MAX_LENGTH] = {};
+
+  buf[CAN_FRAME_NUMBER] = frameNumber++;
+
+  int16_t egt = (int16_t)getGlobalValue(F_EGT);
+  buf[CAN_FRAME_EGT_UPDATE_EGT_HI] = MSB(egt);
+  buf[CAN_FRAME_EGT_UPDATE_EGT_LO] = LSB(egt);
+
+  int16_t dpfTemp = (int16_t)getGlobalValue(F_DPF_TEMP);
+  buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI] = MSB(dpfTemp);
+  buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO] = LSB(dpfTemp);
+
+  hal_can_send(canHandle, CAN_ID_EGT_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
+}
+
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   switch (canID) {
 
     case CAN_ID_ECU_UPDATE_01:
-    case CAN_ID_DPF:
-    case CAN_ID_CLOCK_BRIGHTNESS:
     case CAN_ID_RPM:
     case CAN_ID_THROTTLE:
     case CAN_ID_ECU_UPDATE_03:
@@ -55,7 +69,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       ecuMessages++; ecuConnected = true;
       break;
 
-    case CAN_ID_LUMENS:
+    case CAN_ID_CLOCK_BRIGHTNESS:
       clusterMessages++; clusterConnected = true;
       break;
 
@@ -122,6 +136,8 @@ void canCheckConnection(void) {
 bool canSendLoop(void) {
   static float lastSpeed = 0.0;
   static float lastOilPressure = 0.0;
+  static float lastEGT = 0.0;
+  static float lastDPFTemp = 0.0;
 
   float curSpeed = getGlobalValue(F_ABS_CAR_SPEED);
   if (lastSpeed != curSpeed) {
@@ -133,6 +149,23 @@ bool canSendLoop(void) {
   if (lastOilPressure != curOilPressure) {
     lastOilPressure = curOilPressure;
     updateCANrecipients();
+  }
+
+  float egt = getGlobalValue(F_EGT);
+  bool egtFrameChanged = false;
+  if(lastEGT != egt) {
+    lastEGT = egt;
+    egtFrameChanged = true;
+  }
+
+  float dpfTemp = getGlobalValue(F_DPF_TEMP);
+  if(lastDPFTemp != dpfTemp) {
+    lastDPFTemp = dpfTemp;
+    egtFrameChanged = true;
+  }
+
+  if(egtFrameChanged) {
+    updateEGTrecipients();
   }
 
 #ifdef ABS_CAR_SPEED_PACKET_TEST

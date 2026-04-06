@@ -431,6 +431,7 @@ static void encodeMode01Pid_E1_FF(uint8_t *txData) {
   txData[6] = 0x00;
 }
 
+//todo: fuel temp
 static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {PID_0_20, encodeMode01Pid_00},
   {STATUS_DTC, encodeMode01StatusDtc},

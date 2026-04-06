@@ -10,6 +10,7 @@
 bool canInit(void);
 void canMainLoop(void);
 void updateCANrecipients(void);
+void updateEGTrecipients(void);
 void canCheckConnection(void);
 bool isEcuConnected(void);
 bool isClusterConnected(void);

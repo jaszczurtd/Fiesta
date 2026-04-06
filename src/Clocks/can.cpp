@@ -62,16 +62,11 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
                                           buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
       valueFields[F_COOLANT_TEMP] = buf[CAN_FRAME_ECU_UPDATE_COOLANT];
       valueFields[F_OIL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_OIL];
-      valueFields[F_EGT] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_EGT_HI],
-                                        buf[CAN_FRAME_ECU_UPDATE_EGT_LO]);
     }
     break;
 
     case CAN_ID_DPF: {
       dpfMessages++;
-      valueFields[F_DPF_TEMP] =
-        MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
-                    buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]);
       valueFields[F_DPF_REGEN] = buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN];
     }
     break;
@@ -132,6 +127,20 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
                                                 buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
       valueFields[F_ABS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED];
       updateCluster();
+    }
+    break;
+
+    case CAN_ID_EGT_UPDATE: {
+      oilSpeedModuleMessages++; oilSpeedModuleConnected = true;
+
+      valueFields[F_EGT] = MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
+                                       buf[CAN_FRAME_EGT_UPDATE_EGT_LO]);
+      valueFields[F_DPF_TEMP] =
+        MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                    buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]);
+
+      deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]), 
+                               int(valueFields[F_DPF_TEMP]));
     }
     break;
 

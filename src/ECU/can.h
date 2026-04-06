@@ -26,6 +26,7 @@ bool CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
 bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
 void CAN_sendGpsExtended(void);
 bool isDPFConnected(void);
+bool isEGTConnected(void);
 void canCheckConnection(void);
 
 #ifdef __cplusplus

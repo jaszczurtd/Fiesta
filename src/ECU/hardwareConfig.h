@@ -91,7 +91,7 @@
 #define HC4051_I_AIR_TEMP 3
 #define HC4051_I_FUEL_LEVEL 4
 #define HC4051_I_BAR_PRESSURE 5
-#define HC4051_I_EGT 6
+//6 not used ATM
 //7 not used ATM
 
 //physical pin of microcontroller for heated windows switch on/off
@@ -117,6 +117,5 @@
 
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
-#define DIVIDER_EGT 2.280
 
 #endif

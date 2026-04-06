@@ -2,12 +2,17 @@
 #include "start.h"
 
 void updateValsForDebug(void);
+void readThermocouples(void);
 
 static SmartTimers timerCANUpdate;
 static SmartTimers timerCANLoop;
 static SmartTimers timerCANCheck;
 static SmartTimers timerOilPressure;
 static SmartTimers timerDebug;
+static SmartTimers timerThermocouples;
+
+hal_thermocouple_t egt_pre_dpf = NULL;
+hal_thermocouple_t egt_mid_dpf = NULL;
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -24,6 +29,7 @@ void setupTimers(void) {
   timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);        hal_delay_ms(CORE_OPERATION_DELAY);
   timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);       hal_delay_ms(CORE_OPERATION_DELAY);
   timerOilPressure.begin(readOilPressure, OIL_PRESSURE_READ_INTERVAL); hal_delay_ms(CORE_OPERATION_DELAY);
+  timerThermocouples.begin(readThermocouples, THERMOCOUPLE_READ_INTERVAL); hal_delay_ms(CORE_OPERATION_DELAY);
   timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);
 }
 
@@ -70,7 +76,55 @@ void initialization(void) {
     return;
   }
 
+  hal_delay_ms(2000);
+
+  setGlobalValue(F_EGT, 0);
+  setGlobalValue(F_DPF_TEMP, 0);
+
+  hal_thermocouple_config_t egt_cfg;
+  egt_cfg.chip             = HAL_THERMOCOUPLE_CHIP_MCP9600;
+  egt_cfg.bus.i2c.sda_pin  = PIN_I2C_SDA;
+  egt_cfg.bus.i2c.scl_pin  = PIN_I2C_SCL;
+  egt_cfg.bus.i2c.clock_hz = 100000UL;
+  egt_cfg.bus.i2c.i2c_addr = MCP9600_ADDR_PRE_DPF;
+
+  egt_pre_dpf = hal_thermocouple_init(&egt_cfg);
+  if (!egt_pre_dpf) {
+    derr("[EGT] MCP9600 #1 not found!");
+  } else {
+    hal_thermocouple_set_type(egt_pre_dpf, HAL_THERMOCOUPLE_TYPE_K);
+    hal_thermocouple_set_adc_resolution(egt_pre_dpf, HAL_THERMOCOUPLE_ADC_RES_18);
+    hal_thermocouple_set_ambient_resolution(egt_pre_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
+    hal_thermocouple_set_filter(egt_pre_dpf, 3);
+    hal_thermocouple_enable(egt_pre_dpf, true);
+    deb("[EGT] MCP9600 #1 OK");
+  }
+
+  egt_mid_dpf = hal_thermocouple_init(&egt_cfg);
+  if (!egt_mid_dpf) {
+    derr("[EGT] MCP9600 #2 not found!");
+  } else {
+    hal_thermocouple_set_type(egt_mid_dpf, HAL_THERMOCOUPLE_TYPE_K);
+    hal_thermocouple_set_adc_resolution(egt_mid_dpf, HAL_THERMOCOUPLE_ADC_RES_18);
+    hal_thermocouple_set_ambient_resolution(egt_mid_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
+    hal_thermocouple_set_filter(egt_mid_dpf, 3);
+    hal_thermocouple_enable(egt_mid_dpf, true);
+    deb("[EGT] MCP9600 #2 OK");
+  }
+
   setStartedCore0();
+}
+
+void readThermocouples(void) {
+  if (egt_pre_dpf) {
+    setGlobalValue(F_EGT, hal_thermocouple_read(egt_pre_dpf));
+  }
+
+  if (egt_mid_dpf) {
+    setGlobalValue(F_DPF_TEMP, hal_thermocouple_read(egt_mid_dpf));
+  }
+
+  updateEGTrecipients();
 }
 
 void looper() {
@@ -92,6 +146,7 @@ void looper() {
   timerCANCheck.tick();
   timerOilPressure.tick();
   timerDebug.tick();
+  timerThermocouples.tick();
   onImpulseTranslating();
   canSendLoop();
 
@@ -124,4 +179,5 @@ void updateValsForDebug(void) {
                                                           isClusterConnected() ? "on" : "off",
                                                           getCircumference(),
                                                           getGlobalValue(F_OIL_PRESSURE));
+  deb("thermo1: %fC, thermo2: %fC", getGlobalValue(F_EGT), getGlobalValue(F_DPF_TEMP));
 }

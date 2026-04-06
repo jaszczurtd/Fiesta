@@ -34,7 +34,6 @@ float readOilTemp(void);
 int32_t readThrottle(void);
 float readAirTemperature(void);
 float readBarPressure(void);
-int32_t readEGT(void);
 int32_t getThrottlePercentage(void);
 int32_t getPercentageEngineLoad(void);
 

@@ -213,7 +213,37 @@ const char *getDtcName(uint16_t code) {
     case DTC_PWM_CHANNEL_NOT_INIT:
       return "P0657 Actuator supply voltage A circuit/open";
     case DTC_DPF_COMM_LOST:
-      return "U0100 Lost communication with ECM/PCM A";
+      return "U0100 Lost communication with DPF module (project mapping)";
+    case DTC_EGT_COMM_LOST:
+      return "U1902 Lost communication with EGT module";
+    case DTC_CAN0_INIT_FAIL:
+      return "U1903 CAN0 bus init failure";
+    case DTC_GPS_SIGNAL_LOST:
+      return "U1904 GPS data unavailable/stale";
+    case DTC_SD_LOGGER_NOT_READY:
+      return "U1905 SD logger missing/not initialized";
+    case DTC_ISOTP_FC_TIMEOUT:
+      return "U1906 ISO-TP flow-control timeout";
+    case DTC_ISOTP_FC_ABORT:
+      return "U1907 ISO-TP flow-control abort from tester";
+    case DTC_ENGINE_OVERSPEED:
+      return "P0219 Engine overspeed condition";
+    case DTC_ECM_EEPROM_FAULT:
+      return "P062F Internal control module EEPROM error";
+    case DTC_SYSTEM_VOLTAGE_LOW:
+      return "P0562 System voltage low";
+    case DTC_SYSTEM_VOLTAGE_HIGH:
+      return "P0563 System voltage high";
+    case DTC_THROTTLE_RANGE_PERF:
+      return "P0121 Throttle/Pedal position range/performance";
+    case DTC_COOLANT_TEMP_RANGE:
+      return "P0116 Engine coolant temperature range/performance";
+    case DTC_INTAKE_TEMP_RANGE:
+      return "P0111 Intake air temperature range/performance";
+    case DTC_MAP_BARO_RANGE:
+      return "P0106 MAP/BARO pressure range/performance";
+    case DTC_FUEL_LEVEL_RANGE:
+      return "P0460 Fuel level sensor range/performance";
     default:
       return "Unknown DTC";
   }

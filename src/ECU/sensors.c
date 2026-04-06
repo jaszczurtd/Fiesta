@@ -212,22 +212,6 @@ float readBarPressure(void) {
   return val;
 }
 
-//-------------------------------------------------------------------------------------------------
-//Read EGT temperature
-//-------------------------------------------------------------------------------------------------
-
-int32_t readEGT(void) {
-  int32_t a = 0;
-  m_mutex_enter_blocking(analog4051Mutex);
-
-  set4051ActivePin(HC4051_I_EGT);
-  a = (int32_t)((getAverageValueFrom(ADC_SENSORS_PIN)) / DIVIDER_EGT);
-  m_mutex_exit(analog4051Mutex);
-  return a;
-}
-
-//-------------------------------------------------------------------------------------------------
-
 void pcf8574_init(void) {
   s_sensorsState.pcf8574State = 0;
 
@@ -287,9 +271,6 @@ void readMediumValues(void) {
       break;
     case F_FUEL:
       setGlobalValue(F_FUEL, readFuel());
-      break;
-    case F_EGT:
-      setGlobalValue(F_EGT, readEGT());
       break;
 #ifndef VP37
     case F_VOLTS:

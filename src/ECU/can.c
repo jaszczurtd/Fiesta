@@ -11,6 +11,10 @@ typedef struct {
   bool dpfEverSeenFlag;
   unsigned long dpfMessagesCount;
   unsigned long lastDpfMessagesCount;
+  bool egtConnectedFlag;
+  bool egtEverSeenFlag;
+  unsigned long egtMessagesCount;
+  unsigned long lastEgtMessagesCount;
   hal_can_t canBusHandle;
   bool isInitialized;
   int32_t lastRpmSent;
@@ -28,6 +32,10 @@ static can_state_t s_canState = {
   .dpfEverSeenFlag = false,
   .dpfMessagesCount = 0uL,
   .lastDpfMessagesCount = 0uL,
+  .egtConnectedFlag = false,
+  .egtEverSeenFlag = false,
+  .egtMessagesCount = 0uL,
+  .lastEgtMessagesCount = 0uL,
   .canBusHandle = NULL,
   .isInitialized = false,
   .lastRpmSent = (int32_t)C_INIT_VAL,
@@ -40,8 +48,13 @@ static can_state_t s_canState = {
 
 void canInit(int retries) {
   s_canState.dpfConnectedFlag = false;
+  s_canState.dpfEverSeenFlag = false;
   s_canState.dpfMessagesCount = 0uL;
   s_canState.lastDpfMessagesCount = 0uL;
+  s_canState.egtConnectedFlag = false;
+  s_canState.egtEverSeenFlag = false;
+  s_canState.egtMessagesCount = 0uL;
+  s_canState.lastEgtMessagesCount = 0uL;
 
   s_canState.canBusHandle = hal_can_create_with_retry(CAN0_GPIO,
                                                       CAN0_INT,
@@ -177,10 +190,6 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (uint8_t)getGlobalValue(F_COOLANT_TEMP);
     buf[CAN_FRAME_ECU_UPDATE_OIL] = (uint8_t)getGlobalValue(F_OIL_TEMP);
 
-    int16_t exh = (int16_t)getGlobalValue(F_EGT);
-    buf[CAN_FRAME_ECU_UPDATE_EGT_HI] = MSB(exh);
-    buf[CAN_FRAME_ECU_UPDATE_EGT_LO] = LSB(exh);
-
     hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
@@ -274,10 +283,19 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     case CAN_ID_DPF: {
       s_canState.dpfMessagesCount++;
       s_canState.dpfEverSeenFlag = true;
-      setGlobalValue(F_DPF_TEMP,
-        MsbLsbToInt(buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_HI],
-                    buf[CAN_FRAME_DPF_UPDATE_DPF_TEMP_LO]));
       setGlobalValue(F_DPF_REGEN, buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN]);
+    }
+    break;
+
+    case CAN_ID_EGT_UPDATE: {
+      s_canState.egtMessagesCount++;
+      s_canState.egtEverSeenFlag = true;
+
+      setGlobalValue(F_EGT, MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
+                                       buf[CAN_FRAME_EGT_UPDATE_EGT_LO]));
+      setGlobalValue(F_DPF_TEMP,
+        MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                    buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
     }
     break;
 
@@ -318,13 +336,21 @@ bool isDPFConnected(void) {
   return s_canState.dpfConnectedFlag;
 }
 
+bool isEGTConnected(void) {
+  return s_canState.egtConnectedFlag;
+}
+
 void canCheckConnection(void) {
   s_canState.lastRpmSent = C_INIT_VAL;
   s_canState.lastThrottleSent = C_INIT_VAL;
 
+  s_canState.egtConnectedFlag = (s_canState.egtMessagesCount != s_canState.lastEgtMessagesCount);
+  s_canState.lastEgtMessagesCount = s_canState.egtMessagesCount;
+  dtcManagerSetActive(DTC_EGT_COMM_LOST,
+    s_canState.egtEverSeenFlag && !s_canState.egtConnectedFlag);
+
   s_canState.dpfConnectedFlag = (s_canState.dpfMessagesCount != s_canState.lastDpfMessagesCount);
   s_canState.lastDpfMessagesCount = s_canState.dpfMessagesCount;
-
-  bool dpfCommLost = s_canState.dpfEverSeenFlag && !s_canState.dpfConnectedFlag;
-  dtcManagerSetActive(DTC_DPF_COMM_LOST, dpfCommLost);
+  dtcManagerSetActive(DTC_DPF_COMM_LOST, 
+    s_canState.dpfEverSeenFlag && !s_canState.dpfConnectedFlag);
 }
