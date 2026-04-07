@@ -7,16 +7,9 @@ set(CMAKE_C_STANDARD 11)
 enable_testing()
 
 set(CLOCKS_SRC ${CMAKE_CURRENT_SOURCE_DIR})
-set(HAL_LIB_SUBMODULE ${CMAKE_CURRENT_SOURCE_DIR}/../library/JaszczurHAL)
 set(HAL_LIB_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 
-if(EXISTS ${HAL_LIB_SUBMODULE}/unity.c)
-    set(UNITY_SOURCE ${HAL_LIB_SUBMODULE}/unity.c)
-    set(UNITY_INCLUDE_DIR ${HAL_LIB_SUBMODULE})
-elseif(EXISTS ${HAL_LIB_SUBMODULE}/src/utils/unity.c)
-    set(UNITY_SOURCE ${HAL_LIB_SUBMODULE}/src/utils/unity.c)
-    set(UNITY_INCLUDE_DIR ${HAL_LIB_SUBMODULE}/src/utils)
-elseif(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
+if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_INCLUDE_DIR ${HAL_LIB_EXTERNAL})
 elseif(EXISTS ${HAL_LIB_EXTERNAL}/src/utils/unity.c)
@@ -24,8 +17,6 @@ elseif(EXISTS ${HAL_LIB_EXTERNAL}/src/utils/unity.c)
     set(UNITY_INCLUDE_DIR ${HAL_LIB_EXTERNAL}/src/utils)
 else()
     message(FATAL_ERROR "JaszczurHAL not found. Expected unity.c at:
-  ${HAL_LIB_SUBMODULE}/unity.c
-  ${HAL_LIB_SUBMODULE}/src/utils/unity.c
   ${HAL_LIB_EXTERNAL}/unity.c
   ${HAL_LIB_EXTERNAL}/src/utils/unity.c")
 endif()
@@ -38,9 +29,6 @@ add_library(clocks_mock STATIC
 target_include_directories(clocks_mock PUBLIC
     ${CLOCKS_SRC}
     ${UNITY_INCLUDE_DIR}
-    ${HAL_LIB_SUBMODULE}
-    ${HAL_LIB_SUBMODULE}/src
-    ${HAL_LIB_SUBMODULE}/src/utils
     ${HAL_LIB_EXTERNAL}
     ${HAL_LIB_EXTERNAL}/src
     ${HAL_LIB_EXTERNAL}/src/utils

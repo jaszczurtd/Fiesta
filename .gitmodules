@@ -1,6 +1,0 @@
-[submodule "src/library/JaszczurHAL"]
-	path = src/library/JaszczurHAL
-	url = git@github.com:jaszczurtd/JaszczurHAL.git
-[submodule "src/library/canDefinitions"]
-	path = src/library/canDefinitions
-	url = git@github.com:jaszczurtd/canDefinitions.git

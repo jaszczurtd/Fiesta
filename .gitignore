@@ -1,128 +1,57 @@
-*.db
-*.gcda
-*.gcno
-*.exe
-*.o
-*.old
+# Workspace tooling
+.codex/
+.codex
+*.codex
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*~*
+
+# Python cache
+__pycache__/
 *.pyc
-*.so
-*.vglog
-*.map
-callgrind.out.*
-dhat.out.*
-massif.out.*
-vglog*
 
-c/*.test
-cpp/*.test
-
-build/
-src/ECU/.build_diag/*
-
-client/mosquitto_pub
-client/mosquitto_rr
-client/mosquitto_sub
-
-cov-int/
-
-dist/
-
-docker/local/mosq.tar.gz
-
-examples/mysql_log/mosquitto_mysql_log
-examples/temperature_conversion/mqtt_temperature_conversion
-
-lib/cpp/libmosquittopp.so*
-lib/cpp/libmosquittopp.a
-lib/libmosquitto.so*
-lib/libmosquitto.a
-
-man/mosquitto.8
-man/mosquitto-tls.7
-man/mosquitto.conf.5
-man/libmosquitto.3
-man/mosquitto_passwd.1
-man/mosquitto_pub.1
-man/mosquitto_rr.1
-man/mosquitto_sub.1
-man/mqtt.7
-
-out/
-
-src/db_dump/mosquitto_db_dump
-src/mosquitto
-src/mosquitto_passwd
-
-test/broker/broker.pid
-test/test_client
-test/fake_user
-test/msgsps_pub
-test/msgsps_sub
-test/msgsps_pub.dat
-test/msgsps_sub.dat
-test/broker/c/auth_plugin.so
-test/broker/c/*.test
-
-test/ssl/*.csr
-test/ssl/rootCA/
-test/ssl/signingCA/
-
-test/lib/c/*.test
-test/lib/cpp/*.test
-
-test/unit/coverage.info
-test/unit/mosq_test
-test/unit/persist_read_test
-test/unit/persist_write_test
-test/unit/out/
-
-www/cache/
-__pycache__
+# Generic firmware/build artifacts
 *.bin
-*.elf
-*.hex
-*.lst
-*.map
-*.srec
 *.d
 *.eep
+*.elf
+*.hex
 *.lss
-Fiesta/ArduinoOutput/
-Fiesta_pcbs/ecu/~ecu.pcb
-Fiesta_pcbs/ecu/~rppico.pcb
-DPF_main/ArduinoOutput/
-Fiesta_pcbs/ecu/ecuv2 (PCB - Design Rule Check Report).txt
-Fiesta_pcbs/ecu/~ecuv2.pcb
-Fiesta_pcbs/ecu/~LCD_buffer.pcb
-Fiesta_pcbs/ecu/~vp37_adjustometer.pcb
-Fiesta_pcbs/ecu/~lamp_dimmer.pcb
-Fiesta_pcbs/ecu/~clocks.pcb
-*~*
-src/Clocks/.build/
-src/ECU/.build/
-src/OilAndSpeed/.build/
+*.lst
+*.map
+*.o
+*.srec
 
-# ECU documentation dumps (kept locally, not versioned)
+# Arduino and module build outputs
+**/.build/
+**/.build_diag/
+**/build_asan/
+**/build_test/
+**/ArduinoOutput/
+
+# CMake in-source artifacts
+**/CMakeFiles/
+**/CMakeCache.txt
+**/CTestTestfile.cmake
+**/cmake_install.cmake
+
+# Module-local generated VS Code config
+src/**/.vscode/c_cpp_properties.json
+
+# Local documentation dumps (not versioned)
+src/ECU/doc/
 src/ECU/Strategy-Documents-main-Ford/
 src/ECU/LVCAN Protocol P145_20_40/
 src/ECU/ISO-15765-OBD2-Ford/
-src/ECU/OBD-context-provider.txt
 
-# ECU host-tests and CMake artifacts
-src/ECU/build_test/
-src/ECU/CMakeFiles/
-src/ECU/CMakeCache.txt
-src/ECU/CTestTestfile.cmake
-src/ECU/cmake_install.cmake
-src/ECU/Makefile
+# Legacy archive generated artifacts
+legacy/**/.build/
+legacy/**/build*/
+legacy/**/ArduinoOutput/
 
-# Prevent accidental in-source build outputs inside test sources dir
-src/ECU/tests/CMakeFiles/
-src/ECU/tests/Testing/
-src/ECU/tests/CMakeCache.txt
-src/ECU/tests/CTestTestfile.cmake
-src/ECU/tests/cmake_install.cmake
-src/ECU/tests/Makefile
-.codex
-build*
-src/ECU/doc/*
+# KiCad autosave/backups
+Fiesta_pcbs/**/~*.pcb
+Fiesta_pcbs/**/fp-info-cache
+Fiesta_pcbs/**/*-backups/
