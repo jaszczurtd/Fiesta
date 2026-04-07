@@ -166,9 +166,11 @@ Typical helpers:
 - `serial-monitor.sh` / `serial-monitor.py`
 - `refresh-intellisense.sh`
 
-### ECU compilation on Linux/WSL (debian family): full setup and build flow
+### ECU compilation on Linux/WSL: full setup and build flow
 
 The same Arduino/WSL setup pattern also applies to other firmware modules such as `src/Clocks` and `src/OilAndSpeed`, but the host-side `CMake` test flow documented below is specific to `src/ECU`.
+You only need to install `arduino-cli` and the `rp2040` core once per machine/WSL environment; after that, the same installation is reused across modules such as `src/ECU`, `src/Clocks`, and `src/OilAndSpeed`.
+
 The `src/ECU` module can be worked on in two modes under Linux/WSL:
 
 - host/mock build with `CMake` for fast local validation,
