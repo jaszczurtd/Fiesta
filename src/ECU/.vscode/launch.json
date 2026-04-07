@@ -27,7 +27,7 @@
                 "break main",
                 "continue"
             ],
-            "preLaunchTask": "Arduino: Kompiluj (Debug)",
+            "preLaunchTask": "Arduino: Build (Debug)",
             "showDevDebugOutput": "parsed",
             "liveWatch": {
                 "enabled": true,
@@ -56,7 +56,7 @@
                 "adapter speed 2000"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Arduino: Kompiluj (Debug)",
+            "preLaunchTask": "Arduino: Build (Debug)",
             "showDevDebugOutput": "parsed",
             "liveWatch": {
                 "enabled": true,
