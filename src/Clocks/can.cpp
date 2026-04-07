@@ -184,6 +184,8 @@ void canCheckConnection(void) {
     if(!lastOilSpeedModuleConnected) {
       valueFields[F_ABS_CAR_SPEED] = 0.0;
       valueFields[F_OIL_PRESSURE] = 0.0;
+      valueFields[F_EGT] = 0.0;
+      valueFields[F_DPF_TEMP] = 0.0;
     }
   }
 
