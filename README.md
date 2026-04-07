@@ -166,6 +166,136 @@ Typical helpers:
 - `serial-monitor.sh` / `serial-monitor.py`
 - `refresh-intellisense.sh`
 
+### ECU compilation on Linux/WSL (debian family): full setup and build flow
+
+The same Arduino/WSL setup pattern also applies to other firmware modules such as `src/Clocks` and `src/OilAndSpeed`, but the host-side `CMake` test flow documented below is specific to `src/ECU`.
+The `src/ECU` module can be worked on in two modes under Linux/WSL:
+
+- host/mock build with `CMake` for fast local validation,
+- firmware build with `arduino-cli` for RP2040/Pico targets.
+
+Recommended local library layout for Linux/WSL:
+
+- `JaszczurHAL`: `/home/youruser/libraries/JaszczurHAL`
+- Arduino sketchbook root: `/home/youruser`
+
+Important configuration note:
+
+- in `src/ECU/.vscode/settings.json`, `arduino.sketchbookPath` should point to the user home directory, not to `/home/`,
+- for this workspace the correct value is:
+
+```json
+"arduino.sketchbookPath": "/home/youruser"
+```
+
+This makes `arduino-cli` and project helper scripts resolve user libraries from:
+
+```text
+/home/youruser/libraries
+```
+
+That is required when `JaszczurHAL` is stored outside the repository in:
+
+```text
+/home/youruser/libraries/JaszczurHAL
+```
+
+#### 1. Host-side ECU build and tests in Linux/WSL
+
+Use this flow to quickly validate ECU logic without building firmware for the board:
+
+```bash
+cd /home/youruser/Fiesta/src/ECU
+cmake -S . -B build_test
+cmake --build build_test -j4
+ctest --test-dir build_test --output-on-failure
+```
+
+This builds the host/mock test target and runs the ECU regression suite locally in Linux/WSL.
+
+#### 2. Install Arduino CLI in Linux/WSL
+
+Install `arduino-cli`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+sudo mv bin/arduino-cli /usr/local/bin/
+arduino-cli version
+```
+
+Initialize CLI configuration and add the RP2040 package index used by the Pico core:
+
+```bash
+arduino-cli config init
+arduino-cli config set board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+```
+
+Install the RP2040 core:
+
+```bash
+arduino-cli core update-index
+arduino-cli core install rp2040:rp2040
+```
+
+#### 3. Verify external libraries
+
+Confirm that the HAL library is available in the expected sketchbook library path:
+
+```bash
+ls /home/youruser/libraries/JaszczurHAL
+```
+
+If `JaszczurHAL` is missing there, `arduino-cli` firmware compilation will fail.
+
+#### 4. Build ECU firmware for Raspberry Pi Pico
+
+Compile `src/ECU` firmware from Linux/WSL:
+
+```bash
+cd /home/youruser/Fiesta/src/ECU
+arduino-cli compile \
+  --fqbn rp2040:rp2040:rpipico \
+  --build-path .build \
+  --libraries /home/youruser/libraries \
+  --build-property "compiler.cpp.extra_flags=-I '$(pwd)'" \
+  --build-property "compiler.c.extra_flags=-I '$(pwd)'" \
+  .
+```
+
+Project default board configuration is also stored in:
+
+- `src/ECU/.vscode/settings.json`
+
+Current default FQBN for ECU is:
+
+```text
+rp2040:rp2040:rpipico
+```
+
+#### 5. Build and copy UF2 to BOOTSEL drive
+
+The ECU project provides a helper script that compiles and copies the generated `.uf2` file to a mounted BOOTSEL drive:
+
+```bash
+cd /home/youruser/Fiesta/src/ECU
+bash scripts/upload-uf2.sh
+```
+
+The script:
+
+- reads `arduino.cliPath`, `arduino.fqbn`, and `arduino.sketchbookPath` from `src/ECU/.vscode/settings.json`,
+- compiles the sketch into `src/ECU/.build`,
+- searches for a generated `.uf2`,
+- copies it to a mounted RP2040 BOOTSEL volume such as `RPI-RP2`.
+
+If the BOOTSEL drive is not found:
+
+1. unplug the board,
+2. hold the `BOOTSEL` button,
+3. reconnect USB while holding `BOOTSEL`,
+4. release the button,
+5. run `bash scripts/upload-uf2.sh` again.
+
 ### ECU host tests
 
 Run locally:
