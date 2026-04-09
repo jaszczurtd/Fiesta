@@ -177,7 +177,7 @@ void CAN_updaterecipients_01(void) {
   if(s_canState.isInitialized) {
     int hi, lo;
 
-    uint8_t buf[CAN_FRAME_MAX_LENGTH];
+    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     
     buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] =
@@ -219,7 +219,7 @@ void CAN_updaterecipients_02(void) {
     if(s_canState.lastRpmSent != rpm) {
       s_canState.lastRpmSent = rpm;
 
-      uint8_t buf[CAN_FRAME_MAX_LENGTH];
+      uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
       buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
       buf[CAN_FRAME_RPM_UPDATE_HI] = MSB(rpm);
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
@@ -231,7 +231,7 @@ void CAN_updaterecipients_02(void) {
 
 void CAN_sendTurboUpdate(void) {
   if(s_canState.isInitialized) {
-    uint8_t buf[CAN_FRAME_MAX_LENGTH];
+    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
     int hi, lo;
     int hi_d, lo_d;
 
@@ -257,7 +257,7 @@ void CAN_sendTurboUpdate(void) {
 
 void CAN_sendThrottleUpdate(void) {
   if(s_canState.isInitialized) {
-    uint8_t buf[CAN_FRAME_MAX_LENGTH];
+    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
 
     int32_t throttle = (int32_t)(getGlobalValue(F_THROTTLE_POS));
     if(s_canState.lastThrottleSent != throttle) {
@@ -278,6 +278,11 @@ void receivedCanMessage(void) {
 
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   s_canState.interruptPending = false;
+
+  if(buf == NULL || len > CAN_FRAME_MAX_LENGTH) {
+    derr("Received invalid CAN frame with ID: %03x, len: %d\n", canID, len);
+    return;
+  }
 
   switch(canID) {
     case CAN_ID_DPF: {

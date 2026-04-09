@@ -58,14 +58,19 @@ Completed areas include:
 - central state ownership (`ecu_context_t`),
 - HAL C wrappers for PID and soft timers,
 - `extern "C"` guards in public ECU headers,
-- ECU source migration to `.c` files (transitional C++ build path still used),
+- ECU source migration to `.c` files,
+- Arduino build path compiles ECU `.c` sources as C while final firmware link remains mixed C/C++,
 - state consolidation in ECU modules (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`, `start`, `obd-2`),
 - explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
 - targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
+- warning quality gate for ECU host tests and Arduino ECU build paths (`-Werror`).
+- warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
+- defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.
 
 Pending areas:
 
 - full C linkage path for required HAL/tool APIs,
+- replacement of C++ dependencies (Arduino core/HAL/test path) if full project-level C-only build is required,
 - MISRA hardening pass (casts, bounds, overflow, naming, volatile/mutex review).
 
 ## MISRA documentation policy (mandatory)
@@ -125,6 +130,9 @@ Example:
 ```
 
 ### ECU host tests (CMake)
+
+Note: CMake in this repository is used for host test configuration/build, and
+test targets are compiled as C++ (`.cpp`).
 
 ```bash
 cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release

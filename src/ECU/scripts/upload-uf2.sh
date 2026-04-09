@@ -44,8 +44,8 @@ fi
 info "Compiling..."
 info "  FQBN: $FQBN"
 if ! $CLI compile --fqbn "$FQBN" --build-path "$BUILD_DIR" $LIB_ARGS \
-    --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR'" \
-    --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR'" \
+    --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR' -Werror" \
+    --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR' -Werror" \
     "$PROJECT_DIR"; then
     err "Compilation failed"
     exit 1

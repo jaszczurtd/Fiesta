@@ -90,7 +90,9 @@ find_package(Threads REQUIRED)
 target_link_libraries(ecu_mock PUBLIC Threads::Threads)
 
 target_compile_options(ecu_mock PRIVATE
-    -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable
+    -Wall
+    -Wextra
+    -Werror
 )
 
 add_subdirectory(tests)

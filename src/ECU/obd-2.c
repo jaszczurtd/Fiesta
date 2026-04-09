@@ -1072,6 +1072,8 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
 }
 
 static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txData, bool *tx) {
+  (void)responseId;  // Intentionally unused; kept for API consistency
+  
   if(txData == NULL || tx == NULL) {
     return false;
   }

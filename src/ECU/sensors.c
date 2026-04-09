@@ -243,6 +243,8 @@ void pcf8574_write(unsigned char pin, bool value) {
 }
 
 bool pcf8574_read(unsigned char pin) {
+  (void)pin;  // Intentionally unused; kept for API consistency
+  
   hal_i2c_begin_transmission(PCF8574_ADDR);
   bool retVal = hal_i2c_read();
   bool notFound = hal_i2c_end_transmission();
