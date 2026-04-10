@@ -60,8 +60,8 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       valueFields[F_CALCULATED_ENGINE_LOAD] = buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD];
       valueFields[F_VOLTS] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI],
                                           buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
-      valueFields[F_COOLANT_TEMP] = buf[CAN_FRAME_ECU_UPDATE_COOLANT];
-      valueFields[F_OIL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_OIL];
+      valueFields[F_COOLANT_TEMP] = static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_COOLANT]);
+      valueFields[F_OIL_TEMP] = static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_OIL]);
     }
     break;
 
@@ -103,7 +103,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     case CAN_ID_ECU_UPDATE_02: {
       ecuMessages++; ecuConnected = true;
 
-      valueFields[F_INTAKE_TEMP] = buf[CAN_FRAME_ECU_UPDATE_INTAKE];
+      valueFields[F_INTAKE_TEMP] = static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
       valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                         buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
       valueFields[F_GPS_IS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
@@ -115,7 +115,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       ecuMessages++; ecuConnected = true;
 
       valueFields[F_PRESSURE_PERCENTAGE] = buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE];
-      valueFields[F_FUEL_TEMP] = buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP];
+      valueFields[F_FUEL_TEMP] = static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP]);
       valueFields[F_FAN_ENABLED] = buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED];
     }
     break;

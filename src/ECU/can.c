@@ -187,13 +187,13 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI] = (uint8_t)hi;
     buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO] = (uint8_t)lo;
 
-    buf[CAN_FRAME_ECU_UPDATE_COOLANT] = (uint8_t)getGlobalValue(F_COOLANT_TEMP);
-    buf[CAN_FRAME_ECU_UPDATE_OIL] = (uint8_t)getGlobalValue(F_OIL_TEMP);
+    buf[CAN_FRAME_ECU_UPDATE_COOLANT] = hal_can_encode_temp_i8(getGlobalValue(F_COOLANT_TEMP));
+    buf[CAN_FRAME_ECU_UPDATE_OIL] = hal_can_encode_temp_i8(getGlobalValue(F_OIL_TEMP));
 
     hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
-    buf[CAN_FRAME_ECU_UPDATE_INTAKE] = (uint8_t)getGlobalValue(F_INTAKE_TEMP);
+    buf[CAN_FRAME_ECU_UPDATE_INTAKE] = hal_can_encode_temp_i8(getGlobalValue(F_INTAKE_TEMP));
 
     int16_t fuel = (int16_t)getGlobalValue(F_FUEL);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
@@ -206,7 +206,7 @@ void CAN_updaterecipients_01(void) {
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] = getGlobalValue(F_PRESSURE_PERCENTAGE);
-    buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = getGlobalValue(F_FUEL_TEMP);
+    buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] = hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = getGlobalValue(F_FAN_ENABLED);
 
     hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);

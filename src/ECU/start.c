@@ -70,19 +70,7 @@ static void start_initContextMutexes(void) {
   hal_critical_section_exit();
 }
 
-static void start_ensureTimerCreated(hal_soft_timer_t *timer) {
-  if(*timer == NULL) {
-    *timer = hal_soft_timer_create();
-  }
-}
-
-typedef struct {
-  hal_soft_timer_t *timer;
-  hal_soft_timer_callback_t callback;
-  uint32_t intervalMs;
-} start_timer_init_t;
-
-static const start_timer_init_t startTimerInitTable[] = {
+static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
   { &s_startRuntimeState.timerEverySecondHandle, callAtEverySecond, (uint32_t)SECOND },
   { &s_startRuntimeState.timerMediumHandle, readMediumValues,
     (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER) },
@@ -95,29 +83,9 @@ static const start_timer_init_t startTimerInitTable[] = {
   { &s_startRuntimeState.timerCANCheckHandle, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
 };
 
-static void start_setupSingleTimer(hal_soft_timer_t *timer,
-                                   hal_soft_timer_callback_t callback,
-                                   uint32_t intervalMs) {
-  watchdog_feed();
-  start_ensureTimerCreated(timer);
-  (void)hal_soft_timer_begin(*timer, callback, intervalMs);
-  hal_delay_ms(CORE_OPERATION_DELAY);
-}
-
-static void start_tickAllTimers(void) {
-  for(uint32_t i = 0u; i < COUNTOF(startTimerInitTable); i++) {
-    hal_soft_timer_tick(*startTimerInitTable[i].timer);
-  }
-}
-
 void setupTimers(void) {
-  const uint32_t timerCount = COUNTOF(startTimerInitTable);
-
-  for(uint32_t i = 0u; i < timerCount; i++) {
-    start_setupSingleTimer(startTimerInitTable[i].timer,
-                           startTimerInitTable[i].callback,
-                           startTimerInitTable[i].intervalMs);
-  }
+  hal_soft_timer_setup_table(startTimerInitTable, COUNTOF(startTimerInitTable),
+                             watchdog_feed, CORE_OPERATION_DELAY);
 }
 
 void executeByWatchdog(int *values, int size) {
@@ -296,7 +264,7 @@ void looper(void) {
     return;
   }
 
-  start_tickAllTimers();
+  hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
   if(s_startRuntimeState.lastThreadSecondsVal < getSeconds()) {
     s_startRuntimeState.lastThreadSecondsVal = getSeconds() + THREAD_CONTROL_SECONDS;
 

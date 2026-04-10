@@ -67,6 +67,14 @@ void initI2C(void) {
 
 void initSPI(void) {
   hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
+
+  // Deassert all SPI chip-selects immediately so that no MCP2515
+  // floats its /CS low during another chip's SPI transactions.
+  const uint8_t spiCsPins[] = { CAN0_GPIO, CAN1_GPIO, SD_CARD_CS };
+  for(uint32_t i = 0; i < COUNTOF(spiCsPins); i++) {
+    hal_gpio_set_mode(spiCsPins[i], HAL_GPIO_OUTPUT);
+    hal_gpio_write(spiCsPins[i], true);
+  }
 }
 
 void setGlobalValue(int idx, float val) {

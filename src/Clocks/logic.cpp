@@ -17,17 +17,30 @@ void drawHighImportanceValuesIfChanged(void);
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
-static SmartTimers timerEverySecond;
-static SmartTimers timerHalfSecond;
-static SmartTimers timerQuarterSecond;
-static SmartTimers timerSoftInit;
-static SmartTimers timerEGT;
-static SmartTimers timerDebug;
-static SmartTimers timerCANLoop;
-static SmartTimers timerCANUpdate;
-static SmartTimers timerCANCheck;
 static Cluster cluster;
 static BuzzerStrategy buzzerStrategy;
+
+static hal_soft_timer_t timerEverySecond = NULL;
+static hal_soft_timer_t timerHalfSecond = NULL;
+static hal_soft_timer_t timerQuarterSecond = NULL;
+static hal_soft_timer_t timerSoftInit = NULL;
+static hal_soft_timer_t timerEGT = NULL;
+static hal_soft_timer_t timerDebug = NULL;
+static hal_soft_timer_t timerCANLoop = NULL;
+static hal_soft_timer_t timerCANUpdate = NULL;
+static hal_soft_timer_t timerCANCheck = NULL;
+
+static const hal_soft_timer_table_entry_t clocksTimerTable[] = {
+  { &timerEverySecond,  callAtEverySecond,        (uint32_t)SECOND },
+  { &timerHalfSecond,   callAtEveryHalfSecond,    (uint32_t)(SECOND / 2) },
+  { &timerQuarterSecond,callAtEveryHalfHalfSecond, (uint32_t)(SECOND / 4) },
+  { &timerSoftInit,     softInitDisplay,           (uint32_t)DISPLAY_SOFTINIT_TIME },
+  { &timerEGT,          changeEGT,                 (uint32_t)DPF_SHOW_TIME_INTERVAL },
+  { &timerDebug,        updateValsForDebug,        (uint32_t)DEBUG_UPDATE },
+  { &timerCANLoop,      canMainLoop,               (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
+  { &timerCANUpdate,    updateCANrecipients,       (uint32_t)CAN_UPDATE_RECIPIENTS },
+  { &timerCANCheck,     canCheckConnection,        (uint32_t)CAN_CHECK_CONNECTION }
+};
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -40,15 +53,8 @@ void debugFunc(void) {
 #endif
 
 void setupTimers(void) {
-  timerEverySecond.begin(callAtEverySecond, SECOND);                hal_delay_ms(CORE_OPERATION_DELAY);
-  timerHalfSecond.begin(callAtEveryHalfSecond, SECOND / 2);         hal_delay_ms(CORE_OPERATION_DELAY);
-  timerQuarterSecond.begin(callAtEveryHalfHalfSecond, SECOND / 4);  hal_delay_ms(CORE_OPERATION_DELAY);
-  timerSoftInit.begin(softInitDisplay, DISPLAY_SOFTINIT_TIME);      hal_delay_ms(CORE_OPERATION_DELAY);
-  timerEGT.begin(changeEGT, DPF_SHOW_TIME_INTERVAL);                hal_delay_ms(CORE_OPERATION_DELAY);
-  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);               hal_delay_ms(CORE_OPERATION_DELAY);
-  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);    hal_delay_ms(CORE_OPERATION_DELAY);
-  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS); hal_delay_ms(CORE_OPERATION_DELAY);
-  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);
+  hal_soft_timer_setup_table(clocksTimerTable, COUNTOF(clocksTimerTable),
+                             hal_watchdog_feed, CORE_OPERATION_DELAY);
 }
 
 static int *wValues = NULL;
@@ -142,15 +148,7 @@ void loop_a(void) {
 
   statusVariable0 = 1;
 
-  timerEverySecond.tick();
-  timerHalfSecond.tick();
-  timerQuarterSecond.tick();
-  timerSoftInit.tick();
-  timerEGT.tick();
-  timerDebug.tick();
-  timerCANLoop.tick();
-  timerCANUpdate.tick();
-  timerCANCheck.tick();
+  hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 

@@ -4,12 +4,21 @@
 void updateValsForDebug(void);
 void readThermocouples(void);
 
-static SmartTimers timerCANUpdate;
-static SmartTimers timerCANLoop;
-static SmartTimers timerCANCheck;
-static SmartTimers timerOilPressure;
-static SmartTimers timerDebug;
-static SmartTimers timerThermocouples;
+static hal_soft_timer_t timerCANUpdate = NULL;
+static hal_soft_timer_t timerCANLoop = NULL;
+static hal_soft_timer_t timerCANCheck = NULL;
+static hal_soft_timer_t timerOilPressure = NULL;
+static hal_soft_timer_t timerDebug = NULL;
+static hal_soft_timer_t timerThermocouples = NULL;
+
+static const hal_soft_timer_table_entry_t oilSpeedTimerTable[] = {
+  { &timerCANUpdate,     updateCANrecipients,  (uint32_t)CAN_UPDATE_RECIPIENTS },
+  { &timerCANLoop,       canMainLoop,          (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
+  { &timerCANCheck,      canCheckConnection,   (uint32_t)CAN_CHECK_CONNECTION },
+  { &timerOilPressure,   readOilPressure,      (uint32_t)OIL_PRESSURE_READ_INTERVAL },
+  { &timerThermocouples, readThermocouples,     (uint32_t)THERMOCOUPLE_READ_INTERVAL },
+  { &timerDebug,         updateValsForDebug,   (uint32_t)DEBUG_UPDATE }
+};
 
 hal_thermocouple_t egt_pre_dpf = NULL;
 hal_thermocouple_t egt_mid_dpf = NULL;
@@ -25,12 +34,8 @@ void executeByWatchdog(int *values, int size) {
 }
 
 void setupTimers(void) {
-  timerCANUpdate.begin(updateCANrecipients, CAN_UPDATE_RECIPIENTS);    hal_delay_ms(CORE_OPERATION_DELAY);
-  timerCANLoop.begin(canMainLoop, CAN_MAIN_LOOP_READ_INTERVAL);        hal_delay_ms(CORE_OPERATION_DELAY);
-  timerCANCheck.begin(canCheckConnection, CAN_CHECK_CONNECTION);       hal_delay_ms(CORE_OPERATION_DELAY);
-  timerOilPressure.begin(readOilPressure, OIL_PRESSURE_READ_INTERVAL); hal_delay_ms(CORE_OPERATION_DELAY);
-  timerThermocouples.begin(readThermocouples, THERMOCOUPLE_READ_INTERVAL); hal_delay_ms(CORE_OPERATION_DELAY);
-  timerDebug.begin(updateValsForDebug, DEBUG_UPDATE);
+  hal_soft_timer_setup_table(oilSpeedTimerTable, COUNTOF(oilSpeedTimerTable),
+                             watchdog_feed, CORE_OPERATION_DELAY);
 }
 
 void initialization(void) {
@@ -141,12 +146,7 @@ void looper() {
 
   statusVariable0 = 1;
 
-  timerCANUpdate.tick();
-  timerCANLoop.tick();
-  timerCANCheck.tick();
-  timerOilPressure.tick();
-  timerDebug.tick();
-  timerThermocouples.tick();
+  hal_soft_timer_tick_table(oilSpeedTimerTable, COUNTOF(oilSpeedTimerTable));
   onImpulseTranslating();
   canSendLoop();
 

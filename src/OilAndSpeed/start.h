@@ -4,6 +4,7 @@
 #include <tools.h>
 #include <canDefinitions.h>
 
+#include <hal/hal_soft_timer.h>
 #include "can.h"
 #include "oilPressure.h"
 #include "speed.h"
