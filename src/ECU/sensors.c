@@ -441,3 +441,21 @@ float getVP37FuelTemperature(void) {
   val = steinhart(val, R_VP37_FUEL_A, R_VP37_FUEL_B, false);
   return roundfWithPrecisionTo(val, 1);
 }
+
+unsigned char readKeyboard(void) {
+  unsigned char pinStates = 0xFF;
+
+  hal_i2c_begin_transmission(I2C_KEYBOARD);
+  bool notFound = hal_i2c_end_transmission();
+
+  if(notFound) {
+    derr("Keyboard not found");
+    return pinStates;
+  }
+
+  hal_i2c_begin_transmission(I2C_KEYBOARD);
+  pinStates = hal_i2c_read();
+  hal_i2c_end_transmission();
+
+  return pinStates;
+}

@@ -118,4 +118,6 @@
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
 
+#define I2C_KEYBOARD 0x24
+
 #endif

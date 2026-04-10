@@ -23,15 +23,16 @@ extern "C" {
 #define VP37_PID_KP 0.45
 #define VP37_PID_KI 0.18
 #define VP37_PID_KD 0.01
+#define VP37_PID_TF 0.03
 
-//calibration / stabilization values
+// calibration / stabilization values
 #define VOLT_PER_PWM 0.0421
 #define VOLTAGE_THRESHOLD 0.2
 #define PERCENTAGE_ERROR 3.0
 
 #define VP37_OPERATION_DELAY 5 //microseconds
 
-#define STABILITY_ADJUSTOMETER_TAB_SIZE 4
+#define STABILITY_ADJUSTOMETER_TAB_SIZE 6
 #define MIN_ADJUSTOMETER_VAL 10
 
 //miliseconds
@@ -44,9 +45,15 @@ extern "C" {
 #define VP37_PERCENTAGE_LIMITER 95
 
 #define VP37_PWM_MIN 378
-#define VP37_PWM_MAX VP37_PWM_MIN * 2.5
+#define VP37_PWM_MAX (VP37_PWM_MIN * 2.5)
 
 #define VP37_ADJUST_TIMER 200
+
+#define VP37_ACCELERATION_MIN 0
+#define VP37_ACCELERATION_MAX 100
+
+#define TIMING_PWM_MIN 0
+#define TIMING_PWM_MAX PWM_RESOLUTION
 
 void measureFuelTemp(void);
 void measureVoltage(void);
@@ -58,6 +65,8 @@ typedef struct {
   int32_t lastThrottle;
   bool calibrationDone;
   int32_t desiredAdjustometer;
+  int32_t currentAdjustometerPosition;
+  int32_t pidErr;
   float pwmValue;
   float voltageCorrection;
   int32_t lastPWMval;
@@ -74,6 +83,14 @@ void VP37_process(VP37Pump *self);
 void VP37_enableVP37(VP37Pump *self, bool enable);
 bool VP37_isVP37Enabled(VP37Pump *self);
 void VP37_showDebug(VP37Pump *self);
+
+void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
+void VP37_setVP37Throttle(VP37Pump *self, int32_t accel);
+int32_t VP37_getMinVP37ThrottleValue(VP37Pump *self);
+int32_t VP37_getMaxVP37ThrottleValue(VP37Pump *self);
+void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
+void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
+float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
 
 #ifdef __cplusplus
 }

@@ -328,6 +328,9 @@ void looper1(void) {
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
   VP37_process(&s_ctx.injectionPump);
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+  tickTests();
+#endif
   m_mutex_exit(vp37StateMutex);
 #endif
   s_startPersistentState.statusVariable1Val = 3;
