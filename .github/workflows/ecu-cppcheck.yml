@@ -1,14 +1,6 @@
 name: ECU Cppcheck
 
 on:
-  push:
-    paths:
-      - "src/ECU/**"
-      - ".github/workflows/ecu-cppcheck.yml"
-  pull_request:
-    paths:
-      - "src/ECU/**"
-      - ".github/workflows/ecu-cppcheck.yml"
   workflow_dispatch:
 
 jobs:

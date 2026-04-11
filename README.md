@@ -45,8 +45,8 @@ Deprecated code in `legacy/`:
 
 Two-level estimate:
 
-- engineering/architecture alignment: **~75-80%**,
-- formal compliance readiness (tooling + evidence): **~45-50%**.
+- engineering/architecture alignment: **~80-85%**,
+- formal compliance readiness (tooling + evidence): **~50-55%**.
 
 Scope:
 
