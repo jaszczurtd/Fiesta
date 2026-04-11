@@ -30,6 +30,11 @@ jobs:
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
           git clone --depth 1 https://github.com/jaszczurtd/canDefinitions.git ../libraries/canDefinitions
 
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
       - name: Configure
         run: |
           cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release

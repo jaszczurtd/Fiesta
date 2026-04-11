@@ -1,0 +1,97 @@
+name: ECU Cppcheck
+
+on:
+  push:
+    paths:
+      - "src/ECU/**"
+      - ".github/workflows/ecu-cppcheck.yml"
+  pull_request:
+    paths:
+      - "src/ECU/**"
+      - ".github/workflows/ecu-cppcheck.yml"
+  workflow_dispatch:
+
+jobs:
+  cppcheck-ecu:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck (ECU profile)
+        working-directory: src/ECU
+        run: |
+          set -euo pipefail
+          cppcheck --enable=all --std=c99 -I. \
+            --suppress=missingInclude \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress=knownConditionTrueFalse \
+            --suppress=checkersReport \
+            *.c 2>&1 | tee cppcheck-current.log
+
+      - name: Baseline gating
+        working-directory: src/ECU
+        run: |
+          set -euo pipefail
+
+          BASELINE_FILE="cppcheck-baseline.log"
+          CURRENT_FILE="cppcheck-current.log"
+
+          if [[ ! -f "$BASELINE_FILE" ]]; then
+            echo "Missing $BASELINE_FILE in repository."
+            echo "Commit current baseline first, then rerun CI."
+            exit 2
+          fi
+
+          extract_findings() {
+            local file="$1"
+            grep -E '^[^:]+:[0-9]+:[0-9]+: (error|warning|style|performance|portability|information): .*\[[^][]+\]$' "$file" \
+              | sed -E 's|^\./||' \
+              | sort -u || true
+          }
+
+          extract_findings "$BASELINE_FILE" > baseline.findings
+          extract_findings "$CURRENT_FILE" > current.findings
+
+          comm -13 baseline.findings current.findings > new.findings || true
+          comm -23 baseline.findings current.findings > fixed.findings || true
+
+          echo "Baseline findings: $(wc -l < baseline.findings)"
+          echo "Current findings:  $(wc -l < current.findings)"
+
+          if [[ -s fixed.findings ]]; then
+            echo "Resolved findings vs baseline:"
+            cat fixed.findings
+          fi
+
+          if [[ -s new.findings ]]; then
+            echo "New cppcheck findings introduced:"
+            cat new.findings
+            exit 1
+          fi
+
+          echo "No new cppcheck findings vs baseline."
+
+      - name: Upload cppcheck artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-cppcheck
+          path: |
+            src/ECU/cppcheck-current.log
+            src/ECU/cppcheck-baseline.log
+            src/ECU/baseline.findings
+            src/ECU/current.findings
+            src/ECU/new.findings
+            src/ECU/fixed.findings

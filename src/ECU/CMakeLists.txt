@@ -95,4 +95,40 @@ target_compile_options(ecu_mock PRIVATE
     -Werror
 )
 
+# Static-analysis integration.
+# - check-cppcheck: manual target (cmake --build ... --target check-cppcheck)
+# - test_cppcheck: regular CTest test (runs with ctest)
+find_program(CPPCHECK_EXECUTABLE cppcheck)
+option(ECU_ENABLE_CPPCHECK_TARGET "Enable check-cppcheck custom target" ON)
+
+if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
+    file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC} "${ECU_SRC}/*.c")
+
+    set(ECU_CPPCHECK_ARGS
+        --enable=all
+        --std=c99
+        -I.
+        --suppress=missingInclude
+        --suppress=missingIncludeSystem
+        --suppress=unusedFunction
+        --suppress=knownConditionTrueFalse
+        --suppress=checkersReport
+    )
+
+    add_custom_target(check-cppcheck
+        COMMAND ${CMAKE_COMMAND} -E chdir ${ECU_SRC}
+            ${CPPCHECK_EXECUTABLE}
+            ${ECU_CPPCHECK_ARGS}
+            ${ECU_CPPCHECK_SOURCES}
+        COMMENT "Running cppcheck for ECU sources"
+        VERBATIM
+    )
+
+    add_test(
+        NAME test_cppcheck
+        COMMAND ${CPPCHECK_EXECUTABLE} ${ECU_CPPCHECK_ARGS} ${ECU_CPPCHECK_SOURCES}
+    )
+    set_tests_properties(test_cppcheck PROPERTIES WORKING_DIRECTORY ${ECU_SRC})
+endif()
+
 add_subdirectory(tests)

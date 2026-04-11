@@ -63,20 +63,20 @@ void RPM_resetRPMCycle(RPM *self) {
     }
 }
 
-void RPM_setAccelRPMPercentage(RPM *self, int percentage) {
+void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage) {
     (void)self;
     (void)percentage;
 }
 
-int RPM_getCurrentRPMSolenoid(RPM *self) {
+int32_t RPM_getCurrentRPMSolenoid(const RPM *self) {
     return self->currentRPMSolenoid;
 }
 
-int RPM_getCurrentRPM(RPM *self) {
+int32_t RPM_getCurrentRPM(const RPM *self) {
     return self->rpmValue;
 }
 
-bool RPM_isEngineRunning(RPM *self) {
+bool RPM_isEngineRunning(const RPM *self) {
     return RPM_getCurrentRPM(self) != 0;
 }
 
@@ -92,6 +92,6 @@ RPM *getRPMInstance(void) {
     return &getECUContext()->rpm;
 }
 
-void createRPM(void) {
+void RPM_create(void) {
     RPM_init(getRPMInstance());
 }
