@@ -23,8 +23,8 @@ typedef struct {
 
 void engineFan_init(engineFan *self);
 void engineFan_process(engineFan *self);
-void engineFan_showDebug(engineFan *self);
-bool engineFan_isFanEnabled(engineFan *self);
+void engineFan_showDebug(const engineFan *self);
+bool engineFan_isFanEnabled(const engineFan *self);
 void engineFan_fan(engineFan *self, bool enable);
 
 engineFan *getFanInstance(void);

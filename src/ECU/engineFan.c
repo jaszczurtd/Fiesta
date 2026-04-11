@@ -13,7 +13,7 @@ engineFan *getFanInstance(void) {
   return &getECUContext()->fan;
 }
 
-static int engineFan_fanEnabledReason(engineFan *self) {
+static int engineFan_fanEnabledReason(const engineFan *self) {
   return self->fanEnabled;
 }
 
@@ -26,7 +26,7 @@ void engineFan_fan(engineFan *self, bool enable) {
   pcf8574_write(PCF8574_O_FAN, enable);
 }
 
-bool engineFan_isFanEnabled(engineFan *self) {
+bool engineFan_isFanEnabled(const engineFan *self) {
   return self->fanEnabled != FAN_REASON_NONE;
 }
 
@@ -84,6 +84,6 @@ void engineFan_process(engineFan *self) {
 
 }
 
-void engineFan_showDebug(engineFan *self) {
+void engineFan_showDebug(const engineFan *self) {
   deb("fan enabled: %d reason: %d", engineFan_isFanEnabled(self), engineFan_fanEnabledReason(self));
 }

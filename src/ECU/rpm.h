@@ -50,12 +50,12 @@ void RPM_resetRPMEngine(RPM *self);
 #ifndef VP37
 void RPM_stabilizeRPM(RPM *self);
 #endif
-bool RPM_isEngineRunning(RPM *self);
+bool RPM_isEngineRunning(const RPM *self);
 void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage);
-int32_t RPM_getCurrentRPMSolenoid(RPM *self);
+int32_t RPM_getCurrentRPMSolenoid(const RPM *self);
 void RPM_interrupt(RPM *self);
 void RPM_resetRPMCycle(RPM *self);
-int32_t RPM_getCurrentRPM(RPM *self);
+int32_t RPM_getCurrentRPM(const RPM *self);
 
 RPM *getRPMInstance(void);
 void RPM_create(void);

@@ -33,14 +33,16 @@ void Turbo_process(Turbo *self) {
 
   self->engineThrottlePercentageValue = getThrottlePercentage();
   self->posThrottle = (self->engineThrottlePercentageValue / 10);
-  bool pedalPressed = false;
-  int32_t pressurePercentage = 0;
 
 #ifdef JUST_TEST_BY_THROTTLE
   self->engineThrottlePercentageValue = Turbo_scaleTurboValues(self, self->engineThrottlePercentageValue);
   self->n75 = percentToGivenVal(self->engineThrottlePercentageValue, PWM_RESOLUTION);
 #else
+  int32_t pressurePercentage = 0;
+
   if(getGlobalValue(F_PRESSURE) < MAX_BOOST_PRESSURE) {
+    bool pedalPressed = false;
+    
     if(self->engineThrottlePercentageValue > 0) {
       pedalPressed = true;
     }

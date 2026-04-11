@@ -24,7 +24,7 @@ void heatedWindshields_init(heatedWindshields *self);
 void heatedWindshields_process(heatedWindshields *self);
 void heatedWindshields_showDebug(heatedWindshields *self);
 void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int32_t side);
-bool heatedWindshields_isHeatedWindowEnabled(heatedWindshields *self);
+bool heatedWindshields_isHeatedWindowEnabled(const heatedWindshields *self);
 
 heatedWindshields *getHeatedWindshieldsInstance(void);
 void createHeatedWindshields(void);

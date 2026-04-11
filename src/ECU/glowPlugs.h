@@ -25,10 +25,10 @@ typedef struct {
 
 void glowPlugs_init(glowPlugs *self);
 void glowPlugs_process(glowPlugs *self);
-void glowPlugs_showDebug(glowPlugs *self);
+void glowPlugs_showDebug(const glowPlugs *self);
 void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable);
 void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable);
-bool glowPlugs_isGlowPlugsHeating(glowPlugs *self);
+bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self);
 void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp);
 
 glowPlugs *getGlowPlugsInstance(void);

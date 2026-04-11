@@ -41,7 +41,7 @@ void heatedWindshields_init(heatedWindshields *self) {
   self->lastHeatedWindowsSecond = 0;
 }
 
-bool heatedWindshields_isHeatedWindowEnabled(heatedWindshields *self) {
+bool heatedWindshields_isHeatedWindowEnabled(const heatedWindshields *self) {
   return self->heatedWindowEnabled;
 }
 
@@ -90,7 +90,6 @@ void heatedWindshields_process(heatedWindshields *self) {
         deb("enable heated windshield");
       }
 
-      pressed = false;
       return;
     }
 

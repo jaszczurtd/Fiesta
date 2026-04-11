@@ -4,7 +4,7 @@
 
 void setUp(void) {
     initSensors();
-    for(int i = 0; i < F_LAST; i++) {
+    for(int32_t i = 0; i < F_LAST; i++) {
         setGlobalValue(i, 0.0f);
     }
 }

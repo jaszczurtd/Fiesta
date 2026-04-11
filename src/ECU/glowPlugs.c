@@ -59,7 +59,7 @@ void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable) {
   pcf8574_write(PCF8574_O_GLOW_PLUGS_LAMP, enable);
 }
 
-bool glowPlugs_isGlowPlugsHeating(glowPlugs *self) {
+bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self) {
   return (self->glowPlugsTime > 0);
 }
 
@@ -137,6 +137,6 @@ void glowPlugs_process(glowPlugs *self) {
   }
 }
 
-void glowPlugs_showDebug(glowPlugs *self) {
+void glowPlugs_showDebug(const glowPlugs *self) {
   deb("glowPlugs: %d", glowPlugs_isGlowPlugsHeating(self));
 }

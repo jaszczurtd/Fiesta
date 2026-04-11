@@ -70,6 +70,12 @@
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     },
     {
+        "key": "ctrl+shift+y",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Quality: Cppcheck baseline",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
         "key": "ctrl+shift+alt+1",
         "command": "workbench.action.tasks.runTask",
         "args": "Arduino: Select board (GUI)",

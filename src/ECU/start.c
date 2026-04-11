@@ -51,20 +51,19 @@ static start_runtime_state_t s_startRuntimeState = {
 };
 
 NOINIT static start_persistent_state_t s_startPersistentState;
-
-m_mutex_def(turboStateMutex);
+static hal_mutex_t turboStateMutex = NULL;
 #ifdef VP37
-m_mutex_def(vp37StateMutex);
+static hal_mutex_t vp37StateMutex = NULL;
 #endif
 
 static void start_initContextMutexes(void) {
   hal_critical_section_enter();
   if(turboStateMutex == NULL) {
-    m_mutex_init(turboStateMutex);
+    turboStateMutex = hal_mutex_create();
   }
 #ifdef VP37
   if(vp37StateMutex == NULL) {
-    m_mutex_init(vp37StateMutex);
+    vp37StateMutex = hal_mutex_create();
   }
 #endif
   hal_critical_section_exit();
@@ -320,18 +319,18 @@ void looper1(void) {
   }
 
   s_startPersistentState.statusVariable1Val = 1;
-  m_mutex_enter_blocking(turboStateMutex);
+  hal_mutex_lock(turboStateMutex);
   Turbo_process(&s_ctx.turbo);
-  m_mutex_exit(turboStateMutex);
+  hal_mutex_unlock(turboStateMutex);
   s_startPersistentState.statusVariable1Val = 2;
   RPM_process(getRPMInstance());
 #ifdef VP37
-  m_mutex_enter_blocking(vp37StateMutex);
+  hal_mutex_lock(vp37StateMutex);
   VP37_process(&s_ctx.injectionPump);
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   tickTests();
 #endif
-  m_mutex_exit(vp37StateMutex);
+  hal_mutex_unlock(vp37StateMutex);
 #endif
   s_startPersistentState.statusVariable1Val = 3;
 

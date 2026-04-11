@@ -5,7 +5,7 @@
 
 void obdReq(uint32_t requestId, uint8_t *data);
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason);
-static void iso_tp(uint32_t responseId, int len, uint8_t *data);
+static void iso_tp(uint32_t responseId, int len, const uint8_t *data);
 static void iso_tp_process(void);
 int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, int maxLen);
 
@@ -142,10 +142,6 @@ int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, i
 
   uint16_t codes[8];
   uint8_t count = dtcManagerGetCodes(kind, codes, 8);
-  int len = 2 + (int)count * 2;
-  if(len > maxLen) {
-    len = maxLen;
-  }
 
   outData[0] = responseService;
   outData[1] = count;
@@ -273,7 +269,7 @@ static void encodeMode01FuelPressure(uint8_t *txData) {
 
 static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[0] = 0x04;
-  RPM *rpm = getRPMInstance();
+  const RPM *rpm = getRPMInstance();
   int p = RPM_isEngineRunning(rpm) ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
   txData[3] = MSB(p);
   txData[4] = LSB(p);
@@ -568,7 +564,7 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     iso_tp(responseId, (int)sizeof(CID), CID);
   }
   else if(pid == MODE09_PID_CVN){    // CVN
-    uint8_t CVN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
+    const uint8_t CVN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
     iso_tp(responseId, 11, CVN);
   }
   else if(pid == MODE09_PID_ECU_COUNT){    // ECU name message count for PID 0A.
@@ -585,7 +581,7 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     iso_tp(responseId, (int)sizeof(ECMname), ECMname);
   }
   else if(pid == MODE09_PID_ESN){    // ESN
-    uint8_t ESN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
+    const uint8_t ESN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
     iso_tp(responseId, 20, ESN);
   }
   else if(pid == MODE09_PID_TYPE_APPR){    // Type Approval Number
@@ -1820,7 +1816,7 @@ static void unsupportedServicePrint(uint8_t mode){
 
 // Non-blocking ISO-TP: sends Single Frame directly, or First Frame and arms
 // the state machine for Consecutive Frames driven by iso_tp_process().
-static void iso_tp(uint32_t responseId, int len, uint8_t *data) {
+static void iso_tp(uint32_t responseId, int len, const uint8_t *data) {
   if(data == NULL || len <= 0) {
     return;
   }

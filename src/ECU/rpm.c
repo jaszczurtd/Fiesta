@@ -99,7 +99,7 @@ void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage) {
   self->currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
 }
 
-int32_t RPM_getCurrentRPMSolenoid(RPM *self) {
+int32_t RPM_getCurrentRPMSolenoid(const RPM *self) {
   return self->currentRPMSolenoid;
 }
 
@@ -112,7 +112,7 @@ static bool RPM_isEngineThrottlePressed(RPM *self) {
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
 
-int32_t RPM_getCurrentRPM(RPM *self) {
+int32_t RPM_getCurrentRPM(const RPM *self) {
   return self->rpmValue;
 }
 
@@ -148,7 +148,6 @@ void RPM_process(RPM *self) {
 
   if(RPM_isEngineThrottlePressed(self) ||
     RPM_getCurrentRPM(self) < RPM_MIN) {
-      desiredRPM = PRESSED_PEDAL_RPM_VALUE;
       RPM_setAccelRPMPercentage(self, ACCELLERATE_RPM_PERCENT_VALUE); //percent
       valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
       return;
@@ -201,7 +200,7 @@ void RPM_process(RPM *self) {
 #endif /*VP37*/
 }
 
-bool RPM_isEngineRunning(RPM *self) {
+bool RPM_isEngineRunning(const RPM *self) {
   return (RPM_getCurrentRPM(self) != 0);
 }
 

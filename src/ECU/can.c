@@ -231,13 +231,14 @@ void CAN_updaterecipients_02(void) {
 
 void CAN_sendTurboUpdate(void) {
   if(s_canState.isInitialized) {
-    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
     int hi, lo;
     int hi_d, lo_d;
 
     floatToDec(getGlobalValue(F_PRESSURE), &hi, &lo);
     floatToDec(getGlobalValue(F_PRESSURE_DESIRED), &hi_d, &lo_d);
     if(lo != s_canState.lastTurboLoSent || hi != s_canState.lastTurboHiSent || hi_d != s_canState.lastTurboHiDesiredSent || lo_d != s_canState.lastTurboLoDesiredSent) {
+      uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
+
       s_canState.lastTurboLoSent = lo;
       s_canState.lastTurboHiSent = hi;
 
@@ -257,12 +258,11 @@ void CAN_sendTurboUpdate(void) {
 
 void CAN_sendThrottleUpdate(void) {
   if(s_canState.isInitialized) {
-    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
-
     int32_t throttle = (int32_t)(getGlobalValue(F_THROTTLE_POS));
     if(s_canState.lastThrottleSent != throttle) {
       s_canState.lastThrottleSent = throttle;
 
+      uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
       buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
       buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
       buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
