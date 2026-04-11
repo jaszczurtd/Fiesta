@@ -34,10 +34,11 @@ Deprecated code in `legacy/`:
 - useful for reference and migration history,
 - should not be treated as current production firmware.
 
-## Current status (2026-04-07)
+## Current status (2026-04-12)
 
 - Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`).
-- ECU host-side test suite currently passes (`10/10` suites).
+- ECU host-side test suite currently passes (`11/11` suites, including `test_cppcheck`).
+- ECU CI now runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
 - ECU startup reports compile timestamp (`__DATE__` + `__TIME__`).
 
 ## ECU MISRA-C migration status
