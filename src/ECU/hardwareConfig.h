@@ -13,7 +13,7 @@
 #define ANGLE_PWM_FREQUENCY_HZ 300
 #endif
 
-#define I2C_SPEED_HZ 200000
+#define I2C_SPEED_HZ 400000
 
 // RP2040 flash-backed EEPROM emulation size used by ECU module.
 #define ECU_EEPROM_SIZE_BYTES 2048u

@@ -20,10 +20,10 @@ extern "C" {
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
 #define VP37_PID_TIME_UPDATE 30.0
-#define VP37_PID_KP 0.45
-#define VP37_PID_KI 0.18
-#define VP37_PID_KD 0.01
-#define VP37_PID_TF 0.03
+#define VP37_PID_KP 0.51
+#define VP37_PID_KI 0.09
+#define VP37_PID_KD 0.04
+#define VP37_PID_TF 0.04
 
 // calibration / stabilization values
 #define VOLT_PER_PWM 0.0421
@@ -42,10 +42,8 @@ extern "C" {
 #define VP37_CALIBRATION_MAX_PERCENTAGE 50
 #define VP37_AVERAGE_VALUES_AMOUNT 5
 
-#define VP37_PERCENTAGE_LIMITER 95
-
 #define VP37_PWM_MIN 378
-#define VP37_PWM_MAX (VP37_PWM_MIN * 2.5)
+#define VP37_PWM_MAX (VP37_PWM_MIN * 3.5)
 
 #define VP37_ADJUST_TIMER 200
 

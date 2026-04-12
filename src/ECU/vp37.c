@@ -68,7 +68,7 @@ static void VP37_makeCalibration(VP37Pump *self) {
   self->VP37_ADJUST_MAX = self->VP37_ADJUST_MIDDLE = self->VP37_ADJUST_MIN = self->VP37_OPERATE_MAX = -1;
 
   valToPWM(PIO_VP37_RPM, VP37_getMaxAdjustometerPWMVal(self));
-  self->VP37_ADJUST_MAX = percentToGivenVal(VP37_PERCENTAGE_LIMITER, VP37_makeCalibrationValue(self));
+  self->VP37_ADJUST_MAX = VP37_makeCalibrationValue(self);
   valToPWM(PIO_VP37_RPM, 0);
   self->VP37_ADJUST_MIN = VP37_makeCalibrationValue(self);
   self->VP37_ADJUST_MIDDLE = ((self->VP37_ADJUST_MAX - self->VP37_ADJUST_MIN) / 2) + self->VP37_ADJUST_MIN;

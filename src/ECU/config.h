@@ -149,7 +149,7 @@
 //just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
 
-//for PID controller
+//for PID controller (pre-calibration fallback; VP37 overrides this after calibration)
 #define PID_MAX_INTEGRAL 16384
 
 

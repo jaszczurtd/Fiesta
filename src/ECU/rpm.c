@@ -107,10 +107,12 @@ void RPM_setAccelMaxRPM(RPM *self) {
   RPM_setAccelRPMPercentage(self, MAX_RPM_PERCENT_VALUE);
 }
 
+#ifndef VP37
 static bool RPM_isEngineThrottlePressed(RPM *self) {
   (void)self;
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;
 }
+#endif
 
 int32_t RPM_getCurrentRPM(const RPM *self) {
   return self->rpmValue;
