@@ -102,7 +102,7 @@ Submodule-based dependency flow is no longer used.
 
 ## Build and development
 
-Each module is an Arduino-style app (`*.ino` + companion sources).
+Each module is an Arduino-style app (`*.ino` + companion sources), but .ino is just a simple wrapper for setup() and loop()/loop1().
 
 Helper scripts are available in module-specific `scripts/` directories:
 
