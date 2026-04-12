@@ -179,15 +179,15 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
   valToPWM(PIO_VP37_ANGLE, hal_map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
 }
 
-void VP37_setVP37Throttle(VP37Pump *self, int32_t accel) {
+void VP37_setVP37Throttle(VP37Pump *self, float accel) {
   if(!self->calibrationDone) {
     derr("Calibration not done!");
     return;
   }
 
-  accel = hal_constrain(accel, VP37_ACCELERATION_MIN, VP37_ACCELERATION_MAX);
-  self->desiredAdjustometer =
-      hal_map(accel, VP37_ACCELERATION_MIN, VP37_ACCELERATION_MAX, self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX);
+  accel = hal_constrain(accel, (float)VP37_ACCELERATION_MIN, (float)VP37_ACCELERATION_MAX);
+  self->desiredAdjustometer = (int32_t)
+      mapfloat(accel, VP37_ACCELERATION_MIN, VP37_ACCELERATION_MAX, self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX);
 }
 
 int32_t VP37_getMinVP37ThrottleValue(VP37Pump *self) {
@@ -253,10 +253,18 @@ void VP37_process(VP37Pump *self) {
       return;
     }
 
-    int32_t thr = getThrottlePercentage();
-    if(self->lastThrottle != thr || self->desiredAdjustometer < 0) {
+    float thr = (float)getThrottlePercentage();
+    if(thr > self->lastThrottle || self->desiredAdjustometer < 0) {
+      // Accelerating or first run: apply immediately
       self->lastThrottle = thr;
       VP37_setVP37Throttle(self, thr);
+    } else if(thr < self->lastThrottle) {
+      // Decelerating: ramp down smoothly
+      self->lastThrottle -= VP37_THROTTLE_RAMP_DOWN_STEP;
+      if(self->lastThrottle < thr) {
+        self->lastThrottle = thr;
+      }
+      VP37_setVP37Throttle(self, self->lastThrottle);
     }
 
     VP37_throttleCycle(self);
@@ -264,7 +272,7 @@ void VP37_process(VP37Pump *self) {
 }
 
 void VP37_showDebug(VP37Pump *self) {
-  deb("thr:%d des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f",
+  deb("thr:%.1f des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f",
       self->lastThrottle,
       self->desiredAdjustometer,
       self->currentAdjustometerPosition,

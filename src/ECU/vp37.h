@@ -19,11 +19,11 @@ extern "C" {
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-#define VP37_PID_TIME_UPDATE 30.0
-#define VP37_PID_KP 0.51
-#define VP37_PID_KI 0.09
-#define VP37_PID_KD 0.04
-#define VP37_PID_TF 0.04
+#define VP37_PID_TIME_UPDATE 45.0
+#define VP37_PID_KP 0.45f
+#define VP37_PID_KI 0.08f
+#define VP37_PID_KD 0.01f
+#define VP37_PID_TF 0.032f
 
 // calibration / stabilization values
 #define VOLT_PER_PWM 0.0421
@@ -32,7 +32,7 @@ extern "C" {
 
 #define VP37_OPERATION_DELAY 5 //microseconds
 
-#define STABILITY_ADJUSTOMETER_TAB_SIZE 6
+#define STABILITY_ADJUSTOMETER_TAB_SIZE 8
 #define MIN_ADJUSTOMETER_VAL 10
 
 //miliseconds
@@ -43,12 +43,16 @@ extern "C" {
 #define VP37_AVERAGE_VALUES_AMOUNT 5
 
 #define VP37_PWM_MIN 378
-#define VP37_PWM_MAX (VP37_PWM_MIN * 3.5)
+#define VP37_PWM_MAX (VP37_PWM_MIN * 4.0)
 
 #define VP37_ADJUST_TIMER 200
 
 #define VP37_ACCELERATION_MIN 0
 #define VP37_ACCELERATION_MAX 100
+
+// Ramp-down step per cycle (in throttle percentage units).
+// Higher = faster descent. 0.5 = smooth, 5+ = snappy.
+#define VP37_THROTTLE_RAMP_DOWN_STEP 0.9f
 
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
@@ -60,7 +64,7 @@ typedef struct {
   hal_pid_controller_t adjustController;
 
   bool vp37Initialized;
-  int32_t lastThrottle;
+  float lastThrottle;
   bool calibrationDone;
   int32_t desiredAdjustometer;
   int32_t currentAdjustometerPosition;
@@ -83,7 +87,7 @@ bool VP37_isVP37Enabled(VP37Pump *self);
 void VP37_showDebug(VP37Pump *self);
 
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
-void VP37_setVP37Throttle(VP37Pump *self, int32_t accel);
+void VP37_setVP37Throttle(VP37Pump *self, float accel);
 int32_t VP37_getMinVP37ThrottleValue(VP37Pump *self);
 int32_t VP37_getMaxVP37ThrottleValue(VP37Pump *self);
 void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
