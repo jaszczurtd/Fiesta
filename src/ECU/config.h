@@ -3,8 +3,47 @@
 
 #include "hardwareConfig.h"
 
-#define vehicle_Vin "WF0BXXGAJB1R32583"
-#define ecu_Name "JASZCZUR FIESTA"
+#define vehicle_Vin     "WF0BXXGAJB1R32583"
+#define ecu_Name        "JASZCZUR FORD FIESTA"
+
+// ECU identification strings (Ford EEC-V / KWP2000 / UDS)
+#define ecu_CalibrationId   "YS6F-12A650-FA"
+#define ecu_PartNumber      "YS6F-12A650-FA"
+#define ecu_SwVersion       "1.00"
+#define ecu_SwDate          "20101201"
+#define ecu_HardwareId      "H1.0"
+#define ecu_Model           "EEC-V"
+#define ecu_Type            "DEM"
+#define ecu_SubType         "VP37"
+#define ecu_Copyright       "FORD MOTOR CO"
+#define ecu_CatchCode       "FD18A3C5"
+
+// Build metadata (updated automatically at compile time).
+#define ecu_BuildDate       __DATE__
+#define ecu_BuildTime       __TIME__
+#define ecu_BuildDateTime   ecu_BuildDate " " ecu_BuildTime
+
+// Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
+// Approximate mileage for a 2001 Ford Fiesta Mk5.
+// Enable OBD_ENABLE_TOTDIST to expose via DID DD01; use getter/setter at runtime.
+// Disabled: ForDiag shows hardcoded value with no way to read real odometer.
+//#define OBD_ENABLE_TOTDIST
+#define ecu_TotalDistanceKmDefault  200000u
+
+// Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
+// This steers Fordiag toward E217/E21A/E219 part number DB lookup.
+#define FORDIAG_COMPAT_NO_UDS_DTC
+
+// Optional verbose debug output (uncomment to enable):
+//#define OBD_VERBOSE_IDENT_DEBUG   // detailed identification field hex dumps
+//#define OBD_VERBOSE_RX_DEBUG      // raw hex of every incoming CAN frame
+
+// Ford E217 binary representation of part number middle section.
+// Each byte → hex with leading zero stripped → concatenated = middle string.
+// For "12A650": {0x12,0x0A,0x06,0x50} → "12"+"A"+"6"+"50" = "12A650"
+// If changing ecu_PartNumber, update these bytes to match the new middle section.
+#define ecu_PartNumMiddleHex   0x12, 0x0A, 0x06, 0x50
+#define ecu_PartNumMiddleLen   4
 
 //BASIC CONTROL VALUES!
 //#define VP37
@@ -110,7 +149,7 @@
 //just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
 
-//for PID controller
+//for PID controller (pre-calibration fallback; VP37 overrides this after calibration)
 #define PID_MAX_INTEGRAL 16384
 
 
@@ -126,4 +165,3 @@
 #define MIN_LAMP_TIME             1       // Minimum lamp time in seconds
 
 #endif
-

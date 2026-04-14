@@ -1,57 +1,48 @@
 #include "peripherials.h"
 
-static Adafruit_NeoPixel pixels(NUMPIXELS, PIN_RGB, NEO_RGB + NEO_KHZ800);
+static volatile float valueFields[F_LAST];
+m_mutex_def(valueFieldsMutex);
 
 void setupOnboardLed(void) {
-  pixels.begin();
+  hal_rgb_led_init(PIN_RGB, NUMPIXELS);
   setLEDColor(BLUE);
 }
 
 void initSPI(void) {
-  pinMode(CAN_CS, OUTPUT);
-  digitalWrite(CAN_CS, HIGH);
+  hal_gpio_set_mode(CAN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(CAN_CS, true);
 
-  SPI.setRX(PIN_MISO); //MISO
-  SPI.setTX(PIN_MOSI); //MOSI
-  SPI.setSCK(PIN_SCK); //SCK
-  SPI.begin(true);
+  hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
 }
 
 void initBasicPIO(void) {
-  analogWriteResolution(PWM_WRITE_RESOLUTION);
+  m_mutex_init(valueFieldsMutex);
+  hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
 }
 
 void setLEDColor(int ledColor) {
   switch (ledColor) {
-    case NONE:
-      pixels.setPixelColor(0, pixels.Color(0, 0, 0));
-      pixels.show();
-      break;
-    case RED:
-      pixels.setPixelColor(0, pixels.Color(30, 0, 0));
-      pixels.show();
-      break;
-    case GREEN:
-      pixels.setPixelColor(0, pixels.Color(0, 30, 0));
-      pixels.show();
-      break;
-    case BLUE:
-      pixels.setPixelColor(0, pixels.Color(0, 0, 30));
-      pixels.show();
-      break;
-    case YELLOW:
-      pixels.setPixelColor(0, pixels.Color(30, 30, 0));
-      pixels.show();
-      break;
-    case WHITE:
-      pixels.setPixelColor(0, pixels.Color(30, 30, 30));
-      pixels.show();
-      break;
-    case PURPLE:
-      pixels.setPixelColor(0, pixels.Color(30, 0, 30));
-      pixels.show();
-    default:
-      break;
+    case NONE:   hal_rgb_led_set_color(HAL_RGB_LED_NONE);   break;
+    case RED:    hal_rgb_led_set_color(HAL_RGB_LED_RED);    break;
+    case GREEN:  hal_rgb_led_set_color(HAL_RGB_LED_GREEN);  break;
+    case BLUE:   hal_rgb_led_set_color(HAL_RGB_LED_BLUE);   break;
+    case YELLOW: hal_rgb_led_set_color(HAL_RGB_LED_YELLOW); break;
+    case WHITE:  hal_rgb_led_set_color(HAL_RGB_LED_WHITE);  break;
+    case PURPLE: hal_rgb_led_set_color(HAL_RGB_LED_PURPLE); break;
+    default:     break;
   }
+}
+
+void setGlobalValue(int idx, float val) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  valueFields[idx] = val;
+  m_mutex_exit(valueFieldsMutex);
+}
+
+float getGlobalValue(int idx) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  float v = valueFields[idx];
+  m_mutex_exit(valueFieldsMutex);
+  return v;
 }
 

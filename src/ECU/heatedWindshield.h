@@ -1,37 +1,36 @@
 #ifndef T_HEATED_WINDSHIELD
 #define T_HEATED_WINDSHIELD
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
-#include "start.h"
+#include "canDefinitions.h"
 #include "tests.h"
 
-#include "EngineController.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-class heatedWindshields : public EngineController {
-public:
-  heatedWindshields();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
-  void heatedWindow(bool enable, int side);
-  bool isHeatedWindowEnabled(void);
-  void heatedWindowMainLoop(void);
+typedef struct {
+  bool heatedWindowEnabled;
+  bool lastHeatedWindowEnabled;
+  bool waitingForUnpress;
 
-private:
-  bool heatedWindowEnabled = false;
-  bool lastHeatedWindowEnabled = false;
-  bool waitingForUnpress = false;
+  int32_t heatedWindowsOverallTimer;
+  unsigned long lastHeatedWindowsSecond;
+} heatedWindshields;
 
-  int heatedWindowsOverallTimer = 0;
-  unsigned long lastHeatedWindowsSecond = 0;
-
-  void disableHeatedWindows(void);
-  bool isHeatedButtonPressed(void);
-};
+void heatedWindshields_init(heatedWindshields *self);
+void heatedWindshields_process(heatedWindshields *self);
+void heatedWindshields_showDebug(heatedWindshields *self);
+void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int32_t side);
+bool heatedWindshields_isHeatedWindowEnabled(const heatedWindshields *self);
 
 heatedWindshields *getHeatedWindshieldsInstance(void);
 void createHeatedWindshields(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

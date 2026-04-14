@@ -21,4 +21,10 @@
 #define TIRE_DIMENSIONS "185/55 R15"
 #define TIRE_CORRECTION_FACTOR 0.98
 
+//oil pressure readings
+#define OIL_PRESSURE_READ_INTERVAL 100
+
+//thermocouples readings
+#define THERMOCOUPLE_READ_INTERVAL 1000
+
 #endif

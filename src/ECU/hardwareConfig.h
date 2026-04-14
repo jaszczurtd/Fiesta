@@ -13,7 +13,10 @@
 #define ANGLE_PWM_FREQUENCY_HZ 300
 #endif
 
-#define I2C_SPEED_HZ 200000
+#define I2C_SPEED_HZ 400000
+
+// RP2040 flash-backed EEPROM emulation size used by ECU module.
+#define ECU_EEPROM_SIZE_BYTES 2048u
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
@@ -37,8 +40,8 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
-#define ADC_VOLT_PIN A2
-#define ADC_SENSORS_PIN A1
+#define ADC_VOLT_PIN 28
+#define ADC_SENSORS_PIN 27
 
 //chip select pin for SD card reader
 #define SD_CARD_CS 26
@@ -88,11 +91,13 @@
 #define HC4051_I_AIR_TEMP 3
 #define HC4051_I_FUEL_LEVEL 4
 #define HC4051_I_BAR_PRESSURE 5
-#define HC4051_I_EGT 6
+//6 not used ATM
 //7 not used ATM
 
 //physical pin of microcontroller for heated windows switch on/off
 #define HEATED_WINDOWS_PIN 20
+
+#define HAL_LED_PIN 25
 
 //real values (resitance) for ECU main supply voltage measurement
 
@@ -112,6 +117,7 @@
 
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
-#define DIVIDER_EGT 2.280
+
+#define I2C_KEYBOARD 0x24
 
 #endif

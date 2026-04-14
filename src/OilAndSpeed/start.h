@@ -1,12 +1,10 @@
 #ifndef S_START_H
 #define S_START_H
 
-#include <Arduino.h>
 #include <tools.h>
 #include <canDefinitions.h>
-#include <arduino-timer.h>
-#include <multicoreWatchdog.h>
 
+#include <hal/hal_soft_timer.h>
 #include "can.h"
 #include "oilPressure.h"
 #include "speed.h"

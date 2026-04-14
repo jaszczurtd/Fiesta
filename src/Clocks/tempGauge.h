@@ -2,8 +2,6 @@
 #ifndef T_TEMP_GAUGE
 #define T_TEMP_GAUGE
 
-#include <Arduino.h>
-#include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
 
 #include "TFTExtension.h"
@@ -28,6 +26,8 @@
 
 #define FAN_COOLANT_X 15
 #define FAN_COOLANT_Y 48
+
+#define TEMP_INITIAL_COLOR 0x33b7
 
 #define OFFSET (SCREEN_W / 40)
 

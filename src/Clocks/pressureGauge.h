@@ -2,8 +2,6 @@
 #ifndef T_PRESSURE_GAUGE
 #define T_PRESSURE_GAUGE
 
-#include <Arduino.h>
-#include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
 
 #include "TFTExtension.h"
@@ -39,6 +37,8 @@ private:
   int lastHI_d;
   int lastLO_d;
   unsigned short *lastAnimImg; 
+
+  static void drawTextForPressureIndicators(int x, int y, const char *format, ...);
 };
 
 void redrawPressureGauges(void);

@@ -1,44 +1,41 @@
 #ifndef T_GLOWPLUGS
 #define T_GLOWPLUGS
 
-#include <tools.h>
-#include <SmartTimers.h>
+#include <tools_c.h>
 
 #include "config.h"
-#include "start.h"
+#include "canDefinitions.h"
 #include "sensors.h"
 #include "tests.h"
 
-#include "EngineController.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-class glowPlugs : public EngineController {
-public:
-  glowPlugs();
-  void init() override;  
-  void process() override;
-  void showDebug() override;
-  void enableGlowPlugs(bool enable);
-  void glowPlugsLamp(bool enable);
-  bool isGlowPlugsHeating(void);
-  void initGlowPlugsTime(float temp);
-  void glowPlugsMainLoop(void);
-
-private:
-  int glowPlugsTime;
-  int glowPlugsLampTime;
-  int lastGlowPlugsTime;
-  int lastGlowPlugsLampTime;  
+typedef struct {
+  int32_t glowPlugsTime;
+  int32_t glowPlugsLampTime;
+  int32_t lastGlowPlugsTime;
+  int32_t lastGlowPlugsLampTime;
 
   unsigned long lastSecond;
   bool warmAfterStart;
   bool initialized;
+} glowPlugs;
 
-  void calculateGlowPlugsTime(float temp);
-  void calculateGlowPlugLampTime(float temp);
-};
+void glowPlugs_init(glowPlugs *self);
+void glowPlugs_process(glowPlugs *self);
+void glowPlugs_showDebug(const glowPlugs *self);
+void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable);
+void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable);
+bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self);
+void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp);
 
 glowPlugs *getGlowPlugsInstance(void);
 void createGlowPlugs(void);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

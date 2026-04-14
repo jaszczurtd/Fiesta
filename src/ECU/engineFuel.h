@@ -1,12 +1,15 @@
 #ifndef T_FUEL
 #define T_FUEL
 
-#include <tools.h>
+#include <tools_c.h>
 
 #include "config.h"
-#include "start.h"
 #include "sensors.h"
 #include "tests.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //fuel value read without average calculation
 //#define JUST_RAW_FUEL_VAL
@@ -20,5 +23,9 @@
 
 float readFuel(void);
 void initFuelMeasurement(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

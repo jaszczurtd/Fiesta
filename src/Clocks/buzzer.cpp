@@ -71,8 +71,8 @@ void Buzzer::initHardware(int pin) {
   Buzzer::buzzerActive = 0;
   Buzzer::acquire();
   Buzzer::pin = pin;
-  pinMode(pin, OUTPUT);
-  digitalWrite(pin, true);
+  hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
+  hal_gpio_write(pin, true);
   Buzzer::disposal();
 }
 
@@ -100,7 +100,7 @@ Buzzer::Buzzer(int type) {
 }
 
 void Buzzer::buzzerOn(bool state) {
-  digitalWrite(Buzzer::pin, !state);
+  hal_gpio_write(Buzzer::pin, !state);
 }
 
 void Buzzer::start() {
@@ -124,7 +124,7 @@ void Buzzer::start() {
   }
   if(currentBuzzer != NULL) {
     currentIndex = 0;
-    timeBuzzer = millis() + currentBuzzer[currentIndex].duration;
+    timeBuzzer = hal_millis() + currentBuzzer[currentIndex].duration;
     started = true;
   }
 }
@@ -144,8 +144,8 @@ void Buzzer::loop() {
       return;
     }
 
-    if(timeBuzzer <= millis()) {
-      timeBuzzer = millis() + currentBuzzer[currentIndex].duration;        
+    if(timeBuzzer <= hal_millis()) {
+      timeBuzzer = hal_millis() + currentBuzzer[currentIndex].duration;        
       switch(currentBuzzer[currentIndex].type) {
         case BUZZER_ON:
           buzzerOn(true);

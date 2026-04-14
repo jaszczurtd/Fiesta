@@ -1,25 +1,17 @@
 #ifndef CAN_F_0
 #define CAN_F_0
 
-#include <SPI.h>
-//coryjfowler
-#include <mcp_can.h>
-
 #include <tools.h>
 #include <canDefinitions.h>
-#include <arduino-timer.h>
-
 #include "hardwareConfig.h"
 
 #include "start.h"
 
-extern float valueFields[];
-
 bool canInit(void);
-bool canMainLoop(void *message);
-void receivedCanMessage(void);
-bool updateCANrecipients(void *argument);
-bool canCheckConnection(void *message);
+void canMainLoop(void);
+void updateCANrecipients(void);
+void updateEGTrecipients(void);
+void canCheckConnection(void);
 bool isEcuConnected(void);
 bool isClusterConnected(void);
 bool isDPFConnected(void);
@@ -32,4 +24,3 @@ int getEngineRPM(void);
 bool canSendLoop(void);
 
 #endif
-

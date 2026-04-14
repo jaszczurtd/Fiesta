@@ -43,14 +43,12 @@ void showEGTGauge(void) {
   egt_g.showSimpleGauge();
 }
 
-bool changeEGT(void *argument) {
+void changeEGT(void) {
   if(isDPFConnected()) {
     egt_g.switchCurrentEGTMode();
   } else {
     egt_g.resetCurrentEGTMode();
   }
-
-  return true;
 }
 
 SimpleGauge::SimpleGauge(int mode) {
@@ -76,51 +74,43 @@ SimpleGauge::SimpleGauge(int mode) {
 
 int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
 
-  TFT *tft = returnTFTReference();
-
   int w1 = 0, kmoffset = 0;
   const char *km = ((const char*)F("km/h"));
   if(mode == MODE_M_KILOMETERS) {
-    tft->setDisplayDefaultFont();
-    w1 = tft->textWidth(km);
+    hal_display_set_default_font();
+    w1 = hal_display_text_width(km);
     kmoffset = 5;
   }
-  tft->serif9ptWithColor(color);
-
-  memset(displayTxt, 0, sizeof(displayTxt));
+  hal_display_set_serif9pt_with_color((uint16_t)color);
 
   va_list valist;
   va_start(valist, format);
-  vsnprintf(displayTxt, sizeof(displayTxt) - 1, format, valist);
+  int w = hal_display_prepare_text_v(displayTxt, sizeof(displayTxt), format, valist);
   va_end(valist);
-
-  int w = tft->textWidth((const char*)displayTxt);
 
   int x1 = x + ((SMALL_ICONS_WIDTH - w - w1 - kmoffset) / 2) - kmoffset;
   int y1 = y + 59;
   
-  tft->fillRect(x + offset, 
-              y1 - 14, SMALL_ICONS_WIDTH - (offset * 2), 
-              16, 
-              ICONS_BG_COLOR);
-  tft->setCursor(x1, y1);
-  tft->println(displayTxt);
+  hal_display_fill_rect(x + offset,
+                        y1 - 14, SMALL_ICONS_WIDTH - (offset * 2),
+                        16,
+                        ICONS_BG_COLOR);
+  hal_display_print_at(x1, y1, displayTxt);
 
   switch(mode) {
     default:
     case MODE_M_NORMAL:
       break;
     case MODE_M_TEMP:
-      tft->drawCircle(x1 + w + 6, y1 - 10, 3, color);
+      hal_display_draw_circle(x1 + w + 6, y1 - 10, 3, color);
       break;
     case MODE_M_KILOMETERS:
-      tft->setDisplayDefaultFont();
-      tft->setCursor(x1 + w + kmoffset, y1 - 6);
-      tft->println(km);
+      hal_display_set_default_font();
+      hal_display_print_at(x1 + w + kmoffset, y1 - 6, km);
       return w;
   }
 
-  tft->setDisplayDefaultFont();
+  hal_display_set_default_font();
   return w;
 }
 
@@ -178,7 +168,6 @@ void SimpleGauge::resetCurrentEGTMode(void) {
 
 void SimpleGauge::showSimpleGauge(void) {
 
-  TFT *tft = returnTFTReference();
   unsigned short *tempImg = NULL;
   bool draw = false;
   int x, y;
@@ -248,7 +237,7 @@ void SimpleGauge::showSimpleGauge(void) {
     }
 
     if(tempImg != NULL) {
-      tft->drawImage(getBaseX(), getBaseY(), w, h, ICONS_BG_COLOR, tempImg);
+      hal_display_draw_image(getBaseX(), getBaseY(), w, h, ICONS_BG_COLOR, tempImg);
     }
     drawOnce = false;
     draw = true;
@@ -301,7 +290,7 @@ void SimpleGauge::showSimpleGauge(void) {
         bool error = currentVal < TEMP_LOWEST || currentVal > TEMP_HIGHEST;
 
         if(error) {
-          color = COLOR(RED);
+          color = HAL_COLOR(RED);
           format = (const char*)err;
         } else {
           format = ((const char*)F("%d"));
@@ -334,9 +323,9 @@ void SimpleGauge::showSimpleGauge(void) {
     case SIMPLE_G_GPS: {
 
       if(isGPSAvailable()) {
-        color = COLOR(GREEN);
+        color = HAL_COLOR(GREEN);
       } else {
-        color = (alertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+        color = (alertSwitch()) ? HAL_COLOR(RED) : ICONS_BG_COLOR;
       }
 
       int posOffset = 10;
@@ -345,7 +334,7 @@ void SimpleGauge::showSimpleGauge(void) {
       x = getBaseX() + SMALL_ICONS_WIDTH - posOffset - radius;
       y = getBaseY() + posOffset - 1;
 
-      tft->fillCircle(x, y, radius, color);
+      hal_display_fill_circle(x, y, radius, color);
 
     }
     break;
@@ -372,7 +361,7 @@ void SimpleGauge::showSimpleGauge(void) {
 
       if(overheat) {
         draw = true;
-        color = (seriousAlertSwitch()) ? COLOR(RED) : TEXT_COLOR;
+        color = (seriousAlertSwitch()) ? HAL_COLOR(RED) : TEXT_COLOR;
       }
 
       if(draw) {
@@ -406,17 +395,17 @@ void SimpleGauge::showSimpleGauge(void) {
         x = getBaseX() + BATTERY_WIDTH + 2;
         y = getBaseY() + 26;
 
-        tft->fillRect(x, y - 14, 45, 16, ICONS_BG_COLOR);
+        hal_display_fill_rect(x, y - 14, 45, 16, ICONS_BG_COLOR);
 
         color = TEXT_COLOR;
         if(volts < VOLTS_MIN_VAL || volts > VOLTS_MAX_VAL) {
-            color = COLOR(RED);
+            color = HAL_COLOR(RED);
         }
 
         char txt[DISPLAY_TXT_SIZE];
-        tft->prepareText(txt, (const char*)F("%d.%dv"), v1, v2);
-        tft->sansBoldWithPosAndColor(x, y, color);
-        tft->printlnFromPreparedText(txt);
+        hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("%d.%dv"), v1, v2);
+        hal_display_set_sans_bold_with_pos_and_color(x, y, (uint16_t)color);
+        hal_display_println_prepared_text(txt);
       }
     }
     break;
@@ -431,21 +420,21 @@ void SimpleGauge::showSimpleGauge(void) {
         switch(mode) {
           case SIMPLE_G_ECU:
           default:
-            color = (seriousAlertSwitch()) ? COLOR(RED) : ICONS_BG_COLOR;
+            color = (seriousAlertSwitch()) ? HAL_COLOR(RED) : ICONS_BG_COLOR;
           break;
 
           case SIMPLE_G_SPEED_AND_OIL:
-            color = (!seriousAlertSwitch()) ? COLOR(PURPLE) : ICONS_BG_COLOR;
+            color = (!seriousAlertSwitch()) ? HAL_COLOR(PURPLE) : ICONS_BG_COLOR;
           break;
         }
 
-        tft->fillCircle(x, y, ECU_CONNECTION_RADIUS, color);
+        hal_display_fill_circle(x, y, ECU_CONNECTION_RADIUS, color);
         draw = false;
       }
 
       if(drawOnce) {
-        tft->fillRect(x - ECU_CONNECTION_RADIUS, y - ECU_CONNECTION_RADIUS, 
-                      ECU_CONNECTION_RADIUS * 3, ECU_CONNECTION_RADIUS * 3, ICONS_BG_COLOR);
+        hal_display_fill_rect(x - ECU_CONNECTION_RADIUS, y - ECU_CONNECTION_RADIUS,
+                              ECU_CONNECTION_RADIUS * 3, ECU_CONNECTION_RADIUS * 3, ICONS_BG_COLOR);
         drawOnce = false;
       }
     }

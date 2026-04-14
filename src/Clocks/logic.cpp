@@ -1,12 +1,14 @@
 
 #include "logic.h"
+#include "buzzerStrategy.h"
 
 const char *err = (char*)F("ERR");
 
-bool callAtEverySecond(void *arg);
-bool callAtEveryHalfSecond(void *arg);
-bool callAtEveryHalfHalfSecond(void *arg);
-bool updateValsForDebug(void *arg);
+void callAtEverySecond(void);
+void callAtEveryHalfSecond(void);
+void callAtEveryHalfHalfSecond(void);
+void updateValsForDebug(void);
+void processTemperatureBuzzerAlerts(void);
 
 void drawLowImportanceValues(void);
 void drawMediumImportanceValues(void);
@@ -15,30 +17,44 @@ void drawHighImportanceValuesIfChanged(void);
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
-static Timer generalTimer;
 static Cluster cluster;
+static BuzzerStrategy buzzerStrategy;
+
+static hal_soft_timer_t timerEverySecond = NULL;
+static hal_soft_timer_t timerHalfSecond = NULL;
+static hal_soft_timer_t timerQuarterSecond = NULL;
+static hal_soft_timer_t timerSoftInit = NULL;
+static hal_soft_timer_t timerEGT = NULL;
+static hal_soft_timer_t timerDebug = NULL;
+static hal_soft_timer_t timerCANLoop = NULL;
+static hal_soft_timer_t timerCANUpdate = NULL;
+static hal_soft_timer_t timerCANCheck = NULL;
+
+static const hal_soft_timer_table_entry_t clocksTimerTable[] = {
+  { &timerEverySecond,  callAtEverySecond,        (uint32_t)SECOND },
+  { &timerHalfSecond,   callAtEveryHalfSecond,    (uint32_t)(SECOND / 2) },
+  { &timerQuarterSecond,callAtEveryHalfHalfSecond, (uint32_t)(SECOND / 4) },
+  { &timerSoftInit,     softInitDisplay,           (uint32_t)DISPLAY_SOFTINIT_TIME },
+  { &timerEGT,          changeEGT,                 (uint32_t)DPF_SHOW_TIME_INTERVAL },
+  { &timerDebug,        updateValsForDebug,        (uint32_t)DEBUG_UPDATE },
+  { &timerCANLoop,      canMainLoop,               (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
+  { &timerCANUpdate,    updateCANrecipients,       (uint32_t)CAN_UPDATE_RECIPIENTS },
+  { &timerCANCheck,     canCheckConnection,        (uint32_t)CAN_CHECK_CONNECTION }
+};
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-void setupTimerWith(unsigned long time, bool(*function)(void *argument)) {
-  //watchdog_feed();
-  generalTimer.every(time, function);
-  m_delay(CORE_OPERATION_DELAY);
+
+#ifdef DEBUG_SCREEN
+void debugFunc(void) {
+  deb("Debug function called");
 }
+#endif
 
 void setupTimers(void) {
-
-  generalTimer = timer_create_default();
-
-  setupTimerWith(SECOND, callAtEverySecond);
-  setupTimerWith(SECOND / 2, callAtEveryHalfSecond);
-  setupTimerWith(SECOND / 4, callAtEveryHalfHalfSecond);
-  setupTimerWith(DISPLAY_SOFTINIT_TIME, softInitDisplay);
-  setupTimerWith(DPF_SHOW_TIME_INTERVAL, changeEGT);
-  setupTimerWith(DEBUG_UPDATE, updateValsForDebug);
-  setupTimerWith(CAN_UPDATE_RECIPIENTS, updateCANrecipients);
-  setupTimerWith(CAN_CHECK_CONNECTION, canCheckConnection);  
+  hal_soft_timer_setup_table(clocksTimerTable, COUNTOF(clocksTimerTable),
+                             hal_watchdog_feed, CORE_OPERATION_DELAY);
 }
 
 static int *wValues = NULL;
@@ -52,8 +68,11 @@ void setup_a(void) {
 
   debugInit();
   setDebugPrefix("Clocks:");
+  deb("Setup started");
+
   setupOnboardLed();
   initBasicPIO();
+  buzzerStrategy.reset();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if(!rebooted) {
@@ -61,37 +80,32 @@ void setup_a(void) {
   }
 
   initSPI();
-
-  TFT *tft = initTFT();
+  initTFT();
 
   int sec = getSeconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
 
-  #ifndef DEBUG_SCREEN
-  tft->fillScreen(COLOR(WHITE));
+#ifndef DEBUG_SCREEN
+  hal_display_fill_screen(HAL_COLOR(WHITE));
   const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  tft->drawImage(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, 0xffff, (unsigned short*)FiestaLogo);
-  #ifdef INC_FREERTOS_H
-  tft->drawRGBBitmap(SCREEN_W - FREERTOS_WIDTH - 1, SCREEN_H - FREERTOS_HEIGHT - 1, 
-                      (unsigned short*)freertos, FREERTOS_WIDTH, FREERTOS_HEIGHT);
-  #endif //INC_FREERTOS_H
-  #endif //DEBUG_SCREEN
+  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, HAL_COLOR(WHITE), (uint16_t*)FiestaLogo);
+#endif //DEBUG_SCREEN
 
-  watchdog_feed();
+  hal_watchdog_feed();
 
-  setLEDColor(canInit() ? RED: GREEN);
+  hal_rgb_led_set_color(canInit() ? HAL_RGB_LED_RED : HAL_RGB_LED_GREEN);
 
   while(sec < secDest) {
-    watchdog_feed();
+    hal_watchdog_feed();
     sec = getSeconds();
   }
 
-  softInitDisplay(NULL);
-  tft->fillScreen(ICONS_BG_COLOR);
+  softInitDisplay();
+  hal_display_fill_screen(ICONS_BG_COLOR);
 
   initFuelMeasurement();
-  canCheckConnection(NULL);
+  canCheckConnection();
 
   #ifdef DEBUG_SCREEN
   debugFunc();
@@ -102,21 +116,22 @@ void setup_a(void) {
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
-  callAtEverySecond(NULL);
-  callAtEveryHalfSecond(NULL);
-  callAtEveryHalfHalfSecond(NULL);
-  updateValsForDebug(NULL);
+  callAtEverySecond();
+  callAtEveryHalfSecond();
+  callAtEveryHalfHalfSecond();
+  updateValsForDebug();
 
-  updateCANrecipients(NULL);
+  updateCANrecipients();
   canMainLoop();
 
-  watchdog_feed();
+  hal_watchdog_feed();
 
   setupTimers();
 
   setStartedCore0();
 
   startBuzzer(BUZZER_SHORT);
+  deb("Setup finished");
 }
 
 void loop_a(void) {
@@ -126,36 +141,35 @@ void loop_a(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    hal_delay_ms(CORE_OPERATION_DELAY);  
+    hal_idle();
     return;
   }
 
   statusVariable0 = 1;
 
-  generalTimer.tick();
+  hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
-    deb("thread is alive, active tasks: %d", generalTimer.size());
+    deb("thread is alive");
   }
   statusVariable0 = 2;
   drawHighImportanceValuesIfChanged();
   statusVariable0 = 3;
 
   if(isEcuConnected()) {
-    setLEDColor(GREEN);
+    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
   } else {
-    setLEDColor(alertSwitch() ? NONE : RED);
+    hal_rgb_led_set_color(alertSwitch() ? HAL_RGB_LED_NONE : HAL_RGB_LED_RED);
   }
 
   loopBuzzers();
 
-  canMainLoop();
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  hal_delay_ms(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
 void seriousAlertsDrawFunctions() {
@@ -174,40 +188,60 @@ bool seriousAlertSwitch(void) {
 }
 
 //timer functions
-bool callAtEverySecond(void *arg) {
+void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
 
 #if SYSTEM_TEMP
-  deb("System temperature: %f", analogReadTemp());
+  deb("System temperature: %f", hal_read_chip_temp());
 #endif
 
   //regular draw - low importance values
   drawLowImportanceValues();
-  return true;
 }
 
-bool callAtEveryHalfSecond(void *arg) {
+void callAtEveryHalfSecond(void) {
 
   enableOilLamp((getOilPressure() < MIN_OIL_PRESSURE));
+  processTemperatureBuzzerAlerts();
 
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
   //draw changes of medium importance values
   drawMediumImportanceValues();
-  return true;
 }
 
-bool callAtEveryHalfHalfSecond(void *arg) {
+void processTemperatureBuzzerAlerts(void) {
+  BuzzerStrategyInput input;
+  input.engineRunning = isEngineRunning();
+  input.nowMs = hal_millis();
+  input.coolantTemp = int(valueFields[F_COOLANT_TEMP]);
+  input.oilTemp = int(valueFields[F_OIL_TEMP]);
+  input.egtTemp = int(valueFields[F_EGT]);
+
+  switch(buzzerStrategy.process(input)) {
+    case BUZZER_STRATEGY_MIDDLE:
+      startBuzzer(BUZZER_MIDDLE);
+      break;
+    case BUZZER_STRATEGY_LONG:
+      startBuzzer(BUZZER_LONG);
+      break;
+  }
+}
+
+void callAtEveryHalfHalfSecond(void) {
   if(alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();
-  return true;
 }
 
 static bool highImportanceValueChanged = false;
 void triggerDrawHighImportanceValue(bool state) {
   highImportanceValueChanged = state;
+}
+
+void updateCluster(void) {
+  cluster.update(getCurrentCarSpeed(), getEngineRPM());
 }
 
 void drawLowImportanceValues(void) {
@@ -256,21 +290,19 @@ void loop_b(void) {
 
   if(!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    m_delay(CORE_OPERATION_DELAY);  
-    tight_loop_contents();
+    hal_delay_ms(CORE_OPERATION_DELAY);  
+    hal_idle();
     return;
   }
   statusVariable1 = 1;
 
-  m_delay(CORE_OPERATION_DELAY);  
-  tight_loop_contents();
+  hal_delay_ms(CORE_OPERATION_DELAY);
+  hal_idle();
 }
 
-bool updateValsForDebug(void *arg) {
+void updateValsForDebug(void) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
   deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
   deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(), getEngineRPM());
-
-  return true;
 }

@@ -2,8 +2,6 @@
 #ifndef T_SIMPLE_GAUGE
 #define T_SIMPLE_GAUGE
 
-#include <Arduino.h>
-#include <Adafruit_GFX.h>    // Core graphics library
 #include <tools.h>
 
 #include "TFTExtension.h"
@@ -64,7 +62,7 @@ void showEngineLoadGauge(void);
 void showGPSGauge(void);
 void showSimpleGauges(void);
 void showEGTGauge(void);
-bool changeEGT(void *argument);
+void changeEGT(void);
 void showECUConnectionGauge(void);
 
 #endif

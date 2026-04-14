@@ -43,6 +43,13 @@
 #define TEMP_EGT_MAX 1600
 #define TEMP_EGT_MIN 100
 
+//buzzer strategy for temperature alarms
+#define BUZZER_COOLANT_OVERHEAT_TEMP ((TEMP_OK_HI + TEMP_MAX) / 2)
+#define BUZZER_OIL_OVERHEAT_TEMP ((TEMP_OIL_OK_HI + TEMP_OIL_MAX) / 2)
+#define BUZZER_EGT_OVERHEAT_TEMP TEMP_EGT_OK_HI
+#define BUZZER_COOLANT_OIL_REPEAT_INTERVAL_MS 15000UL
+#define BUZZER_EGT_REPEAT_INTERVAL_MS 10000UL
+
 //temperature when fan should start
 #define TEMP_FAN_START  102
 //temperature when fan should stop after start
@@ -118,5 +125,13 @@
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * SECOND
 
-#endif
+//Graphics definitions
+#define DISPLAY_TXT_SIZE 32
+#define DISPLAY_SOFTINIT_TIME 10000
 
+#define SCREEN_W 320
+#define SCREEN_H 240
+
+#define TEXT_COLOR 0xE73C
+
+#endif
