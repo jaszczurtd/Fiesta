@@ -1,0 +1,1 @@
+Pump type:VP37/VE37 - Drive current:4-5A - Drive voltage:0-5V - Current frequency:165-195HZ

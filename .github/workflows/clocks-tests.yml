@@ -1,0 +1,42 @@
+name: Clocks Tests
+
+on:
+  push:
+    paths:
+      - "src/Clocks/**"
+      - ".github/workflows/clocks-tests.yml"
+  pull_request:
+    paths:
+      - "src/Clocks/**"
+      - ".github/workflows/clocks-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test-clocks:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Clone Clocks dependencies
+        run: |
+          set -eux
+          mkdir -p ../libraries
+          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+
+      - name: Configure
+        run: |
+          cmake -S src/Clocks -B src/Clocks/build_test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build src/Clocks/build_test --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir src/Clocks/build_test --output-on-failure

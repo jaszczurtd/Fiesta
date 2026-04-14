@@ -1,0 +1,57 @@
+# Workspace tooling
+.codex/
+.codex
+*.codex
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*~*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generic firmware/build artifacts
+*.bin
+*.d
+*.eep
+*.elf
+*.hex
+*.lss
+*.lst
+*.map
+*.o
+*.srec
+
+# Arduino and module build outputs
+**/.build/
+**/.build_diag/
+**/build_asan/
+**/build_test/
+**/ArduinoOutput/
+
+# CMake in-source artifacts
+**/CMakeFiles/
+**/CMakeCache.txt
+**/CTestTestfile.cmake
+**/cmake_install.cmake
+
+# Module-local generated VS Code config
+src/**/.vscode/c_cpp_properties.json
+
+# Local documentation dumps (not versioned)
+src/ECU/doc/
+src/ECU/Strategy-Documents-main-Ford/
+src/ECU/LVCAN Protocol P145_20_40/
+src/ECU/ISO-15765-OBD2-Ford/
+
+# Legacy archive generated artifacts
+legacy/**/.build/
+legacy/**/build*/
+legacy/**/ArduinoOutput/
+
+# KiCad autosave/backups
+Fiesta_pcbs/**/~*.pcb
+Fiesta_pcbs/**/fp-info-cache
+Fiesta_pcbs/**/*-backups/

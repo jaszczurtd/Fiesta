@@ -1,0 +1,8 @@
+# Arduino build output (also covered by parent .gitignore)
+.build/
+
+# Cppcheck baseline (generated, machine-specific)
+cppcheck-baseline.log
+
+# VS Code generated IntelliSense config (machine-specific paths)
+.vscode/c_cpp_properties.json

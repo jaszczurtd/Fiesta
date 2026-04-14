@@ -1,0 +1,10 @@
+#01 GND - GND
+#02 VCC - VCC (3.3V only!)
+#03 SCL - D13/SCK
+#04 SDA - D11/MOSI
+#05 RES - D8 or any digital
+#06 DC  - D7 or any digital
+#07 BLK - NC
+
+
+https://github.com/cbm80amiga/Arduino_ST7789_Fast
