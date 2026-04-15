@@ -27,6 +27,11 @@ Active modules in `src/`:
 - `src/ECU` - engine control logic, diagnostics (OBD/UDS over CAN), DTC manager, actuator logic.
 - `src/Clocks` - dashboard/cluster rendering and signaling.
 - `src/OilAndSpeed` - dedicated oil pressure and speed module.
+- `src/Adjustometer` - VP37 injection pump actuator position transducer. Not a standalone module - it is part of the ECU subsystem and resides on the same PCB. Measures fuel-delivery actuator position via a Hartley oscillator driven by the pump's built-in coils, counts frequency on RP2040, applies adaptive thermal compensation, and exposes the result over I²C to the ECU.
+
+Completed / not actively developed:
+
+- `src/Fiesta_clock` - standalone clock/temperature display (AVR, finished project, currently not under active development).
 
 Deprecated code in `legacy/`:
 
@@ -36,9 +41,9 @@ Deprecated code in `legacy/`:
 
 ## Current status (2026-04-12)
 
-- Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`).
-- ECU host-side test suite currently passes (`11/11` suites, including `test_cppcheck`).
-- ECU CI now runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
+- Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`, `src/Adjustometer`).
+- Host-side test suites: ECU - 11 tests (including `test_cppcheck`), Adjustometer - 2 tests, Clocks - 1 test.
+- ECU CI runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
 - ECU startup reports compile timestamp (`__DATE__` + `__TIME__`).
 
 ## ECU MISRA-C migration status
@@ -51,7 +56,7 @@ Two-level estimate:
 Scope:
 
 - `src/ECU` is in scope for MISRA-C migration,
-- `src/Clocks` and `src/OilAndSpeed` are currently out of MISRA scope.
+- `src/Clocks`, `src/OilAndSpeed`, and `src/Adjustometer` are currently out of MISRA scope.
 
 Completed areas include:
 
@@ -130,15 +135,33 @@ Example:
 "arduino.sketchbookPath": "/home/youruser"
 ```
 
-### ECU host tests (CMake)
+### Host tests (CMake)
 
 Note: CMake in this repository is used for host test configuration/build, and
 test targets are compiled as C++ (`.cpp`).
+
+ECU:
 
 ```bash
 cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release
 cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure
+```
+
+Clocks:
+
+```bash
+cmake -S src/Clocks -B src/Clocks/build_test -DCMAKE_BUILD_TYPE=Release
+cmake --build src/Clocks/build_test --parallel
+ctest --test-dir src/Clocks/build_test --output-on-failure
+```
+
+Adjustometer:
+
+```bash
+cmake -S src/Adjustometer -B src/Adjustometer/build_test -DCMAKE_BUILD_TYPE=Release
+cmake --build src/Adjustometer/build_test --parallel
+ctest --test-dir src/Adjustometer/build_test --output-on-failure
 ```
 
 ### Firmware build examples
@@ -164,6 +187,13 @@ cd src/OilAndSpeed
 bash scripts/upload-uf2.sh
 ```
 
+Adjustometer:
+
+```bash
+cd src/Adjustometer
+bash scripts/upload-uf2.sh
+```
+
 ## Hardware and materials
 
 - PCB projects and variants: `Fiesta_pcbs/`
@@ -171,6 +201,8 @@ bash scripts/upload-uf2.sh
 - supporting docs/graphics/examples: `materials/`
 
 ## Credits
+
+Libraries used in `src/Fiesta_clock`:
 
 - DS18B20 library origin: Davide Gironi.
 - `PCF8563.c` created 2014-11-18 by Jakub Pachciarek.

@@ -8,17 +8,20 @@
 #define LED_BRIGHTNESS_FULL          30
 #define LED_BRIGHTNESS_HALF          15
 
-#define LED_SEQ_MAX  3
+#define LED_SEQ_MAX  4
 
 static uint32_t ledLastToggleMs = 0;
 static uint32_t lastI2CTransactionCount = 0;
 
 // Color sequence built each cycle from active conditions
-static uint8_t ledSeq[LED_SEQ_MAX];
+static hal_rgb_led_color_t ledSeq[LED_SEQ_MAX];
 static uint8_t ledSeqLen = 0;
 static uint8_t ledSeqIdx = 0;
 
 void initLed(void) {
+  ledLastToggleMs = 0;
+  ledSeqLen = 0;
+  ledSeqIdx = 0;
   hal_rgb_led_init(PIN_RGB, NUMPIXELS);
   hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
   hal_rgb_led_off();
@@ -48,12 +51,13 @@ void updateLed(void) {
   uint32_t txnCount = hal_i2c_slave_get_transaction_count();
   bool noI2C = (txnCount == lastI2CTransactionCount);
   bool fuelBroken = (status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0;
+  bool voltageBad = (status & ADJ_STATUS_VOLTAGE_BAD) != 0;
 
   if (!noI2C) {
     lastI2CTransactionCount = txnCount;
   }
 
-  if (!noI2C && !fuelBroken) {
+  if (!noI2C && !fuelBroken && !voltageBad) {
     // All OK: steady green at 50% brightness
     ledSeqLen = 0;
     hal_rgb_led_set_brightness(LED_BRIGHTNESS_HALF);
@@ -61,10 +65,13 @@ void updateLed(void) {
     return;
   }
 
-  // Build cycling sequence: [purple] [red] green
+  // Build cycling sequence: [purple] [yellow] [red] green
   uint8_t len = 0;
   if (fuelBroken) {
     ledSeq[len++] = HAL_RGB_LED_PURPLE;
+  }
+  if (voltageBad) {
+    ledSeq[len++] = HAL_RGB_LED_YELLOW;
   }
   if (noI2C) {
     ledSeq[len++] = HAL_RGB_LED_RED;

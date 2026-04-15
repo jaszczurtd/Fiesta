@@ -49,6 +49,7 @@ static void updateI2CRegisters(void) {
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_FUEL_TEMP, fuelTemp);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, status);
 
+ #ifdef DEBUG_DEEP 
   if (pulse != lastPulse) {
     deb("p: %ld\n", (long)pulse);
     lastPulse = pulse;
@@ -67,6 +68,7 @@ static void updateI2CRegisters(void) {
     lastPeriodicLogMs = now;
     deb("p:%ld v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld\n", (long)pulse, voltage, fuelTemp, status, getBaselineFuelTemp(), (long)getAdaptiveCoeffX10(), (long)getDbgLastDtX256(), (long)getDbgLastRawDrift(), (long)getDbgLastNewCoeff());
   }
+#endif
 }
 
 void initialization1(void) {
