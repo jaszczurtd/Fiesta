@@ -18,7 +18,10 @@ extern "C" {
 #define DEBUG_UPDATE (3 * SECOND)
 
 #define ADJUSTOMETER_SIGNAL_LOSS_MULTIPLIER 3U
-#define ADJUSTOMETER_SIGNAL_LOSS_MIN_US 5000U
+// Minimum timeout for signal-loss detection.  At the operating range (~37 kHz)
+// the dynamic timeout (period × 3 ≈ 81 µs) is always clamped here.  10 ms gives
+// safe margin against false loss during rapid frequency transients above ~100 Hz.
+#define ADJUSTOMETER_SIGNAL_LOSS_MIN_US 10000U
 #define ADJUSTOMETER_SIGNAL_LOSS_MAX_US 200000U
 
 // Status register bitmask (register 0x04).
@@ -45,6 +48,7 @@ void initBasicPIO(void);
 void initSensors(void);
 
 int32_t  getAdjustometerPulses(void);
+uint32_t getAdjustometerSignalHz(void);
 uint8_t  getAdjustometerStatus(void);
 uint8_t  getSupplyVoltageRaw(void);
 uint8_t  getFuelTemperatureRaw(void);

@@ -27,8 +27,11 @@
 #define ADJUSTOMETER_BASELINE_LOCK_WINDOWS 6U
 
 // Near-zero spike suppression with hysteresis.
-#define ADJUSTOMETER_ZERO_HOLD_ENTER_HZ 20
-#define ADJUSTOMETER_ZERO_HOLD_EXIT_HZ 25
+// Enter threshold must be wide enough to suppress post-manipulation thermal/
+// mechanical settling of the sensor (typically ~30-50 Hz residual that decays
+// over minutes).  At full-scale ~8000 Hz the deadband is ~0.5 %.
+#define ADJUSTOMETER_ZERO_HOLD_ENTER_HZ 40
+#define ADJUSTOMETER_ZERO_HOLD_EXIT_HZ 50
 #define ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS 2U
 
 // ADC EMA filter: alpha = 1/(2^SHIFT).  SHIFT=3 → 12.5% new, 87.5% old.
@@ -42,7 +45,7 @@
 #define THERMAL_COMP_HZ_PER_C_X10 0
 
 // EMA smoothing of fuel temperature inside ISR (fixed-point ×256).
-// Shift=8 → tau ≈ 256 windows ≈ 0.44 s at 37 kHz / 64-pulse window.
+// Shift=8 → tau ≈ 256 windows ≈ 0.89 s at 37 kHz / 128-pulse window.
 // Eliminates ±1 °C ADC quantisation jitter without lagging real trends.
 #define THERMAL_COMP_EMA_SHIFT 8U
 
