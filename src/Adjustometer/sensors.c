@@ -3,6 +3,8 @@
 #include <hal/hal_i2c_slave.h>
 
 static void countAdjustometerPulses(void);
+static void resetSensorsState(void);
+static bool isSignalLost(void);
 
 void initI2C(void) {
   hal_i2c_slave_init(PIN_SDA, PIN_SCL, ADJUSTOMETER_I2C_ADDR);
@@ -14,6 +16,7 @@ void initBasicPIO(void) {
 }
 
 void initSensors(void) {
+  resetSensorsState();
   initBasicPIO();
   initI2C();
 
@@ -237,35 +240,6 @@ static void countAdjustometerPulses(void) {
   }
 }
 
-int32_t getAdjustometerPulses(void) {
-  const uint32_t lastEdgeUs = __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
-  if (lastEdgeUs == 0U) {
-    return 0;
-  }
-
-  const uint32_t nowUs = hal_micros();
-  uint32_t signalLossUs = ADJUSTOMETER_SIGNAL_LOSS_US;
-  const uint32_t signalHz = __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
-  if (signalHz > 0U) {
-    const uint32_t periodUs = (uint32_t)((US_PER_SECOND + (signalHz / 2U)) / signalHz);
-    uint32_t dynamicLossUs = periodUs * ADJUSTOMETER_SIGNAL_LOSS_MULTIPLIER;
-
-    if (dynamicLossUs < ADJUSTOMETER_SIGNAL_LOSS_MIN_US) {
-      dynamicLossUs = ADJUSTOMETER_SIGNAL_LOSS_MIN_US;
-    } else if (dynamicLossUs > ADJUSTOMETER_SIGNAL_LOSS_MAX_US) {
-      dynamicLossUs = ADJUSTOMETER_SIGNAL_LOSS_MAX_US;
-    }
-
-    signalLossUs = dynamicLossUs;
-  }
-
-  if ((nowUs - lastEdgeUs) > signalLossUs) {
-    return 0;
-  }
-
-  return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
-}
-
 // Returns true if signal loss is detected (no edges for too long).
 static bool isSignalLost(void) {
   const uint32_t lastEdgeUs = __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
@@ -290,6 +264,13 @@ static bool isSignalLost(void) {
   return (nowUs - lastEdgeUs) > signalLossUs;
 }
 
+int32_t getAdjustometerPulses(void) {
+  if (isSignalLost()) {
+    return 0;
+  }
+  return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
+}
+
 uint8_t getAdjustometerStatus(void) {
   uint8_t status = ADJ_STATUS_OK;
 
@@ -299,7 +280,7 @@ uint8_t getAdjustometerStatus(void) {
   if (!adjustometerBaselineReady) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
-  if (getFuelTemperatureRaw() == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
+  if (__atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE) == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
     status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
   }
   {
@@ -315,6 +296,33 @@ uint8_t getAdjustometerStatus(void) {
 static float filteredFuelTemp = -1.0f;
 static float filteredVoltage  = -1.0f;
 
+static void resetSensorsState(void) {
+  adjustometerPulse = 0;
+  adjustometerLastEdgeUs = 0;
+  adjustometerSignalHz = 0;
+  adjustometerSharedFuelTemp = 0;
+  adjustometerWindowStartUs = 0;
+  adjustometerWindowCount = 0;
+  adjustometerFilteredHz = 0;
+  adjustometerBaselineStartUs = 0;
+  adjustometerBaselineEstimate = 0;
+  adjustometerBaselineStableWindows = 0;
+  adjustometerBaseline = 0;
+  adjustometerBaselineReady = false;
+  adjustometerZeroHold = true;
+  adjustometerZeroCandidateSign = 0;
+  adjustometerZeroCandidateWindows = 0;
+  adjustometerBaselineFuelTemp = 0;
+  adjustometerSmoothedFuelTempX256 = 0;
+  adjustometerAdaptiveCoeffX10x256 = 0;
+  adjustometerAdaptiveReady = false;
+  dbgLastDtX256 = 0;
+  dbgLastRawDrift = 0;
+  dbgLastNewCoeff = 0;
+  filteredFuelTemp = -1.0f;
+  filteredVoltage = -1.0f;
+}
+
 static float adcEma(float raw, float prev) {
   if (prev < 0.0f) {
     return raw;
@@ -327,7 +335,7 @@ uint8_t getSupplyVoltageRaw(void) {
   float volts = adcToVolt((int)(avgAdc + 0.5f),
                           (float)VDIV_R1_KOHM, (float)VDIV_R2_KOHM);
   filteredVoltage = adcEma(volts, filteredVoltage);
-  if (filteredVoltage < 0.0f) filteredVoltage = 0.0f;
+  if (isnan(filteredVoltage) || filteredVoltage < 0.0f) filteredVoltage = 0.0f;
   // Return tenths-of-volt clamped to uint8_t (0 = 0.0 V, 255 = 25.5 V).
   float tv = filteredVoltage * 10.0f + 0.5f;
   if (tv > 255.0f) tv = 255.0f;
@@ -336,8 +344,9 @@ uint8_t getSupplyVoltageRaw(void) {
 
 uint8_t getFuelTemperatureRaw(void) {
   float tempC = ntcToTemp(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A, R_VP37_FUEL_B);
+  if (isnan(tempC)) tempC = 0.0f;
   filteredFuelTemp = adcEma(tempC, filteredFuelTemp);
-  if (filteredFuelTemp < 0.0f) filteredFuelTemp = 0.0f;
+  if (isnan(filteredFuelTemp) || filteredFuelTemp < 0.0f) filteredFuelTemp = 0.0f;
   if (filteredFuelTemp > 255.0f) filteredFuelTemp = 255.0f;
   uint8_t result = (uint8_t)(filteredFuelTemp + 0.5f);
   __atomic_store_n(&adjustometerSharedFuelTemp, result, __ATOMIC_RELEASE);

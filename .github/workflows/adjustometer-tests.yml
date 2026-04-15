@@ -1,0 +1,50 @@
+name: Adjustometer Tests
+
+on:
+  push:
+    paths:
+      - "src/Adjustometer/**"
+      - ".github/workflows/adjustometer-tests.yml"
+  pull_request:
+    paths:
+      - "src/Adjustometer/**"
+      - ".github/workflows/adjustometer-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test-adjustometer:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      JASZCZURHAL_REF: c66c0854c83c03b51af35acabbcc0345895e2e8b
+      CANDEFINITIONS_REF: e88e6873d5d7553593db9b5f690430f2a74d9193
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Clone Adjustometer dependencies
+        run: |
+          set -eux
+          mkdir -p ../libraries
+
+          git init ../libraries/JaszczurHAL
+          git -C ../libraries/JaszczurHAL remote add origin https://github.com/jaszczurtd/JaszczurHAL.git
+          git -C ../libraries/JaszczurHAL fetch --depth 1 origin "$JASZCZURHAL_REF"
+          git -C ../libraries/JaszczurHAL checkout --detach FETCH_HEAD
+
+          git init ../libraries/canDefinitions
+          git -C ../libraries/canDefinitions remote add origin https://github.com/jaszczurtd/canDefinitions.git
+          git -C ../libraries/canDefinitions fetch --depth 1 origin "$CANDEFINITIONS_REF"
+          git -C ../libraries/canDefinitions checkout --detach FETCH_HEAD
+
+      - name: Configure
+        run: cmake -S src/Adjustometer -B src/Adjustometer/build_test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build src/Adjustometer/build_test --parallel
+
+      - name: Run tests
+        run: ctest --test-dir src/Adjustometer/build_test --output-on-failure

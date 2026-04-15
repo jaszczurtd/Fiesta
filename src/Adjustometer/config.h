@@ -7,6 +7,8 @@
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
 
+#define DEBUG_DEEP 1
+
 // I2C slave register map.
 #define ADJUSTOMETER_I2C_ADDR       0x57
 #define ADJUSTOMETER_REG_PULSE_HI   0x00  // int16_t big-endian (2 bytes)
