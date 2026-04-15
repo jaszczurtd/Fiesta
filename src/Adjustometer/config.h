@@ -13,7 +13,7 @@
 #define ADJUSTOMETER_REG_PULSE_LO   0x01
 #define ADJUSTOMETER_REG_VOLTAGE    0x02  // uint8_t: supply voltage (scaled)
 #define ADJUSTOMETER_REG_FUEL_TEMP  0x03  // uint8_t: fuel temperature
-#define ADJUSTOMETER_REG_STATUS     0x04  // uint8_t: AdjStatus enum
+#define ADJUSTOMETER_REG_STATUS     0x04  // uint8_t: status bitmask (see sensors.h)
 
 // Baseline lock uses adaptive tracking and must converge quickly.
 #define ADJUSTOMETER_BASELINE_MIN_TIME_MS 80U

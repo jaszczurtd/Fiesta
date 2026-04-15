@@ -2,6 +2,7 @@
 #include "start.h"
 #include <hal/hal_soft_timer.h>
 #include <hal/hal_i2c_slave.h>
+#include "led.h"
 
 void initialization(void) {
 
@@ -9,6 +10,7 @@ void initialization(void) {
   setDebugPrefix("Adj:");
  
   initSensors();
+  initLed();
 
   setStartedCore0();
 
@@ -40,7 +42,7 @@ static void updateI2CRegisters(void) {
 
   uint8_t voltage  = getSupplyVoltageRaw();
   uint8_t fuelTemp = getFuelTemperatureRaw();
-  uint8_t status   = (uint8_t)getAdjustometerStatus();
+  uint8_t status   = getAdjustometerStatus();
 
   hal_i2c_slave_reg_write16(ADJUSTOMETER_REG_PULSE_HI, (uint16_t)(int16_t)pulse);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_VOLTAGE, voltage);
@@ -87,6 +89,7 @@ void looper1(void) {
   }
 
   updateI2CRegisters();
+  updateLed();
 
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);
