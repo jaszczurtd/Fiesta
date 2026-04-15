@@ -16,7 +16,6 @@
 #define HAL_DISABLE_EEPROM          /* → propagates HAL_DISABLE_KV        */
 #define HAL_DISABLE_CAN
 #define HAL_DISABLE_DISPLAY
-#define HAL_DISABLE_RGB_LED
 #define HAL_DISABLE_THERMOCOUPLE
 #define HAL_DISABLE_UART
 #define HAL_DISABLE_SWSERIAL        /* → propagates HAL_DISABLE_GPS       */

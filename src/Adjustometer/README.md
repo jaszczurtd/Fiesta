@@ -66,7 +66,33 @@ Fiesta_pcbs/vp37_adjustometer/
 | `0x00–0x01` | int16, big-endian | `PULSE` | Frequency deviation from baseline [Hz]. Positive = actuator moved toward higher fuel delivery. 0 = rest position. |
 | `0x02` | uint8 | `VOLTAGE` | Supply voltage in tenths of a volt. E.g. 135 = 13.5 V. |
 | `0x03` | uint8 | `FUEL_TEMP` | Fuel temperature in °C (0–255). |
-| `0x04` | uint8 | `STATUS` | Module state: `0` = OK, `1` = signal lost, `2` = baseline calibration in progress. |
+| `0x04` | uint8 | `STATUS` | Status bitmask (see below). `0x00` = all OK. |
+
+#### STATUS register bitmask (0x04)
+
+| Bit | Mask | Name | Description |
+|-----|------|------|-------------|
+| 0 | `0x01` | `SIGNAL_LOST` | No oscillation detected — oscillator is not running or signal is absent. |
+| 1 | `0x02` | `FUEL_TEMP_BROKEN` | Fuel temperature sensor reads 0 (open circuit / shorted to VCC). |
+| 2 | `0x04` | `BASELINE_PENDING` | Baseline calibration has not yet converged. |
+| 3 | `0x08` | `VOLTAGE_BAD` | Supply voltage out of range (< 8.0 V or > 15.0 V). |
+
+Multiple bits can be set simultaneously.
+
+### LED indicator
+
+The LED displays a color sequence built from all active fault conditions.
+Each color in the sequence is shown for 0.5 s; the sequence repeats continuously.
+
+| Condition | LED pattern |
+|-----------|-------------|
+| Signal lost (no oscillation) | Red blinking 4×/s — overrides all other patterns |
+| Fuel temp broken + no I²C | purple → red → green (repeating) |
+| Fuel temp broken, I²C OK | purple → green (repeating) |
+| No I²C, fuel temp OK | red → green (repeating) |
+| All OK (oscillating, I²C active, sensors healthy) | Steady green (50% brightness) |
+
+The sequence is composed additively from active conditions: purple is added when `FUEL_TEMP_BROKEN` is set, red is added when no I²C transaction has been detected since the last `updateLed()` call. Green is always the final element, providing a visual "heartbeat" regardless of fault combination.
 
 ## Code structure
 

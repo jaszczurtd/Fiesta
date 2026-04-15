@@ -9,6 +9,7 @@
 
 #include "hardwareConfig.h"
 #include "sensors.h"
+#include "led.h"
 
 #ifdef __cplusplus
 extern "C" {

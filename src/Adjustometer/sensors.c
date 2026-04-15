@@ -151,9 +151,11 @@ static void countAdjustometerPulses(void) {
         // Uses EMA-smoothed fuel temperature (×256 fixed-point) to avoid
         // ±1 °C ADC quantisation jitter propagating into the PID feedback.
         // After ΔT ≥ 3 °C the coefficient is computed adaptively from observed data.
+        // Compensation is skipped entirely when the fuel temperature sensor is broken
+        // (raw == 0), because unreliable readings would corrupt the drift model.
         {
           const uint8_t curFTraw = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
-          if (curFTraw != 0U) {
+          if (curFTraw != ADJ_FUEL_TEMP_SENSOR_BROKEN) {
             const uint32_t curFTx256 = (uint32_t)curFTraw << 8;
             if (adjustometerSmoothedFuelTempX256 == 0U) {
               adjustometerSmoothedFuelTempX256 = curFTx256;
@@ -161,35 +163,36 @@ static void countAdjustometerPulses(void) {
               adjustometerSmoothedFuelTempX256 +=
                   ((int32_t)curFTx256 - (int32_t)adjustometerSmoothedFuelTempX256) >> THERMAL_COMP_EMA_SHIFT;
             }
-          }
-          if (adjustometerBaselineFuelTemp != 0U && adjustometerSmoothedFuelTempX256 != 0U) {
-            const int32_t baseFTx256 = (int32_t)((uint32_t)adjustometerBaselineFuelTemp << 8);
-            const int32_t dtX256 = (int32_t)adjustometerSmoothedFuelTempX256 - baseFTx256;
-            dbgLastDtX256 = dtX256;
 
-            // Adaptive coefficient: compute actual drift rate once ΔT is large enough
-            if (dtX256 >= (int32_t)ADAPTIVE_COMP_MIN_DT_X256) {
-              const int32_t rawDrift = (int32_t)filtered - (int32_t)adjustometerBaseline;
-              const int32_t newCoeffX10 = (rawDrift * 2560) / dtX256;
-              dbgLastRawDrift = rawDrift;
-              dbgLastNewCoeff = newCoeffX10;
-              const int32_t absCoeff = absI32(newCoeffX10);
-              if (absCoeff >= ADAPTIVE_COMP_MIN_COEFF_X10 &&
-                  absCoeff <= ADAPTIVE_COMP_MAX_COEFF_X10) {
-                const int32_t newX256 = newCoeffX10 << 8;
-                if (!adjustometerAdaptiveReady) {
-                  adjustometerAdaptiveCoeffX10x256 = newX256;
-                  adjustometerAdaptiveReady = true;
-                } else {
-                  adjustometerAdaptiveCoeffX10x256 +=
-                      (newX256 - adjustometerAdaptiveCoeffX10x256) >> ADAPTIVE_COMP_EMA_SHIFT;
+            if (adjustometerBaselineFuelTemp != 0U && adjustometerSmoothedFuelTempX256 != 0U) {
+              const int32_t baseFTx256 = (int32_t)((uint32_t)adjustometerBaselineFuelTemp << 8);
+              const int32_t dtX256 = (int32_t)adjustometerSmoothedFuelTempX256 - baseFTx256;
+              dbgLastDtX256 = dtX256;
+
+              // Adaptive coefficient: compute actual drift rate once ΔT is large enough
+              if (dtX256 >= (int32_t)ADAPTIVE_COMP_MIN_DT_X256) {
+                const int32_t rawDrift = (int32_t)filtered - (int32_t)adjustometerBaseline;
+                const int32_t newCoeffX10 = (rawDrift * 2560) / dtX256;
+                dbgLastRawDrift = rawDrift;
+                dbgLastNewCoeff = newCoeffX10;
+                const int32_t absCoeff = absI32(newCoeffX10);
+                if (absCoeff >= ADAPTIVE_COMP_MIN_COEFF_X10 &&
+                    absCoeff <= ADAPTIVE_COMP_MAX_COEFF_X10) {
+                  const int32_t newX256 = newCoeffX10 << 8;
+                  if (!adjustometerAdaptiveReady) {
+                    adjustometerAdaptiveCoeffX10x256 = newX256;
+                    adjustometerAdaptiveReady = true;
+                  } else {
+                    adjustometerAdaptiveCoeffX10x256 +=
+                        (newX256 - adjustometerAdaptiveCoeffX10x256) >> ADAPTIVE_COMP_EMA_SHIFT;
+                  }
                 }
               }
-            }
 
-            const int32_t coeffX10 = adjustometerAdaptiveReady ?
-                (adjustometerAdaptiveCoeffX10x256 >> 8) : (int32_t)THERMAL_COMP_HZ_PER_C_X10;
-            pulse -= (coeffX10 * dtX256) / 2560;
+              const int32_t coeffX10 = adjustometerAdaptiveReady ?
+                  (adjustometerAdaptiveCoeffX10x256 >> 8) : (int32_t)THERMAL_COMP_HZ_PER_C_X10;
+              pulse -= (coeffX10 * dtX256) / 2560;
+            }
           }
         }
 
@@ -263,10 +266,11 @@ int32_t getAdjustometerPulses(void) {
   return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
 }
 
-AdjStatus getAdjustometerStatus(void) {
+// Returns true if signal loss is detected (no edges for too long).
+static bool isSignalLost(void) {
   const uint32_t lastEdgeUs = __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
   if (lastEdgeUs == 0U) {
-    return ADJ_STATUS_BASELINE_PENDING;
+    return true;
   }
 
   const uint32_t nowUs = hal_micros();
@@ -283,11 +287,29 @@ AdjStatus getAdjustometerStatus(void) {
     signalLossUs = dynamicLossUs;
   }
 
-  if ((nowUs - lastEdgeUs) > signalLossUs) {
-    return ADJ_STATUS_SIGNAL_LOST;
+  return (nowUs - lastEdgeUs) > signalLossUs;
+}
+
+uint8_t getAdjustometerStatus(void) {
+  uint8_t status = ADJ_STATUS_OK;
+
+  if (isSignalLost()) {
+    status |= ADJ_STATUS_SIGNAL_LOST;
+  }
+  if (!adjustometerBaselineReady) {
+    status |= ADJ_STATUS_BASELINE_PENDING;
+  }
+  if (getFuelTemperatureRaw() == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
+    status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
+  }
+  {
+    uint8_t v = getSupplyVoltageRaw();
+    if (v < ADJ_VOLTAGE_MIN_TV || v > ADJ_VOLTAGE_MAX_TV) {
+      status |= ADJ_STATUS_VOLTAGE_BAD;
+    }
   }
 
-  return ADJ_STATUS_OK;
+  return status;
 }
 
 static float filteredFuelTemp = -1.0f;
