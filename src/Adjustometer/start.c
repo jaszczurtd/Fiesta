@@ -66,7 +66,7 @@ static void updateI2CRegisters(void) {
   uint32_t now = hal_millis();
   if (now - lastPeriodicLogMs >= DEBUG_UPDATE) {
     lastPeriodicLogMs = now;
-    deb("p:%ld v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld\n", (long)pulse, voltage, fuelTemp, status, getBaselineFuelTemp(), (long)getAdaptiveCoeffX10(), (long)getDbgLastDtX256(), (long)getDbgLastRawDrift(), (long)getDbgLastNewCoeff());
+    deb("p:%ld f:%lu.%lukHz v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld\n", (long)pulse, (unsigned long)(getAdjustometerSignalHz() / 1000U), (unsigned long)((getAdjustometerSignalHz() % 1000U) / 100U), voltage, fuelTemp, status, getBaselineFuelTemp(), (long)getAdaptiveCoeffX10(), (long)getDbgLastDtX256(), (long)getDbgLastRawDrift(), (long)getDbgLastNewCoeff());
   }
 #endif
 }

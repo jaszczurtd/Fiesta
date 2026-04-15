@@ -2,6 +2,14 @@
 #include "sensors.h"
 #include <hal/hal_i2c_slave.h>
 
+// Signed right-shift must be arithmetic (sign-extending) for EMA filters to work correctly.
+// GCC guarantees this; the assertion guards against non-conforming toolchains.
+#ifdef __cplusplus
+static_assert((-1 >> 1) == -1, "Arithmetic right-shift required for signed integers");
+#else
+_Static_assert((-1 >> 1) == -1, "Arithmetic right-shift required for signed integers");
+#endif
+
 static void countAdjustometerPulses(void);
 static void resetSensorsState(void);
 static bool isSignalLost(void);
@@ -36,30 +44,34 @@ static uint32_t adjustometerBaselineStartUs = 0;
 static uint32_t adjustometerBaselineEstimate = 0;
 static uint32_t adjustometerBaselineStableWindows = 0;
 static uint32_t adjustometerBaseline = 0;
-static bool     adjustometerBaselineReady = false;
+// Cross-core: written by ISR (Core0), read by getters (Core1).
+static volatile bool     adjustometerBaselineReady = false;
 static bool     adjustometerZeroHold = true;
 static int8_t   adjustometerZeroCandidateSign = 0;
 static uint8_t  adjustometerZeroCandidateWindows = 0;
 // Fuel temperature at baseline capture — used for thermal drift compensation.
-static uint8_t  adjustometerBaselineFuelTemp = 0;
+// Cross-core: written by ISR (Core0), read by getters (Core1).
+static volatile uint8_t  adjustometerBaselineFuelTemp = 0;
 // Smoothed fuel-temperature tracker (fixed-point ×256), ISR EMA-filtered.
 static uint32_t adjustometerSmoothedFuelTempX256 = 0;
 // Adaptive thermal-compensation coefficient (×10 ×256 fixed-point for EMA smoothing).
-static int32_t  adjustometerAdaptiveCoeffX10x256 = 0;
-static bool     adjustometerAdaptiveReady = false;
+// Cross-core: written by ISR (Core0), read by getters (Core1).
+static volatile int32_t  adjustometerAdaptiveCoeffX10x256 = 0;
+static volatile bool     adjustometerAdaptiveReady = false;
 // ISR diagnostics — captured every window for debugging the adaptive path.
-static int32_t  dbgLastDtX256 = 0;
-static int32_t  dbgLastRawDrift = 0;
-static int32_t  dbgLastNewCoeff = 0;
+// Cross-core: written by ISR (Core0), read by getters (Core1).
+static volatile int32_t  dbgLastDtX256 = 0;
+static volatile int32_t  dbgLastRawDrift = 0;
+static volatile int32_t  dbgLastNewCoeff = 0;
 
 // JaszczurHAL defines SECOND in milliseconds, so convert to microseconds for Hz = us_per_second / period_us.
 #define US_PER_SECOND (SECOND * 1000UL)
 // Number of pulses to accumulate before computing frequency.
-// At 37 kHz this gives ~1.7 ms window, lowering output latency.
+// At 37 kHz this gives ~3.5 ms window, lowering output latency.
 #define ADJUSTOMETER_PULSE_WINDOW 128U
 #define ADJUSTOMETER_SIGNAL_LOSS_US 200000U
 // EMA filter: weight = 1/(2^SHIFT). SHIFT=3 means new sample has 12.5% weight.
-// With 64-pulse window this keeps jitter low while preserving fast step response.
+// With 128-pulse window this keeps jitter low while preserving fast step response.
 #define ADJUSTOMETER_EMA_SHIFT 3U
 #define ADJUSTOMETER_BASELINE_MIN_TIME_US (ADJUSTOMETER_BASELINE_MIN_TIME_MS * 1000UL)
 #define ADJUSTOMETER_BASELINE_MAX_TIME_US (ADJUSTOMETER_BASELINE_MAX_TIME_MS * 1000UL)
@@ -74,7 +86,14 @@ static inline uint32_t applyAdjustometerEma(uint32_t rawHz, uint32_t filteredHz)
   }
 
   // EMA: filtered += (rawHz - filtered) / (2^SHIFT)
-  return filteredHz + (((int32_t)rawHz - (int32_t)filteredHz) >> ADJUSTOMETER_EMA_SHIFT);
+  // Guarantee minimum ±1 step when delta != 0 to prevent integer truncation
+  // stall (positive delta < 2^SHIFT would otherwise truncate to 0).
+  int32_t delta = (int32_t)rawHz - (int32_t)filteredHz;
+  int32_t step = delta >> ADJUSTOMETER_EMA_SHIFT;
+  if (step == 0 && delta != 0) {
+    step = (delta > 0) ? 1 : -1;
+  }
+  return filteredHz + (uint32_t)step;
 }
 
 static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
@@ -135,8 +154,9 @@ static void countAdjustometerPulses(void) {
 
         if (baselineConverged || maxTimeReached) {
           adjustometerBaseline = adjustometerBaselineEstimate;
-          adjustometerBaselineFuelTemp = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
-          adjustometerSmoothedFuelTempX256 = (uint32_t)adjustometerBaselineFuelTemp << 8;
+          const uint8_t capFT = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
+          __atomic_store_n(&adjustometerBaselineFuelTemp, capFT, __ATOMIC_RELEASE);
+          adjustometerSmoothedFuelTempX256 = (uint32_t)capFT << 8;
           // Re-anchor filter to baseline to start from a true near-zero output.
           adjustometerFilteredHz = adjustometerBaseline;
           __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
@@ -144,7 +164,7 @@ static void countAdjustometerPulses(void) {
           adjustometerZeroHold = true;
           adjustometerZeroCandidateSign = 0;
           adjustometerZeroCandidateWindows = 0U;
-          adjustometerBaselineReady = true;
+          __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
         }
         __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
       } else {
@@ -167,27 +187,36 @@ static void countAdjustometerPulses(void) {
                   ((int32_t)curFTx256 - (int32_t)adjustometerSmoothedFuelTempX256) >> THERMAL_COMP_EMA_SHIFT;
             }
 
+            // Late baseline temperature acquisition: if the sensor wasn't ready
+            // when the baseline locked (temp was still 0), capture the first valid
+            // reading so thermal compensation can activate.
+            if (adjustometerBaselineFuelTemp == 0U) {
+              __atomic_store_n(&adjustometerBaselineFuelTemp, curFTraw, __ATOMIC_RELEASE);
+              adjustometerSmoothedFuelTempX256 = curFTx256;
+            }
+
             if (adjustometerBaselineFuelTemp != 0U && adjustometerSmoothedFuelTempX256 != 0U) {
               const int32_t baseFTx256 = (int32_t)((uint32_t)adjustometerBaselineFuelTemp << 8);
               const int32_t dtX256 = (int32_t)adjustometerSmoothedFuelTempX256 - baseFTx256;
-              dbgLastDtX256 = dtX256;
+              __atomic_store_n(&dbgLastDtX256, dtX256, __ATOMIC_RELEASE);
 
               // Adaptive coefficient: compute actual drift rate once ΔT is large enough
               if (dtX256 >= (int32_t)ADAPTIVE_COMP_MIN_DT_X256) {
                 const int32_t rawDrift = (int32_t)filtered - (int32_t)adjustometerBaseline;
                 const int32_t newCoeffX10 = (rawDrift * 2560) / dtX256;
-                dbgLastRawDrift = rawDrift;
-                dbgLastNewCoeff = newCoeffX10;
+                __atomic_store_n(&dbgLastRawDrift, rawDrift, __ATOMIC_RELEASE);
+                __atomic_store_n(&dbgLastNewCoeff, newCoeffX10, __ATOMIC_RELEASE);
                 const int32_t absCoeff = absI32(newCoeffX10);
                 if (absCoeff >= ADAPTIVE_COMP_MIN_COEFF_X10 &&
                     absCoeff <= ADAPTIVE_COMP_MAX_COEFF_X10) {
                   const int32_t newX256 = newCoeffX10 << 8;
                   if (!adjustometerAdaptiveReady) {
-                    adjustometerAdaptiveCoeffX10x256 = newX256;
-                    adjustometerAdaptiveReady = true;
+                    __atomic_store_n(&adjustometerAdaptiveCoeffX10x256, newX256, __ATOMIC_RELEASE);
+                    __atomic_store_n(&adjustometerAdaptiveReady, true, __ATOMIC_RELEASE);
                   } else {
-                    adjustometerAdaptiveCoeffX10x256 +=
-                        (newX256 - adjustometerAdaptiveCoeffX10x256) >> ADAPTIVE_COMP_EMA_SHIFT;
+                    int32_t curCoeff = adjustometerAdaptiveCoeffX10x256;
+                    curCoeff += (newX256 - curCoeff) >> ADAPTIVE_COMP_EMA_SHIFT;
+                    __atomic_store_n(&adjustometerAdaptiveCoeffX10x256, curCoeff, __ATOMIC_RELEASE);
                   }
                 }
               }
@@ -271,13 +300,17 @@ int32_t getAdjustometerPulses(void) {
   return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
 }
 
+uint32_t getAdjustometerSignalHz(void) {
+  return __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
+}
+
 uint8_t getAdjustometerStatus(void) {
   uint8_t status = ADJ_STATUS_OK;
 
   if (isSignalLost()) {
     status |= ADJ_STATUS_SIGNAL_LOST;
   }
-  if (!adjustometerBaselineReady) {
+  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
   if (__atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE) == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
@@ -354,14 +387,14 @@ uint8_t getFuelTemperatureRaw(void) {
 }
 
 uint8_t getBaselineFuelTemp(void) {
-  return adjustometerBaselineFuelTemp;
+  return __atomic_load_n(&adjustometerBaselineFuelTemp, __ATOMIC_ACQUIRE);
 }
 
 int32_t getAdaptiveCoeffX10(void) {
-  if (!adjustometerAdaptiveReady) return -1;
-  return adjustometerAdaptiveCoeffX10x256 >> 8;
+  if (!__atomic_load_n(&adjustometerAdaptiveReady, __ATOMIC_ACQUIRE)) return -1;
+  return __atomic_load_n(&adjustometerAdaptiveCoeffX10x256, __ATOMIC_ACQUIRE) >> 8;
 }
 
-int32_t getDbgLastDtX256(void) { return dbgLastDtX256; }
-int32_t getDbgLastRawDrift(void) { return dbgLastRawDrift; }
-int32_t getDbgLastNewCoeff(void) { return dbgLastNewCoeff; }
+int32_t getDbgLastDtX256(void) { return __atomic_load_n(&dbgLastDtX256, __ATOMIC_ACQUIRE); }
+int32_t getDbgLastRawDrift(void) { return __atomic_load_n(&dbgLastRawDrift, __ATOMIC_ACQUIRE); }
+int32_t getDbgLastNewCoeff(void) { return __atomic_load_n(&dbgLastNewCoeff, __ATOMIC_ACQUIRE); }
