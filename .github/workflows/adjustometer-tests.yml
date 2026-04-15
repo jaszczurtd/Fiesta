@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      JASZCZURHAL_REF: c66c0854c83c03b51af35acabbcc0345895e2e8b
+      JASZCZURHAL_REF: 2dc559d316eb8d905d2ce1a22aacd34b5b3126cd
       CANDEFINITIONS_REF: e88e6873d5d7553593db9b5f690430f2a74d9193
     permissions:
       contents: read
