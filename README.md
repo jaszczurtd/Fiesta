@@ -116,7 +116,7 @@ Helper scripts are available in module-specific `scripts/` directories:
 - `refresh-intellisense.sh`
 - `serial-monitor.sh` / `serial-monitor.py` (where available)
 
-### Linux/WSL setup (shared for ECU/Clocks/OilAndSpeed)
+### Linux/WSL setup (shared for all modules)
 
 Install Arduino CLI and RP2040 core once per machine:
 
