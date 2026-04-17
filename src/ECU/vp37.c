@@ -77,6 +77,11 @@ static void VP37_makeCalibration(VP37Pump *self) {
   hal_pid_controller_set_output_limits(self->adjustController,
                                        (float)self->VP37_ADJUST_MIN,
                                        (float)self->VP37_ADJUST_MAX);
+  deb("VP37 calibration: MIN=%d MIDDLE=%d MAX=%d OPERATE_MAX=%d", 
+      self->VP37_ADJUST_MIN, 
+      self->VP37_ADJUST_MIDDLE, 
+      self->VP37_ADJUST_MAX, 
+      self->VP37_OPERATE_MAX);
 }
 
 static void VP37_initVP37(VP37Pump *self) {
@@ -235,12 +240,12 @@ void VP37_process(VP37Pump *self) {
       VP37_updateAdjustometerPosition(self);
     }
 
-    if((self->VP37_ADJUST_MAX <= 0 || self->VP37_ADJUST_MIDDLE <= 0 || self->VP37_ADJUST_MIN <= 0) &&
-       self->currentAdjustometerPosition > MIN_ADJUSTOMETER_VAL) {
-      VP37_makeCalibration(self);
-      VP37_updateAdjustometerPosition(self);
-      self->desiredAdjustometer = self->currentAdjustometerPosition;
-    }
+    // if((self->VP37_ADJUST_MAX <= 0 || self->VP37_ADJUST_MIDDLE <= 0 || self->VP37_ADJUST_MIN <= 0) &&
+    //    self->currentAdjustometerPosition > MIN_ADJUSTOMETER_VAL) {
+    //   VP37_makeCalibration(self);
+    //   VP37_updateAdjustometerPosition(self);
+    //   self->desiredAdjustometer = self->currentAdjustometerPosition;
+    // }
 
     hal_soft_timer_tick(self->fuelTempTimer);
     hal_soft_timer_tick(self->voltageTimer);
@@ -272,15 +277,15 @@ void VP37_process(VP37Pump *self) {
 }
 
 void VP37_showDebug(VP37Pump *self) {
-  deb("thr:%.1f des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f",
-      self->lastThrottle,
-      self->desiredAdjustometer,
-      self->currentAdjustometerPosition,
-      getGlobalValue(F_VOLTS),
-      getGlobalValue(F_FUEL_TEMP),
-      self->finalPWM,
-      self->pidErr,
-      hal_pid_controller_get_kp(self->adjustController),
-      hal_pid_controller_get_ki(self->adjustController),
-      hal_pid_controller_get_kd(self->adjustController));
+  // deb("thr:%.1f des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f",
+  //     self->lastThrottle,
+  //     self->desiredAdjustometer,
+  //     self->currentAdjustometerPosition,
+  //     getGlobalValue(F_VOLTS),
+  //     getGlobalValue(F_FUEL_TEMP),
+  //     self->finalPWM,
+  //     self->pidErr,
+  //     hal_pid_controller_get_kp(self->adjustController),
+  //     hal_pid_controller_get_ki(self->adjustController),
+  //     hal_pid_controller_get_kd(self->adjustController));
 }

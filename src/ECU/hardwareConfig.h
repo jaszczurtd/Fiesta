@@ -58,18 +58,24 @@
 #define CAN1_GPIO 6
 #define CAN1_INT 14
 
-//ADS1115
-//values for ECU voltage 
-#define R1 3300.0  // 3.3k / ohm
-#define R2 470.0   // 470R / ohm
-#define ADC_RANGE 0.1875  
+// Adjustometer (VP37 feedback module) — I2C slave on shared bus
+#define ADJUSTOMETER_I2C_ADDR      0x57
+#define ADJUSTOMETER_REG_PULSE_HI  0x00  // int16 BE: frequency deviation from baseline [Hz]
+#define ADJUSTOMETER_REG_PULSE_LO  0x01
+#define ADJUSTOMETER_REG_VOLTAGE   0x02  // uint8: supply voltage in 0.1 V units
+#define ADJUSTOMETER_REG_FUEL_TEMP 0x03  // uint8: fuel temperature °C
+#define ADJUSTOMETER_REG_STATUS    0x04  // uint8: status bitmask
+#define ADJUSTOMETER_REG_COUNT     5     // total bytes to read in one burst
 
-#define ADS1115_PIN_0 0 //vp37 fuel temp
-#define ADS1115_PIN_1 1 //system supply voltage
-#define ADS1115_PIN_2 2 //vp37 adjustometer
-#define ADS1115_PIN_3 3 //not used atm
+// Adjustometer STATUS register bitmask
+#define ADJ_STATUS_OK              0x00
+#define ADJ_STATUS_SIGNAL_LOST     0x01
+#define ADJ_STATUS_FUEL_TEMP_BROKEN 0x02
+#define ADJ_STATUS_BASELINE_PENDING 0x04
+#define ADJ_STATUS_VOLTAGE_BAD     0x08
 
-#define ADS1115_ADDR 0x48
+// Maximum wait for Adjustometer baseline calibration at startup [ms]
+#define ADJUSTOMETER_BASELINE_WAIT_MS 500
 
 //PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
@@ -111,9 +117,6 @@
 
 #define R_TEMP_AIR_A 5050 //sensor
 #define R_TEMP_AIR_B 4800
-
-#define R_VP37_FUEL_A 2300 //sensor
-#define R_VP37_FUEL_B 3300
 
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955

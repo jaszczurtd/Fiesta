@@ -29,6 +29,10 @@ void initSensors(void) {
   initI2C();
 
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countAdjustometerPulses, HAL_GPIO_IRQ_FALLING);
+
+  // Elevate GPIO IRQ above I2C slave so Hall-sensor edges
+  // are never blocked by I2C transactions — prevents pulse coalescence.
+  hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGHEST);
 }
 
 static volatile int32_t  adjustometerPulse = 0;

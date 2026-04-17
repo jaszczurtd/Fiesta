@@ -29,9 +29,11 @@ void looper(void) {
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
+#ifdef DEBUG_MAX_CHANGES
 static int32_t lastPulse = 0;
 static uint8_t lastVoltage = 0;
 static uint8_t lastFuelTemp = 0;
+#endif
 static uint32_t lastPeriodicLogMs = 0;
 
 static void updateI2CRegisters(void) {
@@ -50,6 +52,11 @@ static void updateI2CRegisters(void) {
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, status);
 
  #ifdef DEBUG_DEEP 
+ #ifdef DEBUG_MAX_CHANGES
+   if (pulse != lastPulse) {
+     deb("p: %ld\n", (long)pulse);
+     lastPulse = pulse;
+   }
   if (pulse != lastPulse) {
     deb("p: %ld\n", (long)pulse);
     lastPulse = pulse;
@@ -62,7 +69,7 @@ static void updateI2CRegisters(void) {
     deb("ft: %u\n", fuelTemp);
     lastFuelTemp = fuelTemp;
   }
-
+#endif
   uint32_t now = hal_millis();
   if (now - lastPeriodicLogMs >= DEBUG_UPDATE) {
     lastPeriodicLogMs = now;
