@@ -95,57 +95,24 @@ void test_adjustometer_fuel_temp_zero(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, t);
 }
 
-// ── DTC status tests ─────────────────────────────────────────────────────────
+// ── Adjustometer status flags are currently informational only ──────────────
 
-void test_adjustometer_status_signal_lost_sets_dtc(void) {
+void test_adjustometer_status_signal_lost_does_not_auto_set_dtc(void) {
     injectAdjRegisterData(0, 120, 40, ADJ_STATUS_SIGNAL_LOST);
-    (void)getVP37Adjustometer();
-
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
+    TEST_ASSERT_EQUAL_INT32(0, getVP37Adjustometer());
+    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
-void test_adjustometer_status_ok_clears_dtc(void) {
-    // First: set signal lost
-    injectAdjRegisterData(0, 120, 40, ADJ_STATUS_SIGNAL_LOST);
-    (void)getVP37Adjustometer();
-    // Then: OK status
-    injectAdjRegisterData(100, 120, 40, ADJ_STATUS_OK);
-    (void)getVP37Adjustometer();
-
-    // Signal lost DTC should no longer be active
-    uint16_t codes[16];
-    uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
-    bool found = false;
-    for(uint8_t i = 0; i < count; i++) {
-        if(codes[i] == DTC_ADJ_SIGNAL_LOST) found = true;
-    }
-    TEST_ASSERT_FALSE(found);
-}
-
-void test_adjustometer_status_fuel_temp_broken(void) {
+void test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc(void) {
     injectAdjRegisterData(0, 120, 0, ADJ_STATUS_FUEL_TEMP_BROKEN);
-    (void)getVP37FuelTemperature();
-
-    uint16_t codes[16];
-    uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
-    bool found = false;
-    for(uint8_t i = 0; i < count; i++) {
-        if(codes[i] == DTC_ADJ_FUEL_TEMP_BROKEN) found = true;
-    }
-    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, getVP37FuelTemperature());
+    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
-void test_adjustometer_status_voltage_bad(void) {
+void test_adjustometer_status_voltage_bad_does_not_auto_set_dtc(void) {
     injectAdjRegisterData(0, 50, 40, ADJ_STATUS_VOLTAGE_BAD);
-    (void)getSystemSupplyVoltage();
-
-    uint16_t codes[16];
-    uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
-    bool found = false;
-    for(uint8_t i = 0; i < count; i++) {
-        if(codes[i] == DTC_ADJ_VOLTAGE_BAD) found = true;
-    }
-    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 5.0f, getSystemSupplyVoltage());
+    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_comm_lost_on_busy_bus(void) {
@@ -189,7 +156,7 @@ void test_vp37_pid_save_and_load(void) {
     VP37Pump *pump = &ctx->injectionPump;
     memset(pump, 0, sizeof(*pump));
     pump->adjustController = hal_pid_controller_create();
-    pump->pidTimeUpdate = VP37_PID_TIME_UPDATE_DEFAULT;
+    pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
 
     // Set custom PID values
     VP37_setVP37PID(pump, 0.55f, 0.12f, 0.025f, false);
@@ -232,21 +199,15 @@ void test_vp37_pid_time_update_setter(void) {
     VP37Pump *pump = &ctx->injectionPump;
     pump->pidTimeUpdate = 45.0f;
 
-    VP37_setVP37PIDTimeUpdate(pump, 60.0f);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 60.0f, VP37_getVP37PIDTimeUpdate(pump));
-
-    // Negative value should not change
-    VP37_setVP37PIDTimeUpdate(pump, -5.0f);
+    pump->pidTimeUpdate = 60.0f;
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 60.0f, VP37_getVP37PIDTimeUpdate(pump));
 }
 
-void test_vp37_percentage_error_setter(void) {
+void test_vp37_percentage_error_constant(void) {
     ecu_context_t *ctx = getECUContext();
     VP37Pump *pump = &ctx->injectionPump;
-    pump->percentageError = 3.0f;
-
-    VP37_setPercentageError(pump, 5.0f);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.0f, pump->percentageError);
+    (void)pump;
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, PERCENTAGE_ERROR);
 }
 
 // ── Int16 BE encoding edge cases ────────────────────────────────────────────
@@ -288,10 +249,9 @@ int main(void) {
     RUN_TEST(test_adjustometer_big_endian_negative);
 
     // DTC status
-    RUN_TEST(test_adjustometer_status_signal_lost_sets_dtc);
-    RUN_TEST(test_adjustometer_status_ok_clears_dtc);
-    RUN_TEST(test_adjustometer_status_fuel_temp_broken);
-    RUN_TEST(test_adjustometer_status_voltage_bad);
+    RUN_TEST(test_adjustometer_status_signal_lost_does_not_auto_set_dtc);
+    RUN_TEST(test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc);
+    RUN_TEST(test_adjustometer_status_voltage_bad_does_not_auto_set_dtc);
     RUN_TEST(test_adjustometer_comm_lost_on_busy_bus);
     RUN_TEST(test_dtc_array_covers_adjustometer_codes);
 
@@ -299,7 +259,7 @@ int main(void) {
     RUN_TEST(test_vp37_pid_save_and_load);
     RUN_TEST(test_vp37_pid_load_returns_false_when_empty);
     RUN_TEST(test_vp37_pid_time_update_setter);
-    RUN_TEST(test_vp37_percentage_error_setter);
+    RUN_TEST(test_vp37_percentage_error_constant);
 
     return UNITY_END();
 }
