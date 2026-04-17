@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      JASZCZURHAL_REF: 3fdcfdfbce0a25ff1f09a5ab18eb73f0ec6dc65e
       CANDEFINITIONS_REF: e88e6873d5d7553593db9b5f690430f2a74d9193
     permissions:
       contents: read
@@ -30,10 +29,7 @@ jobs:
           set -eux
           mkdir -p ../libraries
 
-          git init ../libraries/JaszczurHAL
-          git -C ../libraries/JaszczurHAL remote add origin https://github.com/jaszczurtd/JaszczurHAL.git
-          git -C ../libraries/JaszczurHAL fetch --depth 1 origin "$JASZCZURHAL_REF"
-          git -C ../libraries/JaszczurHAL checkout --detach FETCH_HEAD
+          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
 
           git init ../libraries/canDefinitions
           git -C ../libraries/canDefinitions remote add origin https://github.com/jaszczurtd/canDefinitions.git

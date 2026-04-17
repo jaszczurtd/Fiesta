@@ -1,7 +1,9 @@
 #include "unity.h"
 #include "hal/hal_pid_controller.h"
 #include "hal/hal_soft_timer.h"
+#include "hal/hal_serial.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "utils/tools_api.h"
 
 static int s_soft_timer_hits = 0;
 
@@ -201,6 +203,65 @@ void test_pid_null_safety(void) {
     hal_pid_controller_destroy(NULL);
 }
 
+// ── hal_serial_available / hal_serial_read tests ─────────────────────────────
+
+void test_serial_read_empty_returns_minus1(void) {
+    hal_mock_serial_reset();
+    TEST_ASSERT_EQUAL_INT(0, hal_serial_available());
+    TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
+}
+
+void test_serial_inject_and_read_back(void) {
+    hal_mock_serial_reset();
+    hal_mock_serial_inject_rx("P0.5\n", 5);
+    TEST_ASSERT_EQUAL_INT(5, hal_serial_available());
+
+    TEST_ASSERT_EQUAL_INT('P', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT(4, hal_serial_available());
+    TEST_ASSERT_EQUAL_INT('0', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT('.', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT('5', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT('\n', hal_serial_read());
+
+    TEST_ASSERT_EQUAL_INT(0, hal_serial_available());
+    TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
+}
+
+void test_serial_reset_clears_rx_buffer(void) {
+    hal_mock_serial_inject_rx("ABC", 3);
+    TEST_ASSERT_EQUAL_INT(3, hal_serial_available());
+
+    hal_mock_serial_reset();
+    TEST_ASSERT_EQUAL_INT(0, hal_serial_available());
+    TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
+}
+
+void test_serial_inject_auto_length(void) {
+    hal_mock_serial_reset();
+    hal_mock_serial_inject_rx("?\n", -1);
+    TEST_ASSERT_EQUAL_INT(2, hal_serial_available());
+    TEST_ASSERT_EQUAL_INT('?', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT('\n', hal_serial_read());
+    TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
+}
+
+// ── float_to_u32 / u32_to_float tests ───────────────────────────────────────
+
+void test_float_to_u32_roundtrip(void) {
+    float values[] = {0.0f, 1.0f, -1.0f, 0.42f, 3.14159f, 1e10f, 1e-10f};
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        uint32_t u = float_to_u32(values[i]);
+        float back = u32_to_float(u);
+        TEST_ASSERT_EQUAL_FLOAT(values[i], back);
+    }
+}
+
+void test_float_to_u32_known_pattern(void) {
+    // IEEE 754: 1.0f = 0x3F800000
+    TEST_ASSERT_EQUAL_HEX32(0x3F800000u, float_to_u32(1.0f));
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, u32_to_float(0x3F800000u));
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -214,6 +275,14 @@ int main(void) {
     RUN_TEST(test_pid_direction_backward_inverts_response);
     RUN_TEST(test_pid_stability_and_oscillation_helpers);
     RUN_TEST(test_pid_null_safety);
+
+    RUN_TEST(test_serial_read_empty_returns_minus1);
+    RUN_TEST(test_serial_inject_and_read_back);
+    RUN_TEST(test_serial_reset_clears_rx_buffer);
+    RUN_TEST(test_serial_inject_auto_length);
+
+    RUN_TEST(test_float_to_u32_roundtrip);
+    RUN_TEST(test_float_to_u32_known_pattern);
 
     return UNITY_END();
 }
