@@ -244,6 +244,14 @@ const char *getDtcName(uint16_t code) {
       return "P0106 MAP/BARO pressure range/performance";
     case DTC_FUEL_LEVEL_RANGE:
       return "P0460 Fuel level sensor range/performance";
+    case DTC_ADJ_COMM_LOST:
+      return "U1908 Lost communication with Adjustometer module";
+    case DTC_ADJ_SIGNAL_LOST:
+      return "U1909 Adjustometer oscillator signal lost";
+    case DTC_ADJ_FUEL_TEMP_BROKEN:
+      return "U190A Adjustometer fuel temperature sensor fault";
+    case DTC_ADJ_VOLTAGE_BAD:
+      return "U190B Adjustometer supply voltage out of range";
     default:
       return "Unknown DTC";
   }

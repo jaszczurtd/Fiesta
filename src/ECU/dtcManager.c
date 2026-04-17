@@ -29,7 +29,7 @@ typedef struct {
 } dtc_entry_t;
 
 typedef struct {
-  dtc_entry_t dtcs[5];
+  dtc_entry_t dtcs[9];
   bool initialized;
 } dtc_manager_state_t;
 
@@ -39,7 +39,11 @@ static dtc_manager_state_t s_dtcState = {
     {DTC_PCF8574_COMM_FAIL, false, false, false, 0},
     {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0},
     {DTC_DPF_COMM_LOST, false, false, false, 0},
-    {DTC_EGT_COMM_LOST, false, false, false, 0}
+    {DTC_EGT_COMM_LOST, false, false, false, 0},
+    {DTC_ADJ_COMM_LOST, false, false, false, 0},
+    {DTC_ADJ_SIGNAL_LOST, false, false, false, 0},
+    {DTC_ADJ_FUEL_TEMP_BROKEN, false, false, false, 0},
+    {DTC_ADJ_VOLTAGE_BAD, false, false, false, 0}
   },
   .initialized = false
 };

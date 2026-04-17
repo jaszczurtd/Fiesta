@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 //in miliseconds, print values into serial
-#define DEBUG_UPDATE (3 * SECOND)
+#define DEBUG_UPDATE (125)
 
 #define ADJUSTOMETER_SIGNAL_LOSS_MULTIPLIER 3U
 // Minimum timeout for signal-loss detection.  At the operating range (~37 kHz)

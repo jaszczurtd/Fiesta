@@ -34,6 +34,12 @@ extern "C" {
 #define DTC_MAP_BARO_RANGE         0x0106  // P0106 MAP/BARO pressure range/performance
 #define DTC_FUEL_LEVEL_RANGE       0x0460  // P0460 Fuel level sensor range/performance
 
+// Adjustometer (VP37 feedback module) DTCs — active in dtcManager.c state table.
+#define DTC_ADJ_COMM_LOST          0xD908  // U1908 Lost communication with Adjustometer module
+#define DTC_ADJ_SIGNAL_LOST        0xD909  // U1909 Adjustometer oscillator signal lost
+#define DTC_ADJ_FUEL_TEMP_BROKEN   0xD90A  // U190A Adjustometer fuel temperature sensor fault
+#define DTC_ADJ_VOLTAGE_BAD        0xD90B  // U190B Adjustometer supply voltage out of range
+
 const char *getPIDName(int pid);
 const char *getDtcName(uint16_t code);
 

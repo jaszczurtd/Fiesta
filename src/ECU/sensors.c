@@ -102,7 +102,6 @@ void initSensors(void) {
   pwm_init();
 
   init4051();
-  hal_ext_adc_init(ADS1115_ADDR, ADC_RANGE);
 
   for(int a = 0; a < F_LAST; a++) {
     s_sensorsPersistent.valueFields[a] = s_sensorsPersistent.reflectionValueFields[a] = 0.0;
@@ -426,20 +425,110 @@ void valToPWM(unsigned char pin, int32_t val) {
   }
 }
 
+// ── Adjustometer I2C readout (replaces ADS1115) ─────────────────────────────
+
+typedef struct {
+  int16_t  pulseHz;       // deviation from baseline [Hz]
+  uint8_t  voltageRaw;    // supply voltage in 0.1 V units
+  uint8_t  fuelTempC;     // fuel temperature °C
+  uint8_t  status;        // bitmask (ADJ_STATUS_*)
+  bool     commOk;        // true if I2C transaction succeeded
+} adjustometer_reading_t;
+
+static adjustometer_reading_t readAdjustometer(void) {
+  adjustometer_reading_t r = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false};
+
+  if(hal_i2c_is_busy(ADJUSTOMETER_I2C_ADDR)) {
+    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+    derr("Adjustometer I2C bus is busy");
+    return r;
+  }
+
+  // Set register pointer to 0x00 (PULSE_HI)
+  hal_i2c_begin_transmission(ADJUSTOMETER_I2C_ADDR);
+  hal_i2c_write(ADJUSTOMETER_REG_PULSE_HI);
+  uint8_t txErr = hal_i2c_end_transmission();
+  if(txErr) {
+    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+    derr("Adjustometer I2C transmission error: %d", (int)txErr);
+    return r;
+  }
+
+  // Read 5 registers starting from 0x00
+  uint8_t received = hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_REG_COUNT);
+  if(received != ADJUSTOMETER_REG_COUNT) {
+    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+    derr("Adjustometer I2C read error: expected %d bytes, got %d", ADJUSTOMETER_REG_COUNT, (int)received);
+    return r;
+  }
+
+  uint8_t buf[ADJUSTOMETER_REG_COUNT];
+  for(uint8_t i = 0; i < ADJUSTOMETER_REG_COUNT; i++) {
+    int b = hal_i2c_read();
+    if(b < 0) {
+      derr("Adjustometer I2C read error at byte %d: %d", (int)i, b);
+      //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+      return r;
+    }
+    buf[i] = (uint8_t)b;
+  }
+
+  //dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
+
+  r.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
+  r.voltageRaw = buf[2];
+  r.fuelTempC  = buf[3];
+  r.status     = buf[4];
+  r.commOk     = true;
+
+  //dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status & ADJ_STATUS_SIGNAL_LOST) != 0);
+  //dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
+  //dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status & ADJ_STATUS_VOLTAGE_BAD) != 0);
+
+  return r;
+}
+
+bool waitForAdjustometerBaseline(void) {
+  uint32_t start = hal_millis();
+  while((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
+    adjustometer_reading_t r = readAdjustometer();
+    if(!r.commOk) {
+      derr("Adjustometer not responding during baseline wait");
+      return false;
+    }
+    if((r.status & ADJ_STATUS_BASELINE_PENDING) == 0) {
+      deb("Adjustometer baseline ready (%lu ms)", (unsigned long)(hal_millis() - start));
+      return true;
+    }
+    hal_delay_ms(10);
+    watchdog_feed();
+  }
+  derr("Adjustometer baseline timeout (%u ms)", ADJUSTOMETER_BASELINE_WAIT_MS);
+  return false;
+}
+
 float getSystemSupplyVoltage(void) {
-  float val = hal_ext_adc_read_scaled(ADS1115_PIN_1) / (R2 / (R1 + R2));
-  return roundfWithPrecisionTo(val, 1);
+  adjustometer_reading_t r = readAdjustometer();
+  if(!r.commOk) {
+    return 0.0f;
+  }
+  return (float)r.voltageRaw * 0.1f;
 }
 
 int32_t getVP37Adjustometer(void) {
-  float val = hal_ext_adc_read_scaled(ADS1115_PIN_2);
-  return (int32_t)(roundfWithPrecisionTo(val, 3) * 1000);
+  adjustometer_reading_t r = readAdjustometer();
+  if(!r.commOk) {
+    return 0;
+  }
+  return (int32_t)r.pulseHz;
 }
 
 float getVP37FuelTemperature(void) {
-  float val = hal_ext_adc_read_scaled(ADS1115_PIN_0);
-  val = steinhart(val, R_VP37_FUEL_A, R_VP37_FUEL_B, false);
-  return roundfWithPrecisionTo(val, 1);
+  adjustometer_reading_t r = readAdjustometer();
+  if(!r.commOk) {
+    return 0.0f;
+  }
+  return (float)r.fuelTempC;
 }
 
 unsigned char readKeyboard(void) {

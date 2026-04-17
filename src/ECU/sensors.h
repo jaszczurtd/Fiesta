@@ -56,6 +56,7 @@ void pwm_init(void);
 float getSystemSupplyVoltage(void);
 int32_t getVP37Adjustometer(void);
 float getVP37FuelTemperature(void);
+bool waitForAdjustometerBaseline(void);
 unsigned char readKeyboard(void);
 
 #ifdef __cplusplus
