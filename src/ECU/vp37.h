@@ -3,6 +3,7 @@
 
 #include <tools_c.h>
 #include <hal/hal_pid_controller.h>
+#include <hal/hal_serial.h>
 
 #include "config.h"
 #include "rpm.h"
@@ -57,6 +58,16 @@ extern "C" {
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
 
+// EEPROM keys for persisting tuned PID values
+#define VP37_KV_KEY_PID_KP  0xE100u
+#define VP37_KV_KEY_PID_KI  0xE101u
+#define VP37_KV_KEY_PID_KD  0xE102u
+#define VP37_KV_KEY_PID_TU  0xE103u
+#define VP37_KV_KEY_PID_TF  0xE104u
+
+// Serial command buffer for runtime PID tuning
+#define VP37_CMD_BUF_SIZE 64
+
 void measureFuelTemp(void);
 void measureVoltage(void);
 
@@ -78,6 +89,10 @@ typedef struct {
   hal_soft_timer_t voltageTimer;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
+  float pidTimeUpdate;
+  float pidTf;
+  char cmdBuf[VP37_CMD_BUF_SIZE];
+  uint8_t cmdLen;
 } VP37Pump;
 
 void VP37_init(VP37Pump *self);
@@ -93,6 +108,8 @@ int32_t VP37_getMaxVP37ThrottleValue(VP37Pump *self);
 void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
+bool VP37_savePIDToEEPROM(VP37Pump *self);
+bool VP37_loadPIDFromEEPROM(VP37Pump *self);
 
 #ifdef __cplusplus
 }
