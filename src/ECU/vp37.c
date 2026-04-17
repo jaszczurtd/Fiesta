@@ -1,6 +1,8 @@
 #include "vp37.h"
 #include <hal/hal_soft_timer.h>
 
+static void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
+
 void measureFuelTemp(void) {
   setGlobalValue(F_FUEL_TEMP, getVP37FuelTemperature());
 }
@@ -98,6 +100,10 @@ static void VP37_initVP37(VP37Pump *self) {
     self->finalPWM = VP37_PWM_MIN;
     self->fuelTempTimer = NULL;
     self->voltageTimer = NULL;
+    self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+    self->pidTf = VP37_PID_TF;
+    self->cmdLen = 0;
+    self->cmdBuf[0] = '\0';
 
     measureFuelTemp();
     measureVoltage();
@@ -105,10 +111,14 @@ static void VP37_initVP37(VP37Pump *self) {
     if(self->adjustController == NULL) {
       self->adjustController = hal_pid_controller_create();
     }
-    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
-    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
-    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
-    hal_pid_controller_set_tf(self->adjustController, VP37_PID_TF);
+
+    // Try loading tuned PID values from EEPROM; fall back to defaults.
+    if(!VP37_loadPIDFromEEPROM(self)) {
+      hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
+      hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
+      hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
+    }
+    hal_pid_controller_set_tf(self->adjustController, self->pidTf);
     hal_pid_controller_set_max_integral(self->adjustController, PID_MAX_INTEGRAL);
 
     if(self->fuelTempTimer == NULL) {
@@ -129,7 +139,7 @@ static void VP37_throttleCycle(VP37Pump *self) {
     return;
   }
 
-  hal_pid_controller_update_time(self->adjustController, VP37_PID_TIME_UPDATE);
+  hal_pid_controller_update_time(self->adjustController, self->pidTimeUpdate);
 
   VP37_updateAdjustometerPosition(self);
   self->pidErr = self->desiredAdjustometer - self->currentAdjustometerPosition;
@@ -186,7 +196,7 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
 
 void VP37_setVP37Throttle(VP37Pump *self, float accel) {
   if(!self->calibrationDone) {
-    derr("Calibration not done!");
+    derr_limited("VP37 calibration", "Calibration not done!");
     return;
   }
 
@@ -230,8 +240,7 @@ void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd) {
 }
 
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self) {
-  (void)self;
-  return VP37_PID_TIME_UPDATE;
+  return self->pidTimeUpdate;
 }
 
 void VP37_process(VP37Pump *self) {
@@ -288,4 +297,156 @@ void VP37_showDebug(VP37Pump *self) {
   //     hal_pid_controller_get_kp(self->adjustController),
   //     hal_pid_controller_get_ki(self->adjustController),
   //     hal_pid_controller_get_kd(self->adjustController));
+
+  // ── Serial PID tuner: read commands from USB CDC ────────────────────
+  while(hal_serial_available() > 0) {
+    int ch = hal_serial_read();
+    if(ch < 0) break;
+
+    if(ch == '\n' || ch == '\r') {
+      if(self->cmdLen > 0) {
+        self->cmdBuf[self->cmdLen] = '\0';
+        VP37_processSerialCommand(self, self->cmdBuf);
+        self->cmdLen = 0;
+      }
+    } else if(self->cmdLen < VP37_CMD_BUF_SIZE - 1) {
+      self->cmdBuf[self->cmdLen++] = (char)ch;
+    }
+  }
+}
+
+// ── EEPROM persistence for PID tuning ────────────────────────────────────────
+
+bool VP37_savePIDToEEPROM(VP37Pump *self) {
+  float kp, ki, kd;
+  VP37_getVP37PIDValues(self, &kp, &ki, &kd);
+
+  bool ok = true;
+  ok = hal_kv_set_u32(VP37_KV_KEY_PID_KP, float_to_u32(kp)) && ok;
+  ok = hal_kv_set_u32(VP37_KV_KEY_PID_KI, float_to_u32(ki)) && ok;
+  ok = hal_kv_set_u32(VP37_KV_KEY_PID_KD, float_to_u32(kd)) && ok;
+  ok = hal_kv_set_u32(VP37_KV_KEY_PID_TU, float_to_u32(self->pidTimeUpdate)) && ok;
+  ok = hal_kv_set_u32(VP37_KV_KEY_PID_TF, float_to_u32(self->pidTf)) && ok;
+
+  if(ok) {
+    hal_eeprom_commit();
+  }
+  return ok;
+}
+
+bool VP37_loadPIDFromEEPROM(VP37Pump *self) {
+  uint32_t raw;
+  float kp, ki, kd, tu, tf;
+
+  if(!hal_kv_get_u32(VP37_KV_KEY_PID_KP, &raw)) return false;
+  kp = u32_to_float(raw);
+  if(!hal_kv_get_u32(VP37_KV_KEY_PID_KI, &raw)) return false;
+  ki = u32_to_float(raw);
+  if(!hal_kv_get_u32(VP37_KV_KEY_PID_KD, &raw)) return false;
+  kd = u32_to_float(raw);
+  if(!hal_kv_get_u32(VP37_KV_KEY_PID_TU, &raw)) return false;
+  tu = u32_to_float(raw);
+
+  // TF key may not exist in older EEPROM images — use default.
+  if(hal_kv_get_u32(VP37_KV_KEY_PID_TF, &raw)) {
+    tf = u32_to_float(raw);
+  } else {
+    tf = VP37_PID_TF;
+  }
+
+  // Sanity check — reject obviously broken values.
+  if(kp < 0.0f || kp > 100.0f) return false;
+  if(ki < 0.0f || ki > 100.0f) return false;
+  if(kd < 0.0f || kd > 100.0f) return false;
+  if(tu < 1.0f || tu > 1000.0f) return false;
+  if(tf < 0.0f || tf > 10.0f) return false;
+
+  hal_pid_controller_set_kp(self->adjustController, kp);
+  hal_pid_controller_set_ki(self->adjustController, ki);
+  hal_pid_controller_set_kd(self->adjustController, kd);
+  self->pidTimeUpdate = tu;
+  self->pidTf = tf;
+
+  deb("\033[33mVP37 PID loaded from EEPROM: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f TF=%.4f\033[0m",
+      kp, ki, kd, tu, tf);
+  return true;
+}
+
+// ── Serial command parser for runtime PID tuning ─────────────────────────────
+
+static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
+  float val;
+
+  if(cmd[0] == '?' || cmd[0] == 'H' || cmd[0] == 'h') {
+    float kp, ki, kd;
+    VP37_getVP37PIDValues(self, &kp, &ki, &kd);
+    deb("\033[33mPID: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f TF=%.4f\033[0m",
+        kp, ki, kd, self->pidTimeUpdate, self->pidTf);
+    deb("\033[33mCAL: MIN=%d MID=%d MAX=%d\033[0m", self->VP37_ADJUST_MIN,
+        self->VP37_ADJUST_MIDDLE, self->VP37_ADJUST_MAX);
+    deb("\033[33mCMD: P<val> I<val> D<val> T<val> F<val> S(save) R(reset) ?(help)\033[0m");
+    return;
+  }
+
+  if(cmd[0] == 'S' || cmd[0] == 's') {
+    if(VP37_savePIDToEEPROM(self)) {
+      deb("\033[33mPID saved to EEPROM\033[0m");
+    } else {
+      derr("PID EEPROM save FAILED");
+    }
+    return;
+  }
+
+  if(cmd[0] == 'R' || cmd[0] == 'r') {
+    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
+    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
+    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
+    self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+    self->pidTf = VP37_PID_TF;
+    hal_pid_controller_set_tf(self->adjustController, self->pidTf);
+    hal_pid_controller_reset(self->adjustController);
+    self->lastPWMval = -1;
+    self->finalPWM = VP37_PWM_MIN;
+    deb("\033[33mPID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f TF=%.4f\033[0m",
+        VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE, VP37_PID_TF);
+    return;
+  }
+
+  // Parse single-letter commands: P0.42  I0.11  D0.02  T80  F0.068
+  char prefix = cmd[0];
+  if((prefix == 'P' || prefix == 'p' ||
+      prefix == 'I' || prefix == 'i' ||
+      prefix == 'D' || prefix == 'd' ||
+      prefix == 'T' || prefix == 't' ||
+      prefix == 'F' || prefix == 'f') && cmd[1] != '\0') {
+
+    val = (float)atof(&cmd[1]);
+
+    switch(prefix) {
+      case 'P': case 'p':
+        hal_pid_controller_set_kp(self->adjustController, val);
+        deb("\033[33mKp = %.4f\033[0m", val);
+        break;
+      case 'I': case 'i':
+        hal_pid_controller_set_ki(self->adjustController, val);
+        deb("\033[33mKi = %.4f\033[0m", val);
+        break;
+      case 'D': case 'd':
+        hal_pid_controller_set_kd(self->adjustController, val);
+        deb("\033[33mKd = %.4f\033[0m", val);
+        break;
+      case 'T': case 't':
+        self->pidTimeUpdate = val;
+        deb("\033[33mTU = %.1f\033[0m", val);
+        break;
+      case 'F': case 'f':
+        self->pidTf = val;
+        hal_pid_controller_set_tf(self->adjustController, val);
+        deb("\033[33mTF = %.4f\033[0m", val);
+        break;
+    }
+    return;
+  }
+
+  derr("Unknown command: '%s'. Send ? for help.", cmd);
 }
