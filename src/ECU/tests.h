@@ -33,11 +33,6 @@ typedef struct {
   float kD;
 } PIDValues;
 
-typedef struct {
-  unsigned char key;
-  unsigned char lastKeyState;
-  bool keyPressed;
-} Keyboard;
 #endif
 
 bool initTests(void);

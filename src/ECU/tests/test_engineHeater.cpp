@@ -44,6 +44,8 @@ static engineHeater eheater;
 
 void setUp(void) {
     hal_mock_set_millis(0);
+    hal_i2c_init(4, 5, 400000);
+    initI2C();
     /* Default: conditions that allow the heater to run */
     setGlobalValue(F_COOLANT_TEMP, 30.0f);        /* cold, below stop temp */
     setGlobalValue(F_VOLTS, 14.0f);               /* good voltage */

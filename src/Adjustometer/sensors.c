@@ -16,6 +16,7 @@ static bool isSignalLost(void);
 
 void initI2C(void) {
   hal_i2c_slave_init(PIN_SDA, PIN_SCL, ADJUSTOMETER_I2C_ADDR);
+  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, ADJ_STATUS_BASELINE_PENDING);
 }
 
 void initBasicPIO(void) {
@@ -26,7 +27,6 @@ void initBasicPIO(void) {
 void initSensors(void) {
   resetSensorsState();
   initBasicPIO();
-  initI2C();
 
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countAdjustometerPulses, HAL_GPIO_IRQ_FALLING);
 
@@ -50,6 +50,9 @@ static uint32_t adjustometerBaselineStableWindows = 0;
 static uint32_t adjustometerBaseline = 0;
 // Cross-core: written by ISR (Core0), read by getters (Core1).
 static volatile bool     adjustometerBaselineReady = false;
+// Post-convergence verification state.
+static bool     adjustometerVerifying = false;
+static uint32_t adjustometerVerifyStartUs = 0;
 static bool     adjustometerZeroHold = true;
 static int8_t   adjustometerZeroCandidateSign = 0;
 static uint8_t  adjustometerZeroCandidateWindows = 0;
@@ -79,6 +82,7 @@ static volatile int32_t  dbgLastNewCoeff = 0;
 #define ADJUSTOMETER_EMA_SHIFT 3U
 #define ADJUSTOMETER_BASELINE_MIN_TIME_US (ADJUSTOMETER_BASELINE_MIN_TIME_MS * 1000UL)
 #define ADJUSTOMETER_BASELINE_MAX_TIME_US (ADJUSTOMETER_BASELINE_MAX_TIME_MS * 1000UL)
+#define ADJUSTOMETER_BASELINE_VERIFY_US  (ADJUSTOMETER_BASELINE_VERIFY_MS * 1000UL)
 
 static inline int32_t absI32(int32_t value) {
   return (value < 0) ? -value : value;
@@ -134,41 +138,66 @@ static void countAdjustometerPulses(void) {
       __atomic_store_n(&adjustometerSignalHz, filtered, __ATOMIC_RELEASE);
 
       if (!adjustometerBaselineReady) {
-        if (adjustometerBaselineStartUs == 0U) {
-          adjustometerBaselineStartUs = nowUs;
-          adjustometerBaselineEstimate = filtered;
-          adjustometerBaselineStableWindows = 0U;
-        } else {
-          // Fast tracking in startup: estimate += (sample - estimate) / (2^SHIFT)
-          adjustometerBaselineEstimate = adjustometerBaselineEstimate +
-              (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >> ADJUSTOMETER_BASELINE_TRACK_SHIFT);
-
-          if (absDiffU32(filtered, adjustometerBaselineEstimate) <= ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ) {
-            adjustometerBaselineStableWindows++;
-          } else {
+        if (!adjustometerVerifying) {
+          // Phase 1: Convergence tracking
+          if (adjustometerBaselineStartUs == 0U) {
+            adjustometerBaselineStartUs = nowUs;
+            adjustometerBaselineEstimate = filtered;
             adjustometerBaselineStableWindows = 0U;
+          } else {
+            adjustometerBaselineEstimate = adjustometerBaselineEstimate +
+                (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >> ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+
+            if (absDiffU32(filtered, adjustometerBaselineEstimate) <= ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ) {
+              adjustometerBaselineStableWindows++;
+            } else {
+              adjustometerBaselineStableWindows = 0U;
+            }
           }
-        }
 
-        const uint32_t baselineElapsedUs = nowUs - adjustometerBaselineStartUs;
-        const bool minTimeReached = (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MIN_TIME_US);
-        const bool maxTimeReached = (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MAX_TIME_US);
-        const bool baselineConverged = minTimeReached &&
-            (adjustometerBaselineStableWindows >= ADJUSTOMETER_BASELINE_LOCK_WINDOWS);
+          const uint32_t baselineElapsedUs = nowUs - adjustometerBaselineStartUs;
+          const bool minTimeReached = (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MIN_TIME_US);
+          const bool maxTimeReached = (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MAX_TIME_US);
+          const bool baselineConverged = minTimeReached &&
+              (adjustometerBaselineStableWindows >= ADJUSTOMETER_BASELINE_LOCK_WINDOWS);
 
-        if (baselineConverged || maxTimeReached) {
-          adjustometerBaseline = adjustometerBaselineEstimate;
-          const uint8_t capFT = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
-          __atomic_store_n(&adjustometerBaselineFuelTemp, capFT, __ATOMIC_RELEASE);
-          adjustometerSmoothedFuelTempX256 = (uint32_t)capFT << 8;
-          // Re-anchor filter to baseline to start from a true near-zero output.
-          adjustometerFilteredHz = adjustometerBaseline;
-          __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
-          adjustometerPulse = 0;
-          adjustometerZeroHold = true;
-          adjustometerZeroCandidateSign = 0;
-          adjustometerZeroCandidateWindows = 0U;
-          __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
+          if (baselineConverged || maxTimeReached) {
+            // Convergence succeeded — enter verification phase
+            adjustometerBaseline = adjustometerBaselineEstimate;
+            adjustometerFilteredHz = adjustometerBaseline;
+            __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
+            adjustometerVerifying = true;
+            adjustometerVerifyStartUs = nowUs;
+          }
+        } else {
+          // Phase 2: Post-convergence verification
+          // Detect slow oscillator drift invisible to the fast convergence window.
+          const uint32_t drift = absDiffU32(filtered, adjustometerBaseline);
+          if (drift > ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ) {
+            // Oscillator still settling — restart convergence from scratch
+            adjustometerVerifying = false;
+            adjustometerBaselineStartUs = nowUs;
+            adjustometerBaselineEstimate = filtered;
+            adjustometerFilteredHz = filtered;
+            adjustometerBaselineStableWindows = 0U;
+          } else if ((nowUs - adjustometerVerifyStartUs) >= ADJUSTOMETER_BASELINE_VERIFY_US) {
+            // Verification passed — finalise baseline
+            adjustometerBaseline = adjustometerBaselineEstimate;
+            const uint8_t capFT = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
+            __atomic_store_n(&adjustometerBaselineFuelTemp, capFT, __ATOMIC_RELEASE);
+            adjustometerSmoothedFuelTempX256 = (uint32_t)capFT << 8;
+            adjustometerFilteredHz = adjustometerBaseline;
+            __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
+            adjustometerPulse = 0;
+            adjustometerZeroHold = true;
+            adjustometerZeroCandidateSign = 0;
+            adjustometerZeroCandidateWindows = 0U;
+            __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
+          } else {
+            // Still verifying — keep EMA-tracking so final baseline is accurate
+            adjustometerBaselineEstimate = adjustometerBaselineEstimate +
+                (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >> ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+          }
         }
         __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
       } else {
@@ -330,6 +359,14 @@ uint8_t getAdjustometerStatus(void) {
   return status;
 }
 
+bool isAdjustometerReady(void) {
+  return adjustometerBaselineReady;
+}
+
+uint32_t getBaseline(void) {
+  return adjustometerBaseline;
+}
+
 static float filteredFuelTemp = -1.0f;
 static float filteredVoltage  = -1.0f;
 
@@ -346,6 +383,8 @@ static void resetSensorsState(void) {
   adjustometerBaselineStableWindows = 0;
   adjustometerBaseline = 0;
   adjustometerBaselineReady = false;
+  adjustometerVerifying = false;
+  adjustometerVerifyStartUs = 0;
   adjustometerZeroHold = true;
   adjustometerZeroCandidateSign = 0;
   adjustometerZeroCandidateWindows = 0;

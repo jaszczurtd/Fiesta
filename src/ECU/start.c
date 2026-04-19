@@ -96,6 +96,7 @@ void initialization(void) {
 
   debugInit();
   setDebugPrefix("ECU:");
+
   deb("Build timestamp: %s", ecu_BuildDateTime);
 
   // Force local flash-backed EEPROM for this ECU build.
@@ -113,10 +114,7 @@ void initialization(void) {
   initTests();
   start_initContextMutexes();
 
-  //this has to be invoked as soon as possible, and twice
   initI2C();
-  pcf8574_init();
-  hal_i2c_deinit();
 
   initSPI();
 
@@ -126,7 +124,7 @@ void initialization(void) {
     initGPSDateAndTime();
   }
 
-  initI2C();
+  pcf8574_init();
 
   #ifdef RESET_EEPROM
   resetEEPROM();

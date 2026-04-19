@@ -3,33 +3,33 @@
 
 static void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
 
-void measureFuelTemp(void) {
-  setGlobalValue(F_FUEL_TEMP, getVP37FuelTemperature());
-}
-
-void measureVoltage(void) {
-  setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
-}
-
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {
   (void)self;
   return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
+int32_t VP37_getAdjustometer(void) {
+  adjustometer_reading_t *reading = getVP37Adjustometer();
+  if(reading == NULL || !reading->commOk) {
+    return -1;
+  }
+  return reading->pulseHz;
+}
+
 static int32_t VP37_getAdjustometerStable(VP37Pump *self) {
   int32_t count = STABILITY_ADJUSTOMETER_TAB_SIZE;
   if(count <= 0) {
-    return getVP37Adjustometer();
+    return VP37_getAdjustometer();
   }
 
-  int32_t firstValue = getVP37Adjustometer();
+  int32_t firstValue = VP37_getAdjustometer();
   int32_t sum = firstValue;
   int32_t minVal = firstValue;
   int32_t maxVal = firstValue;
   self->adjustStabilityTable[0] = firstValue;
 
   for(int32_t a = 1; a < count; a++) {
-    int32_t value = getVP37Adjustometer();
+    int32_t value = VP37_getAdjustometer();
     self->adjustStabilityTable[a] = value;
     sum += value;
 
@@ -51,7 +51,22 @@ static int32_t VP37_getAdjustometerStable(VP37Pump *self) {
 }
 
 static void VP37_updateAdjustometerPosition(VP37Pump *self) {
-  self->currentAdjustometerPosition = getVP37Adjustometer();
+  adjustometer_reading_t *reading = getVP37Adjustometer();
+  if(reading == NULL) {
+    return;
+  }
+  if(reading->commOk) {
+    self->currentAdjustometerPosition = reading->pulseHz;
+    self->adjCommLostSince = 0;
+
+    setGlobalValue(F_FUEL_TEMP, reading->fuelTempC);
+    setGlobalValue(F_VOLTS, reading->voltageRaw * 0.1f);
+  } else {
+    if(self->adjCommLostSince == 0) {
+      self->adjCommLostSince = hal_millis();
+    }
+    derr("Failed to read adjustometer for VP37 control");
+  }
 }
 
 static void VP37_applyDelay(void) {
@@ -74,7 +89,12 @@ static void VP37_makeCalibration(VP37Pump *self) {
   valToPWM(PIO_VP37_RPM, 0);
   self->VP37_ADJUST_MIN = VP37_makeCalibrationValue(self);
   self->VP37_ADJUST_MIDDLE = ((self->VP37_ADJUST_MAX - self->VP37_ADJUST_MIN) / 2) + self->VP37_ADJUST_MIN;
-  self->calibrationDone = self->VP37_ADJUST_MIDDLE > 0;
+  self->calibrationDone = (self->VP37_ADJUST_MAX > self->VP37_ADJUST_MIN) &&
+                          (self->VP37_ADJUST_MIDDLE > 0);
+  if(self->VP37_ADJUST_MAX <= self->VP37_ADJUST_MIN) {
+    derr("VP37 calibration inverted: MIN=%d >= MAX=%d (oscillator not stable?)",
+         self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX);
+  }
 
   hal_pid_controller_set_output_limits(self->adjustController,
                                        (float)self->VP37_ADJUST_MIN,
@@ -86,54 +106,6 @@ static void VP37_makeCalibration(VP37Pump *self) {
       self->VP37_OPERATE_MAX);
 }
 
-static void VP37_initVP37(VP37Pump *self) {
-  if(!self->vp37Initialized) {
-
-    self->lastThrottle = -1;
-    self->calibrationDone = false;
-    self->desiredAdjustometer = -1;
-    self->currentAdjustometerPosition = -1;
-    self->pidErr = 0;
-    self->pwmValue = VP37_PWM_MIN;
-    self->voltageCorrection = 0;
-    self->lastPWMval = -1;
-    self->finalPWM = VP37_PWM_MIN;
-    self->fuelTempTimer = NULL;
-    self->voltageTimer = NULL;
-    self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
-    self->pidTf = VP37_PID_TF;
-    self->cmdLen = 0;
-    self->cmdBuf[0] = '\0';
-
-    measureFuelTemp();
-    measureVoltage();
-
-    if(self->adjustController == NULL) {
-      self->adjustController = hal_pid_controller_create();
-    }
-
-    // Try loading tuned PID values from EEPROM; fall back to defaults.
-    if(!VP37_loadPIDFromEEPROM(self)) {
-      hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
-      hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
-      hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
-    }
-    hal_pid_controller_set_tf(self->adjustController, self->pidTf);
-    hal_pid_controller_set_max_integral(self->adjustController, PID_MAX_INTEGRAL);
-
-    if(self->fuelTempTimer == NULL) {
-      self->fuelTempTimer = hal_soft_timer_create();
-    }
-    if(self->voltageTimer == NULL) {
-      self->voltageTimer = hal_soft_timer_create();
-    }
-    (void)hal_soft_timer_begin(self->fuelTempTimer, measureFuelTemp, VP37_FUEL_TEMP_UPDATE);
-    (void)hal_soft_timer_begin(self->voltageTimer, measureVoltage, VP37_VOLTAGE_UPDATE);
-
-    self->vp37Initialized = true;
-  }
-}
-
 static void VP37_throttleCycle(VP37Pump *self) {
   if(self->desiredAdjustometer < 0) {
     return;
@@ -141,7 +113,6 @@ static void VP37_throttleCycle(VP37Pump *self) {
 
   hal_pid_controller_update_time(self->adjustController, self->pidTimeUpdate);
 
-  VP37_updateAdjustometerPosition(self);
   self->pidErr = self->desiredAdjustometer - self->currentAdjustometerPosition;
 
   float output = hal_pid_controller_update(self->adjustController, (float)self->pidErr);
@@ -166,7 +137,38 @@ void VP37_init(VP37Pump *self) {
     return;
   }
 
-  VP37_initVP37(self);
+  if(!waitForAdjustometerBaseline()) {
+    derr("VP37 adjustometer baseline not ready, cannot initialize");
+    return;
+  }
+
+  self->lastThrottle = -1;
+  self->calibrationDone = false;
+  self->desiredAdjustometer = -1;
+  self->currentAdjustometerPosition = -1;
+  self->adjCommLostSince = 0;
+  self->pidErr = 0;
+  self->pwmValue = VP37_PWM_MIN;
+  self->voltageCorrection = 0;
+  self->lastPWMval = -1;
+  self->finalPWM = VP37_PWM_MIN;
+  self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+  self->pidTf = VP37_PID_TF;
+  self->cmdLen = 0;
+  self->cmdBuf[0] = '\0';
+
+  if(self->adjustController == NULL) {
+    self->adjustController = hal_pid_controller_create();
+  }
+
+  // Try loading tuned PID values from EEPROM; fall back to defaults.
+  if(!VP37_loadPIDFromEEPROM(self)) {
+    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
+    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
+    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
+  }
+  hal_pid_controller_set_tf(self->adjustController, self->pidTf);
+  hal_pid_controller_set_max_integral(self->adjustController, PID_MAX_INTEGRAL);
 
   valToPWM(PIO_VP37_ANGLE, 0);
 
@@ -175,6 +177,8 @@ void VP37_init(VP37Pump *self) {
   self->desiredAdjustometer = -1;
 
   VP37_enableVP37(self, self->calibrationDone);
+
+  self->vp37Initialized = true;
 }
 
 void VP37_enableVP37(VP37Pump *self, bool enable) {
@@ -245,8 +249,14 @@ float VP37_getVP37PIDTimeUpdate(VP37Pump *self) {
 
 void VP37_process(VP37Pump *self) {
   if(self->vp37Initialized) {
-    if(self->currentAdjustometerPosition < MIN_ADJUSTOMETER_VAL) {
-      VP37_updateAdjustometerPosition(self);
+    VP37_updateAdjustometerPosition(self);
+
+    if(self->adjCommLostSince != 0 &&
+       (hal_millis() - self->adjCommLostSince) >= (VP37_ADJ_COMM_CUTOFF_S * SECOND)) {
+      self->vp37Initialized = false;
+      VP37_enableVP37(self, false);
+      derr("VP37 disabled: adjustometer comm lost for %u s", VP37_ADJ_COMM_CUTOFF_S);
+      return;
     }
 
     // if((self->VP37_ADJUST_MAX <= 0 || self->VP37_ADJUST_MIDDLE <= 0 || self->VP37_ADJUST_MIN <= 0) &&
@@ -255,9 +265,6 @@ void VP37_process(VP37Pump *self) {
     //   VP37_updateAdjustometerPosition(self);
     //   self->desiredAdjustometer = self->currentAdjustometerPosition;
     // }
-
-    hal_soft_timer_tick(self->fuelTempTimer);
-    hal_soft_timer_tick(self->voltageTimer);
 
     int32_t rpm = (int32_t)getGlobalValue(F_RPM);
     if(rpm > RPM_MAX_EVER) {
@@ -285,18 +292,28 @@ void VP37_process(VP37Pump *self) {
   }
 }
 
+static uint32_t lastPeriodicLogMs = 0;
+
 void VP37_showDebug(VP37Pump *self) {
-  // deb("thr:%.1f des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f",
-  //     self->lastThrottle,
-  //     self->desiredAdjustometer,
-  //     self->currentAdjustometerPosition,
-  //     getGlobalValue(F_VOLTS),
-  //     getGlobalValue(F_FUEL_TEMP),
-  //     self->finalPWM,
-  //     self->pidErr,
-  //     hal_pid_controller_get_kp(self->adjustController),
-  //     hal_pid_controller_get_ki(self->adjustController),
-  //     hal_pid_controller_get_kd(self->adjustController));
+
+  uint32_t now = hal_millis();
+  if (now - lastPeriodicLogMs >= VP37_DEBUG_UPDATE) {
+    lastPeriodicLogMs = now;
+
+    deb("thr:%.1f des:%d adj:%d V:%.1f t:%.1fC pwm:%d err:%d %.2f/%.2f/%.2f min:%d max:%d",
+      self->lastThrottle,
+      self->desiredAdjustometer,
+      self->currentAdjustometerPosition,
+      getGlobalValue(F_VOLTS),
+      getGlobalValue(F_FUEL_TEMP),
+      self->finalPWM,
+      self->pidErr,
+      hal_pid_controller_get_kp(self->adjustController),
+      hal_pid_controller_get_ki(self->adjustController),
+      hal_pid_controller_get_kd(self->adjustController),
+      self->VP37_ADJUST_MIN,
+      self->VP37_ADJUST_MAX);
+  }
 
   // ── Serial PID tuner: read commands from USB CDC ────────────────────
   while(hal_serial_available() > 0) {

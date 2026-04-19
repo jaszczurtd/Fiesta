@@ -27,6 +27,8 @@ typedef struct {
   int32_t lastCoolantTemp;
   int32_t lastOilTemp;
   bool lastIsEngineRunning;
+  adjustometer_reading_t adjustometer;
+  uint8_t adjCommErrors;
 } sensors_runtime_state_t;
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
@@ -46,11 +48,14 @@ static sensors_runtime_state_t s_sensorsState = {
   .lastEGTTemp = 0,
   .lastCoolantTemp = 0,
   .lastOilTemp = 0,
-  .lastIsEngineRunning = false
+  .lastIsEngineRunning = false,
+  .adjustometer = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false},
+  .adjCommErrors = 0
 };
 
 m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
+m_mutex_def(i2cBusMutex);
 
 static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
   if((idx < 0) || (idx >= F_LAST)) {
@@ -61,7 +66,17 @@ static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
   return true;
 }
 
+//I2C bus recovery: toggle SCL up to 9 times on GPIO level to release
+//a slave that is holding SDA low (e.g. after master reset mid-transaction).
+//Must be called BEFORE Wire.begin() / hal_i2c_init().
+
 void initI2C(void) {
+  static bool i2cMutexInited = false;
+  if(!i2cMutexInited) {
+    m_mutex_init(i2cBusMutex);
+    i2cMutexInited = true;
+  }
+  hal_i2c_bus_clear(PIN_SDA, PIN_SCL);
   hal_i2c_init(PIN_SDA, PIN_SCL, I2C_SPEED_HZ);
 }
 
@@ -219,12 +234,32 @@ float readBarPressure(void) {
   return val;
 }
 
-void pcf8574_init(void) {
+static const char *i2cEndTransmissionError(uint8_t code) {
+  switch(code) {
+    case 1:  return "data too long";
+    case 2:  return "NACK on address";
+    case 3:  return "NACK on data";
+    case 4:  return "other error";
+    case 5:  return "timeout";
+    default: return "unknown";
+  }
+}
+
+bool pcf8574_init(void) {
   s_sensorsState.pcf8574State = 0;
 
+  m_mutex_enter_blocking(i2cBusMutex);
   hal_i2c_begin_transmission(PCF8574_ADDR);
-  hal_i2c_write(s_sensorsState.pcf8574State);
-  hal_i2c_end_transmission();
+  bool success = hal_i2c_write(s_sensorsState.pcf8574State);
+  bool notFound = hal_i2c_end_transmission();
+  m_mutex_exit(i2cBusMutex);
+
+  if(!success || notFound) {
+    derr("pcf8574_init: %s (endTx=%u)", notFound ? i2cEndTransmissionError(notFound) : "write failed", (unsigned)notFound);
+  }
+
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, (!success || notFound));
+  return (success && !notFound);
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
@@ -234,33 +269,47 @@ void pcf8574_write(unsigned char pin, bool value) {
     bitClear(s_sensorsState.pcf8574State, pin);
   }
 
+  m_mutex_enter_blocking(i2cBusMutex);
   hal_i2c_begin_transmission(PCF8574_ADDR);
   bool success = hal_i2c_write(s_sensorsState.pcf8574State);
   bool notFound = hal_i2c_end_transmission();
+  m_mutex_exit(i2cBusMutex);
 
-  if(!success) {
-    derr("error writting byte to pcf8574");
-  }
-
-  if(notFound) {
-    derr("pcf8574 not found");
+  if(!success || notFound) {
+    derr("pcf8574_write: %s (endTx=%u)", notFound ? i2cEndTransmissionError(notFound) : "write failed", (unsigned)notFound);
   }
 
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, (!success || notFound));
 }
 
 bool pcf8574_read(unsigned char pin) {
-  (void)pin;  // Intentionally unused; kept for API consistency
-  
-  hal_i2c_begin_transmission(PCF8574_ADDR);
-  bool retVal = hal_i2c_read();
-  bool notFound = hal_i2c_end_transmission();
-
-  if(notFound) {
-    derr("pcf8574 not found");
+  if(pin > 7) {
+    derr("pcf8574_read invalid pin: %u", (unsigned)pin);
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+    return false;
   }
-  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, notFound);
-  return retVal;
+
+  m_mutex_enter_blocking(i2cBusMutex);
+  uint8_t received = hal_i2c_request_from(PCF8574_ADDR, 1);
+  if(received != 1) {
+    m_mutex_exit(i2cBusMutex);
+    derr("pcf8574_read: expected 1 byte, got %d", (int)received);
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+    return false;
+  }
+
+  int raw = hal_i2c_read();
+  m_mutex_exit(i2cBusMutex);
+
+  if(raw < 0) {
+    derr("pcf8574_read: hal_i2c_read failed: %d", raw);
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+    return false;
+  }
+
+  s_sensorsState.pcf8574State = (uint8_t)raw;
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
+  return bitRead(s_sensorsState.pcf8574State, pin);
 }
 
 int32_t getRAWThrottle(void) {
@@ -427,65 +476,90 @@ void valToPWM(unsigned char pin, int32_t val) {
 
 // ── Adjustometer I2C readout (replaces ADS1115) ─────────────────────────────
 
-typedef struct {
-  int16_t  pulseHz;       // deviation from baseline [Hz]
-  uint8_t  voltageRaw;    // supply voltage in 0.1 V units
-  uint8_t  fuelTempC;     // fuel temperature °C
-  uint8_t  status;        // bitmask (ADJ_STATUS_*)
-  bool     commOk;        // true if I2C transaction succeeded
-} adjustometer_reading_t;
+// Runtime I2C bus recovery: if the Adjustometer (or any I2C slave) resets
+// mid-transaction, the ECU master can get stuck.  After several consecutive
+// failed transactions, reinitialise the bus with GPIO-level recovery.
+#define I2C_RECOVERY_THRESHOLD 5
+#define ADJ_COMM_ERROR_THRESHOLD 3
+static uint8_t i2cConsecutiveErrors = 0;
+
+static void i2cCheckRecovery(void) {
+  i2cConsecutiveErrors++;
+  if(i2cConsecutiveErrors >= I2C_RECOVERY_THRESHOLD) {
+    deb("I2C: %u consecutive errors, performing bus recovery", (unsigned)i2cConsecutiveErrors);
+    hal_i2c_deinit();
+    initI2C();
+    i2cConsecutiveErrors = 0;
+  }
+}
 
 static adjustometer_reading_t readAdjustometer(void) {
-  adjustometer_reading_t r = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false};
 
-  if(hal_i2c_is_busy(ADJUSTOMETER_I2C_ADDR)) {
-    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-    derr("Adjustometer I2C bus is busy");
-    return r;
-  }
+  m_mutex_enter_blocking(i2cBusMutex);
 
   // Set register pointer to 0x00 (PULSE_HI)
   hal_i2c_begin_transmission(ADJUSTOMETER_I2C_ADDR);
   hal_i2c_write(ADJUSTOMETER_REG_PULSE_HI);
   uint8_t txErr = hal_i2c_end_transmission();
   if(txErr) {
-    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-    derr("Adjustometer I2C transmission error: %d", (int)txErr);
-    return r;
+    m_mutex_exit(i2cBusMutex);
+    derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr), (int)txErr);
+    i2cCheckRecovery();
+    s_sensorsState.adjCommErrors++;
+    if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
+      s_sensorsState.adjustometer.commOk = false;
+    }
+    return s_sensorsState.adjustometer;
   }
 
   // Read 5 registers starting from 0x00
   uint8_t received = hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_REG_COUNT);
   if(received != ADJUSTOMETER_REG_COUNT) {
+    m_mutex_exit(i2cBusMutex);
     //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
     derr("Adjustometer I2C read error: expected %d bytes, got %d", ADJUSTOMETER_REG_COUNT, (int)received);
-    return r;
+    i2cCheckRecovery();
+    s_sensorsState.adjCommErrors++;
+    if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
+      s_sensorsState.adjustometer.commOk = false;
+    }
+    return s_sensorsState.adjustometer;
   }
 
   uint8_t buf[ADJUSTOMETER_REG_COUNT];
   for(uint8_t i = 0; i < ADJUSTOMETER_REG_COUNT; i++) {
     int b = hal_i2c_read();
     if(b < 0) {
+      m_mutex_exit(i2cBusMutex);
       derr("Adjustometer I2C read error at byte %d: %d", (int)i, b);
       //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-      return r;
+      i2cCheckRecovery();
+      s_sensorsState.adjCommErrors++;
+      if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
+        s_sensorsState.adjustometer.commOk = false;
+      }
+      return s_sensorsState.adjustometer;
     }
     buf[i] = (uint8_t)b;
   }
 
+  m_mutex_exit(i2cBusMutex);
+
   //dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
 
-  r.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
-  r.voltageRaw = buf[2];
-  r.fuelTempC  = buf[3];
-  r.status     = buf[4];
-  r.commOk     = true;
+  s_sensorsState.adjustometer.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
+  s_sensorsState.adjustometer.voltageRaw = buf[2];
+  s_sensorsState.adjustometer.fuelTempC  = buf[3];
+  s_sensorsState.adjustometer.status     = buf[4];
+  s_sensorsState.adjustometer.commOk     = true;
+  s_sensorsState.adjCommErrors = 0;
+  i2cConsecutiveErrors = 0;
 
   //dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status & ADJ_STATUS_SIGNAL_LOST) != 0);
   //dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
   //dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status & ADJ_STATUS_VOLTAGE_BAD) != 0);
 
-  return r;
+  return s_sensorsState.adjustometer;
 }
 
 bool waitForAdjustometerBaseline(void) {
@@ -493,8 +567,10 @@ bool waitForAdjustometerBaseline(void) {
   while((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
     adjustometer_reading_t r = readAdjustometer();
     if(!r.commOk) {
-      derr("Adjustometer not responding during baseline wait");
-      return false;
+      /* device may still be booting – keep retrying until timeout */
+      hal_delay_ms(10);
+      watchdog_feed();
+      continue;
     }
     if((r.status & ADJ_STATUS_BASELINE_PENDING) == 0) {
       deb("Adjustometer baseline ready (%lu ms)", (unsigned long)(hal_millis() - start));
@@ -507,44 +583,15 @@ bool waitForAdjustometerBaseline(void) {
   return false;
 }
 
+adjustometer_reading_t *getVP37Adjustometer(void) {
+  readAdjustometer();
+  return &s_sensorsState.adjustometer;
+}
+
 float getSystemSupplyVoltage(void) {
-  adjustometer_reading_t r = readAdjustometer();
-  if(!r.commOk) {
+  adjustometer_reading_t *reading = getVP37Adjustometer();
+  if(reading == NULL || !reading->commOk) {
     return 0.0f;
   }
-  return (float)r.voltageRaw * 0.1f;
-}
-
-int32_t getVP37Adjustometer(void) {
-  adjustometer_reading_t r = readAdjustometer();
-  if(!r.commOk) {
-    return 0;
-  }
-  return (int32_t)r.pulseHz;
-}
-
-float getVP37FuelTemperature(void) {
-  adjustometer_reading_t r = readAdjustometer();
-  if(!r.commOk) {
-    return 0.0f;
-  }
-  return (float)r.fuelTempC;
-}
-
-unsigned char readKeyboard(void) {
-  unsigned char pinStates = 0xFF;
-
-  hal_i2c_begin_transmission(I2C_KEYBOARD);
-  bool notFound = hal_i2c_end_transmission();
-
-  if(notFound) {
-    derr("Keyboard not found");
-    return pinStates;
-  }
-
-  hal_i2c_begin_transmission(I2C_KEYBOARD);
-  pinStates = hal_i2c_read();
-  hal_i2c_end_transmission();
-
-  return pinStates;
+  return reading->voltageRaw * 0.1f;
 }

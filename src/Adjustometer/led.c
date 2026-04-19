@@ -9,9 +9,11 @@
 #define LED_BRIGHTNESS_HALF          15
 
 #define LED_SEQ_MAX  4
+#define LED_I2C_TIMEOUT_MS 2000U
 
 static uint32_t ledLastToggleMs = 0;
 static uint32_t lastI2CTransactionCount = 0;
+static uint32_t lastI2CSeenMs = 0;
 
 // Color sequence built each cycle from active conditions
 static hal_rgb_led_color_t ledSeq[LED_SEQ_MAX];
@@ -26,6 +28,7 @@ void initLed(void) {
   hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
   hal_rgb_led_off();
   lastI2CTransactionCount = hal_i2c_slave_get_transaction_count();
+  lastI2CSeenMs = hal_millis();
 }
 
 void updateLed(void) {
@@ -47,15 +50,18 @@ void updateLed(void) {
     return;
   }
 
-  // Build color sequence from active conditions
+  // Build color sequence from active conditions.
+  // Use time-based I2C activity detection to avoid rapid LED toggling:
+  // updateLed() runs every ~1 ms but I2C transactions arrive every ~10-100 ms,
+  // so per-frame comparison would falsely report "no I2C" most of the time.
   uint32_t txnCount = hal_i2c_slave_get_transaction_count();
-  bool noI2C = (txnCount == lastI2CTransactionCount);
+  if (txnCount != lastI2CTransactionCount) {
+    lastI2CTransactionCount = txnCount;
+    lastI2CSeenMs = now;
+  }
+  bool noI2C = (now - lastI2CSeenMs) >= LED_I2C_TIMEOUT_MS;
   bool fuelBroken = (status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0;
   bool voltageBad = (status & ADJ_STATUS_VOLTAGE_BAD) != 0;
-
-  if (!noI2C) {
-    lastI2CTransactionCount = txnCount;
-  }
 
   if (!noI2C && !fuelBroken && !voltageBad) {
     // All OK: steady green at 50% brightness

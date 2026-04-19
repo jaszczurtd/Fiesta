@@ -20,15 +20,17 @@ static void simulatePulses(uint32_t count, uint32_t freqHz) {
 
 /**
  * Lock baseline at freqHz by driving enough pulses to exceed
- * ADJUSTOMETER_BASELINE_MAX_TIME_MS (force lock).
+ * ADJUSTOMETER_BASELINE_MAX_TIME_MS (force convergence) plus
+ * ADJUSTOMETER_BASELINE_VERIFY_MS (post-convergence verification).
  * Pulse window is 128 (internal constant in sensors.c).
  */
 static void lockBaseline(uint32_t freqHz) {
     const uint32_t pulseWindow = 128U;
     const uint32_t periodUs  = 1000000U / freqHz;
     const uint32_t windowUs  = pulseWindow * periodUs;
-    const uint32_t maxTimeUs = ADJUSTOMETER_BASELINE_MAX_TIME_MS * 1000UL;
-    const uint32_t windows   = (maxTimeUs / windowUs) + 5U;
+    const uint32_t totalTimeUs = (ADJUSTOMETER_BASELINE_MAX_TIME_MS +
+                                  ADJUSTOMETER_BASELINE_VERIFY_MS) * 1000UL;
+    const uint32_t windows   = (totalTimeUs / windowUs) + 5U;
     simulatePulses(windows * pulseWindow, freqHz);
 }
 
