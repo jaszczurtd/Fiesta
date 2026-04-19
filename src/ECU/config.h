@@ -1,8 +1,6 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
-#include "hardwareConfig.h"
-
 #define vehicle_Vin     "WF0BXXGAJB1R32583"
 #define ecu_Name        "JASZCZUR FORD FIESTA"
 
@@ -46,7 +44,7 @@
 #define ecu_PartNumMiddleLen   4
 
 //BASIC CONTROL VALUES!
-//#define VP37
+#define VP37
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
@@ -149,10 +147,6 @@
 //just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
 
-//for PID controller (pre-calibration fallback; VP37 overrides this after calibration)
-#define PID_MAX_INTEGRAL 16384
-
-
 //glow plugs values
 #define MAX_GLOW_PLUGS_TIME SECONDS_IN_MINUTE
 
@@ -166,5 +160,7 @@
 
 //Nominal voltage for VP37 correction factor calculation.
 #define NOMINAL_VOLTAGE 12.0f
+
+#include "hardwareConfig.h"
 
 #endif

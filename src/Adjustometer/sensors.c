@@ -38,8 +38,6 @@ void initSensors(void) {
 static volatile int32_t  adjustometerPulse = 0;
 static volatile uint32_t adjustometerLastEdgeUs = 0;
 static volatile uint32_t adjustometerSignalHz = 0;
-// Cross-core fuel temperature: written by Core1, read by ISR for thermal compensation.
-static volatile uint8_t  adjustometerSharedFuelTemp = 0;
 // ISR-only state can stay non-volatile for tighter generated code.
 static uint32_t adjustometerWindowStartUs = 0;
 static uint32_t adjustometerWindowCount = 0;
@@ -56,20 +54,11 @@ static uint32_t adjustometerVerifyStartUs = 0;
 static bool     adjustometerZeroHold = true;
 static int8_t   adjustometerZeroCandidateSign = 0;
 static uint8_t  adjustometerZeroCandidateWindows = 0;
-// Fuel temperature at baseline capture — used for thermal drift compensation.
-// Cross-core: written by ISR (Core0), read by getters (Core1).
-static volatile uint8_t  adjustometerBaselineFuelTemp = 0;
-// Smoothed fuel-temperature tracker (fixed-point ×256), ISR EMA-filtered.
-static uint32_t adjustometerSmoothedFuelTempX256 = 0;
-// Adaptive thermal-compensation coefficient (×10 ×256 fixed-point for EMA smoothing).
-// Cross-core: written by ISR (Core0), read by getters (Core1).
-static volatile int32_t  adjustometerAdaptiveCoeffX10x256 = 0;
-static volatile bool     adjustometerAdaptiveReady = false;
-// ISR diagnostics — captured every window for debugging the adaptive path.
-// Cross-core: written by ISR (Core0), read by getters (Core1).
-static volatile int32_t  dbgLastDtX256 = 0;
-static volatile int32_t  dbgLastRawDrift = 0;
-static volatile int32_t  dbgLastNewCoeff = 0;
+
+// ADC EMA filter state for fuel-temp and supply-voltage readings.
+// Used by Core1 only — no atomics needed.
+static float filteredFuelTemp = -1.0f;
+static float filteredVoltage  = -1.0f;
 
 // JaszczurHAL defines SECOND in milliseconds, so convert to microseconds for Hz = us_per_second / period_us.
 #define US_PER_SECOND (SECOND * 1000UL)
@@ -183,9 +172,6 @@ static void countAdjustometerPulses(void) {
           } else if ((nowUs - adjustometerVerifyStartUs) >= ADJUSTOMETER_BASELINE_VERIFY_US) {
             // Verification passed — finalise baseline
             adjustometerBaseline = adjustometerBaselineEstimate;
-            const uint8_t capFT = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
-            __atomic_store_n(&adjustometerBaselineFuelTemp, capFT, __ATOMIC_RELEASE);
-            adjustometerSmoothedFuelTempX256 = (uint32_t)capFT << 8;
             adjustometerFilteredHz = adjustometerBaseline;
             __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
             adjustometerPulse = 0;
@@ -202,64 +188,6 @@ static void countAdjustometerPulses(void) {
         __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
       } else {
         int32_t pulse = (int32_t)filtered - (int32_t)adjustometerBaseline;
-
-        // Thermal compensation: remove frequency drift caused by temperature change.
-        // Uses EMA-smoothed fuel temperature (×256 fixed-point) to avoid
-        // ±1 °C ADC quantisation jitter propagating into the PID feedback.
-        // After ΔT ≥ 3 °C the coefficient is computed adaptively from observed data.
-        // Compensation is skipped entirely when the fuel temperature sensor is broken
-        // (raw == 0), because unreliable readings would corrupt the drift model.
-        {
-          const uint8_t curFTraw = __atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE);
-          if (curFTraw != ADJ_FUEL_TEMP_SENSOR_BROKEN) {
-            const uint32_t curFTx256 = (uint32_t)curFTraw << 8;
-            if (adjustometerSmoothedFuelTempX256 == 0U) {
-              adjustometerSmoothedFuelTempX256 = curFTx256;
-            } else {
-              adjustometerSmoothedFuelTempX256 +=
-                  ((int32_t)curFTx256 - (int32_t)adjustometerSmoothedFuelTempX256) >> THERMAL_COMP_EMA_SHIFT;
-            }
-
-            // Late baseline temperature acquisition: if the sensor wasn't ready
-            // when the baseline locked (temp was still 0), capture the first valid
-            // reading so thermal compensation can activate.
-            if (adjustometerBaselineFuelTemp == 0U) {
-              __atomic_store_n(&adjustometerBaselineFuelTemp, curFTraw, __ATOMIC_RELEASE);
-              adjustometerSmoothedFuelTempX256 = curFTx256;
-            }
-
-            if (adjustometerBaselineFuelTemp != 0U && adjustometerSmoothedFuelTempX256 != 0U) {
-              const int32_t baseFTx256 = (int32_t)((uint32_t)adjustometerBaselineFuelTemp << 8);
-              const int32_t dtX256 = (int32_t)adjustometerSmoothedFuelTempX256 - baseFTx256;
-              __atomic_store_n(&dbgLastDtX256, dtX256, __ATOMIC_RELEASE);
-
-              // Adaptive coefficient: compute actual drift rate once ΔT is large enough
-              if (dtX256 >= (int32_t)ADAPTIVE_COMP_MIN_DT_X256) {
-                const int32_t rawDrift = (int32_t)filtered - (int32_t)adjustometerBaseline;
-                const int32_t newCoeffX10 = (rawDrift * 2560) / dtX256;
-                __atomic_store_n(&dbgLastRawDrift, rawDrift, __ATOMIC_RELEASE);
-                __atomic_store_n(&dbgLastNewCoeff, newCoeffX10, __ATOMIC_RELEASE);
-                const int32_t absCoeff = absI32(newCoeffX10);
-                if (absCoeff >= ADAPTIVE_COMP_MIN_COEFF_X10 &&
-                    absCoeff <= ADAPTIVE_COMP_MAX_COEFF_X10) {
-                  const int32_t newX256 = newCoeffX10 << 8;
-                  if (!adjustometerAdaptiveReady) {
-                    __atomic_store_n(&adjustometerAdaptiveCoeffX10x256, newX256, __ATOMIC_RELEASE);
-                    __atomic_store_n(&adjustometerAdaptiveReady, true, __ATOMIC_RELEASE);
-                  } else {
-                    int32_t curCoeff = adjustometerAdaptiveCoeffX10x256;
-                    curCoeff += (newX256 - curCoeff) >> ADAPTIVE_COMP_EMA_SHIFT;
-                    __atomic_store_n(&adjustometerAdaptiveCoeffX10x256, curCoeff, __ATOMIC_RELEASE);
-                  }
-                }
-              }
-
-              const int32_t coeffX10 = adjustometerAdaptiveReady ?
-                  (adjustometerAdaptiveCoeffX10x256 >> 8) : (int32_t)THERMAL_COMP_HZ_PER_C_X10;
-              pulse -= (coeffX10 * dtX256) / 2560;
-            }
-          }
-        }
 
         const int32_t absPulse = absI32(pulse);
 
@@ -346,7 +274,11 @@ uint8_t getAdjustometerStatus(void) {
   if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
-  if (__atomic_load_n(&adjustometerSharedFuelTemp, __ATOMIC_ACQUIRE) == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
+  // Fuel-temp sensor health: filteredFuelTemp is updated by getFuelTemperatureRaw()
+  // on the same core (Core1) just before this function is called from
+  // updateI2CRegisters().  Reading it directly is therefore safe and avoids the
+  // need for a separate cross-core atomic.
+  if ((uint8_t)(filteredFuelTemp + 0.5f) == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
     status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
   }
   {
@@ -367,14 +299,10 @@ uint32_t getBaseline(void) {
   return adjustometerBaseline;
 }
 
-static float filteredFuelTemp = -1.0f;
-static float filteredVoltage  = -1.0f;
-
 static void resetSensorsState(void) {
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
-  adjustometerSharedFuelTemp = 0;
   adjustometerWindowStartUs = 0;
   adjustometerWindowCount = 0;
   adjustometerFilteredHz = 0;
@@ -388,13 +316,6 @@ static void resetSensorsState(void) {
   adjustometerZeroHold = true;
   adjustometerZeroCandidateSign = 0;
   adjustometerZeroCandidateWindows = 0;
-  adjustometerBaselineFuelTemp = 0;
-  adjustometerSmoothedFuelTempX256 = 0;
-  adjustometerAdaptiveCoeffX10x256 = 0;
-  adjustometerAdaptiveReady = false;
-  dbgLastDtX256 = 0;
-  dbgLastRawDrift = 0;
-  dbgLastNewCoeff = 0;
   filteredFuelTemp = -1.0f;
   filteredVoltage = -1.0f;
 }
@@ -424,20 +345,5 @@ uint8_t getFuelTemperatureRaw(void) {
   filteredFuelTemp = adcEma(tempC, filteredFuelTemp);
   if (isnan(filteredFuelTemp) || filteredFuelTemp < 0.0f) filteredFuelTemp = 0.0f;
   if (filteredFuelTemp > 255.0f) filteredFuelTemp = 255.0f;
-  uint8_t result = (uint8_t)(filteredFuelTemp + 0.5f);
-  __atomic_store_n(&adjustometerSharedFuelTemp, result, __ATOMIC_RELEASE);
-  return result;
+  return (uint8_t)(filteredFuelTemp + 0.5f);
 }
-
-uint8_t getBaselineFuelTemp(void) {
-  return __atomic_load_n(&adjustometerBaselineFuelTemp, __ATOMIC_ACQUIRE);
-}
-
-int32_t getAdaptiveCoeffX10(void) {
-  if (!__atomic_load_n(&adjustometerAdaptiveReady, __ATOMIC_ACQUIRE)) return -1;
-  return __atomic_load_n(&adjustometerAdaptiveCoeffX10x256, __ATOMIC_ACQUIRE) >> 8;
-}
-
-int32_t getDbgLastDtX256(void) { return __atomic_load_n(&dbgLastDtX256, __ATOMIC_ACQUIRE); }
-int32_t getDbgLastRawDrift(void) { return __atomic_load_n(&dbgLastRawDrift, __ATOMIC_ACQUIRE); }
-int32_t getDbgLastNewCoeff(void) { return __atomic_load_n(&dbgLastNewCoeff, __ATOMIC_ACQUIRE); }

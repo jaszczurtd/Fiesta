@@ -3,7 +3,6 @@
 #include "vp37.h"
 #include "dtcManager.h"
 #include "ecuContext.h"
-#include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -25,8 +24,6 @@ static void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
 
 void setUp(void) {
     hal_mock_set_millis(0);
-    hal_mock_eeprom_reset();
-    hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
     hal_i2c_init(4, 5, 400000);
     initSensors();
     initI2C();
@@ -156,49 +153,57 @@ void test_dtc_array_covers_adjustometer_codes(void) {
     TEST_ASSERT_TRUE(foundVolt);
 }
 
-// ── VP37 PID EEPROM save/load tests ─────────────────────────────────────────
+// ── VP37 PID API tests ──────────────────────────────────────────────────────
 
-void test_vp37_pid_save_and_load(void) {
+void test_vp37_pid_setter_updates_controller_gains(void) {
     ecu_context_t *ctx = getECUContext();
     VP37Pump *pump = &ctx->injectionPump;
     memset(pump, 0, sizeof(*pump));
     pump->adjustController = hal_pid_controller_create();
-    pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
 
-    // Set custom PID values
     VP37_setVP37PID(pump, 0.55f, 0.12f, 0.025f, false);
-    pump->pidTimeUpdate = 50.0f;
-
-    // Save
-    TEST_ASSERT_TRUE(VP37_savePIDToEEPROM(pump));
-
-    // Change values
-    VP37_setVP37PID(pump, 0.0f, 0.0f, 0.0f, false);
-    pump->pidTimeUpdate = 1.0f;
-
-    // Reload
-    TEST_ASSERT_TRUE(VP37_loadPIDFromEEPROM(pump));
 
     float kp, ki, kd;
     VP37_getVP37PIDValues(pump, &kp, &ki, &kd);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.55f, kp);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.12f, ki);
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.025f, kd);
-    TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.0f, pump->pidTimeUpdate);
 
     hal_pid_controller_destroy(pump->adjustController);
 }
 
-void test_vp37_pid_load_returns_false_when_empty(void) {
+void test_vp37_pid_reset_restores_pwm_tracking_state(void) {
     ecu_context_t *ctx = getECUContext();
     VP37Pump *pump = &ctx->injectionPump;
     memset(pump, 0, sizeof(*pump));
     pump->adjustController = hal_pid_controller_create();
+    pump->lastPWMval = 777;
+    pump->finalPWM = 888;
 
-    // EEPROM is clean, load should fail
-    TEST_ASSERT_FALSE(VP37_loadPIDFromEEPROM(pump));
+    VP37_setVP37PID(pump, 0.20f, 0.10f, 0.05f, true);
+
+    TEST_ASSERT_EQUAL_INT32(-1, pump->lastPWMval);
+    TEST_ASSERT_EQUAL_INT32(VP37_PWM_MIN, pump->finalPWM);
 
     hal_pid_controller_destroy(pump->adjustController);
+}
+
+void test_vp37_throttle_caps_target_to_configured_range(void) {
+    ecu_context_t *ctx = getECUContext();
+    VP37Pump *pump = &ctx->injectionPump;
+    memset(pump, 0, sizeof(*pump));
+    pump->calibrationDone = true;
+    pump->VP37_ADJUST_MIN = 100;
+    pump->VP37_ADJUST_MAX = 9100;
+
+    VP37_setVP37Throttle(pump, 100.0f);
+
+    int32_t expectedTarget = (int32_t)mapfloat((float)VP37_ACCELERATION_MAX,
+                                               VP37_PERCENT_MIN,
+                                               VP37_PERCENT_MAX,
+                                               (float)pump->VP37_ADJUST_MIN,
+                                               (float)pump->VP37_ADJUST_MAX);
+    TEST_ASSERT_EQUAL_INT32(expectedTarget, pump->desiredAdjustometerTarget);
 }
 
 void test_vp37_pid_time_update_setter(void) {
@@ -262,9 +267,10 @@ int main(void) {
     RUN_TEST(test_adjustometer_comm_lost_on_nack);
     RUN_TEST(test_dtc_array_covers_adjustometer_codes);
 
-    // VP37 PID EEPROM
-    RUN_TEST(test_vp37_pid_save_and_load);
-    RUN_TEST(test_vp37_pid_load_returns_false_when_empty);
+    // VP37 PID / throttle API
+    RUN_TEST(test_vp37_pid_setter_updates_controller_gains);
+    RUN_TEST(test_vp37_pid_reset_restores_pwm_tracking_state);
+    RUN_TEST(test_vp37_throttle_caps_target_to_configured_range);
     RUN_TEST(test_vp37_pid_time_update_setter);
     RUN_TEST(test_vp37_percentage_error_constant);
 
