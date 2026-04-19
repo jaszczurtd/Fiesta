@@ -18,19 +18,48 @@
 extern "C" {
 #endif
 
-#define VP37_DEBUG_UPDATE 500
+#define VP37_DEBUG_UPDATE 50
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
-#define VP37_PID_TIME_UPDATE 80.0
-#define VP37_PID_KP 0.42f
-#define VP37_PID_KI 0.11f
-#define VP37_PID_KD 0.02f
+#define VP37_PID_TIME_UPDATE 150.0
+// PID + Feedforward (FF) architecture:
+//   pwm = pwm_ff(desired) + pid_correction
+// PID output is now interpreted as PWM correction (units: PWM counts),
+// NOT as a position estimate. Gains are in PWM/Hz (Kp), PWM/(Hz*s) (Ki),
+// PWM*s/Hz (Kd). Old position-tracking gains were ~4x larger because the
+// adj->PWM linear map had ratio ~0.236 (1890 PWM / 8000 Hz).
+#define VP37_PID_KP 0.08f
+#define VP37_PID_KI 0.06f
+#define VP37_PID_KD 0.015f
 #define VP37_PID_TF 0.068f
+#define VP37_PID_MAX_INTEGRAL 4096
+
+// Error deadband [Hz]: errors smaller than this are treated as zero
+// to prevent integral windup near the setpoint. ~0.6% of full range.
+#define VP37_PID_DEADBAND 40
+// Maximum PID correction magnitude in PWM units. PID adds at most
+// +/- VP37_PID_CORR_LIMIT to the feedforward PWM. Keeps the controller
+// from ramming the actuator into mechanical stops on transients.
+#define VP37_PID_CORR_LIMIT 220
+// Feedforward steady-state PWM at adjustometer MIN/MAX positions.
+// Determined empirically from logs (steady-state PWM observed at idle vs.
+// near full position). Linear interpolation between these points provides
+// the bulk of the control signal; PID only trims the residual.
+#define VP37_PWM_FF_AT_MIN 480
+#define VP37_PWM_FF_AT_MAX 690
+// Setpoint slew rate limit [Hz per PID cycle].
+// Caps how fast desiredAdjustometer can change between PID updates.
+// Prevents the FF term from issuing huge instantaneous PWM jumps when
+// throttle changes rapidly. 400/cycle @ 150ms = ~2667 Hz/s = full range
+// (8000 Hz) traversal in ~3 s.
+// Asymmetric: down-slew is slower because mechanical inertia + return spring
+// already drag the actuator back; matching FF too quickly causes the actuator
+// to overshoot the new (lower) target by 500-1100 Hz on throttle release.
+#define VP37_DESIRED_SLEW_PER_CYCLE 800
+#define VP37_DESIRED_SLEW_PER_CYCLE_DOWN 500
 
 // calibration / stabilization values
-#define VOLT_PER_PWM 0.0421
-#define VOLTAGE_THRESHOLD 0.2
 #define PERCENTAGE_ERROR 3.0
 
 #define VP37_OPERATION_DELAY 5 //microseconds
@@ -38,7 +67,7 @@ extern "C" {
 #define STABILITY_ADJUSTOMETER_TAB_SIZE 4
 #define MIN_ADJUSTOMETER_VAL 10
 
-#define VP37_CALIBRATION_MAX_PERCENTAGE 90
+#define VP37_CALIBRATION_MAX_PERCENTAGE 80
 #define VP37_AVERAGE_VALUES_AMOUNT 5
 
 #define VP37_PWM_MIN 378
@@ -46,25 +75,37 @@ extern "C" {
 
 #define VP37_ADJUST_TIMER 200
 
+//define this, to avoid magic numbers in the code
+#define VP37_PERCENT_MIN 0
+#define VP37_PERCENT_MAX 100
+
+//Throttle range in percentage units. 
+//Adjusting this, we can limit the maximum throttle range available to the user. 
+//100 means full range, 50 means half, etc.
 #define VP37_ACCELERATION_MIN 0
-#define VP37_ACCELERATION_MAX 100
+#define VP37_ACCELERATION_MAX 90
 
 // Ramp-down step per cycle (in throttle percentage units).
 // Higher = faster descent. 0.5 = smooth, 5+ = snappy.
-#define VP37_THROTTLE_RAMP_DOWN_STEP 0.9f
-
+#define VP37_THROTTLE_RAMP_DOWN_STEP 2.9f
+#define VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS 20
 // Time in seconds with commOk==false before VP37 is disabled.
 #define VP37_ADJ_COMM_CUTOFF_S 5
 
+#define VP37_MIN_COMPENSATION_VOLTAGE 7.0f
+
+// Soft floor on the commanded PWM (in nominal-voltage units), applied BEFORE
+// voltage compensation. While the actuator is still travelling toward a
+// higher target, the slewed setpoint (and thus FF) is well below the
+// final target's FF. PID alone may not push hard enough on the way up,
+// causing sluggish climb. The soft floor keeps pwmValue at least
+// (FF_at_target - margin) so the coil always has enough drive to reach
+// the target promptly. Margin allows PID to undershoot slightly when the
+// adjustometer overshoots, without yanking PWM back to the FF curve.
+#define VP37_PWM_FF_SOFT_FLOOR_MARGIN 80
+
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
-
-// EEPROM keys for persisting tuned PID values
-#define VP37_KV_KEY_PID_KP  0xE100u
-#define VP37_KV_KEY_PID_KI  0xE101u
-#define VP37_KV_KEY_PID_KD  0xE102u
-#define VP37_KV_KEY_PID_TU  0xE103u
-#define VP37_KV_KEY_PID_TF  0xE104u
 
 // Serial command buffer for runtime PID tuning
 #define VP37_CMD_BUF_SIZE 64
@@ -78,6 +119,10 @@ typedef struct {
   bool vp37Initialized;
   float lastThrottle;
   bool calibrationDone;
+  // Setpoint pipeline:
+  //   desiredAdjustometerTarget : raw target written by VP37_setVP37Throttle()
+  //   desiredAdjustometer       : slew-rate limited setpoint actually fed to PID
+  int32_t desiredAdjustometerTarget;
   int32_t desiredAdjustometer;
   int32_t currentAdjustometerPosition;
   int32_t pidErr;
@@ -93,6 +138,7 @@ typedef struct {
   char cmdBuf[VP37_CMD_BUF_SIZE];
   uint8_t cmdLen;
   uint32_t adjCommLostSince;
+  uint32_t throttleRampLastMs;
 } VP37Pump;
 
 void VP37_init(VP37Pump *self);
@@ -103,13 +149,9 @@ void VP37_showDebug(VP37Pump *self);
 
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 void VP37_setVP37Throttle(VP37Pump *self, float accel);
-int32_t VP37_getMinVP37ThrottleValue(VP37Pump *self);
-int32_t VP37_getMaxVP37ThrottleValue(VP37Pump *self);
 void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
-bool VP37_savePIDToEEPROM(VP37Pump *self);
-bool VP37_loadPIDFromEEPROM(VP37Pump *self);
 
 #ifdef __cplusplus
 }

@@ -41,10 +41,10 @@ void looper(void) {
 }
 
 static void updateI2CRegisters(void) {
+  // getAdjustometerPulses() returns abs() — VP37 deflects only in one direction,
+  // so pulse is always >= 0.  Only the upper int16_t bound needs clamping.
   int32_t pulse = getAdjustometerPulses();
-  // Clamp to int16_t range for register map
   if (pulse > 32767) pulse = 32767;
-  if (pulse < -32768) pulse = -32768;
 
   uint8_t voltage  = getSupplyVoltageRaw();
   uint8_t fuelTemp = getFuelTemperatureRaw();
@@ -75,18 +75,14 @@ static void updateI2CRegisters(void) {
   uint32_t now = hal_millis();
   if (now - lastPeriodicLogMs >= DEBUG_UPDATE) {
     lastPeriodicLogMs = now;
-    deb("p:%ld f:%lu.%lukHz v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld bl:%ld ready:%d\n", 
-      (long)pulse, 
-      (unsigned long)(getAdjustometerSignalHz() / 1000U), 
-      (unsigned long)((getAdjustometerSignalHz() % 1000U) / 100U), 
-      voltage, 
-      fuelTemp, 
-      status, getBaselineFuelTemp(), 
-      (long)getAdaptiveCoeffX10(), 
-      (long)getDbgLastDtX256(), 
-      (long)getDbgLastRawDrift(), 
-      (long)getDbgLastNewCoeff(),
-      getBaseline(),
+    deb("p:%ld f:%lu.%lukHz v:%u ft:%u s:%u bl:%lu ready:%d\n",
+      (long)pulse,
+      (unsigned long)(getAdjustometerSignalHz() / 1000U),
+      (unsigned long)((getAdjustometerSignalHz() % 1000U) / 100U),
+      voltage,
+      fuelTemp,
+      status,
+      (unsigned long)getBaseline(),
       isAdjustometerReady());
   }
 #endif

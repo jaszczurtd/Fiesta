@@ -21,6 +21,7 @@ extern "C" {
 #define SOLENOID_UPDATE_TIME 700
 #define PRESSURE_LIMITER_FACTOR 2
 #define MIN_TEMPERATURE_CORRECTION 30
+#define TURBO_DEBUG_UPDATE 1500
 
 typedef struct {
   unsigned long lastSolenoidUpdate;

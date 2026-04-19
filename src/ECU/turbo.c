@@ -136,8 +136,15 @@ void Turbo_showDebug(Turbo *self) {
   }
 
   if(pr) {
-    deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d",
-      self->lastThrottlePos, self->lastPosThrottle, self->lastPedalPressed, self->lastRPM_index,
-      self->lastPressurePercentage, self->n75);
+    static uint32_t lastPeriodicLogMs = 0;
+
+    uint32_t now = hal_millis();
+    if (now - lastPeriodicLogMs >= TURBO_DEBUG_UPDATE) {
+      lastPeriodicLogMs = now;
+
+      deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d",
+       self->lastThrottlePos, self->lastPosThrottle, self->lastPedalPressed, self->lastRPM_index,
+       self->lastPressurePercentage, self->n75);
+    }
   }
 }
