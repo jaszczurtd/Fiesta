@@ -18,6 +18,8 @@
 extern "C" {
 #endif
 
+#define VP37_DEBUG_UPDATE 500
+
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
 #define VP37_PID_TIME_UPDATE 80.0
@@ -36,11 +38,7 @@ extern "C" {
 #define STABILITY_ADJUSTOMETER_TAB_SIZE 4
 #define MIN_ADJUSTOMETER_VAL 10
 
-//miliseconds
-#define VP37_FUEL_TEMP_UPDATE 500
-#define VP37_VOLTAGE_UPDATE 10
-
-#define VP37_CALIBRATION_MAX_PERCENTAGE 80
+#define VP37_CALIBRATION_MAX_PERCENTAGE 90
 #define VP37_AVERAGE_VALUES_AMOUNT 5
 
 #define VP37_PWM_MIN 378
@@ -54,6 +52,9 @@ extern "C" {
 // Ramp-down step per cycle (in throttle percentage units).
 // Higher = faster descent. 0.5 = smooth, 5+ = snappy.
 #define VP37_THROTTLE_RAMP_DOWN_STEP 0.9f
+
+// Time in seconds with commOk==false before VP37 is disabled.
+#define VP37_ADJ_COMM_CUTOFF_S 5
 
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
@@ -85,14 +86,13 @@ typedef struct {
   int32_t lastPWMval;
   int32_t finalPWM;
   float lastVolts;
-  hal_soft_timer_t fuelTempTimer;
-  hal_soft_timer_t voltageTimer;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
   float pidTimeUpdate;
   float pidTf;
   char cmdBuf[VP37_CMD_BUF_SIZE];
   uint8_t cmdLen;
+  uint32_t adjCommLostSince;
 } VP37Pump;
 
 void VP37_init(VP37Pump *self);

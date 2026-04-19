@@ -4,11 +4,22 @@
 #include <hal/hal_i2c_slave.h>
 #include "led.h"
 
+#ifdef DEBUG_MAX_CHANGES
+static int32_t lastPulse = 0;
+static uint8_t lastVoltage = 0;
+static uint8_t lastFuelTemp = 0;
+#endif
+static uint32_t lastPeriodicLogMs = 0;
+
 void initialization(void) {
 
   debugInit();
   setDebugPrefix("Adj:");
- 
+
+  setupWatchdog(NULL, WATCHDOG_TIME);
+  
+  initI2C();
+
   initSensors();
   initLed();
 
@@ -29,13 +40,6 @@ void looper(void) {
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
-#ifdef DEBUG_MAX_CHANGES
-static int32_t lastPulse = 0;
-static uint8_t lastVoltage = 0;
-static uint8_t lastFuelTemp = 0;
-#endif
-static uint32_t lastPeriodicLogMs = 0;
-
 static void updateI2CRegisters(void) {
   int32_t pulse = getAdjustometerPulses();
   // Clamp to int16_t range for register map
@@ -46,17 +50,15 @@ static void updateI2CRegisters(void) {
   uint8_t fuelTemp = getFuelTemperatureRaw();
   uint8_t status   = getAdjustometerStatus();
 
-  hal_i2c_slave_reg_write16(ADJUSTOMETER_REG_PULSE_HI, (uint16_t)(int16_t)pulse);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_VOLTAGE, voltage);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_FUEL_TEMP, fuelTemp);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, status);
+  if(isAdjustometerReady()) {
+    hal_i2c_slave_reg_write16(ADJUSTOMETER_REG_PULSE_HI, (uint16_t)(int16_t)pulse);
+    hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_VOLTAGE, voltage);
+    hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_FUEL_TEMP, fuelTemp);
+    hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, status);
+  }
 
  #ifdef DEBUG_DEEP 
  #ifdef DEBUG_MAX_CHANGES
-   if (pulse != lastPulse) {
-     deb("p: %ld\n", (long)pulse);
-     lastPulse = pulse;
-   }
   if (pulse != lastPulse) {
     deb("p: %ld\n", (long)pulse);
     lastPulse = pulse;
@@ -73,7 +75,19 @@ static void updateI2CRegisters(void) {
   uint32_t now = hal_millis();
   if (now - lastPeriodicLogMs >= DEBUG_UPDATE) {
     lastPeriodicLogMs = now;
-    deb("p:%ld f:%lu.%lukHz v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld\n", (long)pulse, (unsigned long)(getAdjustometerSignalHz() / 1000U), (unsigned long)((getAdjustometerSignalHz() % 1000U) / 100U), voltage, fuelTemp, status, getBaselineFuelTemp(), (long)getAdaptiveCoeffX10(), (long)getDbgLastDtX256(), (long)getDbgLastRawDrift(), (long)getDbgLastNewCoeff());
+    deb("p:%ld f:%lu.%lukHz v:%u ft:%u s:%u bft:%u ac:%ld dt:%ld rd:%ld nc:%ld bl:%ld ready:%d\n", 
+      (long)pulse, 
+      (unsigned long)(getAdjustometerSignalHz() / 1000U), 
+      (unsigned long)((getAdjustometerSignalHz() % 1000U) / 100U), 
+      voltage, 
+      fuelTemp, 
+      status, getBaselineFuelTemp(), 
+      (long)getAdaptiveCoeffX10(), 
+      (long)getDbgLastDtX256(), 
+      (long)getDbgLastRawDrift(), 
+      (long)getDbgLastNewCoeff(),
+      getBaseline(),
+      isAdjustometerReady());
   }
 #endif
 }

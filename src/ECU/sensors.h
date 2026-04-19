@@ -16,6 +16,14 @@
 extern "C" {
 #endif
 
+typedef struct {
+  int16_t  pulseHz;       // deviation from baseline [Hz]
+  uint8_t  voltageRaw;    // supply voltage in 0.1 V units
+  uint8_t  fuelTempC;     // fuel temperature °C
+  uint8_t  status;        // bitmask (ADJ_STATUS_*)
+  bool     commOk;        // true if I2C transaction succeeded
+} adjustometer_reading_t;
+
 //in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 
@@ -37,7 +45,7 @@ float readBarPressure(void);
 int32_t getThrottlePercentage(void);
 int32_t getPercentageEngineLoad(void);
 
-void pcf8574_init(void);
+bool pcf8574_init(void);
 void pcf8574_write(unsigned char pin, bool value);
 bool pcf8574_read(unsigned char pin);
 void valToPWM(unsigned char pin, int32_t val);
@@ -53,11 +61,9 @@ bool isDPFRegenerating(void);
 void updateValsForDebug(void);
 void pwm_init(void);
 
-float getSystemSupplyVoltage(void);
-int32_t getVP37Adjustometer(void);
-float getVP37FuelTemperature(void);
+adjustometer_reading_t *getVP37Adjustometer(void);
 bool waitForAdjustometerBaseline(void);
-unsigned char readKeyboard(void);
+float getSystemSupplyVoltage(void);
 
 #ifdef __cplusplus
 }

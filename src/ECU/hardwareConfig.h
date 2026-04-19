@@ -74,8 +74,12 @@
 #define ADJ_STATUS_BASELINE_PENDING 0x04
 #define ADJ_STATUS_VOLTAGE_BAD     0x08
 
-// Maximum wait for Adjustometer baseline calibration at startup [ms]
-#define ADJUSTOMETER_BASELINE_WAIT_MS 500
+// Maximum wait for Adjustometer baseline calibration at startup [ms].
+// Must accommodate the oscillator warm-up period (ADJUSTOMETER_WARMUP_MS
+// on the Adjustometer side) plus convergence (250 ms) plus post-convergence
+// verification (1000 ms).  Extra margin handles repeated convergence restarts
+// caused by slow oscillator drift on cold power-on.
+#define ADJUSTOMETER_BASELINE_WAIT_MS 8000
 
 //PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
@@ -120,7 +124,5 @@
 
 //dividers - analog reads
 #define DIVIDER_PRESSURE_BAR 955
-
-#define I2C_KEYBOARD 0x24
 
 #endif

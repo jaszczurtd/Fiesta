@@ -16,55 +16,8 @@ static bool s_testsInitialized = false;
 //=============================================================================
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
 
-static hal_soft_timer_t s_testsMainTimer = NULL;
-static Keyboard s_kb;
 static PIDValues s_pidVal;
 static CyclicTest s_ct;
-
-/// @brief Handle keyboard input for PID tuning
-/// Allows interactive adjustment of VP37 PID gains via keyboard pins
-static bool getKeyboardInput(void) {
-  s_kb.key = readKeyboard();
-  if(s_kb.key != 0xFF) {
-    deb("keyPressed: (%d) 0x%02X", s_kb.key, s_kb.key);
-  }
-
-  if(s_kb.keyPressed && s_kb.key == 0xFF) {
-    s_kb.keyPressed = false;
-    ecu_context_t *ctx = getECUContext();
-    VP37_setVP37PID(&ctx->injectionPump, s_pidVal.kP, s_pidVal.kI, s_pidVal.kD, true);
-    deb("PID Update: Kp=%.4f Ki=%.4f Kd=%.4f", s_pidVal.kP, s_pidVal.kI, s_pidVal.kD);
-  }
-
-  for(int i = 0; i < 8; i++) {
-    if((s_kb.key & (1 << i)) == 0 && (s_kb.lastKeyState & (1 << i)) != 0) {
-      s_kb.keyPressed = true;
-      switch(i) {
-        case 2:
-          s_pidVal.kP += s_ct.uv;
-          break;
-        case 5:
-          s_pidVal.kP = (s_pidVal.kP > s_ct.uv) ? (s_pidVal.kP - s_ct.uv) : 0.0f;
-          break;
-        case 1:
-          s_pidVal.kI += s_ct.uv;
-          break;
-        case 4:
-          s_pidVal.kI = (s_pidVal.kI > s_ct.uv) ? (s_pidVal.kI - s_ct.uv) : 0.0f;
-          break;
-        case 0:
-          s_pidVal.kD += s_ct.uv;
-          break;
-        case 3:
-          s_pidVal.kD = (s_pidVal.kD > s_ct.uv) ? (s_pidVal.kD - s_ct.uv) : 0.0f;
-          break;
-      }
-    }
-  }
-
-  s_kb.lastKeyState = s_kb.key;
-  return true;
-}
 
 /// @brief Generate cyclic throttle ramp for VP37 (0-100-0%)
 /// Allows observation of PID response during tuning
@@ -91,14 +44,6 @@ static int VP37cyclicTest(void) {
 /// @brief Initialize tests based on enabled directives
 bool initTests(void) {
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
-  s_kb.lastKeyState = 0xFF;
-  s_kb.keyPressed = false;
-  s_kb.key = 0xFF;
-
-  s_testsMainTimer = hal_soft_timer_create();
-  if(s_testsMainTimer != NULL) {
-    (void)hal_soft_timer_begin(s_testsMainTimer, (void (*)(void))getKeyboardInput, ENGINE_KEYBOARD_UPDATE);
-  }
 
   ecu_context_t *ctx = getECUContext();
   VP37_getVP37PIDValues(&ctx->injectionPump, &s_pidVal.kP, &s_pidVal.kI, &s_pidVal.kD);
@@ -140,8 +85,5 @@ void tickTests(void) {
   ecu_context_t *ctx = getECUContext();
   VP37_setVP37Throttle(&ctx->injectionPump, thr);
 
-  if(s_testsMainTimer != NULL) {
-    hal_soft_timer_tick(s_testsMainTimer);
-  }
 #endif
 }

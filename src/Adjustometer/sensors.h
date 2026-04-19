@@ -57,6 +57,9 @@ int32_t  getAdaptiveCoeffX10(void);
 int32_t  getDbgLastDtX256(void);
 int32_t  getDbgLastRawDrift(void);
 int32_t  getDbgLastNewCoeff(void);
+uint32_t  getBaseline(void);
+bool isAdjustometerReady(void);
+
 #ifdef __cplusplus
 }
 #endif

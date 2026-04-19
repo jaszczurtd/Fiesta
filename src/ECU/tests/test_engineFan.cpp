@@ -28,6 +28,8 @@ static engineFan efan;
 
 void setUp(void) {
     hal_mock_set_millis(0);
+    hal_i2c_init(4, 5, 400000);
+    initI2C();
     setGlobalValue(F_COOLANT_TEMP, 0.0f);
     setGlobalValue(F_RPM, 0.0f);
     setGlobalValue(F_INTAKE_TEMP, 0.0f);

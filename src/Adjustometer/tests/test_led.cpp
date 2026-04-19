@@ -26,8 +26,9 @@ static void lockBaseline(uint32_t freqHz) {
     const uint32_t pulseWindow = 128U;
     const uint32_t periodUs  = 1000000U / freqHz;
     const uint32_t windowUs  = pulseWindow * periodUs;
-    const uint32_t maxTimeUs = ADJUSTOMETER_BASELINE_MAX_TIME_MS * 1000UL;
-    const uint32_t windows   = (maxTimeUs / windowUs) + 5U;
+    const uint32_t totalTimeUs = (ADJUSTOMETER_BASELINE_MAX_TIME_MS +
+                                  ADJUSTOMETER_BASELINE_VERIFY_MS) * 1000UL;
+    const uint32_t windows   = (totalTimeUs / windowUs) + 5U;
     simulatePulses(windows * pulseWindow, freqHz);
 }
 
@@ -125,9 +126,9 @@ void test_signal_lost_red_blink(void) {
 void test_no_i2c_red_green_cycle(void) {
     lockBaseline(10000);
     settleAdcFilters();
-    /* hal_mock_advance_millis also advances micros, so fire keepSignalAlive
-     * AFTER the millis advance to refresh ISR edges before updateLed. */
-    hal_mock_advance_millis(1000);
+    /* Advance past LED_I2C_TIMEOUT_MS (2000 ms) so noI2C triggers,
+     * then keep signal alive so isSignalLost() stays false. */
+    hal_mock_advance_millis(2500);
     keepSignalAlive();
     updateLed();
     hal_rgb_led_color_t first = hal_mock_rgb_led_get_color();
