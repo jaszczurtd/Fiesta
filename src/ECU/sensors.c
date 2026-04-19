@@ -263,6 +263,11 @@ bool pcf8574_init(void) {
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
+  if(pin > 7) {
+    derr("pcf8574_write invalid pin: %u", (unsigned)pin);
+    return;
+  }
+
   if(value) {
     bitSet(s_sensorsState.pcf8574State, pin);
   }  else {
@@ -285,7 +290,6 @@ void pcf8574_write(unsigned char pin, bool value) {
 bool pcf8574_read(unsigned char pin) {
   if(pin > 7) {
     derr("pcf8574_read invalid pin: %u", (unsigned)pin);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
     return false;
   }
 
@@ -336,7 +340,7 @@ void readMediumValues(void) {
       break;
 #endif
   }
-  if(s_sensorsState.lowCurrentValue++ > F_LAST) {
+  if(s_sensorsState.lowCurrentValue++ >= F_LAST) {
     s_sensorsState.lowCurrentValue = 0;
   }
 }

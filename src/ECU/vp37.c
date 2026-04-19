@@ -123,7 +123,10 @@ static void VP37_throttleCycle(VP37Pump *self) {
     self->lastVolts = volts;
   }
 
-  self->finalPWM = self->pwmValue * (12.0f / self->lastVolts);
+  if(self->lastVolts == 0) {
+    self->lastVolts = NOMINAL_VOLTAGE; // avoid division by zero; assume nominal voltage
+  }
+  self->finalPWM = self->pwmValue * (NOMINAL_VOLTAGE / self->lastVolts);
   self->finalPWM = hal_constrain(self->finalPWM, (int32_t)VP37_PWM_MIN, (int32_t)(VP37_PWM_MAX));
 
   if(self->lastPWMval != self->finalPWM) {
