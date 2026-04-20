@@ -20,6 +20,14 @@ static void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
     hal_mock_i2c_inject_rx(buf, 5);
 }
 
+static void injectAdjRegisterDataRepeated(int count, int16_t pulseHz,
+                                          uint8_t voltage, uint8_t fuelTemp,
+                                          uint8_t status) {
+    for(int i = 0; i < count; i++) {
+        injectAdjRegisterData(pulseHz, voltage, fuelTemp, status);
+    }
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 void setUp(void) {
@@ -222,6 +230,31 @@ void test_vp37_percentage_error_constant(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, PERCENTAGE_ERROR);
 }
 
+void test_vp37_init_returns_already_initialized(void) {
+    ecu_context_t *ctx = getECUContext();
+    VP37Pump *pump = &ctx->injectionPump;
+    memset(pump, 0, sizeof(*pump));
+    pump->vp37Initialized = true;
+
+    VP37InitStatus status = VP37_init(pump);
+
+    TEST_ASSERT_EQUAL_INT(VP37_INIT_ALREADY_INITIALIZED, status);
+}
+
+void test_vp37_init_returns_ok_when_baseline_ready(void) {
+    ecu_context_t *ctx = getECUContext();
+    VP37Pump *pump = &ctx->injectionPump;
+    memset(pump, 0, sizeof(*pump));
+
+    // Ensure all reads done during baseline wait + calibration have valid data.
+    injectAdjRegisterDataRepeated(64, 1200, 132, 40, ADJ_STATUS_OK);
+
+    VP37InitStatus status = VP37_init(pump);
+
+    TEST_ASSERT_EQUAL_INT(VP37_INIT_OK, status);
+    TEST_ASSERT_TRUE(pump->vp37Initialized);
+}
+
 // ── Int16 BE encoding edge cases ────────────────────────────────────────────
 
 void test_adjustometer_big_endian_byte_order(void) {
@@ -273,6 +306,8 @@ int main(void) {
     RUN_TEST(test_vp37_throttle_caps_target_to_configured_range);
     RUN_TEST(test_vp37_pid_time_update_setter);
     RUN_TEST(test_vp37_percentage_error_constant);
+    RUN_TEST(test_vp37_init_returns_already_initialized);
+    RUN_TEST(test_vp37_init_returns_ok_when_baseline_ready);
 
     return UNITY_END();
 }

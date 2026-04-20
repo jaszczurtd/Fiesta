@@ -18,7 +18,7 @@
 extern "C" {
 #endif
 
-#define VP37_DEBUG_UPDATE 50
+#define VP37_DEBUG_UPDATE 500
 
 #define DEFAULT_INJECTION_PRESSURE 300 //bar
 
@@ -83,7 +83,7 @@ extern "C" {
 //Adjusting this, we can limit the maximum throttle range available to the user. 
 //100 means full range, 50 means half, etc.
 #define VP37_ACCELERATION_MIN 0
-#define VP37_ACCELERATION_MAX 90
+#define VP37_ACCELERATION_MAX 100
 
 // Ramp-down step per cycle (in throttle percentage units).
 // Higher = faster descent. 0.5 = smooth, 5+ = snappy.
@@ -106,9 +106,6 @@ extern "C" {
 
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
-
-// Serial command buffer for runtime PID tuning
-#define VP37_CMD_BUF_SIZE 64
 
 void measureFuelTemp(void);
 void measureVoltage(void);
@@ -135,13 +132,18 @@ typedef struct {
   int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
   float pidTimeUpdate;
   float pidTf;
-  char cmdBuf[VP37_CMD_BUF_SIZE];
-  uint8_t cmdLen;
   uint32_t adjCommLostSince;
   uint32_t throttleRampLastMs;
 } VP37Pump;
 
-void VP37_init(VP37Pump *self);
+typedef enum {
+  VP37_INIT_OK = 0,
+  VP37_INIT_ALREADY_INITIALIZED,
+  VP37_INIT_BASELINE_NOT_READY,
+  VP37_INIT_PID_CREATE_FAILED
+} VP37InitStatus;
+
+VP37InitStatus VP37_init(VP37Pump *self);
 void VP37_process(VP37Pump *self);
 void VP37_enableVP37(VP37Pump *self, bool enable);
 bool VP37_isVP37Enabled(VP37Pump *self);
