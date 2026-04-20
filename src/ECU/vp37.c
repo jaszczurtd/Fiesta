@@ -1,18 +1,17 @@
 #include "vp37.h"
 #include <hal/hal_soft_timer.h>
 
-static void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
 static void VP37_makeCalibration(VP37Pump *self);
 static void VP37_updateAdjustometerPosition(VP37Pump *self);
 
-void VP37_init(VP37Pump *self) {
+VP37InitStatus VP37_init(VP37Pump *self) {
   if(self->vp37Initialized) {
-    return;
+    return VP37_INIT_ALREADY_INITIALIZED;
   }
 
   if(!waitForAdjustometerBaseline()) {
-    derr("VP37 adjustometer baseline not ready, cannot initialize");
-    return;
+    derr_limited("VP37 init baseline", "VP37 adjustometer baseline not ready, cannot initialize");
+    return VP37_INIT_BASELINE_NOT_READY;
   }
 
   self->lastThrottle = -1;
@@ -29,11 +28,13 @@ void VP37_init(VP37Pump *self) {
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   self->pidTf = VP37_PID_TF;
   self->throttleRampLastMs = hal_millis();
-  self->cmdLen = 0;
-  self->cmdBuf[0] = '\0';
 
   if(self->adjustController == NULL) {
     self->adjustController = hal_pid_controller_create();
+    if(self->adjustController == NULL) {
+      derr("VP37 init failed: cannot create PID controller");
+      return VP37_INIT_PID_CREATE_FAILED;
+    }
   }
 
   hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
@@ -52,6 +53,7 @@ void VP37_init(VP37Pump *self) {
   VP37_enableVP37(self, self->calibrationDone);
 
   self->vp37Initialized = true;
+  return VP37_INIT_OK;
 }
 
 void VP37_enableVP37(VP37Pump *self, bool enable) {
@@ -127,7 +129,7 @@ static void VP37_updateAdjustometerPosition(VP37Pump *self) {
     if(self->adjCommLostSince == 0) {
       self->adjCommLostSince = hal_millis();
     }
-    derr("Failed to read adjustometer for VP37 control");
+    derr_limited("VP37 adj comm", "Failed to read adjustometer for VP37 control");
   }
 }
 
@@ -388,89 +390,5 @@ void VP37_showDebug(VP37Pump *self) {
       self->VP37_ADJUST_MAX);
   }
 
-  // ── Serial PID tuner: read commands from USB CDC ────────────────────
-  while(hal_serial_available() > 0) {
-    int ch = hal_serial_read();
-    if(ch < 0) break;
-
-    if(ch == '\n' || ch == '\r') {
-      if(self->cmdLen > 0) {
-        self->cmdBuf[self->cmdLen] = '\0';
-        VP37_processSerialCommand(self, self->cmdBuf);
-        self->cmdLen = 0;
-      }
-    } else if(self->cmdLen < VP37_CMD_BUF_SIZE - 1) {
-      self->cmdBuf[self->cmdLen++] = (char)ch;
-    }
-  }
 }
 
-// ── Serial command parser for runtime PID tuning ─────────────────────────────
-
-static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
-  float val;
-
-  if(cmd[0] == '?' || cmd[0] == 'H' || cmd[0] == 'h') {
-    float kp, ki, kd;
-    VP37_getVP37PIDValues(self, &kp, &ki, &kd);
-    deb("\033[33mPID: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f TF=%.4f\033[0m",
-        kp, ki, kd, self->pidTimeUpdate, self->pidTf);
-    deb("\033[33mCAL: MIN=%d MID=%d MAX=%d\033[0m", self->VP37_ADJUST_MIN,
-        self->VP37_ADJUST_MIDDLE, self->VP37_ADJUST_MAX);
-    deb("\033[33mCMD: P<val> I<val> D<val> T<val> F<val> R(reset) ?(help)\033[0m");
-    return;
-  }
-
-  if(cmd[0] == 'R' || cmd[0] == 'r') {
-    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
-    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
-    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
-    self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
-    self->pidTf = VP37_PID_TF;
-    hal_pid_controller_set_tf(self->adjustController, self->pidTf);
-    hal_pid_controller_reset(self->adjustController);
-    self->lastPWMval = -1;
-    self->finalPWM = VP37_PWM_MIN;
-    deb("\033[33mPID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f TF=%.4f\033[0m",
-        VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE, VP37_PID_TF);
-    return;
-  }
-
-  // Parse single-letter commands: P0.42  I0.11  D0.02  T80  F0.068
-  char prefix = cmd[0];
-  if((prefix == 'P' || prefix == 'p' ||
-      prefix == 'I' || prefix == 'i' ||
-      prefix == 'D' || prefix == 'd' ||
-      prefix == 'T' || prefix == 't' ||
-      prefix == 'F' || prefix == 'f') && cmd[1] != '\0') {
-
-    val = (float)atof(&cmd[1]);
-
-    switch(prefix) {
-      case 'P': case 'p':
-        hal_pid_controller_set_kp(self->adjustController, val);
-        deb("\033[33mKp = %.4f\033[0m", val);
-        break;
-      case 'I': case 'i':
-        hal_pid_controller_set_ki(self->adjustController, val);
-        deb("\033[33mKi = %.4f\033[0m", val);
-        break;
-      case 'D': case 'd':
-        hal_pid_controller_set_kd(self->adjustController, val);
-        deb("\033[33mKd = %.4f\033[0m", val);
-        break;
-      case 'T': case 't':
-        self->pidTimeUpdate = val;
-        deb("\033[33mTU = %.1f\033[0m", val);
-        break;
-      case 'F': case 'f':
-        self->pidTf = val;
-        hal_pid_controller_set_tf(self->adjustController, val);
-        deb("\033[33mTF = %.4f\033[0m", val);
-        break;
-    }
-    return;
-  }
-
-  derr("Unknown command: '%s'. Send ? for help.", cmd);
-}

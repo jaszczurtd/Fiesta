@@ -69,6 +69,18 @@ static void start_initContextMutexes(void) {
   hal_critical_section_exit();
 }
 
+static void start_forceWatchdogReset(const char *reason) {
+  derr("Forcing watchdog reset: %s", reason);
+  bool ledOn = false;
+  while(true) {
+    ledOn = !ledOn;
+    hal_gpio_write(HAL_LED_PIN, ledOn);
+    // Intentionally do not feed/update watchdog.
+    hal_idle();
+    hal_delay_ms(150);
+  }
+}
+
 static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
   { &s_startRuntimeState.timerEverySecondHandle, callAtEverySecond, (uint32_t)SECOND },
   { &s_startRuntimeState.timerMediumHandle, readMediumValues,
@@ -197,8 +209,26 @@ void initialization(void) {
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
-  VP37_init(&s_ctx.injectionPump);
+  VP37InitStatus vp37InitStatus = VP37_init(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
+
+  switch(vp37InitStatus) {
+    case VP37_INIT_OK:
+      break;
+    case VP37_INIT_ALREADY_INITIALIZED:
+      deb("VP37 already initialized");
+      break;
+    case VP37_INIT_BASELINE_NOT_READY:
+      derr("VP37 init failed: adjustometer baseline not ready");
+      start_forceWatchdogReset("VP37 baseline not ready at startup");
+      break;
+    case VP37_INIT_PID_CREATE_FAILED:
+      derr("VP37 init failed: PID controller create failed");
+      break;
+    default:
+      derr("VP37 init failed: unknown status=%d", (int)vp37InitStatus);
+      break;
+  }
 #endif
   watchdog_feed();
 

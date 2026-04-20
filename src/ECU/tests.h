@@ -12,26 +12,24 @@ extern "C" {
 //#define START_TEST_ENABLE_DTC_INJECTION 
 
 //enable functional tests for VP37 cyclic control via keyboard
-//#define START_TEST_ENABLE_VP37_CYCLIC // Cyclic test: ramps VP37 throttle 0-100-0%, allows PID tuning via keyboard pins 0-7
+//#define START_TEST_ENABLE_VP37_CYCLIC // Cyclic test: ramps VP37 throttle 0-100-0%, 
+//allows PID tuning via Serial commands (send '?' for help)
 
-//miliseconds
-#define ENGINE_KEYBOARD_UPDATE 50
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
-#define CYCLIC_DELAYTIME 3
+#define CYCLIC_DELAYTIME 8
+
+// Serial command buffer for runtime PID tuning
+#define VP37_CMD_BUF_SIZE 64
 
 typedef struct {
   uint32_t previousMillis;
   int increment;
   int value;
   float uv;
+  char cmdBuf[VP37_CMD_BUF_SIZE];
+  uint8_t cmdLen;
 } CyclicTest;
-
-typedef struct {
-  float kP;
-  float kI;
-  float kD;
-} PIDValues;
 
 #endif
 
