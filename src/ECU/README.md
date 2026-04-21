@@ -44,7 +44,8 @@ Current hardening/warning status:
   `readHighValues` tick now emits one throttle + one turbo frame
   immediately (previously suppressed by the NOINIT cache), refreshing
   CAN consumers that would otherwise hold a stale pre-reset value.
-- Initial project-local MISRA screening run reports 976 active findings across 27 rule IDs; use it as a triage baseline, not as a clean-status indicator.
+- Latest project-local MISRA screening snapshot (2026-04-21) reports 787 active findings; use it as a triage baseline, not as a clean-status indicator.
+- Rule 10.4 dropped to 95 findings after recent `obd-2.c` cleanup and additional OBD/UDS regression tests.
 
 ## Build
 

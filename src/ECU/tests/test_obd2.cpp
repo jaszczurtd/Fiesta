@@ -7,6 +7,8 @@
 #include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
+void obdReq(uint32_t requestId, uint8_t *data);
+
 /*
  * OBD-2 unit tests — pure function tests for Mode 01 PID encoding,
  * Ford part number helpers, DTC payload builder, and TOTDIST getter/setter.
@@ -15,7 +17,21 @@
  * logic directly via encodeMode01PidData() and helper functions.
  */
 
+static void ensure_obd_can_ready(void) {
+    if (obdTestGetCanHandle() == NULL) {
+        obdInit(1);
+    }
+    TEST_ASSERT_NOT_NULL(obdTestGetCanHandle());
+    hal_mock_can_reset(obdTestGetCanHandle());
+}
+
+static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
+    return hal_mock_can_get_sent(obdTestGetCanHandle(), id, len, data);
+}
+
 void setUp(void) {
+    ensure_obd_can_ready();
+    dtcManagerClearAll();
     for (int i = 0; i < F_LAST; i++) {
         setGlobalValue(i, 0.0f);
     }
@@ -147,6 +163,24 @@ void test_pid_engine_load(void) {
     TEST_ASSERT_TRUE(encodeMode01PidData(ENGINE_LOAD, data, &len));
     TEST_ASSERT_EQUAL_INT(1, len);
     TEST_ASSERT_INT_WITHIN(2, 127, data[0]);
+}
+
+void test_pid_intake_pressure_uses_absolute_kpa(void) {
+    setGlobalValue(F_PRESSURE, 0.80f);
+    uint8_t data[4] = {0};
+    int len = 0;
+    TEST_ASSERT_TRUE(encodeMode01PidData(INTAKE_PRESSURE, data, &len));
+    TEST_ASSERT_EQUAL_INT(1, len);
+    TEST_ASSERT_EQUAL_UINT8(181, data[0]);
+}
+
+void test_pid_intake_pressure_clamps_to_255_kpa(void) {
+    setGlobalValue(F_PRESSURE, 3.50f);
+    uint8_t data[4] = {0};
+    int len = 0;
+    TEST_ASSERT_TRUE(encodeMode01PidData(INTAKE_PRESSURE, data, &len));
+    TEST_ASSERT_EQUAL_INT(1, len);
+    TEST_ASSERT_EQUAL_UINT8(255, data[0]);
 }
 
 void test_pid_unsupported_returns_false(void) {
@@ -389,6 +423,450 @@ void test_obd_temp_byte_applied_via_intake_pid(void) {
     TEST_ASSERT_EQUAL_UINT8(255, data[0]);
 }
 
+// ── UDS/KWP request handling via obdReq ──────────────────────────────────────
+
+void test_uds_diag_session_extended_positive_response(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_DIAGNOSTIC_SESSION, UDS_SESSION_EXTENDED, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(8, len);
+    TEST_ASSERT_EQUAL_UINT8(0x06, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_DIAGNOSTIC_SESSION, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SESSION_EXTENDED, tx[2]);
+}
+
+void test_uds_diag_session_unsupported_subfunction_negative_response(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_DIAGNOSTIC_SESSION, 0x7Eu, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(8, len);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_DIAGNOSTIC_SESSION, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_SUBFUNCTION_NOT_SUPPORTED, tx[3]);
+}
+
+void test_uds_tester_present_suppress_positive_response_sends_nothing(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_TESTER_PRESENT, UDS_SUPPRESS_POSITIVE_RSP, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_FALSE(pop_can_tx(&id, &len, tx));
+}
+
+void test_uds_tester_present_without_suppress_returns_positive(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_TESTER_PRESENT, 0x01, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x02, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_TESTER_PRESENT, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
+}
+
+void test_uds_read_active_session_did_reflects_last_session(void) {
+    uint8_t sessionReq[8] = {0x02, UDS_SVC_DIAGNOSTIC_SESSION, UDS_SESSION_EXTENDED, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, sessionReq);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx)); // consume 0x10 response
+
+    uint8_t didReq[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(DID_ACTIVE_SESSION), LSB(DID_ACTIVE_SESSION), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, didReq);
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x04, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(DID_ACTIVE_SESSION), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(DID_ACTIVE_SESSION), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SESSION_EXTENDED, tx[4]);
+}
+
+void test_kwp_read_data_by_local_id_unknown_returns_nrc31(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_LOCAL_ID, 0x55, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_LOCAL_ID, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+}
+
+void test_uds_comm_control_invalid_subfunction_returns_nrc22(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_COMM_CONTROL, 0x03, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_COMM_CONTROL, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_CONDITIONS_NOT_CORRECT, tx[3]);
+}
+
+void test_uds_control_dtc_setting_on_positive_response(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_CONTROL_DTC_SETTING, 0x01, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x02, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_CONTROL_DTC_SETTING, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
+}
+
+void test_uds_control_dtc_setting_invalid_subfunction_returns_nrc12(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_CONTROL_DTC_SETTING, 0x03, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_CONTROL_DTC_SETTING, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_SUBFUNCTION_NOT_SUPPORTED, tx[3]);
+}
+
+void test_uds_ecu_reset_echoes_subfunction(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_ECU_RESET, 0x03, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x02, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_ECU_RESET, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[2]);
+}
+
+void test_uds_security_access_returns_nrc22(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_SECURITY_ACCESS, 0x01, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_SECURITY_ACCESS, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_CONDITIONS_NOT_CORRECT, tx[3]);
+}
+
+void test_uds_routine_control_returns_nrc31(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_ROUTINE_CONTROL, 0x01, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_ROUTINE_CONTROL, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+}
+
+void test_uds_read_dtc_info_returns_service_not_supported_in_fordiag_mode(void) {
+    uint8_t req[8] = {0x01, UDS_SVC_READ_DTC_INFO, 0, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DTC_INFO, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_SERVICE_NOT_SUPPORTED, tx[3]);
+}
+
+void test_kwp_read_dtc_by_status_reports_stored_code(void) {
+    uint16_t codes[1] = {0};
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerGetCodes(DTC_KIND_STORED, codes, 1));
+
+    uint8_t req[8] = {0x04, KWP_SVC_READ_DTC_BY_STATUS, 0x00, 0xFF, 0xFF, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(KWP_RSP_READ_DTC_BY_STATUS, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(codes[0]), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(codes[0]), tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x08, tx[5]);
+}
+
+void test_kwp_read_dtc_by_status_reports_active_code(void) {
+    uint16_t codes[1] = {0};
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 1));
+
+    uint8_t req[8] = {0x04, KWP_SVC_READ_DTC_BY_STATUS, 0x01, 0xFF, 0xFF, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(KWP_RSP_READ_DTC_BY_STATUS, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(codes[0]), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(codes[0]), tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x01, tx[5]);
+}
+
+void test_uds_read_memory_by_addr_unmapped_returns_zero_filled_block(void) {
+    uint8_t req[8] = {0x04, UDS_SVC_READ_MEMORY_BY_ADDR, 0x00, 0x12, 0x34, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x07, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_MEMORY_BY_ADDR, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(0x12, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(0x34, tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[5]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[6]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[7]);
+}
+
+void test_uds_read_memory_by_addr_invalid_type_returns_general_negative(void) {
+    uint8_t req[8] = {0x04, UDS_SVC_READ_MEMORY_BY_ADDR, 0x7F, 0x12, 0x34, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x06, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_MEMORY_BY_ADDR, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(0x7F, tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x12, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x34, tx[5]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_SUBFUNCTION_NOT_SUPPORTED, tx[6]);
+}
+
+void test_uds_read_ford_boost_did_returns_pressure_payload(void) {
+    setGlobalValue(F_PRESSURE, 1.25f);
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(DID_FORD_BOOST), LSB(DID_FORD_BOOST), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(DID_FORD_BOOST), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(DID_FORD_BOOST), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x04, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0xE2, tx[5]);
+}
+
+void test_uds_read_ecu_capabilities_returns_nrc31(void) {
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(DID_ECU_CAPABILITIES), LSB(DID_ECU_CAPABILITIES), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+}
+
+void test_uds_read_unknown_did_returns_nrc31(void) {
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, 0xFE, 0xEE, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+}
+
+void test_uds_read_scp_load_returns_scaled_word(void) {
+    setGlobalValue(F_CALCULATED_ENGINE_LOAD, 50.0f);
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(SCP_PID_LOAD), LSB(SCP_PID_LOAD), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(SCP_PID_LOAD), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(SCP_PID_LOAD), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x40, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[5]);
+}
+
+void test_uds_read_scp_bp_returns_default_barometric_value(void) {
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(SCP_PID_BP), LSB(SCP_PID_BP), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x04, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(SCP_PID_BP), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(SCP_PID_BP), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(239, tx[4]);
+}
+
+void test_uds_read_scp_idblock_addr_returns_descriptor(void) {
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(SCP_PID_IDBLOCK_ADDR), LSB(SCP_PID_IDBLOCK_ADDR), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x07, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(SCP_PID_IDBLOCK_ADDR), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(SCP_PID_IDBLOCK_ADDR), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(SCP_IDBLOCK_BANK, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(SCP_IDBLOCK_ADDR), tx[5]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(SCP_IDBLOCK_ADDR), tx[6]);
+    TEST_ASSERT_EQUAL_UINT8(SCP_IDBLOCK_FMT_DEFAULT, tx[7]);
+}
+
+void test_uds_read_f4_catch_code_alt_prefers_live_pid_payload(void) {
+    setGlobalValue(F_INTAKE_TEMP, 25.0f);
+    uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(DID_F4_CATCH_CODE_ALT), LSB(DID_F4_CATCH_CODE_ALT), 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x04, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(MSB(DID_F4_CATCH_CODE_ALT), tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(LSB(DID_F4_CATCH_CODE_ALT), tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(65, tx[4]);
+}
+
+void test_uds_read_scp_maf_pid_returns_nrc31(void) {
+    uint16_t pids[] = {SCP_PID_IMAF, SCP_PID_VMAF, SCP_PID_MAF_RATE};
+
+    for (size_t index = 0; index < (sizeof(pids) / sizeof(pids[0])); index++) {
+        uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(pids[index]), LSB(pids[index]), 0, 0, 0, 0};
+        obdReq(LISTEN_ID, req);
+
+        uint32_t id = 0;
+        uint8_t len = 0;
+        uint8_t tx[8] = {0};
+        TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+        TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+        TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+        TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+        TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
+        TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+    }
+}
+
+void test_kwp_read_local_id_rom_size_returns_512k(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_LOCAL_ID, KWP_LID_ROM_SIZE, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x06, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_LOCAL_ID, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(KWP_LID_ROM_SIZE, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[3]);
+    TEST_ASSERT_EQUAL_UINT8(0x08, tx[4]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[5]);
+    TEST_ASSERT_EQUAL_UINT8(0x00, tx[6]);
+}
+
+void test_kwp_read_local_id_compact_ident_returns_nrc31(void) {
+    uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_LOCAL_ID, KWP_LID_COMPACT_IDENT, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_LOCAL_ID, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -410,6 +888,8 @@ int main(void) {
     RUN_TEST(test_pid_dpf_temp_from_sensor);
     RUN_TEST(test_pid_dpf_temp_at_zero);
     RUN_TEST(test_pid_engine_load);
+    RUN_TEST(test_pid_intake_pressure_uses_absolute_kpa);
+    RUN_TEST(test_pid_intake_pressure_clamps_to_255_kpa);
     RUN_TEST(test_pid_unsupported_returns_false);
     RUN_TEST(test_pid_egt_as_catalyst_temp);
 
@@ -423,6 +903,35 @@ int main(void) {
     RUN_TEST(test_obd_temp_byte_fractional_truncates_toward_zero);
     RUN_TEST(test_obd_temp_byte_applied_via_coolant_pid);
     RUN_TEST(test_obd_temp_byte_applied_via_intake_pid);
+
+    // UDS/KWP request handling
+    RUN_TEST(test_uds_diag_session_extended_positive_response);
+    RUN_TEST(test_uds_diag_session_unsupported_subfunction_negative_response);
+    RUN_TEST(test_uds_tester_present_suppress_positive_response_sends_nothing);
+    RUN_TEST(test_uds_tester_present_without_suppress_returns_positive);
+    RUN_TEST(test_uds_read_active_session_did_reflects_last_session);
+    RUN_TEST(test_kwp_read_data_by_local_id_unknown_returns_nrc31);
+    RUN_TEST(test_uds_comm_control_invalid_subfunction_returns_nrc22);
+    RUN_TEST(test_uds_control_dtc_setting_on_positive_response);
+    RUN_TEST(test_uds_control_dtc_setting_invalid_subfunction_returns_nrc12);
+    RUN_TEST(test_uds_ecu_reset_echoes_subfunction);
+    RUN_TEST(test_uds_security_access_returns_nrc22);
+    RUN_TEST(test_uds_routine_control_returns_nrc31);
+    RUN_TEST(test_uds_read_dtc_info_returns_service_not_supported_in_fordiag_mode);
+    RUN_TEST(test_kwp_read_dtc_by_status_reports_stored_code);
+    RUN_TEST(test_kwp_read_dtc_by_status_reports_active_code);
+    RUN_TEST(test_uds_read_memory_by_addr_unmapped_returns_zero_filled_block);
+    RUN_TEST(test_uds_read_memory_by_addr_invalid_type_returns_general_negative);
+    RUN_TEST(test_uds_read_ford_boost_did_returns_pressure_payload);
+    RUN_TEST(test_uds_read_ecu_capabilities_returns_nrc31);
+    RUN_TEST(test_uds_read_unknown_did_returns_nrc31);
+    RUN_TEST(test_uds_read_scp_load_returns_scaled_word);
+    RUN_TEST(test_uds_read_scp_bp_returns_default_barometric_value);
+    RUN_TEST(test_uds_read_scp_idblock_addr_returns_descriptor);
+    RUN_TEST(test_uds_read_f4_catch_code_alt_prefers_live_pid_payload);
+    RUN_TEST(test_uds_read_scp_maf_pid_returns_nrc31);
+    RUN_TEST(test_kwp_read_local_id_rom_size_returns_512k);
+    RUN_TEST(test_kwp_read_local_id_compact_ident_returns_nrc31);
 
     RUN_TEST(test_stmin_to_ms_preserves_millisecond_values);
     RUN_TEST(test_stmin_to_ms_clamps_submillisecond_range_to_one_ms);
