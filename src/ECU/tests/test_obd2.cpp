@@ -7,8 +7,6 @@
 #include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
-void obdReq(uint32_t requestId, uint8_t *data);
-
 /*
  * OBD-2 unit tests — pure function tests for Mode 01 PID encoding,
  * Ford part number helpers, DTC payload builder, and TOTDIST getter/setter.

@@ -391,6 +391,14 @@ extern "C" {
 void obdInit(int retries);
 
 /**
+ * @brief Handle one raw OBD/UDS request frame payload.
+ * @param requestId Incoming CAN request identifier.
+ * @param data Pointer to request bytes (expects at least CAN DLC bytes).
+ * @return None.
+ */
+void obdReq(uint32_t requestId, uint8_t *data);
+
+/**
  * @brief Poll CAN and advance the OBD/ISO-TP state machine.
  * @return None.
  */
