@@ -1247,7 +1247,7 @@ static void buildScpIdBlock(uint8_t *block, int len) {
   // Vidblock checksum (CRAI8 §35.7.3.2): word-by-word sum of bytes
   // 128..255 must equal 0 (mod 65536). Compute correction word at 0xFE.
   uint32_t sum = 0;
-  for(int i = 0x80; i < SCP_IDBLOCK_CHKSUM_OFS; i += 2) {
+  for(size_t i = 0x80; i < SCP_IDBLOCK_CHKSUM_OFS; i += 2) {
     sum += ((uint16_t)block[i] << 8) | block[i + 1];
     if(sum > 65535u) {
       sum -= 65536u;
@@ -1596,7 +1596,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *dat
       PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD,
       PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD
     };
-    for(int a = 0; a < 17 && a < (int)strlen(vehicle_Vin); a++) {
+    for(size_t a = 0; a < 17 && a < strlen(vehicle_Vin); a++) {
       payload[3 + a] = (uint8_t)(vehicle_Vin[a]);
     }
 #ifdef OBD_VERBOSE_IDENT_DEBUG
@@ -2267,7 +2267,7 @@ static void iso_tp_process(void) {
     }
     // Drain up to several frames per call so that stale/non-OBD traffic
     // cannot keep the MCP2515 RX buffers occupied while we wait for FC.
-    for(int drain = 0; drain < 8; drain++) {
+    for(size_t drain = 0; drain < 8; drain++) {
       if(hal_gpio_read(CAN1_INT)) break;            // no more frames
       bool gotFrame = hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue);
       if(!gotFrame) break;

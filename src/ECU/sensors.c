@@ -151,7 +151,7 @@ void initSensors(void) {
 
   init4051();
 
-  for(int a = 0; a < F_LAST; a++) {
+  for(size_t a = 0; a < F_LAST; a++) {
     s_sensorsPersistent.valueFields[a] = 0.0;
   }
 
