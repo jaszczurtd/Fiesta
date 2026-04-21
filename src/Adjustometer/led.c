@@ -20,6 +20,10 @@ static hal_rgb_led_color_t ledSeq[LED_SEQ_MAX];
 static uint8_t ledSeqLen = 0;
 static uint8_t ledSeqIdx = 0;
 
+/**
+ * @brief Initialize RGB LED hardware and reset LED sequencing state.
+ * @return None.
+ */
 void initLed(void) {
   ledLastToggleMs = 0;
   ledSeqLen = 0;
@@ -31,6 +35,10 @@ void initLed(void) {
   lastI2CSeenMs = hal_millis();
 }
 
+/**
+ * @brief Refresh the LED pattern according to signal, sensor and I2C health.
+ * @return None.
+ */
 void updateLed(void) {
   uint32_t now = hal_millis();
   uint8_t status = getAdjustometerStatus();

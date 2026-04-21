@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "dtcManager.h"
 #include "sensors.h"
+#include "testable/dtcManager_testable.h"
 #include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -92,6 +93,31 @@ void test_dtc_get_codes_respects_output_limit(void) {
     TEST_ASSERT_EQUAL_UINT8(2, n);
 }
 
+void test_find_dtc_index_returns_expected_slots(void) {
+    TEST_ASSERT_EQUAL_INT(0, findDtcIndex(DTC_OBD_CAN_INIT_FAIL));
+    TEST_ASSERT_EQUAL_INT(1, findDtcIndex(DTC_PCF8574_COMM_FAIL));
+    TEST_ASSERT_EQUAL_INT(8, findDtcIndex(DTC_ADJ_VOLTAGE_BAD));
+}
+
+void test_find_dtc_index_returns_minus_one_for_unknown_code(void) {
+    TEST_ASSERT_EQUAL_INT(-1, findDtcIndex(0xFFFFu));
+}
+
+void test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom(void) {
+    uint16_t span = dtcKvEffectiveSpan();
+
+    TEST_ASSERT_GREATER_THAN_UINT16(0u, span);
+    TEST_ASSERT_EQUAL_UINT16(0u, (uint16_t)(span & 1u));
+    TEST_ASSERT_TRUE(span <= (ECU_EEPROM_SIZE_BYTES / 2u));
+}
+
+void test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small(void) {
+    hal_mock_eeprom_reset();
+    hal_eeprom_init(HAL_EEPROM_RP2040, 32, 0);
+
+    TEST_ASSERT_EQUAL_UINT16(0u, dtcKvEffectiveSpan());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_dtc_set_active_updates_all_kinds);
@@ -100,5 +126,9 @@ int main(void) {
     RUN_TEST(test_dtc_timestamp_nonzero_when_gps_is_available);
     RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
     RUN_TEST(test_dtc_get_codes_respects_output_limit);
+    RUN_TEST(test_find_dtc_index_returns_expected_slots);
+    RUN_TEST(test_find_dtc_index_returns_minus_one_for_unknown_code);
+    RUN_TEST(test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom);
+    RUN_TEST(test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small);
     return UNITY_END();
 }

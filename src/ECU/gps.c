@@ -16,6 +16,16 @@ static gps_runtime_state_t s_gpsRuntime = {
 
 NOINIT static gps_persistent_state_t s_gpsPersistent;
 
+/**
+ * @brief Read GPS date/time components and apply project time adjustment.
+ * @param year Output pointer for adjusted year.
+ * @param month Output pointer for adjusted month.
+ * @param day Output pointer for adjusted day.
+ * @param hour Output pointer for adjusted hour.
+ * @param minute Output pointer for adjusted minute.
+ * @param second Output pointer for adjusted second.
+ * @return None.
+ */
 static void getAdjustedDateTime(int *year, int *month, int *day,
                                 int *hour, int *minute, int *second);
 
@@ -65,6 +75,16 @@ void initGPSDateAndTime(void) {
   memset(s_gpsPersistent.gpsTime, 0, GPS_TIME_DATE_BUFFER_SIZE);
 }
 
+/**
+ * @brief Read GPS date/time components and apply project-specific adjustment.
+ * @param year Output pointer for adjusted year.
+ * @param month Output pointer for adjusted month.
+ * @param day Output pointer for adjusted day.
+ * @param hour Output pointer for adjusted hour.
+ * @param minute Output pointer for adjusted minute.
+ * @param second Output pointer for adjusted second.
+ * @return None.
+ */
 static void getAdjustedDateTime(int *year, int *month, int *day,
                                 int *hour, int *minute, int *second) {
   *year   = hal_gps_date_year();

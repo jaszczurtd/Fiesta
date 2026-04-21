@@ -1,175 +1,266 @@
 # VP37 Adjustometer
 
-Actuator position transducer for the VP37 diesel injection pump, providing PID feedback to the engine control unit.
+Actuator position transducer for the VP37 diesel injection pump, providing feedback to the engine control unit.
+
+This README describes the current state of the sources in `src/Adjustometer`.
+If this text ever diverges from the code, the source of truth is:
+
+- `sensors.c / sensors.h`
+- `start.c`
+- `led.c`
+- `config.h`
+- `hardwareConfig.h`
+- `tests/test_sensors.cpp`
+- `tests/test_led.cpp`
 
 ## How it works
 
-The circuit uses the actuator position sensor coils built into the VP37 pump as the resonant element of a modified **Hartley oscillator**. The oscillation frequency varies in the range of **~22–37 kHz** depending on the actuator position (and thus fuel delivery).
+The circuit uses the actuator position sensor coils built into the VP37 pump as the resonant element of a modified Hartley oscillator. The oscillation frequency varies roughly in the **22-37 kHz** range depending on actuator position.
 
-The pulses from the oscillator are counted by an **RP2040** microcontroller (Raspberry Pi Pico), which:
+The pulses from the oscillator are counted by an RP2040 microcontroller, which currently performs:
+
+1. Frequency measurement in windows of 128 pulses.
+2. Baseline convergence with tracking, lock criteria, and post-lock verification.
+3. Pulse derivation as filtered frequency deviation from baseline.
+4. Near-zero suppression with zero-hold hysteresis.
+5. Signal-loss detection.
+6. Exposure of processed values over I2C to the ECU.
+
+Additionally, the module reads:
+
+- fuel temperature from the NTC thermistor built into the VP37 pump,
+- supply voltage via a resistor divider.
+
+Important current-state note:
+
+- the current sources do **not** implement active thermal compensation of the pulse signal,
+- fuel temperature is still sampled, filtered, reported over I2C, and used for diagnostics,
+- fuel temperature remains available for future ECU-side compensation or supervisory logic.
 
 ### Oscillator hardware
 
 The oscillator circuit consists of two stages:
 
-1. **Hartley oscillator** - built around a **BC547B** (SMD equivalent: BC847B) NPN bipolar transistor. This is a general-purpose low-noise silicon transistor with high DC current gain (hFE 200–450), well suited for LC oscillator circuits in the tens-of-kHz range. It sustains oscillation using the pump's actuator coils as the resonant inductor.
+1. Hartley oscillator built around a **BC547B** (SMD equivalent: BC847B) NPN transistor.
+2. Pulse shaper built around a **2SK170GR** N-channel JFET, converting the sinusoidal oscillator output into clean digital pulses for the RP2040 GPIO interrupt.
 
-2. **Pulse shaper** - built around a **2SK170GR** N-channel JFET. This is a low-noise, high-transconductance junction FET. Here it converts the sinusoidal oscillator output into clean rectangular pulses suitable for digital counting by the RP2040 GPIO interrupt. The "GR" grade denotes a mid-range IDSS (6–12 mA).
+The 2SK170 is discontinued and increasingly hard to source. Possible substitutes (match IDSS grade and pinout):
 
-   The 2SK170 is discontinued and increasingly hard to source. Possible substitutes (match IDSS grade and pinout):
-
-   | Part | Package | Notes |
-   |------|---------|-------|
-   | **2SK2145** | TO-92S | Toshiba drop-in replacement, very similar specs. |
-   | **2N5457 / 2N5458** | TO-92 | ON Semi / Central Semi, widely available, slightly higher noise. |
-   | **J113** | TO-92 | ON Semi, higher IDSS (~5–20 mA), may need bias adjustment. |
-   | **MMBFJ310** | SOT-23 (SMD) | ON Semi, high-gm JFET, good SMD option. |
-   | **SST310** | SOT-23 (SMD) | Microchip, equivalent to J310 in SMD. |
-   | **MMBF5457 / MMBF5458** | SOT-23 (SMD) | SMD versions of 2N5457/5458. |
-   | **SST5457** | SOT-23 (SMD) | Microchip SMD equivalent. |
-
-### Signal processing
-
-The RP2040:
-
-1. Measures signal frequency in windows of 128 pulses (~3.5 ms at 37 kHz).
-2. Determines the **baseline** - the reference frequency at the current rest position.
-3. Computes **pulse** - frequency deviation from baseline (proportional to actuator displacement).
-4. Applies **adaptive thermal compensation** to eliminate frequency drift caused by engine heating.
-5. Exposes the result over the **I²C** bus to the engine control unit (ECU).
-
-Additionally, the circuit reads:
-- **Fuel temperature** from an NTC thermistor built into the VP37 pump.
-- **Supply voltage** via a resistor divider (47 kΩ / 10 kΩ).
+| Part | Package | Notes |
+|------|---------|-------|
+| **2SK2145** | TO-92S | Toshiba drop-in replacement, very similar specs. |
+| **2N5457 / 2N5458** | TO-92 | Widely available, slightly higher noise. |
+| **J113** | TO-92 | Higher IDSS, may need bias adjustment. |
+| **MMBFJ310** | SOT-23 | Good SMD option. |
+| **SST310** | SOT-23 | SMD equivalent to J310. |
+| **MMBF5457 / MMBF5458** | SOT-23 | SMD versions of 2N5457/5458. |
+| **SST5457** | SOT-23 | Microchip SMD equivalent. |
 
 ## Context - EDC15
 
-This circuit is a **loose interpretation** of the specialised transducer inside the original Volkswagen EDC15 engine control unit. It is not a 1:1 copy for obvious reasons - there is no public documentation for that component, and the ICs themselves are not available for purchase. The general concept (LC resonance -> frequency -> feedback) is preserved, but the hardware/digital implementation, the thermal compensation algorithm, and I²C communication have been designed from scratch.
+This circuit is a loose interpretation of the specialised position-feedback concept used around VP37/EDC15. It is not a 1:1 copy of the OEM solution.
+
+What is preserved conceptually:
+
+- pump-coil-based resonant sensing,
+- frequency-derived feedback,
+- external ECU consumption of a processed feedback signal.
+
+What is different in this project:
+
+- the implementation is built around an external RP2040 module,
+- feedback is exported digitally over I2C,
+- the current firmware exports a non-negative pulse magnitude,
+- thermal compensation is not currently performed inside Adjustometer.
 
 ## Circuit schematic
 
-The PCB layout and circuit schematic are located in the repository:
+The PCB layout and circuit schematic are located in:
 
-```
+```text
 Fiesta_pcbs/vp37_adjustometer/
 ```
 
-## I²C communication
+## I2C communication
 
-- **Slave address:** `0x57`
-- **Speed:** 400 kHz (Fast Mode)
+- slave address: `0x57`
+- speed: 400 kHz
 
 ### Register map
 
 | Address | Size | Name | Description |
 |---------|------|------|-------------|
-| `0x00–0x01` | int16, big-endian | `PULSE` | Frequency deviation from baseline [Hz]. Positive = actuator moved toward higher fuel delivery. 0 = rest position. |
-| `0x02` | uint8 | `VOLTAGE` | Supply voltage in tenths of a volt. E.g. 135 = 13.5 V. |
-| `0x03` | uint8 | `FUEL_TEMP` | Fuel temperature in °C (0–255). |
-| `0x04` | uint8 | `STATUS` | Status bitmask (see below). `0x00` = all OK. |
+| `0x00-0x01` | int16, big-endian | `PULSE` | Current firmware exports the absolute magnitude of frequency deviation from baseline in Hz. In practice this is non-negative, even though the register format remains signed `int16` for ECU compatibility. |
+| `0x02` | uint8 | `VOLTAGE` | Supply voltage in tenths of a volt. Example: `135 = 13.5 V`. |
+| `0x03` | uint8 | `FUEL_TEMP` | Fuel temperature in whole degrees C, `0-255`. |
+| `0x04` | uint8 | `STATUS` | Status bitmask. `0x00 = all OK`. |
 
-#### STATUS register bitmask (0x04)
+#### STATUS register bitmask
 
 | Bit | Mask | Name | Description |
 |-----|------|------|-------------|
-| 0 | `0x01` | `SIGNAL_LOST` | No oscillation detected — oscillator is not running or signal is absent. |
-| 1 | `0x02` | `FUEL_TEMP_BROKEN` | Fuel temperature sensor reads 0 (open circuit / shorted to VCC). |
-| 2 | `0x04` | `BASELINE_PENDING` | Baseline calibration has not yet converged. |
-| 3 | `0x08` | `VOLTAGE_BAD` | Supply voltage out of range (< 8.0 V or > 15.0 V). |
+| 0 | `0x01` | `SIGNAL_LOST` | No oscillation detected. |
+| 1 | `0x02` | `FUEL_TEMP_BROKEN` | Fuel temperature sensor reads as broken / implausible. |
+| 2 | `0x04` | `BASELINE_PENDING` | Baseline calibration has not yet completed. |
+| 3 | `0x08` | `VOLTAGE_BAD` | Supply voltage out of range (`< 8.0 V` or `> 15.0 V`). |
 
 Multiple bits can be set simultaneously.
 
 ### LED indicator
 
-The LED displays a color sequence built from all active fault conditions.
-Each color in the sequence is shown for 0.5 s; the sequence repeats continuously.
+The LED behavior is source-driven by `led.c` and currently works as follows:
 
-| Condition | LED pattern |
-|-----------|-------------|
-| Signal lost (no oscillation) | Red blinking 4×/s — overrides all other patterns |
-| Fuel temp broken + no I²C | purple → red → green (repeating) |
-| Fuel temp broken, I²C OK | purple → green (repeating) |
-| No I²C, fuel temp OK | red → green (repeating) |
-| All OK (oscillating, I²C active, sensors healthy) | Steady green (50% brightness) |
+- `SIGNAL_LOST` overrides everything else with red blinking at 4 Hz.
+- If there is no signal-loss condition and no active faults, the LED is steady green at half brightness.
+- Otherwise the LED cycles every 500 ms through a sequence built from active conditions in this order:
+  - purple if `FUEL_TEMP_BROKEN` is active,
+  - yellow if `VOLTAGE_BAD` is active,
+  - red if no I2C transaction has been seen for 2 s,
+  - green as the final heartbeat color.
 
-The sequence is composed additively from active conditions: purple is added when `FUEL_TEMP_BROKEN` is set, red is added when no I²C transaction has been detected since the last `updateLed()` call. Green is always the final element, providing a visual "heartbeat" regardless of fault combination.
+Examples:
+
+- fuel-temp fault only: `purple -> green`
+- voltage fault only: `yellow -> green`
+- no I2C only: `red -> green`
+- combined faults: additive sequence, for example `purple -> yellow -> red -> green`
+
+## Current source-based functionality
+
+### Core split
+
+- `Adjustometer.ino` delegates to `start.c`.
+- Core0 initialises sensors and hosts the GPIO interrupt used for pulse counting.
+- Core1 updates the I2C registers, updates the LED state machine, and handles diagnostic logging.
+
+### Frequency and pulse path
+
+The current `sensors.c` implementation does this:
+
+- counts oscillator edges on every falling GPIO interrupt,
+- computes frequency every 128 pulses,
+- filters frequency with an integer EMA (`ADJUSTOMETER_EMA_SHIFT = 3`),
+- converges baseline using tracking and stability windows,
+- verifies the captured baseline for `1000 ms` and restarts convergence if slow drift exceeds `500 Hz`,
+- computes pulse relative to baseline,
+- suppresses small near-zero residuals using zero-hold hysteresis,
+- returns `abs(pulse)` from `getAdjustometerPulses()`.
+
+This means the current exported `PULSE` value is a magnitude-oriented signal, not a signed bidirectional displacement.
+
+### Baseline readiness
+
+Current baseline logic is controlled by these constants:
+
+- `ADJUSTOMETER_BASELINE_MIN_TIME_MS = 80`
+- `ADJUSTOMETER_BASELINE_MAX_TIME_MS = 250`
+- `ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ = 12`
+- `ADJUSTOMETER_BASELINE_LOCK_WINDOWS = 6`
+- `ADJUSTOMETER_BASELINE_VERIFY_MS = 1000`
+- `ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ = 500`
+
+Note:
+
+- `ADJUSTOMETER_WARMUP_MS` exists in `config.h` as a documented design constant,
+- but the current runtime path is governed by baseline convergence and verification logic rather than by an explicit startup delay call in the live source.
+
+### Zero-hold and signal loss
+
+Current near-zero suppression uses:
+
+- `ADJUSTOMETER_ZERO_HOLD_ENTER_HZ = 40`
+- `ADJUSTOMETER_ZERO_HOLD_EXIT_HZ = 50`
+- `ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS = 2`
+
+Current signal-loss detection uses a dynamic timeout:
+
+- `timeout = period * 3`,
+- clamped to `10 ms .. 200 ms`.
+
+If signal loss is detected, `getAdjustometerPulses()` returns `0` and the `SIGNAL_LOST` status bit is set.
+
+### Fuel temperature and voltage
+
+Fuel temperature and supply voltage are read on Core1 and filtered with a simple ADC EMA:
+
+- `ADC_EMA_SHIFT = 3`
+
+Current purpose of fuel-temperature measurement:
+
+- expose current pump fuel temperature over I2C,
+- detect a broken temperature sensor,
+- preserve the signal for future ECU-side thermal handling.
+
+Current purpose of supply-voltage measurement:
+
+- expose the module supply voltage over I2C,
+- flag out-of-range voltage with `VOLTAGE_BAD`.
 
 ## Code structure
 
 | File | Description |
 |------|-------------|
-| `Adjustometer.ino` | Arduino entry point - delegates to `start.c`. |
-| `start.c / start.h` | Both RP2040 core initialisation, Core1 main loop (I²C + diagnostic logging). |
-| `sensors.c / sensors.h` | Pulse-counting ISR (Core0), frequency measurement, baseline calibration, thermal compensation, ADC reads (temperature, voltage). |
-| `config.h` | Main configuration constants - thresholds, coefficients, I²C register map. |
-| `hardwareConfig.h` | Pin assignments, voltage divider parameters, NTC resistor values. |
-| `hal_project_config.h` | JaszczurHAL library configuration (disabling unused modules). |
-| `scripts/` | Developer tools: upload, serial monitor, IntelliSense refresh, board selector. |
+| `Adjustometer.ino` | Arduino entry point delegating to `start.c`. |
+| `start.c / start.h` | RP2040 core initialisation, Core1 loop, I2C register publishing, LED updates. |
+| `sensors.c / sensors.h` | Pulse ISR, frequency measurement, baseline logic, zero-hold, ADC reads, status generation. |
+| `led.c / led.h` | LED state machine and fault indication logic. |
+| `config.h` | Runtime constants for register map, baseline, verification, zero-hold, ADC filtering. |
+| `hardwareConfig.h` | Pin assignments, divider ratios, NTC constants. |
+| `tests/test_sensors.cpp` | Host tests for baseline, pulse path, status bits, zero-hold, signal loss. |
+| `tests/test_led.cpp` | Host tests for LED behavior. |
 
-The project uses the **JaszczurHAL** library as a hardware abstraction layer (GPIO, ADC, I²C slave, watchdog, timers).
+The project uses **JaszczurHAL** as the hardware abstraction layer.
 
-### Core assignment
+## Tests
 
-- **Core0:** GPIO ISR handler (counting pulses from the Hartley oscillator), watchdog.
-- **Core1:** Main loop - ADC reads (temperature, voltage), I²C register updates, diagnostic logging.
+The Adjustometer repository has its own host-side test suite under `build_test/`:
 
-## Thermal compensation
+- `test_sensors`
+- `test_led`
 
-The circuit is **thermally compensated**. Engine heating causes oscillator frequency drift (coil inductance changes with temperature), which without compensation would produce a false actuator movement signal.
-
-Compensation operates in two phases:
-
-1. **Fallback phase** (ΔT < `ADAPTIVE_COMP_MIN_DT_C`): a fixed coefficient `THERMAL_COMP_HZ_PER_C_X10` is used. It defaults to **0** because the drift direction (positive or negative) varies between engine sessions - a non-zero fallback would be destructive when the actual drift sign is reversed.
-
-2. **Adaptive phase** (ΔT ≥ `ADAPTIVE_COMP_MIN_DT_C`): the ISR computes the actual drift rate from observed data `(filteredHz − baseline) / ΔT` and smooths it with an EMA filter. This coefficient is then used for real-time pulse correction.
+These tests validate the current source behavior for pulse measurement, baseline, status bits, and LED signaling.
 
 ## Key configuration constants
 
-### Frequency measurement (`sensors.c`)
+### Frequency measurement
 
-| Constant | Value | Description | Tuning |
-|----------|-------|-------------|--------|
-| `ADJUSTOMETER_PULSE_WINDOW` | 128 | Number of pulses per measurement window. Larger = lower quantisation error but higher latency. At 37 kHz: 128 pulses ≈ 3.5 ms. | Increasing to 256 halves noise but doubles latency to ~7 ms. |
-| `ADJUSTOMETER_EMA_SHIFT` | 3 | Frequency EMA filter: new sample weight = 1/2³ = 12.5%. | Increasing smooths more but slows response to fast changes. |
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `ADJUSTOMETER_PULSE_WINDOW` | `128` | Pulses accumulated per frequency window. |
+| `ADJUSTOMETER_EMA_SHIFT` | `3` | EMA smoothing for the measured oscillator frequency. |
 
-### Baseline calibration (`config.h`)
+### Baseline and verification
 
-| Constant | Value | Description | Tuning |
-|----------|-------|-------------|--------|
-| `BASELINE_MIN_TIME_MS` | 80 | Minimum data collection time for baseline. | Too short -> noisy baseline. Too long -> delayed readiness. |
-| `BASELINE_MAX_TIME_MS` | 250 | Timeout - if baseline hasn't converged, use the current estimate. | |
-| `BASELINE_LOCK_TOLERANCE_HZ` | 12 | Maximum allowed difference between a sample and the estimate to count as stable. | Lowering forces better convergence but may fail to lock on a noisy signal. |
-| `BASELINE_LOCK_WINDOWS` | 6 | Number of consecutive stable windows required to lock. | |
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `ADJUSTOMETER_BASELINE_MIN_TIME_MS` | `80` | Minimum convergence time before lock is allowed. |
+| `ADJUSTOMETER_BASELINE_MAX_TIME_MS` | `250` | Maximum convergence time before force-lock to estimate. |
+| `ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ` | `12` | Stability threshold for lock counting. |
+| `ADJUSTOMETER_BASELINE_LOCK_WINDOWS` | `6` | Required stable windows to lock. |
+| `ADJUSTOMETER_BASELINE_VERIFY_MS` | `1000` | Post-lock verification time. |
+| `ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ` | `500` | Drift threshold that restarts convergence. |
 
-### Near-zero noise suppression (`config.h`)
+### Zero-hold
 
-| Constant | Value | Description | Tuning |
-|----------|-------|-------------|--------|
-| `ZERO_HOLD_ENTER_HZ` | 20 | Threshold to enter zero-hold (pulse -> 0). Must be above the noise floor (~15 Hz). | If p oscillates ±15 Hz at rest, raise this threshold. |
-| `ZERO_HOLD_EXIT_HZ` | 25 | Threshold to exit zero-hold (consider movement as real). | Must be > ENTER, but not too large - otherwise the circuit becomes insensitive to small movements. |
-| `ZERO_HOLD_RELEASE_WINDOWS` | 2 | Number of consecutive windows that must exceed EXIT to release zero-hold. | Increasing to 3–4 improves resilience to occasional spikes. |
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `ADJUSTOMETER_ZERO_HOLD_ENTER_HZ` | `40` | Enter near-zero hold. |
+| `ADJUSTOMETER_ZERO_HOLD_EXIT_HZ` | `50` | Leave near-zero hold. |
+| `ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS` | `2` | Consecutive windows required to release hold. |
 
-### Thermal compensation (`config.h`)
+### Signal loss
 
-| Constant | Value | Description | Tuning |
-|----------|-------|-------------|--------|
-| `THERMAL_COMP_HZ_PER_C_X10` | 0 | Fallback Hz/°C × 10 before adaptive activation. 0 = no compensation below the ΔT threshold. | Set non-zero only if the drift direction is consistent. |
-| `THERMAL_COMP_EMA_SHIFT` | 8 | ISR temperature smoothing (τ ≈ 0.44 s). | Decreasing -> faster response, but ±1 °C ADC jitter leaks into compensation. |
-| `ADAPTIVE_COMP_MIN_DT_C` | 4 | ΔT in °C required to activate adaptive compensation. | Too small -> noisy first estimate. Too large -> long time to activation. |
-| `ADAPTIVE_COMP_EMA_SHIFT` | 6 | Adaptive coefficient smoothing (τ ≈ 64 windows). | Decreasing -> faster convergence, more noise. |
-| `ADAPTIVE_COMP_MIN/MAX_COEFF_X10` | 5 / 200 | Allowed coefficient range: 0.5–20.0 Hz/°C. | Limits the impact of erroneous measurements. |
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `ADJUSTOMETER_SIGNAL_LOSS_MULTIPLIER` | `3` | Dynamic timeout multiplier. |
+| `ADJUSTOMETER_SIGNAL_LOSS_MIN_US` | `10000` | Lower clamp for signal-loss timeout. |
+| `ADJUSTOMETER_SIGNAL_LOSS_MAX_US` | `200000` | Upper clamp for signal-loss timeout. |
 
-### Signal loss detection (`sensors.h`)
+## Supply-voltage measurement note
 
-| Constant | Value | Description | Tuning |
-|----------|-------|-------------|--------|
-| `SIGNAL_LOSS_MULTIPLIER` | 3 | Dynamic timeout = period × multiplier. | |
-| `SIGNAL_LOSS_MIN_US` | 5000 | Lower timeout bound (5 ms). Prevents false loss detection caused by ISR delays (USB). | Reducing below 2 ms causes false losses on Core0 with USB CDC. |
-| `SIGNAL_LOSS_MAX_US` | 200000 | Upper timeout bound (200 ms). | |
+The I2C voltage register is encoded as `0.1 V` units up to `255 = 25.5 V`, but the current hardware divider in `hardwareConfig.h` is `47k / 10k`, which gives a practical ADC input ceiling of about `18.8 V` at `3.3 V` full scale.
 
-## Supply voltage range
-
-The circuit is designed for stable operation in the **8–25 V** range, covering typical 12 V automotive voltages including charging spikes. In practice, the circuit remains stable down to **5 V**, which should allow engine cranking even with a weak battery (voltage dips during starter engagement).
+The current status logic treats voltage outside `8.0 .. 15.0 V` as bad.
 
 ## Building
 

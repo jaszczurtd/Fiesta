@@ -30,13 +30,46 @@ extern "C" {
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
 
+/**
+ * @brief Execute once-per-second background tasks.
+ * @return None.
+ */
 void callAtEverySecond(void);
 
+/**
+ * @brief Initialize all core-0 ECU services and modules.
+ * @return None.
+ */
 void initialization(void);
+
+/**
+ * @brief Initialize core-1 services used by the split runtime.
+ * @return None.
+ */
 void initialization1(void);
+
+/**
+ * @brief Run one iteration of the core-0 main loop.
+ * @return None.
+ */
 void looper(void);
+
+/**
+ * @brief Run one iteration of the core-1 main loop.
+ * @return None.
+ */
 void looper1(void);
+
+/**
+ * @brief Reserved legacy severe-alert input helper.
+ * @return Alert state when implemented.
+ */
 bool seriousAlertSwitch(void);
+
+/**
+ * @brief Reserved legacy alert input helper.
+ * @return Alert state when implemented.
+ */
 bool alertSwitch(void);
 
 #ifdef __cplusplus

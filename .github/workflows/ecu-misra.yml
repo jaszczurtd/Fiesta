@@ -1,0 +1,40 @@
+name: ECU MISRA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  misra-ecu:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck python3
+
+      - name: Run ECU MISRA screening
+        working-directory: src/ECU
+        run: |
+          chmod +x misra/check_misra.sh
+          misra/check_misra.sh --out misra/.results --quiet
+
+      - name: Upload MISRA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-misra
+          path: |
+            src/ECU/misra/.results/results.txt
+            src/ECU/misra/.results/active-findings.txt
+            src/ECU/misra/.results/rule-counts.txt
+            src/ECU/misra/.results/error_count.txt
+            src/ECU/misra/.results/summary.txt
+            src/ECU/misra/.results/severity-counts.txt

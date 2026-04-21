@@ -1,4 +1,5 @@
 #include "dtcManager.h"
+#include "ecu_unit_testing.h"
 #include "gps.h"
 
 #define DTC_EEPROM_MAGIC         0x4454434Du // "DTCM"
@@ -50,19 +51,39 @@ static dtc_manager_state_t s_dtcState = {
 
 #define DTC_COUNT ((uint8_t)COUNTOF(s_dtcState.dtcs))
 
+/**
+ * @brief Get the legacy EEPROM slot address for a DTC index.
+ * @param idx Index of the DTC entry.
+ * @return EEPROM address of the legacy storage slot.
+ */
 static uint16_t dtcSlotAddr(uint8_t idx) {
   return (uint16_t)(DTC_EEPROM_BASE + DTC_EEPROM_HEADER_SIZE + (idx * DTC_EEPROM_SLOT_SIZE));
 }
 
+/**
+ * @brief Get the KV key used to store DTC flags for an index.
+ * @param idx Index of the DTC entry.
+ * @return Key-value storage key for DTC flags.
+ */
 static uint16_t dtcKvKey(uint8_t idx) {
   return (uint16_t)(DTC_KV_KEY_FLAGS_BASE + idx);
 }
 
+/**
+ * @brief Get the KV key used to store DTC timestamp for an index.
+ * @param idx Index of the DTC entry.
+ * @return Key-value storage key for DTC timestamp.
+ */
 static uint16_t dtcKvTimestampKey(uint8_t idx) {
   return (uint16_t)(DTC_KV_KEY_TIMESTAMP_BASE + idx);
 }
 
-static int findDtcIndex(uint16_t code) {
+/**
+ * @brief Find the internal slot index for a DTC code.
+ * @param code DTC code to search for.
+ * @return Matching index, or -1 when the code is unknown.
+ */
+TESTABLE_STATIC int findDtcIndex(uint16_t code) {
   for(uint8_t i = 0; i < DTC_COUNT; i++) {
     if(s_dtcState.dtcs[i].code == code) {
       return i;
@@ -71,6 +92,11 @@ static int findDtcIndex(uint16_t code) {
   return -1;
 }
 
+/**
+ * @brief Build the persisted flag byte for a DTC entry.
+ * @param idx Index of the DTC entry.
+ * @return Packed flag byte for the selected entry.
+ */
 static uint8_t makeFlagsForIndex(uint8_t idx) {
   uint8_t flags = 0u;
   if(s_dtcState.dtcs[idx].stored) {
@@ -82,11 +108,22 @@ static uint8_t makeFlagsForIndex(uint8_t idx) {
   return flags;
 }
 
+/**
+ * @brief Apply a persisted flag byte to one DTC entry.
+ * @param idx Index of the DTC entry.
+ * @param flags Packed flag byte to apply.
+ * @return None.
+ */
 static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
   s_dtcState.dtcs[idx].stored = (flags & DTC_FLAG_STORED) != 0u;
   s_dtcState.dtcs[idx].permanent = (flags & DTC_FLAG_PERMANENT) != 0u;
 }
 
+/**
+ * @brief Save one DTC entry to key-value storage.
+ * @param idx Index of the DTC entry to save.
+ * @return True on success, otherwise false.
+ */
 static bool saveDtcToKv(uint8_t idx) {
   bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
   if(s_dtcState.dtcs[idx].firstOccurrence != 0) {
@@ -95,6 +132,10 @@ static bool saveDtcToKv(uint8_t idx) {
   return ok;
 }
 
+/**
+ * @brief Save all DTC entries to key-value storage.
+ * @return True when all writes succeed, otherwise false.
+ */
 static bool saveAllToKv(void) {
   bool ok = true;
   for(uint8_t i = 0; i < DTC_COUNT; i++) {
@@ -103,6 +144,10 @@ static bool saveAllToKv(void) {
   return ok;
 }
 
+/**
+ * @brief Clear all runtime and persisted flags in memory.
+ * @return None.
+ */
 static void resetAllState(void) {
   for(uint8_t i = 0; i < DTC_COUNT; i++) {
     s_dtcState.dtcs[i].active = false;
@@ -112,12 +157,20 @@ static void resetAllState(void) {
   }
 }
 
+/**
+ * @brief Check whether the legacy EEPROM DTC header is valid.
+ * @return True when legacy DTC storage contains a recognized header.
+ */
 static bool legacyHeaderIsValid(void) {
   int32_t magic = hal_eeprom_read_int(DTC_EEPROM_BASE);
   uint8_t version = hal_eeprom_read_byte((uint16_t)(DTC_EEPROM_BASE + 4));
   return (magic == (int32_t)DTC_EEPROM_MAGIC) && (version == DTC_EEPROM_VERSION);
 }
 
+/**
+ * @brief Try to migrate DTC flags from legacy EEPROM storage into KV storage.
+ * @return True when migration succeeded, otherwise false.
+ */
 static bool tryMigrateLegacyFromEeprom(void) {
   if(!legacyHeaderIsValid()) {
     return false;
@@ -132,6 +185,10 @@ static bool tryMigrateLegacyFromEeprom(void) {
   return saveAllToKv();
 }
 
+/**
+ * @brief Load all DTC state from key-value storage.
+ * @return True when the load completed.
+ */
 static bool loadAllFromKv(void) {
   for(uint8_t i = 0; i < DTC_COUNT; i++) {
     uint32_t flags = 0u;
@@ -148,11 +205,19 @@ static bool loadAllFromKv(void) {
   return true;
 }
 
+/**
+ * @brief Write the active KV schema version marker.
+ * @return True on success, otherwise false.
+ */
 static bool writeKvSchemaVersion(void) {
   return hal_kv_set_u32(DTC_KV_SCHEMA_KEY, DTC_KV_SCHEMA_VERSION);
 }
 
-static uint16_t dtcKvEffectiveSpan(void) {
+/**
+ * @brief Compute the effective KV storage span available in EEPROM.
+ * @return Even-sized usable KV span in bytes, or 0 when out of range.
+ */
+TESTABLE_STATIC uint16_t dtcKvEffectiveSpan(void) {
   uint32_t start = (uint32_t)DTC_KV_BASE;
   uint32_t end = start + (uint32_t)DTC_KV_SIZE;
   uint16_t eepromSize = hal_eeprom_size();
@@ -173,6 +238,10 @@ static uint16_t dtcKvEffectiveSpan(void) {
   return span;
 }
 
+/**
+ * @brief Clear the EEPROM area reserved for DTC key-value storage.
+ * @return True on success, otherwise false.
+ */
 static bool resetDtcKvRegion(void) {
   uint32_t start = (uint32_t)DTC_KV_BASE;
   uint16_t eepromSize = hal_eeprom_size();

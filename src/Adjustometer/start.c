@@ -11,6 +11,10 @@ static uint8_t lastFuelTemp = 0;
 #endif
 static uint32_t lastPeriodicLogMs = 0;
 
+/**
+ * @brief Initialize core-0 services, sensors and status reporting.
+ * @return None.
+ */
 void initialization(void) {
 
   debugInit();
@@ -28,6 +32,10 @@ void initialization(void) {
   deb("Fiesta Adjustometer started: %s\n", isEnvironmentStarted() ? "yes" : "no");
 }
 
+/**
+ * @brief Run one iteration of the idle core-0 maintenance loop.
+ * @return None.
+ */
 void looper(void) {
   updateWatchdogCore0();
 
@@ -40,6 +48,10 @@ void looper(void) {
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
+/**
+ * @brief Mirror current measurements and status into the I2C register map.
+ * @return None.
+ */
 static void updateI2CRegisters(void) {
   // getAdjustometerPulses() returns abs() — VP37 deflects only in one direction,
   // so pulse is always >= 0.  Only the upper int16_t bound needs clamping.
@@ -88,6 +100,10 @@ static void updateI2CRegisters(void) {
 #endif
 }
 
+/**
+ * @brief Initialize the second core used for I2C register publishing.
+ * @return None.
+ */
 void initialization1(void) {
   setStartedCore1();
 
@@ -98,6 +114,10 @@ void initialization1(void) {
 // main logic
 //-----------------------------------------------------------------------------
 
+/**
+ * @brief Run one iteration of the core-1 Adjustometer loop.
+ * @return None.
+ */
 void looper1(void) {
 
   updateWatchdogCore1();

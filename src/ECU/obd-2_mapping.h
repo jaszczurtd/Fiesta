@@ -40,7 +40,18 @@ extern "C" {
 #define DTC_ADJ_FUEL_TEMP_BROKEN   0xD90A  // U190A Adjustometer fuel temperature sensor fault
 #define DTC_ADJ_VOLTAGE_BAD        0xD90B  // U190B Adjustometer supply voltage out of range
 
+/**
+ * @brief Translate a PID number into a human-readable label.
+ * @param pid PID number to describe.
+ * @return Pointer to a static name string.
+ */
 const char *getPIDName(int pid);
+
+/**
+ * @brief Translate a project DTC code into a human-readable label.
+ * @param code Diagnostic trouble code to describe.
+ * @return Pointer to a static name string.
+ */
 const char *getDtcName(uint16_t code);
 
 #ifdef __cplusplus

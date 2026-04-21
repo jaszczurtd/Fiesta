@@ -107,7 +107,17 @@ extern "C" {
 #define TIMING_PWM_MIN 0
 #define TIMING_PWM_MAX PWM_RESOLUTION
 
+/**
+ * @brief Reserved legacy hook for VP37-side fuel temperature sampling.
+ * @return None.
+ * @note When implemented, this would correspond to a G81-like fuel-temperature input.
+ */
 void measureFuelTemp(void);
+
+/**
+ * @brief Reserved legacy hook for VP37-side supply voltage sampling.
+ * @return None.
+ */
 void measureVoltage(void);
 
 typedef struct {
@@ -116,9 +126,9 @@ typedef struct {
   bool vp37Initialized;
   float lastThrottle;
   bool calibrationDone;
-  // Setpoint pipeline:
-  //   desiredAdjustometerTarget : raw target written by VP37_setVP37Throttle()
-  //   desiredAdjustometer       : slew-rate limited setpoint actually fed to PID
+  // Setpoint pipeline (current names -> functional meaning):
+  //   desiredAdjustometerTarget : raw quantity-position target written by VP37_setVP37Throttle()
+  //   desiredAdjustometer       : slew-rate limited quantity-position target actually fed to PID
   int32_t desiredAdjustometerTarget;
   int32_t desiredAdjustometer;
   int32_t currentAdjustometerPosition;
@@ -143,16 +153,95 @@ typedef enum {
   VP37_INIT_PID_CREATE_FAILED
 } VP37InitStatus;
 
+/**
+ * @brief Initialize the VP37 inner quantity-control loop and calibrate Adjustometer limits.
+ * @param self VP37 controller instance to initialize.
+ * @return Initialization status code.
+ * @note Functionally this brings up the project-local N146/G149-like path.
+ *       Adjustometer remains only G149-like, not a literal OEM G149.
+ */
 VP37InitStatus VP37_init(VP37Pump *self);
+
+/**
+ * @brief Process one cycle of the VP37 inner quantity-actuator loop.
+ * @param self VP37 controller instance to process.
+ * @return None.
+ * @note This is the low-level N146/G149-like loop. Higher-level requested-fuel-
+ *       quantity arbitration is still represented only partially in the current code.
+ */
 void VP37_process(VP37Pump *self);
+
+/**
+ * @brief Enable or disable the VP37 output stage.
+ * @param self VP37 controller instance issuing the command.
+ * @param enable True to enable the actuator path, false to disable it.
+ * @return None.
+ * @note This is a project-local run/enable output and is only loosely comparable to
+ *       the OEM N109 stop-solenoid path.
+ */
 void VP37_enableVP37(VP37Pump *self, bool enable);
+
+/**
+ * @brief Read back the current VP37 enable output state.
+ * @param self VP37 controller instance to inspect.
+ * @return True when VP37 output is enabled, otherwise false.
+ * @note The signal is project-local and should not be treated as a literal N109 alias.
+ */
 bool VP37_isVP37Enabled(VP37Pump *self);
+
+/**
+ * @brief Print VP37 controller state for diagnostics.
+ * @param self VP37 controller instance to report.
+ * @return None.
+ */
 void VP37_showDebug(VP37Pump *self);
 
+/**
+ * @brief Set the VP37 timing-actuator output as a normalized angle command.
+ * @param self VP37 controller instance issuing the command.
+ * @param angle Requested timing angle in the 0..100 range.
+ * @return None.
+ * @note In OEM terminology this is closest to commanding the N108 start-of-injection
+ *       actuator path. Closed-loop G80/G28 SOI feedback is not implemented here yet.
+ */
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
+
+/**
+ * @brief Convert legacy accelerator demand into a VP37 quantity-feedback target.
+ * @param self VP37 controller instance to update.
+ * @param accel Accelerator / driver-demand input in percentage-like units.
+ * @return None.
+ * @note Despite the legacy "Throttle" name, this function currently maps G79/G185-like
+ *       driver demand directly into the project-local N146/G149-like target.
+ */
 void VP37_setVP37Throttle(VP37Pump *self, float accel);
+
+/**
+ * @brief Update VP37 PID gains and optionally reset controller state.
+ * @param self VP37 controller instance to update.
+ * @param kp New proportional gain.
+ * @param ki New integral gain.
+ * @param kd New derivative gain.
+ * @param shouldTriggerReset True to reset controller state after applying gains.
+ * @return None.
+ */
 void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
+
+/**
+ * @brief Read back the current VP37 PID gains.
+ * @param self VP37 controller instance to inspect.
+ * @param kp Output pointer receiving proportional gain, or NULL.
+ * @param ki Output pointer receiving integral gain, or NULL.
+ * @param kd Output pointer receiving derivative gain, or NULL.
+ * @return None.
+ */
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
+
+/**
+ * @brief Get the current VP37 PID update interval.
+ * @param self VP37 controller instance to inspect.
+ * @return PID update time in milliseconds.
+ */
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
 
 #ifdef __cplusplus

@@ -33,8 +33,22 @@ typedef struct {
 
 #endif
 
+/**
+ * @brief Initialize optional built-in test helpers selected at compile time.
+ * @return True when initialization finished.
+ */
 bool initTests(void);
+
+/**
+ * @brief Run one-shot startup test hooks.
+ * @return True when startup test processing finished.
+ */
 bool startTests(void);
+
+/**
+ * @brief Execute one periodic step of enabled runtime tests.
+ * @return None.
+ */
 void tickTests(void);
 
 #ifdef __cplusplus

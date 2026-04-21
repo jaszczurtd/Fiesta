@@ -1,5 +1,6 @@
 
 #include "obd-2.h"
+#include "ecu_unit_testing.h"
 #include "rpm.h"
 #include "vp37.h"
 
@@ -10,7 +11,7 @@ static void iso_tp_process(void);
 int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, int maxLen);
 
 static bool requireMinLength(uint32_t responseId, uint8_t serviceId, uint8_t numofBytes, uint8_t minLen);
-static uint8_t stMinToMs(uint8_t stMin);
+TESTABLE_STATIC uint8_t stMinToMs(uint8_t stMin);
 static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
 static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
 static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
@@ -89,15 +90,29 @@ static obd_state_t s_obdState = {
 
 #ifdef OBD_ENABLE_TOTDIST
 
+/**
+ * @brief Return the emulated total-distance value for Ford-specific DIDs.
+ * @return Odometer value in kilometers.
+ */
 uint32_t obdGetTotalDistanceKm(void) {
   return s_obdState.totalDistanceKmValue;
 }
 
+/**
+ * @brief Update the emulated total-distance value for Ford-specific DIDs.
+ * @param km New odometer value in kilometers.
+ * @return None.
+ */
 void obdSetTotalDistanceKm(uint32_t km) {
   s_obdState.totalDistanceKmValue = km;
 }
 #endif
 
+/**
+ * @brief Initialize the CAN-based OBD/UDS responder.
+ * @param retries Number of CAN initialization retries to request.
+ * @return None.
+ */
 void obdInit(int retries) {
 
   s_obdState.canHandle = hal_can_create_with_retry(CAN1_GPIO, CAN1_INT, NULL,
@@ -114,6 +129,10 @@ void obdInit(int retries) {
   }
 }
 
+/**
+ * @brief Poll CAN for requests and advance any active ISO-TP transmission.
+ * @return None.
+ */
 void obdLoop(void) {
   if(!s_obdState.initializedFlag) {
     return;
@@ -135,6 +154,14 @@ void obdLoop(void) {
   }
 }
 
+/**
+ * @brief Pack DTC codes into a compact payload for diagnostic responses.
+ * @param responseService Positive-response service identifier.
+ * @param kind DTC collection to export.
+ * @param outData Output buffer receiving the payload.
+ * @param maxLen Size of @p outData in bytes.
+ * @return Number of bytes written.
+ */
 int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, int maxLen) {
   if(outData == NULL || maxLen < 2) {
     return 0;
@@ -155,6 +182,14 @@ int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, i
   return pos;
 }
 
+/**
+ * @brief Validate minimum request length and send NRC 0x13 on failure.
+ * @param responseId CAN identifier used for the negative response.
+ * @param serviceId Service currently being processed.
+ * @param numofBytes Request length encoded in the incoming frame.
+ * @param minLen Minimum accepted payload length.
+ * @return True when the request is long enough, otherwise false.
+ */
 static bool requireMinLength(uint32_t responseId, uint8_t serviceId, uint8_t numofBytes, uint8_t minLen) {
   if(numofBytes < minLen) {
     negAck(responseId, serviceId, NRC_INCORRECT_LENGTH);
@@ -163,7 +198,12 @@ static bool requireMinLength(uint32_t responseId, uint8_t serviceId, uint8_t num
   return true;
 }
 
-static uint8_t stMinToMs(uint8_t stMin) {
+/**
+ * @brief Convert ISO-TP STmin encoding into scheduler-friendly milliseconds.
+ * @param stMin Raw ISO-TP STmin byte.
+ * @return Millisecond delay used between consecutive frames.
+ */
+TESTABLE_STATIC uint8_t stMinToMs(uint8_t stMin) {
   if(stMin <= 0x7F) {
     return stMin;
   }
@@ -177,6 +217,11 @@ static uint8_t stMinToMs(uint8_t stMin) {
 }
 
 #ifdef OBD_VERBOSE_IDENT_DEBUG
+/**
+ * @brief Check whether a DID belongs to the Ford identification subset.
+ * @param did DID to classify.
+ * @return True when the DID is part of Ford identification handling.
+ */
 static bool isFordDiagIdentificationDid(uint16_t did) {
   if(did == DID_FORD_MODEL || did == DID_PART_NUMBER || did == DID_SW_VERSION || did == DID_VIN || did == DID_FORD_CATCH_CODE) {
     return true;
@@ -198,6 +243,11 @@ static bool isFordDiagIdentificationDid(uint16_t did) {
   return false;
 }
 
+/**
+ * @brief Check whether a KWP local ID is used by Ford identification flows.
+ * @param localId Local identifier to classify.
+ * @return True when the local ID is part of Ford identification handling.
+ */
 static bool isFordDiagIdentificationLocalId(uint8_t localId) {
   return (localId == KWP_LID_CALIB_BLOCK || localId == KWP_LID_COMPACT_IDENT || localId == KWP_LID_SUPPORTED_LIST || (localId >= KWP_LID_CALIBRATION_ID && localId <= KWP_LID_COPYRIGHT));
 }
@@ -210,6 +260,11 @@ typedef struct {
   mode01_encoder_t encoder;
 } mode01_pid_handler_t;
 
+/**
+ * @brief Encode the Mode 01 supported-PID bitmap for 0x00-0x20.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_00(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x98;    // PIDs 01,04,05 (removed 03=FuelSysStatus for diesel)
@@ -218,6 +273,11 @@ static void encodeMode01Pid_00(uint8_t *txData) {
   txData[6] = 0x13;
 }
 
+/**
+ * @brief Encode MIL and active-DTC count for Mode 01 PID 0x01.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01StatusDtc(uint8_t *txData) {
   uint8_t activeDTC = dtcManagerCount(DTC_KIND_ACTIVE);
   bool MIL = (activeDTC > 0);
@@ -228,17 +288,32 @@ static void encodeMode01StatusDtc(uint8_t *txData) {
   txData[6] = 0x00;
 }
 
+/**
+ * @brief Encode diesel fuel-system status for Mode 01 PID 0x03.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelSysStatus(uint8_t *txData) {
   txData[0] = 0x04;
   txData[3] = 0;
   txData[4] = 0;
 }
 
+/**
+ * @brief Encode calculated engine load for Mode 01 PID 0x04.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EngineLoad(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
 }
 
+/**
+ * @brief Encode absolute engine load for Mode 01 PID 0x43.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01AbsoluteLoad(uint8_t *txData) {
   txData[0] = 0x04;
   int l = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
@@ -246,11 +321,21 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
   txData[4] = LSB(l);
 }
 
+/**
+ * @brief Encode coolant temperature for Mode 01 PID 0x05.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_COOLANT_TEMP) + 40.0f));
 }
 
+/**
+ * @brief Encode absolute intake pressure for Mode 01 PID 0x0B.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01IntakePressure(uint8_t *txData) {
   // PID 0x0B: 1 byte, kPa absolute (0-255)
   // F_PRESSURE is gauge bar (above atmosphere); convert: kPa_abs = bar*100 + 101
@@ -261,12 +346,22 @@ static void encodeMode01IntakePressure(uint8_t *txData) {
   txData[3] = (uint8_t)kpa;
 }
 
+/**
+ * @brief Encode fuel pressure placeholder for Mode 01 PID 0x0A.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelPressure(uint8_t *txData) {
   // PID 0x0A: gauge fuel pressure, 1 byte, kPa = 3*A. Not applicable for diesel VP37.
   txData[0] = 0x03;
   txData[3] = 0;
 }
 
+/**
+ * @brief Encode VP37 rail-pressure proxy for diesel-specific fuel rail PIDs.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[0] = 0x04;
   const RPM *rpm = getRPMInstance();
@@ -275,6 +370,11 @@ static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[4] = LSB(p);
 }
 
+/**
+ * @brief Encode fuel tank level percentage for Mode 01 PID 0x2F.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelLevel(uint8_t *txData) {
   txData[0] = 0x03;
   int32_t fuelPercentage = (((int32_t)(getGlobalValue(F_FUEL)) * 100) / (FUEL_MIN - FUEL_MAX));
@@ -284,6 +384,11 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
   txData[3] = percentToGivenVal(fuelPercentage, 255);
 }
 
+/**
+ * @brief Encode engine RPM for Mode 01 PID 0x0C.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[0] = 0x04;
   int32_t engine_Rpm = (int32_t)(getGlobalValue(F_RPM) * 4.0f);
@@ -291,33 +396,66 @@ static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[4] = LSB(engine_Rpm);
 }
 
+/**
+ * @brief Encode vehicle speed for Mode 01 PID 0x0D.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01VehicleSpeed(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = (uint8_t)((int32_t)getGlobalValue(F_ABS_CAR_SPEED));
 }
 
+/**
+ * @brief Encode intake air temperature for Mode 01 PID 0x0F.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01IntakeTemp(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_INTAKE_TEMP) + 40.0f));
 }
 
+/**
+ * @brief Encode the legacy driver-demand signal for Mode 01 throttle-related PIDs.
+ * @param txData Output frame buffer.
+ * @return None.
+ * @note The current ECU reuses generic throttle-related OBD PIDs for the G79/G185-like
+ *       pedal-demand path because the internal signal is still historically named
+ *       `F_THROTTLE_POS`.
+ */
 static void encodeMode01ThrottlePos(uint8_t *txData) {
   txData[0] = 0x03;
   float percent = (getGlobalValue(F_THROTTLE_POS) * 100) / PWM_RESOLUTION;
   txData[3] = percentToGivenVal(percent, 255);
 }
 
+/**
+ * @brief Encode the ECU's supported OBD standard identifier.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01ObdStandards(uint8_t *txData) {
   txData[0] = 0x04;
   txData[3] = EOBD_OBD_OBD_II;
 }
 
+/**
+ * @brief Encode a placeholder engine runtime value.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EngineRuntime(uint8_t *txData) {
   txData[0] = 0x04;
   txData[3] = 10;
   txData[4] = 10;
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0x21-0x40 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_21_40(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x20;
@@ -326,6 +464,11 @@ static void encodeMode01Pid_21_40(uint8_t *txData) {
   txData[6] = 0x1F;
 }
 
+/**
+ * @brief Encode catalyst-temperature style data from EGT inputs.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[0] = 0x04;
   int32_t temp = ((int32_t)(getGlobalValue(F_EGT)) + 40) * 10;
@@ -333,6 +476,11 @@ static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[4] = LSB(temp);
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0x41-0x60 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_41_60(uint8_t *txData) {
   txData[0] = 0x06;
   // 0x46 (Ambient air temperature) is intentionally not advertised,
@@ -343,6 +491,11 @@ static void encodeMode01Pid_41_60(uint8_t *txData) {
   txData[6] = 0xDF;
 }
 
+/**
+ * @brief Encode ECU supply voltage for Mode 01 PID 0x42.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[0] = 0x04;
   int32_t volt = (int32_t)(getGlobalValue(F_VOLTS) * 1000.0f);
@@ -350,33 +503,65 @@ static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[4] = LSB(volt);
 }
 
+/**
+ * @brief Encode diesel fuel type for Mode 01 PID 0x51.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelType(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = FUEL_TYPE_DIESEL;
 }
 
+/**
+ * @brief Encode engine oil temperature for Mode 01 PID 0x5C.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EngineOilTemp(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_OIL_TEMP) + 40.0f));
 }
 
+/**
+ * @brief Encode a fixed fuel-injection timing value for Mode 01 PID 0x5D.
+ * @param txData Output frame buffer.
+ * @return None.
+ * @note This is a placeholder timing report. Conceptually it is closer to the N108
+ *       start-of-injection path than to a measured closed-loop G80/G28 SOI result.
+ */
 static void encodeMode01FuelTiming(uint8_t *txData) {
   txData[0] = 0x04;
   txData[3] = 0x61;
   txData[4] = 0x80;
 }
 
+/**
+ * @brief Encode a fixed fuel-rate value for Mode 01 PID 0x5E.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01FuelRate(uint8_t *txData) {
   txData[0] = 0x04;
   txData[3] = 0x07;
   txData[4] = 0xD0;
 }
 
+/**
+ * @brief Encode the configured emissions-standard identifier.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01EmissionsStandard(uint8_t *txData) {
   txData[0] = 0x03;
   txData[3] = EURO_3;
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0x61-0x80 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_61_80(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x00;
@@ -385,6 +570,11 @@ static void encodeMode01Pid_61_80(uint8_t *txData) {
   txData[6] = 0x11;
 }
 
+/**
+ * @brief Encode DPF temperature for Mode 01 PID 0x7C.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[0] = 0x04;
   // PID 0x7C: DPF temperature bank 1, formula = (A*256+B)/10 - 40 °C
@@ -395,6 +585,11 @@ static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[4] = LSB(raw);
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0x81-0xA0 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_81_A0(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x00;
@@ -403,6 +598,11 @@ static void encodeMode01Pid_81_A0(uint8_t *txData) {
   txData[6] = 0x01;
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0xA1-0xC0 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_A1_C0(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x00;
@@ -411,6 +611,11 @@ static void encodeMode01Pid_A1_C0(uint8_t *txData) {
   txData[6] = 0x01;
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0xC1-0xE0 range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_C1_E0(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x00;
@@ -419,6 +624,11 @@ static void encodeMode01Pid_C1_E0(uint8_t *txData) {
   txData[6] = 0x01;
 }
 
+/**
+ * @brief Encode the supported-PID bitmap for the 0xE1-0xFF range.
+ * @param txData Output frame buffer.
+ * @return None.
+ */
 static void encodeMode01Pid_E1_FF(uint8_t *txData) {
   txData[0] = 0x06;
   txData[3] = 0x00;
@@ -427,7 +637,7 @@ static void encodeMode01Pid_E1_FF(uint8_t *txData) {
   txData[6] = 0x00;
 }
 
-//todo: fuel temp
+// Fuel temperature is currently exposed through Ford-specific DID DD02, not a Mode 01 PID.
 static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {PID_0_20, encodeMode01Pid_00},
   {STATUS_DTC, encodeMode01StatusDtc},
@@ -476,6 +686,15 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
   {PID_E1_FF, encodeMode01Pid_E1_FF},
 };
 
+/**
+ * @brief Dispatch one Mode 01 PID request through the encoder table.
+ * @param pid Requested PID.
+ * @param responseId CAN response identifier.
+ * @param mode Current service mode.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the request was fully handled.
+ */
 static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
   for(size_t i = 0; i < COUNTOF(s_mode01PidHandlers); i++) {
     if(s_mode01PidHandlers[i].pid == pid) {
@@ -491,8 +710,13 @@ static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
 
 }
 
-// Encode mode 01 PID payload bytes only (without 0x41 and PID).
-// Returns true when PID has a registered encoder.
+/**
+ * @brief Encode only the data bytes for a supported Mode 01 PID.
+ * @param pid Requested PID.
+ * @param out Output buffer receiving only payload bytes.
+ * @param outLen Output pointer receiving payload length.
+ * @return True when a PID encoder exists, otherwise false.
+ */
 bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
   if(out == NULL || outLen == NULL) {
     return false;
@@ -521,6 +745,15 @@ bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
   return false;
 }
 
+/**
+ * @brief Handle Mode 06 on-board monitoring requests.
+ * @param pid Requested test identifier.
+ * @param responseId CAN response identifier.
+ * @param mode Current service mode.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the request was fully handled.
+ */
 static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
   if(pid == 0x00){        // Supported TIDs 01-20
     txData[0] = 0x06;
@@ -538,6 +771,15 @@ static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
   return true;
 }
 
+/**
+ * @brief Handle Mode 09 vehicle-information requests.
+ * @param pid Requested information PID.
+ * @param responseId CAN response identifier.
+ * @param mode Current service mode.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the request was fully handled.
+ */
 static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
   if(pid == 0x00){        // Supported PIDs 01-20
     txData[0] = 0x06;
@@ -601,6 +843,15 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
   return true;
 }
 
+/**
+ * @brief Dispatch one SAE OBD service request.
+ * @param mode Requested OBD mode.
+ * @param pid Requested PID when applicable.
+ * @param responseId CAN response identifier.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the request was recognized and handled.
+ */
 static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId, uint8_t *txData, bool *tx) {
   if(mode == OBD_MODE_CURRENT_DATA) {
     return handleMode01(pid, responseId, mode, txData, tx);
@@ -657,7 +908,14 @@ static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId, uin
 // Pack a string into a fixed-width null-padded field at buf[0..width-1].
 #define packField    hal_pack_field
 
-// Build and send a UDS 0x22 positive response with a fixed-width ASCII field.
+/**
+ * @brief Send a UDS 0x22 response containing a fixed-width ASCII field.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @param str Source string.
+ * @param width Fixed payload width.
+ * @return None.
+ */
 static void send22Field(uint32_t responseId, uint16_t did, const char *str, int width) {
   if(width < 0) width = 0;
   if(width > 40) width = 40;
@@ -673,8 +931,14 @@ static void send22Field(uint32_t responseId, uint16_t did, const char *str, int 
   iso_tp(responseId, 3 + width, payload);
 }
 
-// Ford identification variant: space-padded (0x20) instead of null-padded.
-// Ford EEC-V uses space padding in identification fields.
+/**
+ * @brief Send a Ford-style UDS 0x22 identification field using space padding.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @param str Source string.
+ * @param width Fixed payload width.
+ * @return None.
+ */
 static void send22IdentField(uint32_t responseId, uint16_t did, const char *str, int width) {
   if(width < 0) width = 0;
   if(width > 40) width = 40;
@@ -690,7 +954,13 @@ static void send22IdentField(uint32_t responseId, uint16_t did, const char *str,
   iso_tp(responseId, 3 + width, payload);
 }
 
-// Build and send a UDS 0x22 response with 32-bit big-endian value.
+/**
+ * @brief Send a UDS 0x22 response containing one 32-bit big-endian value.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @param value Value to encode.
+ * @return None.
+ */
 static void send22U32(uint32_t responseId, uint16_t did, uint32_t value) {
   uint8_t payload[7] = {
     UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
@@ -718,7 +988,11 @@ static void send22U32(uint32_t responseId, uint16_t did, uint32_t value) {
 static const char FORD_PARTNUM_CHARS[] = "ABCDEFGHJKLMNPRSTUVXYZ";
 #define FORD_PARTNUM_CHARSET_LEN 22
 
-// Reverse-lookup: character → index in FORD_PARTNUM_CHARS, or -1.
+/**
+ * @brief Look up one Ford suffix character in the Fordiag charset.
+ * @param c Character to encode.
+ * @return Character index, or -1 when unsupported.
+ */
 static int fordPartCharIndex(char c) {
   for(int i = 0; i < FORD_PARTNUM_CHARSET_LEN; i++) {
     if(FORD_PARTNUM_CHARS[i] == c) return i;
@@ -726,8 +1000,12 @@ static int fordPartCharIndex(char c) {
   return -1;
 }
 
-// Encode a 1-or-2-char suffix fragment into one byte.
-// "B" → high=0, low=1 → byte=1.  "AX" → high=1,low=19 → byte=1*22+19=41.
+/**
+ * @brief Encode one Ford part-number suffix fragment into a single byte.
+ * @param s Pointer to the suffix fragment to encode.
+ * @param len Number of characters to encode from @p s.
+ * @return Encoded suffix byte.
+ */
 uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
   if(len == 1) {
     int idx = fordPartCharIndex(s[0]);
@@ -743,8 +1021,17 @@ uint8_t fordPartSuffixCharsToByte(const char *s, int len) {
   return 0;
 }
 
-// Split a Ford part number "PREFIX-MIDDLE-SUFFIX" into its three components.
-// Returns true on success. Pointers receive start positions and lengths.
+/**
+ * @brief Split a Ford part number into prefix, middle and suffix spans.
+ * @param pn Ford part-number string.
+ * @param prefixOut Output pointer receiving the prefix start.
+ * @param prefixLen Output pointer receiving prefix length.
+ * @param middleOut Output pointer receiving middle-section start.
+ * @param middleLen Output pointer receiving middle-section length.
+ * @param suffixOut Output pointer receiving suffix start.
+ * @param suffixLen Output pointer receiving suffix length.
+ * @return True when the string matches PREFIX-MIDDLE-SUFFIX format.
+ */
 bool fordPartNumberSplit(const char *pn,
                                 const char **prefixOut, int *prefixLen,
                                 const char **middleOut, int *middleLen,
@@ -767,11 +1054,12 @@ bool fordPartNumberSplit(const char *pn,
   return true;
 }
 
-// Send DID 0xE217 response: binary middle bytes of Ford part number.
-// The raw bytes are defined in config.h (ecu_PartNumMiddleHex) because
-// the Ford byte→string encoding (hex per byte, strip leading zero) is
-// ambiguous to reverse from the string alone.
-// Example: "XS4A-12A650-AXB" → response: 62 E2 17 12 0A 06 50
+/**
+ * @brief Send DID 0xE217 containing the binary middle section of the part number.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @return None.
+ */
 static void sendE217PartNumMiddle(uint32_t responseId, uint16_t did) {
   static const uint8_t midBytes[] = {ecu_PartNumMiddleHex};
   int midLen = ecu_PartNumMiddleLen;
@@ -785,8 +1073,12 @@ static void sendE217PartNumMiddle(uint32_t responseId, uint16_t did) {
   iso_tp(responseId, 3 + midLen, payload);
 }
 
-// Send DID 0xE21A response: ASCII prefix of Ford part number.
-// Example: "XS4A-12A650-AXB" → response: 62 E2 1A 58 53 34 41 ("XS4A")
+/**
+ * @brief Send DID 0xE21A containing the ASCII part-number prefix.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @return None.
+ */
 static void sendE21APartNumPrefix(uint32_t responseId, uint16_t did) {
   const char *prefix, *middle, *suffix;
   int prefixLen, middleLen, suffixLen;
@@ -804,11 +1096,12 @@ static void sendE21APartNumPrefix(uint32_t responseId, uint16_t did) {
   iso_tp(responseId, 3 + prefixLen, payload);
 }
 
-// Send DID 0xE219 response: 2-byte encoded suffix of Ford part number.
-// Encoding per Fordiag's FordPartNumE219/FordPartNumByteToChars:
-//   Suffix is split into left part and right part (e.g. "AXB" → "AX","B").
-//   Each part → byte via charset lookup. Left byte is doubled (×2) per convention.
-// Example: "AXB" → leftByte=41*2=82=0x52, rightByte=1 → {0x52, 0x01}
+/**
+ * @brief Send DID 0xE219 containing the Ford-encoded part-number suffix.
+ * @param responseId CAN response identifier.
+ * @param did DID being answered.
+ * @return None.
+ */
 static void sendE219PartNumSuffix(uint32_t responseId, uint16_t did) {
   const char *prefix, *middle, *suffix;
   int prefixLen, middleLen, suffixLen;
@@ -843,8 +1136,14 @@ static void sendE219PartNumSuffix(uint32_t responseId, uint16_t did) {
   iso_tp(responseId, (int)sizeof(payload), payload);
 }
 
-// Build and send a KWP 0x12 positive response with a fixed-width ASCII field.
-// Uses space padding (0x20) per Ford EEC-V convention.
+/**
+ * @brief Send a KWP 0x12 response with a fixed-width space-padded field.
+ * @param responseId CAN response identifier.
+ * @param localId Local identifier being answered.
+ * @param str Source string.
+ * @param width Fixed payload width.
+ * @return None.
+ */
 static void send12LocalField(uint32_t responseId, uint8_t localId, const char *str, int width) {
   if(width < 0) width = 0;
   if(width > 60) width = 60;
@@ -857,6 +1156,15 @@ static void send12LocalField(uint32_t responseId, uint8_t localId, const char *s
   iso_tp(responseId, 2 + width, payload);
 }
 
+/**
+ * @brief Copy a string into a fixed window inside an ID block.
+ * @param block Destination block buffer.
+ * @param len Size of @p block.
+ * @param offset Byte offset where the field starts.
+ * @param width Fixed field width.
+ * @param value String to copy.
+ * @return None.
+ */
 static void writeAsciiField(uint8_t *block,
                             int len,
                             int offset,
@@ -874,10 +1182,12 @@ static void writeAsciiField(uint8_t *block,
   memcpy(&block[offset], value, (size_t)n);
 }
 
-// Build a compact synthetic SCP ID block that can be accessed via service 0x23.
-// Layout follows Ford EEC-V conventions documented in CRAI8:
-//   Bottom half (0x00-0x7F): non-checksummed identification fields
-//   Upper half  (0x80-0xFF): checksummed area with VIN at END_VIN_BYTE_OFFSET=0x95
+/**
+ * @brief Build the synthetic Ford SCP identification block used by DMR reads.
+ * @param block Output block buffer.
+ * @param len Size of @p block in bytes.
+ * @return None.
+ */
 static void buildScpIdBlock(uint8_t *block, int len) {
   if(block == NULL || len < SCP_IDBLOCK_SIZE) {
     return;
@@ -921,6 +1231,13 @@ static void buildScpIdBlock(uint8_t *block, int len) {
   block[SCP_IDBLOCK_CHKSUM_OFS + 1] = (uint8_t)(correction & 0xFF);
 }
 
+/**
+ * @brief Read one byte from the synthetic SCP DMR address space.
+ * @param dmrType Ford DMR access type.
+ * @param addr Requested address.
+ * @param outValue Output pointer receiving the byte value.
+ * @return True when the read was handled.
+ */
 static bool readScpDmrByte(uint8_t dmrType, uint16_t addr, uint8_t *outValue) {
   if(outValue == NULL) {
     return false;
@@ -945,11 +1262,28 @@ static bool readScpDmrByte(uint8_t dmrType, uint16_t addr, uint8_t *outValue) {
   return true;
 }
 
+/**
+ * @brief Send an SCP-style generic negative response frame.
+ * @param responseId CAN response identifier.
+ * @param requestMode Original service identifier.
+ * @param arg1 First echoed argument byte.
+ * @param arg2 Second echoed argument byte.
+ * @param arg3 Third echoed argument byte.
+ * @param responseCode Response or NRC code.
+ * @return None.
+ */
 static void sendScpGeneralResponse(uint32_t responseId, uint8_t requestMode, uint8_t arg1, uint8_t arg2, uint8_t arg3, uint8_t responseCode) {
   uint8_t rsp[8] = {0x06, UDS_RSP_NEGATIVE, requestMode, arg1, arg2, arg3, responseCode, PAD};
   hal_can_send(s_obdState.canHandle, responseId, 8, rsp);
 }
 
+/**
+ * @brief Send one 4-byte SCP direct-memory response frame.
+ * @param responseId CAN response identifier.
+ * @param addr Requested base address.
+ * @param dmrType Ford DMR access type.
+ * @return None.
+ */
 static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrType) {
   uint8_t b0 = 0;
   uint8_t b1 = 0;
@@ -967,8 +1301,12 @@ static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrTy
   hal_can_send(s_obdState.canHandle, responseId, 8, rsp);
 }
 
-// Encode a known Ford SCP PID into data bytes.
-// Returns the number of data bytes (1/2/4) or 0 if PID is not in the table.
+/**
+ * @brief Encode one supported Ford SCP PID into raw response bytes.
+ * @param pid Ford SCP PID to encode.
+ * @param out Output buffer receiving up to 4 data bytes.
+ * @return Number of data bytes written, or 0 when unsupported.
+ */
 static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
   switch(pid) {
     case SCP_PID_RPM: { // N - Engine RPM, 0.25 rpm resolution, Word
@@ -1067,6 +1405,14 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
   return 0;
 }
 
+/**
+ * @brief Handle a Ford SCP PID access request tunneled over UDS 0x22.
+ * @param responseId CAN response identifier.
+ * @param pid Requested Ford SCP PID.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the PID was handled.
+ */
 static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txData, bool *tx) {
   (void)responseId;  // Intentionally unused; kept for API consistency
   
@@ -1100,8 +1446,12 @@ static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txDat
   return true;
 }
 
-// Ford-specific E3xx identification mapping used by ForDiag.
-// Observed behavior: VIN is composed from E301..E305, while E300 is used as Type.
+/**
+ * @brief Answer Ford E3xx identification DIDs used by Fordiag.
+ * @param responseId CAN response identifier.
+ * @param did Requested DID.
+ * @return None.
+ */
 static void send22FordDiagE3xx(uint32_t responseId, uint16_t did) {
   if(did == DID_FORD_TYPE) {
     // Null-padded: Fordiag treats E3xx as a VIN block and space-padding here
@@ -1135,6 +1485,16 @@ static void send22FordDiagE3xx(uint32_t responseId, uint16_t did) {
   send22Field(responseId, did, vinChunk, width);
 }
 
+/**
+ * @brief Dispatch one UDS or KWP service request.
+ * @param mode Requested service identifier.
+ * @param numofBytes Request length encoded in the incoming frame.
+ * @param data Raw request buffer.
+ * @param responseId CAN response identifier.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the service was recognized and handled.
+ */
 static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
   if(mode == UDS_SVC_DIAGNOSTIC_SESSION) {
     if(!requireMinLength(responseId, mode, numofBytes, 2)) {
@@ -1743,6 +2103,12 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
   return false;
 }
 
+/**
+ * @brief Parse and answer one incoming OBD/UDS CAN request frame.
+ * @param requestId CAN identifier of the incoming request.
+ * @param data Raw request buffer.
+ * @return None.
+ */
 void obdReq(uint32_t requestId, uint8_t *data){
   uint8_t numofBytes = data[0];
 
@@ -1796,26 +2162,47 @@ void obdReq(uint32_t requestId, uint8_t *data){
 }
 
 
-// Generic debug serial output
+/**
+ * @brief Send a generic UDS negative response frame.
+ * @param responseId CAN response identifier.
+ * @param mode Original service identifier.
+ * @param reason Negative-response code.
+ * @return None.
+ */
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason){
   uint8_t txData[] = {0x03,UDS_RSP_NEGATIVE,mode,reason,PAD,PAD,PAD,PAD};
   hal_can_send(s_obdState.canHandle, responseId, 8, txData);
 }
 
 
-// Generic debug serial output
+/**
+ * @brief Log an unsupported PID request.
+ * @param mode Requested service mode.
+ * @param pid Unsupported PID.
+ * @return None.
+ */
 static void unsupportedPrint(uint8_t mode, uint8_t pid){
   deb("Mode $%02X: Unsupported PID $%02X requested!", mode, pid);
 }
 
 
+/**
+ * @brief Log an unsupported service request.
+ * @param mode Unsupported service identifier.
+ * @return None.
+ */
 static void unsupportedServicePrint(uint8_t mode){
   deb("Unsupported service $%02X requested!", mode);
 }
 
 
-// Non-blocking ISO-TP: sends Single Frame directly, or First Frame and arms
-// the state machine for Consecutive Frames driven by iso_tp_process().
+/**
+ * @brief Start a non-blocking ISO-TP response transmission.
+ * @param responseId CAN response identifier.
+ * @param len Number of payload bytes to send.
+ * @param data Payload bytes to transmit.
+ * @return None.
+ */
 static void iso_tp(uint32_t responseId, int len, const uint8_t *data) {
   if(data == NULL || len <= 0) {
     return;
@@ -1859,7 +2246,10 @@ static void iso_tp(uint32_t responseId, int len, const uint8_t *data) {
   s_obdState.isoTpState.state = ISO_TP_WAIT_FC;
 }
 
-// Called every obdLoop() iteration; sends one CF per call, handles FC frames.
+/**
+ * @brief Advance the ISO-TP transmit state machine by one scheduler step.
+ * @return None.
+ */
 static void iso_tp_process(void) {
   if(s_obdState.isoTpState.state == ISO_TP_IDLE) {
     return;

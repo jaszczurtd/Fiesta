@@ -1,7 +1,22 @@
 #include "vp37.h"
 #include <hal/hal_soft_timer.h>
 
+/**
+ * @brief Run the VP37 calibration sweep and capture Adjustometer limits.
+ * @param self VP37 controller instance to calibrate.
+ * @return None.
+ * @note This calibrates the project-local N146/G149-like quantity-feedback range,
+ *       not an OEM mg/stroke model.
+ */
 static void VP37_makeCalibration(VP37Pump *self);
+
+/**
+ * @brief Refresh cached Adjustometer position and telemetry values.
+ * @param self VP37 controller instance to update.
+ * @return None.
+ * @note The refreshed values are a project-local G149-like quantity feedback plus
+ *       G81-like fuel temperature and supply-voltage telemetry.
+ */
 static void VP37_updateAdjustometerPosition(VP37Pump *self);
 
 VP37InitStatus VP37_init(VP37Pump *self) {
@@ -67,11 +82,22 @@ bool VP37_isVP37Enabled(VP37Pump *self) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
+/**
+ * @brief Get the PWM value used during maximum-range calibration.
+ * @param self VP37 controller instance using the calibration path.
+ * @return PWM command used for calibration.
+ */
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {
   (void)self;
   return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
 }
 
+/**
+ * @brief Read the latest Adjustometer pulse value for VP37 control.
+ * @return Adjustometer pulse value in Hz, or -1 on communication failure.
+ * @note This is a project-local G149-like raw quantity-feedback signal, not a direct
+ *       OEM quantity estimate.
+ */
 int32_t VP37_getAdjustometer(void) {
   adjustometer_reading_t *reading = getVP37Adjustometer();
   if(reading == NULL || !reading->commOk) {
@@ -80,6 +106,12 @@ int32_t VP37_getAdjustometer(void) {
   return reading->pulseHz;
 }
 
+/**
+ * @brief Average several Adjustometer reads while rejecting min/max outliers.
+ * @param self VP37 controller instance storing the temporary samples.
+ * @return Stabilized Adjustometer value.
+ * @note The stabilized result still represents project-local G149-like raw feedback.
+ */
 static int32_t VP37_getAdjustometerStable(VP37Pump *self) {
   int32_t count = STABILITY_ADJUSTOMETER_TAB_SIZE;
   if(count <= 0) {
@@ -133,11 +165,20 @@ static void VP37_updateAdjustometerPosition(VP37Pump *self) {
   }
 }
 
+/**
+ * @brief Wait for mechanical movement to settle during calibration.
+ * @return None.
+ */
 static void VP37_applyDelay(void) {
   hal_delay_ms(VP37_ADJUST_TIMER);
   watchdog_feed();
 }
 
+/**
+ * @brief Delay and sample one stabilized calibration value.
+ * @param self VP37 controller instance being calibrated.
+ * @return Stabilized Adjustometer calibration value.
+ */
 static int32_t VP37_makeCalibrationValue(VP37Pump *self) {
   VP37_applyDelay();
   int32_t val = VP37_getAdjustometerStable(self);
@@ -170,6 +211,13 @@ static void VP37_makeCalibration(VP37Pump *self) {
       self->VP37_OPERATE_MAX);
 }
 
+/**
+ * @brief Execute the inner VP37 quantity-control cycle.
+ * @param self VP37 controller instance to update.
+ * @return None.
+ * @note The current input still comes from legacy throttle-named driver demand,
+ *       but the controlled plant is the project-local N146/G149-like inner loop.
+ */
 static void VP37_throttleCycle(VP37Pump *self) {
   if(self->desiredAdjustometerTarget < 0) {
     return;
@@ -259,12 +307,28 @@ static void VP37_throttleCycle(VP37Pump *self) {
   }
 }
 
+/**
+ * @brief Set the current timing-actuator command for the VP37 pump.
+ * @param self VP37 controller instance issuing the command.
+ * @param angle Requested timing angle in the 0..100 range.
+ * @return None.
+ * @note This is closest to the N108 actuator side of SOI control. G80/G28 closed-loop
+ *       timing feedback is not implemented here yet.
+ */
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
   (void)self;
   angle = hal_constrain(angle, 0, 100);
   valToPWM(PIO_VP37_ANGLE, hal_map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
 }
 
+/**
+ * @brief Convert legacy driver-demand input into a VP37 quantity-position target.
+ * @param self VP37 controller instance to update.
+ * @param accel Accelerator / driver-demand input in percentage-like units.
+ * @return None.
+ * @note Despite the legacy name, this maps G79/G185-like driver demand into the
+ *       project-local N146/G149-like inner-loop target.
+ */
 void VP37_setVP37Throttle(VP37Pump *self, float accel) {
   if(!self->calibrationDone) {
     derr_limited("VP37 calibration", "Calibration not done!");
