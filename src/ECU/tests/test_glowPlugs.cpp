@@ -88,6 +88,31 @@ void test_glow_process_disables_after_elapsed_time(void) {
     TEST_ASSERT_FALSE(glowPlugs_isGlowPlugsHeating(&gp));
 }
 
+void test_glow_process_does_not_decrement_in_same_second(void) {
+    glowPlugs_initGlowPlugsTime(&gp, 0.0f);
+    int32_t before = gp.glowPlugsTime;
+
+    hal_mock_set_millis(1000);
+    glowPlugs_process(&gp);
+    int32_t afterFirstTick = gp.glowPlugsTime;
+
+    glowPlugs_process(&gp);
+    TEST_ASSERT_EQUAL_INT32(before - 1, afterFirstTick);
+    TEST_ASSERT_EQUAL_INT32(afterFirstTick, gp.glowPlugsTime);
+}
+
+void test_glow_process_returns_early_when_not_initialized(void) {
+    gp.glowPlugsTime = 5;
+    gp.glowPlugsLampTime = 5;
+    gp.initialized = false;
+
+    hal_mock_set_millis(1000);
+    glowPlugs_process(&gp);
+
+    TEST_ASSERT_EQUAL_INT32(5, gp.glowPlugsTime);
+    TEST_ASSERT_EQUAL_INT32(5, gp.glowPlugsLampTime);
+}
+
 // ── warmAfterStart flag ───────────────────────────────────────────────────────
 
 void test_glow_warm_after_start_prevents_reheat(void) {
@@ -128,6 +153,16 @@ void test_glow_process_triggers_heat_on_cold_rpm(void) {
     TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(&gp));
 }
 
+void test_glow_lamp_time_is_max_for_very_low_temperature(void) {
+    glowPlugs_initGlowPlugsTime(&gp, TEMP_VERY_LOW);
+    TEST_ASSERT_EQUAL_INT32(MAX_LAMP_TIME, gp.glowPlugsLampTime);
+}
+
+void test_glow_lamp_time_stays_zero_for_warm_temperature(void) {
+    glowPlugs_initGlowPlugsTime(&gp, (float)(TEMP_COLD_ENGINE + 5));
+    TEST_ASSERT_EQUAL_INT32(0, gp.glowPlugsLampTime);
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -145,8 +180,12 @@ int main(void) {
     RUN_TEST(test_glow_heating_just_below_threshold);
     RUN_TEST(test_glow_still_heating_before_expiry);
     RUN_TEST(test_glow_process_disables_after_elapsed_time);
+    RUN_TEST(test_glow_process_does_not_decrement_in_same_second);
+    RUN_TEST(test_glow_process_returns_early_when_not_initialized);
     RUN_TEST(test_glow_warm_after_start_prevents_reheat);
     RUN_TEST(test_glow_process_triggers_heat_on_cold_rpm);
+    RUN_TEST(test_glow_lamp_time_is_max_for_very_low_temperature);
+    RUN_TEST(test_glow_lamp_time_stays_zero_for_warm_temperature);
 
     return UNITY_END();
 }
