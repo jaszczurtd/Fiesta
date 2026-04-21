@@ -73,6 +73,27 @@ static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
   return true;
 }
 
+/**
+ * @brief Read one analog sensor routed through the HC4051 mux with averaging.
+ * @param muxChannel HC4051 channel to select.
+ * @param tableIdx Pointer to the averaging ring-buffer write index.
+ * @param tableValuesSet Pointer to the averaging "samples seen" counter.
+ * @param table Averaging ring buffer storage.
+ * @return Latest averaged NTC temperature in degrees Celsius.
+ */
+static float sensors_readNtcViaMux(uint8_t muxChannel,
+                                   int *tableIdx, int *tableValuesSet,
+                                   float *table) {
+  float a = 0.0f;
+  m_mutex_enter_blocking(analog4051Mutex);
+  set4051ActivePin(muxChannel);
+  a = getAverageForTable(tableIdx, tableValuesSet,
+                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B),
+                         table);
+  m_mutex_exit(analog4051Mutex);
+  return a;
+}
+
 //I2C bus recovery: toggle SCL up to 9 times on GPIO level to release
 //a slave that is holding SDA low (e.g. after master reset mid-transaction).
 //Must be called BEFORE Wire.begin() / hal_i2c_init().
@@ -154,15 +175,10 @@ void initBasicPIO(void) {
 //Read coolant temperature
 //-------------------------------------------------------------------------------------------------
 float readCoolantTemp(void) {
-  float a = 0.0;
-  m_mutex_enter_blocking(analog4051Mutex);
-
-  set4051ActivePin(HC4051_I_COOLANT_TEMP);
-  a = getAverageForTable(&s_sensorsState.collantTableIdx, &s_sensorsState.collantValuesSet,
-                        ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                        s_sensorsState.collantTable);
-  m_mutex_exit(analog4051Mutex);  
-  return a;
+  return sensors_readNtcViaMux(HC4051_I_COOLANT_TEMP,
+                               &s_sensorsState.collantTableIdx,
+                               &s_sensorsState.collantValuesSet,
+                               s_sensorsState.collantTable);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -170,15 +186,10 @@ float readCoolantTemp(void) {
 //-------------------------------------------------------------------------------------------------
 
 float readOilTemp(void) {
-  float a = 0.0;
-  m_mutex_enter_blocking(analog4051Mutex);
-  set4051ActivePin(HC4051_I_OIL_TEMP);
-
-  a = getAverageForTable(&s_sensorsState.oilTableIdx, &s_sensorsState.oilValuesSet,
-                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), //real values (resitance)
-                         s_sensorsState.oilTable);
-  m_mutex_exit(analog4051Mutex);  
-  return a;
+  return sensors_readNtcViaMux(HC4051_I_OIL_TEMP,
+                               &s_sensorsState.oilTableIdx,
+                               &s_sensorsState.oilValuesSet,
+                               s_sensorsState.oilTable);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -287,10 +298,12 @@ static const char *i2cEndTransmissionError(uint8_t code) {
 bool pcf8574_init(void) {
   s_sensorsState.pcf8574State = 0;
 
+  // i2cBusMutex serializes us against multi-step transactions (e.g. adjustometer)
+  // that split a begin/write/end from a later request_from; the HAL-internal
+  // mutex alone covers only a single begin/end pair.
   m_mutex_enter_blocking(i2cBusMutex);
-  hal_i2c_begin_transmission(PCF8574_ADDR);
-  bool success = hal_i2c_write(s_sensorsState.pcf8574State);
-  bool notFound = hal_i2c_end_transmission();
+  bool success = false;
+  uint8_t notFound = hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
   if(!success || notFound) {
@@ -314,9 +327,8 @@ void pcf8574_write(unsigned char pin, bool value) {
   }
 
   m_mutex_enter_blocking(i2cBusMutex);
-  hal_i2c_begin_transmission(PCF8574_ADDR);
-  bool success = hal_i2c_write(s_sensorsState.pcf8574State);
-  bool notFound = hal_i2c_end_transmission();
+  bool success = false;
+  uint8_t notFound = hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
   if(!success || notFound) {
@@ -333,24 +345,17 @@ bool pcf8574_read(unsigned char pin) {
   }
 
   m_mutex_enter_blocking(i2cBusMutex);
-  uint8_t received = hal_i2c_request_from(PCF8574_ADDR, 1);
-  if(received != 1) {
-    m_mutex_exit(i2cBusMutex);
-    derr("pcf8574_read: expected 1 byte, got %d", (int)received);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
-    return false;
-  }
-
-  int raw = hal_i2c_read();
+  bool readOk = false;
+  uint8_t raw = hal_i2c_read_byte(PCF8574_ADDR, &readOk);
   m_mutex_exit(i2cBusMutex);
 
-  if(raw < 0) {
-    derr("pcf8574_read: hal_i2c_read failed: %d", raw);
+  if(!readOk) {
+    derr("pcf8574_read: I2C read failed");
     dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
     return false;
   }
 
-  s_sensorsState.pcf8574State = (uint8_t)raw;
+  s_sensorsState.pcf8574State = raw;
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
   return bitRead(s_sensorsState.pcf8574State, pin);
 }
@@ -567,9 +572,8 @@ static adjustometer_reading_t readAdjustometer(void) {
   m_mutex_enter_blocking(i2cBusMutex);
 
   // Set register pointer to 0x00 (PULSE_HI)
-  hal_i2c_begin_transmission(ADJUSTOMETER_I2C_ADDR);
-  hal_i2c_write(ADJUSTOMETER_REG_PULSE_HI);
-  uint8_t txErr = hal_i2c_end_transmission();
+  uint8_t txErr = hal_i2c_write_byte(ADJUSTOMETER_I2C_ADDR,
+                                     ADJUSTOMETER_REG_PULSE_HI, NULL);
   if(txErr) {
     m_mutex_exit(i2cBusMutex);
     derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr), (int)txErr);

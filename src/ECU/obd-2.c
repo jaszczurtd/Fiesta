@@ -289,6 +289,24 @@ static void encodeMode01StatusDtc(uint8_t *txData) {
 }
 
 /**
+ * @brief Convert a temperature in °C into the 1-byte OBD/UDS representation.
+ * @param tempC Temperature value in degrees Celsius.
+ * @return Raw byte in the range 0..255 using the +40 °C OBD offset.
+ * @note OBD-II (SAE J1979) encodes temperatures as A = (T + 40) with a 1-byte
+ *       range of -40 °C .. 215 °C. Clamping prevents undefined-cast values when
+ *       upstream readings momentarily fall outside the sensor spec.
+ */
+TESTABLE_STATIC uint8_t obd_encodeTempByte(float tempC) {
+  int32_t raw = (int32_t)(tempC + 40.0f);
+  if(raw < 0) {
+    raw = 0;
+  } else if(raw > 255) {
+    raw = 255;
+  }
+  return (uint8_t)raw;
+}
+
+/**
  * @brief Encode diesel fuel-system status for Mode 01 PID 0x03.
  * @param txData Output frame buffer.
  * @return None.
@@ -328,7 +346,7 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
  */
 static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_COOLANT_TEMP) + 40.0f));
+  txData[3] = obd_encodeTempByte(getGlobalValue(F_COOLANT_TEMP));
 }
 
 /**
@@ -413,7 +431,7 @@ static void encodeMode01VehicleSpeed(uint8_t *txData) {
  */
 static void encodeMode01IntakeTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_INTAKE_TEMP) + 40.0f));
+  txData[3] = obd_encodeTempByte(getGlobalValue(F_INTAKE_TEMP));
 }
 
 /**
@@ -520,7 +538,7 @@ static void encodeMode01FuelType(uint8_t *txData) {
  */
 static void encodeMode01EngineOilTemp(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = (uint8_t)((int32_t)(getGlobalValue(F_OIL_TEMP) + 40.0f));
+  txData[3] = obd_encodeTempByte(getGlobalValue(F_OIL_TEMP));
 }
 
 /**
@@ -1860,19 +1878,19 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
     } else if(did == DID_FORD_OUTTMP) {
       // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
       // ECU has no outside temp sensor; use intake temp as best proxy.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_INTAKE_TEMP) + 40.0f), 0, 255);
+      uint8_t raw = obd_encodeTempByte(getGlobalValue(F_INTAKE_TEMP));
       uint8_t payload[4] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)raw
+        raw
       };
-      deb("UDS 0x22 DD05 OUTTMP raw=%d (%.1f°C)", raw, getGlobalValue(F_INTAKE_TEMP));
+      deb("UDS 0x22 DD05 OUTTMP raw=%u (%.1f°C)", (unsigned)raw, getGlobalValue(F_INTAKE_TEMP));
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_FUEL_TEMP) {
       // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_FUEL_TEMP) + 40.0f), 0, 255);
+      uint8_t raw = obd_encodeTempByte(getGlobalValue(F_FUEL_TEMP));
       uint8_t payload[4] = {
         UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)raw
+        raw
       };
       iso_tp(responseId, (int)sizeof(payload), payload);
     } else if(did == DID_FORD_OIL_PRESSURE) {

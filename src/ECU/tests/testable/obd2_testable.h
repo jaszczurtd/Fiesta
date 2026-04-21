@@ -5,6 +5,7 @@
 
 #ifdef UNIT_TEST
 uint8_t stMinToMs(uint8_t stMin);
+uint8_t obd_encodeTempByte(float tempC);
 #endif
 
 #endif

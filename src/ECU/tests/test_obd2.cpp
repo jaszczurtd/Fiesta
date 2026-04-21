@@ -337,6 +337,58 @@ void test_totdist_set_max_3byte(void) {
 }
 #endif
 
+// ── obd_encodeTempByte helper ────────────────────────────────────────────────
+
+void test_obd_temp_byte_zero_celsius(void) {
+    TEST_ASSERT_EQUAL_UINT8(40, obd_encodeTempByte(0.0f));
+}
+
+void test_obd_temp_byte_negative_40_celsius(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, obd_encodeTempByte(-40.0f));
+}
+
+void test_obd_temp_byte_215_celsius_is_max(void) {
+    TEST_ASSERT_EQUAL_UINT8(255, obd_encodeTempByte(215.0f));
+}
+
+void test_obd_temp_byte_clamps_below_minus_40(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, obd_encodeTempByte(-100.0f));
+}
+
+void test_obd_temp_byte_clamps_above_215(void) {
+    TEST_ASSERT_EQUAL_UINT8(255, obd_encodeTempByte(500.0f));
+}
+
+void test_obd_temp_byte_positive_mid(void) {
+    // 90 °C → raw = 130
+    TEST_ASSERT_EQUAL_UINT8(130, obd_encodeTempByte(90.0f));
+}
+
+void test_obd_temp_byte_fractional_truncates_toward_zero(void) {
+    // 24.9 + 40 = 64.9 → truncated to 64
+    TEST_ASSERT_EQUAL_UINT8(64, obd_encodeTempByte(24.9f));
+}
+
+void test_obd_temp_byte_applied_via_coolant_pid(void) {
+    // Sanity check: Mode 01 PID 0x05 uses the helper. -50 °C must clamp to 0.
+    setGlobalValue(F_COOLANT_TEMP, -50.0f);
+    uint8_t data[4] = {0};
+    int len = 0;
+    TEST_ASSERT_TRUE(encodeMode01PidData(ENGINE_COOLANT_TEMP, data, &len));
+    TEST_ASSERT_EQUAL_INT(1, len);
+    TEST_ASSERT_EQUAL_UINT8(0, data[0]);
+}
+
+void test_obd_temp_byte_applied_via_intake_pid(void) {
+    // 250 °C beyond spec must clamp to 255 via the helper.
+    setGlobalValue(F_INTAKE_TEMP, 250.0f);
+    uint8_t data[4] = {0};
+    int len = 0;
+    TEST_ASSERT_TRUE(encodeMode01PidData(INTAKE_TEMP, data, &len));
+    TEST_ASSERT_EQUAL_INT(1, len);
+    TEST_ASSERT_EQUAL_UINT8(255, data[0]);
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -360,6 +412,18 @@ int main(void) {
     RUN_TEST(test_pid_engine_load);
     RUN_TEST(test_pid_unsupported_returns_false);
     RUN_TEST(test_pid_egt_as_catalyst_temp);
+
+    // obd_encodeTempByte helper
+    RUN_TEST(test_obd_temp_byte_zero_celsius);
+    RUN_TEST(test_obd_temp_byte_negative_40_celsius);
+    RUN_TEST(test_obd_temp_byte_215_celsius_is_max);
+    RUN_TEST(test_obd_temp_byte_clamps_below_minus_40);
+    RUN_TEST(test_obd_temp_byte_clamps_above_215);
+    RUN_TEST(test_obd_temp_byte_positive_mid);
+    RUN_TEST(test_obd_temp_byte_fractional_truncates_toward_zero);
+    RUN_TEST(test_obd_temp_byte_applied_via_coolant_pid);
+    RUN_TEST(test_obd_temp_byte_applied_via_intake_pid);
+
     RUN_TEST(test_stmin_to_ms_preserves_millisecond_values);
     RUN_TEST(test_stmin_to_ms_clamps_submillisecond_range_to_one_ms);
     RUN_TEST(test_stmin_to_ms_rejects_reserved_values);
