@@ -173,6 +173,59 @@ void test_internal_engine_load_helper_clamps_overflow_to_hundred(void) {
     TEST_ASSERT_EQUAL_INT(100, sensors_calculateEngineLoadFromValues(5.0f, (float)(RPM_MAX_EVER * 2)));
 }
 
+// ── PCF8574 I2C write path (exercises the shared i2c-write helper) ──────────
+
+void test_pcf8574_write_targets_expected_address(void) {
+    hal_mock_i2c_set_busy(false);
+    pcf8574_write(0, true);
+    TEST_ASSERT_EQUAL_UINT8(PCF8574_ADDR, hal_mock_i2c_get_last_addr());
+}
+
+void test_pcf8574_write_changes_address_free_after_release(void) {
+    // Each pcf8574_write must acquire and release the i2c bus mutex. The mock
+    // exposes a lock depth counter that should be zero outside the helper.
+    hal_mock_i2c_set_busy(false);
+    pcf8574_write(1, true);
+    TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+    pcf8574_write(1, false);
+    TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+}
+
+void test_pcf8574_write_invalid_pin_is_noop(void) {
+    hal_mock_i2c_set_busy(false);
+    // Use an address-distinct target first, then verify invalid pin leaves the
+    // recorded last-address unchanged because pcf8574_write should not transmit.
+    hal_i2c_begin_transmission(0x11);
+    (void)hal_i2c_end_transmission();
+    TEST_ASSERT_EQUAL_UINT8(0x11, hal_mock_i2c_get_last_addr());
+
+    pcf8574_write(8, true);  // pin > 7 → invalid, early return
+    TEST_ASSERT_EQUAL_UINT8(0x11, hal_mock_i2c_get_last_addr());
+}
+
+void test_pcf8574_read_returns_set_bit(void) {
+    // PCF8574 reports the full port byte; bit 3 set → pcf8574_read(3) == true.
+    hal_mock_i2c_set_busy(false);
+    const uint8_t rx[] = { (uint8_t)(1u << 3) };
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    TEST_ASSERT_TRUE(pcf8574_read(3));
+}
+
+void test_pcf8574_read_returns_cleared_bit(void) {
+    hal_mock_i2c_set_busy(false);
+    const uint8_t rx[] = { 0x00 };
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    TEST_ASSERT_FALSE(pcf8574_read(5));
+}
+
+void test_pcf8574_read_invalid_pin_returns_false(void) {
+    // Invalid pin must short-circuit without touching the bus.
+    hal_mock_i2c_set_busy(false);
+    TEST_ASSERT_FALSE(pcf8574_read(8));
+}
+
 // ── readThrottle — ADC-based mapping ─────────────────────────────────────────
 
 void test_throttle_adc_at_idle_gives_zero(void) {
@@ -239,6 +292,13 @@ int main(void) {
 
     RUN_TEST(test_throttle_adc_at_idle_gives_zero);
     RUN_TEST(test_throttle_adc_at_full_gives_max);
+
+    RUN_TEST(test_pcf8574_write_targets_expected_address);
+    RUN_TEST(test_pcf8574_write_changes_address_free_after_release);
+    RUN_TEST(test_pcf8574_write_invalid_pin_is_noop);
+    RUN_TEST(test_pcf8574_read_returns_set_bit);
+    RUN_TEST(test_pcf8574_read_returns_cleared_bit);
+    RUN_TEST(test_pcf8574_read_invalid_pin_returns_false);
 
     return UNITY_END();
 }

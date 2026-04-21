@@ -2,6 +2,7 @@
 .codex/
 .codex
 *.codex
+.claude/*
 
 # OS/editor noise
 .DS_Store
