@@ -45,7 +45,8 @@ Deprecated code in `legacy/`:
 - Host-side validation exists for ECU, Adjustometer, and Clocks. ECU currently provides 11 executable host test targets under `src/ECU/tests/`; `test_cppcheck` is added as an extra CTest entry when `cppcheck` is installed. Adjustometer currently provides 2 host tests.
 - ECU CI runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
 - ECU now has a dedicated project-local MISRA screening runner under `src/ECU/misra/`, a deviation register scaffold, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
-- Initial ECU MISRA screening baseline reports 976 active findings across 27 rule IDs, so the new runner should be treated as a triage/evidence path, not a pass signal.
+- Latest ECU MISRA screening snapshot (2026-04-21) reports 787 active findings across 25 rule IDs, so the runner should be treated as a triage/evidence path, not a pass signal.
+- Recent ECU hardening reduced rule 10.4 findings to 95 (mainly `obd-2.c` essential-type cleanup with regression-test coverage updates).
 - ECU startup reports compile timestamp (`__DATE__` + `__TIME__`).
 
 ## ECU MISRA-C migration status
@@ -81,7 +82,7 @@ Pending areas:
 
 - full C linkage path for required HAL/tool APIs,
 - replacement of C++ dependencies (Arduino core/HAL/test path) if full project-level C-only build is required,
-- MISRA hardening pass (casts, bounds, overflow, naming, volatile/mutex review).
+- MISRA hardening pass (in progress): remaining casts/bounds/overflow cleanup outside `obd-2.c`, plus naming consistency and volatile/mutex review across ECU modules.
 
 ## MISRA documentation policy (mandatory)
 
