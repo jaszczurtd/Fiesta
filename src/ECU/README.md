@@ -29,6 +29,21 @@ Current hardening/warning status:
 - ECU warning fixes aligned with `-Werror` include unused-parameter cleanup in `obd-2.c` and `sensors.c`.
 - CAN TX paths use full buffer zero-initialization before send.
 - CAN RX callback rejects invalid frames (`NULL` buffer or `len > CAN_FRAME_MAX_LENGTH`) before payload reads.
+- Multi-core state access tightened in `sensors.c` and `dtcManager.c`:
+  adjustometer readout uses snapshot semantics under a dedicated mutex,
+  `getVP37Adjustometer()` migrated to an out-parameter API so callers own
+  the destination storage, PCF8574 shadow-latch RMW moved inside the I2C
+  bus mutex, and `dtcManager` state is guarded by `dtcManagerMutex` with
+  KV persistence performed outside the critical section via a snapshot
+  captured under the mutex.
+- `readHighValues()` no longer maintains its own change-detection cache
+  (`reflectionValueFields` removed): `CAN_sendThrottleUpdate()` and
+  `CAN_sendTurboUpdate()` already self-gate on `s_canState.last*Sent`,
+  so the outer layer was redundant, racy, and broadcast both updates on
+  any field change. Behavioural note: after a soft reset the first
+  `readHighValues` tick now emits one throttle + one turbo frame
+  immediately (previously suppressed by the NOINIT cache), refreshing
+  CAN consumers that would otherwise hold a stale pre-reset value.
 - Initial project-local MISRA screening run reports 976 active findings across 27 rule IDs; use it as a triage baseline, not as a clean-status indicator.
 
 ## Build

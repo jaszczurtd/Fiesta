@@ -8,7 +8,6 @@
 
 typedef struct {
   volatile float valueFields[F_LAST];
-  volatile float reflectionValueFields[F_LAST];
 } sensors_persistent_state_t;
 
 typedef struct {
@@ -57,6 +56,7 @@ static sensors_runtime_state_t s_sensorsState = {
 m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
 m_mutex_def(i2cBusMutex);
+m_mutex_def(adjustometerStateMutex);
 
 /**
  * @brief Validate a global value index before accessing the value table.
@@ -145,13 +145,14 @@ float getGlobalValue(int idx) {
 
 void initSensors(void) {
   m_mutex_init(valueFieldsMutex);
+  m_mutex_init(adjustometerStateMutex);
   hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
   pwm_init();
 
   init4051();
 
   for(int a = 0; a < F_LAST; a++) {
-    s_sensorsPersistent.valueFields[a] = s_sensorsPersistent.reflectionValueFields[a] = 0.0;
+    s_sensorsPersistent.valueFields[a] = 0.0;
   }
 
   s_sensorsState.collantTableIdx = s_sensorsState.collantValuesSet = 0;
@@ -320,13 +321,16 @@ void pcf8574_write(unsigned char pin, bool value) {
     return;
   }
 
+  // Mutate the shadow latch under the bus mutex so concurrent
+  // pcf8574_write() calls on two different pins cannot race on the
+  // read-modify-write sequence (lost bit update). Also keeps the
+  // I2C byte we push in sync with what we just stored locally.
+  m_mutex_enter_blocking(i2cBusMutex);
   if(value) {
     bitSet(s_sensorsState.pcf8574State, pin);
-  }  else {
+  } else {
     bitClear(s_sensorsState.pcf8574State, pin);
   }
-
-  m_mutex_enter_blocking(i2cBusMutex);
   bool success = false;
   uint8_t notFound = hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
@@ -347,6 +351,12 @@ bool pcf8574_read(unsigned char pin) {
   m_mutex_enter_blocking(i2cBusMutex);
   bool readOk = false;
   uint8_t raw = hal_i2c_read_byte(PCF8574_ADDR, &readOk);
+  if(readOk) {
+    // Commit the refreshed shadow latch while still holding the bus mutex,
+    // so pcf8574_write() cannot race on pcf8574State between the read and
+    // the store.
+    s_sensorsState.pcf8574State = raw;
+  }
   m_mutex_exit(i2cBusMutex);
 
   if(!readOk) {
@@ -355,9 +365,8 @@ bool pcf8574_read(unsigned char pin) {
     return false;
   }
 
-  s_sensorsState.pcf8574State = raw;
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
-  return bitRead(s_sensorsState.pcf8574State, pin);
+  return (raw & (uint8_t)(1u << pin)) != 0;
 }
 
 /**
@@ -420,37 +429,17 @@ int32_t getPercentageEngineLoad(void) {
 }
 
 void readHighValues(void) {
-  for(int a = 0; a < F_LAST; a++) {
-    float v = getGlobalValue(a);
-    switch(a) {
-      case F_RPM:
-        v = RPM_getCurrentRPM(getRPMInstance());
-        setGlobalValue(a, v);
-        break;
-      case F_THROTTLE_POS:
-        v = readThrottle();
-        setGlobalValue(a, v);
-        break;
-      case F_PRESSURE:
-        v = readBarPressure();
-        setGlobalValue(a, v);
-        break;
-      case F_GPS_CAR_SPEED:
-        v = getCurrentCarSpeed();
-        setGlobalValue(a, v);
-        break;
-      case F_CALCULATED_ENGINE_LOAD:
-        v = getPercentageEngineLoad();
-        setGlobalValue(a, v);
-        break;
-    }
-    if(s_sensorsPersistent.reflectionValueFields[a] != v) {
-        s_sensorsPersistent.reflectionValueFields[a] = v;
+  setGlobalValue(F_RPM,                    RPM_getCurrentRPM(getRPMInstance()));
+  setGlobalValue(F_THROTTLE_POS,           (float)readThrottle());
+  setGlobalValue(F_PRESSURE,               readBarPressure());
+  setGlobalValue(F_GPS_CAR_SPEED,          getCurrentCarSpeed());
+  setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());
 
-        CAN_sendThrottleUpdate();
-        CAN_sendTurboUpdate();
-    }
-  }
+  // CAN update helpers self-gate on s_canState.last*Sent, so both calls are
+  // no-ops when the globals they care about did not change. No outer
+  // change-detection cache is needed.
+  CAN_sendThrottleUpdate();
+  CAN_sendTurboUpdate();
 }
 
 void init4051(void) {
@@ -562,6 +551,24 @@ static void i2cCheckRecovery(void) {
 }
 
 /**
+ * @brief Shared error-counter bump for Adjustometer I2C failures.
+ * @return Snapshot of the adjustometer state after the bump.
+ * @note Runs outside i2cBusMutex but under adjustometerStateMutex so the
+ *       comm counter and commOk flag cannot be torn against a parallel
+ *       reader on the other core.
+ */
+static adjustometer_reading_t adjustometerRecordCommError(void) {
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  s_sensorsState.adjCommErrors++;
+  if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
+    s_sensorsState.adjustometer.commOk = false;
+  }
+  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
+  m_mutex_exit(adjustometerStateMutex);
+  return snapshot;
+}
+
+/**
  * @brief Read the full Adjustometer register block over I2C for the VP37 quantity-feedback path.
  * @return Latest Adjustometer reading structure, reusing previous values on failure.
  * @note The returned pulse, status, and fuel-temperature fields form a project-local
@@ -578,11 +585,7 @@ static adjustometer_reading_t readAdjustometer(void) {
     m_mutex_exit(i2cBusMutex);
     derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr), (int)txErr);
     i2cCheckRecovery();
-    s_sensorsState.adjCommErrors++;
-    if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
-      s_sensorsState.adjustometer.commOk = false;
-    }
-    return s_sensorsState.adjustometer;
+    return adjustometerRecordCommError();
   }
 
   // Read 5 registers starting from 0x00
@@ -592,11 +595,7 @@ static adjustometer_reading_t readAdjustometer(void) {
     //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
     derr("Adjustometer I2C read error: expected %d bytes, got %d", ADJUSTOMETER_REG_COUNT, (int)received);
     i2cCheckRecovery();
-    s_sensorsState.adjCommErrors++;
-    if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
-      s_sensorsState.adjustometer.commOk = false;
-    }
-    return s_sensorsState.adjustometer;
+    return adjustometerRecordCommError();
   }
 
   uint8_t buf[ADJUSTOMETER_REG_COUNT];
@@ -607,11 +606,7 @@ static adjustometer_reading_t readAdjustometer(void) {
       derr("Adjustometer I2C read error at byte %d: %d", (int)i, b);
       //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
       i2cCheckRecovery();
-      s_sensorsState.adjCommErrors++;
-      if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
-        s_sensorsState.adjustometer.commOk = false;
-      }
-      return s_sensorsState.adjustometer;
+      return adjustometerRecordCommError();
     }
     buf[i] = (uint8_t)b;
   }
@@ -620,19 +615,27 @@ static adjustometer_reading_t readAdjustometer(void) {
 
   //dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
 
-  s_sensorsState.adjustometer.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
-  s_sensorsState.adjustometer.voltageRaw = buf[2];
-  s_sensorsState.adjustometer.fuelTempC  = buf[3];
-  s_sensorsState.adjustometer.status     = buf[4];
-  s_sensorsState.adjustometer.commOk     = true;
+  // Build the snapshot off the shared state so parallel readers on the other
+  // core never see a half-updated field block.
+  adjustometer_reading_t snapshot;
+  snapshot.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
+  snapshot.voltageRaw = buf[2];
+  snapshot.fuelTempC  = buf[3];
+  snapshot.status     = buf[4];
+  snapshot.commOk     = true;
+
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  s_sensorsState.adjustometer = snapshot;
   s_sensorsState.adjCommErrors = 0;
+  m_mutex_exit(adjustometerStateMutex);
+
   i2cConsecutiveErrors = 0;
 
   //dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status & ADJ_STATUS_SIGNAL_LOST) != 0);
   //dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
   //dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status & ADJ_STATUS_VOLTAGE_BAD) != 0);
 
-  return s_sensorsState.adjustometer;
+  return snapshot;
 }
 
 /**
@@ -661,22 +664,30 @@ bool waitForAdjustometerBaseline(void) {
 }
 
 /**
- * @brief Return the latest Adjustometer reading for the N146/G149-like inner loop.
- * @return Pointer to the shared Adjustometer reading structure.
+ * @brief Take a snapshot of the latest Adjustometer reading for the VP37 inner loop.
+ * @param out Caller-owned storage receiving the snapshot (must not be NULL).
+ * @return None.
+ * @note Uses readAdjustometer()'s by-value return so the caller's copy is
+ *       consistent even if another core writes the shared state in between.
  */
-adjustometer_reading_t *getVP37Adjustometer(void) {
-  readAdjustometer();
-  return &s_sensorsState.adjustometer;
+void getVP37Adjustometer(adjustometer_reading_t *out) {
+  if(out == NULL) {
+    return;
+  }
+  *out = readAdjustometer();
 }
 
 /**
  * @brief Read system supply voltage from the Adjustometer telemetry bundle.
  * @return Supply voltage in volts, or 0 when Adjustometer telemetry is unavailable.
+ * @note Uses readAdjustometer()'s by-value return (local snapshot) to avoid a
+ *       torn read between commOk and voltageRaw if another core writes the
+ *       shared state mid-call.
  */
 float getSystemSupplyVoltage(void) {
-  adjustometer_reading_t *reading = getVP37Adjustometer();
-  if(reading == NULL || !reading->commOk) {
+  adjustometer_reading_t reading = readAdjustometer();
+  if(!reading.commOk) {
     return 0.0f;
   }
-  return reading->voltageRaw * 0.1f;
+  return reading.voltageRaw * 0.1f;
 }

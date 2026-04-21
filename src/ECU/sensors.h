@@ -192,12 +192,16 @@ void updateValsForDebug(void);
 void pwm_init(void);
 
 /**
- * @brief Read and return the latest Adjustometer state for the VP37 quantity-feedback path.
- * @return Pointer to the shared Adjustometer reading structure.
- * @note Adjustometer is only a project-local G149-like signal source; it is not a
- *       literal OEM G149 implementation.
+ * @brief Take a thread-safe snapshot of the latest Adjustometer state.
+ * @param out Caller-owned storage receiving the snapshot. Must not be NULL.
+ * @return None.
+ * @note Triggers a fresh I2C read via readAdjustometer() and copies the
+ *       resulting snapshot into @p out. No heap allocation; the caller
+ *       provides the destination (stack or static). Adjustometer is only
+ *       a project-local G149-like signal source, not a literal OEM G149
+ *       implementation.
  */
-adjustometer_reading_t *getVP37Adjustometer(void);
+void getVP37Adjustometer(adjustometer_reading_t *out);
 
 /**
  * @brief Wait until the Adjustometer reports that its quantity-feedback baseline capture is ready.

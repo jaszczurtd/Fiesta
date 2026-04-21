@@ -99,11 +99,12 @@ static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {
  *       OEM quantity estimate.
  */
 int32_t VP37_getAdjustometer(void) {
-  adjustometer_reading_t *reading = getVP37Adjustometer();
-  if(reading == NULL || !reading->commOk) {
+  adjustometer_reading_t reading;
+  getVP37Adjustometer(&reading);
+  if(!reading.commOk) {
     return -1;
   }
-  return reading->pulseHz;
+  return reading.pulseHz;
 }
 
 /**
@@ -147,16 +148,14 @@ static int32_t VP37_getAdjustometerStable(VP37Pump *self) {
 }
 
 static void VP37_updateAdjustometerPosition(VP37Pump *self) {
-  adjustometer_reading_t *reading = getVP37Adjustometer();
-  if(reading == NULL) {
-    return;
-  }
-  if(reading->commOk) {
-    self->currentAdjustometerPosition = reading->pulseHz;
+  adjustometer_reading_t reading;
+  getVP37Adjustometer(&reading);
+  if(reading.commOk) {
+    self->currentAdjustometerPosition = reading.pulseHz;
     self->adjCommLostSince = 0;
 
-    setGlobalValue(F_FUEL_TEMP, reading->fuelTempC);
-    setGlobalValue(F_VOLTS, reading->voltageRaw * 0.1f);
+    setGlobalValue(F_FUEL_TEMP, reading.fuelTempC);
+    setGlobalValue(F_VOLTS, reading.voltageRaw * 0.1f);
   } else {
     if(self->adjCommLostSince == 0) {
       self->adjCommLostSince = hal_millis();

@@ -49,7 +49,23 @@ static dtc_manager_state_t s_dtcState = {
   .initialized = false
 };
 
+m_mutex_def(dtcManagerMutex);
+
 #define DTC_COUNT ((uint8_t)COUNTOF(s_dtcState.dtcs))
+
+/**
+ * @brief Initialise dtcManagerMutex once, lazily.
+ * @return None.
+ * @note Called from dtcManagerInit() and the read-side getters so a caller
+ *       that locks before init never touches an uninitialised mutex.
+ */
+static void ensureDtcMutexInited(void) {
+  static bool dtcMutexInited = false;
+  if(!dtcMutexInited) {
+    m_mutex_init(dtcManagerMutex);
+    dtcMutexInited = true;
+  }
+}
 
 /**
  * @brief Get the legacy EEPROM slot address for a DTC index.
@@ -123,11 +139,30 @@ static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
  * @brief Save one DTC entry to key-value storage.
  * @param idx Index of the DTC entry to save.
  * @return True on success, otherwise false.
+ * @note Reads s_dtcState.dtcs[idx] without holding dtcManagerMutex — call
+ *       only from a context that already owns the mutex, or pass a snapshot
+ *       via saveDtcSnapshotToKv() instead.
  */
 static bool saveDtcToKv(uint8_t idx) {
   bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)makeFlagsForIndex(idx));
   if(s_dtcState.dtcs[idx].firstOccurrence != 0) {
     ok = hal_kv_set_u32(dtcKvTimestampKey(idx), s_dtcState.dtcs[idx].firstOccurrence) && ok;
+  }
+  return ok;
+}
+
+/**
+ * @brief Save one DTC entry to KV using a pre-captured snapshot.
+ * @param idx Index of the DTC entry to save.
+ * @param flags Flag byte captured under dtcManagerMutex.
+ * @param firstOccurrence Timestamp captured under dtcManagerMutex.
+ * @return True on success, otherwise false.
+ * @note Safe to call WITHOUT holding dtcManagerMutex — no shared reads.
+ */
+static bool saveDtcSnapshotToKv(uint8_t idx, uint8_t flags, uint32_t firstOccurrence) {
+  bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)flags);
+  if(firstOccurrence != 0) {
+    ok = hal_kv_set_u32(dtcKvTimestampKey(idx), firstOccurrence) && ok;
   }
   return ok;
 }
@@ -315,7 +350,11 @@ void dtcManagerLogStorageStats(void) {
 }
 
 void dtcManagerInit(void) {
+  ensureDtcMutexInited();
+  m_mutex_enter_blocking(dtcManagerMutex);
+
   if(s_dtcState.initialized) {
+    m_mutex_exit(dtcManagerMutex);
     return;
   }
 
@@ -325,6 +364,7 @@ void dtcManagerInit(void) {
       (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE, (unsigned)kvSpan, (unsigned)hal_eeprom_size());
     resetAllState();
     s_dtcState.initialized = true;
+    m_mutex_exit(dtcManagerMutex);
     return;
   }
 
@@ -333,6 +373,7 @@ void dtcManagerInit(void) {
       (unsigned)DTC_KV_BASE, (unsigned)DTC_KV_SIZE, (unsigned)kvSpan);
     resetAllState();
     s_dtcState.initialized = true;
+    m_mutex_exit(dtcManagerMutex);
     return;
   }
 
@@ -349,21 +390,36 @@ void dtcManagerInit(void) {
     }
 
     s_dtcState.initialized = true;
+    m_mutex_exit(dtcManagerMutex);
     return;
   }
 
   loadAllFromKv();
 
   s_dtcState.initialized = true;
+  m_mutex_exit(dtcManagerMutex);
 }
 
-void dtcManagerSetActive(uint16_t code, bool active) {
+/**
+ * @brief Ensure the module is initialised before a public API mutates state.
+ * @return None.
+ * @note Call BEFORE acquiring dtcManagerMutex — dtcManagerInit() takes the
+ *       mutex internally.
+ */
+static void ensureInitialized(void) {
   if(!s_dtcState.initialized) {
     dtcManagerInit();
   }
+}
+
+void dtcManagerSetActive(uint16_t code, bool active) {
+  ensureInitialized();
+
+  m_mutex_enter_blocking(dtcManagerMutex);
 
   int idx = findDtcIndex(code);
   if(idx < 0) {
+    m_mutex_exit(dtcManagerMutex);
     return;
   }
 
@@ -389,19 +445,29 @@ void dtcManagerSetActive(uint16_t code, bool active) {
     }
   }
 
+  uint8_t savedIdx = (uint8_t)idx;
+  uint8_t savedFlags = changed ? makeFlagsForIndex(savedIdx) : 0u;
+  uint32_t savedTs = changed ? s_dtcState.dtcs[savedIdx].firstOccurrence : 0u;
+  m_mutex_exit(dtcManagerMutex);
+
+  // KV persistence can be slow (EEPROM write); keep it outside the critical
+  // section so concurrent dtcManagerCount/GetCodes readers are not blocked.
+  // The flag/timestamp snapshot was captured under the mutex above, so the
+  // KV write is consistent with the in-memory transition we just performed.
   if(changed) {
-    if(!saveDtcToKv((uint8_t)idx)) {
-      derr("DTC: failed to persist key=%u", (unsigned)dtcKvKey((uint8_t)idx));
+    if(!saveDtcSnapshotToKv(savedIdx, savedFlags, savedTs)) {
+      derr("DTC: failed to persist key=%u", (unsigned)dtcKvKey(savedIdx));
     }
   }
 }
 
 void dtcManagerClearAll(void) {
-  if(!s_dtcState.initialized) {
-    dtcManagerInit();
-  }
+  ensureInitialized();
 
+  m_mutex_enter_blocking(dtcManagerMutex);
   resetAllState();
+  m_mutex_exit(dtcManagerMutex);
+
   if(!resetDtcKvRegion()) {
     derr("DTC: KV region reset failed");
   }
@@ -416,10 +482,9 @@ void dtcManagerClearAll(void) {
 }
 
 uint8_t dtcManagerCount(dtc_kind_t kind) {
-  if(!s_dtcState.initialized) {
-    dtcManagerInit();
-  }
+  ensureInitialized();
 
+  m_mutex_enter_blocking(dtcManagerMutex);
   uint8_t count = 0;
   for(uint8_t i = 0; i < DTC_COUNT; i++) {
     switch(kind) {
@@ -443,17 +508,17 @@ uint8_t dtcManagerCount(dtc_kind_t kind) {
         break;
     }
   }
+  m_mutex_exit(dtcManagerMutex);
   return count;
 }
 
 uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes) {
-  if(!s_dtcState.initialized) {
-    dtcManagerInit();
-  }
+  ensureInitialized();
   if(outCodes == NULL || maxCodes == 0) {
     return 0;
   }
 
+  m_mutex_enter_blocking(dtcManagerMutex);
   uint8_t idx = 0;
   for(uint8_t i = 0; i < DTC_COUNT && idx < maxCodes; i++) {
     bool take = false;
@@ -475,18 +540,17 @@ uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes
       outCodes[idx++] = s_dtcState.dtcs[i].code;
     }
   }
+  m_mutex_exit(dtcManagerMutex);
 
   return idx;
 }
 
 uint32_t dtcManagerGetTimestamp(uint16_t code) {
-  if(!s_dtcState.initialized) {
-    dtcManagerInit();
-  }
+  ensureInitialized();
 
+  m_mutex_enter_blocking(dtcManagerMutex);
   int idx = findDtcIndex(code);
-  if(idx < 0) {
-    return 0;
-  }
-  return s_dtcState.dtcs[idx].firstOccurrence;
+  uint32_t ts = (idx < 0) ? 0u : s_dtcState.dtcs[idx].firstOccurrence;
+  m_mutex_exit(dtcManagerMutex);
+  return ts;
 }
