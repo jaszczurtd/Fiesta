@@ -52,11 +52,6 @@ set(ECU_SOURCES
     ${ECU_SRC}/vp37.c
 )
 
-# Transitional mode:
-# Sources are renamed to .c as part of MISRA step 3, but still compiled as C++
-# until full C linkage is provided across all required JaszczurHAL APIs.
-set_source_files_properties(${ECU_SOURCES} PROPERTIES LANGUAGE CXX)
-
 # ── ecu_mock: hal mock + tools + ECU sources + stubs for excluded modules ──────
 add_library(ecu_mock STATIC
     ${MOCK_SOURCES}
