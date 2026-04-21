@@ -81,6 +81,11 @@ void test_heater_off_low_voltage(void) {
     TEST_ASSERT_FALSE(heaterLoOn(&eheater));
 }
 
+void test_heater_on_at_minimum_voltage_boundary(void) {
+    setGlobalValue(F_VOLTS, MINIMUM_VOLTS_AMOUNT);
+    TEST_ASSERT_TRUE(heaterLoOn(&eheater));
+}
+
 void test_heater_off_engine_stopped(void) {
     setGlobalValue(F_RPM, 0.0f);
     TEST_ASSERT_FALSE(heaterLoOn(&eheater));
@@ -162,6 +167,30 @@ void test_heater_hi_boundary_exactly_at_split(void) {
     TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "hiEnabled:0"));
 }
 
+void test_heater_state_switches_from_hi_lo_to_lo_only(void) {
+    setGlobalValue(F_COOLANT_TEMP, 30.0f);
+    engineHeater_process(&eheater);
+    TEST_ASSERT_TRUE(eheater.heaterHiEnabled);
+    TEST_ASSERT_TRUE(eheater.heaterLoEnabled);
+
+    setGlobalValue(F_COOLANT_TEMP, 60.0f);
+    engineHeater_process(&eheater);
+    TEST_ASSERT_FALSE(eheater.heaterHiEnabled);
+    TEST_ASSERT_TRUE(eheater.heaterLoEnabled);
+}
+
+void test_heater_state_disables_when_conditions_fail(void) {
+    setGlobalValue(F_COOLANT_TEMP, 30.0f);
+    engineHeater_process(&eheater);
+    TEST_ASSERT_TRUE(eheater.heaterLoEnabled);
+    TEST_ASSERT_TRUE(eheater.heaterHiEnabled);
+
+    setGlobalValue(F_VOLTS, MINIMUM_VOLTS_AMOUNT - 0.5f);
+    engineHeater_process(&eheater);
+    TEST_ASSERT_FALSE(eheater.heaterHiEnabled);
+    TEST_ASSERT_FALSE(eheater.heaterLoEnabled);
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -173,6 +202,7 @@ int main(void) {
     RUN_TEST(test_heater_off_above_stop_temp);
     RUN_TEST(test_heater_lo_on_at_stop_temp_boundary);
     RUN_TEST(test_heater_off_low_voltage);
+    RUN_TEST(test_heater_on_at_minimum_voltage_boundary);
     RUN_TEST(test_heater_off_engine_stopped);
     RUN_TEST(test_heater_on_rpm_at_min_boundary);
     RUN_TEST(test_heater_off_rpm_below_min_boundary);
@@ -182,6 +212,8 @@ int main(void) {
     RUN_TEST(test_heater_hi_on_very_cold_coolant);
     RUN_TEST(test_heater_lo_only_when_moderately_cold);
     RUN_TEST(test_heater_hi_boundary_exactly_at_split);
+    RUN_TEST(test_heater_state_switches_from_hi_lo_to_lo_only);
+    RUN_TEST(test_heater_state_disables_when_conditions_fail);
 
     return UNITY_END();
 }

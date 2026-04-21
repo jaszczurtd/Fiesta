@@ -95,6 +95,17 @@ void test_fan_off_after_coolant_cools_down(void) {
     TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
+void test_fan_off_at_coolant_stop_boundary(void) {
+    setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
+    setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
+
+    setGlobalValue(F_COOLANT_TEMP, (float)TEMP_FAN_STOP);
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
+}
+
 void test_fan_hysteresis_coolant_stays_on_between_thresholds(void) {
     /* Enable, then set coolant between stop and start → must stay on */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
@@ -129,6 +140,18 @@ void test_fan_off_after_intake_air_cools(void) {
     TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
+void test_fan_off_at_air_stop_boundary(void) {
+    setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
+    setGlobalValue(F_COOLANT_TEMP, 30.0f);
+    setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
+
+    setGlobalValue(F_INTAKE_TEMP, (float)AIR_TEMP_FAN_STOP);
+    engineFan_process(&efan);
+    TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
+}
+
 void test_fan_hysteresis_air_stays_on_between_thresholds(void) {
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
@@ -159,6 +182,31 @@ void test_fan_not_forced_on_just_above_lowest(void) {
     TEST_ASSERT_FALSE(engineFan_isFanEnabled(&efan));
 }
 
+void test_fan_stays_on_when_one_reason_remains_active(void) {
+    setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
+    setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
+    setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_START + 1));
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
+
+    setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_STOP - 1));
+    setGlobalValue(F_INTAKE_TEMP, (float)(AIR_TEMP_FAN_STOP + 1));
+    engineFan_process(&efan);
+    TEST_ASSERT_TRUE(engineFan_isFanEnabled(&efan));
+}
+
+void test_fan_writes_state_to_global_value(void) {
+    setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
+    setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
+    engineFan_process(&efan);
+    TEST_ASSERT_GREATER_THAN(0, (int32_t)getGlobalValue(F_FAN_ENABLED));
+
+    setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_STOP - 1));
+    setGlobalValue(F_INTAKE_TEMP, 0.0f);
+    engineFan_process(&efan);
+    TEST_ASSERT_EQUAL_INT32(0, (int32_t)getGlobalValue(F_FAN_ENABLED));
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -173,12 +221,16 @@ int main(void) {
     RUN_TEST(test_fan_off_below_coolant_start_threshold);
     RUN_TEST(test_fan_on_by_coolant_overheating);
     RUN_TEST(test_fan_off_after_coolant_cools_down);
+    RUN_TEST(test_fan_off_at_coolant_stop_boundary);
     RUN_TEST(test_fan_hysteresis_coolant_stays_on_between_thresholds);
     RUN_TEST(test_fan_on_by_high_intake_air);
     RUN_TEST(test_fan_off_after_intake_air_cools);
+    RUN_TEST(test_fan_off_at_air_stop_boundary);
     RUN_TEST(test_fan_hysteresis_air_stays_on_between_thresholds);
     RUN_TEST(test_fan_forced_on_with_sensor_fault);
     RUN_TEST(test_fan_not_forced_on_just_above_lowest);
+    RUN_TEST(test_fan_stays_on_when_one_reason_remains_active);
+    RUN_TEST(test_fan_writes_state_to_global_value);
 
     return UNITY_END();
 }
