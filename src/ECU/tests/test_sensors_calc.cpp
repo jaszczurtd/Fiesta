@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "sensors.h"
+#include "dtcManager.h"
 #include "testable/sensors_testable.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -260,7 +261,11 @@ void test_throttle_adc_at_full_gives_max(void) {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
+    hal_i2c_init(4, 5, 400000);
     initSensors();
+    initI2C();          // required: initializes i2cBusMutex used by pcf8574_*
+    dtcManagerInit();   // required: pcf8574_* calls dtcManagerSetActive()
+    dtcManagerClearAll();
 
     UNITY_BEGIN();
 
