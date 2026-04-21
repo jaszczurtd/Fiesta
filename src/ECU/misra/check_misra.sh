@@ -45,6 +45,8 @@ rule_texts="${MISRA_RULE_TEXTS:-}"
 quiet=0
 fail_on_findings=0
 temp_addon_config=""
+hal_src="$project_root/../../../libraries/JaszczurHAL/src"
+can_defs_dir="$project_root/../../../libraries/canDefinitions"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -143,6 +145,20 @@ if [[ $quiet -eq 1 ]]; then
     quiet_args=(--quiet)
 fi
 
+include_args=(-I.)
+if [[ -d "$can_defs_dir" ]]; then
+    include_args+=(-I"$can_defs_dir")
+fi
+if [[ -d "$hal_src" ]]; then
+    include_args+=(-I"$hal_src" -I"$hal_src/utils")
+fi
+
+define_args=(
+    -DUNIT_TEST
+    -DSERIAL_7N1=2
+    -DSERIAL_8N1=6
+)
+
 pushd "$project_root" >/dev/null
 
 set +e
@@ -153,7 +169,8 @@ set +e
     --std=c99 \
     --language=c \
     --inline-suppr \
-    -I. \
+    "${include_args[@]}" \
+    "${define_args[@]}" \
     "${suppressions_args[@]}" \
     --suppress=missingInclude \
     --suppress=missingIncludeSystem \
@@ -173,7 +190,23 @@ if [[ $cppcheck_status -ne 0 ]]; then
     exit $cppcheck_status
 fi
 
-grep -E '\[misra-c2012-[0-9]+\.[0-9]+\]$' "$results_file" > "$active_file" || true
+grep -E '\[misra-c2012-[0-9]+\.[0-9]+\]$' "$results_file" \
+    | awk -v root_prefix="$project_root/" '
+        {
+            split($0, parts, ":");
+            file = parts[1];
+            if (file == "nofile") {
+                next;
+            }
+            if (file ~ /^\//) {
+                if (index(file, root_prefix) == 1) {
+                    print;
+                }
+                next;
+            }
+            print;
+        }
+    ' > "$active_file" || true
 
 if [[ -s "$active_file" ]]; then
     sed -n 's/.*\[\(misra-c2012-[0-9]\+\.[0-9]\+\)\]$/\1/p' "$active_file" \

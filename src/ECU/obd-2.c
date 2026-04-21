@@ -17,11 +17,17 @@ static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
 static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
 static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId, uint8_t *txData, bool *tx);
 static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId);
 static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txData, bool *tx);
 static void sendScpGeneralResponse(uint32_t responseId, uint8_t requestMode, uint8_t arg1, uint8_t arg2, uint8_t arg3, uint8_t responseCode);
 static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrType);
 static void unsupportedPrint(uint8_t mode, uint8_t pid);
 static void unsupportedServicePrint(uint8_t mode);
+#ifdef UNIT_TEST
+hal_can_t obdTestGetCanHandle(void);
+#endif
 
 #define ISO_TP_MAX_PAYLOAD 160
 #define ISO_TP_FC_TIMEOUT_MS 1000
@@ -88,6 +94,12 @@ static obd_state_t s_obdState = {
 #endif
 };
 
+#ifdef UNIT_TEST
+TESTABLE_STATIC hal_can_t obdTestGetCanHandle(void) {
+  return s_obdState.canHandle;
+}
+#endif
+
 #ifdef OBD_ENABLE_TOTDIST
 
 /**
@@ -147,7 +159,7 @@ void obdLoop(void) {
 
   if(!hal_gpio_read(CAN1_INT)) {
     if(hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue)) {
-      if(s_obdState.rxIdValue == FUNCTIONAL_ID || s_obdState.rxIdValue == LISTEN_ID) {
+      if((s_obdState.rxIdValue == (uint32_t)FUNCTIONAL_ID) || (s_obdState.rxIdValue == (uint32_t)LISTEN_ID)) {
         obdReq(s_obdState.rxIdValue, s_obdState.rxBufValue);
       }
     }
@@ -191,11 +203,12 @@ int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, i
  * @return True when the request is long enough, otherwise false.
  */
 static bool requireMinLength(uint32_t responseId, uint8_t serviceId, uint8_t numofBytes, uint8_t minLen) {
+  bool validLength = true;
   if(numofBytes < minLen) {
     negAck(responseId, serviceId, NRC_INCORRECT_LENGTH);
-    return false;
+    validLength = false;
   }
-  return true;
+  return validLength;
 }
 
 /**
@@ -204,16 +217,16 @@ static bool requireMinLength(uint32_t responseId, uint8_t serviceId, uint8_t num
  * @return Millisecond delay used between consecutive frames.
  */
 TESTABLE_STATIC uint8_t stMinToMs(uint8_t stMin) {
-  if(stMin <= 0x7F) {
-    return stMin;
+  uint8_t msDelay = 0u;
+  if(stMin <= 0x7Fu) {
+    msDelay = stMin;
+  } else {
+    // 0xF1..0xF9 are 100us..900us; clamp to 1ms granularity for current scheduler.
+    if((stMin >= 0xF1u) && (stMin <= 0xF9u)) {
+      msDelay = 1u;
+    }
   }
-
-  // 0xF1..0xF9 are 100us..900us; clamp to 1ms granularity for current scheduler.
-  if(stMin >= 0xF1 && stMin <= 0xF9) {
-    return 1;
-  }
-
-  return 0;
+  return msDelay;
 }
 
 #ifdef OBD_VERBOSE_IDENT_DEBUG
@@ -223,21 +236,21 @@ TESTABLE_STATIC uint8_t stMinToMs(uint8_t stMin) {
  * @return True when the DID is part of Ford identification handling.
  */
 static bool isFordDiagIdentificationDid(uint16_t did) {
-  if(did == DID_FORD_MODEL || did == DID_PART_NUMBER || did == DID_SW_VERSION || did == DID_VIN || did == DID_FORD_CATCH_CODE) {
+  if(did == (uint16_t)DID_FORD_MODEL || did == (uint16_t)DID_PART_NUMBER || did == (uint16_t)DID_SW_VERSION || did == (uint16_t)DID_VIN || did == (uint16_t)DID_FORD_CATCH_CODE) {
     return true;
   }
-  if(did == DID_F4_MODEL_16 || did == DID_F4_TYPE_ALT || did == DID_F4_SUBTYPE_ALT || did == DID_F4_CATCH_CODE_ALT || did == DID_F4_SW_DATE_ALT
-     || did == DID_F4_CALIBRATION_ID_ALT || did == DID_F4_HARDWARE_ID_ALT || did == DID_F4_ROM_SIZE_ALT || did == DID_F4_PART_NUMBER_ALT || did == DID_F4_SW_VERSION
-     || did == DID_F4_COPYRIGHT_ALT) {
+  if(did == (uint16_t)DID_F4_MODEL_16 || did == (uint16_t)DID_F4_TYPE_ALT || did == (uint16_t)DID_F4_SUBTYPE_ALT || did == (uint16_t)DID_F4_CATCH_CODE_ALT || did == (uint16_t)DID_F4_SW_DATE_ALT
+     || did == (uint16_t)DID_F4_CALIBRATION_ID_ALT || did == (uint16_t)DID_F4_HARDWARE_ID_ALT || did == (uint16_t)DID_F4_ROM_SIZE_ALT || did == (uint16_t)DID_F4_PART_NUMBER_ALT || did == (uint16_t)DID_F4_SW_VERSION
+     || did == (uint16_t)DID_F4_COPYRIGHT_ALT) {
     return true;
   }
-  if(did >= DID_F4_MODEL && did <= DID_F4_COPYRIGHT) {
+  if(did >= (uint16_t)DID_F4_MODEL && did <= (uint16_t)DID_F4_COPYRIGHT) {
     return true;
   }
-  if(did >= DID_FORD_TYPE && did <= DID_FORD_VIN_CHUNK_LAST) {
+  if(did >= (uint16_t)DID_FORD_TYPE && did <= (uint16_t)DID_FORD_VIN_CHUNK_LAST) {
     return true;
   }
-  if(did == DID_FORD_SW_DATE || did == DID_FORD_PARTNUM_MIDDLE || did == DID_FORD_PARTNUM_SUFFIX || did == DID_FORD_PARTNUM_PREFIX) {
+  if(did == (uint16_t)DID_FORD_SW_DATE || did == (uint16_t)DID_FORD_PARTNUM_MIDDLE || did == (uint16_t)DID_FORD_PARTNUM_SUFFIX || did == (uint16_t)DID_FORD_PARTNUM_PREFIX) {
     return true;
   }
   return false;
@@ -280,7 +293,7 @@ static void encodeMode01Pid_00(uint8_t *txData) {
  */
 static void encodeMode01StatusDtc(uint8_t *txData) {
   uint8_t activeDTC = dtcManagerCount(DTC_KIND_ACTIVE);
-  bool MIL = (activeDTC > 0);
+  bool MIL = (activeDTC > 0u);
   txData[0] = 0x06;
   txData[3] = (MIL << 7) | (activeDTC & 0x7F);
   txData[4] = 0x07;
@@ -714,18 +727,23 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
  * @return True when the request was fully handled.
  */
 static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
+  bool handled = false;
   for(size_t i = 0; i < COUNTOF(s_mode01PidHandlers); i++) {
     if(s_mode01PidHandlers[i].pid == pid) {
       s_mode01PidHandlers[i].encoder(txData);
       *tx = true;
-      return true;
+      handled = true;
+      break;
     }
   }
 
-  negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
-  unsupportedPrint(mode, pid);
-  return true;
+  if(!handled) {
+    negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
+    unsupportedPrint(mode, pid);
+    handled = true;
+  }
 
+  return handled;
 }
 
 /**
@@ -736,8 +754,9 @@ static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
  * @return True when a PID encoder exists, otherwise false.
  */
 bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
+  bool encoded = false;
   if(out == NULL || outLen == NULL) {
-    return false;
+    return encoded;
   }
 
   for(size_t i = 0; i < COUNTOF(s_mode01PidHandlers); i++) {
@@ -757,10 +776,11 @@ bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
     }
     memcpy(out, &txData[3], (size_t)dataLen);
     *outLen = dataLen;
-    return true;
+    encoded = true;
+    break;
   }
 
-  return false;
+  return encoded;
 }
 
 /**
@@ -773,7 +793,7 @@ bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen) {
  * @return True when the request was fully handled.
  */
 static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
-  if(pid == 0x00){        // Supported TIDs 01-20
+  if(pid == 0x00u){        // Supported TIDs 01-20
     txData[0] = 0x06;
 
     txData[3] = 0x00;
@@ -781,11 +801,10 @@ static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     txData[5] = 0x00;
     txData[6] = 0x00;
     *tx = true;
-    return true;
+  } else {
+    negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
+    unsupportedPrint(mode, pid);
   }
-
-  negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
-  unsupportedPrint(mode, pid);
   return true;
 }
 
@@ -799,7 +818,7 @@ static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
  * @return True when the request was fully handled.
  */
 static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx) {
-  if(pid == 0x00){        // Supported PIDs 01-20
+  if(pid == 0x00u){        // Supported PIDs 01-20
     txData[0] = 0x06;
 
     txData[3] = 0x54;
@@ -808,14 +827,15 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     txData[6] = 0x00;
     *tx = true;
   }
-  else if(pid == MODE09_PID_VIN){    // VIN (17 to 20 Bytes) Uses ISO-TP
+  else if(pid == (uint8_t)MODE09_PID_VIN){    // VIN (17 to 20 Bytes) Uses ISO-TP
     uint8_t VIN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD};
-    for(int a = 0; a < (int)strlen(vehicle_Vin); a++) {
-      VIN[a + 3] = (uint8_t)vehicle_Vin[a];
+    size_t vinLen = strlen(vehicle_Vin);
+    for(size_t a = 0u; a < vinLen; a++) {
+      VIN[a + 3u] = (uint8_t)vehicle_Vin[a];
     }
     iso_tp(responseId, 20, VIN);
   }
-  else if(pid == MODE09_PID_CALID){    // Calibration ID (Ford part number format, e.g. XS4A-12A650-AXB)
+  else if(pid == (uint8_t)MODE09_PID_CALID){    // Calibration ID (Ford part number format, e.g. XS4A-12A650-AXB)
     // Mode 09 PID 04: fixed 16-byte CALID, null padded.
     uint8_t CID[3 + 16] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01};
     int calLen = (int)strlen(ecu_CalibrationId);
@@ -823,16 +843,16 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     memcpy(&CID[3], ecu_CalibrationId, (size_t)calLen);
     iso_tp(responseId, (int)sizeof(CID), CID);
   }
-  else if(pid == MODE09_PID_CVN){    // CVN
+  else if(pid == (uint8_t)MODE09_PID_CVN){    // CVN
     const uint8_t CVN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x02, 0x11, 0x42, 0x42, 0x42, 0x22, 0x43, 0x43, 0x43};
     iso_tp(responseId, 11, CVN);
   }
-  else if(pid == MODE09_PID_ECU_COUNT){    // ECU name message count for PID 0A.
+  else if(pid == (uint8_t)MODE09_PID_ECU_COUNT){    // ECU name message count for PID 0A.
     txData[0] = 0x03;
     txData[3] = 0x01;
     *tx = true;
   }
-  else if(pid == MODE09_PID_ECU_NAME){    // ECM Name
+  else if(pid == (uint8_t)MODE09_PID_ECU_NAME){    // ECM Name
     // Mode 09 PID 0A: fixed 20-byte ECU name, null padded.
     uint8_t ECMname[3 + 20] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01};
     int nameLen = (int)strlen(ecu_Name);
@@ -840,11 +860,11 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
     memcpy(&ECMname[3], ecu_Name, (size_t)nameLen);
     iso_tp(responseId, (int)sizeof(ECMname), ECMname);
   }
-  else if(pid == MODE09_PID_ESN){    // ESN
+  else if(pid == (uint8_t)MODE09_PID_ESN){    // ESN
     const uint8_t ESN[] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01, 0x41, 0x72, 0x64, 0x75, 0x69, 0x6E, 0x6F, 0x2D, 0x4F, 0x42, 0x44, 0x49, 0x49, 0x73, 0x69, 0x6D, 0x00};
     iso_tp(responseId, 20, ESN);
   }
-  else if(pid == MODE09_PID_TYPE_APPR){    // Type Approval Number
+  else if(pid == (uint8_t)MODE09_PID_TYPE_APPR){    // Type Approval Number
     // 20-byte fixed field, null padded.
     uint8_t typeAppr[3 + 20] = {(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), pid, 0x01};
     const char *approvalStr = "e11*2005/78*0001*00";
@@ -871,53 +891,42 @@ static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
  * @return True when the request was recognized and handled.
  */
 static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId, uint8_t *txData, bool *tx) {
-  if(mode == OBD_MODE_CURRENT_DATA) {
-    return handleMode01(pid, responseId, mode, txData, tx);
-  }
-
-  if(mode == OBD_MODE_FREEZE_FRAME || mode == OBD_MODE_O2_MONITORING || mode == OBD_MODE_CONTROL_OPERATIONS) {
+  bool handled = false;
+  if(mode == (uint8_t)OBD_MODE_CURRENT_DATA) {
+    handled = handleMode01(pid, responseId, mode, txData, tx);
+  } else if((mode == (uint8_t)OBD_MODE_FREEZE_FRAME) ||
+            (mode == (uint8_t)OBD_MODE_O2_MONITORING) ||
+            (mode == (uint8_t)OBD_MODE_CONTROL_OPERATIONS)) {
     negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
     unsupportedPrint(mode, pid);
-    return true;
-  }
-
-  if(mode == OBD_MODE_STORED_DTC) {
+    handled = true;
+  } else if(mode == (uint8_t)OBD_MODE_STORED_DTC) {
     uint8_t DTCs[24] = {0};
     int dtcLen = fillDtcPayload((uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), DTC_KIND_STORED, DTCs, sizeof(DTCs));
     iso_tp(responseId, dtcLen, DTCs);
-    return true;
-  }
-
-  if(mode == OBD_MODE_CLEAR_DTC) {
+    handled = true;
+  } else if(mode == (uint8_t)OBD_MODE_CLEAR_DTC) {
     dtcManagerClearAll();
     txData[0] = 0x01;
     *tx = true;
-    return true;
-  }
-
-  if(mode == OBD_MODE_ONBOARD_MONITORING) {
-    return handleMode06(pid, responseId, mode, txData, tx);
-  }
-
-  if(mode == OBD_MODE_PENDING_DTC) {
+    handled = true;
+  } else if(mode == (uint8_t)OBD_MODE_ONBOARD_MONITORING) {
+    handled = handleMode06(pid, responseId, mode, txData, tx);
+  } else if(mode == (uint8_t)OBD_MODE_PENDING_DTC) {
     uint8_t DTCs[24] = {0};
     int dtcLen = fillDtcPayload((uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), DTC_KIND_PENDING, DTCs, sizeof(DTCs));
     iso_tp(responseId, dtcLen, DTCs);
-    return true;
-  }
-
-  if(mode == OBD_MODE_VEHICLE_INFO) {
-    return handleMode09(pid, responseId, mode, txData, tx);
-  }
-
-  if(mode == OBD_MODE_PERMANENT_DTC) {
+    handled = true;
+  } else if(mode == (uint8_t)OBD_MODE_VEHICLE_INFO) {
+    handled = handleMode09(pid, responseId, mode, txData, tx);
+  } else if(mode == (uint8_t)OBD_MODE_PERMANENT_DTC) {
     uint8_t DTCs[24] = {0};
     int dtcLen = fillDtcPayload((uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode), DTC_KIND_PERMANENT, DTCs, sizeof(DTCs));
     iso_tp(responseId, dtcLen, DTCs);
-    return true;
+    handled = true;
   }
 
-  return false;
+  return handled;
 }
 
 // Pack a string into a fixed-width field at buf[0..width-1], using chosen padding.
@@ -1240,11 +1249,11 @@ static void buildScpIdBlock(uint8_t *block, int len) {
   uint32_t sum = 0;
   for(int i = 0x80; i < SCP_IDBLOCK_CHKSUM_OFS; i += 2) {
     sum += ((uint16_t)block[i] << 8) | block[i + 1];
-    if(sum > 65535) {
-      sum -= 65536;
+    if(sum > 65535u) {
+      sum -= 65536u;
     }
   }
-  uint16_t correction = (uint16_t)((65536 - sum) & 0xFFFF);
+  uint16_t correction = (uint16_t)((65536u - sum) & 0xFFFFu);
   block[SCP_IDBLOCK_CHKSUM_OFS]     = (uint8_t)(correction >> 8);
   block[SCP_IDBLOCK_CHKSUM_OFS + 1] = (uint8_t)(correction & 0xFF);
 }
@@ -1268,7 +1277,7 @@ static bool readScpDmrByte(uint8_t dmrType, uint16_t addr, uint8_t *outValue) {
   const uint16_t idStarts[] = {SCP_IDBLOCK_ADDR, SCP_IDBLOCK_ADDR_ALT};
   for(size_t i = 0; i < COUNTOF(idStarts); i++) {
     uint16_t start = idStarts[i];
-    if(addr >= start && addr < (uint16_t)(start + SCP_IDBLOCK_SIZE)) {
+    if(addr >= start && addr < (uint16_t)(start + (uint16_t)SCP_IDBLOCK_SIZE)) {
       *outValue = idBlock[(int)(addr - start)];
       return true;
     }
@@ -1308,9 +1317,9 @@ static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrTy
   uint8_t b2 = 0;
   uint8_t b3 = 0;
   readScpDmrByte(dmrType, addr, &b0);
-  readScpDmrByte(dmrType, (uint16_t)(addr + 1), &b1);
-  readScpDmrByte(dmrType, (uint16_t)(addr + 2), &b2);
-  readScpDmrByte(dmrType, (uint16_t)(addr + 3), &b3);
+  readScpDmrByte(dmrType, (uint16_t)(addr + 1u), &b1);
+  readScpDmrByte(dmrType, (uint16_t)(addr + 2u), &b2);
+  readScpDmrByte(dmrType, (uint16_t)(addr + 3u), &b3);
 
   uint8_t rsp[8] = {0x07, UDS_RSP_READ_MEMORY_BY_ADDR, MSB(addr), LSB(addr), b0, b1, b2, b3};
 #ifdef OBD_VERBOSE_IDENT_DEBUG
@@ -1414,10 +1423,10 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
     case SCP_PID_EGRDC:    // VP37: no electronic EGR → NRC
     case SCP_PID_FUELPW1:   // VP37: no individual injector pulsewidth → NRC
       return 0;
-    case SCP_PID_VMAF:     // VMAF - MAF voltage (VP37: no MAF sensor)
-    case SCP_PID_MAF_RATE:  // j1979_01_10 - MAF rate (VP37: no MAF sensor)
-    case SCP_PID_IMAF:      // IMAF - MAF sensor A/D (VP37: no MAF sensor)
-      // Return 0 → not handled → NRC, so Fordiag won't show "MAF system".
+    case SCP_PID_VMAF:     // VMAF - MAF voltage (no MAF sensor)
+    case SCP_PID_MAF_RATE: // j1979_01_10 - MAF rate (no MAF sensor)
+    case SCP_PID_IMAF:     // IMAF - MAF sensor A/D (no MAF sensor)
+      // Any positive response here makes Fordiag show an extra "MAF system".
       return 0;
   }
   return 0;
@@ -1471,14 +1480,14 @@ static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txDat
  * @return None.
  */
 static void send22FordDiagE3xx(uint32_t responseId, uint16_t did) {
-  if(did == DID_FORD_TYPE) {
+  if(did == (uint16_t)DID_FORD_TYPE) {
     // Null-padded: Fordiag treats E3xx as a VIN block and space-padding here
     // causes trailing 0x20 bytes to bleed into the VIN display as leading spaces.
     send22Field(responseId, did, ecu_Type, 8);
     return;
   }
 
-  if(did < DID_FORD_VIN_CHUNK_BASE || did > DID_FORD_VIN_CHUNK_LAST) {
+  if(did < (uint16_t)DID_FORD_VIN_CHUNK_BASE || did > (uint16_t)DID_FORD_VIN_CHUNK_LAST) {
     return;
   }
 
@@ -1503,134 +1512,28 @@ static void send22FordDiagE3xx(uint32_t responseId, uint16_t did) {
   send22Field(responseId, did, vinChunk, width);
 }
 
-/**
- * @brief Dispatch one UDS or KWP service request.
- * @param mode Requested service identifier.
- * @param numofBytes Request length encoded in the incoming frame.
- * @param data Raw request buffer.
- * @param responseId CAN response identifier.
- * @param txData Output frame buffer.
- * @param tx Output flag set when a single-frame response is ready.
- * @return True when the service was recognized and handled.
- */
-static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
-  if(mode == UDS_SVC_DIAGNOSTIC_SESSION) {
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
-    }
-
-    uint8_t subFunction = data[2] & 0x7F;
-    if(subFunction == UDS_SESSION_DEFAULT || subFunction == UDS_SESSION_PROGRAMMING || subFunction == UDS_SESSION_EXTENDED) {
-      s_obdState.udsSessionValue = subFunction;
-      uint8_t udsRsp[] = {0x06, UDS_RSP_DIAGNOSTIC_SESSION, subFunction, 0x00, 0x32, 0x01, 0xF4, PAD};
-      hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
-    } else {
-      negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
-    }
-    return true;
-  }
-
-  if(mode == UDS_SVC_ECU_RESET) {
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
-    }
-
-    uint8_t subFunction = data[2] & 0x7F;
-    txData[0] = 0x02;
-    txData[1] = UDS_RSP_ECU_RESET;
-    txData[2] = subFunction;
-    *tx = true;
-    return true;
-  }
-
-  if(mode == UDS_SVC_CLEAR_DTC) {
-    // ISO 14229 request is 0x14 + 3-byte groupOfDTC, but some testers
-    // send shortened variants (for example only service byte). For
-    // compatibility we accept all variants and clear all DTCs.
-    if(numofBytes >= 4) {
-      uint32_t group = ((uint32_t)data[2] << 16)
-                     | ((uint32_t)data[3] << 8)
-                     | (uint32_t)data[4];
-      deb("UDS 0x14 clearDTC group=0x%06lX", (unsigned long)group);
-    } else if(numofBytes >= 2) {
-      uint32_t group = 0;
-      for(uint8_t i = 2; i <= numofBytes; i++) {
-        group = (group << 8) | (uint32_t)data[i];
-      }
-      deb("UDS 0x14 clearDTC shortGroup bytes=%u value=0x%06lX",
-          (unsigned)(numofBytes - 1), (unsigned long)group);
-    } else {
-      deb("UDS 0x14 clearDTC (no group bytes)");
-    }
-
-    dtcManagerClearAll();
-
-    txData[0] = 0x01;
-    txData[1] = UDS_RSP_CLEAR_DTC;
-    *tx = true;
-    return true;
-  }
-
-  if(mode == KWP_SVC_READ_DTC_BY_STATUS) {
-    // KWP2000 readDiagnosticTroubleCodesByStatus (ISO 14230-3)
-    // Request: 18 statusOfDTC groupHi groupLo
-    if(!requireMinLength(responseId, mode, numofBytes, 4)) {
-      return true;
-    }
-
-    uint8_t statusOfDtc = data[2];
-    uint16_t group = ((uint16_t)data[3] << 8) | (uint16_t)data[4];
-    (void)group; // FF00/FFFF = powertrain/all; we report all regardless
-
-    // statusOfDtc is a bitmask: 0x00 = report all, 0x01 = testFailed (active),
-    // 0x08 = confirmedDTC (stored). Treat 0x00 as "all stored".
-    dtc_kind_t kind = DTC_KIND_STORED;
-    if(statusOfDtc & 0x01) {
-      kind = DTC_KIND_ACTIVE;
-    }
-
-    uint16_t codes[8] = {0};
-    uint8_t count = dtcManagerGetCodes(kind, codes, 8);
-    deb("KWP 0x18 statusOfDtc=0x%02X group=0x%04X kind=%d count=%u",
-        statusOfDtc, group, (int)kind, count);
-
-    // Response (ISO 14230-3): 58 numberOfDTC [dtcHi dtcLo statusOfDTC]...
-    uint8_t payload[40] = {0};
-    int p = 0;
-    payload[p++] = KWP_RSP_READ_DTC_BY_STATUS;
-    payload[p++] = count;
-
-    for(uint8_t i = 0; i < count && (p + 2) < (int)sizeof(payload); i++) {
-      payload[p++] = MSB(codes[i]);
-      payload[p++] = LSB(codes[i]);
-      payload[p++] = (kind == DTC_KIND_ACTIVE) ? 0x01 : 0x08;
-    }
-
-    iso_tp(responseId, p, payload);
-    return true;
-  }
-
-  if(mode == UDS_SVC_READ_DTC_INFO) {
+static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
 #ifdef FORDIAG_COMPAT_NO_UDS_DTC
-    // Fordiag author: "after connect do not response to command 19 = not support UDS".
-    // Returning NRC here tells Fordiag the ECU is not a UDS ECU,
-    // steering it toward the EEC-V identification path (E217/E21A/E219).
-    // DTCs remain accessible via standard OBD Modes 0x03/0x07/0x0A.
-    negAck(responseId, mode, NRC_SERVICE_NOT_SUPPORTED);
-    return true;
-#endif
-    // Accept 1-byte "probe" requests: Fordiag sends just service 0x19
-    // to check DTC support before the full identification sequence.
-    if(numofBytes < 2) {
-      uint8_t probe[] = {UDS_RSP_READ_DTC_INFO, 0x02, 0x2F};
-      iso_tp(responseId, (int)sizeof(probe), probe);
-      return true;
-    }
-
+  (void)numofBytes;
+  (void)data;
+  (void)txData;
+  (void)tx;
+  // Fordiag author: "after connect do not response to command 19 = not support UDS".
+  // Returning NRC here tells Fordiag the ECU is not a UDS ECU,
+  // steering it toward the EEC-V identification path (E217/E21A/E219).
+  // DTCs remain accessible via standard OBD Modes 0x03/0x07/0x0A.
+  negAck(responseId, mode, NRC_SERVICE_NOT_SUPPORTED);
+#else
+  // Accept 1-byte "probe" requests: Fordiag sends just service 0x19
+  // to check DTC support before the full identification sequence.
+  if(numofBytes < 2u) {
+    uint8_t probe[] = {UDS_RSP_READ_DTC_INFO, 0x02, 0x2F};
+    iso_tp(responseId, (int)sizeof(probe), probe);
+  } else {
     uint8_t subFunction = data[2];
     deb("UDS 0x19 subFunction=0x%02X len=0x%02X", subFunction, numofBytes);
-    if(subFunction == 0x02) {
-      uint8_t statusMask = (numofBytes > 3) ? data[3] : 0xFF;
+    if(subFunction == 0x02u) {
+      uint8_t statusMask = (numofBytes > 3u) ? data[3] : 0xFFu;
       uint16_t activeCodes[8] = {0};
       uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, activeCodes, 8);
       deb("UDS 0x19 reportDTCByStatusMask mask=0x%02X activeCount=%u", statusMask, count);
@@ -1643,7 +1546,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
 
       for(uint8_t i = 0; i < count && (p + 3) < (int)sizeof(payload); i++) {
         uint8_t dtcStatus = 0x01; // testFailed
-        if((dtcStatus & statusMask) == 0) {
+        if((dtcStatus & statusMask) == 0u) {
           continue;
         }
 
@@ -1654,10 +1557,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       }
 
       iso_tp(responseId, p, payload);
-      return true;
-    }
-
-    if(subFunction == 0x0A) {
+    } else if(subFunction == 0x0Au) {
       // reportSupportedDTC
       uint8_t storedCount = dtcManagerCount(DTC_KIND_STORED);
       deb("UDS 0x19 reportSupportedDTC storedCount=%u", storedCount);
@@ -1666,459 +1566,545 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
       txData[2] = 0x0A;
       txData[3] = storedCount;
       *tx = true;
-      return true;
-    }
-
-    negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
-    return true;
-  }
-
-  if(mode == UDS_SVC_READ_MEMORY_BY_ADDR) {
-    // Ford SCP-style Request DMR Access
-    if(!requireMinLength(responseId, mode, numofBytes, 4)) {
-      return true;
-    }
-
-    uint8_t dmrType = data[2];
-    uint16_t addr = ((uint16_t)(data[3]) << 8) | (uint16_t)(data[4]);
-    deb("SCP 0x23 DMR type=0x%02X addr=0x%04X", dmrType, addr);
-
-    bool validType = (dmrType == 0x00 || dmrType == 0x01 || dmrType == 0x08 || dmrType == 0x09);
-    if(!validType) {
-      sendScpGeneralResponse(responseId, UDS_SVC_READ_MEMORY_BY_ADDR, data[2], data[3], data[4], NRC_SUBFUNCTION_NOT_SUPPORTED);
-      return true;
-    }
-
-    sendScpDmrResponse(responseId, addr, dmrType);
-    return true;
-  }
-
-  if(mode == UDS_SVC_READ_DATA_BY_ID) {
-    if(!requireMinLength(responseId, mode, numofBytes, 3)) {
-      return true;
-    }
-
-    uint16_t did = ((uint16_t)(data[2]) << 8) | (uint16_t)(data[3]);
-    deb("UDS 0x22 DID=0x%04X len=%d", did, numofBytes);
-    // Detect multi-DID requests: service(1) + N*DID(2) means numofBytes > 3 for N>1.
-    if(numofBytes > 3) {
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-      int didCount = (numofBytes - 1) / 2;
-      deb("UDS 0x22 MULTI-DID detected: %d DIDs in request (only 1st processed!)", didCount);
-      hal_deb_hex("UDS 0x22 multi-DID raw", data, (int)numofBytes + 1, 16);
-#endif
-    }
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-    if(isFordDiagIdentificationDid(did)) {
-      deb("UDS 0x22 ident request DID=0x%04X reqId=0x%03lX", did, (unsigned long)s_obdState.activeRequestIdValue);
-      hal_deb_hex("UDS 0x22 ident request raw", data, (int)numofBytes + 1, 16);
-    }
-#endif
-    if(did == DID_VIN) {
-      uint8_t payload[] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_VIN >> 8), (uint8_t)(DID_VIN & 0xFF),
-        PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD,
-        PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD
-      };
-      for(int a = 0; a < 17 && a < (int)strlen(vehicle_Vin); a++) {
-        payload[3 + a] = (uint8_t)(vehicle_Vin[a]);
-      }
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-      deb("UDS 0x22 F190 VIN='%s'", vehicle_Vin);
-      hal_deb_hex("UDS 0x22 F190 payload", payload, 20, 24);
-#endif
-      iso_tp(responseId, 20, payload);
-    } else if(did == DID_ACTIVE_SESSION) {
-      uint8_t udsRsp[] = {0x04, UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_ACTIVE_SESSION >> 8), (uint8_t)(DID_ACTIVE_SESSION & 0xFF), s_obdState.udsSessionValue, PAD, PAD, PAD};
-      hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
-    } else if(did == DID_SPARE_PART_NUMBER) {
-      send22Field(responseId, did, ecu_PartNumber, (int)strlen(ecu_PartNumber));
-    } else if(did == DID_SW_VERSION) {
-      // Fordiag maps this DID as "SW version".
-      send22Field(responseId, did, ecu_SwVersion, 4);
-    } else if(did == DID_SW_VERSION_ALT) {
-      send22Field(responseId, did, ecu_SwVersion, (int)strlen(ecu_SwVersion));
-    } else if(did == DID_SUPPLIER_ID) {
-      // System supplier identifier
-      const char *supplier = "FORD EEC-V";
-      send22Field(responseId, did, supplier, (int)strlen(supplier));
-    } else if(did == DID_MANUFACTURE_DATE) {
-      send22Field(responseId, did, ecu_SwDate, (int)strlen(ecu_SwDate));
-    } else if(did == DID_SERIAL_NUMBER) {
-      send22Field(responseId, did, vehicle_Vin, (int)strlen(vehicle_Vin));
-    } else if(did == DID_HW_VERSION) {
-      send22Field(responseId, did, ecu_HardwareId, (int)strlen(ecu_HardwareId));
-    } else if(did == DID_SYSTEM_NAME) {
-      // System name / engine type
-      const char *sysName = "FORD 1.8 TDDI VP37";
-      send22Field(responseId, did, sysName, (int)strlen(sysName));
-    } else if(did == DID_ODX_FILE_ID) {
-      send22Field(responseId, did, ecu_Model, (int)strlen(ecu_Model));
-    } else if(did == DID_FORD_MODEL) {
-      send22IdentField(responseId, did, ecu_Model, 8);
-    } else if((did >> 8) == (DID_F4_MODEL >> 8) && did > DID_F4_COPYRIGHT) {
-      // F4xx live-data mirror takes priority over ALT ident DIDs.
-      // ALT ident DIDs (F40B, F40C, …F449) share the same address space,
-      // so we must try live-data encoding first to avoid e.g. 0xF40F returning
-      // the catch-code string instead of PID 0x0F (IAT) temperature data.
-      uint8_t pid = (uint8_t)(did & 0x00FF);
-      uint8_t dataBytes[4] = {0};
-      int dataLen = 0;
-      if(encodeMode01PidData(pid, dataBytes, &dataLen)) {
-        uint8_t payload[3 + 4] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did};
-        memcpy(&payload[3], dataBytes, (size_t)dataLen);
-        iso_tp(responseId, 3 + dataLen, payload);
-      } else if(did == DID_F4_MODEL_16) {
-        send22IdentField(responseId, did, ecu_Model, 16);
-      } else if(did == DID_F4_TYPE_ALT) {
-        send22IdentField(responseId, did, ecu_Type, 8);
-      } else if(did == DID_F4_SUBTYPE_ALT) {
-        send22IdentField(responseId, did, ecu_SubType, 8);
-      } else if(did == DID_F4_CATCH_CODE_ALT) {
-        send22IdentField(responseId, did, ecu_CatchCode, 8);
-      } else if(did == DID_F4_SW_DATE_ALT) {
-        send22IdentField(responseId, did, ecu_SwDate, 8);
-      } else if(did == DID_F4_CALIBRATION_ID_ALT) {
-        send22IdentField(responseId, did, ecu_CalibrationId, 16);
-      } else if(did == DID_F4_HARDWARE_ID_ALT) {
-        send22IdentField(responseId, did, ecu_HardwareId, 8);
-      } else if(did == DID_F4_ROM_SIZE_ALT) {
-        send22U32(responseId, did, FORD_ROM_SIZE_512K);
-      } else if(did == DID_F4_PART_NUMBER_ALT) {
-        send22IdentField(responseId, did, ecu_PartNumber, 16);
-      } else if(did == DID_F4_SW_VERSION) {
-        send22IdentField(responseId, did, ecu_SwVersion, 4);
-      } else if(did == DID_F4_COPYRIGHT_ALT) {
-        send22IdentField(responseId, did, ecu_Copyright, 16);
-      } else {
-        // Keep alive with a deterministic zero payload for unknown F4xx PIDs.
-        uint8_t payload[] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did, 0x00};
-        iso_tp(responseId, (int)sizeof(payload), payload);
-      }
-    } else if(did >= DID_F4_MODEL && did <= DID_F4_COPYRIGHT) {
-      // Ford EEC-V identification DIDs used by identification screen.
-      const char *val;
-      int width;
-      switch(did) {
-        case DID_F4_MODEL:          val = ecu_Model;         width = 8;  break;
-        case DID_F4_TYPE:           val = ecu_Type;          width = 8;  break;
-        case DID_F4_SUBTYPE:        val = ecu_SubType;       width = 8;  break;
-        case DID_F4_CATCH_CODE:     val = ecu_CatchCode;     width = 8;  break;
-        case DID_F4_SW_DATE:        val = ecu_SwDate;        width = 8;  break;
-        case DID_F4_CALIBRATION_ID: val = ecu_CalibrationId; width = 16; break;
-        case DID_F4_PART_NUMBER:    val = ecu_PartNumber;    width = 16; break;
-        case DID_F4_HARDWARE_ID:    val = ecu_HardwareId;    width = 8;  break;
-        case DID_F4_ROM_SIZE:       send22U32(responseId, did, FORD_ROM_SIZE_512K); return true;
-        case DID_F4_COPYRIGHT:      val = ecu_Copyright;     width = 16; break;
-        default:                    val = ecu_SwVersion;     width = 4;  break;
-      }
-      send22IdentField(responseId, did, val, width);
-    } else if(did == DID_PART_NUMBER) {
-      // Fordiag maps this DID as "Part number".
-      send22Field(responseId, did, ecu_PartNumber, 16);
-    } else if(did == DID_BOOT_SW_ID) {
-      send22Field(responseId, did, ecu_SwVersion, 4);
-    } else if(did >= DID_FORD_TYPE && did <= DID_FORD_VIN_CHUNK_LAST) {
-      send22FordDiagE3xx(responseId, did);
-    } else if(did == DID_FORD_SW_DATE) {
-      // E200: Fordiag decodes SW date as 3 binary bytes (NOT ASCII!):
-      //   byte 0 = month (lower nibble), byte 1 = day, byte 2 = year-1900.
-      // Per Fordiag author's ECU_ReadSWVersion FoxPro source.
-      // Parse ecu_SwDate "YYYYMMDD" → binary {month, day, year-1900}.
-      {
-        int year = 0, month = 0, day = 0;
-        if(strlen(ecu_SwDate) >= 8) {
-          year  = (ecu_SwDate[0]-'0')*1000 + (ecu_SwDate[1]-'0')*100 +
-                  (ecu_SwDate[2]-'0')*10   + (ecu_SwDate[3]-'0');
-          month = (ecu_SwDate[4]-'0')*10   + (ecu_SwDate[5]-'0');
-          day   = (ecu_SwDate[6]-'0')*10   + (ecu_SwDate[7]-'0');
-        }
-        uint8_t payload[6] = {
-          UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-          (uint8_t)(month & 0x0F),
-          (uint8_t)day,
-          (uint8_t)(year - 1900)
-        };
-        deb("UDS 0x22 E200 SW date: %d-%02d-%02d → {0x%02X,0x%02X,0x%02X}",
-            year, month, day, payload[3], payload[4], payload[5]);
-        iso_tp(responseId, (int)sizeof(payload), payload);
-      }
-    } else if(did == DID_FORD_PARTNUM_MIDDLE) {
-      // E217: Fordiag reads binary middle bytes of Ford part number
-      // (e.g. "12A650" → {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
-      sendE217PartNumMiddle(responseId, did);
-    } else if(did == DID_FORD_PARTNUM_PREFIX) {
-      // E21A: Fordiag reads ASCII prefix of Ford part number
-      // (e.g. "XS4A") for ECU identification.
-      sendE21APartNumPrefix(responseId, did);
-    } else if(did == DID_FORD_PARTNUM_SUFFIX) {
-      // E219: Fordiag reads 2-byte encoded suffix of Ford part number
-      // (e.g. "AXB" → {0x52, 0x01}) for ECU identification.
-      sendE219PartNumSuffix(responseId, did);
-    } else if(did == DID_FORD_CATCH_CODE) {
-      send22IdentField(responseId, did, ecu_CatchCode, 8);
-    } else if(did == DID_FORD_PART_NUMBER) {
-      send22IdentField(responseId, did, ecu_PartNumber, 16);
-    } else if(did == DID_FORD_TOTDIST) {
-#ifdef OBD_ENABLE_TOTDIST
-      // DD01: Total distance (odometer), 3 bytes big-endian unsigned km.
-      // Per Fordiag author: "3bytova!" — unusual 3-byte format.
-      uint32_t km = obdGetTotalDistanceKm();
-      uint8_t payload[6] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)((km >> 16) & 0xFF),
-        (uint8_t)((km >> 8) & 0xFF),
-        (uint8_t)(km & 0xFF)
-      };
-      deb("UDS 0x22 DD01 TOTDIST=%lu km", (unsigned long)km);
-      iso_tp(responseId, (int)sizeof(payload), payload);
-#else
-      negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-#endif
-    } else if(did == DID_FORD_OUTTMP) {
-      // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
-      // ECU has no outside temp sensor; use intake temp as best proxy.
-      uint8_t raw = obd_encodeTempByte(getGlobalValue(F_INTAKE_TEMP));
-      uint8_t payload[4] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        raw
-      };
-      deb("UDS 0x22 DD05 OUTTMP raw=%u (%.1f°C)", (unsigned)raw, getGlobalValue(F_INTAKE_TEMP));
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_FUEL_TEMP) {
-      // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
-      uint8_t raw = obd_encodeTempByte(getGlobalValue(F_FUEL_TEMP));
-      uint8_t payload[4] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        raw
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_OIL_PRESSURE) {
-      // DD03: Oil pressure, 2 bytes big-endian, kPa × 10.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
-      uint8_t payload[5] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_BOOST) {
-      // DD04: Boost/intake pressure, 2 bytes big-endian, bar × 1000.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE) * 1000.0f), 0, 65535);
-      uint8_t payload[5] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_DPF_PRESSURE) {
-      // DD06: DPF differential pressure, 2 bytes big-endian, Pa.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_DPF_PRESSURE) * 1000.0f), 0, 65535);
-      uint8_t payload[5] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_BOOST_DESIRED) {
-      // DD07: Desired boost pressure, 2 bytes big-endian, bar × 1000.
-      int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE_DESIRED) * 1000.0f), 0, 65535);
-      uint8_t payload[5] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_FORD_BOOST_PERCENT) {
-      // DD08: Boost duty cycle percentage, 1 byte 0-100.
-      int32_t pct = hal_constrain((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE), 0, 100);
-      uint8_t payload[4] = {
-        UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
-        (uint8_t)pct
-      };
-      iso_tp(responseId, (int)sizeof(payload), payload);
-    } else if(did == DID_ECU_CAPABILITIES) {
-      // DID 0x0200 collides with SCP_PID_CODES_COUNT — must return NRC here
-      // so Fordiag falls back to Mode 01 PID 0x51 for diesel type detection.
-      // A positive response causes Fordiag to show "MAP system / MAF system".
-      negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-    } else if(handleScpPidAccess(responseId, did, txData, tx)) {
-      // Compatibility with legacy Ford SCP "REQUEST_PID_ACCESS" style over CAN.
-      // Positive response already prepared in txData.
     } else {
+      negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
+    }
+  }
+#endif
+}
+
+static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
+  uint16_t did = ((uint16_t)(data[2]) << 8) | (uint16_t)(data[3]);
+  deb("UDS 0x22 DID=0x%04X len=%d", did, numofBytes);
+  // Detect multi-DID requests: service(1) + N*DID(2) means numofBytes > 3 for N>1.
+  if(numofBytes > 3u) {
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+    int didCount = (numofBytes - 1) / 2;
+    deb("UDS 0x22 MULTI-DID detected: %d DIDs in request (only 1st processed!)", didCount);
+    hal_deb_hex("UDS 0x22 multi-DID raw", data, (int)numofBytes + 1, 16);
+#endif
+  }
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+  if(isFordDiagIdentificationDid(did)) {
+    deb("UDS 0x22 ident request DID=0x%04X reqId=0x%03lX", did, (unsigned long)s_obdState.activeRequestIdValue);
+    hal_deb_hex("UDS 0x22 ident request raw", data, (int)numofBytes + 1, 16);
+  }
+#endif
+  if(did == (uint16_t)DID_VIN) {
+    uint8_t payload[] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_VIN >> 8), (uint8_t)(DID_VIN & 0xFF),
+      PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD,
+      PAD, PAD, PAD, PAD, PAD, PAD, PAD, PAD
+    };
+    for(int a = 0; a < 17 && a < (int)strlen(vehicle_Vin); a++) {
+      payload[3 + a] = (uint8_t)(vehicle_Vin[a]);
+    }
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+    deb("UDS 0x22 F190 VIN='%s'", vehicle_Vin);
+    hal_deb_hex("UDS 0x22 F190 payload", payload, 20, 24);
+#endif
+    iso_tp(responseId, 20, payload);
+  } else if(did == (uint16_t)DID_ACTIVE_SESSION) {
+    uint8_t udsRsp[] = {0x04, UDS_RSP_READ_DATA_BY_ID, (uint8_t)(DID_ACTIVE_SESSION >> 8), (uint8_t)(DID_ACTIVE_SESSION & 0xFF), s_obdState.udsSessionValue, PAD, PAD, PAD};
+    hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
+  } else if(did == (uint16_t)DID_SPARE_PART_NUMBER) {
+    send22Field(responseId, did, ecu_PartNumber, (int)strlen(ecu_PartNumber));
+  } else if(did == (uint16_t)DID_SW_VERSION) {
+    // Fordiag maps this DID as "SW version".
+    send22Field(responseId, did, ecu_SwVersion, 4);
+  } else if(did == (uint16_t)DID_SW_VERSION_ALT) {
+    send22Field(responseId, did, ecu_SwVersion, (int)strlen(ecu_SwVersion));
+  } else if(did == (uint16_t)DID_SUPPLIER_ID) {
+    // System supplier identifier
+    const char *supplier = "FORD EEC-V";
+    send22Field(responseId, did, supplier, (int)strlen(supplier));
+  } else if(did == (uint16_t)DID_MANUFACTURE_DATE) {
+    send22Field(responseId, did, ecu_SwDate, (int)strlen(ecu_SwDate));
+  } else if(did == (uint16_t)DID_SERIAL_NUMBER) {
+    send22Field(responseId, did, vehicle_Vin, (int)strlen(vehicle_Vin));
+  } else if(did == (uint16_t)DID_HW_VERSION) {
+    send22Field(responseId, did, ecu_HardwareId, (int)strlen(ecu_HardwareId));
+  } else if(did == (uint16_t)DID_SYSTEM_NAME) {
+    // System name / engine type
+    const char *sysName = "FORD 1.8 TDDI VP37";
+    send22Field(responseId, did, sysName, (int)strlen(sysName));
+  } else if(did == (uint16_t)DID_ODX_FILE_ID) {
+    send22Field(responseId, did, ecu_Model, (int)strlen(ecu_Model));
+  } else if(did == (uint16_t)DID_FORD_MODEL) {
+    send22IdentField(responseId, did, ecu_Model, 8);
+  } else if((did >> 8) == (DID_F4_MODEL >> 8) && did > (uint16_t)DID_F4_COPYRIGHT) {
+    // F4xx live-data mirror takes priority over ALT ident DIDs.
+    // ALT ident DIDs (F40B, F40C, …F449) share the same address space,
+    // so we must try live-data encoding first to avoid e.g. 0xF40F returning
+    // the catch-code string instead of PID 0x0F (IAT) temperature data.
+    uint8_t pid = (uint8_t)(did & 0x00FFu);
+    uint8_t dataBytes[4] = {0};
+    int dataLen = 0;
+    if(encodeMode01PidData(pid, dataBytes, &dataLen)) {
+      uint8_t payload[3 + 4] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did};
+      memcpy(&payload[3], dataBytes, (size_t)dataLen);
+      iso_tp(responseId, 3 + dataLen, payload);
+    } else if(did == (uint16_t)DID_F4_MODEL_16) {
+      send22IdentField(responseId, did, ecu_Model, 16);
+    } else if(did == (uint16_t)DID_F4_TYPE_ALT) {
+      send22IdentField(responseId, did, ecu_Type, 8);
+    } else if(did == (uint16_t)DID_F4_SUBTYPE_ALT) {
+      send22IdentField(responseId, did, ecu_SubType, 8);
+    } else if(did == (uint16_t)DID_F4_CATCH_CODE_ALT) {
+      send22IdentField(responseId, did, ecu_CatchCode, 8);
+    } else if(did == (uint16_t)DID_F4_SW_DATE_ALT) {
+      send22IdentField(responseId, did, ecu_SwDate, 8);
+    } else if(did == (uint16_t)DID_F4_CALIBRATION_ID_ALT) {
+      send22IdentField(responseId, did, ecu_CalibrationId, 16);
+    } else if(did == (uint16_t)DID_F4_HARDWARE_ID_ALT) {
+      send22IdentField(responseId, did, ecu_HardwareId, 8);
+    } else if(did == (uint16_t)DID_F4_ROM_SIZE_ALT) {
+      send22U32(responseId, did, FORD_ROM_SIZE_512K);
+    } else if(did == (uint16_t)DID_F4_PART_NUMBER_ALT) {
+      send22IdentField(responseId, did, ecu_PartNumber, 16);
+    } else if(did == (uint16_t)DID_F4_SW_VERSION) {
+      send22IdentField(responseId, did, ecu_SwVersion, 4);
+    } else if(did == (uint16_t)DID_F4_COPYRIGHT_ALT) {
+      send22IdentField(responseId, did, ecu_Copyright, 16);
+    } else {
+      // Keep alive with a deterministic zero payload for unknown F4xx PIDs.
+      uint8_t payload[] = {UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)did, 0x00};
+      iso_tp(responseId, (int)sizeof(payload), payload);
+    }
+  } else if(did >= (uint16_t)DID_F4_MODEL && did <= (uint16_t)DID_F4_COPYRIGHT) {
+    // Ford EEC-V identification DIDs used by identification screen.
+    const char *val = ecu_SwVersion;
+    int width = 4;
+    bool isRomSizeDid = false;
+    switch(did) {
+      case DID_F4_MODEL:          val = ecu_Model;         width = 8;  break;
+      case DID_F4_TYPE:           val = ecu_Type;          width = 8;  break;
+      case DID_F4_SUBTYPE:        val = ecu_SubType;       width = 8;  break;
+      case DID_F4_CATCH_CODE:     val = ecu_CatchCode;     width = 8;  break;
+      case DID_F4_SW_DATE:        val = ecu_SwDate;        width = 8;  break;
+      case DID_F4_CALIBRATION_ID: val = ecu_CalibrationId; width = 16; break;
+      case DID_F4_PART_NUMBER:    val = ecu_PartNumber;    width = 16; break;
+      case DID_F4_HARDWARE_ID:    val = ecu_HardwareId;    width = 8;  break;
+      case DID_F4_ROM_SIZE:       isRomSizeDid = true;     break;
+      case DID_F4_COPYRIGHT:      val = ecu_Copyright;     width = 16; break;
+      default:                                                    break;
+    }
+    if(isRomSizeDid) {
+      send22U32(responseId, did, FORD_ROM_SIZE_512K);
+    } else {
+      send22IdentField(responseId, did, val, width);
+    }
+  } else if(did == (uint16_t)DID_PART_NUMBER) {
+    // Fordiag maps this DID as "Part number".
+    send22Field(responseId, did, ecu_PartNumber, 16);
+  } else if(did == (uint16_t)DID_BOOT_SW_ID) {
+    send22Field(responseId, did, ecu_SwVersion, 4);
+  } else if(did >= (uint16_t)DID_FORD_TYPE && did <= (uint16_t)DID_FORD_VIN_CHUNK_LAST) {
+    send22FordDiagE3xx(responseId, did);
+  } else if(did == (uint16_t)DID_FORD_SW_DATE) {
+    // E200: Fordiag decodes SW date as 3 binary bytes (NOT ASCII!):
+    //   byte 0 = month (lower nibble), byte 1 = day, byte 2 = year-1900.
+    // Per Fordiag author's ECU_ReadSWVersion FoxPro source.
+    // Parse ecu_SwDate "YYYYMMDD" → binary {month, day, year-1900}.
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    if(strlen(ecu_SwDate) >= 8u) {
+      year  = (ecu_SwDate[0] - '0') * 1000 + (ecu_SwDate[1] - '0') * 100 +
+              (ecu_SwDate[2] - '0') * 10   + (ecu_SwDate[3] - '0');
+      month = (ecu_SwDate[4] - '0') * 10   + (ecu_SwDate[5] - '0');
+      day   = (ecu_SwDate[6] - '0') * 10   + (ecu_SwDate[7] - '0');
+    }
+    uint8_t payload[6] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)(month & 0x0F),
+      (uint8_t)day,
+      (uint8_t)(year - 1900)
+    };
+    deb("UDS 0x22 E200 SW date: %d-%02d-%02d → {0x%02X,0x%02X,0x%02X}",
+        year, month, day, payload[3], payload[4], payload[5]);
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_PARTNUM_MIDDLE) {
+    // E217: Fordiag reads binary middle bytes of Ford part number
+    // (e.g. "12A650" → {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
+    sendE217PartNumMiddle(responseId, did);
+  } else if(did == (uint16_t)DID_FORD_PARTNUM_PREFIX) {
+    // E21A: Fordiag reads ASCII prefix of Ford part number
+    // (e.g. "XS4A") for ECU identification.
+    sendE21APartNumPrefix(responseId, did);
+  } else if(did == (uint16_t)DID_FORD_PARTNUM_SUFFIX) {
+    // E219: Fordiag reads 2-byte encoded suffix of Ford part number
+    // (e.g. "AXB" → {0x52, 0x01}) for ECU identification.
+    sendE219PartNumSuffix(responseId, did);
+  } else if(did == (uint16_t)DID_FORD_CATCH_CODE) {
+    send22IdentField(responseId, did, ecu_CatchCode, 8);
+  } else if(did == (uint16_t)DID_FORD_PART_NUMBER) {
+    send22IdentField(responseId, did, ecu_PartNumber, 16);
+  } else if(did == (uint16_t)DID_FORD_TOTDIST) {
+#ifdef OBD_ENABLE_TOTDIST
+    // DD01: Total distance (odometer), 3 bytes big-endian unsigned km.
+    // Per Fordiag author: "3bytova!" — unusual 3-byte format.
+    uint32_t km = obdGetTotalDistanceKm();
+    uint8_t payload[6] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)((km >> 16) & 0xFF),
+      (uint8_t)((km >> 8) & 0xFF),
+      (uint8_t)(km & 0xFF)
+    };
+    deb("UDS 0x22 DD01 TOTDIST=%lu km", (unsigned long)km);
+    iso_tp(responseId, (int)sizeof(payload), payload);
+#else
+    negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+#endif
+  } else if(did == (uint16_t)DID_FORD_OUTTMP) {
+    // DD05: External temperature, 1 byte unsigned, value = raw - 40 °C.
+    // ECU has no outside temp sensor; use intake temp as best proxy.
+    uint8_t raw = obd_encodeTempByte(getGlobalValue(F_INTAKE_TEMP));
+    uint8_t payload[4] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      raw
+    };
+    deb("UDS 0x22 DD05 OUTTMP raw=%u (%.1f°C)", (unsigned)raw, getGlobalValue(F_INTAKE_TEMP));
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_FUEL_TEMP) {
+    // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
+    uint8_t raw = obd_encodeTempByte(getGlobalValue(F_FUEL_TEMP));
+    uint8_t payload[4] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      raw
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_OIL_PRESSURE) {
+    // DD03: Oil pressure, 2 bytes big-endian, kPa × 10.
+    int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
+    uint8_t payload[5] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_BOOST) {
+    // DD04: Boost/intake pressure, 2 bytes big-endian, bar × 1000.
+    int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE) * 1000.0f), 0, 65535);
+    uint8_t payload[5] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_DPF_PRESSURE) {
+    // DD06: DPF differential pressure, 2 bytes big-endian, Pa.
+    int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_DPF_PRESSURE) * 1000.0f), 0, 65535);
+    uint8_t payload[5] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_BOOST_DESIRED) {
+    // DD07: Desired boost pressure, 2 bytes big-endian, bar × 1000.
+    int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE_DESIRED) * 1000.0f), 0, 65535);
+    uint8_t payload[5] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)(raw >> 8), (uint8_t)(raw & 0xFF)
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_FORD_BOOST_PERCENT) {
+    // DD08: Boost duty cycle percentage, 1 byte 0-100.
+    int32_t pct = hal_constrain((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE), 0, 100);
+    uint8_t payload[4] = {
+      UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
+      (uint8_t)pct
+    };
+    iso_tp(responseId, (int)sizeof(payload), payload);
+  } else if(did == (uint16_t)DID_ECU_CAPABILITIES) {
+    // DID 0x0200 collides with SCP_PID_CODES_COUNT — must return NRC here
+    // so Fordiag falls back to Mode 01 PID 0x51 for diesel type detection.
+    // A positive response causes Fordiag to show "MAP system / MAF system".
+    negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+  } else if(handleScpPidAccess(responseId, did, txData, tx)) {
+    // Compatibility with legacy Ford SCP "REQUEST_PID_ACCESS" style over CAN.
+    // Positive response already prepared in txData.
+  } else {
+    negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+  }
+}
+
+static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId) {
+#ifndef OBD_VERBOSE_IDENT_DEBUG
+  (void)numofBytes;
+#endif
+  uint8_t localId = data[2];
+  deb("KWP 0x12 localId=0x%02X", localId);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+  if(isFordDiagIdentificationLocalId(localId)) {
+    deb("KWP 0x12 ident request localId=0x%02X reqId=0x%03lX", localId, (unsigned long)s_obdState.activeRequestIdValue);
+    hal_deb_hex("KWP 0x12 ident request raw", data, (int)numofBytes + 1, 16);
+  }
+#endif
+
+  switch(localId) {
+    case KWP_LID_CALIBRATION_ID:  send12LocalField(responseId, localId, ecu_CalibrationId, 16); break;
+    case KWP_LID_SW_DATE:         send12LocalField(responseId, localId, ecu_SwDate, 8);         break;
+    case KWP_LID_PART_NUMBER:     send12LocalField(responseId, localId, ecu_PartNumber, 16);    break;
+    case KWP_LID_MODEL_16:        send12LocalField(responseId, localId, ecu_Model, 16);         break;
+    case KWP_LID_VIN:             send12LocalField(responseId, localId, vehicle_Vin, 17);       break;
+    case KWP_LID_MODEL:           send12LocalField(responseId, localId, ecu_Model, 16);         break;
+    case KWP_LID_TYPE:            send12LocalField(responseId, localId, ecu_Type, 8);           break;
+    case KWP_LID_SUBTYPE:         send12LocalField(responseId, localId, ecu_SubType, 8);        break;
+    case KWP_LID_CATCH_CODE:      send12LocalField(responseId, localId, ecu_CatchCode, 8);      break;
+    case KWP_LID_VIN_ALT:         send12LocalField(responseId, localId, vehicle_Vin, 17);       break;
+    case KWP_LID_SW_VERSION:      send12LocalField(responseId, localId, ecu_SwVersion, 4);      break;
+    case KWP_LID_SW_DATE_ALT:     send12LocalField(responseId, localId, ecu_SwDate, 8);         break;
+    case KWP_LID_CALIBRATION_ALT: send12LocalField(responseId, localId, ecu_CalibrationId, 16); break;
+    case KWP_LID_PART_NUMBER_ALT: send12LocalField(responseId, localId, ecu_PartNumber, 16);    break;
+    case KWP_LID_HARDWARE_ID:     send12LocalField(responseId, localId, ecu_HardwareId, 8);     break;
+    case KWP_LID_COPYRIGHT:       send12LocalField(responseId, localId, ecu_Copyright, 32);     break;
+    case KWP_LID_ROM_SIZE: {
+      // ROM size: 512 KB = 0x00080000
+      uint8_t rsp[6] = {UDS_RSP_READ_DATA_BY_LOCAL_ID, localId};
+      hal_u32_to_bytes_be(FORD_ROM_SIZE_512K, &rsp[2]);
+      iso_tp(responseId, (int)sizeof(rsp), rsp);
+      break;
+    }
+
+    // ---- ForDiag EEC-V identification blocks -------------------------
+    case KWP_LID_CALIB_BLOCK: {
+      // Software calibration block used by Fordiag:
+      // SwVersion(4) + SwDate(8) + CalibId(16)
+      uint8_t resp[2 + 16 + 4 + 8];
+      resp[0] = UDS_RSP_READ_DATA_BY_LOCAL_ID;
+      resp[1] = localId;
+      // Ford EEC-V convention: space-padded ASCII fields.
+      packFieldPad(&resp[2], ecu_SwVersion, 4, FORD_IDENT_PAD);
+      packFieldPad(&resp[6], ecu_SwDate, 8, FORD_IDENT_PAD);
+      packFieldPad(&resp[14], ecu_CalibrationId, 16, FORD_IDENT_PAD);
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+      deb("KWP 0x12/0x33 fields: sw=%s swDate=%s cal=%s", ecu_SwVersion, ecu_SwDate, ecu_CalibrationId);
+      hal_deb_hex("KWP 0x12/0x33 response", resp, (int)sizeof(resp), 40);
+#endif
+      iso_tp(responseId, (int)sizeof(resp), resp);
+      break;
+    }
+    case KWP_LID_COMPACT_IDENT:
+      // Disabled: our custom compact block format doesn't match what Fordiag
+      // expects, causing it to show "MAP system / MAF system" instead of
+      // "DIESEL engine". NRC forces fallback to standard PID 0x51 detection.
       negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+      break;
+    case KWP_LID_SUPPORTED_LIST: {
+      // Supported local identifiers list used by some scan tools to discover ID fields.
+      uint8_t resp[] = {
+        UDS_RSP_READ_DATA_BY_LOCAL_ID, localId,
+        KWP_LID_CALIB_BLOCK,
+        KWP_LID_CALIBRATION_ID, KWP_LID_SW_DATE, KWP_LID_PART_NUMBER, KWP_LID_MODEL_16,
+        KWP_LID_VIN, KWP_LID_MODEL, KWP_LID_TYPE, KWP_LID_SUBTYPE, KWP_LID_CATCH_CODE, KWP_LID_VIN_ALT,
+        KWP_LID_SW_VERSION, KWP_LID_SW_DATE_ALT, KWP_LID_CALIBRATION_ALT, KWP_LID_PART_NUMBER_ALT, KWP_LID_HARDWARE_ID, KWP_LID_ROM_SIZE, KWP_LID_COPYRIGHT
+      };
+#ifdef OBD_VERBOSE_IDENT_DEBUG
+      hal_deb_hex("KWP 0x12/0xFF response", resp, (int)sizeof(resp), 8);
+#endif
+      iso_tp(responseId, (int)sizeof(resp), resp);
+      break;
     }
-    return true;
+    // ------------------------------------------------------------------
+
+    default:
+      negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
+      break;
   }
+}
 
-  if(mode == UDS_SVC_READ_DATA_BY_LOCAL_ID) {
-    // KWP2000 service 0x12 - ReadDataByLocalIdentifier
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
-    }
+/**
+ * @brief Dispatch one UDS or KWP service request.
+ * @param mode Requested service identifier.
+ * @param numofBytes Request length encoded in the incoming frame.
+ * @param data Raw request buffer.
+ * @param responseId CAN response identifier.
+ * @param txData Output frame buffer.
+ * @param tx Output flag set when a single-frame response is ready.
+ * @return True when the service was recognized and handled.
+ */
+static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
+  bool handled = false;
 
-    uint8_t localId = data[2];
-    deb("KWP 0x12 localId=0x%02X", localId);
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-    if(isFordDiagIdentificationLocalId(localId)) {
-      deb("KWP 0x12 ident request localId=0x%02X reqId=0x%03lX", localId, (unsigned long)s_obdState.activeRequestIdValue);
-      hal_deb_hex("KWP 0x12 ident request raw", data, (int)numofBytes + 1, 16);
-    }
-#endif
-
-    switch(localId) {
-      case KWP_LID_CALIBRATION_ID:  send12LocalField(responseId, localId, ecu_CalibrationId, 16); return true;
-      case KWP_LID_SW_DATE:          send12LocalField(responseId, localId, ecu_SwDate, 8);         return true;
-      case KWP_LID_PART_NUMBER:      send12LocalField(responseId, localId, ecu_PartNumber, 16);    return true;
-      case KWP_LID_MODEL_16:         send12LocalField(responseId, localId, ecu_Model, 16);         return true;
-      case KWP_LID_VIN:              send12LocalField(responseId, localId, vehicle_Vin, 17);       return true;
-      case KWP_LID_MODEL:            send12LocalField(responseId, localId, ecu_Model, 16);         return true;
-      case KWP_LID_TYPE:             send12LocalField(responseId, localId, ecu_Type, 8);           return true;
-      case KWP_LID_SUBTYPE:          send12LocalField(responseId, localId, ecu_SubType, 8);        return true;
-      case KWP_LID_CATCH_CODE:       send12LocalField(responseId, localId, ecu_CatchCode, 8);      return true;
-      case KWP_LID_VIN_ALT:          send12LocalField(responseId, localId, vehicle_Vin, 17);       return true;
-      case KWP_LID_SW_VERSION:       send12LocalField(responseId, localId, ecu_SwVersion, 4);      return true;
-      case KWP_LID_SW_DATE_ALT:      send12LocalField(responseId, localId, ecu_SwDate, 8);         return true;
-      case KWP_LID_CALIBRATION_ALT:  send12LocalField(responseId, localId, ecu_CalibrationId, 16); return true;
-      case KWP_LID_PART_NUMBER_ALT:  send12LocalField(responseId, localId, ecu_PartNumber, 16);    return true;
-      case KWP_LID_HARDWARE_ID:      send12LocalField(responseId, localId, ecu_HardwareId, 8);     return true;
-      case KWP_LID_COPYRIGHT:        send12LocalField(responseId, localId, ecu_Copyright, 32);     return true;
-      case KWP_LID_ROM_SIZE: {
-        // ROM size: 512 KB = 0x00080000
-        uint8_t rsp[6] = {UDS_RSP_READ_DATA_BY_LOCAL_ID, localId};
-        hal_u32_to_bytes_be(FORD_ROM_SIZE_512K, &rsp[2]);
-        iso_tp(responseId, (int)sizeof(rsp), rsp);
-        return true;
+  if(mode == (uint8_t)UDS_SVC_DIAGNOSTIC_SESSION) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      uint8_t subFunction = data[2] & 0x7Fu;
+      if((subFunction == (uint8_t)UDS_SESSION_DEFAULT) ||
+         (subFunction == (uint8_t)UDS_SESSION_PROGRAMMING) ||
+         (subFunction == (uint8_t)UDS_SESSION_EXTENDED)) {
+        s_obdState.udsSessionValue = subFunction;
+        uint8_t udsRsp[] = {0x06, UDS_RSP_DIAGNOSTIC_SESSION, subFunction, 0x00, 0x32, 0x01, 0xF4, PAD};
+        hal_can_send(s_obdState.canHandle, responseId, 8, udsRsp);
+      } else {
+        negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
       }
-
-      // ---- ForDiag EEC-V identification blocks -------------------------
-      case KWP_LID_CALIB_BLOCK: {
-        // Software calibration block used by Fordiag:
-        // SwVersion(4) + SwDate(8) + CalibId(16)
-        uint8_t resp[2 + 16 + 4 + 8];
-        resp[0] = UDS_RSP_READ_DATA_BY_LOCAL_ID; resp[1] = localId;
-        // Ford EEC-V convention: space-padded ASCII fields.
-        packFieldPad(&resp[2],  ecu_SwVersion,       4, FORD_IDENT_PAD);
-        packFieldPad(&resp[6],  ecu_SwDate,          8, FORD_IDENT_PAD);
-        packFieldPad(&resp[14], ecu_CalibrationId,  16, FORD_IDENT_PAD);
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-        deb("KWP 0x12/0x33 fields: sw=%s swDate=%s cal=%s", ecu_SwVersion, ecu_SwDate, ecu_CalibrationId);
-        hal_deb_hex("KWP 0x12/0x33 response", resp, (int)sizeof(resp), 40);
-#endif
-        iso_tp(responseId, (int)sizeof(resp), resp);
-        return true;
+    }
+  } else if(mode == (uint8_t)UDS_SVC_ECU_RESET) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      uint8_t subFunction = data[2] & 0x7Fu;
+      txData[0] = 0x02;
+      txData[1] = UDS_RSP_ECU_RESET;
+      txData[2] = subFunction;
+      *tx = true;
+    }
+  } else if(mode == (uint8_t)UDS_SVC_CLEAR_DTC) {
+    handled = true;
+    // ISO 14229 request is 0x14 + 3-byte groupOfDTC, but some testers
+    // send shortened variants (for example only service byte). For
+    // compatibility we accept all variants and clear all DTCs.
+    if(numofBytes >= 4u) {
+      uint32_t group = ((uint32_t)data[2] << 16)
+                     | ((uint32_t)data[3] << 8)
+                     | (uint32_t)data[4];
+      deb("UDS 0x14 clearDTC group=0x%06lX", (unsigned long)group);
+    } else if(numofBytes >= 2u) {
+      uint32_t group = 0;
+      for(uint8_t i = 2; i <= numofBytes; i++) {
+        group = (group << 8) | (uint32_t)data[i];
       }
-      case KWP_LID_COMPACT_IDENT:
-        // Disabled: our custom compact block format doesn't match what Fordiag
-        // expects, causing it to show "MAP system / MAF system" instead of
-        // "DIESEL engine". NRC forces fallback to standard PID 0x51 detection.
-        negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-        return true;
-      case KWP_LID_SUPPORTED_LIST: {
-        // Supported local identifiers list used by some scan tools to discover ID fields.
-        uint8_t resp[] = {
-          UDS_RSP_READ_DATA_BY_LOCAL_ID, localId,
-          KWP_LID_CALIB_BLOCK,
-          KWP_LID_CALIBRATION_ID, KWP_LID_SW_DATE, KWP_LID_PART_NUMBER, KWP_LID_MODEL_16,
-          KWP_LID_VIN, KWP_LID_MODEL, KWP_LID_TYPE, KWP_LID_SUBTYPE, KWP_LID_CATCH_CODE, KWP_LID_VIN_ALT,
-          KWP_LID_SW_VERSION, KWP_LID_SW_DATE_ALT, KWP_LID_CALIBRATION_ALT, KWP_LID_PART_NUMBER_ALT, KWP_LID_HARDWARE_ID, KWP_LID_ROM_SIZE, KWP_LID_COPYRIGHT
-        };
-#ifdef OBD_VERBOSE_IDENT_DEBUG
-        hal_deb_hex("KWP 0x12/0xFF response", resp, (int)sizeof(resp), 8);
-#endif
-        iso_tp(responseId, (int)sizeof(resp), resp);
-        return true;
-      }
-      // ------------------------------------------------------------------
-
-      default:
-        negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-        return true;
+      deb("UDS 0x14 clearDTC shortGroup bytes=%u value=0x%06lX",
+          (unsigned)(numofBytes - 1u), (unsigned long)group);
+    } else {
+      deb("UDS 0x14 clearDTC (no group bytes)");
     }
 
-    // Unreachable because all accepted IDs return in the switch above.
-    return true;
-  }
+    dtcManagerClearAll();
 
-  if(mode == UDS_SVC_TESTER_PRESENT) {
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
-    }
-
-    uint8_t subFunction = data[2];
-
-    // 0x80 means suppress positive response.
-    if((subFunction & UDS_SUPPRESS_POSITIVE_RSP) != 0) {
-      return true;
-    }
-
-    // Accept any sub-function value (Fordiag sends 0x01 in addition to 0x00).
-    txData[0] = 0x02;
-    txData[1] = UDS_RSP_TESTER_PRESENT;
-    txData[2] = (uint8_t)(subFunction & 0x7F);
+    txData[0] = 0x01;
+    txData[1] = UDS_RSP_CLEAR_DTC;
     *tx = true;
-    return true;
+  } else if(mode == (uint8_t)KWP_SVC_READ_DTC_BY_STATUS) {
+    handled = true;
+    // KWP2000 readDiagnosticTroubleCodesByStatus (ISO 14230-3)
+    // Request: 18 statusOfDTC groupHi groupLo
+    if(requireMinLength(responseId, mode, numofBytes, 4)) {
+      uint8_t statusOfDtc = data[2];
+      uint16_t group = ((uint16_t)data[3] << 8) | (uint16_t)data[4];
+      (void)group; // FF00/FFFF = powertrain/all; we report all regardless
+
+      // statusOfDtc is a bitmask: 0x00 = report all, 0x01 = testFailed (active),
+      // 0x08 = confirmedDTC (stored). Treat 0x00 as "all stored".
+      dtc_kind_t kind = DTC_KIND_STORED;
+      if((statusOfDtc & 0x01u) != 0u) {
+        kind = DTC_KIND_ACTIVE;
+      }
+
+      uint16_t codes[8] = {0};
+      uint8_t count = dtcManagerGetCodes(kind, codes, 8);
+      deb("KWP 0x18 statusOfDtc=0x%02X group=0x%04X kind=%d count=%u",
+          statusOfDtc, group, (int)kind, count);
+
+      // Response (ISO 14230-3): 58 numberOfDTC [dtcHi dtcLo statusOfDTC]...
+      uint8_t payload[40] = {0};
+      int p = 0;
+      payload[p++] = KWP_RSP_READ_DTC_BY_STATUS;
+      payload[p++] = count;
+
+      for(uint8_t i = 0; i < count && (p + 2) < (int)sizeof(payload); i++) {
+        payload[p++] = MSB(codes[i]);
+        payload[p++] = LSB(codes[i]);
+        payload[p++] = (kind == DTC_KIND_ACTIVE) ? 0x01 : 0x08;
+      }
+
+      iso_tp(responseId, p, payload);
+    }
+  } else if(mode == (uint8_t)UDS_SVC_READ_DTC_INFO) {
+    handled = true;
+    handleUdsReadDtcInfo(mode, numofBytes, data, responseId, txData, tx);
+  } else if(mode == (uint8_t)UDS_SVC_READ_MEMORY_BY_ADDR) {
+    handled = true;
+    // Ford SCP-style Request DMR Access
+    if(requireMinLength(responseId, mode, numofBytes, 4)) {
+      uint8_t dmrType = data[2];
+      uint16_t addr = ((uint16_t)(data[3]) << 8) | (uint16_t)(data[4]);
+      deb("SCP 0x23 DMR type=0x%02X addr=0x%04X", dmrType, addr);
+
+      bool validType = (dmrType == 0x00u || dmrType == 0x01u || dmrType == 0x08u || dmrType == 0x09u);
+      if(!validType) {
+        sendScpGeneralResponse(responseId, UDS_SVC_READ_MEMORY_BY_ADDR, data[2], data[3], data[4], NRC_SUBFUNCTION_NOT_SUPPORTED);
+      } else {
+        sendScpDmrResponse(responseId, addr, dmrType);
+      }
+    }
+  } else if(mode == (uint8_t)UDS_SVC_READ_DATA_BY_ID) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 3)) {
+      handleUdsReadDataById(mode, numofBytes, data, responseId, txData, tx);
+    }
+  } else if(mode == (uint8_t)UDS_SVC_READ_DATA_BY_LOCAL_ID) {
+    handled = true;
+    // KWP2000 service 0x12 - ReadDataByLocalIdentifier
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      handleUdsReadDataByLocalId(mode, numofBytes, data, responseId);
+    }
+  } else if(mode == (uint8_t)UDS_SVC_TESTER_PRESENT) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      uint8_t subFunction = data[2];
+
+      // 0x80 means suppress positive response.
+      if((subFunction & (uint8_t)UDS_SUPPRESS_POSITIVE_RSP) == 0u) {
+        // Accept any sub-function value (Fordiag sends 0x01 in addition to 0x00).
+        txData[0] = 0x02;
+        txData[1] = UDS_RSP_TESTER_PRESENT;
+        txData[2] = (uint8_t)(subFunction & 0x7Fu);
+        *tx = true;
+      }
+    }
   }
 
   // ── Services listed in Ford ISO-15765 table but not fully implemented ──
   // Respond with proper NRC so Ford diagnostic tools see the ECU as aware
   // of these services rather than treating it as a communication failure.
 
-  if(mode == UDS_SVC_SECURITY_ACCESS) {
+  else if(mode == (uint8_t)UDS_SVC_SECURITY_ACCESS) {
+    handled = true;
     // SecurityAccess: no seed/key implemented on this emulated ECU.
     negAck(responseId, mode, NRC_CONDITIONS_NOT_CORRECT);
-    return true;
-  }
-
-  if(mode == UDS_SVC_COMM_CONTROL) {
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
+  } else if(mode == (uint8_t)UDS_SVC_COMM_CONTROL) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      uint8_t subFunction = data[2] & 0x7Fu;
+      if(subFunction == 0x00u) {
+        // enableRxAndTx — acknowledge default state.
+        txData[0] = 0x02;
+        txData[1] = UDS_RSP_COMM_CONTROL;
+        txData[2] = subFunction;
+        *tx = true;
+      } else {
+        negAck(responseId, mode, NRC_CONDITIONS_NOT_CORRECT);
+      }
     }
-    uint8_t subFunction = data[2] & 0x7F;
-    if(subFunction == 0x00) {
-      // enableRxAndTx — acknowledge default state.
-      txData[0] = 0x02;
-      txData[1] = UDS_RSP_COMM_CONTROL;
-      txData[2] = subFunction;
-      *tx = true;
-    } else {
-      negAck(responseId, mode, NRC_CONDITIONS_NOT_CORRECT);
-    }
-    return true;
-  }
-
-  if(mode == UDS_SVC_WRITE_DATA_BY_ID) {
+  } else if(mode == (uint8_t)UDS_SVC_WRITE_DATA_BY_ID) {
+    handled = true;
     // No writable DIDs on this ECU.
     negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-    return true;
-  }
-
-  if(mode == UDS_SVC_IO_CONTROL) {
+  } else if(mode == (uint8_t)UDS_SVC_IO_CONTROL) {
+    handled = true;
     // No controllable I/O on this ECU.
     negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-    return true;
-  }
-
-  if(mode == UDS_SVC_ROUTINE_CONTROL) {
+  } else if(mode == (uint8_t)UDS_SVC_ROUTINE_CONTROL) {
+    handled = true;
     // No supported routines.
     negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
-    return true;
+  } else if(mode == (uint8_t)UDS_SVC_CONTROL_DTC_SETTING) {
+    handled = true;
+    if(requireMinLength(responseId, mode, numofBytes, 2)) {
+      uint8_t subFunction = data[2] & 0x7Fu;
+      // Accept both DTCSettingOn (0x01) and DTCSettingOff (0x02).
+      if(subFunction == 0x01u || subFunction == 0x02u) {
+        txData[0] = 0x02;
+        txData[1] = UDS_RSP_CONTROL_DTC_SETTING;
+        txData[2] = subFunction;
+        *tx = true;
+      } else {
+        negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
+      }
+    }
   }
 
-  if(mode == UDS_SVC_CONTROL_DTC_SETTING) {
-    if(!requireMinLength(responseId, mode, numofBytes, 2)) {
-      return true;
-    }
-    uint8_t subFunction = data[2] & 0x7F;
-    // Accept both DTCSettingOn (0x01) and DTCSettingOff (0x02).
-    if(subFunction == 0x01 || subFunction == 0x02) {
-      txData[0] = 0x02;
-      txData[1] = UDS_RSP_CONTROL_DTC_SETTING;
-      txData[2] = subFunction;
-      *tx = true;
-    } else {
-      negAck(responseId, mode, NRC_SUBFUNCTION_NOT_SUPPORTED);
-    }
-    return true;
-  }
-
-  return false;
+  return handled;
 }
 
 /**
@@ -2135,11 +2121,11 @@ void obdReq(uint32_t requestId, uint8_t *data){
 #endif
 
   // Ignore ISO-TP control/segmentation frames arriving as normal OBD requests.
-  if(numofBytes > 8) {
+  if(numofBytes > 8u) {
     deb("RX dropped: ISO-TP multi-frame PCI=0x%02X (no MF rx support)", data[0]);
     return;
   }
-  if(numofBytes < 1) {
+  if(numofBytes < 1u) {
     return;
   }
 
@@ -2285,7 +2271,9 @@ static void iso_tp_process(void) {
       if(hal_gpio_read(CAN1_INT)) break;            // no more frames
       bool gotFrame = hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue);
       if(!gotFrame) break;
-      bool idMatches = (s_obdState.rxIdValue == s_obdState.isoTpState.requestId) || (s_obdState.rxIdValue == LISTEN_ID) || (s_obdState.rxIdValue == FUNCTIONAL_ID);
+      bool idMatches = (s_obdState.rxIdValue == s_obdState.isoTpState.requestId) ||
+                       (s_obdState.rxIdValue == (uint32_t)LISTEN_ID) ||
+                       (s_obdState.rxIdValue == (uint32_t)FUNCTIONAL_ID);
       if(gotFrame && idMatches) {
         if(s_obdState.dlcValue >= 3 && ((s_obdState.rxBufValue[0] & 0xF0) == 0x30)) {
           uint8_t fcType = s_obdState.rxBufValue[0] & 0x0F;

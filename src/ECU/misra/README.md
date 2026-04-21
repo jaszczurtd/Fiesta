@@ -50,3 +50,18 @@ Process rules:
 - Use suppressions only for validated tool false positives or explicitly accepted deviations.
 - Keep `deviation-register.md` synchronized with `suppressions.txt`.
 - Treat this runner as evidence support for the ECU MISRA migration, not as proof of compliance on its own.
+
+Latest snapshot (2026-04-21):
+
+- active findings: `787`,
+- top open buckets:
+  - `misra-c2012-2.5`: `165`,
+  - `misra-c2012-15.5`: `132`,
+  - `misra-c2012-8.4`: `109`,
+  - `misra-c2012-10.4`: `95`.
+
+Recent progress:
+
+- `obd-2.c` was cleaned up for mixed essential-type comparisons (rule 10.4),
+- UDS/KWP request-handling regression coverage was expanded in `test_obd2.cpp`,
+- last pass reduced overall active findings and significantly lowered rule 10.4 findings.
