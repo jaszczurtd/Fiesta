@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "sensors.h"
 #include "dtcManager.h"
+#include "rpm.h"
 #include "testable/sensors_testable.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -227,6 +228,41 @@ void test_pcf8574_read_invalid_pin_returns_false(void) {
     TEST_ASSERT_FALSE(pcf8574_read(8));
 }
 
+// ── readHighValues field wiring ─────────────────────────────────────────────
+//
+// readHighValues() is the core polling step on the sensor timer. It must
+// refresh F_RPM, F_THROTTLE_POS, F_PRESSURE, F_GPS_CAR_SPEED and
+// F_CALCULATED_ENGINE_LOAD on every tick, and must NOT touch fields owned by
+// readMediumValues() (F_COOLANT_TEMP, F_OIL_TEMP, F_INTAKE_TEMP, F_FUEL,
+// F_VOLTS). These tests guard the explicit setGlobalValue() wiring against
+// accidental removal after the reflectionValueFields cleanup.
+
+void test_readHighValues_refreshes_rpm_from_instance(void) {
+    getRPMInstance()->rpmValue = 2750;
+    setGlobalValue(F_RPM, 0.0f);
+
+    readHighValues();
+
+    TEST_ASSERT_EQUAL_FLOAT(2750.0f, getGlobalValue(F_RPM));
+}
+
+void test_readHighValues_does_not_touch_medium_rate_fields(void) {
+    // Seed medium-rate fields with distinctive sentinels.
+    setGlobalValue(F_COOLANT_TEMP, 91.0f);
+    setGlobalValue(F_OIL_TEMP,     82.0f);
+    setGlobalValue(F_INTAKE_TEMP,  33.0f);
+    setGlobalValue(F_FUEL,         512.0f);
+    setGlobalValue(F_VOLTS,        13.8f);
+
+    readHighValues();
+
+    TEST_ASSERT_EQUAL_FLOAT(91.0f,  getGlobalValue(F_COOLANT_TEMP));
+    TEST_ASSERT_EQUAL_FLOAT(82.0f,  getGlobalValue(F_OIL_TEMP));
+    TEST_ASSERT_EQUAL_FLOAT(33.0f,  getGlobalValue(F_INTAKE_TEMP));
+    TEST_ASSERT_EQUAL_FLOAT(512.0f, getGlobalValue(F_FUEL));
+    TEST_ASSERT_EQUAL_FLOAT(13.8f,  getGlobalValue(F_VOLTS));
+}
+
 // ── readThrottle — ADC-based mapping ─────────────────────────────────────────
 
 void test_throttle_adc_at_idle_gives_zero(void) {
@@ -304,6 +340,9 @@ int main(void) {
     RUN_TEST(test_pcf8574_read_returns_set_bit);
     RUN_TEST(test_pcf8574_read_returns_cleared_bit);
     RUN_TEST(test_pcf8574_read_invalid_pin_returns_false);
+
+    RUN_TEST(test_readHighValues_refreshes_rpm_from_instance);
+    RUN_TEST(test_readHighValues_does_not_touch_medium_rate_fields);
 
     return UNITY_END();
 }

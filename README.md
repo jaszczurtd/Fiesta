@@ -71,6 +71,7 @@ Completed areas include:
 - state consolidation in ECU modules (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`, `start`, `obd-2`),
 - explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
 - targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
+- dual-core state synchronization pass in `src/ECU`: dedicated mutex for adjustometer snapshot, PCF8574 shadow-latch race fix, `dtcManager` state and KV persistence under a dedicated mutex; adjustometer reader API migrated from shared-pointer to out-parameter snapshot; `readHighValues()` change-detection cache removed (CAN helpers self-dedupe).
 - warning quality gate for ECU host tests and Arduino ECU build paths (`-Werror`).
 - warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
 - defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.

@@ -118,6 +118,44 @@ void test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small(void) {
     TEST_ASSERT_EQUAL_UINT16(0u, dtcKvEffectiveSpan());
 }
 
+// ── mutex balance / re-entrancy guards ──────────────────────────────────────
+//
+// The mock hal_mutex is backed by std::mutex (non-recursive). Any path that
+// accidentally takes dtcManagerMutex twice on the same thread, or leaks a
+// lock, hangs indefinitely. Running each public API twice in sequence and
+// observing that the test completes and subsequent readers still return data
+// is enough to catch both failure modes in a single-threaded suite.
+
+void test_dtc_manager_init_is_idempotent_and_releases_lock(void) {
+    dtcManagerInit();
+    dtcManagerInit();
+    // If the second call deadlocks or leaks the lock, the next mutex-guarded
+    // read would hang; the test would never reach UNITY_END.
+    (void)dtcManagerCount(DTC_KIND_ACTIVE);
+}
+
+void test_dtc_manager_set_active_releases_lock_between_calls(void) {
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+    TEST_ASSERT_EQUAL_UINT8(2, dtcManagerCount(DTC_KIND_ACTIVE));
+}
+
+void test_dtc_manager_clear_all_releases_lock(void) {
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    dtcManagerClearAll();
+    dtcManagerClearAll();  // must not deadlock on back-to-back calls
+    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
+}
+
+void test_dtc_manager_get_timestamp_releases_lock(void) {
+    (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
+    (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
+    // If the getter forgot to release the mutex, dtcManagerSetActive() below
+    // would block forever.
+    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_dtc_set_active_updates_all_kinds);
@@ -130,5 +168,9 @@ int main(void) {
     RUN_TEST(test_find_dtc_index_returns_minus_one_for_unknown_code);
     RUN_TEST(test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom);
     RUN_TEST(test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small);
+    RUN_TEST(test_dtc_manager_init_is_idempotent_and_releases_lock);
+    RUN_TEST(test_dtc_manager_set_active_releases_lock_between_calls);
+    RUN_TEST(test_dtc_manager_clear_all_releases_lock);
+    RUN_TEST(test_dtc_manager_get_timestamp_releases_lock);
     return UNITY_END();
 }
