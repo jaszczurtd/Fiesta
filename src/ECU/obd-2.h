@@ -383,25 +383,75 @@ extern "C" {
 #define EURO_5 0x05
 #define EURO_6 0x06
 
+/**
+ * @brief Initialize the OBD/UDS CAN responder.
+ * @param retries Number of CAN initialization retries to attempt.
+ * @return None.
+ */
 void obdInit(int retries);
+
+/**
+ * @brief Poll CAN and advance the OBD/ISO-TP state machine.
+ * @return None.
+ */
 void obdLoop(void);
 
 #ifdef OBD_ENABLE_TOTDIST
+/**
+ * @brief Read the emulated total-distance value exposed through Ford DIDs.
+ * @return Current odometer value in kilometers.
+ */
 uint32_t obdGetTotalDistanceKm(void);
+
+/**
+ * @brief Update the emulated total-distance value exposed through Ford DIDs.
+ * @param km New odometer value in kilometers.
+ * @return None.
+ */
 void     obdSetTotalDistanceKm(uint32_t km);
 #endif
 
-// Mode 01 PID encoder (payload bytes only, without service/PID header).
+/**
+ * @brief Encode only the payload bytes for a supported Mode 01 PID.
+ * @param pid PID to encode.
+ * @param out Output buffer receiving only the data bytes.
+ * @param outLen Output pointer receiving number of bytes written.
+ * @return True when the PID is supported, otherwise false.
+ */
 bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen);
 
-// DTC payload builder for Modes 03/07/0A.
+/**
+ * @brief Build a compact DTC payload for Mode 03/07/0A style responses.
+ * @param responseService Positive-response service identifier.
+ * @param kind DTC set to export.
+ * @param outData Output buffer receiving the packed payload.
+ * @param maxLen Size of @p outData in bytes.
+ * @return Number of bytes written to @p outData.
+ */
 int fillDtcPayload(uint8_t responseService, dtc_kind_t kind, uint8_t *outData, int maxLen);
 
-// Ford part number helpers (used by E217/E21A/E219 encoding).
+/**
+ * @brief Split a Ford part number string into prefix, middle and suffix spans.
+ * @param pn Null-terminated Ford part number string.
+ * @param prefixOut Output pointer receiving the prefix start.
+ * @param prefixLen Output pointer receiving the prefix length.
+ * @param middleOut Output pointer receiving the middle section start.
+ * @param middleLen Output pointer receiving the middle section length.
+ * @param suffixOut Output pointer receiving the suffix start.
+ * @param suffixLen Output pointer receiving the suffix length.
+ * @return True when the input matches PREFIX-MIDDLE-SUFFIX format.
+ */
 bool fordPartNumberSplit(const char *pn,
                          const char **prefixOut, int *prefixLen,
                          const char **middleOut, int *middleLen,
                          const char **suffixOut, int *suffixLen);
+
+/**
+ * @brief Encode one Ford part-number suffix fragment into Fordiag byte form.
+ * @param s Pointer to the suffix characters to encode.
+ * @param len Number of characters to encode from @p s.
+ * @return Encoded Ford suffix byte.
+ */
 uint8_t fordPartSuffixCharsToByte(const char *s, int len);
 
 #ifdef __cplusplus

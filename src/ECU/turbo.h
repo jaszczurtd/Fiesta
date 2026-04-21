@@ -39,9 +39,35 @@ typedef struct {
   int32_t lastN75;
 } Turbo;
 
+/**
+ * @brief Initialize turbo control state.
+ * @param self Turbo controller instance to initialize.
+ * @return None.
+ */
 void Turbo_init(Turbo *self);
+
+/**
+ * @brief Update turbo actuator command from legacy driver-demand, RPM, and boost state.
+ * @param self Turbo controller instance to process.
+ * @return None.
+ * @note The `n75` field intentionally follows OEM N75 terminology for the boost-control
+ *       solenoid path. The demand input still comes from legacy throttle-named driver
+ *       demand rather than from a final allowed-fuel-quantity variable.
+ */
 void Turbo_process(Turbo *self);
+
+/**
+ * @brief Run the placeholder turbo test path.
+ * @param self Turbo controller instance to exercise.
+ * @return None.
+ */
 void Turbo_turboTest(Turbo *self);
+
+/**
+ * @brief Print selected turbo controller values for diagnostics.
+ * @param self Turbo controller instance to report.
+ * @return None.
+ */
 void Turbo_showDebug(Turbo *self);
 
 #ifdef __cplusplus

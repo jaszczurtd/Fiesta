@@ -13,11 +13,21 @@ heatedWindshields *getHeatedWindshieldsInstance(void) {
   return &getECUContext()->windows;
 }
 
+/**
+ * @brief Read the heated windshield button state.
+ * @param self Heated windshield controller instance using the input.
+ * @return True when the button input is active, otherwise false.
+ */
 static bool heatedWindshields_isHeatedButtonPressed(heatedWindshields *self) {
   (void)self;
   return hal_gpio_read(HEATED_WINDOWS_PIN);
 }
 
+/**
+ * @brief Clear heated windshield state and timers.
+ * @param self Heated windshield controller instance to reset.
+ * @return None.
+ */
 static void heatedWindshields_disableHeatedWindows(heatedWindshields *self) {
   self->heatedWindowEnabled = false;
   self->lastHeatedWindowEnabled = !self->heatedWindowEnabled;

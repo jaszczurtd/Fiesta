@@ -1,10 +1,17 @@
 #include "turbo.h"
+#include "ecu_unit_testing.h"
 
 #define TURBO_PID_TIME_UPDATE 6.0
 #define TURBO_PID_KP 0.7
 #define TURBO_PID_KI 0.1
 #define TURBO_PID_KD 0.05
 
+/**
+ * @brief Apply project-specific scaling to a turbo command percentage.
+ * @param self Turbo controller instance using the scaling rule.
+ * @param value Input command percentage.
+ * @return Scaled turbo command percentage.
+ */
 static int32_t Turbo_scaleTurboValues(Turbo *self, int32_t value) {
   (void)self;
 #ifdef GTB2260VZK
@@ -14,7 +21,13 @@ static int32_t Turbo_scaleTurboValues(Turbo *self, int32_t value) {
   return value;
 }
 
-static int32_t Turbo_correctPressureFactor(Turbo *self) {
+/**
+ * @brief Derive a pressure correction factor from intake temperature.
+ * @param self Turbo controller instance using the correction rule.
+ * @return Integer correction factor subtracted from requested pressure percentage.
+ * @note The temperature input is the project's G72-like intake-air-temperature path.
+ */
+TESTABLE_STATIC int32_t Turbo_correctPressureFactor(Turbo *self) {
   (void)self;
   int32_t temperature = (int32_t)getGlobalValue(F_INTAKE_TEMP);
   return (temperature < MIN_TEMPERATURE_CORRECTION) ?
@@ -29,6 +42,13 @@ void Turbo_turboTest(Turbo *self) {
   (void)self;
 }
 
+/**
+ * @brief Update the boost-control command for the N75-like turbo path.
+ * @param self Turbo controller instance to process.
+ * @return None.
+ * @note The current demand source is legacy throttle-named driver demand, not yet a
+ *       quantity-centric allowed-fuel signal.
+ */
 void Turbo_process(Turbo *self) {
 
   self->engineThrottlePercentageValue = getThrottlePercentage();

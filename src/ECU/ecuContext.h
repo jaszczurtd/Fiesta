@@ -34,6 +34,10 @@ typedef struct {
     VP37Pump          injectionPump;
 } ecu_context_t;
 
+/**
+ * @brief Return the shared ECU context that owns all runtime modules.
+ * @return Pointer to the global ECU context instance.
+ */
 ecu_context_t *getECUContext(void);
 
 #ifdef __cplusplus

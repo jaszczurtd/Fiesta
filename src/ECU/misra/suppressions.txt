@@ -1,0 +1,14 @@
+# ECU MISRA suppressions
+#
+# Keep this file minimal.
+#
+# Rules:
+# - Prefer code fixes over suppressions.
+# - Only suppress validated tool noise or explicitly accepted deviations.
+# - Every non-comment suppression entry must have a matching record in
+#   deviation-register.md.
+# - Keep file and scope qualifiers as narrow as practical.
+#
+# Examples:
+# misra-c2012-11.3:vp37.c
+# misra-c2012-17.7

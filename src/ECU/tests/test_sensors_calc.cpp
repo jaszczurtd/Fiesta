@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "sensors.h"
+#include "testable/sensors_testable.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 /*
@@ -142,6 +143,36 @@ void test_set_global_value_invalid_index_does_not_modify_valid_slot(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 321.0f, getGlobalValue(F_RPM));
 }
 
+// ── internal testable helpers ───────────────────────────────────────────────
+
+void test_internal_throttle_helper_maps_min_to_full_scale(void) {
+    TEST_ASSERT_EQUAL_INT(PWM_RESOLUTION, sensors_computeThrottlePositionFromRaw(THROTTLE_MIN));
+}
+
+void test_internal_throttle_helper_maps_max_to_zero(void) {
+    TEST_ASSERT_EQUAL_INT(0, sensors_computeThrottlePositionFromRaw(THROTTLE_MAX));
+}
+
+void test_internal_throttle_helper_clamps_below_min(void) {
+    TEST_ASSERT_EQUAL_INT(PWM_RESOLUTION, sensors_computeThrottlePositionFromRaw(THROTTLE_MIN - 200));
+}
+
+void test_internal_throttle_helper_clamps_above_max(void) {
+    TEST_ASSERT_EQUAL_INT(0, sensors_computeThrottlePositionFromRaw(THROTTLE_MAX + 200));
+}
+
+void test_internal_engine_load_helper_rounds_half_up(void) {
+    TEST_ASSERT_EQUAL_INT(67, sensors_calculateEngineLoadFromValues(2.55f, 3325.0f));
+}
+
+void test_internal_engine_load_helper_clamps_negative_to_zero(void) {
+    TEST_ASSERT_EQUAL_INT(0, sensors_calculateEngineLoadFromValues(-1.0f, (float)RPM_MAX_EVER));
+}
+
+void test_internal_engine_load_helper_clamps_overflow_to_hundred(void) {
+    TEST_ASSERT_EQUAL_INT(100, sensors_calculateEngineLoadFromValues(5.0f, (float)(RPM_MAX_EVER * 2)));
+}
+
 // ── readThrottle — ADC-based mapping ─────────────────────────────────────────
 
 void test_throttle_adc_at_idle_gives_zero(void) {
@@ -198,6 +229,13 @@ int main(void) {
     RUN_TEST(test_dpf_not_regenerating_after_flag_clear);
     RUN_TEST(test_get_global_value_invalid_index_returns_zero);
     RUN_TEST(test_set_global_value_invalid_index_does_not_modify_valid_slot);
+    RUN_TEST(test_internal_throttle_helper_maps_min_to_full_scale);
+    RUN_TEST(test_internal_throttle_helper_maps_max_to_zero);
+    RUN_TEST(test_internal_throttle_helper_clamps_below_min);
+    RUN_TEST(test_internal_throttle_helper_clamps_above_max);
+    RUN_TEST(test_internal_engine_load_helper_rounds_half_up);
+    RUN_TEST(test_internal_engine_load_helper_clamps_negative_to_zero);
+    RUN_TEST(test_internal_engine_load_helper_clamps_overflow_to_hundred);
 
     RUN_TEST(test_throttle_adc_at_idle_gives_zero);
     RUN_TEST(test_throttle_adc_at_full_gives_max);

@@ -2,6 +2,10 @@
 #include "dtcManager.h"
 #include "gps.h"
 
+/**
+ * @brief Mark that a CAN interrupt signalled pending traffic.
+ * @return None.
+ */
 void receivedCanMessage(void);
 
 typedef struct {
@@ -95,6 +99,13 @@ uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
        | (uint32_t)mi;
 }
 
+  /**
+   * @brief Convert a floating GPS coordinate to clamped microdegrees.
+   * @param coord Coordinate value in decimal degrees.
+   * @param minVal Minimum allowed microdegree value.
+   * @param maxVal Maximum allowed microdegree value.
+   * @return Coordinate converted to microdegrees and clamped to range.
+   */
 static int32_t gpsCoordToMicroDeg(float coord, int32_t minVal, int32_t maxVal) {
   int32_t scaled = (int32_t)roundf(coord * 1000000.0f);
   if(scaled < minVal) {
@@ -276,6 +287,13 @@ void receivedCanMessage(void) {
     s_canState.interruptPending = true;
 }
 
+/**
+ * @brief Decode one received CAN frame and update project state.
+ * @param canID CAN identifier of the received frame.
+ * @param len Payload length in bytes.
+ * @param buf Pointer to the received payload buffer.
+ * @return None.
+ */
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   s_canState.interruptPending = false;
 

@@ -21,7 +21,16 @@ extern "C" {
 #define FUEL_MEASUREMENT_TIME_DEST 30
 
 
+/**
+ * @brief Read the fuel level, including averaging logic when enabled.
+ * @return Current filtered or raw fuel level value, depending on build flags.
+ */
 float readFuel(void);
+
+/**
+ * @brief Reset the fuel measurement buffer and timing state.
+ * @return None.
+ */
 void initFuelMeasurement(void);
 
 #ifdef __cplusplus

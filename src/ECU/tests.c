@@ -16,13 +16,27 @@ static bool s_testsInitialized = false;
 //=============================================================================
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
 
+/**
+ * @brief Parse one serial PID-tuning command for the VP37 cyclic test.
+ * @param self VP37 instance being tuned.
+ * @param cmd Null-terminated command string.
+ * @return None.
+ */
 void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
+
+/**
+ * @brief Poll the serial console and apply runtime VP37 tuning commands.
+ * @param self VP37 instance being tuned.
+ * @return None.
+ */
 void VP37_TunePID(VP37Pump *self);
 
 static CyclicTest s_ct;
 
-/// @brief Generate cyclic throttle ramp for VP37 (0-100-0%)
-/// Allows observation of PID response during tuning
+/**
+ * @brief Generate a repeating 0-100-0 throttle ramp for VP37 testing.
+ * @return Current cyclic throttle demand.
+ */
 static int VP37cyclicTest(void) {
   uint32_t currentMillis = hal_millis();
 
@@ -43,7 +57,10 @@ static int VP37cyclicTest(void) {
 // Public Test Interface
 //=============================================================================
 
-/// @brief Initialize tests based on enabled directives
+/**
+ * @brief Initialize enabled test fixtures and runtime state.
+ * @return True when initialization finished.
+ */
 bool initTests(void) {
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   s_ct.cmdLen = 0;
@@ -59,7 +76,10 @@ bool initTests(void) {
   return true;
 }
 
-/// @brief Startup tests (run once at system startup)
+/**
+ * @brief Execute one-shot startup diagnostics enabled at compile time.
+ * @return True when startup tests finished.
+ */
 bool startTests(void) {
 #ifdef START_TEST_ENABLE_DTC_INJECTION
   static bool dtcInjected = false;
@@ -74,7 +94,10 @@ bool startTests(void) {
   return true;
 }
 
-/// @brief Periodic test tick (call from looper1 if START_TEST_ENABLE_VP37_CYCLIC enabled)
+/**
+ * @brief Execute one periodic step of enabled runtime tests.
+ * @return None.
+ */
 void tickTests(void) {
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   if(!s_testsInitialized) {
@@ -90,6 +113,11 @@ void tickTests(void) {
 }
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
+/**
+ * @brief Poll the serial console and apply live PID tuning commands.
+ * @param self VP37 instance under test.
+ * @return None.
+ */
 void VP37_TunePID(VP37Pump *self) {
   // ── Serial PID tuner: read commands from USB CDC ────────────────────
   while(hal_serial_available() > 0) {
@@ -108,7 +136,12 @@ void VP37_TunePID(VP37Pump *self) {
   }
 }
 
-// ── Serial command parser for runtime PID tuning ─────────────────────────────
+/**
+ * @brief Decode one textual PID-tuning command and apply it to VP37.
+ * @param self VP37 instance under test.
+ * @param cmd Null-terminated command string.
+ * @return None.
+ */
 void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
   float val;
 

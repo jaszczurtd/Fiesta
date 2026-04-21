@@ -1,5 +1,6 @@
 
 #include "sensors.h"
+#include "ecu_unit_testing.h"
 #include "can.h"
 #include "engineFuel.h"
 #include "gps.h"
@@ -57,6 +58,12 @@ m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
 m_mutex_def(i2cBusMutex);
 
+/**
+ * @brief Validate a global value index before accessing the value table.
+ * @param idx Global value index to validate.
+ * @param caller Name of the caller used in diagnostics.
+ * @return True when the index is valid, otherwise false.
+ */
 static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
   if((idx < 0) || (idx >= F_LAST)) {
     derr_limited("sensors", "%s invalid value index: %d (valid: 0..%d)",
@@ -70,6 +77,10 @@ static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
 //a slave that is holding SDA low (e.g. after master reset mid-transaction).
 //Must be called BEFORE Wire.begin() / hal_i2c_init().
 
+/**
+ * @brief Initialize the I2C bus and its mutex-protected access path.
+ * @return None.
+ */
 void initI2C(void) {
   static bool i2cMutexInited = false;
   if(!i2cMutexInited) {
@@ -174,13 +185,14 @@ float readOilTemp(void) {
 //Read throttle
 //-------------------------------------------------------------------------------------------------
 
-int32_t readThrottle(void) {
-  m_mutex_enter_blocking(analog4051Mutex);
-  set4051ActivePin(HC4051_I_THROTTLE_POS);
-
-  int32_t rawVal = (int32_t)getAverageValueFrom(ADC_SENSORS_PIN);
-  m_mutex_exit(analog4051Mutex);
-
+/**
+ * @brief Map a raw legacy throttle ADC reading into the internal driver-demand scale.
+ * @param rawVal Raw ADC value measured on the throttle input.
+ * @return Driver-demand signal in the internal PWM-scale range.
+ * @note The input is currently named "throttle" in code, but architecturally it is the
+ *       G79/G185-like driver-demand path.
+ */
+TESTABLE_STATIC int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal) {
   int32_t initialVal = rawVal - THROTTLE_MIN;
 
   if(initialVal < 0) {
@@ -196,6 +208,20 @@ int32_t readThrottle(void) {
   return abs(result - PWM_RESOLUTION);
 }
 
+int32_t readThrottle(void) {
+  m_mutex_enter_blocking(analog4051Mutex);
+  set4051ActivePin(HC4051_I_THROTTLE_POS);
+
+  int32_t rawVal = (int32_t)getAverageValueFrom(ADC_SENSORS_PIN);
+  m_mutex_exit(analog4051Mutex);
+
+  return sensors_computeThrottlePositionFromRaw(rawVal);
+}
+
+/**
+ * @brief Convert the stored legacy throttle value into a 0..100 driver-demand percentage.
+ * @return Driver-demand percentage derived from the G79/G185-like input path.
+ */
 int32_t getThrottlePercentage(void) {
   int32_t currentVal = (int32_t)(getGlobalValue(F_THROTTLE_POS));
   float percent = (currentVal * 100) / PWM_RESOLUTION;
@@ -206,6 +232,10 @@ int32_t getThrottlePercentage(void) {
 //Read air temperature
 //-------------------------------------------------------------------------------------------------
 
+/**
+ * @brief Read intake air temperature from the G72-like sensor path.
+ * @return Intake air temperature in degrees Celsius.
+ */
 float readAirTemperature(void) {
   float a = 0.0;
   m_mutex_enter_blocking(analog4051Mutex);
@@ -220,6 +250,10 @@ float readAirTemperature(void) {
 //Read bar pressure amount
 //-------------------------------------------------------------------------------------------------
 
+/**
+ * @brief Read boost / manifold pressure from the G71-like sensor path.
+ * @return Pressure in bar relative to atmosphere.
+ */
 float readBarPressure(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
@@ -234,6 +268,11 @@ float readBarPressure(void) {
   return val;
 }
 
+/**
+ * @brief Translate an I2C end-transmission status code into readable text.
+ * @param code HAL I2C end-transmission status code.
+ * @return Constant string describing the error code.
+ */
 static const char *i2cEndTransmissionError(uint8_t code) {
   switch(code) {
     case 1:  return "data too long";
@@ -316,6 +355,11 @@ bool pcf8574_read(unsigned char pin) {
   return bitRead(s_sensorsState.pcf8574State, pin);
 }
 
+/**
+ * @brief Read the legacy throttle-named value as stored in the global value table.
+ * @return Current raw driver-demand value.
+ * @note This is still the G79/G185-like pedal-demand signal, despite the legacy name.
+ */
 int32_t getRAWThrottle(void) {
   return (int32_t)(getGlobalValue(F_THROTTLE_POS));
 }
@@ -345,10 +389,17 @@ void readMediumValues(void) {
   }
 }
 
-int32_t getPercentageEngineLoad(void) {
-
-  float map = (getGlobalValue(F_PRESSURE) * 255.0f / 2.55f);
-  float load = (map / 255.0f) * (getGlobalValue(F_RPM) / (float)(RPM_MAX_EVER)) * 100.0f;
+/**
+ * @brief Calculate normalized engine load from pressure and RPM inputs.
+ * @param pressureBar Pressure input in bar.
+ * @param rpm Engine speed in RPM.
+ * @return Engine load percentage clamped to the 0..100 range.
+ * @note This helper produces a project-local supervisory load estimate, not an OEM
+ *       EDC15 quantity or air-mass model.
+ */
+TESTABLE_STATIC int32_t sensors_calculateEngineLoadFromValues(float pressureBar, float rpm) {
+  float map = (pressureBar * 255.0f / 2.55f);
+  float load = (map / 255.0f) * (rpm / (float)(RPM_MAX_EVER)) * 100.0f;
   int32_t roundedLoad = (int32_t)(load + 0.5f);
 
   if (roundedLoad < 0) {
@@ -357,6 +408,10 @@ int32_t getPercentageEngineLoad(void) {
       roundedLoad = 100;
   }
   return roundedLoad;
+}
+
+int32_t getPercentageEngineLoad(void) {
+  return sensors_calculateEngineLoadFromValues(getGlobalValue(F_PRESSURE), getGlobalValue(F_RPM));
 }
 
 void readHighValues(void) {
@@ -487,6 +542,10 @@ void valToPWM(unsigned char pin, int32_t val) {
 #define ADJ_COMM_ERROR_THRESHOLD 3
 static uint8_t i2cConsecutiveErrors = 0;
 
+/**
+ * @brief Count I2C errors and recover the bus when the threshold is reached.
+ * @return None.
+ */
 static void i2cCheckRecovery(void) {
   i2cConsecutiveErrors++;
   if(i2cConsecutiveErrors >= I2C_RECOVERY_THRESHOLD) {
@@ -497,6 +556,12 @@ static void i2cCheckRecovery(void) {
   }
 }
 
+/**
+ * @brief Read the full Adjustometer register block over I2C for the VP37 quantity-feedback path.
+ * @return Latest Adjustometer reading structure, reusing previous values on failure.
+ * @note The returned pulse, status, and fuel-temperature fields form a project-local
+ *       G149/G81-like telemetry bundle, not a literal OEM sensor block.
+ */
 static adjustometer_reading_t readAdjustometer(void) {
 
   m_mutex_enter_blocking(i2cBusMutex);
@@ -566,6 +631,10 @@ static adjustometer_reading_t readAdjustometer(void) {
   return s_sensorsState.adjustometer;
 }
 
+/**
+ * @brief Wait until the project-local G149-like baseline capture is finished.
+ * @return True when baseline becomes ready before timeout, otherwise false.
+ */
 bool waitForAdjustometerBaseline(void) {
   uint32_t start = hal_millis();
   while((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
@@ -587,11 +656,19 @@ bool waitForAdjustometerBaseline(void) {
   return false;
 }
 
+/**
+ * @brief Return the latest Adjustometer reading for the N146/G149-like inner loop.
+ * @return Pointer to the shared Adjustometer reading structure.
+ */
 adjustometer_reading_t *getVP37Adjustometer(void) {
   readAdjustometer();
   return &s_sensorsState.adjustometer;
 }
 
+/**
+ * @brief Read system supply voltage from the Adjustometer telemetry bundle.
+ * @return Supply voltage in volts, or 0 when Adjustometer telemetry is unavailable.
+ */
 float getSystemSupplyVoltage(void) {
   adjustometer_reading_t *reading = getVP37Adjustometer();
   if(reading == NULL || !reading->commOk) {

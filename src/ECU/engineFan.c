@@ -13,6 +13,11 @@ engineFan *getFanInstance(void) {
   return &getECUContext()->fan;
 }
 
+/**
+ * @brief Return the bitmask that explains why the fan is enabled.
+ * @param self Fan controller instance to inspect.
+ * @return Reason bitmask stored in the controller state.
+ */
 static int engineFan_fanEnabledReason(const engineFan *self) {
   return self->fanEnabled;
 }

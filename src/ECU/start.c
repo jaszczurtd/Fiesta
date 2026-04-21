@@ -9,6 +9,10 @@
 
 static ecu_context_t s_ctx;
 
+/**
+ * @brief Return the single ECU context instance shared by both cores.
+ * @return Pointer to the global ECU context.
+ */
 ecu_context_t *getECUContext(void) {
   return &s_ctx;
 }
@@ -56,6 +60,10 @@ static hal_mutex_t turboStateMutex = NULL;
 static hal_mutex_t vp37StateMutex = NULL;
 #endif
 
+/**
+ * @brief Create shared module mutexes once during startup.
+ * @return None.
+ */
 static void start_initContextMutexes(void) {
   hal_critical_section_enter();
   if(turboStateMutex == NULL) {
@@ -69,6 +77,11 @@ static void start_initContextMutexes(void) {
   hal_critical_section_exit();
 }
 
+/**
+ * @brief Stop feeding the watchdog and blink LED until reset occurs.
+ * @param reason Human-readable reason logged before forcing reset.
+ * @return None.
+ */
 static void start_forceWatchdogReset(const char *reason) {
   derr("Forcing watchdog reset: %s", reason);
   bool ledOn = false;
@@ -94,16 +107,30 @@ static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
   { &s_startRuntimeState.timerCANCheckHandle, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
 };
 
+/**
+ * @brief Configure the shared soft-timer table used by core 0.
+ * @return None.
+ */
 void setupTimers(void) {
   hal_soft_timer_setup_table(startTimerInitTable, COUNTOF(startTimerInitTable),
                              watchdog_feed, CORE_OPERATION_DELAY);
 }
 
+/**
+ * @brief Store watchdog snapshot data received after an automatic reboot.
+ * @param values Pointer to watchdog snapshot values.
+ * @param size Number of snapshot elements available at @p values.
+ * @return None.
+ */
 void executeByWatchdog(int *values, int size) {
   s_startRuntimeState.wValuesPtr = values;
   s_startRuntimeState.wSizeVal = size;
 }
 
+/**
+ * @brief Initialize all core-0 peripherals, modules and watchdog state.
+ * @return None.
+ */
 void initialization(void) {
 
   debugInit();
@@ -262,6 +289,10 @@ void initialization(void) {
 }
 
 //timer functions
+/**
+ * @brief Execute periodic once-per-second housekeeping outputs.
+ * @return None.
+ */
 void callAtEverySecond(void) {
   s_startRuntimeState.alertBlinkState = (s_startRuntimeState.alertBlinkState) ? false : true;
   hal_gpio_write(HAL_LED_PIN, s_startRuntimeState.alertBlinkState);
@@ -273,6 +304,10 @@ void callAtEverySecond(void) {
 #endif
 }
 
+/**
+ * @brief Run one core-0 scheduler iteration for I/O and service tasks.
+ * @return None.
+ */
 void looper(void) {
   s_startPersistentState.statusVariable0Val = 0;
   updateWatchdogCore0();
@@ -322,6 +357,10 @@ void looper(void) {
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
 
+/**
+ * @brief Initialize the second core runtime context.
+ * @return None.
+ */
 void initialization1(void) {
   start_initContextMutexes();
   RPM_create();
@@ -335,6 +374,10 @@ void initialization1(void) {
 // main logic
 //-----------------------------------------------------------------------------
 
+/**
+ * @brief Run one core-1 control-loop iteration.
+ * @return None.
+ */
 void looper1(void) {
 
   s_startPersistentState.statusVariable1Val = 0;

@@ -3,6 +3,7 @@
 #include "obd-2_mapping.h"
 #include "sensors.h"
 #include "gps.h"
+#include "testable/obd2_testable.h"
 #include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -165,6 +166,21 @@ void test_pid_egt_as_catalyst_temp(void) {
     TEST_ASSERT_EQUAL_INT(2, len);
     uint16_t result = ((uint16_t)data[0] << 8) | data[1];
     TEST_ASSERT_EQUAL_UINT16(6400, result);
+}
+
+void test_stmin_to_ms_preserves_millisecond_values(void) {
+    TEST_ASSERT_EQUAL_UINT8(0x00, stMinToMs(0x00));
+    TEST_ASSERT_EQUAL_UINT8(0x7F, stMinToMs(0x7F));
+}
+
+void test_stmin_to_ms_clamps_submillisecond_range_to_one_ms(void) {
+    TEST_ASSERT_EQUAL_UINT8(1, stMinToMs(0xF1));
+    TEST_ASSERT_EQUAL_UINT8(1, stMinToMs(0xF9));
+}
+
+void test_stmin_to_ms_rejects_reserved_values(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, stMinToMs(0x80));
+    TEST_ASSERT_EQUAL_UINT8(0, stMinToMs(0xFA));
 }
 
 // ── Ford part number split ────────────────────────────────────────────────────
@@ -344,6 +360,9 @@ int main(void) {
     RUN_TEST(test_pid_engine_load);
     RUN_TEST(test_pid_unsupported_returns_false);
     RUN_TEST(test_pid_egt_as_catalyst_temp);
+    RUN_TEST(test_stmin_to_ms_preserves_millisecond_values);
+    RUN_TEST(test_stmin_to_ms_clamps_submillisecond_range_to_one_ms);
+    RUN_TEST(test_stmin_to_ms_rejects_reserved_values);
 
     // Ford part number split
     RUN_TEST(test_ford_part_split_standard);

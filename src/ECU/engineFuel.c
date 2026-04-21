@@ -22,6 +22,10 @@ static engine_fuel_state_t s_engineFuel = {
   .measurements = 0
 };
 
+/**
+ * @brief Read the current tank level and update the running average state.
+ * @return Latest fuel level result after optional averaging.
+ */
 float readFuel(void) {
   set4051ActivePin(HC4051_I_FUEL_LEVEL);
 
@@ -82,6 +86,10 @@ float readFuel(void) {
   return s_engineFuel.lastResult;
 }
 
+/**
+ * @brief Initialize the rolling fuel measurement state and schedule.
+ * @return None.
+ */
 void initFuelMeasurement(void) {
   memset(s_engineFuel.measuredValues, FUEL_INIT_VALUE, sizeof(s_engineFuel.measuredValues));
   s_engineFuel.measuedValuesIndex = 0;

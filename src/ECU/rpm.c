@@ -12,6 +12,10 @@
 #define RPM_PULSES_DIVISOR     2
 
 #ifndef VP37
+/**
+ * @brief Reset the temporary RPM correction cycle after the timer fires.
+ * @return None.
+ */
 static void cycleCheckTimerCallback(void) {
   RPM_resetRPMCycle(getRPMInstance());
   // Software timer is periodic by default, so stop it after first fire.
@@ -27,6 +31,10 @@ RPM *getRPMInstance(void) {
   return &getECUContext()->rpm;
 }
 
+/**
+ * @brief Forward a Hall-sensor edge interrupt to the shared G28-like RPM instance.
+ * @return None.
+ */
 void countRPM(void) {
   RPM_interrupt(getRPMInstance());
 }
@@ -36,7 +44,7 @@ void RPM_resetRPMCycle(RPM *self) {
 }
 
 /*
- Hall sensor ISR — called on every crankshaft pulse edge.
+ G28-like crank sensor ISR — called on every crankshaft pulse edge.
  The 150ms time-window check and pulse snapshot MUST stay inside the ISR.
  Moving them to main loop causes jitter because the main loop
  iteration time varies with CAN, OBD, turbo, etc. workload. That makes
@@ -108,6 +116,11 @@ void RPM_setAccelMaxRPM(RPM *self) {
 }
 
 #ifndef VP37
+/**
+ * @brief Check whether legacy throttle / driver-demand input exceeds the non-VP37 acceleration threshold.
+ * @param self RPM controller instance using the throttle signal.
+ * @return True when throttle is above the configured threshold, otherwise false.
+ */
 static bool RPM_isEngineThrottlePressed(RPM *self) {
   (void)self;
   return getThrottlePercentage() > ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE;

@@ -14,16 +14,28 @@ static void countAdjustometerPulses(void);
 static void resetSensorsState(void);
 static bool isSignalLost(void);
 
+/**
+ * @brief Initialize the I2C slave interface and default status register.
+ * @return None.
+ */
 void initI2C(void) {
   hal_i2c_slave_init(PIN_SDA, PIN_SCL, ADJUSTOMETER_I2C_ADDR);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, ADJ_STATUS_BASELINE_PENDING);
 }
 
+/**
+ * @brief Configure GPIO and ADC resources required by the Adjustometer.
+ * @return None.
+ */
 void initBasicPIO(void) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
   hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
 }
 
+/**
+ * @brief Reset sensor state and attach the Hall-signal interrupt handler.
+ * @return None.
+ */
 void initSensors(void) {
   resetSensorsState();
   initBasicPIO();
@@ -73,10 +85,21 @@ static float filteredVoltage  = -1.0f;
 #define ADJUSTOMETER_BASELINE_MAX_TIME_US (ADJUSTOMETER_BASELINE_MAX_TIME_MS * 1000UL)
 #define ADJUSTOMETER_BASELINE_VERIFY_US  (ADJUSTOMETER_BASELINE_VERIFY_MS * 1000UL)
 
+/**
+ * @brief Return the absolute value of a signed 32-bit integer.
+ * @param value Value to normalize.
+ * @return Absolute value of @p value.
+ */
 static inline int32_t absI32(int32_t value) {
   return (value < 0) ? -value : value;
 }
 
+/**
+ * @brief Apply the integer EMA used for Adjustometer frequency filtering.
+ * @param rawHz Newly measured frequency.
+ * @param filteredHz Previous filtered frequency.
+ * @return Updated filtered frequency.
+ */
 static inline uint32_t applyAdjustometerEma(uint32_t rawHz, uint32_t filteredHz) {
   if (filteredHz == 0U) {
     return rawHz;
@@ -93,6 +116,12 @@ static inline uint32_t applyAdjustometerEma(uint32_t rawHz, uint32_t filteredHz)
   return filteredHz + (uint32_t)step;
 }
 
+/**
+ * @brief Compute absolute difference between two unsigned 32-bit values.
+ * @param a First value.
+ * @param b Second value.
+ * @return Absolute difference between @p a and @p b.
+ */
 static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
   return (a >= b) ? (a - b) : (b - a);
 }
@@ -107,6 +136,10 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
 //  • CPU budget — Core0 has no other duties; voltage and temperature ADC reads
 //    are auxiliary, non-time-critical tasks handled on Core1, so the ISR can
 //    safely use the full Core0 bandwidth.
+/**
+ * @brief Process one Hall edge and update filtered pulse/frequency state.
+ * @return None.
+ */
 static void countAdjustometerPulses(void) {
   const uint32_t nowUs = hal_micros();
   __atomic_store_n(&adjustometerLastEdgeUs, nowUs, __ATOMIC_RELEASE);
@@ -230,7 +263,10 @@ static void countAdjustometerPulses(void) {
   }
 }
 
-// Returns true if signal loss is detected (no edges for too long).
+/**
+ * @brief Check whether the Hall signal has timed out.
+ * @return True when no pulse edge has been seen within the allowed timeout.
+ */
 static bool isSignalLost(void) {
   const uint32_t lastEdgeUs = __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
   if (lastEdgeUs == 0U) {
@@ -254,6 +290,12 @@ static bool isSignalLost(void) {
   return (nowUs - lastEdgeUs) > signalLossUs;
 }
 
+/**
+ * @brief Return the current Adjustometer pulse magnitude.
+ * @return Current pulse value, or 0 while signal is lost.
+ * @note This is a project-local G149-like raw quantity-feedback signal, not an OEM
+ *       quantity estimate and not a calibrated mg/stroke value.
+ */
 int32_t getAdjustometerPulses(void) {
   if (isSignalLost()) {
     return 0;
@@ -261,10 +303,20 @@ int32_t getAdjustometerPulses(void) {
   return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
 }
 
+/**
+ * @brief Return the current filtered oscillator frequency.
+ * @return Signal frequency in hertz.
+ * @note This is the oscillator-side raw observable behind the project's G149-like
+ *       quantity-feedback path.
+ */
 uint32_t getAdjustometerSignalHz(void) {
   return __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
 }
 
+/**
+ * @brief Build the module status bitmask from current signal and ADC state.
+ * @return Packed Adjustometer status flags.
+ */
 uint8_t getAdjustometerStatus(void) {
   uint8_t status = ADJ_STATUS_OK;
 
@@ -291,14 +343,29 @@ uint8_t getAdjustometerStatus(void) {
   return status;
 }
 
+/**
+ * @brief Check whether baseline acquisition and verification are complete.
+ * @return True when the Adjustometer is ready for ECU use.
+ * @note The ECU treats this as readiness of the project-local G149-like path before
+ *       enabling its N146/G149-like inner loop.
+ */
 bool isAdjustometerReady(void) {
   return adjustometerBaselineReady;
 }
 
+/**
+ * @brief Return the locked baseline frequency used as the zero point.
+ * @return Baseline frequency in hertz.
+ * @note This is the zero reference for the project-local G149-like quantity-feedback path.
+ */
 uint32_t getBaseline(void) {
   return adjustometerBaseline;
 }
 
+/**
+ * @brief Reset all runtime sensor, baseline and filter state.
+ * @return None.
+ */
 static void resetSensorsState(void) {
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
@@ -320,6 +387,12 @@ static void resetSensorsState(void) {
   filteredVoltage = -1.0f;
 }
 
+/**
+ * @brief Apply the ADC-side floating-point EMA filter.
+ * @param raw Latest ADC-derived value.
+ * @param prev Previous filtered value.
+ * @return Updated filtered value.
+ */
 static float adcEma(float raw, float prev) {
   if (prev < 0.0f) {
     return raw;
@@ -327,6 +400,10 @@ static float adcEma(float raw, float prev) {
   return prev + ((raw - prev) / (float)(1U << ADC_EMA_SHIFT));
 }
 
+/**
+ * @brief Read and filter the module supply voltage.
+ * @return Tenths-of-volt value clamped to an 8-bit register.
+ */
 uint8_t getSupplyVoltageRaw(void) {
   float avgAdc = getAverageValueFrom(ADC_VOLT_PIN);
   float volts = adcToVolt((int)(avgAdc + 0.5f),
@@ -339,6 +416,11 @@ uint8_t getSupplyVoltageRaw(void) {
   return (uint8_t)tv;
 }
 
+/**
+ * @brief Read and filter the fuel temperature sensor.
+ * @return Rounded fuel temperature in degrees Celsius as an 8-bit value.
+ * @note This is the module's G81-like fuel-temperature input.
+ */
 uint8_t getFuelTemperatureRaw(void) {
   float tempC = ntcToTemp(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A, R_VP37_FUEL_B);
   if (isnan(tempC)) tempC = 0.0f;

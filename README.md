@@ -27,7 +27,7 @@ Active modules in `src/`:
 - `src/ECU` - engine control logic, diagnostics (OBD/UDS over CAN), DTC manager, actuator logic.
 - `src/Clocks` - dashboard/cluster rendering and signaling.
 - `src/OilAndSpeed` - dedicated oil pressure and speed module.
-- `src/Adjustometer` - VP37 injection pump actuator position transducer. Not a standalone module - it is part of the ECU subsystem and resides on the same PCB. Measures fuel-delivery actuator position via a Hartley oscillator driven by the pump's built-in coils, counts frequency on RP2040, applies adaptive thermal compensation, and exposes the result over I²C to the ECU.
+- `src/Adjustometer` - dedicated RP2040-based VP37 feedback module within the ECU subsystem. It has its own firmware tree, is commonly deployed on the same PCB as the ECU, measures pump-coil resonance with a Hartley oscillator, derives baseline-relative pulse magnitude, reports fuel temperature and supply voltage, and exposes its state over I2C to the ECU.
 
 Completed / not actively developed:
 
@@ -39,11 +39,13 @@ Deprecated code in `legacy/`:
 - useful for reference and migration history,
 - should not be treated as current production firmware.
 
-## Current status (2026-04-12)
+## Current status (2026-04-21)
 
 - Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`, `src/Adjustometer`).
-- Host-side test suites: ECU - 11 tests (including `test_cppcheck`), Adjustometer - 2 tests, Clocks - 1 test.
+- Host-side validation exists for ECU, Adjustometer, and Clocks. ECU currently provides 11 executable host test targets under `src/ECU/tests/`; `test_cppcheck` is added as an extra CTest entry when `cppcheck` is installed. Adjustometer currently provides 2 host tests.
 - ECU CI runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
+- ECU now has a dedicated project-local MISRA screening runner under `src/ECU/misra/`, a deviation register scaffold, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
+- Initial ECU MISRA screening baseline reports 976 active findings across 27 rule IDs, so the new runner should be treated as a triage/evidence path, not a pass signal.
 - ECU startup reports compile timestamp (`__DATE__` + `__TIME__`).
 
 ## ECU MISRA-C migration status
@@ -51,7 +53,7 @@ Deprecated code in `legacy/`:
 Two-level estimate:
 
 - engineering/architecture alignment: **~80-85%**,
-- formal compliance readiness (tooling + evidence): **~50-55%**.
+- formal compliance readiness (tooling + evidence): **~55-60%**.
 
 Scope:
 
@@ -72,6 +74,7 @@ Completed areas include:
 - warning quality gate for ECU host tests and Arduino ECU build paths (`-Werror`).
 - warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
 - defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.
+- project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
 
 Pending areas:
 
@@ -86,6 +89,24 @@ in the same change set.
 
 Project-specific working notes can be kept locally, but repository-level safety
 status in this file must remain synchronized with code changes.
+
+## ECU MISRA screening entry points
+
+Local run:
+
+```bash
+cd src/ECU
+bash misra/check_misra.sh --out misra/.results
+```
+
+Manual CI artifact workflow:
+
+- `.github/workflows/ecu-misra.yml`
+
+Notes:
+
+- the repository does not ship MISRA rule-text extracts,
+- severity split by Mandatory / Required / Advisory is only available when a licensed local rule-text file is provided to the runner.
 
 ## Dependencies
 

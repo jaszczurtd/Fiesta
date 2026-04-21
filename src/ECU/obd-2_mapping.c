@@ -197,6 +197,11 @@ const char* const PID_NAME_MAPPER[] PROGMEM = {
   PID_NAME_0x5f,
 };
 
+/**
+ * @brief Return the static name assigned to a standard PID.
+ * @param pid PID number to look up.
+ * @return Static PID description, or "unknown" when out of range.
+ */
 const char *getPIDName(int pid) {
   if(pid > PID_LAST) {
     return "unknown";
@@ -204,6 +209,11 @@ const char *getPIDName(int pid) {
   return PID_NAME_MAPPER[pid];
 }
 
+/**
+ * @brief Return the static name assigned to a project DTC mapping.
+ * @param code DTC code to look up.
+ * @return Static DTC description, or "Unknown DTC" when unmapped.
+ */
 const char *getDtcName(uint16_t code) {
   switch(code) {
     case DTC_OBD_CAN_INIT_FAIL:
