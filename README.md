@@ -158,8 +158,8 @@ and is idempotent (safe to re-run). It:
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
-7. configures and builds the ECU host tests, then runs `ctest` (includes `test_cppcheck` once `cppcheck` is present),
-8. compiles the ECU firmware and reports the produced `.uf2` artifact.
+7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
+8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
@@ -178,12 +178,11 @@ only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
 
-The apt packages, arduino-cli/core, and cloned libraries installed by
-`bootstrap.sh` form the shared toolchain used by all modules — after running
-it once you can build Clocks / OilAndSpeed / Adjustometer directly with their
-own `scripts/upload-uf2.sh`.
+`bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
+modules that have them, firmware for all). For iterative work on a single
+module, skip bootstrap and use the per-module recipes below.
 
-### Host tests (CMake) — other modules
+### Host tests (CMake) — per module
 
 CMake in this repository is used for host test configuration/build; test
 targets are compiled as C++ (`.cpp`). Same pattern for every module:
@@ -194,14 +193,12 @@ cmake --build src/<Module>/build_test --parallel
 ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-Modules with host tests: `ECU` (built by `bootstrap.sh`), `Clocks`, `Adjustometer`.
+Modules with host tests: `ECU`, `Clocks`, `Adjustometer`.
 
-### Firmware build — other modules
-
-Once the toolchain is set up (via `bootstrap.sh` or manually):
+### Firmware build — per module
 
 ```bash
-cd src/<Clocks|OilAndSpeed|Adjustometer>
+cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
 bash scripts/upload-uf2.sh
 ```
 

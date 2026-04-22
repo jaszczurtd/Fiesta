@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ECU dev-environment bootstrap (Debian-like Linux)
+# Fiesta dev-environment bootstrap (Debian-like Linux)
 #
 # Installs system deps (incl. Python 3 and cppcheck), arduino-cli + rp2040
 # core, clones required Arduino libraries (JaszczurHAL, canDefinitions), runs
-# host tests, then compiles the firmware. Idempotent — safe to re-run.
-# Also covers the deps used by misra/check_misra.sh (cppcheck + Python 3;
-# the MISRA addon ships with the cppcheck package).
+# host tests, then compiles firmware for every Fiesta module:
+#   - ECU           (host tests + firmware, -Werror)
+#   - Clocks        (host tests + firmware)
+#   - OilAndSpeed   (firmware only — no host tests in-tree)
+#   - Adjustometer  (host tests + firmware, -Werror)
+# Idempotent — safe to re-run. Also covers the deps used by
+# misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
+# cppcheck package).
 #
 # Env overrides:
 #   LIB_DIR        default: $HOME/libraries   (parent of cloned libs)
@@ -19,8 +24,23 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BUILD_TEST_DIR="$PROJECT_DIR/build_test"
-BUILD_FW_DIR="$PROJECT_DIR/.build"
+SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
+
+# Fallback FQBN for modules that do not ship a .vscode/arduino.json
+# (every Fiesta board in use is an RP2040 Pi Pico with the same flash layout).
+DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk"
+
+# Per-module build matrix.
+#   TEST_MODULES = modules that ship a CMakeLists.txt at src/<Module>/.
+#   FW_MODULES   = "module:werror" — werror=1 enables -Werror for that module
+#                  (matches what each module's own scripts/upload-uf2.sh uses).
+TEST_MODULES=(ECU Clocks Adjustometer)
+FW_MODULES=(
+    "ECU:1"
+    "Clocks:0"
+    "OilAndSpeed:0"
+    "Adjustometer:1"
+)
 
 # src/ECU/CMakeLists.txt resolves libraries at ${PROJECT_DIR}/../../../libraries
 # (i.e. parent of the repo root). The default must match that path or the host
@@ -200,31 +220,46 @@ fetch_libraries() {
 }
 
 # -----------------------------------------------------------------------------
-# 5. Host tests
+# 5. Host tests (per module)
 # -----------------------------------------------------------------------------
+run_tests_for() {
+    local module="$1"
+    local src="$SRC_ROOT/$module"
+    local build="$src/build_test"
+    if [[ ! -f "$src/CMakeLists.txt" ]]; then
+        info "[$module] no CMakeLists.txt — skipping tests"
+        return 0
+    fi
+    info "[$module] configuring host tests"
+    cmake -S "$src" -B "$build" -DCMAKE_BUILD_TYPE=Release
+    info "[$module] building host tests"
+    cmake --build "$build" --parallel
+    info "[$module] running ctest"
+    ctest --test-dir "$build" --output-on-failure
+    ok "[$module] host tests passed"
+}
+
 run_tests() {
     if [[ "${SKIP_TESTS:-0}" = "1" ]]; then
         info "SKIP_TESTS=1 — skipping host tests"
         return
     fi
-    info "Configuring host test build"
-    cmake -S "$PROJECT_DIR" -B "$BUILD_TEST_DIR" -DCMAKE_BUILD_TYPE=Release
-    info "Building host tests"
-    cmake --build "$BUILD_TEST_DIR" --parallel
-    info "Running ctest"
-    ctest --test-dir "$BUILD_TEST_DIR" --output-on-failure
-    ok "Host tests passed"
+    local module
+    for module in "${TEST_MODULES[@]}"; do
+        run_tests_for "$module"
+    done
 }
 
 # -----------------------------------------------------------------------------
-# 6. Firmware compile
+# 6. Firmware compile (per module)
 # -----------------------------------------------------------------------------
-read_arduino_json() {
-    local key="$1"
+read_arduino_json_key() {
+    local file="$1" key="$2"
+    [[ -f "$file" ]] || { echo ""; return; }
     python3 -c "
 import json, sys
 try:
-    with open('$PROJECT_DIR/.vscode/arduino.json') as f:
+    with open('$file') as f:
         s = json.load(f)
 except Exception:
     sys.exit(0)
@@ -232,46 +267,63 @@ print(s.get('$key', ''))
 "
 }
 
+compile_firmware_for() {
+    local module="$1" werror="$2"
+    local src="$SRC_ROOT/$module"
+    local build="$src/.build"
+    local ajson="$src/.vscode/arduino.json"
+
+    local board config fqbn=""
+    board=$(read_arduino_json_key "$ajson" board)
+    config=$(read_arduino_json_key "$ajson" configuration)
+    if [[ -n "$board" ]]; then
+        fqbn="$board"
+        [[ -n "$config" ]] && fqbn="${board}:${config}"
+    fi
+    if [[ -z "$fqbn" ]]; then
+        fqbn="$DEFAULT_FQBN"
+        info "[$module] no .vscode/arduino.json — using default FQBN"
+    fi
+
+    local werror_flag=""
+    [[ "$werror" = "1" ]] && werror_flag=" -Werror"
+
+    info "[$module] compiling firmware (FQBN: $fqbn)"
+    "$ARDUINO_CLI" compile \
+        --fqbn "$fqbn" \
+        --libraries "$LIB_DIR" \
+        --build-path "$build" \
+        --build-property "compiler.cpp.extra_flags=-I '$src'$werror_flag" \
+        --build-property "compiler.c.extra_flags=-I '$src'$werror_flag" \
+        "$src"
+    local uf2
+    uf2=$(find "$build" -maxdepth 2 -name '*.uf2' -type f | head -1)
+    if [[ -n "$uf2" ]]; then
+        ok "[$module] firmware: $uf2"
+    else
+        warn "[$module] compile finished but no .uf2 found in $build"
+    fi
+}
+
 compile_firmware() {
     if [[ "${SKIP_BUILD:-0}" = "1" ]]; then
         info "SKIP_BUILD=1 — skipping firmware compile"
         return
     fi
-    local board config fqbn
-    board=$(read_arduino_json board)
-    config=$(read_arduino_json configuration)
-    if [[ -z "$board" ]]; then
-        err "cannot read 'board' from .vscode/arduino.json"
-        exit 1
-    fi
-    fqbn="$board"
-    [[ -n "$config" ]] && fqbn="${board}:${config}"
-
-    info "Compiling firmware"
-    info "  FQBN: $fqbn"
-    info "  Libraries: $LIB_DIR"
-    "$ARDUINO_CLI" compile \
-        --fqbn "$fqbn" \
-        --libraries "$LIB_DIR" \
-        --build-path "$BUILD_FW_DIR" \
-        --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR' -Werror" \
-        --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR' -Werror" \
-        "$PROJECT_DIR"
-    local uf2
-    uf2=$(find "$BUILD_FW_DIR" -maxdepth 2 -name '*.uf2' -type f | head -1)
-    if [[ -n "$uf2" ]]; then
-        ok "Firmware built: $uf2"
-    else
-        warn "Compile finished but no .uf2 artifact found in $BUILD_FW_DIR"
-    fi
+    local entry module werror
+    for entry in "${FW_MODULES[@]}"; do
+        module="${entry%%:*}"
+        werror="${entry##*:}"
+        compile_firmware_for "$module" "$werror"
+    done
 }
 
 # -----------------------------------------------------------------------------
 # main
 # -----------------------------------------------------------------------------
-info "ECU bootstrap starting"
-info "  PROJECT_DIR: $PROJECT_DIR"
-info "  LIB_DIR:     $LIB_DIR"
+info "Fiesta bootstrap starting"
+info "  SRC_ROOT: $SRC_ROOT"
+info "  LIB_DIR:  $LIB_DIR"
 
 install_apt
 check_python

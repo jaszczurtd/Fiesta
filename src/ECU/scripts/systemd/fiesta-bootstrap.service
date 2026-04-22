@@ -1,0 +1,14 @@
+[Unit]
+Description=Fiesta daily bootstrap (git pull + bootstrap.sh + email)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/fiesta-bootstrap.env
+ExecStart=%h/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh
+# Don't disturb interactive use on the Pi.
+Nice=10
+IOSchedulingClass=idle
+# Bound the daily build so a hung arduino-cli cannot sit forever.
+TimeoutStartSec=30min
