@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Fiesta bootstrap schedule (13:00 local time)
+
+[Timer]
+# Fire every day at 13:00 local time.
+OnCalendar=*-*-* 13:00:00
+# If the Pi was off at 13:00, run as soon as it comes back up.
+Persistent=true
+Unit=fiesta-bootstrap.service
+
+[Install]
+WantedBy=timers.target
