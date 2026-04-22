@@ -8,6 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SETTINGS_FILE="$PROJECT_DIR/.vscode/settings.json"
+ARDUINO_JSON="$PROJECT_DIR/.vscode/arduino.json"
 BUILD_DIR="$PROJECT_DIR/.build"
 
 RED='\033[0;31m'
@@ -23,21 +24,53 @@ err()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # Read settings
 read_setting() {
+    local file="$1" key="$2" default="${3:-}"
+    [[ -f "$file" ]] || { echo "$default"; return; }
     python3 -c "
-import json
-with open('$SETTINGS_FILE') as f:
-    s = json.load(f)
-print(s.get('$1', '${2:-}'))
-" 2>/dev/null
+import json, sys
+try:
+    with open('$file') as f:
+        s = json.load(f)
+except Exception:
+    sys.exit(0)
+print(s.get('$key', '$default'))
+"
 }
 
-CLI=$(read_setting "arduino.cliPath" "arduino-cli")
-FQBN=$(read_setting "arduino.fqbn")
-SKETCHBOOK=$(read_setting "arduino.sketchbookPath")
+CLI=$(read_setting "$SETTINGS_FILE" "arduino.cliPath" "arduino-cli")
+FQBN=$(read_setting "$SETTINGS_FILE" "arduino.fqbn")
+SKETCHBOOK=$(read_setting "$SETTINGS_FILE" "arduino.sketchbookPath")
+
+# Fallback: derive FQBN from .vscode/arduino.json (board + configuration)
+if [[ -z "$FQBN" && -f "$ARDUINO_JSON" ]]; then
+    BOARD=$(read_setting "$ARDUINO_JSON" "board")
+    CONFIG=$(read_setting "$ARDUINO_JSON" "configuration")
+    if [[ -n "$BOARD" ]]; then
+        if [[ -n "$CONFIG" ]]; then
+            FQBN="${BOARD}:${CONFIG}"
+        else
+            FQBN="$BOARD"
+        fi
+        info "FQBN loaded from arduino.json"
+    fi
+fi
+
+if [[ -z "$FQBN" ]]; then
+    err "FQBN not set: add 'arduino.fqbn' to .vscode/settings.json or 'board' to .vscode/arduino.json"
+    exit 1
+fi
 
 LIB_ARGS=""
 if [[ -n "$SKETCHBOOK" && -d "$SKETCHBOOK/libraries" ]]; then
     LIB_ARGS="--libraries $SKETCHBOOK/libraries"
+else
+    for candidate in "$HOME/libraries" "$HOME/Arduino/libraries"; do
+        if [[ -d "$candidate" ]]; then
+            LIB_ARGS="--libraries $candidate"
+            info "Libraries auto-detected: $candidate"
+            break
+        fi
+    done
 fi
 
 # Compile
