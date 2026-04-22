@@ -1,4 +1,4 @@
-# Fiesta daily bootstrap — systemd user service
+# Fiesta daily bootstrap - systemd user service
 
 Runs the ECU bootstrap once a day on a Raspberry Pi (or any Linux host with
 systemd), captures the result, and emails a status summary.
@@ -8,7 +8,7 @@ What the runner does, in order:
 1. clone or hard-reset `$FIESTA_DIR` to `origin/$BRANCH`,
 2. remove `src/ECU/build_test/` and `src/ECU/.build/` (pre-run clean),
 3. run `src/ECU/scripts/bootstrap.sh` with `SKIP_APT=1`
-   (system packages are set up once, manually — the user service cannot sudo),
+   (system packages are set up once, manually - the user service cannot sudo),
 4. send an email with PASS/FAIL, HEAD SHA, commit subject, and the last
    80 lines of the log (full log attached).
 
@@ -25,6 +25,36 @@ after each run. Logs go to `$HOME/.cache/fiesta-bootstrap/run-*.log`
 | `fiesta-bootstrap.service`     | systemd oneshot unit |
 | `fiesta-bootstrap.timer`       | systemd timer (13:00 daily, `Persistent=true`) |
 | `fiesta-bootstrap.env.example` | SMTP / path config template |
+
+## File placement (important)
+
+Only **two** files from this directory belong in `~/.config/systemd/user/`:
+
+- `fiesta-bootstrap.service`
+- `fiesta-bootstrap.timer`
+
+Everything else (`fiesta-bootstrap-run.sh`, `send-status.py`,
+`fiesta-bootstrap.env.example`) **stays in the repo**. The service's
+`ExecStart=` points at the runner via `%h/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh`,
+and the runner invokes `send-status.py` from its own directory. Do not
+copy those scripts into `~/.config/systemd/user/` - it will not help, and
+it creates drift the next time you `git pull`.
+
+## `systemctl --user` never takes `sudo`
+
+`--user` is the current user's scope. Prefixing it with `sudo` switches
+to `root`, which has no user-bus session, and you get:
+
+```
+Failed to connect to bus: No medium found
+```
+
+Always run user-scope commands as yourself:
+
+```bash
+systemctl --user daemon-reload            # yes
+sudo systemctl --user daemon-reload       # NO
+```
 
 ## One-time install on the Pi
 
@@ -43,7 +73,8 @@ cp ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap.env.example \
 chmod 600 ~/.config/fiesta-bootstrap.env
 $EDITOR ~/.config/fiesta-bootstrap.env     # fill in SMTP_*, MAIL_TO, etc.
 
-# 4. Install user systemd units
+# 4. Install user systemd units - ONLY .service and .timer go here.
+#    Do NOT copy fiesta-bootstrap-run.sh or send-status.py into this dir.
 mkdir -p ~/.config/systemd/user
 cp ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap.service \
    ~/.config/systemd/user/
@@ -81,7 +112,39 @@ less ~/.cache/fiesta-bootstrap/last.log
   put it in `SMTP_PASS`. Regular account passwords will not work.
 - Corporate SMTP relays that require only the sender host: leave `SMTP_USER`
   / `SMTP_PASS` empty and the script will skip authentication.
-- Port 465 → implicit TLS; anything else → STARTTLS.
+- Port 465 -> implicit TLS; anything else -> STARTTLS.
+
+## Gotcha: `EnvironmentFile` does not expand `%h` or `$HOME`
+
+`systemd`'s `EnvironmentFile=` directive reads the file as literal
+`KEY=VALUE` pairs - it does **not** expand:
+
+- systemd specifiers (`%h`, `%u`, ...),
+- shell variables (`$HOME`),
+- tildes (`~`).
+
+If you put `FIESTA_DIR=%h/Documents/Fiesta` in `fiesta-bootstrap.env`, the
+runner will treat `%h/Documents/Fiesta` as a relative path (rooted at the
+service's `WorkingDirectory`, i.e. `$HOME`), end up creating a literal
+`$HOME/%h/Documents/Fiesta/` directory, and arduino-cli will fail with a
+confusing `ld: cannot open map file …` because the `%h` token leaks into
+the linker recipe.
+
+The runner now fail-fasts with a clear error when it sees a `%…` / `~` /
+`$…` in `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR`, or `BRANCH`, and
+when `FIESTA_DIR` is not absolute.
+
+**Fix**: in `~/.config/fiesta-bootstrap.env`, either
+
+- leave `FIESTA_DIR` **unset** (the runner defaults to `$HOME/Documents/Fiesta`), or
+- set it to an **absolute path**, e.g. `FIESTA_DIR=/home/pi/Documents/Fiesta`.
+
+If an earlier run already created a literal `%h` directory, clean it up
+once:
+
+```bash
+rm -rf "$HOME/%h"
+```
 
 ## Notes
 

@@ -24,6 +24,27 @@ FIESTA_REPO_URL="${FIESTA_REPO_URL:-https://github.com/jaszczurtd/Fiesta.git}"
 BRANCH="${BRANCH:-main}"
 LOG_DIR="${FIESTA_LOG_DIR:-$HOME/.cache/fiesta-bootstrap}"
 
+# systemd's EnvironmentFile= does not expand %h / %u / $HOME / ~. Catch the
+# common mistake early — otherwise the literal specifier leaks into every
+# downstream path and arduino-cli will fail with a confusing linker error.
+for var in FIESTA_DIR FIESTA_REPO_URL LOG_DIR BRANCH; do
+    val="${!var}"
+    case "$val" in
+        *%[a-zA-Z]*|\~*|\$*)
+            echo "[ERROR] $var contains an unexpanded specifier or shell metachar: '$val'" >&2
+            echo "[ERROR] EnvironmentFile= takes values literally — use an absolute path." >&2
+            exit 2
+            ;;
+    esac
+done
+case "$FIESTA_DIR" in
+    /*) : ;;
+    *)
+        echo "[ERROR] FIESTA_DIR must be an absolute path, got: '$FIESTA_DIR'" >&2
+        exit 2
+        ;;
+esac
+
 mkdir -p "$LOG_DIR"
 STAMP="$(date -u +'%Y%m%dT%H%M%SZ')"
 LOG_FILE="$LOG_DIR/run-$STAMP.log"
