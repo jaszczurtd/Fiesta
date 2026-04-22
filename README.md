@@ -112,14 +112,18 @@ Notes:
 
 ## Dependencies
 
-The project uses a single shared external libraries location.
-
-Required libraries:
+Required external Arduino libraries (shared across all modules):
 
 - `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
 - `canDefinitions` (shared CAN IDs/signals): https://github.com/jaszczurtd/canDefinitions
 
-Expected layout:
+Required toolchain:
+
+- `git`, `build-essential`, `cmake`, `python3`, `curl`
+- `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
+- `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
+
+Expected libraries layout:
 
 ```text
 <sketchbook>/libraries/JaszczurHAL
@@ -134,86 +138,60 @@ Each module is an Arduino-style app (`*.ino` + companion sources), but .ino is j
 
 Helper scripts are available in module-specific `scripts/` directories:
 
+- `bootstrap.sh` (ECU only — one-shot dev-env setup and build)
 - `select-board.sh`
 - `upload-uf2.sh`
 - `refresh-intellisense.sh`
 - `serial-monitor.sh` / `serial-monitor.py` (where available)
 
-### Linux/WSL setup (shared for all modules)
+### One-shot setup (Debian-like Linux / WSL)
 
-Install Arduino CLI and RP2040 core once per machine:
+`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end
+and is idempotent (safe to re-run). It:
 
-```bash
-arduino-cli config init
-arduino-cli config set board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-arduino-cli core update-index
-arduino-cli core install rp2040:rp2040
-```
+1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`),
+2. verifies Python 3 is available,
+3. verifies `cppcheck` is available and its MISRA addon is reachable,
+4. installs `arduino-cli` if missing,
+5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
+6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default `$HOME/libraries`),
+7. configures and builds the ECU host tests, then runs `ctest` (includes `test_cppcheck` once `cppcheck` is present),
+8. compiles the ECU firmware and reports the produced `.uf2` artifact.
 
-Set `arduino.sketchbookPath` in module `.vscode/settings.json` to the directory that contains `libraries/`.
+The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
-Example:
-
-```json
-"arduino.sketchbookPath": "/home/youruser"
-```
-
-### Host tests (CMake)
-
-Note: CMake in this repository is used for host test configuration/build, and
-test targets are compiled as C++ (`.cpp`).
-
-ECU:
+Run from repository root:
 
 ```bash
-cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release
-cmake --build src/ECU/build_test --parallel
-ctest --test-dir src/ECU/build_test --output-on-failure
+bash src/ECU/scripts/bootstrap.sh
 ```
 
-Clocks:
+Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
+
+The apt packages, arduino-cli/core, and cloned libraries installed by
+`bootstrap.sh` form the shared toolchain used by all modules — after running
+it once you can build Clocks / OilAndSpeed / Adjustometer directly with their
+own `scripts/upload-uf2.sh`.
+
+### Host tests (CMake) — other modules
+
+CMake in this repository is used for host test configuration/build; test
+targets are compiled as C++ (`.cpp`). Same pattern for every module:
 
 ```bash
-cmake -S src/Clocks -B src/Clocks/build_test -DCMAKE_BUILD_TYPE=Release
-cmake --build src/Clocks/build_test --parallel
-ctest --test-dir src/Clocks/build_test --output-on-failure
+cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
+cmake --build src/<Module>/build_test --parallel
+ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-Adjustometer:
+Modules with host tests: `ECU` (built by `bootstrap.sh`), `Clocks`, `Adjustometer`.
+
+### Firmware build — other modules
+
+Once the toolchain is set up (via `bootstrap.sh` or manually):
 
 ```bash
-cmake -S src/Adjustometer -B src/Adjustometer/build_test -DCMAKE_BUILD_TYPE=Release
-cmake --build src/Adjustometer/build_test --parallel
-ctest --test-dir src/Adjustometer/build_test --output-on-failure
-```
-
-### Firmware build examples
-
-ECU:
-
-```bash
-cd src/ECU
-bash scripts/upload-uf2.sh
-```
-
-Clocks:
-
-```bash
-cd src/Clocks
-bash scripts/upload-uf2.sh
-```
-
-OilAndSpeed:
-
-```bash
-cd src/OilAndSpeed
-bash scripts/upload-uf2.sh
-```
-
-Adjustometer:
-
-```bash
-cd src/Adjustometer
+cd src/<Clocks|OilAndSpeed|Adjustometer>
 bash scripts/upload-uf2.sh
 ```
 
