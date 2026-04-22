@@ -35,6 +35,8 @@ set(ADJ_SOURCES
 # Compile .c sources as C++ so __atomic_* builtins and hal C++ APIs work
 set_source_files_properties(${ADJ_SOURCES} PROPERTIES LANGUAGE CXX)
 
+find_package(Threads REQUIRED)
+
 # ── adj_mock library ──────────────────────────────────────────────────────────
 add_library(adj_mock STATIC
     ${MOCK_SOURCES}
@@ -59,10 +61,34 @@ target_compile_definitions(adj_mock PUBLIC
     UNITY_INCLUDE_CONFIG_H
 )
 
-find_package(Threads REQUIRED)
 target_link_libraries(adj_mock PUBLIC Threads::Threads)
 
 target_compile_options(adj_mock PRIVATE -Wall -Wextra -Wno-unused-parameter)
+
+add_library(adj_mock_common STATIC
+    ${MOCK_SOURCES}
+    ${HAL_UTIL_SOURCES}
+    ${HAL_SRC}/utils/tools.cpp
+)
+
+target_include_directories(adj_mock_common BEFORE PUBLIC
+    ${ADJ_SRC}/tests/include
+    ${HAL_STUBS}
+)
+target_include_directories(adj_mock_common PUBLIC
+    ${HAL_SRC}
+    ${HAL_SRC}/utils
+    ${ADJ_SRC}
+    ${CANDEFS}
+)
+
+target_compile_definitions(adj_mock_common PUBLIC
+    UNITY_INCLUDE_CONFIG_H
+)
+
+target_link_libraries(adj_mock_common PUBLIC Threads::Threads)
+
+target_compile_options(adj_mock_common PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 add_subdirectory(tests)
