@@ -39,6 +39,96 @@ Deprecated code in `legacy/`:
 - useful for reference and migration history,
 - should not be treated as current production firmware.
 
+## Dependencies
+
+Required external custom libraries (shared across all modules):
+
+- `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
+- `canDefinitions` (shared CAN IDs/signals): https://github.com/jaszczurtd/canDefinitions
+
+Required toolchain:
+
+- `git`, `build-essential`, `cmake`, `python3`, `curl`
+- `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
+- `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
+
+Expected libraries layout (the ECU CMakeLists pins this path):
+
+```text
+<parent-of-repo-root>/libraries/JaszczurHAL
+<parent-of-repo-root>/libraries/canDefinitions
+```
+
+Example: if this repo is cloned at `/home/you/projects/Fiesta`, libraries go
+to `/home/you/projects/libraries/`.
+
+## Build and development
+
+Each module is an Arduino-style app (`*.ino` + companion sources), but .ino is just a simple wrapper for setup() and loop()/loop1(). But that is where the similarities to a typical Arduino project end. The code is practically independent of the Arduino ecosystem, which is fully virtualized by JaszczurHAL library.
+
+Helper scripts are available in module-specific `scripts/` directories:
+
+- `bootstrap.sh` (in `src/ECU/scripts/` — one-shot dev-env setup + tests + firmware build for all Fiesta modules)
+- `select-board.sh`
+- `upload-uf2.sh`
+- `refresh-intellisense.sh`
+- `serial-monitor.sh` / `serial-monitor.py` (where available)
+
+### One-shot setup (Debian-like Linux / WSL)
+
+`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end
+and is idempotent (safe to re-run). It:
+
+1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`),
+2. verifies Python 3 is available,
+3. verifies `cppcheck` is available and its MISRA addon is reachable,
+4. installs `arduino-cli` if missing,
+5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
+6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
+7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
+8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
+
+The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
+
+Run from repository root as a regular (non-root) user — the script uses
+`sudo` only for apt and arduino-cli install and will prompt for the password
+when needed:
+
+```bash
+bash src/ECU/scripts/bootstrap.sh
+```
+
+Do not run it under `sudo` — arduino-cli config, rp2040 core, and cloned
+libraries would end up under `/root/` and break later non-root builds. The
+script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
+only if you know what you are doing.
+
+Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
+
+`bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
+modules that have them, firmware for all). For iterative work on a single
+module, skip bootstrap and use the per-module recipes below.
+
+### Host tests (CMake) — per module
+
+CMake in this repository is used for host test configuration/build; test
+targets are compiled as C++ (`.cpp`). Same pattern for every module:
+
+```bash
+cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
+cmake --build src/<Module>/build_test --parallel
+ctest --test-dir src/<Module>/build_test --output-on-failure
+```
+
+Modules with host tests: `ECU`, `Clocks`, `Adjustometer`.
+
+### Firmware build — per module
+
+```bash
+cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
+bash scripts/upload-uf2.sh
+```
+
 ## Current status (2026-04-21)
 
 - Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`, `src/Adjustometer`).
@@ -109,98 +199,6 @@ Notes:
 
 - the repository does not ship MISRA rule-text extracts,
 - severity split by Mandatory / Required / Advisory is only available when a licensed local rule-text file is provided to the runner.
-
-## Dependencies
-
-Required external Arduino libraries (shared across all modules):
-
-- `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
-- `canDefinitions` (shared CAN IDs/signals): https://github.com/jaszczurtd/canDefinitions
-
-Required toolchain:
-
-- `git`, `build-essential`, `cmake`, `python3`, `curl`
-- `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
-- `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
-
-Expected libraries layout (the ECU CMakeLists pins this path):
-
-```text
-<parent-of-repo-root>/libraries/JaszczurHAL
-<parent-of-repo-root>/libraries/canDefinitions
-```
-
-Example: if this repo is cloned at `/home/you/projects/Fiesta`, libraries go
-to `/home/you/projects/libraries/`.
-
-Submodule-based dependency flow is no longer used.
-
-## Build and development
-
-Each module is an Arduino-style app (`*.ino` + companion sources), but .ino is just a simple wrapper for setup() and loop()/loop1().
-
-Helper scripts are available in module-specific `scripts/` directories:
-
-- `bootstrap.sh` (ECU only — one-shot dev-env setup and build)
-- `select-board.sh`
-- `upload-uf2.sh`
-- `refresh-intellisense.sh`
-- `serial-monitor.sh` / `serial-monitor.py` (where available)
-
-### One-shot setup (Debian-like Linux / WSL)
-
-`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end
-and is idempotent (safe to re-run). It:
-
-1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`),
-2. verifies Python 3 is available,
-3. verifies `cppcheck` is available and its MISRA addon is reachable,
-4. installs `arduino-cli` if missing,
-5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
-6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
-7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
-8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
-
-The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
-
-Run from repository root as a regular (non-root) user — the script uses
-`sudo` only for apt and arduino-cli install and will prompt for the password
-when needed:
-
-```bash
-bash src/ECU/scripts/bootstrap.sh
-```
-
-Do not run it under `sudo` — arduino-cli config, rp2040 core, and cloned
-libraries would end up under `/root/` and break later non-root builds. The
-script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
-only if you know what you are doing.
-
-Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
-
-`bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
-modules that have them, firmware for all). For iterative work on a single
-module, skip bootstrap and use the per-module recipes below.
-
-### Host tests (CMake) — per module
-
-CMake in this repository is used for host test configuration/build; test
-targets are compiled as C++ (`.cpp`). Same pattern for every module:
-
-```bash
-cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
-cmake --build src/<Module>/build_test --parallel
-ctest --test-dir src/<Module>/build_test --output-on-failure
-```
-
-Modules with host tests: `ECU`, `Clocks`, `Adjustometer`.
-
-### Firmware build — per module
-
-```bash
-cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
-bash scripts/upload-uf2.sh
-```
 
 ## Hardware and materials
 
