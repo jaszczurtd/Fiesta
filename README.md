@@ -64,11 +64,29 @@ to `/home/you/projects/libraries/`.
 
 ## Build and development
 
-Each module is an Arduino-style app (`*.ino` + companion sources), but .ino is just a simple wrapper for setup() and loop()/loop1(). But that is where the similarities to a typical Arduino project end. The code is practically independent of the Arduino ecosystem, which is fully virtualized by JaszczurHAL library.
+Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
+
+Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`) the same way `bootstrap.sh` and `scripts/upload-uf2.sh` do via `arduino-cli`. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+For the building detalis, see the `One-shot setup` section below.
+
+### Development environment
+
+The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor - the module `.vscode/` directories ship `tasks.json`, `launch.json`, `extensions.json`, and (for modules already migrated) `arduino.json` / `settings.json`, so everything - compile, upload, serial monitor, host tests, debugger - is wired up out of the box.
+
+Platform support summary:
+
+- **Linux (Debian-like)** - primary target. `bootstrap.sh`, host tests, firmware build (`arduino-cli`), `upload-uf2.sh`, MISRA screening, and the daily Pi runner all work.
+- **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; UF2 upload via `upload-uf2.sh` requires either mounting the BOOTSEL drive from Windows or running the upload step natively.
+- **Native Windows** - partially supported. `arduino-cli` compile and VS Code tasks work, but the shell scripts (`bootstrap.sh`, `upload-uf2.sh`, `serial-monitor.sh`, `misra/check_misra.sh`) and the systemd daily runner are Bash-only. Use WSL2 for those.
+- **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell scripts likely need minor tweaks.
+
+### Unattended daily build on a Raspberry Pi
+
+`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `bootstrap.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup, gotchas (e.g. `EnvironmentFile=` not expanding `%h`), and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 Helper scripts are available in module-specific `scripts/` directories:
 
-- `bootstrap.sh` (in `src/ECU/scripts/` — one-shot dev-env setup + tests + firmware build for all Fiesta modules)
+- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules)
 - `select-board.sh`
 - `upload-uf2.sh`
 - `refresh-intellisense.sh`
@@ -90,7 +108,7 @@ and is idempotent (safe to re-run). It:
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
-Run from repository root as a regular (non-root) user — the script uses
+Run from repository root as a regular (non-root) user - the script uses
 `sudo` only for apt and arduino-cli install and will prompt for the password
 when needed:
 
@@ -98,7 +116,7 @@ when needed:
 bash src/ECU/scripts/bootstrap.sh
 ```
 
-Do not run it under `sudo` — arduino-cli config, rp2040 core, and cloned
+Do not run this script under `sudo` - arduino-cli config, rp2040 core, and cloned
 libraries would end up under `/root/` and break later non-root builds. The
 script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
 only if you know what you are doing.
@@ -109,7 +127,7 @@ Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `S
 modules that have them, firmware for all). For iterative work on a single
 module, skip bootstrap and use the per-module recipes below.
 
-### Host tests (CMake) — per module
+### Host tests (CMake) - per module
 
 CMake in this repository is used for host test configuration/build; test
 targets are compiled as C++ (`.cpp`). Same pattern for every module:
@@ -122,7 +140,7 @@ ctest --test-dir src/<Module>/build_test --output-on-failure
 
 Modules with host tests: `ECU`, `Clocks`, `Adjustometer`.
 
-### Firmware build — per module
+### Firmware build - per module
 
 ```bash
 cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
