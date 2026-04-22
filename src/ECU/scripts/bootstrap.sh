@@ -22,7 +22,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_TEST_DIR="$PROJECT_DIR/build_test"
 BUILD_FW_DIR="$PROJECT_DIR/.build"
 
-LIB_DIR="${LIB_DIR:-$HOME/libraries}"
+# src/ECU/CMakeLists.txt resolves libraries at ${PROJECT_DIR}/../../../libraries
+# (i.e. parent of the repo root). The default must match that path or the host
+# test build will fail to find JaszczurHAL sources.
+DEFAULT_LIB_DIR="$(cd "$PROJECT_DIR/../../.." && pwd)/libraries"
+LIB_DIR="${LIB_DIR:-$DEFAULT_LIB_DIR}"
 ARDUINO_CLI="${ARDUINO_CLI:-arduino-cli}"
 BOARD_URL="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
 
@@ -33,6 +37,16 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 if [[ $EUID -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
+
+# Running as root puts arduino-cli config + rp2040 core under /root/.arduino15/
+# and the rest of the workflow uses the wrong $HOME, which breaks later
+# non-root use of arduino-cli compile. Require an explicit opt-in.
+if [[ $EUID -eq 0 && "${ALLOW_ROOT:-0}" != "1" ]]; then
+    err "Do not run bootstrap.sh as root — it uses sudo only for apt and arduino-cli install."
+    err "Re-run as a regular user (you will be prompted for the sudo password)."
+    err "To proceed anyway, set ALLOW_ROOT=1."
+    exit 1
+fi
 
 # -----------------------------------------------------------------------------
 # 1. Platform sanity check
@@ -82,19 +96,47 @@ check_python() {
 # -----------------------------------------------------------------------------
 # 2c. cppcheck (static analysis + MISRA screening via bundled addon)
 # -----------------------------------------------------------------------------
+find_misra_addon() {
+    # Fast path: dpkg knows exactly which files cppcheck ships.
+    if command -v dpkg >/dev/null 2>&1; then
+        if dpkg -L cppcheck 2>/dev/null | grep -qE '/misra\.py$'; then
+            dpkg -L cppcheck 2>/dev/null | grep -E '/misra\.py$' | head -1
+            return 0
+        fi
+    fi
+    # Direct probe of common locations (Debian/Ubuntu/Fedora/source).
+    local candidates=(
+        /usr/share/cppcheck/addons/misra.py
+        /usr/local/share/cppcheck/addons/misra.py
+        /usr/lib/cppcheck/addons/misra.py
+        /usr/share/cppcheck-addons/misra.py
+    )
+    for p in "${candidates[@]}"; do
+        [[ -f "$p" ]] && { echo "$p"; return 0; }
+    done
+    # Broad fallback.
+    local found
+    found=$(find /usr/share /usr/lib /usr/local/share /usr/local/lib 2>/dev/null \
+        -name misra.py -path '*cppcheck*' -print -quit)
+    if [[ -n "$found" ]]; then
+        echo "$found"
+        return 0
+    fi
+    return 1
+}
+
 check_cppcheck() {
     if ! command -v cppcheck >/dev/null 2>&1; then
         err "cppcheck not found after apt step — install it manually and re-run."
         exit 1
     fi
     ok "cppcheck present: $(cppcheck --version 2>&1 | head -1)"
-    # Sanity-check that the MISRA addon is reachable for misra/check_misra.sh.
-    if ! python3 -c "import os, sys
-for p in ('/usr/share/cppcheck/addons/misra.py',
-          '/usr/local/share/cppcheck/addons/misra.py'):
-    if os.path.isfile(p): sys.exit(0)
-sys.exit(1)" 2>/dev/null; then
-        warn "cppcheck misra.py addon not found in common locations — misra/check_misra.sh may fail"
+    local addon
+    if addon=$(find_misra_addon); then
+        ok "cppcheck MISRA addon: $addon"
+    else
+        warn "cppcheck misra.py addon not found — misra/check_misra.sh may fail"
+        warn "On Debian/Ubuntu the addon ships with the 'cppcheck' package; check 'dpkg -L cppcheck | grep misra'"
     fi
 }
 

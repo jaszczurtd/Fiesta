@@ -123,12 +123,15 @@ Required toolchain:
 - `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
 - `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
 
-Expected libraries layout:
+Expected libraries layout (the ECU CMakeLists pins this path):
 
 ```text
-<sketchbook>/libraries/JaszczurHAL
-<sketchbook>/libraries/canDefinitions
+<parent-of-repo-root>/libraries/JaszczurHAL
+<parent-of-repo-root>/libraries/canDefinitions
 ```
+
+Example: if this repo is cloned at `/home/you/projects/Fiesta`, libraries go
+to `/home/you/projects/libraries/`.
 
 Submodule-based dependency flow is no longer used.
 
@@ -154,19 +157,26 @@ and is idempotent (safe to re-run). It:
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
-6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default `$HOME/libraries`),
+6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
 7. configures and builds the ECU host tests, then runs `ctest` (includes `test_cppcheck` once `cppcheck` is present),
 8. compiles the ECU firmware and reports the produced `.uf2` artifact.
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
-Run from repository root:
+Run from repository root as a regular (non-root) user — the script uses
+`sudo` only for apt and arduino-cli install and will prompt for the password
+when needed:
 
 ```bash
 bash src/ECU/scripts/bootstrap.sh
 ```
 
-Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
+Do not run it under `sudo` — arduino-cli config, rp2040 core, and cloned
+libraries would end up under `/root/` and break later non-root builds. The
+script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
+only if you know what you are doing.
+
+Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
 
 The apt packages, arduino-cli/core, and cloned libraries installed by
 `bootstrap.sh` form the shared toolchain used by all modules — after running
