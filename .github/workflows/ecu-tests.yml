@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      CANDEFINITIONS_REF: e88e6873d5d7553593db9b5f690430f2a74d9193
+      CANDEFINITIONS_REF: main
     permissions:
       contents: read
 
