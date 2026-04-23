@@ -102,7 +102,7 @@ and is idempotent (safe to re-run). It:
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
-6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
+6. syncs `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
 8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
 
@@ -122,6 +122,8 @@ script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
 only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
+
+`bootstrap.sh` treats `JaszczurHAL` and `canDefinitions` under `$LIB_DIR` as disposable build dependencies: if those directories already contain git checkouts, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
 `bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
 modules that have them, firmware for all). For iterative work on a single
