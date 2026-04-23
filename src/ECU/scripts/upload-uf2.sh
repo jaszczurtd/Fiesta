@@ -11,6 +11,12 @@ SETTINGS_FILE="$PROJECT_DIR/.vscode/settings.json"
 ARDUINO_JSON="$PROJECT_DIR/.vscode/arduino.json"
 BUILD_DIR="$PROJECT_DIR/.build"
 
+# USB descriptor identity. Surfaces in /dev/serial/by-id/usb-<MFR>_<PRODUCT>_<UID>-if00
+# so bench operators and the desktop configurator can distinguish modules by name
+# without waiting for a HELLO round-trip.
+USB_MANUFACTURER="Fiesta"
+USB_PRODUCT="Jaszczur Fiesta ECU"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -79,6 +85,8 @@ info "  FQBN: $FQBN"
 if ! $CLI compile --fqbn "$FQBN" --build-path "$BUILD_DIR" $LIB_ARGS \
     --build-property "compiler.cpp.extra_flags=-I '$PROJECT_DIR' -Werror" \
     --build-property "compiler.c.extra_flags=-I '$PROJECT_DIR' -Werror" \
+    --build-property "build.usb_manufacturer=\"$USB_MANUFACTURER\"" \
+    --build-property "build.usb_product=\"$USB_PRODUCT\"" \
     "$PROJECT_DIR"; then
     err "Compilation failed"
     exit 1

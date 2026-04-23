@@ -10,6 +10,15 @@ extern "C" {
 
 #define MODULE_NAME "ECU"
 
+/* Fiesta-project firmware identity for the configurator HELLO response. */
+#ifndef FW_VERSION
+#define FW_VERSION "0.1.0"
+#endif
+
+#ifndef BUILD_ID
+#define BUILD_ID (__DATE__ " " __TIME__)
+#endif
+
 #define vehicle_Vin     "WF0BXXGAJB1R32583"
 #define ecu_Name        "JASZCZUR FORD FIESTA"
 

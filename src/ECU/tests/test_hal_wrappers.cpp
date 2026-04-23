@@ -270,7 +270,11 @@ void test_ecu_config_session_hello_path(void) {
 
     TEST_ASSERT_TRUE(configSessionActive());
     TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(hal_mock_serial_last_line(), "module=ECU"));
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "module=ECU"));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "fw="));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "build="));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "uid="));
 }
 
 void test_ecu_config_session_unknown_command_returns_error(void) {

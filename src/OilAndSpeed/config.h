@@ -6,6 +6,15 @@
 
 #define MODULE_NAME "OIL&SPD"
 
+/* Fiesta-project firmware identity for the configurator HELLO response. */
+#ifndef FW_VERSION
+#define FW_VERSION "0.1.0"
+#endif
+
+#ifndef BUILD_ID
+#define BUILD_ID (__DATE__ " " __TIME__)
+#endif
+
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
