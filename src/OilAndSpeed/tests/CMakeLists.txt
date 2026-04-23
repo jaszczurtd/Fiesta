@@ -15,9 +15,6 @@ target_link_libraries(test_speed PRIVATE oilspeed_mock)
 target_include_directories(test_speed BEFORE PRIVATE
     ${HAL_SRC}/arduino_host_stubs
 )
-target_include_directories(test_speed PRIVATE
-    ${CAN_DEFS_LIB}
-)
 target_compile_definitions(test_speed PRIVATE
     PI=3.14159265358979323846
 )
