@@ -312,6 +312,21 @@ print(s.get('$key', ''))
 "
 }
 
+# Map module name to human-readable USB product string used for iProduct.
+# Surfaces as /dev/serial/by-id/usb-<MFR>_<PRODUCT>_<UID>-if00 on the host.
+# Must match the USB_PRODUCT strings hard-coded in each module's
+# scripts/upload-uf2.sh, otherwise the daily build and the manual flash
+# path would produce different iProduct strings for the same firmware.
+usb_product_for() {
+    case "$1" in
+        ECU)           echo "Jaszczur Fiesta ECU" ;;
+        Clocks)        echo "Jaszczur Fiesta Clocks" ;;
+        OilAndSpeed)   echo "Jaszczur Fiesta OilAndSpeed" ;;
+        Adjustometer)  echo "Jaszczur Fiesta Adjustometer" ;;
+        *)             echo "Jaszczur Fiesta $1" ;;
+    esac
+}
+
 compile_firmware_for() {
     local module="$1" werror="$2"
     local src="$SRC_ROOT/$module"
@@ -333,6 +348,10 @@ compile_firmware_for() {
     local werror_flag=""
     [[ "$werror" = "1" ]] && werror_flag=" -Werror"
 
+    local usb_manufacturer="Fiesta"
+    local usb_product
+    usb_product=$(usb_product_for "$module")
+
     info "[$module] compiling firmware (FQBN: $fqbn)"
     "$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
@@ -340,6 +359,8 @@ compile_firmware_for() {
         --build-path "$build" \
         --build-property "compiler.cpp.extra_flags=-I '$src'$werror_flag" \
         --build-property "compiler.c.extra_flags=-I '$src'$werror_flag" \
+        --build-property "build.usb_manufacturer=\"$usb_manufacturer\"" \
+        --build-property "build.usb_product=\"$usb_product\"" \
         "$src"
     local uf2
     uf2=$(find "$build" -maxdepth 2 -name '*.uf2' -type f | head -1)

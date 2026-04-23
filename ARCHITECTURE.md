@@ -12,9 +12,13 @@ focuses on setup, safety status, and build procedures.
 
 Fiesta is **not** a single firmware binary. It is a multi-module electronic
 stack for a Ford Fiesta 1.8 (M)TDDI with custom electronics replacing parts
-of the OEM wiring. Each module has its own firmware, its own PCB (see
-[`Fiesta_pcbs/`](Fiesta_pcbs/)), and communicates with the others over
-well-defined physical buses (CAN, I²C).
+of the OEM wiring. Each firmware module has its own binary, its own PCB
+(see [`Fiesta_pcbs/`](Fiesta_pcbs/)), and communicates with the others over
+well-defined physical buses (CAN, I²C). A **desktop companion**, the
+Fiesta Serial Configurator, sits off-vehicle and talks to each firmware
+module over USB CDC for diagnostics, calibration, and flashing - it is a
+full member of the family (§5.5), currently at the design-complete /
+bootstrap-firmware-wired stage.
 
 The system replaces and augments the following vehicle functions:
 
@@ -23,9 +27,11 @@ The system replaces and augments the following vehicle functions:
 - diagnostics (OBD-II / UDS over CAN, mimics Ford EEC-V),
 - driver-facing instrumentation (dashboard gauges, display, buzzer),
 - auxiliary telemetry (oil pressure, wheel speed, exhaust gas temperatures,
-  GPS speed and time).
+  GPS speed and time),
+- off-vehicle runtime configuration and re-flashing via the Serial
+  Configurator, over a per-module USB CDC serial session.
 
-High-level module map (active firmware):
+High-level module map (active firmware + desktop companion):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -64,7 +70,22 @@ High-level module map (active firmware):
 │     │              │──── SPI ───────────► SD card (logging)            │
 │     │              │                                                   │
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
-│     └──────────────┘                                                   │
+│     └──────┬───────┘                                                   │
+│            │                                                           │
+│            │  USB CDC (text HELLO session; same on every module)       │
+│            │                                                           │
+│     ┌──────▼──────────────────────────────────────────────┐            │
+│     │                                                     │            │
+│     │        Fiesta Serial Configurator                   │            │
+│     │        (Linux primary, Windows 10/11 secondary,     │            │
+│     │         GTK-4 GUI + platform-neutral core,          │            │
+│     │         off-vehicle, status: design complete)       │            │
+│     │                                                     │            │
+│     └─────────────────────────────────────────────────────┘            │
+│                                                                        │
+│     (Clocks, OilAndSpeed, Adjustometer each expose the same USB CDC    │
+│     session to the configurator - relationship shown here only for     │
+│     ECU to keep the diagram readable.)                                 │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -105,6 +126,14 @@ loom.
 | [`Clocks`](src/Clocks/) | C++ | dashboard / instrument cluster rendering | out of scope |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure and wheel speed telemetry, EGT acquisition | out of scope |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump-coil resonance feedback (I²C slave) | out of scope |
+
+### Desktop companion
+
+| Component | Target platforms | Role | Status |
+|---|---|---|---|
+| Fiesta Serial Configurator | Linux (primary, Debian-like), Windows 10/11 (secondary); mobile out of scope | per-module runtime parameter configuration, firmware flashing via BOOTSEL/UF2, diagnostic log capture | design complete; Phase 0 bootstrap handshake wired into every firmware module; desktop application code not yet started |
+
+The configurator is a full family member, not a development-time utility.
 
 ### Completed / archived
 
@@ -246,7 +275,7 @@ and ownership analysis tractable.
   `ANGLE_PWM_FREQUENCY_HZ`).
 - **UART** (RX=22, TX=21): GPS receiver.
 - **GPIO**: heated-windows switch input on pin 20, status LED on pin 25.
-- **Persistent store**: 2048 bytes of flash-backed emulated EEPROM
+- **Persistent store**: `ECU_EEPROM_SIZE_BYTES` (currently is 2048) bytes of flash-backed emulated EEPROM
   (`ECU_EEPROM_SIZE_BYTES`), used for DTCs and configuration.
 
 **Timing model.** On RP2040, ECU does not use an RTOS. Work is scheduled by a soft-timer
@@ -368,6 +397,77 @@ and be verified before the baseline is considered valid. The ECU waits up
 to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms` for the `BASELINE_PENDING`
 status bit to clear before trusting the frequency reading.
 
+### 5.5 Fiesta Serial Configurator - desktop companion (planned)
+
+**Role.** Off-vehicle desktop application used to discover Fiesta modules on
+USB, inspect their identity, read and modify runtime parameters, and flash
+matching firmware images. Replaces ad-hoc `arduino-cli` + manual `picocom`
+workflows with a single tool that enforces module/image matching and
+(later) authenticated configuration changes. It is **not** required for
+the car to operate - the firmware stack runs independently - but it is the
+primary way to service and tune the modules without a full rebuild.
+
+**Status.** Fiesta Serial Cinfigurator design complete.
+Phase 0 (bootstrap identity groundwork) is implemented on the firmware
+side: every active firmware module exposes a shared configurator session
+via JaszczurHAL's `hal_serial_session_*` helper that reports the module
+identity, firmware version, build id, and device UID on first contact.
+The desktop application itself is not yet written; its code will land
+either as a separate top-level directory in this repo (TBD) or as a
+separate repository.
+
+**Target platforms.**
+- Linux (Debian-like desktops) - primary target; ships as `.deb`.
+- Windows 10 / 11 - secondary target; achievable because we use standard
+  USB CDC (`usbser.sys` native since Win10 1703) and a cross-platform
+  serial library. Packaging via MSYS2 + NSIS or PyInstaller.
+- macOS - not a declared target but is essentially free given the Windows
+  portability rules.
+- Mobile - out of scope.
+
+**GUI toolkit.** GTK-4, preferred for native look on Linux and active
+upstream maintenance. Language binding is open between C + GTK-4 and
+Python + PyGObject; the decision is left for the start of implementation.
+GTK-2 is explicitly rejected (EOL, poor Windows story).
+
+**Architectural rule.** The tool is split into:
+- a **platform-neutral core library** that owns serial enumeration,
+  transport framing, session state, authentication, parameter catalog,
+  and flash orchestration. It is headless and reusable (CLI, tests, any
+  future non-GTK shell);
+- a **GTK-4 UI shell** that owns only presentation. It never opens serial
+  ports directly and never parses frames.
+
+No business logic may carry platform `#ifdef`s. OS-specific code lives in
+five named seams: device enumeration, hot-plug detection, UF2 drive
+discovery, config-file location, packaging (see the design doc §4.2).
+
+**Contract with firmware modules.** The configurator depends on two
+per-module invariants:
+1. Every active firmware module runs a configurator session wired through
+   `configSessionInit/Tick` (ECU, Clocks, OilAndSpeed; Adjustometer is out
+   of the primary flow). The session answers the bootstrap handshake with
+   the module's canonical identity, firmware version, build id, and
+   device UID - sourced from compile-time `MODULE_NAME` / `FW_VERSION` /
+   `BUILD_ID` plus `hal_get_device_uid_hex()`.
+2. USB descriptor identity: `iSerialNumber` is populated by the arduino-pico
+   core from `pico_get_unique_board_id()` (verified on hardware 2026-04-24);
+   `iProduct` is customised per module to `Fiesta <ModuleName>` via
+   `arduino-cli --build-property build.usb_product=...` in each module's
+   `scripts/upload-uf2.sh` and in the shared `bootstrap.sh`.
+
+The UID reported in the handshake and the USB `iSerialNumber` carry the same
+64-bit flash unique id, giving the host two independent identification
+paths that must agree.
+
+**Rollout phases** Phase 0 is closed.
+Remaining phases, in order: Phase 1 runtime parameters foundation
+(`ecu_params` with staging / apply / commit semantics backed by HAL KV),
+Phase 2 framed binary protocol (read-only), Phase 3 authenticated writes
+(HMAC / AEAD + sequence numbers), Phase 4 multi-module flashing orchestration
+(`ENTER_BOOTLOADER`, UF2 copy, post-flash identity re-check), Phase 5
+hardening (lockout policy, key rotation, audit logs).
+
 ---
 
 ## 6. Communication
@@ -424,6 +524,47 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
   VP37 injection outputs (ECU), turbo solenoid (ECU), DPF lamp (ECU),
   VP37 oscillator capture (Adjustometer).
 
+### 6.4 Desktop configurator channel (USB CDC)
+
+Every RP2040-based firmware module additionally exposes a **configurator
+session** over its native USB CDC port. This is the transport the Fiesta
+Serial Configurator (§5.5) uses off-vehicle. Implementation is shared
+through JaszczurHAL's `hal_serial_session_*` helper - each firmware module
+only owns a thin wrapper (`configSessionInit/Tick`) and the static identity
+strings.
+
+Channel responsibilities:
+
+- carry the module bootstrap handshake (identity + firmware metadata +
+  device UID) on first contact,
+- coexist with the existing debug log output on the same CDC stream,
+- later carry authenticated configuration and flashing traffic.
+
+Host-side identification path (two independent layers that must agree):
+
+- USB descriptor layer: `iSerialNumber` carries the RP2040 flash unique id
+  (populated automatically by the arduino-pico core), `iProduct` carries
+  `Fiesta <ModuleName>` (set at build time via `arduino-cli --build-property
+  build.usb_product=...`). On Linux this surfaces as
+  `/dev/serial/by-id/usb-<mfr>_<product>_<UID>-if00`; on Windows,
+  `usbser.sys` sticky-binds the COM# to that iSerialNumber.
+- Application layer: the module reports the same UID inside the handshake
+  response, so the host can cross-check that the opened port actually
+  belongs to the physical board it expects.
+
+Evolution path (rollout details in §5.5):
+
+- Current bootstrap level is deliberately minimal and unauthenticated - it
+  exists to let tooling discover modules and verify identity before any
+  trusted operation is possible.
+- Sensitive operations (runtime writes, commit, bootloader entry) live on
+  top of an authenticated framed protocol added in later phases; they are
+  out of scope for the bootstrap channel and are not exposed by the
+  handshake parser.
+
+Wire-level specifics, command catalog, response fields, security design
+and phased rollout will be provided later.
+
 ---
 
 ## 7. External interfaces to the vehicle
@@ -471,7 +612,7 @@ authoritative 104-pin ECU connector map.
 ### 7.4 Diagnostic interface
 
 - OBD-II port connected to the ECU's CAN1 controller. The ECU implements
-  OBD-II / UDS service handlers in [`src/ECU/obd-2.c`](src/ECU/obd-2.c);
+  OBD-II / UDS service handlers in [`src/ECU/obd-2.c`](src/ECU/obd-2.c); and presents itself as an ECC-V Ford Fiesta 1.8 DI ECU.
   the PID → internal signal mapping lives in
   [`src/ECU/obd-2_mapping.c`](src/ECU/obd-2_mapping.c).
 
@@ -494,7 +635,7 @@ backed by the RP2040 emulated EEPROM (`ECU_EEPROM_SIZE_BYTES` bytes on the ECU).
 - **Configuration** - written by each module's `config.{c,cpp}`.
 
 There is no file system on the SD card used by firmware for state - the SD
-is for logging only.
+is for logging only (legacy).
 
 ---
 
@@ -521,14 +662,23 @@ install procedure in [README § One-shot setup](README.md#one-shot-setup-debian-
 
 ## 10. Build and CI/CD architecture
 
-Two orthogonal build paths exist:
+Two orthogonal firmware build paths exist today, with a third path planned
+for the desktop configurator:
 
 - **Host tests** - per-module `CMakeLists.txt` builds a Unity-based test
   binary compiled as C++ with the HAL mock backend. Fast to run locally;
   no hardware required.
 - **Firmware build** - `arduino-cli` compiles each module into a `.uf2`
   file using the `rp2040:rp2040` core. Deployed over USB with the module
-  in BOOTSEL mode via `scripts/upload-uf2.sh`.
+  in BOOTSEL mode via `scripts/upload-uf2.sh`. The upload scripts also
+  pass `build.usb_manufacturer` / `build.usb_product` per module so that
+  each module surfaces under a distinct USB iProduct string on the host.
+- **Desktop configurator build (planned)** - separate from the firmware
+  builds. Primary output is a Debian `.deb` for Linux; Windows packaging
+  (MSYS2 + NSIS, or PyInstaller depending on language choice) is a
+  secondary output. The configurator does not share the `arduino-cli`
+  path. Its CI/CD lives alongside firmware workflows once implementation
+  starts; see §5.5.
 
 The ECU firmware build additionally enforces `-Werror` on the Arduino path
 as a warning quality gate.
@@ -604,6 +754,7 @@ Fiesta/
   [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt) and
   [`Fiesta_pcbs/wirings.txt`](Fiesta_pcbs/wirings.txt).
 - Module-level safety status / progress - see the README.
+- Design of the Fiesta Serial Configurator - as is an internal document only.
 
 When in doubt about architecture, read the code; the `hardwareConfig.h`,
 `start.{c,cpp}`, and `can.{c,cpp}` files in each module are the best

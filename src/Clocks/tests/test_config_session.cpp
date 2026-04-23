@@ -23,6 +23,9 @@ void test_clocks_hello_activates_session_and_reports_module(void) {
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "OK HELLO"));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "module=" MODULE_NAME));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "proto=1"));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "fw=" FW_VERSION));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "build="));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "uid="));
 }
 
 void test_clocks_unknown_command_returns_error(void) {

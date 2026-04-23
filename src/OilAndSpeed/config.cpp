@@ -4,11 +4,11 @@
 static hal_serial_session_t s_configSession;
 
 void configSessionInit(void) {
-  hal_serial_session_init(&s_configSession);
+  hal_serial_session_init(&s_configSession, MODULE_NAME, FW_VERSION, BUILD_ID);
 }
 
 void configSessionTick(void) {
-  hal_serial_session_poll(&s_configSession, MODULE_NAME);
+  hal_serial_session_poll(&s_configSession);
 }
 
 bool configSessionActive(void) {
