@@ -3,6 +3,8 @@
 
 #include "hardwareConfig.h"
 
+#define MODULE_NAME "ADJ"
+
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1

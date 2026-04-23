@@ -1,6 +1,11 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
+#include <stdbool.h>
+#include <stdint.h>
+
+#define MODULE_NAME "Clocks"
+
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
@@ -133,5 +138,27 @@
 #define SCREEN_H 240
 
 #define TEXT_COLOR 0xE73C
+
+/**
+ * @brief Initialize the minimal serial configurator session context.
+ */
+void configSessionInit(void);
+
+/**
+ * @brief Poll serial RX and process supported session commands.
+ */
+void configSessionTick(void);
+
+/**
+ * @brief Return true if at least one HELLO handshake was completed.
+ * @return Session active flag.
+ */
+bool configSessionActive(void);
+
+/**
+ * @brief Return current session id assigned by HELLO handshake.
+ * @return Session id, or 0 when inactive.
+ */
+uint32_t configSessionId(void);
 
 #endif

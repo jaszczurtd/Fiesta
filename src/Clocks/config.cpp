@@ -1,8 +1,5 @@
-
 #include "config.h"
 #include <hal/hal_serial_session.h>
-
-const char *err = "ERR";
 
 static hal_serial_session_t s_configSession;
 
@@ -21,3 +18,4 @@ bool configSessionActive(void) {
 uint32_t configSessionId(void) {
   return hal_serial_session_id(&s_configSession);
 }
+

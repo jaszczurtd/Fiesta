@@ -103,7 +103,7 @@ and is idempotent (safe to re-run). It:
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. clones `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`),
-7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
+7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
 8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
@@ -138,7 +138,7 @@ cmake --build src/<Module>/build_test --parallel
 ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-Modules with host tests: `ECU`, `Clocks`, `Adjustometer`.
+Modules with host tests: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`.
 
 ### Firmware build - per module
 
@@ -147,11 +147,12 @@ cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
 bash scripts/upload-uf2.sh
 ```
 
-## Current status (2026-04-21)
+## Current status (2026-04-23)
 
 - Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`, `src/Adjustometer`).
-- Host-side validation exists for ECU, Adjustometer, and Clocks. ECU currently provides 11 executable host test targets under `src/ECU/tests/`; `test_cppcheck` is added as an extra CTest entry when `cppcheck` is installed. Adjustometer currently provides 2 host tests.
-- ECU CI runs cppcheck as part of standard test execution (`ctest`) and includes baseline gating in GitHub Actions.
+- Host-side validation exists for ECU, Clocks, OilAndSpeed, and Adjustometer. ECU currently provides 13 executable host test targets under `src/ECU/tests/`; `test_cppcheck` is added as an extra CTest entry when `cppcheck` is installed. Clocks currently provides 2 host tests, OilAndSpeed 1 host test, and Adjustometer 3 host tests.
+- GitHub Actions test workflows currently cover ECU (`.github/workflows/ecu-tests.yml`), Clocks (`.github/workflows/clocks-tests.yml`), and Adjustometer (`.github/workflows/adjustometer-tests.yml`). There is currently no dedicated OilAndSpeed test workflow in `.github/workflows/`.
+- ECU CI also runs cppcheck baseline gating in GitHub Actions (`.github/workflows/ecu-cppcheck.yml`).
 - ECU now has a dedicated project-local MISRA screening runner under `src/ECU/misra/`, a deviation register scaffold, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
 - Latest ECU MISRA screening snapshot (2026-04-21) reports 787 active findings across 25 rule IDs, so the runner should be treated as a triage/evidence path, not a pass signal.
 - Recent ECU hardening reduced rule 10.4 findings to 95 (mainly `obd-2.c` essential-type cleanup with regression-test coverage updates).

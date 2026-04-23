@@ -18,7 +18,7 @@ static uint32_t lastPeriodicLogMs = 0;
 void initialization(void) {
 
   debugInit();
-  setDebugPrefix("Adj:");
+  setDebugPrefixWithColon(MODULE_NAME);
 
   setupWatchdog(NULL, WATCHDOG_TIME);
   

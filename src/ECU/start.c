@@ -134,7 +134,7 @@ void executeByWatchdog(int *values, int size) {
 void initialization(void) {
 
   debugInit();
-  setDebugPrefix("ECU:");
+  setDebugPrefixWithColon(MODULE_NAME);
 
   deb("Build timestamp: %s", ecu_BuildDateTime);
 
@@ -221,6 +221,7 @@ void initialization(void) {
   #endif
 
   initSensors();
+  configSessionInit();
 
   createFan();
   createHeater();
@@ -343,6 +344,7 @@ void looper(void) {
   s_startPersistentState.statusVariable0Val = 7;
   heatedWindshields_process(getHeatedWindshieldsInstance());
   s_startPersistentState.statusVariable0Val = 8;
+  configSessionTick();
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);

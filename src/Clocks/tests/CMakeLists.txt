@@ -5,3 +5,4 @@ function(add_clocks_test NAME)
 endfunction()
 
 add_clocks_test(test_buzzerStrategy)
+add_clocks_test(test_config_session)
