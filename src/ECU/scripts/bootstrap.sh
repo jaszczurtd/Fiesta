@@ -3,7 +3,7 @@
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
 # Installs system deps (incl. Python 3 and cppcheck), arduino-cli + rp2040
-# core, clones required Arduino libraries (JaszczurHAL, canDefinitions), runs
+# core, syncs required Arduino libraries (JaszczurHAL, canDefinitions), runs
 # host tests, then compiles firmware for every Fiesta module:
 #   - ECU           (host tests + firmware, -Werror)
 #   - Clocks        (host tests + firmware)
@@ -199,24 +199,69 @@ setup_arduino_core() {
 # -----------------------------------------------------------------------------
 # 4. GitHub libraries
 # -----------------------------------------------------------------------------
-clone_lib() {
+resolve_origin_default_branch() {
+    local dest="$1"
+    local remote_head=""
+
+    git -C "$dest" remote set-head origin --auto >/dev/null 2>&1 || true
+    remote_head=$(git -C "$dest" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+
+    if [[ -z "$remote_head" ]]; then
+        if git -C "$dest" show-ref --verify --quiet refs/remotes/origin/main; then
+            remote_head="origin/main"
+        elif git -C "$dest" show-ref --verify --quiet refs/remotes/origin/master; then
+            remote_head="origin/master"
+        fi
+    fi
+
+    if [[ -z "$remote_head" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "${remote_head#origin/}"
+}
+
+sync_lib() {
     local name="$1" url="$2" dest="$LIB_DIR/$1"
-    if [[ -d "$dest/.git" ]]; then
-        ok "$name already cloned at $dest"
+    local default_branch=""
+
+    if [[ -e "$dest" ]] && git -C "$dest" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        warn "$name checkout exists at $dest — discarding local changes and resetting to the remote default branch"
+
+        if git -C "$dest" remote get-url origin >/dev/null 2>&1; then
+            git -C "$dest" remote set-url origin "$url"
+        else
+            git -C "$dest" remote add origin "$url"
+        fi
+
+        git -C "$dest" fetch --depth 1 --prune origin
+        default_branch=$(resolve_origin_default_branch "$dest") || {
+            err "Could not determine origin default branch for $name at $dest"
+            return 1
+        }
+
+        git -C "$dest" reset --hard
+        git -C "$dest" clean -fdx
+        git -C "$dest" checkout --force -B "$default_branch" "origin/$default_branch"
+        git -C "$dest" reset --hard "origin/$default_branch"
+
+        ok "$name reset to origin/$default_branch at $dest"
         return
     fi
+
     if [[ -e "$dest" ]]; then
         err "$dest exists but is not a git checkout — leaving it alone"
         return 1
     fi
+
     info "Cloning $name into $dest"
     git clone --depth 1 "$url" "$dest"
 }
 
 fetch_libraries() {
     mkdir -p "$LIB_DIR"
-    clone_lib JaszczurHAL   https://github.com/jaszczurtd/JaszczurHAL.git
-    clone_lib canDefinitions https://github.com/jaszczurtd/canDefinitions.git
+    sync_lib JaszczurHAL   https://github.com/jaszczurtd/JaszczurHAL.git
+    sync_lib canDefinitions https://github.com/jaszczurtd/canDefinitions.git
 }
 
 # -----------------------------------------------------------------------------
