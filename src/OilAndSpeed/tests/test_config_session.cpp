@@ -21,7 +21,7 @@ void test_oilspeed_hello_activates_session_and_reports_module(void) {
   const char *line = hal_mock_serial_last_line();
   TEST_ASSERT_NOT_NULL(line);
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "OK HELLO"));
-  TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "module=OILANDSPEED"));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "module=" MODULE_NAME));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "proto=1"));
 }
 
