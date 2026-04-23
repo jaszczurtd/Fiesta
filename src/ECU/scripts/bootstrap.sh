@@ -7,7 +7,7 @@
 # host tests, then compiles firmware for every Fiesta module:
 #   - ECU           (host tests + firmware, -Werror)
 #   - Clocks        (host tests + firmware)
-#   - OilAndSpeed   (firmware only — no host tests in-tree)
+#   - OilAndSpeed   (host tests + firmware)
 #   - Adjustometer  (host tests + firmware, -Werror)
 # Idempotent — safe to re-run. Also covers the deps used by
 # misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
@@ -34,7 +34,7 @@ DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbgl
 #   TEST_MODULES = modules that ship a CMakeLists.txt at src/<Module>/.
 #   FW_MODULES   = "module:werror" — werror=1 enables -Werror for that module
 #                  (matches what each module's own scripts/upload-uf2.sh uses).
-TEST_MODULES=(ECU Clocks Adjustometer)
+TEST_MODULES=(ECU Clocks OilAndSpeed Adjustometer)
 FW_MODULES=(
     "ECU:1"
     "Clocks:0"

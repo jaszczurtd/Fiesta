@@ -1,6 +1,15 @@
 #ifndef T_CONFIG
 #define T_CONFIG
 
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define MODULE_NAME "ECU"
+
 #define vehicle_Vin     "WF0BXXGAJB1R32583"
 #define ecu_Name        "JASZCZUR FORD FIESTA"
 
@@ -162,5 +171,31 @@
 #define NOMINAL_VOLTAGE 12.0f
 
 #include "hardwareConfig.h"
+
+/**
+ * @brief Initialize the minimal serial configurator session context.
+ */
+void configSessionInit(void);
+
+/**
+ * @brief Poll serial RX and process supported session commands.
+ */
+void configSessionTick(void);
+
+/**
+ * @brief Return true if at least one HELLO handshake was completed.
+ * @return Session active flag.
+ */
+bool configSessionActive(void);
+
+/**
+ * @brief Return current session id assigned by HELLO handshake.
+ * @return Session id, or 0 when inactive.
+ */
+uint32_t configSessionId(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -42,7 +42,8 @@ void initialization(void) {
   bool result = false;
 
   debugInit();
-  setDebugPrefix("OIL&SPD:");
+  setDebugPrefixWithColon(MODULE_NAME);
+
   setupOnboardLed();
   initBasicPIO();
 
@@ -73,6 +74,7 @@ void initialization(void) {
   }
 
   setupTimers();
+  configSessionInit();
 
   result = setupSpeedometer();
   setLEDColor(result ? GREEN: YELLOW);
@@ -145,6 +147,7 @@ void looper() {
   }
 
   statusVariable0 = 1;
+  configSessionTick();
 
   hal_soft_timer_tick_table(oilSpeedTimerTable, COUNTOF(oilSpeedTimerTable));
   onImpulseTranslating();

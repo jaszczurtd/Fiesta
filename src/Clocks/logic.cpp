@@ -67,7 +67,8 @@ void executeByWatchdog(int *values, int size) {
 void setup_a(void) {
 
   debugInit();
-  setDebugPrefix("Clocks:");
+  setDebugPrefixWithColon(MODULE_NAME);
+
   deb("Setup started");
 
   setupOnboardLed();
@@ -127,6 +128,7 @@ void setup_a(void) {
   hal_watchdog_feed();
 
   setupTimers();
+  configSessionInit();
 
   setStartedCore0();
 
@@ -157,6 +159,7 @@ void loop_a(void) {
   statusVariable0 = 2;
   drawHighImportanceValuesIfChanged();
   statusVariable0 = 3;
+  configSessionTick();
 
   if(isEcuConnected()) {
     hal_rgb_led_set_color(HAL_RGB_LED_GREEN);

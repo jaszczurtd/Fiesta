@@ -2,8 +2,11 @@
 #include "hal/hal_pid_controller.h"
 #include "hal/hal_soft_timer.h"
 #include "hal/hal_serial.h"
+#include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "config.h"
 #include "utils/tools_api.h"
+#include <string.h>
 
 static int s_soft_timer_hits = 0;
 
@@ -245,6 +248,43 @@ void test_serial_inject_auto_length(void) {
     TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
 }
 
+// ── hal_enter_bootloader tests ───────────────────────────────────────────────
+
+void test_enter_bootloader_sets_mock_flag(void) {
+    hal_mock_bootloader_reset_flag();
+    TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+
+    hal_enter_bootloader();
+
+    TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
+}
+
+// ── ECU config session HELLO tests ───────────────────────────────────────────
+
+void test_ecu_config_session_hello_path(void) {
+    configSessionInit();
+    hal_mock_serial_reset();
+
+    hal_mock_serial_inject_rx("HELLO\n", -1);
+    configSessionTick();
+
+    TEST_ASSERT_TRUE(configSessionActive());
+    TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(hal_mock_serial_last_line(), "module=ECU"));
+}
+
+void test_ecu_config_session_unknown_command_returns_error(void) {
+    configSessionInit();
+    hal_mock_serial_reset();
+
+    hal_mock_serial_inject_rx("WHAT\n", -1);
+    configSessionTick();
+
+    TEST_ASSERT_FALSE(configSessionActive());
+    TEST_ASSERT_EQUAL_UINT32(0u, configSessionId());
+    TEST_ASSERT_EQUAL_STRING("ERR UNKNOWN", hal_mock_serial_last_line());
+}
+
 // ── float_to_u32 / u32_to_float tests ───────────────────────────────────────
 
 void test_float_to_u32_roundtrip(void) {
@@ -280,10 +320,12 @@ int main(void) {
     RUN_TEST(test_serial_inject_and_read_back);
     RUN_TEST(test_serial_reset_clears_rx_buffer);
     RUN_TEST(test_serial_inject_auto_length);
+    RUN_TEST(test_enter_bootloader_sets_mock_flag);
+    RUN_TEST(test_ecu_config_session_hello_path);
+    RUN_TEST(test_ecu_config_session_unknown_command_returns_error);
 
     RUN_TEST(test_float_to_u32_roundtrip);
     RUN_TEST(test_float_to_u32_known_pattern);
 
     return UNITY_END();
 }
-
