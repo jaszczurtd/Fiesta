@@ -20,24 +20,9 @@ Safety is treated as a top-level requirement.
 
 Fiesta is a multi-module system, not a single firmware binary.
 
-## Module layout
-
-Active modules in `src/`:
-
-- `src/ECU` - engine control logic, diagnostics (OBD/UDS over CAN), DTC manager, actuator logic.
-- `src/Clocks` - dashboard/cluster rendering and signaling.
-- `src/OilAndSpeed` - dedicated oil pressure and speed module.
-- `src/Adjustometer` - dedicated RP2040-based VP37 feedback module within the ECU subsystem. It has its own firmware tree, is commonly deployed on the same PCB as the ECU, measures pump-coil resonance with a Hartley oscillator, derives baseline-relative pulse magnitude, reports fuel temperature and supply voltage, and exposes its state over I2C to the ECU.
-
-Completed / not actively developed:
-
-- `src/Fiesta_clock` - standalone clock/temperature display (AVR, finished project, currently not under active development).
-
-Deprecated code in `legacy/`:
-
-- old/archival sources that are not the primary development target,
-- useful for reference and migration history,
-- should not be treated as current production firmware.
+For a full description of the modules, their responsibilities, how they talk
+to each other and to the vehicle, and where the external dependencies fit in,
+see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Dependencies
 
@@ -221,12 +206,6 @@ Notes:
 - the repository does not ship MISRA rule-text extracts,
 - severity split by Mandatory / Required / Advisory is only available when a licensed local rule-text file is provided to the runner.
 
-## Hardware and materials
-
-- PCB projects and variants: `Fiesta_pcbs/`
-- wiring/pinout notes: `Fiesta_pcbs/pinout.txt`, `Fiesta_pcbs/wirings.txt`
-- supporting docs/graphics/examples: `materials/`
-
 ## Credits
 
 Libraries used in `src/Fiesta_clock`:
@@ -237,6 +216,8 @@ Libraries used in `src/Fiesta_clock`:
 ## Photos
 
 ![Display](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/display.JPG?raw=true)
+
+This is a test prototype used to test the engine when it is not installed in the car
 
 ![ECU](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/ecu.jpg?raw=true)
 
