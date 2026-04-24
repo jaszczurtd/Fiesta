@@ -230,11 +230,19 @@ Libraries used in `src/Fiesta_clock`:
 
 ## Photos
 
-![Display](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/display.JPG?raw=true)
-
-This is a test prototype used to test the engine when it is not installed in the car
+This is a test prototype used to test the engine when it is not installed in the car:
 
 ![ECU](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/ecu.jpg?raw=true)
+
+Bootstrap script + USB parameters:
+
+![Bootstrap](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/bootstrap.png?raw=true)
+
+Test engine:
+
+![Engine](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/test_engine.jpg?raw=true)
+
+![Display](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/display.JPG?raw=true)
 
 ![In-car](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/incar.jpg?raw=true)
 
