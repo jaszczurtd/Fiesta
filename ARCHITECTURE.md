@@ -197,7 +197,9 @@ src/<Module>/
 ├── CMakeLists.txt         # host-test build
 ├── tests/                 # host unit tests (compiled as C++)
 ├── build_test/            # CMake build output (git-ignored)
-└── scripts/               # upload-uf2.sh, serial-monitor.{sh,py}, etc.
+└── scripts/               # thin wrappers: arduino-build.sh, upload-uf2.sh,
+                           # refresh-intellisense.sh, select-board.sh,
+                           # serial-persistent.py, serial-monitor.{sh,py}
 ```
 
 ---
@@ -670,9 +672,11 @@ for the desktop configurator:
   no hardware required.
 - **Firmware build** - `arduino-cli` compiles each module into a `.uf2`
   file using the `rp2040:rp2040` core. Deployed over USB with the module
-  in BOOTSEL mode via `scripts/upload-uf2.sh`. The upload scripts also
-  pass `build.usb_manufacturer` / `build.usb_product` per module so that
-  each module surfaces under a distinct USB iProduct string on the host.
+  in BOOTSEL mode via `scripts/upload-uf2.sh`. The module-local scripts are
+  thin wrappers over shared implementations in `src/common/scripts/`. The
+  upload/build paths also pass `build.usb_manufacturer` /
+  `build.usb_product` per module so that each module surfaces under a
+  distinct USB iProduct string on the host.
 - **Desktop configurator build (planned)** - separate from the firmware
   builds. Primary output is a Debian `.deb` for Linux; Windows packaging
   (MSYS2 + NSIS, or PyInstaller depending on language choice) is a

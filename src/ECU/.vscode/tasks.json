@@ -33,11 +33,8 @@
             "label": "Arduino: Build",
             "detail": "Ctrl+Shift+1 - compile sketch",
             "type": "shell",
-            "command": "bash",
-            "args": [
-                "-c",
-                "CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; VERBOSE='${config:arduino.verbose}'; VFLAG=''; if [ \"$VERBOSE\" = \"true\" ]; then VFLAG='-v'; fi; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --build-property \"compiler.cpp.extra_flags=-I '${workspaceFolder}' -Werror\" --build-property \"compiler.c.extra_flags=-I '${workspaceFolder}' -Werror\" --warnings all $VFLAG '${workspaceFolder}'"
-            ],
+            "command": "${workspaceFolder}/scripts/arduino-build.sh",
+            "args": ["build"],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -67,11 +64,8 @@
             "label": "Arduino: Build (Debug)",
             "detail": "Compile with debug symbols (auto-run by F5/Run)",
             "type": "shell",
-            "command": "bash",
-            "args": [
-                "-c",
-                "CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --build-property \"compiler.cpp.extra_flags=-I '${workspaceFolder}' -Werror\" --build-property \"compiler.c.extra_flags=-I '${workspaceFolder}' -Werror\" --optimize-for-debug --warnings all '${workspaceFolder}'"
-            ],
+            "command": "${workspaceFolder}/scripts/arduino-build.sh",
+            "args": ["debug"],
             "group": "build",
             "presentation": {
                 "echo": true,
@@ -98,11 +92,8 @@
             "label": "Arduino: Upload",
             "detail": "Ctrl+Shift+2 - start persistent monitor (if needed) + compile + upload",
             "type": "shell",
-            "command": "bash",
-            "args": [
-                "-c",
-                "MONITOR='${workspaceFolder}/scripts/serial-persistent.py'; if ! pgrep -f \"serial-persistent.py -m pico\" >/dev/null 2>&1; then nohup python3 \"$MONITOR\" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 & fi; CLI='${config:arduino.cliPath}'; CLI=\"${CLI:-arduino-cli}\"; FQBN='${config:arduino.fqbn}'; LIBS='${config:arduino.sketchbookPath}/libraries'; PORT='${config:arduino.uploadPort}'; VERBOSE='${config:arduino.verbose}'; VFLAG=''; if [ \"$VERBOSE\" = \"true\" ]; then VFLAG='-v'; fi; $CLI compile --fqbn \"$FQBN\" --build-path '${workspaceFolder}/.build' --libraries \"$LIBS\" --build-property \"compiler.cpp.extra_flags=-I '${workspaceFolder}' -Werror\" --build-property \"compiler.c.extra_flags=-I '${workspaceFolder}' -Werror\" --upload --port \"$PORT\" --warnings all $VFLAG '${workspaceFolder}'"
-            ],
+            "command": "${workspaceFolder}/scripts/arduino-build.sh",
+            "args": ["upload"],
             "presentation": {
                 "echo": true,
                 "reveal": "always",

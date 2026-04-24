@@ -269,10 +269,21 @@ Requirements:
 - **JaszczurHAL** library in the sketchbook/libraries path
 
 ```bash
-arduino-cli compile --fqbn rp2040:rp2040:rpipico \
-  --libraries /path/to/libraries \
-  --warnings all .
+cd src/Adjustometer
+./scripts/arduino-build.sh build
+./scripts/arduino-build.sh debug
+./scripts/arduino-build.sh upload
+./scripts/upload-uf2.sh
+./scripts/refresh-intellisense.sh
 ```
+
+Notes:
+
+- `./scripts/arduino-build.sh upload` is the same path used by the VS Code upload task / `Ctrl+Shift+2`.
+- `./scripts/upload-uf2.sh` is the BOOTSEL mass-storage path.
+- `python3 ./scripts/serial-persistent.py -m pico` is the same path used by the VS Code monitor task / `Ctrl+Shift+3`.
+- `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the running persistent monitor re-reads that setting and switches to the new preferred port without needing a manual restart.
+- The module-local wrappers delegate into the shared implementation under `src/common/scripts/`, which also applies the module USB identity (`Jaszczur` / `Fiesta Adjustometer`) consistently across build paths.
 
 ## License
 
