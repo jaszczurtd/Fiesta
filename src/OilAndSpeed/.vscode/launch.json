@@ -27,7 +27,7 @@
                 "break main",
                 "continue"
             ],
-            "preLaunchTask": "Arduino: Kompiluj (Debug)",
+            "preLaunchTask": "Arduino: Build (Debug)",
             "showDevDebugOutput": "parsed",
             "liveWatch": {
                 "enabled": true,
@@ -53,10 +53,10 @@
             ],
             "svdFile": "${config:cortex-debug.svdFileRP2350}",
             "openOCDLaunchCommands": [
-                "adapter speed 2000"
+                "adapter speed 5000"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Arduino: Kompiluj (Debug)",
+            "preLaunchTask": "Arduino: Build (Debug)",
             "showDevDebugOutput": "parsed",
             "liveWatch": {
                 "enabled": true,

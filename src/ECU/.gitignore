@@ -10,9 +10,6 @@ build_asan/
 misra/.results/
 misra/rule-texts.local.txt
 
-# Machine-local VS Code settings (arduino paths, sketchbook path, upload port, cortex-debug paths)
-.vscode/settings.json
-
 # Arduino IDE legacy output (referenced in arduino.json as "../ArduinoOutput")
 ../ArduinoOutput/
 
