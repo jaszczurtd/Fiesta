@@ -1,3 +1,0 @@
-serial-configurator-core-tests 1 0.00212865
-serial-configurator-core-api-tests 1 1.00895
----
