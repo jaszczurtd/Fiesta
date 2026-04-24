@@ -51,7 +51,7 @@ to `/home/you/projects/libraries/`.
 
 Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
 
-Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`) the same way `bootstrap.sh` and `scripts/upload-uf2.sh` do via `arduino-cli`. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`) the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
 For the building detalis, see the `One-shot setup` section below.
 
 ### Development environment
@@ -60,9 +60,9 @@ The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi 
 
 Platform support summary:
 
-- **Linux (Debian-like)** - primary target. `bootstrap.sh`, host tests, firmware build (`arduino-cli`), `upload-uf2.sh`, MISRA screening, and the daily Pi runner all work.
-- **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; UF2 upload via `upload-uf2.sh` requires either mounting the BOOTSEL drive from Windows or running the upload step natively.
-- **Native Windows** - partially supported. `arduino-cli` compile and VS Code tasks work, but the shell scripts (`bootstrap.sh`, `upload-uf2.sh`, `serial-monitor.sh`, `misra/check_misra.sh`) and the systemd daily runner are Bash-only. Use WSL2 for those.
+- **Linux (Debian-like)** - primary target. `bootstrap.sh`, per-module `arduino-build.sh` / `upload-uf2.sh` / `refresh-intellisense.sh`, host tests, MISRA screening, and the daily Pi runner all work.
+- **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `scripts/arduino-build.sh upload` and `upload-uf2.sh` still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
+- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the repo's VS Code tasks now invoke Bash wrappers (`arduino-build.sh`, `upload-uf2.sh`, `refresh-intellisense.sh`, `bootstrap.sh`). Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
 - **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell scripts likely need minor tweaks.
 
 ### Unattended daily build on a Raspberry Pi
@@ -72,10 +72,14 @@ Platform support summary:
 Helper scripts are available in module-specific `scripts/` directories:
 
 - `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules)
-- `select-board.sh`
-- `upload-uf2.sh`
-- `refresh-intellisense.sh`
-- `serial-monitor.sh` / `serial-monitor.py` (where available)
+- `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
+- `select-board.sh` (per module wrapper for the shared board-selection helper)
+- `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
+- `refresh-intellisense.sh` (per module wrapper for compile DB / IntelliSense regeneration)
+- `serial-persistent.py` (per module wrapper used by the VS Code monitor tasks, including `Ctrl+Shift+3`; it re-reads the preferred port from project settings so `Ctrl+Shift+9` changes take effect without restarting the monitor)
+- `serial-monitor.py` / `serial-monitor.sh` (compatibility wrappers over the shared persistent monitor)
+
+Shared implementations for those wrappers live in `src/common/scripts/`.
 
 ### One-shot setup (Debian-like Linux / WSL)
 
@@ -131,8 +135,19 @@ Modules with host tests: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`.
 
 ```bash
 cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
-bash scripts/upload-uf2.sh
+./scripts/arduino-build.sh build
+./scripts/arduino-build.sh upload
+./scripts/upload-uf2.sh
+./scripts/refresh-intellisense.sh
 ```
+
+Notes:
+
+- `./scripts/arduino-build.sh upload` is the same code path used by the VS Code upload task / `Ctrl+Shift+2`.
+- `./scripts/upload-uf2.sh` is the BOOTSEL mass-storage path.
+- `python3 ./scripts/serial-persistent.py -m pico` is the same path used by the VS Code monitor task / `Ctrl+Shift+3`.
+- `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the persistent monitor notices that change and switches to the new preferred port without needing a manual restart.
+- The module-local scripts are thin wrappers; the shared implementation lives in `src/common/scripts/`.
 
 ## Current status (2026-04-23)
 

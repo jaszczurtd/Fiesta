@@ -53,8 +53,21 @@ Firmware build (Arduino path):
 
 ```bash
 cd src/ECU
-bash scripts/upload-uf2.sh
+./scripts/arduino-build.sh build
+./scripts/arduino-build.sh debug
+./scripts/arduino-build.sh upload
+./scripts/upload-uf2.sh
+./scripts/refresh-intellisense.sh
 ```
+
+Notes:
+
+- `./scripts/arduino-build.sh upload` is the same path used by the VS Code upload task / `Ctrl+Shift+2`.
+- `./scripts/upload-uf2.sh` is the BOOTSEL mass-storage path.
+- `./scripts/refresh-intellisense.sh` regenerates `compile_commands.json`, `compile_commands_patched.json`, and `.vscode/c_cpp_properties.json`.
+- `python3 ./scripts/serial-persistent.py -m pico` is the same path used by the VS Code monitor task / `Ctrl+Shift+3`.
+- `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the running persistent monitor re-reads that setting and switches to the new preferred port without needing a manual restart.
+- The module-local wrappers delegate into the shared implementation under `src/common/scripts/`.
 
 Host tests (CMake path):
 

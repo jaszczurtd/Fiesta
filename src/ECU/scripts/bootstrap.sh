@@ -25,6 +25,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
+COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-arduino-common.sh"
+
+# shellcheck source=/dev/null
+source "$COMMON_SCRIPT"
 
 # Fallback FQBN for modules that do not ship a .vscode/arduino.json
 # (every Fiesta board in use is an RP2040 Pi Pico with the same flash layout).
@@ -33,7 +37,8 @@ DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbgl
 # Per-module build matrix.
 #   TEST_MODULES = modules that ship a CMakeLists.txt at src/<Module>/.
 #   FW_MODULES   = "module:werror" — werror=1 enables -Werror for that module
-#                  (matches what each module's own scripts/upload-uf2.sh uses).
+#                  (matches the per-module policy used by the shared Arduino
+#                  build/upload/refresh wrappers).
 TEST_MODULES=(ECU Clocks OilAndSpeed Adjustometer)
 FW_MODULES=(
     "ECU:1"
@@ -312,21 +317,6 @@ print(s.get('$key', ''))
 "
 }
 
-# Map module name to human-readable USB product string used for iProduct.
-# Surfaces as /dev/serial/by-id/usb-<MFR>_<PRODUCT>_<UID>-if00 on the host.
-# Must match the USB_PRODUCT strings hard-coded in each module's
-# scripts/upload-uf2.sh, otherwise the daily build and the manual flash
-# path would produce different iProduct strings for the same firmware.
-usb_product_for() {
-    case "$1" in
-        ECU)           echo "Jaszczur Fiesta ECU" ;;
-        Clocks)        echo "Jaszczur Fiesta Clocks" ;;
-        OilAndSpeed)   echo "Jaszczur Fiesta OilAndSpeed" ;;
-        Adjustometer)  echo "Jaszczur Fiesta Adjustometer" ;;
-        *)             echo "Jaszczur Fiesta $1" ;;
-    esac
-}
-
 compile_firmware_for() {
     local module="$1" werror="$2"
     local src="$SRC_ROOT/$module"
@@ -348,9 +338,9 @@ compile_firmware_for() {
     local werror_flag=""
     [[ "$werror" = "1" ]] && werror_flag=" -Werror"
 
-    local usb_manufacturer="Fiesta"
-    local usb_product
-    usb_product=$(usb_product_for "$module")
+    local usb_manufacturer usb_product
+    usb_manufacturer=$(fiesta_usb_manufacturer)
+    usb_product=$(fiesta_usb_product_for "$module")
 
     info "[$module] compiling firmware (FQBN: $fqbn)"
     "$ARDUINO_CLI" compile \
