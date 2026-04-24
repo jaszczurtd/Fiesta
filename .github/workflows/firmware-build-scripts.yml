@@ -1,0 +1,82 @@
+name: Firmware Build Scripts
+
+on:
+  push:
+    paths:
+      - "src/ECU/**"
+      - "src/Clocks/**"
+      - "src/OilAndSpeed/**"
+      - "src/Adjustometer/**"
+      - "src/common/scripts/**"
+      - ".github/workflows/firmware-build-scripts.yml"
+  pull_request:
+    paths:
+      - "src/ECU/**"
+      - "src/Clocks/**"
+      - "src/OilAndSpeed/**"
+      - "src/Adjustometer/**"
+      - "src/common/scripts/**"
+      - ".github/workflows/firmware-build-scripts.yml"
+  workflow_dispatch:
+
+jobs:
+  verify-build-scripts:
+    name: Verify build scripts (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - ECU
+          - Clocks
+          - OilAndSpeed
+          - Adjustometer
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      CANDEFINITIONS_REF: main
+      ARDUINO_BOARD_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Clone firmware dependencies
+        run: |
+          set -eux
+          mkdir -p ../libraries
+
+          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+
+          git init ../libraries/canDefinitions
+          git -C ../libraries/canDefinitions remote add origin https://github.com/jaszczurtd/canDefinitions.git
+          git -C ../libraries/canDefinitions fetch --depth 1 origin "$CANDEFINITIONS_REF"
+          git -C ../libraries/canDefinitions checkout --detach FETCH_HEAD
+
+      - name: Setup arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install rp2040 core
+        run: |
+          set -eux
+          arduino-cli core update-index --additional-urls "$ARDUINO_BOARD_URL"
+          arduino-cli core install rp2040:rp2040 --additional-urls "$ARDUINO_BOARD_URL"
+
+      - name: Verify release build wrapper
+        working-directory: src/${{ matrix.module }}
+        run: |
+          set -eux
+          ./scripts/arduino-build.sh build
+
+      - name: Verify debug build wrapper
+        working-directory: src/${{ matrix.module }}
+        run: |
+          set -eux
+          ./scripts/arduino-build.sh debug
+
+      - name: Verify IntelliSense refresh wrapper
+        working-directory: src/${{ matrix.module }}
+        run: |
+          set -eux
+          ./scripts/refresh-intellisense.sh
