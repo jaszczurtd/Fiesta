@@ -4,7 +4,7 @@ This document describes the architecture of the Fiesta firmware ecosystem:
 the modules it is composed of, what each module is responsible for, how the
 modules talk to each other and to the rest of the vehicle, and what external
 dependencies they rely on. It complements [`README.md`](README.md), which
-focuses on setup, safety status, and build procedures.
+focuses on setup, safety guidance, and build procedures.
 
 ---
 
@@ -17,8 +17,7 @@ of the OEM wiring. Each firmware module has its own binary, its own PCB
 well-defined physical buses (CAN, I²C). A **desktop companion**, the
 Fiesta Serial Configurator, sits off-vehicle and talks to each firmware
 module over USB CDC for diagnostics, calibration, and flashing - it is a
-full member of the family (§5.5), currently at the design-complete /
-bootstrap-firmware-wired stage.
+full member of the family (§5.5).
 
 The system replaces and augments the following vehicle functions:
 
@@ -72,7 +71,7 @@ High-level module map (active firmware + desktop companion):
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
-│            │  USB CDC (text HELLO session; same on every module)       │
+│            │  USB CDC (text HELLO session on ECU/Clocks/OilAndSpeed)   │
 │            │  Additional encrypted layer later for flashing/settings   │
 │            │  changes                                                  │
 │            │                                                           │
@@ -81,13 +80,13 @@ High-level module map (active firmware + desktop companion):
 │     │        Fiesta Serial Configurator                   │            │
 │     │        (Linux primary, Windows 10/11 secondary,     │            │
 │     │         GTK-4 GUI + platform-neutral core,          │            │
-│     │         off-vehicle, status: design complete)       │            │
+│     │         off-vehicle)                                 │            │
 │     │                                                     │            │
 │     └─────────────────────────────────────────────────────┘            │
 │                                                                        │
-│     (Clocks, OilAndSpeed, Adjustometer each expose the same USB CDC    │
-│     session to the configurator - relationship shown here only for     │
-│     ECU to keep the diagram readable.)                                 │
+│     (Clocks and OilAndSpeed expose the same USB CDC session pattern    │
+│     as ECU. Adjustometer is currently outside the primary              │
+│     configurator/flashing flow.)                                       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,9 +130,9 @@ loom.
 
 ### Desktop companion
 
-| Component | Target platforms | Role | Status |
-|---|---|---|---|
-| Fiesta Serial Configurator | Linux (primary, Debian-like), Windows 10/11 (secondary); mobile out of scope | per-module runtime parameter configuration, firmware flashing via BOOTSEL/UF2, diagnostic log capture | design complete; Phase 0 bootstrap handshake wired into every firmware module; desktop application code not yet started |
+| Component | Target platforms | Role |
+|---|---|---|
+| Fiesta Serial Configurator | Linux (primary, Debian-like), Windows 10/11 (secondary); mobile out of scope | per-module runtime parameter configuration, firmware flashing via BOOTSEL/UF2, diagnostic log capture |
 
 The configurator is a full family member, not a development-time utility.
 
@@ -401,7 +400,7 @@ and be verified before the baseline is considered valid. The ECU waits up
 to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms` for the `BASELINE_PENDING`
 status bit to clear before trusting the frequency reading.
 
-### 5.5 Fiesta Serial Configurator - desktop companion (planned)
+### 5.5 Fiesta Serial Configurator - desktop companion
 
 **Role.** Off-vehicle desktop application used to discover Fiesta modules on
 USB, inspect their identity, read and modify runtime parameters, and flash
@@ -411,14 +410,8 @@ workflows with a single tool that enforces module/image matching and
 the car to operate - the firmware stack runs independently - but it is the
 primary way to service and tune the modules without a full rebuild.
 
-**Status.** Fiesta Serial Cinfigurator design complete.
-Phase 0 (bootstrap identity groundwork) is implemented on the firmware
-side: every active firmware module exposes a shared configurator session
-via JaszczurHAL's `hal_serial_session_*` helper that reports the module
-identity, firmware version, build id, and device UID on first contact.
-The desktop application itself is not yet written; its code will land
-either as a separate top-level directory in this repo (TBD) or as a
-separate repository.
+Implementation milestones and phase-closure updates are tracked in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 **Target platforms.**
 - Linux (Debian-like desktops) - primary target; ships as `.deb`.
@@ -429,10 +422,8 @@ separate repository.
   portability rules.
 - Mobile - out of scope.
 
-**GUI toolkit.** GTK-4, preferred for native look on Linux and active
-upstream maintenance. Language binding is open between C + GTK-4 and
-Python + PyGObject; the decision is left for the start of implementation.
-GTK-2 is explicitly rejected (EOL, poor Windows story).
+**GUI toolkit.** GTK-4 is the selected toolkit. The current implementation
+uses C + GTK-4.
 
 **Architectural rule.** The tool is split into:
 - a **platform-neutral core library** that owns serial enumeration,
@@ -449,13 +440,13 @@ discovery, config-file location, packaging (see the design doc §4.2).
 **Contract with firmware modules.** The configurator depends on two
 per-module invariants:
 1. Every active firmware module runs a configurator session wired through
-   `configSessionInit/Tick` (ECU, Clocks, OilAndSpeed; Adjustometer is out
+  `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed; Adjustometer is out
    of the primary flow). The session answers the bootstrap handshake with
    the module's canonical identity, firmware version, build id, and
    device UID - sourced from compile-time `MODULE_NAME` / `FW_VERSION` /
    `BUILD_ID` plus `hal_get_device_uid_hex()`.
 2. USB descriptor identity: `iSerialNumber` is populated by the arduino-pico
-   core from `pico_get_unique_board_id()` (verified on hardware 2026-04-24);
+   core from `pico_get_unique_board_id()`;
    `iProduct` is customised per module to `Fiesta <ModuleName>` via
    `arduino-cli --build-property build.usb_product=...` in each module's
    `scripts/upload-uf2.sh` and in the shared `bootstrap.sh`.
@@ -464,8 +455,7 @@ The UID reported in the handshake and the USB `iSerialNumber` carry the same
 64-bit flash unique id, giving the host two independent identification
 paths that must agree.
 
-**Rollout phases** Phase 0 is closed.
-Remaining phases, in order: Phase 1 runtime parameters foundation
+**Rollout phases.** In order: Phase 1 runtime parameters foundation
 (`ecu_params` with staging / apply / commit semantics backed by HAL KV),
 Phase 2 framed binary protocol (read-only), Phase 3 authenticated writes
 (HMAC / AEAD + sequence numbers), Phase 4 multi-module flashing orchestration
@@ -530,12 +520,13 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
 
 ### 6.4 Desktop configurator channel (USB CDC)
 
-Every RP2040-based firmware module additionally exposes a **configurator
-session** over its native USB CDC port. This is the transport the Fiesta
-Serial Configurator (§5.5) uses off-vehicle. Implementation is shared
-through JaszczurHAL's `hal_serial_session_*` helper - each firmware module
-only owns a thin wrapper (`configSessionInit/Tick`) and the static identity
-strings.
+Every RP2040-based firmware module in the **primary configurator flow**
+(ECU, Clocks, OilAndSpeed) exposes a **configurator session** over its
+native USB CDC port. This is the transport the Fiesta Serial Configurator
+(§5.5) uses off-vehicle. Implementation is shared through JaszczurHAL's
+`hal_serial_session_*` helper - each firmware module only owns a thin
+wrapper (`configSessionInit/Tick/Active/Id`) and static identity strings.
+Adjustometer remains outside the primary serial-configurator/flashing flow.
 
 Channel responsibilities:
 
@@ -565,6 +556,11 @@ Evolution path (rollout details in §5.5):
   top of an authenticated framed protocol added in later phases; they are
   out of scope for the bootstrap channel and are not exposed by the
   handshake parser.
+- CLI mode is a first-class shell over the same core library and is the
+  default flashing entrypoint for VS Code tasks.
+- CLI and GUI flashing flows must enforce the same fail-closed preflight
+  gates (identity handshake, artifact/module compatibility, unambiguous
+  target selection) before any bootloader transition or image copy.
 
 Wire-level specifics, command catalog, response fields, security design
 and phased rollout will be provided later.
@@ -666,8 +662,7 @@ install procedure in [README § One-shot setup](README.md#one-shot-setup-debian-
 
 ## 10. Build and CI/CD architecture
 
-Two orthogonal firmware build paths exist today, with a third path planned
-for the desktop configurator:
+Three build paths exist today:
 
 - **Host tests** - per-module `CMakeLists.txt` builds a Unity-based test
   binary compiled as C++ with the HAL mock backend. Fast to run locally;
@@ -679,12 +674,12 @@ for the desktop configurator:
   upload/build paths also pass `build.usb_manufacturer` /
   `build.usb_product` per module so that each module surfaces under a
   distinct USB iProduct string on the host.
-- **Desktop configurator build (planned)** - separate from the firmware
-  builds. Primary output is a Debian `.deb` for Linux; Windows packaging
-  (MSYS2 + NSIS, or PyInstaller depending on language choice) is a
-  secondary output. The configurator does not share the `arduino-cli`
-  path. Its CI/CD lives alongside firmware workflows once implementation
-  starts; see §5.5.
+- **Desktop configurator build/test** - `src/SerialConfigurator` is built
+  with CMake/GTK4 and tested with CTest via
+  [`scripts/desktop-build.sh`](src/SerialConfigurator/scripts/desktop-build.sh)
+  (`build`, `run`, `test`, `clean`). CI is in
+  [`.github/workflows/serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml).
+  Packaging paths are `.deb` (Linux primary) and Windows installer bundles.
 
 The ECU firmware build additionally enforces `-Werror` on the Arduino path
 as a warning quality gate.
@@ -699,6 +694,7 @@ as a warning quality gate.
 | [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | ctest for Clocks |
 | [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | ctest for OilAndSpeed |
 | [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | ctest for Adjustometer |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (`serial-configurator-core-tests`, `serial-configurator-core-api-tests`) |
 
 ### 10.2 Unattended daily build
 
@@ -737,6 +733,7 @@ Fiesta/
 │   ├── Clocks/                  # dashboard / instrument cluster
 │   ├── OilAndSpeed/             # oil + ABS speed + EGT telemetry
 │   ├── Adjustometer/            # VP37 feedback (I²C slave)
+│   ├── SerialConfigurator/      # GTK4 desktop companion (detect/configure/flash groundwork)
 │   └── Fiesta_clock/            # AVR-based standalone clock (archived)
 ├── Fiesta_pcbs/                 # schematics, PCB layouts, connector maps
 │   ├── ecu/                     # ecuv1 + ecuv2
@@ -762,7 +759,8 @@ Fiesta/
   [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt) and
   [`Fiesta_pcbs/wirings.txt`](Fiesta_pcbs/wirings.txt).
 - Module-level safety status / progress - see the README.
-- Design of the Fiesta Serial Configurator - as is an internal document only.
+- Internal Serial Configurator execution notes are intentionally not linked
+  from repository-level documentation.
 
 When in doubt about architecture, read the code; the `hardwareConfig.h`,
 `start.{c,cpp}`, and `can.{c,cpp}` files in each module are the best

@@ -1,0 +1,42 @@
+name: SerialConfigurator Tests
+
+on:
+  push:
+    paths:
+      - "src/SerialConfigurator/**"
+      - ".github/workflows/serial-configurator-tests.yml"
+  pull_request:
+    paths:
+      - "src/SerialConfigurator/**"
+      - ".github/workflows/serial-configurator-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  test-serial-configurator:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Fiesta
+        uses: actions/checkout@v5
+
+      - name: Install Linux dependencies
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libgtk-4-dev
+
+      - name: Configure
+        run: |
+          cmake -S src/SerialConfigurator -B src/SerialConfigurator/build_ci -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build src/SerialConfigurator/build_ci --parallel
+
+      - name: Run tests
+        run: |
+          ctest --test-dir src/SerialConfigurator/build_ci --output-on-failure

@@ -1,0 +1,35 @@
+Start testing: Apr 25 00:00 CEST
+----------------------------------------------------------
+1/2 Testing: serial-configurator-core-tests
+1/2 Test: serial-configurator-core-tests
+Command: "/home/jaszczurtd/development/projects_git/Fiesta/src/SerialConfigurator/build_ci/serial-configurator-core-tests"
+Directory: /home/jaszczurtd/development/projects_git/Fiesta/src/SerialConfigurator/build_ci
+"serial-configurator-core-tests" start time: Apr 25 00:00 CEST
+Output:
+----------------------------------------------------------
+[OK] serial_configurator_core smoke tests passed
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"serial-configurator-core-tests" end time: Apr 25 00:00 CEST
+"serial-configurator-core-tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: serial-configurator-core-api-tests
+2/2 Test: serial-configurator-core-api-tests
+Command: "/home/jaszczurtd/development/projects_git/Fiesta/src/SerialConfigurator/build_ci/serial-configurator-core-api-tests"
+Directory: /home/jaszczurtd/development/projects_git/Fiesta/src/SerialConfigurator/build_ci
+"serial-configurator-core-api-tests" start time: Apr 25 00:00 CEST
+Output:
+----------------------------------------------------------
+[OK] serial_configurator_core API contract tests passed
+<end of output>
+Test time =   1.01 sec
+----------------------------------------------------------
+Test Passed.
+"serial-configurator-core-api-tests" end time: Apr 25 00:00 CEST
+"serial-configurator-core-api-tests" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Apr 25 00:00 CEST

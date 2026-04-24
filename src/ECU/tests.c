@@ -112,28 +112,42 @@ void tickTests(void) {
 #endif
 }
 
+/**
+ * @brief Forward one already-parsed serial command line to enabled test
+ *        fixtures. See tests.h for full description.
+ * @param line NUL-terminated command line.
+ * @return None.
+ */
+void tickTestsHandleSerialLine(const char *line) {
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+  if(!s_testsInitialized || line == NULL || line[0] == '\0') {
+    return;
+  }
+  ecu_context_t *ctx = getECUContext();
+  VP37_processSerialCommand(&ctx->injectionPump, line);
+#else
+  (void)line;
+#endif
+}
+
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
 /**
- * @brief Poll the serial console and apply live PID tuning commands.
+ * @brief Apply live PID tuning commands previously routed by the HAL serial
+ *        session unknown-line callback.
+ *
+ * VP37_TunePID no longer reads from the serial port directly — it would
+ * race against @ref hal_serial_session_poll for individual bytes on the
+ * shared USB CDC stream. Instead, @ref tickTestsHandleSerialLine receives a
+ * complete line and forwards it here.
+ *
  * @param self VP37 instance under test.
  * @return None.
  */
 void VP37_TunePID(VP37Pump *self) {
-  // ── Serial PID tuner: read commands from USB CDC ────────────────────
-  while(hal_serial_available() > 0) {
-    int ch = hal_serial_read();
-    if(ch < 0) break;
-
-    if(ch == '\n' || ch == '\r') {
-      if(s_ct.cmdLen > 0) {
-        s_ct.cmdBuf[s_ct.cmdLen] = '\0';
-        VP37_processSerialCommand(self, s_ct.cmdBuf);
-        s_ct.cmdLen = 0;
-      }
-    } else if(s_ct.cmdLen < VP37_CMD_BUF_SIZE - 1) {
-      s_ct.cmdBuf[s_ct.cmdLen++] = (char)ch;
-    }
-  }
+  (void)self;
+  /* Intentionally empty: command bytes are now delivered as whole lines via
+   * tickTestsHandleSerialLine() once the HAL session parser has rejected
+   * them as non-protocol commands. */
 }
 
 /**
