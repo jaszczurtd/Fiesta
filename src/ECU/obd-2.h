@@ -396,7 +396,10 @@ void obdInit(int retries);
  * @param data Pointer to request bytes (expects at least CAN DLC bytes).
  * @return None.
  */
-void obdReq(uint32_t requestId, uint8_t *data);
+void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data);
+#ifdef UNIT_TEST
+#define obdReq(requestId, data) obdReqWithDlc((requestId), 8u, (data))
+#endif
 
 /**
  * @brief Poll CAN and advance the OBD/ISO-TP state machine.

@@ -4,7 +4,7 @@
 #include "rpm.h"
 #include "vp37.h"
 
-void obdReq(uint32_t requestId, uint8_t *data);
+void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data);
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason);
 static void iso_tp(uint32_t responseId, int len, const uint8_t *data);
 static void iso_tp_process(void);
@@ -16,10 +16,10 @@ static bool handleMode01(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t
 static bool handleMode06(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
 static bool handleMode09(uint8_t pid, uint32_t responseId, uint8_t mode, uint8_t *txData, bool *tx);
 static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId, uint8_t *txData, bool *tx);
-static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
-static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
-static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
-static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId);
+static bool handleUdsService(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx);
+static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId);
 static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txData, bool *tx);
 static void sendScpGeneralResponse(uint32_t responseId, uint8_t requestMode, uint8_t arg1, uint8_t arg2, uint8_t arg3, uint8_t responseCode);
 static void sendScpDmrResponse(uint32_t responseId, uint16_t addr, uint8_t dmrType);
@@ -160,7 +160,7 @@ void obdLoop(void) {
   if(!hal_gpio_read(CAN1_INT)) {
     if(hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue, &s_obdState.dlcValue, s_obdState.rxBufValue)) {
       if((s_obdState.rxIdValue == (uint32_t)FUNCTIONAL_ID) || (s_obdState.rxIdValue == (uint32_t)LISTEN_ID)) {
-        obdReq(s_obdState.rxIdValue, s_obdState.rxBufValue);
+        obdReqWithDlc(s_obdState.rxIdValue, s_obdState.dlcValue, s_obdState.rxBufValue);
       }
     }
   }
@@ -1512,7 +1512,7 @@ static void send22FordDiagE3xx(uint32_t responseId, uint16_t did) {
   send22Field(responseId, did, vinChunk, width);
 }
 
-static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
+static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
 #ifdef FORDIAG_COMPAT_NO_UDS_DTC
   (void)numofBytes;
   (void)data;
@@ -1573,7 +1573,7 @@ static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes, uint8_t *data
 #endif
 }
 
-static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
+static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
   uint16_t did = ((uint16_t)(data[2]) << 8) | (uint16_t)(data[3]);
   deb("UDS 0x22 DID=0x%04X len=%d", did, numofBytes);
   // Detect multi-DID requests: service(1) + N*DID(2) means numofBytes > 3 for N>1.
@@ -1827,7 +1827,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, uint8_t *dat
   }
 }
 
-static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId) {
+static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId) {
 #ifndef OBD_VERBOSE_IDENT_DEBUG
   (void)numofBytes;
 #endif
@@ -1922,7 +1922,7 @@ static void handleUdsReadDataByLocalId(uint8_t mode, uint8_t numofBytes, uint8_t
  * @param tx Output flag set when a single-frame response is ready.
  * @return True when the service was recognized and handled.
  */
-static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
+static bool handleUdsService(uint8_t mode, uint8_t numofBytes, const uint8_t *data, uint32_t responseId, uint8_t *txData, bool *tx) {
   bool handled = false;
 
   if(mode == (uint8_t)UDS_SVC_DIAGNOSTIC_SESSION) {
@@ -2113,11 +2113,15 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, uint8_t *data, ui
  * @param data Raw request buffer.
  * @return None.
  */
-void obdReq(uint32_t requestId, uint8_t *data){
+void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data){
+  if(data == NULL || dlc == 0u || dlc > 8u) {
+    return;
+  }
+
   uint8_t numofBytes = data[0];
 
 #ifdef OBD_VERBOSE_RX_DEBUG
-  hal_deb_hex("RX raw", data, (numofBytes <= 8) ? (numofBytes + 1) : 8, 16);
+  hal_deb_hex("RX raw", data, (int)((dlc < 8u) ? dlc : 8u), 16);
 #endif
 
   // Ignore ISO-TP control/segmentation frames arriving as normal OBD requests.
@@ -2128,6 +2132,10 @@ void obdReq(uint32_t requestId, uint8_t *data){
   if(numofBytes < 1u) {
     return;
   }
+  if((uint8_t)(numofBytes + 1u) > dlc) {
+    deb("RX dropped: payload length %u exceeds DLC %u", (unsigned)numofBytes, (unsigned)dlc);
+    return;
+  }
 
   uint32_t responseId = REPLY_ID;
   if(requestId == LISTEN_ID) {
@@ -2136,7 +2144,7 @@ void obdReq(uint32_t requestId, uint8_t *data){
   s_obdState.activeRequestIdValue = requestId;
 
   uint8_t mode = data[1];
-  uint8_t pid = (numofBytes > 1) ? data[2] : 0;
+  uint8_t pid = (numofBytes > 1u && dlc > 2u) ? data[2] : 0u;
   bool tx = false;
   uint8_t txData[] = {0x00,(uint8_t)(UDS_POSITIVE_RESPONSE_OFFSET | mode),pid,PAD,PAD,PAD,PAD,PAD};
 

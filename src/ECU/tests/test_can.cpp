@@ -1,9 +1,19 @@
 #include "unity.h"
 #include "can.h"
 #include "sensors.h"
+#include "hal/impl/.mock/hal_mock.h"
+
+static void ensure_can_ready(void) {
+    if (canTestGetCanHandle() == NULL) {
+        canInit(1);
+    }
+    TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
+    hal_mock_can_reset(canTestGetCanHandle());
+}
 
 void setUp(void) {
     initSensors();
+    ensure_can_ready();
     for(int32_t i = 0; i < F_LAST; i++) {
         setGlobalValue(i, 0.0f);
     }
@@ -83,11 +93,37 @@ void test_build_gps_lat_lon_frames_clamp_coordinates(void) {
     TEST_ASSERT_EQUAL_INT(-180000000, lon);
 }
 
+void test_truncated_egt_frame_is_ignored(void) {
+    setGlobalValue(F_EGT, 321.0f);
+    setGlobalValue(F_DPF_TEMP, 654.0f);
+
+    uint8_t shortFrame[3] = {0x00, 0x12, 0x34};
+    hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE, 3, shortFrame);
+    canMainLoop();
+
+    TEST_ASSERT_EQUAL_FLOAT(321.0f, getGlobalValue(F_EGT));
+    TEST_ASSERT_EQUAL_FLOAT(654.0f, getGlobalValue(F_DPF_TEMP));
+}
+
+void test_truncated_oil_and_speed_frame_is_ignored(void) {
+    setGlobalValue(F_OIL_PRESSURE, 4.2f);
+    setGlobalValue(F_ABS_CAR_SPEED, 88.0f);
+
+    uint8_t shortFrame[2] = {0x01, 0x02};
+    hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, 2, shortFrame);
+    canMainLoop();
+
+    TEST_ASSERT_EQUAL_FLOAT(4.2f, getGlobalValue(F_OIL_PRESSURE));
+    TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_ABS_CAR_SPEED));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_pack_gps_datetime_valid);
     RUN_TEST(test_pack_gps_datetime_invalid_returns_zero);
     RUN_TEST(test_build_gps_lat_lon_frames_encode_high_precision_values);
     RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
+    RUN_TEST(test_truncated_egt_frame_is_ignored);
+    RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
     return UNITY_END();
 }
