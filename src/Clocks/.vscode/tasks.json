@@ -30,7 +30,7 @@
     ],
     "tasks": [
         {
-            "label": "Arduino: Build",
+            "label": "Project: Build",
             "detail": "Ctrl+Shift+1 - compile sketch",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/arduino-build.sh",
@@ -61,7 +61,7 @@
             }
         },
         {
-            "label": "Arduino: Build (Debug)",
+            "label": "Project: Build (Debug)",
             "detail": "Compile with debug symbols (auto-run by F5/Run)",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/arduino-build.sh",
@@ -89,7 +89,7 @@
             }
         },
         {
-            "label": "Arduino: Upload",
+            "label": "Project: Upload",
             "detail": "Ctrl+Shift+2 - start persistent monitor (if needed) + compile + upload",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/arduino-build.sh",
@@ -116,7 +116,7 @@
             }
         },
         {
-            "label": "Arduino: Upload (UF2 / BOOTSEL)",
+            "label": "Project: Upload (UF2 / BOOTSEL)",
             "detail": "Ctrl+Shift+4 - compile + copy UF2 to BOOTSEL drive",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/upload-uf2.sh",
@@ -131,7 +131,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Monitor (persistent)",
+            "label": "Project: Monitor (persistent)",
             "detail": "Ctrl+Shift+3 - waits for Pico (VID:PID), connects, then reconnects after unplug",
             "type": "shell",
             "command": "python3",
@@ -147,7 +147,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Monitor (Debug Probe)",
+            "label": "Project: Monitor (Debug Probe)",
             "detail": "Ctrl+Shift+5 - monitor for Raspberry Pi Debug Probe / Picoprobe",
             "type": "shell",
             "command": "python3",
@@ -163,7 +163,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Monitor (any port)",
+            "label": "Project: Monitor (any port)",
             "detail": "Monitor any /dev/ttyACM* or /dev/ttyUSB* device",
             "type": "shell",
             "command": "python3",
@@ -179,13 +179,13 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Select board (GUI)",
+            "label": "Project: Select board (GUI)",
             "detail": "Ctrl+Shift+Alt+1 - quick selection from VS Code dropdown",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-c",
-                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *—.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*— *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Arduino: Refresh IntelliSense')\""
+                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *—.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*— *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Project: Refresh IntelliSense')\""
             ],
             "presentation": {
                 "echo": true,
@@ -198,7 +198,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Select board (interactive)",
+            "label": "Project: Select board (interactive)",
             "detail": "Ctrl+Shift+Alt+2 - full menu with advanced options (flash, freq, USB, debug)",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/select-board.sh",
@@ -212,7 +212,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Refresh IntelliSense",
+            "label": "Project: Refresh IntelliSense",
             "detail": "Ctrl+Shift+6 - compile project and generate c_cpp_properties.json",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
@@ -227,7 +227,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Install library",
+            "label": "Project: Install library",
             "detail": "Ctrl+Shift+0 - install library via arduino-cli",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
@@ -245,7 +245,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Clean",
+            "label": "Project: Clean",
             "detail": "Ctrl+Shift+7 - remove .build directory",
             "type": "shell",
             "command": "rm",
@@ -259,7 +259,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: List ports",
+            "label": "Project: List ports",
             "detail": "Ctrl+Shift+8 - list connected Arduino devices",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
@@ -274,7 +274,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Arduino: Change port",
+            "label": "Project: Change port",
             "detail": "Ctrl+Shift+9 - set upload port in settings.json",
             "type": "shell",
             "command": "python3",

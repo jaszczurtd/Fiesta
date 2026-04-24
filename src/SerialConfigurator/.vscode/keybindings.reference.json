@@ -1,0 +1,32 @@
+[
+    {
+        "key": "ctrl+shift+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Build",
+        "when": "resourceExtname == .c || resourceExtname == .h || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Upload",
+        "when": "resourceExtname == .c || resourceExtname == .h || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+5",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Test",
+        "when": "resourceExtname == .c || resourceExtname == .h || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+7",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Clean",
+        "when": "resourceExtname == .c || resourceExtname == .h || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+6",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Refresh IntelliSense",
+        "when": "resourceExtname == .c || resourceExtname == .h || editorLangId == cpp || editorLangId == c"
+    }
+]

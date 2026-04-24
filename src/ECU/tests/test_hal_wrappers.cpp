@@ -8,6 +8,10 @@
 #include "utils/tools_api.h"
 #include <string.h>
 
+extern "C" const char *test_stubs_last_forwarded_serial_line(void);
+extern "C" unsigned     test_stubs_forwarded_serial_count(void);
+extern "C" void         test_stubs_reset_forwarded_serial(void);
+
 static int s_soft_timer_hits = 0;
 
 static void testSoftTimerCallback(void) {
@@ -278,15 +282,23 @@ void test_ecu_config_session_hello_path(void) {
 }
 
 void test_ecu_config_session_unknown_command_returns_error(void) {
+    /* New behaviour (post HAL unknown-line callback): the bootstrap session
+     * helper no longer prints "ERR UNKNOWN" itself when ECU has registered an
+     * unknown-line handler. Instead the line is forwarded to
+     * tickTestsHandleSerialLine(). The test stub records the forwarded line
+     * so we can verify routing without relying on a serial reply. */
     configSessionInit();
     hal_mock_serial_reset();
+    test_stubs_reset_forwarded_serial();
 
     hal_mock_serial_inject_rx("WHAT\n", -1);
     configSessionTick();
 
     TEST_ASSERT_FALSE(configSessionActive());
     TEST_ASSERT_EQUAL_UINT32(0u, configSessionId());
-    TEST_ASSERT_EQUAL_STRING("ERR UNKNOWN", hal_mock_serial_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    TEST_ASSERT_EQUAL_UINT(1u, test_stubs_forwarded_serial_count());
+    TEST_ASSERT_EQUAL_STRING("WHAT", test_stubs_last_forwarded_serial_line());
 }
 
 // ── float_to_u32 / u32_to_float tests ───────────────────────────────────────

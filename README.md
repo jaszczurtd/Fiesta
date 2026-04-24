@@ -27,6 +27,11 @@ For a full description of the modules, their responsibilities, how they talk
 to each other and to the vehicle, and where the external dependencies fit in,
 see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
+The desktop companion lives in
+[`src/SerialConfigurator/`](src/SerialConfigurator/).
+Implementation status and milestone snapshots are tracked in
+[`CHANGELOG.md`](CHANGELOG.md).
+
 ## Dependencies
 
 Required external custom libraries (shared across all modules):
@@ -54,9 +59,9 @@ to `/home/you/projects/libraries/`.
 
 Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
 
-Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Se, expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`); the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. So, expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`); the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
 
-For the building detalis, see the `One-shot setup` section below.
+For the building details, see the `One-shot setup` section below.
 
 ### Development environment
 
@@ -149,6 +154,15 @@ Notes:
 - `python3 ./scripts/serial-persistent.py -m pico` is the same path used by the VS Code monitor task / `Ctrl+Shift+3`.
 - `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the persistent monitor notices that change and switches to the new preferred port without needing a manual restart.
 - The module-local scripts are thin wrappers; the shared implementation lives in `src/common/scripts/`.
+
+### Desktop companion build (SerialConfigurator)
+
+```bash
+cd src/SerialConfigurator
+./scripts/desktop-build.sh build
+./scripts/desktop-build.sh run
+./scripts/desktop-build.sh test
+```
 
 ### Debugging with Raspberry Pi Debug Probe
 

@@ -1,0 +1,108 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Project: Build",
+            "detail": "Ctrl+Shift+1 - configure and compile Serial Configurator",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/desktop-build.sh",
+            "args": ["build"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "gcc",
+                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Project: Upload",
+            "detail": "Ctrl+Shift+2 - compile and run Serial Configurator",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/desktop-build.sh",
+            "args": ["run"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "gcc",
+                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Project: Clean",
+            "detail": "Ctrl+Shift+7 - remove build directory",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/desktop-build.sh",
+            "args": ["clean"],
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Refresh IntelliSense",
+            "detail": "Ctrl+Shift+6 - configure CMake and regenerate c_cpp_properties.json",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Test",
+            "detail": "Ctrl+Shift+5 - build and run CTest suite",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/desktop-build.sh",
+            "args": ["test"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
