@@ -2,7 +2,7 @@
     "arduino.cliPath": "arduino-cli",
     "arduino.fqbn": "rp2040:rp2040:rpipico",
     "arduino.boardDescription": "Raspberry Pi Pico",
-    "arduino.uploadPort": "/dev/ttyACM0",
+    "arduino.uploadPort": "/dev/ttyACM1",
     "arduino.sketchbookPath": "",
     "arduino.buildDir": "${workspaceFolder}/.build",
     "arduino.verbose": true,

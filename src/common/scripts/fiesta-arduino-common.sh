@@ -242,9 +242,14 @@ fiesta_start_persistent_monitor() {
 
     [[ -f "$monitor" ]] || return 0
 
-    if ! pgrep -f "serial-persistent.py -m pico" >/dev/null 2>&1; then
-        nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
+    # Keep exactly one monitor instance per project to avoid mixed serial output.
+    if pgrep -f -- "$project_dir/scripts/serial-persistent.py" >/dev/null 2>&1 \
+        || pgrep -f -- "$project_dir/scripts/serial-monitor.py" >/dev/null 2>&1 \
+        || pgrep -f -- "fiesta-serial-persistent.py .*--project-dir $project_dir" >/dev/null 2>&1; then
+        return 0
     fi
+
+    nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
 }
 
 fiesta_find_uf2_artifact() {

@@ -9,6 +9,7 @@ files are thin wrappers around this script.
 Behavior:
 - waits for a serial device,
 - connects and reads continuously,
+- keeps exclusive access by default and waits if another process owns the lock,
 - reconnects after unplug/disconnect,
 - exits cleanly on Ctrl+C.
 
@@ -287,18 +288,13 @@ def monitor(port, baud, cli_port="", project_dir="", use_exclusive=True):
     except serial.SerialException as exc:
         if use_exclusive and is_exclusive_lock_error(exc):
             print(
-                f"{YELLOW}Port {port} is already locked by another process; "
-                f"retrying without exclusive lock...{NC}"
+                f"{YELLOW}Port {port} is locked by another process; "
+                f"waiting for exclusive access...{NC}"
             )
-            try:
-                ser = open_serial(port, baud, exclusive=False)
-            except serial.SerialException as fallback_exc:
-                print(f"{RED}Cannot open {port}: {fallback_exc}{NC}")
-                return "error"
+            return "locked"
         else:
             print(f"{RED}Cannot open {port}: {exc}{NC}")
             return "error"
-
 
     print(f"{GREEN}Connected to {port} @ {baud}{NC}")
     print(f"{DIM}{'─' * 80}{NC}")
@@ -396,7 +392,7 @@ def main():
     print(f"  Baud:   {GREEN}{args.baud}{NC}")
     print(f"  Mode:   {GREEN}{args.mode}{NC}")
     print(f"  Port:   {GREEN}{preferred if preferred else 'auto'}{NC}")
-    print(f"  Lock:   {GREEN}{'shared' if args.no_exclusive else 'exclusive+fallback'}{NC}")
+    print(f"  Lock:   {GREEN}{'shared' if args.no_exclusive else 'exclusive-only'}{NC}")
     print(f"  {YELLOW}Ctrl+C{NC} to stop")
     print()
 
@@ -428,6 +424,10 @@ def main():
             print(f"\n{DIM}{'─' * 80}{NC}")
             print(f"{YELLOW}Device disconnected: {port}{NC}\n")
             time.sleep(0.5)
+            continue
+
+        if result == "locked":
+            time.sleep(0.8)
             continue
 
         if result == "error":

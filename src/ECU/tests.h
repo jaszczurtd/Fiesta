@@ -12,7 +12,7 @@ extern "C" {
 //#define START_TEST_ENABLE_DTC_INJECTION 
 
 //enable functional tests for VP37 cyclic control via keyboard
-//#define START_TEST_ENABLE_VP37_CYCLIC // Cyclic test: ramps VP37 throttle 0-100-0%, 
+#define START_TEST_ENABLE_VP37_CYCLIC // Cyclic test: ramps VP37 throttle 0-100-0%, 
 //allows PID tuning via Serial commands (send '?' for help)
 
 
