@@ -1,6 +1,16 @@
 #include "can.h"
 
+#ifdef UNIT_TEST
+hal_can_t oilspeedTestGetCanHandle(void);
+#endif
+
 static hal_can_t canHandle = NULL;
+
+#ifdef UNIT_TEST
+hal_can_t oilspeedTestGetCanHandle(void) {
+  return canHandle;
+}
+#endif
 
 static unsigned char frameNumber = 0;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;
@@ -59,6 +69,11 @@ void updateEGTrecipients(void) {
 }
 
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
+  if (buf == NULL || len > CAN_FRAME_MAX_LENGTH) {
+    derr("Received invalid CAN frame with ID: %03x, len: %d\n", canID, len);
+    return;
+  }
+
   switch (canID) {
 
     case CAN_ID_ECU_UPDATE_01:
@@ -74,6 +89,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       break;
 
     case CAN_ID_ECU_UPDATE_02: {
+      if (len <= CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED) {
+        derr("Received truncated ECU_UPDATE_02 frame with len: %d", len);
+        return;
+      }
       ecuMessages++; ecuConnected = true;
 
       setGlobalValue(F_INTAKE_TEMP, buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
@@ -134,39 +153,12 @@ void canCheckConnection(void) {
 }
 
 bool canSendLoop(void) {
-  static float lastSpeed = 0.0;
-  static float lastOilPressure = 0.0;
-  static float lastEGT = 0.0;
-  static float lastDPFTemp = 0.0;
-
-  float curSpeed = getGlobalValue(F_ABS_CAR_SPEED);
-  if (lastSpeed != curSpeed) {
-    lastSpeed = curSpeed;
-    updateCANrecipients();
-  }
-
-  float curOilPressure = getGlobalValue(F_OIL_PRESSURE);
-  if (lastOilPressure != curOilPressure) {
-    lastOilPressure = curOilPressure;
-    updateCANrecipients();
-  }
-
-  float egt = getGlobalValue(F_EGT);
-  bool egtFrameChanged = false;
-  if(lastEGT != egt) {
-    lastEGT = egt;
-    egtFrameChanged = true;
-  }
-
-  float dpfTemp = getGlobalValue(F_DPF_TEMP);
-  if(lastDPFTemp != dpfTemp) {
-    lastDPFTemp = dpfTemp;
-    egtFrameChanged = true;
-  }
-
-  if(egtFrameChanged) {
-    updateEGTrecipients();
-  }
+  // Broadcast the Oil/Speed and EGT frames unconditionally every tick.
+  // These frames double as a heartbeat for the receivers (Clocks tracks
+  // `oilSpeedModuleConnected` off the arrival count), so we match the ECU
+  // CAN_updaterecipients_0x pattern and skip any change-detection cache.
+  updateCANrecipients();
+  updateEGTrecipients();
 
 #ifdef ABS_CAR_SPEED_PACKET_TEST
   static int amountCounter = 0;

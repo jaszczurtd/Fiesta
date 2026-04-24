@@ -438,6 +438,26 @@ void test_uds_diag_session_extended_positive_response(void) {
     TEST_ASSERT_EQUAL_UINT8(UDS_SESSION_EXTENDED, tx[2]);
 }
 
+void test_obd_request_with_short_dlc_is_ignored(void) {
+    uint8_t req[1] = {0x01};
+    obdReqWithDlc(LISTEN_ID, 1u, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_FALSE(pop_can_tx(&id, &len, tx));
+}
+
+void test_obd_request_with_declared_length_beyond_dlc_is_ignored(void) {
+    uint8_t req[3] = {0x03, UDS_SVC_READ_DATA_BY_ID, 0xF1};
+    obdReqWithDlc(LISTEN_ID, 3u, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_FALSE(pop_can_tx(&id, &len, tx));
+}
+
 void test_uds_diag_session_unsupported_subfunction_negative_response(void) {
     uint8_t req[8] = {0x02, UDS_SVC_DIAGNOSTIC_SESSION, 0x7Eu, 0, 0, 0, 0, 0};
     obdReq(LISTEN_ID, req);
@@ -865,6 +885,81 @@ void test_kwp_read_local_id_compact_ident_returns_nrc31(void) {
     TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
 }
 
+// ── UDS short-frame negative-response regression guards (NRC 0x13) ───────────
+// These cover the requireMinLength() boolean contract at call sites where
+// commit 04cebf9 refactored the early-return style into single-exit; a future
+// accidental polarity flip or missing requireMinLength() call will surface
+// here instead of silently letting an under-sized UDS request fall through.
+
+void test_uds_diag_session_short_frame_returns_nrc13(void) {
+    // UDS_SVC_DIAGNOSTIC_SESSION requires minLen=2 (service + subFunction).
+    // numofBytes=1 omits the subFunction and must trigger NRC_INCORRECT_LENGTH.
+    uint8_t req[8] = {0x01, UDS_SVC_DIAGNOSTIC_SESSION, 0, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_DIAGNOSTIC_SESSION, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+}
+
+void test_uds_read_data_by_id_short_frame_returns_nrc13(void) {
+    // UDS_SVC_READ_DATA_BY_ID requires minLen=3 (service + 2-byte DID).
+    // numofBytes=2 supplies only one DID byte and must trigger NRC_INCORRECT_LENGTH.
+    uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_ID, 0xF1, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+}
+
+void test_uds_read_memory_by_addr_short_frame_returns_nrc13(void) {
+    // UDS_SVC_READ_MEMORY_BY_ADDR requires minLen=4 (service + DMR type + 2-byte addr).
+    // numofBytes=3 is one byte short and must trigger NRC_INCORRECT_LENGTH.
+    uint8_t req[8] = {0x03, UDS_SVC_READ_MEMORY_BY_ADDR, 0x00, 0x10, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_MEMORY_BY_ADDR, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+}
+
+void test_uds_control_dtc_setting_short_frame_returns_nrc13(void) {
+    // UDS_SVC_CONTROL_DTC_SETTING (last requireMinLength() site in the
+    // dispatch chain) requires minLen=2. numofBytes=1 must trigger
+    // NRC_INCORRECT_LENGTH rather than falling through to a positive ack.
+    uint8_t req[8] = {0x01, UDS_SVC_CONTROL_DTC_SETTING, 0, 0, 0, 0, 0, 0};
+    obdReq(LISTEN_ID, req);
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t tx[8] = {0};
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_CONTROL_DTC_SETTING, tx[2]);
+    TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
@@ -901,6 +996,8 @@ int main(void) {
     RUN_TEST(test_obd_temp_byte_fractional_truncates_toward_zero);
     RUN_TEST(test_obd_temp_byte_applied_via_coolant_pid);
     RUN_TEST(test_obd_temp_byte_applied_via_intake_pid);
+    RUN_TEST(test_obd_request_with_short_dlc_is_ignored);
+    RUN_TEST(test_obd_request_with_declared_length_beyond_dlc_is_ignored);
 
     // UDS/KWP request handling
     RUN_TEST(test_uds_diag_session_extended_positive_response);
@@ -930,6 +1027,12 @@ int main(void) {
     RUN_TEST(test_uds_read_scp_maf_pid_returns_nrc31);
     RUN_TEST(test_kwp_read_local_id_rom_size_returns_512k);
     RUN_TEST(test_kwp_read_local_id_compact_ident_returns_nrc31);
+
+    // UDS short-frame → NRC_INCORRECT_LENGTH regression guards
+    RUN_TEST(test_uds_diag_session_short_frame_returns_nrc13);
+    RUN_TEST(test_uds_read_data_by_id_short_frame_returns_nrc13);
+    RUN_TEST(test_uds_read_memory_by_addr_short_frame_returns_nrc13);
+    RUN_TEST(test_uds_control_dtc_setting_short_frame_returns_nrc13);
 
     RUN_TEST(test_stmin_to_ms_preserves_millisecond_values);
     RUN_TEST(test_stmin_to_ms_clamps_submillisecond_range_to_one_ms);

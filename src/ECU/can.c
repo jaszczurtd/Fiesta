@@ -50,6 +50,12 @@ static can_state_t s_canState = {
   .lastThrottleSent = (int32_t)C_INIT_VAL
 };
 
+#ifdef UNIT_TEST
+hal_can_t canTestGetCanHandle(void) {
+  return s_canState.canBusHandle;
+}
+#endif
+
 void canInit(int retries) {
   s_canState.dpfConnectedFlag = false;
   s_canState.dpfEverSeenFlag = false;
@@ -304,6 +310,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
   switch(canID) {
     case CAN_ID_DPF: {
+      if(len <= CAN_FRAME_DPF_UPDATE_DPF_REGEN) {
+        derr("Received truncated DPF frame with len: %d", len);
+        return;
+      }
       s_canState.dpfMessagesCount++;
       s_canState.dpfEverSeenFlag = true;
       setGlobalValue(F_DPF_REGEN, buf[CAN_FRAME_DPF_UPDATE_DPF_REGEN]);
@@ -311,6 +321,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     break;
 
     case CAN_ID_EGT_UPDATE: {
+      if(len <= CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO) {
+        derr("Received truncated EGT frame with len: %d", len);
+        return;
+      }
       s_canState.egtMessagesCount++;
       s_canState.egtEverSeenFlag = true;
 
@@ -323,6 +337,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     break;
 
     case CAN_ID_CLOCK_BRIGHTNESS: {
+      if(len <= CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO) {
+        derr("Received truncated clock-brightness frame with len: %d", len);
+        return;
+      }
       setGlobalValue(F_CLOCK_BRIGHTNESS,
         MsbLsbToInt(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI],
                     buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]));
@@ -330,6 +348,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     break;
 
     case CAN_ID_LUMENS: {
+      if(len <= CAN_FRAME_LIGHTS_UPDATE_LO) {
+        derr("Received truncated lumens frame with len: %d", len);
+        return;
+      }
       setGlobalValue(F_OUTSIDE_LUMENS,
         decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
                    buf[CAN_FRAME_LIGHTS_UPDATE_LO]));
@@ -337,6 +359,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     break;
 
     case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
+      if(len <= CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED) {
+        derr("Received truncated OilAndSpeed frame with len: %d", len);
+        return;
+      }
       setGlobalValue(F_OIL_PRESSURE, decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
                                               buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
       setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);

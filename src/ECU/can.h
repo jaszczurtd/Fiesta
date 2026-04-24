@@ -116,6 +116,10 @@ bool isEGTConnected(void);
  */
 void canCheckConnection(void);
 
+#ifdef UNIT_TEST
+hal_can_t canTestGetCanHandle(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
