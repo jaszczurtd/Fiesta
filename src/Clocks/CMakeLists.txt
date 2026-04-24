@@ -9,6 +9,7 @@ enable_testing()
 set(CLOCKS_SRC ${CMAKE_CURRENT_SOURCE_DIR})
 set(HAL_LIB_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 set(HAL_SRC ${HAL_LIB_EXTERNAL}/src)
+set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/canDefinitions)
 
 if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
@@ -38,6 +39,7 @@ target_include_directories(clocks_mock PUBLIC
     ${HAL_LIB_EXTERNAL}
     ${HAL_SRC}
     ${HAL_SRC}/utils
+    ${CANDEFS}
 )
 
 target_compile_definitions(clocks_mock PUBLIC
