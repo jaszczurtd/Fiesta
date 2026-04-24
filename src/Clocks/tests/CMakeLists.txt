@@ -22,6 +22,5 @@ target_link_libraries(test_can PRIVATE clocks_mock)
 target_include_directories(test_can BEFORE PRIVATE
     ${HAL_SRC}
     ${HAL_SRC}/arduino_host_stubs
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../libraries/canDefinitions
 )
 add_test(NAME test_can COMMAND test_can)
