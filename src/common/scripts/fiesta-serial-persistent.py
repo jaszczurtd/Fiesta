@@ -233,7 +233,7 @@ def clear_hupcl(fd):
         pass
 
 
-def open_serial(port, baud):
+def open_serial(port, baud, exclusive=True):
     ser = serial.Serial()
     ser.port = port
     ser.baudrate = baud
@@ -243,10 +243,11 @@ def open_serial(port, baud):
     ser.dsrdtr = False
     ser.rtscts = False
 
-    try:
-        ser.exclusive = True
-    except Exception:
-        pass
+    if exclusive:
+        try:
+            ser.exclusive = True
+        except Exception:
+            pass
 
     ser.open()
     clear_hupcl(ser.fd)
@@ -271,12 +272,33 @@ def open_serial(port, baud):
     return ser
 
 
-def monitor(port, baud, cli_port="", project_dir=""):
+def is_exclusive_lock_error(exc):
+    text = str(exc).lower()
+    return (
+        "could not exclusively lock port" in text
+        or "resource temporarily unavailable" in text
+        or "errno 11" in text
+    )
+
+
+def monitor(port, baud, cli_port="", project_dir="", use_exclusive=True):
     try:
-        ser = open_serial(port, baud)
+        ser = open_serial(port, baud, exclusive=use_exclusive)
     except serial.SerialException as exc:
-        print(f"{RED}Cannot open {port}: {exc}{NC}")
-        return "error"
+        if use_exclusive and is_exclusive_lock_error(exc):
+            print(
+                f"{YELLOW}Port {port} is already locked by another process; "
+                f"retrying without exclusive lock...{NC}"
+            )
+            try:
+                ser = open_serial(port, baud, exclusive=False)
+            except serial.SerialException as fallback_exc:
+                print(f"{RED}Cannot open {port}: {fallback_exc}{NC}")
+                return "error"
+        else:
+            print(f"{RED}Cannot open {port}: {exc}{NC}")
+            return "error"
+
 
     print(f"{GREEN}Connected to {port} @ {baud}{NC}")
     print(f"{DIM}{'─' * 80}{NC}")
@@ -355,6 +377,11 @@ def parse_args():
         default="",
         help="Project directory used to read .vscode/settings.json for preferred port lookup",
     )
+    parser.add_argument(
+        "--no-exclusive",
+        action="store_true",
+        help="Disable exclusive lock attempt when opening serial port",
+    )
     return parser.parse_args()
 
 
@@ -369,6 +396,7 @@ def main():
     print(f"  Baud:   {GREEN}{args.baud}{NC}")
     print(f"  Mode:   {GREEN}{args.mode}{NC}")
     print(f"  Port:   {GREEN}{preferred if preferred else 'auto'}{NC}")
+    print(f"  Lock:   {GREEN}{'shared' if args.no_exclusive else 'exclusive+fallback'}{NC}")
     print(f"  {YELLOW}Ctrl+C{NC} to stop")
     print()
 
@@ -379,7 +407,13 @@ def main():
         if not port:
             port = wait_for_device(args.mode, args.port, args.project_dir)
 
-        result = monitor(port, args.baud, args.port, args.project_dir)
+        result = monitor(
+            port,
+            args.baud,
+            args.port,
+            args.project_dir,
+            use_exclusive=not args.no_exclusive,
+        )
 
         if result == "quit":
             print(f"\n{CYAN}Done.{NC}")

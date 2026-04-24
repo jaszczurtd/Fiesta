@@ -6,16 +6,13 @@
     "arduino.sketchbookPath": "",
     "arduino.buildDir": "${workspaceFolder}/.build",
     "arduino.verbose": true,
-
     "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
     "C_Cpp.errorSquiggles": "enabled",
-
     "cortex-debug.openocdPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/bin/openocd",
     "cortex-debug.openocdScriptsPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/share/openocd/scripts",
     "cortex-debug.gdbPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-gcc/4.1.0-1aec55e/bin/arm-none-eabi-gdb",
     "cortex-debug.svdFileRP2040": "${userHome}/.arduino15/packages/rp2040/hardware/rp2040/5.5.1/pico-sdk/src/rp2040/hardware_regs/RP2040.svd",
     "cortex-debug.svdFileRP2350": "${userHome}/.arduino15/packages/rp2040/hardware/rp2040/5.5.1/pico-sdk/src/rp2350/hardware_regs/RP2350.svd",
-
     "files.associations": {
         "*.ino": "cpp"
     },
