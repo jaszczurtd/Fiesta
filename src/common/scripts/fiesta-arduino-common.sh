@@ -114,11 +114,20 @@ fiesta_resolve_fqbn() {
 
 fiesta_resolve_libraries_dir() {
     local sketchbook="$1"
+    local project_dir="${2:-}"
     local candidate
 
     if [[ -n "$sketchbook" && -d "$sketchbook/libraries" ]]; then
         printf '%s\n' "$sketchbook/libraries"
         return 0
+    fi
+
+    if [[ -n "$project_dir" ]]; then
+        candidate="$(cd "$project_dir/../../.." 2>/dev/null && pwd)/libraries"
+        if [[ -d "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
     fi
 
     for candidate in "$HOME/libraries" "$HOME/Arduino/libraries"; do
@@ -175,7 +184,7 @@ fiesta_run_compile() {
     cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
     fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
     sketchbook=$(fiesta_read_json_setting "$settings_file" "arduino.sketchbookPath" "")
-    libraries_dir=$(fiesta_resolve_libraries_dir "$sketchbook" || true)
+    libraries_dir=$(fiesta_resolve_libraries_dir "$sketchbook" "$project_dir" || true)
     extra_flags=$(fiesta_compiler_extra_flags "$sketch_dir" "$include_werror")
     usb_manufacturer=$(fiesta_usb_manufacturer)
     usb_product=$(fiesta_usb_product_for "$module")
