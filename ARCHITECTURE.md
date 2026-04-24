@@ -38,19 +38,19 @@ High-level module map (active firmware + desktop companion):
 │                         Fiesta electronic stack                        │
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                        │
-│     ┌──────────────┐        CAN (main)         ┌──────────────┐        │
+│     ┌──────────────┐                           ┌──────────────┐        │
 │     │              │◄──────────────────────────┤              │        │
-│     │     ECU      │                           │    Clocks    │        │
-│     │  (RP2040,    │◄──────────────────────────┤  (RP2040,    │        │
+│     │     ECU      │      CAN (main)           │    Clocks    │        │
+│     │  (RP2040,    │──────────────────────────►┤  (RP2040,    │        │
 │     │  core-0 +    │                           │   dashboard) │        │
 │     │  core-1)     │                           │              │        │
 │     │              │                           └──────────────┘        │
-│     │              │           CAN (main)                              │
-│     │              │◄──────────┬───────────────┐                       │
-│     │              │           │               │                       │
-│     │              │           │          ┌──────────────┐             │
-│     │              │           │          │ OilAndSpeed  │             │
-│     │              │           └──────────┤  (RP2040)    │             │
+│     │              │                                                   │
+│     │              │◄──────────────────────────┐                       │
+│     │              │                           │                       │
+│     │              │      CAN (main)      ┌──────────────┐             │
+│     │              │                      │ OilAndSpeed  │             │
+│     │              │─────────────────────►┤  (RP2040)    │             │
 │     │              │                      └──────────────┘             │
 │     │              │                                                   │
 │     │              │◄──── I²C (0x57) ─────┐                            │
@@ -67,12 +67,14 @@ High-level module map (active firmware + desktop companion):
 │     │              │                                                   │
 │     │              │──── UART ──────────► GPS receiver                 │
 │     │              │                                                   │
-│     │              │──── SPI ───────────► SD card (logging)            │
+│     │              │──── SPI ───────────► SD card (logging, legacy)    │
 │     │              │                                                   │
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
 │            │  USB CDC (text HELLO session; same on every module)       │
+│            │  Additional encrypted layer later for flashing/settings   │
+│            │  changes                                                  │
 │            │                                                           │
 │     ┌──────▼──────────────────────────────────────────────┐            │
 │     │                                                     │            │
@@ -210,8 +212,8 @@ src/<Module>/
 
 **Role.** The ECU is the only safety-critical module. It owns engine
 control, fault management, and the OBD-II interface. It is the
-**MISRA-C target**; see [README § ECU MISRA-C migration status](README.md#ecu-misra-c-migration-status)
-for the current alignment figures.
+**MISRA-C target**; see [`MISRA.md`](MISRA.md) for the current alignment
+figures, migration status, and screening entry points.
 
 **Dual-core split.**
 - `core-0` runs the main control loop: soft-timer table, CAN TX/RX, actuator
@@ -221,8 +223,8 @@ for the current alignment figures.
 
 Cross-core state is protected by dedicated mutexes (adjustometer snapshot,
 PCF8574 shadow latch, DTC manager + its KV persistence). See the "dual-core
-state synchronization pass" bullet in the README for the list of covered
-structures.
+state synchronization pass" bullet in [`MISRA.md`](MISRA.md) for the list of
+covered structures.
 
 **Central state.** All per-module state is consolidated into a single
 `ecu_context_t` struct (see [`ecuContext.h`](src/ECU/ecuContext.h)). There
@@ -245,7 +247,7 @@ and ownership analysis tractable.
 | [`turbo.c`](src/ECU/turbo.c) | turbo boost control (N75 solenoid, MAP-based) |
 | [`engineFan.c`](src/ECU/engineFan.c) | fan relay control with hysteresis |
 | [`engineHeater.c`](src/ECU/engineHeater.c) | block-heater low/high relays |
-| [`engineFuel.c`](src/ECU/engineFuel.c) | fuel pump control |
+| [`engineFuel.c`](src/ECU/engineFuel.c) | amount of fuel measurement |
 | [`glowPlugs.c`](src/ECU/glowPlugs.c) | glow plug relay + lamp timing |
 | [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | heated-window relays with button latch |
 | [`gps.c`](src/ECU/gps.c) | NMEA parsing over UART, time/date publication |
@@ -723,7 +725,9 @@ external library repos → host tests for every module that has a
 
 ```
 Fiesta/
-├── README.md                    # project overview + safety status (authoritative)
+├── README.md                    # project overview
+├── MISRA.md                     # MISRA-C status, policy, entry points (authoritative)
+├── CHANGELOG.md                 # per-module build/test/CI status log
 ├── ARCHITECTURE.md              # this file
 ├── LICENSE
 ├── .github/

@@ -16,6 +16,9 @@ Safety is treated as a top-level requirement.
 - Coverage is expanded continuously (host tests + firmware build validation).
 - Safety documentation is kept synchronized with code changes.
 
+MISRA-C migration status, policy, and screening entry points live in a
+dedicated document: [`MISRA.md`](MISRA.md).
+
 ## Repository scope
 
 Fiesta is a multi-module system, not a single firmware binary.
@@ -51,7 +54,8 @@ to `/home/you/projects/libraries/`.
 
 Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
 
-Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`) the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. Se, expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`); the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+
 For the building detalis, see the `One-shot setup` section below.
 
 ### Development environment
@@ -67,11 +71,11 @@ Platform support summary:
 
 ### Unattended daily build on a Raspberry Pi
 
-`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `bootstrap.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup, gotchas (e.g. `EnvironmentFile=` not expanding `%h`), and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
+`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `bootstrap.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 Helper scripts are available in module-specific `scripts/` directories:
 
-- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules)
+- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start your project adventure by just simply invoking this script right after the clone. See `One-shot setup` section below.
 - `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
 - `select-board.sh` (per module wrapper for the shared board-selection helper)
 - `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
@@ -83,8 +87,7 @@ Shared implementations for those wrappers live in `src/common/scripts/`.
 
 ### One-shot setup (Debian-like Linux / WSL)
 
-`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end
-and is idempotent (safe to re-run). It:
+`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
 
 1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`),
 2. verifies Python 3 is available,
@@ -98,16 +101,14 @@ and is idempotent (safe to re-run). It:
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
 Run from repository root as a regular (non-root) user - the script uses
-`sudo` only for apt and arduino-cli install and will prompt for the password
-when needed:
+`sudo` only for apt and arduino-cli install and will prompt for the password when needed:
 
 ```bash
 bash src/ECU/scripts/bootstrap.sh
 ```
 
-Do not run this script under `sudo` - arduino-cli config, rp2040 core, and cloned
-libraries would end up under `/root/` and break later non-root builds. The
-script exits early if it detects `EUID=0`; override with `ALLOW_ROOT=1`
+Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds. 
+The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1`
 only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
@@ -149,77 +150,29 @@ Notes:
 - `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the persistent monitor notices that change and switches to the new preferred port without needing a manual restart.
 - The module-local scripts are thin wrappers; the shared implementation lives in `src/common/scripts/`.
 
-## Current status (2026-04-23)
+### Debugging with Raspberry Pi Debug Probe
 
-- Primary firmware modules compile with the current HAL (`src/ECU`, `src/Clocks`, `src/OilAndSpeed`, `src/Adjustometer`).
-- Host-side validation exists for ECU, Clocks, OilAndSpeed, and Adjustometer. ECU currently provides 13 executable host test targets under `src/ECU/tests/`; `test_cppcheck` is added as an extra CTest entry when `cppcheck` is installed. Clocks currently provides 2 host tests, OilAndSpeed 2 host tests, and Adjustometer 3 host tests.
-- GitHub Actions test workflows currently cover ECU (`.github/workflows/ecu-tests.yml`), Clocks (`.github/workflows/clocks-tests.yml`), OilAndSpeed (`.github/workflows/oilandspeed-tests.yml`), and Adjustometer (`.github/workflows/adjustometer-tests.yml`).
-- ECU CI also runs cppcheck baseline gating in GitHub Actions (`.github/workflows/ecu-cppcheck.yml`).
-- ECU now has a dedicated project-local MISRA screening runner under `src/ECU/misra/`, a deviation register scaffold, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
-- Latest ECU MISRA screening snapshot (2026-04-21) reports 787 active findings across 25 rule IDs, so the runner should be treated as a triage/evidence path, not a pass signal.
-- Recent ECU hardening reduced rule 10.4 findings to 95 (mainly `obd-2.c` essential-type cleanup with regression-test coverage updates).
-- ECU startup reports compile timestamp (`__DATE__` + `__TIME__`).
+Each module ships a `.vscode/launch.json` with Cortex-Debug (`marus25.cortex-debug`) configurations for live debugging via the Raspberry Pi Debug Probe over CMSIS-DAP:
 
-## ECU MISRA-C migration status
+- **Debug: RP2040 (Pico/Pico W/Zero/Plus)** — flash + break at `main`
+- **Debug: RP2350 (Pico 2/Pico 2 W)** — flash + break at `main`
+- **Debug: Attach RP2040 / RP2350** — attach to a running target without re-flashing
 
-Two-level estimate:
+Prerequisites:
 
-- engineering/architecture alignment: **~80-85%**,
-- formal compliance readiness (tooling + evidence): **~55-60%**.
+- Debug Probe firmware v2 or later (USB VID:PID `2e8a:000c`). Older Picoprobe firmware (`2e8a:0004`) also works since the shipped configs use `interface/cmsis-dap.cfg`.
+- SWD wiring: probe `SC`->target `SWCLK`, `SD`->`SWDIO`, `GND`->`GND`. Power the target independently or from the probe's debug header.
+- The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
+- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `bootstrap.sh`). Paths are already set in each module's `.vscode/settings.json` — review them if your core version differs from the committed defaults.
 
-Scope:
+Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Arduino: Build (Debug)` as `preLaunchTask` so the ELF at `${workspaceFolder}/.build/*.ino.elf` stays fresh; `attach` variants skip the build step.
 
-- `src/ECU` is in scope for MISRA-C migration,
-- `src/Clocks`, `src/OilAndSpeed`, and `src/Adjustometer` are currently out of MISRA scope.
+Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for upload — it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path. For a companion serial log during debug, `Ctrl+Shift+5` starts `serial-persistent.py -m probe` against the Debug Probe's UART pass-through.
 
-Completed areas include:
+## Current status
 
-- class-to-struct migration for core ECU modules,
-- central state ownership (`ecu_context_t`),
-- HAL C wrappers for PID and soft timers,
-- `extern "C"` guards in public ECU headers,
-- ECU source migration to `.c` files,
-- Arduino build path compiles ECU `.c` sources as C while final firmware link remains mixed C/C++,
-- state consolidation in ECU modules (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`, `start`, `obd-2`),
-- explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
-- targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
-- dual-core state synchronization pass in `src/ECU`: dedicated mutex for adjustometer snapshot, PCF8574 shadow-latch race fix, `dtcManager` state and KV persistence under a dedicated mutex; adjustometer reader API migrated from shared-pointer to out-parameter snapshot; `readHighValues()` change-detection cache removed (CAN helpers self-dedupe).
-- warning quality gate for ECU host tests and Arduino ECU build paths (`-Werror`).
-- warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
-- defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.
-- project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
-
-Pending areas:
-
-- full C linkage path for required HAL/tool APIs,
-- replacement of C++ dependencies (Arduino core/HAL/test path) if full project-level C-only build is required,
-- MISRA hardening pass (in progress): remaining casts/bounds/overflow cleanup outside `obd-2.c`, plus naming consistency and volatile/mutex review across ECU modules.
-
-## MISRA documentation policy (mandatory)
-
-For each MISRA-related change, update safety status in `README.md` (this file)
-in the same change set.
-
-Project-specific working notes can be kept locally, but repository-level safety
-status in this file must remain synchronized with code changes.
-
-## ECU MISRA screening entry points
-
-Local run:
-
-```bash
-cd src/ECU
-bash misra/check_misra.sh --out misra/.results
-```
-
-Manual CI artifact workflow:
-
-- `.github/workflows/ecu-misra.yml`
-
-Notes:
-
-- the repository does not ship MISRA rule-text extracts,
-- severity split by Mandatory / Required / Advisory is only available when a licensed local rule-text file is provided to the runner.
+Per-module build, test, and CI state — including latest snapshot date —
+is tracked in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Credits
 

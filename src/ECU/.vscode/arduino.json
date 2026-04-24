@@ -2,7 +2,7 @@
     "board": "rp2040:rp2040:rpipico",
     "configuration": "flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk",
     "port": "COM19",
-    "programmer": "rp2040:edbg",
+    "programmer": "rp2040:picoprobe",
     "sketch": "main.ino",
     "output": "../ArduinoOutput"
 }
