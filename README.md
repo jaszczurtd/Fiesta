@@ -7,6 +7,100 @@ The repository contains multiple embedded applications, hardware assets, and val
 Gallery:
 https://postimg.cc/gallery/pHF4jy2
 
+## For the embedded engineer who already despises Arduino
+
+Let's not pretend. If you're a working automotive / industrial embedded
+engineer, "Arduino" is a slur. You've seen the GitHub graveyard: 2000-line
+`.ino` files with `delay(100)` in the main loop, dynamic `String` allocation
+inside ISRs, libraries that paper over a `wiringPi`-grade abstraction with
+more `wiringPi`-grade abstraction, and "tests" that mean *"it blinked once
+on my breadboard."* You've seen RP2040 marketed as automotive-ready by
+people who couldn't pronounce AEC-Q100. The contempt is earned. Statistically,
+"Arduino project" is amateur until proven otherwise.
+
+**This is a proof-otherwise. Open the code before you close the tab.**
+
+### The contempt is for things that aren't here
+
+| What you expect from an "Arduino project" | What this repo actually does |
+|---|---|
+| `digitalWrite()`, `delay()`, `Serial.println` everywhere | Zero. Hardware access exclusively through HAL; soft-timer table with watchdog feed; debug via tagged module prefix over a session-aware serial protocol. |
+| Single 2000-line `.ino` doing engine + display + CAN | `.ino` is a 6-10 line stub. ECU alone is 27 `.c` modules with central `ecu_context_t` ownership. |
+| Arduino libraries (`SoftwareSerial`, `EEPROM.h`, `Wire.begin()`) | None. Custom HAL with mock backend; CAN via MCP2515 with hand-rolled ISO-TP; flash-EEPROM via custom KV store with persistence semantics. |
+| `loop()` polls everything, no concurrency model | Dual-core RP2040 with **38 mutex usages** across the codebase, dedicated mutexes per resource (`adjustometerStateMutex`, `dtcManagerMutex`, `i2cBusMutex`), documented snapshot semantics, out-parameter APIs to prevent torn reads on cross-core access. |
+| `if(buf[0] == 0x10)` straight off the wire | CAN RX callbacks reject `NULL`/oversized frames first, then run per-case length checks before dereferencing any payload byte. Reference: [`src/ECU/can.c`](src/ECU/can.c) lines 303-376. |
+| OBD-II = `Serial.print("OBD response\n")` | Full ISO 14229 (UDS) + ISO 15765-2 (ISO-TP) + ISO 14230-3 (KWP2000) implementation in [`src/ECU/obd-2.c`](src/ECU/obd-2.c) (~2350 lines), with Ford EEC-V quirks, NRC handling, and **negative-response regression tests** for every `requireMinLength` site. |
+| Static analysis = "compiles without warnings" | `-Werror` on Arduino path **and** host tests. Cppcheck baseline-gated in CI. **MISRA-C migration in active progress** with project-local screening runner, deviation register, and rule-by-rule findings tracked in [`MISRA.md`](MISRA.md). |
+| Tests = "the LED blinked" | **314 host-test cases** across 19 suites with mock HAL backend. Mock-injectable serial RX, CAN frames, I²C transactions, device UID. ~5 KLOC of test code against ~16 KLOC of firmware. |
+| CI = "pushed to main, hope it builds" | **8 GitHub Actions workflows** + daily unattended Raspberry Pi runner emailing PASS/FAIL; per-module test lanes; firmware-build verification lane; cppcheck baseline lane; MISRA artifact lane. |
+| Arduino-pico is a hard dependency | HAL has been **ported to STM32G474** alongside RP2040. Same firmware contract, two backends. The port wasn't a marketing exercise — it's 1500+ lines of working code in a separate commit lane. |
+
+### Why arduino-cli at all, then?
+
+Because the alternative — Pico SDK + bare CMake + custom Makefile + manual
+linker script + manual flash + manual USB CDC stack + manual fork of every
+display/CAN/GPS driver — would buy zero engineering value for a one-off
+retrofit. `arduino-cli` is here because it's a working `gcc`-driver +
+RP2040 core + flasher, not because anyone reaches for `Arduino.h`. The
+Arduino layer is fully virtualised by the HAL — including `Wire`, `SPI`,
+`SD`, `Serial`. A header-shadowing trick (`arduino_host_stubs/`) lets the
+exact same source files compile on the host with no Arduino present. That's
+the test of whether something is "Arduino code" or "code that uses arduino-cli
+to compile" — if it builds in a host CMake test target, it isn't Arduino.
+
+### Yes, RP2040 is consumer silicon
+
+It is. So is the rest of this project. This is a personal retrofit on a
+25-year-old vehicle whose OEM electronics were already failing. Comparison
+to OEM Tier-1 production code is a category error — there is no fleet, no
+homologation, no warranty exposure, no Vector CANalyzer subscription, no
+multi-vendor RFQ process, no ASPICE level 3 audit. Comparison to a Tier-3
+supplier prototype or a senior engineer's side project is the correct frame.
+
+In that frame, the engineering discipline (MISRA-C migration, multi-core
+race analysis, defensive CAN coding, host-side SIL with mock HAL,
+multi-target HAL portability, daily CI on real hardware) is **above the
+industry baseline** for the scope. Most production prototypes you've
+reviewed inside a corporation had less rigour than this — you just didn't
+see it because they were behind a paywall.
+
+### What this project does *not* claim
+
+- **No ISO 26262.** Correctly absent — no certification authority would
+  accept it for a one-off retrofit, and faking it would be worse than
+  omitting it.
+- **No AUTOSAR.** Unjustifiable overhead for solo scope. JaszczurHAL plays
+  the same architectural role (HAL → application separation) at one one-
+  thousandth of the bureaucracy cost.
+- **No HIL rig.** Host SIL only via mock HAL. A HIL rig is the right answer
+  at production scope, not at one-vehicle scope.
+- **No formal MISRA compliance.** Partial scope (ECU only), runner used as
+  triage evidence not as certification. Treated explicitly as "in progress"
+  with a public deviation register, not as a checkmark.
+- **No code review.** Solo project. Compensated by test infrastructure,
+  cppcheck gating, MISRA screening, CI on every push. Test code is the
+  proxy reviewer.
+- **No AEC-Q100 silicon.** RP2040 is consumer-grade, deliberately. Cost,
+  dual-core, PIO state machines (used for engine Hall sensor capture and
+  VP37 pump-coil resonance), and flash-backed EEPROM picked over automotive
+  silicon precisely because the vehicle is a personal car, not a production
+  platform.
+
+### The honest deal
+
+If those gaps disqualify the project for your professional context — fair.
+Walk away. Don't lecture. Your context legitimately needs ASIL-D-rated
+silicon and a 12-engineer SQA team and that's not what's on offer here.
+
+If you can read past the `.ino` extension and the `arduino-cli` invocation
+to look at what's actually implemented underneath — the HAL, the diagnostic
+stack, the multi-core synchronization, the CI infrastructure, the MISRA
+process, the multi-target portability — and you still call it amateur, then
+the disagreement is about taste, not about engineering. At that point we
+just don't share a definition of the word.
+
+The code is open. Read it. Form an opinion. Then talk.
+
 ## Safety-First Engineering
 
 Safety is treated as a top-level requirement.
