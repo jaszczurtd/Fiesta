@@ -64,7 +64,7 @@
             }
         },
         {
-            "name": "Debug: Attach RP2040 (bez uploadu)",
+            "name": "Debug: Attach RP2040 (no upload)",
             "cwd": "${workspaceRoot}",
             "executable": "${workspaceFolder}/.build/${workspaceFolderBasename}.ino.elf",
             "request": "attach",
@@ -91,7 +91,7 @@
             }
         },
         {
-            "name": "Debug: Attach RP2350 (bez uploadu)",
+            "name": "Debug: Attach RP2350 (no upload)",
             "cwd": "${workspaceRoot}",
             "executable": "${workspaceFolder}/.build/${workspaceFolderBasename}.ino.elf",
             "request": "attach",
