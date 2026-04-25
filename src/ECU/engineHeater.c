@@ -28,8 +28,9 @@ void engineHeater_process(engineHeater *self) {
   float coolant = getGlobalValue(F_COOLANT_TEMP);
   float volts = getGlobalValue(F_VOLTS);
   int32_t engineRPM = (int32_t)getGlobalValue(F_RPM);
+  const int16_t heaterStop = ecuParamsHeaterStop();
 
-  if(coolant > TEMP_HEATER_STOP ||
+  if(coolant > heaterStop ||
     engineFan_isFanEnabled(getFanInstance()) ||
     glowPlugs_isGlowPlugsHeating(getGlowPlugsInstance()) ||
     volts < MINIMUM_VOLTS_AMOUNT ||
@@ -38,7 +39,7 @@ void engineHeater_process(engineHeater *self) {
     self->heaterHiEnabled = false;
   } else {
 
-    if(coolant <= (float)(TEMP_HEATER_STOP) / 1.5f) {
+    if(coolant <= (float)heaterStop / 1.5f) {
       self->heaterLoEnabled = self->heaterHiEnabled = true;
     } else {
       self->heaterLoEnabled = true;

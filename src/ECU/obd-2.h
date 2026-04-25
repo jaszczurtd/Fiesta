@@ -14,6 +14,21 @@
 extern "C" {
 #endif
 
+// Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
+// This steers Fordiag toward E217/E21A/E219 part number DB lookup.
+#define FORDIAG_COMPAT_NO_UDS_DTC
+
+// Optional verbose debug output (uncomment to enable):
+//#define OBD_VERBOSE_IDENT_DEBUG   // detailed identification field hex dumps
+//#define OBD_VERBOSE_RX_DEBUG      // raw hex of every incoming CAN frame
+
+// Ford E217 binary representation of part number middle section.
+// Each byte → hex with leading zero stripped → concatenated = middle string.
+// For "12A650": {0x12,0x0A,0x06,0x50} → "12"+"A"+"6"+"50" = "12A650"
+// If changing ecu_PartNumber, update these bytes to match the new middle section.
+#define ecu_PartNumMiddleHex   0x12, 0x0A, 0x06, 0x50
+#define ecu_PartNumMiddleLen   4
+
 #define PAD 0x00
 
 // ── CAN addressing (11-bit standard, Ford PCM) ─────────────────────

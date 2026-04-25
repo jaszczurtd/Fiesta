@@ -40,6 +40,10 @@ void engineFan_process(engineFan *self) {
   float coolant = getGlobalValue(F_COOLANT_TEMP);
   int32_t rpm = (int32_t)getGlobalValue(F_RPM);
   int32_t air = (int32_t)getGlobalValue(F_INTAKE_TEMP);
+  const int16_t fanAirStop = ecuParamsFanAirStop();
+  const int16_t fanAirStart = ecuParamsFanAirStart();
+  const int16_t fanCoolantStop = ecuParamsFanCoolantStop();
+  const int16_t fanCoolantStart = ecuParamsFanCoolantStart();
 
   if(rpm > RPM_MIN) {
 
@@ -48,25 +52,25 @@ void engineFan_process(engineFan *self) {
 
       if(engineFan_isFanEnabled(self)) {
         if(self->fanEnabled & FAN_REASON_AIR) {
-          if(air <= AIR_TEMP_FAN_STOP) {
+          if(air <= fanAirStop) {
             self->fanEnabled &= ~FAN_REASON_AIR;
           }
         }
 
         if(self->fanEnabled & FAN_REASON_COOLANT) {
-          if(coolant <= TEMP_FAN_STOP) {
+          if(coolant <= fanCoolantStop) {
             self->fanEnabled &= ~FAN_REASON_COOLANT;
           }
         }
       } else {
         if(!(self->fanEnabled & FAN_REASON_AIR)) {
-          if(air > AIR_TEMP_FAN_START) {
+          if(air > fanAirStart) {
             self->fanEnabled |= FAN_REASON_AIR;
           }
         }
 
         if(!(self->fanEnabled & FAN_REASON_COOLANT)) {
-          if(coolant > TEMP_FAN_START) {
+          if(coolant > fanCoolantStart) {
             self->fanEnabled |= FAN_REASON_COOLANT;
           }
         }

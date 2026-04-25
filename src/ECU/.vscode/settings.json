@@ -1,7 +1,7 @@
 {
     "arduino.cliPath": "arduino-cli",
-    "arduino.fqbn": "rp2040:rp2040:rpipico",
-    "arduino.boardDescription": "Raspberry Pi Pico",
+    "arduino.fqbn": "rp2040:rp2040:waveshare_rp2040_plus:flash=4194304_0,freq=200,dbgport=Disabled,dbglvl=None,usbstack=picosdk",
+    "arduino.boardDescription": "Waveshare RP2040-Plus",
     "arduino.uploadPort": "/dev/ttyACM0",
     "arduino.sketchbookPath": "",
     "arduino.buildDir": "${workspaceFolder}/.build",
