@@ -151,7 +151,7 @@ void RPM_process(RPM *self) {
 #ifndef VP37
   hal_soft_timer_tick(self->rpmCycleTimer);
 
-  int desiredRPM = NOMINAL_RPM_VALUE;
+  int desiredRPM = ecuParamsNominalRpm();
 
   if(((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;

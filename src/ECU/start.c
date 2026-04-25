@@ -149,6 +149,7 @@ void initialization(void) {
 #endif
 
   dtcManagerInit();
+  ecuParamsInit();
 
   initTests();
   start_initContextMutexes();

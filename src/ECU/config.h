@@ -39,29 +39,11 @@ extern "C" {
 #define ecu_BuildTime       __TIME__
 #define ecu_BuildDateTime   ecu_BuildDate " " ecu_BuildTime
 
-// Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
-// Approximate mileage for a 2001 Ford Fiesta Mk5.
-// Enable OBD_ENABLE_TOTDIST to expose via DID DD01; use getter/setter at runtime.
-// Disabled: ForDiag shows hardcoded value with no way to read real odometer.
-//#define OBD_ENABLE_TOTDIST
-#define ecu_TotalDistanceKmDefault  200000u
+/* ============================================================================
+ * NON-TWEAKABLE PARAMETERS (compile-time only)
+ * ==========================================================================*/
 
-// Fordiag Phase 2: suppress service 0x19 so Fordiag uses EEC-V path.
-// This steers Fordiag toward E217/E21A/E219 part number DB lookup.
-#define FORDIAG_COMPAT_NO_UDS_DTC
-
-// Optional verbose debug output (uncomment to enable):
-//#define OBD_VERBOSE_IDENT_DEBUG   // detailed identification field hex dumps
-//#define OBD_VERBOSE_RX_DEBUG      // raw hex of every incoming CAN frame
-
-// Ford E217 binary representation of part number middle section.
-// Each byte → hex with leading zero stripped → concatenated = middle string.
-// For "12A650": {0x12,0x0A,0x06,0x50} → "12"+"A"+"6"+"50" = "12A650"
-// If changing ecu_PartNumber, update these bytes to match the new middle section.
-#define ecu_PartNumMiddleHex   0x12, 0x0A, 0x06, 0x50
-#define ecu_PartNumMiddleLen   4
-
-//BASIC CONTROL VALUES!
+// BASIC CONTROL VALUES
 #define VP37
 
 #define WATCHDOG_TIME 4000
@@ -96,18 +78,9 @@ extern "C" {
 #define TEMP_EGT_MAX 1600
 #define TEMP_EGT_MIN 100
 
-//temperature when fan should start
-#define TEMP_FAN_START  102
-//temperature when fan should stop after start
-#define TEMP_FAN_STOP   95
-
-//air temperature when fan should start
-#define AIR_TEMP_FAN_START 55
-//air temperature when fan should start
-#define AIR_TEMP_FAN_STOP 45
-
-//temperature when engine heater should stop to heat
-#define TEMP_HEATER_STOP 80
+/* ============================================================================
+ * NON-TWEAKABLE PARAMETERS (compile-time only) - CONTINUED
+ * ==========================================================================*/
 
 //minimum voltage amount - below this value no engine heater, or heated windows
 #define MINIMUM_VOLTS_AMOUNT 13.0
@@ -136,7 +109,6 @@ extern "C" {
 //maximum RPM for engine
 #define RPM_MAX_EVER 5000
 
-#define NOMINAL_RPM_VALUE 890
 #define COLD_RPM_VALUE 1000
 #define REGEN_RPM_VALUE 1100
 #define PRESSED_PEDAL_RPM_VALUE 1300
@@ -179,7 +151,109 @@ extern "C" {
 //Nominal voltage for VP37 correction factor calculation.
 #define NOMINAL_VOLTAGE 12.0f
 
+/* ============================================================================
+ * TWEAKABLE PARAMETERS (runtime-calibrated)
+ * ==========================================================================*/
+
+//coolant temperature when fan should start
+#define TEMP_FAN_START 102
+//coolant temperature when fan should stop after start
+#define TEMP_FAN_STOP 95
+//coolant fan start/stop validation bounds
+#define ECU_PARAMS_COOLANT_START_MIN 70
+#define ECU_PARAMS_COOLANT_START_MAX 130
+#define ECU_PARAMS_COOLANT_STOP_MIN 50
+#define ECU_PARAMS_COOLANT_STOP_MAX 120
+
+//air temperature when fan should start
+#define AIR_TEMP_FAN_START 55
+//air temperature when fan should stop after start
+#define AIR_TEMP_FAN_STOP 45
+//air fan start/stop validation bounds
+#define ECU_PARAMS_AIR_START_MIN 20
+#define ECU_PARAMS_AIR_START_MAX 90
+#define ECU_PARAMS_AIR_STOP_MIN -20
+#define ECU_PARAMS_AIR_STOP_MAX 80
+
+//temperature when engine heater should stop heating
+#define TEMP_HEATER_STOP 80
+//heater stop temperature validation bounds
+#define ECU_PARAMS_HEATER_STOP_MIN 40
+#define ECU_PARAMS_HEATER_STOP_MAX 100
+
+//nominal idle RPM target in non-cold / non-regen state
+#define NOMINAL_RPM_VALUE 890
+//nominal idle RPM validation bounds
+#define ECU_PARAMS_NOMINAL_RPM_MIN 700
+#define ECU_PARAMS_NOMINAL_RPM_MAX 1200
+
+// Odometer value for DID DD01 (TOTDIST), 3-byte unsigned km.
+// Approximate mileage for a 2001 Ford Fiesta Mk5.
+// Enable OBD_ENABLE_TOTDIST to expose via DID DD01; use getter/setter at runtime.
+// Disabled: ForDiag shows hardcoded value with no way to read real odometer.
+//#define OBD_ENABLE_TOTDIST
+#define ecu_TotalDistanceKmDefault  200000u
+
 #include "hardwareConfig.h"
+
+typedef struct {
+  int16_t fanCoolantStartC;
+  int16_t fanCoolantStopC;
+  int16_t fanAirStartC;
+  int16_t fanAirStopC;
+  int16_t heaterStopC;
+  int16_t nominalRpm;
+} ecu_params_values_t;
+
+/**
+ * @brief Initialize runtime ECU parameters from persisted KV storage.
+ *
+ * Defaults are sourced from config.h. If persisted data is missing or invalid,
+ * defaults remain active.
+ */
+void ecuParamsInit(void);
+
+/**
+ * @brief Return the currently active runtime parameter set.
+ * @return Pointer to active immutable runtime parameters.
+ */
+const ecu_params_values_t *ecuParamsActive(void);
+
+/**
+ * @brief Runtime coolant threshold for fan enable.
+ * @return Coolant temperature in Celsius.
+ */
+int16_t ecuParamsFanCoolantStart(void);
+
+/**
+ * @brief Runtime coolant threshold for fan disable.
+ * @return Coolant temperature in Celsius.
+ */
+int16_t ecuParamsFanCoolantStop(void);
+
+/**
+ * @brief Runtime intake-air threshold for fan enable.
+ * @return Intake-air temperature in Celsius.
+ */
+int16_t ecuParamsFanAirStart(void);
+
+/**
+ * @brief Runtime intake-air threshold for fan disable.
+ * @return Intake-air temperature in Celsius.
+ */
+int16_t ecuParamsFanAirStop(void);
+
+/**
+ * @brief Runtime coolant threshold for heater stop.
+ * @return Coolant temperature in Celsius.
+ */
+int16_t ecuParamsHeaterStop(void);
+
+/**
+ * @brief Runtime nominal idle RPM target (normal mode).
+ * @return Nominal RPM value.
+ */
+int16_t ecuParamsNominalRpm(void);
 
 /**
  * @brief Initialize the minimal serial configurator session context.
