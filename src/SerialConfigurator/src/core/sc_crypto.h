@@ -15,6 +15,9 @@ extern "C" {
 #define SC_CRYPTO_CHACHA20_POLY1305_TAG_BYTES 16u
 #define SC_CRYPTO_MD5_DIGEST_BYTES 16u
 #define SC_CRYPTO_MD5_HEX_BUF_SIZE 33u
+#define SC_CRYPTO_SHA256_DIGEST_BYTES 32u
+#define SC_CRYPTO_SHA256_HEX_BUF_SIZE 65u
+#define SC_CRYPTO_HMAC_SHA256_BLOCK_BYTES 64u
 
 bool sc_crypto_available(void);
 const char *sc_crypto_backend_name(void);
@@ -79,6 +82,43 @@ bool sc_crypto_base64_decode(
     uint8_t *output,
     size_t out_size,
     size_t *out_len
+);
+
+/*
+ * SHA-256 / HMAC-SHA256.
+ *
+ * Provided unconditionally by every backend (portable implementation
+ * lives in sc_sha256.c). Used by the SerialConfigurator authentication
+ * handshake (Phase 3): per-device key is derived as
+ *   HMAC-SHA256(key=salt, message=uid)
+ * and the challenge response is
+ *   HMAC-SHA256(key=device_key, message=challenge || session_id).
+ */
+bool sc_crypto_sha256(
+    const uint8_t *input,
+    size_t input_len,
+    uint8_t out_digest[SC_CRYPTO_SHA256_DIGEST_BYTES]
+);
+bool sc_crypto_sha256_hex(
+    const uint8_t *input,
+    size_t input_len,
+    char *output,
+    size_t out_size
+);
+bool sc_crypto_hmac_sha256(
+    const uint8_t *key,
+    size_t key_len,
+    const uint8_t *message,
+    size_t message_len,
+    uint8_t out_mac[SC_CRYPTO_SHA256_DIGEST_BYTES]
+);
+bool sc_crypto_hmac_sha256_hex(
+    const uint8_t *key,
+    size_t key_len,
+    const uint8_t *message,
+    size_t message_len,
+    char *output,
+    size_t out_size
 );
 
 #ifdef __cplusplus
