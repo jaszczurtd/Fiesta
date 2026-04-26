@@ -54,6 +54,7 @@ pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
 add_library(serial_configurator_core STATIC
     src/core/sc_core.c
     src/core/sc_frame.c
+    src/core/sc_sha256.c
     src/core/sc_transport.c
     ${SC_CRYPTO_SOURCES}
 )
