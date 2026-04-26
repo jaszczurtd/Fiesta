@@ -17,6 +17,9 @@ extern "C" {
 #define SC_IDENTITY_FIELD_MAX 64u
 #define SC_COMMAND_STATUS_TOKEN_MAX 32u
 #define SC_COMMAND_TOPIC_MAX 32u
+#define SC_PARAM_ID_MAX 48u
+#define SC_PARAM_TEXT_MAX 96u
+#define SC_PARAM_ITEMS_MAX 64u
 
 typedef struct ScIdentityData {
     bool valid;
@@ -48,6 +51,54 @@ typedef struct ScCommandResult {
     char response[SC_HELLO_RESPONSE_MAX];
 } ScCommandResult;
 
+typedef enum ScValueType {
+    SC_VALUE_TYPE_UNKNOWN = 0,
+    SC_VALUE_TYPE_BOOL,
+    SC_VALUE_TYPE_INT,
+    SC_VALUE_TYPE_UINT,
+    SC_VALUE_TYPE_FLOAT,
+    SC_VALUE_TYPE_TEXT
+} ScValueType;
+
+typedef struct ScTypedValue {
+    ScValueType type;
+    bool bool_value;
+    int64_t int_value;
+    uint64_t uint_value;
+    double float_value;
+    char raw[SC_PARAM_TEXT_MAX];
+} ScTypedValue;
+
+typedef struct ScParamValueEntry {
+    char id[SC_PARAM_ID_MAX];
+    ScTypedValue value;
+} ScParamValueEntry;
+
+typedef struct ScParamListData {
+    size_t count;
+    bool truncated;
+    char ids[SC_PARAM_ITEMS_MAX][SC_PARAM_ID_MAX];
+} ScParamListData;
+
+typedef struct ScParamValuesData {
+    size_t count;
+    bool truncated;
+    ScParamValueEntry entries[SC_PARAM_ITEMS_MAX];
+} ScParamValuesData;
+
+typedef struct ScParamDetailData {
+    bool valid;
+    char id[SC_PARAM_ID_MAX];
+    bool has_value;
+    ScTypedValue value;
+    bool has_min;
+    ScTypedValue min;
+    bool has_max;
+    ScTypedValue max;
+    bool has_default;
+    ScTypedValue default_value;
+} ScParamDetailData;
+
 typedef struct ScModuleStatus {
     const char *display_name;
     bool detected;
@@ -71,6 +122,7 @@ void sc_core_detect_modules(ScCore *core, char *log_output, size_t log_output_si
 size_t sc_core_module_count(void);
 const ScModuleStatus *sc_core_module_status(const ScCore *core, size_t index);
 const char *sc_command_status_name(ScCommandStatus status);
+const char *sc_value_type_name(ScValueType type);
 
 bool sc_core_sc_get_meta(
     ScCore *core,
@@ -100,6 +152,25 @@ bool sc_core_sc_get_param(
     ScCommandResult *result,
     char *log_output,
     size_t log_output_size
+);
+
+bool sc_core_parse_param_list_result(
+    const ScCommandResult *result,
+    ScParamListData *parsed,
+    char *error,
+    size_t error_size
+);
+bool sc_core_parse_param_values_result(
+    const ScCommandResult *result,
+    ScParamValuesData *parsed,
+    char *error,
+    size_t error_size
+);
+bool sc_core_parse_param_result(
+    const ScCommandResult *result,
+    ScParamDetailData *parsed,
+    char *error,
+    size_t error_size
 );
 
 #ifdef __cplusplus

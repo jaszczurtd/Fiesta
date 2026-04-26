@@ -18,6 +18,38 @@ static const char *value_or_dash(const char *value)
     return (value != 0 && value[0] != '\0') ? value : "-";
 }
 
+static void typed_value_to_text(const ScTypedValue *value, char *buffer, size_t buffer_size)
+{
+    if (buffer == 0 || buffer_size == 0u) {
+        return;
+    }
+
+    if (value == 0) {
+        (void)snprintf(buffer, buffer_size, "-");
+        return;
+    }
+
+    switch (value->type) {
+        case SC_VALUE_TYPE_BOOL:
+            (void)snprintf(buffer, buffer_size, "%s", value->bool_value ? "true" : "false");
+            return;
+        case SC_VALUE_TYPE_INT:
+            (void)snprintf(buffer, buffer_size, "%lld", (long long)value->int_value);
+            return;
+        case SC_VALUE_TYPE_UINT:
+            (void)snprintf(buffer, buffer_size, "%llu", (unsigned long long)value->uint_value);
+            return;
+        case SC_VALUE_TYPE_FLOAT:
+            (void)snprintf(buffer, buffer_size, "%.6g", value->float_value);
+            return;
+        case SC_VALUE_TYPE_TEXT:
+        case SC_VALUE_TYPE_UNKNOWN:
+        default:
+            (void)snprintf(buffer, buffer_size, "%s", value_or_dash(value->raw));
+            return;
+    }
+}
+
 static bool strings_equal_case_insensitive(const char *a, const char *b)
 {
     if (a == 0 || b == 0) {
@@ -41,7 +73,9 @@ static void print_usage(const char *program_name)
     fprintf(stderr, "  %s detect\n", program_name);
     fprintf(stderr, "  %s list\n", program_name);
     fprintf(stderr, "  %s meta [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
+    fprintf(stderr, "  %s param-list [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s get-values [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
+    fprintf(stderr, "  %s get-param <param-id> [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
 }
 
 static bool parse_selectors(
@@ -308,7 +342,141 @@ static int command_list(void)
     return 0;
 }
 
-static int command_meta_or_values(const char *command, const CliSelectors *selectors)
+static void print_parsed_values(const ScParamValuesData *values)
+{
+    if (values == 0) {
+        return;
+    }
+
+    printf("PARSED count=%zu%s\n", values->count, values->truncated ? " (truncated)" : "");
+    for (size_t i = 0u; i < values->count; ++i) {
+        char typed[128];
+        typed_value_to_text(&values->entries[i].value, typed, sizeof(typed));
+        printf(
+            "- %s = %s (type=%s)\n",
+            values->entries[i].id,
+            typed,
+            sc_value_type_name(values->entries[i].value.type)
+        );
+    }
+}
+
+static void print_parsed_param_list(const ScParamListData *list)
+{
+    if (list == 0) {
+        return;
+    }
+
+    printf("PARSED count=%zu%s\n", list->count, list->truncated ? " (truncated)" : "");
+    for (size_t i = 0u; i < list->count; ++i) {
+        printf("- %s\n", list->ids[i]);
+    }
+}
+
+static void print_parsed_param_detail(const ScParamDetailData *detail)
+{
+    if (detail == 0) {
+        return;
+    }
+
+    char value_text[128];
+    char min_text[128];
+    char max_text[128];
+    char default_text[128];
+    typed_value_to_text(&detail->value, value_text, sizeof(value_text));
+    typed_value_to_text(&detail->min, min_text, sizeof(min_text));
+    typed_value_to_text(&detail->max, max_text, sizeof(max_text));
+    typed_value_to_text(&detail->default_value, default_text, sizeof(default_text));
+
+    printf("PARSED id=%s valid=%s\n", detail->id, detail->valid ? "true" : "false");
+    printf("  value=%s (type=%s)\n", value_text, sc_value_type_name(detail->value.type));
+    if (detail->has_min) {
+        printf("  min=%s (type=%s)\n", min_text, sc_value_type_name(detail->min.type));
+    }
+    if (detail->has_max) {
+        printf("  max=%s (type=%s)\n", max_text, sc_value_type_name(detail->max.type));
+    }
+    if (detail->has_default) {
+        printf(
+            "  default=%s (type=%s)\n",
+            default_text,
+            sc_value_type_name(detail->default_value.type)
+        );
+    }
+}
+
+static bool parse_get_param_args(
+    int argc,
+    char *argv[],
+    const char **param_id,
+    CliSelectors *selectors
+)
+{
+    if (param_id == 0 || selectors == 0) {
+        return false;
+    }
+
+    *param_id = 0;
+    selectors->module = 0;
+    selectors->uid = 0;
+    selectors->port = 0;
+
+    int i = 2;
+    while (i < argc) {
+        const char *arg = argv[i];
+        if (strcmp(arg, "--module") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --module\n");
+                return false;
+            }
+            selectors->module = argv[i + 1];
+            i += 2;
+            continue;
+        }
+
+        if (strcmp(arg, "--uid") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --uid\n");
+                return false;
+            }
+            selectors->uid = argv[i + 1];
+            i += 2;
+            continue;
+        }
+
+        if (strcmp(arg, "--port") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --port\n");
+                return false;
+            }
+            selectors->port = argv[i + 1];
+            i += 2;
+            continue;
+        }
+
+        if (*param_id == 0) {
+            *param_id = arg;
+            i++;
+            continue;
+        }
+
+        fprintf(stderr, "[ERROR] Unknown option or extra argument: %s\n", arg);
+        return false;
+    }
+
+    if (*param_id == 0 || (*param_id)[0] == '\0') {
+        fprintf(stderr, "[ERROR] Missing <param-id>.\n");
+        return false;
+    }
+
+    return true;
+}
+
+static int command_meta_values_or_catalog(
+    const char *command,
+    const char *param_id,
+    const CliSelectors *selectors
+)
 {
     ScCore core;
     char detection_log[CLI_DETECTION_LOG_MAX];
@@ -343,10 +511,27 @@ static int command_meta_or_values(const char *command, const CliSelectors *selec
             command_log,
             sizeof(command_log)
         );
-    } else {
+    } else if (strcmp(command, "get-values") == 0) {
         ok = sc_core_sc_get_values(
             &core,
             (size_t)module_index,
+            &result,
+            command_log,
+            sizeof(command_log)
+        );
+    } else if (strcmp(command, "param-list") == 0) {
+        ok = sc_core_sc_get_param_list(
+            &core,
+            (size_t)module_index,
+            &result,
+            command_log,
+            sizeof(command_log)
+        );
+    } else if (strcmp(command, "get-param") == 0) {
+        ok = sc_core_sc_get_param(
+            &core,
+            (size_t)module_index,
+            param_id,
             &result,
             command_log,
             sizeof(command_log)
@@ -373,6 +558,36 @@ static int command_meta_or_values(const char *command, const CliSelectors *selec
                 value_or_dash(status->meta_identity.build_id),
                 value_or_dash(status->meta_identity.uid)
             );
+        }
+    }
+
+    if (strcmp(command, "param-list") == 0 && result.status == SC_COMMAND_STATUS_OK) {
+        ScParamListData parsed;
+        char parse_error[256];
+        if (sc_core_parse_param_list_result(&result, &parsed, parse_error, sizeof(parse_error))) {
+            print_parsed_param_list(&parsed);
+        } else {
+            fprintf(stderr, "[WARN] %s\n", parse_error);
+        }
+    }
+
+    if (strcmp(command, "get-values") == 0 && result.status == SC_COMMAND_STATUS_OK) {
+        ScParamValuesData parsed;
+        char parse_error[256];
+        if (sc_core_parse_param_values_result(&result, &parsed, parse_error, sizeof(parse_error))) {
+            print_parsed_values(&parsed);
+        } else {
+            fprintf(stderr, "[WARN] %s\n", parse_error);
+        }
+    }
+
+    if (strcmp(command, "get-param") == 0 && result.status == SC_COMMAND_STATUS_OK) {
+        ScParamDetailData parsed;
+        char parse_error[256];
+        if (sc_core_parse_param_result(&result, &parsed, parse_error, sizeof(parse_error))) {
+            print_parsed_param_detail(&parsed);
+        } else {
+            fprintf(stderr, "[WARN] %s\n", parse_error);
         }
     }
 
@@ -405,15 +620,33 @@ int main(int argc, char *argv[])
         return command_list();
     }
 
-    if (strcmp(command, "meta") == 0 || strcmp(command, "get-values") == 0) {
+    if (strcmp(command, "meta") == 0 ||
+        strcmp(command, "get-values") == 0 ||
+        strcmp(command, "param-list") == 0) {
         CliSelectors selectors;
         if (!parse_selectors(argc, argv, 2, &selectors)) {
             print_usage(argv[0]);
             return 1;
         }
 
-        return command_meta_or_values(
-            strcmp(command, "meta") == 0 ? "meta" : "get-values",
+        return command_meta_values_or_catalog(
+            command,
+            0,
+            &selectors
+        );
+    }
+
+    if (strcmp(command, "get-param") == 0) {
+        CliSelectors selectors;
+        const char *param_id = 0;
+        if (!parse_get_param_args(argc, argv, &param_id, &selectors)) {
+            print_usage(argv[0]);
+            return 1;
+        }
+
+        return command_meta_values_or_catalog(
+            "get-param",
+            param_id,
             &selectors
         );
     }

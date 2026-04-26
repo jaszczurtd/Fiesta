@@ -105,6 +105,9 @@ void sc_module_details_init(ScModuleDetailsView *view)
     view->build_value = build_field_row(grid, 4, "Build");
     view->proto_value = build_field_row(grid, 5, "Proto");
     view->session_value = build_field_row(grid, 6, "Session");
+    view->catalog_status_value = build_field_row(grid, 7, "Catalog");
+    view->values_status_value = build_field_row(grid, 8, "Values");
+    view->param_probe_status_value = build_field_row(grid, 9, "Param Probe");
 }
 
 GtkWidget *sc_module_details_root(const ScModuleDetailsView *view)
@@ -131,12 +134,18 @@ void sc_module_details_show_placeholder(ScModuleDetailsView *view, const char *m
     set_label_text(view->build_value, "-");
     set_label_text(view->proto_value, "-");
     set_label_text(view->session_value, "-");
+    set_label_text(view->catalog_status_value, "-");
+    set_label_text(view->values_status_value, "-");
+    set_label_text(view->param_probe_status_value, "-");
 }
 
 void sc_module_details_show_module(
     ScModuleDetailsView *view,
     const ScModuleStatus *status,
-    const char *meta_status
+    const char *meta_status,
+    const char *catalog_status,
+    const char *values_status,
+    const char *param_probe_status
 )
 {
     if (view == 0 || status == 0) {
@@ -145,6 +154,9 @@ void sc_module_details_show_module(
 
     set_label_text(view->selected_value, status->display_name);
     set_label_text(view->meta_status_value, value_or_dash(meta_status));
+    set_label_text(view->catalog_status_value, value_or_dash(catalog_status));
+    set_label_text(view->values_status_value, value_or_dash(values_status));
+    set_label_text(view->param_probe_status_value, value_or_dash(param_probe_status));
 
     const ScIdentityData *identity = prefer_meta_identity(status);
     if (identity == 0) {
@@ -181,10 +193,16 @@ void sc_module_details_show_module(
             identity->module_name[0] != '\0' ? identity->module_name : status->display_name
         )
     );
+    const char *build_value = identity->build_id;
+    if ((build_value == 0 || build_value[0] == '\0') &&
+        status->hello_identity.valid &&
+        status->hello_identity.build_id[0] != '\0') {
+        build_value = status->hello_identity.build_id;
+    }
     set_label_text(view->port_value, status->detected ? value_or_dash(status->port_path) : "-");
     set_label_text(view->uid_value, value_or_dash(identity->uid));
     set_label_text(view->fw_value, value_or_dash(identity->fw_version));
-    set_label_text(view->build_value, value_or_dash(identity->build_id));
+    set_label_text(view->build_value, value_or_dash(build_value));
     set_label_text(view->proto_value, proto_text);
     set_label_text(view->session_value, session_text);
 }

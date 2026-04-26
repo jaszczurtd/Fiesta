@@ -2,15 +2,38 @@
 #include "hal/hal_pid_controller.h"
 #include "hal/hal_soft_timer.h"
 #include "hal/hal_serial.h"
+#include "hal/hal_serial_frame.h"
 #include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "config.h"
 #include "utils/tools_api.h"
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 extern "C" const char *test_stubs_last_forwarded_serial_line(void);
 extern "C" unsigned     test_stubs_forwarded_serial_count(void);
 extern "C" void         test_stubs_reset_forwarded_serial(void);
+
+static uint8_t hwRefCrc8(const char *data, size_t len) {
+    uint8_t crc = 0u;
+    for (size_t i = 0u; i < len; ++i) {
+        crc ^= (uint8_t)data[i];
+        for (int b = 0; b < 8; ++b) {
+            crc = (uint8_t)((crc & 0x80u) ? ((crc << 1) ^ 0x07u) : (crc << 1));
+        }
+    }
+    return crc;
+}
+
+static void hwBuildFrame(uint16_t seq, const char *payload, char *out, size_t out_size) {
+    char body[160];
+    const int body_len = snprintf(body, sizeof(body), "SC,%u,%s", (unsigned)seq, payload);
+    TEST_ASSERT_TRUE(body_len > 0 && (size_t)body_len < sizeof(body));
+    const uint8_t crc = hwRefCrc8(body, (size_t)body_len);
+    const int written = snprintf(out, out_size, "$%s*%02X\n", body, crc);
+    TEST_ASSERT_TRUE(written > 0 && (size_t)written < out_size);
+}
 
 static int s_soft_timer_hits = 0;
 
@@ -269,24 +292,30 @@ void test_ecu_config_session_hello_path(void) {
     configSessionInit();
     hal_mock_serial_reset();
 
-    hal_mock_serial_inject_rx("HELLO\n", -1);
+    char frame[160];
+    hwBuildFrame(1u, "HELLO", frame, sizeof(frame));
+    hal_mock_serial_inject_rx(frame, -1);
     configSessionTick();
 
     TEST_ASSERT_TRUE(configSessionActive());
     TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
-    const char *line = hal_mock_serial_last_line();
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "module=ECU"));
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "fw="));
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "build="));
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(line, "uid="));
+    const char *raw = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_NULL(raw);
+
+    uint16_t seq = 0u;
+    char inner[200];
+    inner[0] = '\0';
+    TEST_ASSERT_TRUE(hal_serial_frame_decode(raw, &seq, inner, sizeof(inner)));
+    TEST_ASSERT_EQUAL_UINT16(1u, seq);
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=ECU"));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "fw="));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "build="));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "uid="));
 }
 
-void test_ecu_config_session_unknown_command_returns_error(void) {
-    /* New behaviour (post HAL unknown-line callback): the bootstrap session
-     * helper no longer prints "ERR UNKNOWN" itself when ECU has registered an
-     * unknown-line handler. Instead the line is forwarded to
-     * tickTestsHandleSerialLine(). The test stub records the forwarded line
-     * so we can verify routing without relying on a serial reply. */
+void test_ecu_config_session_non_framed_input_is_silently_dropped(void) {
+    /* The framed-only HAL session must ignore plain-text input completely:
+     * no reply on the wire, no fall-through to tickTestsHandleSerialLine(). */
     configSessionInit();
     hal_mock_serial_reset();
     test_stubs_reset_forwarded_serial();
@@ -297,8 +326,7 @@ void test_ecu_config_session_unknown_command_returns_error(void) {
     TEST_ASSERT_FALSE(configSessionActive());
     TEST_ASSERT_EQUAL_UINT32(0u, configSessionId());
     TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
-    TEST_ASSERT_EQUAL_UINT(1u, test_stubs_forwarded_serial_count());
-    TEST_ASSERT_EQUAL_STRING("WHAT", test_stubs_last_forwarded_serial_line());
+    TEST_ASSERT_EQUAL_UINT(0u, test_stubs_forwarded_serial_count());
 }
 
 // ── float_to_u32 / u32_to_float tests ───────────────────────────────────────
@@ -338,7 +366,7 @@ int main(void) {
     RUN_TEST(test_serial_inject_auto_length);
     RUN_TEST(test_enter_bootloader_sets_mock_flag);
     RUN_TEST(test_ecu_config_session_hello_path);
-    RUN_TEST(test_ecu_config_session_unknown_command_returns_error);
+    RUN_TEST(test_ecu_config_session_non_framed_input_is_silently_dropped);
 
     RUN_TEST(test_float_to_u32_roundtrip);
     RUN_TEST(test_float_to_u32_known_pattern);

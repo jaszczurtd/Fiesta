@@ -27,6 +27,7 @@ add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
     ${CLOCKS_SRC}/config.cpp
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/hal_crypto.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_system.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp

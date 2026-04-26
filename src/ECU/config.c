@@ -2,6 +2,7 @@
 #include "config.h"
 #include "tests.h"
 #include "ecu_unit_testing.h"
+#include <hal/hal_crypto.h>
 
 #include <hal/hal_kv.h>
 #include <hal/hal_serial_session.h>
@@ -22,6 +23,12 @@ const char *err = "ERR";
 #define SC_STATUS_BAD_REQUEST      "SC_BAD_REQUEST"
 #define SC_STATUS_NOT_READY        "SC_NOT_READY"
 #define SC_STATUS_INVALID_PARAM_ID "SC_INVALID_PARAM_ID"
+
+/* Forward-declared session state used by every SC_* reply helper below.
+ * `hal_serial_session_println(&s_configSession, ...)` automatically wraps the
+ * payload into the `$SC,<seq>,<payload>*<crc>` frame when the in-flight
+ * request was framed; otherwise it falls back to plain text. */
+static hal_serial_session_t s_configSession;
 
 static ecu_params_values_t s_active = {
   .fanCoolantStartC = TEMP_FAN_START,
@@ -453,6 +460,12 @@ static void configSessionReplyGetMeta(void) {
     uidHex[0] = '\0';
   }
 
+  char out[32];
+  size_t out_len = 0u;
+  const uint8_t *b = (const uint8_t *)(BUILD_ID);
+
+  hal_base64_encode(b, strlen((const char*)b), out, sizeof(out), &out_len);
+
   char response[256] = {0};
   snprintf(response,
            sizeof(response),
@@ -462,9 +475,9 @@ static void configSessionReplyGetMeta(void) {
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
            (unsigned long)configSessionId(),
            FW_VERSION,
-           BUILD_ID,
+           out,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
-  hal_serial_println(response);
+  hal_serial_session_println(&s_configSession, response);
 }
 
 static void configSessionReplyGetParamList(void) {
@@ -472,7 +485,7 @@ static void configSessionReplyGetParamList(void) {
   size_t used = (size_t)snprintf(response, sizeof(response), "%s PARAM_LIST", SC_STATUS_OK);
   if(used >= sizeof(response)) {
     response[sizeof(response) - 1u] = '\0';
-    hal_serial_println(response);
+    hal_serial_session_println(&s_configSession, response);
     return;
   }
 
@@ -497,12 +510,12 @@ static void configSessionReplyGetParamList(void) {
   }
 
   response[sizeof(response) - 1u] = '\0';
-  hal_serial_println(response);
+  hal_serial_session_println(&s_configSession, response);
 }
 
 static void configSessionReplyGetParamValue(const sc_param_definition_t *param) {
   if(param == NULL || param->getter == NULL) {
-    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return;
   }
 
@@ -516,13 +529,13 @@ static void configSessionReplyGetParamValue(const sc_param_definition_t *param) 
            (int)param->minValue,
            (int)param->maxValue,
            (int)param->defaultValue);
-  hal_serial_println(response);
+  hal_serial_session_println(&s_configSession, response);
 }
 
 static void configSessionReplyGetValues(void) {
   const ecu_params_values_t *active = ecuParamsActive();
   if(active == NULL) {
-    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return;
   }
 
@@ -538,19 +551,19 @@ static void configSessionReplyGetValues(void) {
            (int)active->fanAirStopC,
            (int)active->heaterStopC,
            (int)active->nominalRpm);
-  hal_serial_println(response);
+  hal_serial_session_println(&s_configSession, response);
 }
 
 static bool configSessionHandleScGetParamCommand(const char *line) {
   if(line == NULL) {
-    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return true;
   }
 
   const char *cursor = line + strlen("SC_GET_PARAM");
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == NULL || cursor[0] == '\0') {
-    hal_serial_println(SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
     return true;
   }
 
@@ -563,14 +576,14 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
   paramId[idLen] = '\0';
 
   if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
-    hal_serial_println(SC_STATUS_BAD_REQUEST " param_id_too_long");
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == NULL || cursor[0] != '\0') {
-    hal_serial_println(SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
     return true;
   }
 
@@ -578,7 +591,7 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
   if(param == NULL) {
     char response[96] = {0};
     snprintf(response, sizeof(response), "%s id=%s", SC_STATUS_INVALID_PARAM_ID, paramId);
-    hal_serial_println(response);
+    hal_serial_session_println(&s_configSession, response);
     return true;
   }
 
@@ -592,7 +605,7 @@ static bool configSessionHandleScCommand(const char *line) {
   }
 
   if(!configSessionActive()) {
-    hal_serial_println(SC_STATUS_NOT_READY " HELLO_REQUIRED");
+    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_READY " HELLO_REQUIRED");
     return true;
   }
 
@@ -615,11 +628,9 @@ static bool configSessionHandleScCommand(const char *line) {
     return configSessionHandleScGetParamCommand(line);
   }
 
-  hal_serial_println(SC_STATUS_UNKNOWN_CMD);
+  hal_serial_session_println(&s_configSession, SC_STATUS_UNKNOWN_CMD);
   return true;
 }
-
-static hal_serial_session_t s_configSession;
 
 static void configSession_onUnknownLine(const char *line, void *user) {
   (void)user;

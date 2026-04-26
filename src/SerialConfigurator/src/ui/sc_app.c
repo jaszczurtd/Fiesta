@@ -18,33 +18,26 @@ typedef struct AppState {
     ScModuleDetailsView details_view;
     bool connected;
     bool detection_in_progress;
-    bool metadata_in_progress;
     bool selection_valid;
     size_t selected_module_index;
     char placeholder_status[160];
     char module_meta_status[SC_MODULE_COUNT][160];
+    char module_catalog_status[SC_MODULE_COUNT][160];
+    char module_values_status[SC_MODULE_COUNT][160];
+    char module_param_probe_status[SC_MODULE_COUNT][160];
 } AppState;
 
 typedef struct DetectionResult {
     ScCore core;
+    char module_meta_status[SC_MODULE_COUNT][160];
+    char module_catalog_status[SC_MODULE_COUNT][160];
+    char module_values_status[SC_MODULE_COUNT][160];
+    char module_param_probe_status[SC_MODULE_COUNT][160];
     char *log_text;
 } DetectionResult;
 
-typedef struct MetadataBatchRequest {
-    ScCore core;
-} MetadataBatchRequest;
-
-typedef struct MetadataBatchResult {
-    ScCore core;
-    bool attempted[SC_MODULE_COUNT];
-    bool meta_ok[SC_MODULE_COUNT];
-    ScCommandResult meta_result[SC_MODULE_COUNT];
-    char module_status[SC_MODULE_COUNT][160];
-    char *log_text;
-} MetadataBatchResult;
-
-#define UI_DETECTION_LOG_MAX 8192u
-#define UI_METADATA_LOG_MAX 16384u
+#define UI_DETECTION_LOG_MAX 16384u
+#define UI_AUTO_REFRESH_PARAM_PROBE 0
 
 static const char *k_detect_label = "Detect Fiesta Modules";
 static const char *k_disconnect_label = "Disconnect";
@@ -53,25 +46,6 @@ static const char *k_idle_log_message =
     "Press \"Detect Fiesta Modules\" to send HELLO to connected modules.\n";
 
 static void detection_result_free(DetectionResult *result)
-{
-    if (result == 0) {
-        return;
-    }
-
-    g_free(result->log_text);
-    g_free(result);
-}
-
-static void metadata_request_free(MetadataBatchRequest *request)
-{
-    if (request == 0) {
-        return;
-    }
-
-    g_free(request);
-}
-
-static void metadata_result_free(MetadataBatchResult *result)
 {
     if (result == 0) {
         return;
@@ -104,6 +78,48 @@ static void set_module_meta_status(AppState *state, size_t module_index, const c
     (void)snprintf(
         state->module_meta_status[module_index],
         sizeof(state->module_meta_status[module_index]),
+        "%s",
+        (message != 0 && message[0] != '\0') ? message : "-"
+    );
+}
+
+static void set_module_catalog_status(AppState *state, size_t module_index, const char *message)
+{
+    if (state == 0 || module_index >= SC_MODULE_COUNT) {
+        return;
+    }
+
+    (void)snprintf(
+        state->module_catalog_status[module_index],
+        sizeof(state->module_catalog_status[module_index]),
+        "%s",
+        (message != 0 && message[0] != '\0') ? message : "-"
+    );
+}
+
+static void set_module_values_status(AppState *state, size_t module_index, const char *message)
+{
+    if (state == 0 || module_index >= SC_MODULE_COUNT) {
+        return;
+    }
+
+    (void)snprintf(
+        state->module_values_status[module_index],
+        sizeof(state->module_values_status[module_index]),
+        "%s",
+        (message != 0 && message[0] != '\0') ? message : "-"
+    );
+}
+
+static void set_module_param_probe_status(AppState *state, size_t module_index, const char *message)
+{
+    if (state == 0 || module_index >= SC_MODULE_COUNT) {
+        return;
+    }
+
+    (void)snprintf(
+        state->module_param_probe_status[module_index],
+        sizeof(state->module_param_probe_status[module_index]),
         "%s",
         (message != 0 && message[0] != '\0') ? message : "-"
     );
@@ -149,23 +165,6 @@ static int module_index_from_row(const AppState *state, const GtkListBoxRow *row
     return -1;
 }
 
-static void append_log_text(AppState *state, const char *text)
-{
-    if (state == 0 || state->log_buffer == 0 || text == 0 || text[0] == '\0') {
-        return;
-    }
-
-    GtkTextIter end;
-    gtk_text_buffer_get_end_iter(state->log_buffer, &end);
-    const int chars = gtk_text_buffer_get_char_count(state->log_buffer);
-    if (chars > 0) {
-        gtk_text_buffer_insert(state->log_buffer, &end, "\n", 1);
-        gtk_text_buffer_get_end_iter(state->log_buffer, &end);
-    }
-
-    gtk_text_buffer_insert(state->log_buffer, &end, text, -1);
-}
-
 static void refresh_details_view(AppState *state)
 {
     if (state == 0) {
@@ -186,7 +185,10 @@ static void refresh_details_view(AppState *state)
     sc_module_details_show_module(
         &state->details_view,
         status,
-        state->module_meta_status[state->selected_module_index]
+        state->module_meta_status[state->selected_module_index],
+        state->module_catalog_status[state->selected_module_index],
+        state->module_values_status[state->selected_module_index],
+        state->module_param_probe_status[state->selected_module_index]
     );
 }
 
@@ -257,12 +259,14 @@ static void reset_connection_state(AppState *state, bool by_user_request)
 
     state->connected = false;
     state->detection_in_progress = false;
-    state->metadata_in_progress = false;
     state->selection_valid = false;
     state->selected_module_index = 0u;
     set_placeholder_status(state, "Run detection to populate module details.");
     for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
         set_module_meta_status(state, i, "No metadata (module not detected).");
+        set_module_catalog_status(state, i, "No catalog read (module not detected).");
+        set_module_values_status(state, i, "No values read (module not detected).");
+        set_module_param_probe_status(state, i, "No param probe (module not detected).");
     }
 
     if (state->module_list != 0) {
@@ -303,6 +307,52 @@ static bool command_result_is_unknown(const ScCommandResult *result)
     return strcmp(result->response, "ERR UNKNOWN") == 0;
 }
 
+#if UI_AUTO_REFRESH_PARAM_PROBE
+static const ScParamValueEntry *find_value_entry_by_id(
+    const ScParamValuesData *values,
+    const char *id
+)
+{
+    if (values == 0 || id == 0) {
+        return 0;
+    }
+
+    for (size_t i = 0u; i < values->count; ++i) {
+        if (strcmp(values->entries[i].id, id) == 0) {
+            return &values->entries[i];
+        }
+    }
+
+    return 0;
+}
+
+static bool typed_values_equal(const ScTypedValue *a, const ScTypedValue *b)
+{
+    if (a == 0 || b == 0) {
+        return false;
+    }
+
+    if (a->type != b->type) {
+        return strcmp(a->raw, b->raw) == 0;
+    }
+
+    switch (a->type) {
+        case SC_VALUE_TYPE_BOOL:
+            return a->bool_value == b->bool_value;
+        case SC_VALUE_TYPE_INT:
+            return a->int_value == b->int_value;
+        case SC_VALUE_TYPE_UINT:
+            return a->uint_value == b->uint_value;
+        case SC_VALUE_TYPE_FLOAT:
+            return a->float_value == b->float_value;
+        case SC_VALUE_TYPE_TEXT:
+        case SC_VALUE_TYPE_UNKNOWN:
+        default:
+            return strcmp(a->raw, b->raw) == 0;
+    }
+}
+#endif
+
 static void run_detection_worker(
     GTask *task,
     gpointer source_object,
@@ -319,36 +369,34 @@ static void run_detection_worker(
 
     sc_core_init(&result->core);
     sc_core_detect_modules(&result->core, result->log_text, UI_DETECTION_LOG_MAX);
+    append_text(
+        result->log_text,
+        UI_DETECTION_LOG_MAX,
+        "\n[INFO] Starting automatic metadata refresh for detected modules...\n"
+    );
 
-    g_task_return_pointer(task, result, (GDestroyNotify)detection_result_free);
-}
-
-static void run_metadata_batch_worker(
-    GTask *task,
-    gpointer source_object,
-    gpointer task_data,
-    GCancellable *cancellable
-)
-{
-    (void)source_object;
-    (void)cancellable;
-
-    MetadataBatchRequest *request = (MetadataBatchRequest *)task_data;
-    if (request == 0) {
-        g_task_return_pointer(task, 0, 0);
-        return;
-    }
-
-    MetadataBatchResult *result = g_new0(MetadataBatchResult, 1u);
-    result->core = request->core;
-    result->log_text = g_malloc0(UI_METADATA_LOG_MAX);
-
+    bool has_any_target = false;
     for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
         const ScModuleStatus *status = sc_core_module_status(&result->core, i);
         if (status == 0) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
+                "Module status unavailable."
+            );
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Module status unavailable."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Module status unavailable."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
                 "Module status unavailable."
             );
             continue;
@@ -356,145 +404,335 @@ static void run_metadata_batch_worker(
 
         if (!status->detected) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
-                "Not detected."
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
+                "Module not detected."
+            );
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Module not detected."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Module not detected."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Module not detected."
             );
             continue;
         }
 
         if (status->target_ambiguous) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
                 "Ambiguous target: metadata skipped."
             );
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Ambiguous target: catalog skipped."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Ambiguous target: values skipped."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Ambiguous target: param probes skipped."
+            );
             continue;
         }
 
-        result->attempted[i] = true;
-        append_text(result->log_text, UI_METADATA_LOG_MAX, "\n[INFO] Automatic metadata refresh for ");
-        append_text(result->log_text, UI_METADATA_LOG_MAX, status->display_name);
-        append_text(result->log_text, UI_METADATA_LOG_MAX, "...\n");
+        has_any_target = true;
+        append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n[INFO] Automatic metadata refresh for ");
+        append_text(result->log_text, UI_DETECTION_LOG_MAX, status->display_name);
+        append_text(result->log_text, UI_DETECTION_LOG_MAX, "...\n");
 
-        result->meta_ok[i] = sc_core_sc_get_meta(
+        ScCommandResult meta_result;
+        const bool meta_ok = sc_core_sc_get_meta(
             &result->core,
             i,
-            &result->meta_result[i],
+            &meta_result,
             result->log_text,
-            UI_METADATA_LOG_MAX
+            UI_DETECTION_LOG_MAX
         );
-        if (!result->meta_ok[i]) {
+        if (!meta_ok) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
                 "SC_GET_META transport error."
             );
-            continue;
-        }
-
-        if (command_result_is_unknown(&result->meta_result[i])) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
-                "SC protocol not supported by this firmware yet."
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Skipped: metadata transport failed."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Skipped: metadata transport failed."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: metadata transport failed."
             );
             continue;
         }
 
-        if (result->meta_result[i].status != SC_COMMAND_STATUS_OK) {
+        if (command_result_is_unknown(&meta_result)) {
             (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
+                "SC protocol not supported by this firmware yet."
+            );
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "SC protocol not supported."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "SC protocol not supported."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "SC protocol not supported."
+            );
+            continue;
+        }
+
+        if (meta_result.status != SC_COMMAND_STATUS_OK) {
+            (void)snprintf(
+                result->module_meta_status[i],
+                sizeof(result->module_meta_status[i]),
                 "SC_GET_META failed: %s",
-                sc_command_status_name(result->meta_result[i].status)
+                sc_command_status_name(meta_result.status)
+            );
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Skipped: metadata failed."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Skipped: metadata failed."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: metadata failed."
             );
             continue;
         }
 
         (void)snprintf(
-            result->module_status[i],
-            sizeof(result->module_status[i]),
+            result->module_meta_status[i],
+            sizeof(result->module_meta_status[i]),
             "Metadata refreshed."
         );
-    }
 
-    g_task_return_pointer(task, result, (GDestroyNotify)metadata_result_free);
-}
+        ScCommandResult list_result;
+        ScParamListData parsed_list;
+        char parse_error[256];
+        bool list_ok = sc_core_sc_get_param_list(
+            &result->core,
+            i,
+            &list_result,
+            result->log_text,
+            UI_DETECTION_LOG_MAX
+        );
 
-static void on_metadata_batch_finished(GObject *source_object, GAsyncResult *async_result, gpointer user_data)
-{
-    (void)source_object;
-
-    AppState *state = (AppState *)user_data;
-    if (state == 0) {
-        return;
-    }
-
-    MetadataBatchResult *result = g_task_propagate_pointer(G_TASK(async_result), 0);
-    state->metadata_in_progress = false;
-
-    if (result == 0) {
-        set_placeholder_status(state, "Automatic metadata refresh failed: internal task error.");
-        append_log_text(state, "[ERROR] Automatic metadata refresh failed: internal task error.");
-        refresh_details_view(state);
-        return;
-    }
-
-    if (result->log_text[0] != '\0') {
-        append_log_text(state, result->log_text);
-    }
-
-    if (!state->connected) {
-        set_placeholder_status(state, "Metadata result ignored: disconnected.");
-        refresh_details_view(state);
-        metadata_result_free(result);
-        return;
-    }
-
-    state->core = result->core;
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        set_module_meta_status(state, i, result->module_status[i]);
-    }
-
-    set_placeholder_status(state, "Automatic metadata refresh finished.");
-    refresh_details_view(state);
-    metadata_result_free(result);
-}
-
-static void start_metadata_refresh_for_detected_modules_async(AppState *state)
-{
-    if (state == 0 || state->metadata_in_progress || state->detection_in_progress || !state->connected) {
-        return;
-    }
-
-    bool has_any_target = false;
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        const ScModuleStatus *status = sc_core_module_status(&state->core, i);
-        if (status != 0 && status->detected && !status->target_ambiguous) {
-            has_any_target = true;
-            break;
+        if (!list_ok) {
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "SC_GET_PARAM_LIST transport error."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Skipped: catalog transport failed."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: catalog transport failed."
+            );
+            continue;
         }
+
+        if (!sc_core_parse_param_list_result(&list_result, &parsed_list, parse_error, sizeof(parse_error))) {
+            (void)snprintf(
+                result->module_catalog_status[i],
+                sizeof(result->module_catalog_status[i]),
+                "Catalog parse failed."
+            );
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Skipped: catalog parse failed."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: catalog parse failed."
+            );
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, "[WARN] ");
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
+            continue;
+        }
+
+        (void)snprintf(
+            result->module_catalog_status[i],
+            sizeof(result->module_catalog_status[i]),
+            "Catalog read: %zu id(s)%s",
+            parsed_list.count,
+            parsed_list.truncated ? " (truncated)" : ""
+        );
+
+        ScCommandResult values_result;
+        ScParamValuesData parsed_values;
+        bool values_ok = sc_core_sc_get_values(
+            &result->core,
+            i,
+            &values_result,
+            result->log_text,
+            UI_DETECTION_LOG_MAX
+        );
+        if (!values_ok) {
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "SC_GET_VALUES transport error."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: values transport failed."
+            );
+            continue;
+        }
+
+        if (!sc_core_parse_param_values_result(&values_result, &parsed_values, parse_error, sizeof(parse_error))) {
+            (void)snprintf(
+                result->module_values_status[i],
+                sizeof(result->module_values_status[i]),
+                "Values parse failed."
+            );
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Skipped: values parse failed."
+            );
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, "[WARN] ");
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
+            append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
+            continue;
+        }
+
+        (void)snprintf(
+            result->module_values_status[i],
+            sizeof(result->module_values_status[i]),
+            "Values read: %zu entry(ies)%s",
+            parsed_values.count,
+            parsed_values.truncated ? " (truncated)" : ""
+        );
+
+#if UI_AUTO_REFRESH_PARAM_PROBE
+        size_t probe_ok_count = 0u;
+        size_t probe_fail_count = 0u;
+        size_t cross_mismatch_count = 0u;
+
+        for (size_t p = 0u; p < parsed_list.count; ++p) {
+            const char *param_id = parsed_list.ids[p];
+            ScCommandResult param_result;
+            if (!sc_core_sc_get_param(
+                    &result->core,
+                    i,
+                    param_id,
+                    &param_result,
+                    result->log_text,
+                    UI_DETECTION_LOG_MAX
+                )) {
+                probe_fail_count++;
+                continue;
+            }
+
+            ScParamDetailData parsed_param;
+            if (!sc_core_parse_param_result(&param_result, &parsed_param, parse_error, sizeof(parse_error))) {
+                probe_fail_count++;
+                continue;
+            }
+
+            probe_ok_count++;
+            const ScParamValueEntry *snapshot = find_value_entry_by_id(&parsed_values, parsed_param.id);
+            if (snapshot != 0 && !typed_values_equal(&snapshot->value, &parsed_param.value)) {
+                cross_mismatch_count++;
+            }
+        }
+
+        if (parsed_list.count == 0u) {
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "No parameter ids to probe."
+            );
+        } else if (probe_fail_count > 0u) {
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Probe partial: ok=%zu fail=%zu mismatch=%zu",
+                probe_ok_count,
+                probe_fail_count,
+                cross_mismatch_count
+            );
+        } else {
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Probe ok: %zu id(s), mismatch=%zu",
+                probe_ok_count,
+                cross_mismatch_count
+            );
+        }
+#else
+        if (parsed_list.count == 0u) {
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "No parameter ids to probe."
+            );
+        } else {
+            (void)snprintf(
+                result->module_param_probe_status[i],
+                sizeof(result->module_param_probe_status[i]),
+                "Probe skipped (fast auto-refresh)."
+            );
+        }
+#endif
     }
 
     if (!has_any_target) {
-        set_placeholder_status(state, "No detected module eligible for metadata refresh.");
-        refresh_details_view(state);
-        return;
+        append_text(
+            result->log_text,
+            UI_DETECTION_LOG_MAX,
+            "[INFO] No detected module eligible for metadata refresh.\n"
+        );
     }
 
-    state->metadata_in_progress = true;
-    set_placeholder_status(state, "Automatic metadata refresh in progress...");
-    refresh_details_view(state);
-    append_log_text(state, "[INFO] Starting automatic metadata refresh for detected modules...");
-
-    MetadataBatchRequest *request = g_new0(MetadataBatchRequest, 1u);
-    request->core = state->core;
-
-    GTask *task = g_task_new(0, 0, on_metadata_batch_finished, state);
-    g_task_set_task_data(task, request, (GDestroyNotify)metadata_request_free);
-    g_task_run_in_thread(task, run_metadata_batch_worker);
-    g_object_unref(task);
+    g_task_return_pointer(task, result, (GDestroyNotify)detection_result_free);
 }
 
 static void on_detection_finished(GObject *source_object, GAsyncResult *async_result, gpointer user_data)
@@ -523,7 +761,7 @@ static void on_detection_finished(GObject *source_object, GAsyncResult *async_re
         }
         state->connected = false;
         refresh_module_lamps(state);
-        set_placeholder_status(state, "Detection failed.");
+        set_placeholder_status(state, "Detection/metadata workflow failed.");
         refresh_details_view(state);
         return;
     }
@@ -542,31 +780,21 @@ static void on_detection_finished(GObject *source_object, GAsyncResult *async_re
     }
 
     for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        const ScModuleStatus *status = sc_core_module_status(&state->core, i);
-        if (status == 0 || !status->detected) {
-            set_module_meta_status(state, i, "Module not detected.");
-            continue;
-        }
-
-        if (status->target_ambiguous) {
-            set_module_meta_status(state, i, "Ambiguous target: metadata skipped.");
-            continue;
-        }
-
-        set_module_meta_status(state, i, "Queued for automatic metadata refresh...");
+        set_module_meta_status(state, i, result->module_meta_status[i]);
+        set_module_catalog_status(state, i, result->module_catalog_status[i]);
+        set_module_values_status(state, i, result->module_values_status[i]);
+        set_module_param_probe_status(state, i, result->module_param_probe_status[i]);
     }
 
-    set_placeholder_status(state, "Detection finished. Metadata refresh will start automatically.");
+    set_placeholder_status(state, "Detection + metadata refresh finished.");
     select_first_detected_module(state);
     refresh_details_view(state);
     detection_result_free(result);
-
-    start_metadata_refresh_for_detected_modules_async(state);
 }
 
 static void start_detection_async(AppState *state)
 {
-    if (state == 0 || state->detection_in_progress || state->metadata_in_progress) {
+    if (state == 0 || state->detection_in_progress) {
         return;
     }
 
@@ -577,6 +805,9 @@ static void start_detection_async(AppState *state)
     set_placeholder_status(state, "Detecting modules...");
     for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
         set_module_meta_status(state, i, "Waiting for detection...");
+        set_module_catalog_status(state, i, "Waiting for detection...");
+        set_module_values_status(state, i, "Waiting for detection...");
+        set_module_param_probe_status(state, i, "Waiting for detection...");
     }
 
     sc_core_reset_detection(&state->core);
@@ -795,7 +1026,6 @@ int sc_app_run(int argc, char *argv[])
     state.module_list = 0;
     state.connected = false;
     state.detection_in_progress = false;
-    state.metadata_in_progress = false;
     state.selection_valid = false;
     state.selected_module_index = 0u;
     (void)snprintf(
@@ -814,6 +1044,24 @@ int sc_app_run(int argc, char *argv[])
             sizeof(state.module_meta_status[i]),
             "%s",
             "No metadata (module not detected)."
+        );
+        (void)snprintf(
+            state.module_catalog_status[i],
+            sizeof(state.module_catalog_status[i]),
+            "%s",
+            "No catalog read (module not detected)."
+        );
+        (void)snprintf(
+            state.module_values_status[i],
+            sizeof(state.module_values_status[i]),
+            "%s",
+            "No values read (module not detected)."
+        );
+        (void)snprintf(
+            state.module_param_probe_status[i],
+            sizeof(state.module_param_probe_status[i]),
+            "%s",
+            "No param probe (module not detected)."
         );
     }
 

@@ -20,6 +20,9 @@ typedef struct ScModuleDetailsView {
     GtkWidget *build_value;
     GtkWidget *proto_value;
     GtkWidget *session_value;
+    GtkWidget *catalog_status_value;
+    GtkWidget *values_status_value;
+    GtkWidget *param_probe_status_value;
 } ScModuleDetailsView;
 
 void sc_module_details_init(ScModuleDetailsView *view);
@@ -28,7 +31,10 @@ void sc_module_details_show_placeholder(ScModuleDetailsView *view, const char *m
 void sc_module_details_show_module(
     ScModuleDetailsView *view,
     const ScModuleStatus *status,
-    const char *meta_status
+    const char *meta_status,
+    const char *catalog_status,
+    const char *values_status,
+    const char *param_probe_status
 );
 
 #ifdef __cplusplus
