@@ -85,9 +85,14 @@ chmod +x ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh
 # 5. Enable the timer
 systemctl --user daemon-reload
 systemctl --user enable --now fiesta-bootstrap.timer
+systemctl --user status fiesta-bootstrap.timer
+systemctl --user list-timers --all | grep fiesta
 
 # 6. Let the service run even when no one is logged in
 loginctl enable-linger "$USER"
+or even better:
+sudo loginctl enable-linger pi
+
 ```
 
 ## Smoke test / inspection

@@ -39,9 +39,6 @@ typedef struct MetadataBatchResult {
     bool attempted[SC_MODULE_COUNT];
     bool meta_ok[SC_MODULE_COUNT];
     ScCommandResult meta_result[SC_MODULE_COUNT];
-    bool values_attempted[SC_MODULE_COUNT];
-    bool values_ok[SC_MODULE_COUNT];
-    ScCommandResult values_result[SC_MODULE_COUNT];
     char module_status[SC_MODULE_COUNT][160];
     char *log_text;
 } MetadataBatchResult;
@@ -415,46 +412,10 @@ static void run_metadata_batch_worker(
             continue;
         }
 
-        result->values_attempted[i] = true;
-        result->values_ok[i] = sc_core_sc_get_values(
-            &result->core,
-            i,
-            &result->values_result[i],
-            result->log_text,
-            UI_METADATA_LOG_MAX
-        );
-        if (!result->values_ok[i]) {
-            (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
-                "Metadata OK, SC_GET_VALUES transport error."
-            );
-            continue;
-        }
-
-        if (command_result_is_unknown(&result->values_result[i])) {
-            (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
-                "Metadata OK, SC_GET_VALUES not supported yet."
-            );
-            continue;
-        }
-
-        if (result->values_result[i].status != SC_COMMAND_STATUS_OK) {
-            (void)snprintf(
-                result->module_status[i],
-                sizeof(result->module_status[i]),
-                "Metadata OK, SC_GET_VALUES failed: %s",
-                sc_command_status_name(result->values_result[i].status)
-            );
-            continue;
-        }
-
         (void)snprintf(
             result->module_status[i],
             sizeof(result->module_status[i]),
-            "Metadata and values refreshed."
+            "Metadata refreshed."
         );
     }
 
@@ -754,10 +715,6 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(spacer, TRUE);
     gtk_box_append(GTK_BOX(top_row), spacer);
-
-    GtkWidget *subtitle = gtk_label_new("Metadata refresh starts automatically after detection.");
-    gtk_widget_add_css_class(subtitle, "dim-label");
-    gtk_box_append(GTK_BOX(top_row), subtitle);
 
     GtkWidget *main_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_append(GTK_BOX(root), main_row);
