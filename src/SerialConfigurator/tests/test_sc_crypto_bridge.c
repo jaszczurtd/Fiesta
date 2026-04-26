@@ -54,13 +54,13 @@ static int test_base64_contract(void)
     size_t encoded_len = 0u;
     size_t decoded_len = 0u;
 
-    if (!sc_crypto_available()) {
-        TEST_ASSERT(sc_crypto_base64_encoded_len(sizeof(raw)) == 0u, "encoded len should be 0 on unavailable backend");
-        TEST_ASSERT(sc_crypto_base64_decoded_max_len(8u) == 0u, "decoded max len should be 0 on unavailable backend");
-        TEST_ASSERT(!sc_crypto_base64_encode(raw, sizeof(raw), encoded, sizeof(encoded), &encoded_len), "base64 encode should fail on unavailable backend");
-        TEST_ASSERT(!sc_crypto_base64_decode("Rmllc3Rh", 8u, decoded, sizeof(decoded), &decoded_len), "base64 decode should fail on unavailable backend");
-        return 0;
-    }
+    /*
+     * base64 is encoding, not crypto: both the "jaszczurhal" and "none"
+     * backends must provide a working implementation so the line
+     * protocol (which carries base64-encoded build_id and similar
+     * fields) works in builds without a real crypto backend.
+     */
+    (void)sc_crypto_available();
 
     TEST_ASSERT(sc_crypto_base64_encoded_len(sizeof(raw)) == 8u, "encoded len mismatch");
     TEST_ASSERT(sc_crypto_base64_decoded_max_len(8u) == 6u, "decoded max len mismatch");
