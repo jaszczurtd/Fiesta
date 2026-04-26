@@ -4,6 +4,29 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
+## 2026-04-26
+
+- `src/SerialConfigurator` moved past the initial HELLO-only shell:
+  core transport now lives in `src/core/sc_transport.c/.h` (line assembly
+  with retry/backoff), UI details view was split into
+  `src/ui/sc_module_details.c/.h`, and a first-class CLI shell exists in
+  `src/cli/sc_cli_main.c`.
+- SerialConfigurator protocol surface now includes read-only `SC_*` flow in
+  core/CLI (`SC_GET_META`, `SC_GET_VALUES`, `SC_GET_PARAM_LIST`,
+  `SC_GET_PARAM`) with fail-closed target selection (`--module` / `--uid` /
+  `--port`) and explicit rejection of ambiguous targets.
+- SerialConfigurator host tests now include three CTest targets:
+  `serial-configurator-core-tests`,
+  `serial-configurator-core-api-tests`,
+  `serial-configurator-core-protocol-tests`.
+- Firmware-side Phase-2 baseline `SC_*` behavior is now aligned across all
+  in-scope modules (`ECU`, `Clocks`, `OilAndSpeed`) for metadata/values
+  refresh compatibility.
+- Current host-test inventory in-tree:
+  `ECU` 15 executable tests (+ optional `test_cppcheck` when `cppcheck` is
+  installed), `Clocks` 3 tests, `OilAndSpeed` 3 tests, `Adjustometer` 3
+  tests.
+
 ## 2026-04-24
 
 - `src/SerialConfigurator` desktop baseline is now integrated in-tree (GTK4 UI shell + HELLO detection core, with UI split into `src/ui/sc_app.c` and thin `src/ui/main.c` entrypoint).

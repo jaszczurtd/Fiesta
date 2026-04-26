@@ -27,6 +27,7 @@ __pycache__/
 
 # Arduino and module build outputs
 **/.build/
+**/build/
 **/.build_diag/
 **/build_asan/
 **/build_test/

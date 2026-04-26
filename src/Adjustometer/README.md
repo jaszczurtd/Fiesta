@@ -213,7 +213,8 @@ The project uses **JaszczurHAL** as the hardware abstraction layer.
 
 ## Tests
 
-The Adjustometer repository has its own host-side test suite under `build_test/`:
+The Adjustometer module has its own host-side test suite (CMake/CTest path,
+typically built under `build_test/`):
 
 - `test_sensors`
 - `test_led`
