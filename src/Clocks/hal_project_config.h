@@ -10,6 +10,12 @@
  * hal_config.h — you only need to disable the base module.
  */
 
+/* ── Opt-in modules ───────────────────────────────────────────────── */
+
+#define HAL_ENABLE_CRYPTO           /* hal_crypto + hal_sc_auth — needed
+                                       for SC_GET_META base64 reply and
+                                       the SC_AUTH challenge/response   */
+
 /* ── Modules not used by Clocks ──────────────────────────────────────── */
 
 #define HAL_DISABLE_WIFI            /* WiFi — not a Pico W                */

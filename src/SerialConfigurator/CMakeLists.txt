@@ -31,6 +31,8 @@ set(SC_CRYPTO_SOURCES src/core/sc_crypto_none.c)
 set(SC_CRYPTO_INCLUDE_DIRS "")
 set(SC_CRYPTO_BACKEND_NAME "none")
 
+set(SC_CRYPTO_DEFINITIONS "")
+
 if(SC_USE_JASZCZURHAL_CRYPTO
    AND EXISTS "${SC_JASZCZURHAL_CRYPTO_HEADER}"
    AND EXISTS "${SC_JASZCZURHAL_CRYPTO_SOURCE}")
@@ -41,6 +43,10 @@ if(SC_USE_JASZCZURHAL_CRYPTO
     )
     set(SC_CRYPTO_INCLUDE_DIRS "${SC_JASZCZURHAL_DIR}/src")
     set(SC_CRYPTO_BACKEND_NAME "jaszczurhal")
+    # JaszczurHAL hal_crypto is opt-in via HAL_ENABLE_CRYPTO; the SC backend
+    # binding pulls the implementation TU directly so we must define the
+    # flag here as well, otherwise the header expands to nothing.
+    list(APPEND SC_CRYPTO_DEFINITIONS HAL_ENABLE_CRYPTO)
 elseif(SC_USE_JASZCZURHAL_CRYPTO)
     message(WARNING
         "SC_USE_JASZCZURHAL_CRYPTO=ON, but hal_crypto was not found under "
@@ -49,11 +55,20 @@ elseif(SC_USE_JASZCZURHAL_CRYPTO)
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
+pkg_check_modules(GTK4 IMPORTED_TARGET gtk4)
+if(NOT GTK4_FOUND)
+    message(STATUS
+        "gtk4 not found via pkg-config; skipping the GUI executable. "
+        "Core library, CLI, and CTest targets still build. Install "
+        "libgtk-4-dev (or your distro equivalent) to build the GUI shell."
+    )
+endif()
 
 add_library(serial_configurator_core STATIC
+    src/core/sc_auth.c
     src/core/sc_core.c
     src/core/sc_frame.c
+    src/core/sc_manifest.c
     src/core/sc_sha256.c
     src/core/sc_transport.c
     ${SC_CRYPTO_SOURCES}
@@ -69,22 +84,25 @@ target_include_directories(serial_configurator_core
 target_compile_definitions(serial_configurator_core
     PUBLIC
         SC_CRYPTO_BACKEND_NAME=\"${SC_CRYPTO_BACKEND_NAME}\"
+        ${SC_CRYPTO_DEFINITIONS}
 )
 
-add_executable(serial-configurator
-    src/ui/sc_app.c
-    src/ui/sc_module_details.c
-    src/ui/main.c
-)
+if(GTK4_FOUND)
+    add_executable(serial-configurator
+        src/ui/sc_app.c
+        src/ui/sc_module_details.c
+        src/ui/main.c
+    )
+
+    target_link_libraries(serial-configurator
+        PRIVATE
+            serial_configurator_core
+            PkgConfig::GTK4
+    )
+endif()
 
 add_executable(serial-configurator-cli
     src/cli/sc_cli_main.c
-)
-
-target_link_libraries(serial-configurator
-    PRIVATE
-        serial_configurator_core
-        PkgConfig::GTK4
 )
 
 target_link_libraries(serial-configurator-cli
@@ -115,6 +133,14 @@ if(BUILD_TESTING)
         tests/test_sc_frame.c
     )
 
+    add_executable(serial-configurator-auth-tests
+        tests/test_sc_auth.c
+    )
+
+    add_executable(serial-configurator-manifest-tests
+        tests/test_sc_manifest.c
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -136,6 +162,16 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(serial-configurator-frame-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    target_link_libraries(serial-configurator-auth-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    target_link_libraries(serial-configurator-manifest-tests
         PRIVATE
             serial_configurator_core
     )
@@ -163,5 +199,15 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-frame-tests
         COMMAND serial-configurator-frame-tests
+    )
+
+    add_test(
+        NAME serial-configurator-auth-tests
+        COMMAND serial-configurator-auth-tests
+    )
+
+    add_test(
+        NAME serial-configurator-manifest-tests
+        COMMAND serial-configurator-manifest-tests
     )
 endif()

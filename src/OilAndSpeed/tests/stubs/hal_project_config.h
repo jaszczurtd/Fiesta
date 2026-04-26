@@ -11,3 +11,4 @@
 #define HAL_DISABLE_DISPLAY
 #define HAL_DISABLE_MAX6675
 #define HAL_DISABLE_EXTERNAL_ADC
+#define HAL_ENABLE_CRYPTO  /* config.cpp uses hal_base64_encode for SC_GET_META */
