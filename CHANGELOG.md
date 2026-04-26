@@ -4,6 +4,40 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
+## 2026-04-26 (latest)
+
+- SerialConfigurator detection latency reduced: the host transport now
+  reuses warm port file descriptors across repeated Detect-button
+  presses (cache reconciliation instead of full close-and-rebuild) and
+  the per-port HELLO budget was retuned (primary 1500 ms → 400 ms,
+  retry 1500 ms, three attempts). The worst-case detection budget is
+  unchanged; the happy-path warm-cache budget improves substantially.
+- Module parameter catalog parity: Clocks and OilAndSpeed now return
+  non-empty read-only catalogs over the SerialConfigurator session
+  (Clocks: 6 thermal thresholds; OilAndSpeed: 2 sampling intervals).
+  Values mirror compile-time constants from each module's `config.h`;
+  the catalogs are read-only for now. ECU's catalog is unchanged.
+- All in-scope test suites still pass on clean Release builds:
+  SerialConfigurator 5/5, ECU 16/16, Clocks 3/3, OilAndSpeed 3/3.
+  Adjustometer remains out of scope.
+
+## 2026-04-26 (later)
+
+- SerialConfigurator transport migrated to a framed wire protocol on the
+  USB CDC channel for ECU, Clocks, and OilAndSpeed. Frames carry an
+  integrity check and a per-request sequence number, and the firmware
+  side no longer accepts non-framed input. The desktop companion (GUI
+  and CLI) was updated in lock-step. Adjustometer remains out of scope.
+- SerialConfigurator host tests grew a new CTest target dedicated to
+  the wire-frame codec; total SerialConfigurator targets are now five
+  (was four). All in-scope module suites still pass on clean Release
+  builds: SerialConfigurator 5/5, ECU 16/16, Clocks 3/3, OilAndSpeed
+  3/3, Adjustometer 3/3.
+- JaszczurHAL `hal_serial_session.h` rewritten as a framed-only helper
+  (see `libraries/JaszczurHAL/CHANGELOG.md`); module wrappers
+  (`configSessionInit/Tick/Active/Id`) and identity contract are
+  unchanged.
+
 ## 2026-04-26
 
 - `src/SerialConfigurator` moved past the initial HELLO-only shell:

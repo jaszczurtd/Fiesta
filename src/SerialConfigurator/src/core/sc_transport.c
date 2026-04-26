@@ -1,5 +1,7 @@
 #include "sc_transport.h"
 
+#include "sc_frame.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
@@ -11,12 +13,27 @@
 #include <unistd.h>
 
 #define SC_TRANSPORT_GLOB_PATTERN "/dev/serial/by-id/usb-Jaszczur_Fiesta_*"
-#define SC_TRANSPORT_TOTAL_TIMEOUT_MS 3000
-#define SC_TRANSPORT_HELLO_RETRY_TIMEOUT_MS 6000
-#define SC_TRANSPORT_HELLO_ATTEMPTS 2
+/* Detection latency tuning. The primary timeout is sized for the warm-cache
+ * happy path (port already open, module already booted) where round-trip
+ * is dominated by USB CDC scheduling and is sub-100 ms in practice. The
+ * retry timeout is sized for cold-plug / post-reset jitter where the
+ * arduino-pico CDC stack can take well over a second to settle. */
+#define SC_TRANSPORT_PRIMARY_TIMEOUT_MS 400
+#define SC_TRANSPORT_RETRY_TIMEOUT_MS 1500
+#define SC_TRANSPORT_OPEN_SETTLE_USEC 100000
+#define SC_TRANSPORT_RETRY_PAUSE_USEC 150000
+#define SC_TRANSPORT_HELLO_ATTEMPTS 3
 #define SC_TRANSPORT_SC_ATTEMPTS 2
+#define SC_TRANSPORT_MAX_CACHED_PORTS 8u
 
-typedef bool (*ScLineMatchFn)(const char *line);
+typedef struct ScCachedPortEntry {
+    bool in_use;
+    int fd;
+    uint16_t next_seq;
+    char device_path[SC_TRANSPORT_PATH_MAX];
+} ScCachedPortEntry;
+
+static ScCachedPortEntry s_cached_ports[SC_TRANSPORT_MAX_CACHED_PORTS];
 
 static void copy_string(char *dst, size_t dst_size, const char *src)
 {
@@ -111,37 +128,40 @@ static bool write_all(int fd, const char *data, size_t len, char *error, size_t 
     return true;
 }
 
-static bool line_is_hello_or_error(const char *line)
+static const char *trim_leading_spaces(const char *line)
 {
-    if (line == 0) {
-        return false;
+    if (line == NULL) {
+        return NULL;
     }
-
-    return strstr(line, "OK HELLO") != 0 || strncmp(line, "ERR ", 4) == 0;
+    while (*line == ' ' || *line == '\t') {
+        ++line;
+    }
+    return line;
 }
 
-static bool line_is_sc_or_error(const char *line)
-{
-    if (line == 0) {
-        return false;
-    }
-
-    return strncmp(line, "SC_", 3) == 0 || strncmp(line, "ERR ", 4) == 0;
-}
-
-static bool read_protocol_line_with_deadline(
+/**
+ * Read framed `$SC,...*crc` lines from @p fd until either:
+ *   - one decodes successfully AND its sequence number equals @p expected_seq
+ *     (in which case its inner payload is copied into @p payload_out and
+ *     true is returned), or
+ *   - the deadline expires (false + timeout error).
+ *
+ * Lines that don't start with `$SC,` (e.g. stray debug prints) are silently
+ * dropped, as are frames with bad CRC or wrong seq. This is the strict
+ * begins-with parser that replaces the previous substring-based extractors.
+ */
+static bool read_framed_response_with_deadline(
     int fd,
+    uint16_t expected_seq,
     int total_timeout_ms,
-    ScLineMatchFn matcher,
-    const char *timeout_context,
-    char *response,
-    size_t response_size,
+    char *payload_out,
+    size_t payload_out_size,
     char *error,
     size_t error_size
 )
 {
-    if (matcher == 0 || response == 0 || response_size == 0u) {
-        set_error(error, error_size, "internal error: invalid matcher or response buffer");
+    if (payload_out == NULL || payload_out_size == 0u) {
+        set_error(error, error_size, "internal error: invalid response buffer");
         return false;
     }
 
@@ -151,12 +171,12 @@ static bool read_protocol_line_with_deadline(
         return false;
     }
 
-    response[0] = '\0';
-    if (error != 0 && error_size > 0u) {
+    payload_out[0] = '\0';
+    if (error != NULL && error_size > 0u) {
         error[0] = '\0';
     }
 
-    char line[SC_TRANSPORT_RESPONSE_MAX];
+    char line[SC_FRAME_LINE_MAX];
     size_t used = 0u;
     bool line_overflow = false;
     line[0] = '\0';
@@ -186,16 +206,14 @@ static bool read_protocol_line_with_deadline(
         timeout.tv_sec = wait_ms / 1000;
         timeout.tv_usec = (wait_ms % 1000) * 1000;
 
-        const int ready = select(fd + 1, &read_fds, 0, 0, &timeout);
+        const int ready = select(fd + 1, &read_fds, NULL, NULL, &timeout);
         if (ready < 0) {
             if (errno == EINTR) {
                 continue;
             }
-
             (void)snprintf(error, error_size, "select failed: %s", strerror(errno));
             return false;
         }
-
         if (ready == 0) {
             continue;
         }
@@ -206,11 +224,9 @@ static bool read_protocol_line_with_deadline(
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
-
             (void)snprintf(error, error_size, "read failed: %s", strerror(errno));
             return false;
         }
-
         if (received == 0) {
             continue;
         }
@@ -224,14 +240,26 @@ static bool read_protocol_line_with_deadline(
             if (c == '\n') {
                 if (!line_overflow && used > 0u) {
                     line[used] = '\0';
-                    const char *candidate = line;
-                    while (candidate[0] == ' ') {
-                        candidate++;
-                    }
-
-                    if (matcher(candidate)) {
-                        copy_string(response, response_size, candidate);
-                        return true;
+                    const char *trimmed = trim_leading_spaces(line);
+                    /* Strict prefix match — only true frames are even
+                     * considered (this replaces the previous strstr-based
+                     * substring search that was vulnerable to false matches
+                     * inside debug log lines). */
+                    if (strncmp(trimmed, SC_FRAME_PREFIX, SC_FRAME_PREFIX_LEN) == 0) {
+                        uint16_t got_seq = 0u;
+                        char inner[SC_TRANSPORT_RESPONSE_MAX];
+                        if (sc_frame_decode(trimmed, &got_seq,
+                                            inner, sizeof(inner))) {
+                            if (got_seq == expected_seq) {
+                                (void)snprintf(payload_out,
+                                               payload_out_size,
+                                               "%s", inner);
+                                return true;
+                            }
+                            /* Stale/late reply for a previous request →
+                             * keep waiting. */
+                        }
+                        /* Bad CRC → drop, keep waiting. */
                     }
                 }
 
@@ -253,25 +281,9 @@ static bool read_protocol_line_with_deadline(
         }
     }
 
-    if (!line_overflow && used > 0u) {
-        line[used] = '\0';
-        const char *candidate = line;
-        while (candidate[0] == ' ') {
-            candidate++;
-        }
-
-        if (matcher(candidate)) {
-            copy_string(response, response_size, candidate);
-            return true;
-        }
-    }
-
-    (void)snprintf(
-        error,
-        error_size,
-        "timeout waiting for %s response",
-        timeout_context != 0 ? timeout_context : "protocol"
-    );
+    (void)snprintf(error, error_size,
+                   "timeout waiting for framed response (seq=%u)",
+                   (unsigned)expected_seq);
     return false;
 }
 
@@ -302,10 +314,248 @@ static bool open_and_configure_port(const char *device_path, int *fd, char *erro
 
     struct timeval settle_tv;
     settle_tv.tv_sec = 0;
-    settle_tv.tv_usec = 500000;
+    settle_tv.tv_usec = SC_TRANSPORT_OPEN_SETTLE_USEC;
     (void)select(0, 0, 0, 0, &settle_tv);
     (void)tcflush(*fd, TCIFLUSH);
     return true;
+}
+
+static bool response_has_prefix(const char *response, const char *prefix)
+{
+    if (response == 0 || prefix == 0) {
+        return false;
+    }
+
+    return strncmp(response, prefix, strlen(prefix)) == 0;
+}
+
+static void close_cached_port_slot(size_t slot)
+{
+    if (slot >= SC_TRANSPORT_MAX_CACHED_PORTS) {
+        return;
+    }
+
+    if (s_cached_ports[slot].in_use && s_cached_ports[slot].fd >= 0) {
+        (void)close(s_cached_ports[slot].fd);
+    }
+
+    s_cached_ports[slot].in_use = false;
+    s_cached_ports[slot].fd = -1;
+    s_cached_ports[slot].device_path[0] = '\0';
+}
+
+/**
+ * Reconcile cached ports against the current candidate list: close any
+ * slot whose device path is no longer present (module unplugged or
+ * renumbered), keep the rest. This preserves warm-cache fast-path
+ * detection across repeated `list_candidates()` calls without leaking
+ * stale fds for genuinely-disconnected devices.
+ */
+static void reconcile_cached_ports_with_list(const ScTransportCandidateList *list)
+{
+    if (list == NULL) {
+        return;
+    }
+    for (size_t i = 0u; i < SC_TRANSPORT_MAX_CACHED_PORTS; ++i) {
+        if (!s_cached_ports[i].in_use) {
+            continue;
+        }
+        bool still_present = false;
+        for (size_t j = 0u; j < list->count; ++j) {
+            if (strcmp(s_cached_ports[i].device_path, list->paths[j]) == 0) {
+                still_present = true;
+                break;
+            }
+        }
+        if (!still_present) {
+            close_cached_port_slot(i);
+        }
+    }
+}
+
+static int find_cached_port_slot(const char *device_path)
+{
+    if (device_path == 0 || device_path[0] == '\0') {
+        return -1;
+    }
+
+    for (size_t i = 0u; i < SC_TRANSPORT_MAX_CACHED_PORTS; ++i) {
+        if (!s_cached_ports[i].in_use) {
+            continue;
+        }
+
+        if (strcmp(s_cached_ports[i].device_path, device_path) == 0) {
+            return (int)i;
+        }
+    }
+
+    return -1;
+}
+
+static int find_free_cached_port_slot(void)
+{
+    for (size_t i = 0u; i < SC_TRANSPORT_MAX_CACHED_PORTS; ++i) {
+        if (!s_cached_ports[i].in_use) {
+            return (int)i;
+        }
+    }
+
+    return -1;
+}
+
+static void invalidate_cached_port(const char *device_path)
+{
+    const int slot = find_cached_port_slot(device_path);
+    if (slot >= 0) {
+        close_cached_port_slot((size_t)slot);
+    }
+}
+
+static bool acquire_cached_port(
+    const char *device_path,
+    int *fd,
+    size_t *slot_out,
+    char *error,
+    size_t error_size
+)
+{
+    if (device_path == NULL || fd == NULL) {
+        set_error(error, error_size, "internal error: invalid cached-port arguments");
+        return false;
+    }
+
+    int slot = find_cached_port_slot(device_path);
+    if (slot >= 0) {
+        if (s_cached_ports[slot].fd >= 0) {
+            *fd = s_cached_ports[slot].fd;
+            if (slot_out != NULL) {
+                *slot_out = (size_t)slot;
+            }
+            return true;
+        }
+
+        close_cached_port_slot((size_t)slot);
+    }
+
+    int opened_fd = -1;
+    if (!open_and_configure_port(device_path, &opened_fd, error, error_size)) {
+        return false;
+    }
+
+    slot = find_free_cached_port_slot();
+    if (slot < 0) {
+        close_cached_port_slot(0u);
+        slot = 0;
+    }
+
+    s_cached_ports[slot].in_use = true;
+    s_cached_ports[slot].fd = opened_fd;
+    s_cached_ports[slot].next_seq = 1u;
+    copy_string(
+        s_cached_ports[slot].device_path,
+        sizeof(s_cached_ports[slot].device_path),
+        device_path
+    );
+    *fd = opened_fd;
+    if (slot_out != NULL) {
+        *slot_out = (size_t)slot;
+    }
+    return true;
+}
+
+static uint16_t allocate_next_seq(size_t slot)
+{
+    if (slot >= SC_TRANSPORT_MAX_CACHED_PORTS) {
+        return 1u;
+    }
+    uint16_t seq = s_cached_ports[slot].next_seq;
+    if (seq == 0u) {
+        seq = 1u;
+    }
+    /* Wrap from 0xFFFF back to 1 (skip 0 to keep "0" reserved as "unset"). */
+    s_cached_ports[slot].next_seq = (uint16_t)((seq == 0xFFFFu) ? 1u : (seq + 1u));
+    return seq;
+}
+
+/**
+ * Send a single framed request and wait for the matching framed response.
+ */
+static bool framed_exchange_on_fd(
+    int fd,
+    uint16_t seq,
+    const char *inner,
+    int timeout_ms,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size
+)
+{
+    char framed_line[SC_FRAME_LINE_MAX + 2u];
+    size_t framed_len = 0u;
+    if (!sc_frame_encode(seq, inner, framed_line, sizeof(framed_line) - 1u,
+                         &framed_len)) {
+        set_error(error, error_size, "failed to encode SC frame");
+        return false;
+    }
+    framed_line[framed_len] = '\n';
+    framed_line[framed_len + 1u] = '\0';
+
+    (void)tcflush(fd, TCIFLUSH);
+
+    if (!write_all(fd, framed_line, framed_len + 1u, error, error_size)) {
+        return false;
+    }
+
+    return read_framed_response_with_deadline(
+        fd, seq, timeout_ms, response, response_size, error, error_size);
+}
+
+static bool send_hello_bootstrap_on_fd(
+    int fd,
+    size_t cache_slot,
+    int timeout_ms,
+    char *error,
+    size_t error_size
+)
+{
+    char hello_response[SC_TRANSPORT_RESPONSE_MAX];
+    hello_response[0] = '\0';
+
+    const uint16_t seq = allocate_next_seq(cache_slot);
+    if (!framed_exchange_on_fd(fd, seq, "HELLO", timeout_ms,
+                               hello_response, sizeof(hello_response),
+                               error, error_size)) {
+        return false;
+    }
+
+    if (!response_has_prefix(hello_response, "OK HELLO")) {
+        (void)snprintf(
+            error,
+            error_size,
+            "HELLO bootstrap rejected: %.180s",
+            hello_response
+        );
+        return false;
+    }
+
+    return true;
+}
+
+static bool send_sc_command_on_fd(
+    int fd,
+    size_t cache_slot,
+    const char *command_inner,
+    int timeout_ms,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size
+)
+{
+    const uint16_t seq = allocate_next_seq(cache_slot);
+    return framed_exchange_on_fd(fd, seq, command_inner, timeout_ms,
+                                 response, response_size, error, error_size);
 }
 
 static bool default_list_candidates(
@@ -320,6 +570,12 @@ static bool default_list_candidates(
         set_error(error, error_size, "internal error: candidate list is NULL");
         return false;
     }
+
+    /* Do NOT blow away the cache here. Detection runs are expected to be
+     * idempotent (Detect button can be pressed repeatedly), and re-opening
+     * every port costs ~100 ms of CDC settle time per module. The cache is
+     * reconciled below against the fresh glob output so genuinely-removed
+     * devices still get their fds closed. */
 
     list->count = 0u;
     list->truncated = false;
@@ -357,6 +613,7 @@ static bool default_list_candidates(
     }
 
     globfree(&devices);
+    reconcile_cached_ports_with_list(list);
     return true;
 }
 
@@ -392,7 +649,7 @@ static bool default_send_hello(
 )
 {
     (void)context;
-    if (device_path == 0 || response == 0 || response_size == 0u) {
+    if (device_path == NULL || response == NULL || response_size == 0u) {
         set_error(error, error_size, "internal error: invalid HELLO arguments");
         return false;
     }
@@ -402,48 +659,38 @@ static bool default_send_hello(
 
     for (int attempt = 0; attempt < SC_TRANSPORT_HELLO_ATTEMPTS; ++attempt) {
         int fd = -1;
+        size_t slot = 0u;
         bool success = false;
 
         do {
-            if (!open_and_configure_port(device_path, &fd, last_error, sizeof(last_error))) {
-                break;
-            }
-
-            const char *hello_command = "HELLO\n";
-            if (!write_all(fd, hello_command, strlen(hello_command), last_error, sizeof(last_error))) {
+            if (!acquire_cached_port(device_path, &fd, &slot,
+                                     last_error, sizeof(last_error))) {
                 break;
             }
 
             const int timeout_ms = (attempt == 0)
-                ? SC_TRANSPORT_TOTAL_TIMEOUT_MS
-                : SC_TRANSPORT_HELLO_RETRY_TIMEOUT_MS;
-            if (!read_protocol_line_with_deadline(
-                    fd,
-                    timeout_ms,
-                    line_is_hello_or_error,
-                    "HELLO",
-                    response,
-                    response_size,
-                    last_error,
-                    sizeof(last_error)
-                )) {
+                ? SC_TRANSPORT_PRIMARY_TIMEOUT_MS
+                : SC_TRANSPORT_RETRY_TIMEOUT_MS;
+
+            const uint16_t seq = allocate_next_seq(slot);
+            if (!framed_exchange_on_fd(fd, seq, "HELLO", timeout_ms,
+                                       response, response_size,
+                                       last_error, sizeof(last_error))) {
                 break;
             }
 
             success = true;
         } while (0);
 
-        if (fd >= 0) {
-            (void)close(fd);
-        }
-
         if (success) {
             return true;
         }
 
+        invalidate_cached_port(device_path);
+
         if (attempt + 1 < SC_TRANSPORT_HELLO_ATTEMPTS) {
-            struct timeval retry_pause = { .tv_sec = 0, .tv_usec = 250000 };
-            (void)select(0, 0, 0, 0, &retry_pause);
+            struct timeval retry_pause = { .tv_sec = 0, .tv_usec = SC_TRANSPORT_RETRY_PAUSE_USEC };
+            (void)select(0, NULL, NULL, NULL, &retry_pause);
         }
     }
 
@@ -462,109 +709,84 @@ static bool default_send_sc_command(
 )
 {
     (void)context;
-    if (device_path == 0 || command == 0 || response == 0 || response_size == 0u) {
+    if (device_path == NULL || command == NULL ||
+        response == NULL || response_size == 0u) {
         set_error(error, error_size, "internal error: invalid SC command arguments");
         return false;
     }
 
-    const size_t command_len = strlen(command);
-    if (command_len == 0u) {
+    /* Strip a trailing newline if the caller supplied one — framing adds its
+     * own terminator and disallows raw '\n' inside the payload. */
+    char inner[SC_FRAME_PAYLOAD_MAX];
+    size_t cmd_len = strlen(command);
+    while (cmd_len > 0u && (command[cmd_len - 1u] == '\n' ||
+                            command[cmd_len - 1u] == '\r')) {
+        --cmd_len;
+    }
+    if (cmd_len == 0u) {
         set_error(error, error_size, "SC command cannot be empty");
         return false;
     }
+    if (cmd_len + 1u > sizeof(inner)) {
+        set_error(error, error_size, "SC command is too long");
+        return false;
+    }
+    memcpy(inner, command, cmd_len);
+    inner[cmd_len] = '\0';
 
     char last_error[256];
     last_error[0] = '\0';
 
     for (int attempt = 0; attempt < SC_TRANSPORT_SC_ATTEMPTS; ++attempt) {
         int fd = -1;
+        size_t slot = 0u;
         bool success = false;
+        const int timeout_ms = (attempt == 0)
+            ? SC_TRANSPORT_PRIMARY_TIMEOUT_MS
+            : SC_TRANSPORT_RETRY_TIMEOUT_MS;
 
         do {
-            if (!open_and_configure_port(device_path, &fd, last_error, sizeof(last_error))) {
+            if (!acquire_cached_port(device_path, &fd, &slot,
+                                     last_error, sizeof(last_error))) {
                 break;
             }
 
-            const char *hello_command = "HELLO\n";
-            char hello_response[SC_TRANSPORT_RESPONSE_MAX];
-            hello_response[0] = '\0';
-
-            if (!write_all(fd, hello_command, strlen(hello_command), last_error, sizeof(last_error))) {
+            if (!send_sc_command_on_fd(fd, slot, inner, timeout_ms,
+                                       response, response_size,
+                                       last_error, sizeof(last_error))) {
                 break;
             }
 
-            const int hello_timeout_ms = (attempt == 0)
-                ? SC_TRANSPORT_TOTAL_TIMEOUT_MS
-                : SC_TRANSPORT_HELLO_RETRY_TIMEOUT_MS;
-            if (!read_protocol_line_with_deadline(
-                    fd,
-                    hello_timeout_ms,
-                    line_is_hello_or_error,
-                    "HELLO bootstrap",
-                    hello_response,
-                    sizeof(hello_response),
-                    last_error,
-                    sizeof(last_error)
-                )) {
+            if (!response_has_prefix(response, "SC_NOT_READY")) {
+                success = true;
                 break;
             }
 
-            if (strncmp(hello_response, "OK HELLO", 8) != 0) {
-                (void)snprintf(
-                    last_error,
-                    sizeof(last_error),
-                    "HELLO bootstrap rejected: %.180s",
-                    hello_response
-                );
+            /* Module forgot HELLO (re-enumeration / reset) — re-handshake
+             * and retry the same command on the same fd. */
+            if (!send_hello_bootstrap_on_fd(fd, slot, timeout_ms,
+                                            last_error, sizeof(last_error))) {
                 break;
             }
 
-            char command_line[SC_TRANSPORT_RESPONSE_MAX];
-            if (command[command_len - 1u] == '\n') {
-                copy_string(command_line, sizeof(command_line), command);
-            } else {
-                if (command_len + 2u > sizeof(command_line)) {
-                    set_error(last_error, sizeof(last_error), "SC command line is too long");
-                    break;
-                }
-
-                (void)snprintf(command_line, sizeof(command_line), "%s\n", command);
-            }
-
-            if (!write_all(fd, command_line, strlen(command_line), last_error, sizeof(last_error))) {
-                break;
-            }
-
-            const int command_timeout_ms = (attempt == 0)
-                ? SC_TRANSPORT_TOTAL_TIMEOUT_MS
-                : SC_TRANSPORT_HELLO_RETRY_TIMEOUT_MS;
-            if (!read_protocol_line_with_deadline(
-                    fd,
-                    command_timeout_ms,
-                    line_is_sc_or_error,
-                    "SC command",
-                    response,
-                    response_size,
-                    last_error,
-                    sizeof(last_error)
-                )) {
+            if (!send_sc_command_on_fd(fd, slot, inner, timeout_ms,
+                                       response, response_size,
+                                       last_error, sizeof(last_error))) {
                 break;
             }
 
             success = true;
         } while (0);
 
-        if (fd >= 0) {
-            (void)close(fd);
-        }
-
         if (success) {
             return true;
         }
 
+        invalidate_cached_port(device_path);
+
         if (attempt + 1 < SC_TRANSPORT_SC_ATTEMPTS) {
-            struct timeval retry_pause = { .tv_sec = 0, .tv_usec = 250000 };
-            (void)select(0, 0, 0, 0, &retry_pause);
+            struct timeval retry_pause = { .tv_sec = 0, .tv_usec = SC_TRANSPORT_RETRY_PAUSE_USEC };
+            (void)select(0, NULL, NULL, NULL, &retry_pause);
         }
     }
 

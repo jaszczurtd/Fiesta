@@ -71,7 +71,7 @@ High-level module map (active firmware + desktop companion):
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
-│            │  USB CDC (text HELLO session on ECU/Clocks/OilAndSpeed)   │
+│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed)   │
 │            │  Additional encrypted layer later for flashing/settings   │
 │            │  changes                                                  │
 │            │                                                           │
@@ -457,10 +457,10 @@ paths that must agree.
 
 **Rollout phases.** In order: Phase 1 runtime parameters foundation
 (`ecu_params` with staging / apply / commit semantics backed by HAL KV),
-Phase 2 transitional read-only text protocol (`SC_*`) across ECU/Clocks/
-OilAndSpeed (with framed protocol planned as continuation), Phase 3
-authenticated writes (HMAC / AEAD + sequence numbers), Phase 4 multi-module
-flashing orchestration
+Phase 2 framed read-only `SC_*` protocol across ECU/Clocks/OilAndSpeed
+(now implemented), Phase 3 authenticated writes
+(HMAC / AEAD + sequence numbers), Phase 4 multi-module flashing
+orchestration
 (`ENTER_BOOTLOADER`, UF2 copy, post-flash identity re-check), Phase 5
 hardening (lockout policy, key rotation, audit logs).
 
@@ -533,10 +533,10 @@ Adjustometer remains outside the primary serial-configurator/flashing flow.
 Channel responsibilities:
 
 - carry the module bootstrap handshake (identity + firmware metadata +
-  device UID) on first contact,
-- carry transitional read-only `SC_*` queries used today by the desktop
-  companion (`SC_GET_META`, `SC_GET_VALUES`, `SC_GET_PARAM_LIST`,
-  `SC_GET_PARAM`),
+  device UID) on first contact, framed with per-request sequence numbers
+  and integrity check,
+- carry read-only `SC_*` queries used today by the desktop companion
+  (`SC_GET_META`, `SC_GET_VALUES`, `SC_GET_PARAM_LIST`, `SC_GET_PARAM`),
 - coexist with the existing debug log output on the same CDC stream,
 - later carry authenticated configuration and flashing traffic.
 
@@ -699,7 +699,7 @@ as a warning quality gate.
 | [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | ctest for Clocks |
 | [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | ctest for OilAndSpeed |
 | [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | ctest for Adjustometer |
-| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (`serial-configurator-core-tests`, `serial-configurator-core-api-tests`, `serial-configurator-core-protocol-tests`) |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (core smoke, core API contract, core protocol, crypto bridge, and frame codec targets) |
 
 ### 10.2 Unattended daily build
 

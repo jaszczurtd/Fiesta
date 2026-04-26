@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sc_crypto.h>
 
 typedef struct ScModuleDef {
     const char *token;
@@ -30,7 +31,12 @@ static void copy_string(char *dst, size_t dst_size, const char *src)
         return;
     }
 
-    (void)snprintf(dst, dst_size, "%s", src);
+    /* Bounded copy without snprintf("%s", ...) which trips
+     * -Werror=format-truncation when GCC cannot prove src fits. */
+    const size_t src_len = strlen(src);
+    const size_t copy_len = (src_len < (dst_size - 1u)) ? src_len : (dst_size - 1u);
+    memcpy(dst, src, copy_len);
+    dst[copy_len] = '\0';
 }
 
 static void copy_span(
@@ -131,6 +137,133 @@ static bool parse_u32_strict(const char *text, uint32_t *value)
     return true;
 }
 
+static bool text_is_printable_ascii(const char *text, size_t len)
+{
+    if (text == 0) {
+        return false;
+    }
+
+    for (size_t i = 0u; i < len; ++i) {
+        const unsigned char c = (unsigned char)text[i];
+        if (c < 0x20u || c > 0x7Eu) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool is_identity_separator_char(char c)
+{
+    return c == ' ' || c == ';' || c == '\t';
+}
+
+static bool value_looks_like_base64_payload(const char *value)
+{
+    if (value == 0) {
+        return false;
+    }
+
+    const size_t len = strlen(value);
+    if (len < 16u) {
+        return false;
+    }
+
+    size_t trailing_padding = 0u;
+    while (trailing_padding < len && value[len - 1u - trailing_padding] == '=') {
+        trailing_padding++;
+    }
+    if (trailing_padding > 2u) {
+        return false;
+    }
+
+    const size_t payload_len = len - trailing_padding;
+    for (size_t i = 0u; i < len; ++i) {
+        const char c = value[i];
+        const bool ok =
+            (c >= 'A' && c <= 'Z') ||
+            (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') ||
+            c == '+' || c == '/' || c == '=';
+        if (!ok) {
+            return false;
+        }
+
+        if (c == '=' && i < payload_len) {
+            return false;
+        }
+    }
+
+    /*
+     * Accept unpadded Base64 variants (len%4 == 2 or 3), because some devices
+     * sporadically lose trailing '=' padding on noisy links.
+     */
+    if ((payload_len % 4u) == 1u) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool decode_build_base64_relaxed(const char *value, char *decoded, size_t decoded_size)
+{
+    if (value == 0 || decoded == 0 || decoded_size < 2u) {
+        return false;
+    }
+
+    size_t value_len = strlen(value);
+    if (value_len == 0u || value_len + 3u >= SC_IDENTITY_FIELD_MAX) {
+        return false;
+    }
+
+    char normalized[SC_IDENTITY_FIELD_MAX];
+    copy_string(normalized, sizeof(normalized), value);
+
+    size_t trailing_padding = 0u;
+    while (trailing_padding < value_len && normalized[value_len - 1u - trailing_padding] == '=') {
+        trailing_padding++;
+    }
+    if (trailing_padding > 2u) {
+        return false;
+    }
+
+    const size_t payload_len = value_len - trailing_padding;
+    if ((payload_len % 4u) == 1u) {
+        return false;
+    }
+
+    size_t normalized_len = value_len;
+    if (trailing_padding == 0u) {
+        const size_t rem = payload_len % 4u;
+        const size_t add_padding = (rem == 0u) ? 0u : (4u - rem);
+        if (add_padding > 0u) {
+            if (normalized_len + add_padding >= sizeof(normalized)) {
+                return false;
+            }
+
+            for (size_t i = 0u; i < add_padding; ++i) {
+                normalized[normalized_len++] = '=';
+            }
+            normalized[normalized_len] = '\0';
+        }
+    }
+
+    memset(decoded, 0, decoded_size);
+    size_t decoded_len = 0u;
+    const bool decoded_ok = sc_crypto_base64_decode(
+        normalized,
+        normalized_len,
+        (uint8_t *)decoded,
+        decoded_size - 1u,
+        &decoded_len
+    );
+    if (!decoded_ok || decoded_len == 0u || !text_is_printable_ascii(decoded, decoded_len)) {
+        return false;
+    }
+
+    return true;
+}
+
 static void identity_set_field(ScIdentityData *identity, const char *key, const char *value)
 {
     if (identity == 0 || key == 0 || value == 0) {
@@ -166,7 +299,19 @@ static void identity_set_field(ScIdentityData *identity, const char *key, const 
     }
 
     if (strcmp(key, "build") == 0) {
-        copy_string(identity->build_id, sizeof(identity->build_id), value);
+        char decoded[SC_IDENTITY_FIELD_MAX];
+        if (decode_build_base64_relaxed(value, decoded, sizeof(decoded))) {
+            copy_string(identity->build_id, sizeof(identity->build_id), decoded);
+        } else if (value_looks_like_base64_payload(value)) {
+            /*
+             * Encoded build payload appears corrupted/truncated.
+             * Keep empty here so upper layers can fall back to HELLO identity.
+             */
+            identity->build_id[0] = '\0';
+        } else {
+            /* Compatibility fallback: some firmware may send raw build text. */
+            copy_string(identity->build_id, sizeof(identity->build_id), value);
+        }
         return;
     }
 
@@ -186,36 +331,86 @@ static void parse_identity_fields(const char *response, ScIdentityData *identity
         return;
     }
 
-    const char *cursor = response;
-    while (cursor[0] != '\0') {
-        while (cursor[0] == ' ') {
-            cursor++;
+    static const char *k_fields[] = { "module", "proto", "session", "fw", "build", "uid" };
+    const size_t field_count = sizeof(k_fields) / sizeof(k_fields[0]);
+
+    const char *response_end = response + strlen(response);
+    for (size_t fi = 0u; fi < field_count; ++fi) {
+        const char *key = k_fields[fi];
+        const size_t key_len = strlen(key);
+        const bool is_build = strcmp(key, "build") == 0;
+
+        const char *field_start = 0;
+        const char *value_start = 0;
+
+        for (const char *p = response; p[0] != '\0'; ++p) {
+            const bool boundary = (p == response) || is_identity_separator_char(p[-1]);
+            if (!boundary) {
+                continue;
+            }
+
+            if (strncmp(p, key, key_len) != 0) {
+                continue;
+            }
+
+            if (p[key_len] == '=') {
+                field_start = p;
+                value_start = p + key_len + 1u;
+                break;
+            }
+
+            if (is_build && p[key_len] != '\0' && !is_identity_separator_char(p[key_len])) {
+                /* Firmware compatibility: accept malformed "build<value>" token. */
+                field_start = p;
+                value_start = p + key_len;
+                while (value_start[0] == '=' || value_start[0] == ':') {
+                    value_start++;
+                }
+                if (value_start[0] == '\0') {
+                    field_start = 0;
+                    value_start = 0;
+                }
+                break;
+            }
         }
 
-        if (cursor[0] == '\0') {
-            break;
-        }
-
-        const char *token_start = cursor;
-        while (cursor[0] != '\0' && cursor[0] != ' ') {
-            cursor++;
-        }
-
-        const size_t token_len = (size_t)(cursor - token_start);
-        if (token_len == 0u) {
+        if (field_start == 0 || value_start == 0 || value_start[0] == '\0') {
             continue;
         }
 
-        const char *eq = (const char *)memchr(token_start, '=', token_len);
-        if (eq == 0 || eq == token_start || eq == token_start + token_len - 1u) {
-            continue;
+        const char *value_end = response_end;
+        for (const char *scan = value_start + 1u; scan[0] != '\0'; ++scan) {
+            if (!is_identity_separator_char(scan[0])) {
+                continue;
+            }
+
+            const char *candidate = scan + 1u;
+            for (size_t next_i = 0u; next_i < field_count; ++next_i) {
+                const char *next_key = k_fields[next_i];
+                const size_t next_key_len = strlen(next_key);
+                const bool next_is_build = strcmp(next_key, "build") == 0;
+
+                if (strncmp(candidate, next_key, next_key_len) != 0) {
+                    continue;
+                }
+
+                if (candidate[next_key_len] == '=' ||
+                    (next_is_build &&
+                     candidate[next_key_len] != '\0' &&
+                     !is_identity_separator_char(candidate[next_key_len]))) {
+                    value_end = scan;
+                    goto found_value_end;
+                }
+            }
         }
 
-        char key[24];
+found_value_end:
+        while (value_end > value_start && is_identity_separator_char(value_end[-1])) {
+            value_end--;
+        }
+
         char value[SC_IDENTITY_FIELD_MAX];
-
-        copy_span(key, sizeof(key), token_start, eq);
-        copy_span(value, sizeof(value), eq + 1, token_start + token_len);
+        copy_span(value, sizeof(value), value_start, value_end);
         identity_set_field(identity, key, value);
     }
 
@@ -344,6 +539,304 @@ static ScCommandStatus command_status_from_token(const char *token)
     }
 
     return SC_COMMAND_STATUS_UNPARSEABLE;
+}
+
+static void set_error(char *error, size_t error_size, const char *message)
+{
+    if (error == 0 || error_size == 0u) {
+        return;
+    }
+
+    copy_string(error, error_size, message != 0 ? message : "");
+}
+
+static bool param_id_char_is_valid(char c)
+{
+    const unsigned char uc = (unsigned char)c;
+    return (uc >= (unsigned char)'a' && uc <= (unsigned char)'z') ||
+        (uc >= (unsigned char)'A' && uc <= (unsigned char)'Z') ||
+        (uc >= (unsigned char)'0' && uc <= (unsigned char)'9') ||
+        c == '_' || c == '-' || c == '.';
+}
+
+static bool param_id_is_valid(const char *id)
+{
+    if (id == 0 || id[0] == '\0') {
+        return false;
+    }
+
+    for (size_t i = 0u; id[i] != '\0'; ++i) {
+        if (!param_id_char_is_valid(id[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool param_list_separator_char(char c)
+{
+    return c == ',' || c == ';' || c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool strings_equal_case_insensitive(const char *a, const char *b)
+{
+    if (a == 0 || b == 0) {
+        return false;
+    }
+
+    size_t i = 0u;
+    while (a[i] != '\0' && b[i] != '\0') {
+        if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) {
+            return false;
+        }
+        i++;
+    }
+
+    return a[i] == '\0' && b[i] == '\0';
+}
+
+static bool parse_i64_strict(const char *text, int64_t *value)
+{
+    if (text == 0 || value == 0 || text[0] == '\0') {
+        return false;
+    }
+
+    errno = 0;
+    char *end = 0;
+    const long long parsed = strtoll(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+
+    *value = (int64_t)parsed;
+    return true;
+}
+
+static bool parse_u64_strict(const char *text, uint64_t *value)
+{
+    if (text == 0 || value == 0 || text[0] == '\0') {
+        return false;
+    }
+
+    if (text[0] == '-') {
+        return false;
+    }
+
+    errno = 0;
+    char *end = 0;
+    const unsigned long long parsed = strtoull(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+
+    *value = (uint64_t)parsed;
+    return true;
+}
+
+static bool parse_double_strict(const char *text, double *value)
+{
+    if (text == 0 || value == 0 || text[0] == '\0') {
+        return false;
+    }
+
+    errno = 0;
+    char *end = 0;
+    const double parsed = strtod(text, &end);
+    if (errno != 0 || end == text || *end != '\0') {
+        return false;
+    }
+
+    *value = parsed;
+    return true;
+}
+
+static bool text_maybe_float(const char *text)
+{
+    if (text == 0 || text[0] == '\0') {
+        return false;
+    }
+
+    for (size_t i = 0u; text[i] != '\0'; ++i) {
+        const char c = text[i];
+        if (c == '.' || c == 'e' || c == 'E') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void typed_value_reset(ScTypedValue *value)
+{
+    if (value == 0) {
+        return;
+    }
+
+    value->type = SC_VALUE_TYPE_UNKNOWN;
+    value->bool_value = false;
+    value->int_value = 0;
+    value->uint_value = 0u;
+    value->float_value = 0.0;
+    value->raw[0] = '\0';
+}
+
+static bool typed_value_is_numeric(const ScTypedValue *value)
+{
+    if (value == 0) {
+        return false;
+    }
+
+    return value->type == SC_VALUE_TYPE_INT ||
+        value->type == SC_VALUE_TYPE_UINT ||
+        value->type == SC_VALUE_TYPE_FLOAT ||
+        value->type == SC_VALUE_TYPE_BOOL;
+}
+
+static double typed_value_as_double(const ScTypedValue *value)
+{
+    if (value == 0) {
+        return 0.0;
+    }
+
+    switch (value->type) {
+        case SC_VALUE_TYPE_BOOL:
+            return value->bool_value ? 1.0 : 0.0;
+        case SC_VALUE_TYPE_INT:
+            return (double)value->int_value;
+        case SC_VALUE_TYPE_UINT:
+            return (double)value->uint_value;
+        case SC_VALUE_TYPE_FLOAT:
+            return value->float_value;
+        default:
+            return 0.0;
+    }
+}
+
+static void typed_value_from_text(const char *text, ScTypedValue *value)
+{
+    typed_value_reset(value);
+    if (value == 0 || text == 0) {
+        return;
+    }
+
+    copy_string(value->raw, sizeof(value->raw), text);
+
+    if (strings_equal_case_insensitive(text, "true") ||
+        strings_equal_case_insensitive(text, "on")) {
+        value->type = SC_VALUE_TYPE_BOOL;
+        value->bool_value = true;
+        return;
+    }
+
+    if (strings_equal_case_insensitive(text, "false") ||
+        strings_equal_case_insensitive(text, "off")) {
+        value->type = SC_VALUE_TYPE_BOOL;
+        value->bool_value = false;
+        return;
+    }
+
+    if (text_maybe_float(text)) {
+        double parsed = 0.0;
+        if (parse_double_strict(text, &parsed)) {
+            value->type = SC_VALUE_TYPE_FLOAT;
+            value->float_value = parsed;
+            return;
+        }
+    }
+
+    int64_t signed_value = 0;
+    if (parse_i64_strict(text, &signed_value)) {
+        if (text[0] != '-' && text[0] != '+') {
+            uint64_t unsigned_value = 0u;
+            if (parse_u64_strict(text, &unsigned_value)) {
+                value->type = SC_VALUE_TYPE_UINT;
+                value->uint_value = unsigned_value;
+                return;
+            }
+        }
+
+        value->type = SC_VALUE_TYPE_INT;
+        value->int_value = signed_value;
+        return;
+    }
+
+    uint64_t unsigned_value = 0u;
+    if (parse_u64_strict(text, &unsigned_value)) {
+        value->type = SC_VALUE_TYPE_UINT;
+        value->uint_value = unsigned_value;
+        return;
+    }
+
+    value->type = SC_VALUE_TYPE_TEXT;
+}
+
+static void param_list_reset(ScParamListData *parsed)
+{
+    if (parsed == 0) {
+        return;
+    }
+
+    parsed->count = 0u;
+    parsed->truncated = false;
+    for (size_t i = 0u; i < SC_PARAM_ITEMS_MAX; ++i) {
+        parsed->ids[i][0] = '\0';
+    }
+}
+
+static void param_values_reset(ScParamValuesData *parsed)
+{
+    if (parsed == 0) {
+        return;
+    }
+
+    parsed->count = 0u;
+    parsed->truncated = false;
+    for (size_t i = 0u; i < SC_PARAM_ITEMS_MAX; ++i) {
+        parsed->entries[i].id[0] = '\0';
+        typed_value_reset(&parsed->entries[i].value);
+    }
+}
+
+static void param_detail_reset(ScParamDetailData *parsed)
+{
+    if (parsed == 0) {
+        return;
+    }
+
+    parsed->valid = false;
+    parsed->id[0] = '\0';
+    parsed->has_value = false;
+    typed_value_reset(&parsed->value);
+    parsed->has_min = false;
+    typed_value_reset(&parsed->min);
+    parsed->has_max = false;
+    typed_value_reset(&parsed->max);
+    parsed->has_default = false;
+    typed_value_reset(&parsed->default_value);
+}
+
+static bool parse_next_token(
+    const char **cursor,
+    char *token,
+    size_t token_size
+)
+{
+    if (cursor == 0 || token == 0 || token_size == 0u || *cursor == 0) {
+        return false;
+    }
+
+    const char *start = skip_spaces(*cursor);
+    if (start == 0 || start[0] == '\0') {
+        token[0] = '\0';
+        *cursor = start;
+        return false;
+    }
+
+    const char *end = token_end(start);
+    copy_span(token, token_size, start, end);
+    *cursor = end;
+    return token[0] != '\0';
 }
 
 static void parse_sc_command_result(const char *response, ScCommandResult *result)
@@ -743,6 +1236,308 @@ const char *sc_command_status_name(ScCommandStatus status)
         default:
             return "UNKNOWN";
     }
+}
+
+const char *sc_value_type_name(ScValueType type)
+{
+    switch (type) {
+        case SC_VALUE_TYPE_UNKNOWN:
+            return "UNKNOWN";
+        case SC_VALUE_TYPE_BOOL:
+            return "BOOL";
+        case SC_VALUE_TYPE_INT:
+            return "INT";
+        case SC_VALUE_TYPE_UINT:
+            return "UINT";
+        case SC_VALUE_TYPE_FLOAT:
+            return "FLOAT";
+        case SC_VALUE_TYPE_TEXT:
+            return "TEXT";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+bool sc_core_parse_param_list_result(
+    const ScCommandResult *result,
+    ScParamListData *parsed,
+    char *error,
+    size_t error_size
+)
+{
+    set_error(error, error_size, "");
+    param_list_reset(parsed);
+
+    if (result == 0 || parsed == 0) {
+        set_error(error, error_size, "param-list parse failed: invalid arguments");
+        return false;
+    }
+
+    if (result->status != SC_COMMAND_STATUS_OK || strcmp(result->topic, "PARAM_LIST") != 0) {
+        set_error(error, error_size, "param-list parse failed: response is not SC_OK PARAM_LIST");
+        return false;
+    }
+
+    const char *cursor = result->details;
+    if (cursor == 0) {
+        return true;
+    }
+
+    bool saw_any_token = false;
+
+    while (cursor[0] != '\0') {
+        while (cursor[0] != '\0' && param_list_separator_char(cursor[0])) {
+            cursor++;
+        }
+
+        if (cursor[0] == '\0') {
+            break;
+        }
+
+        const char *token_start = cursor;
+        while (cursor[0] != '\0' && !param_list_separator_char(cursor[0])) {
+            cursor++;
+        }
+
+        char token[SC_PARAM_ID_MAX];
+        copy_span(token, sizeof(token), token_start, cursor);
+        saw_any_token = true;
+        if (!param_id_is_valid(token)) {
+            parsed->truncated = true;
+            continue;
+        }
+
+        bool already_present = false;
+        for (size_t i = 0u; i < parsed->count; ++i) {
+            if (strcmp(parsed->ids[i], token) == 0) {
+                already_present = true;
+                break;
+            }
+        }
+
+        if (already_present) {
+            continue;
+        }
+
+        if (parsed->count >= SC_PARAM_ITEMS_MAX) {
+            parsed->truncated = true;
+            continue;
+        }
+
+        copy_string(parsed->ids[parsed->count], sizeof(parsed->ids[parsed->count]), token);
+        parsed->count++;
+    }
+
+    if (parsed->count == 0u && saw_any_token) {
+        set_error(error, error_size, "param-list parse failed: no valid parameter ids in payload");
+        return false;
+    }
+
+    return true;
+}
+
+bool sc_core_parse_param_values_result(
+    const ScCommandResult *result,
+    ScParamValuesData *parsed,
+    char *error,
+    size_t error_size
+)
+{
+    set_error(error, error_size, "");
+    param_values_reset(parsed);
+
+    if (result == 0 || parsed == 0) {
+        set_error(error, error_size, "param-values parse failed: invalid arguments");
+        return false;
+    }
+
+    if (result->status != SC_COMMAND_STATUS_OK || strcmp(result->topic, "PARAM_VALUES") != 0) {
+        set_error(error, error_size, "param-values parse failed: response is not SC_OK PARAM_VALUES");
+        return false;
+    }
+
+    const char *cursor = result->details;
+    char token[SC_HELLO_RESPONSE_MAX];
+    bool saw_any_token = false;
+    while (parse_next_token(&cursor, token, sizeof(token))) {
+        saw_any_token = true;
+        char *equals = strchr(token, '=');
+        if (equals == 0) {
+            parsed->truncated = true;
+            continue;
+        }
+
+        *equals = '\0';
+        const char *id = token;
+        const char *raw_value = equals + 1u;
+        if (!param_id_is_valid(id)) {
+            parsed->truncated = true;
+            continue;
+        }
+
+        if (raw_value[0] == '\0') {
+            parsed->truncated = true;
+            continue;
+        }
+
+        bool already_present = false;
+        for (size_t i = 0u; i < parsed->count; ++i) {
+            if (strcmp(parsed->entries[i].id, id) == 0) {
+                already_present = true;
+                typed_value_from_text(raw_value, &parsed->entries[i].value);
+                break;
+            }
+        }
+        if (already_present) {
+            continue;
+        }
+
+        if (parsed->count >= SC_PARAM_ITEMS_MAX) {
+            parsed->truncated = true;
+            continue;
+        }
+
+        copy_string(parsed->entries[parsed->count].id, sizeof(parsed->entries[parsed->count].id), id);
+        typed_value_from_text(raw_value, &parsed->entries[parsed->count].value);
+        parsed->count++;
+    }
+
+    if (parsed->count == 0u && saw_any_token) {
+        set_error(error, error_size, "param-values parse failed: no valid id=value tokens");
+        return false;
+    }
+
+    return true;
+}
+
+bool sc_core_parse_param_result(
+    const ScCommandResult *result,
+    ScParamDetailData *parsed,
+    char *error,
+    size_t error_size
+)
+{
+    set_error(error, error_size, "");
+    param_detail_reset(parsed);
+
+    if (result == 0 || parsed == 0) {
+        set_error(error, error_size, "param parse failed: invalid arguments");
+        return false;
+    }
+
+    if (result->status != SC_COMMAND_STATUS_OK || strcmp(result->topic, "PARAM") != 0) {
+        set_error(error, error_size, "param parse failed: response is not SC_OK PARAM");
+        return false;
+    }
+
+    const char *cursor = result->details;
+    char token[SC_HELLO_RESPONSE_MAX];
+    while (parse_next_token(&cursor, token, sizeof(token))) {
+        char *equals = strchr(token, '=');
+        if (equals == 0) {
+            set_error(error, error_size, "param parse failed: token without '='");
+            return false;
+        }
+
+        *equals = '\0';
+        const char *key = token;
+        const char *raw_value = equals + 1u;
+        if (raw_value[0] == '\0') {
+            set_error(error, error_size, "param parse failed: empty value token");
+            return false;
+        }
+
+        if (strcmp(key, "id") == 0) {
+            if (!param_id_is_valid(raw_value)) {
+                set_error(error, error_size, "param parse failed: invalid id");
+                return false;
+            }
+            copy_string(parsed->id, sizeof(parsed->id), raw_value);
+            continue;
+        }
+
+        if (strcmp(key, "value") == 0) {
+            typed_value_from_text(raw_value, &parsed->value);
+            parsed->has_value = true;
+            continue;
+        }
+
+        if (strcmp(key, "min") == 0) {
+            typed_value_from_text(raw_value, &parsed->min);
+            parsed->has_min = true;
+            continue;
+        }
+
+        if (strcmp(key, "max") == 0) {
+            typed_value_from_text(raw_value, &parsed->max);
+            parsed->has_max = true;
+            continue;
+        }
+
+        if (strcmp(key, "default") == 0) {
+            typed_value_from_text(raw_value, &parsed->default_value);
+            parsed->has_default = true;
+            continue;
+        }
+    }
+
+    if (parsed->id[0] == '\0') {
+        set_error(error, error_size, "param parse failed: missing id");
+        return false;
+    }
+
+    if (!parsed->has_value) {
+        set_error(error, error_size, "param parse failed: missing value");
+        return false;
+    }
+
+    if (parsed->has_min && parsed->has_max &&
+        typed_value_is_numeric(&parsed->min) &&
+        typed_value_is_numeric(&parsed->max)) {
+        if (typed_value_as_double(&parsed->min) > typed_value_as_double(&parsed->max)) {
+            set_error(error, error_size, "param parse failed: min > max");
+            return false;
+        }
+    }
+
+    if (parsed->has_value && parsed->has_min &&
+        typed_value_is_numeric(&parsed->value) &&
+        typed_value_is_numeric(&parsed->min)) {
+        if (typed_value_as_double(&parsed->value) < typed_value_as_double(&parsed->min)) {
+            set_error(error, error_size, "param parse failed: value < min");
+            return false;
+        }
+    }
+
+    if (parsed->has_value && parsed->has_max &&
+        typed_value_is_numeric(&parsed->value) &&
+        typed_value_is_numeric(&parsed->max)) {
+        if (typed_value_as_double(&parsed->value) > typed_value_as_double(&parsed->max)) {
+            set_error(error, error_size, "param parse failed: value > max");
+            return false;
+        }
+    }
+
+    if (parsed->has_default && parsed->has_min &&
+        typed_value_is_numeric(&parsed->default_value) &&
+        typed_value_is_numeric(&parsed->min)) {
+        if (typed_value_as_double(&parsed->default_value) < typed_value_as_double(&parsed->min)) {
+            set_error(error, error_size, "param parse failed: default < min");
+            return false;
+        }
+    }
+
+    if (parsed->has_default && parsed->has_max &&
+        typed_value_is_numeric(&parsed->default_value) &&
+        typed_value_is_numeric(&parsed->max)) {
+        if (typed_value_as_double(&parsed->default_value) > typed_value_as_double(&parsed->max)) {
+            set_error(error, error_size, "param parse failed: default > max");
+            return false;
+        }
+    }
+
+    parsed->valid = true;
+    return true;
 }
 
 bool sc_core_sc_get_meta(
