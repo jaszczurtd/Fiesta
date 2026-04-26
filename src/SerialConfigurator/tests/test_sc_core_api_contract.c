@@ -11,12 +11,19 @@
 static int test_null_safety(void)
 {
     sc_core_init(0);
+    sc_core_set_transport(0, 0);
     sc_core_reset_detection(0);
     sc_core_detect_modules(0, 0, 0u);
 
     char log[128] = {0};
     sc_core_detect_modules(0, log, sizeof(log));
     TEST_ASSERT(strstr(log, "Core is not initialized") != 0, "missing NULL-core error log");
+
+    ScCommandResult result;
+    TEST_ASSERT(!sc_core_sc_get_meta(0, 0u, &result, 0, 0u), "SC_GET_META should fail for NULL core");
+    TEST_ASSERT(!sc_core_sc_get_param_list(0, 0u, &result, 0, 0u), "SC_GET_PARAM_LIST should fail for NULL core");
+    TEST_ASSERT(!sc_core_sc_get_values(0, 0u, &result, 0, 0u), "SC_GET_VALUES should fail for NULL core");
+    TEST_ASSERT(!sc_core_sc_get_param(0, 0u, "id", &result, 0, 0u), "SC_GET_PARAM should fail for NULL core");
     return 0;
 }
 

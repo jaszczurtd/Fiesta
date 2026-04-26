@@ -1,76 +1,28 @@
 # Fiesta
 
-Firmware ecosystem for Ford Fiesta 1.8 (M)TDDI custom electronics.
+Firmware ecosystem designed for Ford Fiesta 1.8 diesel with custom electronics.
+It was built for a custom 1.8 diesel hybrid engine setup that combines
+elements of the 1.8D (indirect injection) and 1.8TDDI (direct injection)
+variants, with a VP37 pump installed.
+
+At this stage the project is still a POC and has not yet been validated as one
+fully integrated system in a road-going car.
+For ECU and VP37 testing, a dedicated engine was built and mounted on a steel
+frame in a garage.
 
 The repository contains multiple embedded applications, hardware assets, and validation materials used to build a complete vehicle electronics stack.
 
 Gallery:
 https://postimg.cc/gallery/pHF4jy2
 
-## For the embedded engineer who already despises Arduino
-
-Let's not pretend. If you're a working automotive / industrial embedded
-engineer, "Arduino" is a slur. You've seen the GitHub graveyard: 2000-line
-`.ino` files with `delay(100)` in the main loop, dynamic `String` allocation
-inside ISRs, libraries that paper over a `wiringPi`-grade abstraction with
-more `wiringPi`-grade abstraction, and "tests" that mean *"it blinked once
-on my breadboard."* You've seen RP2040 marketed as automotive-ready by
-people who couldn't pronounce AEC-Q100. The contempt is earned. Statistically,
-"Arduino project" is amateur until proven otherwise.
-
-**This is a proof-otherwise. Open the code before you close the tab.**
-
-### The contempt is for things that aren't here
-
-| What you expect from an "Arduino project" | What this repo actually does |
-|---|---|
-| `digitalWrite()`, `delay()`, `Serial.println` everywhere | Zero. Hardware access exclusively through HAL; soft-timer table with watchdog feed; debug via tagged module prefix over a session-aware serial protocol. |
-| Single 2000-line `.ino` doing engine + display + CAN | `.ino` is a 6-10 line stub. ECU alone is 27 `.c` modules with central `ecu_context_t` ownership. |
-| Arduino libraries (`SoftwareSerial`, `EEPROM.h`, `Wire.begin()`) | None. Custom HAL with mock backend; CAN via MCP2515 with hand-rolled ISO-TP; flash-EEPROM via custom KV store with persistence semantics. |
-| `loop()` polls everything, no concurrency model | Dual-core RP2040 with **38 mutex usages** across the codebase, dedicated mutexes per resource (`adjustometerStateMutex`, `dtcManagerMutex`, `i2cBusMutex`), documented snapshot semantics, out-parameter APIs to prevent torn reads on cross-core access. |
-| `if(buf[0] == 0x10)` straight off the wire | CAN RX callbacks reject `NULL`/oversized frames first, then run per-case length checks before dereferencing any payload byte. Reference: [`src/ECU/can.c`](src/ECU/can.c) lines 303-376. |
-| OBD-II = `Serial.print("OBD response\n")` | Full ISO 14229 (UDS) + ISO 15765-2 (ISO-TP) + ISO 14230-3 (KWP2000) implementation in [`src/ECU/obd-2.c`](src/ECU/obd-2.c) (~2350 lines), with Ford EEC-V quirks, NRC handling, and **negative-response regression tests** for every `requireMinLength` site. |
-| Static analysis = "compiles without warnings" | `-Werror` on Arduino path **and** host tests. Cppcheck baseline-gated in CI. **MISRA-C migration in active progress** with project-local screening runner, deviation register, and rule-by-rule findings tracked in [`MISRA.md`](MISRA.md). |
-| Tests = "the LED blinked" | **314 host-test cases** across 19 suites with mock HAL backend. Mock-injectable serial RX, CAN frames, I²C transactions, device UID. ~5 KLOC of test code against ~16 KLOC of firmware. |
-| CI = "pushed to main, hope it builds" | **8 GitHub Actions workflows** + daily unattended Raspberry Pi runner emailing PASS/FAIL; per-module test lanes; firmware-build verification lane; cppcheck baseline lane; MISRA artifact lane. |
-| Arduino-pico is a hard dependency | HAL has been **ported to STM32G474** alongside RP2040. Same firmware contract, two backends. The port wasn't a marketing exercise — it's 1500+ lines of working code in a separate commit lane. |
-
-### Why arduino-cli at all, then?
-
-Because the alternative — Pico SDK + bare CMake + custom Makefile + manual
-linker script + manual flash + manual USB CDC stack + manual fork of every
-display/CAN/GPS driver — would buy zero engineering value for a one-off
-retrofit. `arduino-cli` is here because it's a working `gcc`-driver +
-RP2040 core + flasher, not because anyone reaches for `Arduino.h`. The
-Arduino layer is fully virtualised by the HAL — including `Wire`, `SPI`,
-`SD`, `Serial`. A header-shadowing trick (`arduino_host_stubs/`) lets the
-exact same source files compile on the host with no Arduino present. That's
-the test of whether something is "Arduino code" or "code that uses arduino-cli
-to compile" — if it builds in a host CMake test target, it isn't Arduino.
-
-### Yes, RP2040 is consumer silicon
-
-It is. So is the rest of this project. This is a personal retrofit on a
-25-year-old vehicle whose OEM electronics were already failing. Comparison
-to OEM Tier-1 production code is a category error — there is no fleet, no
-homologation, no warranty exposure, no Vector CANalyzer subscription, no
-multi-vendor RFQ process, no ASPICE level 3 audit. Comparison to a Tier-3
-supplier prototype or a senior engineer's side project is the correct frame.
-
-In that frame, the engineering discipline (MISRA-C migration, multi-core
-race analysis, defensive CAN coding, host-side SIL with mock HAL,
-multi-target HAL portability, daily CI on real hardware) is **above the
-industry baseline** for the scope. Most production prototypes you've
-reviewed inside a corporation had less rigour than this — you just didn't
-see it because they were behind a paywall.
 
 ### What this project does *not* claim
 
-- **No ISO 26262.** Correctly absent — no certification authority would
+- **No ISO 26262.** Correctly absent - no certification authority would
   accept it for a one-off retrofit, and faking it would be worse than
   omitting it.
 - **No AUTOSAR.** Unjustifiable overhead for solo scope. JaszczurHAL plays
-  the same architectural role (HAL → application separation) at one one-
+  the same architectural role (HAL -> application separation) at roughly one-
   thousandth of the bureaucracy cost.
 - **No HIL rig.** Host SIL only via mock HAL. A HIL rig is the right answer
   at production scope, not at one-vehicle scope.
@@ -86,27 +38,28 @@ see it because they were behind a paywall.
   silicon precisely because the vehicle is a personal car, not a production
   platform.
 
-### The honest deal
+## For Embedded Engineers Who Usually Skip Arduino Projects
 
-If those gaps disqualify the project for your professional context — fair.
-Walk away. Don't lecture. Your context legitimately needs ASIL-D-rated
-silicon and a 12-engineer SQA team and that's not what's on offer here.
+Fiesta project started with Arduino because it enabled fast prototyping.  
+In this repository, Arduino is used primarily as a build/upload frontend (`arduino-cli`), not as the application architecture.
 
-If you can read past the `.ino` extension and the `arduino-cli` invocation
-to look at what's actually implemented underneath — the HAL, the diagnostic
-stack, the multi-core synchronization, the CI infrastructure, the MISRA
-process, the multi-target portability — and you still call it amateur, then
-the disagreement is about taste, not about engineering. At that point we
-just don't share a definition of the word.
+The firmware itself is organized as regular modules, with thin `*.ino` entry points and most logic implemented outside Arduino-specific code.  
+Hardware-facing code is isolated through `JaszczurHAL`, host-side tests run with CMake/CTest, and CI validates key build/test paths.
 
-The code is open. Read it. Form an opinion. Then talk.
+This is a personal retrofit project, not a certified automotive product.  
+The focus is practical engineering discipline: clear module boundaries, repeatable tooling, test coverage growth, and explicit safety-oriented work in the ECU path.
 
-## Safety-First Engineering
+Still, if the word "Arduino" closes your perspective, this repository is probably not
+for you.
 
-Safety is treated as a top-level requirement.
+## The main rule is: safety-first. Always.
+
+Even though the full stack is not yet running in a real car as one integrated
+system, safety is treated as a first-class priority.
 
 - `src/ECU` is the safety-critical module and is being aligned with MISRA-C.
-- Defensive coding and runtime hardening are prioritized over shortcuts.
+- Defensive coding and runtime hardening are prioritized over shortcuts,
+  already at this stage of the project.
 - Coverage is expanded continuously (host tests + firmware build validation).
 - Safety documentation is kept synchronized with code changes.
 
@@ -117,12 +70,18 @@ dedicated document: [`MISRA.md`](MISRA.md).
 
 Fiesta is a multi-module system, not a single firmware binary.
 
+Some modules are already tested in the car (non-safety-critical paths such as
+the Clocks extension, and ECU in supervisory/engine-parameter mode without
+VP37 actuation).
+
 For a full description of the modules, their responsibilities, how they talk
 to each other and to the vehicle, and where the external dependencies fit in,
 see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 The desktop companion lives in
 [`src/SerialConfigurator/`](src/SerialConfigurator/).
+Current scope includes GTK detection/details UI plus a CLI shell (`detect`,
+`list`, `meta`, `get-values`) over the same core.
 Implementation status and milestone snapshots are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -153,13 +112,23 @@ to `/home/you/projects/libraries/`.
 
 Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
 
-Because the Arduino layer is only used as a toolchain facade (not as an API), the project is unlikely to compile out-of-the-box in the official **Arduino IDE**. So, expect to re-create the per-module include paths, add `-Werror` / `-I <project-dir>` build properties, and wire up the external libraries (`JaszczurHAL`, `canDefinitions`); the same way `bootstrap.sh` and the per-module wrapper scripts do via the shared `src/common/scripts/` helpers. Host tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + the MISRA addon) have no Arduino IDE equivalent at all.
+Because Arduino is used here as a toolchain facade rather than an application API, this project is unlikely to compile out of the box in the official **Arduino IDE**.
+
+If you still want to build it there, expect extra manual setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external libraries (`JaszczurHAL`, `canDefinitions`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
+
+Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + MISRA addon) have no native Arduino IDE equivalent.
 
 For the building details, see the `One-shot setup` section below.
 
 ### Development environment
 
-The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor - the module `.vscode/` directories ship `tasks.json`, `launch.json`, `extensions.json`, and (for modules already migrated) `arduino.json` / `settings.json`, so everything - compile, upload, serial monitor, host tests, debugger - is wired up out of the box.
+The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi
+OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
+`Clocks`, `OilAndSpeed`, `Adjustometer`) ship ready-to-use `.vscode/` setups
+(`tasks.json`, `launch.json`, `extensions.json`, `settings.json`; plus
+`arduino.json` in `ECU` and `Adjustometer`), so compile, upload,
+serial monitor, host tests, and debugger flows are wired out of the box.
+`src/SerialConfigurator` ships its own CMake-oriented VS Code task setup.
 
 Platform support summary:
 
@@ -174,7 +143,7 @@ Platform support summary:
 
 Helper scripts are available in module-specific `scripts/` directories:
 
-- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start your project adventure by just simply invoking this script right after the clone. See `One-shot setup` section below.
+- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
 - `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
 - `select-board.sh` (per module wrapper for the shared board-selection helper)
 - `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
@@ -256,31 +225,32 @@ cd src/SerialConfigurator
 ./scripts/desktop-build.sh build
 ./scripts/desktop-build.sh run
 ./scripts/desktop-build.sh test
+./build/serial-configurator-cli detect
 ```
 
 ### Debugging with Raspberry Pi Debug Probe
 
 Each module ships a `.vscode/launch.json` with Cortex-Debug (`marus25.cortex-debug`) configurations for live debugging via the Raspberry Pi Debug Probe over CMSIS-DAP:
 
-- **Debug: RP2040 (Pico/Pico W/Zero/Plus)** — flash + break at `main`
-- **Debug: RP2350 (Pico 2/Pico 2 W)** — flash + break at `main`
-- **Debug: Attach RP2040 / RP2350** — attach to a running target without re-flashing
+- **Debug: RP2040 (Pico/Pico W/Zero/Plus)** - flash + break at `main`
+- **Debug: RP2350 (Pico 2/Pico 2 W)** - flash + break at `main`
+- **Debug: Attach RP2040 / RP2350** - attach to a running target without re-flashing
 
 Prerequisites:
 
 - Debug Probe firmware v2 or later (USB VID:PID `2e8a:000c`). Older Picoprobe firmware (`2e8a:0004`) also works since the shipped configs use `interface/cmsis-dap.cfg`.
 - SWD wiring: probe `SC`->target `SWCLK`, `SD`->`SWDIO`, `GND`->`GND`. Power the target independently or from the probe's debug header.
 - The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
-- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `bootstrap.sh`). Paths are already set in each module's `.vscode/settings.json` — review them if your core version differs from the committed defaults.
+- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `bootstrap.sh`). Paths are already set in each module's `.vscode/settings.json` - review them if your core version differs from the committed defaults.
 
 Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Arduino: Build (Debug)` as `preLaunchTask` so the ELF at `${workspaceFolder}/.build/*.ino.elf` stays fresh; `attach` variants skip the build step.
 
-Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for upload — it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path. For a companion serial log during debug, `Ctrl+Shift+5` starts `serial-persistent.py -m probe` against the Debug Probe's UART pass-through.
+Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for upload - it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path. For a companion serial log during debug, `Ctrl+Shift+5` starts `serial-persistent.py -m probe` against the Debug Probe's UART pass-through.
 
 ## Current status
 
-Per-module build, test, and CI state — including latest snapshot date —
-is tracked in [`CHANGELOG.md`](CHANGELOG.md).
+Per-module build, test, and CI history is tracked in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## Credits
 

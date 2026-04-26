@@ -6,6 +6,8 @@
 #include <hal/hal_kv.h>
 #include <hal/hal_serial_session.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 
 const char *err = "ERR";
 
@@ -14,6 +16,12 @@ const char *err = "ERR";
 #define ECU_PARAMS_BLOB_SIZE_V1 16u
 #define ECU_PARAMS_BLOB_SIZE_V2 18u
 #define ECU_PARAMS_BLOB_KEY     0xDA10u
+
+#define SC_STATUS_OK               "SC_OK"
+#define SC_STATUS_UNKNOWN_CMD      "SC_UNKNOWN_CMD"
+#define SC_STATUS_BAD_REQUEST      "SC_BAD_REQUEST"
+#define SC_STATUS_NOT_READY        "SC_NOT_READY"
+#define SC_STATUS_INVALID_PARAM_ID "SC_INVALID_PARAM_ID"
 
 static ecu_params_values_t s_active = {
   .fanCoolantStartC = TEMP_FAN_START,
@@ -356,10 +364,269 @@ int16_t ecuParamsNominalRpm(void) {
   return s_active.nominalRpm;
 }
 
+typedef int16_t (*sc_param_getter_t)(void);
+
+typedef struct {
+  const char *id;
+  sc_param_getter_t getter;
+  int16_t defaultValue;
+  int16_t minValue;
+  int16_t maxValue;
+} sc_param_definition_t;
+
+static const sc_param_definition_t s_scParamDefinitions[] = {
+  {
+    .id = "fan_coolant_start_c",
+    .getter = &ecuParamsFanCoolantStart,
+    .defaultValue = TEMP_FAN_START,
+    .minValue = ECU_PARAMS_COOLANT_START_MIN,
+    .maxValue = ECU_PARAMS_COOLANT_START_MAX
+  },
+  {
+    .id = "fan_coolant_stop_c",
+    .getter = &ecuParamsFanCoolantStop,
+    .defaultValue = TEMP_FAN_STOP,
+    .minValue = ECU_PARAMS_COOLANT_STOP_MIN,
+    .maxValue = ECU_PARAMS_COOLANT_STOP_MAX
+  },
+  {
+    .id = "fan_air_start_c",
+    .getter = &ecuParamsFanAirStart,
+    .defaultValue = AIR_TEMP_FAN_START,
+    .minValue = ECU_PARAMS_AIR_START_MIN,
+    .maxValue = ECU_PARAMS_AIR_START_MAX
+  },
+  {
+    .id = "fan_air_stop_c",
+    .getter = &ecuParamsFanAirStop,
+    .defaultValue = AIR_TEMP_FAN_STOP,
+    .minValue = ECU_PARAMS_AIR_STOP_MIN,
+    .maxValue = ECU_PARAMS_AIR_STOP_MAX
+  },
+  {
+    .id = "heater_stop_c",
+    .getter = &ecuParamsHeaterStop,
+    .defaultValue = TEMP_HEATER_STOP,
+    .minValue = ECU_PARAMS_HEATER_STOP_MIN,
+    .maxValue = ECU_PARAMS_HEATER_STOP_MAX
+  },
+  {
+    .id = "nominal_rpm",
+    .getter = &ecuParamsNominalRpm,
+    .defaultValue = NOMINAL_RPM_VALUE,
+    .minValue = ECU_PARAMS_NOMINAL_RPM_MIN,
+    .maxValue = ECU_PARAMS_NOMINAL_RPM_MAX
+  }
+};
+
+static const size_t s_scParamDefinitionCount =
+  sizeof(s_scParamDefinitions) / sizeof(s_scParamDefinitions[0]);
+
+static const sc_param_definition_t *configSessionFindParamById(const char *id) {
+  if(id == NULL || id[0] == '\0') {
+    return NULL;
+  }
+
+  for(size_t i = 0u; i < s_scParamDefinitionCount; i++) {
+    if(strcmp(s_scParamDefinitions[i].id, id) == 0) {
+      return &s_scParamDefinitions[i];
+    }
+  }
+
+  return NULL;
+}
+
+TESTABLE_INLINE_STATIC const char *configSessionSkipSpaces(const char *cursor) {
+  if(cursor == NULL) {
+    return NULL;
+  }
+
+  while(*cursor == ' ') {
+    cursor++;
+  }
+  return cursor;
+}
+
+static void configSessionReplyGetMeta(void) {
+  char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
+  if(!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
+    uidHex[0] = '\0';
+  }
+
+  char response[256] = {0};
+  snprintf(response,
+           sizeof(response),
+           "%s META module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
+           SC_STATUS_OK,
+           MODULE_NAME,
+           (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
+           (unsigned long)configSessionId(),
+           FW_VERSION,
+           BUILD_ID,
+           uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
+  hal_serial_println(response);
+}
+
+static void configSessionReplyGetParamList(void) {
+  char response[256] = {0};
+  size_t used = (size_t)snprintf(response, sizeof(response), "%s PARAM_LIST", SC_STATUS_OK);
+  if(used >= sizeof(response)) {
+    response[sizeof(response) - 1u] = '\0';
+    hal_serial_println(response);
+    return;
+  }
+
+  for(size_t i = 0u; i < s_scParamDefinitionCount; i++) {
+    const char *separator = (i == 0u) ? " " : ",";
+    int written = snprintf(response + used,
+                           sizeof(response) - used,
+                           "%s%s",
+                           separator,
+                           s_scParamDefinitions[i].id);
+    if(written < 0) {
+      break;
+    }
+
+    size_t chunk = (size_t)written;
+    if(chunk >= (sizeof(response) - used)) {
+      used = sizeof(response) - 1u;
+      break;
+    }
+
+    used += chunk;
+  }
+
+  response[sizeof(response) - 1u] = '\0';
+  hal_serial_println(response);
+}
+
+static void configSessionReplyGetParamValue(const sc_param_definition_t *param) {
+  if(param == NULL || param->getter == NULL) {
+    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    return;
+  }
+
+  char response[192] = {0};
+  snprintf(response,
+           sizeof(response),
+           "%s PARAM id=%s value=%d min=%d max=%d default=%d",
+           SC_STATUS_OK,
+           param->id,
+           (int)param->getter(),
+           (int)param->minValue,
+           (int)param->maxValue,
+           (int)param->defaultValue);
+  hal_serial_println(response);
+}
+
+static void configSessionReplyGetValues(void) {
+  const ecu_params_values_t *active = ecuParamsActive();
+  if(active == NULL) {
+    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    return;
+  }
+
+  char response[256] = {0};
+  snprintf(response,
+           sizeof(response),
+           "%s PARAM_VALUES fan_coolant_start_c=%d fan_coolant_stop_c=%d fan_air_start_c=%d "
+           "fan_air_stop_c=%d heater_stop_c=%d nominal_rpm=%d",
+           SC_STATUS_OK,
+           (int)active->fanCoolantStartC,
+           (int)active->fanCoolantStopC,
+           (int)active->fanAirStartC,
+           (int)active->fanAirStopC,
+           (int)active->heaterStopC,
+           (int)active->nominalRpm);
+  hal_serial_println(response);
+}
+
+static bool configSessionHandleScGetParamCommand(const char *line) {
+  if(line == NULL) {
+    hal_serial_println(SC_STATUS_BAD_REQUEST);
+    return true;
+  }
+
+  const char *cursor = line + strlen("SC_GET_PARAM");
+  cursor = configSessionSkipSpaces(cursor);
+  if(cursor == NULL || cursor[0] == '\0') {
+    hal_serial_println(SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    return true;
+  }
+
+  char paramId[32] = {0};
+  size_t idLen = 0u;
+  while(cursor[idLen] != '\0' && cursor[idLen] != ' ' && idLen + 1u < sizeof(paramId)) {
+    paramId[idLen] = cursor[idLen];
+    idLen++;
+  }
+  paramId[idLen] = '\0';
+
+  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+    hal_serial_println(SC_STATUS_BAD_REQUEST " param_id_too_long");
+    return true;
+  }
+
+  cursor += idLen;
+  cursor = configSessionSkipSpaces(cursor);
+  if(cursor == NULL || cursor[0] != '\0') {
+    hal_serial_println(SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    return true;
+  }
+
+  const sc_param_definition_t *param = configSessionFindParamById(paramId);
+  if(param == NULL) {
+    char response[96] = {0};
+    snprintf(response, sizeof(response), "%s id=%s", SC_STATUS_INVALID_PARAM_ID, paramId);
+    hal_serial_println(response);
+    return true;
+  }
+
+  configSessionReplyGetParamValue(param);
+  return true;
+}
+
+static bool configSessionHandleScCommand(const char *line) {
+  if(line == NULL || strncmp(line, "SC_", 3u) != 0) {
+    return false;
+  }
+
+  if(!configSessionActive()) {
+    hal_serial_println(SC_STATUS_NOT_READY " HELLO_REQUIRED");
+    return true;
+  }
+
+  if(strcmp(line, "SC_GET_META") == 0) {
+    configSessionReplyGetMeta();
+    return true;
+  }
+
+  if(strcmp(line, "SC_GET_PARAM_LIST") == 0) {
+    configSessionReplyGetParamList();
+    return true;
+  }
+
+  if(strcmp(line, "SC_GET_VALUES") == 0) {
+    configSessionReplyGetValues();
+    return true;
+  }
+
+  if(strncmp(line, "SC_GET_PARAM", strlen("SC_GET_PARAM")) == 0) {
+    return configSessionHandleScGetParamCommand(line);
+  }
+
+  hal_serial_println(SC_STATUS_UNKNOWN_CMD);
+  return true;
+}
+
 static hal_serial_session_t s_configSession;
 
 static void configSession_onUnknownLine(const char *line, void *user) {
   (void)user;
+  if(configSessionHandleScCommand(line)) {
+    return;
+  }
+
   /* Forward non-protocol command lines (PID tuning, etc.) to test fixtures.
    * This keeps the bootstrap session parser as the sole consumer of raw
    * serial bytes; secondary consumers receive whole lines only after HELLO

@@ -328,8 +328,8 @@ thermocouple amplifiers for pre-DPF/KAT and mid-DPF exhaust gas temperatures.
 
 | File | Responsibility |
 |---|---|
-| [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC → bar conversion for the resistive oil sender (10..180 Ω nominal) |
-| [`speed.cpp`](src/OilAndSpeed/speed.cpp) | frequency-counter on ABS pulse line → vehicle speed |
+| [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC -> bar conversion for the resistive oil sender (10..180 Ω nominal) |
+| [`speed.cpp`](src/OilAndSpeed/speed.cpp) | frequency-counter on ABS pulse line -> vehicle speed |
 | [`can.cpp`](src/OilAndSpeed/can.cpp) | CAN TX of oil/speed/EGT frames (IDs from `canDefinitions`) |
 | [`config.cpp`](src/OilAndSpeed/config.cpp) | persistent config |
 | [`periperials.cpp`](src/OilAndSpeed/periperials.cpp) | GPIO/SPI/I²C init *(file name kept as-is in the source tree)* |
@@ -339,9 +339,9 @@ thermocouple amplifiers for pre-DPF/KAT and mid-DPF exhaust gas temperatures.
 
 - **ADC**: oil pressure sender on `A3`.
 - **GPIO**: ABS frequency input on pin 14.
-- **SPI** (MISO=0, MOSI=3, SCK=2) → CAN controller (CS=1, INT=4). Same
+- **SPI** (MISO=0, MOSI=3, SCK=2) -> CAN controller (CS=1, INT=4). Same
   SPI pin layout as Clocks; not shared with any display.
-- **I²C** (SDA=12, SCL=13) → two MCP9600 thermocouple amplifiers at
+- **I²C** (SDA=12, SCL=13) -> two MCP9600 thermocouple amplifiers at
   `0x60` (pre-DPF) and `0x67` (mid-DPF).
 - **GPIO**: RGB status LED on pin 16.
 
@@ -372,7 +372,7 @@ as an **I²C slave** at address `0x57`.
 
 - **PIO**: `PIO_INTERRUPT_HALL=2` captures the ~37 kHz oscillator.
 - **I²C** (SDA=0, SCL=1 @ 400 kHz): **slave** side; the ECU is the master.
-- **ADC**: `ADC_VOLT_PIN=29` (supply voltage, 47k/10k divider → ≈18.8 V
+- **ADC**: `ADC_VOLT_PIN=29` (supply voltage, 47k/10k divider -> ≈18.8 V
   max), `ADC_FUEL_TEMP_PIN=28` (NTC fuel-temp sensor, `R_VP37_FUEL_A=2300`,
   `R_VP37_FUEL_B=3300`).
 - **GPIO**: RGB LED on pin 16.
@@ -403,21 +403,21 @@ status bit to clear before trusting the frequency reading.
 ### 5.5 Fiesta Serial Configurator - desktop companion
 
 **Role.** Off-vehicle desktop application used to discover Fiesta modules on
-USB, inspect their identity, read and modify runtime parameters, and flash
-matching firmware images. Replaces ad-hoc `arduino-cli` + manual `picocom`
-workflows with a single tool that enforces module/image matching and
-(later) authenticated configuration changes. It is **not** required for
-the car to operate - the firmware stack runs independently - but it is the
-primary way to service and tune the modules without a full rebuild.
+USB, inspect identity/metadata, and run read-only protocol queries over the
+shared serial session. It replaces ad-hoc `arduino-cli` + manual `picocom`
+probing with a single tool that enforces unambiguous target selection.
+Writable configuration and full flashing orchestration remain phased follow-up
+work behind authenticated protocol layers.
 
 Implementation milestones and phase-closure updates are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 **Target platforms.**
-- Linux (Debian-like desktops) - primary target; ships as `.deb`.
-- Windows 10 / 11 - secondary target; achievable because we use standard
-  USB CDC (`usbser.sys` native since Win10 1703) and a cross-platform
-  serial library. Packaging via MSYS2 + NSIS or PyInstaller.
+- Linux (Debian-like desktops) - primary target; source build and local
+  execution are supported in-tree.
+- Windows 10 / 11 - secondary target; architectural target is preserved, but
+  current transport implementation is Linux/POSIX-first and still needs
+  dedicated portability-layer work for production Windows parity.
 - macOS - not a declared target but is essentially free given the Windows
   portability rules.
 - Mobile - out of scope.
@@ -457,8 +457,10 @@ paths that must agree.
 
 **Rollout phases.** In order: Phase 1 runtime parameters foundation
 (`ecu_params` with staging / apply / commit semantics backed by HAL KV),
-Phase 2 framed binary protocol (read-only), Phase 3 authenticated writes
-(HMAC / AEAD + sequence numbers), Phase 4 multi-module flashing orchestration
+Phase 2 transitional read-only text protocol (`SC_*`) across ECU/Clocks/
+OilAndSpeed (with framed protocol planned as continuation), Phase 3
+authenticated writes (HMAC / AEAD + sequence numbers), Phase 4 multi-module
+flashing orchestration
 (`ENTER_BOOTLOADER`, UF2 copy, post-flash identity re-check), Phase 5
 hardening (lockout policy, key rotation, audit logs).
 
@@ -532,6 +534,9 @@ Channel responsibilities:
 
 - carry the module bootstrap handshake (identity + firmware metadata +
   device UID) on first contact,
+- carry transitional read-only `SC_*` queries used today by the desktop
+  companion (`SC_GET_META`, `SC_GET_VALUES`, `SC_GET_PARAM_LIST`,
+  `SC_GET_PARAM`),
 - coexist with the existing debug log output on the same CDC stream,
 - later carry authenticated configuration and flashing traffic.
 
@@ -549,21 +554,20 @@ Host-side identification path (two independent layers that must agree):
 
 Evolution path (rollout details in §5.5):
 
-- Current bootstrap level is deliberately minimal and unauthenticated - it
-  exists to let tooling discover modules and verify identity before any
-  trusted operation is possible.
+- Current bootstrap/read-only level is deliberately unauthenticated and
+  constrained to discovery + metadata/values reads before trusted operations
+  are introduced.
 - Sensitive operations (runtime writes, commit, bootloader entry) live on
   top of an authenticated framed protocol added in later phases; they are
-  out of scope for the bootstrap channel and are not exposed by the
-  handshake parser.
+  out of scope for the current text channel.
 - CLI mode is a first-class shell over the same core library and is the
   default flashing entrypoint for VS Code tasks.
 - CLI and GUI flashing flows must enforce the same fail-closed preflight
   gates (identity handshake, artifact/module compatibility, unambiguous
   target selection) before any bootloader transition or image copy.
 
-Wire-level specifics, command catalog, response fields, security design
-and phased rollout will be provided later.
+Wire-level framed-protocol specifics, auth model details, and full writable
+command catalog remain planned follow-up work.
 
 ---
 
@@ -573,7 +577,7 @@ This is what connects the modules to the car itself (as opposed to each
 other). See [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt) for the
 authoritative 104-pin ECU connector map.
 
-### 7.1 Sensors (vehicle → ECU/OilAndSpeed)
+### 7.1 Sensors (vehicle -> ECU/OilAndSpeed)
 
 - Coolant temperature (NTC, via HC4051 mux),
 - Oil temperature (NTC, via HC4051 mux),
@@ -581,14 +585,14 @@ authoritative 104-pin ECU connector map.
 - Fuel level (resistive, via HC4051 mux),
 - Throttle / driver demand (analog 0–5 V, via HC4051 mux),
 - Manifold / boost pressure (analog, via HC4051 mux),
-- Engine RPM (Hall sensor → PIO),
+- Engine RPM (Hall sensor -> PIO),
 - Heated-windows button (GPIO),
-- ECU supply voltage (divider → ADC 28 on ECU, ADC 29 on Adjustometer),
+- ECU supply voltage (divider -> ADC 28 on ECU, ADC 29 on Adjustometer),
 - Oil pressure (resistive, ADC on OilAndSpeed),
 - Wheel speed (ABS pulse, frequency input on OilAndSpeed),
 - Pre-DPF + mid-DPF EGT (MCP9600 thermocouple amps on OilAndSpeed).
 
-### 7.2 Actuators (ECU → vehicle)
+### 7.2 Actuators (ECU -> vehicle)
 
 - Glow plug relay + indicator lamp (PCF8574 bits 0 / 4),
 - Fuel pump (PWM),
@@ -600,7 +604,7 @@ authoritative 104-pin ECU connector map.
 - DPF warning lamp (PIO pin 8),
 - MCU Status LED on the ECU board (pin 25).
 
-### 7.3 Driver interface (modules → driver)
+### 7.3 Driver interface (modules -> driver)
 
 - Speedometer, tachometer, oil gauge - driven by Clocks with PWM square
   waves on pins 9 / 10 / 11 (the analog gauges are Ford OEM / mechanical-style 
@@ -613,7 +617,7 @@ authoritative 104-pin ECU connector map.
 
 - OBD-II port connected to the ECU's CAN1 controller. The ECU implements
   OBD-II / UDS service handlers in [`src/ECU/obd-2.c`](src/ECU/obd-2.c); and presents itself as an ECC-V Ford Fiesta 1.8 DI ECU.
-  the PID → internal signal mapping lives in
+  the PID -> internal signal mapping lives in
   [`src/ECU/obd-2_mapping.c`](src/ECU/obd-2_mapping.c).
 
 ### 7.5 Auxiliary
@@ -679,7 +683,8 @@ Three build paths exist today:
   [`scripts/desktop-build.sh`](src/SerialConfigurator/scripts/desktop-build.sh)
   (`build`, `run`, `test`, `clean`). CI is in
   [`.github/workflows/serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml).
-  Packaging paths are `.deb` (Linux primary) and Windows installer bundles.
+  Repository scope currently covers source build/test; release packaging paths
+  are not yet standardized in-tree.
 
 The ECU firmware build additionally enforces `-Werror` on the Arduino path
 as a warning quality gate.
@@ -694,7 +699,7 @@ as a warning quality gate.
 | [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | ctest for Clocks |
 | [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | ctest for OilAndSpeed |
 | [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | ctest for Adjustometer |
-| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (`serial-configurator-core-tests`, `serial-configurator-core-api-tests`) |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (`serial-configurator-core-tests`, `serial-configurator-core-api-tests`, `serial-configurator-core-protocol-tests`) |
 
 ### 10.2 Unattended daily build
 
@@ -709,9 +714,9 @@ all four modules, once per day. Setup notes in
 
 [`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh) is the
 single idempotent project entry point that sets up a fresh machine end-to-end:
-system packages → arduino-cli + rp2040 core → cloning/refreshing the two
-external library repos → host tests for every module that has a
-`CMakeLists.txt` → firmware `.uf2` build for every module. Env overrides:
+system packages -> arduino-cli + rp2040 core -> cloning/refreshing the two
+external library repos -> host tests for every module that has a
+`CMakeLists.txt` -> firmware `.uf2` build for every module. Env overrides:
 `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT`, `SKIP_APT`, `SKIP_TESTS`,
 `SKIP_BUILD`.
 

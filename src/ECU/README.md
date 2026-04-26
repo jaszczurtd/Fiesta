@@ -10,7 +10,7 @@ consolidated in [`MISRA.md`](../../MISRA.md).
 
 Module-local MISRA tooling:
 
-- runner: [`misra/check_misra.sh`](misra/),
+- runner: [`misra/check_misra.sh`](misra/check_misra.sh),
 - suppressions + deviation register: [`misra/`](misra/),
 - manual CI artifact workflow: `.github/workflows/ecu-misra.yml`.
 

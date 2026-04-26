@@ -7,6 +7,7 @@ endfunction()
 
 add_ecu_test(test_glowPlugs)
 add_ecu_test(test_ecu_params)
+add_ecu_test(test_sc_protocol)
 add_ecu_test(test_engineFan)
 add_ecu_test(test_engineHeater)
 add_ecu_test(test_heatedWindshield)
