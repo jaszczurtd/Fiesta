@@ -12,3 +12,4 @@
 
 #define HAL_DISABLE_ASSERTS
 #define HAL_DISABLE_TFT
+#define HAL_ENABLE_CRYPTO  /* config.c uses hal_base64_encode for SC_GET_META */
