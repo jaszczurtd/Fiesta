@@ -25,6 +25,7 @@
 #include "sc_app.h"
 #include "sc_core.h"
 #include "sc_detection.h"
+#include "sc_flash_paths.h"
 #include "sc_flash_tab.h"
 #include "sc_generic_gfx_helper.h"
 #include "sc_i18n.h"
@@ -95,6 +96,8 @@ int sc_app_run(int argc, char *argv[])
     state.detect_button = 0;
     state.module_list = 0;
     state.flash_tab_root = 0;
+    sc_flash_paths_init(&state.flash_paths);
+    state.flash_in_progress = false;
     state.connected = false;
     state.detection_in_progress = false;
     state.selection_valid = false;

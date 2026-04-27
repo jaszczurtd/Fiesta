@@ -34,6 +34,29 @@ GtkWidget *sc_flash_tab_build(AppState *state);
  */
 void sc_flash_tab_refresh_sensitivity(AppState *state);
 
+/**
+ * @brief Rebuild the per-module flash sections in the second tab
+ *        (Phase 6.2). Called whenever the detection state changes
+ *        — adds a section for every in-scope module that is
+ *        currently detected, removes sections for modules that are
+ *        no longer detected, and falls back to the placeholder when
+ *        no module is detected. Persisted paths
+ *        (`state->flash_paths`) are re-applied to every freshly
+ *        rebuilt section so the operator does not have to re-pick
+ *        paths after every Detect.
+ */
+void sc_flash_tab_rebuild_sections(AppState *state);
+
+/**
+ * @brief Toggle the global "flash in progress" lock. While locked,
+ *        every Flash button, the Detect button, and every section's
+ *        file pickers go insensitive. The active section's status
+ *        field stays live. Phase 6.5 wires the real flash flow into
+ *        this lock; Phase 6.2 only exercises the plumbing from the
+ *        stubbed Flash button.
+ */
+void sc_flash_tab_set_lock(AppState *state, bool locked);
+
 #ifdef __cplusplus
 }
 #endif

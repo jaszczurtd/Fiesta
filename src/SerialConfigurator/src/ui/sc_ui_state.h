@@ -19,6 +19,7 @@
 #include <stddef.h>
 
 #include "sc_core.h"
+#include "sc_flash_paths.h"
 #include "sc_module_details.h"
 
 #ifdef __cplusplus
@@ -37,10 +38,14 @@ typedef struct AppState {
     GtkWidget *module_lamps[SC_MODULE_COUNT];
     GtkWidget *module_name_labels[SC_MODULE_COUNT];
     ScModuleDetailsView details_view;
-    /* Phase 6.1: notebook tab 2 root widget. Sensitive iff at least
-     * one in-scope module is detected. Tab body is a placeholder
-     * label until Phase 6.2 lands the per-module Flash sections. */
+    /* Phase 6.1+: notebook tab 2 root widget. Sensitive iff at least
+     * one in-scope module is detected. Phase 6.2 populates the body
+     * with per-module sections at every detection cycle. */
     GtkWidget *flash_tab_root;
+    /* Phase 6.2: per-module flash UI substate (paths persisted to
+     * flash-paths.json + global flash-in-progress lock flag). */
+    ScFlashPaths flash_paths;
+    bool flash_in_progress;
     bool connected;
     bool detection_in_progress;
     bool selection_valid;

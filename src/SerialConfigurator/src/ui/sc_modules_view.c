@@ -169,9 +169,10 @@ void sc_modules_view_refresh_lamps(AppState *state)
     }
 
     /* Detection state changed -> downstream subviews re-evaluate
-     * their own gating. Today the only consumer is the Phase 6.1
-     * Flash tab; future Phase 6.x slices keep using this hook. */
+     * their own gating. The Flash tab also rebuilds its per-module
+     * sections to reflect which modules are now in-scope (Phase 6.2). */
     sc_flash_tab_refresh_sensitivity(state);
+    sc_flash_tab_rebuild_sections(state);
 }
 
 void sc_modules_view_select_first_detected(AppState *state)
