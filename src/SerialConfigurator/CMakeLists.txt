@@ -90,7 +90,12 @@ target_compile_definitions(serial_configurator_core
 if(GTK4_FOUND)
     add_executable(serial-configurator
         src/ui/sc_app.c
+        src/ui/sc_detection.c
+        src/ui/sc_flash_tab.c
+        src/ui/sc_generic_gfx_helper.c
+        src/ui/sc_i18n.c
         src/ui/sc_module_details.c
+        src/ui/sc_modules_view.c
         src/ui/main.c
     )
 
@@ -102,7 +107,10 @@ if(GTK4_FOUND)
 endif()
 
 add_executable(serial-configurator-cli
+    src/cli/sc_cli_commands.c
     src/cli/sc_cli_main.c
+    src/cli/sc_cli_output.c
+    src/cli/sc_cli_selectors.c
 )
 
 target_link_libraries(serial-configurator-cli
@@ -145,6 +153,10 @@ if(BUILD_TESTING)
         tests/test_sc_phase5.c
     )
 
+    add_executable(serial-configurator-i18n-tests
+        tests/test_sc_i18n.c
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -185,6 +197,14 @@ if(BUILD_TESTING)
             serial_configurator_core
     )
 
+    # i18n test embeds src/ui/sc_i18n.c by #include — it is pure C with no
+    # GTK or core deps, so the test target stands alone (linkable on
+    # hosts that lack libgtk-4-dev).
+    target_include_directories(serial-configurator-i18n-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
     add_test(
         NAME serial-configurator-core-tests
         COMMAND serial-configurator-core-tests
@@ -223,5 +243,10 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-phase5-tests
         COMMAND serial-configurator-phase5-tests
+    )
+
+    add_test(
+        NAME serial-configurator-i18n-tests
+        COMMAND serial-configurator-i18n-tests
     )
 endif()
