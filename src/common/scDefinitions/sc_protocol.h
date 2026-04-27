@@ -12,13 +12,14 @@
  * single-source-of-truth contract and is forbidden — see provider §11
  * Rule 5 (effective from refactor R1.1 onward).
  *
- * Reply format strings and the canonical Fiesta vocabulary instance
- * (passed to @c hal_serial_session_init_with_vocabulary) also live
- * here. JaszczurHAL itself does NOT include this header — the helper
- * receives the dialect via the init pointer.
+ * @note This header is intentionally HAL-free. The HAL-bound
+ *       @c fiesta_default_vocabulary instance (passed to
+ *       @c hal_serial_session_init_with_vocabulary) lives in
+ *       @ref sc_session_vocabulary.h to keep the host build
+ *       compilable on environments without JaszczurHAL on the
+ *       include path (e.g. SerialConfigurator host CI runs that
+ *       fall back to the @c sc_crypto_none backend).
  */
-
-#include "hal/hal_serial_session_vocabulary.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -111,40 +112,6 @@ extern "C" {
 /* "SC_NOT_READY HELLO_REQUIRED" */
 #define SC_REPLY_NOT_READY_HELLO_REQUIRED                                    \
     SC_STATUS_NOT_READY " " SC_REPLY_TAG_HELLO_REQUIRED
-
-/* ── Fiesta default vocabulary instance ─────────────────────────────── */
-
-/**
- * @brief Canonical Fiesta vocabulary instance.
- *
- * Pass to @c hal_serial_session_init_with_vocabulary() so the HAL
- * session helper speaks the Fiesta dialect. The contents currently
- * match @c hal_serial_session_vocabulary_default verbatim — Fiesta
- * tokens are byte-identical to the legacy HAL defaults today. Keeping
- * the instance here is the single-source-of-truth: if Fiesta later
- * renames a token, only this instance changes; the HAL default stays
- * a development fallback.
- *
- * The HAL helper itself does NOT include this header — values flow in
- * via the init pointer (R1.0 vocabulary decoupling).
- */
-static const hal_serial_session_vocabulary_t fiesta_default_vocabulary = {
-    .cmd_auth_begin = SC_CMD_AUTH_BEGIN,
-    .cmd_auth_prove = SC_CMD_AUTH_PROVE,
-    .cmd_reboot_bootloader = SC_CMD_REBOOT_BOOTLOADER,
-    .reply_unknown_cmd = SC_STATUS_UNKNOWN_CMD,
-    .reply_not_ready_hello_required = SC_REPLY_NOT_READY_HELLO_REQUIRED,
-    .reply_auth_challenge_fmt = SC_REPLY_AUTH_CHALLENGE_FMT,
-    .reply_auth_ok = SC_REPLY_AUTH_OK,
-    .reply_auth_failed_no_challenge = SC_REPLY_AUTH_FAILED_NO_CHALLENGE,
-    .reply_auth_failed_bad_length = SC_REPLY_AUTH_FAILED_BAD_LENGTH,
-    .reply_auth_failed_bad_hex = SC_REPLY_AUTH_FAILED_BAD_HEX,
-    .reply_auth_failed_key_derivation = SC_REPLY_AUTH_FAILED_KEY_DERIVATION,
-    .reply_auth_failed_mac_compute = SC_REPLY_AUTH_FAILED_MAC_COMPUTE,
-    .reply_auth_failed_bad_mac = SC_REPLY_AUTH_FAILED_BAD_MAC,
-    .reply_not_authorized = SC_STATUS_NOT_AUTHORIZED,
-    .reply_reboot_ok = SC_REPLY_REBOOT_OK,
-};
 
 #ifdef __cplusplus
 }
