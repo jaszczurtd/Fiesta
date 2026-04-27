@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "sc_core.h"
+#include "sc_detection.h"
 #include "sc_flash.h"
 #include "sc_flash_paths.h"
 #include "sc_i18n.h"
@@ -323,22 +325,147 @@ static void on_manifest_clear_clicked(GtkButton *button, gpointer user_data)
     section_recompute_status(s);
 }
 
-static gboolean on_lock_release_timeout(gpointer user_data)
+/* ── Phase 6.5 worker plumbing ─────────────────────────────────────── */
+
+/* Heap-owned context handed to the worker thread. The strings are
+ * copies (the source widgets / state may have changed by the time the
+ * worker reads them), the section pointer is stable for the lifetime
+ * of the GUI (s_sections is a static array). The transport pointer is
+ * borrowed from AppState — its lifetime exceeds any flash. */
+typedef struct {
+    ScFlashSection *section;
+    AppState *state;
+    const ScTransport *transport;
+    size_t module_index;
+    char device_path[512];
+    char uid_hex[64];
+    char uf2_path[512];
+    char manifest_path[512]; /* may be empty */
+} FlashCtx;
+
+/* Marshalled event from worker → main loop via g_idle_add. */
+typedef enum {
+    FLASH_EV_PROGRESS,
+    FLASH_EV_COMPLETE,
+} FlashEventKind;
+
+typedef struct {
+    FlashEventKind kind;
+    ScFlashSection *section;
+    AppState *state;
+    /* Progress fields (kind == FLASH_EV_PROGRESS). */
+    ScFlashPhase phase;
+    uint64_t bytes_written;
+    uint64_t bytes_total;
+    /* Completion fields (kind == FLASH_EV_COMPLETE). */
+    ScFlashStatus status;
+    char message[512];
+} FlashEvent;
+
+static gboolean flash_idle_apply(gpointer user_data)
 {
-    AppState *state = (AppState *)user_data;
-    if (state == NULL) return G_SOURCE_REMOVE;
+    FlashEvent *ev = (FlashEvent *)user_data;
+    if (ev == NULL || ev->section == NULL || ev->state == NULL) {
+        g_free(ev);
+        return G_SOURCE_REMOVE;
+    }
+    ScFlashSection *s = ev->section;
 
-    sc_flash_tab_set_lock(state, false);
+    if (ev->kind == FLASH_EV_PROGRESS) {
+        char buf[192];
+        if (ev->phase == SC_FLASH_PHASE_COPY && ev->bytes_total > 0u) {
+            const unsigned pct = (unsigned)((ev->bytes_written * 100u) /
+                                            ev->bytes_total);
+            (void)snprintf(buf, sizeof(buf),
+                           sc_i18n_string_get(SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT),
+                           pct);
+            if (s->progress_bar != NULL) {
+                gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar),
+                    (double)ev->bytes_written / (double)ev->bytes_total);
+                gtk_widget_set_visible(s->progress_bar, TRUE);
+            }
+        } else {
+            (void)snprintf(buf, sizeof(buf),
+                           sc_i18n_string_get(SC_I18N_FLASH_STATUS_RUNNING_FMT),
+                           sc_flash_phase_name(ev->phase));
+            if (s->progress_bar != NULL) {
+                gtk_progress_bar_pulse(GTK_PROGRESS_BAR(s->progress_bar));
+                gtk_widget_set_visible(s->progress_bar, TRUE);
+            }
+        }
+        section_set_status(s, buf);
+    } else { /* FLASH_EV_COMPLETE */
+        char buf[640];
+        if (ev->status == SC_FLASH_STATUS_OK) {
+            (void)snprintf(buf, sizeof(buf),
+                           sc_i18n_string_get(SC_I18N_FLASH_STATUS_DONE_FMT),
+                           ev->message);
+        } else {
+            (void)snprintf(buf, sizeof(buf),
+                           sc_i18n_string_get(SC_I18N_FLASH_STATUS_FAILED_FMT),
+                           sc_flash_status_name(ev->status), ev->message);
+        }
+        section_set_status(s, buf);
 
-    /* Show a transient note in every active section's status so the
-     * operator sees the lock release. Actual flash flow lands later. */
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        if (s_sections[i].active && s_sections[i].status_label != NULL) {
-            section_set_status(&s_sections[i],
-                sc_i18n_string_get(SC_I18N_FLASH_STATUS_LOCK_RELEASED));
+        if (s->progress_bar != NULL) {
+            gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar),
+                                          0.0);
+            gtk_widget_set_visible(s->progress_bar, FALSE);
+        }
+
+        sc_flash_tab_set_lock(ev->state, false);
+
+        /* On success, kick off a full re-detection so all sections see
+         * the new fw_version / build_id. The detection worker raises
+         * its own lock independently. */
+        if (ev->status == SC_FLASH_STATUS_OK) {
+            sc_detection_start_async(ev->state);
         }
     }
+    g_free(ev);
     return G_SOURCE_REMOVE;
+}
+
+/* Progress callback called from the worker thread. Allocates a small
+ * event and posts it to the main loop; never touches widgets directly. */
+static void flash_progress_marshal(ScFlashPhase phase, uint64_t bytes_written,
+                                    uint64_t bytes_total, void *user)
+{
+    FlashCtx *ctx = (FlashCtx *)user;
+    if (ctx == NULL) return;
+    FlashEvent *ev = g_new0(FlashEvent, 1);
+    ev->kind = FLASH_EV_PROGRESS;
+    ev->section = ctx->section;
+    ev->state = ctx->state;
+    ev->phase = phase;
+    ev->bytes_written = bytes_written;
+    ev->bytes_total = bytes_total;
+    g_idle_add(flash_idle_apply, ev);
+}
+
+static gpointer flash_worker_main(gpointer user_data)
+{
+    FlashCtx *ctx = (FlashCtx *)user_data;
+
+    char err[512] = {0};
+    const char *manifest = (ctx->manifest_path[0] != '\0')
+                               ? ctx->manifest_path : NULL;
+    const ScFlashStatus rc = sc_core_flash(
+        ctx->transport, ctx->module_index, ctx->device_path, ctx->uid_hex,
+        ctx->uf2_path, manifest, NULL,
+        flash_progress_marshal, ctx,
+        err, sizeof(err));
+
+    FlashEvent *ev = g_new0(FlashEvent, 1);
+    ev->kind = FLASH_EV_COMPLETE;
+    ev->section = ctx->section;
+    ev->state = ctx->state;
+    ev->status = rc;
+    (void)snprintf(ev->message, sizeof(ev->message), "%s", err);
+    g_idle_add(flash_idle_apply, ev);
+
+    g_free(ctx);
+    return NULL;
 }
 
 static void on_flash_clicked(GtkButton *button, gpointer user_data)
@@ -347,10 +474,52 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
     ScFlashSection *s = (ScFlashSection *)user_data;
     if (s == NULL || s->state == NULL) return;
 
+    /* Pre-flight gates with operator-friendly diagnostics. */
+    const ScModuleStatus *status = sc_core_module_status(&s->state->core,
+                                                         s->module_index);
+    if (status == NULL || !status->detected ||
+        status->port_path[0] == '\0' ||
+        !status->hello_identity.valid ||
+        status->hello_identity.uid[0] == '\0') {
+        section_set_status(s,
+            sc_i18n_string_get(SC_I18N_FLASH_STATUS_NEED_DETECTION));
+        return;
+    }
+    const char *uf2 = sc_flash_paths_get_uf2(&s->state->flash_paths,
+                                              s->module_name);
+    if (uf2 == NULL || uf2[0] == '\0') {
+        section_set_status(s,
+            sc_i18n_string_get(SC_I18N_FLASH_STATUS_NEED_UF2));
+        return;
+    }
+
+    FlashCtx *ctx = g_new0(FlashCtx, 1);
+    ctx->section = s;
+    ctx->state = s->state;
+    ctx->transport = &s->state->core.transport;
+    ctx->module_index = s->module_index;
+    (void)snprintf(ctx->device_path, sizeof(ctx->device_path), "%s",
+                   status->port_path);
+    (void)snprintf(ctx->uid_hex, sizeof(ctx->uid_hex), "%s",
+                   status->hello_identity.uid);
+    (void)snprintf(ctx->uf2_path, sizeof(ctx->uf2_path), "%s", uf2);
+    const char *manifest = sc_flash_paths_get_manifest(&s->state->flash_paths,
+                                                        s->module_name);
+    if (manifest != NULL && manifest[0] != '\0') {
+        (void)snprintf(ctx->manifest_path, sizeof(ctx->manifest_path),
+                       "%s", manifest);
+    }
+
     sc_flash_tab_set_lock(s->state, true);
-    section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_FLASH_TODO));
-    /* Phase 6.5 will replace this timeout with the real flash flow. */
-    (void)g_timeout_add(1500u, on_lock_release_timeout, s->state);
+    if (s->progress_bar != NULL) {
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar), 0.0);
+        gtk_widget_set_visible(s->progress_bar, TRUE);
+    }
+    section_set_status(s, sc_flash_phase_name(SC_FLASH_PHASE_FORMAT_CHECK));
+
+    GThread *worker = g_thread_new("sc_flash_worker",
+                                    flash_worker_main, ctx);
+    g_thread_unref(worker); /* detached — worker frees ctx itself. */
 }
 
 /* ── section construction ──────────────────────────────────────────── */

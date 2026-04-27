@@ -236,6 +236,125 @@ ScRebootStatus sc_core_reboot_to_bootloader(
     char *error,
     size_t error_size);
 
+/* ── Phase 6.5: end-to-end flashing orchestrator ──────────────────── */
+
+/**
+ * @brief Stable status enum returned by @ref sc_core_flash.
+ *
+ * The reasons are tagged precisely so the GUI / CLI status field
+ * can render "what went wrong, where" without parsing free-form
+ * text. Tokens emitted by @ref sc_flash_status_name are stable
+ * across versions and matched by tests.
+ */
+typedef enum ScFlashStatus {
+    SC_FLASH_STATUS_OK = 0,
+    SC_FLASH_STATUS_NULL_ARG,
+    SC_FLASH_STATUS_FORMAT_REJECTED,
+    SC_FLASH_STATUS_MANIFEST_PARSE_FAILED,
+    SC_FLASH_STATUS_MANIFEST_MODULE_MISMATCH,
+    SC_FLASH_STATUS_MANIFEST_ARTIFACT_MISMATCH,
+    SC_FLASH_STATUS_AUTH_FAILED,
+    SC_FLASH_STATUS_REBOOT_FAILED,
+    SC_FLASH_STATUS_BOOTSEL_TIMEOUT,
+    SC_FLASH_STATUS_COPY_FAILED,
+    SC_FLASH_STATUS_REENUM_TIMEOUT,
+    SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED,
+    SC_FLASH_STATUS_POST_FLASH_FW_MISMATCH
+} ScFlashStatus;
+
+/**
+ * @brief Progress phase tag passed to the flash callback.
+ *
+ * Most phases are quasi-instantaneous from the operator's POV and
+ * only fire one callback (with @c bytes_total == 0, which the GUI
+ * can render as an indeterminate pulse). The COPY phase fires a
+ * callback per chunk with non-zero @c bytes_total so the GUI can
+ * switch to a determinate fraction.
+ */
+typedef enum ScFlashPhase {
+    SC_FLASH_PHASE_FORMAT_CHECK = 0,
+    SC_FLASH_PHASE_MANIFEST_VERIFY,
+    SC_FLASH_PHASE_AUTHENTICATE,
+    SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,
+    SC_FLASH_PHASE_WAIT_BOOTSEL,
+    SC_FLASH_PHASE_COPY,
+    SC_FLASH_PHASE_WAIT_REENUM,
+    SC_FLASH_PHASE_POST_FLASH_HELLO
+} ScFlashPhase;
+
+typedef void (*sc_core_flash_progress_cb)(ScFlashPhase phase,
+                                          uint64_t bytes_written,
+                                          uint64_t bytes_total,
+                                          void *user);
+
+/**
+ * @brief Optional knobs for @ref sc_core_flash; pass NULL to use the
+ *        production defaults.
+ *
+ * Tests use this to point the BOOTSEL watcher and the re-enumeration
+ * waiter at @c mkdtemp fixtures and to shrink the timeouts so the
+ * suite finishes in well under a second.
+ */
+typedef struct ScFlashOptions {
+    /** Override for `/media/$USER` and `/run/media/$USER`. NULL entries
+     *  are skipped; an all-NULL array uses the production defaults. */
+    const char *bootsel_parents[2];
+    /** Override for `/dev/serial/by-id/`. NULL → production default. */
+    const char *by_id_parent;
+    /** 0 → 60000. */
+    uint32_t bootsel_timeout_ms;
+    /** 0 → 30000. */
+    uint32_t reenum_timeout_ms;
+    /** 0 → 2500. */
+    uint32_t grace_after_reenum_ms;
+} ScFlashOptions;
+
+/**
+ * @brief End-to-end flashing flow. Composes Phase 6.2/6.3/6.4
+ *        helpers plus Phase 3/4/5 auth, manifest, and reboot.
+ *
+ * Order of operations (each step on success):
+ *   1. UF2 format check.
+ *   2. If @p manifest_path_or_null is non-NULL: parse manifest,
+ *      verify module match against the targeted module index,
+ *      verify artifact SHA-256 matches the manifest claim.
+ *   3. AUTH (HELLO + AUTH_BEGIN + AUTH_PROVE).
+ *   4. REBOOT_BOOTLOADER (sends the framed command, drains the
+ *      ACK, hands control to the boot ROM).
+ *   5. Watch for the BOOTSEL mass-storage drive.
+ *   6. Copy `<drive_path>/firmware.uf2`, invoking the progress
+ *      callback per 64 KiB chunk.
+ *   7. Wait for the new USB-CDC enumeration on the same UID.
+ *   8. Grace sleep so the firmware-side session stack settles.
+ *   9. HELLO again to confirm the new firmware is running. If the
+ *      manifest declared a `fw_version`, the parsed HELLO identity
+ *      must match.
+ *
+ * On any step's failure the function returns the corresponding
+ * @ref ScFlashStatus token; the diagnostic in @p error_buf carries
+ * the underlying helper's error string for the operator log.
+ *
+ * @p uid_hex must be the UID the targeted module reported in its
+ * pre-flash HELLO — it gates the re-enumeration step against the
+ * same physical device so a different module appearing on the bus
+ * concurrently does not get mistakenly matched.
+ *
+ * @p progress_cb may be NULL.
+ */
+ScFlashStatus sc_core_flash(
+    const ScTransport *transport,
+    size_t module_index,
+    const char *device_path,
+    const char *uid_hex,
+    const char *uf2_path,
+    const char *manifest_path_or_null,
+    const ScFlashOptions *options_or_null,
+    sc_core_flash_progress_cb progress_cb, void *progress_user,
+    char *error_buf, size_t error_size);
+
+const char *sc_flash_status_name(ScFlashStatus status);
+const char *sc_flash_phase_name(ScFlashPhase phase);
+
 #ifdef __cplusplus
 }
 #endif

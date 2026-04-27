@@ -180,6 +180,19 @@ if os.path.isdir(build_dir):
     if os.path.isdir(core_dir):
         includes.add(core_dir)
 
+# R1: every Fiesta firmware module pulls the scDefinitions sources via a
+# relative `#include "../common/scDefinitions/..."` from its config.{c,cpp}
+# (and the sc_param_handlers_glue.c shim transitively pulls the .c). The
+# arduino-cli compile_commands.json does not list that dir as `-I` because
+# the includes are file-relative — but VS Code IntelliSense is happier when
+# the path is on `includePath` explicitly, so jump-to-definition on
+# k_ecu_params[] / sc_param_reply_* / SC_CMD_* lands inside the shared
+# headers instead of falling back to the workspaceFolder/** glob.
+sc_definitions_dir = os.path.normpath(
+    os.path.join(project_dir, "..", "common", "scDefinitions"))
+if os.path.isdir(sc_definitions_dir):
+    includes.add(sc_definitions_dir)
+
 includes_list = sorted([path for path in includes if os.path.isdir(path)])
 defines_list = sorted(defines)
 includes_list.append("${workspaceFolder}/**")

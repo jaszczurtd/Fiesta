@@ -201,12 +201,44 @@ setup_arduino_core() {
     fi
     "$ARDUINO_CLI" core update-index >/dev/null
     if "$ARDUINO_CLI" core list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "rp2040:rp2040"; then
-        ok "rp2040:rp2040 core already installed"
+        local installed_version
+        installed_version=$("$ARDUINO_CLI" core list 2>/dev/null \
+            | awk '$1=="rp2040:rp2040" {print $2}')
+        ok "rp2040:rp2040 core already installed (version: ${installed_version:-unknown})"
+        # The arduino-pico core ships new board IDs across releases (e.g.
+        # `waveshare_rp2040_plus` was added in v2.0, RP2350 boards in v4.0).
+        # The presence-only check above does NOT catch a stale install that
+        # predates a board the operator's settings.json targets — `compile`
+        # then dies with a terse "board ... not found". Upgrade
+        # unconditionally so already-current installs become a no-op while
+        # stale ones are brought up to date.
+        info "Upgrading rp2040:rp2040 to the latest version (no-op if current)"
+        if ! "$ARDUINO_CLI" core upgrade rp2040:rp2040; then
+            warn "core upgrade exited non-zero — continuing with whatever is installed"
+        fi
     else
         info "Installing rp2040:rp2040 core (this can take a few minutes)"
         "$ARDUINO_CLI" core install rp2040:rp2040
         ok "rp2040 core installed"
     fi
+
+    # Sanity-check: every Fiesta module currently targets the
+    # `waveshare_rp2040_plus` board (see src/*/.vscode/settings.json). If the
+    # core is too old and lacks that ID, fail fast with an actionable error
+    # instead of letting the operator re-run the whole pipeline only to hit
+    # arduino-cli's terse "Invalid FQBN: board ... not found" later on.
+    local probe_board="rp2040:rp2040:waveshare_rp2040_plus"
+    if ! "$ARDUINO_CLI" board listall rp2040:rp2040 2>/dev/null \
+            | awk '{print $NF}' | grep -qx "$probe_board"; then
+        err "Required board '$probe_board' missing from rp2040:rp2040."
+        err "Likely cause: an arduino-pico install older than v2.0 (this board was"
+        err "added in 2.0). Fix:"
+        err "  $ARDUINO_CLI core install --force rp2040:rp2040"
+        err "Then re-run bootstrap.sh. If the failure persists, verify the board"
+        err "manager URL is the earlephilhower one ($BOARD_URL)."
+        exit 1
+    fi
+    ok "rp2040:rp2040 board catalogue includes the project default ($probe_board)"
 }
 
 # -----------------------------------------------------------------------------
