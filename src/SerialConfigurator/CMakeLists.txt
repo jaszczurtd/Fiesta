@@ -231,6 +231,17 @@ if(BUILD_TESTING)
             Threads::Threads
     )
 
+    # Phase 6.5 — end-to-end orchestrator (sc_core_flash). Drives
+    # the full pipeline through a mock transport + mkdtemp BOOTSEL /
+    # by-id fixtures so every branch is hermetic.
+    add_executable(serial-configurator-flash-orchestrator-tests
+        tests/test_sc_flash_orchestrator.c
+    )
+    target_link_libraries(serial-configurator-flash-orchestrator-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -364,5 +375,10 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-flash-copy-reenum-tests
         COMMAND serial-configurator-flash-copy-reenum-tests
+    )
+
+    add_test(
+        NAME serial-configurator-flash-orchestrator-tests
+        COMMAND serial-configurator-flash-orchestrator-tests
     )
 endif()

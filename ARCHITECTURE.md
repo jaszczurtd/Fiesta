@@ -182,7 +182,50 @@ into `<parent-of-repo-root>/libraries/canDefinitions` by `bootstrap.sh`
 and is treated by the bootstrap as a disposable build dependency (force
 reset to the remote default branch on every run).
 
-### 4.3 Per-module layout convention
+### 4.3 scDefinitions ([`src/common/scDefinitions`](src/common/scDefinitions/))
+
+`scDefinitions` is the in-tree single source of truth for the
+SerialConfigurator wire vocabulary and the descriptor-driven SC reply
+machinery shared by ECU, Clocks, OilAndSpeed, and the desktop
+configurator. Unlike `JaszczurHAL` and `canDefinitions` (out-of-tree
+external libs) it lives inside the Fiesta repository because the
+contract is Fiesta-specific.
+
+Files:
+
+- [`sc_protocol.h`](src/common/scDefinitions/sc_protocol.h) - HAL-free
+  `SC_CMD_*`, `SC_STATUS_*`, reply tags and reply format strings. Every
+  `SC_*` literal used anywhere in firmware or host code lives here.
+- [`sc_session_vocabulary.h`](src/common/scDefinitions/sc_session_vocabulary.h)
+  \- HAL-bound binding that owns the `fiesta_default_vocabulary` instance
+  passed to `hal_serial_session_init_with_vocabulary` so JaszczurHAL
+  itself stays free of Fiesta-specific tokens.
+- [`sc_param_types.h`](src/common/scDefinitions/sc_param_types.h) -
+  tagged-union `sc_param_descriptor_t` (SCALAR_I16 active; AXIS / MAP
+  kinds reserved), flags (`READ_ONLY`, `NOT_PERSISTED`), and the
+  `SC_PARAM_SCALAR_I16(...)` /
+  `SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(...)` builder macros.
+- [`sc_param_handlers.{h,c}`](src/common/scDefinitions/) - generic
+  descriptor-driven machinery: lookup, range validation, get/set,
+  load_defaults, three reply emitters (`PARAM_LIST` / `PARAM_VALUES` /
+  `PARAM`), schema-versioned blob_encode/decode, and the shared
+  CRC32 (PKZIP) helper.
+
+Each firmware module's `config.{c,cpp}` declares a `static const
+sc_param_descriptor_t k_<module>_params[]` array and routes its SC
+unknown-handler through the generic emitters. Adding a new
+wire-visible parameter is one row in `k_<module>_params[]`, one field
+in the values struct, and (if persisted) a `schema_since` bump - no
+edits to reply machinery. See `src/SerialConfigurator/tests/test_sc_param.c`
+for the contract.
+
+Each firmware sketch carries a one-line `sc_param_handlers_glue.c`
+that `#include`s the common .c, so arduino-cli (which only auto-compiles
+files inside the sketch directory) picks the implementation up without
+library plumbing. Host CMake builds compile the same source directly
+through `${SCDEFS}`.
+
+### 4.4 Per-module layout convention
 
 Every active module follows the same file layout:
 
@@ -455,14 +498,24 @@ The UID reported in the handshake and the USB `iSerialNumber` carry the same
 64-bit flash unique id, giving the host two independent identification
 paths that must agree.
 
-**Rollout phases.** In order: Phase 1 runtime parameters foundation
-(`ecu_params` with staging / apply / commit semantics backed by HAL KV),
-Phase 2 framed read-only `SC_*` protocol across ECU/Clocks/OilAndSpeed
-(now implemented), Phase 3 authenticated writes
-(HMAC / AEAD + sequence numbers), Phase 4 multi-module flashing
-orchestration
-(`ENTER_BOOTLOADER`, UF2 copy, post-flash identity re-check), Phase 5
-hardening (lockout policy, key rotation, audit logs).
+**Rollout phases.** Phases 1–6 are landed; Phase 7 is the next bucket.
+
+| Phase | Status | Scope |
+|---|---|---|
+| 1 - Runtime parameters foundation | done | `ecu_params` with staging / apply / commit semantics backed by HAL KV; descriptor-driven across all three modules after R1 (§5.5 below). |
+| 2 - Framed read-only `SC_*` | done | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM` over `$SC,<seq>,<payload>*<crc8>\n` framing, on ECU/Clocks/OilAndSpeed. |
+| 3 - Authentication handshake | done | `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` with HMAC-SHA256 over a per-device key derived from the RP2040 UID; one-shot challenge consumption defeats replay. |
+| 4 - Manifest pre-flash gate | done | Hard-rejecting host-side parser that requires `module_name`, `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte. |
+| 5 - Auth-gated bootloader entry | done | `SC_REBOOT_BOOTLOADER` accepted only after a successful `SC_AUTH_PROVE`; firmware ACKs, drains the ACK frame, and hands control to the boot ROM. |
+| 6 - Flash flow | done | `sc_core_flash` orchestrator composes format check + manifest verify + auth + reboot + BOOTSEL drive watcher + UF2 copy with progress + re-enumeration waiter + post-flash HELLO with optional `fw_version` match. GUI runs the flow on a worker thread, marshals progress via `g_idle_add`. |
+| 7 - Hardening | next | Auth-failure lockout policy on `auth_failures`, ed25519 manifest signature backend (the field is already parsed and exposed today), key rotation, audit logs. |
+
+**R1 cross-cutting refactor (done).** Folded between Phase 6 slices to
+collapse ~70% copy&paste between ECU/Clocks/OilAndSpeed `config.{c,cpp}`
+onto the new `src/common/scDefinitions/` framework (see §4.3) and to
+strip Fiesta-specific SC tokens out of JaszczurHAL. Net firmware shrink
+across the three modules: 1228 → 865 LOC (-29%); JaszczurHAL `src/`
+SC_* literal count: 55 → 0.
 
 ---
 
@@ -554,20 +607,27 @@ Host-side identification path (two independent layers that must agree):
 
 Evolution path (rollout details in §5.5):
 
-- Current bootstrap/read-only level is deliberately unauthenticated and
-  constrained to discovery + metadata/values reads before trusted operations
-  are introduced.
-- Sensitive operations (runtime writes, commit, bootloader entry) live on
-  top of an authenticated framed protocol added in later phases; they are
-  out of scope for the current text channel.
-- CLI mode is a first-class shell over the same core library and is the
-  default flashing entrypoint for VS Code tasks.
-- CLI and GUI flashing flows must enforce the same fail-closed preflight
-  gates (identity handshake, artifact/module compatibility, unambiguous
-  target selection) before any bootloader transition or image copy.
+- Bootstrap (HELLO) and the read-only `SC_*` queries are unauthenticated
+  by design - they are discovery / inspection only and do not mutate
+  module state.
+- Auth-gated commands (currently `SC_REBOOT_BOOTLOADER`) require a prior
+  `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` round trip that consumes a one-shot
+  challenge (Phase 3). A new HELLO mints a fresh session id and clears
+  the authenticated state.
+- The full flash flow (Phase 6) is implemented end-to-end behind a single
+  `sc_core_flash` orchestrator: UF2 format check + optional manifest
+  module/sha256 verify + auth + reboot + BOOTSEL drive watcher + chunked
+  UF2 copy with progress + re-enumeration waiter + post-flash HELLO with
+  optional `fw_version` match.
+- CLI mode is a first-class shell over the same core library; the GUI
+  invokes the same `sc_core_flash` from a `GThread` worker and marshals
+  progress / completion through `g_idle_add`.
+- Both CLI and GUI flashing paths run the same fail-closed preflight
+  gates (manifest module match, artifact sha256, unambiguous target
+  selection). Adjustometer remains intentionally outside the SC flow.
 
-Wire-level framed-protocol specifics, auth model details, and full writable
-command catalog remain planned follow-up work.
+Runtime parameter writes (`SC_SET_PARAM`-style commands) and signed
+manifest verification (ed25519 backend) remain on the Phase 7 list.
 
 ---
 
@@ -738,7 +798,10 @@ Fiesta/
 │   ├── Clocks/                  # dashboard / instrument cluster
 │   ├── OilAndSpeed/             # oil + ABS speed + EGT telemetry
 │   ├── Adjustometer/            # VP37 feedback (I²C slave)
-│   ├── SerialConfigurator/      # GTK4 desktop companion (detect/configure/flash groundwork)
+│   ├── SerialConfigurator/      # GTK4 + CLI desktop companion (detect / inspect / flash)
+│   ├── common/
+│   │   ├── scDefinitions/       # SC wire vocabulary + descriptor framework (§4.3)
+│   │   └── scripts/             # shared bash helpers (arduino-build / upload / refresh-intellisense / ...)
 │   └── Fiesta_clock/            # AVR-based standalone clock (archived)
 ├── Fiesta_pcbs/                 # schematics, PCB layouts, connector maps
 │   ├── ecu/                     # ecuv1 + ecuv2

@@ -82,6 +82,18 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
         "Flash flow not implemented yet (Phase 6.5). Lock plumbing is exercised.",
     [SC_I18N_FLASH_STATUS_LOCK_RELEASED] =
         "Lock released. Pick paths and click Flash again once Phase 6.5 lands.",
+    [SC_I18N_FLASH_STATUS_NEED_DETECTION] =
+        "Detect the module before flashing.",
+    [SC_I18N_FLASH_STATUS_NEED_UF2] =
+        "Pick a UF2 file before flashing.",
+    [SC_I18N_FLASH_STATUS_RUNNING_FMT] =
+        "Flashing: %s",
+    [SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT] =
+        "Flashing: COPY (%u%%)",
+    [SC_I18N_FLASH_STATUS_DONE_FMT] =
+        "Flash OK: %s",
+    [SC_I18N_FLASH_STATUS_FAILED_FMT] =
+        "Flash failed: %s — %s",
 
     [SC_I18N_STATUS_NO_META]    = "No metadata (module not detected).",
     [SC_I18N_STATUS_NO_CATALOG] = "No catalog read (module not detected).",
@@ -198,6 +210,18 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_STATUS_LOCK_RELEASED] =
         "Blokada zwolniona. Wybierz ścieżki i kliknij Flashuj ponownie, "
         "gdy Faza 6.5 będzie gotowa.",
+    [SC_I18N_FLASH_STATUS_NEED_DETECTION] =
+        "Wykryj moduł zanim zaczniesz flashowanie.",
+    [SC_I18N_FLASH_STATUS_NEED_UF2] =
+        "Wybierz plik UF2 zanim zaczniesz flashowanie.",
+    [SC_I18N_FLASH_STATUS_RUNNING_FMT] =
+        "Flashowanie: %s",
+    [SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT] =
+        "Flashowanie: COPY (%u%%)",
+    [SC_I18N_FLASH_STATUS_DONE_FMT] =
+        "Flash OK: %s",
+    [SC_I18N_FLASH_STATUS_FAILED_FMT] =
+        "Flashowanie nieudane: %s — %s",
 
     [SC_I18N_STATUS_NO_META]    = "Brak metadanych (moduł niewykryty).",
     [SC_I18N_STATUS_NO_CATALOG] = "Brak odczytu katalogu (moduł niewykryty).",

@@ -30,8 +30,11 @@ see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 The desktop companion lives in
 [`src/SerialConfigurator/`](src/SerialConfigurator/).
-Current scope includes GTK detection/details UI plus a CLI shell (`detect`,
-`list`, `meta`, `get-values`) over the same core.
+Current scope: GTK detection / details UI, per-module Flash sections
+with UF2 format check + manifest pre-flash gate, end-to-end flashing
+flow (auth + reboot + BOOTSEL drive watcher + UF2 copy with progress +
+re-enumeration), and a first-class CLI shell (`detect`, `list`, `meta`,
+`param-list`, `get-values`, `get-param`) over the same core.
 Implementation status and milestone snapshots are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 

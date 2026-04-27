@@ -105,6 +105,12 @@ typedef enum ScI18nKey {
     SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2, /* "Manifest parsed; pick a UF2 to verify the hash." */
     SC_I18N_FLASH_STATUS_FLASH_TODO,     /* "Flash flow not implemented yet (Phase 6.5)." */
     SC_I18N_FLASH_STATUS_LOCK_RELEASED,  /* "Lock released. (Stub run finished.)" */
+    SC_I18N_FLASH_STATUS_NEED_DETECTION, /* "Detect the module before flashing." */
+    SC_I18N_FLASH_STATUS_NEED_UF2,       /* "Pick a UF2 file before flashing." */
+    SC_I18N_FLASH_STATUS_RUNNING_FMT,    /* "Flashing: %s" */
+    SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT, /* "Flashing: COPY (%u%%)" */
+    SC_I18N_FLASH_STATUS_DONE_FMT,       /* "Flash OK: %s" */
+    SC_I18N_FLASH_STATUS_FAILED_FMT,     /* "Flash failed: %s — %s" */
 
     /* ── Default per-module status strings (idle) ──────────────────── */
     SC_I18N_STATUS_NO_META,

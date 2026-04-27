@@ -66,6 +66,8 @@ cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
 
 ## Current Functionality
 
+Detection (read-only, no auth):
+
 - `Detect Fiesta Modules` button sends `HELLO` to devices discovered under
   `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`.
 - Detection runs in a background thread, so the GTK window stays responsive
@@ -79,18 +81,62 @@ cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
 - `Disconnect` clears detected state and returns all lamps to red.
 - Scanning stops early as soon as all known modules are detected.
 - A scrollable log view shows HELLO responses and detection details.
+- Core and CLI support read-only `SC_*` requests across all
+  in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`):
+  `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`.
+
+Authenticated bootloader entry (Phase 3 + 5):
+
+- `sc_core_authenticate` runs HELLO → `SC_AUTH_BEGIN` → `SC_AUTH_PROVE`
+  using HMAC-SHA256 over a per-device key derived from the RP2040 UID.
+  One-shot challenge consumption defeats replay; a new HELLO clears the
+  authenticated session.
+- `sc_core_reboot_to_bootloader` issues `SC_REBOOT_BOOTLOADER` after a
+  successful auth and verifies the firmware ACK before returning.
+
+Manifest pre-flash gate (Phase 4):
+
+- Hard-rejecting host-side parser that requires `module_name`,
+  `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte.
+  `signature` is parsed but verification is deferred to a future
+  ed25519 backend.
+
+Flash flow (Phase 6, end-to-end):
+
+- Per-module Flash sections in the GUI: UF2 + optional manifest pickers
+  with persistent paths (`flash-paths.json`), live status field, and a
+  GtkProgressBar that pulses during non-copy phases and shows fraction
+  during the COPY phase.
+- `sc_core_flash` orchestrator composes UF2 format check + manifest verify
+  + auth + reboot + BOOTSEL drive watcher (`/media/$USER` + `/run/media/$USER`,
+  matching `RPI-RP2*` / `RP2350`) + chunked UF2 copy with progress +
+  `/dev/serial/by-id/` re-enumeration waiter on the same UID + post-flash
+  HELLO with optional `fw_version` match against the manifest.
+- Returns a stable 13-code `ScFlashStatus` enum so the GUI can render
+  the specific reason on failure (`MANIFEST_MODULE_MISMATCH`,
+  `BOOTSEL_TIMEOUT`, `POST_FLASH_FW_MISMATCH`, ...). Lock policy: the
+  Detect button + every other module's Flash button + every section's
+  pickers go insensitive while the flow runs.
+
+CLI:
+
 - CLI supports `detect`, `list`, `meta`, `param-list`, `get-values`,
   and `get-param <id>`.
 - CLI prints parsed payloads with inferred value types
   (`BOOL`/`INT`/`UINT`/`FLOAT`/`TEXT`) for parameter responses.
 - CLI target selection is fail-closed: ambiguous target resolution is rejected
   (use selectors `--module`, `--uid`, or `--port`).
-- Core and CLI support transitional read-only `SC_*` requests across all
-  in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`):
-  `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`.
-- Current module behavior above that common baseline is module-specific:
-  `ECU` exposes a richer parameter catalog, while `Clocks` and `OilAndSpeed`
-  currently expose metadata + baseline empty list/value payloads.
+
+Module-specific behaviour above the common baseline:
+
+- `ECU` exposes a richer parameter catalogue (six writable thresholds,
+  schema-versioned KV blob).
+- `Clocks` and `OilAndSpeed` expose read-only / not-persisted descriptors
+  mirroring their compile-time thresholds and sampling intervals.
+
+The wire vocabulary, descriptor types, and reply machinery for every
+module are shared via [`src/common/scDefinitions/`](../common/scDefinitions/);
+see `ARCHITECTURE.md` §4.3.
 
 ## Code Structure
 
@@ -104,13 +150,28 @@ cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
 
 ## CI / Test Baseline
 
-At this stage, a minimal CI layer is already worth having. The project now has
-four core test binaries integrated with CTest:
+The project ships 15 host CTest targets covering core / protocol /
+crypto / flash / manifest / orchestrator surfaces:
 
 - `serial-configurator-core-tests` (smoke checks)
 - `serial-configurator-core-api-tests` (API contract checks)
 - `serial-configurator-core-protocol-tests` (read-only protocol parsing + flow)
 - `serial-configurator-crypto-tests` (bridge checks for `sc_crypto`)
+- `serial-configurator-frame-tests` (`$SC,...*<crc>` codec)
+- `serial-configurator-auth-tests` (HMAC-SHA256 + per-device key derivation)
+- `serial-configurator-manifest-tests` (Phase 4 hard-reject parser)
+- `serial-configurator-phase5-tests` (auth + reboot orchestration)
+- `serial-configurator-i18n-tests` (compiled-in EN+PL string tables)
+- `serial-configurator-flash-tests` (UF2 format checker)
+- `serial-configurator-flash-paths-tests` (`flash-paths.json` persistence)
+- `serial-configurator-sc-param-tests` (descriptor framework — find /
+  validate / get / set / load_defaults / 3 reply emitters /
+  schema-versioned blob codec)
+- `serial-configurator-flash-bootsel-tests` (Phase 6.3 BOOTSEL drive watcher)
+- `serial-configurator-flash-copy-reenum-tests` (Phase 6.4 UF2 copy +
+  re-enumeration waiter)
+- `serial-configurator-flash-orchestrator-tests` (Phase 6.5 `sc_core_flash`
+  end-to-end through mock transport + `mkdtemp` BOOTSEL/by-id fixtures)
 
 Recommended first CI steps:
 

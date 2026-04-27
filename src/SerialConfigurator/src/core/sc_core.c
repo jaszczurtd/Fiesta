@@ -7,9 +7,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 #include <sc_auth.h>
 #include <sc_crypto.h>
+#include "sc_flash.h"
+#include "sc_manifest.h"
 #include "sc_protocol.h"
+#include "sc_transport.h"
 
 typedef struct ScModuleDef {
     const char *token;
@@ -1916,4 +1921,304 @@ ScRebootStatus sc_core_reboot_to_bootloader(
     }
     set_phase5_error(error, error_size, "unexpected reply: %s", reply);
     return SC_REBOOT_ERR_UNEXPECTED_REPLY;
+}
+
+/* ── Phase 6.5: end-to-end flashing orchestrator ──────────────────── */
+
+const char *sc_flash_status_name(ScFlashStatus status)
+{
+    switch (status) {
+    case SC_FLASH_STATUS_OK:                          return "OK";
+    case SC_FLASH_STATUS_NULL_ARG:                    return "NULL_ARG";
+    case SC_FLASH_STATUS_FORMAT_REJECTED:             return "FORMAT_REJECTED";
+    case SC_FLASH_STATUS_MANIFEST_PARSE_FAILED:       return "MANIFEST_PARSE_FAILED";
+    case SC_FLASH_STATUS_MANIFEST_MODULE_MISMATCH:    return "MANIFEST_MODULE_MISMATCH";
+    case SC_FLASH_STATUS_MANIFEST_ARTIFACT_MISMATCH:  return "MANIFEST_ARTIFACT_MISMATCH";
+    case SC_FLASH_STATUS_AUTH_FAILED:                 return "AUTH_FAILED";
+    case SC_FLASH_STATUS_REBOOT_FAILED:               return "REBOOT_FAILED";
+    case SC_FLASH_STATUS_BOOTSEL_TIMEOUT:             return "BOOTSEL_TIMEOUT";
+    case SC_FLASH_STATUS_COPY_FAILED:                 return "COPY_FAILED";
+    case SC_FLASH_STATUS_REENUM_TIMEOUT:              return "REENUM_TIMEOUT";
+    case SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED:     return "POST_FLASH_HELLO_FAILED";
+    case SC_FLASH_STATUS_POST_FLASH_FW_MISMATCH:      return "POST_FLASH_FW_MISMATCH";
+    }
+    return "UNKNOWN";
+}
+
+const char *sc_flash_phase_name(ScFlashPhase phase)
+{
+    switch (phase) {
+    case SC_FLASH_PHASE_FORMAT_CHECK:        return "FORMAT_CHECK";
+    case SC_FLASH_PHASE_MANIFEST_VERIFY:     return "MANIFEST_VERIFY";
+    case SC_FLASH_PHASE_AUTHENTICATE:        return "AUTHENTICATE";
+    case SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER: return "REBOOT_TO_BOOTLOADER";
+    case SC_FLASH_PHASE_WAIT_BOOTSEL:        return "WAIT_BOOTSEL";
+    case SC_FLASH_PHASE_COPY:                return "COPY";
+    case SC_FLASH_PHASE_WAIT_REENUM:         return "WAIT_REENUM";
+    case SC_FLASH_PHASE_POST_FLASH_HELLO:    return "POST_FLASH_HELLO";
+    }
+    return "UNKNOWN";
+}
+
+static void flash_set_error(char *buf, size_t size, const char *fmt, ...)
+{
+    if (buf == NULL || size == 0u) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    (void)vsnprintf(buf, size, fmt, args);
+    va_end(args);
+}
+
+static void flash_pulse(sc_core_flash_progress_cb cb, void *user,
+                        ScFlashPhase phase)
+{
+    if (cb != NULL) {
+        cb(phase, 0u, 0u, user);
+    }
+}
+
+typedef struct {
+    sc_core_flash_progress_cb cb;
+    void *user;
+} flash_copy_progress_state_t;
+
+static void flash_copy_progress_adapter(uint64_t bytes_written,
+                                        uint64_t total_bytes, void *user)
+{
+    flash_copy_progress_state_t *st = (flash_copy_progress_state_t *)user;
+    if (st->cb != NULL) {
+        st->cb(SC_FLASH_PHASE_COPY, bytes_written, total_bytes, st->user);
+    }
+}
+
+static void flash_sleep_ms(uint32_t ms)
+{
+    if (ms == 0u) {
+        return;
+    }
+    struct timespec req;
+    req.tv_sec = (time_t)(ms / 1000u);
+    req.tv_nsec = (long)((ms % 1000u) * 1000000L);
+    (void)nanosleep(&req, NULL);
+}
+
+ScFlashStatus sc_core_flash(
+    const ScTransport *transport,
+    size_t module_index,
+    const char *device_path,
+    const char *uid_hex,
+    const char *uf2_path,
+    const char *manifest_path_or_null,
+    const ScFlashOptions *options_or_null,
+    sc_core_flash_progress_cb progress_cb, void *progress_user,
+    char *error_buf, size_t error_size)
+{
+    if (transport == NULL || device_path == NULL || uid_hex == NULL ||
+        uid_hex[0] == '\0' || uf2_path == NULL ||
+        module_index >= SC_MODULE_COUNT) {
+        flash_set_error(error_buf, error_size, "null/invalid input");
+        return SC_FLASH_STATUS_NULL_ARG;
+    }
+
+    char helper_err[256];
+
+    /* 1. UF2 format check. */
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_FORMAT_CHECK);
+    helper_err[0] = '\0';
+    const sc_flash_status_t fmt_st = sc_flash_uf2_format_check(
+        uf2_path, helper_err, sizeof(helper_err));
+    if (fmt_st != SC_FLASH_OK) {
+        flash_set_error(error_buf, error_size,
+                        "UF2 format rejected: %s — %s",
+                        sc_flash_status_str(fmt_st), helper_err);
+        return SC_FLASH_STATUS_FORMAT_REJECTED;
+    }
+
+    /* 2. Manifest (optional). */
+    sc_manifest_t manifest;
+    bool have_manifest = false;
+    if (manifest_path_or_null != NULL && manifest_path_or_null[0] != '\0') {
+        flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_MANIFEST_VERIFY);
+        const sc_manifest_status_t parse_st = sc_manifest_load_file(
+            manifest_path_or_null, &manifest);
+        if (parse_st != SC_MANIFEST_OK) {
+            flash_set_error(error_buf, error_size,
+                            "manifest parse failed: %s",
+                            sc_manifest_status_str(parse_st));
+            return SC_FLASH_STATUS_MANIFEST_PARSE_FAILED;
+        }
+        have_manifest = true;
+
+        const char *expected = k_module_defs[module_index].token;
+        const sc_manifest_status_t mod_st = sc_manifest_check_module_match(
+            &manifest, expected);
+        if (mod_st != SC_MANIFEST_OK) {
+            flash_set_error(error_buf, error_size,
+                            "manifest module mismatch: declares '%s', "
+                            "expected '%s'",
+                            manifest.module_name, expected);
+            return SC_FLASH_STATUS_MANIFEST_MODULE_MISMATCH;
+        }
+
+        const sc_manifest_status_t art_st = sc_manifest_verify_artifact(
+            &manifest, uf2_path);
+        if (art_st != SC_MANIFEST_OK) {
+            flash_set_error(error_buf, error_size,
+                            "manifest artifact mismatch: %s",
+                            sc_manifest_status_str(art_st));
+            return SC_FLASH_STATUS_MANIFEST_ARTIFACT_MISMATCH;
+        }
+    }
+
+    /* 3. Authenticate. */
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_AUTHENTICATE);
+    helper_err[0] = '\0';
+    const ScAuthStatus auth_st = sc_core_authenticate(
+        transport, device_path, helper_err, sizeof(helper_err));
+    if (auth_st != SC_AUTH_OK) {
+        flash_set_error(error_buf, error_size,
+                        "auth failed: %s — %s",
+                        sc_auth_status_name(auth_st), helper_err);
+        return SC_FLASH_STATUS_AUTH_FAILED;
+    }
+
+    /* 4. Reboot to bootloader. */
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER);
+    helper_err[0] = '\0';
+    const ScRebootStatus reboot_st = sc_core_reboot_to_bootloader(
+        transport, device_path, helper_err, sizeof(helper_err));
+    if (reboot_st != SC_REBOOT_OK) {
+        flash_set_error(error_buf, error_size,
+                        "reboot failed: %s — %s",
+                        sc_reboot_status_name(reboot_st), helper_err);
+        return SC_FLASH_STATUS_REBOOT_FAILED;
+    }
+
+    /* 5. Wait for BOOTSEL drive. */
+    const ScFlashOptions defaults = {
+        .bootsel_parents = { NULL, NULL },
+        .by_id_parent = NULL,
+        .bootsel_timeout_ms = 60000u,
+        .reenum_timeout_ms = 30000u,
+        .grace_after_reenum_ms = 2500u,
+    };
+    const ScFlashOptions *opts = (options_or_null != NULL)
+                                     ? options_or_null : &defaults;
+    const uint32_t bootsel_timeout = (opts->bootsel_timeout_ms != 0u)
+                                         ? opts->bootsel_timeout_ms
+                                         : defaults.bootsel_timeout_ms;
+    const uint32_t reenum_timeout = (opts->reenum_timeout_ms != 0u)
+                                        ? opts->reenum_timeout_ms
+                                        : defaults.reenum_timeout_ms;
+    const uint32_t grace_ms = (opts->grace_after_reenum_ms != 0u)
+                                  ? opts->grace_after_reenum_ms
+                                  : defaults.grace_after_reenum_ms;
+
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_WAIT_BOOTSEL);
+    char bootsel_path[512];
+    helper_err[0] = '\0';
+    sc_flash_status_t bs_st;
+    if (opts->bootsel_parents[0] != NULL || opts->bootsel_parents[1] != NULL) {
+        const char *parents[2] = {
+            opts->bootsel_parents[0], opts->bootsel_parents[1]
+        };
+        const size_t parent_count =
+            (parents[1] != NULL) ? 2u : (parents[0] != NULL) ? 1u : 0u;
+        const char *first_non_null = parents[0];
+        if (first_non_null == NULL) {
+            first_non_null = parents[1];
+        }
+        const char *p[2] = { first_non_null, parents[1] };
+        if (parent_count == 1u && parents[0] == NULL) {
+            p[0] = parents[1];
+        }
+        bs_st = sc_flash__watch_for_bootsel_in(
+            p, parent_count, bootsel_timeout,
+            bootsel_path, sizeof(bootsel_path),
+            helper_err, sizeof(helper_err));
+    } else {
+        bs_st = sc_flash_watch_for_bootsel(
+            bootsel_timeout, bootsel_path, sizeof(bootsel_path),
+            helper_err, sizeof(helper_err));
+    }
+    if (bs_st != SC_FLASH_OK) {
+        flash_set_error(error_buf, error_size,
+                        "BOOTSEL watcher: %s — %s",
+                        sc_flash_status_str(bs_st), helper_err);
+        return SC_FLASH_STATUS_BOOTSEL_TIMEOUT;
+    }
+
+    /* 6. Copy UF2. */
+    flash_copy_progress_state_t copy_state = {
+        .cb = progress_cb, .user = progress_user
+    };
+    helper_err[0] = '\0';
+    const sc_flash_status_t cp_st = sc_flash_copy_uf2(
+        uf2_path, bootsel_path, flash_copy_progress_adapter, &copy_state,
+        helper_err, sizeof(helper_err));
+    if (cp_st != SC_FLASH_OK) {
+        flash_set_error(error_buf, error_size,
+                        "copy failed: %s — %s",
+                        sc_flash_status_str(cp_st), helper_err);
+        return SC_FLASH_STATUS_COPY_FAILED;
+    }
+
+    /* 7. Wait for re-enumeration on the same UID. */
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_WAIT_REENUM);
+    char new_device_path[512];
+    helper_err[0] = '\0';
+    const sc_flash_status_t re_st = (opts->by_id_parent != NULL)
+        ? sc_flash__wait_reenumeration_in(
+              opts->by_id_parent, uid_hex, reenum_timeout,
+              new_device_path, sizeof(new_device_path),
+              helper_err, sizeof(helper_err))
+        : sc_flash_wait_reenumeration(
+              uid_hex, reenum_timeout,
+              new_device_path, sizeof(new_device_path),
+              helper_err, sizeof(helper_err));
+    if (re_st != SC_FLASH_OK) {
+        flash_set_error(error_buf, error_size,
+                        "re-enumeration: %s — %s",
+                        sc_flash_status_str(re_st), helper_err);
+        return SC_FLASH_STATUS_REENUM_TIMEOUT;
+    }
+
+    /* 8. Grace pause. */
+    flash_sleep_ms(grace_ms);
+
+    /* 9. Post-flash HELLO. */
+    flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_POST_FLASH_HELLO);
+    char hello_response[SC_HELLO_RESPONSE_MAX];
+    char hello_err[256];
+    if (!sc_transport_send_hello(transport, new_device_path,
+                                  hello_response, sizeof(hello_response),
+                                  hello_err, sizeof(hello_err))) {
+        flash_set_error(error_buf, error_size,
+                        "post-flash HELLO transport: %s", hello_err);
+        return SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED;
+    }
+    ScIdentityData parsed;
+    if (!parse_hello_identity(hello_response, &parsed)) {
+        flash_set_error(error_buf, error_size,
+                        "post-flash HELLO unparseable: %.180s",
+                        hello_response);
+        return SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED;
+    }
+
+    if (have_manifest && manifest.fw_version[0] != '\0') {
+        if (strcmp(parsed.fw_version, manifest.fw_version) != 0) {
+            flash_set_error(error_buf, error_size,
+                            "post-flash fw_version mismatch: device='%s' "
+                            "manifest='%s'",
+                            parsed.fw_version, manifest.fw_version);
+            return SC_FLASH_STATUS_POST_FLASH_FW_MISMATCH;
+        }
+    }
+
+    flash_set_error(error_buf, error_size,
+                    "OK: %s flashed, fw=%s, build=%s",
+                    parsed.module_name, parsed.fw_version, parsed.build_id);
+    return SC_FLASH_STATUS_OK;
 }
