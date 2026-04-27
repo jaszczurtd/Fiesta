@@ -28,6 +28,18 @@
 extern "C" {
 #endif
 
+/* ── Wire-shared sizing constants ──────────────────────────────────── */
+
+/**
+ * @brief Buffer size (with NUL terminator) for a parameter id on the wire.
+ *
+ * Both host and firmware MUST use this constant when sizing their
+ * parameter-id buffers so the contract stays in one place. Strings on
+ * the wire may be up to @c SC_PARAM_ID_MAX-1 bytes; longer payloads
+ * are rejected by the firmware with @c SC_BAD_REQUEST param_id_too_long.
+ */
+#define SC_PARAM_ID_MAX 48u
+
 /* ── Inbound command tokens (host → device) ────────────────────────── */
 
 #define SC_CMD_HELLO                "HELLO"

@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "sc_protocol.h"
 #include "sc_transport.h"
 
 #ifdef __cplusplus
@@ -17,7 +18,7 @@ extern "C" {
 #define SC_IDENTITY_FIELD_MAX 64u
 #define SC_COMMAND_STATUS_TOKEN_MAX 32u
 #define SC_COMMAND_TOPIC_MAX 32u
-#define SC_PARAM_ID_MAX 48u
+/* SC_PARAM_ID_MAX is defined in sc_protocol.h (single source of truth). */
 #define SC_PARAM_TEXT_MAX 96u
 #define SC_PARAM_ITEMS_MAX 64u
 

@@ -85,8 +85,11 @@ size_t sc_param_load_defaults(const sc_param_descriptor_t *descs, size_t count,
 /**
  * @brief Emit "SC_OK PARAM_LIST <id1>,<id2>,...".
  *
- * Truncates silently if the joined line exceeds the helper's internal
- * buffer (@c 256 bytes) — same behaviour as the legacy ECU emitter.
+ * If the joined line would exceed the helper's internal buffer
+ * (@c 256 bytes) the emitter stops before the offending id and
+ * appends the sentinel token @c ,* . The host parser treats the
+ * @c * as an invalid id and sets @c parsed->truncated, so a partial
+ * list never silently looks complete.
  */
 void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
                                    size_t count, sc_emit_fn emit,
@@ -95,6 +98,10 @@ void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
 /**
  * @brief Emit "SC_OK PARAM_VALUES id1=<v1> id2=<v2> ..." across SCALAR_I16
  *        descriptors in declaration order.
+ *
+ * On internal-buffer overflow the emitter stops before the offending
+ * pair and appends the sentinel @c " *=*" so the host marks
+ * @c parsed->truncated true (mirrors @ref sc_param_reply_get_param_list).
  */
 void sc_param_reply_get_values_i16(const sc_param_descriptor_t *descs,
                                    size_t count, const void *values_ctx,

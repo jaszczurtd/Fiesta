@@ -115,7 +115,7 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
     return true;
   }
 
-  char paramId[32] = {0};
+  char paramId[SC_PARAM_ID_MAX] = {0};
   size_t idLen = 0u;
   while(cursor[idLen] != '\0' && cursor[idLen] != ' ' && idLen + 1u < sizeof(paramId)) {
     paramId[idLen] = cursor[idLen];
