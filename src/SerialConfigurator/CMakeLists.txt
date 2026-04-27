@@ -64,9 +64,26 @@ if(NOT GTK4_FOUND)
     )
 endif()
 
+set(FIESTA_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
+set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
+
+# R1.1: Single-source-of-truth library for the SC wire vocabulary plus the
+# generic descriptor-driven SC reply machinery. Shared by host (SC core,
+# CLI, host tests starting in R1.3) and firmware modules (ECU/Clocks/
+# OilAndSpeed migrating onto it from R1.2 onward via arduino-build.sh).
+add_library(fiesta_sc_definitions STATIC
+    "${FIESTA_SC_DEFINITIONS_DIR}/sc_param_handlers.c"
+)
+target_include_directories(fiesta_sc_definitions
+    PUBLIC
+        "${FIESTA_SC_DEFINITIONS_DIR}"
+        "${SC_JASZCZURHAL_DIR}/src"
+)
+
 add_library(serial_configurator_core STATIC
     src/core/sc_auth.c
     src/core/sc_core.c
+    src/core/sc_flash.c
     src/core/sc_frame.c
     src/core/sc_manifest.c
     src/core/sc_sha256.c
@@ -91,6 +108,7 @@ if(GTK4_FOUND)
     add_executable(serial-configurator
         src/ui/sc_app.c
         src/ui/sc_detection.c
+        src/ui/sc_flash_paths.c
         src/ui/sc_flash_tab.c
         src/ui/sc_generic_gfx_helper.c
         src/ui/sc_i18n.c
@@ -157,6 +175,22 @@ if(BUILD_TESTING)
         tests/test_sc_i18n.c
     )
 
+    add_executable(serial-configurator-flash-tests
+        tests/test_sc_flash.c
+    )
+
+    add_executable(serial-configurator-flash-paths-tests
+        tests/test_sc_flash_paths.c
+    )
+
+    add_executable(serial-configurator-sc-param-tests
+        tests/test_sc_param.c
+    )
+    target_link_libraries(serial-configurator-sc-param-tests
+        PRIVATE
+            fiesta_sc_definitions
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -205,6 +239,23 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
+    target_link_libraries(serial-configurator-flash-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    # flash-paths test embeds src/ui/sc_flash_paths.c by #include — it
+    # is pure C with no GTK dependency, so the test target stands alone
+    # exactly like the i18n tests do.
+    target_link_libraries(serial-configurator-flash-paths-tests
+        PRIVATE
+            serial_configurator_core
+    )
+    target_include_directories(serial-configurator-flash-paths-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
     add_test(
         NAME serial-configurator-core-tests
         COMMAND serial-configurator-core-tests
@@ -248,5 +299,20 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-i18n-tests
         COMMAND serial-configurator-i18n-tests
+    )
+
+    add_test(
+        NAME serial-configurator-flash-tests
+        COMMAND serial-configurator-flash-tests
+    )
+
+    add_test(
+        NAME serial-configurator-flash-paths-tests
+        COMMAND serial-configurator-flash-paths-tests
+    )
+
+    add_test(
+        NAME serial-configurator-sc-param-tests
+        COMMAND serial-configurator-sc-param-tests
     )
 endif()
