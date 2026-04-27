@@ -162,8 +162,10 @@ static int test_get_set_i16_guards(void) {
                 "out-of-range set rejected");
     TEST_ASSERT(v.fan_coolant_start_c == 100, "value unchanged after reject");
 
-    /* Read-only guard (clocks). */
-    clocks_values_t c;
+    /* Read-only guard (clocks). Pre-zero the values struct so the
+     * post-load_defaults assertion is checking that load_defaults left
+     * the slot alone, not that uninitialised stack happens to read 0. */
+    clocks_values_t c = {0};
     sc_param_load_defaults(k_clocks_descs, k_clocks_descs_count, &c);
     TEST_ASSERT(c.coolant_warn_c == 0, "RO field untouched by load_defaults");
     TEST_ASSERT(!sc_param_set_i16(&k_clocks_descs[0], &c, 95),

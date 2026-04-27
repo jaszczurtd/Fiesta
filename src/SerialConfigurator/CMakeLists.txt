@@ -71,13 +71,18 @@ set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
 # generic descriptor-driven SC reply machinery. Shared by host (SC core,
 # CLI, host tests starting in R1.3) and firmware modules (ECU/Clocks/
 # OilAndSpeed migrating onto it from R1.2 onward via arduino-build.sh).
+#
+# Intentionally JaszczurHAL-free: sc_param_handlers.c includes only the
+# HAL-free sc_protocol.h. The HAL-bound fiesta_default_vocabulary lives in
+# sc_session_vocabulary.h, which firmware modules include directly via
+# arduino-build.sh — host CI runs that fall back to sc_crypto_none don't
+# need it and must not require JaszczurHAL on the include path.
 add_library(fiesta_sc_definitions STATIC
     "${FIESTA_SC_DEFINITIONS_DIR}/sc_param_handlers.c"
 )
 target_include_directories(fiesta_sc_definitions
     PUBLIC
         "${FIESTA_SC_DEFINITIONS_DIR}"
-        "${SC_JASZCZURHAL_DIR}/src"
 )
 
 add_library(serial_configurator_core STATIC
