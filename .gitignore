@@ -4,6 +4,7 @@
 *.codex
 .claude/*
 **/build_*/
+Testing/*
 
 # OS/editor noise
 .DS_Store

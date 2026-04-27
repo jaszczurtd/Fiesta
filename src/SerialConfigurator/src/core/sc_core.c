@@ -469,21 +469,6 @@ static int module_index_from_token(const char *token)
     return -1;
 }
 
-static bool all_modules_detected(const ScCore *core)
-{
-    if (core == 0) {
-        return false;
-    }
-
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        if (!core->modules[i].detected) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 static void command_result_reset(ScCommandResult *result)
 {
     if (result == 0) {
@@ -1196,14 +1181,9 @@ void sc_core_detect_modules(ScCore *core, char *log_output, size_t log_output_si
             device_path
         );
 
-        if (all_modules_detected(core)) {
-            log_append(
-                log_output,
-                log_output_size,
-                "All known modules are detected. Stopping scan early.\n"
-            );
-            break;
-        }
+        /* Scan all candidates even after every module type is matched
+         * once: a second instance of the same module on a later port
+         * must be observed so target_ambiguous can be raised. */
     }
 
     log_append(log_output, log_output_size, "\nDetection summary:\n");

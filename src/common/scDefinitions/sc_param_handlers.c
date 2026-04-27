@@ -143,6 +143,14 @@ size_t sc_param_load_defaults(const sc_param_descriptor_t *descs, size_t count,
 
 #define SC_PARAM_REPLY_BUF_BYTES 256u
 
+/* Truncation sentinels appended when the response cannot fit every id.
+ * `*` is not a valid param-id character on the host parser, so an
+ * extra `,*` (PARAM_LIST) or ` *=*` (PARAM_VALUES) token unambiguously
+ * signals truncation: the host's existing token-validation path sets
+ * `parsed->truncated = true` when it sees the sentinel. */
+#define SC_PARAM_TRUNC_MARK_LIST   ",*"
+#define SC_PARAM_TRUNC_MARK_VALUES " *=*"
+
 void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
                                    size_t count, sc_emit_fn emit,
                                    void *emit_user) {
@@ -150,6 +158,7 @@ void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
         return;
     }
     char response[SC_PARAM_REPLY_BUF_BYTES];
+    const size_t mark_len = sizeof(SC_PARAM_TRUNC_MARK_LIST) - 1u;
     size_t used = (size_t)snprintf(response, sizeof(response), "%s",
                                    SC_REPLY_PARAM_LIST_HEAD);
     if (used >= sizeof(response)) {
@@ -159,25 +168,35 @@ void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
     }
 
     bool first = true;
+    bool truncated = false;
     if (descs != NULL) {
         for (size_t i = 0u; i < count; ++i) {
             if (descs[i].id == NULL) {
                 continue;
             }
             const char *sep = first ? " " : ",";
-            int written = snprintf(response + used, sizeof(response) - used,
+            const size_t budget = sizeof(response) - used;
+            int written = snprintf(response + used, budget,
                                    "%s%s", sep, descs[i].id);
             if (written < 0) {
+                truncated = true;
                 break;
             }
-            size_t chunk = (size_t)written;
-            if (chunk >= sizeof(response) - used) {
-                used = sizeof(response) - 1u;
+            const size_t chunk = (size_t)written;
+            /* Refuse to consume the bytes reserved for the trailing
+             * truncation marker so the sentinel always fits when needed. */
+            if (chunk + mark_len + 1u > budget) {
+                response[used] = '\0';
+                truncated = true;
                 break;
             }
             used += chunk;
             first = false;
         }
+    }
+    if (truncated && (used + mark_len + 1u) <= sizeof(response)) {
+        memcpy(response + used, SC_PARAM_TRUNC_MARK_LIST, mark_len + 1u);
+        used += mark_len;
     }
     response[sizeof(response) - 1u] = '\0';
     emit(response, emit_user);
@@ -190,6 +209,7 @@ void sc_param_reply_get_values_i16(const sc_param_descriptor_t *descs,
         return;
     }
     char response[SC_PARAM_REPLY_BUF_BYTES];
+    const size_t mark_len = sizeof(SC_PARAM_TRUNC_MARK_VALUES) - 1u;
     size_t used = (size_t)snprintf(response, sizeof(response), "%s",
                                    SC_REPLY_PARAM_VALUES_HEAD);
     if (used >= sizeof(response)) {
@@ -198,25 +218,33 @@ void sc_param_reply_get_values_i16(const sc_param_descriptor_t *descs,
         return;
     }
 
+    bool truncated = false;
     if (descs != NULL && values_ctx != NULL) {
         for (size_t i = 0u; i < count; ++i) {
             const sc_param_descriptor_t *d = &descs[i];
             if (d->kind != SC_PARAM_KIND_SCALAR_I16 || d->id == NULL) {
                 continue;
             }
-            int written = snprintf(response + used, sizeof(response) - used,
+            const size_t budget = sizeof(response) - used;
+            int written = snprintf(response + used, budget,
                                    " %s=%d", d->id,
                                    (int)*scalar_i16_rvalue(d, values_ctx));
             if (written < 0) {
+                truncated = true;
                 break;
             }
-            size_t chunk = (size_t)written;
-            if (chunk >= sizeof(response) - used) {
-                used = sizeof(response) - 1u;
+            const size_t chunk = (size_t)written;
+            if (chunk + mark_len + 1u > budget) {
+                response[used] = '\0';
+                truncated = true;
                 break;
             }
             used += chunk;
         }
+    }
+    if (truncated && (used + mark_len + 1u) <= sizeof(response)) {
+        memcpy(response + used, SC_PARAM_TRUNC_MARK_VALUES, mark_len + 1u);
+        used += mark_len;
     }
     response[sizeof(response) - 1u] = '\0';
     emit(response, emit_user);
