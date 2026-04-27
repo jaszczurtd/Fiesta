@@ -83,12 +83,12 @@ typedef struct {
         .kind = SC_PARAM_KIND_SCALAR_I16,                                     \
         .flags = (uint16_t)SC_PARAM_FLAG_NONE,                                \
         .schema_since = (uint16_t)(since),                                    \
-        .as.scalar_i16 = {                                                    \
+        .as = { .scalar_i16 = {                                               \
             .value_offset = offsetof(struct_t, field),                        \
             .min_value = (int16_t)(min_v),                                    \
             .max_value = (int16_t)(max_v),                                    \
             .default_value = (int16_t)(default_v),                            \
-        },                                                                    \
+        } },                                                                  \
     }
 
 /**
@@ -106,12 +106,12 @@ typedef struct {
         .flags = (uint16_t)(SC_PARAM_FLAG_READ_ONLY                           \
                             | SC_PARAM_FLAG_NOT_PERSISTED),                   \
         .schema_since = (uint16_t)(since),                                    \
-        .as.scalar_i16 = {                                                    \
+        .as = { .scalar_i16 = {                                               \
             .value_offset = offsetof(struct_t, field),                        \
             .min_value = (int16_t)(min_v),                                    \
             .max_value = (int16_t)(max_v),                                    \
             .default_value = (int16_t)(default_v),                            \
-        },                                                                    \
+        } },                                                                  \
     }
 
 #ifdef __cplusplus

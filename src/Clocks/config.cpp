@@ -5,69 +5,76 @@
 #include <hal/hal_serial_session.h>
 #include <hal/hal_crypto.h>
 
-static const char *SC_STATUS_OK = "SC_OK";
-static const char *SC_STATUS_UNKNOWN_CMD = "SC_UNKNOWN_CMD";
-static const char *SC_STATUS_BAD_REQUEST = "SC_BAD_REQUEST";
-static const char *SC_STATUS_NOT_READY = "SC_NOT_READY";
-static const char *SC_STATUS_INVALID_PARAM_ID = "SC_INVALID_PARAM_ID";
+#include "../common/scDefinitions/sc_param_handlers.h"
+#include "../common/scDefinitions/sc_param_types.h"
+#include "../common/scDefinitions/sc_protocol.h"
+#include "../common/scDefinitions/sc_session_vocabulary.h"
 
 static hal_serial_session_t s_configSession;
 
 /* Read-only parameter catalog for the configurator host.
  *
  * These are compile-time thresholds today (no runtime calibration layer
- * on Clocks yet, unlike ECU's `ecuParams`). They are exposed read-only so
- * the desktop catalog browser is meaningful for this module; min/max are
- * the validation bounds that would apply if/when this becomes writable.
- */
-typedef int16_t (*clocks_sc_param_getter_t)(void);
+ * on Clocks yet, unlike ECU's `ecuParams`). They are exposed read-only +
+ * not-persisted so the desktop catalog browser is meaningful for this
+ * module; min/max are the validation bounds that would apply if/when
+ * this becomes writable. */
+typedef struct {
+  int16_t coolant_warn_c;
+  int16_t coolant_max_c;
+  int16_t oil_warn_c;
+  int16_t oil_max_c;
+  int16_t egt_warn_c;
+  int16_t egt_max_c;
+} clocks_values_t;
 
-static int16_t configSessionParamCoolantWarn(void) { return (int16_t)TEMP_OK_HI; }
-static int16_t configSessionParamCoolantMax(void)  { return (int16_t)TEMP_MAX; }
-static int16_t configSessionParamOilWarn(void)     { return (int16_t)TEMP_OIL_OK_HI; }
-static int16_t configSessionParamOilMax(void)      { return (int16_t)TEMP_OIL_MAX; }
-static int16_t configSessionParamEgtWarn(void)     { return (int16_t)TEMP_EGT_OK_HI; }
-static int16_t configSessionParamEgtMax(void)      { return (int16_t)TEMP_EGT_MAX; }
-
-struct ClocksScParam {
-  const char *id;
-  clocks_sc_param_getter_t getter;
-  int16_t defaultValue;
-  int16_t minValue;
-  int16_t maxValue;
+static const clocks_values_t k_clocks_values = {
+  .coolant_warn_c = (int16_t)TEMP_OK_HI,
+  .coolant_max_c  = (int16_t)TEMP_MAX,
+  .oil_warn_c     = (int16_t)TEMP_OIL_OK_HI,
+  .oil_max_c      = (int16_t)TEMP_OIL_MAX,
+  .egt_warn_c     = (int16_t)TEMP_EGT_OK_HI,
+  .egt_max_c      = (int16_t)TEMP_EGT_MAX,
 };
 
-static const ClocksScParam s_scParams[] = {
-  { "coolant_warn_c", &configSessionParamCoolantWarn, (int16_t)TEMP_OK_HI,     80,  120 },
-  { "coolant_max_c",  &configSessionParamCoolantMax,  (int16_t)TEMP_MAX,      100,  140 },
-  { "oil_warn_c",     &configSessionParamOilWarn,     (int16_t)TEMP_OIL_OK_HI, 90,  130 },
-  { "oil_max_c",      &configSessionParamOilMax,      (int16_t)TEMP_OIL_MAX,  120,  160 },
-  { "egt_warn_c",     &configSessionParamEgtWarn,     (int16_t)TEMP_EGT_OK_HI,700, 1100 },
-  { "egt_max_c",      &configSessionParamEgtMax,      (int16_t)TEMP_EGT_MAX, 1300, 1800 },
+static const sc_param_descriptor_t k_clocks_params[] = {
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_warn_c", clocks_values_t,
+                                       coolant_warn_c, 80, 120,
+                                       (int16_t)TEMP_OK_HI, 1),
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_max_c", clocks_values_t,
+                                       coolant_max_c, 100, 140,
+                                       (int16_t)TEMP_MAX, 1),
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_warn_c", clocks_values_t,
+                                       oil_warn_c, 90, 130,
+                                       (int16_t)TEMP_OIL_OK_HI, 1),
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_max_c", clocks_values_t,
+                                       oil_max_c, 120, 160,
+                                       (int16_t)TEMP_OIL_MAX, 1),
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_warn_c", clocks_values_t,
+                                       egt_warn_c, 700, 1100,
+                                       (int16_t)TEMP_EGT_OK_HI, 1),
+  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
+                                       egt_max_c, 1300, 1800,
+                                       (int16_t)TEMP_EGT_MAX, 1),
 };
-static const size_t s_scParamCount = sizeof(s_scParams) / sizeof(s_scParams[0]);
-
-static const ClocksScParam *configSessionFindParamById(const char *id) {
-  if(id == nullptr || id[0] == '\0') {
-    return nullptr;
-  }
-  for(size_t i = 0u; i < s_scParamCount; ++i) {
-    if(strcmp(s_scParams[i].id, id) == 0) {
-      return &s_scParams[i];
-    }
-  }
-  return nullptr;
-}
+static const size_t k_clocks_params_count =
+    sizeof(k_clocks_params) / sizeof(k_clocks_params[0]);
 
 static const char *configSessionSkipSpaces(const char *cursor) {
   if(cursor == nullptr) {
     return nullptr;
   }
-
   while(*cursor == ' ') {
     cursor++;
   }
   return cursor;
+}
+
+/* Adapter that bridges the descriptor-driven `sc_emit_fn` callback to
+ * the framed reply helper from JaszczurHAL. The session pointer is
+ * passed as the opaque emit_user parameter. */
+static void configSessionEmitThroughHal(const char *payload, void *user) {
+  hal_serial_session_println((hal_serial_session_t *)user, payload);
 }
 
 static void configSessionReplyGetMeta(void) {
@@ -76,102 +83,21 @@ static void configSessionReplyGetMeta(void) {
     uidHex[0] = '\0';
   }
 
-  char out[32];
-  size_t out_len = 0u;
+  char buildB64[32];
+  size_t buildB64Len = 0u;
   const uint8_t *b = (const uint8_t *)(BUILD_ID);
-
-  hal_base64_encode(b, strlen((const char*)b), out, sizeof(out), &out_len);
+  hal_base64_encode(b, strlen((const char *)b), buildB64, sizeof(buildB64),
+                    &buildB64Len);
 
   char response[256] = {0};
-  snprintf(response,
-           sizeof(response),
-           "%s META module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
-           SC_STATUS_OK,
+  snprintf(response, sizeof(response),
+           SC_REPLY_META_FMT,
            MODULE_NAME,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
            (unsigned long)configSessionId(),
            FW_VERSION,
-           out,
+           buildB64,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetParamList(void) {
-  char response[256] = {0};
-  size_t used = (size_t)snprintf(response, sizeof(response), "%s PARAM_LIST", SC_STATUS_OK);
-  if(used >= sizeof(response)) {
-    response[sizeof(response) - 1u] = '\0';
-    hal_serial_session_println(&s_configSession, response);
-    return;
-  }
-
-  for(size_t i = 0u; i < s_scParamCount; ++i) {
-    const char *separator = (i == 0u) ? " " : ",";
-    int written = snprintf(response + used,
-                           sizeof(response) - used,
-                           "%s%s",
-                           separator,
-                           s_scParams[i].id);
-    if(written < 0) {
-      break;
-    }
-    size_t chunk = (size_t)written;
-    if(chunk >= (sizeof(response) - used)) {
-      used = sizeof(response) - 1u;
-      break;
-    }
-    used += chunk;
-  }
-
-  response[sizeof(response) - 1u] = '\0';
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetParamValue(const ClocksScParam *param) {
-  if(param == nullptr || param->getter == nullptr) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
-    return;
-  }
-  char response[160] = {0};
-  snprintf(response,
-           sizeof(response),
-           "%s PARAM id=%s value=%d min=%d max=%d default=%d",
-           SC_STATUS_OK,
-           param->id,
-           (int)param->getter(),
-           (int)param->minValue,
-           (int)param->maxValue,
-           (int)param->defaultValue);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetValues(void) {
-  char response[256] = {0};
-  size_t used = (size_t)snprintf(response, sizeof(response), "%s PARAM_VALUES", SC_STATUS_OK);
-  if(used >= sizeof(response)) {
-    response[sizeof(response) - 1u] = '\0';
-    hal_serial_session_println(&s_configSession, response);
-    return;
-  }
-
-  for(size_t i = 0u; i < s_scParamCount; ++i) {
-    int written = snprintf(response + used,
-                           sizeof(response) - used,
-                           " %s=%d",
-                           s_scParams[i].id,
-                           (int)s_scParams[i].getter());
-    if(written < 0) {
-      break;
-    }
-    size_t chunk = (size_t)written;
-    if(chunk >= (sizeof(response) - used)) {
-      used = sizeof(response) - 1u;
-      break;
-    }
-    used += chunk;
-  }
-
-  response[sizeof(response) - 1u] = '\0';
   hal_serial_session_println(&s_configSession, response);
 }
 
@@ -181,10 +107,11 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
     return true;
   }
 
-  const char *cursor = line + strlen("SC_GET_PARAM");
+  const char *cursor = line + strlen(SC_CMD_GET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == nullptr || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession, "SC_BAD_REQUEST expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
@@ -197,26 +124,22 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
   paramId[idLen] = '\0';
 
   if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
-    hal_serial_session_println(&s_configSession, "SC_BAD_REQUEST param_id_too_long");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == nullptr || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession, "SC_BAD_REQUEST expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
-  const ClocksScParam *param = configSessionFindParamById(paramId);
-  if(param == nullptr) {
-    char response[96] = {0};
-    snprintf(response, sizeof(response), "%s id=%s", SC_STATUS_INVALID_PARAM_ID, paramId);
-    hal_serial_session_println(&s_configSession, response);
-    return true;
-  }
-
-  configSessionReplyGetParamValue(param);
+  sc_param_reply_get_param(k_clocks_params, k_clocks_params_count,
+                           &k_clocks_values, paramId,
+                           configSessionEmitThroughHal, &s_configSession);
   return true;
 }
 
@@ -226,26 +149,32 @@ static bool configSessionHandleScCommand(const char *line) {
   }
 
   if(!configSessionActive()) {
-    hal_serial_session_println(&s_configSession, "SC_NOT_READY HELLO_REQUIRED");
+    hal_serial_session_println(&s_configSession,
+        SC_REPLY_NOT_READY_HELLO_REQUIRED);
     return true;
   }
 
-  if(strcmp(line, "SC_GET_META") == 0) {
+  if(strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
     return true;
   }
 
-  if(strcmp(line, "SC_GET_PARAM_LIST") == 0) {
-    configSessionReplyGetParamList();
+  if(strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
+    sc_param_reply_get_param_list(k_clocks_params, k_clocks_params_count,
+                                  configSessionEmitThroughHal,
+                                  &s_configSession);
     return true;
   }
 
-  if(strcmp(line, "SC_GET_VALUES") == 0) {
-    configSessionReplyGetValues();
+  if(strcmp(line, SC_CMD_GET_VALUES) == 0) {
+    sc_param_reply_get_values_i16(k_clocks_params, k_clocks_params_count,
+                                  &k_clocks_values,
+                                  configSessionEmitThroughHal,
+                                  &s_configSession);
     return true;
   }
 
-  if(strncmp(line, "SC_GET_PARAM", strlen("SC_GET_PARAM")) == 0) {
+  if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
     return configSessionHandleScGetParamCommand(line);
   }
 
@@ -264,7 +193,9 @@ static void configSession_onUnknownLine(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  hal_serial_session_init(&s_configSession, MODULE_NAME, FW_VERSION, BUILD_ID);
+  hal_serial_session_init_with_vocabulary(&s_configSession, MODULE_NAME,
+                                          FW_VERSION, BUILD_ID,
+                                          &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,
                                          &configSession_onUnknownLine,
                                          nullptr);

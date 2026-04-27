@@ -10,6 +10,7 @@ set(CLOCKS_SRC ${CMAKE_CURRENT_SOURCE_DIR})
 set(HAL_LIB_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 set(HAL_SRC ${HAL_LIB_EXTERNAL}/src)
 set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/canDefinitions)
+set(SCDEFS  ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 
 if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
@@ -32,6 +33,11 @@ add_library(clocks_mock STATIC
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp
     ${UNITY_SOURCE}
+    # R1.4: descriptor-driven SC reply machinery shared with the host
+    # SerialConfigurator. Firmware arduino-cli build picks this up via
+    # sc_param_handlers_glue.c instead, so each source TU compiles
+    # exactly once on either path.
+    ${SCDEFS}/sc_param_handlers.c
 )
 
 target_include_directories(clocks_mock PUBLIC
@@ -41,6 +47,7 @@ target_include_directories(clocks_mock PUBLIC
     ${HAL_SRC}
     ${HAL_SRC}/utils
     ${CANDEFS}
+    ${SCDEFS}
 )
 
 target_compile_definitions(clocks_mock PUBLIC
