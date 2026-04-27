@@ -141,6 +141,10 @@ if(BUILD_TESTING)
         tests/test_sc_manifest.c
     )
 
+    add_executable(serial-configurator-phase5-tests
+        tests/test_sc_phase5.c
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -172,6 +176,11 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(serial-configurator-manifest-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    target_link_libraries(serial-configurator-phase5-tests
         PRIVATE
             serial_configurator_core
     )
@@ -209,5 +218,10 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-manifest-tests
         COMMAND serial-configurator-manifest-tests
+    )
+
+    add_test(
+        NAME serial-configurator-phase5-tests
+        COMMAND serial-configurator-phase5-tests
     )
 endif()

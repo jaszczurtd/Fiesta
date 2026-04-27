@@ -2,23 +2,26 @@
 # =============================================================================
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
-# Installs system deps (incl. Python 3 and cppcheck), arduino-cli + rp2040
-# core, syncs required Arduino libraries (JaszczurHAL, canDefinitions), runs
-# host tests, then compiles firmware for every Fiesta module:
-#   - ECU           (host tests + firmware, -Werror)
-#   - Clocks        (host tests + firmware)
-#   - OilAndSpeed   (host tests + firmware)
-#   - Adjustometer  (host tests + firmware, -Werror)
+# Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
+# arduino-cli + rp2040 core, syncs required Arduino libraries (JaszczurHAL,
+# canDefinitions), runs host tests, compiles firmware for every Fiesta
+# module, and finally builds + tests the SerialConfigurator desktop tool:
+#   - ECU                (host tests + firmware, -Werror)
+#   - Clocks             (host tests + firmware)
+#   - OilAndSpeed        (host tests + firmware)
+#   - Adjustometer       (host tests + firmware, -Werror)
+#   - SerialConfigurator (CMake desktop build + 8 CTest targets, GTK-4 GUI)
 # Idempotent — safe to re-run. Also covers the deps used by
 # misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
 # cppcheck package).
 #
 # Env overrides:
-#   LIB_DIR        default: $HOME/libraries   (parent of cloned libs)
-#   ARDUINO_CLI    default: arduino-cli       (path to binary)
-#   SKIP_APT=1     skip apt-get steps
-#   SKIP_TESTS=1   skip host test build+run
-#   SKIP_BUILD=1   skip firmware compile
+#   LIB_DIR         default: $HOME/libraries   (parent of cloned libs)
+#   ARDUINO_CLI     default: arduino-cli       (path to binary)
+#   SKIP_APT=1      skip apt-get steps
+#   SKIP_TESTS=1    skip firmware host test build+run
+#   SKIP_BUILD=1    skip firmware compile
+#   SKIP_DESKTOP=1  skip SerialConfigurator build + tests
 # =============================================================================
 set -euo pipefail
 
@@ -84,7 +87,12 @@ fi
 # -----------------------------------------------------------------------------
 # 2. System packages
 # -----------------------------------------------------------------------------
-APT_PKGS=(git build-essential cmake python3 curl ca-certificates cppcheck)
+APT_PKGS=(
+    # Common toolchain
+    git build-essential cmake python3 curl ca-certificates cppcheck
+    # SerialConfigurator desktop build (CMake pkg_check_modules + GTK-4)
+    pkg-config libgtk-4-dev
+)
 
 install_apt() {
     if [[ "${SKIP_APT:-0}" = "1" ]]; then
@@ -375,6 +383,51 @@ compile_firmware() {
 }
 
 # -----------------------------------------------------------------------------
+# 7. SerialConfigurator desktop build + tests
+# -----------------------------------------------------------------------------
+# CMake here resolves JaszczurHAL via ${PROJECT_DIR}/../../../libraries, which
+# is the same path that fetch_libraries() populates. The crypto backend
+# binding (sc_crypto_jaszczurhal.cpp) propagates HAL_ENABLE_CRYPTO to the
+# SerialConfigurator core target, so the firmware-shared hal_crypto.cpp gets
+# its real implementation rather than the no-op fallback.
+#
+# GTK-4 is treated as optional in CMakeLists (pkg_check_modules without
+# REQUIRED). When libgtk-4-dev is installed the GUI executable is emitted
+# alongside the CLI; otherwise CMake prints a STATUS line and skips the GUI
+# while still building core + CLI + all CTest targets.
+build_serial_configurator() {
+    if [[ "${SKIP_DESKTOP:-0}" = "1" ]]; then
+        info "SKIP_DESKTOP=1 — skipping SerialConfigurator build/tests"
+        return
+    fi
+
+    local sc_dir="$SRC_ROOT/SerialConfigurator"
+    if [[ ! -f "$sc_dir/CMakeLists.txt" ]]; then
+        warn "SerialConfigurator: CMakeLists.txt not found at $sc_dir — skipping"
+        return
+    fi
+
+    local sc_build="$sc_dir/build"
+    info "[SerialConfigurator] configuring (Release) at $sc_build"
+    cmake -S "$sc_dir" -B "$sc_build" -DCMAKE_BUILD_TYPE=Release
+
+    info "[SerialConfigurator] building"
+    cmake --build "$sc_build" --parallel
+
+    info "[SerialConfigurator] running ctest"
+    ctest --test-dir "$sc_build" --output-on-failure
+
+    if [[ -x "$sc_build/serial-configurator" ]]; then
+        ok "[SerialConfigurator] GUI binary: $sc_build/serial-configurator"
+    else
+        warn "[SerialConfigurator] GUI binary not built (libgtk-4-dev missing?). CLI + tests still OK."
+    fi
+    if [[ -x "$sc_build/serial-configurator-cli" ]]; then
+        ok "[SerialConfigurator] CLI binary: $sc_build/serial-configurator-cli"
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # main
 # -----------------------------------------------------------------------------
 info "Fiesta bootstrap starting"
@@ -389,5 +442,6 @@ setup_arduino_core
 fetch_libraries
 run_tests
 compile_firmware
+build_serial_configurator
 
 ok "Bootstrap finished"

@@ -1,4 +1,5 @@
 #include "sc_core.h"
+#include "sc_manifest.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -76,6 +77,9 @@ static void print_usage(const char *program_name)
     fprintf(stderr, "  %s param-list [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s get-values [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s get-param <param-id> [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
+    fprintf(stderr, "  %s reboot-bootloader [--module <name>] [--uid <hex>] [--port <path>]\n",
+            program_name);
+    fprintf(stderr, "      [--manifest <path>] [--artifact <path>]\n");
 }
 
 static bool parse_selectors(
@@ -603,6 +607,163 @@ static int command_meta_values_or_catalog(
     return 0;
 }
 
+/* ── reboot-bootloader ─────────────────────────────────────────────────── */
+
+static bool parse_reboot_args(int argc, char *argv[], CliSelectors *selectors,
+                              const char **manifest_path,
+                              const char **artifact_path)
+{
+    *manifest_path = NULL;
+    *artifact_path = NULL;
+    selectors->module = NULL;
+    selectors->uid = NULL;
+    selectors->port = NULL;
+    for (int i = 2; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (strcmp(arg, "--module") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --module\n");
+                return false;
+            }
+            selectors->module = argv[++i];
+        } else if (strcmp(arg, "--uid") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --uid\n");
+                return false;
+            }
+            selectors->uid = argv[++i];
+        } else if (strcmp(arg, "--port") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --port\n");
+                return false;
+            }
+            selectors->port = argv[++i];
+        } else if (strcmp(arg, "--manifest") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --manifest\n");
+                return false;
+            }
+            *manifest_path = argv[++i];
+        } else if (strcmp(arg, "--artifact") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --artifact\n");
+                return false;
+            }
+            *artifact_path = argv[++i];
+        } else {
+            fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
+            return false;
+        }
+    }
+    return true;
+}
+
+static int command_reboot_bootloader(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    const char *manifest_path = NULL;
+    const char *artifact_path = NULL;
+    if (!parse_reboot_args(argc, argv, &selectors,
+                           &manifest_path, &artifact_path)) {
+        return 1;
+    }
+
+    /* Phase 4 preflight (optional). The manifest verifies the artifact
+     * SHA-256 and module-name match before we hand the firmware over to
+     * the boot ROM. Hard-reject on any mismatch — the doc requires the
+     * flashing flow to fail closed. */
+    sc_manifest_t manifest;
+    bool have_manifest = false;
+    if (manifest_path != NULL) {
+        const sc_manifest_status_t st = sc_manifest_load_file(manifest_path,
+                                                              &manifest);
+        if (st != SC_MANIFEST_OK) {
+            fprintf(stderr, "[ERROR] manifest load: %s\n",
+                    sc_manifest_status_str(st));
+            return 3;
+        }
+        have_manifest = true;
+
+        if (artifact_path != NULL) {
+            const sc_manifest_status_t av =
+                sc_manifest_verify_artifact(&manifest, artifact_path);
+            if (av != SC_MANIFEST_OK) {
+                fprintf(stderr, "[ERROR] artifact verify: %s\n",
+                        sc_manifest_status_str(av));
+                return 3;
+            }
+            printf("[OK] manifest sha256 matches artifact %s\n", artifact_path);
+        } else {
+            fprintf(stderr,
+                    "[WARN] --manifest provided without --artifact; "
+                    "manifest fields parsed but SHA-256 not verified.\n");
+        }
+    }
+
+    ScCore core;
+    char detection_log[CLI_DETECTION_LOG_MAX];
+    if (!run_detection(&core, detection_log, sizeof(detection_log))) {
+        fprintf(stderr, "[ERROR] Detection initialization failed.\n");
+        return 2;
+    }
+
+    char selection_error[256];
+    selection_error[0] = '\0';
+    const int idx = select_target_module(&core, &selectors,
+                                         selection_error,
+                                         sizeof(selection_error));
+    if (idx < 0) {
+        fprintf(stderr, "[ERROR] %s\n", selection_error);
+        return 4;
+    }
+
+    const ScModuleStatus *target = sc_core_module_status(&core, (size_t)idx);
+    if (target == NULL || !target->detected) {
+        fprintf(stderr, "[ERROR] Selected module is not detected.\n");
+        return 4;
+    }
+
+    if (have_manifest) {
+        const sc_manifest_status_t mm =
+            sc_manifest_check_module_match(&manifest, target->display_name);
+        if (mm != SC_MANIFEST_OK) {
+            fprintf(stderr,
+                    "[ERROR] manifest module mismatch: manifest=%s target=%s\n",
+                    manifest.module_name, target->display_name);
+            return 3;
+        }
+        printf("[OK] manifest module=%s matches target.\n",
+               target->display_name);
+    }
+
+    char err[512];
+    err[0] = '\0';
+    const ScAuthStatus auth_st = sc_core_authenticate(&core.transport,
+                                                      target->port_path,
+                                                      err, sizeof(err));
+    if (auth_st != SC_AUTH_OK) {
+        fprintf(stderr, "[ERROR] auth: %s — %s\n",
+                sc_auth_status_name(auth_st), err);
+        return 5;
+    }
+    printf("[OK] authenticated session on %s\n", target->port_path);
+
+    err[0] = '\0';
+    const ScRebootStatus reboot_st = sc_core_reboot_to_bootloader(
+        &core.transport, target->port_path, err, sizeof(err));
+    if (reboot_st != SC_REBOOT_OK) {
+        fprintf(stderr, "[ERROR] reboot: %s — %s\n",
+                sc_reboot_status_name(reboot_st), err);
+        return 6;
+    }
+
+    printf("[OK] firmware acknowledged SC_REBOOT_BOOTLOADER on %s.\n",
+           target->port_path);
+    printf("Port should disappear shortly; pick up the BOOTSEL/UF2 device "
+           "from there (Phase 6).\n");
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
@@ -614,6 +775,10 @@ int main(int argc, char *argv[])
 
     if (strcmp(command, "detect") == 0) {
         return command_detect();
+    }
+
+    if (strcmp(command, "reboot-bootloader") == 0) {
+        return command_reboot_bootloader(argc, argv);
     }
 
     if (strcmp(command, "list") == 0) {

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sc_auth.h>
 #include <sc_crypto.h>
 
 typedef struct ScModuleDef {
@@ -1662,4 +1663,235 @@ bool sc_core_sc_get_param(
         log_output,
         log_output_size
     );
+}
+
+/* ── Phase 5: authenticated bootloader entry ───────────────────────────── */
+
+static void set_phase5_error(char *error, size_t error_size, const char *fmt, ...)
+{
+    if (error == NULL || error_size == 0u) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    (void)vsnprintf(error, error_size, fmt, args);
+    va_end(args);
+}
+
+/* Find " key=" inside @p src, copy the value (until next space or NUL) into
+ * @p out. Returns true on success. The leading space in the search token
+ * disambiguates against substrings (e.g. "session" vs "build_session"). */
+static bool extract_kv_value(const char *src,
+                             const char *key,
+                             char *out,
+                             size_t out_size)
+{
+    if (src == NULL || key == NULL || out == NULL || out_size == 0u) {
+        return false;
+    }
+    char needle[40];
+    const int n = snprintf(needle, sizeof(needle), " %s=", key);
+    if (n < 0 || (size_t)n >= sizeof(needle)) {
+        return false;
+    }
+    const char *hit = strstr(src, needle);
+    if (hit == NULL) {
+        return false;
+    }
+    const char *value = hit + (size_t)n;
+    size_t len = 0u;
+    while (value[len] != '\0' && value[len] != ' ' && value[len] != '\r' &&
+           value[len] != '\n' && len + 1u < out_size) {
+        out[len] = value[len];
+        ++len;
+    }
+    if (value[len] != '\0' && value[len] != ' ' && value[len] != '\r' &&
+        value[len] != '\n') {
+        /* Truncated. */
+        return false;
+    }
+    out[len] = '\0';
+    return len > 0u;
+}
+
+const char *sc_auth_status_name(ScAuthStatus status)
+{
+    switch (status) {
+    case SC_AUTH_OK:                     return "OK";
+    case SC_AUTH_ERR_NULL_ARG:           return "NULL_ARG";
+    case SC_AUTH_ERR_HELLO_FAILED:       return "HELLO_FAILED";
+    case SC_AUTH_ERR_HELLO_PARSE:        return "HELLO_PARSE";
+    case SC_AUTH_ERR_BEGIN_FAILED:       return "BEGIN_FAILED";
+    case SC_AUTH_ERR_BAD_CHALLENGE:      return "BAD_CHALLENGE";
+    case SC_AUTH_ERR_RESPONSE_COMPUTE:   return "RESPONSE_COMPUTE";
+    case SC_AUTH_ERR_PROVE_FAILED:       return "PROVE_FAILED";
+    case SC_AUTH_ERR_AUTH_REJECTED:      return "AUTH_REJECTED";
+    }
+    return "UNKNOWN";
+}
+
+const char *sc_reboot_status_name(ScRebootStatus status)
+{
+    switch (status) {
+    case SC_REBOOT_OK:                   return "OK";
+    case SC_REBOOT_ERR_NULL_ARG:         return "NULL_ARG";
+    case SC_REBOOT_ERR_TRANSPORT:        return "TRANSPORT";
+    case SC_REBOOT_ERR_NOT_AUTHORIZED:   return "NOT_AUTHORIZED";
+    case SC_REBOOT_ERR_UNEXPECTED_REPLY: return "UNEXPECTED_REPLY";
+    }
+    return "UNKNOWN";
+}
+
+ScAuthStatus sc_core_authenticate(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size)
+{
+    if (transport == NULL || transport->ops == NULL || device_path == NULL) {
+        set_phase5_error(error, error_size, "null argument");
+        return SC_AUTH_ERR_NULL_ARG;
+    }
+
+    char tx_error[256];
+    tx_error[0] = '\0';
+
+    /* 1. HELLO — refresh identity and start a fresh authenticated window. */
+    char hello[SC_HELLO_RESPONSE_MAX];
+    if (transport->ops->send_hello == NULL ||
+        !transport->ops->send_hello(transport->context, device_path,
+                                    hello, sizeof(hello),
+                                    tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size, "HELLO failed: %s", tx_error);
+        return SC_AUTH_ERR_HELLO_FAILED;
+    }
+
+    /* 2. Parse uid_hex and session_id from the HELLO inner payload. */
+    char uid_hex[SC_IDENTITY_FIELD_MAX];
+    char session_str[SC_IDENTITY_FIELD_MAX];
+    if (!extract_kv_value(hello, "uid", uid_hex, sizeof(uid_hex)) ||
+        !extract_kv_value(hello, "session", session_str, sizeof(session_str))) {
+        set_phase5_error(error, error_size,
+                         "HELLO parse: missing uid/session in '%s'", hello);
+        return SC_AUTH_ERR_HELLO_PARSE;
+    }
+
+    uint8_t uid_bytes[8];
+    if (strlen(uid_hex) != sizeof(uid_bytes) * 2u ||
+        !sc_auth_decode_hex(uid_hex, uid_bytes, sizeof(uid_bytes))) {
+        set_phase5_error(error, error_size,
+                         "HELLO parse: bad uid hex '%s'", uid_hex);
+        return SC_AUTH_ERR_HELLO_PARSE;
+    }
+
+    char *end = NULL;
+    const unsigned long session_ul = strtoul(session_str, &end, 10);
+    if (end == session_str || *end != '\0' || session_ul == 0u ||
+        session_ul > UINT32_MAX) {
+        set_phase5_error(error, error_size,
+                         "HELLO parse: bad session '%s'", session_str);
+        return SC_AUTH_ERR_HELLO_PARSE;
+    }
+    const uint32_t session_id = (uint32_t)session_ul;
+
+    /* 3. SC_AUTH_BEGIN -> SC_OK AUTH_CHALLENGE <hex>. */
+    char begin_reply[SC_HELLO_RESPONSE_MAX];
+    if (transport->ops->send_sc_command == NULL ||
+        !transport->ops->send_sc_command(transport->context, device_path,
+                                         "SC_AUTH_BEGIN",
+                                         begin_reply, sizeof(begin_reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         "AUTH_BEGIN transport failed: %s", tx_error);
+        return SC_AUTH_ERR_BEGIN_FAILED;
+    }
+
+    static const char k_chal_prefix[] = "SC_OK AUTH_CHALLENGE ";
+    if (strncmp(begin_reply, k_chal_prefix, sizeof(k_chal_prefix) - 1u) != 0) {
+        set_phase5_error(error, error_size,
+                         "AUTH_BEGIN unexpected reply: %s", begin_reply);
+        return SC_AUTH_ERR_BAD_CHALLENGE;
+    }
+
+    const char *challenge_hex = begin_reply + (sizeof(k_chal_prefix) - 1u);
+    uint8_t challenge[SC_AUTH_CHALLENGE_BYTES];
+    if (strlen(challenge_hex) != SC_AUTH_CHALLENGE_BYTES * 2u ||
+        !sc_auth_decode_hex(challenge_hex, challenge, sizeof(challenge))) {
+        set_phase5_error(error, error_size,
+                         "AUTH_BEGIN bad challenge hex: %s", challenge_hex);
+        return SC_AUTH_ERR_BAD_CHALLENGE;
+    }
+
+    /* 4. Compute response and send SC_AUTH_PROVE <hex>. */
+    char response_hex[SC_AUTH_RESPONSE_HEX_BUF_SIZE];
+    if (!sc_auth_compute_response_hex(uid_bytes, sizeof(uid_bytes),
+                                      challenge, sizeof(challenge),
+                                      session_id,
+                                      response_hex, sizeof(response_hex))) {
+        set_phase5_error(error, error_size, "compute_response_hex failed");
+        return SC_AUTH_ERR_RESPONSE_COMPUTE;
+    }
+
+    char prove_cmd[SC_HELLO_RESPONSE_MAX];
+    const int written = snprintf(prove_cmd, sizeof(prove_cmd),
+                                 "SC_AUTH_PROVE %s", response_hex);
+    if (written < 0 || (size_t)written >= sizeof(prove_cmd)) {
+        set_phase5_error(error, error_size, "AUTH_PROVE command too long");
+        return SC_AUTH_ERR_RESPONSE_COMPUTE;
+    }
+
+    char prove_reply[SC_HELLO_RESPONSE_MAX];
+    if (!transport->ops->send_sc_command(transport->context, device_path,
+                                         prove_cmd,
+                                         prove_reply, sizeof(prove_reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         "AUTH_PROVE transport failed: %s", tx_error);
+        return SC_AUTH_ERR_PROVE_FAILED;
+    }
+
+    if (strcmp(prove_reply, "SC_OK AUTH_OK") != 0) {
+        set_phase5_error(error, error_size,
+                         "AUTH_PROVE rejected: %s", prove_reply);
+        return SC_AUTH_ERR_AUTH_REJECTED;
+    }
+
+    return SC_AUTH_OK;
+}
+
+ScRebootStatus sc_core_reboot_to_bootloader(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size)
+{
+    if (transport == NULL || transport->ops == NULL ||
+        transport->ops->send_sc_command == NULL || device_path == NULL) {
+        set_phase5_error(error, error_size, "null argument");
+        return SC_REBOOT_ERR_NULL_ARG;
+    }
+
+    char tx_error[256];
+    tx_error[0] = '\0';
+    char reply[SC_HELLO_RESPONSE_MAX];
+
+    if (!transport->ops->send_sc_command(transport->context, device_path,
+                                         "SC_REBOOT_BOOTLOADER",
+                                         reply, sizeof(reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         "SC_REBOOT_BOOTLOADER transport failed: %s", tx_error);
+        return SC_REBOOT_ERR_TRANSPORT;
+    }
+
+    if (strcmp(reply, "SC_OK REBOOT") == 0) {
+        return SC_REBOOT_OK;
+    }
+    if (strncmp(reply, "SC_NOT_AUTHORIZED", strlen("SC_NOT_AUTHORIZED")) == 0) {
+        set_phase5_error(error, error_size,
+                         "firmware refused: %s", reply);
+        return SC_REBOOT_ERR_NOT_AUTHORIZED;
+    }
+    set_phase5_error(error, error_size, "unexpected reply: %s", reply);
+    return SC_REBOOT_ERR_UNEXPECTED_REPLY;
 }
