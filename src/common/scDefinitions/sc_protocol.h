@@ -61,6 +61,14 @@ extern "C" {
 #define SC_REPLY_TAG_AUTH_OK               "AUTH_OK"
 #define SC_REPLY_TAG_REBOOT                "REBOOT"
 
+/* Structural HELLO reply head — emitted by the HAL session helper as
+ * "OK HELLO module=... proto=... session=... fw=... build=... uid=..."
+ * Hosts parse the leading "OK HELLO" via strncmp. The "OK " prefix
+ * here is intentionally NOT SC_STATUS_OK (which is "SC_OK") because
+ * the HELLO reply predates the SC_OK convention and stays as plain
+ * "OK" for protocol compatibility (see also HAL session helper). */
+#define SC_REPLY_HELLO_HEAD                "OK HELLO"
+
 /* ── Reply format strings (compose with snprintf) ──────────────────── */
 
 /* "SC_OK META module=<name> proto=<n> session=<id> fw=<ver> build=<b64> uid=<hex>" */
