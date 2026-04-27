@@ -173,6 +173,69 @@ bool sc_core_parse_param_result(
     size_t error_size
 );
 
+/* ── Phase 5: authenticated bootloader entry ────────────────────────── */
+
+typedef enum ScAuthStatus {
+    SC_AUTH_OK = 0,
+    SC_AUTH_ERR_NULL_ARG,
+    SC_AUTH_ERR_HELLO_FAILED,
+    SC_AUTH_ERR_HELLO_PARSE,
+    SC_AUTH_ERR_BEGIN_FAILED,
+    SC_AUTH_ERR_BAD_CHALLENGE,
+    SC_AUTH_ERR_RESPONSE_COMPUTE,
+    SC_AUTH_ERR_PROVE_FAILED,
+    SC_AUTH_ERR_AUTH_REJECTED
+} ScAuthStatus;
+
+typedef enum ScRebootStatus {
+    SC_REBOOT_OK = 0,
+    SC_REBOOT_ERR_NULL_ARG,
+    SC_REBOOT_ERR_TRANSPORT,
+    SC_REBOOT_ERR_NOT_AUTHORIZED,
+    SC_REBOOT_ERR_UNEXPECTED_REPLY
+} ScRebootStatus;
+
+const char *sc_auth_status_name(ScAuthStatus status);
+const char *sc_reboot_status_name(ScRebootStatus status);
+
+/**
+ * @brief Run HELLO -> SC_AUTH_BEGIN -> SC_AUTH_PROVE on @p device_path.
+ *
+ * Builds the AUTH_PROVE response from the device's reported UID and the
+ * compile-time salt (`sc_auth_compute_response_hex`). On success the
+ * firmware-side session is authenticated; the caller can then issue the
+ * one auth-gated command available today, `sc_core_reboot_to_bootloader`.
+ *
+ * @param transport    Transport to use (must not be NULL).
+ * @param device_path  Resolved serial device path.
+ * @param error        Optional error buffer (filled on non-OK status).
+ * @param error_size   Size of @p error.
+ * @return @c SC_AUTH_OK on success, otherwise a precise reason code.
+ */
+ScAuthStatus sc_core_authenticate(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size);
+
+/**
+ * @brief Send `SC_REBOOT_BOOTLOADER` and verify the firmware ACK.
+ *
+ * Requires the firmware-side session to already be authenticated (see
+ * @ref sc_core_authenticate). The transport-level cache reuses the same
+ * physical USB CDC fd across calls, so the firmware authenticated state
+ * persists between auth and this call.
+ *
+ * On success the firmware will (a) drain the ACK frame and (b) hand
+ * control to the boot ROM; the host should stop using the port and let
+ * the Phase 6 watcher pick up the BOOTSEL/UF2 mass-storage device.
+ */
+ScRebootStatus sc_core_reboot_to_bootloader(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size);
+
 #ifdef __cplusplus
 }
 #endif
