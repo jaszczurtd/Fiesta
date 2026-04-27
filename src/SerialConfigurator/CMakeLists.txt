@@ -206,6 +206,19 @@ if(BUILD_TESTING)
             fiesta_sc_definitions
     )
 
+    # Phase 6.3 — BOOTSEL drive watcher. Uses pthread for the
+    # mid-test mkdir worker and the public sc_flash API from
+    # serial_configurator_core.
+    find_package(Threads REQUIRED)
+    add_executable(serial-configurator-flash-bootsel-tests
+        tests/test_sc_flash_bootsel.c
+    )
+    target_link_libraries(serial-configurator-flash-bootsel-tests
+        PRIVATE
+            serial_configurator_core
+            Threads::Threads
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -329,5 +342,10 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-sc-param-tests
         COMMAND serial-configurator-sc-param-tests
+    )
+
+    add_test(
+        NAME serial-configurator-flash-bootsel-tests
+        COMMAND serial-configurator-flash-bootsel-tests
     )
 endif()
