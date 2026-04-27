@@ -1,6 +1,7 @@
 #include "sc_transport.h"
 
 #include "sc_frame.h"
+#include "sc_protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -529,7 +530,7 @@ static bool send_hello_bootstrap_on_fd(
         return false;
     }
 
-    if (!response_has_prefix(hello_response, "OK HELLO")) {
+    if (!response_has_prefix(hello_response, SC_REPLY_HELLO_HEAD)) {
         (void)snprintf(
             error,
             error_size,
@@ -757,7 +758,7 @@ static bool default_send_sc_command(
                 break;
             }
 
-            if (!response_has_prefix(response, "SC_NOT_READY")) {
+            if (!response_has_prefix(response, SC_STATUS_NOT_READY)) {
                 success = true;
                 break;
             }

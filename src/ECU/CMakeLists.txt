@@ -10,6 +10,7 @@ enable_testing()
 set(HAL_SRC   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL/src)
 set(ECU_SRC   ${CMAKE_CURRENT_SOURCE_DIR})
 set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/canDefinitions)
+set(SCDEFS    ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 set(HAL_STUBS ${HAL_SRC}/arduino_host_stubs)
 set(ECU_STUBS ${ECU_SRC}/tests/stubs)
 
@@ -51,6 +52,12 @@ set(ECU_SOURCES
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
     ${ECU_SRC}/vp37.c
+    # R1.2: descriptor-driven SC reply machinery shared with the host
+    # SerialConfigurator. The arduino-cli build picks this up through
+    # the sc_param_handlers_glue.c include shim instead, so the
+    # firmware sketch and host tests both end up compiling the same
+    # source file exactly once.
+    ${SCDEFS}/sc_param_handlers.c
 )
 
 # ── ecu_mock: hal mock + tools + ECU sources + stubs for excluded modules ──────
@@ -74,6 +81,7 @@ target_include_directories(ecu_mock PUBLIC
     ${HAL_SRC}/utils
     ${ECU_SRC}
     ${CANDEFS}
+    ${SCDEFS}
 )
 
 target_compile_definitions(ecu_mock PUBLIC

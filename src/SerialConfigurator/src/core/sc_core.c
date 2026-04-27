@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sc_auth.h>
 #include <sc_crypto.h>
+#include "sc_protocol.h"
 
 typedef struct ScModuleDef {
     const char *token;
@@ -420,7 +421,9 @@ found_value_end:
 
 static bool parse_hello_identity(const char *response, ScIdentityData *identity)
 {
-    if (response == 0 || identity == 0 || strncmp(response, "OK HELLO", 8) != 0) {
+    if (response == 0 || identity == 0 ||
+        strncmp(response, SC_REPLY_HELLO_HEAD,
+                sizeof(SC_REPLY_HELLO_HEAD) - 1u) != 0) {
         identity_reset(identity);
         return false;
     }
@@ -431,7 +434,9 @@ static bool parse_hello_identity(const char *response, ScIdentityData *identity)
 
 static bool parse_meta_identity(const char *response, ScIdentityData *identity)
 {
-    if (response == 0 || identity == 0 || strncmp(response, "SC_OK META", 10) != 0) {
+    static const char k_meta_head[] = SC_STATUS_OK " " SC_REPLY_TAG_META;
+    if (response == 0 || identity == 0 ||
+        strncmp(response, k_meta_head, sizeof(k_meta_head) - 1u) != 0) {
         identity_reset(identity);
         return false;
     }
@@ -519,22 +524,27 @@ static ScCommandStatus command_status_from_token(const char *token)
         return SC_COMMAND_STATUS_UNPARSEABLE;
     }
 
-    if (strcmp(token, "SC_OK") == 0) {
+    if (strcmp(token, SC_STATUS_OK) == 0) {
         return SC_COMMAND_STATUS_OK;
     }
-    if (strcmp(token, "SC_UNKNOWN_CMD") == 0) {
+    if (strcmp(token, SC_STATUS_UNKNOWN_CMD) == 0) {
         return SC_COMMAND_STATUS_UNKNOWN_CMD;
     }
-    if (strcmp(token, "SC_BAD_REQUEST") == 0) {
+    if (strcmp(token, SC_STATUS_BAD_REQUEST) == 0) {
         return SC_COMMAND_STATUS_BAD_REQUEST;
     }
-    if (strcmp(token, "SC_NOT_READY") == 0) {
+    if (strcmp(token, SC_STATUS_NOT_READY) == 0) {
         return SC_COMMAND_STATUS_NOT_READY;
     }
-    if (strcmp(token, "SC_INVALID_PARAM_ID") == 0) {
+    if (strcmp(token, SC_STATUS_INVALID_PARAM_ID) == 0) {
         return SC_COMMAND_STATUS_INVALID_PARAM_ID;
     }
 
+    /* Generic SC_* prefix: any unrecognised token whose name starts with
+     * SC_ is treated as an "other" SC status so the host can carry it
+     * forward verbatim instead of dropping the response. The "SC_" string
+     * here is the protocol prefix shared by every status, not a vocabulary
+     * token in its own right. */
     if (strncmp(token, "SC_", 3) == 0) {
         return SC_COMMAND_STATUS_OTHER;
     }
@@ -878,7 +888,8 @@ static void parse_sc_command_result(const char *response, ScCommandResult *resul
 
     if (strcmp(result->status_token, "ERR") == 0 && strcmp(result->topic, "UNKNOWN") == 0) {
         result->status = SC_COMMAND_STATUS_UNKNOWN_CMD;
-        copy_string(result->status_token, sizeof(result->status_token), "SC_UNKNOWN_CMD");
+        copy_string(result->status_token, sizeof(result->status_token),
+                    SC_STATUS_UNKNOWN_CMD);
         result->topic[0] = '\0';
     }
 
@@ -1126,8 +1137,10 @@ void sc_core_detect_modules(ScCore *core, char *log_output, size_t log_output_si
 
         log_append(log_output, log_output_size, "HELLO response: %s\n", response);
 
-        if (strncmp(response, "OK HELLO", 8) != 0) {
-            log_append(log_output, log_output_size, "Ignored: response is not OK HELLO.\n");
+        if (strncmp(response, SC_REPLY_HELLO_HEAD,
+                    sizeof(SC_REPLY_HELLO_HEAD) - 1u) != 0) {
+            log_append(log_output, log_output_size,
+                       "Ignored: response is not " SC_REPLY_HELLO_HEAD ".\n");
             continue;
         }
 
@@ -1223,15 +1236,15 @@ const char *sc_command_status_name(ScCommandStatus status)
         case SC_COMMAND_STATUS_UNPARSEABLE:
             return "UNPARSEABLE";
         case SC_COMMAND_STATUS_OK:
-            return "SC_OK";
+            return SC_STATUS_OK;
         case SC_COMMAND_STATUS_UNKNOWN_CMD:
-            return "SC_UNKNOWN_CMD";
+            return SC_STATUS_UNKNOWN_CMD;
         case SC_COMMAND_STATUS_BAD_REQUEST:
-            return "SC_BAD_REQUEST";
+            return SC_STATUS_BAD_REQUEST;
         case SC_COMMAND_STATUS_NOT_READY:
-            return "SC_NOT_READY";
+            return SC_STATUS_NOT_READY;
         case SC_COMMAND_STATUS_INVALID_PARAM_ID:
-            return "SC_INVALID_PARAM_ID";
+            return SC_STATUS_INVALID_PARAM_ID;
         case SC_COMMAND_STATUS_OTHER:
             return "SC_OTHER";
         default:
@@ -1552,7 +1565,7 @@ bool sc_core_sc_get_meta(
     const bool success = sc_core_send_sc_command_internal(
         core,
         module_index,
-        "SC_GET_META",
+        SC_CMD_GET_META,
         result,
         log_output,
         log_output_size
@@ -1561,7 +1574,8 @@ bool sc_core_sc_get_meta(
         return success;
     }
 
-    if (result->status == SC_COMMAND_STATUS_OK && strcmp(result->topic, "META") == 0) {
+    if (result->status == SC_COMMAND_STATUS_OK &&
+        strcmp(result->topic, SC_REPLY_TAG_META) == 0) {
         ScIdentityData parsed;
         if (parse_meta_identity(result->response, &parsed)) {
             core->modules[module_index].meta_identity = parsed;
@@ -1569,7 +1583,9 @@ bool sc_core_sc_get_meta(
             log_append(
                 log_output,
                 log_output_size,
-                "[WARN] SC_GET_META returned SC_OK META but identity fields were incomplete.\n"
+                "[WARN] " SC_CMD_GET_META " returned " SC_STATUS_OK " "
+                SC_REPLY_TAG_META
+                " but identity fields were incomplete.\n"
             );
         }
     }
@@ -1588,7 +1604,7 @@ bool sc_core_sc_get_param_list(
     return sc_core_send_sc_command_internal(
         core,
         module_index,
-        "SC_GET_PARAM_LIST",
+        SC_CMD_GET_PARAM_LIST,
         result,
         log_output,
         log_output_size
@@ -1606,7 +1622,7 @@ bool sc_core_sc_get_values(
     return sc_core_send_sc_command_internal(
         core,
         module_index,
-        "SC_GET_VALUES",
+        SC_CMD_GET_VALUES,
         result,
         log_output,
         log_output_size
@@ -1626,7 +1642,8 @@ bool sc_core_sc_get_param(
         if (result != 0) {
             command_result_reset(result);
         }
-        log_append(log_output, log_output_size, "[ERROR] param_id is required for SC_GET_PARAM.\n");
+        log_append(log_output, log_output_size,
+                   "[ERROR] param_id is required for " SC_CMD_GET_PARAM ".\n");
         return false;
     }
 
@@ -1646,12 +1663,14 @@ bool sc_core_sc_get_param(
     }
 
     char command[SC_HELLO_RESPONSE_MAX];
-    const int written = snprintf(command, sizeof(command), "SC_GET_PARAM %s", param_id);
+    const int written = snprintf(command, sizeof(command),
+                                 SC_CMD_GET_PARAM " %s", param_id);
     if (written < 0 || (size_t)written >= sizeof(command)) {
         if (result != 0) {
             command_result_reset(result);
         }
-        log_append(log_output, log_output_size, "[ERROR] SC_GET_PARAM command is too long.\n");
+        log_append(log_output, log_output_size,
+                   "[ERROR] " SC_CMD_GET_PARAM " command is too long.\n");
         return false;
     }
 
@@ -1798,7 +1817,7 @@ ScAuthStatus sc_core_authenticate(
     char begin_reply[SC_HELLO_RESPONSE_MAX];
     if (transport->ops->send_sc_command == NULL ||
         !transport->ops->send_sc_command(transport->context, device_path,
-                                         "SC_AUTH_BEGIN",
+                                         SC_CMD_AUTH_BEGIN,
                                          begin_reply, sizeof(begin_reply),
                                          tx_error, sizeof(tx_error))) {
         set_phase5_error(error, error_size,
@@ -1806,7 +1825,8 @@ ScAuthStatus sc_core_authenticate(
         return SC_AUTH_ERR_BEGIN_FAILED;
     }
 
-    static const char k_chal_prefix[] = "SC_OK AUTH_CHALLENGE ";
+    static const char k_chal_prefix[] =
+        SC_STATUS_OK " " SC_REPLY_TAG_AUTH_CHALLENGE " ";
     if (strncmp(begin_reply, k_chal_prefix, sizeof(k_chal_prefix) - 1u) != 0) {
         set_phase5_error(error, error_size,
                          "AUTH_BEGIN unexpected reply: %s", begin_reply);
@@ -1834,7 +1854,7 @@ ScAuthStatus sc_core_authenticate(
 
     char prove_cmd[SC_HELLO_RESPONSE_MAX];
     const int written = snprintf(prove_cmd, sizeof(prove_cmd),
-                                 "SC_AUTH_PROVE %s", response_hex);
+                                 SC_CMD_AUTH_PROVE " %s", response_hex);
     if (written < 0 || (size_t)written >= sizeof(prove_cmd)) {
         set_phase5_error(error, error_size, "AUTH_PROVE command too long");
         return SC_AUTH_ERR_RESPONSE_COMPUTE;
@@ -1850,7 +1870,7 @@ ScAuthStatus sc_core_authenticate(
         return SC_AUTH_ERR_PROVE_FAILED;
     }
 
-    if (strcmp(prove_reply, "SC_OK AUTH_OK") != 0) {
+    if (strcmp(prove_reply, SC_REPLY_AUTH_OK) != 0) {
         set_phase5_error(error, error_size,
                          "AUTH_PROVE rejected: %s", prove_reply);
         return SC_AUTH_ERR_AUTH_REJECTED;
@@ -1876,18 +1896,20 @@ ScRebootStatus sc_core_reboot_to_bootloader(
     char reply[SC_HELLO_RESPONSE_MAX];
 
     if (!transport->ops->send_sc_command(transport->context, device_path,
-                                         "SC_REBOOT_BOOTLOADER",
+                                         SC_CMD_REBOOT_BOOTLOADER,
                                          reply, sizeof(reply),
                                          tx_error, sizeof(tx_error))) {
         set_phase5_error(error, error_size,
-                         "SC_REBOOT_BOOTLOADER transport failed: %s", tx_error);
+                         SC_CMD_REBOOT_BOOTLOADER " transport failed: %s",
+                         tx_error);
         return SC_REBOOT_ERR_TRANSPORT;
     }
 
-    if (strcmp(reply, "SC_OK REBOOT") == 0) {
+    if (strcmp(reply, SC_REPLY_REBOOT_OK) == 0) {
         return SC_REBOOT_OK;
     }
-    if (strncmp(reply, "SC_NOT_AUTHORIZED", strlen("SC_NOT_AUTHORIZED")) == 0) {
+    if (strncmp(reply, SC_STATUS_NOT_AUTHORIZED,
+                sizeof(SC_STATUS_NOT_AUTHORIZED) - 1u) == 0) {
         set_phase5_error(error, error_size,
                          "firmware refused: %s", reply);
         return SC_REBOOT_ERR_NOT_AUTHORIZED;

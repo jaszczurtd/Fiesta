@@ -103,6 +103,16 @@ target_include_directories(serial_configurator_core
         ${SC_CRYPTO_INCLUDE_DIRS}
 )
 
+# R1.3: SC core / CLI / transport adopt SSOT defines from sc_protocol.h
+# (no more inline "SC_GET_META" / "SC_OK" string literals). The link
+# also exposes sc_protocol.h on the include path of every target that
+# links serial_configurator_core, since fiesta_sc_definitions PUBLIC
+# includes its header dir.
+target_link_libraries(serial_configurator_core
+    PUBLIC
+        fiesta_sc_definitions
+)
+
 target_compile_definitions(serial_configurator_core
     PUBLIC
         SC_CRYPTO_BACKEND_NAME=\"${SC_CRYPTO_BACKEND_NAME}\"

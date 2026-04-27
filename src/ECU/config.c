@@ -10,6 +10,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../common/scDefinitions/sc_param_handlers.h"
+#include "../common/scDefinitions/sc_param_types.h"
+#include "../common/scDefinitions/sc_protocol.h"
+#include "../common/scDefinitions/sc_session_vocabulary.h"
+
 const char *err = "ERR";
 
 #define ECU_PARAMS_SCHEMA_V1    1u
@@ -18,11 +23,44 @@ const char *err = "ERR";
 #define ECU_PARAMS_BLOB_SIZE_V2 18u
 #define ECU_PARAMS_BLOB_KEY     0xDA10u
 
-#define SC_STATUS_OK               "SC_OK"
-#define SC_STATUS_UNKNOWN_CMD      "SC_UNKNOWN_CMD"
-#define SC_STATUS_BAD_REQUEST      "SC_BAD_REQUEST"
-#define SC_STATUS_NOT_READY        "SC_NOT_READY"
-#define SC_STATUS_INVALID_PARAM_ID "SC_INVALID_PARAM_ID"
+/* Wire-visible parameter catalogue. R1.2 routes every SC reply for these
+ * params through the descriptor-driven helpers in src/common/scDefinitions/.
+ * The schema_since column drives V1 (5 fields, 16-byte blob) vs V2 (6
+ * fields, 18-byte blob) backwards compatibility. */
+static const sc_param_descriptor_t k_ecu_params[] = {
+    SC_PARAM_SCALAR_I16("fan_coolant_start_c", ecu_params_values_t,
+                        fanCoolantStartC,
+                        ECU_PARAMS_COOLANT_START_MIN,
+                        ECU_PARAMS_COOLANT_START_MAX,
+                        TEMP_FAN_START, 1),
+    SC_PARAM_SCALAR_I16("fan_coolant_stop_c", ecu_params_values_t,
+                        fanCoolantStopC,
+                        ECU_PARAMS_COOLANT_STOP_MIN,
+                        ECU_PARAMS_COOLANT_STOP_MAX,
+                        TEMP_FAN_STOP, 1),
+    SC_PARAM_SCALAR_I16("fan_air_start_c", ecu_params_values_t,
+                        fanAirStartC,
+                        ECU_PARAMS_AIR_START_MIN,
+                        ECU_PARAMS_AIR_START_MAX,
+                        AIR_TEMP_FAN_START, 1),
+    SC_PARAM_SCALAR_I16("fan_air_stop_c", ecu_params_values_t,
+                        fanAirStopC,
+                        ECU_PARAMS_AIR_STOP_MIN,
+                        ECU_PARAMS_AIR_STOP_MAX,
+                        AIR_TEMP_FAN_STOP, 1),
+    SC_PARAM_SCALAR_I16("heater_stop_c", ecu_params_values_t,
+                        heaterStopC,
+                        ECU_PARAMS_HEATER_STOP_MIN,
+                        ECU_PARAMS_HEATER_STOP_MAX,
+                        TEMP_HEATER_STOP, 1),
+    SC_PARAM_SCALAR_I16("nominal_rpm", ecu_params_values_t,
+                        nominalRpm,
+                        ECU_PARAMS_NOMINAL_RPM_MIN,
+                        ECU_PARAMS_NOMINAL_RPM_MAX,
+                        NOMINAL_RPM_VALUE, 2),
+};
+static const size_t k_ecu_params_count =
+    sizeof(k_ecu_params) / sizeof(k_ecu_params[0]);
 
 /* Forward-declared session state used by every SC_* reply helper below.
  * `hal_serial_session_println(&s_configSession, ...)` automatically wraps the
@@ -50,56 +88,11 @@ static ecu_params_values_t s_staging = {
 
 static bool s_initialized = false;
 
-#ifdef UNIT_TEST
-static void configWriteU16LE(uint8_t *dst, uint16_t value) {
-  dst[0] = (uint8_t)(value & 0xFFu);
-  dst[1] = (uint8_t)((value >> 8) & 0xFFu);
-}
-
-static void configWriteU32LE(uint8_t *dst, uint32_t value) {
-  dst[0] = (uint8_t)(value & 0xFFu);
-  dst[1] = (uint8_t)((value >> 8) & 0xFFu);
-  dst[2] = (uint8_t)((value >> 16) & 0xFFu);
-  dst[3] = (uint8_t)((value >> 24) & 0xFFu);
-}
-#endif
-
-static uint16_t configReadU16LE(const uint8_t *src) {
-  return (uint16_t)src[0] | ((uint16_t)src[1] << 8);
-}
-
-static uint32_t configReadU32LE(const uint8_t *src) {
-  return (uint32_t)src[0]
-    | ((uint32_t)src[1] << 8)
-    | ((uint32_t)src[2] << 16)
-    | ((uint32_t)src[3] << 24);
-}
-
-static uint32_t configCrc32(const uint8_t *data, uint16_t len) {
-  uint32_t crc = 0xFFFFFFFFu;
-  for(uint16_t i = 0; i < len; i++) {
-    crc ^= (uint32_t)data[i];
-    for(uint8_t bit = 0; bit < 8u; bit++) {
-      if((crc & 1u) != 0u) {
-        crc = (crc >> 1) ^ 0xEDB88320u;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-  return ~crc;
-}
-
 TESTABLE_STATIC void ecuParamsLoadDefaults(ecu_params_values_t *outValues) {
   if(outValues == NULL) {
     return;
   }
-  outValues->fanCoolantStartC = TEMP_FAN_START;
-  outValues->fanCoolantStopC = TEMP_FAN_STOP;
-  outValues->fanAirStartC = AIR_TEMP_FAN_START;
-  outValues->fanAirStopC = AIR_TEMP_FAN_STOP;
-  outValues->heaterStopC = TEMP_HEATER_STOP;
-  outValues->nominalRpm = NOMINAL_RPM_VALUE;
+  (void)sc_param_load_defaults(k_ecu_params, k_ecu_params_count, outValues);
 }
 
 TESTABLE_STATIC bool ecuParamsValidate(const ecu_params_values_t *candidate, const char **reason) {
@@ -198,83 +191,6 @@ TESTABLE_STATIC void ecuParamsApply(void) {
   s_active = s_staging;
 }
 
-#ifdef UNIT_TEST
-static bool configEncodeBlobV2(const ecu_params_values_t *values,
-                               uint8_t outBlob[ECU_PARAMS_BLOB_SIZE_V2]) {
-  if(values == NULL || outBlob == NULL) {
-    return false;
-  }
-
-  configWriteU16LE(&outBlob[0], ECU_PARAMS_SCHEMA_V2);
-  configWriteU16LE(&outBlob[2], (uint16_t)values->fanCoolantStartC);
-  configWriteU16LE(&outBlob[4], (uint16_t)values->fanCoolantStopC);
-  configWriteU16LE(&outBlob[6], (uint16_t)values->fanAirStartC);
-  configWriteU16LE(&outBlob[8], (uint16_t)values->fanAirStopC);
-  configWriteU16LE(&outBlob[10], (uint16_t)values->heaterStopC);
-  configWriteU16LE(&outBlob[12], (uint16_t)values->nominalRpm);
-
-  const uint32_t crc = configCrc32(outBlob, 14u);
-  configWriteU32LE(&outBlob[14], crc);
-  return true;
-}
-#endif
-
-static bool configDecodeBlobV1(const uint8_t *blob, ecu_params_values_t *outValues) {
-  if(blob == NULL || outValues == NULL) {
-    return false;
-  }
-
-  const uint32_t expectedCrc = configReadU32LE(&blob[12]);
-  const uint32_t actualCrc = configCrc32(blob, 12u);
-  if(expectedCrc != actualCrc) {
-    return false;
-  }
-
-  ecu_params_values_t decoded = {
-    .fanCoolantStartC = (int16_t)configReadU16LE(&blob[2]),
-    .fanCoolantStopC = (int16_t)configReadU16LE(&blob[4]),
-    .fanAirStartC = (int16_t)configReadU16LE(&blob[6]),
-    .fanAirStopC = (int16_t)configReadU16LE(&blob[8]),
-    .heaterStopC = (int16_t)configReadU16LE(&blob[10]),
-    .nominalRpm = NOMINAL_RPM_VALUE
-  };
-
-  if(!ecuParamsValidate(&decoded, NULL)) {
-    return false;
-  }
-
-  *outValues = decoded;
-  return true;
-}
-
-static bool configDecodeBlobV2(const uint8_t *blob, ecu_params_values_t *outValues) {
-  if(blob == NULL || outValues == NULL) {
-    return false;
-  }
-
-  const uint32_t expectedCrc = configReadU32LE(&blob[14]);
-  const uint32_t actualCrc = configCrc32(blob, 14u);
-  if(expectedCrc != actualCrc) {
-    return false;
-  }
-
-  ecu_params_values_t decoded = {
-    .fanCoolantStartC = (int16_t)configReadU16LE(&blob[2]),
-    .fanCoolantStopC = (int16_t)configReadU16LE(&blob[4]),
-    .fanAirStartC = (int16_t)configReadU16LE(&blob[6]),
-    .fanAirStopC = (int16_t)configReadU16LE(&blob[8]),
-    .heaterStopC = (int16_t)configReadU16LE(&blob[10]),
-    .nominalRpm = (int16_t)configReadU16LE(&blob[12])
-  };
-
-  if(!ecuParamsValidate(&decoded, NULL)) {
-    return false;
-  }
-
-  *outValues = decoded;
-  return true;
-}
-
 TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
   if(outValues == NULL) {
     return false;
@@ -293,14 +209,23 @@ TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
     return false;
   }
 
-  const uint16_t schema = configReadU16LE(&blob[0]);
-  if(schema == ECU_PARAMS_SCHEMA_V1 && blobLen == ECU_PARAMS_BLOB_SIZE_V1) {
-    return configDecodeBlobV1(blob, outValues);
+  /* Pre-load defaults so V2-only fields keep a sane value when a V1
+   * blob (5 fields) is being decoded into a V2-shaped struct. */
+  ecu_params_values_t decoded;
+  ecuParamsLoadDefaults(&decoded);
+
+  uint16_t schema = 0u;
+  if(!sc_param_blob_decode(k_ecu_params, k_ecu_params_count, &decoded,
+                           blob, blobLen, &schema)) {
+    return false;
   }
-  if(schema == ECU_PARAMS_SCHEMA_V2 && blobLen == ECU_PARAMS_BLOB_SIZE_V2) {
-    return configDecodeBlobV2(blob, outValues);
+
+  if(!ecuParamsValidate(&decoded, NULL)) {
+    return false;
   }
-  return false;
+
+  *outValues = decoded;
+  return true;
 }
 
 #ifdef UNIT_TEST
@@ -310,7 +235,10 @@ TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
   }
 
   uint8_t blob[ECU_PARAMS_BLOB_SIZE_V2] = {0};
-  if(!configEncodeBlobV2(values, blob)) {
+  const size_t written = sc_param_blob_encode(
+      k_ecu_params, k_ecu_params_count, values, ECU_PARAMS_SCHEMA_V2,
+      blob, sizeof(blob));
+  if(written != ECU_PARAMS_BLOB_SIZE_V2) {
     return false;
   }
   return hal_kv_set_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob));
@@ -371,78 +299,6 @@ int16_t ecuParamsNominalRpm(void) {
   return s_active.nominalRpm;
 }
 
-typedef int16_t (*sc_param_getter_t)(void);
-
-typedef struct {
-  const char *id;
-  sc_param_getter_t getter;
-  int16_t defaultValue;
-  int16_t minValue;
-  int16_t maxValue;
-} sc_param_definition_t;
-
-static const sc_param_definition_t s_scParamDefinitions[] = {
-  {
-    .id = "fan_coolant_start_c",
-    .getter = &ecuParamsFanCoolantStart,
-    .defaultValue = TEMP_FAN_START,
-    .minValue = ECU_PARAMS_COOLANT_START_MIN,
-    .maxValue = ECU_PARAMS_COOLANT_START_MAX
-  },
-  {
-    .id = "fan_coolant_stop_c",
-    .getter = &ecuParamsFanCoolantStop,
-    .defaultValue = TEMP_FAN_STOP,
-    .minValue = ECU_PARAMS_COOLANT_STOP_MIN,
-    .maxValue = ECU_PARAMS_COOLANT_STOP_MAX
-  },
-  {
-    .id = "fan_air_start_c",
-    .getter = &ecuParamsFanAirStart,
-    .defaultValue = AIR_TEMP_FAN_START,
-    .minValue = ECU_PARAMS_AIR_START_MIN,
-    .maxValue = ECU_PARAMS_AIR_START_MAX
-  },
-  {
-    .id = "fan_air_stop_c",
-    .getter = &ecuParamsFanAirStop,
-    .defaultValue = AIR_TEMP_FAN_STOP,
-    .minValue = ECU_PARAMS_AIR_STOP_MIN,
-    .maxValue = ECU_PARAMS_AIR_STOP_MAX
-  },
-  {
-    .id = "heater_stop_c",
-    .getter = &ecuParamsHeaterStop,
-    .defaultValue = TEMP_HEATER_STOP,
-    .minValue = ECU_PARAMS_HEATER_STOP_MIN,
-    .maxValue = ECU_PARAMS_HEATER_STOP_MAX
-  },
-  {
-    .id = "nominal_rpm",
-    .getter = &ecuParamsNominalRpm,
-    .defaultValue = NOMINAL_RPM_VALUE,
-    .minValue = ECU_PARAMS_NOMINAL_RPM_MIN,
-    .maxValue = ECU_PARAMS_NOMINAL_RPM_MAX
-  }
-};
-
-static const size_t s_scParamDefinitionCount =
-  sizeof(s_scParamDefinitions) / sizeof(s_scParamDefinitions[0]);
-
-static const sc_param_definition_t *configSessionFindParamById(const char *id) {
-  if(id == NULL || id[0] == '\0') {
-    return NULL;
-  }
-
-  for(size_t i = 0u; i < s_scParamDefinitionCount; i++) {
-    if(strcmp(s_scParamDefinitions[i].id, id) == 0) {
-      return &s_scParamDefinitions[i];
-    }
-  }
-
-  return NULL;
-}
-
 TESTABLE_INLINE_STATIC const char *configSessionSkipSpaces(const char *cursor) {
   if(cursor == NULL) {
     return NULL;
@@ -454,103 +310,34 @@ TESTABLE_INLINE_STATIC const char *configSessionSkipSpaces(const char *cursor) {
   return cursor;
 }
 
+/* Adapter that bridges the descriptor-driven `sc_emit_fn` callback to
+ * the framed reply helper from JaszczurHAL. The session pointer is
+ * passed as the opaque emit_user parameter. */
+static void configSessionEmitThroughHal(const char *payload, void *user) {
+  hal_serial_session_println((hal_serial_session_t *)user, payload);
+}
+
 static void configSessionReplyGetMeta(void) {
   char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
   if(!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
     uidHex[0] = '\0';
   }
 
-  char out[32];
-  size_t out_len = 0u;
+  char buildB64[32];
+  size_t buildB64Len = 0u;
   const uint8_t *b = (const uint8_t *)(BUILD_ID);
-
-  hal_base64_encode(b, strlen((const char*)b), out, sizeof(out), &out_len);
+  hal_base64_encode(b, strlen((const char *)b), buildB64, sizeof(buildB64),
+                    &buildB64Len);
 
   char response[256] = {0};
-  snprintf(response,
-           sizeof(response),
-           "%s META module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
-           SC_STATUS_OK,
+  snprintf(response, sizeof(response),
+           SC_REPLY_META_FMT,
            MODULE_NAME,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
            (unsigned long)configSessionId(),
            FW_VERSION,
-           out,
+           buildB64,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetParamList(void) {
-  char response[256] = {0};
-  size_t used = (size_t)snprintf(response, sizeof(response), "%s PARAM_LIST", SC_STATUS_OK);
-  if(used >= sizeof(response)) {
-    response[sizeof(response) - 1u] = '\0';
-    hal_serial_session_println(&s_configSession, response);
-    return;
-  }
-
-  for(size_t i = 0u; i < s_scParamDefinitionCount; i++) {
-    const char *separator = (i == 0u) ? " " : ",";
-    int written = snprintf(response + used,
-                           sizeof(response) - used,
-                           "%s%s",
-                           separator,
-                           s_scParamDefinitions[i].id);
-    if(written < 0) {
-      break;
-    }
-
-    size_t chunk = (size_t)written;
-    if(chunk >= (sizeof(response) - used)) {
-      used = sizeof(response) - 1u;
-      break;
-    }
-
-    used += chunk;
-  }
-
-  response[sizeof(response) - 1u] = '\0';
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetParamValue(const sc_param_definition_t *param) {
-  if(param == NULL || param->getter == NULL) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
-    return;
-  }
-
-  char response[192] = {0};
-  snprintf(response,
-           sizeof(response),
-           "%s PARAM id=%s value=%d min=%d max=%d default=%d",
-           SC_STATUS_OK,
-           param->id,
-           (int)param->getter(),
-           (int)param->minValue,
-           (int)param->maxValue,
-           (int)param->defaultValue);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static void configSessionReplyGetValues(void) {
-  const ecu_params_values_t *active = ecuParamsActive();
-  if(active == NULL) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
-    return;
-  }
-
-  char response[256] = {0};
-  snprintf(response,
-           sizeof(response),
-           "%s PARAM_VALUES fan_coolant_start_c=%d fan_coolant_stop_c=%d fan_air_start_c=%d "
-           "fan_air_stop_c=%d heater_stop_c=%d nominal_rpm=%d",
-           SC_STATUS_OK,
-           (int)active->fanCoolantStartC,
-           (int)active->fanCoolantStopC,
-           (int)active->fanAirStartC,
-           (int)active->fanAirStopC,
-           (int)active->heaterStopC,
-           (int)active->nominalRpm);
   hal_serial_session_println(&s_configSession, response);
 }
 
@@ -560,10 +347,11 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
     return true;
   }
 
-  const char *cursor = line + strlen("SC_GET_PARAM");
+  const char *cursor = line + strlen(SC_CMD_GET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
@@ -576,26 +364,22 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
   paramId[idLen] = '\0';
 
   if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " param_id_too_long");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
   if(cursor == NULL || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST " expected=SC_GET_PARAM_<param_id>");
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
-  const sc_param_definition_t *param = configSessionFindParamById(paramId);
-  if(param == NULL) {
-    char response[96] = {0};
-    snprintf(response, sizeof(response), "%s id=%s", SC_STATUS_INVALID_PARAM_ID, paramId);
-    hal_serial_session_println(&s_configSession, response);
-    return true;
-  }
-
-  configSessionReplyGetParamValue(param);
+  sc_param_reply_get_param(k_ecu_params, k_ecu_params_count, &s_active,
+                           paramId,
+                           configSessionEmitThroughHal, &s_configSession);
   return true;
 }
 
@@ -605,26 +389,32 @@ static bool configSessionHandleScCommand(const char *line) {
   }
 
   if(!configSessionActive()) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_READY " HELLO_REQUIRED");
+    hal_serial_session_println(&s_configSession,
+        SC_REPLY_NOT_READY_HELLO_REQUIRED);
     return true;
   }
 
-  if(strcmp(line, "SC_GET_META") == 0) {
+  if(strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
     return true;
   }
 
-  if(strcmp(line, "SC_GET_PARAM_LIST") == 0) {
-    configSessionReplyGetParamList();
+  if(strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
+    sc_param_reply_get_param_list(k_ecu_params, k_ecu_params_count,
+                                  configSessionEmitThroughHal,
+                                  &s_configSession);
     return true;
   }
 
-  if(strcmp(line, "SC_GET_VALUES") == 0) {
-    configSessionReplyGetValues();
+  if(strcmp(line, SC_CMD_GET_VALUES) == 0) {
+    sc_param_reply_get_values_i16(k_ecu_params, k_ecu_params_count,
+                                  ecuParamsActive(),
+                                  configSessionEmitThroughHal,
+                                  &s_configSession);
     return true;
   }
 
-  if(strncmp(line, "SC_GET_PARAM", strlen("SC_GET_PARAM")) == 0) {
+  if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
     return configSessionHandleScGetParamCommand(line);
   }
 
@@ -646,7 +436,9 @@ static void configSession_onUnknownLine(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  hal_serial_session_init(&s_configSession, MODULE_NAME, FW_VERSION, BUILD_ID);
+  hal_serial_session_init_with_vocabulary(&s_configSession, MODULE_NAME,
+                                          FW_VERSION, BUILD_ID,
+                                          &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,
                                          &configSession_onUnknownLine,
                                          NULL);
