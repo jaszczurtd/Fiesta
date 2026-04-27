@@ -61,8 +61,12 @@ typedef enum sc_flash_status_t {
     SC_FLASH_ERR_BAD_END_MAGIC,
     SC_FLASH_ERR_WRONG_FAMILY,
     SC_FLASH_ERR_BLOCK_INDEX_OUT_OF_RANGE,
-    /* Reserved for 6.3+ — exposed now so downstream files can pre-bind
-     * status-token consumers without future re-renumbering. */
+    /** Phase 6.3 — Linux watcher hit its deadline without seeing the
+     *  RPI-RP2 / RP2350 mass-storage drive appear under any of the
+     *  candidate parent directories. */
+    SC_FLASH_ERR_BOOTSEL_TIMEOUT,
+    /** Reserved for backends that have no implementation on the
+     *  current platform (Windows BOOTSEL watcher today). */
     SC_FLASH_ERR_NOT_IMPLEMENTED
 } sc_flash_status_t;
 
@@ -94,6 +98,55 @@ const char *sc_flash_status_str(sc_flash_status_t st);
 sc_flash_status_t sc_flash_uf2_format_check(const char *path,
                                             char *error_buf,
                                             size_t error_size);
+
+/**
+ * @brief Watch for the RP2040 BOOTSEL mass-storage drive to appear and
+ *        return its mount path as soon as it does.
+ *
+ * Linux: polls `/media/$USER/` and `/run/media/$USER/` at ~100 ms
+ * intervals until @p timeout_ms elapses, looking for a directory entry
+ * whose name starts with `RPI-RP2` (covers `RPI-RP2` for RP2040 and
+ * `RPI-RP2350` for RP2350) or equals `RP2350`. On the first match the
+ * full mount path is written to @p out_path and the function returns
+ * @c SC_FLASH_OK. On deadline expiry it returns
+ * @c SC_FLASH_ERR_BOOTSEL_TIMEOUT. The session that triggered the
+ * BOOTSEL request (Phase 5 reboot ACK + ROM jump) typically settles
+ * within 1–3 seconds; callers should pass at least 5000 ms of margin.
+ *
+ * Windows: stub returning @c SC_FLASH_ERR_NOT_IMPLEMENTED. Function
+ * shape is OS-neutral so the future Windows backend slots in cleanly.
+ *
+ * Always writes a NUL-terminated diagnostic into @p error_buf when
+ * non-NULL: the matched mount path on success, the timeout duration on
+ * BOOTSEL_TIMEOUT, the missing $USER on a degenerate Linux env.
+ *
+ * @p out_path / @p error_buf may be NULL if the caller does not need
+ * the corresponding output; @p out_path_size / @p error_size are then
+ * ignored.
+ */
+sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
+                                             char *out_path,
+                                             size_t out_path_size,
+                                             char *error_buf,
+                                             size_t error_size);
+
+/**
+ * @brief Test-only entry point: same contract as
+ *        @ref sc_flash_watch_for_bootsel but with caller-supplied
+ *        parent directories instead of the OS-standard `/media/$USER/`
+ *        and `/run/media/$USER/`.
+ *
+ * The bench-time public function is a thin wrapper over this; tests
+ * use it to point the watcher at an `mkdtemp` fixture so the suite
+ * stays hermetic. Available on every platform that implements the
+ * polling backend (Linux today; the Windows shape lives in the
+ * production wrapper, never reaches this entry point).
+ */
+sc_flash_status_t sc_flash__watch_for_bootsel_in(
+    const char *const *parent_dirs, size_t parent_count,
+    uint32_t timeout_ms,
+    char *out_path, size_t out_path_size,
+    char *error_buf, size_t error_size);
 
 #ifdef __cplusplus
 }
