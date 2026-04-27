@@ -219,6 +219,18 @@ if(BUILD_TESTING)
             Threads::Threads
     )
 
+    # Phase 6.4 — UF2 copy with progress + re-enumeration waiter.
+    # Same fixture pattern as bootsel: mkdtemp parent + pthread
+    # worker that drops the expected entry mid-test.
+    add_executable(serial-configurator-flash-copy-reenum-tests
+        tests/test_sc_flash_copy_reenum.c
+    )
+    target_link_libraries(serial-configurator-flash-copy-reenum-tests
+        PRIVATE
+            serial_configurator_core
+            Threads::Threads
+    )
+
     target_link_libraries(serial-configurator-core-tests
         PRIVATE
             serial_configurator_core
@@ -347,5 +359,10 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-flash-bootsel-tests
         COMMAND serial-configurator-flash-bootsel-tests
+    )
+
+    add_test(
+        NAME serial-configurator-flash-copy-reenum-tests
+        COMMAND serial-configurator-flash-copy-reenum-tests
     )
 endif()

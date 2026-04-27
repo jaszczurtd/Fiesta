@@ -32,6 +32,8 @@ const char *sc_flash_status_str(sc_flash_status_t st)
     case SC_FLASH_ERR_WRONG_FAMILY:            return "WRONG_FAMILY";
     case SC_FLASH_ERR_BLOCK_INDEX_OUT_OF_RANGE: return "BLOCK_INDEX_OUT_OF_RANGE";
     case SC_FLASH_ERR_BOOTSEL_TIMEOUT:         return "BOOTSEL_TIMEOUT";
+    case SC_FLASH_ERR_FILE_WRITE:              return "FILE_WRITE";
+    case SC_FLASH_ERR_REENUM_TIMEOUT:          return "REENUM_TIMEOUT";
     case SC_FLASH_ERR_NOT_IMPLEMENTED:         return "NOT_IMPLEMENTED";
     }
     return "UNKNOWN";
@@ -354,6 +356,221 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
     (void)out_path_size;
     write_error(error_buf, error_size,
                 "BOOTSEL watcher not implemented on this platform");
+    return SC_FLASH_ERR_NOT_IMPLEMENTED;
+#endif
+}
+
+/* ── Phase 6.4 — UF2 copy with progress + re-enumeration waiter ─── */
+
+#define SC_FLASH_COPY_CHUNK_BYTES (64u * 1024u)
+#define SC_FLASH_COPY_DEST_FILENAME "firmware.uf2"
+
+sc_flash_status_t sc_flash_copy_uf2(const char *src_uf2_path,
+                                    const char *drive_path,
+                                    sc_flash_progress_cb progress_cb,
+                                    void *progress_user,
+                                    char *error_buf,
+                                    size_t error_size)
+{
+    if (src_uf2_path == NULL || drive_path == NULL) {
+        write_error(error_buf, error_size, "null path");
+        return SC_FLASH_ERR_NULL_ARG;
+    }
+
+    FILE *src = fopen(src_uf2_path, "rb");
+    if (src == NULL) {
+        write_error(error_buf, error_size,
+                    "could not open source '%s'", src_uf2_path);
+        return SC_FLASH_ERR_FILE_OPEN;
+    }
+
+    if (fseek(src, 0, SEEK_END) != 0) {
+        (void)fclose(src);
+        write_error(error_buf, error_size, "fseek end failed");
+        return SC_FLASH_ERR_FILE_READ;
+    }
+    const long len_signed = ftell(src);
+    if (len_signed < 0) {
+        (void)fclose(src);
+        write_error(error_buf, error_size, "ftell failed");
+        return SC_FLASH_ERR_FILE_READ;
+    }
+    if (fseek(src, 0, SEEK_SET) != 0) {
+        (void)fclose(src);
+        write_error(error_buf, error_size, "fseek start failed");
+        return SC_FLASH_ERR_FILE_READ;
+    }
+    const size_t total = (size_t)len_signed;
+
+    if (total == 0u) {
+        (void)fclose(src);
+        write_error(error_buf, error_size, "source file is empty");
+        return SC_FLASH_ERR_EMPTY;
+    }
+    if (total > SC_FLASH_UF2_MAX_BYTES) {
+        (void)fclose(src);
+        write_error(error_buf, error_size,
+                    "source is %zu bytes, cap is %u",
+                    total, SC_FLASH_UF2_MAX_BYTES);
+        return SC_FLASH_ERR_TOO_LARGE;
+    }
+
+    char dest_path[1024];
+    const int dest_len = snprintf(dest_path, sizeof(dest_path),
+                                  "%s/%s", drive_path,
+                                  SC_FLASH_COPY_DEST_FILENAME);
+    if (dest_len < 0 || (size_t)dest_len >= sizeof(dest_path)) {
+        (void)fclose(src);
+        write_error(error_buf, error_size,
+                    "drive_path too long for buffer");
+        return SC_FLASH_ERR_NULL_ARG;
+    }
+
+    FILE *dst = fopen(dest_path, "wb");
+    if (dst == NULL) {
+        (void)fclose(src);
+        write_error(error_buf, error_size,
+                    "could not open destination '%s'", dest_path);
+        return SC_FLASH_ERR_FILE_WRITE;
+    }
+
+    uint8_t chunk[SC_FLASH_COPY_CHUNK_BYTES];
+    uint64_t copied = 0u;
+    while (copied < total) {
+        const size_t want = ((total - copied) < SC_FLASH_COPY_CHUNK_BYTES)
+                                ? (size_t)(total - copied)
+                                : SC_FLASH_COPY_CHUNK_BYTES;
+        const size_t got = fread(chunk, 1u, want, src);
+        if (got != want) {
+            (void)fclose(src);
+            (void)fclose(dst);
+            write_error(error_buf, error_size,
+                        "short read at %llu / %zu",
+                        (unsigned long long)copied, total);
+            return SC_FLASH_ERR_FILE_READ;
+        }
+        const size_t put = fwrite(chunk, 1u, got, dst);
+        if (put != got) {
+            (void)fclose(src);
+            (void)fclose(dst);
+            write_error(error_buf, error_size,
+                        "short write at %llu / %zu",
+                        (unsigned long long)copied, total);
+            return SC_FLASH_ERR_FILE_WRITE;
+        }
+        copied += (uint64_t)put;
+        if (progress_cb != NULL) {
+            progress_cb(copied, (uint64_t)total, progress_user);
+        }
+    }
+
+    (void)fclose(src);
+
+    /* Flush to the physical device before declaring success. The
+     * boot ROM watches the mass-storage write stream and reboots
+     * once the file is fully landed; if we return without fsync()
+     * the caller may race against the kernel's writeback queue. */
+    if (fflush(dst) != 0) {
+        (void)fclose(dst);
+        write_error(error_buf, error_size, "fflush failed");
+        return SC_FLASH_ERR_FILE_WRITE;
+    }
+#if SC_FLASH_HAVE_POSIX_WATCHER
+    {
+        const int fd = fileno(dst);
+        if (fd >= 0) {
+            (void)fsync(fd);
+        }
+    }
+#endif
+    (void)fclose(dst);
+
+    write_error(error_buf, error_size,
+                "OK: copied %zu bytes to %s", total, dest_path);
+    return SC_FLASH_OK;
+}
+
+sc_flash_status_t sc_flash__wait_reenumeration_in(
+    const char *parent_dir, const char *uid_hex,
+    uint32_t timeout_ms,
+    char *out_path, size_t out_path_size,
+    char *error_buf, size_t error_size)
+{
+    if (parent_dir == NULL || uid_hex == NULL || uid_hex[0] == '\0') {
+        write_error(error_buf, error_size, "null/empty inputs");
+        return SC_FLASH_ERR_NULL_ARG;
+    }
+    if (out_path != NULL && out_path_size > 0u) {
+        out_path[0] = '\0';
+    }
+
+#if SC_FLASH_HAVE_POSIX_WATCHER
+    const uint64_t deadline_ms = monotonic_ms() + (uint64_t)timeout_ms;
+    for (;;) {
+        DIR *d = opendir(parent_dir);
+        if (d != NULL) {
+            struct dirent *ent;
+            while ((ent = readdir(d)) != NULL) {
+                const char *name = ent->d_name;
+                if (name[0] == '.' && (name[1] == '\0' ||
+                                        (name[1] == '.' &&
+                                         name[2] == '\0'))) {
+                    continue;
+                }
+                if (strstr(name, uid_hex) == NULL) {
+                    continue;
+                }
+                if (out_path != NULL && out_path_size > 0u) {
+                    (void)snprintf(out_path, out_path_size,
+                                   "%s/%s", parent_dir, name);
+                }
+                (void)closedir(d);
+                write_error(error_buf, error_size,
+                            "found at %s",
+                            (out_path != NULL) ? out_path : "(no buf)");
+                return SC_FLASH_OK;
+            }
+            (void)closedir(d);
+        }
+        const uint64_t now_ms = monotonic_ms();
+        if (now_ms >= deadline_ms) {
+            write_error(error_buf, error_size,
+                        "no by-id entry matching uid=%s after %u ms",
+                        uid_hex, (unsigned)timeout_ms);
+            return SC_FLASH_ERR_REENUM_TIMEOUT;
+        }
+        const uint64_t remaining = deadline_ms - now_ms;
+        sleep_ms((uint32_t)((remaining < 100u) ? remaining : 100u));
+    }
+#else
+    (void)timeout_ms;
+    (void)out_path;
+    (void)out_path_size;
+    write_error(error_buf, error_size,
+                "re-enumeration waiter not implemented on this platform");
+    return SC_FLASH_ERR_NOT_IMPLEMENTED;
+#endif
+}
+
+sc_flash_status_t sc_flash_wait_reenumeration(const char *uid_hex,
+                                              uint32_t timeout_ms,
+                                              char *out_path,
+                                              size_t out_path_size,
+                                              char *error_buf,
+                                              size_t error_size)
+{
+#if SC_FLASH_HAVE_POSIX_WATCHER
+    return sc_flash__wait_reenumeration_in("/dev/serial/by-id",
+                                           uid_hex, timeout_ms,
+                                           out_path, out_path_size,
+                                           error_buf, error_size);
+#else
+    (void)uid_hex;
+    (void)timeout_ms;
+    (void)out_path;
+    (void)out_path_size;
+    write_error(error_buf, error_size,
+                "re-enumeration waiter not implemented on this platform");
     return SC_FLASH_ERR_NOT_IMPLEMENTED;
 #endif
 }

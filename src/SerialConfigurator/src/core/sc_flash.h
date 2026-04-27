@@ -65,6 +65,14 @@ typedef enum sc_flash_status_t {
      *  RPI-RP2 / RP2350 mass-storage drive appear under any of the
      *  candidate parent directories. */
     SC_FLASH_ERR_BOOTSEL_TIMEOUT,
+    /** Phase 6.4 — could not open / write the destination
+     *  `<drive_path>/firmware.uf2`. Reported alongside the diagnostic
+     *  string so the operator can see the underlying errno. */
+    SC_FLASH_ERR_FILE_WRITE,
+    /** Phase 6.4 — re-enumeration waiter exhausted its budget without
+     *  seeing a `/dev/serial/by-id/` entry matching the supplied UID
+     *  suffix. */
+    SC_FLASH_ERR_REENUM_TIMEOUT,
     /** Reserved for backends that have no implementation on the
      *  current platform (Windows BOOTSEL watcher today). */
     SC_FLASH_ERR_NOT_IMPLEMENTED
@@ -144,6 +152,77 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
  */
 sc_flash_status_t sc_flash__watch_for_bootsel_in(
     const char *const *parent_dirs, size_t parent_count,
+    uint32_t timeout_ms,
+    char *out_path, size_t out_path_size,
+    char *error_buf, size_t error_size);
+
+/**
+ * @brief Progress callback invoked after every chunk written by
+ *        @ref sc_flash_copy_uf2.
+ *
+ * @p bytes_written is the cumulative count after the latest write;
+ * @p total_bytes is the source file size, fixed for the duration of
+ * the copy. The callback runs on the same thread that called
+ * @ref sc_flash_copy_uf2 — typically a worker thread spawned by the
+ * orchestrator (Phase 6.5) — so any GUI updates have to be
+ * marshalled by the caller (e.g. via @c g_idle_add).
+ */
+typedef void (*sc_flash_progress_cb)(uint64_t bytes_written,
+                                     uint64_t total_bytes,
+                                     void *user);
+
+/**
+ * @brief Copy a UF2 file onto the BOOTSEL mass-storage drive.
+ *
+ * Reads @p src_uf2_path in 64 KiB chunks and writes them to
+ * `<drive_path>/firmware.uf2`, invoking @p progress_cb after each
+ * chunk with the running and total byte counts. Closes both files
+ * and `fsync()`s the destination before returning so the kernel
+ * flushes to the actual mass-storage device — the RP2040 boot ROM
+ * detects the completed write and reboots into the new firmware on
+ * its own.
+ *
+ * Source size is capped at @ref SC_FLASH_UF2_MAX_BYTES;
+ * structural validation of the UF2 itself is the caller's concern
+ * (use @ref sc_flash_uf2_format_check before this).
+ *
+ * @p progress_cb may be NULL.
+ */
+sc_flash_status_t sc_flash_copy_uf2(const char *src_uf2_path,
+                                    const char *drive_path,
+                                    sc_flash_progress_cb progress_cb,
+                                    void *progress_user,
+                                    char *error_buf,
+                                    size_t error_size);
+
+/**
+ * @brief Wait for the firmware to re-enumerate as a USB-serial
+ *        device after a flash, identified by its UID hex suffix.
+ *
+ * Linux: polls `/dev/serial/by-id/` every 100 ms until
+ * @p timeout_ms elapses, returning the full path to the first entry
+ * whose name contains @p uid_hex. The match is on UID rather than
+ * arbitrary device path because the underlying inode (`/dev/ttyACM*`)
+ * may change across reboots, while the UID embedded in the by-id
+ * symlink name is stable.
+ *
+ * Windows: stub returning @c SC_FLASH_ERR_NOT_IMPLEMENTED.
+ */
+sc_flash_status_t sc_flash_wait_reenumeration(const char *uid_hex,
+                                              uint32_t timeout_ms,
+                                              char *out_path,
+                                              size_t out_path_size,
+                                              char *error_buf,
+                                              size_t error_size);
+
+/**
+ * @brief Test-only entry point for @ref sc_flash_wait_reenumeration
+ *        — drives the polling loop against a caller-supplied parent
+ *        directory rather than `/dev/serial/by-id/`.
+ */
+sc_flash_status_t sc_flash__wait_reenumeration_in(
+    const char *parent_dir,
+    const char *uid_hex,
     uint32_t timeout_ms,
     char *out_path, size_t out_path_size,
     char *error_buf, size_t error_size);
