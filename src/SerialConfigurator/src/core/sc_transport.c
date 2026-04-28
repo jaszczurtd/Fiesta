@@ -6,12 +6,60 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <glob.h>
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+
+/* ── Diagnostic logging ──────────────────────────────────────────────
+ * Mirrors the [sc_flash] tracer in sc_flash.c so the operator can see
+ * the auth → reboot → bootsel chain end-to-end without rebuilding.
+ *
+ * - `transport_log` is always-on, used for one-time/high-signal events:
+ *   open(), close(), cache hit/miss/invalidate, retry-loop attempts.
+ * - `transport_log_v` is gated by `SC_FLASH_DEBUG=1` for noisy
+ *   per-frame trace (every send/recv chunk). Off by default.
+ *
+ * The env var is shared with sc_flash.c so a single `SC_FLASH_DEBUG=1`
+ * flips both layers — the operator does not need to remember two knobs. */
+static bool transport_log_verbose_enabled(void)
+{
+    static int cached = -1;
+    if (cached < 0) {
+        const char *v = getenv("SC_FLASH_DEBUG");
+        cached = (v != NULL && v[0] != '\0' && v[0] != '0') ? 1 : 0;
+    }
+    return cached != 0;
+}
+
+static void transport_log(const char *fmt, ...)
+{
+    va_list ap;
+    (void)fputs("[sc_transport] ", stderr);
+    va_start(ap, fmt);
+    (void)vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    (void)fputc('\n', stderr);
+    (void)fflush(stderr);
+}
+
+static void transport_log_v(const char *fmt, ...)
+{
+    if (!transport_log_verbose_enabled()) {
+        return;
+    }
+    va_list ap;
+    (void)fputs("[sc_transport] ", stderr);
+    va_start(ap, fmt);
+    (void)vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    (void)fputc('\n', stderr);
+    (void)fflush(stderr);
+}
 
 #define SC_TRANSPORT_GLOB_PATTERN "/dev/serial/by-id/usb-Jaszczur_Fiesta_*"
 /* Detection latency tuning. The primary timeout is sized for the warm-cache
@@ -292,22 +340,29 @@ static bool open_and_configure_port(const char *device_path, int *fd, char *erro
 {
     if (device_path == 0 || fd == 0) {
         set_error(error, error_size, "internal error: invalid arguments");
+        transport_log("open: rejected — null device_path or fd pointer");
         return false;
     }
 
     *fd = open(device_path, O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (*fd < 0) {
+        const int e = errno;
         (void)snprintf(
             error,
             error_size,
             "open(%.120s) failed: %.96s",
             device_path,
-            strerror(errno)
+            strerror(e)
         );
+        transport_log("open('%s') failed: errno=%d (%s)",
+                      device_path, e, strerror(e));
         return false;
     }
+    transport_log("open('%s') ok: fd=%d", device_path, *fd);
 
     if (!configure_serial_port(*fd, error, error_size)) {
+        transport_log("configure_serial_port(fd=%d) failed: %s",
+                      *fd, error ? error : "(no buf)");
         (void)close(*fd);
         *fd = -1;
         return false;
@@ -337,6 +392,9 @@ static void close_cached_port_slot(size_t slot)
     }
 
     if (s_cached_ports[slot].in_use && s_cached_ports[slot].fd >= 0) {
+        transport_log("cache slot=%zu close fd=%d path='%s'",
+                      slot, s_cached_ports[slot].fd,
+                      s_cached_ports[slot].device_path);
         (void)close(s_cached_ports[slot].fd);
     }
 
@@ -369,6 +427,11 @@ static void reconcile_cached_ports_with_list(const ScTransportCandidateList *lis
             }
         }
         if (!still_present) {
+            transport_log("reconcile: dropping cached slot=%zu fd=%d "
+                          "path='%s' (no longer in candidate list — "
+                          "device unplugged or by-id symlink gone)",
+                          i, s_cached_ports[i].fd,
+                          s_cached_ports[i].device_path);
             close_cached_port_slot(i);
         }
     }
@@ -408,7 +471,10 @@ static void invalidate_cached_port(const char *device_path)
 {
     const int slot = find_cached_port_slot(device_path);
     if (slot >= 0) {
+        transport_log("invalidate path='%s' (slot=%d)", device_path, slot);
         close_cached_port_slot((size_t)slot);
+    } else {
+        transport_log_v("invalidate path='%s' — no cached slot", device_path);
     }
 }
 
@@ -428,6 +494,8 @@ static bool acquire_cached_port(
     int slot = find_cached_port_slot(device_path);
     if (slot >= 0) {
         if (s_cached_ports[slot].fd >= 0) {
+            transport_log_v("cache hit slot=%d fd=%d path='%s'",
+                            slot, s_cached_ports[slot].fd, device_path);
             *fd = s_cached_ports[slot].fd;
             if (slot_out != NULL) {
                 *slot_out = (size_t)slot;
@@ -435,6 +503,8 @@ static bool acquire_cached_port(
             return true;
         }
 
+        transport_log("cache slot=%d stale (fd<0) for path='%s' — reopening",
+                      slot, device_path);
         close_cached_port_slot((size_t)slot);
     }
 
@@ -445,6 +515,8 @@ static bool acquire_cached_port(
 
     slot = find_free_cached_port_slot();
     if (slot < 0) {
+        transport_log("cache full — evicting slot 0 path='%s'",
+                      s_cached_ports[0].device_path);
         close_cached_port_slot(0u);
         slot = 0;
     }
@@ -457,6 +529,8 @@ static bool acquire_cached_port(
         sizeof(s_cached_ports[slot].device_path),
         device_path
     );
+    transport_log("cache install slot=%d fd=%d path='%s'",
+                  slot, opened_fd, device_path);
     *fd = opened_fd;
     if (slot_out != NULL) {
         *slot_out = (size_t)slot;
@@ -658,6 +732,7 @@ static bool default_send_hello(
     char last_error[256];
     last_error[0] = '\0';
 
+    transport_log_v("HELLO begin path='%s'", device_path);
     for (int attempt = 0; attempt < SC_TRANSPORT_HELLO_ATTEMPTS; ++attempt) {
         int fd = -1;
         size_t slot = 0u;
@@ -684,9 +759,14 @@ static bool default_send_hello(
         } while (0);
 
         if (success) {
+            transport_log_v("HELLO ok path='%s' attempt=%d",
+                            device_path, attempt + 1);
             return true;
         }
 
+        transport_log("HELLO attempt %d/%d failed path='%s': %s",
+                      attempt + 1, SC_TRANSPORT_HELLO_ATTEMPTS,
+                      device_path, last_error);
         invalidate_cached_port(device_path);
 
         if (attempt + 1 < SC_TRANSPORT_HELLO_ATTEMPTS) {
@@ -695,6 +775,7 @@ static bool default_send_hello(
         }
     }
 
+    transport_log("HELLO exhausted path='%s': %s", device_path, last_error);
     copy_string(error, error_size, last_error);
     return false;
 }
@@ -738,6 +819,7 @@ static bool default_send_sc_command(
     char last_error[256];
     last_error[0] = '\0';
 
+    transport_log_v("SC '%s' begin path='%s'", inner, device_path);
     for (int attempt = 0; attempt < SC_TRANSPORT_SC_ATTEMPTS; ++attempt) {
         int fd = -1;
         size_t slot = 0u;
@@ -763,6 +845,8 @@ static bool default_send_sc_command(
                 break;
             }
 
+            transport_log("SC '%s' got NOT_READY — re-handshaking on fd=%d",
+                          inner, fd);
             /* Module forgot HELLO (re-enumeration / reset) — re-handshake
              * and retry the same command on the same fd. */
             if (!send_hello_bootstrap_on_fd(fd, slot, timeout_ms,
@@ -780,9 +864,14 @@ static bool default_send_sc_command(
         } while (0);
 
         if (success) {
+            transport_log_v("SC '%s' ok path='%s' attempt=%d reply='%.80s'",
+                            inner, device_path, attempt + 1, response);
             return true;
         }
 
+        transport_log("SC '%s' attempt %d/%d failed path='%s': %s",
+                      inner, attempt + 1, SC_TRANSPORT_SC_ATTEMPTS,
+                      device_path, last_error);
         invalidate_cached_port(device_path);
 
         if (attempt + 1 < SC_TRANSPORT_SC_ATTEMPTS) {
@@ -791,6 +880,8 @@ static bool default_send_sc_command(
         }
     }
 
+    transport_log("SC '%s' exhausted path='%s': %s",
+                  inner, device_path, last_error);
     copy_string(error, error_size, last_error);
     return false;
 }
