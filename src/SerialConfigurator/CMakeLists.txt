@@ -129,6 +129,7 @@ if(GTK4_FOUND)
         src/ui/sc_i18n.c
         src/ui/sc_module_details.c
         src/ui/sc_modules_view.c
+        src/ui/sc_progressbar.c
         src/ui/main.c
     )
 
