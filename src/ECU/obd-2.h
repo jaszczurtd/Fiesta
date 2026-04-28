@@ -23,8 +23,8 @@ extern "C" {
 //#define OBD_VERBOSE_RX_DEBUG      // raw hex of every incoming CAN frame
 
 // Ford E217 binary representation of part number middle section.
-// Each byte → hex with leading zero stripped → concatenated = middle string.
-// For "12A650": {0x12,0x0A,0x06,0x50} → "12"+"A"+"6"+"50" = "12A650"
+// Each byte -> hex with leading zero stripped -> concatenated = middle string.
+// For "12A650": {0x12,0x0A,0x06,0x50} -> "12"+"A"+"6"+"50" = "12A650"
 // If changing ecu_PartNumber, update these bytes to match the new middle section.
 #define ecu_PartNumMiddleHex   0x12, 0x0A, 0x06, 0x50
 #define ecu_PartNumMiddleLen   4
@@ -140,7 +140,7 @@ extern "C" {
 #define KWP_LID_COMPACT_IDENT     0xFE
 #define KWP_LID_SUPPORTED_LIST    0xFF
 
-// ── Ford EEC-V UDS DIDs — standard identification ──────────────────
+// ── Ford EEC-V UDS DIDs - standard identification ──────────────────
 #define DID_ACTIVE_SESSION         0xF186
 #define DID_SPARE_PART_NUMBER      0xF187
 #define DID_SW_VERSION             0xF188
@@ -155,7 +155,7 @@ extern "C" {
 #define DID_PART_NUMBER            0xF113
 #define DID_BOOT_SW_ID             0xF180
 
-// ── Ford EEC-V UDS DIDs — manufacturer-specific ────────────────────
+// ── Ford EEC-V UDS DIDs - manufacturer-specific ────────────────────
 #define DID_ECU_CAPABILITIES       0x0200
 
 #define DID_FORD_MODEL             0xE6F3
@@ -165,13 +165,13 @@ extern "C" {
 #define DID_FORD_SW_DATE           0xE200
 // E217/E21A/E219: Fordiag uses these to read Ford part number components
 // for ECU identification (prefix-middle-suffix lookup in internal DB).
-#define DID_FORD_PARTNUM_MIDDLE    0xE217   // binary middle  (e.g. 12A650→0x120A0650)
+#define DID_FORD_PARTNUM_MIDDLE    0xE217   // binary middle  (e.g. 12A650->0x120A0650)
 #define DID_FORD_PARTNUM_SUFFIX    0xE219   // encoded suffix  (2-byte Ford encoding)
 #define DID_FORD_PARTNUM_PREFIX    0xE21A   // ASCII prefix    (e.g. "XS4A")
 #define DID_FORD_CATCH_CODE        0xC92E
 #define DID_FORD_PART_NUMBER       0xC900
 
-// ── Ford DD0x DIDs — vehicle telemetry (CAN ECU specific) ──────────
+// ── Ford DD0x DIDs - vehicle telemetry (CAN ECU specific) ──────────
 #define DID_FORD_TOTDIST           0xDD01   // Total distance (3 bytes, km)
 #define DID_FORD_FUEL_TEMP         0xDD02   // Fuel temperature (1 byte, +40 offset, °C)
 #define DID_FORD_OIL_PRESSURE      0xDD03   // Oil pressure (2 bytes, kPa ×10)
@@ -224,7 +224,7 @@ extern "C" {
 #define SCP_PID_SECURITY_STATUS    0xC115   // Security Access Status
 #define SCP_PID_PATS_STATUS        0xC124   // PATS Status
 
-// ── Ford SCP PIDs — diesel-specific (CDAN2 PID MAP) ────────────────
+// ── Ford SCP PIDs - diesel-specific (CDAN2 PID MAP) ────────────────
 #define SCP_PID_TRIP_COUNT         0x0100   // OBDII trip count, Byte
 #define SCP_PID_CODES_COUNT        0x0200   // DTC code count, Byte
 #define SCP_PID_EGRDC              0x113C   // EGR duty cycle, 100/32768 %

@@ -32,9 +32,9 @@ set(HAL_UTIL_SOURCES
 
 # ── ECU sources compilable without arduino-timer / multicoreWatchdog ───────────
 #
-# rpm.c   — excluded: uses arduino-timer (Timer class)
-# start.c — excluded: uses multicoreWatchdog (which uses arduino-timer)
-# tests.c — excluded: placeholder only (empty initTests / startTests)
+# rpm.c   - excluded: uses arduino-timer (Timer class)
+# start.c - excluded: uses multicoreWatchdog (which uses arduino-timer)
+# tests.c - excluded: placeholder only (empty initTests / startTests)
 #
 set(ECU_SOURCES
     ${ECU_SRC}/sensors.c

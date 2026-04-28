@@ -2,7 +2,7 @@
 #define ECU_CONTEXT_H
 
 /*
- * Central ECU context — single struct owning all module instances.
+ * Central ECU context - single struct owning all module instances.
  *
  * INCLUDE ONLY FROM .cpp FILES, after the module's own header has been
  * included first. Reason: module headers form a circular include chain

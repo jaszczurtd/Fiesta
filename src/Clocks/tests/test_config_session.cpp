@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Independent reference CRC-8/CCITT — same poly/init as the production
+/* Independent reference CRC-8/CCITT - same poly/init as the production
  * helper but kept distinct so the wire format is locked in by the test. */
 static uint8_t refCrc8(const char *data, size_t len) {
   uint8_t crc = 0u;

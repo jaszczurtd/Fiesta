@@ -1005,9 +1005,9 @@ static void send22U32(uint32_t responseId, uint16_t did, uint32_t value) {
 
 // ── Ford Part Number encoding for E217/E21A/E219 identification ──────
 // Fordiag reads the Ford part number in three pieces:
-//   E21A → ASCII prefix      (e.g. "XS4A")
-//   E217 → binary middle     (e.g. "12A650" → {0x12,0x0A,0x06,0x50})
-//   E219 → encoded suffix    (e.g. "AXB" → 2-byte Ford encoding)
+//   E21A -> ASCII prefix      (e.g. "XS4A")
+//   E217 -> binary middle     (e.g. "12A650" -> {0x12,0x0A,0x06,0x50})
+//   E219 -> encoded suffix    (e.g. "AXB" -> 2-byte Ford encoding)
 // It reconstructs PREFIX-MIDDLE-SUFFIX, looks it up in an internal
 // database, and fills model/type/subtype/etc. fields from the match.
 
@@ -1240,7 +1240,7 @@ static void buildScpIdBlock(uint8_t *block, int len) {
   block[0x7A] = 0x00;
   block[0x7B] = 0x00;
 
-  // Upper half: checksummed — VIN at 0x85..0x95, Copyright at 0x97
+  // Upper half: checksummed - VIN at 0x85..0x95, Copyright at 0x97
   writeAsciiField(block, len, SCP_IDBLOCK_VIN_OFFSET, 17, vehicle_Vin);
   writeAsciiField(block, len, SCP_IDBLOCK_COPYRIGHT_OFS, 32, ecu_Copyright);
 
@@ -1365,9 +1365,9 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
       out[0] = (uint8_t)raw;
       return 1;
     }
-    case SCP_PID_LAMBSE1:   // VP37: no lambda sensors → NRC
+    case SCP_PID_LAMBSE1:   // VP37: no lambda sensors -> NRC
     case SCP_PID_LAMBSE2:
-    case SCP_PID_KAMRF1:    // VP37: no adaptive fuel trim → NRC
+    case SCP_PID_KAMRF1:    // VP37: no adaptive fuel trim -> NRC
     case SCP_PID_KAMRF2:
       return 0;
     case SCP_PID_LOAD: { // LOAD - Engine Load, 1/32768 of std air charge, Word
@@ -1383,11 +1383,11 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
       return 2;
     }
     case SCP_PID_BP: { // BP - Barometric Pressure, 0.125 inHg, Byte
-      // Default sea level ≈ 29.92 inHg → raw = 29.92/0.125 ≈ 239
+      // Default sea level ≈ 29.92 inHg -> raw = 29.92/0.125 ≈ 239
       out[0] = 239;
       return 1;
     }
-    // SCP_PID_IMAF removed — handled above with VMAF/MAF_RATE (return NRC)
+    // SCP_PID_IMAF removed - handled above with VMAF/MAF_RATE (return NRC)
     case SCP_PID_RATCH: { // RATCH - throttle ratchet count, 0.0156, Word
       out[0] = 0; out[1] = 0;
       return 2;
@@ -1420,8 +1420,8 @@ static int encodeFordScpPid(uint16_t pid, uint8_t *out) {
       out[0] = dtcManagerCount(DTC_KIND_STORED);
       return 1;
     }
-    case SCP_PID_EGRDC:    // VP37: no electronic EGR → NRC
-    case SCP_PID_FUELPW1:   // VP37: no individual injector pulsewidth → NRC
+    case SCP_PID_EGRDC:    // VP37: no electronic EGR -> NRC
+    case SCP_PID_FUELPW1:   // VP37: no individual injector pulsewidth -> NRC
       return 0;
     case SCP_PID_VMAF:     // VMAF - MAF voltage (no MAF sensor)
     case SCP_PID_MAF_RATE: // j1979_01_10 - MAF rate (no MAF sensor)
@@ -1453,7 +1453,7 @@ static bool handleScpPidAccess(uint32_t responseId, uint16_t pid, uint8_t *txDat
   // Try known Ford SCP PIDs with proper encoding.
   dataLen = encodeFordScpPid(pid, dataBytes);
 
-  // Unknown PIDs: return false → caller sends NRC.
+  // Unknown PIDs: return false -> caller sends NRC.
   // Returning positive zero responses for unknown DIDs caused Fordiag
   // to show "MAP system / MAF system" (any positive = "sensor exists").
   if(dataLen == 0) {
@@ -1705,7 +1705,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
     // E200: Fordiag decodes SW date as 3 binary bytes (NOT ASCII!):
     //   byte 0 = month (lower nibble), byte 1 = day, byte 2 = year-1900.
     // Per Fordiag author's ECU_ReadSWVersion FoxPro source.
-    // Parse ecu_SwDate "YYYYMMDD" → binary {month, day, year-1900}.
+    // Parse ecu_SwDate "YYYYMMDD" -> binary {month, day, year-1900}.
     int year = 0;
     int month = 0;
     int day = 0;
@@ -1721,12 +1721,12 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
       (uint8_t)day,
       (uint8_t)(year - 1900)
     };
-    deb("UDS 0x22 E200 SW date: %d-%02d-%02d → {0x%02X,0x%02X,0x%02X}",
+    deb("UDS 0x22 E200 SW date: %d-%02d-%02d -> {0x%02X,0x%02X,0x%02X}",
         year, month, day, payload[3], payload[4], payload[5]);
     iso_tp(responseId, (int)sizeof(payload), payload);
   } else if(did == (uint16_t)DID_FORD_PARTNUM_MIDDLE) {
     // E217: Fordiag reads binary middle bytes of Ford part number
-    // (e.g. "12A650" → {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
+    // (e.g. "12A650" -> {0x12, 0x0A, 0x06, 0x50}) for ECU identification.
     sendE217PartNumMiddle(responseId, did);
   } else if(did == (uint16_t)DID_FORD_PARTNUM_PREFIX) {
     // E21A: Fordiag reads ASCII prefix of Ford part number
@@ -1734,7 +1734,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
     sendE21APartNumPrefix(responseId, did);
   } else if(did == (uint16_t)DID_FORD_PARTNUM_SUFFIX) {
     // E219: Fordiag reads 2-byte encoded suffix of Ford part number
-    // (e.g. "AXB" → {0x52, 0x01}) for ECU identification.
+    // (e.g. "AXB" -> {0x52, 0x01}) for ECU identification.
     sendE219PartNumSuffix(responseId, did);
   } else if(did == (uint16_t)DID_FORD_CATCH_CODE) {
     send22IdentField(responseId, did, ecu_CatchCode, 8);
@@ -1743,7 +1743,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
   } else if(did == (uint16_t)DID_FORD_TOTDIST) {
 #ifdef OBD_ENABLE_TOTDIST
     // DD01: Total distance (odometer), 3 bytes big-endian unsigned km.
-    // Per Fordiag author: "3bytova!" — unusual 3-byte format.
+    // Per Fordiag author: "3bytova!" - unusual 3-byte format.
     uint32_t km = obdGetTotalDistanceKm();
     uint8_t payload[6] = {
       UDS_RSP_READ_DATA_BY_ID, (uint8_t)(did >> 8), (uint8_t)(did & 0xFF),
@@ -1815,7 +1815,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
     };
     iso_tp(responseId, (int)sizeof(payload), payload);
   } else if(did == (uint16_t)DID_ECU_CAPABILITIES) {
-    // DID 0x0200 collides with SCP_PID_CODES_COUNT — must return NRC here
+    // DID 0x0200 collides with SCP_PID_CODES_COUNT - must return NRC here
     // so Fordiag falls back to Mode 01 PID 0x51 for diesel type detection.
     // A positive response causes Fordiag to show "MAP system / MAF system".
     negAck(responseId, mode, NRC_REQUEST_OUT_OF_RANGE);
@@ -2067,7 +2067,7 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes, const uint8_t *da
     if(requireMinLength(responseId, mode, numofBytes, 2)) {
       uint8_t subFunction = data[2] & 0x7Fu;
       if(subFunction == 0x00u) {
-        // enableRxAndTx — acknowledge default state.
+        // enableRxAndTx - acknowledge default state.
         txData[0] = 0x02;
         txData[1] = UDS_RSP_COMM_CONTROL;
         txData[2] = subFunction;

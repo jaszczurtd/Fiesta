@@ -135,7 +135,7 @@ void tickTestsHandleSerialLine(const char *line) {
  * @brief Apply live PID tuning commands previously routed by the HAL serial
  *        session unknown-line callback.
  *
- * VP37_TunePID no longer reads from the serial port directly — it would
+ * VP37_TunePID no longer reads from the serial port directly - it would
  * race against @ref hal_serial_session_poll for individual bytes on the
  * shared USB CDC stream. Instead, @ref tickTestsHandleSerialLine receives a
  * complete line and forwards it here.

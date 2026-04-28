@@ -17,8 +17,8 @@
  *   RPM_MIN                = 350   heater off when engine stopped
  *
  * Heater Hi/Lo selection when all conditions allow heating:
- *   coolant <= (int)(80 / 1.5) = 53  → both Lo and Hi enabled
- *   coolant in (53, 80]             → Lo only
+ *   coolant <= (int)(80 / 1.5) = 53  -> both Lo and Hi enabled
+ *   coolant in (53, 80]             -> Lo only
  *
  * The heater state is not exposed via a public getter.  We observe it
  * through engineHeater::showDebug() which produces:
@@ -125,22 +125,22 @@ void test_heater_off_when_glow_plugs_active(void) {
 // ── On-conditions and Hi/Lo selection ────────────────────────────────────────
 
 void test_heater_lo_on_normal_cold_conditions(void) {
-    /* 30°C: <= 53 → both lo and hi should be on */
+    /* 30°C: <= 53 -> both lo and hi should be on */
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
     TEST_ASSERT_TRUE(heaterLoOn(&eheater));
 }
 
 void test_heater_hi_on_very_cold_coolant(void) {
-    /* coolant <= (int)(80/1.5) = 53 → hi also enabled */
+    /* coolant <= (int)(80/1.5) = 53 -> hi also enabled */
     setGlobalValue(F_COOLANT_TEMP, 30.0f);
     TEST_ASSERT_TRUE(heaterHiOn(&eheater));
 }
 
 void test_heater_lo_only_when_moderately_cold(void) {
     /*
-     * 60°C > 53 but <= 80 → lo enabled, hi disabled.
+     * 60°C > 53 but <= 80 -> lo enabled, hi disabled.
      * We need two separate calls because heaterLoOn / heaterHiOn each
-     * call process() — call process() once and then check the debug line.
+     * call process() - call process() once and then check the debug line.
      */
     setGlobalValue(F_COOLANT_TEMP, 60.0f);
     engineHeater_process(&eheater);
@@ -152,8 +152,8 @@ void test_heater_lo_only_when_moderately_cold(void) {
 
 void test_heater_hi_boundary_exactly_at_split(void) {
     /*
-     * (int)(80 / 1.5f) = 53.  At coolant == 53: condition is <= 53 → hi on.
-     * At coolant == 54: condition fails → hi off.
+     * (int)(80 / 1.5f) = 53.  At coolant == 53: condition is <= 53 -> hi on.
+     * At coolant == 54: condition fails -> hi off.
      */
     setGlobalValue(F_COOLANT_TEMP, 53.0f);
     engineHeater_process(&eheater);

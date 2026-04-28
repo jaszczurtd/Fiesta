@@ -87,7 +87,7 @@ Detection (read-only, no auth):
 
 Authenticated bootloader entry (Phase 3 + 5):
 
-- `sc_core_authenticate` runs HELLO → `SC_AUTH_BEGIN` → `SC_AUTH_PROVE`
+- `sc_core_authenticate` runs HELLO -> `SC_AUTH_BEGIN` -> `SC_AUTH_PROVE`
   using HMAC-SHA256 over a per-device key derived from the RP2040 UID.
   One-shot challenge consumption defeats replay; a new HELLO clears the
   authenticated session.

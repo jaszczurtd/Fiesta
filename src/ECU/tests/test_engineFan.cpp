@@ -16,12 +16,12 @@
  *   AIR_TEMP_FAN_STOP  =  45
  *
  * Fan logic summary:
- *   - rpm <= RPM_MIN           → fan always off (engine stopped)
- *   - coolant <= TEMP_LOWEST   → fan forced on (sensor failure)
- *   - coolant > TEMP_FAN_START → start coolant reason
- *   - coolant <= TEMP_FAN_STOP → stop coolant reason (hysteresis)
- *   - air > AIR_TEMP_FAN_START → start air reason
- *   - air <= AIR_TEMP_FAN_STOP → stop air reason (hysteresis)
+ *   - rpm <= RPM_MIN           -> fan always off (engine stopped)
+ *   - coolant <= TEMP_LOWEST   -> fan forced on (sensor failure)
+ *   - coolant > TEMP_FAN_START -> start coolant reason
+ *   - coolant <= TEMP_FAN_STOP -> stop coolant reason (hysteresis)
+ *   - air > AIR_TEMP_FAN_START -> start air reason
+ *   - air <= AIR_TEMP_FAN_STOP -> stop air reason (hysteresis)
  */
 
 static engineFan efan;
@@ -56,7 +56,7 @@ void test_fan_off_at_rpm_min_boundary(void) {
 }
 
 void test_fan_disabled_when_rpm_drops(void) {
-    /* Turn on fan, then drop RPM → must turn off */
+    /* Turn on fan, then drop RPM -> must turn off */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 5));
     engineFan_process(&efan);
@@ -107,7 +107,7 @@ void test_fan_off_at_coolant_stop_boundary(void) {
 }
 
 void test_fan_hysteresis_coolant_stays_on_between_thresholds(void) {
-    /* Enable, then set coolant between stop and start → must stay on */
+    /* Enable, then set coolant between stop and start -> must stay on */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_FAN_START + 1));
     engineFan_process(&efan);
@@ -167,7 +167,7 @@ void test_fan_hysteresis_air_stays_on_between_thresholds(void) {
 // ── Sensor failure ────────────────────────────────────────────────────────────
 
 void test_fan_forced_on_with_sensor_fault(void) {
-    /* coolant == TEMP_LOWEST signals a disconnected sensor → force fan on */
+    /* coolant == TEMP_LOWEST signals a disconnected sensor -> force fan on */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)TEMP_LOWEST);
     engineFan_process(&efan);
@@ -175,7 +175,7 @@ void test_fan_forced_on_with_sensor_fault(void) {
 }
 
 void test_fan_not_forced_on_just_above_lowest(void) {
-    /* One degree above sentinel is still cold but a valid reading → no force */
+    /* One degree above sentinel is still cold but a valid reading -> no force */
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     setGlobalValue(F_COOLANT_TEMP, (float)(TEMP_LOWEST + 1));
     engineFan_process(&efan);

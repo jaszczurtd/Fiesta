@@ -43,7 +43,7 @@ void updateLed(void) {
   uint32_t now = hal_millis();
   uint8_t status = getAdjustometerStatus();
 
-  // Signal lost — red blink 4x/s, overrides everything
+  // Signal lost - red blink 4x/s, overrides everything
   if (status & ADJ_STATUS_SIGNAL_LOST) {
     if ((now - ledLastToggleMs) >= LED_BLINK_NO_OSCILLATION_MS) {
       ledLastToggleMs = now;

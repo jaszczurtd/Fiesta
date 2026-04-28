@@ -53,7 +53,7 @@ void looper(void) {
  * @return None.
  */
 static void updateI2CRegisters(void) {
-  // getAdjustometerPulses() returns abs() — VP37 deflects only in one direction,
+  // getAdjustometerPulses() returns abs() - VP37 deflects only in one direction,
   // so pulse is always >= 0.  Only the upper int16_t bound needs clamping.
   int32_t pulse = getAdjustometerPulses();
   if (pulse > 32767) pulse = 32767;

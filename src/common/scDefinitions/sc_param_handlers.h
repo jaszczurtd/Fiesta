@@ -9,7 +9,7 @@
  * read-side replies (@c GET_META, @c GET_PARAM_LIST, @c GET_VALUES,
  * @c GET_PARAM) to the helpers below, passing its descriptor array,
  * its values-struct pointer, and an @ref sc_emit_fn that wraps each
- * reply payload in a framed @c hal_serial_session_println — collapsing
+ * reply payload in a framed @c hal_serial_session_println - collapsing
  * ~70% copy&paste between ECU/Clocks/OilAndSpeed @c config.c[pp].
  *
  * Helpers do not depend on JaszczurHAL: replies are emitted via the
@@ -31,7 +31,7 @@ extern "C" {
  * @brief Reply-emit callback type.
  *
  * The helper writes one reply payload per call. The caller is
- * responsible for the SC frame envelope — typically by routing this
+ * responsible for the SC frame envelope - typically by routing this
  * callback through @c hal_serial_session_println.
  */
 typedef void (*sc_emit_fn)(const char *payload, void *user);
@@ -114,7 +114,7 @@ void sc_param_reply_get_values_i16(const sc_param_descriptor_t *descs,
  *        "SC_INVALID_PARAM_ID id=<requested_id>".
  *
  * Caller is responsible for parsing the payload that follows
- * "SC_GET_PARAM " — empty, garbage, or oversize ids are bad-request
+ * "SC_GET_PARAM " - empty, garbage, or oversize ids are bad-request
  * concerns handled at the call site.
  */
 void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
@@ -140,7 +140,7 @@ size_t sc_param_blob_size_for_schema(const sc_param_descriptor_t *descs,
  * Layout (little-endian throughout):
  *     [0..1]            schema (uint16_t LE)
  *     [2..N-5]          per-descriptor payload, declaration order:
- *                       SCALAR_I16 → 2 bytes (LE) when
+ *                       SCALAR_I16 -> 2 bytes (LE) when
  *                       @c flags & NOT_PERSISTED == 0 AND
  *                       @c schema_since <= @p schema; otherwise skipped
  *     [N-4..N-1]        CRC32 over [0..N-5], polynomial 0xEDB88320 (PKZIP),

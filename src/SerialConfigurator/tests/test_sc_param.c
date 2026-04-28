@@ -281,10 +281,10 @@ static int test_blob_round_trip_v2(void) {
 
     /* Schema header LE = 0x0002. */
     TEST_ASSERT(blob[0] == 0x02 && blob[1] == 0x00, "schema LE = 2");
-    /* fan_coolant_start_c = 110 → 0x006E. */
+    /* fan_coolant_start_c = 110 -> 0x006E. */
     TEST_ASSERT(blob[2] == 0x6E && blob[3] == 0x00,
                 "fan_coolant_start_c LE encoded");
-    /* nominal_rpm = 900 → 0x0384 (LE: 0x84 0x03). */
+    /* nominal_rpm = 900 -> 0x0384 (LE: 0x84 0x03). */
     TEST_ASSERT(blob[12] == 0x84 && blob[13] == 0x03, "nominal_rpm LE encoded");
 
     /* CRC matches independently. */

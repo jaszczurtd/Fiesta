@@ -44,7 +44,7 @@ static void injectVoltageOk(void) {
     hal_mock_adc_inject(ADC_VOLT_PIN, adc);
 }
 
-/** Inject ADC so voltage reads as too low (5V → below 8V threshold). */
+/** Inject ADC so voltage reads as too low (5V -> below 8V threshold). */
 static void injectVoltageBad(void) {
     const float ratio = (float)(VDIV_R1_KOHM + VDIV_R2_KOHM) / (float)VDIV_R2_KOHM;
     int adc = (int)(5.0f / ratio * 4095.0f / 3.3f);
@@ -59,7 +59,7 @@ static void settleAdcFilters(void) {
     }
 }
 
-/** Bump I2C slave transaction count → LED sees "I2C active". */
+/** Bump I2C slave transaction count -> LED sees "I2C active". */
 static void bumpI2C(void) {
     uint8_t dummy[] = {0x00, 0x42};
     hal_mock_i2c_slave_simulate_receive(dummy, 2);
@@ -104,7 +104,7 @@ void test_all_ok_steady_green(void) {
 /* ── Signal lost: red blink 4×/s ───────────────────────────────────────────── */
 
 void test_signal_lost_red_blink(void) {
-    /* No pulses → signal lost.  Advance millis past blink period. */
+    /* No pulses -> signal lost.  Advance millis past blink period. */
     hal_mock_advance_micros(300000);
     hal_mock_advance_millis(200);
     updateLed();
@@ -121,7 +121,7 @@ void test_signal_lost_red_blink(void) {
     TEST_ASSERT_EQUAL(HAL_RGB_LED_RED, c3);
 }
 
-/* ── No I2C only: red → green cycle ────────────────────────────────────────── */
+/* ── No I2C only: red -> green cycle ────────────────────────────────────────── */
 
 void test_no_i2c_red_green_cycle(void) {
     lockBaseline(10000);
@@ -144,7 +144,7 @@ void test_no_i2c_red_green_cycle(void) {
     TEST_ASSERT_TRUE(has_green);
 }
 
-/* ── Fuel temp broken only: purple → green cycle ───────────────────────────── */
+/* ── Fuel temp broken only: purple -> green cycle ───────────────────────────── */
 
 void test_fuel_broken_purple_green_cycle(void) {
     injectFuelTemp(true);
@@ -169,7 +169,7 @@ void test_fuel_broken_purple_green_cycle(void) {
     TEST_ASSERT_TRUE(has_green);
 }
 
-/* ── Both faults: purple → red → green cycle ───────────────────────────────── */
+/* ── Both faults: purple -> red -> green cycle ───────────────────────────────── */
 
 void test_both_faults_three_color_cycle(void) {
     injectFuelTemp(true);
@@ -199,7 +199,7 @@ void test_both_faults_three_color_cycle(void) {
     TEST_ASSERT_TRUE(has_green);
 }
 
-/* ── Fault clears → returns to steady green ────────────────────────────────── */
+/* ── Fault clears -> returns to steady green ────────────────────────────────── */
 
 void test_fault_clears_returns_to_green(void) {
     lockBaseline(10000);
@@ -224,7 +224,7 @@ void test_fault_clears_returns_to_green(void) {
     TEST_ASSERT_EQUAL_UINT8(15, hal_mock_rgb_led_get_brightness());
 }
 
-/* ── Voltage bad only: yellow → green cycle ────────────────────────────────── */
+/* ── Voltage bad only: yellow -> green cycle ────────────────────────────────── */
 
 void test_voltage_bad_yellow_green_cycle(void) {
     injectVoltageBad();
@@ -249,7 +249,7 @@ void test_voltage_bad_yellow_green_cycle(void) {
     TEST_ASSERT_TRUE(has_green);
 }
 
-/* ── Voltage bad clears → returns to green ─────────────────────────────────── */
+/* ── Voltage bad clears -> returns to green ─────────────────────────────────── */
 
 void test_voltage_bad_clears_returns_to_green(void) {
     lockBaseline(10000);

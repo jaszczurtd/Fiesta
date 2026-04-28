@@ -44,12 +44,12 @@ void RPM_resetRPMCycle(RPM *self) {
 }
 
 /*
- G28-like crank sensor ISR — called on every crankshaft pulse edge.
+ G28-like crank sensor ISR - called on every crankshaft pulse edge.
  The 150ms time-window check and pulse snapshot MUST stay inside the ISR.
  Moving them to main loop causes jitter because the main loop
  iteration time varies with CAN, OBD, turbo, etc. workload. That makes
  the counting window non-deterministic and RPM readings unstable.
- hal_millis() is just a timer register read — cheap enough for an ISR.
+ hal_millis() is just a timer register read - cheap enough for an ISR.
  Only the integer RPM math is deferred to process() via the rpmReady flag.
 */
 void RPM_interrupt(RPM *self) {

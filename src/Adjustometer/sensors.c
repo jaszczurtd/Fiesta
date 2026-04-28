@@ -43,7 +43,7 @@ void initSensors(void) {
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countAdjustometerPulses, HAL_GPIO_IRQ_FALLING);
 
   // Elevate GPIO IRQ above I2C slave so Hall-sensor edges
-  // are never blocked by I2C transactions — prevents pulse coalescence.
+  // are never blocked by I2C transactions - prevents pulse coalescence.
   hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGHEST);
 }
 
@@ -68,7 +68,7 @@ static int8_t   adjustometerZeroCandidateSign = 0;
 static uint8_t  adjustometerZeroCandidateWindows = 0;
 
 // ADC EMA filter state for fuel-temp and supply-voltage readings.
-// Used by Core1 only — no atomics needed.
+// Used by Core1 only - no atomics needed.
 static float filteredFuelTemp = -1.0f;
 static float filteredVoltage  = -1.0f;
 
@@ -126,14 +126,14 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
   return (a >= b) ? (a - b) : (b - a);
 }
 
-// ISR — intentionally does all frequency computation, baseline calibration,
+// ISR - intentionally does all frequency computation, baseline calibration,
 // thermal compensation and zero-hold filtering in interrupt context.
 // While best practice favours minimal ISRs, here the design is deliberate:
-//  • Determinism — every 128-pulse window is processed immediately, without
+//  • Determinism - every 128-pulse window is processed immediately, without
 //    jitter from loop scheduling or competing tasks.
-//  • Responsiveness — the PID feedback value is always up-to-date the moment
+//  • Responsiveness - the PID feedback value is always up-to-date the moment
 //    Core1 reads it; no deferred work queue or flag polling.
-//  • CPU budget — Core0 has no other duties; voltage and temperature ADC reads
+//  • CPU budget - Core0 has no other duties; voltage and temperature ADC reads
 //    are auxiliary, non-time-critical tasks handled on Core1, so the ISR can
 //    safely use the full Core0 bandwidth.
 /**
@@ -184,7 +184,7 @@ static void countAdjustometerPulses(void) {
               (adjustometerBaselineStableWindows >= ADJUSTOMETER_BASELINE_LOCK_WINDOWS);
 
           if (baselineConverged || maxTimeReached) {
-            // Convergence succeeded — enter verification phase
+            // Convergence succeeded - enter verification phase
             adjustometerBaseline = adjustometerBaselineEstimate;
             adjustometerFilteredHz = adjustometerBaseline;
             __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
@@ -196,14 +196,14 @@ static void countAdjustometerPulses(void) {
           // Detect slow oscillator drift invisible to the fast convergence window.
           const uint32_t drift = absDiffU32(filtered, adjustometerBaseline);
           if (drift > ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ) {
-            // Oscillator still settling — restart convergence from scratch
+            // Oscillator still settling - restart convergence from scratch
             adjustometerVerifying = false;
             adjustometerBaselineStartUs = nowUs;
             adjustometerBaselineEstimate = filtered;
             adjustometerFilteredHz = filtered;
             adjustometerBaselineStableWindows = 0U;
           } else if ((nowUs - adjustometerVerifyStartUs) >= ADJUSTOMETER_BASELINE_VERIFY_US) {
-            // Verification passed — finalise baseline
+            // Verification passed - finalise baseline
             adjustometerBaseline = adjustometerBaselineEstimate;
             adjustometerFilteredHz = adjustometerBaseline;
             __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz, __ATOMIC_RELEASE);
@@ -213,7 +213,7 @@ static void countAdjustometerPulses(void) {
             adjustometerZeroCandidateWindows = 0U;
             __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
           } else {
-            // Still verifying — keep EMA-tracking so final baseline is accurate
+            // Still verifying - keep EMA-tracking so final baseline is accurate
             adjustometerBaselineEstimate = adjustometerBaselineEstimate +
                 (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >> ADJUSTOMETER_BASELINE_TRACK_SHIFT);
           }

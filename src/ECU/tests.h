@@ -58,7 +58,7 @@ void tickTests(void);
  * Intended to be wired as the unknown-line callback for the HAL serial
  * session helper so that test fixtures consume serial commands only after
  * the bootstrap protocol parser (HELLO etc.) has had its chance to handle
- * them. Safe to call when no tests are compiled in — it becomes a no-op.
+ * them. Safe to call when no tests are compiled in - it becomes a no-op.
  *
  * @param line NUL-terminated command line (no trailing CR/LF).
  * @return None.

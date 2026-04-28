@@ -102,7 +102,7 @@ static int test_copy_writes_destination_byte_for_byte(void) {
                 "mkdtemp dst");
 
     char src_path[512];
-    const size_t total = 200u * 1024u; /* 200 KiB → 4 chunks of 64 KiB
+    const size_t total = 200u * 1024u; /* 200 KiB -> 4 chunks of 64 KiB
                                           plus an 8 KiB tail. */
     TEST_ASSERT(make_src_file(src_dir, total,
                               src_path, sizeof(src_path)) == 0,

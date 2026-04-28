@@ -17,7 +17,7 @@
 
 /* ── Diagnostic logging ──────────────────────────────────────────────
  * Mirrors the [sc_flash] tracer in sc_flash.c so the operator can see
- * the auth → reboot → bootsel chain end-to-end without rebuilding.
+ * the auth -> reboot -> bootsel chain end-to-end without rebuilding.
  *
  * - `transport_log` is always-on, used for one-time/high-signal events:
  *   open(), close(), cache hit/miss/invalidate, retry-loop attempts.
@@ -305,10 +305,10 @@ static bool read_framed_response_with_deadline(
                                                "%s", inner);
                                 return true;
                             }
-                            /* Stale/late reply for a previous request →
+                            /* Stale/late reply for a previous request ->
                              * keep waiting. */
                         }
-                        /* Bad CRC → drop, keep waiting. */
+                        /* Bad CRC -> drop, keep waiting. */
                     }
                 }
 

@@ -14,7 +14,7 @@ static const char *const k_locale_codes[SC_LOCALE_COUNT] = {
 /* ── String tables (designated initializers - missing slots are NULL) ── */
 
 static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
-    [SC_I18N_APP_TITLE]            = "Serial Configurator",
+    [SC_I18N_APP_TITLE]            = "Fiesta Serial Configurator",
     [SC_I18N_TAB_MODULES]          = "Modules",
     [SC_I18N_TAB_FLASH]            = "Flash",
     [SC_I18N_FRAME_MODULES]        = "Modules",
@@ -142,7 +142,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
  * to know which locale is active.
  */
 static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
-    [SC_I18N_APP_TITLE]            = "Serial Configurator",
+    [SC_I18N_APP_TITLE]            = "Fiesta Serial Configurator",
     [SC_I18N_TAB_MODULES]          = "Moduły",
     [SC_I18N_TAB_FLASH]            = "Flashowanie",
     [SC_I18N_FRAME_MODULES]        = "Moduły",

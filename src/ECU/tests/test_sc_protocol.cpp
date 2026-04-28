@@ -187,7 +187,7 @@ void test_non_framed_lines_are_silently_discarded(void) {
     TEST_ASSERT_FALSE(configSessionActive());
 
     /* A line that contains the frame sentinel as a substring (e.g. inside
-     * a debug log) must also be ignored — only lines that *start* with
+     * a debug log) must also be ignored - only lines that *start* with
      * `$SC,` are accepted. */
     const char *response2 = sendRawSerialLine("[INFO] saw $SC,1,HELLO*00\n");
     TEST_ASSERT_EQUAL_STRING("", response2);

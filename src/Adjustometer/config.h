@@ -51,7 +51,7 @@
 #define ADJUSTOMETER_ZERO_HOLD_EXIT_HZ 50
 #define ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS 2U
 
-// ADC EMA filter: alpha = 1/(2^SHIFT).  SHIFT=3 → 12.5% new, 87.5% old.
+// ADC EMA filter: alpha = 1/(2^SHIFT).  SHIFT=3 -> 12.5% new, 87.5% old.
 // Fuel temp and voltage change slowly, so heavy smoothing is fine.
 #define ADC_EMA_SHIFT 3U
 

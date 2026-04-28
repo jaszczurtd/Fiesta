@@ -139,7 +139,7 @@ static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
  * @brief Save one DTC entry to key-value storage.
  * @param idx Index of the DTC entry to save.
  * @return True on success, otherwise false.
- * @note Reads s_dtcState.dtcs[idx] without holding dtcManagerMutex — call
+ * @note Reads s_dtcState.dtcs[idx] without holding dtcManagerMutex - call
  *       only from a context that already owns the mutex, or pass a snapshot
  *       via saveDtcSnapshotToKv() instead.
  */
@@ -157,7 +157,7 @@ static bool saveDtcToKv(uint8_t idx) {
  * @param flags Flag byte captured under dtcManagerMutex.
  * @param firstOccurrence Timestamp captured under dtcManagerMutex.
  * @return True on success, otherwise false.
- * @note Safe to call WITHOUT holding dtcManagerMutex — no shared reads.
+ * @note Safe to call WITHOUT holding dtcManagerMutex - no shared reads.
  */
 static bool saveDtcSnapshotToKv(uint8_t idx, uint8_t flags, uint32_t firstOccurrence) {
   bool ok = hal_kv_set_u32(dtcKvKey(idx), (uint32_t)flags);
@@ -403,7 +403,7 @@ void dtcManagerInit(void) {
 /**
  * @brief Ensure the module is initialised before a public API mutates state.
  * @return None.
- * @note Call BEFORE acquiring dtcManagerMutex — dtcManagerInit() takes the
+ * @note Call BEFORE acquiring dtcManagerMutex - dtcManagerInit() takes the
  *       mutex internally.
  */
 static void ensureInitialized(void) {
