@@ -1,4 +1,5 @@
 #include "sc_transport.h"
+#include "../config.h"
 
 #include "sc_frame.h"
 #include "sc_protocol.h"
@@ -60,20 +61,6 @@ static void transport_log_v(const char *fmt, ...)
     (void)fputc('\n', stderr);
     (void)fflush(stderr);
 }
-
-#define SC_TRANSPORT_GLOB_PATTERN "/dev/serial/by-id/usb-Jaszczur_Fiesta_*"
-/* Detection latency tuning. The primary timeout is sized for the warm-cache
- * happy path (port already open, module already booted) where round-trip
- * is dominated by USB CDC scheduling and is sub-100 ms in practice. The
- * retry timeout is sized for cold-plug / post-reset jitter where the
- * arduino-pico CDC stack can take well over a second to settle. */
-#define SC_TRANSPORT_PRIMARY_TIMEOUT_MS 400
-#define SC_TRANSPORT_RETRY_TIMEOUT_MS 1500
-#define SC_TRANSPORT_OPEN_SETTLE_USEC 100000
-#define SC_TRANSPORT_RETRY_PAUSE_USEC 150000
-#define SC_TRANSPORT_HELLO_ATTEMPTS 3
-#define SC_TRANSPORT_SC_ATTEMPTS 2
-#define SC_TRANSPORT_MAX_CACHED_PORTS 8u
 
 typedef struct ScCachedPortEntry {
     bool in_use;

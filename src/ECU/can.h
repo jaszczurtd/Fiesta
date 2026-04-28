@@ -2,7 +2,7 @@
 #define T_CAN
 
 #include <tools_c.h>
-#include <canDefinitions.h>
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include "sensors.h"
 #include "config.h"

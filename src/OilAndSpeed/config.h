@@ -1,10 +1,7 @@
-#ifndef T_CONFIG
-#define T_CONFIG
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#define MODULE_NAME "OIL&SPD"
 
 /* Fiesta-project firmware identity for the configurator HELLO response. */
 #ifndef FW_VERSION
@@ -62,5 +59,3 @@ bool configSessionActive(void);
  * @return Session id, or 0 when inactive.
  */
 uint32_t configSessionId(void);
-
-#endif

@@ -12,6 +12,7 @@
 
 #include "sc_auth.h"
 #include "sc_core.h"
+#include "sc_fiesta_module_tokens.h"
 #include "sc_transport.h"
 
 #include <stdio.h>
@@ -66,7 +67,7 @@ static void mock_state_init(MockState *st)
     /* Default HELLO carries the canonical UID + session id used by the
      * tests below. */
     snprintf(st->hello_reply, sizeof(st->hello_reply),
-             "OK HELLO module=ECU proto=1 session=%lu fw=1.0.0 build=dev "
+             "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=%lu fw=1.0.0 build=dev "
              "uid=E661A4D1234567AB",
              (unsigned long)k_session_id);
     /* Default AUTH_BEGIN reply: hex of k_challenge. */
@@ -195,7 +196,7 @@ static int test_authenticate_rejects_missing_uid_in_hello(void)
     MockState st;
     mock_state_init(&st);
     snprintf(st.hello_reply, sizeof(st.hello_reply),
-             "OK HELLO module=ECU proto=1 session=42 fw=1.0.0 build=dev");
+             "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=1.0.0 build=dev");
     ScTransport t = make_transport(&st);
 
     char err[512] = {0};
@@ -210,7 +211,7 @@ static int test_authenticate_rejects_bad_uid_length(void)
     MockState st;
     mock_state_init(&st);
     snprintf(st.hello_reply, sizeof(st.hello_reply),
-             "OK HELLO module=ECU proto=1 session=42 fw=1.0.0 build=dev "
+             "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=1.0.0 build=dev "
              "uid=DEADBEEF");
     ScTransport t = make_transport(&st);
 

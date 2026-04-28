@@ -7,6 +7,7 @@
  */
 
 #include "sc_crypto.h"
+#include "sc_fiesta_module_tokens.h"
 #include "sc_manifest.h"
 
 #include <stdio.h>
@@ -38,7 +39,7 @@ static const char *k_abc_sha256_hex =
 
 static const char *k_minimal_manifest_json =
     "{"
-    "  \"module_name\": \"ECU\","
+    "  \"module_name\": \"" SC_MODULE_TOKEN_ECU "\","
     "  \"fw_version\": \"0.1.0\","
     "  \"build_id\":   \"2026-04-26 12:00:00\","
     "  \"sha256\":     \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
@@ -51,7 +52,7 @@ static int test_parse_minimal_valid_manifest(void)
                                                       strlen(k_minimal_manifest_json),
                                                       &m);
     TEST_ASSERT_EQ(SC_MANIFEST_OK, st, "parse minimal manifest");
-    TEST_ASSERT(strcmp(m.module_name, "ECU") == 0, "module_name");
+    TEST_ASSERT(strcmp(m.module_name, SC_MODULE_TOKEN_ECU) == 0, "module_name");
     TEST_ASSERT(strcmp(m.fw_version, "0.1.0") == 0, "fw_version");
     TEST_ASSERT(strcmp(m.build_id, "2026-04-26 12:00:00") == 0, "build_id");
     TEST_ASSERT(strcmp(m.sha256_hex, k_abc_sha256_hex) == 0, "sha256_hex");
@@ -63,7 +64,7 @@ static int test_parse_with_signature(void)
 {
     const char *json =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"2026-04-26 12:00:00\","
         "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\","
@@ -96,7 +97,7 @@ static int test_missing_required_field_is_rejected(void)
 {
     const char *json =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
         "}";
@@ -120,8 +121,8 @@ static int test_duplicate_field_is_rejected(void)
 {
     const char *json =
         "{"
-        "\"module_name\":\"ECU\","
-        "\"module_name\":\"Clocks\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_CLOCKS "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"x\","
         "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
@@ -137,7 +138,7 @@ static int test_unknown_field_is_rejected(void)
 {
     const char *json =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"x\","
         "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\","
@@ -155,7 +156,7 @@ static int test_bad_sha256_format_is_rejected(void)
     /* Wrong length (63 chars). */
     const char *json_short =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"x\","
         "\"sha256\":\"a7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
@@ -168,7 +169,7 @@ static int test_bad_sha256_format_is_rejected(void)
     /* Uppercase hex must be rejected - manifest contract is lowercase. */
     const char *json_upper =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"x\","
         "\"sha256\":\"BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD\""
@@ -180,7 +181,7 @@ static int test_bad_sha256_format_is_rejected(void)
     /* Non-hex char. */
     const char *json_nonhex =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":\"0.1.0\","
         "\"build_id\":\"x\","
         "\"sha256\":\"za7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
@@ -240,7 +241,7 @@ static int test_unsupported_json_features_are_rejected(void)
     /* Numeric value where string is expected. */
     const char *json_num =
         "{"
-        "\"module_name\":\"ECU\","
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
         "\"fw_version\":1,"
         "\"build_id\":\"x\","
         "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
@@ -272,10 +273,10 @@ static int test_module_match_check(void)
                                      strlen(k_minimal_manifest_json), &m),
                    "parse for module match");
     TEST_ASSERT_EQ(SC_MANIFEST_OK,
-                   sc_manifest_check_module_match(&m, "ECU"),
+                   sc_manifest_check_module_match(&m, SC_MODULE_TOKEN_ECU),
                    "match exact");
     TEST_ASSERT_EQ(SC_MANIFEST_ERR_MODULE_MISMATCH,
-                   sc_manifest_check_module_match(&m, "Clocks"),
+                   sc_manifest_check_module_match(&m, SC_MODULE_TOKEN_CLOCKS),
                    "wrong module rejected");
     TEST_ASSERT_EQ(SC_MANIFEST_ERR_MODULE_MISMATCH,
                    sc_manifest_check_module_match(&m, "ecu"),
@@ -311,7 +312,7 @@ static int test_load_file_round_trip(void)
     (void)remove(path);
 
     TEST_ASSERT_EQ(SC_MANIFEST_OK, st, "load_file");
-    TEST_ASSERT(strcmp(m.module_name, "ECU") == 0, "loaded module_name");
+    TEST_ASSERT(strcmp(m.module_name, SC_MODULE_TOKEN_ECU) == 0, "loaded module_name");
     return 0;
 }
 

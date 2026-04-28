@@ -1,6 +1,7 @@
 #include "unity.h"
 
 #include "config.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "hal/hal_serial_frame.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -110,7 +111,7 @@ void test_sc_get_meta_returns_sc_ok_with_identity_fields(void) {
 
     const char *response = sendSerialLine("SC_GET_META\n");
     TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK META"));
-    TEST_ASSERT_NOT_NULL(strstr(response, "module=ECU"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_ECU));
     TEST_ASSERT_NOT_NULL(strstr(response, "proto=1"));
     TEST_ASSERT_NOT_NULL(strstr(response, "session="));
     TEST_ASSERT_NOT_NULL(strstr(response, "fw="));
@@ -206,7 +207,7 @@ void test_framed_hello_responds_with_same_seq_and_valid_crc(void) {
     TEST_ASSERT_NOT_NULL(response);
     TEST_ASSERT_EQUAL_STRING_LEN("$SC,7,", response, 6);
     TEST_ASSERT_NOT_NULL(strstr(response, "OK HELLO"));
-    TEST_ASSERT_NOT_NULL(strstr(response, "module=ECU"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_ECU));
 
     /* Validate CRC of the response over the bytes between '$' and '*'. */
     const char *star = strrchr(response, '*');
@@ -246,7 +247,7 @@ void test_framed_command_after_framed_hello_preserves_seq(void) {
     TEST_ASSERT_NOT_NULL(meta_response);
     TEST_ASSERT_EQUAL_STRING_LEN("$SC,101,", meta_response, 8);
     TEST_ASSERT_NOT_NULL(strstr(meta_response, "SC_OK META"));
-    TEST_ASSERT_NOT_NULL(strstr(meta_response, "module=ECU"));
+    TEST_ASSERT_NOT_NULL(strstr(meta_response, "module=" SC_MODULE_TOKEN_ECU));
 }
 
 int main(void) {

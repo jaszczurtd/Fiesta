@@ -1,5 +1,6 @@
 
 #include "start.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 void updateValsForDebug(void);
 void readThermocouples(void);
@@ -42,7 +43,7 @@ void initialization(void) {
   bool result = false;
 
   debugInit();
-  setDebugPrefixWithColon(MODULE_NAME);
+  setDebugPrefixWithColon(SC_MODULE_TOKEN_OIL_AND_SPEED);
 
   setupOnboardLed();
   initBasicPIO();

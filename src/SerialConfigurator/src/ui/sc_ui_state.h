@@ -26,8 +26,8 @@
 extern "C" {
 #endif
 
-#define UI_DETECTION_LOG_MAX 16384u
-#define UI_AUTO_REFRESH_PARAM_PROBE 0
+#define UI_DETECTION_LOG_MAX SC_RUNTIME_DETECTION_LOG_MAX
+#define UI_AUTO_REFRESH_PARAM_PROBE SC_UI_AUTO_REFRESH_PARAM_PROBE
 
 typedef struct AppState {
     ScCore core;
@@ -50,19 +50,19 @@ typedef struct AppState {
     bool detection_in_progress;
     bool selection_valid;
     size_t selected_module_index;
-    char placeholder_status[160];
-    char module_meta_status[SC_MODULE_COUNT][160];
-    char module_catalog_status[SC_MODULE_COUNT][160];
-    char module_values_status[SC_MODULE_COUNT][160];
-    char module_param_probe_status[SC_MODULE_COUNT][160];
+    char placeholder_status[SC_UI_STATUS_TEXT_MAX];
+    char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
 } AppState;
 
 typedef struct DetectionResult {
     ScCore core;
-    char module_meta_status[SC_MODULE_COUNT][160];
-    char module_catalog_status[SC_MODULE_COUNT][160];
-    char module_values_status[SC_MODULE_COUNT][160];
-    char module_param_probe_status[SC_MODULE_COUNT][160];
+    char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+    char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
     char *log_text;
 } DetectionResult;
 

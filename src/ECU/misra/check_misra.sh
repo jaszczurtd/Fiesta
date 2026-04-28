@@ -46,7 +46,6 @@ quiet=0
 fail_on_findings=0
 temp_addon_config=""
 hal_src="$project_root/../../../libraries/JaszczurHAL/src"
-can_defs_dir="$project_root/../../../libraries/canDefinitions"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -146,9 +145,6 @@ if [[ $quiet -eq 1 ]]; then
 fi
 
 include_args=(-I.)
-if [[ -d "$can_defs_dir" ]]; then
-    include_args+=(-I"$can_defs_dir")
-fi
 if [[ -d "$hal_src" ]]; then
     include_args+=(-I"$hal_src" -I"$hal_src/utils")
 fi

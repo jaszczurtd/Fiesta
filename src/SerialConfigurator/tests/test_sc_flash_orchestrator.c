@@ -28,6 +28,7 @@
 #include "sc_auth.h"
 #include "sc_core.h"
 #include "sc_crypto.h"
+#include "sc_fiesta_module_tokens.h"
 #include "sc_flash.h"
 #include "sc_manifest.h"
 #include "sc_transport.h"
@@ -84,11 +85,11 @@ static void challenge_hex(char *out, size_t out_size) {
 static void mock_state_init(MockState *st, const char *fw_version_post) {
     memset(st, 0, sizeof(*st));
     snprintf(st->hello_pre_reply, sizeof(st->hello_pre_reply),
-             "OK HELLO module=ECU proto=1 session=%lu fw=1.0.0 build=dev "
+             "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=%lu fw=1.0.0 build=dev "
              "uid=%s",
              (unsigned long)k_session_id_pre, k_uid_hex);
     snprintf(st->hello_post_reply, sizeof(st->hello_post_reply),
-             "OK HELLO module=ECU proto=1 session=%lu fw=%s build=dev "
+             "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=%lu fw=%s build=dev "
              "uid=%s",
              (unsigned long)k_session_id_post,
              (fw_version_post != NULL) ? fw_version_post : "1.0.0",
@@ -274,7 +275,7 @@ static int fs_fixture_setup(FsFixture *fx,
 
     if (make_temp_dir("byid", fx->by_id_parent, sizeof(fx->by_id_parent)) != 0) return -1;
     (void)snprintf(fx->by_id_entry, sizeof(fx->by_id_entry),
-                   "%s/usb-Jaszczur_Fiesta_ECU_%s-if00",
+                   "%s/usb-Jaszczur_Fiesta_" SC_MODULE_TOKEN_ECU "_%s-if00",
                    fx->by_id_parent, k_uid_hex);
     if (write_file(fx->by_id_entry, "", 0u) != 0) return -1;
 
@@ -313,7 +314,7 @@ static ScFlashOptions tight_options(const FsFixture *fx) {
 
 static int test_happy_path_with_manifest(void) {
     FsFixture fx;
-    TEST_ASSERT(fs_fixture_setup(&fx, "ECU", "1.0.0", NULL) == 0,
+    TEST_ASSERT(fs_fixture_setup(&fx, SC_MODULE_TOKEN_ECU, "1.0.0", NULL) == 0,
                 "fs_fixture_setup");
     MockState st;
     mock_state_init(&st, "1.0.0");
@@ -383,7 +384,7 @@ static int test_format_check_rejects_corrupt_uf2(void) {
 static int test_manifest_module_mismatch(void) {
     FsFixture fx;
     /* Manifest declares Clocks but module_index=0 (ECU). */
-    TEST_ASSERT(fs_fixture_setup(&fx, "Clocks", "1.0.0", NULL) == 0,
+    TEST_ASSERT(fs_fixture_setup(&fx, SC_MODULE_TOKEN_CLOCKS, "1.0.0", NULL) == 0,
                 "fixture");
     MockState st;
     mock_state_init(&st, "1.0.0");
@@ -408,7 +409,7 @@ static int test_manifest_artifact_mismatch(void) {
     /* Manifest declares an obviously-wrong sha256. */
     static const char *const k_bad_sha =
         "0000000000000000000000000000000000000000000000000000000000000000";
-    TEST_ASSERT(fs_fixture_setup(&fx, "ECU", "1.0.0", k_bad_sha) == 0,
+    TEST_ASSERT(fs_fixture_setup(&fx, SC_MODULE_TOKEN_ECU, "1.0.0", k_bad_sha) == 0,
                 "fixture");
     MockState st;
     mock_state_init(&st, "1.0.0");
@@ -510,7 +511,7 @@ static int test_reenum_timeout_when_byid_entry_missing(void) {
 
 static int test_post_flash_fw_mismatch_with_manifest(void) {
     FsFixture fx;
-    TEST_ASSERT(fs_fixture_setup(&fx, "ECU", "1.0.0", NULL) == 0, "fixture");
+    TEST_ASSERT(fs_fixture_setup(&fx, SC_MODULE_TOKEN_ECU, "1.0.0", NULL) == 0, "fixture");
     MockState st;
     /* Post-flash HELLO claims a different fw_version than the manifest. */
     mock_state_init(&st, "9.9.9");

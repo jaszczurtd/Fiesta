@@ -11,6 +11,7 @@
 #include "sc_manifest.h"
 #include "sc_modules_view.h"   /* refresh_lamps -> calls our refresh_sensitivity */
 #include "sc_progressbar.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 /*
  * Phase 6.2: per-module Flash sections.
@@ -89,14 +90,30 @@ typedef struct {
 } PhaseFraction;
 
 static const PhaseFraction k_phase_fractions[] = {
-    { SC_FLASH_PHASE_FORMAT_CHECK,          0.00,   200.0 },
-    { SC_FLASH_PHASE_MANIFEST_VERIFY,       0.05,   300.0 },
-    { SC_FLASH_PHASE_AUTHENTICATE,          0.10,   500.0 },
-    { SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,  0.20,   400.0 },
-    { SC_FLASH_PHASE_WAIT_BOOTSEL,          0.30,  4000.0 },
-    { SC_FLASH_PHASE_COPY,                  0.55,  3000.0 },
-    { SC_FLASH_PHASE_WAIT_REENUM,           0.80,  3000.0 },
-    { SC_FLASH_PHASE_POST_FLASH_HELLO,      0.95,   500.0 },
+    { SC_FLASH_PHASE_FORMAT_CHECK,
+      SC_UI_FLASH_PHASE_FORMAT_CHECK_START,
+      SC_UI_FLASH_PHASE_FORMAT_CHECK_EXPECTED_MS },
+    { SC_FLASH_PHASE_MANIFEST_VERIFY,
+      SC_UI_FLASH_PHASE_MANIFEST_VERIFY_START,
+      SC_UI_FLASH_PHASE_MANIFEST_VERIFY_EXPECTED_MS },
+    { SC_FLASH_PHASE_AUTHENTICATE,
+      SC_UI_FLASH_PHASE_AUTHENTICATE_START,
+      SC_UI_FLASH_PHASE_AUTHENTICATE_EXPECTED_MS },
+    { SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,
+      SC_UI_FLASH_PHASE_REBOOT_TO_BOOTLOADER_START,
+      SC_UI_FLASH_PHASE_REBOOT_TO_BOOTLOADER_EXPECTED_MS },
+    { SC_FLASH_PHASE_WAIT_BOOTSEL,
+      SC_UI_FLASH_PHASE_WAIT_BOOTSEL_START,
+      SC_UI_FLASH_PHASE_WAIT_BOOTSEL_EXPECTED_MS },
+    { SC_FLASH_PHASE_COPY,
+      SC_UI_FLASH_PHASE_COPY_START,
+      SC_UI_FLASH_PHASE_COPY_EXPECTED_MS },
+    { SC_FLASH_PHASE_WAIT_REENUM,
+      SC_UI_FLASH_PHASE_WAIT_REENUM_START,
+      SC_UI_FLASH_PHASE_WAIT_REENUM_EXPECTED_MS },
+    { SC_FLASH_PHASE_POST_FLASH_HELLO,
+      SC_UI_FLASH_PHASE_POST_FLASH_HELLO_START,
+      SC_UI_FLASH_PHASE_POST_FLASH_HELLO_EXPECTED_MS },
 };
 static const size_t k_phase_fractions_count =
     sizeof(k_phase_fractions) / sizeof(k_phase_fractions[0]);
@@ -253,7 +270,7 @@ static gboolean on_creep_tick(gpointer user_data)
      * the orchestrator has not yet finished. */
     double t = (expected_ms > 0.0) ? (elapsed_ms / expected_ms) : 1.0;
     if (t > 1.0) t = 1.0;
-    const double cap = phase_end - 0.005;
+    const double cap = phase_end - SC_UI_FLASH_CREEP_PHASE_EPSILON;
     double from = s->creep_from_fraction;
     if (from < 0.0) from = 0.0;
     if (from > cap) from = cap;
@@ -281,7 +298,7 @@ static void start_phase_creep(ScFlashSection *s, ScFlashPhase phase,
     }
     /* 100 ms tick gives ~10 fps, enough for smooth motion without
      * burning CPU on idle redraws. */
-    s->creep_timer_id = g_timeout_add(100u, on_creep_tick, s);
+    s->creep_timer_id = g_timeout_add(SC_UI_FLASH_CREEP_TICK_MS, on_creep_tick, s);
 }
 
 static void stop_phase_creep(ScFlashSection *s)
@@ -395,6 +412,97 @@ typedef struct DialogCtx {
     bool is_manifest;       /* true: manifest picker; false: UF2 */
 } DialogCtx;
 
+static GFile *dialog_initial_folder_from_path(const char *path)
+{
+    if (path == NULL || path[0] == '\0') {
+        return NULL;
+    }
+
+    char *dir = g_path_get_dirname(path);
+    if (dir == NULL) {
+        return NULL;
+    }
+
+    GFile *folder = NULL;
+    if (g_file_test(dir, G_FILE_TEST_IS_DIR)) {
+        folder = g_file_new_for_path(dir);
+    }
+    g_free(dir);
+    return folder;
+}
+
+static const char *module_source_dir_name(const char *module_display_name)
+{
+    if (module_display_name == NULL) {
+        return NULL;
+    }
+    if (strcmp(module_display_name, SC_MODULE_ECU) == 0) {
+        return SC_MODULE_ECU;
+    }
+    if (strcmp(module_display_name, SC_MODULE_CLOCKS) == 0) {
+        return SC_MODULE_CLOCKS;
+    }
+    if (strcmp(module_display_name, SC_MODULE_OIL_AND_SPEED) == 0) {
+        return SC_MODULE_OIL_AND_SPEED;
+    }
+    return NULL;
+}
+
+static GFile *dialog_initial_folder_from_module_build(const ScFlashSection *section)
+{
+    if (section == NULL) {
+        return NULL;
+    }
+
+    const char *module_dir = module_source_dir_name(section->module_name);
+    if (module_dir == NULL) {
+        return NULL;
+    }
+
+    static const char *const k_roots[] = {
+        ".", "..", "../..", "../../..", "../../../..",
+    };
+    const size_t root_count = sizeof(k_roots) / sizeof(k_roots[0]);
+
+    for (size_t i = 0u; i < root_count; ++i) {
+        char *candidate = g_build_filename(
+            k_roots[i], module_dir, ".build", NULL);
+        if (candidate != NULL && g_file_test(candidate, G_FILE_TEST_IS_DIR)) {
+            GFile *folder = g_file_new_for_path(candidate);
+            g_free(candidate);
+            return folder;
+        }
+        g_free(candidate);
+    }
+    return NULL;
+}
+
+static GFile *dialog_initial_folder_for_picker(const ScFlashSection *section,
+                                               bool is_manifest)
+{
+    if (section == NULL || section->state == NULL) {
+        return NULL;
+    }
+
+    const char *primary = is_manifest
+        ? sc_flash_paths_get_manifest(&section->state->flash_paths, section->module_name)
+        : sc_flash_paths_get_uf2(&section->state->flash_paths, section->module_name);
+    GFile *folder = dialog_initial_folder_from_path(primary);
+    if (folder != NULL) {
+        return folder;
+    }
+
+    const char *secondary = is_manifest
+        ? sc_flash_paths_get_uf2(&section->state->flash_paths, section->module_name)
+        : sc_flash_paths_get_manifest(&section->state->flash_paths, section->module_name);
+    folder = dialog_initial_folder_from_path(secondary);
+    if (folder != NULL) {
+        return folder;
+    }
+
+    return dialog_initial_folder_from_module_build(section);
+}
+
 #if GTK_CHECK_VERSION(4, 10, 0)
 static void on_file_dialog_open_finish(GObject *source,
                                        GAsyncResult *result,
@@ -456,6 +564,12 @@ static void open_file_dialog(ScFlashSection *section, bool is_manifest)
     gtk_file_dialog_set_filters(dialog, G_LIST_MODEL(filters));
     g_object_unref(filters);
     g_object_unref(filter);
+
+    GFile *initial_folder = dialog_initial_folder_for_picker(section, is_manifest);
+    if (initial_folder != NULL) {
+        gtk_file_dialog_set_initial_folder(dialog, initial_folder);
+        g_object_unref(initial_folder);
+    }
 
     GtkRoot *root = gtk_widget_get_root(section->frame);
     GtkWindow *parent = GTK_IS_WINDOW(root) ? GTK_WINDOW(root) : NULL;
@@ -584,8 +698,8 @@ static gboolean flash_idle_apply(gpointer user_data)
                 phase_start + (phase_end - phase_start) * in_phase;
             /* Smooth large jumps (notably COPY entry after quick early
              * phases) so the operator sees a continuous ramp. */
-            if (target > current + 0.05) {
-                frac = current + 0.05;
+            if (target > current + SC_UI_FLASH_COPY_MAX_STEP) {
+                frac = current + SC_UI_FLASH_COPY_MAX_STEP;
             } else {
                 frac = target;
             }
@@ -603,8 +717,8 @@ static gboolean flash_idle_apply(gpointer user_data)
             const double target = phase_start_fraction(ev->phase);
             /* Never jump abruptly at phase boundaries. Advance only a
              * small step immediately; the creep ticker fills the rest. */
-            if (target > current + 0.02) {
-                frac = current + 0.02;
+            if (target > current + SC_UI_FLASH_PHASE_MAX_STEP) {
+                frac = current + SC_UI_FLASH_PHASE_MAX_STEP;
             } else if (target < current) {
                 frac = current;
             } else {
@@ -912,7 +1026,8 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
     gtk_widget_set_hexpand(s->progress_area, TRUE);
     gtk_widget_set_vexpand(s->progress_area, FALSE);
     gtk_widget_set_valign(s->progress_area, GTK_ALIGN_CENTER);
-    gtk_widget_set_size_request(s->progress_area, -1, 12);
+    gtk_widget_set_size_request(s->progress_area, -1,
+                                SC_UI_FLASH_PROGRESS_HEIGHT_PX);
     gtk_widget_set_visible(s->progress_area, FALSE);
     gtk_box_append(GTK_BOX(action_row), s->progress_area);
 
@@ -920,11 +1035,12 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
     gtk_widget_set_hexpand(s->progress_slot, TRUE);
     gtk_widget_set_vexpand(s->progress_slot, FALSE);
     gtk_widget_set_valign(s->progress_slot, GTK_ALIGN_CENTER);
-    gtk_widget_set_size_request(s->progress_slot, -1, 12);
+    gtk_widget_set_size_request(s->progress_slot, -1,
+                                SC_UI_FLASH_PROGRESS_HEIGHT_PX);
     gtk_widget_set_visible(s->progress_slot, FALSE);
     gtk_box_append(GTK_BOX(s->progress_area), s->progress_slot);
 
-    s->progress_bar = sc_progressbar_new(12);
+    s->progress_bar = sc_progressbar_new(SC_UI_FLASH_PROGRESS_HEIGHT_PX);
     gtk_widget_set_halign(s->progress_bar, GTK_ALIGN_FILL);
     gtk_widget_set_valign(s->progress_bar, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand(s->progress_bar, TRUE);
@@ -935,7 +1051,8 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
     gtk_label_set_yalign(GTK_LABEL(s->progress_result_label), 0.5f);
     gtk_widget_set_halign(s->progress_result_label, GTK_ALIGN_FILL);
     gtk_widget_set_valign(s->progress_result_label, GTK_ALIGN_CENTER);
-    gtk_widget_set_size_request(s->progress_result_label, -1, 12);
+    gtk_widget_set_size_request(s->progress_result_label, -1,
+                                SC_UI_FLASH_PROGRESS_HEIGHT_PX);
     gtk_widget_set_hexpand(s->progress_result_label, TRUE);
     gtk_widget_set_margin_start(s->progress_result_label, 4);
     gtk_box_append(GTK_BOX(s->progress_slot), s->progress_result_label);

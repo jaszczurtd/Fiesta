@@ -1,4 +1,5 @@
 #include "sc_progressbar.h"
+#include "../config.h"
 
 typedef struct {
     double fraction; /* always clamped to [0, 1] */
@@ -136,7 +137,7 @@ static void draw_progress(GtkDrawingArea *area, cairo_t *cr, int width,
 GtkWidget *sc_progressbar_new(int height_px)
 {
     if (height_px <= 0) {
-        height_px = 18;
+        height_px = SC_UI_PROGRESSBAR_DEFAULT_HEIGHT_PX;
     }
 
     GtkWidget *bar = gtk_drawing_area_new();

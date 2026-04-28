@@ -9,7 +9,7 @@ enable_testing()
 # ── Paths ──────────────────────────────────────────────────────────────────────
 set(HAL_SRC   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL/src)
 set(ECU_SRC   ${CMAKE_CURRENT_SOURCE_DIR})
-set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/canDefinitions)
+set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 set(SCDEFS    ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 set(HAL_STUBS ${HAL_SRC}/arduino_host_stubs)
 set(ECU_STUBS ${ECU_SRC}/tests/stubs)

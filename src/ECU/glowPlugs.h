@@ -4,7 +4,7 @@
 #include <tools_c.h>
 
 #include "config.h"
-#include "canDefinitions.h"
+#include "../common/canDefinitions/canDefinitions.h"
 #include "sensors.h"
 #include "tests.h"
 

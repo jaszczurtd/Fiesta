@@ -43,7 +43,9 @@ static void on_activate(GtkApplication *app, gpointer user_data)
 
     GtkWidget *window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), sc_i18n_string_get(SC_I18N_APP_TITLE));
-    gtk_window_set_default_size(GTK_WINDOW(window), 1040, 680);
+    gtk_window_set_default_size(GTK_WINDOW(window),
+                                SC_APP_WINDOW_DEFAULT_WIDTH,
+                                SC_APP_WINDOW_DEFAULT_HEIGHT);
 
     /* Phase 6.1: notebook with two pages - legacy modules view first,
      * empty flash tab second. Subsequent slices flesh out page 2. */

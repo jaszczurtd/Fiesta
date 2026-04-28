@@ -1,4 +1,5 @@
 #include "sc_flash.h"
+#include "../config.h"
 
 #include <errno.h>
 #include <stdarg.h>
@@ -822,7 +823,6 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
 #if SC_FLASH_HAVE_POSIX_WATCHER
     /* Cap parents at a small static limit; the production caller passes
      * 2 (`/media/$USER`, `/run/media/$USER`) and tests pass 1 or 2. */
-#  define SC_FLASH_BOOTSEL_PARENTS_MAX 4u
     const size_t scan_count = (parent_count > SC_FLASH_BOOTSEL_PARENTS_MAX)
                                   ? SC_FLASH_BOOTSEL_PARENTS_MAX : parent_count;
     parent_obs_t obs[SC_FLASH_BOOTSEL_PARENTS_MAX];
@@ -842,7 +842,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
 
     const uint64_t start_ms = monotonic_ms();
     const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
-    uint64_t next_heartbeat_ms = start_ms + 5000u;
+    uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
     uint64_t iters = 0u;
 
     for (;;) {
@@ -899,7 +899,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
             flash_log("watch_for_bootsel: still polling, elapsed=%llu ms iter=%llu",
                       (unsigned long long)(now_ms - start_ms),
                       (unsigned long long)iters);
-            next_heartbeat_ms += 5000u;
+            next_heartbeat_ms += SC_FLASH_BOOTSEL_HEARTBEAT_MS;
         }
         if (now_ms >= deadline_ms) {
             /* On timeout dump everything we observed so the operator can
@@ -923,9 +923,10 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
             return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
         }
         const uint64_t remaining = deadline_ms - now_ms;
-        sleep_ms((uint32_t)((remaining < 100u) ? remaining : 100u));
+        sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                ? remaining
+                                : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
     }
-#  undef SC_FLASH_BOOTSEL_PARENTS_MAX
 #else
     (void)timeout_ms;
     (void)out_path;
@@ -964,8 +965,8 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
 
     char path_a[512];
     char path_b[512];
-    (void)snprintf(path_a, sizeof(path_a), "/media/%s", user);
-    (void)snprintf(path_b, sizeof(path_b), "/run/media/%s", user);
+    (void)snprintf(path_a, sizeof(path_a), SC_FLASH_BOOTSEL_PARENT_A_FMT, user);
+    (void)snprintf(path_b, sizeof(path_b), SC_FLASH_BOOTSEL_PARENT_B_FMT, user);
     const char *parents[2] = { path_a, path_b };
     const size_t scan_count = 2u;
 
@@ -994,7 +995,6 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
      * mounts under /media/root within ~2 s of BOOTSEL appearing) but
      * long enough that we don't fire before udev finishes attaching
      * the partition. */
-#  define SC_FLASH_AUTOMOUNT_GRACE_MS 500u
     parent_obs_t obs[2];
     bool   prev_existed[2] = { false, false };
     size_t prev_entries[2] = { 0u, 0u };
@@ -1020,7 +1020,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
 
     const uint64_t start_ms = monotonic_ms();
     const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
-    uint64_t next_heartbeat_ms = start_ms + 5000u;
+    uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
     uint64_t iters = 0u;
 
     for (;;) {
@@ -1211,7 +1211,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                       block_dev_seen ? " [block_dev_visible]" : "",
                       automount_succeeded ? " [automount_ok]"
                         : (automount_attempted ? " [automount_failed]" : ""));
-            next_heartbeat_ms += 5000u;
+            next_heartbeat_ms += SC_FLASH_BOOTSEL_HEARTBEAT_MS;
         }
         if (now_ms >= deadline_ms) {
             char summary[1024];
@@ -1254,9 +1254,10 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
             return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
         }
         const uint64_t remaining = deadline_ms - now_ms;
-        sleep_ms((uint32_t)((remaining < 100u) ? remaining : 100u));
+        sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                ? remaining
+                                : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
     }
-#  undef SC_FLASH_AUTOMOUNT_GRACE_MS
 #else
     (void)timeout_ms;
     (void)out_path;
@@ -1268,9 +1269,6 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
 }
 
 /* ── Phase 6.4 - UF2 copy with progress + re-enumeration waiter ─── */
-
-#define SC_FLASH_COPY_CHUNK_BYTES (64u * 1024u)
-#define SC_FLASH_COPY_DEST_FILENAME "firmware.uf2"
 
 sc_flash_status_t sc_flash_copy_uf2(const char *src_uf2_path,
                                     const char *drive_path,
@@ -1426,7 +1424,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
     bool   logged_open_err  = false;
     const uint64_t start_ms = monotonic_ms();
     const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
-    uint64_t next_heartbeat_ms = start_ms + 5000u;
+    uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
     uint64_t iters = 0u;
 
     for (;;) {
@@ -1508,7 +1506,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
             flash_log("wait_reenumeration: still polling, elapsed=%llu ms iter=%llu",
                       (unsigned long long)(now_ms - start_ms),
                       (unsigned long long)iters);
-            next_heartbeat_ms += 5000u;
+            next_heartbeat_ms += SC_FLASH_BOOTSEL_HEARTBEAT_MS;
         }
         if (now_ms >= deadline_ms) {
             char summary[768];
@@ -1522,7 +1520,9 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
             return SC_FLASH_ERR_REENUM_TIMEOUT;
         }
         const uint64_t remaining = deadline_ms - now_ms;
-        sleep_ms((uint32_t)((remaining < 100u) ? remaining : 100u));
+        sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                ? remaining
+                                : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
     }
 #else
     (void)timeout_ms;
@@ -1542,7 +1542,7 @@ sc_flash_status_t sc_flash_wait_reenumeration(const char *uid_hex,
                                               size_t error_size)
 {
 #if SC_FLASH_HAVE_POSIX_WATCHER
-    return sc_flash__wait_reenumeration_in("/dev/serial/by-id",
+    return sc_flash__wait_reenumeration_in(SC_FLASH_REENUM_PARENT_DIR,
                                            uid_hex, timeout_ms,
                                            out_path, out_path_size,
                                            error_buf, error_size);

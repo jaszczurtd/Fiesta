@@ -3,7 +3,7 @@
 #define C_LOGIC
 
 #include <tools.h>
-#include <canDefinitions.h>
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include <hal/hal.h>
 #include <hal/hal_display.h>

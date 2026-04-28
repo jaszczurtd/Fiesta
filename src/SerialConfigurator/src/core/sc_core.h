@@ -7,12 +7,13 @@
 
 #include "sc_protocol.h"
 #include "sc_transport.h"
+#include "../config.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define SC_MODULE_COUNT 3u
 #define SC_PORT_PATH_MAX SC_TRANSPORT_PATH_MAX
 #define SC_HELLO_RESPONSE_MAX SC_TRANSPORT_RESPONSE_MAX
 #define SC_IDENTITY_FIELD_MAX 64u
@@ -302,11 +303,11 @@ typedef struct ScFlashOptions {
     const char *bootsel_parents[2];
     /** Override for `/dev/serial/by-id/`. NULL -> production default. */
     const char *by_id_parent;
-    /** 0 -> 60000. */
+    /** 0 -> SC_FLASH_DEFAULT_BOOTSEL_TIMEOUT_MS. */
     uint32_t bootsel_timeout_ms;
-    /** 0 -> 30000. */
+    /** 0 -> SC_FLASH_DEFAULT_REENUM_TIMEOUT_MS. */
     uint32_t reenum_timeout_ms;
-    /** 0 -> 2500. */
+    /** 0 -> SC_FLASH_DEFAULT_REENUM_GRACE_MS. */
     uint32_t grace_after_reenum_ms;
 } ScFlashOptions;
 

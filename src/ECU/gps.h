@@ -4,7 +4,7 @@
 #include <libConfig.h>
 #include <tools_c.h>
 #include <hal/hal_gps.h>
-#include "canDefinitions.h"
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include "config.h"
 #include "sensors.h"

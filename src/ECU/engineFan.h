@@ -6,7 +6,7 @@
 #include "config.h"
 #include "sensors.h"
 #include "tests.h"
-#include "canDefinitions.h"
+#include "../common/canDefinitions/canDefinitions.h"
 
 #ifdef __cplusplus
 extern "C" {

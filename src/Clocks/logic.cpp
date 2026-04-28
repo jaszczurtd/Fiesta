@@ -1,6 +1,7 @@
 
 #include "logic.h"
 #include "buzzerStrategy.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 const char *err = (char*)F("ERR");
 
@@ -67,7 +68,7 @@ void executeByWatchdog(int *values, int size) {
 void setup_a(void) {
 
   debugInit();
-  setDebugPrefixWithColon(MODULE_NAME);
+  setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCKS);
 
   deb("Setup started");
 

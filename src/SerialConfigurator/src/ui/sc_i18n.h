@@ -11,7 +11,7 @@
  *     bundling libintl or solving cross-platform path resolution.
  *   - The active locale is auto-detected on first call:
  *       1. SC_LOCALE env var (override for tests / explicit user choice),
- *       2. LANG / LC_ALL / LC_MESSAGES env vars (first two chars match
+ *       2. LC_ALL / LC_MESSAGES / LANG env vars (first two chars match
  *          against the supported-locale code list),
  *       3. fall back to English.
  *     Tests / runtime can override via @ref sc_i18n_set_locale.
