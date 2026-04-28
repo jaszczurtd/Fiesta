@@ -18,8 +18,8 @@
 #endif
 
 /* ── Diagnostic logging ──────────────────────────────────────────────
- * The flash flow has several layers (auth → reboot → watch BOOTSEL →
- * copy → wait re-enum), each of which can fail with a generic
+ * The flash flow has several layers (auth -> reboot -> watch BOOTSEL ->
+ * copy -> wait re-enum), each of which can fail with a generic
  * "timeout" / "not found" code. When that happens the operator needs
  * to know *what the watcher actually saw on disk*, not just the code,
  * so the diagnostics below print a `[sc_flash]` trace to stderr.
@@ -863,12 +863,12 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
                           strerror(obs[i].open_errno));
                 logged_open_errno[i] = true;
             }
-            /* Always-on log when the parent transitions empty→non-empty
+            /* Always-on log when the parent transitions empty->non-empty
              * (e.g. udisks2 finally mounted something) and when entries
              * appear/disappear, since either is a clear signal for the
              * operator that something on disk changed. */
             if (obs[i].exists != prev_existed[i]) {
-                flash_log("parent[%zu]='%s' state %s→%s",
+                flash_log("parent[%zu]='%s' state %s->%s",
                           i, parent_dirs[i],
                           prev_existed[i] ? "exists" : "missing",
                           obs[i].exists   ? "exists" : "missing");
@@ -881,7 +881,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
                 off = parent_obs_append(snap, sizeof(snap), off,
                                         parent_dirs[i], &obs[i]);
                 (void)off;
-                flash_log("parent[%zu] entry-count %zu→%zu%s",
+                flash_log("parent[%zu] entry-count %zu->%zu%s",
                           i, prev_entries[i], obs[i].entry_count, snap);
                 prev_entries[i] = obs[i].entry_count;
             }
@@ -1037,7 +1037,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 logged_open_errno[i] = true;
             }
             if (obs[i].exists != prev_existed[i]) {
-                flash_log("parent[%zu]='%s' state %s→%s",
+                flash_log("parent[%zu]='%s' state %s->%s",
                           i, parents[i],
                           prev_existed[i] ? "exists" : "missing",
                           obs[i].exists   ? "exists" : "missing");
@@ -1050,7 +1050,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 off = parent_obs_append(snap, sizeof(snap), off,
                                         parents[i], &obs[i]);
                 (void)off;
-                flash_log("parent[%zu] entry-count %zu→%zu%s",
+                flash_log("parent[%zu] entry-count %zu->%zu%s",
                           i, prev_entries[i], obs[i].entry_count, snap);
                 prev_entries[i] = obs[i].entry_count;
             }
@@ -1485,7 +1485,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
         }
 
         if (obs.exists != prev_existed) {
-            flash_log("parent='%s' state %s→%s",
+            flash_log("parent='%s' state %s->%s",
                       parent_dir,
                       prev_existed ? "exists" : "missing",
                       obs.exists   ? "exists" : "missing");
@@ -1498,7 +1498,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
             off = parent_obs_append(snap, sizeof(snap), off,
                                     parent_dir, &obs);
             (void)off;
-            flash_log("parent entry-count %zu→%zu%s",
+            flash_log("parent entry-count %zu->%zu%s",
                       prev_entries, obs.entry_count, snap);
             prev_entries = obs.entry_count;
         }

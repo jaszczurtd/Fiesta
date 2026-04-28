@@ -534,7 +534,7 @@ typedef struct {
     char manifest_path[512]; /* may be empty */
 } FlashCtx;
 
-/* Marshalled event from worker → main loop via g_idle_add. */
+/* Marshalled event from worker -> main loop via g_idle_add. */
 typedef enum {
     FLASH_EV_PROGRESS,
     FLASH_EV_COMPLETE,

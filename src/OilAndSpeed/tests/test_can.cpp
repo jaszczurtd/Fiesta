@@ -88,7 +88,7 @@ void test_full_ecu_update_02_frame_updates_state(void) {
 }
 
 void test_clock_brightness_frame_marks_cluster_connected(void) {
-  // CAN_ID_CLOCK_BRIGHTNESS has no payload deref in OilAndSpeed — it is
+  // CAN_ID_CLOCK_BRIGHTNESS has no payload deref in OilAndSpeed - it is
   // used purely as a heartbeat for cluster-presence detection. Any length
   // ≤ CAN_FRAME_MAX_LENGTH must flip isClusterConnected() true.
   TEST_ASSERT_FALSE(isClusterConnected());

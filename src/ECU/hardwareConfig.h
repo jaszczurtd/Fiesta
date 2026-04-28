@@ -58,7 +58,7 @@
 #define CAN1_GPIO 6
 #define CAN1_INT 14
 
-// Adjustometer (VP37 feedback module) — I2C slave on shared bus
+// Adjustometer (VP37 feedback module) - I2C slave on shared bus
 #define ADJUSTOMETER_I2C_ADDR      0x57
 #define ADJUSTOMETER_REG_PULSE_HI  0x00  // int16 BE: frequency deviation from baseline [Hz]
 #define ADJUSTOMETER_REG_PULSE_LO  0x01

@@ -300,13 +300,13 @@ typedef struct ScFlashOptions {
     /** Override for `/media/$USER` and `/run/media/$USER`. NULL entries
      *  are skipped; an all-NULL array uses the production defaults. */
     const char *bootsel_parents[2];
-    /** Override for `/dev/serial/by-id/`. NULL → production default. */
+    /** Override for `/dev/serial/by-id/`. NULL -> production default. */
     const char *by_id_parent;
-    /** 0 → 60000. */
+    /** 0 -> 60000. */
     uint32_t bootsel_timeout_ms;
-    /** 0 → 30000. */
+    /** 0 -> 30000. */
     uint32_t reenum_timeout_ms;
-    /** 0 → 2500. */
+    /** 0 -> 2500. */
     uint32_t grace_after_reenum_ms;
 } ScFlashOptions;
 

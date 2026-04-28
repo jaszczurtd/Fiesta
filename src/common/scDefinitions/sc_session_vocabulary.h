@@ -29,13 +29,13 @@ extern "C" {
  *
  * Pass to @c hal_serial_session_init_with_vocabulary() so the HAL
  * session helper speaks the Fiesta dialect. The contents currently
- * match @c hal_serial_session_vocabulary_default verbatim — Fiesta
+ * match @c hal_serial_session_vocabulary_default verbatim - Fiesta
  * tokens are byte-identical to the legacy HAL defaults today. Keeping
  * the instance here is the single-source-of-truth: if Fiesta later
  * renames a token, only this instance changes; the HAL default stays
  * a development fallback.
  *
- * The HAL helper itself does NOT include this header — values flow in
+ * The HAL helper itself does NOT include this header - values flow in
  * via the init pointer (R1.0 vocabulary decoupling).
  */
 static const hal_serial_session_vocabulary_t fiesta_default_vocabulary = {

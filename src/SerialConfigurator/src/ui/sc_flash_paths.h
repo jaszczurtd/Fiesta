@@ -23,7 +23,7 @@
  * In-memory layout is indexed by the same SC_MODULE_COUNT enum that
  * sc_core uses, so callers can do
  *     sc_flash_paths_get_uf2(&paths, status->display_name)
- * without owning a module-name → index mapping.
+ * without owning a module-name -> index mapping.
  *
  * This module is GTK-free so future tests or CLI consumers can reuse
  * the loader without dragging in the GUI dependency tree.

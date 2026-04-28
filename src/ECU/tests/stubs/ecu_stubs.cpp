@@ -1,5 +1,5 @@
 /*
- * ECU test stubs — stub implementations for modules excluded from the test build.
+ * ECU test stubs - stub implementations for modules excluded from the test build.
  *
  * rpm.cpp is excluded because it uses the arduino-timer Timer class.
  * start.cpp is excluded because it uses multicoreWatchdog (arduino-timer dep).

@@ -54,7 +54,7 @@ typedef struct {
      * blob's schema is strictly less than @c schema_since, leaving
      * whatever default the values struct had at decode time. Module
      * declarations start at 1 and bump the value when a new parameter
-     * is introduced — this matches ECU's V1->V2 history (V1 had 5
+     * is introduced - this matches ECU's V1->V2 history (V1 had 5
      * params, V2 added @c nominalRpm with @c schema_since=2).
      */
     uint16_t schema_since;

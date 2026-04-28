@@ -8,10 +8,10 @@
 #include "hal/impl/.mock/hal_mock.h"
 
 /*
- * OBD-2 unit tests — pure function tests for Mode 01 PID encoding,
+ * OBD-2 unit tests - pure function tests for Mode 01 PID encoding,
  * Ford part number helpers, DTC payload builder, and TOTDIST getter/setter.
  *
- * These tests do NOT require CAN bus setup — they exercise the encoding
+ * These tests do NOT require CAN bus setup - they exercise the encoding
  * logic directly via encodeMode01PidData() and helper functions.
  */
 
@@ -40,7 +40,7 @@ void tearDown(void) {}
 // ── Mode 01 PID encoding ─────────────────────────────────────────────────────
 
 void test_pid_coolant_temp_at_zero(void) {
-    // PID 0x05: A = temp + 40 → 0 + 40 = 40
+    // PID 0x05: A = temp + 40 -> 0 + 40 = 40
     setGlobalValue(F_COOLANT_TEMP, 0.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -60,7 +60,7 @@ void test_pid_coolant_temp_at_80(void) {
 }
 
 void test_pid_rpm_at_idle(void) {
-    // PID 0x0C: RPM × 4, 2 bytes big-endian. 850 RPM → 3400 = 0x0D48
+    // PID 0x0C: RPM × 4, 2 bytes big-endian. 850 RPM -> 3400 = 0x0D48
     setGlobalValue(F_RPM, 850.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -91,7 +91,7 @@ void test_pid_vehicle_speed(void) {
 }
 
 void test_pid_intake_temp(void) {
-    // PID 0x0F: A = temp + 40. At 25°C → 65
+    // PID 0x0F: A = temp + 40. At 25°C -> 65
     setGlobalValue(F_INTAKE_TEMP, 25.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -101,7 +101,7 @@ void test_pid_intake_temp(void) {
 }
 
 void test_pid_ecu_voltage(void) {
-    // PID 0x42: V × 1000, 2 bytes. 13.8V → 13800 = 0x35E8
+    // PID 0x42: V × 1000, 2 bytes. 13.8V -> 13800 = 0x35E8
     setGlobalValue(F_VOLTS, 13.8f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -112,7 +112,7 @@ void test_pid_ecu_voltage(void) {
 }
 
 void test_pid_oil_temp(void) {
-    // PID 0x5C: A = temp + 40. At 90°C → 130
+    // PID 0x5C: A = temp + 40. At 90°C -> 130
     setGlobalValue(F_OIL_TEMP, 90.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -131,8 +131,8 @@ void test_pid_fuel_type_diesel(void) {
 }
 
 void test_pid_dpf_temp_from_sensor(void) {
-    // PID 0x7C: (A×256+B)/10 - 40 = temp → raw = (temp+40)×10
-    // At 300°C → raw = 3400 = 0x0D48
+    // PID 0x7C: (A×256+B)/10 - 40 = temp -> raw = (temp+40)×10
+    // At 300°C -> raw = 3400 = 0x0D48
     setGlobalValue(F_DPF_TEMP, 300.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -143,7 +143,7 @@ void test_pid_dpf_temp_from_sensor(void) {
 }
 
 void test_pid_dpf_temp_at_zero(void) {
-    // 0°C → raw = (0+40)×10 = 400
+    // 0°C -> raw = (0+40)×10 = 400
     setGlobalValue(F_DPF_TEMP, 0.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -154,7 +154,7 @@ void test_pid_dpf_temp_at_zero(void) {
 }
 
 void test_pid_engine_load(void) {
-    // PID 0x04: A = load% × 255/100. At 50% → 127 (floored)
+    // PID 0x04: A = load% × 255/100. At 50% -> 127 (floored)
     setGlobalValue(F_CALCULATED_ENGINE_LOAD, 50.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -190,7 +190,7 @@ void test_pid_unsupported_returns_false(void) {
 
 void test_pid_egt_as_catalyst_temp(void) {
     // PID 0x3C (CAT_TEMP_B1S1): (A×256+B)/10 - 40 = temp
-    // At 600°C → raw = (600+40)×10 = 6400
+    // At 600°C -> raw = (600+40)×10 = 6400
     setGlobalValue(F_EGT, 600.0f);
     uint8_t data[4] = {0};
     int len = 0;
@@ -392,12 +392,12 @@ void test_obd_temp_byte_clamps_above_215(void) {
 }
 
 void test_obd_temp_byte_positive_mid(void) {
-    // 90 °C → raw = 130
+    // 90 °C -> raw = 130
     TEST_ASSERT_EQUAL_UINT8(130, obd_encodeTempByte(90.0f));
 }
 
 void test_obd_temp_byte_fractional_truncates_toward_zero(void) {
-    // 24.9 + 40 = 64.9 → truncated to 64
+    // 24.9 + 40 = 64.9 -> truncated to 64
     TEST_ASSERT_EQUAL_UINT8(64, obd_encodeTempByte(24.9f));
 }
 
@@ -1028,7 +1028,7 @@ int main(void) {
     RUN_TEST(test_kwp_read_local_id_rom_size_returns_512k);
     RUN_TEST(test_kwp_read_local_id_compact_ident_returns_nrc31);
 
-    // UDS short-frame → NRC_INCORRECT_LENGTH regression guards
+    // UDS short-frame -> NRC_INCORRECT_LENGTH regression guards
     RUN_TEST(test_uds_diag_session_short_frame_returns_nrc13);
     RUN_TEST(test_uds_read_data_by_id_short_frame_returns_nrc13);
     RUN_TEST(test_uds_read_memory_by_addr_short_frame_returns_nrc13);

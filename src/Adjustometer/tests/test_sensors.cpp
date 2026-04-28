@@ -48,8 +48,8 @@ static void injectVoltage(int tenthsOfVolt) {
 
 /**
  * Inject ADC for fuel temperature sensor.
- * broken=true → ADC near max → ntcToTemp returns negative → 0.
- * broken=false → ADC mid-range → ntcToTemp returns positive.
+ * broken=true -> ADC near max -> ntcToTemp returns negative -> 0.
+ * broken=false -> ADC mid-range -> ntcToTemp returns positive.
  */
 static void injectFuelTemp(bool broken) {
     hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, broken ? 4090 : 2000);
@@ -109,7 +109,7 @@ void test_frequency_shift_produces_nonzero_pulse(void) {
 /* ── Zero-hold hysteresis ──────────────────────────────────────────────────── */
 
 void test_small_shift_within_zero_hold(void) {
-    /* Use 1000 Hz where 1 us period change → small Hz shift */
+    /* Use 1000 Hz where 1 us period change -> small Hz shift */
     lockBaseline(1000);
     /* Shift to ~1010 Hz (period 990us): Δ=10 Hz < ENTER=20 Hz */
     simulatePulses(512, 1010);
@@ -162,14 +162,14 @@ void test_status_fuel_temp_ok(void) {
 }
 
 void test_status_voltage_too_low(void) {
-    injectVoltage(50);   /* 5.0 V — well below 8.0 V threshold */
+    injectVoltage(50);   /* 5.0 V - well below 8.0 V threshold */
     settleAdcFilters();
     uint8_t status = getAdjustometerStatus();
     TEST_ASSERT_BITS_HIGH(ADJ_STATUS_VOLTAGE_BAD, status);
 }
 
 void test_status_voltage_too_high(void) {
-    injectVoltage(200);  /* 20.0 V — well above 15.0 V threshold */
+    injectVoltage(200);  /* 20.0 V - well above 15.0 V threshold */
     settleAdcFilters();
     uint8_t status = getAdjustometerStatus();
     TEST_ASSERT_BITS_HIGH(ADJ_STATUS_VOLTAGE_BAD, status);
@@ -217,17 +217,17 @@ void test_thermal_comp_skipped_when_sensor_broken(void) {
 
 /**
  * When ADC reads near max (4090), adcCompe pushes it to ~4122 (> ADC_MAX=4095).
- * ntcToTemp computes 4095/4122-1 → negative → log(negative) → NaN.
+ * ntcToTemp computes 4095/4122-1 -> negative -> log(negative) -> NaN.
  * Without the isnan guard, NaN permanently poisons the EMA filter.
  * This test verifies the filter recovers after a broken sensor phase.
  */
 void test_nan_recovery_after_broken_sensor(void) {
-    injectFuelTemp(true);   /* ADC=4090 → adcCompe > 4095 → NaN from ntcToTemp */
+    injectFuelTemp(true);   /* ADC=4090 -> adcCompe > 4095 -> NaN from ntcToTemp */
     settleAdcFilters();
     uint8_t broken = getFuelTemperatureRaw();
     TEST_ASSERT_EQUAL_UINT8(ADJ_FUEL_TEMP_SENSOR_BROKEN, broken);
 
-    injectFuelTemp(false);  /* ADC=2000 → ntcToTemp ≈ 13°C */
+    injectFuelTemp(false);  /* ADC=2000 -> ntcToTemp ≈ 13°C */
     for (int i = 0; i < 30; i++) getFuelTemperatureRaw();
     uint8_t recovered = getFuelTemperatureRaw();
     TEST_ASSERT_TRUE(recovered > 0);  /* Must escape NaN trap */
@@ -237,7 +237,7 @@ void test_nan_recovery_after_broken_sensor(void) {
 
 /**
  * Calling getAdjustometerStatus() repeatedly should not change the
- * fuel temperature reading — it reads adjustometerSharedFuelTemp
+ * fuel temperature reading - it reads adjustometerSharedFuelTemp
  * atomically instead of calling getFuelTemperatureRaw().
  *
  * We inject a moderate ADC change (not broken sensor) so that
@@ -245,14 +245,14 @@ void test_nan_recovery_after_broken_sensor(void) {
  * (the old side-effect) would produce a large drift.
  */
 void test_status_does_not_mutate_fuel_temp_ema(void) {
-    injectFuelTemp(false);  /* ADC=2000 → ~13°C */
+    injectFuelTemp(false);  /* ADC=2000 -> ~13°C */
     settleAdcFilters();
     uint8_t tempBefore = getFuelTemperatureRaw();
     TEST_ASSERT_TRUE(tempBefore > 0);
 
     /* Shift ADC to a significantly different (but valid) value */
     hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, 1000);
-    /* 50 status calls — must not advance the temperature EMA */
+    /* 50 status calls - must not advance the temperature EMA */
     for (int i = 0; i < 50; i++) getAdjustometerStatus();
 
     /* First getFuelTemperatureRaw after 50 status calls:
@@ -274,7 +274,7 @@ void test_signal_loss_consistency_pulses_vs_status(void) {
     lockBaseline(10000);
     simulatePulses(256, 10000);
 
-    /* Signal alive — both should agree */
+    /* Signal alive - both should agree */
     TEST_ASSERT_TRUE(getAdjustometerPulses() >= 0);
     TEST_ASSERT_BITS_LOW(ADJ_STATUS_SIGNAL_LOST, getAdjustometerStatus());
 

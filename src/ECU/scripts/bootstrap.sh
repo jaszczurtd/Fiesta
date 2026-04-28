@@ -11,7 +11,7 @@
 #   - OilAndSpeed        (host tests + firmware)
 #   - Adjustometer       (host tests + firmware, -Werror)
 #   - SerialConfigurator (CMake desktop build + 8 CTest targets, GTK-4 GUI)
-# Idempotent — safe to re-run. Also covers the deps used by
+# Idempotent - safe to re-run. Also covers the deps used by
 # misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
 # cppcheck package).
 #
@@ -39,7 +39,7 @@ DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbgl
 
 # Per-module build matrix.
 #   TEST_MODULES = modules that ship a CMakeLists.txt at src/<Module>/.
-#   FW_MODULES   = "module:werror" — werror=1 enables -Werror for that module
+#   FW_MODULES   = "module:werror" - werror=1 enables -Werror for that module
 #                  (matches the per-module policy used by the shared Arduino
 #                  build/upload/refresh wrappers).
 TEST_MODULES=(ECU Clocks OilAndSpeed Adjustometer)
@@ -70,7 +70,7 @@ if [[ $EUID -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
 # and the rest of the workflow uses the wrong $HOME, which breaks later
 # non-root use of arduino-cli compile. Require an explicit opt-in.
 if [[ $EUID -eq 0 && "${ALLOW_ROOT:-0}" != "1" ]]; then
-    err "Do not run bootstrap.sh as root — it uses sudo only for apt and arduino-cli install."
+    err "Do not run bootstrap.sh as root - it uses sudo only for apt and arduino-cli install."
     err "Re-run as a regular user (you will be prompted for the sudo password)."
     err "To proceed anyway, set ALLOW_ROOT=1."
     exit 1
@@ -80,7 +80,7 @@ fi
 # 1. Platform sanity check
 # -----------------------------------------------------------------------------
 if ! command -v apt-get >/dev/null 2>&1; then
-    err "apt-get not found — this script supports Debian-like systems only."
+    err "apt-get not found - this script supports Debian-like systems only."
     exit 1
 fi
 
@@ -96,7 +96,7 @@ APT_PKGS=(
 
 install_apt() {
     if [[ "${SKIP_APT:-0}" = "1" ]]; then
-        info "SKIP_APT=1 — skipping apt step"
+        info "SKIP_APT=1 - skipping apt step"
         return
     fi
     local missing=()
@@ -120,7 +120,7 @@ install_apt() {
 # -----------------------------------------------------------------------------
 check_python() {
     if ! command -v python3 >/dev/null 2>&1; then
-        err "python3 not found after apt step — install it manually and re-run."
+        err "python3 not found after apt step - install it manually and re-run."
         exit 1
     fi
     ok "python3 present: $(python3 --version 2>&1)"
@@ -160,7 +160,7 @@ find_misra_addon() {
 
 check_cppcheck() {
     if ! command -v cppcheck >/dev/null 2>&1; then
-        err "cppcheck not found after apt step — install it manually and re-run."
+        err "cppcheck not found after apt step - install it manually and re-run."
         exit 1
     fi
     ok "cppcheck present: $(cppcheck --version 2>&1 | head -1)"
@@ -168,7 +168,7 @@ check_cppcheck() {
     if addon=$(find_misra_addon); then
         ok "cppcheck MISRA addon: $addon"
     else
-        warn "cppcheck misra.py addon not found — misra/check_misra.sh may fail"
+        warn "cppcheck misra.py addon not found - misra/check_misra.sh may fail"
         warn "On Debian/Ubuntu the addon ships with the 'cppcheck' package; check 'dpkg -L cppcheck | grep misra'"
     fi
 }
@@ -208,13 +208,13 @@ setup_arduino_core() {
         # The arduino-pico core ships new board IDs across releases (e.g.
         # `waveshare_rp2040_plus` was added in v2.0, RP2350 boards in v4.0).
         # The presence-only check above does NOT catch a stale install that
-        # predates a board the operator's settings.json targets — `compile`
+        # predates a board the operator's settings.json targets - `compile`
         # then dies with a terse "board ... not found". Upgrade
         # unconditionally so already-current installs become a no-op while
         # stale ones are brought up to date.
         info "Upgrading rp2040:rp2040 to the latest version (no-op if current)"
         if ! "$ARDUINO_CLI" core upgrade rp2040:rp2040; then
-            warn "core upgrade exited non-zero — continuing with whatever is installed"
+            warn "core upgrade exited non-zero - continuing with whatever is installed"
         fi
     else
         info "Installing rp2040:rp2040 core (this can take a few minutes)"
@@ -271,7 +271,7 @@ sync_lib() {
     local default_branch=""
 
     if [[ -e "$dest" ]] && git -C "$dest" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        warn "$name checkout exists at $dest — discarding local changes and resetting to the remote default branch"
+        warn "$name checkout exists at $dest - discarding local changes and resetting to the remote default branch"
 
         if git -C "$dest" remote get-url origin >/dev/null 2>&1; then
             git -C "$dest" remote set-url origin "$url"
@@ -295,7 +295,7 @@ sync_lib() {
     fi
 
     if [[ -e "$dest" ]]; then
-        err "$dest exists but is not a git checkout — leaving it alone"
+        err "$dest exists but is not a git checkout - leaving it alone"
         return 1
     fi
 
@@ -317,7 +317,7 @@ run_tests_for() {
     local src="$SRC_ROOT/$module"
     local build="$src/build_test"
     if [[ ! -f "$src/CMakeLists.txt" ]]; then
-        info "[$module] no CMakeLists.txt — skipping tests"
+        info "[$module] no CMakeLists.txt - skipping tests"
         return 0
     fi
     info "[$module] configuring host tests"
@@ -331,7 +331,7 @@ run_tests_for() {
 
 run_tests() {
     if [[ "${SKIP_TESTS:-0}" = "1" ]]; then
-        info "SKIP_TESTS=1 — skipping host tests"
+        info "SKIP_TESTS=1 - skipping host tests"
         return
     fi
     local module
@@ -372,7 +372,7 @@ compile_firmware_for() {
     fi
     if [[ -z "$fqbn" ]]; then
         fqbn="$DEFAULT_FQBN"
-        info "[$module] no .vscode/arduino.json — using default FQBN"
+        info "[$module] no .vscode/arduino.json - using default FQBN"
     fi
 
     local werror_flag=""
@@ -403,7 +403,7 @@ compile_firmware_for() {
 
 compile_firmware() {
     if [[ "${SKIP_BUILD:-0}" = "1" ]]; then
-        info "SKIP_BUILD=1 — skipping firmware compile"
+        info "SKIP_BUILD=1 - skipping firmware compile"
         return
     fi
     local entry module werror
@@ -429,13 +429,13 @@ compile_firmware() {
 # while still building core + CLI + all CTest targets.
 build_serial_configurator() {
     if [[ "${SKIP_DESKTOP:-0}" = "1" ]]; then
-        info "SKIP_DESKTOP=1 — skipping SerialConfigurator build/tests"
+        info "SKIP_DESKTOP=1 - skipping SerialConfigurator build/tests"
         return
     fi
 
     local sc_dir="$SRC_ROOT/SerialConfigurator"
     if [[ ! -f "$sc_dir/CMakeLists.txt" ]]; then
-        warn "SerialConfigurator: CMakeLists.txt not found at $sc_dir — skipping"
+        warn "SerialConfigurator: CMakeLists.txt not found at $sc_dir - skipping"
         return
     fi
 

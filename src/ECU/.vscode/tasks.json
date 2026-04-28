@@ -6,14 +6,14 @@
             "description": "Select target board",
             "type": "pickString",
             "options": [
-                "rp2040:rp2040:rpipico          — Raspberry Pi Pico",
-                "rp2040:rp2040:rpipicow         — Raspberry Pi Pico W",
-                "rp2040:rp2040:rpipico2         — Raspberry Pi Pico 2",
-                "rp2040:rp2040:rpipico2w        — Raspberry Pi Pico 2 W",
-                "rp2040:rp2040:waveshare_rp2040_zero — Waveshare RP2040-Zero",
-                "rp2040:rp2040:waveshare_rp2040_plus — Waveshare RP2040-Plus"
+                "rp2040:rp2040:rpipico          - Raspberry Pi Pico",
+                "rp2040:rp2040:rpipicow         - Raspberry Pi Pico W",
+                "rp2040:rp2040:rpipico2         - Raspberry Pi Pico 2",
+                "rp2040:rp2040:rpipico2w        - Raspberry Pi Pico 2 W",
+                "rp2040:rp2040:waveshare_rp2040_zero - Waveshare RP2040-Zero",
+                "rp2040:rp2040:waveshare_rp2040_plus - Waveshare RP2040-Plus"
             ],
-            "default": "rp2040:rp2040:rpipico          — Raspberry Pi Pico"
+            "default": "rp2040:rp2040:rpipico          - Raspberry Pi Pico"
         },
         {
             "id": "libraryName",
@@ -185,7 +185,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *—.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*— *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Project: Refresh IntelliSense')\""
+                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *-.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*- *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Project: Refresh IntelliSense')\""
             ],
             "presentation": {
                 "echo": true,

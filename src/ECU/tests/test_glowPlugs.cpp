@@ -59,7 +59,7 @@ void test_glow_heating_very_cold_engine(void) {
 }
 
 void test_glow_heating_just_below_threshold(void) {
-    /* 44°C is 1 degree below threshold → small but positive heating time */
+    /* 44°C is 1 degree below threshold -> small but positive heating time */
     glowPlugs_initGlowPlugsTime(&gp, (float)(TEMP_COLD_ENGINE - 1));
     TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(&gp));
 }
@@ -124,12 +124,12 @@ void test_glow_warm_after_start_prevents_reheat(void) {
     glowPlugs_initGlowPlugsTime(&gp, 50.0f);
     TEST_ASSERT_FALSE(glowPlugs_isGlowPlugsHeating(&gp));
 
-    /* First process tick: coolant = 50 > TEMP_COLD_ENGINE → warmAfterStart */
+    /* First process tick: coolant = 50 > TEMP_COLD_ENGINE -> warmAfterStart */
     setGlobalValue(F_COOLANT_TEMP, 50.0f);
     hal_mock_set_millis(1000);
     glowPlugs_process(&gp);
 
-    /* Now cold coolant + RPM > RPM_MIN — should NOT reheat */
+    /* Now cold coolant + RPM > RPM_MIN - should NOT reheat */
     setGlobalValue(F_COOLANT_TEMP, 0.0f);
     setGlobalValue(F_RPM, (float)(RPM_MIN + 10));
     hal_mock_set_millis(2000);

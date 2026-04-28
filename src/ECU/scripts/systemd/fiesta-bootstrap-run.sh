@@ -4,7 +4,7 @@
 #
 # Flow:
 #   1. Sync the Fiesta repo at $FIESTA_DIR (clone if missing, hard reset to
-#      origin/$BRANCH otherwise — this runner is unattended and expects no
+#      origin/$BRANCH otherwise - this runner is unattended and expects no
 #      local changes on the Pi).
 #   2. Remove previous ECU build artifacts (build_test/, .build/).
 #   3. Run src/ECU/scripts/bootstrap.sh with SKIP_APT=1 (system packages are
@@ -25,14 +25,14 @@ BRANCH="${BRANCH:-main}"
 LOG_DIR="${FIESTA_LOG_DIR:-$HOME/.cache/fiesta-bootstrap}"
 
 # systemd's EnvironmentFile= does not expand %h / %u / $HOME / ~. Catch the
-# common mistake early — otherwise the literal specifier leaks into every
+# common mistake early - otherwise the literal specifier leaks into every
 # downstream path and arduino-cli will fail with a confusing linker error.
 for var in FIESTA_DIR FIESTA_REPO_URL LOG_DIR BRANCH; do
     val="${!var}"
     case "$val" in
         *%[a-zA-Z]*|\~*|\$*)
             echo "[ERROR] $var contains an unexpanded specifier or shell metachar: '$val'" >&2
-            echo "[ERROR] EnvironmentFile= takes values literally — use an absolute path." >&2
+            echo "[ERROR] EnvironmentFile= takes values literally - use an absolute path." >&2
             exit 2
             ;;
     esac
@@ -54,7 +54,7 @@ ln -sf "$LOG_FILE" "$LOG_DIR/last.log"
 # Mirror all output into the log file.
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "=== Fiesta daily bootstrap run — $STAMP ==="
+echo "=== Fiesta daily bootstrap run - $STAMP ==="
 echo "Host:          $(hostname)"
 echo "User:          $(id -un)"
 echo "FIESTA_DIR:    $FIESTA_DIR"
@@ -88,7 +88,7 @@ if [[ -d "$FIESTA_DIR/.git" ]]; then
     HEAD_SHA="$(git -C "$FIESTA_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
     HEAD_SUBJ="$(git -C "$FIESTA_DIR" log -1 --format='%s' 2>/dev/null || echo unknown)"
 fi
-echo "[INFO] HEAD: $HEAD_SHA — $HEAD_SUBJ"
+echo "[INFO] HEAD: $HEAD_SHA - $HEAD_SUBJ"
 
 # -----------------------------------------------------------------------------
 # 2. Clean ECU build artifacts
@@ -97,7 +97,7 @@ echo "[INFO] Cleaning previous ECU artifacts"
 rm -rf "$FIESTA_DIR/src/ECU/build_test" "$FIESTA_DIR/src/ECU/.build"
 
 # -----------------------------------------------------------------------------
-# 3. Run bootstrap (SKIP_APT=1 — apt requires sudo which user service lacks)
+# 3. Run bootstrap (SKIP_APT=1 - apt requires sudo which user service lacks)
 # -----------------------------------------------------------------------------
 bootstrap_rc=0
 if [[ $sync_rc -ne 0 ]]; then
@@ -120,10 +120,10 @@ else
 fi
 
 SHORT_SHA="${HEAD_SHA:0:10}"
-SUBJECT="[Fiesta] daily bootstrap $STATUS — $SHORT_SHA"
+SUBJECT="[Fiesta] daily bootstrap $STATUS - $SHORT_SHA"
 
 {
-    echo "Fiesta daily bootstrap — $STATUS (rc=$bootstrap_rc)"
+    echo "Fiesta daily bootstrap - $STATUS (rc=$bootstrap_rc)"
     echo
     echo "Host:        $(hostname)"
     echo "User:        $(id -un)"
@@ -145,7 +145,7 @@ if command -v python3 >/dev/null 2>&1; then
         --attach "$LOG_FILE" \
         || echo "[WARN] Email send failed (see stderr above)"
 else
-    echo "[WARN] python3 not available — skipping email"
+    echo "[WARN] python3 not available - skipping email"
 fi
 
 exit "$bootstrap_rc"

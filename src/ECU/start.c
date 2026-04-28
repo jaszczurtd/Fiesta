@@ -4,7 +4,7 @@
 #include <hal/hal_soft_timer.h>
 
 //-----------------------------------------------------------------------------
-// Central ECU context — single owner of all module instances
+// Central ECU context - single owner of all module instances
 //-----------------------------------------------------------------------------
 
 static ecu_context_t s_ctx;
@@ -317,7 +317,7 @@ void looper(void) {
   s_startPersistentState.statusVariable0Val = 1;
   glowPlugs_process(getGlowPlugsInstance());
 
-  // Drain GPS serial FIFO every iteration — the PIO SoftwareSerial
+  // Drain GPS serial FIFO every iteration - the PIO SoftwareSerial
   // buffer is only 32 bytes; at 9600 baud it overflows in ~33 ms.
   hal_gps_update();
 

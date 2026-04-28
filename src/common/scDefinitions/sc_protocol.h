@@ -9,7 +9,7 @@
  * (ECU, Clocks, OilAndSpeed) or host (SerialConfigurator core / CLI / UI)
  * MUST live here. Adding a raw "SC_..." literal directly in module
  * config.c, host transport, or CLI handlers bypasses the
- * single-source-of-truth contract and is forbidden — see provider §11
+ * single-source-of-truth contract and is forbidden - see provider §11
  * Rule 5 (effective from refactor R1.1 onward).
  *
  * @note This header is intentionally HAL-free. The HAL-bound
@@ -40,7 +40,7 @@ extern "C" {
  */
 #define SC_PARAM_ID_MAX 48u
 
-/* ── Inbound command tokens (host → device) ────────────────────────── */
+/* ── Inbound command tokens (host -> device) ────────────────────────── */
 
 #define SC_CMD_HELLO                "HELLO"
 #define SC_CMD_GET_META             "SC_GET_META"
@@ -51,7 +51,7 @@ extern "C" {
 #define SC_CMD_AUTH_PROVE           "SC_AUTH_PROVE"  /**< prefix; followed by " <hex>". */
 #define SC_CMD_REBOOT_BOOTLOADER    "SC_REBOOT_BOOTLOADER"
 
-/* ── Outbound reply status tokens (device → host) ──────────────────── */
+/* ── Outbound reply status tokens (device -> host) ──────────────────── */
 
 #define SC_STATUS_OK                "SC_OK"
 #define SC_STATUS_UNKNOWN_CMD       "SC_UNKNOWN_CMD"
@@ -73,7 +73,7 @@ extern "C" {
 #define SC_REPLY_TAG_AUTH_OK               "AUTH_OK"
 #define SC_REPLY_TAG_REBOOT                "REBOOT"
 
-/* Structural HELLO reply head — emitted by the HAL session helper as
+/* Structural HELLO reply head - emitted by the HAL session helper as
  * "OK HELLO module=... proto=... session=... fw=... build=... uid=..."
  * Hosts parse the leading "OK HELLO" via strncmp. The "OK " prefix
  * here is intentionally NOT SC_STATUS_OK (which is "SC_OK") because
@@ -109,7 +109,7 @@ extern "C" {
 #define SC_REPLY_BAD_REQUEST_EXPECTED_FMT                                    \
     SC_STATUS_BAD_REQUEST " expected=%s"
 
-/* "SC_OK AUTH_CHALLENGE <hex>" — emitted by HAL session helper. */
+/* "SC_OK AUTH_CHALLENGE <hex>" - emitted by HAL session helper. */
 #define SC_REPLY_AUTH_CHALLENGE_FMT                                          \
     SC_STATUS_OK " " SC_REPLY_TAG_AUTH_CHALLENGE " %s"
 
@@ -121,7 +121,7 @@ extern "C" {
 #define SC_REPLY_REBOOT_OK                                                   \
     SC_STATUS_OK " " SC_REPLY_TAG_REBOOT
 
-/* "SC_AUTH_FAILED <reason>" — reasons that the HAL session helper emits. */
+/* "SC_AUTH_FAILED <reason>" - reasons that the HAL session helper emits. */
 #define SC_REPLY_AUTH_FAILED_NO_CHALLENGE   SC_STATUS_AUTH_FAILED " no_challenge"
 #define SC_REPLY_AUTH_FAILED_BAD_LENGTH     SC_STATUS_AUTH_FAILED " bad_length"
 #define SC_REPLY_AUTH_FAILED_BAD_HEX        SC_STATUS_AUTH_FAILED " bad_hex"

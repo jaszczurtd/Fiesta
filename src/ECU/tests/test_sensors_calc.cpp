@@ -6,7 +6,7 @@
 #include "hal/impl/.mock/hal_mock.h"
 
 /*
- * sensors.cpp calculation tests — functions that operate purely on global
+ * sensors.cpp calculation tests - functions that operate purely on global
  * value fields or on injected ADC values (no hardware timing required).
  *
  * Relevant constants (config.h / hardwareConfig.h):
@@ -20,8 +20,8 @@
  *
  * readThrottle() maps ADC reading to [0, PWM_RESOLUTION] and then inverts:
  *   return abs(result - PWM_RESOLUTION)
- *   → low ADC (= THROTTLE_MIN) → full throttle value = PWM_RESOLUTION
- *   → high ADC (= THROTTLE_MAX) → idle = 0
+ *   -> low ADC (= THROTTLE_MIN) -> full throttle value = PWM_RESOLUTION
+ *   -> high ADC (= THROTTLE_MAX) -> idle = 0
  *
  * getPercentageEngineLoad():
  *   map = F_PRESSURE * 255 / 2.55
@@ -52,7 +52,7 @@ void test_throttle_percentage_full(void) {
 }
 
 void test_throttle_percentage_midpoint(void) {
-    /* PWM_RESOLUTION / 2 ≈ 1023 → (1023*100)/2047 ≈ 49 % */
+    /* PWM_RESOLUTION / 2 ≈ 1023 -> (1023*100)/2047 ≈ 49 % */
     setGlobalValue(F_THROTTLE_POS, (float)(PWM_RESOLUTION / 2));
     int pct = getThrottlePercentage();
     TEST_ASSERT_INT_WITHIN(2, 50, pct);
@@ -86,14 +86,14 @@ void test_engine_load_full_at_max_rpm_and_pressure(void) {
 }
 
 void test_engine_load_half_at_half_rpm(void) {
-    /* map = 255, rpm = 2500/5000 = 0.5 → load = 50 */
+    /* map = 255, rpm = 2500/5000 = 0.5 -> load = 50 */
     setGlobalValue(F_RPM, (float)(RPM_MAX_EVER / 2));
     setGlobalValue(F_PRESSURE, 2.55f);
     TEST_ASSERT_INT_WITHIN(2, 50, getPercentageEngineLoad());
 }
 
 void test_engine_load_half_at_half_pressure(void) {
-    /* map = 127.5/255 = 0.5, rpm full → load = 50 */
+    /* map = 127.5/255 = 0.5, rpm full -> load = 50 */
     setGlobalValue(F_RPM, (float)RPM_MAX_EVER);
     setGlobalValue(F_PRESSURE, 1.275f);
     TEST_ASSERT_INT_WITHIN(2, 50, getPercentageEngineLoad());
@@ -201,12 +201,12 @@ void test_pcf8574_write_invalid_pin_is_noop(void) {
     (void)hal_i2c_end_transmission();
     TEST_ASSERT_EQUAL_UINT8(0x11, hal_mock_i2c_get_last_addr());
 
-    pcf8574_write(8, true);  // pin > 7 → invalid, early return
+    pcf8574_write(8, true);  // pin > 7 -> invalid, early return
     TEST_ASSERT_EQUAL_UINT8(0x11, hal_mock_i2c_get_last_addr());
 }
 
 void test_pcf8574_read_returns_set_bit(void) {
-    // PCF8574 reports the full port byte; bit 3 set → pcf8574_read(3) == true.
+    // PCF8574 reports the full port byte; bit 3 set -> pcf8574_read(3) == true.
     hal_mock_i2c_set_busy(false);
     const uint8_t rx[] = { (uint8_t)(1u << 3) };
     hal_mock_i2c_inject_rx(rx, 1);
@@ -263,17 +263,17 @@ void test_readHighValues_does_not_touch_medium_rate_fields(void) {
     TEST_ASSERT_EQUAL_FLOAT(13.8f,  getGlobalValue(F_VOLTS));
 }
 
-// ── readThrottle — ADC-based mapping ─────────────────────────────────────────
+// ── readThrottle - ADC-based mapping ─────────────────────────────────────────
 
 void test_throttle_adc_at_idle_gives_zero(void) {
     /*
-     * ADC = THROTTLE_MAX → initialVal = THROTTLE_MAX - THROTTLE_MIN = maxVal
+     * ADC = THROTTLE_MAX -> initialVal = THROTTLE_MAX - THROTTLE_MIN = maxVal
      * result = maxVal / (maxVal / PWM_RESOLUTION) = PWM_RESOLUTION
      * return = abs(PWM_RESOLUTION - PWM_RESOLUTION) = 0
      *
      * getAverageValueFrom() applies adcCompe() to each sample.  For values
      * well inside the linear range of adcCompe, the output is the input.
-     * THROTTLE_MAX = 3730 > 3584, so adcCompe adds 32 → 3762.
+     * THROTTLE_MAX = 3730 > 3584, so adcCompe adds 32 -> 3762.
      * We inject 3730 and accept the result as "near 0" within tolerance.
      */
     hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
@@ -283,11 +283,11 @@ void test_throttle_adc_at_idle_gives_zero(void) {
 
 void test_throttle_adc_at_full_gives_max(void) {
     /*
-     * ADC = THROTTLE_MIN → initialVal = 0
+     * ADC = THROTTLE_MIN -> initialVal = 0
      * result = 0; return = abs(0 - PWM_RESOLUTION) = PWM_RESOLUTION
-     * adcCompe(1795): 1795 is above 1536 → adds 16 → 1811.
+     * adcCompe(1795): 1795 is above 1536 -> adds 16 -> 1811.
      * 1811 - THROTTLE_MIN (1795) = 16; result = 16 / divider ≈ 16
-     * abs(16 - 2047) ≈ 2031 — near PWM_RESOLUTION, within tolerance.
+     * abs(16 - 2047) ≈ 2031 - near PWM_RESOLUTION, within tolerance.
      */
     hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MIN);
     int val = readThrottle();

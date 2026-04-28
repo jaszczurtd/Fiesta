@@ -293,7 +293,7 @@ size_t sc_param_blob_size_for_schema(const sc_param_descriptor_t *descs,
         if (!descriptor_persists_at_schema(&descs[i], schema)) {
             continue;
         }
-        bytes += 2u; /* SCALAR_I16 → 2 bytes LE */
+        bytes += 2u; /* SCALAR_I16 -> 2 bytes LE */
         ++included;
     }
     if (included == 0u) {

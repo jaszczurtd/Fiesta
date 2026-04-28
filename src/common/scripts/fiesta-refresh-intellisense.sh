@@ -184,7 +184,7 @@ if os.path.isdir(build_dir):
 # relative `#include "../common/scDefinitions/..."` from its config.{c,cpp}
 # (and the sc_param_handlers_glue.c shim transitively pulls the .c). The
 # arduino-cli compile_commands.json does not list that dir as `-I` because
-# the includes are file-relative — but VS Code IntelliSense is happier when
+# the includes are file-relative - but VS Code IntelliSense is happier when
 # the path is on `includePath` explicitly, so jump-to-definition on
 # k_ecu_params[] / sc_param_reply_* / SC_CMD_* lands inside the shared
 # headers instead of falling back to the workspaceFolder/** glob.
@@ -297,8 +297,8 @@ main() {
     ok "IntelliSense configuration refreshed"
     echo ""
     echo "  Next steps in VS Code:"
-    echo "  1. Ctrl+Shift+P → C/C++: Reset IntelliSense Database"
-    echo "  2. Ctrl+Shift+P → Developer: Reload Window"
+    echo "  1. Ctrl+Shift+P -> C/C++: Reset IntelliSense Database"
+    echo "  2. Ctrl+Shift+P -> Developer: Reload Window"
     echo ""
 }
 
