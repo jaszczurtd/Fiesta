@@ -2,7 +2,7 @@
 #define SC_CLI_OUTPUT_H
 
 /*
- * stdout / stderr formatting helpers for the CLI. Pure printers — no
+ * stdout / stderr formatting helpers for the CLI. Pure printers - no
  * detection, no transport, no manifest. Every function takes already-
  * resolved data structs from sc_core (parsed identity, parsed param
  * lists / values / details) and renders them to stdout in a
@@ -10,7 +10,7 @@
  *
  * Strings here are intentionally English. CLI output is a developer /
  * bench-operator surface; protocol tokens, log prefixes, and column
- * headers stay verbatim across locales (see provider §4.7 Rule 2 —
+ * headers stay verbatim across locales (see provider §4.7 Rule 2 -
  * the i18n layer is GUI-only by design).
  */
 

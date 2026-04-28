@@ -187,7 +187,7 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
 
     /* Phase 4 preflight (optional). The manifest verifies the artifact
      * SHA-256 and module-name match before we hand the firmware over to
-     * the boot ROM. Hard-reject on any mismatch — the doc requires the
+     * the boot ROM. Hard-reject on any mismatch - the doc requires the
      * flashing flow to fail closed. */
     sc_manifest_t manifest;
     bool have_manifest = false;
@@ -259,7 +259,7 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
                                                       target->port_path,
                                                       err, sizeof(err));
     if (auth_st != SC_AUTH_OK) {
-        fprintf(stderr, "[ERROR] auth: %s — %s\n",
+        fprintf(stderr, "[ERROR] auth: %s - %s\n",
                 sc_auth_status_name(auth_st), err);
         return 5;
     }
@@ -269,7 +269,7 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
     const ScRebootStatus reboot_st = sc_core_reboot_to_bootloader(
         &core.transport, target->port_path, err, sizeof(err));
     if (reboot_st != SC_REBOOT_OK) {
-        fprintf(stderr, "[ERROR] reboot: %s — %s\n",
+        fprintf(stderr, "[ERROR] reboot: %s - %s\n",
                 sc_reboot_status_name(reboot_st), err);
         return 6;
     }

@@ -241,11 +241,11 @@ sc_flash_status_t sc_flash_uf2_format_check(const char *path,
     return SC_FLASH_OK;
 }
 
-/* ── Phase 6.3 — BOOTSEL drive watcher ───────────────────────────── */
+/* ── Phase 6.3 - BOOTSEL drive watcher ───────────────────────────── */
 
 /* Match: name starts with "RPI-RP2" (RPI-RP2, RPI-RP2350, ...) OR
  * equals "RP2350". The RP2040 ROM mounts as "RPI-RP2"; RP2350 ROMs
- * vary by firmware version — both spellings are common in the wild. */
+ * vary by firmware version - both spellings are common in the wild. */
 static bool dir_name_matches_bootsel(const char *name)
 {
     if (name == NULL) {
@@ -457,7 +457,7 @@ static void sleep_ms(uint32_t ms)
 /* Scan /dev/disk/by-label for BOOTSEL block devices.
  *
  * On a healthy desktop session udisks2 picks the device up and mounts
- * it under /media/$USER or /run/media/$USER — and the directory-based
+ * it under /media/$USER or /run/media/$USER - and the directory-based
  * scan elsewhere finds it. On hosts where udisks2 is dormant (the
  * GUI was launched outside an active seat, sudo'd, started before the
  * session bus came up, or simply Mint Cinnamon's auto-mount being
@@ -640,12 +640,12 @@ static bool bootsel_find_mountpoint_in_mountinfo(char *out_path,
 }
 
 /* Invoke `udisksctl unmount -b <device>` and capture output. Mirrors
- * @c bootsel_attempt_udisks_mount but for the inverse operation —
+ * @c bootsel_attempt_udisks_mount but for the inverse operation -
  * used to forcibly unmount a /media/root/... mount that the system
  * udisks2 created when the user's session wasn't seat-active. The
  * polkit action is `org.freedesktop.UDisks2.filesystem-unmount-others`
  * which on standard Mint / Ubuntu is allowed for active sessions
- * without password and prompted for admin password otherwise — so
+ * without password and prompted for admin password otherwise - so
  * this call may fail visibly with a polkit auth error, which the
  * trace captures so the operator can see it. */
 static bool bootsel_attempt_udisks_unmount(const char *device,
@@ -717,7 +717,7 @@ static bool bootsel_attempt_udisks_unmount(const char *device,
 /* Invoke `udisksctl mount -b <device>` and capture the result. udisks2
  * runs as a daemon owned by root, accessed over the system D-Bus, with
  * polkit gating who may auto-mount. The default Mint / Ubuntu polkit
- * rules grant auto-mount to active session users — so on the unhappy
+ * rules grant auto-mount to active session users - so on the unhappy
  * paths we run into here the call usually succeeds and trips udisks2
  * into doing what GNOME / Cinnamon failed to do automatically.
  *
@@ -738,7 +738,7 @@ static bool bootsel_attempt_udisks_mount(const char *device,
     char cmd[1024];
     /* The realpath() output is a canonical /dev/sdXN form with no shell
      * metacharacters. Wrap in single quotes anyway as defense-in-depth
-     * — never embed an unquoted user-supplied path into a shell
+     * - never embed an unquoted user-supplied path into a shell
      * command line. */
     const int n = snprintf(cmd, sizeof(cmd),
                            "udisksctl mount -b '%s' 2>&1", device);
@@ -784,7 +784,7 @@ static bool bootsel_attempt_udisks_mount(const char *device,
     const int rc = pclose(fp);
     /* `udisksctl mount` returns 0 on success and prints the mount point.
      * Failure modes include polkit auth refused (rc=1), device already
-     * mounted (still rc=1 but harmless — we'll find it on next scan),
+     * mounted (still rc=1 but harmless - we'll find it on next scan),
      * and "object not in registry" (rc=1, indicates udisks2 daemon is
      * not running). The tail string carries the precise reason. */
     if (rc != 0) {
@@ -812,7 +812,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
 {
     if (parent_dirs == NULL || parent_count == 0u) {
         write_error(error_buf, error_size, "no parent dirs");
-        flash_log("watch_for_bootsel: rejected — no parent dirs");
+        flash_log("watch_for_bootsel: rejected - no parent dirs");
         return SC_FLASH_ERR_NULL_ARG;
     }
     if (out_path != NULL && out_path_size > 0u) {
@@ -917,7 +917,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
                                         parent_dirs[i], &obs[i]);
             }
             write_error(error_buf, error_size, "%s", summary);
-            flash_log("BOOTSEL_TIMEOUT — %s", summary);
+            flash_log("BOOTSEL_TIMEOUT - %s", summary);
             flash_log("hint: confirm the BOOTSEL drive auto-mounted under one of the parents above; "
                       "if the drive shows up elsewhere (e.g. /mnt/...) the watcher will not see it");
             return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
@@ -954,8 +954,8 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
     }
     if (user == NULL || user[0] == '\0') {
         write_error(error_buf, error_size,
-                    "USER/LOGNAME unset — cannot resolve standard mount roots");
-        flash_log("watch_for_bootsel: rejected — USER and LOGNAME unset; "
+                    "USER/LOGNAME unset - cannot resolve standard mount roots");
+        flash_log("watch_for_bootsel: rejected - USER and LOGNAME unset; "
                   "the GUI/CLI was launched without a user-session env "
                   "(check `env | grep -E '^(USER|LOGNAME)='`)");
         return SC_FLASH_ERR_NULL_ARG;
@@ -1064,7 +1064,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
         }
 
         /* Mountinfo probe: catches mounts that don't live under
-         * /media/$USER — most often /media/root/RPI-RP2 (system
+         * /media/$USER - most often /media/root/RPI-RP2 (system
          * udisks2 mounts as root when the user's session isn't seat-
          * active) but also any operator-supplied path like
          * /mnt/rpi-rp2/. The scan above only reaches the standard
@@ -1085,7 +1085,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 flash_log("BOOTSEL match (mountinfo): '%s'%s",
                           mi_path,
                           under_user_root ? ""
-                            : " — outside /media/$USER, but writable, "
+                            : " - outside /media/$USER, but writable, "
                               "proceeding");
                 write_error(error_buf, error_size, "found at %s", mi_path);
                 return SC_FLASH_OK;
@@ -1093,11 +1093,11 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
             /* Found but unwritable. Most common cause: /media/root/...
              * created by the system udisks2 acting as root because the
              * user's polkit session was inactive. Try one round of
-             * `udisksctl unmount` — polkit on Mint / Ubuntu allows
+             * `udisksctl unmount` - polkit on Mint / Ubuntu allows
              * filesystem-unmount-others for the active session
              * without prompting; if our session is non-active we lose
              * here too and surface the actionable error. */
-            flash_log("BOOTSEL mounted at '%s' but uid=%u cannot write — "
+            flash_log("BOOTSEL mounted at '%s' but uid=%u cannot write - "
                       "trying udisksctl unmount once before giving up",
                       mi_path, (unsigned)getuid());
             if (automount_enabled && !unmount_others_attempted &&
@@ -1111,7 +1111,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                     automount_attempted = false;
                     automount_succeeded = false;
                     block_dev_first_seen_ms = monotonic_ms();
-                    flash_log("unmount succeeded — re-arming automount; "
+                    flash_log("unmount succeeded - re-arming automount; "
                               "next iteration will mount as uid=%u",
                               (unsigned)getuid());
                     /* Sleep briefly so udev / udisks2 settles on the
@@ -1119,7 +1119,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                     sleep_ms(200u);
                     continue;
                 }
-                flash_log("unmount failed — surfacing remediation: %s",
+                flash_log("unmount failed - surfacing remediation: %s",
                           unmount_err);
             }
             char summary[1024];
@@ -1138,7 +1138,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 }
             }
             int n2 = snprintf(summary + s_off, sizeof(summary) - s_off,
-                " Remediation: (a) `sudo umount '%.200s'` and rerun — "
+                " Remediation: (a) `sudo umount '%.200s'` and rerun - "
                 "udisks2 should remount under /media/$USER for the active "
                 "session, or (b) run the flasher as root, or (c) "
                 "fix `loginctl session-status` so polkit allows "
@@ -1148,14 +1148,14 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 s_off += (size_t)n2;
             }
             write_error(error_buf, error_size, "%s", summary);
-            flash_log("BOOTSEL drive at '%s' is NOT writable for uid=%u — "
+            flash_log("BOOTSEL drive at '%s' is NOT writable for uid=%u - "
                       "aborting WAIT_BOOTSEL early. %s",
                       mi_path, (unsigned)getuid(), summary);
             return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
         }
 
         /* Block-device probe: catches "BOOTSEL is on the bus but
-         * udisks2 has not auto-mounted it" — the killer mode on Mint
+         * udisks2 has not auto-mounted it" - the killer mode on Mint
          * Cinnamon and headless / sudo'd sessions. */
         char tmp_label[64];
         char tmp_dev[256];
@@ -1173,7 +1173,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
             }
             if (!block_dev_logged) {
                 flash_log("block device visible: /dev/disk/by-label/%s -> %s "
-                          "(no /media/$USER mount yet — udisks2 may be "
+                          "(no /media/$USER mount yet - udisks2 may be "
                           "dormant in this session)",
                           block_label, block_dev_path);
                 block_dev_logged = true;
@@ -1190,7 +1190,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                         block_dev_path, automount_err,
                         sizeof(automount_err));
                     if (!automount_succeeded) {
-                        flash_log("automount: failed — %s. Hint: try "
+                        flash_log("automount: failed - %s. Hint: try "
                                   "manually `udisksctl mount -b %s` and "
                                   "rerun, or check polkit "
                                   "(/etc/polkit-1/...) and udisks2 "
@@ -1242,7 +1242,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 } else {
                     n = snprintf(summary + off, sizeof(summary) - off,
                         "; automount not_attempted (SC_FLASH_NO_AUTOMOUNT "
-                        "in effect — try `udisksctl mount -b %s`)",
+                        "in effect - try `udisksctl mount -b %s`)",
                         block_dev_path);
                     if (n > 0 && (size_t)n < sizeof(summary) - off) {
                         off += (size_t)n;
@@ -1250,7 +1250,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                 }
             }
             write_error(error_buf, error_size, "%s", summary);
-            flash_log("BOOTSEL_TIMEOUT — %s", summary);
+            flash_log("BOOTSEL_TIMEOUT - %s", summary);
             return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
         }
         const uint64_t remaining = deadline_ms - now_ms;
@@ -1267,7 +1267,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
 #endif
 }
 
-/* ── Phase 6.4 — UF2 copy with progress + re-enumeration waiter ─── */
+/* ── Phase 6.4 - UF2 copy with progress + re-enumeration waiter ─── */
 
 #define SC_FLASH_COPY_CHUNK_BYTES (64u * 1024u)
 #define SC_FLASH_COPY_DEST_FILENAME "firmware.uf2"
@@ -1405,7 +1405,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
 {
     if (parent_dir == NULL || uid_hex == NULL || uid_hex[0] == '\0') {
         write_error(error_buf, error_size, "null/empty inputs");
-        flash_log("wait_reenumeration: rejected — parent_dir=%s uid_hex=%s",
+        flash_log("wait_reenumeration: rejected - parent_dir=%s uid_hex=%s",
                   (parent_dir != NULL) ? parent_dir : "(null)",
                   (uid_hex != NULL) ? (uid_hex[0] == '\0' ? "(empty)" : uid_hex)
                                     : "(null)");
@@ -1518,7 +1518,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
             off = parent_obs_append(summary, sizeof(summary), off,
                                     parent_dir, &obs);
             write_error(error_buf, error_size, "%s", summary);
-            flash_log("REENUM_TIMEOUT — %s", summary);
+            flash_log("REENUM_TIMEOUT - %s", summary);
             return SC_FLASH_ERR_REENUM_TIMEOUT;
         }
         const uint64_t remaining = deadline_ms - now_ms;

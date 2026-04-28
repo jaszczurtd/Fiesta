@@ -1760,7 +1760,7 @@ ScAuthStatus sc_core_authenticate(
     char tx_error[256];
     tx_error[0] = '\0';
 
-    /* 1. HELLO — refresh identity and start a fresh authenticated window. */
+    /* 1. HELLO - refresh identity and start a fresh authenticated window. */
     char hello[SC_HELLO_RESPONSE_MAX];
     if (transport->ops->send_hello == NULL ||
         !transport->ops->send_hello(transport->context, device_path,
@@ -2011,7 +2011,7 @@ ScFlashStatus sc_core_flash(
         uf2_path, helper_err, sizeof(helper_err));
     if (fmt_st != SC_FLASH_OK) {
         flash_set_error(error_buf, error_size,
-                        "UF2 format rejected: %s — %s",
+                        "UF2 format rejected: %s - %s",
                         sc_flash_status_str(fmt_st), helper_err);
         return SC_FLASH_STATUS_FORMAT_REJECTED;
     }
@@ -2059,7 +2059,7 @@ ScFlashStatus sc_core_flash(
         transport, device_path, helper_err, sizeof(helper_err));
     if (auth_st != SC_AUTH_OK) {
         flash_set_error(error_buf, error_size,
-                        "auth failed: %s — %s",
+                        "auth failed: %s - %s",
                         sc_auth_status_name(auth_st), helper_err);
         return SC_FLASH_STATUS_AUTH_FAILED;
     }
@@ -2071,7 +2071,7 @@ ScFlashStatus sc_core_flash(
         transport, device_path, helper_err, sizeof(helper_err));
     if (reboot_st != SC_REBOOT_OK) {
         flash_set_error(error_buf, error_size,
-                        "reboot failed: %s — %s",
+                        "reboot failed: %s - %s",
                         sc_reboot_status_name(reboot_st), helper_err);
         return SC_FLASH_STATUS_REBOOT_FAILED;
     }
@@ -2125,7 +2125,7 @@ ScFlashStatus sc_core_flash(
     }
     if (bs_st != SC_FLASH_OK) {
         flash_set_error(error_buf, error_size,
-                        "BOOTSEL watcher: %s — %s",
+                        "BOOTSEL watcher: %s - %s",
                         sc_flash_status_str(bs_st), helper_err);
         return SC_FLASH_STATUS_BOOTSEL_TIMEOUT;
     }
@@ -2140,7 +2140,7 @@ ScFlashStatus sc_core_flash(
         helper_err, sizeof(helper_err));
     if (cp_st != SC_FLASH_OK) {
         flash_set_error(error_buf, error_size,
-                        "copy failed: %s — %s",
+                        "copy failed: %s - %s",
                         sc_flash_status_str(cp_st), helper_err);
         return SC_FLASH_STATUS_COPY_FAILED;
     }
@@ -2160,7 +2160,7 @@ ScFlashStatus sc_core_flash(
               helper_err, sizeof(helper_err));
     if (re_st != SC_FLASH_OK) {
         flash_set_error(error_buf, error_size,
-                        "re-enumeration: %s — %s",
+                        "re-enumeration: %s - %s",
                         sc_flash_status_str(re_st), helper_err);
         return SC_FLASH_STATUS_REENUM_TIMEOUT;
     }

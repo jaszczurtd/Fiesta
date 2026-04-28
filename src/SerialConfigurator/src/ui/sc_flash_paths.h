@@ -7,7 +7,7 @@
  * Saves a small JSON document at:
  *   Linux:   $XDG_CONFIG_HOME/fiesta-configurator/flash-paths.json
  *            (or ~/.config/fiesta-configurator/flash-paths.json)
- *   Windows: stub — sc_flash_paths_save / _load return false until a
+ *   Windows: stub - sc_flash_paths_save / _load return false until a
  *            future Windows-packaging slice ports the path resolver
  *            (see provider §4.1 design rule).
  *
@@ -18,7 +18,7 @@
  *     "OilAndSpeed": { ... }
  *   }
  *
- * Adjustometer never appears here — out-of-scope by policy lock v1.32.
+ * Adjustometer never appears here - out-of-scope by policy lock v1.32.
  *
  * In-memory layout is indexed by the same SC_MODULE_COUNT enum that
  * sc_core uses, so callers can do

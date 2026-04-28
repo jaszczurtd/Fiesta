@@ -75,7 +75,7 @@ set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
 # Intentionally JaszczurHAL-free: sc_param_handlers.c includes only the
 # HAL-free sc_protocol.h. The HAL-bound fiesta_default_vocabulary lives in
 # sc_session_vocabulary.h, which firmware modules include directly via
-# arduino-build.sh — host CI runs that fall back to sc_crypto_none don't
+# arduino-build.sh - host CI runs that fall back to sc_crypto_none don't
 # need it and must not require JaszczurHAL on the include path.
 add_library(fiesta_sc_definitions STATIC
     "${FIESTA_SC_DEFINITIONS_DIR}/sc_param_handlers.c"
@@ -207,7 +207,7 @@ if(BUILD_TESTING)
             fiesta_sc_definitions
     )
 
-    # Phase 6.3 — BOOTSEL drive watcher. Uses pthread for the
+    # Phase 6.3 - BOOTSEL drive watcher. Uses pthread for the
     # mid-test mkdir worker and the public sc_flash API from
     # serial_configurator_core.
     find_package(Threads REQUIRED)
@@ -220,7 +220,7 @@ if(BUILD_TESTING)
             Threads::Threads
     )
 
-    # Phase 6.4 — UF2 copy with progress + re-enumeration waiter.
+    # Phase 6.4 - UF2 copy with progress + re-enumeration waiter.
     # Same fixture pattern as bootsel: mkdtemp parent + pthread
     # worker that drops the expected entry mid-test.
     add_executable(serial-configurator-flash-copy-reenum-tests
@@ -232,7 +232,7 @@ if(BUILD_TESTING)
             Threads::Threads
     )
 
-    # Phase 6.5 — end-to-end orchestrator (sc_core_flash). Drives
+    # Phase 6.5 - end-to-end orchestrator (sc_core_flash). Drives
     # the full pipeline through a mock transport + mkdtemp BOOTSEL /
     # by-id fixtures so every branch is hermetic.
     add_executable(serial-configurator-flash-orchestrator-tests
@@ -283,7 +283,7 @@ if(BUILD_TESTING)
             serial_configurator_core
     )
 
-    # i18n test embeds src/ui/sc_i18n.c by #include — it is pure C with no
+    # i18n test embeds src/ui/sc_i18n.c by #include - it is pure C with no
     # GTK or core deps, so the test target stands alone (linkable on
     # hosts that lack libgtk-4-dev).
     target_include_directories(serial-configurator-i18n-tests
@@ -296,7 +296,7 @@ if(BUILD_TESTING)
             serial_configurator_core
     )
 
-    # flash-paths test embeds src/ui/sc_flash_paths.c by #include — it
+    # flash-paths test embeds src/ui/sc_flash_paths.c by #include - it
     # is pure C with no GTK dependency, so the test target stands alone
     # exactly like the i18n tests do.
     target_link_libraries(serial-configurator-flash-paths-tests
@@ -307,6 +307,31 @@ if(BUILD_TESTING)
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # Custom progress-bar widget test - embeds src/ui/sc_progressbar.c
+    # by #include. Unlike the i18n test, the widget is GTK-backed
+    # (GtkDrawingArea + cairo), so the target only registers when GTK4
+    # is available on the host. The test itself skips at runtime when
+    # no display is reachable, so headless CI runs do not fail.
+    if(GTK4_FOUND)
+        add_executable(serial-configurator-progressbar-tests
+            tests/test_sc_progressbar.c
+        )
+        target_link_libraries(serial-configurator-progressbar-tests
+            PRIVATE
+                serial_configurator_core
+                PkgConfig::GTK4
+        )
+        target_include_directories(serial-configurator-progressbar-tests
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+
+        add_test(
+            NAME serial-configurator-progressbar-tests
+            COMMAND serial-configurator-progressbar-tests
+        )
+    endif()
 
     add_test(
         NAME serial-configurator-core-tests

@@ -1,5 +1,5 @@
 /*
- * R1.1 — coverage of the generic SC param framework in
+ * R1.1 - coverage of the generic SC param framework in
  * src/common/scDefinitions/. Verifies:
  *   - find_by_id, validate_range, get_i16, set_i16, load_defaults
  *     (kind / read-only / range / NULL guards),
@@ -39,7 +39,7 @@ typedef struct {
     int16_t fan_air_start_c;
     int16_t fan_air_stop_c;
     int16_t heater_stop_c;
-    int16_t nominal_rpm; /* schema_since=2 — V1 blob lacks this field. */
+    int16_t nominal_rpm; /* schema_since=2 - V1 blob lacks this field. */
 } ecu_values_t;
 
 static const sc_param_descriptor_t k_ecu_descs[] = {
@@ -326,7 +326,7 @@ static int test_blob_round_trip_v1_upgrade_path(void) {
      * than be overwritten by anything from the V1 buffer. */
     ecu_values_t out;
     sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &out);
-    out.nominal_rpm = 999; /* sentinel — must NOT be touched by V1 decode. */
+    out.nominal_rpm = 999; /* sentinel - must NOT be touched by V1 decode. */
 
     uint16_t schema = 0u;
     TEST_ASSERT(sc_param_blob_decode(k_ecu_descs, k_ecu_descs_count, &out, blob,
@@ -383,7 +383,7 @@ static int test_blob_decode_rejects_bad_inputs(void) {
 }
 
 static int test_crc32_reference_vector(void) {
-    /* Same vector as JaszczurHAL CRC8 self-test inspirits — "123456789"
+    /* Same vector as JaszczurHAL CRC8 self-test inspirits - "123456789"
      * reference for CRC32/PKZIP is 0xCBF43926 (well-known). */
     const uint8_t buf[] = "123456789";
     TEST_ASSERT(sc_param_crc32(buf, 9u) == 0xCBF43926u,

@@ -1,5 +1,5 @@
 /*
- * Phase 6.3 — coverage for sc_flash_watch_for_bootsel.
+ * Phase 6.3 - coverage for sc_flash_watch_for_bootsel.
  *
  * Tests use the test-only entry point sc_flash__watch_for_bootsel_in
  * with mkdtemp-allocated parent directories so the suite stays

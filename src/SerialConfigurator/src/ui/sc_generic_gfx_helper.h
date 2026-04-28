@@ -17,7 +17,7 @@ extern "C" {
 
 /**
  * @brief Install the application's CSS provider on the default GDK
- *        display. Idempotent — safe to call once at app startup.
+ *        display. Idempotent - safe to call once at app startup.
  */
 void sc_gfx_install_css(void);
 

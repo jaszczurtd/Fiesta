@@ -25,7 +25,7 @@
  *   per-frame trace (every send/recv chunk). Off by default.
  *
  * The env var is shared with sc_flash.c so a single `SC_FLASH_DEBUG=1`
- * flips both layers — the operator does not need to remember two knobs. */
+ * flips both layers - the operator does not need to remember two knobs. */
 static bool transport_log_verbose_enabled(void)
 {
     static int cached = -1;
@@ -290,7 +290,7 @@ static bool read_framed_response_with_deadline(
                 if (!line_overflow && used > 0u) {
                     line[used] = '\0';
                     const char *trimmed = trim_leading_spaces(line);
-                    /* Strict prefix match — only true frames are even
+                    /* Strict prefix match - only true frames are even
                      * considered (this replaces the previous strstr-based
                      * substring search that was vulnerable to false matches
                      * inside debug log lines). */
@@ -340,7 +340,7 @@ static bool open_and_configure_port(const char *device_path, int *fd, char *erro
 {
     if (device_path == 0 || fd == 0) {
         set_error(error, error_size, "internal error: invalid arguments");
-        transport_log("open: rejected — null device_path or fd pointer");
+        transport_log("open: rejected - null device_path or fd pointer");
         return false;
     }
 
@@ -428,7 +428,7 @@ static void reconcile_cached_ports_with_list(const ScTransportCandidateList *lis
         }
         if (!still_present) {
             transport_log("reconcile: dropping cached slot=%zu fd=%d "
-                          "path='%s' (no longer in candidate list — "
+                          "path='%s' (no longer in candidate list - "
                           "device unplugged or by-id symlink gone)",
                           i, s_cached_ports[i].fd,
                           s_cached_ports[i].device_path);
@@ -474,7 +474,7 @@ static void invalidate_cached_port(const char *device_path)
         transport_log("invalidate path='%s' (slot=%d)", device_path, slot);
         close_cached_port_slot((size_t)slot);
     } else {
-        transport_log_v("invalidate path='%s' — no cached slot", device_path);
+        transport_log_v("invalidate path='%s' - no cached slot", device_path);
     }
 }
 
@@ -503,7 +503,7 @@ static bool acquire_cached_port(
             return true;
         }
 
-        transport_log("cache slot=%d stale (fd<0) for path='%s' — reopening",
+        transport_log("cache slot=%d stale (fd<0) for path='%s' - reopening",
                       slot, device_path);
         close_cached_port_slot((size_t)slot);
     }
@@ -515,7 +515,7 @@ static bool acquire_cached_port(
 
     slot = find_free_cached_port_slot();
     if (slot < 0) {
-        transport_log("cache full — evicting slot 0 path='%s'",
+        transport_log("cache full - evicting slot 0 path='%s'",
                       s_cached_ports[0].device_path);
         close_cached_port_slot(0u);
         slot = 0;
@@ -797,7 +797,7 @@ static bool default_send_sc_command(
         return false;
     }
 
-    /* Strip a trailing newline if the caller supplied one — framing adds its
+    /* Strip a trailing newline if the caller supplied one - framing adds its
      * own terminator and disallows raw '\n' inside the payload. */
     char inner[SC_FRAME_PAYLOAD_MAX];
     size_t cmd_len = strlen(command);
@@ -845,9 +845,9 @@ static bool default_send_sc_command(
                 break;
             }
 
-            transport_log("SC '%s' got NOT_READY — re-handshaking on fd=%d",
+            transport_log("SC '%s' got NOT_READY - re-handshaking on fd=%d",
                           inner, fd);
-            /* Module forgot HELLO (re-enumeration / reset) — re-handshake
+            /* Module forgot HELLO (re-enumeration / reset) - re-handshake
              * and retry the same command on the same fd. */
             if (!send_hello_bootstrap_on_fd(fd, slot, timeout_ms,
                                             last_error, sizeof(last_error))) {

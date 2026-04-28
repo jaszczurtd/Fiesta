@@ -15,7 +15,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -24,7 +24,7 @@
     do { \
         if (strcmp((actual), (expected)) != 0) { \
             fprintf(stderr, \
-                    "FAIL: %s — %s (line %d): got '%s', want '%s'\n", \
+                    "FAIL: %s - %s (line %d): got '%s', want '%s'\n", \
                     __func__, (msg), __LINE__, (actual), (expected)); \
             return 1; \
         } \
@@ -129,7 +129,7 @@ static int test_unknown_top_key_is_ignored(void)
 
     TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&p, "ECU"),
                        "/new.uf2", "ECU loaded");
-    /* No way to fetch a value for a non-tracked module — sc_flash_paths
+    /* No way to fetch a value for a non-tracked module - sc_flash_paths
      * has no slot for Adjustometer, and the loader silently ignores it. */
     return 0;
 }

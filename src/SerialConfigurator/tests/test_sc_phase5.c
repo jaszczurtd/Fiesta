@@ -21,7 +21,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -30,7 +30,7 @@
     do { \
         if ((a) != (b)) { \
             fprintf(stderr, \
-                    "FAIL: %s — %s (line %d): got %d, want %d\n", \
+                    "FAIL: %s - %s (line %d): got %d, want %d\n", \
                     __func__, (msg), __LINE__, (int)(a), (int)(b)); \
             return 1; \
         } \

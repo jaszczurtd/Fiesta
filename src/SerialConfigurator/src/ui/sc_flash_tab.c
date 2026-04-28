@@ -17,13 +17,13 @@
  *
  * The body widget at @p state->flash_tab_root is a vertical box. On
  * every detection cycle it is rebuilt from scratch by
- * sc_flash_tab_rebuild_sections — each in-scope module that is
+ * sc_flash_tab_rebuild_sections - each in-scope module that is
  * currently detected gets a GtkFrame section with:
  *   - UF2 file picker (Choose / Clear) + path label
  *   - manifest file picker (optional, Choose / Clear) + path label
  *   - read-only status label (selectable text)
  *   - GtkProgressBar (idle-hidden until 6.5 wires flashing)
- *   - Flash button (stubbed in 6.2 — exercises the global lock)
+ *   - Flash button (stubbed in 6.2 - exercises the global lock)
  *
  * Per-section widget pointers live in a private static array so the
  * AppState struct does not have to grow N pointers per module. A
@@ -34,7 +34,7 @@
  *   while a flash is running, every other Flash button, the Detect
  *   button, and every section's file pickers go insensitive. The
  *   active section's status field stays live.
- * The 6.2 stub only exercises the plumbing — the Flash button
+ * The 6.2 stub only exercises the plumbing - the Flash button
  * enters the lock, prints "TODO Phase 6.5" into the status field,
  * and a g_timeout_add releases the lock 1.5 s later.
  */
@@ -58,7 +58,7 @@ typedef struct ScFlashSection {
     GtkWidget *progress_slot;
     GtkWidget *progress_bar;
     GtkWidget *progress_result_label;
-    /* Creep state — advances the determinate progress bar smoothly
+    /* Creep state - advances the determinate progress bar smoothly
      * within a phase's [start, end) range while the orchestrator is
      * blocked on a single-event phase (AUTH, REBOOT, WAIT_BOOTSEL,
      * WAIT_REENUM). Without this the bar jumps to phase_start and
@@ -218,7 +218,9 @@ static void section_show_progress_result(ScFlashSection *s, bool ok)
     if (s == NULL || s->progress_slot == NULL || s->progress_result_label == NULL) {
         return;
     }
-    gtk_label_set_text(GTK_LABEL(s->progress_result_label), ok ? "OK" : "BLAD");
+    gtk_label_set_text(GTK_LABEL(s->progress_result_label),
+        sc_i18n_string_get(ok ? SC_I18N_FLASH_RESULT_OK
+                              : SC_I18N_FLASH_RESULT_FAIL));
     if (s->progress_area != NULL) {
         gtk_widget_set_visible(s->progress_area, TRUE);
     }
@@ -231,7 +233,7 @@ static void section_show_progress_result(ScFlashSection *s, bool ok)
 
 /* ── progress-bar phase creep ──────────────────────────────────────── */
 
-/* Tick callback — advances the bar from phase_start toward phase_end
+/* Tick callback - advances the bar from phase_start toward phase_end
  * based on elapsed time within the phase. Caps at phase_end - epsilon
  * so a long-running phase does not cause the bar to overrun the next
  * phase's start before the next FLASH_EV_PROGRESS event arrives. */
@@ -268,7 +270,7 @@ static void start_phase_creep(ScFlashSection *s, ScFlashPhase phase,
     if (s == NULL) return;
     /* Anchor the timer to "now" and remember the phase so the tick
      * computes the right ramp. If a creep was already running, just
-     * reset its anchor — same source id keeps firing. */
+     * reset its anchor - same source id keeps firing. */
     s->creep_phase = phase;
     if (from_fraction < 0.0) from_fraction = 0.0;
     if (from_fraction > 1.0) from_fraction = 1.0;
@@ -425,7 +427,7 @@ static void on_file_dialog_open_finish(GObject *source,
         g_free(path);
         g_object_unref(file);
     } else if (error != NULL) {
-        /* User-cancelled or genuine error — leave state unchanged. */
+        /* User-cancelled or genuine error - leave state unchanged. */
         g_clear_error(&error);
     }
 
@@ -520,7 +522,7 @@ static void on_manifest_clear_clicked(GtkButton *button, gpointer user_data)
  * copies (the source widgets / state may have changed by the time the
  * worker reads them), the section pointer is stable for the lifetime
  * of the GUI (s_sections is a static array). The transport pointer is
- * borrowed from AppState — its lifetime exceeds any flash. */
+ * borrowed from AppState - its lifetime exceeds any flash. */
 typedef struct {
     ScFlashSection *section;
     AppState *state;
@@ -569,7 +571,7 @@ static gboolean flash_idle_apply(gpointer user_data)
         if (current < 0.0) current = 0.0;
         if (current > 1.0) current = 1.0;
         if (ev->phase == SC_FLASH_PHASE_COPY && ev->bytes_total > 0u) {
-            /* Inside COPY — interpolate within the phase's fraction
+            /* Inside COPY - interpolate within the phase's fraction
              * range. Per-chunk events arrive every 64 KiB so the bar
              * sweeps smoothly across this slice. */
             const double phase_start =
@@ -594,7 +596,7 @@ static gboolean flash_idle_apply(gpointer user_data)
                            sc_i18n_string_get(SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT),
                            pct);
         } else {
-            /* Phase boundary — jump to the next phase's start fraction.
+            /* Phase boundary - jump to the next phase's start fraction.
              * The bar shows a determinate position even during long
              * waits (WAIT_BOOTSEL, WAIT_REENUM); the status label
              * names which phase the host is sitting in. */
@@ -615,7 +617,7 @@ static gboolean flash_idle_apply(gpointer user_data)
         }
         section_set_progress_visual(s, frac);
         if (ev->phase == SC_FLASH_PHASE_COPY && ev->bytes_total > 0u) {
-            /* COPY drives the bar from per-chunk events — no creep
+            /* COPY drives the bar from per-chunk events - no creep
              * needed and the timer would fight the real fraction. */
             stop_phase_creep(s);
         } else {
@@ -772,7 +774,7 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
 
     GThread *worker = g_thread_new("sc_flash_worker",
                                     flash_worker_main, ctx);
-    g_thread_unref(worker); /* detached — worker frees ctx itself. */
+    g_thread_unref(worker); /* detached - worker frees ctx itself. */
 }
 
 /* ── section construction ──────────────────────────────────────────── */
@@ -1019,7 +1021,7 @@ void sc_flash_tab_set_lock(AppState *state, bool locked)
     if (state == NULL) return;
     state->flash_in_progress = locked;
 
-    /* Detect button — sc_detection.c owns the runtime state but the
+    /* Detect button - sc_detection.c owns the runtime state but the
      * widget pointer is in AppState, so we can toggle it directly. */
     if (state->detect_button != NULL) {
         gtk_widget_set_sensitive(state->detect_button, !locked);
@@ -1044,7 +1046,7 @@ GtkWidget *sc_flash_tab_build(AppState *state)
         return 0;
     }
 
-    /* Persisted paths first — every freshly-rebuilt section reads
+    /* Persisted paths first - every freshly-rebuilt section reads
      * from state->flash_paths to populate its labels. A missing or
      * malformed file is treated as "no remembered paths yet". */
     sc_flash_paths_init(&state->flash_paths);
@@ -1059,7 +1061,7 @@ GtkWidget *sc_flash_tab_build(AppState *state)
     state->flash_tab_root = flash_tab_root;
     state->flash_in_progress = false;
 
-    /* Initial body — placeholder until first detection. */
+    /* Initial body - placeholder until first detection. */
     sc_flash_tab_rebuild_sections(state);
     sc_flash_tab_refresh_sensitivity(state);
     return flash_tab_root;

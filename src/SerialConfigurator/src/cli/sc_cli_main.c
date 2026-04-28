@@ -2,11 +2,11 @@
  * CLI process entry. Tiny dispatch over subcommands. Every subcommand
  * lives in a focused module:
  *
- *   sc_cli_selectors.{h,c}  — --module/--uid/--port + per-command
+ *   sc_cli_selectors.{h,c}  - --module/--uid/--port + per-command
  *                             arg parsers + target-module resolver
- *   sc_cli_output.{h,c}     — stdout printers (module table, parsed
+ *   sc_cli_output.{h,c}     - stdout printers (module table, parsed
  *                             values / param list / param detail)
- *   sc_cli_commands.{h,c}   — command_detect, command_list,
+ *   sc_cli_commands.{h,c}   - command_detect, command_list,
  *                             command_meta_values_or_catalog,
  *                             command_reboot_bootloader, plus the
  *                             stable exit-code conventions

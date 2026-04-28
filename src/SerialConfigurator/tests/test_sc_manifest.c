@@ -17,7 +17,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -26,13 +26,13 @@
     do { \
         if ((a) != (b)) { \
             fprintf(stderr, \
-                    "FAIL: %s — %s (line %d): got %d, want %d\n", \
+                    "FAIL: %s - %s (line %d): got %d, want %d\n", \
                     __func__, (msg), __LINE__, (int)(a), (int)(b)); \
             return 1; \
         } \
     } while (0)
 
-/* "abc" SHA-256 — FIPS 180-2 Appendix B.1. */
+/* "abc" SHA-256 - FIPS 180-2 Appendix B.1. */
 static const char *k_abc_sha256_hex =
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
@@ -165,7 +165,7 @@ static int test_bad_sha256_format_is_rejected(void)
                    sc_manifest_parse(json_short, strlen(json_short), &m),
                    "63-char sha256");
 
-    /* Uppercase hex must be rejected — manifest contract is lowercase. */
+    /* Uppercase hex must be rejected - manifest contract is lowercase. */
     const char *json_upper =
         "{"
         "\"module_name\":\"ECU\","

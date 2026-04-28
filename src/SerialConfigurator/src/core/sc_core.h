@@ -336,7 +336,7 @@ typedef struct ScFlashOptions {
  * the underlying helper's error string for the operator log.
  *
  * @p uid_hex must be the UID the targeted module reported in its
- * pre-flash HELLO — it gates the re-enumeration step against the
+ * pre-flash HELLO - it gates the re-enumeration step against the
  * same physical device so a different module appearing on the bus
  * concurrently does not get mistakenly matched.
  *

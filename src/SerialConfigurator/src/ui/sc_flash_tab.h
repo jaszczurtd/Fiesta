@@ -29,7 +29,7 @@ GtkWidget *sc_flash_tab_build(AppState *state);
  * @brief Toggle @p state->flash_tab_root sensitivity based on
  *        whether any in-scope module is currently detected.
  *        Adjustometer is excluded by construction (not in
- *        SC_MODULE_COUNT — see v1.32 lock); no special filtering
+ *        SC_MODULE_COUNT - see v1.32 lock); no special filtering
  *        needed here.
  */
 void sc_flash_tab_refresh_sensitivity(AppState *state);
@@ -37,7 +37,7 @@ void sc_flash_tab_refresh_sensitivity(AppState *state);
 /**
  * @brief Rebuild the per-module flash sections in the second tab
  *        (Phase 6.2). Called whenever the detection state changes
- *        — adds a section for every in-scope module that is
+ *        - adds a section for every in-scope module that is
  *        currently detected, removes sections for modules that are
  *        no longer detected, and falls back to the placeholder when
  *        no module is detected. Persisted paths

@@ -10,7 +10,7 @@
  * Each subview owns the widgets and helpers tied to its panel and only
  * touches the subset of AppState it needs. The struct stays a single
  * type because GTK widget pointers, scratch status strings, and the
- * detection cache all share the same lifetime — splitting per-subview
+ * detection cache all share the same lifetime - splitting per-subview
  * structs would buy nothing here.
  */
 

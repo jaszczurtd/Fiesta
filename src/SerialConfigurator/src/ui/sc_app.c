@@ -7,11 +7,11 @@
  * Anything that has its own widget tree, status state, or signal
  * handlers lives in a dedicated subview file:
  *
- *   sc_modules_view.{h,c}       — page 1: list, lamps, details
- *   sc_flash_tab.{h,c}          — page 2: Flash tab body + gating
- *   sc_detection.{h,c}          — async worker + Detect/Disconnect
- *   sc_generic_gfx_helper.{h,c} — install_css, set_lamp_state
- *   sc_module_details.{h,c}     — right-hand module details panel
+ *   sc_modules_view.{h,c}       - page 1: list, lamps, details
+ *   sc_flash_tab.{h,c}          - page 2: Flash tab body + gating
+ *   sc_detection.{h,c}          - async worker + Detect/Disconnect
+ *   sc_generic_gfx_helper.{h,c} - install_css, set_lamp_state
+ *   sc_module_details.{h,c}     - right-hand module details panel
  *
  * The shared AppState struct lives in sc_ui_state.h and is treated
  * as a private cross-subview header. All subview files include it.
@@ -45,13 +45,13 @@ static void on_activate(GtkApplication *app, gpointer user_data)
     gtk_window_set_title(GTK_WINDOW(window), sc_i18n_string_get(SC_I18N_APP_TITLE));
     gtk_window_set_default_size(GTK_WINDOW(window), 1040, 680);
 
-    /* Phase 6.1: notebook with two pages — legacy modules view first,
+    /* Phase 6.1: notebook with two pages - legacy modules view first,
      * empty flash tab second. Subsequent slices flesh out page 2. */
     GtkWidget *notebook = gtk_notebook_new();
     gtk_widget_set_vexpand(notebook, TRUE);
     gtk_window_set_child(GTK_WINDOW(window), notebook);
 
-    /* Page 1 — Modules. */
+    /* Page 1 - Modules. */
     GtkWidget *modules_root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_start(modules_root, 16);
     gtk_widget_set_margin_end(modules_root, 16);
@@ -73,7 +73,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
                          state);
     }
 
-    /* Page 2 — Flash. Built before reset_connection so that
+    /* Page 2 - Flash. Built before reset_connection so that
      * flash_tab_root is set when refresh_module_lamps fires its
      * downstream sensitivity refresh. */
     GtkWidget *flash_root = sc_flash_tab_build(state);
@@ -81,7 +81,7 @@ static void on_activate(GtkApplication *app, gpointer user_data)
                              flash_root,
                              gtk_label_new(sc_i18n_string_get(SC_I18N_TAB_FLASH)));
 
-    /* Idle initial state — modules not detected, log shows the
+    /* Idle initial state - modules not detected, log shows the
      * "press Detect" prompt, flash tab grey via the lamp refresh. */
     sc_detection_reset_connection(state, false);
 
