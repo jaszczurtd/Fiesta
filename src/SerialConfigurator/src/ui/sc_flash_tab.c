@@ -407,6 +407,8 @@ static void section_recompute_status(ScFlashSection *s)
 
 /* ── file-dialog plumbing ──────────────────────────────────────────── */
 
+#if GTK_CHECK_VERSION(4, 10, 0)
+
 typedef struct DialogCtx {
     ScFlashSection *section;
     bool is_manifest;       /* true: manifest picker; false: UF2 */
@@ -503,7 +505,6 @@ static GFile *dialog_initial_folder_for_picker(const ScFlashSection *section,
     return dialog_initial_folder_from_module_build(section);
 }
 
-#if GTK_CHECK_VERSION(4, 10, 0)
 static void on_file_dialog_open_finish(GObject *source,
                                        GAsyncResult *result,
                                        gpointer user_data)
