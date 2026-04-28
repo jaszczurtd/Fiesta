@@ -1,5 +1,4 @@
-#ifndef T_CONFIG
-#define T_CONFIG
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,8 +6,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define MODULE_NAME "ECU"
 
 /* Fiesta-project firmware identity for the configurator HELLO response. */
 #ifndef FW_VERSION
@@ -279,6 +276,4 @@ uint32_t configSessionId(void);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

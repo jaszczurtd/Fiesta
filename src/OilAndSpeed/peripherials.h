@@ -2,7 +2,7 @@
 #define S_PERIPHERIALS_H
 
 #include <tools.h>
-#include <canDefinitions.h>
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include "config.h"
 #include "hardwareConfig.h"

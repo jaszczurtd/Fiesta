@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "config.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "hal/hal_serial_frame.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include <stdint.h>
@@ -96,7 +97,7 @@ void test_oilspeed_hello_activates_session_and_reports_module(void) {
   TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
 
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "OK HELLO"));
-  TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=" MODULE_NAME));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "proto=1"));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "fw=" FW_VERSION));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "build="));
@@ -153,7 +154,7 @@ void test_oilspeed_handles_multiple_hello_commands_in_one_rx_buffer(void) {
   const char *raw = hal_mock_serial_last_line();
   TEST_ASSERT_NOT_NULL(raw);
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "OK HELLO"));
-  TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "module=" MODULE_NAME));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
 }
 
 void test_oilspeed_sc_get_meta_requires_hello_first(void) {
@@ -167,7 +168,7 @@ void test_oilspeed_sc_get_meta_returns_identity_fields(void) {
 
   const char *response = sendSerialLine("SC_GET_META\n");
   TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK META"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "module=" MODULE_NAME));
+  TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_NOT_NULL(strstr(response, "proto=1"));
   TEST_ASSERT_NOT_NULL(strstr(response, "session="));
   TEST_ASSERT_NOT_NULL(strstr(response, "fw=" FW_VERSION));
@@ -228,7 +229,7 @@ void test_oilspeed_framed_hello_responds_with_same_seq(void) {
   TEST_ASSERT_NOT_NULL(response);
   TEST_ASSERT_EQUAL_STRING_LEN("$SC,77,", response, 7);
   TEST_ASSERT_NOT_NULL(strstr(response, "OK HELLO"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "module=" MODULE_NAME));
+  TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_TRUE(configSessionActive());
 }
 

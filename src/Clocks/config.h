@@ -1,10 +1,7 @@
-#ifndef T_CONFIG
-#define T_CONFIG
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#define MODULE_NAME "Clocks"
 
 /* Fiesta-project firmware identity for the configurator HELLO response. */
 #ifndef FW_VERSION
@@ -170,4 +167,3 @@ bool configSessionActive(void);
  */
 uint32_t configSessionId(void);
 
-#endif

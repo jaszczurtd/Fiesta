@@ -10,7 +10,7 @@ set(OILSPEED_SRC ${CMAKE_CURRENT_SOURCE_DIR})
 set(OILSPEED_TEST_STUBS ${CMAKE_CURRENT_SOURCE_DIR}/tests/stubs)
 set(HAL_LIB_EXTERNAL ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 set(HAL_SRC ${HAL_LIB_EXTERNAL}/src)
-set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/canDefinitions)
+set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 set(SCDEFS  ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 
 if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)

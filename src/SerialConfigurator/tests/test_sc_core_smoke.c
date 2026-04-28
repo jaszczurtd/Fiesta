@@ -1,4 +1,5 @@
 #include "sc_core.h"
+#include "sc_fiesta_module_tokens.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +14,11 @@ static int test_init_defaults(void)
     ScCore core;
     sc_core_init(&core);
 
-    const char *expected_names[SC_MODULE_COUNT] = { "ECU", "Clocks", "OilAndSpeed" };
+    const char *expected_names[SC_MODULE_COUNT] = {
+        SC_MODULE_ECU,
+        SC_MODULE_CLOCKS,
+        SC_MODULE_OIL_AND_SPEED
+    };
 
     TEST_ASSERT(sc_core_module_count() == SC_MODULE_COUNT, "module count mismatch");
 

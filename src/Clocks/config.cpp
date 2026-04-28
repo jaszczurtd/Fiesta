@@ -9,6 +9,7 @@
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
 #include "../common/scDefinitions/sc_session_vocabulary.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 static hal_serial_session_t s_configSession;
 
@@ -92,7 +93,7 @@ static void configSessionReplyGetMeta(void) {
   char response[256] = {0};
   snprintf(response, sizeof(response),
            SC_REPLY_META_FMT,
-           MODULE_NAME,
+           SC_MODULE_TOKEN_CLOCKS,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
            (unsigned long)configSessionId(),
            FW_VERSION,
@@ -193,7 +194,7 @@ static void configSession_onUnknownLine(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  hal_serial_session_init_with_vocabulary(&s_configSession, MODULE_NAME,
+  hal_serial_session_init_with_vocabulary(&s_configSession, SC_MODULE_TOKEN_CLOCKS,
                                           FW_VERSION, BUILD_ID,
                                           &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,

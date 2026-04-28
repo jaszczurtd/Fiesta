@@ -3,6 +3,7 @@
 #include <hal/hal_soft_timer.h>
 #include <hal/hal_i2c_slave.h>
 #include "led.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 #ifdef DEBUG_MAX_CHANGES
 static int32_t lastPulse = 0;
@@ -18,7 +19,7 @@ static uint32_t lastPeriodicLogMs = 0;
 void initialization(void) {
 
   debugInit();
-  setDebugPrefixWithColon(MODULE_NAME);
+  setDebugPrefixWithColon(SC_MODULE_TOKEN_ADJUSTOMETER);
 
   setupWatchdog(NULL, WATCHDOG_TIME);
   

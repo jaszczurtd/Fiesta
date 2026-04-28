@@ -5,7 +5,7 @@
 #include <float.h>
 
 #include "config.h"
-#include "canDefinitions.h"
+#include "../common/canDefinitions/canDefinitions.h"
 #include "rpm.h"
 #include "hardwareConfig.h"
 #include "tests.h"

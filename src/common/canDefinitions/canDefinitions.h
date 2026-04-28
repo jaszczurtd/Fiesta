@@ -1,0 +1,157 @@
+#ifndef CAN_DEFINITIONS_0
+#define CAN_DEFINITIONS_0
+
+//how many times CAN modules should be initialized in case of error?
+#define CAN_RETRIES 4
+
+//engine temperature which is considered as a "cold engine". Above is "normal".
+#define TEMP_COLD_ENGINE 45
+//minimum RPM for dependencies to operate on
+#define RPM_MIN 350 
+
+//time for checking if the "cold" start is allowed (s)
+#define CAN_CHECK_COLD_START_CONDITIONS 40
+
+//all values in ms
+#define CAN_UPDATE_RECIPIENTS 50
+#define CAN_MAIN_LOOP_READ_INTERVAL 4
+#define CAN_CHECK_CONNECTION 1500
+
+#define CAN_FRAME_MAX_LENGTH 8
+
+//0 index - same for all frames
+#define CAN_FRAME_NUMBER 0
+
+#define CAN_ID_ECU_UPDATE_01 	0x123
+enum {
+    CAN_FRAME_ECU_UPDATE_ENGINE_LOAD = 1,
+    CAN_FRAME_ECU_UPDATE_VOLTS_HI,
+    CAN_FRAME_ECU_UPDATE_VOLTS_LO,
+    CAN_FRAME_ECU_UPDATE_COOLANT,
+    CAN_FRAME_ECU_UPDATE_OIL,
+};
+
+#define CAN_ID_DPF          0x124
+enum {
+    CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_HI = 1,
+    CAN_FRAME_DPF_UPDATE_DPF_PRESSURE_LO,
+    CAN_FRAME_DPF_UPDATE_DPF_REGEN,
+};
+
+#define CAN_ID_LUMENS       0x125
+enum {
+    CAN_FRAME_LIGHTS_UPDATE_HI = 1,
+    CAN_FRAME_LIGHTS_UPDATE_LO,
+};
+
+#define CAN_ID_CLOCK_BRIGHTNESS       0x126
+enum {
+    CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI = 1,
+    CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO,
+};
+
+#define CAN_ID_RPM 0x127
+enum {
+    CAN_FRAME_RPM_UPDATE_HI = 1,
+    CAN_FRAME_RPM_UPDATE_LO,
+};
+
+#define CAN_ID_THROTTLE 0x128
+enum {
+    CAN_FRAME_THROTTLE_UPDATE_HI = 1,
+    CAN_FRAME_THROTTLE_UPDATE_LO,
+};
+
+#define CAN_ID_ECU_UPDATE_02 0x129
+enum {
+    CAN_FRAME_ECU_UPDATE_INTAKE = 1,
+    CAN_FRAME_ECU_UPDATE_FUEL_HI,
+    CAN_FRAME_ECU_UPDATE_FUEL_LO,
+    CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE,
+    CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED
+};
+
+#define CAN_ID_OIL_AND_SPEED_MODULE_UPDATE 0x12a
+enum {
+    CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI = 1,
+    CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO,
+    CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED,
+};
+
+#define CAN_ID_ECU_UPDATE_03 0x12b
+enum {
+    CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE = 1,
+    CAN_FRAME_ECU_UPDATE_FUEL_TEMP,
+    CAN_FRAME_ECU_UPDATE_FAN_ENABLED,
+};
+
+#define CAN_ID_TURBO_PRESSURE 0x12c
+enum {
+    CAN_FRAME_ECU_UPDATE_PRESSURE_HI = 1,
+    CAN_FRAME_ECU_UPDATE_PRESSURE_LO,
+    CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI,
+    CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO,
+};
+
+#define CAN_ID_GPS_EXT_LAT 0x12d
+enum {
+    CAN_FRAME_GPS_EXT_LAT_B3 = 1,   // int32 latitude * 1e6 (big-endian)
+    CAN_FRAME_GPS_EXT_LAT_B2,
+    CAN_FRAME_GPS_EXT_LAT_B1,
+    CAN_FRAME_GPS_EXT_LAT_B0,
+    CAN_FRAME_GPS_EXT_STATUS,       // bit0: GPS available
+    CAN_FRAME_GPS_EXT_RSVD1,
+    CAN_FRAME_GPS_EXT_RSVD2,
+};
+
+#define CAN_ID_GPS_EXT_LON_TIME 0x12e
+enum {
+    CAN_FRAME_GPS_EXT_LON_B3 = 1,   // int32 longitude * 1e6 (big-endian)
+    CAN_FRAME_GPS_EXT_LON_B2,
+    CAN_FRAME_GPS_EXT_LON_B1,
+    CAN_FRAME_GPS_EXT_LON_B0,
+    CAN_FRAME_GPS_EXT_DT_HI,        // packed datetime: YYYY offset from 2020 (4b), MM (4b), DD (5b), HH (5b), mm (6b)
+    CAN_FRAME_GPS_EXT_DT_MD,
+    CAN_FRAME_GPS_EXT_DT_LO,
+};
+
+#define CAN_ID_EGT_UPDATE 0x12f
+enum {
+    CAN_FRAME_EGT_UPDATE_EGT_HI = 1,
+    CAN_FRAME_EGT_UPDATE_EGT_LO,
+    CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI,
+    CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO,
+};
+
+enum {
+    F_FUEL,
+    F_COOLANT_TEMP,
+    F_OIL_TEMP,
+    F_INTAKE_TEMP,
+    F_THROTTLE_POS,
+    F_RPM,
+    F_EGT,
+    F_PRESSURE,
+    F_VOLTS,
+    F_DPF_PRESSURE,
+    F_DPF_TEMP,
+    F_DPF_REGEN,
+    F_GPS_CAR_SPEED,
+    F_CALCULATED_ENGINE_LOAD,
+    F_OIL_PRESSURE,
+    F_PRESSURE_PERCENTAGE,
+    F_FUEL_TEMP,
+    F_OUTSIDE_LUMENS,
+    F_CLOCK_BRIGHTNESS,
+    F_GPS_IS_AVAILABLE,
+    F_LATITUDE,
+    F_LONGITUDE,
+    F_GPS_TIME,   // HHMM (local adjusted time)
+    F_GPS_DATE,   // YYMMDD (local adjusted date)
+    F_FAN_ENABLED,
+    F_PRESSURE_DESIRED,
+    F_ABS_CAR_SPEED,
+    F_LAST
+};
+
+#endif

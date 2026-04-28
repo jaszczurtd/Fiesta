@@ -1,11 +1,9 @@
 #include "sc_manifest.h"
+#include "../config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define SC_MANIFEST_MAX_JSON_SIZE   (64u * 1024u)
-#define SC_MANIFEST_MAX_ARTIFACT_SIZE (8u * 1024u * 1024u)
 
 const char *sc_manifest_status_str(sc_manifest_status_t status)
 {

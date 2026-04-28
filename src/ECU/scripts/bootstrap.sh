@@ -3,8 +3,8 @@
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
 # Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
-# arduino-cli + rp2040 core, syncs required Arduino libraries (JaszczurHAL,
-# canDefinitions), runs host tests, compiles firmware for every Fiesta
+# arduino-cli + rp2040 core, syncs required Arduino library (JaszczurHAL),
+# runs host tests, compiles firmware for every Fiesta
 # module, and finally builds + tests the SerialConfigurator desktop tool:
 #   - ECU                (host tests + firmware, -Werror)
 #   - Clocks             (host tests + firmware)
@@ -306,7 +306,6 @@ sync_lib() {
 fetch_libraries() {
     mkdir -p "$LIB_DIR"
     sync_lib JaszczurHAL   https://github.com/jaszczurtd/JaszczurHAL.git
-    sync_lib canDefinitions https://github.com/jaszczurtd/canDefinitions.git
 }
 
 # -----------------------------------------------------------------------------

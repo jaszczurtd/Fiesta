@@ -1,4 +1,5 @@
 #include "sc_frame.h"
+#include "sc_fiesta_module_tokens.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -61,7 +62,7 @@ static int test_encode_rejects_invalid_payload(void)
 static int test_roundtrip(void)
 {
     char encoded[128];
-    TEST_ASSERT(sc_frame_encode(1234u, "OK HELLO module=ECU proto=1",
+    TEST_ASSERT(sc_frame_encode(1234u, "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1",
                                 encoded, sizeof(encoded), NULL),
                 "encode roundtrip");
 
@@ -70,7 +71,7 @@ static int test_roundtrip(void)
     TEST_ASSERT(sc_frame_decode(encoded, &seq, inner, sizeof(inner)),
                 "decode roundtrip");
     TEST_ASSERT(seq == 1234u, "seq roundtrip");
-    TEST_ASSERT(strcmp(inner, "OK HELLO module=ECU proto=1") == 0,
+    TEST_ASSERT(strcmp(inner, "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1") == 0,
                 "payload roundtrip");
     return 0;
 }
@@ -106,7 +107,7 @@ static int test_decode_rejects_non_framed_lines(void)
     TEST_ASSERT(!sc_frame_decode("[INFO] saw $SC,1,foo*00",
                                  &seq, inner, sizeof(inner)),
                 "decode must reject '$SC,' as substring");
-    TEST_ASSERT(!sc_frame_decode("OK HELLO module=ECU",
+    TEST_ASSERT(!sc_frame_decode("OK HELLO module=" SC_MODULE_TOKEN_ECU,
                                  &seq, inner, sizeof(inner)),
                 "decode must reject legacy plain-text line");
     TEST_ASSERT(!sc_frame_decode("$SC,abc,FOO*00",

@@ -2,7 +2,7 @@
 #define S_START_H
 
 #include <tools.h>
-#include <canDefinitions.h>
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include <hal/hal_soft_timer.h>
 #include "can.h"

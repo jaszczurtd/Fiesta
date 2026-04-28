@@ -177,6 +177,8 @@ static int test_env_resolver_prefers_sc_locale_override(void)
 
     s_locale_initialized = false;
     unsetenv("SC_LOCALE");
+    unsetenv("LC_ALL");
+    unsetenv("LC_MESSAGES");
     setenv("LANG", "pl_PL.UTF-8", 1);
     TEST_ASSERT(sc_i18n_active_locale() == SC_LOCALE_PL,
                 "LANG=pl_PL.UTF-8 -> PL when SC_LOCALE absent");

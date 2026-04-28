@@ -20,13 +20,14 @@
  */
 
 #include "sc_cli_selectors.h"
+#include "../config.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define CLI_DETECTION_LOG_MAX 16384u
-#define CLI_COMMAND_LOG_MAX 4096u
+#define CLI_DETECTION_LOG_MAX SC_RUNTIME_DETECTION_LOG_MAX
+#define CLI_COMMAND_LOG_MAX SC_RUNTIME_COMMAND_LOG_MAX
 
 int sc_cli_command_detect(void);
 int sc_cli_command_list(void);

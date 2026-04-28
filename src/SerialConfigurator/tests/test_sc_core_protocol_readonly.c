@@ -1,4 +1,5 @@
 #include "sc_core.h"
+#include "sc_fiesta_module_tokens.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -202,8 +203,8 @@ static int test_detect_parses_structured_hello_fields(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu",
             .device_path = "/dev/mock/ttyACM0",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -230,7 +231,7 @@ static int test_detect_parses_structured_hello_fields(void)
     TEST_ASSERT(!ecu->target_ambiguous, "ECU should not be ambiguous");
     TEST_ASSERT(strcmp(ecu->port_path, "/dev/mock/ttyACM0") == 0, "ECU path mismatch");
     TEST_ASSERT(ecu->hello_identity.valid, "hello identity should be valid");
-    TEST_ASSERT(strcmp(ecu->hello_identity.module_name, "ECU") == 0, "hello module mismatch");
+    TEST_ASSERT(strcmp(ecu->hello_identity.module_name, SC_MODULE_TOKEN_ECU) == 0, "hello module mismatch");
     TEST_ASSERT(ecu->hello_identity.proto_present, "hello proto should be present");
     TEST_ASSERT(ecu->hello_identity.proto_version == 1, "hello proto mismatch");
     TEST_ASSERT(ecu->hello_identity.session_present, "hello session should be present");
@@ -247,8 +248,8 @@ static int test_duplicate_detection_sets_ambiguous_flag(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-1",
             .device_path = "/dev/mock/ttyACM0",
-            .hello_response = "OK HELLO module=ECU proto=1 session=11 fw=v1 build=YjE= uid=AAA",
-            .meta_response = "SC_OK META module=ECU proto=1 session=11 fw=v1 build=YjE= uid=AAA",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=11 fw=v1 build=YjE= uid=AAA",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=11 fw=v1 build=YjE= uid=AAA",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -257,8 +258,8 @@ static int test_duplicate_detection_sets_ambiguous_flag(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-2",
             .device_path = "/dev/mock/ttyACM1",
-            .hello_response = "OK HELLO module=ECU proto=1 session=12 fw=v1 build=YjE= uid=BBB",
-            .meta_response = "SC_OK META module=ECU proto=1 session=12 fw=v1 build=YjE= uid=BBB",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=12 fw=v1 build=YjE= uid=BBB",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=12 fw=v1 build=YjE= uid=BBB",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -292,8 +293,8 @@ static int test_sc_commands_parse_status_and_meta(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu",
             .device_path = "/dev/mock/ttyACM0",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=99 fw=v2 build=Yjk5 uid=F00D",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=99 fw=v2 build=Yjk5 uid=F00D",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=900",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=900 min=700 max=1200 default=890",
@@ -324,7 +325,7 @@ static int test_sc_commands_parse_status_and_meta(void)
     const ScModuleStatus *ecu = sc_core_module_status(&core, 0u);
     TEST_ASSERT(ecu != 0, "ECU status missing after SC_GET_META");
     TEST_ASSERT(ecu->meta_identity.valid, "meta identity should be parsed");
-    TEST_ASSERT(strcmp(ecu->meta_identity.module_name, "ECU") == 0, "meta module mismatch");
+    TEST_ASSERT(strcmp(ecu->meta_identity.module_name, SC_MODULE_TOKEN_ECU) == 0, "meta module mismatch");
     TEST_ASSERT(ecu->meta_identity.session_present, "meta session should be present");
     TEST_ASSERT(ecu->meta_identity.session_id == 99u, "meta session mismatch");
     TEST_ASSERT(strcmp(ecu->meta_identity.uid, "F00D") == 0, "meta uid mismatch");
@@ -387,8 +388,8 @@ static int test_sc_get_param_reports_invalid_param_id(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu",
             .device_path = "/dev/mock/ttyACM0",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -431,8 +432,8 @@ static int test_sc_get_param_parser_rejects_invalid_min_max_range(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-invalid-range",
             .device_path = "/dev/mock/ttyACM5",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=1200 max=700 default=890",
@@ -475,7 +476,7 @@ static int test_sc_err_unknown_is_mapped_to_unknown_cmd_status(void)
         {
             .candidate_path = "/dev/mock/by-id/clocks",
             .device_path = "/dev/mock/ttyACM7",
-            .hello_response = "OK HELLO module=Clocks proto=1 session=10 fw=v1 build=YjE= uid=CLOCKS",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=10 fw=v1 build=YjE= uid=CLOCKS",
             .meta_response = "ERR UNKNOWN",
             .values_response = "ERR UNKNOWN",
             .param_list_response = "ERR UNKNOWN",
@@ -519,8 +520,8 @@ static int test_detect_accepts_plain_build_with_spaces(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-plain-build",
             .device_path = "/dev/mock/ttyACM9",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=Apr 26 2026 13:31:00 uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=Apr 26 2026 13:31:00 uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=Apr 26 2026 13:31:00 uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=Apr 26 2026 13:31:00 uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -556,8 +557,8 @@ static int test_meta_accepts_build_without_equals(void)
         {
             .candidate_path = "/dev/mock/by-id/clocks-build-no-eq",
             .device_path = "/dev/mock/ttyACM8",
-            .hello_response = "OK HELLO module=Clocks proto=1 session=10 fw=v1 build=YjE= uid=CLOCKS",
-            .meta_response = "SC_OK META module=Clocks proto=1 session=10 fw=v1 buildYjI= uid=CLOCKS",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=10 fw=v1 build=YjE= uid=CLOCKS",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=10 fw=v1 buildYjI= uid=CLOCKS",
             .values_response = "SC_OK PARAM_VALUES",
             .param_list_response = "SC_OK PARAM_LIST",
             .param_nominal_response = "SC_INVALID_PARAM_ID id=nominal_rpm",
@@ -601,8 +602,8 @@ static int test_meta_base64_build_without_padding_is_decoded(void)
         {
             .candidate_path = "/dev/mock/by-id/clocks-build-missing-padding",
             .device_path = "/dev/mock/ttyACM10",
-            .hello_response = "OK HELLO module=Clocks proto=1 session=10 fw=v1 build=QXByIDI2IDIwMjYgMTM6MTI6MzE= uid=CLOCKS",
-            .meta_response = "SC_OK META module=Clocks proto=1 session=11 fw=v1 build=QXByIDI2IDIwMjYgMTM6MTI6MzE uid=CLOCKS",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=10 fw=v1 build=QXByIDI2IDIwMjYgMTM6MTI6MzE= uid=CLOCKS",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=11 fw=v1 build=QXByIDI2IDIwMjYgMTM6MTI6MzE uid=CLOCKS",
             .values_response = "SC_OK PARAM_VALUES",
             .param_list_response = "SC_OK PARAM_LIST",
             .param_nominal_response = "SC_INVALID_PARAM_ID id=nominal_rpm",
@@ -646,8 +647,8 @@ static int test_meta_corrupted_base64_build_falls_back_to_empty_meta_build(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-corrupted-build",
             .device_path = "/dev/mock/ttyACM6",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=QXByIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=QXyIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=QXByIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=QXyIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -696,8 +697,8 @@ static int test_param_list_parser_tolerates_noise_tokens(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-param-list-noise",
             .device_path = "/dev/mock/ttyACM11",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES fan_coolant_start_c=102",
             .param_list_response = "SC_OK PARAM_LIST fan_coolant_start_c,fan_coolant_stop_c,ECU:,fan_air_start_c",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
@@ -745,8 +746,8 @@ static int test_param_values_parser_tolerates_noise_tokens(void)
         {
             .candidate_path = "/dev/mock/by-id/ecu-param-values-noise",
             .device_path = "/dev/mock/ttyACM12",
-            .hello_response = "OK HELLO module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
-            .meta_response = "SC_OK META module=ECU proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
             .values_response = "SC_OK PARAM_VALUES fan_coolant_start_c=102 fan_coolant_stop_c=95 ECU: thr:6.0 fan_air_start_c=55 fan_air_stop_c=45",
             .param_list_response = "SC_OK PARAM_LIST fan_coolant_start_c fan_coolant_stop_c fan_air_start_c fan_air_stop_c",
             .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",

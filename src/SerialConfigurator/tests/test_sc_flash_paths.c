@@ -6,6 +6,7 @@
  */
 
 #include "../src/ui/sc_flash_paths.c"
+#include "sc_fiesta_module_tokens.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,9 +67,9 @@ static int test_save_then_load_round_trip(void)
     with_temp_path();
     ScFlashPaths in;
     sc_flash_paths_init(&in);
-    sc_flash_paths_set_uf2(&in,      "ECU",         "/path/ecu.uf2");
-    sc_flash_paths_set_manifest(&in, "ECU",         "/path/ecu.json");
-    sc_flash_paths_set_uf2(&in,      "Clocks",      "/path/clocks.uf2");
+    sc_flash_paths_set_uf2(&in,      SC_MODULE_ECU,    "/path/ecu.uf2");
+    sc_flash_paths_set_manifest(&in, SC_MODULE_ECU,    "/path/ecu.json");
+    sc_flash_paths_set_uf2(&in,      SC_MODULE_CLOCKS, "/path/clocks.uf2");
     /* OilAndSpeed: leave both empty intentionally. */
 
     TEST_ASSERT(sc_flash_paths_save(&in), "save");
@@ -78,15 +79,15 @@ static int test_save_then_load_round_trip(void)
     TEST_ASSERT(sc_flash_paths_load(&out), "load");
     cleanup();
 
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, "ECU"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, SC_MODULE_ECU),
                        "/path/ecu.uf2", "round-trip ECU uf2");
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&out, "ECU"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&out, SC_MODULE_ECU),
                        "/path/ecu.json", "round-trip ECU manifest");
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, "Clocks"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, SC_MODULE_CLOCKS),
                        "/path/clocks.uf2", "round-trip Clocks uf2");
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&out, "Clocks"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&out, SC_MODULE_CLOCKS),
                        "", "Clocks manifest stays empty");
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, "OilAndSpeed"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, SC_MODULE_OIL_AND_SPEED),
                        "", "OilAndSpeed uf2 stays empty");
     return 0;
 }
@@ -101,7 +102,7 @@ static int test_load_malformed_file_returns_false_and_clears(void)
     (void)fclose(f);
 
     ScFlashPaths p;
-    sc_flash_paths_set_uf2(&p, "ECU", "/should/be/cleared");
+    sc_flash_paths_set_uf2(&p, SC_MODULE_ECU, "/should/be/cleared");
     const bool ok = sc_flash_paths_load(&p);
     cleanup();
 
@@ -118,7 +119,7 @@ static int test_unknown_top_key_is_ignored(void)
     const char *legacy =
         "{"
         " \"Adjustometer\": { \"uf2_path\": \"/old.uf2\", \"manifest_path\": \"\" },"
-        " \"ECU\":          { \"uf2_path\": \"/new.uf2\", \"manifest_path\": \"\" }"
+        " \"" SC_MODULE_ECU "\":          { \"uf2_path\": \"/new.uf2\", \"manifest_path\": \"\" }"
         "}";
     (void)fwrite(legacy, 1u, strlen(legacy), f);
     (void)fclose(f);
@@ -127,7 +128,7 @@ static int test_unknown_top_key_is_ignored(void)
     TEST_ASSERT(sc_flash_paths_load(&p), "load with legacy Adjustometer key");
     cleanup();
 
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&p, "ECU"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&p, SC_MODULE_ECU),
                        "/new.uf2", "ECU loaded");
     /* No way to fetch a value for a non-tracked module - sc_flash_paths
      * has no slot for Adjustometer, and the loader silently ignores it. */
@@ -141,7 +142,7 @@ static int test_unknown_inner_key_is_ignored(void)
     TEST_ASSERT(f != NULL, "open temp");
     const char *forward_compat =
         "{"
-        " \"ECU\": { \"uf2_path\": \"/x.uf2\","
+        " \"" SC_MODULE_ECU "\": { \"uf2_path\": \"/x.uf2\","
         "          \"manifest_path\": \"/x.json\","
         "          \"future_field\": \"forward-compat-noise\" }"
         "}";
@@ -152,8 +153,8 @@ static int test_unknown_inner_key_is_ignored(void)
     TEST_ASSERT(sc_flash_paths_load(&p), "load with extra inner key");
     cleanup();
 
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&p, "ECU"), "/x.uf2", "ECU uf2");
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&p, "ECU"), "/x.json", "ECU manifest");
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&p, SC_MODULE_ECU), "/x.uf2", "ECU uf2");
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&p, SC_MODULE_ECU), "/x.json", "ECU manifest");
     return 0;
 }
 
@@ -179,14 +180,14 @@ static int test_paths_with_special_characters_round_trip(void)
     sc_flash_paths_init(&in);
     /* Backslash and double-quote are the only chars that need
      * escaping in JSON; verify both round-trip cleanly. */
-    sc_flash_paths_set_uf2(&in, "ECU", "/path/with \"quote\" and \\backslash");
+    sc_flash_paths_set_uf2(&in, SC_MODULE_ECU, "/path/with \"quote\" and \\backslash");
     TEST_ASSERT(sc_flash_paths_save(&in), "save");
 
     ScFlashPaths out;
     TEST_ASSERT(sc_flash_paths_load(&out), "load");
     cleanup();
 
-    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, "ECU"),
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, SC_MODULE_ECU),
                        "/path/with \"quote\" and \\backslash",
                        "escaped chars round-trip");
     return 0;

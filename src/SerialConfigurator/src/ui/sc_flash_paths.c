@@ -1,4 +1,6 @@
 #include "sc_flash_paths.h"
+#include "../config.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -7,16 +9,14 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define MAX_JSON_BYTES (64u * 1024u)
-
 /* Module display names keyed by SC_MODULE_COUNT index. MUST stay in
  * sync with sc_core's k_module_defs[] - the entry order is part of
  * the on-disk schema. Adjustometer is intentionally absent (v1.32
  * policy lock). */
 static const char *const k_module_names[SC_MODULE_COUNT] = {
-    "ECU",
-    "Clocks",
-    "OilAndSpeed",
+    SC_MODULE_ECU,
+    SC_MODULE_CLOCKS,
+    SC_MODULE_OIL_AND_SPEED
 };
 
 static const char *s_test_override = NULL;
@@ -50,18 +50,18 @@ const char *sc_flash_paths_default_file(void)
     const char *xdg = getenv("XDG_CONFIG_HOME");
     if (xdg != NULL && xdg[0] != '\0') {
         (void)snprintf(s_default_buf, sizeof(s_default_buf),
-                       "%s/fiesta-configurator/flash-paths.json", xdg);
+                       SC_FLASH_PATHS_XDG, xdg);
         return s_default_buf;
     }
     const char *home = getenv("HOME");
     if (home != NULL && home[0] != '\0') {
         (void)snprintf(s_default_buf, sizeof(s_default_buf),
-                       "%s/.config/fiesta-configurator/flash-paths.json", home);
+                       SC_FLASH_PATHS_HOME, home);
         return s_default_buf;
     }
     /* No HOME - degrade to /tmp so the GUI stays usable. */
     (void)snprintf(s_default_buf, sizeof(s_default_buf),
-                   "/tmp/fiesta-configurator-flash-paths.json");
+                   SC_FLASH_PATHS_TMP);
     return s_default_buf;
 #endif
 }
@@ -397,7 +397,7 @@ bool sc_flash_paths_load(ScFlashPaths *out)
 
     if (fseek(f, 0, SEEK_END) != 0) { (void)fclose(f); return false; }
     const long len = ftell(f);
-    if (len < 0 || (size_t)len > MAX_JSON_BYTES) {
+    if (len < 0 || (size_t)len > SC_FLASH_PATHS_JSON_MAX_BYTES) {
         (void)fclose(f);
         return false;
     }

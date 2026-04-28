@@ -1,9 +1,6 @@
-#ifndef T_CONFIG
-#define T_CONFIG
+#pragma once
 
 #include "hardwareConfig.h"
-
-#define MODULE_NAME "ADJ"
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
@@ -55,4 +52,3 @@
 // Fuel temp and voltage change slowly, so heavy smoothing is fine.
 #define ADC_EMA_SHIFT 3U
 
-#endif

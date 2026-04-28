@@ -6,7 +6,7 @@
 #include "config.h"
 
 #include <tools_c.h>
-#include "canDefinitions.h"
+#include "../common/canDefinitions/canDefinitions.h"
 
 #include "hardwareConfig.h"
 

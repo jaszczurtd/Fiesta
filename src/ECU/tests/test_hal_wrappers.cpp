@@ -6,6 +6,7 @@
 #include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "config.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "utils/tools_api.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -307,7 +308,7 @@ void test_ecu_config_session_hello_path(void) {
     inner[0] = '\0';
     TEST_ASSERT_TRUE(hal_serial_frame_decode(raw, &seq, inner, sizeof(inner)));
     TEST_ASSERT_EQUAL_UINT16(1u, seq);
-    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=ECU"));
+    TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=" SC_MODULE_TOKEN_ECU));
     TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "fw="));
     TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "build="));
     TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "uid="));

@@ -2,6 +2,7 @@
 #include "start.h"
 #include "ecuContext.h"
 #include <hal/hal_soft_timer.h>
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances
@@ -134,7 +135,7 @@ void executeByWatchdog(int *values, int size) {
 void initialization(void) {
 
   debugInit();
-  setDebugPrefixWithColon(MODULE_NAME);
+  setDebugPrefixWithColon(SC_MODULE_TOKEN_ECU);
 
   deb("Build timestamp: %s", ecu_BuildDateTime);
 

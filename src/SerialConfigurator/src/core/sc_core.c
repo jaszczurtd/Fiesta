@@ -15,6 +15,7 @@
 #include "sc_manifest.h"
 #include "sc_protocol.h"
 #include "sc_transport.h"
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 typedef struct ScModuleDef {
     const char *token;
@@ -22,9 +23,9 @@ typedef struct ScModuleDef {
 } ScModuleDef;
 
 static const ScModuleDef k_module_defs[SC_MODULE_COUNT] = {
-    { "ECU", "ECU" },
-    { "Clocks", "Clocks" },
-    { "OIL&SPD", "OilAndSpeed" },
+    { SC_MODULE_TOKEN_ECU, SC_MODULE_ECU },
+    { SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS },
+    { SC_MODULE_TOKEN_OIL_AND_SPEED, SC_MODULE_OIL_AND_SPEED },
 };
 
 static void copy_string(char *dst, size_t dst_size, const char *src)
@@ -462,8 +463,10 @@ static int module_index_from_token(const char *token)
         }
     }
 
-    if (strcmp(token, "OilAndSpeed") == 0) {
-        return 2;
+    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+        if (strcmp(token, k_module_defs[i].display_name) == 0) {
+            return (int)i;
+        }
     }
 
     return -1;
@@ -2080,9 +2083,9 @@ ScFlashStatus sc_core_flash(
     const ScFlashOptions defaults = {
         .bootsel_parents = { NULL, NULL },
         .by_id_parent = NULL,
-        .bootsel_timeout_ms = 60000u,
-        .reenum_timeout_ms = 30000u,
-        .grace_after_reenum_ms = 2500u,
+        .bootsel_timeout_ms = SC_FLASH_DEFAULT_BOOTSEL_TIMEOUT_MS,
+        .reenum_timeout_ms = SC_FLASH_DEFAULT_REENUM_TIMEOUT_MS,
+        .grace_after_reenum_ms = SC_FLASH_DEFAULT_REENUM_GRACE_MS,
     };
     const ScFlashOptions *opts = (options_or_null != NULL)
                                      ? options_or_null : &defaults;
@@ -2097,7 +2100,7 @@ ScFlashStatus sc_core_flash(
                                   : defaults.grace_after_reenum_ms;
 
     flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_WAIT_BOOTSEL);
-    char bootsel_path[512];
+    char bootsel_path[SC_TRANSPORT_PATH_MAX];
     helper_err[0] = '\0';
     sc_flash_status_t bs_st;
     if (opts->bootsel_parents[0] != NULL || opts->bootsel_parents[1] != NULL) {
@@ -2147,7 +2150,7 @@ ScFlashStatus sc_core_flash(
 
     /* 7. Wait for re-enumeration on the same UID. */
     flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_WAIT_REENUM);
-    char new_device_path[512];
+    char new_device_path[SC_TRANSPORT_PATH_MAX];
     helper_err[0] = '\0';
     const sc_flash_status_t re_st = (opts->by_id_parent != NULL)
         ? sc_flash__wait_reenumeration_in(

@@ -38,8 +38,8 @@
 extern "C" {
 #endif
 
-/** @brief Maximum path length stored per slot, including NUL. */
-#define SC_FLASH_PATHS_PATH_MAX 1024u
+/** @brief Maximum path length stored per slot, including NUL.
+ *  Defined in src/config.h (single source of config). */
 
 typedef struct ScFlashPathsEntry {
     char uf2[SC_FLASH_PATHS_PATH_MAX];

@@ -2,7 +2,7 @@
 #define CAN_F_0
 
 #include <tools.h>
-#include <canDefinitions.h>
+#include "../common/canDefinitions/canDefinitions.h"
 #include <hal/hal.h>
 #include "logic.h"
 
