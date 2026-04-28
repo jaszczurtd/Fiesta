@@ -4,7 +4,7 @@
  * The tests build small valid / mutated UF2 files in /tmp via mkstemp
  * and then call sc_flash_uf2_format_check on them. The generator is
  * focused on what the format check actually verifies (magic words,
- * family id, block alignment, indices) — payload bytes inside each
+ * family id, block alignment, indices) - payload bytes inside each
  * block are zeros.
  */
 
@@ -19,7 +19,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -28,7 +28,7 @@
     do { \
         if ((a) != (b)) { \
             fprintf(stderr, \
-                    "FAIL: %s — %s (line %d): got %d, want %d\n", \
+                    "FAIL: %s - %s (line %d): got %d, want %d\n", \
                     __func__, (msg), __LINE__, (int)(a), (int)(b)); \
             return 1; \
         } \
@@ -138,7 +138,7 @@ static int test_unaligned_size_is_rejected(void)
     int fd = mkstemp(path);
     TEST_ASSERT(fd >= 0, "mkstemp");
     (void)close(fd);
-    /* Write 600 bytes — not a multiple of 512. */
+    /* Write 600 bytes - not a multiple of 512. */
     uint8_t blob[600];
     memset(blob, 0xAA, sizeof(blob));
     TEST_ASSERT(write_uf2(path, blob, sizeof(blob)), "write unaligned");
@@ -206,7 +206,7 @@ static int test_block_index_out_of_range_is_rejected(void)
     const sc_flash_status_t st = sc_flash_uf2_format_check(path, err, sizeof(err));
     (void)remove(path);
     /* The checker first notices that block 1's declared total (1)
-     * disagrees with block 0's declared total (2) — that's the
+     * disagrees with block 0's declared total (2) - that's the
      * "BLOCK_INDEX_OUT_OF_RANGE" status (we share the code for both
      * disagreement and out-of-range). */
     TEST_ASSERT_EQ(SC_FLASH_ERR_BLOCK_INDEX_OUT_OF_RANGE, st,

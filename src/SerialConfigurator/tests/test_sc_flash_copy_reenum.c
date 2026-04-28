@@ -1,5 +1,5 @@
 /*
- * Phase 6.4 — coverage for sc_flash_copy_uf2 and
+ * Phase 6.4 - coverage for sc_flash_copy_uf2 and
  * sc_flash_wait_reenumeration.
  *
  * `sc_flash_copy_uf2` is exercised against a deterministic source

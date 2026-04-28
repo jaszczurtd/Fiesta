@@ -238,7 +238,7 @@ void sc_modules_view_build(AppState *state, GtkWidget *parent_box)
 
     /* Top row: Detect button on the left, spacer expands. The button
      * itself is wired to its click handler by the orchestrator that
-     * owns the detection state — see sc_app.c. */
+     * owns the detection state - see sc_app.c. */
     GtkWidget *top_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_append(GTK_BOX(parent_box), top_row);
 

@@ -21,7 +21,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -92,7 +92,7 @@ static int test_response_binds_challenge_and_session_id(void)
     TEST_ASSERT(memcmp(resp_a, resp_b, sizeof(resp_a)) != 0,
                 "session_id must affect response");
 
-    /* Mutate the challenge by one byte — must change the MAC. */
+    /* Mutate the challenge by one byte - must change the MAC. */
     uint8_t challenge2[SC_AUTH_CHALLENGE_BYTES];
     memcpy(challenge2, challenge, sizeof(challenge2));
     challenge2[0] ^= 0xFFu;

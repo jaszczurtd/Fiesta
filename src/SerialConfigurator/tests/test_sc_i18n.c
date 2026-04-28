@@ -1,7 +1,7 @@
 /*
  * sc_i18n: locale resolution + table integrity tests.
  *
- * No GTK dependency — sc_i18n.c is pure C, so the test compiles and
+ * No GTK dependency - sc_i18n.c is pure C, so the test compiles and
  * runs identically on Linux and Windows hosts. The test source is
  * included directly because the file lives in the GUI source list
  * (src/ui/sc_i18n.c); embedding it here keeps the CTest target
@@ -17,7 +17,7 @@
 #define TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
-            fprintf(stderr, "FAIL: %s — %s (line %d)\n", __func__, (msg), __LINE__); \
+            fprintf(stderr, "FAIL: %s - %s (line %d)\n", __func__, (msg), __LINE__); \
             return 1; \
         } \
     } while (0)
@@ -26,7 +26,7 @@
     do { \
         if (strcmp((actual), (expected)) != 0) { \
             fprintf(stderr, \
-                    "FAIL: %s — %s (line %d): got '%s', want '%s'\n", \
+                    "FAIL: %s - %s (line %d): got '%s', want '%s'\n", \
                     __func__, (msg), __LINE__, (actual), (expected)); \
             return 1; \
         } \
@@ -39,13 +39,13 @@ static int test_every_key_has_an_english_string(void)
         const char *s = sc_i18n_string_get((ScI18nKey)k);
         if (s == NULL || s[0] == '\0') {
             fprintf(stderr,
-                    "FAIL: %s — key %d returned %s\n",
+                    "FAIL: %s - key %d returned %s\n",
                     __func__, k, s == NULL ? "NULL" : "empty string");
             return 1;
         }
         if (strcmp(s, sc_i18n_missing_marker()) == 0) {
             fprintf(stderr,
-                    "FAIL: %s — key %d returned the missing marker\n",
+                    "FAIL: %s - key %d returned the missing marker\n",
                     __func__, k);
             return 1;
         }
@@ -57,19 +57,19 @@ static int test_every_key_has_a_polish_string(void)
 {
     /* Polish translations are allowed to be identical to English when
      * the source string is a protocol token or a marker like '[WARN] '
-     * — but the slot must NOT be NULL or the missing marker. */
+     * - but the slot must NOT be NULL or the missing marker. */
     sc_i18n_set_locale(SC_LOCALE_PL);
     for (int k = 0; k < SC_I18N_KEY_COUNT; ++k) {
         const char *s = sc_i18n_string_get((ScI18nKey)k);
         if (s == NULL || s[0] == '\0') {
             fprintf(stderr,
-                    "FAIL: %s — key %d returned %s under PL\n",
+                    "FAIL: %s - key %d returned %s under PL\n",
                     __func__, k, s == NULL ? "NULL" : "empty string");
             return 1;
         }
         if (strcmp(s, sc_i18n_missing_marker()) == 0) {
             fprintf(stderr,
-                    "FAIL: %s — key %d returned the missing marker under PL\n",
+                    "FAIL: %s - key %d returned the missing marker under PL\n",
                     __func__, k);
             return 1;
         }

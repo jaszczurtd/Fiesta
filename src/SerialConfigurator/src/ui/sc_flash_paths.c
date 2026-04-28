@@ -10,7 +10,7 @@
 #define MAX_JSON_BYTES (64u * 1024u)
 
 /* Module display names keyed by SC_MODULE_COUNT index. MUST stay in
- * sync with sc_core's k_module_defs[] — the entry order is part of
+ * sync with sc_core's k_module_defs[] - the entry order is part of
  * the on-disk schema. Adjustometer is intentionally absent (v1.32
  * policy lock). */
 static const char *const k_module_names[SC_MODULE_COUNT] = {
@@ -59,7 +59,7 @@ const char *sc_flash_paths_default_file(void)
                        "%s/.config/fiesta-configurator/flash-paths.json", home);
         return s_default_buf;
     }
-    /* No HOME — degrade to /tmp so the GUI stays usable. */
+    /* No HOME - degrade to /tmp so the GUI stays usable. */
     (void)snprintf(s_default_buf, sizeof(s_default_buf),
                    "/tmp/fiesta-configurator-flash-paths.json");
     return s_default_buf;
@@ -234,7 +234,7 @@ static bool parse_inner_object(json_cursor_t *c, ScFlashPathsEntry *entry)
         } else if (strcmp(key, "manifest_path") == 0) {
             copy_path(entry->manifest, sizeof(entry->manifest), value);
         }
-        /* Unknown inner keys silently ignored — forward-compat hook. */
+        /* Unknown inner keys silently ignored - forward-compat hook. */
 
         skip_ws(c);
         if (c->p < c->end && *c->p == '}') {
@@ -282,7 +282,7 @@ static bool parse_top_object(const char *json, size_t json_len,
             out->entries[idx] = tmp;
         }
         /* Unknown top-level module names (e.g. legacy "Adjustometer") are
-         * silently dropped — forward-compat for schema additions and
+         * silently dropped - forward-compat for schema additions and
          * back-compat for old configs that included Adjustometer. */
 
         skip_ws(&c);
@@ -313,7 +313,7 @@ static bool append_json_string(char *dst, size_t dst_size,
                 dst[(*pos)++] = '\\';
                 dst[(*pos)++] = ch;
             } else if ((unsigned char)ch < 0x20u) {
-                /* Reject control chars in stored paths — would not
+                /* Reject control chars in stored paths - would not
                  * round-trip cleanly. Real filesystem paths never
                  * contain these. */
                 return false;

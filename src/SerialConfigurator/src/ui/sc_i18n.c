@@ -11,7 +11,7 @@ static const char *const k_locale_codes[SC_LOCALE_COUNT] = {
     [SC_LOCALE_PL] = "pl",
 };
 
-/* ── String tables (designated initializers — missing slots are NULL) ── */
+/* ── String tables (designated initializers - missing slots are NULL) ── */
 
 static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_APP_TITLE]            = "Serial Configurator",
@@ -53,7 +53,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_PLACEHOLDER] =
         "Detect Fiesta modules first. The flash sections appear here "
         "once at least one module responds to HELLO.",
-    [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flash — %s",
+    [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flash - %s",
     [SC_I18N_FLASH_LBL_UF2]              = "UF2 artifact:",
     [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (optional):",
     [SC_I18N_FLASH_BTN_PICK_UF2]         = "Choose UF2…",
@@ -93,7 +93,9 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_STATUS_DONE_FMT] =
         "Flash OK: %s",
     [SC_I18N_FLASH_STATUS_FAILED_FMT] =
-        "Flash failed: %s — %s",
+        "Flash failed: %s - %s",
+    [SC_I18N_FLASH_RESULT_OK]            = "OK",
+    [SC_I18N_FLASH_RESULT_FAIL]          = "FAIL",
 
     [SC_I18N_STATUS_NO_META]    = "No metadata (module not detected).",
     [SC_I18N_STATUS_NO_CATALOG] = "No catalog read (module not detected).",
@@ -179,7 +181,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_PLACEHOLDER] =
         "Najpierw wykryj moduły Fiesta. Sekcje flashowania pojawią się tutaj, "
         "gdy przynajmniej jeden moduł odpowie na HELLO.",
-    [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flashowanie — %s",
+    [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flashowanie - %s",
     [SC_I18N_FLASH_LBL_UF2]              = "Plik UF2:",
     [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (opcjonalny):",
     [SC_I18N_FLASH_BTN_PICK_UF2]         = "Wybierz UF2…",
@@ -221,7 +223,9 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_STATUS_DONE_FMT] =
         "Flash OK: %s",
     [SC_I18N_FLASH_STATUS_FAILED_FMT] =
-        "Flashowanie nieudane: %s — %s",
+        "Flashowanie nieudane: %s - %s",
+    [SC_I18N_FLASH_RESULT_OK]            = "OK",
+    [SC_I18N_FLASH_RESULT_FAIL]          = "BŁĄD",
 
     [SC_I18N_STATUS_NO_META]    = "Brak metadanych (moduł niewykryty).",
     [SC_I18N_STATUS_NO_CATALOG] = "Brak odczytu katalogu (moduł niewykryty).",
@@ -291,13 +295,13 @@ ScLocale sc_i18n_parse_locale_string(const char *s)
 
 static ScLocale resolve_locale_from_env(void)
 {
-    /* SC_LOCALE wins — explicit override for tests / power users. */
+    /* SC_LOCALE wins - explicit override for tests / power users. */
     const char *override = getenv("SC_LOCALE");
     if (override != NULL && override[0] != '\0') {
         return sc_i18n_parse_locale_string(override);
     }
 
-    /* POSIX-flavour env vars — same semantics on Linux and on
+    /* POSIX-flavour env vars - same semantics on Linux and on
      * Windows when launched from MSYS2 or after `setlocale("")`. */
     static const char *const k_lang_vars[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
     for (size_t i = 0; i < sizeof(k_lang_vars) / sizeof(k_lang_vars[0]); ++i) {

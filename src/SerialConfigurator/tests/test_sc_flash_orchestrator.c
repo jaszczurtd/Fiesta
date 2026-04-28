@@ -1,5 +1,5 @@
 /*
- * Phase 6.5 — coverage for sc_core_flash, the end-to-end flashing
+ * Phase 6.5 - coverage for sc_core_flash, the end-to-end flashing
  * orchestrator.
  *
  * Each test pre-creates an `mkdtemp` fixture set:
@@ -12,7 +12,7 @@
  *     entry (so the re-enumeration wait hits on the first iteration).
  *
  * Pre-creating the BOOTSEL + by-id entries means the test never has
- * to spawn worker threads — the polling latency itself is covered by
+ * to spawn worker threads - the polling latency itself is covered by
  * the dedicated 6.3 / 6.4 suites. This suite focuses on the
  * orchestrator's branching logic.
  *
@@ -42,7 +42,7 @@
 #define TEST_ASSERT(cond, msg)                                                \
     do {                                                                      \
         if (!(cond)) {                                                        \
-            fprintf(stderr, "[FAIL] %s — %s (line %d)\n",                     \
+            fprintf(stderr, "[FAIL] %s - %s (line %d)\n",                     \
                     __func__, (msg), __LINE__);                               \
             return 1;                                                         \
         }                                                                     \
@@ -222,7 +222,7 @@ static void build_minimal_uf2(uint8_t out[512]) {
     out[24] = 0x01;
     /* family id (28-31) = RP2040 0xE48BFF56 */
     out[28] = 0x56; out[29] = 0xFF; out[30] = 0x8B; out[31] = 0xE4;
-    /* payload bytes — leave as 0; family only checked at offset 28-31. */
+    /* payload bytes - leave as 0; family only checked at offset 28-31. */
     /* end_magic (508-511) = 0x0AB16F30 */
     out[508] = 0x30; out[509] = 0x6F; out[510] = 0xB1; out[511] = 0x0A;
 }
@@ -332,7 +332,7 @@ static int test_happy_path_with_manifest(void) {
      * mints a new session_id on each HELLO and drops the auth state
      * with it; the mock mirrors that). What we care about here is
      * that it was raised mid-flow, which the AUTH_PROVE branch in
-     * mock_send sets — and which is implicit in the OK status. */
+     * mock_send sets - and which is implicit in the OK status. */
     fs_fixture_teardown(&fx);
     return 0;
 }
@@ -600,7 +600,7 @@ static int test_status_and_phase_names_stable(void) {
 
 static int test_null_arg_rejection(void) {
     char err[64];
-    /* All required pointers NULL except one — should get NULL_ARG. */
+    /* All required pointers NULL except one - should get NULL_ARG. */
     TEST_ASSERT(sc_core_flash(NULL, 0u, "/dev/x", "AB", "/tmp/x", NULL,
                               NULL, NULL, NULL, err, sizeof(err)) ==
                 SC_FLASH_STATUS_NULL_ARG, "NULL transport");

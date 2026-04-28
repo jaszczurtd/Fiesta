@@ -7,7 +7,7 @@
  * 6.2 lands the format checker only: parse a UF2 file and verify
  * structural invariants (magic, family id, block alignment) before
  * the GUI lets the operator queue it for flashing. No transport,
- * no boot-ROM interaction, no host-side filesystem watching — those
+ * no boot-ROM interaction, no host-side filesystem watching - those
  * arrive in 6.3 / 6.4 / 6.5.
  *
  * Keep this module GTK-free so the CLI can reuse the same checker
@@ -37,7 +37,7 @@ extern "C" {
 #define SC_FLASH_UF2_END_MAGIC    0x0AB16F30u
 #define SC_FLASH_UF2_FAMILY_RP2040 0xE48BFF56u
 
-/** @brief Cap on accepted UF2 file size (8 MiB — comfortably above any
+/** @brief Cap on accepted UF2 file size (8 MiB - comfortably above any
  *  realistic RP2040 image). */
 #define SC_FLASH_UF2_MAX_BYTES (8u * 1024u * 1024u)
 
@@ -61,15 +61,15 @@ typedef enum sc_flash_status_t {
     SC_FLASH_ERR_BAD_END_MAGIC,
     SC_FLASH_ERR_WRONG_FAMILY,
     SC_FLASH_ERR_BLOCK_INDEX_OUT_OF_RANGE,
-    /** Phase 6.3 — Linux watcher hit its deadline without seeing the
+    /** Phase 6.3 - Linux watcher hit its deadline without seeing the
      *  RPI-RP2 / RP2350 mass-storage drive appear under any of the
      *  candidate parent directories. */
     SC_FLASH_ERR_BOOTSEL_TIMEOUT,
-    /** Phase 6.4 — could not open / write the destination
+    /** Phase 6.4 - could not open / write the destination
      *  `<drive_path>/firmware.uf2`. Reported alongside the diagnostic
      *  string so the operator can see the underlying errno. */
     SC_FLASH_ERR_FILE_WRITE,
-    /** Phase 6.4 — re-enumeration waiter exhausted its budget without
+    /** Phase 6.4 - re-enumeration waiter exhausted its budget without
      *  seeing a `/dev/serial/by-id/` entry matching the supplied UID
      *  suffix. */
     SC_FLASH_ERR_REENUM_TIMEOUT,
@@ -92,7 +92,7 @@ const char *sc_flash_status_str(sc_flash_status_t st);
  * @ref SC_FLASH_UF2_MAX_BYTES) and walks every 512-byte block:
  * magic1 / magic2 / end magic at fixed offsets, family id matches
  * RP2040, block index < total blocks, total blocks consistent across
- * blocks. Each block's payload bytes are NOT checked — that's the
+ * blocks. Each block's payload bytes are NOT checked - that's the
  * artifact's content domain, not its structural contract.
  *
  * On success returns @c SC_FLASH_OK and writes a short OK token to
@@ -163,8 +163,8 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
  * @p bytes_written is the cumulative count after the latest write;
  * @p total_bytes is the source file size, fixed for the duration of
  * the copy. The callback runs on the same thread that called
- * @ref sc_flash_copy_uf2 — typically a worker thread spawned by the
- * orchestrator (Phase 6.5) — so any GUI updates have to be
+ * @ref sc_flash_copy_uf2 - typically a worker thread spawned by the
+ * orchestrator (Phase 6.5) - so any GUI updates have to be
  * marshalled by the caller (e.g. via @c g_idle_add).
  */
 typedef void (*sc_flash_progress_cb)(uint64_t bytes_written,
@@ -178,7 +178,7 @@ typedef void (*sc_flash_progress_cb)(uint64_t bytes_written,
  * `<drive_path>/firmware.uf2`, invoking @p progress_cb after each
  * chunk with the running and total byte counts. Closes both files
  * and `fsync()`s the destination before returning so the kernel
- * flushes to the actual mass-storage device — the RP2040 boot ROM
+ * flushes to the actual mass-storage device - the RP2040 boot ROM
  * detects the completed write and reboots into the new firmware on
  * its own.
  *
@@ -217,7 +217,7 @@ sc_flash_status_t sc_flash_wait_reenumeration(const char *uid_hex,
 
 /**
  * @brief Test-only entry point for @ref sc_flash_wait_reenumeration
- *        — drives the polling loop against a caller-supplied parent
+ *        - drives the polling loop against a caller-supplied parent
  *        directory rather than `/dev/serial/by-id/`.
  */
 sc_flash_status_t sc_flash__wait_reenumeration_in(

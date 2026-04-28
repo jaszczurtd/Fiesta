@@ -164,7 +164,7 @@ crypto / flash / manifest / orchestrator surfaces:
 - `serial-configurator-i18n-tests` (compiled-in EN+PL string tables)
 - `serial-configurator-flash-tests` (UF2 format checker)
 - `serial-configurator-flash-paths-tests` (`flash-paths.json` persistence)
-- `serial-configurator-sc-param-tests` (descriptor framework — find /
+- `serial-configurator-sc-param-tests` (descriptor framework - find /
   validate / get / set / load_defaults / 3 reply emitters /
   schema-versioned blob codec)
 - `serial-configurator-flash-bootsel-tests` (Phase 6.3 BOOTSEL drive watcher)

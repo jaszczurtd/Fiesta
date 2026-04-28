@@ -26,13 +26,13 @@
  *   - ICU is overkill for a tool with ~50 strings.
  *   - Runtime JSON works but adds path-resolution edge cases that
  *     differ Linux vs Windows. The current backend can be swapped
- *     to JSON later WITHOUT changing callers — the public API only
+ *     to JSON later WITHOUT changing callers - the public API only
  *     takes symbolic enum keys.
  *
  * Out of scope (not part of this layer):
  *   - protocol tokens (`SC_GET_META`, `SC_OK`, ...) stay verbatim
  *     because they are wire identifiers, not user-facing text;
- *   - CSS strings in sc_generic_gfx_helper — code, not text;
+ *   - CSS strings in sc_generic_gfx_helper - code, not text;
  *   - the GApplication ID `pl.jaszczur.fiesta.serialconfigurator`.
  */
 
@@ -82,8 +82,8 @@ typedef enum ScI18nKey {
 
     /* ── Flash tab ─────────────────────────────────────────────────── */
     SC_I18N_FLASH_PLACEHOLDER,
-    /* Phase 6.2 — per-module section widgets */
-    SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash — %s" */
+    /* Phase 6.2 - per-module section widgets */
+    SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash - %s" */
     SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact:" */
     SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest (optional):" */
     SC_I18N_FLASH_BTN_PICK_UF2,          /* "Choose UF2…" */
@@ -110,7 +110,14 @@ typedef enum ScI18nKey {
     SC_I18N_FLASH_STATUS_RUNNING_FMT,    /* "Flashing: %s" */
     SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT, /* "Flashing: COPY (%u%%)" */
     SC_I18N_FLASH_STATUS_DONE_FMT,       /* "Flash OK: %s" */
-    SC_I18N_FLASH_STATUS_FAILED_FMT,     /* "Flash failed: %s — %s" */
+    SC_I18N_FLASH_STATUS_FAILED_FMT,     /* "Flash failed: %s - %s" */
+    SC_I18N_FLASH_RESULT_OK,             /* "OK" - short marker shown in
+                                             the progress slot after a
+                                             successful flash. */
+    SC_I18N_FLASH_RESULT_FAIL,           /* short marker shown in the
+                                             progress slot after a failed
+                                             flash (EN: "FAIL", PL:
+                                             "BŁĄD"). */
 
     /* ── Default per-module status strings (idle) ──────────────────── */
     SC_I18N_STATUS_NO_META,
@@ -160,7 +167,7 @@ typedef enum ScI18nKey {
  * returned by @ref sc_i18n_missing_marker so the gap is visible in
  * the UI rather than crashing.
  *
- * Stable for the program lifetime — the string is a static literal
+ * Stable for the program lifetime - the string is a static literal
  * baked into the binary.
  */
 const char *sc_i18n_string_get(ScI18nKey key);

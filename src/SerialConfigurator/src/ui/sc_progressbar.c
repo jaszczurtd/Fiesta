@@ -16,10 +16,74 @@ static ScProgressBarState *progress_state(GtkWidget *progress_bar)
         G_OBJECT(progress_bar), k_state_key);
 }
 
+/* Resolve the foreground color of @p widget - used as the seed for
+ * the trough / border tints so the bar adapts to dark mode and to
+ * arbitrary user themes. */
+static void resolve_fg_color(GtkWidget *widget, GdkRGBA *out)
+{
+    out->red = 0.0; out->green = 0.0; out->blue = 0.0; out->alpha = 1.0;
+    if (widget == NULL) {
+        return;
+    }
+#if GTK_CHECK_VERSION(4, 10, 0)
+    gtk_widget_get_color(widget, out);
+#else
+    GtkStyleContext *ctx = gtk_widget_get_style_context(widget);
+    if (ctx != NULL) {
+        gtk_style_context_get_color(ctx, out);
+    }
+#endif
+}
+
+/* Resolve a "brand" fill color. We look up themes' named accent
+ * colors first (libadwaita's @accent_bg_color, then the legacy
+ * @theme_selected_bg_color); when nothing matches we fall back to a
+ * neutral blue tuned to read on both light and dark Mint Cinnamon
+ * themes. */
+static void resolve_fill_color(GtkWidget *widget, GdkRGBA *out)
+{
+    /* Tuned blue - visible on Mint-Y light, Mint-Y-Dark, Adwaita
+     * (light & dark). Used as the fallback when the theme exposes
+     * no accent color. */
+    out->red = 0.27; out->green = 0.60; out->blue = 0.95; out->alpha = 1.0;
+
+    if (widget == NULL) {
+        return;
+    }
+    /* gtk_widget_get_style_context + gtk_style_context_lookup_color
+     * are both deprecated since GTK 4.10 but remain functional and
+     * are the only public way to read named theme colors (incl.
+     * accent / selection) without pulling in libadwaita. Single
+     * BEGIN/END pair - the lookup loop falls through to END on
+     * either match (via break) or no-match. */
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    GtkStyleContext *ctx = gtk_widget_get_style_context(widget);
+    if (ctx != NULL) {
+        static const char *const k_candidates[] = {
+            "accent_bg_color",         /* libadwaita */
+            "theme_selected_bg_color", /* legacy GTK */
+        };
+        for (size_t i = 0u; i < G_N_ELEMENTS(k_candidates); ++i) {
+            GdkRGBA c;
+            if (gtk_style_context_lookup_color(ctx, k_candidates[i], &c)) {
+                *out = c;
+                break;
+            }
+        }
+    }
+G_GNUC_END_IGNORE_DEPRECATIONS
+}
+
+static void cairo_set_rgba_alpha(cairo_t *cr, const GdkRGBA *base,
+                                 double alpha_mul)
+{
+    cairo_set_source_rgba(cr, base->red, base->green, base->blue,
+                          base->alpha * alpha_mul);
+}
+
 static void draw_progress(GtkDrawingArea *area, cairo_t *cr, int width,
                           int height, gpointer user_data)
 {
-    (void)area;
     ScProgressBarState *st = (ScProgressBarState *)user_data;
     if (width <= 0 || height <= 0) {
         return;
@@ -38,22 +102,30 @@ static void draw_progress(GtkDrawingArea *area, cairo_t *cr, int width,
     }
     const double y = ((double)height - (double)bar_h) * 0.5;
 
-    /* Trough */
-    cairo_set_source_rgb(cr, 0.86, 0.86, 0.86);
+    GdkRGBA fg, fill;
+    resolve_fg_color(GTK_WIDGET(area), &fg);
+    resolve_fill_color(GTK_WIDGET(area), &fill);
+
+    /* Trough: fg tinted at 12 % - invisible enough on both light
+     * and dark themes to read as a track without competing with the
+     * fill. */
+    cairo_set_rgba_alpha(cr, &fg, 0.12);
     cairo_rectangle(cr, 0.0, y, (double)width, (double)bar_h);
     cairo_fill(cr);
 
-    /* Fill */
+    /* Fill: theme accent (or fallback blue) at full opacity. */
     const double fill_w = frac * (double)width;
     if (fill_w > 0.0) {
-        cairo_set_source_rgb(cr, 0.27, 0.60, 0.95);
+        cairo_set_source_rgba(cr, fill.red, fill.green, fill.blue,
+                              fill.alpha);
         cairo_rectangle(cr, 0.0, y, fill_w, (double)bar_h);
         cairo_fill(cr);
     }
 
-    /* Border */
+    /* Border: fg tinted at 35 % - visible outline on dark mode where
+     * a 0.58-grey border would disappear. */
     if (width >= 2 && bar_h >= 2) {
-        cairo_set_source_rgb(cr, 0.58, 0.58, 0.58);
+        cairo_set_rgba_alpha(cr, &fg, 0.35);
         cairo_set_line_width(cr, 1.0);
         cairo_rectangle(cr, 0.5, y + 0.5, (double)width - 1.0,
                         (double)bar_h - 1.0);

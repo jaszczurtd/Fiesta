@@ -390,7 +390,7 @@ sc_manifest_status_t sc_manifest_verify_artifact(
         return SC_MANIFEST_ERR_HASH_BACKEND;
     }
 
-    /* Constant-time comparison — manifest hash is public, but staying
+    /* Constant-time comparison - manifest hash is public, but staying
      * branch-free keeps a uniform pattern with the auth path. */
     uint8_t diff = 0u;
     for (size_t i = 0u; i < SC_CRYPTO_SHA256_DIGEST_BYTES; ++i) {
