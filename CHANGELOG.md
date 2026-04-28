@@ -4,7 +4,24 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-04-26 (latest)
+## 2026-04-29 (latest)
+
+- CAN definitions were moved in-tree to `src/common/canDefinitions/` and all
+  module include/CMake paths now consume that shared header directly. The ECU
+  bootstrap flow no longer clones `canDefinitions` as an external dependency.
+- Module identity tokens were centralized in
+  `src/common/scDefinitions/sc_fiesta_module_tokens.h` and adopted across ECU,
+  Clocks, OilAndSpeed, Adjustometer, and SerialConfigurator tests/core paths.
+- SerialConfigurator runtime constants were consolidated in
+  `src/SerialConfigurator/src/config.h` and wired into core/transport/flash/UI
+  code paths to remove duplicated literals.
+- Flash pickers in SerialConfigurator now restore a practical initial folder
+  (`remembered slot path` -> `sibling slot path` -> `<Module>/.build` fallback)
+  so UF2/manifest selection works smoothly with hidden build folders.
+- Validation snapshot after the refactor: SerialConfigurator 16/16,
+  ECU 16/16, Clocks 3/3, OilAndSpeed 3/3, Adjustometer 3/3 (all PASS).
+
+## 2026-04-26
 
 - SerialConfigurator detection latency reduced: the host transport now
   reuses warm port file descriptors across repeated Detect-button

@@ -43,7 +43,10 @@ Implementation status and milestone snapshots are tracked in
 Required external custom libraries (shared across all modules):
 
 - `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
-- `canDefinitions` (shared CAN IDs/signals): https://github.com/jaszczurtd/canDefinitions
+
+In-tree shared definitions (versioned with this repository):
+
+- `src/common/canDefinitions/canDefinitions.h` (shared CAN IDs/signals)
 
 Required toolchain:
 
@@ -51,11 +54,10 @@ Required toolchain:
 - `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
 - `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
 
-Expected libraries layout (the ECU CMakeLists pins this path):
+Expected external libraries layout:
 
 ```text
 <parent-of-repo-root>/libraries/JaszczurHAL
-<parent-of-repo-root>/libraries/canDefinitions
 ```
 
 Example: if this repo is cloned at `/home/you/projects/Fiesta`, libraries go
@@ -67,7 +69,7 @@ Each module is an Arduino-style application (*.ino + companion sources). However
 
 Because Arduino is used here as a toolchain facade rather than an application API, this project is unlikely to compile out of the box in the official **Arduino IDE**.
 
-If you still want to build it there, expect extra manual setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external libraries (`JaszczurHAL`, `canDefinitions`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
+If you still want to build it there, expect extra manual setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external library (`JaszczurHAL`) plus the in-tree shared headers (`src/common/*`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
 
 Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + MISRA addon) have no native Arduino IDE equivalent.
 
@@ -80,7 +82,7 @@ Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppchec
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
-6. syncs `JaszczurHAL` and `canDefinitions` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by `src/ECU/CMakeLists.txt`): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
+6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
 8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
 
@@ -99,7 +101,7 @@ only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
 
-`bootstrap.sh` treats `JaszczurHAL` and `canDefinitions` under `$LIB_DIR` as disposable build dependencies: if those directories already contain git checkouts, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
+`bootstrap.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
 `bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
 modules that have them, firmware for all). For iterative work on a single
