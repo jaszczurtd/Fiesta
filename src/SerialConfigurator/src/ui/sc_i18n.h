@@ -111,6 +111,13 @@ typedef enum ScI18nKey {
     SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT, /* "Flashing: COPY (%u%%)" */
     SC_I18N_FLASH_STATUS_DONE_FMT,       /* "Flash OK: %s" */
     SC_I18N_FLASH_STATUS_FAILED_FMT,     /* "Flash failed: %s — %s" */
+    SC_I18N_FLASH_RESULT_OK,             /* "OK" — short marker shown in
+                                             the progress slot after a
+                                             successful flash. */
+    SC_I18N_FLASH_RESULT_FAIL,           /* short marker shown in the
+                                             progress slot after a failed
+                                             flash (EN: "FAIL", PL:
+                                             "BŁĄD"). */
 
     /* ── Default per-module status strings (idle) ──────────────────── */
     SC_I18N_STATUS_NO_META,

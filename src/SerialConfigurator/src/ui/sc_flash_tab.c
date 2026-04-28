@@ -10,6 +10,7 @@
 #include "sc_i18n.h"
 #include "sc_manifest.h"
 #include "sc_modules_view.h"   /* refresh_lamps -> calls our refresh_sensitivity */
+#include "sc_progressbar.h"
 
 /*
  * Phase 6.2: per-module Flash sections.
@@ -53,10 +54,97 @@ typedef struct ScFlashSection {
     GtkWidget *manifest_clear_btn;
     GtkWidget *flash_btn;
     GtkWidget *status_label;
+    GtkWidget *progress_area;
+    GtkWidget *progress_slot;
     GtkWidget *progress_bar;
+    GtkWidget *progress_result_label;
+    /* Creep state — advances the determinate progress bar smoothly
+     * within a phase's [start, end) range while the orchestrator is
+     * blocked on a single-event phase (AUTH, REBOOT, WAIT_BOOTSEL,
+     * WAIT_REENUM). Without this the bar jumps to phase_start and
+     * sits there for several seconds. COPY drives the bar from real
+     * per-chunk events, so creep is paused while in COPY. */
+    guint creep_timer_id;
+    ScFlashPhase creep_phase;
+    double creep_from_fraction;   /* dynamic creep start for smooth ramps */
+    int64_t creep_anchor_ms;     /* g_get_monotonic_time of phase entry */
 } ScFlashSection;
 
+/* Discrete fraction assigned to each phase of @ref sc_core_flash. The
+ * bar jumps to the phase's @c start fraction on phase entry and
+ * (during COPY) interpolates linearly between @c start and the next
+ * phase's @c start as the per-chunk progress events arrive. Weights
+ * roughly mirror real-world wall-clock budgets observed on Mint /
+ * Cinnamon: WAIT_BOOTSEL is the longest non-COPY wait (auto-mount
+ * race, 1-5 s), COPY itself dominates total throughput, WAIT_REENUM
+ * is short. Sums to 1.0 across the table. */
+typedef struct {
+    ScFlashPhase phase;
+    double start;
+    /* Expected wall-clock duration in ms used by the creep ticker to
+     * pace the bar's movement within a phase. Picked from observed
+     * runs on Mint / Cinnamon, biased slightly long so the creep
+     * finishes a touch before the actual phase boundary fires. */
+    double expected_ms;
+} PhaseFraction;
+
+static const PhaseFraction k_phase_fractions[] = {
+    { SC_FLASH_PHASE_FORMAT_CHECK,          0.00,   200.0 },
+    { SC_FLASH_PHASE_MANIFEST_VERIFY,       0.05,   300.0 },
+    { SC_FLASH_PHASE_AUTHENTICATE,          0.10,   500.0 },
+    { SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,  0.20,   400.0 },
+    { SC_FLASH_PHASE_WAIT_BOOTSEL,          0.30,  4000.0 },
+    { SC_FLASH_PHASE_COPY,                  0.55,  3000.0 },
+    { SC_FLASH_PHASE_WAIT_REENUM,           0.80,  3000.0 },
+    { SC_FLASH_PHASE_POST_FLASH_HELLO,      0.95,   500.0 },
+};
+static const size_t k_phase_fractions_count =
+    sizeof(k_phase_fractions) / sizeof(k_phase_fractions[0]);
+
+static double phase_start_fraction(ScFlashPhase phase)
+{
+    for (size_t i = 0u; i < k_phase_fractions_count; ++i) {
+        if (k_phase_fractions[i].phase == phase) {
+            return k_phase_fractions[i].start;
+        }
+    }
+    return 0.0;
+}
+
+static double phase_end_fraction(ScFlashPhase phase)
+{
+    for (size_t i = 0u; i < k_phase_fractions_count; ++i) {
+        if (k_phase_fractions[i].phase == phase) {
+            if (i + 1u < k_phase_fractions_count) {
+                return k_phase_fractions[i + 1u].start;
+            }
+            return 1.0;
+        }
+    }
+    return 0.0;
+}
+
+static double phase_expected_ms(ScFlashPhase phase)
+{
+    for (size_t i = 0u; i < k_phase_fractions_count; ++i) {
+        if (k_phase_fractions[i].phase == phase) {
+            return k_phase_fractions[i].expected_ms;
+        }
+    }
+    return 1000.0;
+}
+
 static ScFlashSection s_sections[SC_MODULE_COUNT];
+
+typedef enum ScLastFlashResult {
+    SC_LAST_FLASH_NONE = 0,
+    SC_LAST_FLASH_OK,
+    SC_LAST_FLASH_FAIL
+} ScLastFlashResult;
+
+/* Persisted across tab rebuilds so a post-flash detect refresh does
+ * not immediately erase the operator-facing "OK/BLAD" marker. */
+static ScLastFlashResult s_last_flash_result[SC_MODULE_COUNT];
 
 /* ── helpers ───────────────────────────────────────────────────────── */
 
@@ -100,6 +188,109 @@ static void section_set_status(ScFlashSection *s, const char *text)
         return;
     }
     gtk_label_set_text(GTK_LABEL(s->status_label), text);
+}
+
+static void section_set_progress_visual(ScFlashSection *s, double frac)
+{
+    if (s == NULL || s->progress_bar == NULL) {
+        return;
+    }
+    sc_progressbar_set_fraction(s->progress_bar, frac);
+}
+
+static void section_show_progress_bar(ScFlashSection *s)
+{
+    if (s == NULL || s->progress_slot == NULL || s->progress_bar == NULL) {
+        return;
+    }
+    if (s->progress_area != NULL) {
+        gtk_widget_set_visible(s->progress_area, TRUE);
+    }
+    gtk_widget_set_visible(s->progress_slot, TRUE);
+    gtk_widget_set_visible(s->progress_bar, TRUE);
+    if (s->progress_result_label != NULL) {
+        gtk_widget_set_visible(s->progress_result_label, FALSE);
+    }
+}
+
+static void section_show_progress_result(ScFlashSection *s, bool ok)
+{
+    if (s == NULL || s->progress_slot == NULL || s->progress_result_label == NULL) {
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(s->progress_result_label),
+        sc_i18n_string_get(ok ? SC_I18N_FLASH_RESULT_OK
+                              : SC_I18N_FLASH_RESULT_FAIL));
+    if (s->progress_area != NULL) {
+        gtk_widget_set_visible(s->progress_area, TRUE);
+    }
+    gtk_widget_set_visible(s->progress_slot, TRUE);
+    gtk_widget_set_visible(s->progress_result_label, TRUE);
+    if (s->progress_bar != NULL) {
+        gtk_widget_set_visible(s->progress_bar, FALSE);
+    }
+}
+
+/* ── progress-bar phase creep ──────────────────────────────────────── */
+
+/* Tick callback — advances the bar from phase_start toward phase_end
+ * based on elapsed time within the phase. Caps at phase_end - epsilon
+ * so a long-running phase does not cause the bar to overrun the next
+ * phase's start before the next FLASH_EV_PROGRESS event arrives. */
+static gboolean on_creep_tick(gpointer user_data)
+{
+    ScFlashSection *s = (ScFlashSection *)user_data;
+    if (s == NULL || s->progress_bar == NULL) {
+        return G_SOURCE_REMOVE;
+    }
+    const double phase_end   = phase_end_fraction(s->creep_phase);
+    const double expected_ms = phase_expected_ms(s->creep_phase);
+    const int64_t now_us = g_get_monotonic_time();
+    const double elapsed_ms =
+        (double)(now_us - s->creep_anchor_ms * 1000) / 1000.0;
+    /* Linear ramp toward phase_end over expected_ms; capped just
+     * below phase_end so the bar never visually "completes" a phase
+     * the orchestrator has not yet finished. */
+    double t = (expected_ms > 0.0) ? (elapsed_ms / expected_ms) : 1.0;
+    if (t > 1.0) t = 1.0;
+    const double cap = phase_end - 0.005;
+    double from = s->creep_from_fraction;
+    if (from < 0.0) from = 0.0;
+    if (from > cap) from = cap;
+    double frac = from + (cap - from) * t;
+    if (frac < from) frac = from;
+    if (frac > cap) frac = cap;
+    section_set_progress_visual(s, frac);
+    return G_SOURCE_CONTINUE;
+}
+
+static void start_phase_creep(ScFlashSection *s, ScFlashPhase phase,
+                              double from_fraction)
+{
+    if (s == NULL) return;
+    /* Anchor the timer to "now" and remember the phase so the tick
+     * computes the right ramp. If a creep was already running, just
+     * reset its anchor — same source id keeps firing. */
+    s->creep_phase = phase;
+    if (from_fraction < 0.0) from_fraction = 0.0;
+    if (from_fraction > 1.0) from_fraction = 1.0;
+    s->creep_from_fraction = from_fraction;
+    s->creep_anchor_ms = g_get_monotonic_time() / 1000;
+    if (s->creep_timer_id != 0u) {
+        return;
+    }
+    /* 100 ms tick gives ~10 fps, enough for smooth motion without
+     * burning CPU on idle redraws. */
+    s->creep_timer_id = g_timeout_add(100u, on_creep_tick, s);
+}
+
+static void stop_phase_creep(ScFlashSection *s)
+{
+    if (s == NULL || s->creep_timer_id == 0u) {
+        return;
+    }
+    g_source_remove(s->creep_timer_id);
+    s->creep_timer_id = 0u;
 }
 
 /* ── format-check / manifest-verify drivers ────────────────────────── */
@@ -373,28 +564,72 @@ static gboolean flash_idle_apply(gpointer user_data)
 
     if (ev->kind == FLASH_EV_PROGRESS) {
         char buf[192];
+        double frac = 0.0;
+        double creep_from = 0.0;
+        section_show_progress_bar(s);
+        double current = sc_progressbar_get_fraction(s->progress_bar);
+        if (current < 0.0) current = 0.0;
+        if (current > 1.0) current = 1.0;
         if (ev->phase == SC_FLASH_PHASE_COPY && ev->bytes_total > 0u) {
+            /* Inside COPY — interpolate within the phase's fraction
+             * range. Per-chunk events arrive every 64 KiB so the bar
+             * sweeps smoothly across this slice. */
+            const double phase_start =
+                phase_start_fraction(SC_FLASH_PHASE_COPY);
+            const double phase_end =
+                phase_end_fraction(SC_FLASH_PHASE_COPY);
+            const double in_phase = (double)ev->bytes_written /
+                                    (double)ev->bytes_total;
+            const double target =
+                phase_start + (phase_end - phase_start) * in_phase;
+            /* Smooth large jumps (notably COPY entry after quick early
+             * phases) so the operator sees a continuous ramp. */
+            if (target > current + 0.05) {
+                frac = current + 0.05;
+            } else {
+                frac = target;
+            }
+            creep_from = frac;
             const unsigned pct = (unsigned)((ev->bytes_written * 100u) /
                                             ev->bytes_total);
             (void)snprintf(buf, sizeof(buf),
                            sc_i18n_string_get(SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT),
                            pct);
-            if (s->progress_bar != NULL) {
-                gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar),
-                    (double)ev->bytes_written / (double)ev->bytes_total);
-                gtk_widget_set_visible(s->progress_bar, TRUE);
-            }
         } else {
+            /* Phase boundary — jump to the next phase's start fraction.
+             * The bar shows a determinate position even during long
+             * waits (WAIT_BOOTSEL, WAIT_REENUM); the status label
+             * names which phase the host is sitting in. */
+            const double target = phase_start_fraction(ev->phase);
+            /* Never jump abruptly at phase boundaries. Advance only a
+             * small step immediately; the creep ticker fills the rest. */
+            if (target > current + 0.02) {
+                frac = current + 0.02;
+            } else if (target < current) {
+                frac = current;
+            } else {
+                frac = target;
+            }
+            creep_from = frac;
             (void)snprintf(buf, sizeof(buf),
                            sc_i18n_string_get(SC_I18N_FLASH_STATUS_RUNNING_FMT),
                            sc_flash_phase_name(ev->phase));
-            if (s->progress_bar != NULL) {
-                gtk_progress_bar_pulse(GTK_PROGRESS_BAR(s->progress_bar));
-                gtk_widget_set_visible(s->progress_bar, TRUE);
-            }
+        }
+        section_set_progress_visual(s, frac);
+        if (ev->phase == SC_FLASH_PHASE_COPY && ev->bytes_total > 0u) {
+            /* COPY drives the bar from per-chunk events — no creep
+             * needed and the timer would fight the real fraction. */
+            stop_phase_creep(s);
+        } else {
+            /* Re-arm the creep so the bar slides smoothly toward the
+             * next phase's start fraction during long waits
+             * (WAIT_BOOTSEL, WAIT_REENUM, AUTH). Each phase event
+             * resets the creep's anchor to the new phase_start. */
+            start_phase_creep(s, ev->phase, creep_from);
         }
         section_set_status(s, buf);
     } else { /* FLASH_EV_COMPLETE */
+        stop_phase_creep(s);
         char buf[640];
         if (ev->status == SC_FLASH_STATUS_OK) {
             (void)snprintf(buf, sizeof(buf),
@@ -408,10 +643,15 @@ static gboolean flash_idle_apply(gpointer user_data)
         section_set_status(s, buf);
 
         if (s->progress_bar != NULL) {
-            gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar),
-                                          0.0);
-            gtk_widget_set_visible(s->progress_bar, FALSE);
+            sc_progressbar_set_fraction(s->progress_bar, 0.0);
         }
+        if (s->module_index < SC_MODULE_COUNT) {
+            s_last_flash_result[s->module_index] =
+                (ev->status == SC_FLASH_STATUS_OK)
+                    ? SC_LAST_FLASH_OK
+                    : SC_LAST_FLASH_FAIL;
+        }
+        section_show_progress_result(s, ev->status == SC_FLASH_STATUS_OK);
 
         sc_flash_tab_set_lock(ev->state, false);
 
@@ -424,6 +664,18 @@ static gboolean flash_idle_apply(gpointer user_data)
     }
     g_free(ev);
     return G_SOURCE_REMOVE;
+}
+
+/* Always marshal worker events through the GTK main context. This
+ * keeps all widget mutations on the UI thread and avoids depending on
+ * whichever thread-default context happens to be current. */
+static void flash_post_to_ui(FlashEvent *ev)
+{
+    if (ev == NULL) {
+        return;
+    }
+    g_main_context_invoke_full(NULL, G_PRIORITY_DEFAULT_IDLE,
+                               flash_idle_apply, ev, NULL);
 }
 
 /* Progress callback called from the worker thread. Allocates a small
@@ -440,7 +692,7 @@ static void flash_progress_marshal(ScFlashPhase phase, uint64_t bytes_written,
     ev->phase = phase;
     ev->bytes_written = bytes_written;
     ev->bytes_total = bytes_total;
-    g_idle_add(flash_idle_apply, ev);
+    flash_post_to_ui(ev);
 }
 
 static gpointer flash_worker_main(gpointer user_data)
@@ -462,7 +714,7 @@ static gpointer flash_worker_main(gpointer user_data)
     ev->state = ctx->state;
     ev->status = rc;
     (void)snprintf(ev->message, sizeof(ev->message), "%s", err);
-    g_idle_add(flash_idle_apply, ev);
+    flash_post_to_ui(ev);
 
     g_free(ctx);
     return NULL;
@@ -511,9 +763,12 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
     }
 
     sc_flash_tab_set_lock(s->state, true);
+    if (s->module_index < SC_MODULE_COUNT) {
+        s_last_flash_result[s->module_index] = SC_LAST_FLASH_NONE;
+    }
     if (s->progress_bar != NULL) {
-        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(s->progress_bar), 0.0);
-        gtk_widget_set_visible(s->progress_bar, TRUE);
+        section_show_progress_bar(s);
+        section_set_progress_visual(s, 0.0);
     }
     section_set_status(s, sc_flash_phase_name(SC_FLASH_PHASE_FORMAT_CHECK));
 
@@ -526,6 +781,10 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
 
 static void section_init_clean(ScFlashSection *s)
 {
+    /* Cancel a pending creep tick so it does not fire against a
+     * widget pointer the rebuild is about to zero out. Safe no-op
+     * when no timer is armed. */
+    stop_phase_creep(s);
     s->active = false;
     s->state = NULL;
     s->module_index = 0u;
@@ -539,7 +798,14 @@ static void section_init_clean(ScFlashSection *s)
     s->manifest_clear_btn = NULL;
     s->flash_btn = NULL;
     s->status_label = NULL;
+    s->progress_area = NULL;
+    s->progress_slot = NULL;
     s->progress_bar = NULL;
+    s->progress_result_label = NULL;
+    s->creep_timer_id = 0u;
+    s->creep_phase = SC_FLASH_PHASE_FORMAT_CHECK;
+    s->creep_from_fraction = 0.0;
+    s->creep_anchor_ms = 0;
 }
 
 static GtkWidget *build_section(AppState *state, size_t module_index)
@@ -631,6 +897,7 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
 
     /* Flash + progress + status */
     GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_valign(action_row, GTK_ALIGN_CENTER);
     gtk_box_append(GTK_BOX(body), action_row);
 
     s->flash_btn = gtk_button_new_with_label(
@@ -639,16 +906,54 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
                      G_CALLBACK(on_flash_clicked), s);
     gtk_box_append(GTK_BOX(action_row), s->flash_btn);
 
-    s->progress_bar = gtk_progress_bar_new();
+    /* Dedicated fixed-height area; bar and result label share exactly
+     * the same vertical space. */
+    s->progress_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_hexpand(s->progress_area, TRUE);
+    gtk_widget_set_vexpand(s->progress_area, FALSE);
+    gtk_widget_set_valign(s->progress_area, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(s->progress_area, -1, 12);
+    gtk_widget_set_visible(s->progress_area, FALSE);
+    gtk_box_append(GTK_BOX(action_row), s->progress_area);
+
+    s->progress_slot = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(s->progress_slot, TRUE);
+    gtk_widget_set_vexpand(s->progress_slot, FALSE);
+    gtk_widget_set_valign(s->progress_slot, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(s->progress_slot, -1, 12);
+    gtk_widget_set_visible(s->progress_slot, FALSE);
+    gtk_box_append(GTK_BOX(s->progress_area), s->progress_slot);
+
+    s->progress_bar = sc_progressbar_new(12);
+    gtk_widget_set_halign(s->progress_bar, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(s->progress_bar, GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand(s->progress_bar, TRUE);
-    gtk_widget_set_visible(s->progress_bar, FALSE);
-    gtk_box_append(GTK_BOX(action_row), s->progress_bar);
+    gtk_box_append(GTK_BOX(s->progress_slot), s->progress_bar);
+
+    s->progress_result_label = gtk_label_new("");
+    gtk_label_set_xalign(GTK_LABEL(s->progress_result_label), 0.0f);
+    gtk_label_set_yalign(GTK_LABEL(s->progress_result_label), 0.5f);
+    gtk_widget_set_halign(s->progress_result_label, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(s->progress_result_label, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(s->progress_result_label, -1, 12);
+    gtk_widget_set_hexpand(s->progress_result_label, TRUE);
+    gtk_widget_set_margin_start(s->progress_result_label, 4);
+    gtk_box_append(GTK_BOX(s->progress_slot), s->progress_result_label);
+    gtk_widget_set_visible(s->progress_result_label, FALSE);
 
     s->status_label = gtk_label_new("");
     gtk_label_set_xalign(GTK_LABEL(s->status_label), 0.0f);
     gtk_label_set_wrap(GTK_LABEL(s->status_label), TRUE);
     gtk_label_set_selectable(GTK_LABEL(s->status_label), TRUE);
     gtk_box_append(GTK_BOX(body), s->status_label);
+
+    if (module_index < SC_MODULE_COUNT) {
+        if (s_last_flash_result[module_index] == SC_LAST_FLASH_OK) {
+            section_show_progress_result(s, true);
+        } else if (s_last_flash_result[module_index] == SC_LAST_FLASH_FAIL) {
+            section_show_progress_result(s, false);
+        }
+    }
 
     section_recompute_status(s);
     return s->frame;
@@ -659,6 +964,13 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
 void sc_flash_tab_refresh_sensitivity(AppState *state)
 {
     if (state == 0 || state->flash_tab_root == 0) {
+        return;
+    }
+    /* Keep the tab interactive while a flash is running so GTK does
+     * not render the progress widget in an insensitive (all-gray)
+     * state even if transient detection status flips occur. */
+    if (state->flash_in_progress) {
+        gtk_widget_set_sensitive(state->flash_tab_root, TRUE);
         return;
     }
     gtk_widget_set_sensitive(

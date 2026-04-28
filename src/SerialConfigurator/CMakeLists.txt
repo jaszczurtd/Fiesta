@@ -129,6 +129,7 @@ if(GTK4_FOUND)
         src/ui/sc_i18n.c
         src/ui/sc_module_details.c
         src/ui/sc_modules_view.c
+        src/ui/sc_progressbar.c
         src/ui/main.c
     )
 
@@ -306,6 +307,31 @@ if(BUILD_TESTING)
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
     )
+
+    # Custom progress-bar widget test — embeds src/ui/sc_progressbar.c
+    # by #include. Unlike the i18n test, the widget is GTK-backed
+    # (GtkDrawingArea + cairo), so the target only registers when GTK4
+    # is available on the host. The test itself skips at runtime when
+    # no display is reachable, so headless CI runs do not fail.
+    if(GTK4_FOUND)
+        add_executable(serial-configurator-progressbar-tests
+            tests/test_sc_progressbar.c
+        )
+        target_link_libraries(serial-configurator-progressbar-tests
+            PRIVATE
+                serial_configurator_core
+                PkgConfig::GTK4
+        )
+        target_include_directories(serial-configurator-progressbar-tests
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+
+        add_test(
+            NAME serial-configurator-progressbar-tests
+            COMMAND serial-configurator-progressbar-tests
+        )
+    endif()
 
     add_test(
         NAME serial-configurator-core-tests

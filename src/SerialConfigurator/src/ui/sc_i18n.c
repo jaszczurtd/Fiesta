@@ -94,6 +94,8 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
         "Flash OK: %s",
     [SC_I18N_FLASH_STATUS_FAILED_FMT] =
         "Flash failed: %s — %s",
+    [SC_I18N_FLASH_RESULT_OK]            = "OK",
+    [SC_I18N_FLASH_RESULT_FAIL]          = "FAIL",
 
     [SC_I18N_STATUS_NO_META]    = "No metadata (module not detected).",
     [SC_I18N_STATUS_NO_CATALOG] = "No catalog read (module not detected).",
@@ -222,6 +224,8 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
         "Flash OK: %s",
     [SC_I18N_FLASH_STATUS_FAILED_FMT] =
         "Flashowanie nieudane: %s — %s",
+    [SC_I18N_FLASH_RESULT_OK]            = "OK",
+    [SC_I18N_FLASH_RESULT_FAIL]          = "BŁĄD",
 
     [SC_I18N_STATUS_NO_META]    = "Brak metadanych (moduł niewykryty).",
     [SC_I18N_STATUS_NO_CATALOG] = "Brak odczytu katalogu (moduł niewykryty).",
