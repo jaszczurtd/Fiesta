@@ -79,7 +79,8 @@ Detection (read-only, no auth):
 - For each discovered parameter id, the app probes `SC_GET_PARAM <id>` and
   validates parsed min/max/default semantics (including range checks).
 - `Disconnect` clears detected state and returns all lamps to red.
-- Scanning stops early as soon as all known modules are detected.
+- Scanning walks all discovered candidates so duplicate module instances can
+  be flagged as ambiguous targets.
 - A scrollable log view shows HELLO responses and detection details.
 - Core and CLI support read-only `SC_*` requests across all
   in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`):
@@ -105,8 +106,11 @@ Flash flow (Phase 6, end-to-end):
 
 - Per-module Flash sections in the GUI: UF2 + optional manifest pickers
   with persistent paths (`flash-paths.json`), live status field, and a
-  GtkProgressBar that pulses during non-copy phases and shows fraction
+  custom GTK progress bar widget that pulses during non-copy phases and shows fraction
   during the COPY phase.
+- File-pickers open in a practical initial folder order: directory of the
+  last remembered path for that slot, then the sibling slot's directory,
+  then the module-local `./<Module>/.build` directory when available.
 - `sc_core_flash` orchestrator composes UF2 format check + manifest verify
   + auth + reboot + BOOTSEL drive watcher (`/media/$USER` + `/run/media/$USER`,
   matching `RPI-RP2*` / `RP2350`) + chunked UF2 copy with progress +
@@ -150,7 +154,7 @@ see `ARCHITECTURE.md` §4.3.
 
 ## CI / Test Baseline
 
-The project ships 15 host CTest targets covering core / protocol /
+The project ships 16 host CTest targets covering core / protocol /
 crypto / flash / manifest / orchestrator surfaces:
 
 - `serial-configurator-core-tests` (smoke checks)

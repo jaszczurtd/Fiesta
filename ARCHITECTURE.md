@@ -172,23 +172,21 @@ the HAL. This is why the project is not a conventional Arduino application
 and **will not** compile out of the box in the Arduino IDE (see
 [README § Build and development](README.md#build-and-development)).
 
-### 4.2 canDefinitions
+### 4.2 canDefinitions ([`src/common/canDefinitions`](src/common/canDefinitions/))
 
-`canDefinitions` ([github.com/jaszczurtd/canDefinitions](https://github.com/jaszczurtd/canDefinitions))
-is the single source of truth for CAN frame IDs, signal layouts, and
-scaling. It is shared across ECU, Clocks, and OilAndSpeed so that they
-agree on the wire format without duplicating header files. It is cloned
-into `<parent-of-repo-root>/libraries/canDefinitions` by `bootstrap.sh`
-and is treated by the bootstrap as a disposable build dependency (force
-reset to the remote default branch on every run).
+`canDefinitions` is the in-tree single source of truth for CAN frame IDs,
+signal layouts, and scaling (`canDefinitions.h`). It is shared across ECU,
+Clocks, and OilAndSpeed so that they agree on the wire format without
+duplicating header files. Because it is versioned inside this repository,
+there is no separate clone/update step for this layer in `bootstrap.sh`.
 
 ### 4.3 scDefinitions ([`src/common/scDefinitions`](src/common/scDefinitions/))
 
 `scDefinitions` is the in-tree single source of truth for the
 SerialConfigurator wire vocabulary and the descriptor-driven SC reply
 machinery shared by ECU, Clocks, OilAndSpeed, and the desktop
-configurator. Unlike `JaszczurHAL` and `canDefinitions` (out-of-tree
-external libs) it lives inside the Fiesta repository because the
+configurator. Unlike `JaszczurHAL` (out-of-tree external lib) it lives
+inside the Fiesta repository because the
 contract is Fiesta-specific.
 
 Files:
@@ -280,7 +278,7 @@ and ownership analysis tractable.
 |---|---|
 | [`start.c`](src/ECU/start.c) | init sequence, soft-timer registration, watchdog startup, reboot-snapshot readback |
 | [`sensors.c`](src/ECU/sensors.c) | HC4051 mux sweep, ADC sampling, PCF8574 driver, adjustometer I²C reads |
-| [`can.c`](src/ECU/can.c) | main-CAN frame packing and dispatch; uses `canDefinitions` IDs |
+| [`can.c`](src/ECU/can.c) | main-CAN frame packing and dispatch; uses shared CAN IDs from `src/common/canDefinitions/canDefinitions.h` |
 | [`obd-2.c`](src/ECU/obd-2.c) | OBD-II / UDS service handlers on the OBD-2 CAN controller; largest single file, active MISRA hotspot |
 | [`obd-2_mapping.c`](src/ECU/obd-2_mapping.c) | mapping from OBD PIDs to ECU signals |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC set/clear, persistence via KV store, retrieval for OBD responses |
@@ -346,7 +344,7 @@ warnings.
 | [`logic.cpp`](src/Clocks/logic.cpp) | state machine mapping CAN signals to display/gauge/buzzer state |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tone generation + warning pattern strategy |
 | [`engineFuel.cpp`](src/Clocks/engineFuel.cpp) | fuel-level aggregation for the cluster |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN RX filtering (shares IDs with ECU via `canDefinitions`) |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN RX filtering (shares IDs with ECU via `src/common/canDefinitions/canDefinitions.h`) |
 | [`peripherials.cpp`](src/Clocks/peripherials.cpp) | GPIO/PWM init |
 
 **Hardware interfaces** (from [`hardwareConfig.h`](src/Clocks/hardwareConfig.h)):
@@ -373,7 +371,7 @@ thermocouple amplifiers for pre-DPF/KAT and mid-DPF exhaust gas temperatures.
 |---|---|
 | [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC -> bar conversion for the resistive oil sender (10..180 Ω nominal) |
 | [`speed.cpp`](src/OilAndSpeed/speed.cpp) | frequency-counter on ABS pulse line -> vehicle speed |
-| [`can.cpp`](src/OilAndSpeed/can.cpp) | CAN TX of oil/speed/EGT frames (IDs from `canDefinitions`) |
+| [`can.cpp`](src/OilAndSpeed/can.cpp) | CAN TX of oil/speed/EGT frames (IDs from `src/common/canDefinitions/canDefinitions.h`) |
 | [`config.cpp`](src/OilAndSpeed/config.cpp) | persistent config |
 | [`periperials.cpp`](src/OilAndSpeed/periperials.cpp) | GPIO/SPI/I²C init *(file name kept as-is in the source tree)* |
 | `start.cpp` | init sequence |
@@ -486,7 +484,7 @@ per-module invariants:
   `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed; Adjustometer is out
    of the primary flow). The session answers the bootstrap handshake with
    the module's canonical identity, firmware version, build id, and
-   device UID - sourced from compile-time `MODULE_NAME` / `FW_VERSION` /
+   device UID - sourced from compile-time `SC_MODULE_TOKEN_*` / `FW_VERSION` /
    `BUILD_ID` plus `hal_get_device_uid_hex()`.
 2. USB descriptor identity: `iSerialNumber` is populated by the arduino-pico
    core from `pico_get_unique_board_id()`;
@@ -530,7 +528,8 @@ There are two physically separate CAN buses, both attached to the ECU:
 | CAN0 "main" | ECU, Clocks, OilAndSpeed | inter-module signalling | SPI, CS=17, INT=15 |
 | CAN1 "OBD-2" | ECU, OBD-II diagnostic port | external diagnostics | SPI, CS=6, INT=14 |
 
-Frame IDs and signal layouts live in the shared `canDefinitions` library so
+Frame IDs and signal layouts live in the shared in-tree `canDefinitions` header
+(`src/common/canDefinitions/canDefinitions.h`) so
 that all participants agree without copy-pasting constants.
 
 Bus roles at a glance:
@@ -707,14 +706,14 @@ is for logging only (legacy).
 
 ### 9.1 Source-level
 
-| Dependency | Role | Cloned by `bootstrap.sh` into |
+| Dependency | Role | Provisioning |
 |---|---|---|
-| `JaszczurHAL` | HAL + utilities + Arduino stubs | `$LIB_DIR/JaszczurHAL` |
-| `canDefinitions` | shared CAN frame definitions | `$LIB_DIR/canDefinitions` |
+| `JaszczurHAL` | HAL + utilities + Arduino stubs | cloned by `bootstrap.sh` into `$LIB_DIR/JaszczurHAL` |
+| `src/common/canDefinitions/canDefinitions.h` | shared CAN frame definitions | in-tree (versioned with Fiesta repo) |
 | `rp2040:rp2040` core (earlephilhower/arduino-pico) | RP2040 Arduino core | arduino-cli user dirs |
 
 `$LIB_DIR` defaults to `<parent-of-repo-root>/libraries`, which matches the
-path [`src/ECU/CMakeLists.txt`](src/ECU/CMakeLists.txt) expects.
+path expected for `JaszczurHAL` by module `CMakeLists.txt` files.
 
 ### 9.2 Tooling
 
@@ -774,8 +773,8 @@ all four modules, once per day. Setup notes in
 
 [`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh) is the
 single idempotent project entry point that sets up a fresh machine end-to-end:
-system packages -> arduino-cli + rp2040 core -> cloning/refreshing the two
-external library repos -> host tests for every module that has a
+system packages -> arduino-cli + rp2040 core -> cloning/refreshing the
+external `JaszczurHAL` repo -> host tests for every module that has a
 `CMakeLists.txt` -> firmware `.uf2` build for every module. Env overrides:
 `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT`, `SKIP_APT`, `SKIP_TESTS`,
 `SKIP_BUILD`.
@@ -800,6 +799,7 @@ Fiesta/
 │   ├── Adjustometer/            # VP37 feedback (I²C slave)
 │   ├── SerialConfigurator/      # GTK4 + CLI desktop companion (detect / inspect / flash)
 │   ├── common/
+│   │   ├── canDefinitions/      # shared CAN IDs/signals (in-tree, single source)
 │   │   ├── scDefinitions/       # SC wire vocabulary + descriptor framework (§4.3)
 │   │   └── scripts/             # shared bash helpers (arduino-build / upload / refresh-intellisense / ...)
 │   └── Fiesta_clock/            # AVR-based standalone clock (archived)
@@ -818,7 +818,8 @@ Fiesta/
 
 ## 12. What is *not* covered here
 
-- Individual CAN frame IDs and signal layouts - see `canDefinitions`.
+- Individual CAN frame IDs and signal layouts - see
+  [`src/common/canDefinitions/canDefinitions.h`](src/common/canDefinitions/canDefinitions.h).
 - JaszczurHAL internals - see the HAL repository.
 - MISRA-C rule-by-rule status - see the MISRA screening artifact from
   `.github/workflows/ecu-misra.yml` and the deviation register under
