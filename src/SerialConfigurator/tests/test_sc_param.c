@@ -44,17 +44,17 @@ typedef struct {
 
 static const sc_param_descriptor_t k_ecu_descs[] = {
     SC_PARAM_SCALAR_I16("fan_coolant_start_c", ecu_values_t,
-                        fan_coolant_start_c, 70, 130, 95, 1),
+                        fan_coolant_start_c, 70, 130, 95, 1, "cooling_fan"),
     SC_PARAM_SCALAR_I16("fan_coolant_stop_c", ecu_values_t,
-                        fan_coolant_stop_c, 50, 120, 85, 1),
+                        fan_coolant_stop_c, 50, 120, 85, 1, "cooling_fan"),
     SC_PARAM_SCALAR_I16("fan_air_start_c", ecu_values_t,
-                        fan_air_start_c, 20, 90, 60, 1),
+                        fan_air_start_c, 20, 90, 60, 1, "cabin_fan"),
     SC_PARAM_SCALAR_I16("fan_air_stop_c", ecu_values_t,
-                        fan_air_stop_c, -20, 80, 50, 1),
+                        fan_air_stop_c, -20, 80, 50, 1, "cabin_fan"),
     SC_PARAM_SCALAR_I16("heater_stop_c", ecu_values_t,
-                        heater_stop_c, 40, 100, 75, 1),
+                        heater_stop_c, 40, 100, 75, 1, "engine_heater"),
     SC_PARAM_SCALAR_I16("nominal_rpm", ecu_values_t, nominal_rpm, 700, 1200,
-                        850, 2),
+                        850, 2, "idle"),
 };
 static const size_t k_ecu_descs_count =
     sizeof(k_ecu_descs) / sizeof(k_ecu_descs[0]);
@@ -70,13 +70,15 @@ typedef struct {
 
 static const sc_param_descriptor_t k_clocks_descs[] = {
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_warn_c", clocks_values_t,
-                                         coolant_warn_c, 60, 120, 95, 1),
+                                         coolant_warn_c, 60, 120, 95, 1,
+                                         "coolant"),
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_max_c", clocks_values_t,
-                                         coolant_max_c, 80, 130, 105, 1),
+                                         coolant_max_c, 80, 130, 105, 1,
+                                         "coolant"),
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_warn_c", clocks_values_t,
-                                         oil_warn_c, 60, 130, 105, 1),
+                                         oil_warn_c, 60, 130, 105, 1, "oil"),
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_max_c", clocks_values_t,
-                                         oil_max_c, 80, 140, 120, 1),
+                                         oil_max_c, 80, 140, 120, 1, "oil"),
 };
 static const size_t k_clocks_descs_count =
     sizeof(k_clocks_descs) / sizeof(k_clocks_descs[0]);
@@ -229,6 +231,28 @@ static int test_reply_param_values(void) {
     return 0;
 }
 
+/* A descriptor with an empty group string must surface as
+ * `group=general` on the wire so the parser never sees an empty
+ * value token. */
+static int test_reply_get_param_emits_general_for_empty_group(void) {
+    typedef struct {
+        int16_t solo;
+    } solo_values_t;
+    static const sc_param_descriptor_t k_solo_descs[] = {
+        SC_PARAM_SCALAR_I16("solo", solo_values_t, solo, 0, 100, 50, 1, ""),
+    };
+
+    solo_values_t v = { .solo = 50 };
+    capture_t cap;
+    capture_reset(&cap);
+    sc_param_reply_get_param(k_solo_descs, 1u, &v, "solo",
+                             capture_emit, &cap);
+    TEST_ASSERT(cap.count == 1u, "one line emitted");
+    TEST_ASSERT(strstr(cap.lines[0], "group=general") != NULL,
+                "empty group falls back to 'general' on the wire");
+    return 0;
+}
+
 static int test_reply_get_param_happy_and_invalid(void) {
     ecu_values_t v;
     sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &v);
@@ -240,8 +264,8 @@ static int test_reply_get_param_happy_and_invalid(void) {
     TEST_ASSERT(cap.count == 1u, "happy path emits one line");
     TEST_ASSERT(strcmp(cap.lines[0],
                        "SC_OK PARAM id=heater_stop_c value=75 min=40 max=100"
-                       " default=75") == 0,
-                "happy path reply matches legacy ECU format");
+                       " default=75 group=engine_heater") == 0,
+                "happy path reply matches ECU format with group field");
 
     capture_reset(&cap);
     sc_param_reply_get_param(k_ecu_descs, k_ecu_descs_count, &v, "nope",
@@ -590,6 +614,7 @@ int main(void) {
     failures += test_load_defaults_skips_readonly();
     failures += test_reply_param_list();
     failures += test_reply_param_values();
+    failures += test_reply_get_param_emits_general_for_empty_group();
     failures += test_reply_get_param_happy_and_invalid();
     failures += test_blob_size_for_schema();
     failures += test_blob_round_trip_v2();

@@ -108,10 +108,15 @@ extern "C" {
 #define SC_REPLY_PARAM_VALUES_HEAD                                           \
     SC_STATUS_OK " " SC_REPLY_TAG_PARAM_VALUES
 
-/* "SC_OK PARAM id=<id> value=<int> min=<int> max=<int> default=<int>" */
+/* "SC_OK PARAM id=<id> value=<int> min=<int> max=<int> default=<int>
+ *  group=<snake_case>"
+ * The group token carries the descriptor's UI section (snake_case, no
+ * spaces). Empty group is rendered as `group=` (zero-length value);
+ * unknown keys are silently ignored by the host parser, so older host
+ * builds remain compatible. */
 #define SC_REPLY_PARAM_FMT                                                   \
     SC_STATUS_OK " " SC_REPLY_TAG_PARAM                                      \
-    " id=%s value=%d min=%d max=%d default=%d"
+    " id=%s value=%d min=%d max=%d default=%d group=%s"
 
 /* "SC_INVALID_PARAM_ID id=<id>" */
 #define SC_REPLY_INVALID_PARAM_ID_FMT                                        \

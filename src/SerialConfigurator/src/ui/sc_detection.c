@@ -1,4 +1,5 @@
 #include "sc_detection.h"
+#include "sc_values_tab.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -412,6 +413,7 @@ static void on_detection_finished(GObject *source_object,
         sc_modules_view_set_placeholder(state,
             sc_i18n_string_get(SC_I18N_PLACEHOLDER_FAILED));
         sc_modules_view_refresh_details(state);
+        sc_values_tab_rebuild(state, false);
         return;
     }
 
@@ -440,6 +442,10 @@ static void on_detection_finished(GObject *source_object,
         sc_i18n_string_get(SC_I18N_PLACEHOLDER_FINISHED));
     sc_modules_view_select_first_detected(state);
     sc_modules_view_refresh_details(state);
+    /* Phase 8.6: rebuild the Values tab content from the fresh
+     * detection cache. Sub-tabs only appear for modules that came
+     * back; modules that disappeared this cycle drop out cleanly. */
+    sc_values_tab_rebuild(state, true);
     detection_result_free(result);
 }
 
@@ -531,6 +537,9 @@ void sc_detection_reset_connection(AppState *state, bool by_user_request)
     }
 
     sc_modules_view_refresh_details(state);
+    /* Phase 8.6: collapse the Values tab back to the placeholder
+     * when the operator disconnects or boot-time idle is reasserted. */
+    sc_values_tab_rebuild(state, false);
 }
 
 void sc_detection_on_detect_clicked(GtkButton *button, gpointer user_data)

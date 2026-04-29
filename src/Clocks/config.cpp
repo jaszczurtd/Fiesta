@@ -41,22 +41,22 @@ static const clocks_values_t k_clocks_values = {
 static const sc_param_descriptor_t k_clocks_params[] = {
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_warn_c", clocks_values_t,
                                        coolant_warn_c, 80, 120,
-                                       (int16_t)TEMP_OK_HI, 1),
+                                       (int16_t)TEMP_OK_HI, 1, "coolant"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_max_c", clocks_values_t,
                                        coolant_max_c, 100, 140,
-                                       (int16_t)TEMP_MAX, 1),
+                                       (int16_t)TEMP_MAX, 1, "coolant"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_warn_c", clocks_values_t,
                                        oil_warn_c, 90, 130,
-                                       (int16_t)TEMP_OIL_OK_HI, 1),
+                                       (int16_t)TEMP_OIL_OK_HI, 1, "oil"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_max_c", clocks_values_t,
                                        oil_max_c, 120, 160,
-                                       (int16_t)TEMP_OIL_MAX, 1),
+                                       (int16_t)TEMP_OIL_MAX, 1, "oil"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_warn_c", clocks_values_t,
                                        egt_warn_c, 700, 1100,
-                                       (int16_t)TEMP_EGT_OK_HI, 1),
+                                       (int16_t)TEMP_EGT_OK_HI, 1, "egt"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
                                        egt_max_c, 1300, 1800,
-                                       (int16_t)TEMP_EGT_MAX, 1),
+                                       (int16_t)TEMP_EGT_MAX, 1, "egt"),
 };
 static const size_t k_clocks_params_count =
     sizeof(k_clocks_params) / sizeof(k_clocks_params[0]);

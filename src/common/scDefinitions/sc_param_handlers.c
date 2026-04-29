@@ -272,11 +272,18 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
         return;
     }
 
+    /* The wire format never carries an empty group value: the host
+     * parser rejects "key=" tokens with no value. Descriptors that
+     * forget to declare a group fall back to "general" so the bucket
+     * is still well-formed. The host UI renders this as the catch-all
+     * section. */
+    const char *group =
+        (desc->group != NULL && desc->group[0] != '\0') ? desc->group : "general";
     snprintf(response, sizeof(response), SC_REPLY_PARAM_FMT, desc->id,
              (int)*scalar_i16_rvalue(desc, values_ctx),
              (int)desc->as.scalar_i16.min_value,
              (int)desc->as.scalar_i16.max_value,
-             (int)desc->as.scalar_i16.default_value);
+             (int)desc->as.scalar_i16.default_value, group);
     emit(response, emit_user);
 }
 

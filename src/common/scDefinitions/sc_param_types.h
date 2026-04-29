@@ -58,6 +58,17 @@ typedef struct {
      * params, V2 added @c nominalRpm with @c schema_since=2).
      */
     uint16_t schema_since;
+    /**
+     * @brief Group name for UI sectioning (e.g. "cooling_fan").
+     *
+     * Snake-case wire token (no spaces - the wire format uses spaces
+     * as token separators). The host GUI renders the human-friendly
+     * label by replacing `_` with ` ` and Title-Casing. Empty string
+     * or NULL means "no group" (descriptor sits in an unnamed bucket).
+     * Emitted as `group=<name>` in the SC_GET_PARAM reply alongside
+     * value/min/max/default.
+     */
+    const char *group;
     union {
         struct {
             /** Byte offset of the @c int16_t field inside the values struct. */
@@ -75,14 +86,17 @@ typedef struct {
  * Use as an element of a `static const sc_param_descriptor_t k_*[] = {...}`
  * array. Pass the host values-struct type as @p struct_t and the
  * field name as @p field; @c offsetof figures out the byte offset.
+ * @p group_str is the snake-case section name surfaced over the wire
+ * (see `group` field on the struct). Pass `""` for ungrouped.
  */
 #define SC_PARAM_SCALAR_I16(id_str, struct_t, field, min_v, max_v,            \
-                            default_v, since)                                 \
+                            default_v, since, group_str)                      \
     {                                                                         \
         .id = (id_str),                                                       \
         .kind = SC_PARAM_KIND_SCALAR_I16,                                     \
         .flags = (uint16_t)SC_PARAM_FLAG_NONE,                                \
         .schema_since = (uint16_t)(since),                                    \
+        .group = (group_str),                                                 \
         .as = { .scalar_i16 = {                                               \
             .value_offset = offsetof(struct_t, field),                        \
             .min_value = (int16_t)(min_v),                                    \
@@ -99,13 +113,15 @@ typedef struct {
  * mutated and never persisted.
  */
 #define SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(id_str, struct_t, field,         \
-                                             min_v, max_v, default_v, since)  \
+                                             min_v, max_v, default_v, since,  \
+                                             group_str)                       \
     {                                                                         \
         .id = (id_str),                                                       \
         .kind = SC_PARAM_KIND_SCALAR_I16,                                     \
         .flags = (uint16_t)(SC_PARAM_FLAG_READ_ONLY                           \
                             | SC_PARAM_FLAG_NOT_PERSISTED),                   \
         .schema_since = (uint16_t)(since),                                    \
+        .group = (group_str),                                                 \
         .as = { .scalar_i16 = {                                               \
             .value_offset = offsetof(struct_t, field),                        \
             .min_value = (int16_t)(min_v),                                    \

@@ -204,6 +204,7 @@ void test_oilspeed_sc_get_param_known_id_returns_value_and_bounds(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "min="));
   TEST_ASSERT_NOT_NULL(strstr(response, "max="));
   TEST_ASSERT_NOT_NULL(strstr(response, "default="));
+  TEST_ASSERT_NOT_NULL(strstr(response, "group=sampling"));
 }
 
 void test_oilspeed_sc_get_param_returns_invalid_param(void) {

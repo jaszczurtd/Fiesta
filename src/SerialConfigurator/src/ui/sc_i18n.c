@@ -133,6 +133,24 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
         "Probe partial: ok=%zu fail=%zu mismatch=%zu",
     [SC_I18N_STATUS_PROBE_OK_FMT]           = "Probe ok: %zu id(s), mismatch=%zu",
     [SC_I18N_STATUS_PROBE_SKIPPED]          = "Probe skipped (fast auto-refresh).",
+
+    [SC_I18N_TAB_VALUES]                    = "Values",
+    [SC_I18N_VALUES_PLACEHOLDER]            = "Run detection to populate the Values tab.",
+    [SC_I18N_VALUES_NO_DETECTED_MODULES]    = "No modules detected.",
+    [SC_I18N_VALUES_NO_PARAMS]              = "No parameters exposed by this module.",
+    [SC_I18N_VALUES_LOADING]                = "Loading parameters...",
+    [SC_I18N_VALUES_LOAD_FAILED_FMT]        = "Failed to load %s: %s",
+    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Apply staged",
+    [SC_I18N_VALUES_BTN_COMMIT]             = "Commit",
+    [SC_I18N_VALUES_BTN_REVERT]             = "Revert",
+    [SC_I18N_VALUES_AUTH_FAILED_FMT]        = "Authentication failed: %s",
+    [SC_I18N_VALUES_APPLY_OK_FMT]           = "Applied %u parameter(s) to staging.",
+    [SC_I18N_VALUES_APPLY_FAILED_FMT]       = "Apply failed for %s: %s",
+    [SC_I18N_VALUES_NOTHING_TO_APPLY]       = "Nothing to apply - no edited parameters.",
+    [SC_I18N_VALUES_COMMIT_OK]              = "Committed.",
+    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Commit failed: %s",
+    [SC_I18N_VALUES_REVERT_OK]              = "Reverted.",
+    [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Revert failed: %s",
 };
 
 /*
@@ -263,6 +281,24 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
         "Sonda częściowa: ok=%zu blad=%zu niezgodnosc=%zu",
     [SC_I18N_STATUS_PROBE_OK_FMT]           = "Sonda ok: %zu id, niezgodnosc=%zu",
     [SC_I18N_STATUS_PROBE_SKIPPED]          = "Sonda pominięta (szybkie auto-odświeżanie).",
+
+    [SC_I18N_TAB_VALUES]                    = "Wartości",
+    [SC_I18N_VALUES_PLACEHOLDER]            = "Uruchom detekcję, aby wypełnić zakładkę Wartości.",
+    [SC_I18N_VALUES_NO_DETECTED_MODULES]    = "Nie wykryto żadnego modułu.",
+    [SC_I18N_VALUES_NO_PARAMS]              = "Moduł nie udostępnia żadnych parametrów.",
+    [SC_I18N_VALUES_LOADING]                = "Wczytywanie parametrów...",
+    [SC_I18N_VALUES_LOAD_FAILED_FMT]        = "Nie udało się wczytać %s: %s",
+    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Zastosuj zmiany",
+    [SC_I18N_VALUES_BTN_COMMIT]             = "Zatwierdź",
+    [SC_I18N_VALUES_BTN_REVERT]             = "Cofnij",
+    [SC_I18N_VALUES_AUTH_FAILED_FMT]        = "Uwierzytelnianie nie powiodło się: %s",
+    [SC_I18N_VALUES_APPLY_OK_FMT]           = "Zastosowano %u parametr(ów) w buforze staging.",
+    [SC_I18N_VALUES_APPLY_FAILED_FMT]       = "Nie udało się zastosować %s: %s",
+    [SC_I18N_VALUES_NOTHING_TO_APPLY]       = "Brak zmian do zastosowania.",
+    [SC_I18N_VALUES_COMMIT_OK]              = "Zatwierdzono.",
+    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Zatwierdzenie nie powiodło się: %s",
+    [SC_I18N_VALUES_REVERT_OK]              = "Cofnięto.",
+    [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Cofnięcie nie powiodło się: %s",
 };
 
 static const char *const *const k_locale_tables[SC_LOCALE_COUNT] = {
