@@ -1,8 +1,14 @@
 #include "unity.h"
 
 #include "config.h"
+#include "dtcManager.h"
+#include "testable/ecuParams_testable.h"
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include "hal/hal_eeprom.h"
+#include "hal/hal_kv.h"
+#include "hal/hal_sc_auth.h"
 #include "hal/hal_serial_frame.h"
+#include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <stdint.h>
@@ -89,8 +95,57 @@ static void performHello(void) {
     TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
 }
 
+/* Drive the session through HELLO + AUTH_BEGIN + AUTH_PROVE so the
+ * test starts from a fully authenticated state. Uses real HMAC-SHA256
+ * crypto against the deterministic mock UID baked into hal_mock. */
+static void performAuth(void) {
+    performHello();
+
+    const char *challengeReply = sendSerialLine("SC_AUTH_BEGIN\n");
+    TEST_ASSERT_NOT_NULL(challengeReply);
+    const char *hexStart = strstr(challengeReply, "AUTH_CHALLENGE ");
+    TEST_ASSERT_NOT_NULL_MESSAGE(hexStart, "expected AUTH_CHALLENGE in reply");
+    hexStart += strlen("AUTH_CHALLENGE ");
+
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+    for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
+        unsigned byte = 0u;
+        TEST_ASSERT_EQUAL_INT(1, sscanf(hexStart + i * 2u, "%2x", &byte));
+        challenge[i] = (uint8_t)byte;
+    }
+
+    uint8_t uid[HAL_DEVICE_UID_BYTES];
+    hal_get_device_uid(uid);
+    uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(uid, sizeof(uid), key));
+
+    uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_compute_response(key, challenge,
+                                                  sizeof(challenge),
+                                                  configSessionId(), mac));
+
+    char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+    static const char kHex[] = "0123456789abcdef";
+    for (size_t i = 0u; i < sizeof(mac); ++i) {
+        hex[i * 2u]      = kHex[(mac[i] >> 4) & 0x0Fu];
+        hex[i * 2u + 1u] = kHex[mac[i] & 0x0Fu];
+    }
+    hex[sizeof(mac) * 2u] = '\0';
+
+    char proveLine[256];
+    snprintf(proveLine, sizeof(proveLine), "SC_AUTH_PROVE %s\n", hex);
+    const char *proveReply = sendSerialLine(proveLine);
+    TEST_ASSERT_NOT_NULL(proveReply);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(proveReply, "AUTH_OK"),
+                                 "expected SC_OK AUTH_OK after PROVE");
+}
+
 void setUp(void) {
     hal_mock_set_millis(0);
+    /* Wipe any blob that previous tests in this program may have
+     * persisted. ecuParamsInit then loads pristine defaults. */
+    (void)hal_kv_delete(ecuParamsBlobKeyForTest());
+    ecuParamsResetRuntimeStateForTest();
     configSessionInit();
     ecuParamsInit();
     test_stubs_reset_forwarded_serial();
@@ -250,7 +305,146 @@ void test_framed_command_after_framed_hello_preserves_seq(void) {
     TEST_ASSERT_NOT_NULL(strstr(meta_response, "module=" SC_MODULE_TOKEN_ECU));
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 8.3: SET_PARAM / COMMIT_PARAMS / REVERT_PARAMS over the wire. */
+/* ------------------------------------------------------------------ */
+
+void test_sc_set_param_rejects_without_auth(void) {
+    performHello();
+    /* No AUTH_PROVE. */
+    const char *response = sendSerialLine("SC_SET_PARAM fan_coolant_start_c 110\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_NOT_AUTHORIZED"));
+    /* Active untouched. */
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
+}
+
+void test_sc_commit_params_rejects_without_auth(void) {
+    performHello();
+    const char *response = sendSerialLine("SC_COMMIT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_NOT_AUTHORIZED"));
+}
+
+void test_sc_revert_params_rejects_without_auth(void) {
+    performHello();
+    const char *response = sendSerialLine("SC_REVERT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_NOT_AUTHORIZED"));
+}
+
+void test_sc_set_param_writes_only_staging_after_auth(void) {
+    performAuth();
+
+    const char *response = sendSerialLine("SC_SET_PARAM fan_coolant_start_c 110\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK PARAM_SET"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "id=fan_coolant_start_c"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "staged=110"));
+    /* Active still at default until COMMIT. */
+    char activeFragment[32];
+    snprintf(activeFragment, sizeof(activeFragment), "active=%d", TEMP_FAN_START);
+    TEST_ASSERT_NOT_NULL(strstr(response, activeFragment));
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
+}
+
+void test_sc_set_param_rejects_out_of_range(void) {
+    performAuth();
+
+    const char *response = sendSerialLine("SC_SET_PARAM fan_coolant_start_c 200\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_BAD_REQUEST"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "out_of_range"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "id=fan_coolant_start_c"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "min=70"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "max=130"));
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
+}
+
+void test_sc_set_param_rejects_unknown_id(void) {
+    performAuth();
+
+    const char *response = sendSerialLine("SC_SET_PARAM nope 0\n");
+    TEST_ASSERT_NOT_NULL(strstr(response, "SC_INVALID_PARAM_ID"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "id=nope"));
+}
+
+void test_sc_commit_persists_blob_and_updates_active(void) {
+    performAuth();
+
+    /* Step the staged value away from the default. */
+    (void)sendSerialLine("SC_SET_PARAM fan_coolant_start_c 109\n");
+
+    const char *commitReply = sendSerialLine("SC_COMMIT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(commitReply, "SC_OK PARAMS_COMMITTED"));
+    TEST_ASSERT_NOT_NULL(strstr(commitReply, "count=6"));
+    /* Active mirror reflects the new value immediately. */
+    TEST_ASSERT_EQUAL_INT16(109, ecuParamsFanCoolantStart());
+
+    /* Reset runtime state and reload from KV: the persisted blob must
+     * round-trip the new value. */
+    ecuParamsResetRuntimeStateForTest();
+    ecuParamsInit();
+    TEST_ASSERT_EQUAL_INT16(109, ecuParamsFanCoolantStart());
+}
+
+void test_sc_commit_fails_on_hysteresis_rule(void) {
+    performAuth();
+
+    /* fan_coolant_stop_c >= fan_coolant_start_c violates hysteresis. */
+    (void)sendSerialLine("SC_SET_PARAM fan_coolant_stop_c 110\n");
+
+    const char *commitReply = sendSerialLine("SC_COMMIT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(commitReply, "SC_COMMIT_FAILED"));
+    TEST_ASSERT_NOT_NULL(strstr(commitReply, "reason=fan_coolant_hysteresis"));
+    /* Active and persisted state untouched. */
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_STOP, ecuParamsFanCoolantStop());
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
+}
+
+void test_sc_revert_restores_staging_from_active(void) {
+    performAuth();
+
+    /* Mutate staging away from active, REVERT, then COMMIT — the blob
+     * must reflect the original defaults rather than the staged 110. */
+    (void)sendSerialLine("SC_SET_PARAM fan_coolant_start_c 110\n");
+    const char *revertReply = sendSerialLine("SC_REVERT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(revertReply, "SC_OK PARAMS_REVERTED"));
+
+    const char *commitReply = sendSerialLine("SC_COMMIT_PARAMS\n");
+    TEST_ASSERT_NOT_NULL(strstr(commitReply, "SC_OK PARAMS_COMMITTED"));
+
+    ecuParamsResetRuntimeStateForTest();
+    ecuParamsInit();
+    /* If revert had failed, the blob would carry 110. */
+    TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
+}
+
+void test_sc_set_param_rejects_malformed_payload(void) {
+    performAuth();
+
+    /* Missing value. */
+    const char *missingValue = sendSerialLine("SC_SET_PARAM fan_coolant_start_c\n");
+    TEST_ASSERT_NOT_NULL(strstr(missingValue, "SC_BAD_REQUEST"));
+
+    /* Non-numeric value. */
+    const char *badValue = sendSerialLine("SC_SET_PARAM fan_coolant_start_c xyz\n");
+    TEST_ASSERT_NOT_NULL(strstr(badValue, "SC_BAD_REQUEST"));
+    TEST_ASSERT_NOT_NULL(strstr(badValue, "value_not_int16"));
+
+    /* Out of int16 domain. */
+    const char *outOfDomain = sendSerialLine("SC_SET_PARAM fan_coolant_start_c 70000\n");
+    TEST_ASSERT_NOT_NULL(strstr(outOfDomain, "SC_BAD_REQUEST"));
+    TEST_ASSERT_NOT_NULL(strstr(outOfDomain, "value_not_int16"));
+}
+
 int main(void) {
+    /* Phase 8.3 brought a production caller of ecuParamsPersist (the
+     * SC_COMMIT_PARAMS branch), so KV-backed persistence has to work
+     * during these tests. Older tests in this suite never wrote a
+     * blob, so the eeprom + kv init calls were unnecessary then.
+     * dtcManagerInit additionally invokes hal_kv_init under the hood,
+     * which is why test_ecu_params.cpp (the only other suite that
+     * exercises persistence) takes the same shape. */
+    hal_mock_eeprom_reset();
+    hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
+    dtcManagerInit();
+
     UNITY_BEGIN();
 
     RUN_TEST(test_sc_get_meta_requires_hello_first);
@@ -265,6 +459,18 @@ int main(void) {
     RUN_TEST(test_framed_hello_responds_with_same_seq_and_valid_crc);
     RUN_TEST(test_framed_request_with_bad_crc_is_silently_dropped);
     RUN_TEST(test_framed_command_after_framed_hello_preserves_seq);
+
+    /* Phase 8.3 — auth-gated SET / COMMIT / REVERT. */
+    RUN_TEST(test_sc_set_param_rejects_without_auth);
+    RUN_TEST(test_sc_commit_params_rejects_without_auth);
+    RUN_TEST(test_sc_revert_params_rejects_without_auth);
+    RUN_TEST(test_sc_set_param_writes_only_staging_after_auth);
+    RUN_TEST(test_sc_set_param_rejects_out_of_range);
+    RUN_TEST(test_sc_set_param_rejects_unknown_id);
+    RUN_TEST(test_sc_commit_persists_blob_and_updates_active);
+    RUN_TEST(test_sc_commit_fails_on_hysteresis_rule);
+    RUN_TEST(test_sc_revert_restores_staging_from_active);
+    RUN_TEST(test_sc_set_param_rejects_malformed_payload);
 
     return UNITY_END();
 }

@@ -7,7 +7,9 @@
 #include <hal/hal_kv.h>
 #include <hal/hal_serial_session.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../common/scDefinitions/sc_param_handlers.h"
@@ -229,7 +231,11 @@ TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
   return true;
 }
 
-#ifdef UNIT_TEST
+/* Encode the descriptor-driven blob and write it to KV. Returns false
+ * when the candidate fails cross-field validation, when the encoder
+ * cannot fill the V2 layout, or when the KV write fails. Phase 8.3
+ * lifted this out of the UNIT_TEST guard so production COMMIT_PARAMS
+ * can persist the staged blob. */
 TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
   if(!ecuParamsValidate(values, NULL)) {
     return false;
@@ -245,6 +251,7 @@ TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
   return hal_kv_set_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob));
 }
 
+#ifdef UNIT_TEST
 TESTABLE_STATIC uint16_t ecuParamsBlobKeyForTest(void) {
   return ECU_PARAMS_BLOB_KEY;
 }
@@ -384,6 +391,127 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
   return true;
 }
 
+/* Phase 8.3 — auth-gated SET_PARAM. Wire format:
+ *     SC_SET_PARAM <param_id> <value>
+ * <value> is parsed as a base-10 signed integer and clamped to the
+ * int16_t domain before being passed to the descriptor helper, which
+ * applies the per-descriptor [min, max] check on top. */
+static bool configSessionHandleScSetParamCommand(const char *line) {
+  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
+    return true;
+  }
+
+  const char *cursor = line + strlen(SC_CMD_SET_PARAM);
+  cursor = configSessionSkipSpaces(cursor);
+  if(cursor == NULL || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+    return true;
+  }
+
+  char paramId[SC_PARAM_ID_MAX] = {0};
+  size_t idLen = 0u;
+  while(cursor[idLen] != '\0' && cursor[idLen] != ' '
+        && idLen + 1u < sizeof(paramId)) {
+    paramId[idLen] = cursor[idLen];
+    idLen++;
+  }
+  paramId[idLen] = '\0';
+
+  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " param_id_too_long");
+    return true;
+  }
+
+  cursor += idLen;
+  cursor = configSessionSkipSpaces(cursor);
+  if(cursor == NULL || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+    return true;
+  }
+
+  char *endptr = NULL;
+  const long parsed = strtol(cursor, &endptr, 10);
+  if(endptr == cursor) {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " value_not_int16");
+    return true;
+  }
+  const char *tail = configSessionSkipSpaces(endptr);
+  if(tail != NULL && tail[0] != '\0') {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+    return true;
+  }
+  if(parsed < INT16_MIN || parsed > INT16_MAX) {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_BAD_REQUEST " value_not_int16");
+    return true;
+  }
+
+  (void)sc_param_reply_set_param(k_ecu_params, k_ecu_params_count,
+                                 &s_staging, &s_active,
+                                 paramId, (int16_t)parsed,
+                                 configSessionEmitThroughHal,
+                                 &s_configSession);
+  return true;
+}
+
+/* Phase 8.3 — auth-gated COMMIT_PARAMS. Validates staging via
+ * cross-field ecuParamsValidate, persists the encoded blob FIRST, then
+ * promotes staging to active. Persisting before promoting keeps active
+ * and the on-disk blob consistent: if the KV write fails, active stays
+ * at the last known-good state and a subsequent reboot reloads the same
+ * old blob. */
+static bool configSessionHandleScCommitParamsCommand(void) {
+  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
+    return true;
+  }
+
+  const char *reason = NULL;
+  if(!ecuParamsValidate(&s_staging, &reason)) {
+    char response[96];
+    snprintf(response, sizeof(response), SC_REPLY_COMMIT_FAILED_FMT,
+             (reason != NULL) ? reason : "unknown");
+    hal_serial_session_println(&s_configSession, response);
+    return true;
+  }
+
+  if(!ecuParamsPersist(&s_staging)) {
+    hal_serial_session_println(&s_configSession,
+        SC_STATUS_COMMIT_FAILED " reason=persist_failed");
+    return true;
+  }
+
+  const size_t count = sc_param_copy_staging_to_active(
+      k_ecu_params, k_ecu_params_count, &s_staging, &s_active);
+
+  char response[64];
+  snprintf(response, sizeof(response), SC_REPLY_PARAMS_COMMITTED_FMT,
+           (unsigned)count);
+  hal_serial_session_println(&s_configSession, response);
+  return true;
+}
+
+/* Phase 8.3 — auth-gated REVERT_PARAMS. Resets staging from active and
+ * always succeeds: there is no validation step because active was
+ * already validated when it was committed. */
+static bool configSessionHandleScRevertParamsCommand(void) {
+  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
+    return true;
+  }
+
+  (void)sc_param_copy_active_to_staging(k_ecu_params, k_ecu_params_count,
+                                        &s_active, &s_staging);
+  hal_serial_session_println(&s_configSession, SC_REPLY_PARAMS_REVERTED);
+  return true;
+}
+
 static bool configSessionHandleScCommand(const char *line) {
   if(line == NULL || strncmp(line, "SC_", 3u) != 0) {
     return false;
@@ -413,6 +541,18 @@ static bool configSessionHandleScCommand(const char *line) {
                                   configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
+  }
+
+  if(strcmp(line, SC_CMD_COMMIT_PARAMS) == 0) {
+    return configSessionHandleScCommitParamsCommand();
+  }
+
+  if(strcmp(line, SC_CMD_REVERT_PARAMS) == 0) {
+    return configSessionHandleScRevertParamsCommand();
+  }
+
+  if(strncmp(line, SC_CMD_SET_PARAM, strlen(SC_CMD_SET_PARAM)) == 0) {
+    return configSessionHandleScSetParamCommand(line);
   }
 
   if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {

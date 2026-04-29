@@ -174,6 +174,19 @@ void test_clocks_sc_unknown_command_returns_sc_unknown_cmd(void) {
   TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
+/* Phase 8.4 — Clocks intentionally does NOT wire the SET_PARAM /
+ * COMMIT_PARAMS / REVERT_PARAMS branches. All Clocks descriptors are
+ * read-only, so the helper would reject every id with
+ * SC_BAD_REQUEST read_only anyway; rather than add per-module code
+ * for the same effect, the dispatcher's default branch returns
+ * SC_UNKNOWN_CMD. This test locks that decision in. */
+void test_clocks_sc_set_param_returns_sc_unknown_cmd(void) {
+  performHello();
+
+  const char *response = sendSerialLine("SC_SET_PARAM coolant_warn_c 100\n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+}
+
 void test_clocks_framed_hello_responds_with_same_seq(void) {
   char frame[80];
   buildFrame(55u, "HELLO", frame, sizeof(frame));
@@ -212,6 +225,7 @@ int main(void) {
   RUN_TEST(test_clocks_sc_get_param_known_id_returns_value_and_bounds);
   RUN_TEST(test_clocks_sc_get_param_returns_invalid_param);
   RUN_TEST(test_clocks_sc_unknown_command_returns_sc_unknown_cmd);
+  RUN_TEST(test_clocks_sc_set_param_returns_sc_unknown_cmd);
   RUN_TEST(test_clocks_framed_hello_responds_with_same_seq);
   RUN_TEST(test_clocks_framed_request_with_bad_crc_is_silently_dropped);
 
