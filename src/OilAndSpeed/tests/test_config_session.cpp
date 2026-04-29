@@ -221,6 +221,20 @@ void test_oilspeed_sc_unknown_command_returns_sc_unknown_cmd(void) {
   TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
+/* Phase 8.4 — OilAndSpeed intentionally does NOT wire the SET_PARAM /
+ * COMMIT_PARAMS / REVERT_PARAMS branches. All descriptors here are
+ * read-only, so the helper would reject every id with
+ * SC_BAD_REQUEST read_only anyway; the dispatcher's default branch
+ * returns SC_UNKNOWN_CMD instead, mirroring Clocks. This test locks
+ * that decision in. */
+void test_oilspeed_sc_set_param_returns_sc_unknown_cmd(void) {
+  performHello();
+
+  const char *response =
+      sendSerialLine("SC_SET_PARAM oil_pressure_read_interval_ms 1500\n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+}
+
 void test_oilspeed_framed_hello_responds_with_same_seq(void) {
   char frame[80];
   buildFrame(77u, "HELLO", frame, sizeof(frame));
@@ -261,6 +275,7 @@ int main(void) {
   RUN_TEST(test_oilspeed_sc_get_param_known_id_returns_value_and_bounds);
   RUN_TEST(test_oilspeed_sc_get_param_returns_invalid_param);
   RUN_TEST(test_oilspeed_sc_unknown_command_returns_sc_unknown_cmd);
+  RUN_TEST(test_oilspeed_sc_set_param_returns_sc_unknown_cmd);
   RUN_TEST(test_oilspeed_framed_hello_responds_with_same_seq);
   RUN_TEST(test_oilspeed_framed_request_with_bad_crc_is_silently_dropped);
 
