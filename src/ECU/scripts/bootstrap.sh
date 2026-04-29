@@ -395,6 +395,13 @@ compile_firmware_for() {
     uf2=$(find "$build" -maxdepth 2 -name '*.uf2' -type f | head -1)
     if [[ -n "$uf2" ]]; then
         ok "[$module] firmware: $uf2"
+        local manifest
+        manifest="$(fiesta_prepare_manifest_for_uf2 "$src" "$uf2" || true)"
+        if [[ -z "$manifest" ]]; then
+            err "[$module] manifest generation/verification failed for $uf2"
+            return 1
+        fi
+        ok "[$module] manifest: $manifest"
     else
         warn "[$module] compile finished but no .uf2 found in $build"
     fi

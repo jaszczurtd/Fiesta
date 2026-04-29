@@ -12,11 +12,12 @@
  *     "fw_version":   "0.1.0",
  *     "build_id":     "2026-04-26 12:00:00",
  *     "sha256":       "<64 lowercase hex chars of the UF2 file>",
+ *     "uf2_file":     "<optional UF2 filename next to this manifest>",
  *     "signature":    "<base64 or hex; OPTIONAL ed25519 over the rest>"
  *   }
  *
  * Required: module_name, fw_version, build_id, sha256.
- * Optional: signature.
+ * Optional: uf2_file, signature.
  *
  * Verification policy is "hard reject":
  *   - any required field missing / wrong type / empty   -> reject,
@@ -57,6 +58,9 @@ extern "C" {
 #define SC_MANIFEST_SHA256_HEX_LEN 64u
 #define SC_MANIFEST_SHA256_HEX_BUF_SIZE (SC_MANIFEST_SHA256_HEX_LEN + 1u)
 
+/** @brief Maximum length of optional UF2 sidecar filename (basename only). */
+#define SC_MANIFEST_UF2_FILE_MAX 255u
+
 /** @brief Maximum signature length (raw text, base64 or hex). */
 #define SC_MANIFEST_SIGNATURE_MAX 256u
 
@@ -75,6 +79,8 @@ typedef enum {
     SC_MANIFEST_ERR_FIELD_TOO_LONG,
     SC_MANIFEST_ERR_FIELD_EMPTY,
     SC_MANIFEST_ERR_BAD_SHA256_FORMAT,
+    SC_MANIFEST_ERR_BAD_UF2_FILE,
+    SC_MANIFEST_ERR_UF2_FILE_MISSING,
     SC_MANIFEST_ERR_UNKNOWN_FIELD,
     SC_MANIFEST_ERR_FILE_OPEN,
     SC_MANIFEST_ERR_FILE_READ,
@@ -94,6 +100,9 @@ typedef struct {
     char sha256_hex[SC_MANIFEST_SHA256_HEX_BUF_SIZE];
     /** Decoded SHA-256 bytes (computed from @ref sha256_hex at parse time). */
     uint8_t sha256[SC_CRYPTO_SHA256_DIGEST_BYTES];
+    /** Optional UF2 filename (basename only, no path separators). */
+    char uf2_file[SC_MANIFEST_UF2_FILE_MAX + 1u];
+    bool has_uf2_file;
     /** Optional signature string (verbatim from JSON), or empty. */
     char signature[SC_MANIFEST_SIGNATURE_MAX + 1u];
     bool has_signature;
@@ -142,6 +151,25 @@ sc_manifest_status_t sc_manifest_load_file(const char *path,
 sc_manifest_status_t sc_manifest_verify_artifact(
     const sc_manifest_t *manifest,
     const char *artifact_path);
+
+/**
+ * @brief Resolve manifest-sidecar UF2 path from @p manifest_path and
+ *        optional @c manifest->uf2_file.
+ *
+ * If @c uf2_file is present, this returns "<dir(manifest_path)>/uf2_file".
+ * The field must be a basename only (no slash, no backslash, not "."/"..").
+ *
+ * @return @c SC_MANIFEST_OK on success, otherwise:
+ *         - @c SC_MANIFEST_ERR_UF2_FILE_MISSING if field absent,
+ *         - @c SC_MANIFEST_ERR_BAD_UF2_FILE for invalid filename,
+ *         - @c SC_MANIFEST_ERR_FIELD_TOO_LONG if output buffer is too small,
+ *         - @c SC_MANIFEST_ERR_NULL_ARG on invalid args.
+ */
+sc_manifest_status_t sc_manifest_resolve_uf2_path(
+    const char *manifest_path,
+    const sc_manifest_t *manifest,
+    char *out_path,
+    size_t out_path_size);
 
 /**
  * @brief Verify that @p manifest targets the expected module name.

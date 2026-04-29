@@ -84,20 +84,15 @@ typedef enum ScI18nKey {
     SC_I18N_FLASH_PLACEHOLDER,
     /* Phase 6.2 - per-module section widgets */
     SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash - %s" */
-    SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact:" */
-    SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest (optional):" */
-    SC_I18N_FLASH_BTN_PICK_UF2,          /* "Choose UF2..." */
+    SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact (auto):" */
+    SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest:" */
     SC_I18N_FLASH_BTN_PICK_MANIFEST,     /* "Choose manifest..." */
-    SC_I18N_FLASH_BTN_CLEAR_UF2,         /* "Clear" (UF2 picker reset) */
     SC_I18N_FLASH_BTN_CLEAR_MANIFEST,    /* "Clear" (manifest picker reset) */
     SC_I18N_FLASH_BTN_FLASH,             /* "Flash" */
     SC_I18N_FLASH_NO_PATH,               /* "(none)" */
-    SC_I18N_FLASH_DIALOG_UF2_TITLE,      /* "Select UF2 artifact" */
     SC_I18N_FLASH_DIALOG_MANIFEST_TITLE, /* "Select manifest JSON" */
-    SC_I18N_FLASH_FILTER_UF2,            /* "UF2 firmware images" */
     SC_I18N_FLASH_FILTER_MANIFEST,       /* "Manifest JSON" */
-    SC_I18N_FLASH_STATUS_INITIAL,        /* "Pick a UF2 artifact to start." */
-    SC_I18N_FLASH_STATUS_UF2_OK_FMT,     /* "UF2 format OK: %s" */
+    SC_I18N_FLASH_STATUS_INITIAL,        /* "Pick a manifest to start." */
     SC_I18N_FLASH_STATUS_UF2_FAIL_FMT,   /* "UF2 format check failed (%s): %s" */
     SC_I18N_FLASH_STATUS_MANIFEST_OK,    /* "Manifest parsed; sha256 matches the chosen UF2." */
     SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT, /* "Manifest parse failed: %s" */

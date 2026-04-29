@@ -169,6 +169,11 @@ static bool mock_send_sc_command(
         return true;
     }
 
+    if (strcmp(command, SC_CMD_BYE) == 0) {
+        (void)snprintf(response, response_size, "%s", SC_REPLY_BYE_OK);
+        return true;
+    }
+
     if (strcmp(command, "SC_GET_PARAM nominal_rpm") == 0) {
         (void)snprintf(response, response_size, "%s", device->param_nominal_response);
         return true;
@@ -790,6 +795,45 @@ static int test_param_values_parser_tolerates_noise_tokens(void)
     return 0;
 }
 
+static int test_sc_bye_command_is_sent_and_parsed(void)
+{
+    const MockDevice devices[] = {
+        {
+            .candidate_path = "/dev/mock/by-id/ecu-bye",
+            .device_path = "/dev/mock/ttyACM13",
+            .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 build=YjQy uid=E661A4",
+            .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
+            .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
+            .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
+            .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
+        }
+    };
+    MockTransportContext context = {
+        .devices = devices,
+        .device_count = sizeof(devices) / sizeof(devices[0]),
+    };
+
+    ScCore core;
+    sc_core_init(&core);
+    const ScTransport transport = make_mock_transport(&context);
+    sc_core_set_transport(&core, &transport);
+
+    char detect_log[2048];
+    char command_log[1024];
+    sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+
+    ScCommandResult result;
+    TEST_ASSERT(
+        sc_core_sc_bye(&core, 0u, &result, command_log, sizeof(command_log)),
+        "SC_BYE call failed"
+    );
+    TEST_ASSERT(result.status == SC_COMMAND_STATUS_OK, "SC_BYE should return OK");
+    TEST_ASSERT(strcmp(result.status_token, SC_STATUS_OK) == 0, "SC_BYE status token mismatch");
+    TEST_ASSERT(strcmp(result.topic, SC_REPLY_TAG_BYE) == 0, "SC_BYE topic mismatch");
+    return 0;
+}
+
 int main(void)
 {
     if (test_detect_parses_structured_hello_fields() != 0) {
@@ -837,6 +881,10 @@ int main(void)
     }
 
     if (test_param_values_parser_tolerates_noise_tokens() != 0) {
+        return 1;
+    }
+
+    if (test_sc_bye_command_is_sent_and_parsed() != 0) {
         return 1;
     }
 

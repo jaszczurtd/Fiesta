@@ -43,6 +43,7 @@ extern "C" {
 /* ── Inbound command tokens (host -> device) ────────────────────────── */
 
 #define SC_CMD_HELLO                "HELLO"
+#define SC_CMD_BYE                  "SC_BYE"
 #define SC_CMD_GET_META             "SC_GET_META"
 #define SC_CMD_GET_PARAM_LIST       "SC_GET_PARAM_LIST"
 #define SC_CMD_GET_VALUES           "SC_GET_VALUES"
@@ -74,6 +75,7 @@ extern "C" {
 #define SC_REPLY_TAG_HELLO_REQUIRED        "HELLO_REQUIRED"
 
 #define SC_REPLY_TAG_META                  "META"
+#define SC_REPLY_TAG_BYE                   "BYE"
 #define SC_REPLY_TAG_PARAM_LIST            "PARAM_LIST"
 #define SC_REPLY_TAG_PARAM_VALUES          "PARAM_VALUES"
 #define SC_REPLY_TAG_PARAM                 "PARAM"
@@ -149,6 +151,10 @@ extern "C" {
 /* "SC_NOT_READY HELLO_REQUIRED" */
 #define SC_REPLY_NOT_READY_HELLO_REQUIRED                                    \
     SC_STATUS_NOT_READY " " SC_REPLY_TAG_HELLO_REQUIRED
+
+/* "SC_OK BYE" */
+#define SC_REPLY_BYE_OK                                                     \
+    SC_STATUS_OK " " SC_REPLY_TAG_BYE
 
 /* ── Phase 8 — parameter staging reply formats ─────────────────────── */
 

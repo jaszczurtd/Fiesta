@@ -26,6 +26,22 @@ extern "C" {
 /* Maximum firmware artifact size (UF2) loaded for hash verification. */
 #define SC_MANIFEST_MAX_ARTIFACT_SIZE (8u * 1024u * 1024u)
 
+/* ── Diagnostics ──────────────────────────────────────────────────── */
+
+/* Deep diagnostic logging toggle.
+ *
+ * When defined, the verbose diagnostic helpers (`flash_log_v` in
+ * sc_flash.c and `transport_log_v` in sc_transport.c) emit per-frame
+ * trace to stderr (every send/recv chunk, every readdir entry, etc.).
+ * When undefined they are no-ops.
+ *
+ * This is a compile-time gate by design: field reports of CDC drops
+ * and BOOTSEL races require the trace to be available without
+ * recompiling, but on developer workstations this output is too noisy
+ * to leave on permanently. Comment / uncomment below for release vs
+ * debug builds. */
+//#define SC_DEBUG_DEEP
+
 /* ── Transport defaults ───────────────────────────────────────────── */
 
 #ifdef _WIN32

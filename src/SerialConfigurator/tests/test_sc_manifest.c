@@ -45,6 +45,15 @@ static const char *k_minimal_manifest_json =
     "  \"sha256\":     \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\""
     "}";
 
+static const char *k_manifest_with_uf2_file_json =
+    "{"
+    "  \"module_name\": \"" SC_MODULE_TOKEN_ECU "\","
+    "  \"fw_version\": \"0.1.0\","
+    "  \"build_id\":   \"2026-04-26 12:00:00\","
+    "  \"sha256\":     \"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\","
+    "  \"uf2_file\":   \"firmware.uf2\""
+    "}";
+
 static int test_parse_minimal_valid_manifest(void)
 {
     sc_manifest_t m;
@@ -56,7 +65,20 @@ static int test_parse_minimal_valid_manifest(void)
     TEST_ASSERT(strcmp(m.fw_version, "0.1.0") == 0, "fw_version");
     TEST_ASSERT(strcmp(m.build_id, "2026-04-26 12:00:00") == 0, "build_id");
     TEST_ASSERT(strcmp(m.sha256_hex, k_abc_sha256_hex) == 0, "sha256_hex");
+    TEST_ASSERT(!m.has_uf2_file, "no uf2_file on minimal manifest");
     TEST_ASSERT(!m.has_signature, "no signature on minimal manifest");
+    return 0;
+}
+
+static int test_parse_with_uf2_file(void)
+{
+    sc_manifest_t m;
+    TEST_ASSERT_EQ(SC_MANIFEST_OK,
+                   sc_manifest_parse(k_manifest_with_uf2_file_json,
+                                     strlen(k_manifest_with_uf2_file_json), &m),
+                   "parse with uf2_file");
+    TEST_ASSERT(m.has_uf2_file, "uf2_file flag set");
+    TEST_ASSERT(strcmp(m.uf2_file, "firmware.uf2") == 0, "uf2_file stored");
     return 0;
 }
 
@@ -189,6 +211,35 @@ static int test_bad_sha256_format_is_rejected(void)
     TEST_ASSERT_EQ(SC_MANIFEST_ERR_BAD_SHA256_FORMAT,
                    sc_manifest_parse(json_nonhex, strlen(json_nonhex), &m),
                    "non-hex sha256");
+    return 0;
+}
+
+static int test_bad_uf2_file_is_rejected(void)
+{
+    const char *json_slash =
+        "{"
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
+        "\"fw_version\":\"0.1.0\","
+        "\"build_id\":\"x\","
+        "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\","
+        "\"uf2_file\":\"dir/firmware.uf2\""
+        "}";
+    sc_manifest_t m;
+    TEST_ASSERT_EQ(SC_MANIFEST_ERR_BAD_UF2_FILE,
+                   sc_manifest_parse(json_slash, strlen(json_slash), &m),
+                   "slash in uf2_file");
+
+    const char *json_dotdot =
+        "{"
+        "\"module_name\":\"" SC_MODULE_TOKEN_ECU "\","
+        "\"fw_version\":\"0.1.0\","
+        "\"build_id\":\"x\","
+        "\"sha256\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\","
+        "\"uf2_file\":\"..\""
+        "}";
+    TEST_ASSERT_EQ(SC_MANIFEST_ERR_BAD_UF2_FILE,
+                   sc_manifest_parse(json_dotdot, strlen(json_dotdot), &m),
+                   "dotdot uf2_file");
     return 0;
 }
 
@@ -382,6 +433,39 @@ static int test_artifact_missing_returns_open_error(void)
     return 0;
 }
 
+static int test_resolve_uf2_path_from_manifest(void)
+{
+    sc_manifest_t m;
+    TEST_ASSERT_EQ(SC_MANIFEST_OK,
+                   sc_manifest_parse(k_manifest_with_uf2_file_json,
+                                     strlen(k_manifest_with_uf2_file_json), &m),
+                   "parse for resolve path");
+
+    char out[512];
+    TEST_ASSERT_EQ(SC_MANIFEST_OK,
+                   sc_manifest_resolve_uf2_path("/tmp/fw/ecu.manifest.json",
+                                                &m, out, sizeof(out)),
+                   "resolve sidecar path");
+    TEST_ASSERT(strcmp(out, "/tmp/fw/firmware.uf2") == 0,
+                "resolved path");
+    return 0;
+}
+
+static int test_resolve_uf2_path_missing_field(void)
+{
+    sc_manifest_t m;
+    TEST_ASSERT_EQ(SC_MANIFEST_OK,
+                   sc_manifest_parse(k_minimal_manifest_json,
+                                     strlen(k_minimal_manifest_json), &m),
+                   "parse without uf2_file");
+    char out[64];
+    TEST_ASSERT_EQ(SC_MANIFEST_ERR_UF2_FILE_MISSING,
+                   sc_manifest_resolve_uf2_path("/tmp/fw/ecu.manifest.json",
+                                                &m, out, sizeof(out)),
+                   "resolve missing uf2_file");
+    return 0;
+}
+
 static int test_status_strings_are_stable(void)
 {
     TEST_ASSERT(strcmp(sc_manifest_status_str(SC_MANIFEST_OK), "OK") == 0,
@@ -392,6 +476,9 @@ static int test_status_strings_are_stable(void)
     TEST_ASSERT(strcmp(sc_manifest_status_str(SC_MANIFEST_ERR_BAD_SHA256_FORMAT),
                        "BAD_SHA256_FORMAT") == 0,
                 "bad sha256 string");
+    TEST_ASSERT(strcmp(sc_manifest_status_str(SC_MANIFEST_ERR_BAD_UF2_FILE),
+                       "BAD_UF2_FILE") == 0,
+                "bad uf2_file string");
     return 0;
 }
 
@@ -399,6 +486,7 @@ int main(void)
 {
     int failures = 0;
     failures += test_parse_minimal_valid_manifest();
+    failures += test_parse_with_uf2_file();
     failures += test_parse_with_signature();
     failures += test_signature_verify_returns_not_supported();
     failures += test_missing_required_field_is_rejected();
@@ -406,6 +494,7 @@ int main(void)
     failures += test_duplicate_field_is_rejected();
     failures += test_unknown_field_is_rejected();
     failures += test_bad_sha256_format_is_rejected();
+    failures += test_bad_uf2_file_is_rejected();
     failures += test_empty_field_is_rejected();
     failures += test_field_too_long_is_rejected();
     failures += test_trailing_garbage_is_rejected();
@@ -416,12 +505,14 @@ int main(void)
     failures += test_artifact_hash_match();
     failures += test_artifact_hash_mismatch();
     failures += test_artifact_missing_returns_open_error();
+    failures += test_resolve_uf2_path_from_manifest();
+    failures += test_resolve_uf2_path_missing_field();
     failures += test_status_strings_are_stable();
 
     if (failures != 0) {
         fprintf(stderr, "test_sc_manifest: %d test(s) failed\n", failures);
         return EXIT_FAILURE;
     }
-    fprintf(stdout, "test_sc_manifest: all 19 tests passed\n");
+    fprintf(stdout, "test_sc_manifest: all 23 tests passed\n");
     return EXIT_SUCCESS;
 }

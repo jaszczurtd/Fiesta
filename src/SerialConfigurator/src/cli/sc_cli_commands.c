@@ -191,6 +191,9 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
      * flashing flow to fail closed. */
     sc_manifest_t manifest;
     bool have_manifest = false;
+    char artifact_from_manifest[512];
+    artifact_from_manifest[0] = '\0';
+    const char *effective_artifact_path = artifact_path;
     if (manifest_path != NULL) {
         const sc_manifest_status_t st = sc_manifest_load_file(manifest_path,
                                                               &manifest);
@@ -201,19 +204,37 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
         }
         have_manifest = true;
 
-        if (artifact_path != NULL) {
+        if (effective_artifact_path == NULL) {
+            const sc_manifest_status_t rp = sc_manifest_resolve_uf2_path(
+                manifest_path, &manifest,
+                artifact_from_manifest, sizeof(artifact_from_manifest));
+            if (rp == SC_MANIFEST_OK) {
+                effective_artifact_path = artifact_from_manifest;
+                printf("[OK] artifact path resolved from manifest: %s\n",
+                       effective_artifact_path);
+            } else if (rp != SC_MANIFEST_ERR_UF2_FILE_MISSING) {
+                fprintf(stderr,
+                        "[ERROR] manifest uf2_file resolve failed: %s\n",
+                        sc_manifest_status_str(rp));
+                return 3;
+            }
+        }
+
+        if (effective_artifact_path != NULL) {
             const sc_manifest_status_t av =
-                sc_manifest_verify_artifact(&manifest, artifact_path);
+                sc_manifest_verify_artifact(&manifest, effective_artifact_path);
             if (av != SC_MANIFEST_OK) {
                 fprintf(stderr, "[ERROR] artifact verify: %s\n",
                         sc_manifest_status_str(av));
                 return 3;
             }
-            printf("[OK] manifest sha256 matches artifact %s\n", artifact_path);
+            printf("[OK] manifest sha256 matches artifact %s\n",
+                   effective_artifact_path);
         } else {
             fprintf(stderr,
                     "[WARN] --manifest provided without --artifact; "
-                    "manifest fields parsed but SHA-256 not verified.\n");
+                    "manifest fields parsed but SHA-256 not verified "
+                    "(no uf2_file in manifest).\n");
         }
     }
 

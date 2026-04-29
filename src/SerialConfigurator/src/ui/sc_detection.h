@@ -23,9 +23,11 @@ extern "C" {
  * @brief Reset the application to its idle state: clear detected
  *        modules, clear selection, restore the Detect button label
  *        and the placeholder log message. When @p by_user_request is
- *        true the log buffer reads "Disconnected. ..."; otherwise it
- *        reads the plain idle prompt. Safe to call before the widget
- *        tree is fully built (every widget reference is NULL-checked).
+ *        true the host first sends `SC_BYE` to each detected module so
+ *        firmware can drop the active SC session and resume debug
+ *        logging, then writes the disconnect log. Otherwise it reads
+ *        the plain idle prompt. Safe to call before the widget tree is
+ *        fully built (every widget reference is NULL-checked).
  */
 void sc_detection_reset_connection(AppState *state, bool by_user_request);
 

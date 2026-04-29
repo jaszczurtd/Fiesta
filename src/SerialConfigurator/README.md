@@ -99,6 +99,8 @@ Manifest pre-flash gate (Phase 4):
 
 - Hard-rejecting host-side parser that requires `module_name`,
   `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte.
+  Optional `uf2_file` lets the host resolve the UF2 sidecar path from the
+  manifest location (manifest-only picker flow).
   `signature` is parsed but verification is deferred to a future
   ed25519 backend.
 

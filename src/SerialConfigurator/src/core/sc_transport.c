@@ -9,7 +9,6 @@
 #include <glob.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
 #include <termios.h>
@@ -22,20 +21,9 @@
  *
  * - `transport_log` is always-on, used for one-time/high-signal events:
  *   open(), close(), cache hit/miss/invalidate, retry-loop attempts.
- * - `transport_log_v` is gated by `SC_FLASH_DEBUG=1` for noisy
- *   per-frame trace (every send/recv chunk). Off by default.
- *
- * The env var is shared with sc_flash.c so a single `SC_FLASH_DEBUG=1`
- * flips both layers - the operator does not need to remember two knobs. */
-static bool transport_log_verbose_enabled(void)
-{
-    static int cached = -1;
-    if (cached < 0) {
-        const char *v = getenv("SC_FLASH_DEBUG");
-        cached = (v != NULL && v[0] != '\0' && v[0] != '0') ? 1 : 0;
-    }
-    return cached != 0;
-}
+ * - `transport_log_v` prints noisy per-frame trace (every send/recv
+ *   chunk) and is gated by the compile-time `SC_DEBUG_DEEP` macro
+ *   defined in src/config.h. */
 
 static void transport_log(const char *fmt, ...)
 {
@@ -48,11 +36,9 @@ static void transport_log(const char *fmt, ...)
     (void)fflush(stderr);
 }
 
+#ifdef SC_DEBUG_DEEP
 static void transport_log_v(const char *fmt, ...)
 {
-    if (!transport_log_verbose_enabled()) {
-        return;
-    }
     va_list ap;
     (void)fputs("[sc_transport] ", stderr);
     va_start(ap, fmt);
@@ -61,6 +47,9 @@ static void transport_log_v(const char *fmt, ...)
     (void)fputc('\n', stderr);
     (void)fflush(stderr);
 }
+#else
+#  define transport_log_v(...) ((void)0)
+#endif
 
 typedef struct ScCachedPortEntry {
     bool in_use;
@@ -175,6 +164,17 @@ static const char *trim_leading_spaces(const char *line)
     return line;
 }
 
+static bool candidate_is_out_of_scope(const char *path)
+{
+    if (path == NULL) {
+        return false;
+    }
+    /* Adjustometer is permanently out of scope for SerialConfigurator's
+     * framed protocol by project policy. Skip it at candidate enumeration
+     * time so we don't emit expected HELLO timeouts for that device. */
+    return strstr(path, "Fiesta_Adjustometer") != NULL;
+}
+
 /**
  * Read framed `$SC,...*crc` lines from @p fd until either:
  *   - one decodes successfully AND its sequence number equals @p expected_seq
@@ -216,6 +216,19 @@ static bool read_framed_response_with_deadline(
     size_t used = 0u;
     bool line_overflow = false;
     line[0] = '\0';
+
+    size_t bytes_seen = 0u;
+    size_t lines_seen = 0u;
+    size_t non_sc_lines = 0u;
+    size_t bad_sc_lines = 0u;
+    size_t wrong_seq_frames = 0u;
+    size_t repaired_missing_dollar = 0u;
+    size_t overflow_lines = 0u;
+    uint16_t first_wrong_seq = 0u;
+    char first_non_sc_line[96];
+    char first_bad_sc_line[96];
+    first_non_sc_line[0] = '\0';
+    first_bad_sc_line[0] = '\0';
 
     while (1) {
         struct timespec t_now;
@@ -267,6 +280,7 @@ static bool read_framed_response_with_deadline(
             continue;
         }
 
+        bytes_seen += (size_t)received;
         for (ssize_t i = 0; i < received; ++i) {
             const char c = chunk[i];
             if (c == '\r') {
@@ -274,18 +288,47 @@ static bool read_framed_response_with_deadline(
             }
 
             if (c == '\n') {
-                if (!line_overflow && used > 0u) {
+                lines_seen++;
+                if (line_overflow) {
+                    overflow_lines++;
+                } else if (used > 0u) {
                     line[used] = '\0';
                     const char *trimmed = trim_leading_spaces(line);
+                    const char *framed = NULL;
+                    bool repaired_prefix = false;
+                    char repaired_line[SC_FRAME_LINE_MAX + 2u];
                     /* Strict prefix match - only true frames are even
                      * considered (this replaces the previous strstr-based
                      * substring search that was vulnerable to false matches
                      * inside debug log lines). */
                     if (strncmp(trimmed, SC_FRAME_PREFIX, SC_FRAME_PREFIX_LEN) == 0) {
+                        framed = trimmed;
+                    } else if (strncmp(trimmed, "SC,", 3u) == 0) {
+                        /* Field logs from real hardware occasionally show a
+                         * one-byte drop at frame start (`SC,...` instead of
+                         * `$SC,...`). Recover by re-prepending `$` and then
+                         * validating the frame normally (CRC + seq). */
+                        const size_t tl = strlen(trimmed);
+                        if (tl + 2u <= sizeof(repaired_line)) {
+                            repaired_line[0] = '$';
+                            (void)snprintf(repaired_line + 1u,
+                                           sizeof(repaired_line) - 1u,
+                                           "%s", trimmed);
+                            framed = repaired_line;
+                            repaired_prefix = true;
+                        }
+                    }
+
+                    if (framed != NULL) {
                         uint16_t got_seq = 0u;
                         char inner[SC_TRANSPORT_RESPONSE_MAX];
-                        if (sc_frame_decode(trimmed, &got_seq,
+                        if (sc_frame_decode(framed, &got_seq,
                                             inner, sizeof(inner))) {
+                            if (repaired_prefix) {
+                                repaired_missing_dollar++;
+                                transport_log("frame repaired (missing '$') seq=%u",
+                                              (unsigned)got_seq);
+                            }
                             if (got_seq == expected_seq) {
                                 (void)snprintf(payload_out,
                                                payload_out_size,
@@ -294,8 +337,31 @@ static bool read_framed_response_with_deadline(
                             }
                             /* Stale/late reply for a previous request ->
                              * keep waiting. */
+                            wrong_seq_frames++;
+                            if (first_wrong_seq == 0u) {
+                                first_wrong_seq = got_seq;
+                            }
+                            transport_log_v(
+                                "drop frame: wrong seq got=%u want=%u line='%.80s'",
+                                (unsigned)got_seq, (unsigned)expected_seq, framed);
+                        } else {
+                            bad_sc_lines++;
+                            if (first_bad_sc_line[0] == '\0') {
+                                (void)snprintf(first_bad_sc_line,
+                                               sizeof(first_bad_sc_line),
+                                               "%.80s", framed);
+                            }
+                            transport_log_v("drop frame: decode failed line='%.80s'",
+                                            framed);
                         }
-                        /* Bad CRC -> drop, keep waiting. */
+                    } else {
+                        non_sc_lines++;
+                        if (first_non_sc_line[0] == '\0') {
+                            (void)snprintf(first_non_sc_line,
+                                           sizeof(first_non_sc_line),
+                                           "%.80s", trimmed);
+                        }
+                        transport_log_v("drop line: non-SC '%.80s'", trimmed);
                     }
                 }
 
@@ -317,9 +383,27 @@ static bool read_framed_response_with_deadline(
         }
     }
 
-    (void)snprintf(error, error_size,
-                   "timeout waiting for framed response (seq=%u)",
-                   (unsigned)expected_seq);
+    if (first_non_sc_line[0] != '\0') {
+        transport_log("timeout diag seq=%u: first non-SC line='%.80s'",
+                      (unsigned)expected_seq, first_non_sc_line);
+    }
+    if (first_bad_sc_line[0] != '\0') {
+        transport_log("timeout diag seq=%u: first bad SC frame='%.80s'",
+                      (unsigned)expected_seq, first_bad_sc_line);
+    }
+    (void)snprintf(
+        error, error_size,
+        "timeout waiting for framed response (seq=%u, bytes=%zu, lines=%zu, non_sc=%zu, bad_sc=%zu, wrong_seq=%zu, repaired=%zu, overflow=%zu, first_wrong_seq=%u)",
+        (unsigned)expected_seq,
+        bytes_seen,
+        lines_seen,
+        non_sc_lines,
+        bad_sc_lines,
+        wrong_seq_frames,
+        repaired_missing_dollar,
+        overflow_lines,
+        (unsigned)first_wrong_seq
+    );
     return false;
 }
 
@@ -661,6 +745,11 @@ static bool default_list_candidates(
     }
 
     for (size_t i = 0u; i < devices.gl_pathc; ++i) {
+        if (candidate_is_out_of_scope(devices.gl_pathv[i])) {
+            transport_log("candidate skip path='%s': Adjustometer is out-of-scope",
+                          devices.gl_pathv[i]);
+            continue;
+        }
         if (list->count >= SC_TRANSPORT_MAX_CANDIDATES) {
             list->truncated = true;
             break;
@@ -746,8 +835,8 @@ static bool default_send_hello(
         } while (0);
 
         if (success) {
-            transport_log_v("HELLO ok path='%s' attempt=%d",
-                            device_path, attempt + 1);
+            transport_log("HELLO ok path='%s' attempt=%d reply='%.80s'",
+                          device_path, attempt + 1, response);
             return true;
         }
 
@@ -851,8 +940,13 @@ static bool default_send_sc_command(
         } while (0);
 
         if (success) {
-            transport_log_v("SC '%s' ok path='%s' attempt=%d reply='%.80s'",
-                            inner, device_path, attempt + 1, response);
+            if (attempt > 0) {
+                transport_log("SC '%s' recovered path='%s' attempt=%d reply='%.80s'",
+                              inner, device_path, attempt + 1, response);
+            } else {
+                transport_log_v("SC '%s' ok path='%s' attempt=%d reply='%.80s'",
+                                inner, device_path, attempt + 1, response);
+            }
             return true;
         }
 
