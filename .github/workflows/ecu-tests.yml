@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      CANDEFINITIONS_REF: main
     permissions:
       contents: read
 
@@ -30,11 +29,6 @@ jobs:
           mkdir -p ../libraries
 
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
-
-          git init ../libraries/canDefinitions
-          git -C ../libraries/canDefinitions remote add origin https://github.com/jaszczurtd/canDefinitions.git
-          git -C ../libraries/canDefinitions fetch --depth 1 origin "$CANDEFINITIONS_REF"
-          git -C ../libraries/canDefinitions checkout --detach FETCH_HEAD
 
       - name: Install cppcheck
         run: |
