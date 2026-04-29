@@ -392,6 +392,194 @@ static int test_crc32_reference_vector(void) {
     return 0;
 }
 
+/* ── Phase 8.2 — staging-mirror writes ───────────────────────────── */
+
+static int test_reply_set_param_writes_only_staging(void) {
+    ecu_values_t staging;
+    ecu_values_t active;
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &staging);
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &active);
+
+    capture_t cap;
+    capture_reset(&cap);
+    const bool ok = sc_param_reply_set_param(
+        k_ecu_descs, k_ecu_descs_count, &staging, &active,
+        "fan_coolant_start_c", 110, capture_emit, &cap);
+    TEST_ASSERT(ok, "set_param happy path returns true");
+    TEST_ASSERT(cap.count == 1u, "one reply line");
+    TEST_ASSERT(strcmp(cap.lines[0],
+                       "SC_OK PARAM_SET id=fan_coolant_start_c"
+                       " staged=110 active=95") == 0,
+                "happy-path reply format");
+    TEST_ASSERT(staging.fan_coolant_start_c == 110, "staging mutated");
+    TEST_ASSERT(active.fan_coolant_start_c == 95, "active untouched");
+    /* Other staging fields stay at defaults too. */
+    TEST_ASSERT(staging.heater_stop_c == 75,
+                "unrelated staging field untouched");
+    return 0;
+}
+
+static int test_reply_set_param_unknown_id_rejected(void) {
+    ecu_values_t staging;
+    ecu_values_t active;
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &staging);
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &active);
+
+    capture_t cap;
+    capture_reset(&cap);
+    const bool ok = sc_param_reply_set_param(
+        k_ecu_descs, k_ecu_descs_count, &staging, &active, "nope", 0,
+        capture_emit, &cap);
+    TEST_ASSERT(!ok, "unknown id returns false");
+    TEST_ASSERT(cap.count == 1u, "one reply line");
+    TEST_ASSERT(strcmp(cap.lines[0], "SC_INVALID_PARAM_ID id=nope") == 0,
+                "unknown id reply format");
+    /* Sanity: a known-default field is still at its default value, i.e.
+     * the helper did not mutate anything before the lookup miss. */
+    TEST_ASSERT(staging.fan_coolant_start_c == 95, "staging untouched");
+    return 0;
+}
+
+static int test_reply_set_param_read_only_rejected(void) {
+    /* Clocks fixture has all RO descriptors. Pre-zero staging so we can
+     * assert nothing leaks into it. */
+    clocks_values_t staging = {0};
+    clocks_values_t active = {0};
+
+    capture_t cap;
+    capture_reset(&cap);
+    const bool ok = sc_param_reply_set_param(
+        k_clocks_descs, k_clocks_descs_count, &staging, &active,
+        "coolant_warn_c", 100, capture_emit, &cap);
+    TEST_ASSERT(!ok, "RO descriptor returns false");
+    TEST_ASSERT(cap.count == 1u, "one reply line");
+    TEST_ASSERT(strcmp(cap.lines[0],
+                       "SC_BAD_REQUEST read_only id=coolant_warn_c") == 0,
+                "RO reply format");
+    TEST_ASSERT(staging.coolant_warn_c == 0, "RO staging slot untouched");
+    return 0;
+}
+
+static int test_reply_set_param_out_of_range_rejected(void) {
+    ecu_values_t staging;
+    ecu_values_t active;
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &staging);
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &active);
+
+    capture_t cap;
+    capture_reset(&cap);
+    /* fan_coolant_start_c [70, 130]: 200 above max. */
+    const bool ok = sc_param_reply_set_param(
+        k_ecu_descs, k_ecu_descs_count, &staging, &active,
+        "fan_coolant_start_c", 200, capture_emit, &cap);
+    TEST_ASSERT(!ok, "OOR returns false");
+    TEST_ASSERT(cap.count == 1u, "one reply line");
+    TEST_ASSERT(strcmp(cap.lines[0],
+                       "SC_BAD_REQUEST out_of_range"
+                       " id=fan_coolant_start_c min=70 max=130") == 0,
+                "OOR reply format");
+    TEST_ASSERT(staging.fan_coolant_start_c == 95,
+                "staging untouched on OOR");
+    return 0;
+}
+
+static int test_reply_set_param_null_active_reports_staged_twice(void) {
+    ecu_values_t staging;
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &staging);
+
+    capture_t cap;
+    capture_reset(&cap);
+    const bool ok = sc_param_reply_set_param(
+        k_ecu_descs, k_ecu_descs_count, &staging, /*active_ctx=*/NULL,
+        "fan_coolant_start_c", 88, capture_emit, &cap);
+    TEST_ASSERT(ok, "NULL active still writes staging");
+    TEST_ASSERT(cap.count == 1u, "one reply line");
+    TEST_ASSERT(strcmp(cap.lines[0],
+                       "SC_OK PARAM_SET id=fan_coolant_start_c"
+                       " staged=88 active=88") == 0,
+                "active mirrors staged when active_ctx=NULL");
+    TEST_ASSERT(staging.fan_coolant_start_c == 88, "staging mutated");
+    return 0;
+}
+
+static int test_copy_active_to_staging_round_trip(void) {
+    /* Active carries non-default values; staging zeroed. After copy the
+     * 6 writable ECU fields match active. */
+    ecu_values_t active = {
+        .fan_coolant_start_c = 100, .fan_coolant_stop_c = 80,
+        .fan_air_start_c = 55,      .fan_air_stop_c = 30,
+        .heater_stop_c = 60,        .nominal_rpm = 1100,
+    };
+    ecu_values_t staging;
+    memset(&staging, 0, sizeof(staging));
+
+    const size_t copied = sc_param_copy_active_to_staging(
+        k_ecu_descs, k_ecu_descs_count, &active, &staging);
+    TEST_ASSERT(copied == 6u, "all 6 ECU writable fields copied");
+    TEST_ASSERT(staging.fan_coolant_start_c == 100, "field 0 copied");
+    TEST_ASSERT(staging.fan_coolant_stop_c == 80, "field 1 copied");
+    TEST_ASSERT(staging.fan_air_start_c == 55, "field 2 copied");
+    TEST_ASSERT(staging.fan_air_stop_c == 30, "field 3 copied");
+    TEST_ASSERT(staging.heater_stop_c == 60, "field 4 copied");
+    TEST_ASSERT(staging.nominal_rpm == 1100, "field 5 copied");
+    return 0;
+}
+
+static int test_copy_staging_to_active_round_trip(void) {
+    ecu_values_t staging = {
+        .fan_coolant_start_c = 105, .fan_coolant_stop_c = 90,
+        .fan_air_start_c = 70,      .fan_air_stop_c = 40,
+        .heater_stop_c = 65,        .nominal_rpm = 950,
+    };
+    ecu_values_t active;
+    memset(&active, 0, sizeof(active));
+
+    const size_t copied = sc_param_copy_staging_to_active(
+        k_ecu_descs, k_ecu_descs_count, &staging, &active);
+    TEST_ASSERT(copied == 6u, "all 6 ECU writable fields copied");
+    /* Spot-check both ends and the middle. */
+    TEST_ASSERT(active.fan_coolant_start_c == 105, "field 0 copied");
+    TEST_ASSERT(active.fan_air_stop_c == 40, "field 3 copied");
+    TEST_ASSERT(active.nominal_rpm == 950, "field 5 copied");
+    return 0;
+}
+
+static int test_copy_preserves_readonly_slots(void) {
+    /* Clocks fixture: all RO. Copy must not touch the destination. */
+    clocks_values_t staging;
+    clocks_values_t active;
+    memset(&staging, 0xAB, sizeof(staging));
+    memset(&active, 0x12, sizeof(active));
+
+    const size_t copied = sc_param_copy_active_to_staging(
+        k_clocks_descs, k_clocks_descs_count, &active, &staging);
+    TEST_ASSERT(copied == 0u, "RO descriptors yield 0 copies");
+    TEST_ASSERT(staging.coolant_warn_c == (int16_t)0xABABu,
+                "RO destination slot untouched");
+    TEST_ASSERT(staging.oil_max_c == (int16_t)0xABABu,
+                "RO destination slot untouched");
+    return 0;
+}
+
+static int test_copy_null_inputs_safe(void) {
+    ecu_values_t v;
+    sc_param_load_defaults(k_ecu_descs, k_ecu_descs_count, &v);
+
+    TEST_ASSERT(sc_param_copy_active_to_staging(NULL, k_ecu_descs_count, &v,
+                                                &v) == 0u,
+                "NULL descs returns 0");
+    TEST_ASSERT(sc_param_copy_active_to_staging(k_ecu_descs, k_ecu_descs_count,
+                                                NULL, &v) == 0u,
+                "NULL active returns 0");
+    TEST_ASSERT(sc_param_copy_active_to_staging(k_ecu_descs, k_ecu_descs_count,
+                                                &v, NULL) == 0u,
+                "NULL staging returns 0");
+    TEST_ASSERT(sc_param_copy_staging_to_active(NULL, k_ecu_descs_count, &v,
+                                                &v) == 0u,
+                "NULL descs (reverse) returns 0");
+    return 0;
+}
+
 /* ── Driver ─────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -408,6 +596,15 @@ int main(void) {
     failures += test_blob_round_trip_v1_upgrade_path();
     failures += test_blob_decode_rejects_bad_inputs();
     failures += test_crc32_reference_vector();
+    failures += test_reply_set_param_writes_only_staging();
+    failures += test_reply_set_param_unknown_id_rejected();
+    failures += test_reply_set_param_read_only_rejected();
+    failures += test_reply_set_param_out_of_range_rejected();
+    failures += test_reply_set_param_null_active_reports_staged_twice();
+    failures += test_copy_active_to_staging_round_trip();
+    failures += test_copy_staging_to_active_round_trip();
+    failures += test_copy_preserves_readonly_slots();
+    failures += test_copy_null_inputs_safe();
 
     if (failures == 0) {
         printf("[OK] sc_param: all tests passed\n");

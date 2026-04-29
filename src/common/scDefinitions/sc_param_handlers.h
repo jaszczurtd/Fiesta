@@ -121,6 +121,69 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
                               const void *values_ctx, const char *requested_id,
                               sc_emit_fn emit, void *emit_user);
 
+/* ── Phase 8 — staging-mirror writes ─────────────────────────────── */
+
+/**
+ * @brief Emit a SET_PARAM reply for @p requested_id with @p value, writing
+ *        the staging mirror only.
+ *
+ * Composes the validation sequence used by the SC_SET_PARAM branch:
+ *   - lookup     -> SC_INVALID_PARAM_ID id=<id>            (unknown id),
+ *   - kind sanity-> SC_BAD_REQUEST                         (non-scalar),
+ *   - RO check   -> SC_BAD_REQUEST read_only id=<id>       (RO descriptor),
+ *   - range check-> SC_BAD_REQUEST out_of_range id=<id> min=<n> max=<n>,
+ *   - write      -> SC_OK PARAM_SET id=<id> staged=<v> active=<v_active>.
+ *
+ * @p active_ctx is opt-in. When non-NULL, the active value reported in
+ * the reply is read from @p active_ctx (which the caller MUST keep
+ * separate from @p staging_ctx). When NULL, the helper reports the
+ * just-written staged value in the active slot, suitable for modules
+ * that do not yet split staging/active mirrors.
+ *
+ * Caller responsibilities:
+ *   - auth-gate SC_SET_PARAM at the protocol layer (this helper has
+ *     no notion of authentication state),
+ *   - parse the wire payload "<id> <value>" before the call.
+ *
+ * Returns true when the staging slot was written (happy path), false on
+ * every error path. The boolean is informational only - the appropriate
+ * reply has already been emitted in either case.
+ */
+bool sc_param_reply_set_param(const sc_param_descriptor_t *descs, size_t count,
+                              void *staging_ctx, const void *active_ctx,
+                              const char *requested_id, int16_t value,
+                              sc_emit_fn emit, void *emit_user);
+
+/**
+ * @brief Copy active->staging across writable SCALAR_I16 descriptors.
+ *
+ * Implements the REVERT_PARAMS data-mover step: discards any pending
+ * staging edits by overwriting them with the active mirror. RO
+ * descriptors and non-scalar kinds are skipped (they keep whatever
+ * @p staging_ctx already held).
+ *
+ * Returns the number of fields copied. Returns 0 when @p descs /
+ * @p active_ctx / @p staging_ctx is NULL.
+ */
+size_t sc_param_copy_active_to_staging(const sc_param_descriptor_t *descs,
+                                       size_t count, const void *active_ctx,
+                                       void *staging_ctx);
+
+/**
+ * @brief Copy staging->active across writable SCALAR_I16 descriptors.
+ *
+ * Implements the COMMIT_PARAMS apply step. Mirror image of
+ * @ref sc_param_copy_active_to_staging - same RO/kind skip rules.
+ *
+ * Caller is responsible for cross-field validation BEFORE this call
+ * and (if persistence is required) for blob encode + write AFTER it.
+ *
+ * Returns the number of fields copied.
+ */
+size_t sc_param_copy_staging_to_active(const sc_param_descriptor_t *descs,
+                                       size_t count, const void *staging_ctx,
+                                       void *active_ctx);
+
 /* ── Persistence (schema-versioned, CRC32 trailer) ──────────────── */
 
 /**
