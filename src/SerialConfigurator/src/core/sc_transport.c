@@ -230,6 +230,17 @@ static bool read_framed_response_with_deadline(
     first_non_sc_line[0] = '\0';
     first_bad_sc_line[0] = '\0';
 
+    /* Fail-fast deadline. When the firmware has clearly already
+     * answered (we saw a `$SC,<seq>,...` line for our seq, but its CRC
+     * did not validate - typically a single-byte CDC drop in the
+     * middle), waiting the full `total_timeout_ms` for a redo just
+     * burns wall-clock; the firmware does NOT retransmit the same
+     * frame on its own. Cap the wait to a short grace window so the
+     * caller can reopen the port and retry sooner. -1 means "no
+     * fail-fast active". */
+    long fail_fast_deadline_ms = -1;
+    static const long FAIL_FAST_GRACE_MS = 60;
+
     while (1) {
         struct timespec t_now;
         if (clock_gettime(CLOCK_MONOTONIC, &t_now) != 0) {
@@ -243,8 +254,16 @@ static bool read_framed_response_with_deadline(
         if (elapsed_ms >= total_timeout_ms) {
             break;
         }
+        if (fail_fast_deadline_ms >= 0 && elapsed_ms >= fail_fast_deadline_ms) {
+            break;
+        }
 
-        const int left_ms = (int)(total_timeout_ms - elapsed_ms);
+        long left_ms_long = total_timeout_ms - elapsed_ms;
+        if (fail_fast_deadline_ms >= 0) {
+            const long left_ff = fail_fast_deadline_ms - elapsed_ms;
+            if (left_ff < left_ms_long) left_ms_long = left_ff;
+        }
+        const int left_ms = (int)left_ms_long;
         const int wait_ms = left_ms > 100 ? 100 : left_ms;
 
         fd_set read_fds;
@@ -353,6 +372,19 @@ static bool read_framed_response_with_deadline(
                             }
                             transport_log_v("drop frame: decode failed line='%.80s'",
                                             framed);
+                            /* Arm fail-fast on the first corrupt frame.
+                             * Subsequent corruptions only ever shrink
+                             * the window further (never extend it). */
+                            if (fail_fast_deadline_ms < 0) {
+                                struct timespec t_ff;
+                                if (clock_gettime(CLOCK_MONOTONIC, &t_ff) == 0) {
+                                    const long ff_elapsed =
+                                        (t_ff.tv_sec - t_start.tv_sec) * 1000L +
+                                        (t_ff.tv_nsec - t_start.tv_nsec) / 1000000L;
+                                    fail_fast_deadline_ms =
+                                        ff_elapsed + FAIL_FAST_GRACE_MS;
+                                }
+                            }
                         }
                     } else {
                         non_sc_lines++;
