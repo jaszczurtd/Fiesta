@@ -33,7 +33,6 @@ jobs:
           - Adjustometer
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      CANDEFINITIONS_REF: main
       ARDUINO_BOARD_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
     permissions:
       contents: read
@@ -48,11 +47,6 @@ jobs:
           mkdir -p ../libraries
 
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
-
-          git init ../libraries/canDefinitions
-          git -C ../libraries/canDefinitions remote add origin https://github.com/jaszczurtd/canDefinitions.git
-          git -C ../libraries/canDefinitions fetch --depth 1 origin "$CANDEFINITIONS_REF"
-          git -C ../libraries/canDefinitions checkout --detach FETCH_HEAD
 
       - name: Setup arduino-cli
         uses: arduino/setup-arduino-cli@v2
