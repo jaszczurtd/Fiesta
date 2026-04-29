@@ -51,6 +51,13 @@ extern "C" {
 #define SC_CMD_AUTH_PROVE           "SC_AUTH_PROVE"  /**< prefix; followed by " <hex>". */
 #define SC_CMD_REBOOT_BOOTLOADER    "SC_REBOOT_BOOTLOADER"
 
+/* Phase 8 — auth-gated parameter staging. SET_PARAM mutates a staging
+ * mirror only; COMMIT_PARAMS validates cross-field rules and persists
+ * the active blob; REVERT_PARAMS resets staging from active. */
+#define SC_CMD_SET_PARAM            "SC_SET_PARAM"   /**< prefix; followed by " <param_id> <value>". */
+#define SC_CMD_COMMIT_PARAMS        "SC_COMMIT_PARAMS"
+#define SC_CMD_REVERT_PARAMS        "SC_REVERT_PARAMS"
+
 /* ── Outbound reply status tokens (device -> host) ──────────────────── */
 
 #define SC_STATUS_OK                "SC_OK"
@@ -60,6 +67,7 @@ extern "C" {
 #define SC_STATUS_NOT_READY         "SC_NOT_READY"
 #define SC_STATUS_NOT_AUTHORIZED    "SC_NOT_AUTHORIZED"
 #define SC_STATUS_AUTH_FAILED       "SC_AUTH_FAILED"
+#define SC_STATUS_COMMIT_FAILED     "SC_COMMIT_FAILED" /**< Phase 8: cross-field rule violation at COMMIT. */
 
 /* ── Reply sub-tokens ──────────────────────────────────────────────── */
 
@@ -72,6 +80,10 @@ extern "C" {
 #define SC_REPLY_TAG_AUTH_CHALLENGE        "AUTH_CHALLENGE"
 #define SC_REPLY_TAG_AUTH_OK               "AUTH_OK"
 #define SC_REPLY_TAG_REBOOT                "REBOOT"
+
+#define SC_REPLY_TAG_PARAM_SET             "PARAM_SET"
+#define SC_REPLY_TAG_PARAMS_COMMITTED      "PARAMS_COMMITTED"
+#define SC_REPLY_TAG_PARAMS_REVERTED       "PARAMS_REVERTED"
 
 /* Structural HELLO reply head - emitted by the HAL session helper as
  * "OK HELLO module=... proto=... session=... fw=... build=... uid=..."
@@ -132,6 +144,45 @@ extern "C" {
 /* "SC_NOT_READY HELLO_REQUIRED" */
 #define SC_REPLY_NOT_READY_HELLO_REQUIRED                                    \
     SC_STATUS_NOT_READY " " SC_REPLY_TAG_HELLO_REQUIRED
+
+/* ── Phase 8 — parameter staging reply formats ─────────────────────── */
+
+/* "SC_OK PARAM_SET id=<id> staged=<int> active=<int>" — emitted by
+ * the generic write helper after a SET_PARAM that passes RO + range
+ * validation. Both staged and active are reported so the host can
+ * confirm the staging slot moved while the active mirror stayed put. */
+#define SC_REPLY_PARAM_SET_FMT                                               \
+    SC_STATUS_OK " " SC_REPLY_TAG_PARAM_SET                                  \
+    " id=%s staged=%d active=%d"
+
+/* "SC_OK PARAMS_COMMITTED count=<n>" — emitted by COMMIT_PARAMS after
+ * staging->active copy + persist. <n> is the number of writable scalar
+ * descriptors copied (RO descriptors are skipped, not counted). */
+#define SC_REPLY_PARAMS_COMMITTED_FMT                                        \
+    SC_STATUS_OK " " SC_REPLY_TAG_PARAMS_COMMITTED                           \
+    " count=%u"
+
+/* "SC_OK PARAMS_REVERTED" — emitted by REVERT_PARAMS after staging is
+ * reset from the active mirror. No body — revert is unconditional. */
+#define SC_REPLY_PARAMS_REVERTED                                             \
+    SC_STATUS_OK " " SC_REPLY_TAG_PARAMS_REVERTED
+
+/* "SC_COMMIT_FAILED reason=<token>" — emitted by COMMIT_PARAMS when
+ * cross-field validation rejects the staged blob (heater_vs_fan_order,
+ * fan_coolant_hysteresis, ...). Active blob and persisted state are
+ * untouched on this path. */
+#define SC_REPLY_COMMIT_FAILED_FMT                                           \
+    SC_STATUS_COMMIT_FAILED " reason=%s"
+
+/* "SC_BAD_REQUEST read_only id=<id>" — SET_PARAM on a descriptor
+ * carrying SC_PARAM_FLAG_READ_ONLY. */
+#define SC_REPLY_BAD_REQUEST_READ_ONLY_FMT                                   \
+    SC_STATUS_BAD_REQUEST " read_only id=%s"
+
+/* "SC_BAD_REQUEST out_of_range id=<id> min=<n> max=<n>" — SET_PARAM
+ * value outside the descriptor's declared [min, max]. */
+#define SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT                                \
+    SC_STATUS_BAD_REQUEST " out_of_range id=%s min=%d max=%d"
 
 #ifdef __cplusplus
 }

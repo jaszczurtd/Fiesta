@@ -280,6 +280,91 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
     emit(response, emit_user);
 }
 
+/* ── Phase 8 — staging-mirror writes ──────────────────────────────── */
+
+bool sc_param_reply_set_param(const sc_param_descriptor_t *descs, size_t count,
+                              void *staging_ctx, const void *active_ctx,
+                              const char *requested_id, int16_t value,
+                              sc_emit_fn emit, void *emit_user) {
+    if (emit == NULL) {
+        return false;
+    }
+    char response[SC_PARAM_REPLY_BUF_BYTES];
+
+    const sc_param_descriptor_t *desc =
+        sc_param_find_by_id(descs, count, requested_id);
+    if (desc == NULL) {
+        snprintf(response, sizeof(response), SC_REPLY_INVALID_PARAM_ID_FMT,
+                 (requested_id != NULL) ? requested_id : "");
+        emit(response, emit_user);
+        return false;
+    }
+
+    if (desc->kind != SC_PARAM_KIND_SCALAR_I16 || staging_ctx == NULL) {
+        emit(SC_STATUS_BAD_REQUEST, emit_user);
+        return false;
+    }
+
+    if ((desc->flags & SC_PARAM_FLAG_READ_ONLY) != 0u) {
+        snprintf(response, sizeof(response),
+                 SC_REPLY_BAD_REQUEST_READ_ONLY_FMT, desc->id);
+        emit(response, emit_user);
+        return false;
+    }
+
+    if (!sc_param_validate_range(desc, value)) {
+        snprintf(response, sizeof(response),
+                 SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT, desc->id,
+                 (int)desc->as.scalar_i16.min_value,
+                 (int)desc->as.scalar_i16.max_value);
+        emit(response, emit_user);
+        return false;
+    }
+
+    *scalar_i16_lvalue(desc, staging_ctx) = value;
+
+    const int16_t active_val =
+        (active_ctx != NULL) ? *scalar_i16_rvalue(desc, active_ctx) : value;
+
+    snprintf(response, sizeof(response), SC_REPLY_PARAM_SET_FMT, desc->id,
+             (int)value, (int)active_val);
+    emit(response, emit_user);
+    return true;
+}
+
+static size_t copy_writable_scalars(const sc_param_descriptor_t *descs,
+                                    size_t count, const void *src_ctx,
+                                    void *dst_ctx) {
+    if (descs == NULL || src_ctx == NULL || dst_ctx == NULL) {
+        return 0u;
+    }
+    size_t copied = 0u;
+    for (size_t i = 0u; i < count; ++i) {
+        const sc_param_descriptor_t *d = &descs[i];
+        if (d->kind != SC_PARAM_KIND_SCALAR_I16) {
+            continue;
+        }
+        if ((d->flags & SC_PARAM_FLAG_READ_ONLY) != 0u) {
+            continue;
+        }
+        *scalar_i16_lvalue(d, dst_ctx) = *scalar_i16_rvalue(d, src_ctx);
+        ++copied;
+    }
+    return copied;
+}
+
+size_t sc_param_copy_active_to_staging(const sc_param_descriptor_t *descs,
+                                       size_t count, const void *active_ctx,
+                                       void *staging_ctx) {
+    return copy_writable_scalars(descs, count, active_ctx, staging_ctx);
+}
+
+size_t sc_param_copy_staging_to_active(const sc_param_descriptor_t *descs,
+                                       size_t count, const void *staging_ctx,
+                                       void *active_ctx) {
+    return copy_writable_scalars(descs, count, staging_ctx, active_ctx);
+}
+
 /* ── Persistence ──────────────────────────────────────────────────── */
 
 size_t sc_param_blob_size_for_schema(const sc_param_descriptor_t *descs,
