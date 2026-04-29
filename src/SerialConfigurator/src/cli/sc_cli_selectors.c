@@ -1,7 +1,9 @@
 #include "sc_cli_selectors.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static bool strings_equal_case_insensitive(const char *a, const char *b)
@@ -191,6 +193,83 @@ bool sc_cli_parse_reboot_args(int argc,
             fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
             return false;
         }
+    }
+    return true;
+}
+
+bool sc_cli_parse_set_param_args(int argc,
+                                 char *argv[],
+                                 const char **param_id,
+                                 int *value,
+                                 CliSelectors *selectors)
+{
+    if (param_id == NULL || value == NULL || selectors == NULL) {
+        return false;
+    }
+
+    *param_id = NULL;
+    *value = 0;
+    bool value_set = false;
+    selectors->module = NULL;
+    selectors->uid = NULL;
+    selectors->port = NULL;
+
+    for (int i = 2; i < argc; ++i) {
+        const char *arg = argv[i];
+        if (strcmp(arg, "--id") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --id\n");
+                return false;
+            }
+            *param_id = argv[++i];
+        } else if (strcmp(arg, "--value") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --value\n");
+                return false;
+            }
+            const char *raw = argv[++i];
+            char *end = NULL;
+            const long parsed = strtol(raw, &end, 10);
+            if (end == raw || *end != '\0' ||
+                parsed < INT16_MIN || parsed > INT16_MAX) {
+                fprintf(stderr,
+                        "[ERROR] --value must be an int16_t (-32768..32767), got '%s'\n",
+                        raw);
+                return false;
+            }
+            *value = (int)parsed;
+            value_set = true;
+        } else if (strcmp(arg, "--module") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --module\n");
+                return false;
+            }
+            selectors->module = argv[++i];
+        } else if (strcmp(arg, "--uid") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --uid\n");
+                return false;
+            }
+            selectors->uid = argv[++i];
+        } else if (strcmp(arg, "--port") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "[ERROR] Missing value for --port\n");
+                return false;
+            }
+            selectors->port = argv[++i];
+        } else {
+            fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
+            return false;
+        }
+    }
+
+    if (*param_id == NULL || (*param_id)[0] == '\0') {
+        fprintf(stderr, "[ERROR] Missing required --id <param_id>.\n");
+        return false;
+    }
+    if (!value_set) {
+        fprintf(stderr, "[ERROR] Missing required --value <i16>.\n");
+        return false;
     }
     return true;
 }
