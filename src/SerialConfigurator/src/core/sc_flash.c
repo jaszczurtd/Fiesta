@@ -237,7 +237,7 @@ sc_flash_status_t sc_flash_uf2_format_check(const char *path,
 
     free(buf);
     write_error(error_buf, error_size,
-                "OK: %zu blocks, family RP2040",
+                "%zu blocks, family RP2040",
                 total_blocks_seen);
     return SC_FLASH_OK;
 }

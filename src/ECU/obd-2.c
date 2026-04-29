@@ -1634,7 +1634,7 @@ static void handleUdsReadDataById(uint8_t mode, uint8_t numofBytes, const uint8_
     send22IdentField(responseId, did, ecu_Model, 8);
   } else if((did >> 8) == (DID_F4_MODEL >> 8) && did > (uint16_t)DID_F4_COPYRIGHT) {
     // F4xx live-data mirror takes priority over ALT ident DIDs.
-    // ALT ident DIDs (F40B, F40C, …F449) share the same address space,
+    // ALT ident DIDs (F40B, F40C, ...F449) share the same address space,
     // so we must try live-data encoding first to avoid e.g. 0xF40F returning
     // the catch-code string instead of PID 0x0F (IAT) temperature data.
     uint8_t pid = (uint8_t)(did & 0x00FFu);
