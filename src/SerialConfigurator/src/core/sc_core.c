@@ -818,6 +818,7 @@ static void param_detail_reset(ScParamDetailData *parsed)
     typed_value_reset(&parsed->max);
     parsed->has_default = false;
     typed_value_reset(&parsed->default_value);
+    parsed->group[0] = '\0';
 }
 
 static bool parse_next_token(
@@ -1479,6 +1480,11 @@ bool sc_core_parse_param_result(
         if (strcmp(key, "default") == 0) {
             typed_value_from_text(raw_value, &parsed->default_value);
             parsed->has_default = true;
+            continue;
+        }
+
+        if (strcmp(key, "group") == 0) {
+            copy_string(parsed->group, sizeof(parsed->group), raw_value);
             continue;
         }
     }

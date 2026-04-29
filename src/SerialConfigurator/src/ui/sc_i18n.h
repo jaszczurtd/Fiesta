@@ -156,6 +156,25 @@ typedef enum ScI18nKey {
     SC_I18N_STATUS_PROBE_OK_FMT,            /* "Probe ok: %zu id(s), mismatch=%zu" */
     SC_I18N_STATUS_PROBE_SKIPPED,
 
+    /* ── Phase 8.6: Values tab ─────────────────────────────────────── */
+    SC_I18N_TAB_VALUES,
+    SC_I18N_VALUES_PLACEHOLDER,
+    SC_I18N_VALUES_NO_DETECTED_MODULES,
+    SC_I18N_VALUES_NO_PARAMS,
+    SC_I18N_VALUES_LOADING,
+    SC_I18N_VALUES_LOAD_FAILED_FMT,         /* "Failed to load %s: %s" */
+    SC_I18N_VALUES_BTN_APPLY_STAGED,
+    SC_I18N_VALUES_BTN_COMMIT,
+    SC_I18N_VALUES_BTN_REVERT,
+    SC_I18N_VALUES_AUTH_FAILED_FMT,         /* "Auth failed: %s" */
+    SC_I18N_VALUES_APPLY_OK_FMT,            /* "Applied %u parameter(s)." */
+    SC_I18N_VALUES_APPLY_FAILED_FMT,        /* "Apply failed for %s: %s" */
+    SC_I18N_VALUES_NOTHING_TO_APPLY,
+    SC_I18N_VALUES_COMMIT_OK,
+    SC_I18N_VALUES_COMMIT_FAILED_FMT,       /* "Commit failed: %s" */
+    SC_I18N_VALUES_REVERT_OK,
+    SC_I18N_VALUES_REVERT_FAILED_FMT,       /* "Revert failed: %s" */
+
     SC_I18N_KEY_COUNT
 } ScI18nKey;
 

@@ -88,6 +88,11 @@ typedef struct ScParamValuesData {
     ScParamValueEntry entries[SC_PARAM_ITEMS_MAX];
 } ScParamValuesData;
 
+/* Snake-case section name from `group=` in the SC_OK PARAM reply.
+ * Empty string means "no group". The 32-byte cap matches existing
+ * SC_COMMAND_TOPIC_MAX-class identifier sizes. */
+#define SC_PARAM_GROUP_MAX 32u
+
 typedef struct ScParamDetailData {
     bool valid;
     char id[SC_PARAM_ID_MAX];
@@ -99,6 +104,7 @@ typedef struct ScParamDetailData {
     ScTypedValue max;
     bool has_default;
     ScTypedValue default_value;
+    char group[SC_PARAM_GROUP_MAX];
 } ScParamDetailData;
 
 typedef struct ScModuleStatus {

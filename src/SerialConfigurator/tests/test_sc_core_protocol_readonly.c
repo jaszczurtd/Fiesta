@@ -297,7 +297,7 @@ static int test_sc_commands_parse_status_and_meta(void)
             .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=99 fw=v2 build=Yjk5 uid=F00D",
             .values_response = "SC_OK PARAM_VALUES nominal_rpm=900",
             .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
-            .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=900 min=700 max=1200 default=890",
+            .param_nominal_response = "SC_OK PARAM id=nominal_rpm value=900 min=700 max=1200 default=890 group=idle",
             .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
         }
     };

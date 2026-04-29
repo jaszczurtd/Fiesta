@@ -31,6 +31,7 @@
 #include "sc_i18n.h"
 #include "sc_modules_view.h"
 #include "sc_ui_state.h"
+#include "sc_values_tab.h"
 
 static void on_activate(GtkApplication *app, gpointer user_data)
 {
@@ -83,6 +84,14 @@ static void on_activate(GtkApplication *app, gpointer user_data)
                              flash_root,
                              gtk_label_new(sc_i18n_string_get(SC_I18N_TAB_FLASH)));
 
+    /* Page 3 - Values (Phase 8.6). Pre-detection it shows a placeholder;
+     * populated with one inner sub-tab per detected module by
+     * sc_detection's on-finished hook calling sc_values_tab_rebuild. */
+    GtkWidget *values_root = sc_values_tab_build(state);
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+                             values_root,
+                             gtk_label_new(sc_i18n_string_get(SC_I18N_TAB_VALUES)));
+
     /* Idle initial state - modules not detected, log shows the
      * "press Detect" prompt, flash tab grey via the lamp refresh. */
     sc_detection_reset_connection(state, false);
@@ -98,6 +107,7 @@ int sc_app_run(int argc, char *argv[])
     state.detect_button = 0;
     state.module_list = 0;
     state.flash_tab_root = 0;
+    state.values_tab_root = 0;
     sc_flash_paths_init(&state.flash_paths);
     state.flash_in_progress = false;
     state.connected = false;

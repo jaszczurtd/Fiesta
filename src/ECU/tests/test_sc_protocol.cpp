@@ -196,6 +196,9 @@ void test_sc_get_param_returns_value_and_bounds(void) {
     TEST_ASSERT_NOT_NULL(strstr(response, "min=700"));
     TEST_ASSERT_NOT_NULL(strstr(response, "max=1200"));
     TEST_ASSERT_NOT_NULL(strstr(response, "default=890"));
+    /* Phase 8.6: descriptor group surfaces in the reply so the host
+     * GUI can section the Values tab. */
+    TEST_ASSERT_NOT_NULL(strstr(response, "group=idle"));
 }
 
 void test_sc_get_param_rejects_unknown_parameter(void) {

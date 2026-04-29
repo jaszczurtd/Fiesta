@@ -42,6 +42,10 @@ typedef struct AppState {
      * one in-scope module is detected. Phase 6.2 populates the body
      * with per-module sections at every detection cycle. */
     GtkWidget *flash_tab_root;
+    /* Phase 8.6: notebook tab 3 root widget for the Values tab. The
+     * tab content is wholly rebuilt on every detection cycle - the
+     * inner per-module notebook tracks the detected set automatically. */
+    GtkWidget *values_tab_root;
     /* Phase 6.2: per-module flash UI substate (paths persisted to
      * flash-paths.json + global flash-in-progress lock flag). */
     ScFlashPaths flash_paths;

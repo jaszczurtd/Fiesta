@@ -32,12 +32,14 @@ static const sc_param_descriptor_t k_oas_params[] = {
                                        oas_values_t,
                                        oil_pressure_read_interval_ms,
                                        50, 500,
-                                       (int16_t)OIL_PRESSURE_READ_INTERVAL, 1),
+                                       (int16_t)OIL_PRESSURE_READ_INTERVAL, 1,
+                                       "sampling"),
   SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("thermocouple_read_interval_ms",
                                        oas_values_t,
                                        thermocouple_read_interval_ms,
                                        500, 5000,
-                                       (int16_t)THERMOCOUPLE_READ_INTERVAL, 1),
+                                       (int16_t)THERMOCOUPLE_READ_INTERVAL, 1,
+                                       "sampling"),
 };
 static const size_t k_oas_params_count =
     sizeof(k_oas_params) / sizeof(k_oas_params[0]);
