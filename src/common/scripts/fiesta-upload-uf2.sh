@@ -47,7 +47,7 @@ fi
 
 echo ""
 info "Searching for UF2 file..."
-UF2="$(fiesta_find_uf2_artifact "$BUILD_DIR")"
+UF2="$(fiesta_find_uf2_artifact "$BUILD_DIR" || true)"
 
 if [[ -z "$UF2" ]]; then
     err "No .uf2 file found in $BUILD_DIR"
@@ -55,6 +55,13 @@ if [[ -z "$UF2" ]]; then
 fi
 
 ok "Found: $UF2"
+
+MANIFEST="$(fiesta_prepare_manifest_for_uf2 "$PROJECT_DIR" "$UF2" || true)"
+if [[ -z "$MANIFEST" ]]; then
+    err "Manifest generation/verification failed for $UF2"
+    exit 1
+fi
+ok "Manifest ready: $MANIFEST"
 
 info "Searching for BOOTSEL drive..."
 MOUNT="$(fiesta_find_bootsel_mount "$USER" || true)"
@@ -81,3 +88,4 @@ sync
 echo ""
 ok "UF2 upload finished"
 ok "File: $(basename "$UF2") -> $MOUNT/"
+ok "Preflight: manifest module + sha256 verified"

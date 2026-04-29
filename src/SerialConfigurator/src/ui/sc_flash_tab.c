@@ -14,30 +14,33 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 /*
- * Phase 6.2: per-module Flash sections.
+ * Per-module Flash sections.
  *
  * The body widget at @p state->flash_tab_root is a vertical box. On
  * every detection cycle it is rebuilt from scratch by
  * sc_flash_tab_rebuild_sections - each in-scope module that is
  * currently detected gets a GtkFrame section with:
- *   - UF2 file picker (Choose / Clear) + path label
- *   - manifest file picker (optional, Choose / Clear) + path label
+ *   - manifest file picker (Choose / Clear) + path label
+ *   - read-only UF2 path label (auto-filled after manifest verify)
  *   - read-only status label (selectable text)
- *   - GtkProgressBar (idle-hidden until 6.5 wires flashing)
- *   - Flash button (stubbed in 6.2 - exercises the global lock)
+ *   - GtkProgressBar
+ *   - Flash button
+ *
+ * The UF2 path is intentionally NOT directly pickable: the operator
+ * picks a manifest, the host resolves the manifest's `uf2_file`
+ * sidecar and verifies its SHA-256 against the manifest, and only
+ * after that consistency check does the UF2 path appear in the
+ * persisted state. This makes "manifest match" structurally
+ * impossible to bypass from the GUI.
  *
  * Per-section widget pointers live in a private static array so the
  * AppState struct does not have to grow N pointers per module. A
  * back-pointer to AppState is embedded in each section so callbacks
  * can update persisted paths and the global lock.
  *
- * The lock policy required by §9 Phase 6.2:
- *   while a flash is running, every other Flash button, the Detect
- *   button, and every section's file pickers go insensitive. The
- *   active section's status field stays live.
- * The 6.2 stub only exercises the plumbing - the Flash button
- * enters the lock, prints "TODO Phase 6.5" into the status field,
- * and a g_timeout_add releases the lock 1.5 s later.
+ * Lock policy: while a flash is running, every other Flash button,
+ * the Detect button, and every section's file pickers go insensitive.
+ * The active section's status field stays live.
  */
 
 typedef struct ScFlashSection {
@@ -49,8 +52,6 @@ typedef struct ScFlashSection {
     GtkWidget *frame;
     GtkWidget *uf2_label;
     GtkWidget *manifest_label;
-    GtkWidget *uf2_pick_btn;
-    GtkWidget *uf2_clear_btn;
     GtkWidget *manifest_pick_btn;
     GtkWidget *manifest_clear_btn;
     GtkWidget *flash_btn;
@@ -312,48 +313,55 @@ static void stop_phase_creep(ScFlashSection *s)
 
 /* ── format-check / manifest-verify drivers ────────────────────────── */
 
-static void run_uf2_format_check(ScFlashSection *s, const char *path)
+/* Run the structural UF2 format check (magic, alignment, family) on a
+ * resolved artifact. Returns the raw flash status; @p detail receives
+ * either the OK summary (block count etc.) or the failure message,
+ * always NUL-terminated. Pure: does not touch any widgets. */
+static sc_flash_status_t check_uf2_format(const char *path,
+                                          char *detail,
+                                          size_t detail_size)
 {
-    if (s == NULL || path == NULL || path[0] == '\0') {
-        section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_INITIAL));
-        return;
+    if (detail != NULL && detail_size > 0u) {
+        detail[0] = '\0';
     }
-
-    char err[256];
-    err[0] = '\0';
-    const sc_flash_status_t st = sc_flash_uf2_format_check(path, err, sizeof(err));
-    char buf[512];
-    if (st == SC_FLASH_OK) {
-        (void)snprintf(buf, sizeof(buf),
-                       sc_i18n_string_get(SC_I18N_FLASH_STATUS_UF2_OK_FMT),
-                       err);
-    } else {
-        (void)snprintf(buf, sizeof(buf),
-                       sc_i18n_string_get(SC_I18N_FLASH_STATUS_UF2_FAIL_FMT),
-                       sc_flash_status_str(st),
-                       err);
+    if (path == NULL || path[0] == '\0') {
+        return SC_FLASH_ERR_NULL_ARG;
     }
-    section_set_status(s, buf);
+    return sc_flash_uf2_format_check(path, detail, detail_size);
 }
 
-static void run_manifest_verify(ScFlashSection *s,
-                                const char *manifest_path,
-                                const char *uf2_path)
+/* Persist a verified UF2 path on the section and refresh the label.
+ * Called only after sc_manifest_verify_artifact succeeds, so the path
+ * stored in flash_paths is by construction consistent with the
+ * currently persisted manifest's sha256. */
+static void section_set_verified_uf2(ScFlashSection *s, const char *path)
+{
+    if (s == NULL || s->state == NULL) return;
+    sc_flash_paths_set_uf2(&s->state->flash_paths, s->module_name,
+                           (path != NULL) ? path : "");
+    (void)sc_flash_paths_save(&s->state->flash_paths);
+    if (s->uf2_label != NULL) {
+        gtk_label_set_text(GTK_LABEL(s->uf2_label),
+                           display_or_none((path != NULL) ? path : ""));
+    }
+}
+
+/* Drive the manifest -> UF2 consistency check. On success persists the
+ * resolved UF2 path; on any failure clears the persisted UF2 path so
+ * the operator cannot accidentally flash with a mismatched binary. */
+static void run_manifest_verify(ScFlashSection *s, const char *manifest_path)
 {
     if (s == NULL) return;
     if (manifest_path == NULL || manifest_path[0] == '\0') {
-        /* Manifest cleared -> fall back to UF2-only status (or initial). */
-        if (uf2_path != NULL && uf2_path[0] != '\0') {
-            run_uf2_format_check(s, uf2_path);
-        } else {
-            section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_INITIAL));
-        }
+        section_set_verified_uf2(s, "");
+        section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_INITIAL));
         return;
     }
 
     sc_manifest_t m;
     const sc_manifest_status_t parse_st = sc_manifest_load_file(manifest_path, &m);
     if (parse_st != SC_MANIFEST_OK) {
+        section_set_verified_uf2(s, "");
         char buf[512];
         (void)snprintf(buf, sizeof(buf),
                        sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT),
@@ -362,15 +370,28 @@ static void run_manifest_verify(ScFlashSection *s,
         return;
     }
 
-    if (uf2_path == NULL || uf2_path[0] == '\0') {
-        section_set_status(s,
-            sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2));
+    char resolved_uf2[512];
+    const sc_manifest_status_t path_st = sc_manifest_resolve_uf2_path(
+        manifest_path, &m, resolved_uf2, sizeof(resolved_uf2));
+    if (path_st != SC_MANIFEST_OK) {
+        section_set_verified_uf2(s, "");
+        if (path_st == SC_MANIFEST_ERR_UF2_FILE_MISSING) {
+            section_set_status(s,
+                sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2));
+        } else {
+            char buf[512];
+            (void)snprintf(buf, sizeof(buf),
+                           sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT),
+                           sc_manifest_status_str(path_st));
+            section_set_status(s, buf);
+        }
         return;
     }
 
     const sc_manifest_status_t verify_st =
-        sc_manifest_verify_artifact(&m, uf2_path);
+        sc_manifest_verify_artifact(&m, resolved_uf2);
     if (verify_st != SC_MANIFEST_OK) {
+        section_set_verified_uf2(s, "");
         char buf[512];
         (void)snprintf(buf, sizeof(buf),
                        sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT),
@@ -379,30 +400,42 @@ static void run_manifest_verify(ScFlashSection *s,
         return;
     }
 
+    /* SHA matches a structurally valid binary in 99.9% of cases, but a
+     * mismatched-family or mis-aligned UF2 with a coincidentally
+     * matching manifest sha would still be rejected by the orchestrator
+     * later. Catch it here so the operator sees the real reason in the
+     * status field instead of a generic mid-flow error. */
+    char fmt_detail[256];
+    const sc_flash_status_t fmt_st =
+        check_uf2_format(resolved_uf2, fmt_detail, sizeof(fmt_detail));
+    if (fmt_st != SC_FLASH_OK) {
+        section_set_verified_uf2(s, "");
+        char buf[512];
+        (void)snprintf(buf, sizeof(buf),
+                       sc_i18n_string_get(SC_I18N_FLASH_STATUS_UF2_FAIL_FMT),
+                       sc_flash_status_str(fmt_st),
+                       fmt_detail);
+        section_set_status(s, buf);
+        return;
+    }
+
+    section_set_verified_uf2(s, resolved_uf2);
     section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_MANIFEST_OK));
 }
 
 /* Update the section's status to reflect the current persisted state.
- * Called after picker changes and after rebuilds. */
+ * Called after manifest changes and after rebuilds. */
 static void section_recompute_status(ScFlashSection *s)
 {
     if (s == NULL || s->state == NULL) return;
-    const char *uf2 = sc_flash_paths_get_uf2(&s->state->flash_paths,
-                                             s->module_name);
     const char *manifest = sc_flash_paths_get_manifest(&s->state->flash_paths,
                                                        s->module_name);
-
-    if ((uf2 == NULL || uf2[0] == '\0') &&
-        (manifest == NULL || manifest[0] == '\0')) {
+    if (manifest == NULL || manifest[0] == '\0') {
+        section_set_verified_uf2(s, "");
         section_set_status(s, sc_i18n_string_get(SC_I18N_FLASH_STATUS_INITIAL));
         return;
     }
-
-    if (manifest != NULL && manifest[0] != '\0') {
-        run_manifest_verify(s, manifest, uf2);
-    } else {
-        run_uf2_format_check(s, uf2);
-    }
+    run_manifest_verify(s, manifest);
 }
 
 /* ── file-dialog plumbing ──────────────────────────────────────────── */
@@ -411,7 +444,6 @@ static void section_recompute_status(ScFlashSection *s)
 
 typedef struct DialogCtx {
     ScFlashSection *section;
-    bool is_manifest;       /* true: manifest picker; false: UF2 */
 } DialogCtx;
 
 static GFile *dialog_initial_folder_from_path(const char *path)
@@ -479,24 +511,21 @@ static GFile *dialog_initial_folder_from_module_build(const ScFlashSection *sect
     return NULL;
 }
 
-static GFile *dialog_initial_folder_for_picker(const ScFlashSection *section,
-                                               bool is_manifest)
+static GFile *dialog_initial_folder_for_manifest(const ScFlashSection *section)
 {
     if (section == NULL || section->state == NULL) {
         return NULL;
     }
 
-    const char *primary = is_manifest
-        ? sc_flash_paths_get_manifest(&section->state->flash_paths, section->module_name)
-        : sc_flash_paths_get_uf2(&section->state->flash_paths, section->module_name);
+    const char *primary = sc_flash_paths_get_manifest(
+        &section->state->flash_paths, section->module_name);
     GFile *folder = dialog_initial_folder_from_path(primary);
     if (folder != NULL) {
         return folder;
     }
 
-    const char *secondary = is_manifest
-        ? sc_flash_paths_get_uf2(&section->state->flash_paths, section->module_name)
-        : sc_flash_paths_get_manifest(&section->state->flash_paths, section->module_name);
+    const char *secondary = sc_flash_paths_get_uf2(
+        &section->state->flash_paths, section->module_name);
     folder = dialog_initial_folder_from_path(secondary);
     if (folder != NULL) {
         return folder;
@@ -505,9 +534,9 @@ static GFile *dialog_initial_folder_for_picker(const ScFlashSection *section,
     return dialog_initial_folder_from_module_build(section);
 }
 
-static void on_file_dialog_open_finish(GObject *source,
-                                       GAsyncResult *result,
-                                       gpointer user_data)
+static void on_manifest_dialog_open_finish(GObject *source,
+                                           GAsyncResult *result,
+                                           gpointer user_data)
 {
     DialogCtx *ctx = (DialogCtx *)user_data;
     GtkFileDialog *dialog = GTK_FILE_DIALOG(source);
@@ -517,19 +546,11 @@ static void on_file_dialog_open_finish(GObject *source,
     if (file != NULL) {
         char *path = g_file_get_path(file);
         if (path != NULL && ctx != NULL && ctx->section != NULL) {
-            if (ctx->is_manifest) {
-                sc_flash_paths_set_manifest(&ctx->section->state->flash_paths,
-                                            ctx->section->module_name,
-                                            path);
-                gtk_label_set_text(GTK_LABEL(ctx->section->manifest_label),
-                                   display_or_none(path));
-            } else {
-                sc_flash_paths_set_uf2(&ctx->section->state->flash_paths,
-                                       ctx->section->module_name,
-                                       path);
-                gtk_label_set_text(GTK_LABEL(ctx->section->uf2_label),
-                                   display_or_none(path));
-            }
+            sc_flash_paths_set_manifest(&ctx->section->state->flash_paths,
+                                        ctx->section->module_name,
+                                        path);
+            gtk_label_set_text(GTK_LABEL(ctx->section->manifest_label),
+                               display_or_none(path));
             (void)sc_flash_paths_save(&ctx->section->state->flash_paths);
             section_recompute_status(ctx->section);
         }
@@ -543,22 +564,18 @@ static void on_file_dialog_open_finish(GObject *source,
     g_free(ctx);
 }
 
-static void open_file_dialog(ScFlashSection *section, bool is_manifest)
+static void open_manifest_file_dialog(ScFlashSection *section)
 {
     if (section == NULL) return;
 
     GtkFileDialog *dialog = gtk_file_dialog_new();
     gtk_file_dialog_set_title(dialog,
-        sc_i18n_string_get(is_manifest
-                           ? SC_I18N_FLASH_DIALOG_MANIFEST_TITLE
-                           : SC_I18N_FLASH_DIALOG_UF2_TITLE));
+        sc_i18n_string_get(SC_I18N_FLASH_DIALOG_MANIFEST_TITLE));
 
     GtkFileFilter *filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter,
-        sc_i18n_string_get(is_manifest
-                           ? SC_I18N_FLASH_FILTER_MANIFEST
-                           : SC_I18N_FLASH_FILTER_UF2));
-    gtk_file_filter_add_pattern(filter, is_manifest ? "*.json" : "*.uf2");
+        sc_i18n_string_get(SC_I18N_FLASH_FILTER_MANIFEST));
+    gtk_file_filter_add_pattern(filter, "*.json");
 
     GListStore *filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
     g_list_store_append(filters, filter);
@@ -566,7 +583,7 @@ static void open_file_dialog(ScFlashSection *section, bool is_manifest)
     g_object_unref(filters);
     g_object_unref(filter);
 
-    GFile *initial_folder = dialog_initial_folder_for_picker(section, is_manifest);
+    GFile *initial_folder = dialog_initial_folder_for_manifest(section);
     if (initial_folder != NULL) {
         gtk_file_dialog_set_initial_folder(dialog, initial_folder);
         g_object_unref(initial_folder);
@@ -577,17 +594,16 @@ static void open_file_dialog(ScFlashSection *section, bool is_manifest)
 
     DialogCtx *ctx = g_new0(DialogCtx, 1);
     ctx->section = section;
-    ctx->is_manifest = is_manifest;
-    gtk_file_dialog_open(dialog, parent, NULL, on_file_dialog_open_finish, ctx);
+    gtk_file_dialog_open(dialog, parent, NULL,
+                         on_manifest_dialog_open_finish, ctx);
     g_object_unref(dialog);
 }
 #else
-static void open_file_dialog(ScFlashSection *section, bool is_manifest)
+static void open_manifest_file_dialog(ScFlashSection *section)
 {
     /* GTK <4.10 has no GtkFileDialog. The build target is GTK 4.14
      * (CI), so this branch is dead in practice. Surface it via the
      * status field if someone manages to hit it. */
-    (void)is_manifest;
     section_set_status(section,
         "GtkFileDialog requires GTK 4.10+; rebuild on a newer host.");
 }
@@ -595,28 +611,10 @@ static void open_file_dialog(ScFlashSection *section, bool is_manifest)
 
 /* ── button callbacks ──────────────────────────────────────────────── */
 
-static void on_uf2_pick_clicked(GtkButton *button, gpointer user_data)
-{
-    (void)button;
-    open_file_dialog((ScFlashSection *)user_data, false);
-}
-
 static void on_manifest_pick_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;
-    open_file_dialog((ScFlashSection *)user_data, true);
-}
-
-static void on_uf2_clear_clicked(GtkButton *button, gpointer user_data)
-{
-    (void)button;
-    ScFlashSection *s = (ScFlashSection *)user_data;
-    if (s == NULL || s->state == NULL) return;
-    sc_flash_paths_set_uf2(&s->state->flash_paths, s->module_name, "");
-    (void)sc_flash_paths_save(&s->state->flash_paths);
-    gtk_label_set_text(GTK_LABEL(s->uf2_label),
-                       sc_i18n_string_get(SC_I18N_FLASH_NO_PATH));
-    section_recompute_status(s);
+    open_manifest_file_dialog((ScFlashSection *)user_data);
 }
 
 static void on_manifest_clear_clicked(GtkButton *button, gpointer user_data)
@@ -624,10 +622,20 @@ static void on_manifest_clear_clicked(GtkButton *button, gpointer user_data)
     (void)button;
     ScFlashSection *s = (ScFlashSection *)user_data;
     if (s == NULL || s->state == NULL) return;
+    /* Clearing the manifest also clears the verified UF2 path: the
+     * UF2 is only ever populated by a successful manifest verify, so
+     * keeping it after the manifest is gone would break the invariant
+     * that an in-state UF2 has been hash-checked against an in-state
+     * manifest. */
     sc_flash_paths_set_manifest(&s->state->flash_paths, s->module_name, "");
+    sc_flash_paths_set_uf2(&s->state->flash_paths, s->module_name, "");
     (void)sc_flash_paths_save(&s->state->flash_paths);
     gtk_label_set_text(GTK_LABEL(s->manifest_label),
                        sc_i18n_string_get(SC_I18N_FLASH_NO_PATH));
+    if (s->uf2_label != NULL) {
+        gtk_label_set_text(GTK_LABEL(s->uf2_label),
+                           sc_i18n_string_get(SC_I18N_FLASH_NO_PATH));
+    }
     section_recompute_status(s);
 }
 
@@ -852,11 +860,23 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
             sc_i18n_string_get(SC_I18N_FLASH_STATUS_NEED_DETECTION));
         return;
     }
-    const char *uf2 = sc_flash_paths_get_uf2(&s->state->flash_paths,
-                                              s->module_name);
-    if (uf2 == NULL || uf2[0] == '\0') {
+    const char *manifest = sc_flash_paths_get_manifest(&s->state->flash_paths,
+                                                       s->module_name);
+    if (manifest == NULL || manifest[0] == '\0') {
         section_set_status(s,
             sc_i18n_string_get(SC_I18N_FLASH_STATUS_NEED_UF2));
+        return;
+    }
+    /* Re-run manifest verify right before flashing so a stale UF2
+     * (file deleted/replaced since the last GUI interaction) is
+     * caught here instead of partway into the orchestrator. The
+     * verify writes the resolved UF2 path back to flash_paths on
+     * success and clears it on failure. */
+    run_manifest_verify(s, manifest);
+    const char *uf2 = sc_flash_paths_get_uf2(&s->state->flash_paths,
+                                             s->module_name);
+    if (uf2 == NULL || uf2[0] == '\0') {
+        /* run_manifest_verify already set a descriptive status. */
         return;
     }
 
@@ -870,12 +890,8 @@ static void on_flash_clicked(GtkButton *button, gpointer user_data)
     (void)snprintf(ctx->uid_hex, sizeof(ctx->uid_hex), "%s",
                    status->hello_identity.uid);
     (void)snprintf(ctx->uf2_path, sizeof(ctx->uf2_path), "%s", uf2);
-    const char *manifest = sc_flash_paths_get_manifest(&s->state->flash_paths,
-                                                        s->module_name);
-    if (manifest != NULL && manifest[0] != '\0') {
-        (void)snprintf(ctx->manifest_path, sizeof(ctx->manifest_path),
-                       "%s", manifest);
-    }
+    (void)snprintf(ctx->manifest_path, sizeof(ctx->manifest_path),
+                   "%s", manifest);
 
     sc_flash_tab_set_lock(s->state, true);
     if (s->module_index < SC_MODULE_COUNT) {
@@ -907,8 +923,6 @@ static void section_init_clean(ScFlashSection *s)
     s->frame = NULL;
     s->uf2_label = NULL;
     s->manifest_label = NULL;
-    s->uf2_pick_btn = NULL;
-    s->uf2_clear_btn = NULL;
     s->manifest_pick_btn = NULL;
     s->manifest_clear_btn = NULL;
     s->flash_btn = NULL;
@@ -954,35 +968,7 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
     gtk_widget_set_margin_bottom(body, 8);
     gtk_frame_set_child(GTK_FRAME(s->frame), body);
 
-    /* UF2 row */
-    GtkWidget *uf2_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append(GTK_BOX(body), uf2_row);
-    GtkWidget *uf2_lbl = gtk_label_new(sc_i18n_string_get(SC_I18N_FLASH_LBL_UF2));
-    gtk_label_set_xalign(GTK_LABEL(uf2_lbl), 0.0f);
-    gtk_widget_set_size_request(uf2_lbl, 160, -1);
-    gtk_box_append(GTK_BOX(uf2_row), uf2_lbl);
-
-    s->uf2_label = gtk_label_new(display_or_none(
-        sc_flash_paths_get_uf2(&state->flash_paths, s->module_name)));
-    gtk_label_set_xalign(GTK_LABEL(s->uf2_label), 0.0f);
-    gtk_label_set_ellipsize(GTK_LABEL(s->uf2_label), PANGO_ELLIPSIZE_MIDDLE);
-    gtk_label_set_selectable(GTK_LABEL(s->uf2_label), TRUE);
-    gtk_widget_set_hexpand(s->uf2_label, TRUE);
-    gtk_box_append(GTK_BOX(uf2_row), s->uf2_label);
-
-    s->uf2_pick_btn = gtk_button_new_with_label(
-        sc_i18n_string_get(SC_I18N_FLASH_BTN_PICK_UF2));
-    g_signal_connect(s->uf2_pick_btn, "clicked",
-                     G_CALLBACK(on_uf2_pick_clicked), s);
-    gtk_box_append(GTK_BOX(uf2_row), s->uf2_pick_btn);
-
-    s->uf2_clear_btn = gtk_button_new_with_label(
-        sc_i18n_string_get(SC_I18N_FLASH_BTN_CLEAR_UF2));
-    g_signal_connect(s->uf2_clear_btn, "clicked",
-                     G_CALLBACK(on_uf2_clear_clicked), s);
-    gtk_box_append(GTK_BOX(uf2_row), s->uf2_clear_btn);
-
-    /* Manifest row */
+    /* Manifest row (the only operator-controlled picker) */
     GtkWidget *m_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append(GTK_BOX(body), m_row);
     GtkWidget *m_lbl = gtk_label_new(sc_i18n_string_get(SC_I18N_FLASH_LBL_MANIFEST));
@@ -1009,6 +995,23 @@ static GtkWidget *build_section(AppState *state, size_t module_index)
     g_signal_connect(s->manifest_clear_btn, "clicked",
                      G_CALLBACK(on_manifest_clear_clicked), s);
     gtk_box_append(GTK_BOX(m_row), s->manifest_clear_btn);
+
+    /* UF2 row (read-only). Populated automatically by the manifest
+     * verify step; the operator never edits this directly. */
+    GtkWidget *uf2_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append(GTK_BOX(body), uf2_row);
+    GtkWidget *uf2_lbl = gtk_label_new(sc_i18n_string_get(SC_I18N_FLASH_LBL_UF2));
+    gtk_label_set_xalign(GTK_LABEL(uf2_lbl), 0.0f);
+    gtk_widget_set_size_request(uf2_lbl, 160, -1);
+    gtk_box_append(GTK_BOX(uf2_row), uf2_lbl);
+
+    s->uf2_label = gtk_label_new(display_or_none(
+        sc_flash_paths_get_uf2(&state->flash_paths, s->module_name)));
+    gtk_label_set_xalign(GTK_LABEL(s->uf2_label), 0.0f);
+    gtk_label_set_ellipsize(GTK_LABEL(s->uf2_label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_label_set_selectable(GTK_LABEL(s->uf2_label), TRUE);
+    gtk_widget_set_hexpand(s->uf2_label, TRUE);
+    gtk_box_append(GTK_BOX(uf2_row), s->uf2_label);
 
     /* Flash + progress + status */
     GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
@@ -1149,12 +1152,10 @@ void sc_flash_tab_set_lock(AppState *state, bool locked)
         ScFlashSection *s = &s_sections[i];
         if (!s->active) continue;
         const bool sensitive = !locked;
-        if (s->uf2_pick_btn != NULL)         gtk_widget_set_sensitive(s->uf2_pick_btn, sensitive);
-        if (s->uf2_clear_btn != NULL)        gtk_widget_set_sensitive(s->uf2_clear_btn, sensitive);
         if (s->manifest_pick_btn != NULL)    gtk_widget_set_sensitive(s->manifest_pick_btn, sensitive);
         if (s->manifest_clear_btn != NULL)   gtk_widget_set_sensitive(s->manifest_clear_btn, sensitive);
         if (s->flash_btn != NULL)            gtk_widget_set_sensitive(s->flash_btn, sensitive);
-        /* status_label and progress_bar stay live during a flash. */
+        /* status_label, uf2_label and progress_bar stay live during a flash. */
     }
 }
 

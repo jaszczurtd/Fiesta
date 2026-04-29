@@ -188,6 +188,7 @@ void configSessionInit(void) {
 
 void configSessionTick(void) {
   hal_serial_session_poll(&s_configSession);
+  hal_debug_set_muted(hal_serial_session_is_active(&s_configSession));
 }
 
 bool configSessionActive(void) {

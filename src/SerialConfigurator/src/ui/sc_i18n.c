@@ -54,30 +54,25 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
         "Detect Fiesta modules first. The flash sections appear here "
         "once at least one module responds to HELLO.",
     [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flash - %s",
-    [SC_I18N_FLASH_LBL_UF2]              = "UF2 artifact:",
-    [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (optional):",
-    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Choose UF2...",
+    [SC_I18N_FLASH_LBL_UF2]              = "UF2 artifact (auto):",
+    [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest:",
     [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Choose manifest...",
-    [SC_I18N_FLASH_BTN_CLEAR_UF2]        = "Clear",
     [SC_I18N_FLASH_BTN_CLEAR_MANIFEST]   = "Clear",
     [SC_I18N_FLASH_BTN_FLASH]            = "Flash",
     [SC_I18N_FLASH_NO_PATH]              = "(none)",
-    [SC_I18N_FLASH_DIALOG_UF2_TITLE]     = "Select UF2 artifact",
     [SC_I18N_FLASH_DIALOG_MANIFEST_TITLE] = "Select manifest JSON",
-    [SC_I18N_FLASH_FILTER_UF2]           = "UF2 firmware images",
     [SC_I18N_FLASH_FILTER_MANIFEST]      = "Manifest JSON",
     [SC_I18N_FLASH_STATUS_INITIAL]       =
-        "Pick a UF2 artifact to start. A manifest is optional but recommended.",
-    [SC_I18N_FLASH_STATUS_UF2_OK_FMT]    = "UF2 format OK: %s",
+        "Pick a manifest to start. The matching UF2 fills in automatically.",
     [SC_I18N_FLASH_STATUS_UF2_FAIL_FMT]  = "UF2 format check failed (%s): %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_OK]   =
-        "Manifest parsed; sha256 matches the chosen UF2.",
+        "Manifest parsed; sha256 matches; UF2 format OK.",
     [SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT] =
         "Manifest parse failed: %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT] =
         "Manifest verification failed: %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2] =
-        "Manifest parsed; pick a UF2 to verify the hash.",
+        "Manifest parsed; add the uf2_file field so the UF2 sidecar can be resolved.",
     [SC_I18N_FLASH_STATUS_FLASH_TODO]    =
         "Flash flow not implemented yet (Phase 6.5). Lock plumbing is exercised.",
     [SC_I18N_FLASH_STATUS_LOCK_RELEASED] =
@@ -85,7 +80,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_STATUS_NEED_DETECTION] =
         "Detect the module before flashing.",
     [SC_I18N_FLASH_STATUS_NEED_UF2] =
-        "Pick a UF2 file before flashing.",
+        "Pick a manifest with uf2_file before flashing.",
     [SC_I18N_FLASH_STATUS_RUNNING_FMT] =
         "Flashing: %s",
     [SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT] =
@@ -200,30 +195,25 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
         "Najpierw wykryj moduły Fiesta. Sekcje flashowania pojawią się tutaj, "
         "gdy przynajmniej jeden moduł odpowie na HELLO.",
     [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flashowanie - %s",
-    [SC_I18N_FLASH_LBL_UF2]              = "Plik UF2:",
-    [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (opcjonalny):",
-    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Wybierz UF2...",
+    [SC_I18N_FLASH_LBL_UF2]              = "Plik UF2 (auto):",
+    [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest:",
     [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Wybierz manifest...",
-    [SC_I18N_FLASH_BTN_CLEAR_UF2]        = "Wyczyść",
     [SC_I18N_FLASH_BTN_CLEAR_MANIFEST]   = "Wyczyść",
     [SC_I18N_FLASH_BTN_FLASH]            = "Flashuj",
     [SC_I18N_FLASH_NO_PATH]              = "(brak)",
-    [SC_I18N_FLASH_DIALOG_UF2_TITLE]     = "Wybierz plik UF2",
     [SC_I18N_FLASH_DIALOG_MANIFEST_TITLE] = "Wybierz manifest JSON",
-    [SC_I18N_FLASH_FILTER_UF2]           = "Obrazy firmware UF2",
     [SC_I18N_FLASH_FILTER_MANIFEST]      = "Manifest JSON",
     [SC_I18N_FLASH_STATUS_INITIAL]       =
-        "Wybierz plik UF2, aby rozpocząć. Manifest jest opcjonalny, ale zalecany.",
-    [SC_I18N_FLASH_STATUS_UF2_OK_FMT]    = "Format UF2 OK: %s",
+        "Wybierz manifest, aby rozpocząć. Pasujący plik UF2 wypełni się automatycznie.",
     [SC_I18N_FLASH_STATUS_UF2_FAIL_FMT]  = "Niepowodzenie sprawdzania formatu UF2 (%s): %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_OK]   =
-        "Manifest sparsowany; sha256 zgadza się z wybranym plikiem UF2.",
+        "Manifest sparsowany; sha256 zgadza się; format UF2 OK.",
     [SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT] =
         "Niepowodzenie parsowania manifestu: %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT] =
         "Niepowodzenie weryfikacji manifestu: %s",
     [SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2] =
-        "Manifest sparsowany; wybierz plik UF2, aby zweryfikować hash.",
+        "Manifest sparsowany; dodaj pole uf2_file, aby rozwiązać sąsiadujący plik UF2.",
     [SC_I18N_FLASH_STATUS_FLASH_TODO]    =
         "Przepływ flashowania jeszcze niezaimplementowany (Faza 6.5). "
         "Mechanizm blokady działa.",
@@ -233,7 +223,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_STATUS_NEED_DETECTION] =
         "Wykryj moduł zanim zaczniesz flashowanie.",
     [SC_I18N_FLASH_STATUS_NEED_UF2] =
-        "Wybierz plik UF2 zanim zaczniesz flashowanie.",
+        "Wybierz manifest z polem uf2_file przed flashowaniem.",
     [SC_I18N_FLASH_STATUS_RUNNING_FMT] =
         "Flashowanie: %s",
     [SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT] =

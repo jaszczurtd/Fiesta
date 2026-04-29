@@ -587,6 +587,10 @@ void configSessionInit(void) {
 
 void configSessionTick(void) {
   hal_serial_session_poll(&s_configSession);
+  /* Keep debug chatter off the same CDC channel while SC session is active.
+   * Without this, async deb()/derr() logs can interleave with framed replies
+   * from another core and corrupt host parsing. */
+  hal_debug_set_muted(hal_serial_session_is_active(&s_configSession));
 }
 
 bool configSessionActive(void) {

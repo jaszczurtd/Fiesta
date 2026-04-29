@@ -153,6 +153,13 @@ bool sc_core_sc_get_values(
     char *log_output,
     size_t log_output_size
 );
+bool sc_core_sc_bye(
+    ScCore *core,
+    size_t module_index,
+    ScCommandResult *result,
+    char *log_output,
+    size_t log_output_size
+);
 bool sc_core_sc_get_param(
     ScCore *core,
     size_t module_index,

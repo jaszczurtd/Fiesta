@@ -44,6 +44,138 @@ static bool command_result_is_unknown(const ScCommandResult *result)
     return strcmp(result->response, "ERR UNKNOWN") == 0;
 }
 
+static void send_bye_to_detected_modules(
+    AppState *state,
+    char *log_output,
+    size_t log_output_size
+)
+{
+    if (state == 0 || log_output == 0 || log_output_size == 0u) {
+        return;
+    }
+
+    bool had_target = false;
+    append_text(log_output, log_output_size,
+                "Disconnect: sending " SC_CMD_BYE " to detected modules...\n");
+
+    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+        const ScModuleStatus *status = sc_core_module_status(&state->core, i);
+        if (status == 0 || !status->detected) {
+            continue;
+        }
+
+        had_target = true;
+        if (status->target_ambiguous) {
+            char line[256];
+            (void)snprintf(
+                line, sizeof(line),
+                "[WARN] %s: skipped (" SC_CMD_BYE " target ambiguous: %zu instances)\n",
+                status->display_name,
+                status->detected_instances
+            );
+            append_text(log_output, log_output_size, line);
+            continue;
+        }
+
+        ScCommandResult result;
+        if (!sc_core_sc_bye(&state->core, i, &result,
+                            log_output, log_output_size)) {
+            continue;
+        }
+
+        if (result.status == SC_COMMAND_STATUS_OK &&
+            strcmp(result.topic, SC_REPLY_TAG_BYE) == 0) {
+            continue;
+        }
+
+        char line[512];
+        if (command_result_is_unknown(&result)) {
+            (void)snprintf(
+                line, sizeof(line),
+                "[WARN] %.64s on %.200s: firmware does not support " SC_CMD_BYE
+                " yet (%.120s)\n",
+                status->display_name,
+                status->port_path,
+                result.response
+            );
+        } else {
+            (void)snprintf(
+                line, sizeof(line),
+                "[WARN] %.64s on %.200s: unexpected " SC_CMD_BYE " reply: %.120s\n",
+                status->display_name,
+                status->port_path,
+                result.response
+            );
+        }
+        append_text(log_output, log_output_size, line);
+    }
+
+    if (!had_target) {
+        append_text(log_output, log_output_size,
+                    "Disconnect: no detected modules required " SC_CMD_BYE ".\n");
+    }
+}
+
+static size_t collect_values_via_get_param(
+    ScCore *core,
+    size_t module_index,
+    const ScParamListData *list,
+    ScParamValuesData *out_values,
+    size_t *out_fail_count,
+    char *log_output,
+    size_t log_output_size)
+{
+    if (core == 0 || list == 0 || out_values == 0) {
+        return 0u;
+    }
+
+    memset(out_values, 0, sizeof(*out_values));
+    if (out_fail_count != 0) {
+        *out_fail_count = 0u;
+    }
+
+    char parse_error[256];
+    for (size_t p = 0u; p < list->count; ++p) {
+        const char *param_id = list->ids[p];
+        ScCommandResult param_result;
+        if (!sc_core_sc_get_param(
+                core,
+                module_index,
+                param_id,
+                &param_result,
+                log_output,
+                log_output_size
+            )) {
+            if (out_fail_count != 0) {
+                (*out_fail_count)++;
+            }
+            continue;
+        }
+
+        ScParamDetailData parsed_param;
+        if (!sc_core_parse_param_result(&param_result, &parsed_param,
+                                        parse_error, sizeof(parse_error))) {
+            if (out_fail_count != 0) {
+                (*out_fail_count)++;
+            }
+            continue;
+        }
+
+        if (out_values->count >= SC_PARAM_ITEMS_MAX) {
+            out_values->truncated = true;
+            break;
+        }
+
+        const size_t idx = out_values->count++;
+        (void)snprintf(out_values->entries[idx].id,
+                       sizeof(out_values->entries[idx].id),
+                       "%s", parsed_param.id);
+        out_values->entries[idx].value = parsed_param.value;
+    }
+
+    return out_values->count;
+}
+
 #if UI_AUTO_REFRESH_PARAM_PROBE
 static const ScParamValueEntry *find_value_entry_by_id(
     const ScParamValuesData *values,
@@ -272,6 +404,8 @@ static void run_detection_worker(
 
         ScCommandResult values_result;
         ScParamValuesData parsed_values;
+        memset(&parsed_values, 0, sizeof(parsed_values));
+        bool values_from_fallback = false;
         bool values_ok = sc_core_sc_get_values(
             &result->core,
             i,
@@ -279,7 +413,21 @@ static void run_detection_worker(
             result->log_text,
             UI_DETECTION_LOG_MAX
         );
-        if (!values_ok) {
+        if (values_ok &&
+            sc_core_parse_param_values_result(&values_result, &parsed_values,
+                                              parse_error, sizeof(parse_error))) {
+            (void)snprintf(result->module_values_status[i],
+                           sizeof(result->module_values_status[i]),
+                           sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
+                           parsed_values.count,
+                           parsed_values.truncated
+                               ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
+                               : "");
+        } else if (!values_ok) {
+            /* Transport failed: device is unresponsive on the framed link;
+             * a per-id SC_GET_PARAM fallback would multiply the timeout
+             * cost by N parameters with no expected gain. Skip straight
+             * to the next module. */
             (void)snprintf(result->module_values_status[i],
                            sizeof(result->module_values_status[i]),
                            "%s", sc_i18n_string_get(SC_I18N_STATUS_VALUES_TRANSPORT_ERR));
@@ -287,29 +435,44 @@ static void run_detection_worker(
                            sizeof(result->module_param_probe_status[i]),
                            "%s", sc_i18n_string_get(SC_I18N_STATUS_SKIP_VALUES_TRANSPORT));
             continue;
-        }
-
-        if (!sc_core_parse_param_values_result(&values_result, &parsed_values, parse_error, sizeof(parse_error))) {
+        } else {
+            /* Transport OK but parse failed: device responded with
+             * something we can't decode. Fall back to per-id
+             * SC_GET_PARAM probes - each round-trip is short and we may
+             * still recover most of the snapshot. */
             (void)snprintf(result->module_values_status[i],
                            sizeof(result->module_values_status[i]),
                            "%s", sc_i18n_string_get(SC_I18N_STATUS_VALUES_PARSE_FAILED));
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_SKIP_VALUES_PARSE));
             append_text(result->log_text, UI_DETECTION_LOG_MAX,
                         sc_i18n_string_get(SC_I18N_LOG_WARN_PREFIX));
             append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
             append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
-            continue;
-        }
 
-        (void)snprintf(result->module_values_status[i],
-                       sizeof(result->module_values_status[i]),
-                       sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
-                       parsed_values.count,
-                       parsed_values.truncated
-                           ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
-                           : "");
+            size_t fallback_fail = 0u;
+            const size_t fallback_ok = collect_values_via_get_param(
+                &result->core, i, &parsed_list, &parsed_values,
+                &fallback_fail, result->log_text, UI_DETECTION_LOG_MAX);
+            if (fallback_ok > 0u) {
+                values_from_fallback = true;
+                const bool partial = parsed_values.truncated ||
+                                     fallback_ok < parsed_list.count ||
+                                     fallback_fail > 0u;
+                (void)snprintf(result->module_values_status[i],
+                               sizeof(result->module_values_status[i]),
+                               sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
+                               parsed_values.count,
+                               partial
+                                   ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
+                                   : "");
+                char warn_line[256];
+                (void)snprintf(warn_line, sizeof(warn_line),
+                               "[WARN] " SC_CMD_GET_VALUES
+                               " failed; fallback " SC_CMD_GET_PARAM
+                               " ok=%zu fail=%zu\n",
+                               fallback_ok, fallback_fail);
+                append_text(result->log_text, UI_DETECTION_LOG_MAX, warn_line);
+            }
+        }
 
 #if UI_AUTO_REFRESH_PARAM_PROBE
         size_t probe_ok_count = 0u;
@@ -338,7 +501,8 @@ static void run_detection_worker(
             }
 
             probe_ok_count++;
-            const ScParamValueEntry *snapshot = find_value_entry_by_id(&parsed_values, parsed_param.id);
+            const ScParamValueEntry *snapshot =
+                find_value_entry_by_id(&parsed_values, parsed_param.id);
             if (snapshot != 0 && !typed_values_equal(&snapshot->value, &parsed_param.value)) {
                 cross_mismatch_count++;
             }
@@ -367,6 +531,10 @@ static void run_detection_worker(
             (void)snprintf(result->module_param_probe_status[i],
                            sizeof(result->module_param_probe_status[i]),
                            "%s", sc_i18n_string_get(SC_I18N_STATUS_NO_IDS_TO_PROBE));
+        } else if (values_from_fallback) {
+            (void)snprintf(result->module_param_probe_status[i],
+                           sizeof(result->module_param_probe_status[i]),
+                           "%s", sc_i18n_string_get(SC_I18N_STATUS_PROBE_SKIPPED));
         } else {
             (void)snprintf(result->module_param_probe_status[i],
                            sizeof(result->module_param_probe_status[i]),
@@ -500,6 +668,11 @@ void sc_detection_reset_connection(AppState *state, bool by_user_request)
         return;
     }
 
+    char disconnect_log[UI_DETECTION_LOG_MAX] = {0};
+    if (by_user_request) {
+        send_bye_to_detected_modules(state, disconnect_log, sizeof(disconnect_log));
+    }
+
     sc_core_reset_detection(&state->core);
     sc_modules_view_refresh_lamps(state);
 
@@ -527,13 +700,18 @@ void sc_detection_reset_connection(AppState *state, bool by_user_request)
     }
 
     if (state->log_buffer != 0) {
-        gtk_text_buffer_set_text(
-            state->log_buffer,
+        char ui_log[UI_DETECTION_LOG_MAX] = {0};
+        append_text(
+            ui_log, sizeof(ui_log),
             sc_i18n_string_get(by_user_request
                         ? SC_I18N_LOG_DISCONNECTED
-                        : SC_I18N_LOG_IDLE),
-            -1
+                        : SC_I18N_LOG_IDLE)
         );
+        if (by_user_request && disconnect_log[0] != '\0') {
+            append_text(ui_log, sizeof(ui_log), "\n");
+            append_text(ui_log, sizeof(ui_log), disconnect_log);
+        }
+        gtk_text_buffer_set_text(state->log_buffer, ui_log, -1);
     }
 
     sc_modules_view_refresh_details(state);

@@ -29,19 +29,9 @@
  *   the resolved $USER, the parent paths being polled, the first
  *   `opendir()` errno per parent, periodic heartbeats, and the
  *   timeout snapshot. Off-the-record under normal happy-path runs.
- * - `flash_log_v` is gated by `SC_FLASH_DEBUG=1` and is for the
- *   per-iteration noise (every readdir entry, every poll). Operators
- *   reproducing a bug on a foreign distro can flip the env var to
- *   capture every step. */
-static bool flash_log_verbose_enabled(void)
-{
-    static int cached = -1;
-    if (cached < 0) {
-        const char *v = getenv("SC_FLASH_DEBUG");
-        cached = (v != NULL && v[0] != '\0' && v[0] != '0') ? 1 : 0;
-    }
-    return cached != 0;
-}
+ * - `flash_log_v` is for the per-iteration noise (every readdir
+ *   entry, every poll) and is gated by the compile-time
+ *   `SC_DEBUG_DEEP` macro defined in src/config.h. */
 
 static void flash_log(const char *fmt, ...)
 {
@@ -54,11 +44,9 @@ static void flash_log(const char *fmt, ...)
     (void)fflush(stderr);
 }
 
+#ifdef SC_DEBUG_DEEP
 static void flash_log_v(const char *fmt, ...)
 {
-    if (!flash_log_verbose_enabled()) {
-        return;
-    }
     va_list ap;
     (void)fputs("[sc_flash] ", stderr);
     va_start(ap, fmt);
@@ -67,6 +55,9 @@ static void flash_log_v(const char *fmt, ...)
     (void)fputc('\n', stderr);
     (void)fflush(stderr);
 }
+#else
+#  define flash_log_v(...) ((void)0)
+#endif
 
 const char *sc_flash_status_str(sc_flash_status_t st)
 {

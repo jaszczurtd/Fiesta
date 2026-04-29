@@ -16,6 +16,8 @@ const char *sc_manifest_status_str(sc_manifest_status_t status)
     case SC_MANIFEST_ERR_FIELD_TOO_LONG:          return "FIELD_TOO_LONG";
     case SC_MANIFEST_ERR_FIELD_EMPTY:             return "FIELD_EMPTY";
     case SC_MANIFEST_ERR_BAD_SHA256_FORMAT:       return "BAD_SHA256_FORMAT";
+    case SC_MANIFEST_ERR_BAD_UF2_FILE:            return "BAD_UF2_FILE";
+    case SC_MANIFEST_ERR_UF2_FILE_MISSING:        return "UF2_FILE_MISSING";
     case SC_MANIFEST_ERR_UNKNOWN_FIELD:           return "UNKNOWN_FIELD";
     case SC_MANIFEST_ERR_FILE_OPEN:               return "FILE_OPEN";
     case SC_MANIFEST_ERR_FILE_READ:               return "FILE_READ";
@@ -141,8 +143,25 @@ typedef struct {
     bool seen_fw_version;
     bool seen_build_id;
     bool seen_sha256;
+    bool seen_uf2_file;
     bool seen_signature;
 } sc_manifest_seen_t;
+
+static bool manifest_uf2_file_is_valid(const char *value)
+{
+    if (value == NULL || value[0] == '\0') {
+        return false;
+    }
+    if (strcmp(value, ".") == 0 || strcmp(value, "..") == 0) {
+        return false;
+    }
+    for (const char *p = value; *p != '\0'; ++p) {
+        if (*p == '/' || *p == '\\') {
+            return false;
+        }
+    }
+    return true;
+}
 
 static sc_manifest_status_t store_field(sc_manifest_t *out,
                                         sc_manifest_seen_t *seen,
@@ -179,6 +198,10 @@ static sc_manifest_status_t store_field(sc_manifest_t *out,
         dst = out->sha256_hex;
         dst_cap = SC_MANIFEST_SHA256_HEX_LEN;
         seen_flag = &seen->seen_sha256;
+    } else if (key_len == 8u && memcmp(key, "uf2_file", 8u) == 0) {
+        dst = out->uf2_file;
+        dst_cap = SC_MANIFEST_UF2_FILE_MAX;
+        seen_flag = &seen->seen_uf2_file;
     } else if (key_len == 9u && memcmp(key, "signature", 9u) == 0) {
         dst = out->signature;
         dst_cap = SC_MANIFEST_SIGNATURE_MAX;
@@ -210,6 +233,11 @@ static sc_manifest_status_t store_field(sc_manifest_t *out,
             return SC_MANIFEST_ERR_BAD_SHA256_FORMAT;
         }
     }
+    if (seen_flag == &seen->seen_uf2_file) {
+        if (!manifest_uf2_file_is_valid(out->uf2_file)) {
+            return SC_MANIFEST_ERR_BAD_UF2_FILE;
+        }
+    }
 
     return SC_MANIFEST_OK;
 }
@@ -224,7 +252,7 @@ sc_manifest_status_t sc_manifest_parse(const char *json,
     memset(out, 0, sizeof(*out));
 
     sc_json_cursor_t c = { json, json + json_len };
-    sc_manifest_seen_t seen = { false, false, false, false, false };
+    sc_manifest_seen_t seen = { false, false, false, false, false, false };
 
     if (!consume_char(&c, '{')) {
         return SC_MANIFEST_ERR_BAD_JSON;
@@ -284,6 +312,7 @@ sc_manifest_status_t sc_manifest_parse(const char *json,
         !seen.seen_build_id || !seen.seen_sha256) {
         return SC_MANIFEST_ERR_MISSING_FIELD;
     }
+    out->has_uf2_file = seen.seen_uf2_file;
     out->has_signature = seen.seen_signature;
 
     return SC_MANIFEST_OK;
@@ -396,6 +425,49 @@ sc_manifest_status_t sc_manifest_verify_artifact(
     }
     if (diff != 0u) {
         return SC_MANIFEST_ERR_ARTIFACT_HASH_MISMATCH;
+    }
+    return SC_MANIFEST_OK;
+}
+
+sc_manifest_status_t sc_manifest_resolve_uf2_path(
+    const char *manifest_path,
+    const sc_manifest_t *manifest,
+    char *out_path,
+    size_t out_path_size)
+{
+    if (manifest_path == NULL || manifest == NULL ||
+        out_path == NULL || out_path_size == 0u) {
+        return SC_MANIFEST_ERR_NULL_ARG;
+    }
+    out_path[0] = '\0';
+
+    if (!manifest->has_uf2_file || manifest->uf2_file[0] == '\0') {
+        return SC_MANIFEST_ERR_UF2_FILE_MISSING;
+    }
+    if (!manifest_uf2_file_is_valid(manifest->uf2_file)) {
+        return SC_MANIFEST_ERR_BAD_UF2_FILE;
+    }
+
+    const char *last_slash = strrchr(manifest_path, '/');
+    const char *last_backslash = strrchr(manifest_path, '\\');
+    char path_sep = '/';
+    if (last_backslash != NULL &&
+        (last_slash == NULL || last_backslash > last_slash)) {
+        last_slash = last_backslash;
+        path_sep = '\\';
+    }
+
+    int n = 0;
+    if (last_slash == NULL) {
+        n = snprintf(out_path, out_path_size, "%s", manifest->uf2_file);
+    } else {
+        const size_t dir_len = (size_t)(last_slash - manifest_path);
+        n = snprintf(out_path, out_path_size, "%.*s%c%s",
+                     (int)dir_len, manifest_path, path_sep, manifest->uf2_file);
+    }
+    if (n < 0 || (size_t)n >= out_path_size) {
+        out_path[0] = '\0';
+        return SC_MANIFEST_ERR_FIELD_TOO_LONG;
     }
     return SC_MANIFEST_OK;
 }
