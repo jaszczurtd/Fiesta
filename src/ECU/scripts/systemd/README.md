@@ -132,11 +132,11 @@ If you put `FIESTA_DIR=%h/Documents/Fiesta` in `fiesta-bootstrap.env`, the
 runner will treat `%h/Documents/Fiesta` as a relative path (rooted at the
 service's `WorkingDirectory`, i.e. `$HOME`), end up creating a literal
 `$HOME/%h/Documents/Fiesta/` directory, and arduino-cli will fail with a
-confusing `ld: cannot open map file …` because the `%h` token leaks into
+confusing `ld: cannot open map file ...` because the `%h` token leaks into
 the linker recipe.
 
-The runner now fail-fasts with a clear error when it sees a `%…` / `~` /
-`$…` in `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR`, or `BRANCH`, and
+The runner now fail-fasts with a clear error when it sees a `%...` / `~` /
+`$...` in `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR`, or `BRANCH`, and
 when `FIESTA_DIR` is not absolute.
 
 **Fix**: in `~/.config/fiesta-bootstrap.env`, either

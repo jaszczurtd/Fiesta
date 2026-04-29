@@ -14,7 +14,7 @@ static const char *const k_locale_codes[SC_LOCALE_COUNT] = {
 /* ── String tables (designated initializers - missing slots are NULL) ── */
 
 static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
-    [SC_I18N_APP_TITLE]            = "Fiesta Serial Configurator",
+    [SC_I18N_APP_TITLE]            = "Fiesta USB Configurator",
     [SC_I18N_TAB_MODULES]          = "Modules",
     [SC_I18N_TAB_FLASH]            = "Flash",
     [SC_I18N_FRAME_MODULES]        = "Modules",
@@ -24,7 +24,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_BTN_DETECTING]        = "Detecting...",
 
     [SC_I18N_LOG_IDLE] =
-        "Press \"Detect Fiesta Modules\" to send HELLO to connected modules.\n",
+        "Press \"Detect Fiesta Modules\" to discover connected Fiesta modules.\n",
     [SC_I18N_LOG_DETECTING] =
         "Detection started... please wait.\n",
     [SC_I18N_LOG_DISCONNECTED] =
@@ -56,8 +56,8 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flash - %s",
     [SC_I18N_FLASH_LBL_UF2]              = "UF2 artifact:",
     [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (optional):",
-    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Choose UF2…",
-    [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Choose manifest…",
+    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Choose UF2...",
+    [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Choose manifest...",
     [SC_I18N_FLASH_BTN_CLEAR_UF2]        = "Clear",
     [SC_I18N_FLASH_BTN_CLEAR_MANIFEST]   = "Clear",
     [SC_I18N_FLASH_BTN_FLASH]            = "Flash",
@@ -140,15 +140,15 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_NO_PARAMS]              = "No parameters exposed by this module.",
     [SC_I18N_VALUES_LOADING]                = "Loading parameters...",
     [SC_I18N_VALUES_LOAD_FAILED_FMT]        = "Failed to load %s: %s",
-    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Apply staged",
-    [SC_I18N_VALUES_BTN_COMMIT]             = "Commit",
+    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Use",
+    [SC_I18N_VALUES_BTN_COMMIT]             = "Save",
     [SC_I18N_VALUES_BTN_REVERT]             = "Revert",
     [SC_I18N_VALUES_AUTH_FAILED_FMT]        = "Authentication failed: %s",
     [SC_I18N_VALUES_APPLY_OK_FMT]           = "Applied %u parameter(s) to staging.",
     [SC_I18N_VALUES_APPLY_FAILED_FMT]       = "Apply failed for %s: %s",
     [SC_I18N_VALUES_NOTHING_TO_APPLY]       = "Nothing to apply - no edited parameters.",
-    [SC_I18N_VALUES_COMMIT_OK]              = "Committed.",
-    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Commit failed: %s",
+    [SC_I18N_VALUES_COMMIT_OK]              = "Saved.",
+    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Save failed: %s",
     [SC_I18N_VALUES_REVERT_OK]              = "Reverted.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Revert failed: %s",
 };
@@ -160,7 +160,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
  * to know which locale is active.
  */
 static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
-    [SC_I18N_APP_TITLE]            = "Fiesta Serial Configurator",
+    [SC_I18N_APP_TITLE]            = "Fiesta USB Configurator",
     [SC_I18N_TAB_MODULES]          = "Moduły",
     [SC_I18N_TAB_FLASH]            = "Flashowanie",
     [SC_I18N_FRAME_MODULES]        = "Moduły",
@@ -170,7 +170,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_BTN_DETECTING]        = "Wykrywanie...",
 
     [SC_I18N_LOG_IDLE] =
-        "Naciśnij \"Wykryj moduły Fiesta\", aby wysłać HELLO do podłączonych modułów.\n",
+        "Naciśnij \"Wykryj moduły Fiesta\", aby wykryć podłączone moduły.\n",
     [SC_I18N_LOG_DETECTING] =
         "Wykrywanie rozpoczęte... proszę czekać.\n",
     [SC_I18N_LOG_DISCONNECTED] =
@@ -202,8 +202,8 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_FLASH_SECTION_HEADER_FMT]   = "Flashowanie - %s",
     [SC_I18N_FLASH_LBL_UF2]              = "Plik UF2:",
     [SC_I18N_FLASH_LBL_MANIFEST]         = "Manifest (opcjonalny):",
-    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Wybierz UF2…",
-    [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Wybierz manifest…",
+    [SC_I18N_FLASH_BTN_PICK_UF2]         = "Wybierz UF2...",
+    [SC_I18N_FLASH_BTN_PICK_MANIFEST]    = "Wybierz manifest...",
     [SC_I18N_FLASH_BTN_CLEAR_UF2]        = "Wyczyść",
     [SC_I18N_FLASH_BTN_CLEAR_MANIFEST]   = "Wyczyść",
     [SC_I18N_FLASH_BTN_FLASH]            = "Flashuj",
@@ -288,15 +288,15 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_NO_PARAMS]              = "Moduł nie udostępnia żadnych parametrów.",
     [SC_I18N_VALUES_LOADING]                = "Wczytywanie parametrów...",
     [SC_I18N_VALUES_LOAD_FAILED_FMT]        = "Nie udało się wczytać %s: %s",
-    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Zastosuj zmiany",
-    [SC_I18N_VALUES_BTN_COMMIT]             = "Zatwierdź",
+    [SC_I18N_VALUES_BTN_APPLY_STAGED]       = "Użyj",
+    [SC_I18N_VALUES_BTN_COMMIT]             = "Zapisz",
     [SC_I18N_VALUES_BTN_REVERT]             = "Cofnij",
     [SC_I18N_VALUES_AUTH_FAILED_FMT]        = "Uwierzytelnianie nie powiodło się: %s",
     [SC_I18N_VALUES_APPLY_OK_FMT]           = "Zastosowano %u parametr(ów) w buforze staging.",
     [SC_I18N_VALUES_APPLY_FAILED_FMT]       = "Nie udało się zastosować %s: %s",
     [SC_I18N_VALUES_NOTHING_TO_APPLY]       = "Brak zmian do zastosowania.",
-    [SC_I18N_VALUES_COMMIT_OK]              = "Zatwierdzono.",
-    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Zatwierdzenie nie powiodło się: %s",
+    [SC_I18N_VALUES_COMMIT_OK]              = "Zapisano.",
+    [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Zapis nie powiódł się: %s",
     [SC_I18N_VALUES_REVERT_OK]              = "Cofnięto.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Cofnięcie nie powiodło się: %s",
 };

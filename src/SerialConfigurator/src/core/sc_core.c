@@ -2413,7 +2413,7 @@ ScFlashStatus sc_core_flash(
     }
 
     flash_set_error(error_buf, error_size,
-                    "OK: %s flashed, fw=%s, build=%s",
+                    "%s flashed, fw=%s, build=%s",
                     parsed.module_name, parsed.fw_version, parsed.build_id);
     return SC_FLASH_STATUS_OK;
 }

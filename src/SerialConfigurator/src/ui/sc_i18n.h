@@ -86,8 +86,8 @@ typedef enum ScI18nKey {
     SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash - %s" */
     SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact:" */
     SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest (optional):" */
-    SC_I18N_FLASH_BTN_PICK_UF2,          /* "Choose UF2…" */
-    SC_I18N_FLASH_BTN_PICK_MANIFEST,     /* "Choose manifest…" */
+    SC_I18N_FLASH_BTN_PICK_UF2,          /* "Choose UF2..." */
+    SC_I18N_FLASH_BTN_PICK_MANIFEST,     /* "Choose manifest..." */
     SC_I18N_FLASH_BTN_CLEAR_UF2,         /* "Clear" (UF2 picker reset) */
     SC_I18N_FLASH_BTN_CLEAR_MANIFEST,    /* "Clear" (manifest picker reset) */
     SC_I18N_FLASH_BTN_FLASH,             /* "Flash" */

@@ -270,7 +270,7 @@ typedef enum ScSetParamStatus {
  *
  * `COMMIT_FAILED` collapses every cross-field rule violation into one
  * code; the precise reason token (`fan_coolant_hysteresis`,
- * `heater_vs_fan_order`, `persist_failed`, …) is written to the
+ * `heater_vs_fan_order`, `persist_failed`, ...) is written to the
  * caller-supplied @p error buffer as the firmware's verbatim reply.
  * Adding new rule tokens on the firmware side does not break callers
  * that only care about pass/fail.
