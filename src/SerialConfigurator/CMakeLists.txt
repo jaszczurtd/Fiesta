@@ -187,6 +187,10 @@ if(BUILD_TESTING)
         tests/test_sc_phase5.c
     )
 
+    add_executable(serial-configurator-phase8-host-tests
+        tests/test_sc_phase8_host.c
+    )
+
     add_executable(serial-configurator-i18n-tests
         tests/test_sc_i18n.c
     )
@@ -283,6 +287,11 @@ if(BUILD_TESTING)
             serial_configurator_core
     )
 
+    target_link_libraries(serial-configurator-phase8-host-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
     # i18n test embeds src/ui/sc_i18n.c by #include - it is pure C with no
     # GTK or core deps, so the test target stands alone (linkable on
     # hosts that lack libgtk-4-dev).
@@ -371,6 +380,11 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-phase5-tests
         COMMAND serial-configurator-phase5-tests
+    )
+
+    add_test(
+        NAME serial-configurator-phase8-host-tests
+        COMMAND serial-configurator-phase8-host-tests
     )
 
     add_test(

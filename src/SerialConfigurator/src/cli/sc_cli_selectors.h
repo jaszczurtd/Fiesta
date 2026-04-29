@@ -57,6 +57,20 @@ bool sc_cli_parse_reboot_args(int argc,
                               const char **artifact_path);
 
 /**
+ * @brief Parse `--id <param_id> --value <i16>` plus selectors for the
+ *        set-param / set-and-commit subcommands.
+ *
+ * @p value receives the parsed signed integer in the int16_t domain;
+ * out-of-range numerics, missing flags, or extra positional args
+ * cause this to return false (and write a reason to stderr).
+ */
+bool sc_cli_parse_set_param_args(int argc,
+                                 char *argv[],
+                                 const char **param_id,
+                                 int *value,
+                                 CliSelectors *out);
+
+/**
  * @brief Return true when @p status matches every non-NULL selector
  *        field. Module name match is case-insensitive against both
  *        `display_name` and `hello_identity.module_name`; UID is

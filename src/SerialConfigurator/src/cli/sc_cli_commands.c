@@ -280,3 +280,205 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[])
            "from there (Phase 6).\n");
     return 0;
 }
+
+/* ── Phase 8.5 — parameter staging subcommands ────────────────────── */
+
+/* Shared boilerplate: detect modules, resolve target by selectors,
+ * authenticate. On success returns 0 and writes the resolved port path
+ * into @p out_port_path; on failure writes a diagnostic to stderr and
+ * returns the appropriate exit code (1/2/4/5). */
+static int phase8_detect_select_authenticate(
+    const CliSelectors *selectors,
+    ScCore *core,
+    char *out_port_path,
+    size_t out_port_size)
+{
+    char detection_log[CLI_DETECTION_LOG_MAX];
+    if (!run_detection(core, detection_log, sizeof(detection_log))) {
+        fprintf(stderr, "[ERROR] Detection initialization failed.\n");
+        return 2;
+    }
+
+    char selection_error[256];
+    selection_error[0] = '\0';
+    const int idx = sc_cli_select_target_module(core, selectors,
+                                                selection_error,
+                                                sizeof(selection_error));
+    if (idx < 0) {
+        fprintf(stderr, "[ERROR] %s\n", selection_error);
+        return 4;
+    }
+
+    const ScModuleStatus *target = sc_core_module_status(core, (size_t)idx);
+    if (target == NULL || !target->detected) {
+        fprintf(stderr, "[ERROR] Selected module is not detected.\n");
+        return 4;
+    }
+    snprintf(out_port_path, out_port_size, "%s", target->port_path);
+
+    char err[512];
+    err[0] = '\0';
+    const ScAuthStatus auth_st = sc_core_authenticate(&core->transport,
+                                                      out_port_path,
+                                                      err, sizeof(err));
+    if (auth_st != SC_AUTH_OK) {
+        fprintf(stderr, "[ERROR] auth: %s - %s\n",
+                sc_auth_status_name(auth_st), err);
+        return 5;
+    }
+    printf("[OK] authenticated session on %s\n", out_port_path);
+    return 0;
+}
+
+int sc_cli_command_set_param(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    const char *param_id = NULL;
+    int value = 0;
+    if (!sc_cli_parse_set_param_args(argc, argv, &param_id, &value, &selectors)) {
+        return 1;
+    }
+
+    ScCore core;
+    char port_path[SC_PORT_PATH_MAX];
+    const int rc = phase8_detect_select_authenticate(&selectors, &core,
+                                                     port_path, sizeof(port_path));
+    if (rc != 0) {
+        return rc;
+    }
+
+    char err[512];
+    err[0] = '\0';
+    const ScSetParamStatus st = sc_core_set_param(
+        &core.transport, port_path, param_id, (int16_t)value,
+        err, sizeof(err));
+    if (st != SC_SET_PARAM_OK) {
+        fprintf(stderr, "[ERROR] set-param: %s - %s\n",
+                sc_set_param_status_name(st), err);
+        return 6;
+    }
+
+    printf("[OK] %s staged %s=%d on %s. Run `commit-params` to apply.\n",
+           SC_CMD_SET_PARAM, param_id, value, port_path);
+    return 0;
+}
+
+int sc_cli_command_commit_params(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    if (!sc_cli_parse_selectors(argc, argv, 2, &selectors)) {
+        return 1;
+    }
+
+    ScCore core;
+    char port_path[SC_PORT_PATH_MAX];
+    const int rc = phase8_detect_select_authenticate(&selectors, &core,
+                                                     port_path, sizeof(port_path));
+    if (rc != 0) {
+        return rc;
+    }
+
+    char err[512];
+    err[0] = '\0';
+    const ScCommitParamsStatus st = sc_core_commit_params(
+        &core.transport, port_path, err, sizeof(err));
+    if (st != SC_COMMIT_PARAMS_OK) {
+        fprintf(stderr, "[ERROR] commit-params: %s - %s\n",
+                sc_commit_params_status_name(st), err);
+        return 6;
+    }
+
+    printf("[OK] %s on %s. Active mirror updated; blob persisted.\n",
+           SC_CMD_COMMIT_PARAMS, port_path);
+    return 0;
+}
+
+int sc_cli_command_revert_params(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    if (!sc_cli_parse_selectors(argc, argv, 2, &selectors)) {
+        return 1;
+    }
+
+    ScCore core;
+    char port_path[SC_PORT_PATH_MAX];
+    const int rc = phase8_detect_select_authenticate(&selectors, &core,
+                                                     port_path, sizeof(port_path));
+    if (rc != 0) {
+        return rc;
+    }
+
+    char err[512];
+    err[0] = '\0';
+    const ScRevertParamsStatus st = sc_core_revert_params(
+        &core.transport, port_path, err, sizeof(err));
+    if (st != SC_REVERT_PARAMS_OK) {
+        fprintf(stderr, "[ERROR] revert-params: %s - %s\n",
+                sc_revert_params_status_name(st), err);
+        return 6;
+    }
+
+    printf("[OK] %s on %s. Staging mirror reset from active.\n",
+           SC_CMD_REVERT_PARAMS, port_path);
+    return 0;
+}
+
+int sc_cli_command_set_and_commit(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    const char *param_id = NULL;
+    int value = 0;
+    if (!sc_cli_parse_set_param_args(argc, argv, &param_id, &value, &selectors)) {
+        return 1;
+    }
+
+    ScCore core;
+    char port_path[SC_PORT_PATH_MAX];
+    const int rc = phase8_detect_select_authenticate(&selectors, &core,
+                                                     port_path, sizeof(port_path));
+    if (rc != 0) {
+        return rc;
+    }
+
+    /* SET. */
+    char err[512];
+    err[0] = '\0';
+    const ScSetParamStatus set_st = sc_core_set_param(
+        &core.transport, port_path, param_id, (int16_t)value,
+        err, sizeof(err));
+    if (set_st != SC_SET_PARAM_OK) {
+        fprintf(stderr, "[ERROR] set-param: %s - %s\n",
+                sc_set_param_status_name(set_st), err);
+        return 6;
+    }
+
+    /* COMMIT. On failure roll the staging mirror back via REVERT so
+     * the firmware never stays half-mutated. */
+    err[0] = '\0';
+    const ScCommitParamsStatus commit_st = sc_core_commit_params(
+        &core.transport, port_path, err, sizeof(err));
+    if (commit_st != SC_COMMIT_PARAMS_OK) {
+        fprintf(stderr, "[ERROR] commit-params: %s - %s\n",
+                sc_commit_params_status_name(commit_st), err);
+
+        char revert_err[512];
+        revert_err[0] = '\0';
+        const ScRevertParamsStatus rv_st = sc_core_revert_params(
+            &core.transport, port_path, revert_err, sizeof(revert_err));
+        if (rv_st == SC_REVERT_PARAMS_OK) {
+            fprintf(stderr,
+                    "[INFO] auto-reverted staging on %s after commit failure.\n",
+                    port_path);
+        } else {
+            fprintf(stderr,
+                    "[WARN] auto-revert also failed: %s - %s. "
+                    "Staging may be left mutated until next HELLO.\n",
+                    sc_revert_params_status_name(rv_st), revert_err);
+        }
+        return 6;
+    }
+
+    printf("[OK] %s=%d staged + committed on %s.\n",
+           param_id, value, port_path);
+    return 0;
+}

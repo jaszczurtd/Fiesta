@@ -1906,6 +1906,212 @@ ScRebootStatus sc_core_reboot_to_bootloader(
     return SC_REBOOT_ERR_UNEXPECTED_REPLY;
 }
 
+/* ── Phase 8.5: parameter staging host orchestrator ───────────────── */
+
+const char *sc_set_param_status_name(ScSetParamStatus status)
+{
+    switch (status) {
+    case SC_SET_PARAM_OK:                   return "OK";
+    case SC_SET_PARAM_ERR_NULL_ARG:         return "NULL_ARG";
+    case SC_SET_PARAM_ERR_TRANSPORT:        return "TRANSPORT";
+    case SC_SET_PARAM_ERR_NOT_AUTHORIZED:   return "NOT_AUTHORIZED";
+    case SC_SET_PARAM_ERR_INVALID_ID:       return "INVALID_ID";
+    case SC_SET_PARAM_ERR_READ_ONLY:        return "READ_ONLY";
+    case SC_SET_PARAM_ERR_OUT_OF_RANGE:     return "OUT_OF_RANGE";
+    case SC_SET_PARAM_ERR_UNEXPECTED_REPLY: return "UNEXPECTED_REPLY";
+    }
+    return "UNKNOWN";
+}
+
+const char *sc_commit_params_status_name(ScCommitParamsStatus status)
+{
+    switch (status) {
+    case SC_COMMIT_PARAMS_OK:                   return "OK";
+    case SC_COMMIT_PARAMS_ERR_NULL_ARG:         return "NULL_ARG";
+    case SC_COMMIT_PARAMS_ERR_TRANSPORT:        return "TRANSPORT";
+    case SC_COMMIT_PARAMS_ERR_NOT_AUTHORIZED:   return "NOT_AUTHORIZED";
+    case SC_COMMIT_PARAMS_ERR_COMMIT_FAILED:    return "COMMIT_FAILED";
+    case SC_COMMIT_PARAMS_ERR_UNEXPECTED_REPLY: return "UNEXPECTED_REPLY";
+    }
+    return "UNKNOWN";
+}
+
+const char *sc_revert_params_status_name(ScRevertParamsStatus status)
+{
+    switch (status) {
+    case SC_REVERT_PARAMS_OK:                   return "OK";
+    case SC_REVERT_PARAMS_ERR_NULL_ARG:         return "NULL_ARG";
+    case SC_REVERT_PARAMS_ERR_TRANSPORT:        return "TRANSPORT";
+    case SC_REVERT_PARAMS_ERR_NOT_AUTHORIZED:   return "NOT_AUTHORIZED";
+    case SC_REVERT_PARAMS_ERR_UNEXPECTED_REPLY: return "UNEXPECTED_REPLY";
+    }
+    return "UNKNOWN";
+}
+
+ScSetParamStatus sc_core_set_param(
+    const ScTransport *transport,
+    const char *device_path,
+    const char *param_id,
+    int16_t value,
+    char *error,
+    size_t error_size)
+{
+    if (transport == NULL || transport->ops == NULL ||
+        transport->ops->send_sc_command == NULL ||
+        device_path == NULL || param_id == NULL) {
+        set_phase5_error(error, error_size, "null argument");
+        return SC_SET_PARAM_ERR_NULL_ARG;
+    }
+
+    char cmd[SC_HELLO_RESPONSE_MAX];
+    const int n = snprintf(cmd, sizeof(cmd),
+                           SC_CMD_SET_PARAM " %s %d",
+                           param_id, (int)value);
+    if (n < 0 || (size_t)n >= sizeof(cmd)) {
+        set_phase5_error(error, error_size,
+                         SC_CMD_SET_PARAM " command too long");
+        return SC_SET_PARAM_ERR_NULL_ARG;
+    }
+
+    char tx_error[256];
+    tx_error[0] = '\0';
+    char reply[SC_HELLO_RESPONSE_MAX];
+    if (!transport->ops->send_sc_command(transport->context, device_path,
+                                         cmd, reply, sizeof(reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         SC_CMD_SET_PARAM " transport failed: %s", tx_error);
+        return SC_SET_PARAM_ERR_TRANSPORT;
+    }
+
+    /* Happy path: "SC_OK PARAM_SET id=<id> staged=<int> active=<int>". */
+    static const char k_ok_prefix[] =
+        SC_STATUS_OK " " SC_REPLY_TAG_PARAM_SET " ";
+    if (strncmp(reply, k_ok_prefix, sizeof(k_ok_prefix) - 1u) == 0) {
+        return SC_SET_PARAM_OK;
+    }
+
+    if (strncmp(reply, SC_STATUS_NOT_AUTHORIZED,
+                sizeof(SC_STATUS_NOT_AUTHORIZED) - 1u) == 0) {
+        set_phase5_error(error, error_size, "firmware: %s", reply);
+        return SC_SET_PARAM_ERR_NOT_AUTHORIZED;
+    }
+    if (strncmp(reply, SC_STATUS_INVALID_PARAM_ID,
+                sizeof(SC_STATUS_INVALID_PARAM_ID) - 1u) == 0) {
+        set_phase5_error(error, error_size, "firmware: %s", reply);
+        return SC_SET_PARAM_ERR_INVALID_ID;
+    }
+
+    /* SC_BAD_REQUEST splits into read_only / out_of_range / other. */
+    static const char k_bad_prefix[] = SC_STATUS_BAD_REQUEST " ";
+    if (strncmp(reply, k_bad_prefix, sizeof(k_bad_prefix) - 1u) == 0) {
+        const char *tail = reply + (sizeof(k_bad_prefix) - 1u);
+        if (strncmp(tail, "read_only", 9u) == 0 &&
+            (tail[9] == ' ' || tail[9] == '\0')) {
+            set_phase5_error(error, error_size, "firmware: %s", reply);
+            return SC_SET_PARAM_ERR_READ_ONLY;
+        }
+        if (strncmp(tail, "out_of_range", 12u) == 0 &&
+            (tail[12] == ' ' || tail[12] == '\0')) {
+            set_phase5_error(error, error_size, "firmware: %s", reply);
+            return SC_SET_PARAM_ERR_OUT_OF_RANGE;
+        }
+        /* Other SC_BAD_REQUEST variants (e.g. param_id_too_long,
+         * value_not_int16) are treated as UNEXPECTED at this layer
+         * because the caller already pre-validates argv before
+         * sending. */
+    }
+
+    set_phase5_error(error, error_size, "unexpected reply: %s", reply);
+    return SC_SET_PARAM_ERR_UNEXPECTED_REPLY;
+}
+
+ScCommitParamsStatus sc_core_commit_params(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size)
+{
+    if (transport == NULL || transport->ops == NULL ||
+        transport->ops->send_sc_command == NULL || device_path == NULL) {
+        set_phase5_error(error, error_size, "null argument");
+        return SC_COMMIT_PARAMS_ERR_NULL_ARG;
+    }
+
+    char tx_error[256];
+    tx_error[0] = '\0';
+    char reply[SC_HELLO_RESPONSE_MAX];
+    if (!transport->ops->send_sc_command(transport->context, device_path,
+                                         SC_CMD_COMMIT_PARAMS,
+                                         reply, sizeof(reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         SC_CMD_COMMIT_PARAMS " transport failed: %s",
+                         tx_error);
+        return SC_COMMIT_PARAMS_ERR_TRANSPORT;
+    }
+
+    /* Happy path: "SC_OK PARAMS_COMMITTED count=<n>". */
+    static const char k_ok_prefix[] =
+        SC_STATUS_OK " " SC_REPLY_TAG_PARAMS_COMMITTED " ";
+    if (strncmp(reply, k_ok_prefix, sizeof(k_ok_prefix) - 1u) == 0) {
+        return SC_COMMIT_PARAMS_OK;
+    }
+    if (strncmp(reply, SC_STATUS_NOT_AUTHORIZED,
+                sizeof(SC_STATUS_NOT_AUTHORIZED) - 1u) == 0) {
+        set_phase5_error(error, error_size, "firmware: %s", reply);
+        return SC_COMMIT_PARAMS_ERR_NOT_AUTHORIZED;
+    }
+    if (strncmp(reply, SC_STATUS_COMMIT_FAILED,
+                sizeof(SC_STATUS_COMMIT_FAILED) - 1u) == 0) {
+        /* Caller reads the precise reason from @p error - we keep the
+         * firmware's verbatim "SC_COMMIT_FAILED reason=<token>" line. */
+        set_phase5_error(error, error_size, "firmware: %s", reply);
+        return SC_COMMIT_PARAMS_ERR_COMMIT_FAILED;
+    }
+
+    set_phase5_error(error, error_size, "unexpected reply: %s", reply);
+    return SC_COMMIT_PARAMS_ERR_UNEXPECTED_REPLY;
+}
+
+ScRevertParamsStatus sc_core_revert_params(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size)
+{
+    if (transport == NULL || transport->ops == NULL ||
+        transport->ops->send_sc_command == NULL || device_path == NULL) {
+        set_phase5_error(error, error_size, "null argument");
+        return SC_REVERT_PARAMS_ERR_NULL_ARG;
+    }
+
+    char tx_error[256];
+    tx_error[0] = '\0';
+    char reply[SC_HELLO_RESPONSE_MAX];
+    if (!transport->ops->send_sc_command(transport->context, device_path,
+                                         SC_CMD_REVERT_PARAMS,
+                                         reply, sizeof(reply),
+                                         tx_error, sizeof(tx_error))) {
+        set_phase5_error(error, error_size,
+                         SC_CMD_REVERT_PARAMS " transport failed: %s",
+                         tx_error);
+        return SC_REVERT_PARAMS_ERR_TRANSPORT;
+    }
+
+    if (strcmp(reply, SC_REPLY_PARAMS_REVERTED) == 0) {
+        return SC_REVERT_PARAMS_OK;
+    }
+    if (strncmp(reply, SC_STATUS_NOT_AUTHORIZED,
+                sizeof(SC_STATUS_NOT_AUTHORIZED) - 1u) == 0) {
+        set_phase5_error(error, error_size, "firmware: %s", reply);
+        return SC_REVERT_PARAMS_ERR_NOT_AUTHORIZED;
+    }
+
+    set_phase5_error(error, error_size, "unexpected reply: %s", reply);
+    return SC_REVERT_PARAMS_ERR_UNEXPECTED_REPLY;
+}
+
 /* ── Phase 6.5: end-to-end flashing orchestrator ──────────────────── */
 
 const char *sc_flash_status_name(ScFlashStatus status)

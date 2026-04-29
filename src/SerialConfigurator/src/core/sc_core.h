@@ -238,6 +238,101 @@ ScRebootStatus sc_core_reboot_to_bootloader(
     char *error,
     size_t error_size);
 
+/* ── Phase 8.5: parameter staging host orchestrator ───────────────── */
+
+/**
+ * @brief Stable status enum for @ref sc_core_set_param.
+ *
+ * `INVALID_ID`, `READ_ONLY`, `OUT_OF_RANGE` and `NOT_AUTHORIZED` mirror
+ * the firmware's reply taxonomy from sc_protocol.h
+ * (SC_REPLY_BAD_REQUEST_READ_ONLY_FMT / _OUT_OF_RANGE_FMT,
+ *  SC_REPLY_INVALID_PARAM_ID_FMT, SC_STATUS_NOT_AUTHORIZED).
+ */
+typedef enum ScSetParamStatus {
+    SC_SET_PARAM_OK = 0,
+    SC_SET_PARAM_ERR_NULL_ARG,
+    SC_SET_PARAM_ERR_TRANSPORT,
+    SC_SET_PARAM_ERR_NOT_AUTHORIZED,
+    SC_SET_PARAM_ERR_INVALID_ID,
+    SC_SET_PARAM_ERR_READ_ONLY,
+    SC_SET_PARAM_ERR_OUT_OF_RANGE,
+    SC_SET_PARAM_ERR_UNEXPECTED_REPLY
+} ScSetParamStatus;
+
+/**
+ * @brief Stable status enum for @ref sc_core_commit_params.
+ *
+ * `COMMIT_FAILED` collapses every cross-field rule violation into one
+ * code; the precise reason token (`fan_coolant_hysteresis`,
+ * `heater_vs_fan_order`, `persist_failed`, …) is written to the
+ * caller-supplied @p error buffer as the firmware's verbatim reply.
+ * Adding new rule tokens on the firmware side does not break callers
+ * that only care about pass/fail.
+ */
+typedef enum ScCommitParamsStatus {
+    SC_COMMIT_PARAMS_OK = 0,
+    SC_COMMIT_PARAMS_ERR_NULL_ARG,
+    SC_COMMIT_PARAMS_ERR_TRANSPORT,
+    SC_COMMIT_PARAMS_ERR_NOT_AUTHORIZED,
+    SC_COMMIT_PARAMS_ERR_COMMIT_FAILED,
+    SC_COMMIT_PARAMS_ERR_UNEXPECTED_REPLY
+} ScCommitParamsStatus;
+
+typedef enum ScRevertParamsStatus {
+    SC_REVERT_PARAMS_OK = 0,
+    SC_REVERT_PARAMS_ERR_NULL_ARG,
+    SC_REVERT_PARAMS_ERR_TRANSPORT,
+    SC_REVERT_PARAMS_ERR_NOT_AUTHORIZED,
+    SC_REVERT_PARAMS_ERR_UNEXPECTED_REPLY
+} ScRevertParamsStatus;
+
+const char *sc_set_param_status_name(ScSetParamStatus status);
+const char *sc_commit_params_status_name(ScCommitParamsStatus status);
+const char *sc_revert_params_status_name(ScRevertParamsStatus status);
+
+/**
+ * @brief Send `SC_SET_PARAM <param_id> <value>` and parse the reply.
+ *
+ * Caller is responsible for the auth precondition: run
+ * @ref sc_core_authenticate first; the transport-level fd cache and
+ * the firmware-side authenticated flag persist across calls until the
+ * next HELLO. SET_PARAM mutates the firmware's staging mirror only -
+ * the active mirror remains untouched until @ref sc_core_commit_params.
+ */
+ScSetParamStatus sc_core_set_param(
+    const ScTransport *transport,
+    const char *device_path,
+    const char *param_id,
+    int16_t value,
+    char *error,
+    size_t error_size);
+
+/**
+ * @brief Send `SC_COMMIT_PARAMS` and parse the reply.
+ *
+ * On `COMMIT_FAILED` the firmware reply (e.g. "SC_COMMIT_FAILED
+ * reason=fan_coolant_hysteresis") is preserved verbatim in @p error
+ * so the caller can render the precise rule that fired.
+ */
+ScCommitParamsStatus sc_core_commit_params(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size);
+
+/**
+ * @brief Send `SC_REVERT_PARAMS` and parse the reply.
+ *
+ * Always succeeds firmware-side once authenticated - revert is a
+ * pure data move (active -> staging). Only fails for transport / auth
+ * problems.
+ */
+ScRevertParamsStatus sc_core_revert_params(
+    const ScTransport *transport,
+    const char *device_path,
+    char *error,
+    size_t error_size);
+
 /* ── Phase 6.5: end-to-end flashing orchestrator ──────────────────── */
 
 /**

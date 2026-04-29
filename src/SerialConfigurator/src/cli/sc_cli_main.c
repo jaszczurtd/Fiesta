@@ -32,6 +32,16 @@ static void print_usage(const char *program_name)
     fprintf(stderr, "  %s reboot-bootloader [--module <name>] [--uid <hex>] [--port <path>]\n",
             program_name);
     fprintf(stderr, "      [--manifest <path>] [--artifact <path>]\n");
+    fprintf(stderr, "  %s set-param --id <param_id> --value <i16> "
+                    "[--module <name>] [--uid <hex>] [--port <path>]\n",
+            program_name);
+    fprintf(stderr, "  %s commit-params [--module <name>] [--uid <hex>] [--port <path>]\n",
+            program_name);
+    fprintf(stderr, "  %s revert-params [--module <name>] [--uid <hex>] [--port <path>]\n",
+            program_name);
+    fprintf(stderr, "  %s set-and-commit --id <param_id> --value <i16> "
+                    "[--module <name>] [--uid <hex>] [--port <path>]\n",
+            program_name);
 }
 
 int main(int argc, char *argv[])
@@ -69,6 +79,22 @@ int main(int argc, char *argv[])
             0,
             &selectors
         );
+    }
+
+    if (strcmp(command, "set-param") == 0) {
+        return sc_cli_command_set_param(argc, argv);
+    }
+
+    if (strcmp(command, "commit-params") == 0) {
+        return sc_cli_command_commit_params(argc, argv);
+    }
+
+    if (strcmp(command, "revert-params") == 0) {
+        return sc_cli_command_revert_params(argc, argv);
+    }
+
+    if (strcmp(command, "set-and-commit") == 0) {
+        return sc_cli_command_set_and_commit(argc, argv);
     }
 
     if (strcmp(command, "get-param") == 0) {

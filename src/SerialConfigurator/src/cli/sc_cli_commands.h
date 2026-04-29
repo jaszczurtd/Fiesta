@@ -44,6 +44,17 @@ int sc_cli_command_meta_values_or_catalog(const char *command,
 
 int sc_cli_command_reboot_bootloader(int argc, char *argv[]);
 
+/* Phase 8.5 — auth-gated parameter staging subcommands. Each does its
+ * own detection + selection + sc_core_authenticate + the operation.
+ * `set-and-commit` chains SET + COMMIT under one auth and on
+ * COMMIT failure issues an automatic REVERT so staging is never left
+ * in a stale state. Exit codes follow the convention above:
+ *   5 - auth or transport, 6 - the sc_core operation returned non-OK. */
+int sc_cli_command_set_param(int argc, char *argv[]);
+int sc_cli_command_commit_params(int argc, char *argv[]);
+int sc_cli_command_revert_params(int argc, char *argv[]);
+int sc_cli_command_set_and_commit(int argc, char *argv[]);
+
 #ifdef __cplusplus
 }
 #endif
