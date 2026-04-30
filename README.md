@@ -44,13 +44,9 @@ Required external custom libraries (shared across all modules):
 
 - `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
 
-In-tree shared definitions (versioned with this repository):
-
-- `src/common/canDefinitions/canDefinitions.h` (shared CAN IDs/signals)
-
 Required toolchain:
 
-- `git`, `build-essential`, `cmake`, `python3`, `curl`
+- `git`, `build-essential`, `cmake`, `python3`, `curl`, `gtk-4`, `ca-certificates`
 - `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
 - `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
 
@@ -60,8 +56,8 @@ Expected external libraries layout:
 <parent-of-repo-root>/libraries/JaszczurHAL
 ```
 
-Example: if this repo is cloned at `/home/you/projects/Fiesta`, libraries go
-to `/home/you/projects/libraries/`.
+Example: if this repo is cloned at `/home/you/projects/Fiesta`, library goes
+into `/home/you/projects/libraries/`.
 
 ## Build and development
 
@@ -77,14 +73,15 @@ Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppchec
 
 `src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
 
-1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`),
+1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`, `gtk-4`),
 2. verifies Python 3 is available,
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
-8. compiles firmware for every Fiesta module and reports each `.uf2` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN.
+8. compiles firmware for every Fiesta module and reports each `.uf2`and `manifests` artifacts: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN,
+9. compiles Fiesta USB Configurator tool (SerialConfigurator). 
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
@@ -103,7 +100,7 @@ Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `S
 
 `bootstrap.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
-`bootstrap.sh` exercises all four Fiesta modules end-to-end (tests for
+`bootstrap.sh` exercises all four Fiesta modules anf USB Configurator end-to-end (tests for
 modules that have them, firmware for all). For iterative work on a single
 module, skip bootstrap and use the per-module recipes below.
 
@@ -256,6 +253,8 @@ Per-module build, test, and CI history is tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Credits
+
+Author: Marcin "Jaszczur" Kielesiński
 
 Libraries used in `src/Fiesta_clock`:
 
