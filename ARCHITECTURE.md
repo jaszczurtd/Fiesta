@@ -71,7 +71,7 @@ High-level module map (active firmware + desktop companion):
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
-│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed)   │
+│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed)    │
 │            │  Additional encrypted layer later for flashing/settings   │
 │            │  changes                                                  │
 │            │                                                           │
@@ -80,7 +80,7 @@ High-level module map (active firmware + desktop companion):
 │     │        Fiesta Serial Configurator                   │            │
 │     │        (Linux primary, Windows 10/11 secondary,     │            │
 │     │         GTK-4 GUI + platform-neutral core,          │            │
-│     │         off-vehicle)                                 │            │
+│     │         off-vehicle)                                │            │
 │     │                                                     │            │
 │     └─────────────────────────────────────────────────────┘            │
 │                                                                        │
@@ -438,8 +438,7 @@ Status bits (`ADJ_STATUS_*`):
 
 **Startup timing.** After power-on the oscillator needs to warm up, converge,
 and be verified before the baseline is considered valid. The ECU waits up
-to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms` for the `BASELINE_PENDING`
-status bit to clear before trusting the frequency reading.
+to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms`(max value, usually everything is ready after ~250ms) for the `BASELINE_PENDING` status bit to clear before trusting the frequency reading.
 
 ### 5.5 Fiesta Serial Configurator - desktop companion
 
@@ -560,7 +559,7 @@ to two slaves:
 | PCF8574 | `0x38` | 8-bit relay expander (glow plugs, fan, heater HI/LO, glow-plug lamp, heated window L/P, VP37 enable) |
 
 OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (100 Khz)
-- it is not electrically shared with the ECU's bus.
+- obviously it is not electrically shared with the ECU's bus.
 
 ### 6.3 Other interfaces
 
@@ -577,56 +576,315 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
 Every RP2040-based firmware module in the **primary configurator flow**
 (ECU, Clocks, OilAndSpeed) exposes a **configurator session** over its
 native USB CDC port. This is the transport the Fiesta Serial Configurator
-(§5.5) uses off-vehicle. Implementation is shared through JaszczurHAL's
-`hal_serial_session_*` helper - each firmware module only owns a thin
-wrapper (`configSessionInit/Tick/Active/Id`) and static identity strings.
-Adjustometer remains outside the primary serial-configurator/flashing flow.
+(§5.5; UI title is "Fiesta USB Configurator") uses off-vehicle.
+Implementation is shared through JaszczurHAL's `hal_serial_session_*`
+helper - each firmware module only owns a thin wrapper
+(`configSessionInit/Tick/Active/Id`) and static identity strings.
+Adjustometer remains outside the primary serial-configurator/flashing
+flow and is structurally skipped at host candidate enumeration time.
 
 Channel responsibilities:
 
 - carry the module bootstrap handshake (identity + firmware metadata +
   device UID) on first contact, framed with per-request sequence numbers
   and integrity check,
-- carry read-only `SC_*` queries used today by the desktop companion
-  (`SC_GET_META`, `SC_GET_VALUES`, `SC_GET_PARAM_LIST`, `SC_GET_PARAM`),
-- coexist with the existing debug log output on the same CDC stream,
-- later carry authenticated configuration and flashing traffic.
+- carry the read-only and write-staging `SC_*` queries used by the
+  desktop companion (`SC_GET_META`, `SC_GET_PARAM_LIST`,
+  `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_SET_PARAM`, `SC_COMMIT_PARAMS`,
+  `SC_REVERT_PARAMS`),
+- carry the auth-gated bootloader entry (`SC_AUTH_BEGIN` /
+  `SC_AUTH_PROVE` / `SC_REBOOT_BOOTLOADER`),
+- close cleanly on disconnect via `SC_BYE`,
+- coexist with the existing debug log output on the same CDC stream
+  (mutex-serialised, see §6.4.5).
 
-Host-side identification path (two independent layers that must agree):
+The channel evolves through phases tracked in §5.5. Phase 1–6 are
+landed; Phase 7 (lockout, ed25519 manifest signatures, key rotation,
+audit logs) is next on the list.
 
-- USB descriptor layer: `iSerialNumber` carries the RP2040 flash unique id
-  (populated automatically by the arduino-pico core), `iProduct` carries
-  `Fiesta <ModuleName>` (set at build time via `arduino-cli --build-property
-  build.usb_product=...`). On Linux this surfaces as
-  `/dev/serial/by-id/usb-<mfr>_<product>_<UID>-if00`; on Windows,
-  `usbser.sys` sticky-binds the COM# to that iSerialNumber.
-- Application layer: the module reports the same UID inside the handshake
-  response, so the host can cross-check that the opened port actually
-  belongs to the physical board it expects.
+#### 6.4.1 Wire framing
 
-Evolution path (rollout details in §5.5):
+Every line on the CDC stream that the configurator cares about is wrapped
+in a single canonical envelope:
 
-- Bootstrap (HELLO) and the read-only `SC_*` queries are unauthenticated
-  by design - they are discovery / inspection only and do not mutate
-  module state.
-- Auth-gated commands (currently `SC_REBOOT_BOOTLOADER`) require a prior
-  `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` round trip that consumes a one-shot
-  challenge (Phase 3). A new HELLO mints a fresh session id and clears
-  the authenticated state.
-- The full flash flow (Phase 6) is implemented end-to-end behind a single
-  `sc_core_flash` orchestrator: UF2 format check + optional manifest
-  module/sha256 verify + auth + reboot + BOOTSEL drive watcher + chunked
-  UF2 copy with progress + re-enumeration waiter + post-flash HELLO with
-  optional `fw_version` match.
-- CLI mode is a first-class shell over the same core library; the GUI
-  invokes the same `sc_core_flash` from a `GThread` worker and marshals
-  progress / completion through `g_idle_add`.
-- Both CLI and GUI flashing paths run the same fail-closed preflight
-  gates (manifest module match, artifact sha256, unambiguous target
-  selection). Adjustometer remains intentionally outside the SC flow.
+```
+$SC,<seq>,<inner>*<crc8>\n
+```
 
-Runtime parameter writes (`SC_SET_PARAM`-style commands) and signed
-manifest verification (ed25519 backend) remain on the Phase 7 list.
+- `$SC,` - hard prefix. Lines that do not start with this sentinel are
+  silently discarded by the firmware session helper, and the host
+  parser drops them as `non_sc` (counted in the timeout-diag string).
+  This is intentional: legacy `deb()`/`derr()` debug lines coexist on
+  the same CDC stream and must never be mistaken for protocol traffic.
+- `<seq>` - per-request 16-bit sequence number assigned by the host.
+  The firmware echoes the same seq on its reply so the host can
+  correlate request/response pairs and reject stale frames from a
+  previous request.
+- `<inner>` - the actual SC payload (e.g. `SC_GET_META`, `SC_OK META
+  module=ECU proto=1 ...`). Must not contain `*`, `\r` or `\n`.
+- `*<crc8>` - CRC-8 over the bytes between `$` and `*`. CRC failures
+  are silently dropped on the firmware side; on the host they are
+  counted as `bad_sc` and trigger the fail-fast path
+  (`SC_TRANSPORT_PRIMARY_TIMEOUT_MS` is capped at +60 ms grace from
+  the first corrupt frame).
+
+The codec lives in `hal_serial_frame.h` on the firmware side
+(JaszczurHAL repo) and
+[`sc_frame.{c,h}`](src/SerialConfigurator/src/core/sc_frame.h) on the
+host. Two structural commands - `HELLO` and `SC_BYE` - are
+recognised verbatim by every session implementation; everything else
+goes through the project-supplied vocabulary table
+(`fiesta_default_vocabulary` in
+[`sc_session_vocabulary.h`](src/common/scDefinitions/sc_session_vocabulary.h)).
+
+**Frame repair.** If for whatever reason there is a corruption data detected during active session, the host transport is trying to recover the corrupted frame, then validates CRC + seq normally. The event is counted as `repaired` in the timeout-diag string and logged
+with the recovered seq.
+
+#### 6.4.2 USB device identity
+
+Every Fiesta firmware module enumerates as a **distinct USB device**
+under `lsusb` and `/dev/serial/by-id/`, identified by the per-module
+product string and the per-board flash unique id. This is what lets
+the host pick the right module on a workbench with multiple Picos
+attached:
+
+```
+$ lsusb
+... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta ECU
+... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta Clocks
+... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta OilAndSpeed
+
+$ ls /dev/serial/by-id/
+usb-Jaszczur_Fiesta_ECU_DE62A875579C612A-if00
+usb-Jaszczur_Fiesta_Clocks_E6625887D3475937-if00
+usb-Jaszczur_Fiesta_OilAndSpeed_E661A4D1234567AB-if00
+```
+
+The two layers that produce that identity:
+
+| Layer | Source | Wired through |
+|---|---|---|
+| `iManufacturer` = `Jaszczur` | compile-time | `arduino-cli --build-property build.usb_manufacturer=Jaszczur` |
+| `iProduct` = `Fiesta <Module>` | compile-time | `arduino-cli --build-property build.usb_product='Fiesta_<Module>'` |
+| `iSerialNumber` = 16-hex-char flash UID | runtime, populated by the arduino-pico core from `pico_get_unique_board_id()` | nothing per-module - lives in the arduino-pico USB CDC stack |
+
+The build-property values come from the shared
+[`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
+helpers `fiesta_module_token_for` and
+`fiesta_module_usb_by_id_tag_for`, so a module name like `OilAndSpeed`
+maps to `Fiesta_OilAndSpeed` in the descriptor (no spaces - basename
+also has to be a valid filename for the manifest sidecar).
+
+The same flash UID is then echoed back inside the SC `HELLO` reply
+(`uid=<hex>`), giving the host **two independent identification paths
+that must agree**:
+
+- the kernel-resolved by-id symlink path (set when the device
+  enumerates),
+- the application-level UID inside the framed `OK HELLO ...` line.
+
+A mismatch between them is treated as a misconfigured / spoofed device
+and refused. On Windows, `usbser.sys` sticky-binds the COM# to
+`iSerialNumber`, so the same matching logic works there once the
+Windows portability layer lands.
+
+#### 6.4.3 Build pipeline (firmware -> UF2 + manifest)
+
+The path from `*.cpp` source to a flashable artefact is shared across
+every module. Module-local scripts in `src/<Module>/scripts/` are thin
+wrappers over the shared implementations in
+[`src/common/scripts/`](src/common/scripts/):
+
+- [`fiesta-arduino-task.sh`](src/common/scripts/fiesta-arduino-task.sh)
+  - end-to-end build / upload entry point used by the VS Code task
+  integration. Takes `MODE=build|upload|debug`.
+- [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
+  - shared library of bash helpers: `fiesta_run_compile`,
+  `fiesta_find_uf2_artifact`, `fiesta_generate_manifest`,
+  `fiesta_verify_manifest`, `fiesta_resolve_upload_port`, etc.
+- [`fiesta-upload-uf2.sh`](src/common/scripts/fiesta-upload-uf2.sh) -
+  manual fallback that copies the UF2 to a BOOTSEL-mounted Pico
+  without going through arduino-cli. Useful when the device is
+  already in BOOTSEL.
+
+**Manifest auto-generation.** Every successful firmware compile
+produces an artefact pair:
+
+```
+<module>.uf2
+<module>.manifest.json   # generated next to the UF2 by fiesta_prepare_manifest_for_uf2
+```
+
+The manifest JSON carries `module_name`, `fw_version`, `build_id`,
+`sha256` (over the UF2 byte-for-byte), and `uf2_file` (basename of
+the sidecar UF2). It is generated AND verified inline at build time -
+a sha256 mismatch fails the build closed. The host's manifest parser
+([`sc_manifest.{c,h}`](src/SerialConfigurator/src/core/sc_manifest.h))
+hard-rejects on any missing required field, on `uf2_file` containing
+a path separator or `.`/`..`, or on a sha256 that does not match the
+artifact byte-for-byte.
+
+This is what lets the GUI accept "manifest only" as the operator-
+facing artefact: picking a manifest fully determines which UF2 is
+about to be flashed, and the host re-runs sha256 verification at the
+last possible moment before reboot.
+
+#### 6.4.4 Upload pipeline & port auto-detection
+
+`fiesta-arduino-task.sh MODE=upload` runs four steps:
+
+1. **Resolve the target port** via
+   `fiesta_resolve_upload_port "<project_dir>" "<settings_uploadPort>"`.
+2. Compile the module fresh into `<project_dir>/.build/`.
+3. Generate + verify the manifest sidecar against the produced UF2.
+4. Invoke `arduino-cli upload --input-file <uf2> --port <resolved_port>`.
+
+Step 1 is the safety-critical one: it makes "flash the wrong module"
+structurally impossible, even with several Picos plugged in.
+[`fiesta_resolve_upload_port`](src/common/scripts/fiesta-arduino-common.sh)
+implements a four-tier policy. The order is "narrowest match first";
+each tier returns one selected port plus a string label encoding the
+reason.
+
+| Tier | Predicate | Outcome |
+|---|---|---|
+| 1 | exactly one `/dev/serial/by-id/usb-*Fiesta_<Module>_*` symlink visible | accept that port (`auto:<Module>`) |
+| 2 | multiple `Fiesta_<Module>_*` symlinks AND `arduino.uploadPort` from `.vscode/settings.json` matches one of them | accept the matching one (`settings-among-multiple:<Module>`); otherwise refuse and dump the visible Fiesta map for the operator |
+| 3 | no `Fiesta_<Module>` visible, but a "fresh Pico" is visible (heuristic: `usb-*Raspberry_Pi_Pico*` / `*RP2040*` / `*RP2350*` / `*MicroPython_Board*`, NOT `*Fiesta_*`, NOT `*Debug_Probe*` / `*Picoprobe*` / `*CMSIS-DAP*`) | accept that port (`fresh:auto:<Module>`); same multi-match refusal as tier 2 |
+| 4 | no `Fiesta_<Module>` visible, no fresh Pico, but a `settings.uploadPort` exists and is a real device AND no OTHER `Fiesta_*` symlinks exist | accept that port as a labelled fallback (`settings-fallback:<Module>`) |
+| - | none of the above | hard refuse and dump the visible Fiesta map |
+
+**Cross-module flash refusal.** Tier 4 deliberately refuses to fall
+back to the operator's saved `arduino.uploadPort` if any OTHER
+Fiesta module's by-id symlink is visible. Rationale: the saved
+`uploadPort` value is module-specific, so seeing a foreign Fiesta
+symlink is strong evidence the operator's bench moved between
+sessions and the saved value is stale. Better to refuse and show a
+visible-modules map than to risk pushing ECU firmware onto a Clocks
+module.
+
+The fresh-Pico heuristic in tier 3 covers the "module is brand new,
+has never run Fiesta firmware, so does not yet identify itself as
+`Fiesta_<Module>`" bring-up case. Debug probes are explicitly
+excluded so that a connected picoprobe never gets mistaken for a
+target.
+
+The persistent serial monitor (`scripts/serial-persistent.py`) is
+launched in the background pinned to the resolved port via
+`fiesta_start_persistent_monitor "<project_dir>" "<port>"`, so
+operator log output continues uninterrupted across the upload cycle
+once the device re-enumerates.
+
+#### 6.4.5 Session lifecycle and TX serialisation
+
+The on-wire session has three structural states:
+
+- **Inactive.** No `HELLO` has been seen. The firmware accepts only
+  `HELLO` and `SC_BYE`; everything else falls through to the unknown-
+  line handler. Auth-gated commands fail with
+  `SC_NOT_READY HELLO_REQUIRED`.
+- **Active, unauthenticated.** Set by a successful `HELLO`. Read-only
+  `SC_GET_*` and parameter staging traffic flow. The firmware also
+  starts muting its async debug logs while a session is active (see
+  below).
+- **Active, authenticated.** Set after `SC_AUTH_PROVE` matches the
+  challenge issued by `SC_AUTH_BEGIN`. Unlocks `SC_REBOOT_BOOTLOADER`
+  and (Phase 7) future config-write paths.
+
+**Graceful disconnect (R1.7).** When the GUI closes the session, it
+sends `SC_BYE` to every detected module; the firmware replies
+`SC_OK BYE`, drops `active`, and clears any pending crypto auth
+state. BYE lives outside `HAL_ENABLE_CRYPTO` so any session can be
+closed cleanly even on builds without the AUTH path. Pre-R1.7
+firmware that does not recognise `SC_BYE` returns `ERR UNKNOWN`,
+which the host downgrades to a WARN line in the disconnect log
+rather than treating as an error.
+
+**Debug log mute.** Each module's `configSessionTick()` calls
+`hal_debug_set_muted(hal_serial_session_is_active(&s_session))`
+every loop, so async `hal_deb`/`hal_derr` from the same firmware
+core stop emitting while a session is active. The mute is released
+automatically once `SC_BYE` / timeout / disconnect flips the session
+back to inactive - no polling required on the host side.
+
+**TX serialisation (R1.8).** On dual-core RP2040, even with the mute
+in place, two cores can still race the underlying USB CDC TX path:
+core 1 may invoke a different log helper (or a direct
+`hal_serial_println`) while core 0 is mid-frame. JaszczurHAL closes
+this race in two layers, both inside the `hal_serial_print/println`
+boundary so every emitter (debug helpers, session helper, direct
+callers) goes through the same gate:
+
+1. A global `s_tx_mutex` taken before the underlying
+   `Serial.print/println` call. This stops two emitters from
+   interleaving at the API level.
+2. On Arduino backends, a `Serial.flush()` *inside* the mutex window
+   after every print. RP2040 + TinyUSB CDC `Serial.println(s)`
+   returns as soon as the bytes are copied into the CDC ring buffer,
+   not when they have left for the host - without the flush, the
+   next emitter took the mutex and started writing fresh bytes into
+   a FIFO that still held tail bytes of the previous frame, and the
+   TinyUSB ring-pointer race in that overlap produced single-byte
+   drops mid-frame (`buid`/`defaut`/`efault` patterns observed in
+   field logs). Flushing inside the mutex makes "exactly one frame
+   in flight" a structural invariant.
+
+STM32G474 / mock backends use plain `printf` and skip the flush
+(no CDC ring buffer hazard). All three backends share the mutex.
+
+#### 6.4.6 Reliability, diagnostics, and ambient noise
+
+The host transport is hardened against three classes of disturbance
+that show up on real benches:
+
+- **CDC byte drops.** Mitigated structurally on the firmware side
+  (§6.4.5) and absorbed reactively on the host: the frame-repair
+  path recovers `SC,...` -> `$SC,...`, and a 60 ms fail-fast
+  deadline on the FIRST corrupt `$SC,<seq>,...` frame stops the
+  host from waiting the full
+  `SC_TRANSPORT_PRIMARY_TIMEOUT_MS = 400 ms` on a frame that
+  firmware will never retransmit on its own (firmware does not
+  retry; the only recovery is reopen + retry on the host).
+  Per-command first-attempt cost on a drop is ~60 ms instead of
+  ~400 ms while pre-fix firmware is in the field.
+- **Stale frames from a previous request.** Counted as `wrong_seq`
+  and skipped; the host keeps reading until either the expected seq
+  arrives or the deadline expires.
+- **Ambient debug log lines.** Counted as `non_sc` and dropped;
+  there is no plain-text fall-through, so a `deb()` line that
+  squeaks through during a session boundary cannot be misread as a
+  protocol reply.
+
+**Timeout diagnostics.** Every transport timeout produces a
+structured error string with raw counters - byte count, line count,
+non-SC line count, bad-SC line count, wrong-seq frame count,
+repaired frame count, overflow line count, and the seq of the first
+wrong-seq frame seen. The first non-SC line and the first bad SC
+frame are also captured (truncated to 80 chars) and emitted as
+`timeout diag seq=...` log entries before the failure string. This
+turns "transport timeout" into something a field operator can
+actually act on.
+
+**Compile-time verbose toggle.**
+[`SC_DEBUG_DEEP`](src/SerialConfigurator/src/config.h) (commented out
+by default) flips `transport_log_v` and `flash_log_v` from no-ops
+into per-frame / per-readdir trace to stderr. Off in normal use to
+keep the operator log readable; the always-on `transport_log` /
+`flash_log` already covers high-signal events (open / close / cache
+hit/miss/invalidate / retry-loop attempts / repair events / timeout
+diagnostics).
+
+**Adjustometer skip.** `Fiesta_Adjustometer*` symlinks are filtered
+out at host candidate enumeration time
+([`candidate_is_out_of_scope`](src/SerialConfigurator/src/core/sc_transport.c)).
+Adjustometer never speaks the framed protocol by project policy, so
+emitting expected HELLO timeouts for it would only muddy the
+diagnostic output.
+
+Runtime parameter writes (`SC_SET_PARAM` / `SC_COMMIT_PARAMS` /
+`SC_REVERT_PARAMS`) are landed end-to-end through host orchestrator,
+CLI, and the GUI Values tab; signed-manifest verification (ed25519
+backend) remains on the Phase 7 list.
 
 ---
 
