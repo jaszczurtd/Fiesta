@@ -64,10 +64,10 @@ fi
 ok "Manifest ready: $MANIFEST"
 
 info "Searching for BOOTSEL drive..."
-MOUNT="$(fiesta_find_bootsel_mount "$USER" || true)"
+MOUNT="$(fiesta_ensure_bootsel_mount "$USER" || true)"
 
 if [[ -z "$MOUNT" ]]; then
-    err "BOOTSEL drive not found"
+    err "BOOTSEL drive not found or could not be mounted"
     echo ""
     echo "  Instructions:"
     echo "  1. Unplug the board from USB"
@@ -78,6 +78,9 @@ if [[ -z "$MOUNT" ]]; then
     echo ""
     echo "  Mounted drives in /media/$USER/:"
     ls "/media/$USER"/ 2>/dev/null || echo "    (none)"
+    echo ""
+    echo "  BOOTSEL labels in /dev/disk/by-label/:"
+    ls /dev/disk/by-label 2>/dev/null | grep -E '^(RPI-RP2|RP2350|RPI-RP2350)$' || echo "    (none)"
     exit 1
 fi
 

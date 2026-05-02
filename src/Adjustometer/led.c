@@ -28,7 +28,7 @@ void initLed(void) {
   ledLastToggleMs = 0;
   ledSeqLen = 0;
   ledSeqIdx = 0;
-  hal_rgb_led_init(PIN_RGB, NUMPIXELS);
+  hal_rgb_led_init_ex(PIN_RGB, NUMPIXELS, HAL_RGB_LED_PIXEL_RGB_KHZ800);
   hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
   hal_rgb_led_off();
   lastI2CTransactionCount = hal_i2c_slave_get_transaction_count();

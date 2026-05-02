@@ -284,6 +284,23 @@ fiesta_run_upload_from_file() {
 
     settings_file="$project_dir/.vscode/settings.json"
 
+    if fiesta_is_bootsel_mount_path "$port"; then
+        cp "$uf2_path" "$port/"
+        sync
+        return 0
+    fi
+
+    if fiesta_is_bootsel_block_device "$port"; then
+        local bootsel_mount
+        bootsel_mount="$(fiesta_ensure_bootsel_mount "$USER" || true)"
+        if [[ -n "$bootsel_mount" ]]; then
+            cp "$uf2_path" "$bootsel_mount/"
+            sync
+            return 0
+        fi
+        return 1
+    fi
+
     cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
     fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
 
@@ -315,6 +332,10 @@ fiesta_start_persistent_monitor() {
     fi
 
     if [[ -n "$preferred_port" ]]; then
+        if fiesta_is_bootsel_mount_path "$preferred_port" || fiesta_is_bootsel_block_device "$preferred_port"; then
+            nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
+            return 0
+        fi
         nohup python3 "$monitor" "$preferred_port" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
     else
         nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
@@ -543,6 +564,13 @@ fiesta_resolve_upload_port() {
         echo "Preferred upload port does not exist: $preferred_port" >&2
     fi
 
+    local bootsel_mount
+    bootsel_mount="$(fiesta_ensure_bootsel_mount "$USER" || true)"
+    if [[ -n "$bootsel_mount" ]]; then
+        printf '%s|bootsel:auto:%s|%s\n' "$bootsel_mount" "$module_name" "$(basename "$bootsel_mount")"
+        return 0
+    fi
+
     echo "No serial port auto-detected for module '$module_name'." >&2
     echo "Visible Fiesta serial map:" >&2
     fiesta_print_fiesta_port_map >&2
@@ -563,6 +591,75 @@ fiesta_find_bootsel_mount() {
             fi
         done
     done
+
+    return 1
+}
+
+fiesta_find_bootsel_block_device() {
+    local name link
+
+    for name in RPI-RP2 RP2350 RPI-RP2350; do
+        link="/dev/disk/by-label/$name"
+        if [[ -e "$link" || -L "$link" ]]; then
+            fiesta_canonical_path "$link"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+fiesta_is_bootsel_mount_path() {
+    local path="$1"
+
+    [[ -d "$path" ]] || return 1
+
+    case "$(basename "$path")" in
+        RPI-RP2|RP2350|RPI-RP2350)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+fiesta_is_bootsel_block_device() {
+    local path="$1"
+    local canon_path bootsel_device
+
+    [[ -n "$path" ]] || return 1
+
+    canon_path="$(fiesta_canonical_path "$path")"
+    bootsel_device="$(fiesta_find_bootsel_block_device || true)"
+
+    [[ -n "$canon_path" && -n "$bootsel_device" && "$canon_path" == "$(fiesta_canonical_path "$bootsel_device")" ]]
+}
+
+fiesta_ensure_bootsel_mount() {
+    local user_name="${1:-$USER}"
+    local mount block_device
+
+    mount="$(fiesta_find_bootsel_mount "$user_name" || true)"
+    if [[ -n "$mount" ]]; then
+        printf '%s\n' "$mount"
+        return 0
+    fi
+
+    block_device="$(fiesta_find_bootsel_block_device || true)"
+    if [[ -z "$block_device" ]]; then
+        return 1
+    fi
+
+    if command -v udisksctl >/dev/null 2>&1; then
+        udisksctl mount -b "$block_device" >/dev/null 2>&1 || true
+    fi
+
+    mount="$(fiesta_find_bootsel_mount "$user_name" || true)"
+    if [[ -n "$mount" ]]; then
+        printf '%s\n' "$mount"
+        return 0
+    fi
 
     return 1
 }
