@@ -275,6 +275,14 @@ Test engine:
 
 ![Engine](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/test_engine.jpg?raw=true)
 
+Serial (Fiesta) Configurator:
+
+![Main](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/SC1.png?raw=true)
+
+![Flash](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/SC2.png?raw=true)
+
+![Values](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/SC3.png?raw=true)
+
 ![Display](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/display.JPG?raw=true)
 
 ![In-car](https://github.com/jaszczurtd/Fiesta/blob/main/materials/imgs/incar.jpg?raw=true)

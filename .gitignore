@@ -59,3 +59,5 @@ legacy/**/ArduinoOutput/
 Fiesta_pcbs/**/~*.pcb
 Fiesta_pcbs/**/fp-info-cache
 Fiesta_pcbs/**/*-backups/
+Fiesta_pcbs/**/*#autosave*
+
