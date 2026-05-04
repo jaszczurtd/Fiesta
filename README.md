@@ -40,9 +40,17 @@ Implementation status and milestone snapshots are tracked in
 
 ## Dependencies
 
-Required external custom libraries (shared across all modules):
+Required external custom library (shared across all modules):
 
 - `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
+
+Expected layout:
+
+```text
+<parent-of-repo-root>/libraries/JaszczurHAL
+```
+Example: if this repo is cloned at `/home/you/projects/Fiesta`, library goes
+into `/home/you/projects/libraries/`.
 
 Required toolchain:
 
@@ -50,22 +58,13 @@ Required toolchain:
 - `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
 - `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
 
-Expected external libraries layout:
-
-```text
-<parent-of-repo-root>/libraries/JaszczurHAL
-```
-
-Example: if this repo is cloned at `/home/you/projects/Fiesta`, library goes
-into `/home/you/projects/libraries/`.
-
 ## Build and development
 
-Each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). That is where the similarities to a typical Arduino project end. The code is largely independent of the Arduino ecosystem, which is fully virtualized by the JaszczurHAL library.
+In theory, each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). And that is where the similarities to a typical Arduino project ends. 
+Arduino is used here as a toolchain facade rather than an application API, so this project is unlikely to compile out of the box in the official **Arduino IDE**.
+The code is fully virtualized by the JaszczurHAL library.
 
-Because Arduino is used here as a toolchain facade rather than an application API, this project is unlikely to compile out of the box in the official **Arduino IDE**.
-
-If you still want to build it there, expect extra manual setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external library (`JaszczurHAL`) plus the in-tree shared headers (`src/common/*`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
+If you still want to build it there, expect extra manual steps/setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external library (`JaszczurHAL`) plus the in-tree shared headers (`src/common/*`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
 
 Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + MISRA addon) have no native Arduino IDE equivalent.
 
@@ -81,38 +80,33 @@ Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppchec
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
 8. compiles firmware for every Fiesta module and reports each `.uf2`and `manifests` artifacts: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN,
-9. compiles Fiesta USB Configurator tool (SerialConfigurator). 
+9. compiles Fiesta USB Configurator tool (`SerialConfigurator`). 
 
 The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
-Run from repository root as a regular (non-root) user - the script uses
-`sudo` only for apt and arduino-cli install and will prompt for the password when needed:
+Run from repository root as a regular (non-root) user - the script uses `sudo` only for apt and arduino-cli install and will prompt for the password when needed:
 
 ```bash
 bash src/ECU/scripts/bootstrap.sh
 ```
 
 Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds. 
-The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1`
-only if you know what you are doing.
+The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
 
-`bootstrap.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
+IMPORTANT: `bootstrap.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
-`bootstrap.sh` exercises all four Fiesta modules anf USB Configurator end-to-end (tests for
-modules that have them, firmware for all). For iterative work on a single
-module, skip bootstrap and use the per-module recipes below.
+`bootstrap.sh` exercises all four Fiesta modules and SerialConfigurator end-to-end (compile & run all tests, compile all modules). 
 
 ### Development environment
 
-The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi
-OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
+The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
 `Clocks`, `OilAndSpeed`, `Adjustometer`) ship ready-to-use `.vscode/` setups
 (`tasks.json`, `launch.json`, `extensions.json`, `settings.json`; plus
 `arduino.json` in `ECU` and `Adjustometer`), so compile, upload,
 serial monitor, host tests, and debugger flows are wired out of the box.
-`src/SerialConfigurator` ships its own CMake-oriented VS Code task setup.
+`src/SerialConfigurator` ships its own CMake-oriented VS Code task setup, with compatible keybindings.
 
 Platform support summary:
 
@@ -127,7 +121,7 @@ Platform support summary:
 
 Helper scripts are available in module-specific `scripts/` directories:
 
-- `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
+- Mentioned before `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
 - `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
 - `select-board.sh` (per module wrapper for the shared board-selection helper)
 - `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
@@ -139,7 +133,7 @@ Shared implementations for those wrappers live in `src/common/scripts/`.
 
 ### Host tests (CMake) - per module
 
-CMake in this repository is used for host test configuration/build; test
+CMake in this repository is used for Serial Configurator compilation, and host test configuration/build; test
 targets are compiled as C++ (`.cpp`). Same pattern for every module:
 
 ```bash
@@ -148,7 +142,7 @@ cmake --build src/<Module>/build_test --parallel
 ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-Modules with host tests: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`.
+All modules have their own separate tests.
 
 ### Firmware build - per module
 
