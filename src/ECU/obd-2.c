@@ -1,3 +1,10 @@
+/* This code implements ISO 14229, ISO 14230, and ISO 15765 diagnostic communication standards. 
+   It enables communication via diagnostic interfaces that support or use the CAN bus.
+
+   The implementation emulates the behavior of an original Ford EEC-V ECU used in the Ford Fiesta 1.8 DI, 
+   allowing diagnostic tools to recognize and communicate with it as if they were connected to the factory 
+   engine control unit.
+*/
 
 #include "obd-2.h"
 #include "ecu_unit_testing.h"
