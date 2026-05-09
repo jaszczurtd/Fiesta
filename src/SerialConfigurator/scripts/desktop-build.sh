@@ -29,6 +29,14 @@ run_tests() {
     ctest --test-dir "$BUILD_DIR" --output-on-failure
 }
 
+package_deb() {
+    build
+    cmake --build "$BUILD_DIR" --target package
+
+    echo "[OK] Debian package artifacts:"
+    find "$BUILD_DIR" -maxdepth 1 -type f -name '*.deb' -print
+}
+
 clean() {
     rm -rf "$BUILD_DIR"
     echo "[OK] Removed ${BUILD_DIR}"
@@ -47,11 +55,14 @@ case "$MODE" in
     test)
         run_tests
         ;;
+    package|deb)
+        package_deb
+        ;;
     clean)
         clean
         ;;
     *)
-        echo "Usage: $0 {build|run|upload|test|clean}" >&2
+        echo "Usage: $0 {build|run|upload|test|package|deb|clean}" >&2
         exit 2
         ;;
 esac

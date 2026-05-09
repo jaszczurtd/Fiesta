@@ -5,12 +5,13 @@
 # Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
 # arduino-cli + rp2040 core, syncs required Arduino library (JaszczurHAL),
 # runs host tests, compiles firmware for every Fiesta
-# module, and finally builds + tests the SerialConfigurator desktop tool:
+# module, and finally builds + tests + packages the SerialConfigurator
+# desktop tool:
 #   - ECU                (host tests + firmware, -Werror)
 #   - Clocks             (host tests + firmware)
 #   - OilAndSpeed        (host tests + firmware)
 #   - Adjustometer       (host tests + firmware, -Werror)
-#   - SerialConfigurator (CMake desktop build + 8 CTest targets, GTK-4 GUI)
+#   - SerialConfigurator (CMake desktop build + tests + .deb package)
 # Idempotent - safe to re-run. Also covers the deps used by
 # misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
 # cppcheck package).
@@ -21,7 +22,8 @@
 #   SKIP_APT=1      skip apt-get steps
 #   SKIP_TESTS=1    skip firmware host test build+run
 #   SKIP_BUILD=1    skip firmware compile
-#   SKIP_DESKTOP=1  skip SerialConfigurator build + tests
+#   SKIP_DESKTOP=1          skip SerialConfigurator build + tests + package
+#   SKIP_DESKTOP_PACKAGE=1  skip SerialConfigurator .deb packaging only
 # =============================================================================
 set -euo pipefail
 
@@ -90,8 +92,8 @@ fi
 APT_PKGS=(
     # Common toolchain
     git build-essential cmake python3 curl ca-certificates cppcheck
-    # SerialConfigurator desktop build (CMake pkg_check_modules + GTK-4)
-    pkg-config libgtk-4-dev
+    # SerialConfigurator desktop build + Debian package
+    pkg-config libgtk-4-dev dpkg-dev
 )
 
 install_apt() {
@@ -440,20 +442,42 @@ build_serial_configurator() {
     fi
 
     local sc_dir="$SRC_ROOT/SerialConfigurator"
-    if [[ ! -f "$sc_dir/CMakeLists.txt" ]]; then
-        warn "SerialConfigurator: CMakeLists.txt not found at $sc_dir - skipping"
+    local sc_build_script="$sc_dir/scripts/desktop-build.sh"
+    
+    if [[ ! -f "$sc_build_script" ]]; then
+        warn "SerialConfigurator: desktop-build.sh not found at $sc_build_script - skipping"
         return
     fi
 
+    info "[SerialConfigurator] calling desktop-build.sh for build + tests"
+    if ! bash "$sc_build_script" build; then
+        err "[SerialConfigurator] build failed"
+        return 1
+    fi
+    
+    if ! bash "$sc_build_script" test; then
+        err "[SerialConfigurator] tests failed"
+        return 1
+    fi
+
+    if [[ "${SKIP_DESKTOP_PACKAGE:-0}" = "1" ]]; then
+        info "[SerialConfigurator] SKIP_DESKTOP_PACKAGE=1 - skipping .deb packaging"
+    else
+        info "[SerialConfigurator] calling desktop-build.sh for .deb package"
+        if ! bash "$sc_build_script" package; then
+            err "[SerialConfigurator] package build failed"
+            return 1
+        fi
+    fi
+
     local sc_build="$sc_dir/build"
-    info "[SerialConfigurator] configuring (Release) at $sc_build"
-    cmake -S "$sc_dir" -B "$sc_build" -DCMAKE_BUILD_TYPE=Release
-
-    info "[SerialConfigurator] building"
-    cmake --build "$sc_build" --parallel
-
-    info "[SerialConfigurator] running ctest"
-    ctest --test-dir "$sc_build" --output-on-failure
+    local deb
+    deb=$(find "$sc_build" -maxdepth 1 -type f -name '*.deb' -print -quit)
+    if [[ -n "$deb" ]]; then
+        ok "[SerialConfigurator] Debian package: $deb"
+    elif [[ "${SKIP_DESKTOP_PACKAGE:-0}" != "1" ]]; then
+        warn "[SerialConfigurator] package step completed but no .deb found in $sc_build"
+    fi
 
     if [[ -x "$sc_build/serial-configurator" ]]; then
         ok "[SerialConfigurator] GUI binary: $sc_build/serial-configurator"

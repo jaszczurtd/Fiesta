@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Fiesta USB Configurator
+Comment=Desktop companion for Fiesta modules
+Exec=serial-configurator
+TryExec=serial-configurator
+Icon=serial-configurator
+Terminal=false
+Categories=Utility;
+Keywords=Fiesta;Serial;Configurator;USB;
+StartupNotify=true
