@@ -41,7 +41,7 @@ extern "C" {
  * ==========================================================================*/
 
 // BASIC CONTROL VALUES
-#define VP37
+//#define VP37
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
@@ -130,9 +130,6 @@ extern "C" {
 //min-max value for indicator
 #define VOLTS_MIN_VAL 11.6
 #define VOLTS_MAX_VAL 14.7
-
-//just a general timer tasks info message on main thread
-#define THREAD_CONTROL_SECONDS 5
 
 //glow plugs values
 #define MAX_GLOW_PLUGS_TIME SECONDS_IN_MINUTE

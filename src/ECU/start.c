@@ -21,7 +21,6 @@ ecu_context_t *getECUContext(void) {
 //-----------------------------------------------------------------------------
 
 typedef struct {
-  unsigned long lastThreadSecondsVal;
   hal_soft_timer_t timerEverySecondHandle;
   hal_soft_timer_t timerMediumHandle;
   hal_soft_timer_t timerHighHandle;
@@ -41,7 +40,6 @@ typedef struct {
 } start_persistent_state_t;
 
 static start_runtime_state_t s_startRuntimeState = {
-  .lastThreadSecondsVal = 0uL,
   .timerEverySecondHandle = NULL,
   .timerMediumHandle = NULL,
   .timerHighHandle = NULL,
@@ -78,6 +76,7 @@ static void start_initContextMutexes(void) {
   hal_critical_section_exit();
 }
 
+#ifdef VP37
 /**
  * @brief Stop feeding the watchdog and blink LED until reset occurs.
  * @param reason Human-readable reason logged before forcing reset.
@@ -94,6 +93,7 @@ static void start_forceWatchdogReset(const char *reason) {
     hal_delay_ms(150);
   }
 }
+#endif
 
 static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
   { &s_startRuntimeState.timerEverySecondHandle, callAtEverySecond, (uint32_t)SECOND },
@@ -330,11 +330,6 @@ void looper(void) {
   }
 
   hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
-  if(s_startRuntimeState.lastThreadSecondsVal < getSeconds()) {
-    s_startRuntimeState.lastThreadSecondsVal = getSeconds() + THREAD_CONTROL_SECONDS;
-
-    deb("thread is alive");
-  }
   s_startPersistentState.statusVariable0Val = 3;
   CAN_updaterecipients_02();
   s_startPersistentState.statusVariable0Val = 4;
@@ -347,6 +342,7 @@ void looper(void) {
   heatedWindshields_process(getHeatedWindshieldsInstance());
   s_startPersistentState.statusVariable0Val = 8;
   configSessionTick();
+  s_startPersistentState.statusVariable0Val = 9;
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
