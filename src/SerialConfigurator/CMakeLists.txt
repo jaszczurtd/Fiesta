@@ -9,6 +9,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(GNUInstallDirs)
+
 add_compile_options(-Wall -Wextra -Werror)
 add_compile_definitions(_POSIX_C_SOURCE=200809L)
 
@@ -139,6 +141,19 @@ if(GTK4_FOUND)
             serial_configurator_core
             PkgConfig::GTK4
     )
+
+    install(TARGETS serial-configurator
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+
+    install(FILES packaging/serial-configurator.desktop
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
+    )
+
+    install(FILES scripts/icon.png
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pixmaps
+        RENAME serial-configurator.png
+    )
 endif()
 
 add_executable(serial-configurator-cli
@@ -152,6 +167,27 @@ target_link_libraries(serial-configurator-cli
     PRIVATE
         serial_configurator_core
 )
+
+install(TARGETS serial-configurator-cli
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(FILES README.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "serial-configurator")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Fiesta Serial Configurator desktop application and CLI"
+)
+set(CPACK_PACKAGE_VENDOR "Fiesta")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "Fiesta maintainers")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Fiesta maintainers")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 include(CTest)
 
@@ -423,3 +459,5 @@ if(BUILD_TESTING)
         COMMAND serial-configurator-flash-orchestrator-tests
     )
 endif()
+
+include(CPack)

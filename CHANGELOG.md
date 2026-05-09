@@ -4,7 +4,32 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-04-29 (latest)
+## 2026-05-10 (latest)
+
+- ECU bootstrap SerialConfigurator step was fixed after integration
+  regression: `src/ECU/scripts/bootstrap.sh` now invokes
+  `src/SerialConfigurator/scripts/desktop-build.sh test` (supported mode)
+  instead of `run_tests` (unsupported), so bootstrap no longer aborts with
+  usage output right after desktop build.
+- ECU bootstrap now also runs SerialConfigurator Debian packaging by default
+  after desktop build + tests, so a `.deb` artifact is produced in
+  `src/SerialConfigurator/build/` on successful runs. New override:
+  `SKIP_DESKTOP_PACKAGE=1` skips only the packaging phase.
+
+## 2026-05-09
+
+- SerialConfigurator can now generate a Debian package (`.deb`) directly
+  from CMake/CPack. Install rules were added for the GUI binary (when GTK4
+  is available), CLI binary, and README docs, and the build helper script now
+  exposes `package`/`deb` modes for one-command packaging.
+- Debian package integration now also installs a freedesktop launcher file
+  (`/usr/share/applications/serial-configurator.desktop`), so Linux desktop
+  menus (including Linux Mint/Cinnamon) can list the GUI app.
+- SerialConfigurator launcher now uses the project-provided icon
+  (`src/SerialConfigurator/scripts/icon.png`) installed as
+  `/usr/share/pixmaps/serial-configurator.png` in the `.deb` package.
+
+## 2026-04-29
 
 - CAN definitions were moved in-tree to `src/common/canDefinitions/` and all
   module include/CMake paths now consume that shared header directly. The ECU

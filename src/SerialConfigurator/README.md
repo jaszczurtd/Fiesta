@@ -8,7 +8,7 @@ The project now also includes a first-class CLI shell over the same core.
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential cmake pkg-config libgtk-4-dev
+sudo apt install -y build-essential cmake pkg-config libgtk-4-dev dpkg-dev
 ```
 
 ## Build
@@ -63,6 +63,16 @@ cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
 ```bash
 ./scripts/desktop-build.sh test
 ```
+
+## Debian package (.deb)
+
+```bash
+./scripts/desktop-build.sh package
+```
+
+The generated package is written to `build/*.deb`.
+After installation, Linux desktop menus should show `Fiesta USB Configurator`.
+The launcher icon is packaged from `scripts/icon.png`.
 
 ## Current Functionality
 
