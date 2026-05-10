@@ -364,6 +364,7 @@ void looper(void) {
 void initialization1(void) {
   start_initContextMutexes();
   RPM_create();
+  createEngineOperation();
 
   setStartedCore1();
 
@@ -397,10 +398,13 @@ void looper1(void) {
   RPM_process(getRPMInstance());
 #ifdef VP37
   hal_mutex_lock(vp37StateMutex);
-  VP37_process(&s_ctx.injectionPump);
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   tickTests();
+#else
+  engineOperation_process(&s_ctx.engineOp);
+  engineOperation_showDebug(&s_ctx.engineOp);
 #endif
+  VP37_process(&s_ctx.injectionPump);
   hal_mutex_unlock(vp37StateMutex);
 #endif
   s_startPersistentState.statusVariable1Val = 3;

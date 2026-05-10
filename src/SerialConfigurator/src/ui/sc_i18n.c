@@ -1,4 +1,5 @@
 #include "sc_i18n.h"
+#include "../config.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -330,7 +331,7 @@ static ScLocale resolve_locale_from_env(void)
     /* POSIX-flavour env vars - same semantics on Linux and on
      * Windows when launched from MSYS2 or after `setlocale("")`. */
     static const char *const k_lang_vars[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
-    for (size_t i = 0; i < sizeof(k_lang_vars) / sizeof(k_lang_vars[0]); ++i) {
+    for (size_t i = 0; i < COUNTOF(k_lang_vars); ++i) {
         const char *v = getenv(k_lang_vars[i]);
         if (v != NULL && v[0] != '\0') {
             return sc_i18n_parse_locale_string(v);

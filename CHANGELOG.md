@@ -15,6 +15,12 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   after desktop build + tests, so a `.deb` artifact is produced in
   `src/SerialConfigurator/build/` on successful runs. New override:
   `SKIP_DESKTOP_PACKAGE=1` skips only the packaging phase.
+- Standardized array-length helpers on `COUNTOF` across SerialConfigurator
+  core/UI/tests plus module parameter catalogs (Clocks/OilAndSpeed) and ECU
+  host tests. SerialConfigurator now defines a local COUNTOF fallback for
+  host builds without JaszczurHAL headers on the include path, with an
+  additional fallback in `src/common/scDefinitions/sc_param_types.h` for
+  shared SC helpers and tests.
 
 ## 2026-05-09
 

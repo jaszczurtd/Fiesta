@@ -334,7 +334,7 @@ void test_ecu_config_session_non_framed_input_is_silently_dropped(void) {
 
 void test_float_to_u32_roundtrip(void) {
     float values[] = {0.0f, 1.0f, -1.0f, 0.42f, 3.14159f, 1e10f, 1e-10f};
-    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+    for (size_t i = 0; i < COUNTOF(values); i++) {
         uint32_t u = float_to_u32(values[i]);
         float back = u32_to_float(u);
         TEST_ASSERT_EQUAL_FLOAT(values[i], back);

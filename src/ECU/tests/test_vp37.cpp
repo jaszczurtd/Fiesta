@@ -210,32 +210,6 @@ void test_vp37_process_updates_globals_from_adjustometer_reading(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 44.0f, getGlobalValue(F_FUEL_TEMP));
 }
 
-void test_vp37_process_throttle_ramp_down_is_time_gated(void) {
-    ecu_context_t *ctx = getECUContext();
-    VP37Pump *pump = &ctx->injectionPump;
-    setupPumpForProcessTests(pump);
-
-    // First cycle at full throttle initializes lastThrottle.
-    setGlobalValue(F_THROTTLE_POS, (float)PWM_RESOLUTION);
-    injectAdjRegisterData(500, 138, 40, ADJ_STATUS_OK);
-    hal_mock_set_millis(100);
-    VP37_process(pump);
-    float firstThrottle = pump->lastThrottle;
-
-    // Drop requested throttle but keep elapsed below ramp interval.
-    setGlobalValue(F_THROTTLE_POS, 0.0f);
-    injectAdjRegisterData(500, 138, 40, ADJ_STATUS_OK);
-    hal_mock_set_millis(100 + VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS - 1);
-    VP37_process(pump);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, firstThrottle, pump->lastThrottle);
-
-    // Once interval elapsed, ramp-down should reduce lastThrottle.
-    injectAdjRegisterData(500, 138, 40, ADJ_STATUS_OK);
-    hal_mock_set_millis(100 + VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS);
-    VP37_process(pump);
-    TEST_ASSERT_TRUE(pump->lastThrottle < firstThrottle);
-}
-
 int main(void) {
     UNITY_BEGIN();
 
@@ -250,7 +224,6 @@ int main(void) {
     RUN_TEST(test_vp37_process_disables_after_adj_comm_cutoff_timeout);
     RUN_TEST(test_vp37_process_disables_when_rpm_above_max);
     RUN_TEST(test_vp37_process_updates_globals_from_adjustometer_reading);
-    RUN_TEST(test_vp37_process_throttle_ramp_down_is_time_gated);
 
     return UNITY_END();
 }

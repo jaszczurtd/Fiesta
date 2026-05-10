@@ -342,6 +342,7 @@ void VP37_setVP37Throttle(VP37Pump *self, float accel) {
   accel = hal_constrain(accel, 
     (float)VP37_PERCENT_MIN, 
     (float)VP37_PERCENT_MAX);
+  self->lastThrottle = accel;
   self->desiredAdjustometerTarget = (int32_t)
       mapfloat(accel, 
         VP37_PERCENT_MIN, 
@@ -403,27 +404,6 @@ void VP37_process(VP37Pump *self) {
       VP37_enableVP37(self, false);
       derr("RPM was too high! (%d)", rpm);
       return;
-    }
-
-    float thr = (float)getThrottlePercentage();
-    if(thr > self->lastThrottle || self->desiredAdjustometerTarget < 0) {
-      // Accelerating or first run: apply immediately
-      self->lastThrottle = thr;
-      self->throttleRampLastMs = hal_millis();
-      VP37_setVP37Throttle(self, thr);
-    } else if(thr < self->lastThrottle) {
-      // Decelerating: ramp down in time-based steps for predictable behavior.
-      uint32_t nowMs = hal_millis();
-      uint32_t elapsedMs = nowMs - self->throttleRampLastMs;
-      if(elapsedMs >= VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS) {
-        float steps = (float)elapsedMs / (float)VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS;
-        self->lastThrottle -= (VP37_THROTTLE_RAMP_DOWN_STEP * steps);
-        if(self->lastThrottle < thr) {
-          self->lastThrottle = thr;
-        }
-        self->throttleRampLastMs = nowMs;
-        VP37_setVP37Throttle(self, self->lastThrottle);
-      }
     }
 
     VP37_throttleCycle(self);

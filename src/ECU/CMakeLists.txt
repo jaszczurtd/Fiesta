@@ -41,6 +41,7 @@ set(ECU_SOURCES
     ${ECU_SRC}/glowPlugs.c
     ${ECU_SRC}/engineFan.c
     ${ECU_SRC}/engineHeater.c
+    ${ECU_SRC}/engine_operation.c
     ${ECU_SRC}/engineFuel.c
     ${ECU_SRC}/heatedWindshield.c
     ${ECU_SRC}/obd-2_mapping.c

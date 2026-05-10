@@ -5,6 +5,10 @@
 extern "C" {
 #endif
 
+#ifndef COUNTOF
+#define COUNTOF(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
 /* ── Flash-path persistence ───────────────────────────────────────── */
 
 #ifdef _WIN32
