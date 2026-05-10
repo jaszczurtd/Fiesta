@@ -59,7 +59,7 @@ static const sc_param_descriptor_t k_clocks_params[] = {
                                        (int16_t)TEMP_EGT_MAX, 1, "egt"),
 };
 static const size_t k_clocks_params_count =
-    sizeof(k_clocks_params) / sizeof(k_clocks_params[0]);
+  COUNTOF(k_clocks_params);
 
 static const char *configSessionSkipSpaces(const char *cursor) {
   if(cursor == nullptr) {

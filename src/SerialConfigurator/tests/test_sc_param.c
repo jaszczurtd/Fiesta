@@ -57,7 +57,7 @@ static const sc_param_descriptor_t k_ecu_descs[] = {
                         850, 2, "idle"),
 };
 static const size_t k_ecu_descs_count =
-    sizeof(k_ecu_descs) / sizeof(k_ecu_descs[0]);
+    COUNTOF(k_ecu_descs);
 
 /* ── Clocks-shaped fixture: read-only, not-persisted threshold params */
 
@@ -81,7 +81,7 @@ static const sc_param_descriptor_t k_clocks_descs[] = {
                                          oil_max_c, 80, 140, 120, 1, "oil"),
 };
 static const size_t k_clocks_descs_count =
-    sizeof(k_clocks_descs) / sizeof(k_clocks_descs[0]);
+    COUNTOF(k_clocks_descs);
 
 /* ── Reply emit capture ──────────────────────────────────────────── */
 

@@ -16,6 +16,7 @@
 #include "engineHeater.h"
 #include "heatedWindshield.h"
 #include "glowPlugs.h"
+#include "engine_operation.h"
 #include "rpm.h"
 #include "turbo.h"
 #include "vp37.h"
@@ -30,6 +31,7 @@ typedef struct {
     heatedWindshields windows;
     glowPlugs         glowP;
     RPM               rpm;
+    engineOperation   engineOp;
     Turbo             turbo;
     VP37Pump          injectionPump;
 } ecu_context_t;

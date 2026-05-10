@@ -340,7 +340,7 @@ static void parse_identity_fields(const char *response, ScIdentityData *identity
     }
 
     static const char *k_fields[] = { "module", "proto", "session", "fw", "build", "uid" };
-    const size_t field_count = sizeof(k_fields) / sizeof(k_fields[0]);
+    const size_t field_count = COUNTOF(k_fields);
 
     const char *response_end = response + strlen(response);
     for (size_t fi = 0u; fi < field_count; ++fi) {

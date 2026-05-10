@@ -42,7 +42,7 @@ static const sc_param_descriptor_t k_oas_params[] = {
                                        "sampling"),
 };
 static const size_t k_oas_params_count =
-    sizeof(k_oas_params) / sizeof(k_oas_params[0]);
+  COUNTOF(k_oas_params);
 
 static const char *configSessionSkipSpaces(const char *cursor) {
   if(cursor == nullptr) {

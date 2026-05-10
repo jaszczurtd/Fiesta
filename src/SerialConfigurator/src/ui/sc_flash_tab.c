@@ -117,7 +117,7 @@ static const PhaseFraction k_phase_fractions[] = {
       SC_UI_FLASH_PHASE_POST_FLASH_HELLO_EXPECTED_MS },
 };
 static const size_t k_phase_fractions_count =
-    sizeof(k_phase_fractions) / sizeof(k_phase_fractions[0]);
+    COUNTOF(k_phase_fractions);
 
 static double phase_start_fraction(ScFlashPhase phase)
 {
@@ -496,7 +496,7 @@ static GFile *dialog_initial_folder_from_module_build(const ScFlashSection *sect
     static const char *const k_roots[] = {
         ".", "..", "../..", "../../..", "../../../..",
     };
-    const size_t root_count = sizeof(k_roots) / sizeof(k_roots[0]);
+    const size_t root_count = COUNTOF(k_roots);
 
     for (size_t i = 0u; i < root_count; ++i) {
         char *candidate = g_build_filename(

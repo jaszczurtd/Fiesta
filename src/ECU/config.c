@@ -62,8 +62,7 @@ static const sc_param_descriptor_t k_ecu_params[] = {
                         ECU_PARAMS_NOMINAL_RPM_MAX,
                         NOMINAL_RPM_VALUE, 2, "idle"),
 };
-static const size_t k_ecu_params_count =
-    sizeof(k_ecu_params) / sizeof(k_ecu_params[0]);
+static const size_t k_ecu_params_count = COUNTOF(k_ecu_params);
 
 /* Forward-declared session state used by every SC_* reply helper below.
  * `hal_serial_session_println(&s_configSession, ...)` automatically wraps the

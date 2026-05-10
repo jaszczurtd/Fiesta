@@ -10,6 +10,7 @@
 #include "hardwareConfig.h"
 #include "sensors.h"
 #include "rpm.h"
+#include "engine_operation.h"
 #include "turbo.h"
 #include "engineFan.h"
 #include "engineHeater.h"

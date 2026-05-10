@@ -218,7 +218,7 @@ static int test_detect_parses_structured_hello_fields(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -273,7 +273,7 @@ static int test_duplicate_detection_sets_ambiguous_flag(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -308,7 +308,7 @@ static int test_sc_commands_parse_status_and_meta(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -403,7 +403,7 @@ static int test_sc_get_param_reports_invalid_param_id(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -447,7 +447,7 @@ static int test_sc_get_param_parser_rejects_invalid_min_max_range(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -491,7 +491,7 @@ static int test_sc_err_unknown_is_mapped_to_unknown_cmd_status(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -535,7 +535,7 @@ static int test_detect_accepts_plain_build_with_spaces(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -572,7 +572,7 @@ static int test_meta_accepts_build_without_equals(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -617,7 +617,7 @@ static int test_meta_base64_build_without_padding_is_decoded(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -662,7 +662,7 @@ static int test_meta_corrupted_base64_build_falls_back_to_empty_meta_build(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -712,7 +712,7 @@ static int test_param_list_parser_tolerates_noise_tokens(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -761,7 +761,7 @@ static int test_param_values_parser_tolerates_noise_tokens(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;
@@ -811,7 +811,7 @@ static int test_sc_bye_command_is_sent_and_parsed(void)
     };
     MockTransportContext context = {
         .devices = devices,
-        .device_count = sizeof(devices) / sizeof(devices[0]),
+        .device_count = COUNTOF(devices),
     };
 
     ScCore core;

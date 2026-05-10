@@ -836,7 +836,7 @@ void test_uds_read_f4_catch_code_alt_prefers_live_pid_payload(void) {
 void test_uds_read_scp_maf_pid_returns_nrc31(void) {
     uint16_t pids[] = {SCP_PID_IMAF, SCP_PID_VMAF, SCP_PID_MAF_RATE};
 
-    for (size_t index = 0; index < (sizeof(pids) / sizeof(pids[0])); index++) {
+    for (size_t index = 0; index < COUNTOF(pids); index++) {
         uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, MSB(pids[index]), LSB(pids[index]), 0, 0, 0, 0};
         obdReq(LISTEN_ID, req);
 

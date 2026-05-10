@@ -586,7 +586,7 @@ static bool bootsel_find_mountpoint_in_mountinfo(char *out_path,
         size_t ntok = 0u;
         char *saveptr = NULL;
         char *tok = strtok_r(line, " \t\n", &saveptr);
-        while (tok != NULL && ntok < (sizeof(tokens) / sizeof(tokens[0]))) {
+        while (tok != NULL && ntok < COUNTOF(tokens)) {
             tokens[ntok++] = tok;
             tok = strtok_r(NULL, " \t\n", &saveptr);
         }

@@ -20,6 +20,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef COUNTOF
+#define COUNTOF(x) (sizeof(x) / sizeof((x)[0]))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
