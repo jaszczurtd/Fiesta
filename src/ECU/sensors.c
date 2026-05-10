@@ -677,17 +677,36 @@ void getVP37Adjustometer(adjustometer_reading_t *out) {
   *out = readAdjustometer();
 }
 
+#ifndef VP37
 /**
- * @brief Read system supply voltage from the Adjustometer telemetry bundle.
- * @return Supply voltage in volts, or 0 when Adjustometer telemetry is unavailable.
- * @note Uses readAdjustometer()'s by-value return (local snapshot) to avoid a
- *       torn read between commOk and voltageRaw if another core writes the
- *       shared state mid-call.
+ * @brief Read ECU supply voltage from the local ADC divider path.
+ * @return Supply voltage in volts, clamped to 0 on invalid conversion.
+ */
+static float sensors_readSystemSupplyVoltageFromADC(void) {
+  float avgAdc = getAverageValueFrom(ADC_VOLT_PIN);
+  float volts = adcToVolt((int)(avgAdc + 0.5f),
+                          (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
+  if(!(volts >= 0.0f)) {
+    volts = 0.0f;
+  }
+  return volts;
+}
+#endif
+
+/**
+ * @brief Read ECU system supply voltage.
+ * @return Supply voltage in volts.
+ * @note With VP37 enabled, the value comes from Adjustometer telemetry.
+ *       Without VP37, the value is measured locally via ADC divider.
  */
 float getSystemSupplyVoltage(void) {
+#ifdef VP37
   adjustometer_reading_t reading = readAdjustometer();
   if(!reading.commOk) {
     return 0.0f;
   }
   return reading.voltageRaw * 0.1f;
+#else
+  return sensors_readSystemSupplyVoltageFromADC();
+#endif
 }

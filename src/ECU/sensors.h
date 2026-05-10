@@ -212,8 +212,10 @@ void getVP37Adjustometer(adjustometer_reading_t *out);
 bool waitForAdjustometerBaseline(void);
 
 /**
- * @brief Get current system supply voltage from Adjustometer telemetry.
+ * @brief Get current ECU system supply voltage.
  * @return Supply voltage in volts, or 0 when unavailable.
+ * @note With VP37 enabled, sourced from Adjustometer telemetry.
+ *       Without VP37, sourced from the local ADC divider path.
  */
 float getSystemSupplyVoltage(void);
 
