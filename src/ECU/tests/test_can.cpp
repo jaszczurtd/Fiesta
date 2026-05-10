@@ -11,6 +11,33 @@ static void ensure_can_ready(void) {
     hal_mock_can_reset(canTestGetCanHandle());
 }
 
+static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
+    return hal_mock_can_get_sent(canTestGetCanHandle(), id, len, data);
+}
+
+#ifndef VP37
+static void injectSupplyVoltageAdc(float volts) {
+    const float ratio = ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+    int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
+    if(adc < 0) {
+        adc = 0;
+    }
+    if(adc > 4095) {
+        adc = 4095;
+    }
+    hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+}
+
+static void refreshMediumValuesUntilVoltsUpdated(void) {
+    for(int i = 0; i < (F_LAST + 2); i++) {
+        readMediumValues();
+        if(getGlobalValue(F_VOLTS) > 0.0f) {
+            return;
+        }
+    }
+}
+#endif
+
 void setUp(void) {
     initSensors();
     ensure_can_ready();
@@ -19,7 +46,9 @@ void setUp(void) {
     }
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+    hal_mock_i2c_set_busy(false);
+}
 
 void test_pack_gps_datetime_valid(void) {
     // 2026-04-03 14:27 -> yy=26 => offset=6
@@ -117,6 +146,36 @@ void test_truncated_oil_and_speed_frame_is_ignored(void) {
     TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_ABS_CAR_SPEED));
 }
 
+#ifndef VP37
+void test_can_update_01_contains_adc_supply_voltage_without_vp37(void) {
+    hal_mock_i2c_set_busy(true); // Ensure this path does not depend on Adjustometer I2C.
+    injectSupplyVoltageAdc(13.8f);
+
+    setGlobalValue(F_VOLTS, 0.0f);
+    refreshMediumValuesUntilVoltsUpdated();
+
+    float measuredVolts = getGlobalValue(F_VOLTS);
+    TEST_ASSERT_TRUE(measuredVolts > 1.0f);
+
+    CAN_updaterecipients_01();
+
+    uint32_t id = 0;
+    uint8_t len = 0;
+    uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+
+    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, data));
+    TEST_ASSERT_EQUAL_UINT32(CAN_ID_ECU_UPDATE_01, id);
+    TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
+
+    int hi = 0;
+    int lo = 0;
+    floatToDec(measuredVolts, &hi, &lo);
+
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)hi, data[CAN_FRAME_ECU_UPDATE_VOLTS_HI]);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)lo, data[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
+}
+#endif
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_pack_gps_datetime_valid);
@@ -125,5 +184,8 @@ int main(void) {
     RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
     RUN_TEST(test_truncated_egt_frame_is_ignored);
     RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
+#ifndef VP37
+    RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
+#endif
     return UNITY_END();
 }

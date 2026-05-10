@@ -18,10 +18,23 @@ static void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
     hal_mock_i2c_inject_rx(buf, 5);
 }
 
+static void injectSupplyVoltageAdc(float volts) {
+    const float ratio = ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+    int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
+    if(adc < 0) {
+        adc = 0;
+    }
+    if(adc > 4095) {
+        adc = 4095;
+    }
+    hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 void setUp(void) {
     hal_mock_set_millis(0);
+    hal_mock_adc_inject(ADC_VOLT_PIN, 0);
     hal_i2c_init(4, 5, 400000);
     initSensors();
     initI2C();
@@ -67,23 +80,41 @@ void test_adjustometer_large_negative(void) {
 }
 
 void test_adjustometer_voltage_conversion(void) {
+#ifdef VP37
     // Register value 138 -> 13.8 V
     injectAdjRegisterData(0, 138, 40, ADJ_STATUS_OK);
     float v = getSystemSupplyVoltage();
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 13.8f, v);
+#else
+    injectSupplyVoltageAdc(13.8f);
+    float v = getSystemSupplyVoltage();
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 13.8f, v);
+#endif
 }
 
 void test_adjustometer_voltage_zero(void) {
+#ifdef VP37
     injectAdjRegisterData(0, 0, 25, ADJ_STATUS_OK);
     float v = getSystemSupplyVoltage();
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
+#else
+    injectSupplyVoltageAdc(0.0f);
+    float v = getSystemSupplyVoltage();
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, v);
+#endif
 }
 
 void test_adjustometer_voltage_max(void) {
+#ifdef VP37
     // 255 -> 25.5 V
     injectAdjRegisterData(0, 255, 20, ADJ_STATUS_OK);
     float v = getSystemSupplyVoltage();
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 25.5f, v);
+#else
+    injectSupplyVoltageAdc(16.0f);
+    float v = getSystemSupplyVoltage();
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 16.0f, v);
+#endif
 }
 
 void test_adjustometer_fuel_temp(void) {
@@ -119,12 +150,18 @@ void test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc(void) {
 }
 
 void test_adjustometer_status_voltage_bad_does_not_auto_set_dtc(void) {
+#ifdef VP37
     injectAdjRegisterData(0, 50, 40, ADJ_STATUS_VOLTAGE_BAD);
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 5.0f, getSystemSupplyVoltage());
+#else
+    injectSupplyVoltageAdc(5.0f);
+    TEST_ASSERT_FLOAT_WITHIN(0.8f, 5.0f, getSystemSupplyVoltage());
+#endif
     TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_comm_lost_on_nack(void) {
+#ifdef VP37
     // Simulate I2C NACK - set busy flag so endTransmission returns != 0.
     // commOk goes false after ADJ_COMM_ERROR_THRESHOLD (3) consecutive errors.
     hal_mock_i2c_set_busy(true);
@@ -135,6 +172,14 @@ void test_adjustometer_comm_lost_on_nack(void) {
     float v = getSystemSupplyVoltage();
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
     hal_mock_i2c_set_busy(false);
+#else
+    // With VP37 disabled, supply voltage must not depend on Adjustometer I2C.
+    hal_mock_i2c_set_busy(true);
+    injectSupplyVoltageAdc(12.0f);
+    float v = getSystemSupplyVoltage();
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 12.0f, v);
+    hal_mock_i2c_set_busy(false);
+#endif
 }
 
 // ── DTC array expansion test ─────────────────────────────────────────────────
