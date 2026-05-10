@@ -29,7 +29,6 @@ typedef struct {
   bool lastIsEngineRunning;
   adjustometer_reading_t adjustometer;
   uint8_t adjCommErrors;
-  float filteredVoltage;
 } sensors_runtime_state_t;
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
@@ -51,8 +50,7 @@ static sensors_runtime_state_t s_sensorsState = {
   .lastOilTemp = 0,
   .lastIsEngineRunning = false,
   .adjustometer = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false},
-  .adjCommErrors = 0,
-  .filteredVoltage = -1.0f
+  .adjCommErrors = 0
 };
 
 m_mutex_def(analog4051Mutex);
@@ -680,29 +678,13 @@ void getVP37Adjustometer(adjustometer_reading_t *out) {
 }
 
 #ifndef VP37
-
-#ifndef ADC_EMA_SHIFT
-#define ADC_EMA_SHIFT 3U
-#endif
-
-static float adcEma(float raw, float prev) {
-  if (prev < 0.0f) {
-    return raw;
-  }
-  return prev + ((raw - prev) / (float)(1U << ADC_EMA_SHIFT));
-}
-
 /**
  * @brief Read ECU supply voltage from the local ADC divider path.
  * @return Supply voltage in volts, clamped to 0 on invalid conversion.
  */
 static float sensors_readSystemSupplyVoltageFromADC(void) {
-  float avgAdc = getAverageValueFrom(ADC_VOLT_PIN);
-  float volts = adcToVolt((int)(avgAdc + 0.5f),
-                          (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
-  s_sensorsState.filteredVoltage = adcEma(volts, s_sensorsState.filteredVoltage);
-  if (isnan(s_sensorsState.filteredVoltage) || s_sensorsState.filteredVoltage < 0.0f) s_sensorsState.filteredVoltage = 0.0f;
-  return s_sensorsState.filteredVoltage;
+  return adcToVolt((int)(getAverageValueFrom(ADC_VOLT_PIN) + 0.5f),
+                        (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
 }
 #endif
 
