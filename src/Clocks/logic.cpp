@@ -309,4 +309,6 @@ void updateValsForDebug(void) {
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
   deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
   deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(), getEngineRPM());
+  deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]),
+                            int(valueFields[F_DPF_TEMP]));
 }

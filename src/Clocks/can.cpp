@@ -190,8 +190,6 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
         MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
                     buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]);
 
-      deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]),
-                               int(valueFields[F_DPF_TEMP]));
     }
     break;
 

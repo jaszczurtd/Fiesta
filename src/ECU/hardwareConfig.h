@@ -111,8 +111,8 @@
 
 //real values (resitance) for ECU main supply voltage measurement
 
-#define V_DIVIDER_R1 49750.0
-#define V_DIVIDER_R2 11800.0
+#define V_DIVIDER_R1 47750.0
+#define V_DIVIDER_R2 18600.0
 
 //real values (resistance) for temperature (coolant/oil) measurement
 
