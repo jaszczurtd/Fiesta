@@ -11959,7 +11959,7 @@
 	)
 	(text "CAN-L"
 		(exclude_from_sim no)
-		(at 384.048 42.418 0)
+		(at 395.478 42.418 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -12349,7 +12349,7 @@
 	)
 	(text "100"
 		(exclude_from_sim no)
-		(at 375.92 43.688 0)
+		(at 387.35 43.688 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -12719,7 +12719,7 @@
 	)
 	(text "96"
 		(exclude_from_sim no)
-		(at 376.428 40.894 0)
+		(at 387.858 40.894 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -12799,7 +12799,7 @@
 	)
 	(text "CAN-H"
 		(exclude_from_sim no)
-		(at 384.302 44.704 0)
+		(at 395.732 44.704 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -13184,6 +13184,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "4d8156ca-6c42-486c-963e-20c1aeb476c4")
+	)
+	(junction
+		(at 394.97 90.17)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4dd2fb9f-afb9-4622-aeae-09d47efe1697")
 	)
 	(junction
 		(at 59.69 49.53)
@@ -13594,6 +13600,12 @@
 		(uuid "b6f0fe7e-eef9-4b55-886a-56a4b55acb30")
 	)
 	(junction
+		(at 375.92 44.45)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "be7b5611-35eb-4d87-a4ea-247aded96fb9")
+	)
+	(junction
 		(at 312.42 189.23)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -13616,6 +13628,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c3059ca2-94bf-4e3f-ace0-2c8bf39f3a81")
+	)
+	(junction
+		(at 382.27 41.91)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "c603de7d-21cd-4842-b60d-d8935c450120")
 	)
 	(junction
 		(at 185.42 205.74)
@@ -13718,6 +13736,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "d65af7ac-525a-42d9-8670-5e7971449375")
+	)
+	(junction
+		(at 401.32 86.36)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d6e60bf0-de70-4bd8-ba4e-12a2d928736f")
 	)
 	(junction
 		(at 320.04 175.26)
@@ -14163,7 +14187,7 @@
 	)
 	(wire
 		(pts
-			(xy 374.65 90.17) (xy 426.72 90.17)
+			(xy 374.65 90.17) (xy 394.97 90.17)
 		)
 		(stroke
 			(width 0)
@@ -14190,6 +14214,16 @@
 			(type default)
 		)
 		(uuid "0d4ea112-33d7-498b-a198-1150bf0dc435")
+	)
+	(wire
+		(pts
+			(xy 382.27 41.91) (xy 386.08 41.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0d94458d-d304-41c1-b2b1-865b25ecf543")
 	)
 	(wire
 		(pts
@@ -14390,6 +14424,16 @@
 			(type default)
 		)
 		(uuid "1536306b-0700-4f54-8918-8af322ef3970")
+	)
+	(wire
+		(pts
+			(xy 375.92 44.45) (xy 386.08 44.45)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1590df8e-b5f2-4966-b0e4-4f49699cde96")
 	)
 	(wire
 		(pts
@@ -14813,7 +14857,7 @@
 	)
 	(wire
 		(pts
-			(xy 398.78 86.36) (xy 398.78 72.39)
+			(xy 401.32 86.36) (xy 401.32 72.39)
 		)
 		(stroke
 			(width 0)
@@ -15033,7 +15077,7 @@
 	)
 	(wire
 		(pts
-			(xy 426.72 90.17) (xy 426.72 72.39)
+			(xy 429.26 90.17) (xy 429.26 72.39)
 		)
 		(stroke
 			(width 0)
@@ -15313,7 +15357,7 @@
 	)
 	(wire
 		(pts
-			(xy 426.72 72.39) (xy 424.18 72.39)
+			(xy 429.26 72.39) (xy 426.72 72.39)
 		)
 		(stroke
 			(width 0)
@@ -15803,6 +15847,16 @@
 	)
 	(wire
 		(pts
+			(xy 382.27 41.91) (xy 382.27 53.34)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "49dc7c4f-d7a8-499d-8cc5-f00763a9ce21")
+	)
+	(wire
+		(pts
 			(xy 227.33 129.54) (xy 255.27 129.54)
 		)
 		(stroke
@@ -16203,7 +16257,7 @@
 	)
 	(wire
 		(pts
-			(xy 374.65 86.36) (xy 398.78 86.36)
+			(xy 374.65 86.36) (xy 401.32 86.36)
 		)
 		(stroke
 			(width 0)
@@ -16303,7 +16357,7 @@
 	)
 	(wire
 		(pts
-			(xy 429.26 77.47) (xy 424.18 77.47)
+			(xy 431.8 77.47) (xy 426.72 77.47)
 		)
 		(stroke
 			(width 0)
@@ -16483,7 +16537,7 @@
 	)
 	(wire
 		(pts
-			(xy 306.07 44.45) (xy 374.65 44.45)
+			(xy 306.07 44.45) (xy 375.92 44.45)
 		)
 		(stroke
 			(width 0)
@@ -16790,6 +16844,16 @@
 			(type default)
 		)
 		(uuid "75149fda-d9cf-47c4-8fc4-1f4dbc42164f")
+	)
+	(wire
+		(pts
+			(xy 394.97 90.17) (xy 394.97 97.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "75675bb4-1b07-4a07-babf-8047c001883c")
 	)
 	(wire
 		(pts
@@ -17713,6 +17777,16 @@
 	)
 	(wire
 		(pts
+			(xy 401.32 86.36) (xy 401.32 97.79)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "99ac7dd2-ab79-43e3-8d18-74b9f3f546d7")
+	)
+	(wire
+		(pts
 			(xy 168.91 38.1) (xy 173.99 38.1)
 		)
 		(stroke
@@ -18213,6 +18287,16 @@
 	)
 	(wire
 		(pts
+			(xy 394.97 90.17) (xy 429.26 90.17)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ae09605a-7da2-40fe-8d61-dc9356fd8f0d")
+	)
+	(wire
+		(pts
 			(xy 217.17 128.27) (xy 254 128.27)
 		)
 		(stroke
@@ -18243,7 +18327,7 @@
 	)
 	(wire
 		(pts
-			(xy 374.65 95.25) (xy 429.26 95.25)
+			(xy 374.65 95.25) (xy 431.8 95.25)
 		)
 		(stroke
 			(width 0)
@@ -18323,7 +18407,7 @@
 	)
 	(wire
 		(pts
-			(xy 429.26 77.47) (xy 429.26 95.25)
+			(xy 431.8 77.47) (xy 431.8 95.25)
 		)
 		(stroke
 			(width 0)
@@ -18623,7 +18707,7 @@
 	)
 	(wire
 		(pts
-			(xy 398.78 72.39) (xy 401.32 72.39)
+			(xy 401.32 72.39) (xy 403.86 72.39)
 		)
 		(stroke
 			(width 0)
@@ -18933,7 +19017,7 @@
 	)
 	(wire
 		(pts
-			(xy 303.53 41.91) (xy 374.65 41.91)
+			(xy 303.53 41.91) (xy 382.27 41.91)
 		)
 		(stroke
 			(width 0)
@@ -19203,7 +19287,7 @@
 	)
 	(wire
 		(pts
-			(xy 374.65 69.85) (xy 401.32 69.85)
+			(xy 374.65 69.85) (xy 403.86 69.85)
 		)
 		(stroke
 			(width 0)
@@ -19400,6 +19484,16 @@
 			(type default)
 		)
 		(uuid "d6a7e7cd-579a-4f2e-8add-e6c187d96f36")
+	)
+	(wire
+		(pts
+			(xy 375.92 44.45) (xy 375.92 53.34)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d6d808fd-eb54-47b5-9b22-d486a2ce1d1e")
 	)
 	(wire
 		(pts
@@ -20952,6 +21046,76 @@
 		)
 	)
 	(symbol
+		(lib_id "Diode:SD05C-01F")
+		(at 375.92 57.15 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "0d25d989-e0a2-4bd5-996f-4cd64955d77d")
+		(property "Reference" "D32"
+			(at 369.062 51.054 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+		(property "Value" "SD05C-01F"
+			(at 372.364 52.324 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SOD-323"
+			(at 381 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diode_arrays/littelfuse_tvs_diode_array_sd_c_datasheet.pdf.pdf"
+			(at 375.92 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "5V, 450W Discrete Bidirectional TVS Diode, SOD-323"
+			(at 375.92 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "c323f79d-6b3b-460c-85ad-da27841da7b1")
+		)
+		(pin "1"
+			(uuid "03f9e188-7e5b-4980-af11-77eb25be93c7")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "D32")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 312.42 270.51 0)
 		(mirror y)
@@ -21242,6 +21406,76 @@
 			(project "ECU"
 				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
 					(reference "J9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Diode:SD05C-01F")
+		(at 394.97 101.6 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1108bce2-5ae5-4022-9847-24f5407827c1")
+		(property "Reference" "D35"
+			(at 388.112 95.504 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+		(property "Value" "SD05C-01F"
+			(at 391.414 96.774 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SOD-323"
+			(at 400.05 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diode_arrays/littelfuse_tvs_diode_array_sd_c_datasheet.pdf.pdf"
+			(at 394.97 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "5V, 450W Discrete Bidirectional TVS Diode, SOD-323"
+			(at 394.97 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "60a43c85-bfef-474c-be53-d4db5a22ad4c")
+		)
+		(pin "1"
+			(uuid "a823db4e-bfd7-4a7e-9771-d23111160627")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "D35")
 					(unit 1)
 				)
 			)
@@ -25542,6 +25776,73 @@
 			(project "ECU"
 				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
 					(reference "#PWR019")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 382.27 60.96 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "5364564d-5b21-493a-8599-9cd5c0896efa")
+		(property "Reference" "#PWR084"
+			(at 382.27 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 382.27 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 382.27 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 382.27 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 382.27 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "cefcd854-94d3-4be1-94a1-52e72717057b")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "#PWR084")
 					(unit 1)
 				)
 			)
@@ -30178,7 +30479,7 @@
 	(symbol
 		(lib_name "Conn_01x01_Socket_2")
 		(lib_id "Connector:Conn_01x01_Socket")
-		(at 379.73 44.45 0)
+		(at 391.16 44.45 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -30187,7 +30488,7 @@
 		(fields_autoplaced yes)
 		(uuid "85c1b496-f12f-423e-bcfb-25ad90f9be19")
 		(property "Reference" "J37"
-			(at 379.095 49.53 0)
+			(at 390.525 49.53 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -30196,7 +30497,7 @@
 			)
 		)
 		(property "Value" "Conn_01x01_Socket"
-			(at 379.095 46.99 0)
+			(at 390.525 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -30205,7 +30506,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 379.73 44.45 0)
+			(at 391.16 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -30214,7 +30515,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 379.73 44.45 0)
+			(at 391.16 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -30223,7 +30524,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x01, script generated"
-			(at 379.73 44.45 0)
+			(at 391.16 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -31871,6 +32172,73 @@
 			(project "ECU"
 				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
 					(reference "#PWR037")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 375.92 60.96 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9a44c212-26e7-452d-bc1e-bad2039c5c98")
+		(property "Reference" "#PWR083"
+			(at 375.92 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 375.92 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 375.92 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 375.92 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 375.92 60.96 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "387e6250-bda6-4da8-b1c0-4d99b3ceba9a")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "#PWR083")
 					(unit 1)
 				)
 			)
@@ -33698,7 +34066,7 @@
 	)
 	(symbol
 		(lib_id "Fiesta_Modules:OBD2_J1962_Female_16P_Generic")
-		(at 401.32 71.12 0)
+		(at 403.86 71.12 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -33707,7 +34075,7 @@
 		(fields_autoplaced yes)
 		(uuid "b19cfdaa-b3c8-4ccd-9666-597c1bce4c0b")
 		(property "Reference" "J32"
-			(at 412.75 52.07 0)
+			(at 415.29 52.07 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -33715,7 +34083,7 @@
 			)
 		)
 		(property "Value" "OBD2_J1962_Female_16P"
-			(at 412.75 54.61 0)
+			(at 415.29 54.61 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -33723,7 +34091,7 @@
 			)
 		)
 		(property "Footprint" "FiestaFootprints:OBD2_J1962_Female_16P_Generic"
-			(at 401.32 71.12 0)
+			(at 403.86 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -33732,7 +34100,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 401.32 71.12 0)
+			(at 403.86 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -33741,7 +34109,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 401.32 71.12 0)
+			(at 403.86 71.12 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -35096,6 +35464,146 @@
 		)
 	)
 	(symbol
+		(lib_id "Diode:SD05C-01F")
+		(at 401.32 101.6 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "bf45208b-1e21-4b09-bbeb-b1897f2a2317")
+		(property "Reference" "D36"
+			(at 394.462 95.504 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+		(property "Value" "SD05C-01F"
+			(at 397.764 96.774 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SOD-323"
+			(at 406.4 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diode_arrays/littelfuse_tvs_diode_array_sd_c_datasheet.pdf.pdf"
+			(at 401.32 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "5V, 450W Discrete Bidirectional TVS Diode, SOD-323"
+			(at 401.32 101.6 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "98e23f1d-4947-4a38-8d60-549b21f19703")
+		)
+		(pin "1"
+			(uuid "76c96fe4-20df-464f-b323-e5dd98ca0868")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "D36")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Diode:SD05C-01F")
+		(at 382.27 57.15 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "bfd8696c-2f1a-47b2-bb21-d1e531d1a09e")
+		(property "Reference" "D34"
+			(at 375.412 51.054 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+		(property "Value" "SD05C-01F"
+			(at 378.714 52.324 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Diode_SMD:D_SOD-323"
+			(at 387.35 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diode_arrays/littelfuse_tvs_diode_array_sd_c_datasheet.pdf.pdf"
+			(at 382.27 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "5V, 450W Discrete Bidirectional TVS Diode, SOD-323"
+			(at 382.27 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "d7721b9e-e97a-4a33-bb4a-ee168354b383")
+		)
+		(pin "1"
+			(uuid "a412ebfb-aad1-4016-88fb-869a011e4b87")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "D34")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_name "Conn_01x01_Socket_13")
 		(lib_id "Connector:Conn_01x01_Socket")
 		(at 54.61 259.08 180)
@@ -35734,6 +36242,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GND")
+		(at 401.32 105.41 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "ca543f97-d88e-46f7-a80f-3d72af6a4433")
+		(property "Reference" "#PWR086"
+			(at 401.32 111.76 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 401.32 109.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 401.32 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 401.32 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 401.32 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "fda1355e-1ad6-4c23-8264-546246ad79e1")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "#PWR086")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_name "Conn_01x01_Socket_2")
 		(lib_id "Connector:Conn_01x01_Socket")
 		(at 379.73 105.41 0)
@@ -36322,7 +36897,7 @@
 	(symbol
 		(lib_name "Conn_01x01_Socket_2")
 		(lib_id "Connector:Conn_01x01_Socket")
-		(at 379.73 41.91 0)
+		(at 391.16 41.91 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -36331,7 +36906,7 @@
 		(fields_autoplaced yes)
 		(uuid "d285f651-0c50-4c16-afad-a9526335e4c5")
 		(property "Reference" "J38"
-			(at 379.095 46.99 0)
+			(at 390.525 46.99 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -36340,7 +36915,7 @@
 			)
 		)
 		(property "Value" "Conn_01x01_Socket"
-			(at 379.095 44.45 0)
+			(at 390.525 44.45 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -36349,7 +36924,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 379.73 41.91 0)
+			(at 391.16 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -36358,7 +36933,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 379.73 41.91 0)
+			(at 391.16 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -36367,7 +36942,7 @@
 			)
 		)
 		(property "Description" "Generic connector, single row, 01x01, script generated"
-			(at 379.73 41.91 0)
+			(at 391.16 41.91 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -38366,6 +38941,73 @@
 			(project "ECU"
 				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
 					(reference "J47")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 394.97 105.41 0)
+		(mirror y)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e558c61e-311a-4e73-89e0-5aad7b252335")
+		(property "Reference" "#PWR085"
+			(at 394.97 111.76 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 394.97 109.22 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 394.97 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 394.97 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 394.97 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "2759c5ef-983c-4fc3-9f39-a1920a6ddea0")
+		)
+		(instances
+			(project "ECU"
+				(path "/42a16386-b871-4bc5-81f0-9fdb5cf5a8a7"
+					(reference "#PWR085")
 					(unit 1)
 				)
 			)
