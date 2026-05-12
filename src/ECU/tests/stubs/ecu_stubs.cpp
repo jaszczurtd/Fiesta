@@ -34,6 +34,12 @@ void RPM_init(RPM *self) {
     self->rpmCycle = false;
 #ifndef VP37
     self->rpmPercentValue = 0;
+    self->rpmFiltered = 0;
+    self->rpmIntegratorQ10 = 0;
+    self->piInitialized = false;
+    self->wasEngineRunning = false;
+    self->vacuumReady = false;
+    self->vacuumReadyAt = 0;
 #endif
 }
 
