@@ -3,15 +3,19 @@
 #include <hal/hal_soft_timer.h>
 
 // RPM formula (integer-only, no floats):
-// original: pulses * (60000 / RPM_REFRESH_INTERVAL) / CRANK_REVOLUTIONS - RPM_CORRECTION_VAL
-//         = pulses * (60000 / 150) / 32 - 50
-//         = pulses * 12.5 - 50
-//         = (pulses * 25 - 100) / 2
-#define RPM_PULSES_MULTIPLIER  25
-#define RPM_PULSES_OFFSET      100
-#define RPM_PULSES_DIVISOR     2
+// rpm = pulses * 60000 / (RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
+//       - RPM_CORRECTION_VAL
+// Keep this derived from RPM_REFRESH_INTERVAL so timing tuning cannot desync
+// RPM conversion scaling.
+#define RPM_PULSES_PER_REVOLUTION  32L
+#define RPM_NUMERATOR_PER_MINUTE   60000L
+#define RPM_DENOMINATOR            ((int64_t)RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
 
 #ifndef VP37
+static unsigned long s_lastPiStepAtMs = 0;
+static int32_t s_lastPTermQ10 = 0;
+static int32_t s_lastIDeltaQ10 = 0;
+
 /**
  * @brief Reset the temporary RPM correction cycle after the timer fires.
  * @return None.
@@ -95,6 +99,9 @@ void RPM_init(RPM *self) {
   self->vacuumReady = false;
   self->vacuumReadyAt = 0;
   self->rpmCycleTimer = NULL;
+  s_lastPiStepAtMs = 0;
+  s_lastPTermQ10 = 0;
+  s_lastIDeltaQ10 = 0;
 #endif
 
   hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
@@ -141,10 +148,11 @@ void RPM_process(RPM *self) {
   if (self->rpmReady) {
     self->rpmReady = false;
 
-    int32_t rpm = (self->snapshotPulses * RPM_PULSES_MULTIPLIER - RPM_PULSES_OFFSET) / RPM_PULSES_DIVISOR;
+    int64_t scaled = ((int64_t)self->snapshotPulses * RPM_NUMERATOR_PER_MINUTE
+      + (RPM_DENOMINATOR / 2)) / RPM_DENOMINATOR;
+    int32_t rpm = (int32_t)scaled - RPM_CORRECTION_VAL;
     if (rpm < 0) rpm = 0;
     if (rpm > RPM_MAX_EVER) rpm = RPM_MAX_EVER;
-    rpm = (rpm / 10) * 10;
 
     self->rpmValue = rpm;
 #ifndef VP37
@@ -208,17 +216,23 @@ void RPM_process(RPM *self) {
   if(RPM_isEngineThrottlePressed(self) ||
     currentRPM < RPM_MIN) {
       RPM_setAccelRPMPercentage(self, ACCELLERATE_RPM_PERCENT_VALUE); //percent
+      self->rpmPercentValue = ACCELLERATE_RPM_PERCENT_VALUE;
       self->piInitialized = false;
       self->rpmIntegratorQ10 = 0;
       self->rpmCycle = false;
+      s_lastPTermQ10 = 0;
+      s_lastIDeltaQ10 = 0;
       valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
       return;
   }
 
   if (!self->vacuumReady) {
+    self->rpmPercentValue = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
     self->piInitialized = false;
     self->rpmIntegratorQ10 = 0;
     self->rpmCycle = false;
+    s_lastPTermQ10 = 0;
+    s_lastIDeltaQ10 = 0;
     valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
     return;
   }
@@ -232,6 +246,8 @@ void RPM_process(RPM *self) {
   int32_t error = desiredRPM - rpmForControl;
 
   if (error <= RPM_PI_DEADBAND_RPM && error >= -RPM_PI_DEADBAND_RPM) {
+    s_lastPTermQ10 = 0;
+    s_lastIDeltaQ10 = 0;
     valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
     return;
   }
@@ -251,7 +267,7 @@ void RPM_process(RPM *self) {
   }
 
   int32_t pTermQ10 = error * RPM_PI_KP_Q10;
-  int64_t iDeltaQ10 = (int64_t)error * RPM_PI_KI_Q10 * RPM_PI_UPDATE_INTERVAL_MS / 1000;
+  int32_t iDeltaQ10 = (int32_t)(((int64_t)error * RPM_PI_KI_Q10 * RPM_PI_UPDATE_INTERVAL_MS) / 1000);
   int32_t uUnsatQ10 = self->rpmIntegratorQ10 + pTermQ10;
   bool atHigh = (uUnsatQ10 > maxQ10);
   bool atLow = (uUnsatQ10 < minQ10);
@@ -260,7 +276,7 @@ void RPM_process(RPM *self) {
     iDeltaQ10 = 0;
   }
 
-  int64_t nextIntegratorQ10 = (int64_t)self->rpmIntegratorQ10 + iDeltaQ10;
+  int64_t nextIntegratorQ10 = (int64_t)self->rpmIntegratorQ10 + (int64_t)iDeltaQ10;
   if (nextIntegratorQ10 > maxQ10) {
     nextIntegratorQ10 = maxQ10;
   } else if (nextIntegratorQ10 < minQ10) {
@@ -275,17 +291,17 @@ void RPM_process(RPM *self) {
     uQ10 = minQ10;
   }
 
+  s_lastPTermQ10 = pTermQ10;
+  s_lastIDeltaQ10 = iDeltaQ10;
+
   self->rpmPercentValue = (int32_t)(uQ10 / RPM_PI_Q10_SCALE);
   RPM_setAccelRPMPercentage(self, self->rpmPercentValue);
+  s_lastPiStepAtMs = now;
   self->rpmCycle = true;
   hal_soft_timer_set_interval(self->rpmCycleTimer, RPM_PI_UPDATE_INTERVAL_MS);
   hal_soft_timer_restart(self->rpmCycleTimer);
 
   valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
-
-#if DEBUG
-  RPM_showDebug(self);
-#endif
 
 #endif /*VP37*/
 }
@@ -316,16 +332,26 @@ void RPM_showDebug(RPM *self) {
   int32_t rpmForControl = (self->rpmFiltered > 0) ? self->rpmFiltered : RPM_getCurrentRPM(self);
   int32_t error = desiredRPM - rpmForControl;
   int32_t iPercent = self->rpmIntegratorQ10 / RPM_PI_Q10_SCALE;
+  int32_t outPercent = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
+  int32_t pTermDeciPct = (s_lastPTermQ10 * 10) / RPM_PI_Q10_SCALE;
+  int32_t iDeltaDeciPct = (s_lastIDeltaQ10 * 10) / RPM_PI_Q10_SCALE;
+  unsigned long piStepAgoMs = (s_lastPiStepAtMs == 0)
+    ? 0
+    : (now - s_lastPiStepAtMs);
 
-  deb("rpmPI rpm:%d filt:%d des:%d err:%d out:%d i:%d vac:%d cyc:%d thr:%d regen:%d cold:%d",
+  deb("rpmPI rpm:%d filt:%d des:%d err:%d out:%d cmd:%d i:%d vac:%d cyc:%d stepAgo:%lu p10:%d iD10:%d thr:%d regen:%d cold:%d",
       RPM_getCurrentRPM(self),
       self->rpmFiltered,
       desiredRPM,
       error,
       self->rpmPercentValue,
+      outPercent,
       iPercent,
       self->vacuumReady ? 1 : 0,
       self->rpmCycle ? 1 : 0,
+      piStepAgoMs,
+      pTermDeciPct,
+      iDeltaDeciPct,
       RPM_isEngineThrottlePressed(self) ? 1 : 0,
       regenActive ? 1 : 0,
       coldEngine ? 1 : 0);

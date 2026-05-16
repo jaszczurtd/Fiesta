@@ -20,17 +20,17 @@ extern "C" {
 #define RPM_PERCENTAGE_CORRECTION_VAL 2
 
 //vacuum accumulator fill time before corrections (in milliseconds)
-#define RPM_CONTROL_VACUUM_FILL_MS 4000
+#define RPM_CONTROL_VACUUM_FILL_MS 1200
 
 //simple RPM smoothing window for control (>= 2)
 #define RPM_CONTROL_FILTER_WINDOW 4
 
 //PI controller tuning (Q10 scale, percent units)
 #define RPM_PI_Q10_SCALE 1024
-#define RPM_PI_UPDATE_INTERVAL_MS 4000
-#define RPM_PI_DEADBAND_RPM MAX_RPM_DIFFERENCE
-#define RPM_PI_KP_Q10 20
-#define RPM_PI_KI_Q10 1
+#define RPM_PI_UPDATE_INTERVAL_MS 400
+#define RPM_PI_DEADBAND_RPM 20
+#define RPM_PI_KP_Q10 40
+#define RPM_PI_KI_Q10 6
 
 //debug log cadence (in milliseconds)
 #define RPM_DEBUG_UPDATE_MS 500

@@ -27,7 +27,6 @@ static hal_soft_timer_t timerQuarterSecond = NULL;
 static hal_soft_timer_t timerSoftInit = NULL;
 static hal_soft_timer_t timerEGT = NULL;
 static hal_soft_timer_t timerDebug = NULL;
-static hal_soft_timer_t timerCANLoop = NULL;
 static hal_soft_timer_t timerCANUpdate = NULL;
 static hal_soft_timer_t timerCANCheck = NULL;
 
@@ -38,7 +37,6 @@ static const hal_soft_timer_table_entry_t clocksTimerTable[] = {
   { &timerSoftInit,     softInitDisplay,           (uint32_t)DISPLAY_SOFTINIT_TIME },
   { &timerEGT,          changeEGT,                 (uint32_t)DPF_SHOW_TIME_INTERVAL },
   { &timerDebug,        updateValsForDebug,        (uint32_t)DEBUG_UPDATE },
-  { &timerCANLoop,      canMainLoop,               (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
   { &timerCANUpdate,    updateCANrecipients,       (uint32_t)CAN_UPDATE_RECIPIENTS },
   { &timerCANCheck,     canCheckConnection,        (uint32_t)CAN_CHECK_CONNECTION }
 };
@@ -151,6 +149,9 @@ void loop_a(void) {
 
   statusVariable0 = 1;
 
+  // Drain CAN RX before timer callbacks that may execute heavy draw paths.
+  canMainLoop();
+
   hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
   if(lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
@@ -171,6 +172,9 @@ void loop_a(void) {
   loopBuzzers();
 
   cluster.update(getCurrentCarSpeed(), getEngineRPM());
+
+  // One more drain at the end of loop to lower chance of RX FIFO buildup.
+  canMainLoop();
 
   hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
