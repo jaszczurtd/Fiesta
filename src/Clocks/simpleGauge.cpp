@@ -253,7 +253,7 @@ void SimpleGauge::showSimpleGauge(void) {
       currentVal = int(valueFields[F_INTAKE_TEMP]);
       break;
     case SIMPLE_G_RPM:
-      currentVal = getEngineRPM();
+      currentVal = ((getEngineRPM() / 10) * 10);
       break;
     case SIMPLE_G_GPS:
       currentVal = getGPSSpeed();

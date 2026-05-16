@@ -109,7 +109,7 @@ extern "C" {
 
 //values from ADC
 #define THROTTLE_MIN 1795
-#define THROTTLE_MAX 3730
+#define THROTTLE_MAX 3605
 
 //values from ADC
 #define FUEL_MAX 320
@@ -123,7 +123,7 @@ extern "C" {
 #define TURBO_MIN_PRESSURE_FOR_SPINNING 0.15
 
 //RPM refresh interval (in miliseconds)
-#define RPM_REFRESH_INTERVAL 150
+#define RPM_REFRESH_INTERVAL 100
 
 //maximum RPM for engine
 #define RPM_MAX_EVER 5000
@@ -133,7 +133,7 @@ extern "C" {
 #define PRESSED_PEDAL_RPM_VALUE 1300
 
 #define ACCELERATE_MIN_PERCENTAGE_THROTTLE_VALUE 4
-#define ACCELLERATE_RPM_PERCENT_VALUE 98
+#define ACCELLERATE_RPM_PERCENT_VALUE 90
 #define MAX_RPM_PERCENT_VALUE 100
 #define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 //max difference for engine nominal RPM

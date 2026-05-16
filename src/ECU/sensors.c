@@ -205,19 +205,28 @@ float readOilTemp(void) {
  *       G79/G185-like driver-demand path.
  */
 TESTABLE_STATIC int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal) {
-  int32_t initialVal = rawVal - THROTTLE_MIN;
-
-  if(initialVal < 0) {
-      initialVal = 0;
+  if(rawVal <= THROTTLE_MIN) {
+    return PWM_RESOLUTION;
   }
-  int32_t maxVal = (THROTTLE_MAX - THROTTLE_MIN);
-
-  if(initialVal > maxVal) {
-      initialVal = maxVal;
+  if(rawVal >= THROTTLE_MAX) {
+    return 0;
   }
-  float divider = maxVal / (float)PWM_RESOLUTION;
-  int32_t result = (int32_t)(initialVal / divider);
-  return abs(result - PWM_RESOLUTION);
+
+  int32_t range = (THROTTLE_MAX - THROTTLE_MIN);
+  int32_t shifted = rawVal - THROTTLE_MIN;
+
+  // Round to the nearest step in PWM domain, then invert the axis
+  // so the historical "higher ADC -> lower demand" behavior is preserved.
+  int32_t scaled = (shifted * PWM_RESOLUTION + (range / 2)) / range;
+  int32_t inverted = PWM_RESOLUTION - scaled;
+
+  if(inverted < 0) {
+    return 0;
+  }
+  if(inverted > PWM_RESOLUTION) {
+    return PWM_RESOLUTION;
+  }
+  return inverted;
 }
 
 int32_t readThrottle(void) {
@@ -435,9 +444,8 @@ void readHighValues(void) {
   setGlobalValue(F_GPS_CAR_SPEED,          getCurrentCarSpeed());
   setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());
 
-  // CAN update helpers self-gate on s_canState.last*Sent, so both calls are
-  // no-ops when the globals they care about did not change. No outer
-  // change-detection cache is needed.
+  // Transmit throttle/turbo each high-rate tick to avoid stale cluster values
+  // after an occasional dropped frame on the bus.
   CAN_sendThrottleUpdate();
   CAN_sendTurboUpdate();
 }

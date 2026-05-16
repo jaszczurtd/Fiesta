@@ -406,6 +406,8 @@ void looper1(void) {
 #endif
   VP37_process(&s_ctx.injectionPump);
   hal_mutex_unlock(vp37StateMutex);
+#else
+  RPM_showDebug(&s_ctx.rpm);
 #endif
   s_startPersistentState.statusVariable1Val = 3;
 
