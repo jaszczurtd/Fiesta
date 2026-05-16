@@ -17,12 +17,28 @@ extern "C" {
 
 //tweakable value:
 //by how much percentage should the solenoid position change from RPM?
-#define RPM_PERCENTAGE_CORRECTION_VAL 5
+#define RPM_PERCENTAGE_CORRECTION_VAL 2
+
+//vacuum accumulator fill time before corrections (in milliseconds)
+#define RPM_CONTROL_VACUUM_FILL_MS 1200
+
+//simple RPM smoothing window for control (>= 2)
+#define RPM_CONTROL_FILTER_WINDOW 4
+
+//PI controller tuning (Q10 scale, percent units)
+#define RPM_PI_Q10_SCALE 1024
+#define RPM_PI_UPDATE_INTERVAL_MS 400
+#define RPM_PI_DEADBAND_RPM 20
+#define RPM_PI_KP_Q10 40
+#define RPM_PI_KI_Q10 6
+
+//debug log cadence (in milliseconds)
+#define RPM_DEBUG_UPDATE_MS 500
 
 //since solenoid has some time lag we have to compensate it
 //values defined as ms
-#define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 500
-#define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 600
+#define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 4000
+#define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 4000
 
 typedef struct {
   volatile int32_t rpmValue;
@@ -38,6 +54,12 @@ typedef struct {
   bool rpmCycle;
 #ifndef VP37
   int32_t rpmPercentValue;
+  int32_t rpmFiltered;
+  int32_t rpmIntegratorQ10;
+  bool piInitialized;
+  bool wasEngineRunning;
+  bool vacuumReady;
+  unsigned long vacuumReadyAt;
   hal_soft_timer_t rpmCycleTimer;
 #endif
 } RPM;
