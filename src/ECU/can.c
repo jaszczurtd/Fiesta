@@ -232,7 +232,7 @@ void CAN_updaterecipients_01(void) {
 
 void CAN_updaterecipients_02(void) {
   if(s_canState.isInitialized) {
-    int32_t rpm = (int32_t)(getGlobalValue(F_RPM));
+    int32_t rpm = RPM_getCurrentRPM(getRPMInstance());
     if(s_canState.lastRpmSent != rpm) {
       s_canState.lastRpmSent = rpm;
 
@@ -253,39 +253,35 @@ void CAN_sendTurboUpdate(void) {
 
     floatToDec(getGlobalValue(F_PRESSURE), &hi, &lo);
     floatToDec(getGlobalValue(F_PRESSURE_DESIRED), &hi_d, &lo_d);
-    if(lo != s_canState.lastTurboLoSent || hi != s_canState.lastTurboHiSent || hi_d != s_canState.lastTurboHiDesiredSent || lo_d != s_canState.lastTurboLoDesiredSent) {
-      uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
+    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
 
-      s_canState.lastTurboLoSent = lo;
-      s_canState.lastTurboHiSent = hi;
+    s_canState.lastTurboLoSent = lo;
+    s_canState.lastTurboHiSent = hi;
 
-      s_canState.lastTurboLoDesiredSent = lo_d;
-      s_canState.lastTurboHiDesiredSent = hi_d;
+    s_canState.lastTurboLoDesiredSent = lo_d;
+    s_canState.lastTurboHiDesiredSent = hi_d;
 
-      buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
-      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (uint8_t)hi;
-      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (uint8_t)lo;      
-      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (uint8_t)hi_d;
-      buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (uint8_t)lo_d;
+    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (uint8_t)hi;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (uint8_t)lo;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (uint8_t)hi_d;
+    buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (uint8_t)lo_d;
 
-      hal_can_send(s_canState.canBusHandle, CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
-    }
+    hal_can_send(s_canState.canBusHandle, CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
   }
 }
 
 void CAN_sendThrottleUpdate(void) {
   if(s_canState.isInitialized) {
     int32_t throttle = (int32_t)(getGlobalValue(F_THROTTLE_POS));
-    if(s_canState.lastThrottleSent != throttle) {
-      s_canState.lastThrottleSent = throttle;
+    s_canState.lastThrottleSent = throttle;
 
-      uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
-      buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
-      buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
-      buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
+    uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
+    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
+    buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
-      hal_can_send(s_canState.canBusHandle, CAN_ID_THROTTLE, sizeof(buf), buf);
-    }
+    hal_can_send(s_canState.canBusHandle, CAN_ID_THROTTLE, sizeof(buf), buf);
   }
 }
 
