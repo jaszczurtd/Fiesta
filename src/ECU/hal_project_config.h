@@ -24,3 +24,4 @@
 #define HAL_DISABLE_DISPLAY         /* ILI9341 TFT driver                  */
 #define HAL_DISABLE_RGB_LED         /* RGB LED driver              */
 #define HAL_DISABLE_UNITY           /* Unity test framework                 */
+#define HAL_DISABLE_DS18B20         /* DS18B20 temperature sensor           */

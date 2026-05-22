@@ -27,3 +27,4 @@
 #define HAL_DISABLE_I2C             /* I2C bus - propagates EXTERNAL_ADC  */
 #define HAL_DISPLAY_ILI9341         /* ILI9341 TFT driver                  */
 #define HAL_DISABLE_SSD1306         /* SSD1306 OLED driver                 */
+#define HAL_DISABLE_DS18B20          /* DS18B20 1-Wire temperature sensor   */
