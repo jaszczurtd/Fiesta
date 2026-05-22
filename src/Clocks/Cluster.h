@@ -15,7 +15,7 @@ typedef struct {
   volatile bool           state;
   unsigned int            pin;
   volatile unsigned int   freq;
-  volatile hal_alarm_id_t alarm;
+  hal_timer_t             timer;
 } cluster_s;
 
 class Cluster {

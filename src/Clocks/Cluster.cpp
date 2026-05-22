@@ -29,14 +29,48 @@ constexpr std::array<CalibrationPoint, 13> SPEED_CALIBRATION = {{
   {220, 290.5f}
 }};
 
-static int64_t toggle_callback(hal_alarm_id_t id, void *user_data) {
+static void toggle_callback(hal_timer_t timer, void *user_data) {
+  (void)timer;
   cluster_s *data = static_cast<cluster_s*>(user_data);
   if(data != nullptr) {
     hal_gpio_write(data->pin, data->state);
     data->state = !data->state;
-    data->alarm = hal_timer_add_alarm_us(data->half_period_us, toggle_callback, user_data, false);
   }
-  return 0;
+}
+
+static bool ensure_timer_created(cluster_s *data) {
+  if(data == nullptr) {
+    return false;
+  }
+  if(data->timer != nullptr) {
+    return true;
+  }
+
+  hal_timer_result_t result = hal_timer_create(HAL_TIMER_POOL_DEFAULT,
+                                               data->half_period_us,
+                                               true,
+                                               toggle_callback,
+                                               data,
+                                               &data->timer);
+  return result == HAL_TIMER_OK;
+}
+
+static bool apply_period_and_start(cluster_s *data) {
+  if(!ensure_timer_created(data)) {
+    return false;
+  }
+
+  if(hal_timer_set_period_us(data->timer, data->half_period_us, false) != HAL_TIMER_OK) {
+    return false;
+  }
+
+  if(hal_timer_get_state(data->timer) != HAL_TIMER_STATE_RUNNING) {
+    if(hal_timer_start(data->timer) != HAL_TIMER_OK) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 float calculate_required_coefficient(uint16_t speed, float target_freq) {
@@ -131,29 +165,33 @@ void Cluster::init_output(unsigned int pin) {
   switch(pin) {
     case SPEED_OUTPUT_PIN:
       speedometer.pin = pin;
-      speedometer.alarm = hal_timer_add_alarm_us(speedometer.half_period_us, toggle_callback, &speedometer, false);
+      speedometer.state = false;
+      speedometer.timer = nullptr;
+      (void)ensure_timer_created(&speedometer);
     break;
 
     case TACHO_OUTPUT_PIN:
       tachometer.pin = pin;
-      tachometer.alarm = hal_timer_add_alarm_us(tachometer.half_period_us, toggle_callback, &tachometer, false);
+      tachometer.state = false;
+      tachometer.timer = nullptr;
+      (void)ensure_timer_created(&tachometer);
     break;
   }
 }
 
 void Cluster::resetSpeed() {
-  if(speedometer.alarm != HAL_ALARM_INVALID) {
-    hal_timer_cancel_alarm(speedometer.alarm);
-    speedometer.alarm = HAL_ALARM_INVALID;
+  if(speedometer.timer != nullptr) {
+    (void)hal_timer_stop(speedometer.timer);
   }
+  speedometer.state = false;
   hal_gpio_write(speedometer.pin, false);
 }
 
 void Cluster::resetRPM() {
-  if(tachometer.alarm != HAL_ALARM_INVALID) {
-    hal_timer_cancel_alarm(tachometer.alarm);
-    tachometer.alarm = HAL_ALARM_INVALID;
+  if(tachometer.timer != nullptr) {
+    (void)hal_timer_stop(tachometer.timer);
   }
+  tachometer.state = false;
   hal_gpio_write(tachometer.pin, false);
 }
 
@@ -165,8 +203,8 @@ void Cluster::update(unsigned int speed, unsigned int rpm) {
       resetSpeed();
     } else {
       calculate_freq_half_period(SPEED_OUTPUT_PIN, speed);
-      if(speedometer.alarm == HAL_ALARM_INVALID) {
-        speedometer.alarm = hal_timer_add_alarm_us(speedometer.half_period_us, toggle_callback, &speedometer, false);
+      if(!apply_period_and_start(&speedometer)) {
+        resetSpeed();
       }
     }
   }
@@ -178,8 +216,8 @@ void Cluster::update(unsigned int speed, unsigned int rpm) {
       resetRPM();
     } else {
       calculate_freq_half_period(TACHO_OUTPUT_PIN, rpm);
-      if(tachometer.alarm == HAL_ALARM_INVALID) {
-        tachometer.alarm = hal_timer_add_alarm_us(tachometer.half_period_us, toggle_callback, &tachometer, false);
+      if(!apply_period_and_start(&tachometer)) {
+        resetRPM();
       }
     }
   }

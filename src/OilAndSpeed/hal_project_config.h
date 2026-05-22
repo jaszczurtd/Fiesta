@@ -27,3 +27,4 @@
 #define HAL_DISABLE_MAX6675         /* MAX6675 thermocouple interface      */
 #define HAL_DISABLE_EXTERNAL_ADC    /* External ADC                        */
 #define HAL_DISABLE_UNITY          /* Unity unit testing framework         */
+#define HAL_DISABLE_DS18B20         /* DS18B20 temperature sensor           */
