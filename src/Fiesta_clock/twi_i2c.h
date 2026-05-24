@@ -1,20 +1,15 @@
-//
-//  i2c.h
-//  Index
-//
-//  Created by Marcin Kielesiński on 26/01/2020.
-//
+#ifndef TWI_I2C_H_
+#define TWI_I2C_H_
 
-#ifndef i2c_h
-#define i2c_h
+#include <stdbool.h>
+#include <stdint.h>
 
-#include <stdio.h>
 #include "utils.h"
 
 #define MASTER_TRANSMITTER 0
 #define MASTER_RECEIVER 1
-#define TRANSMISSION_SUCCESS -1
-#define TRANSMISSION_ERROR -2
+#define TRANSMISSION_SUCCESS 1
+#define TRANSMISSION_ERROR 0
 
 void TWI_Init(void);
 void TWI_Start(void);
@@ -24,4 +19,4 @@ void TWI_Write(unsigned char byte);
 unsigned char TWI_address(unsigned char address, bool masterMode);
 
 
-#endif /* i2c_h */
+#endif /* TWI_I2C_H_ */

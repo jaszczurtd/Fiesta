@@ -8,7 +8,7 @@
  */
 #include "font.h"
 
-const char ssd1306oled_font[][6] PROGMEM = {
+const uint8_t ssd1306oled_font[][6] PROGMEM = {
 {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // sp
 {0x00, 0x00, 0x00, 0x2f, 0x00, 0x00}, // !
 {0x00, 0x00, 0x07, 0x00, 0x07, 0x00}, // "
@@ -107,9 +107,9 @@ const char ssd1306oled_font[][6] PROGMEM = {
 /* end of normal char-set */
 /* put your own signs/chars here, edit special_char too */
 /* be sure that your first special char stand here */
-{0x00, 0x48, 0x55, 0x55, 0x54, 0x20}, // œ 7f
+{0x00, 0x48, 0x55, 0x55, 0x54, 0x20}, // ï¿½ 7f
 
 };
-const char special_char[][2] PROGMEM = {
+const uint8_t special_char[][2] PROGMEM = {
     {0xff, 0xff} // end of table special_char
 };

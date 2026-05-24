@@ -1,12 +1,6 @@
 
 #include "main.h"
 
-#define IDLE_SECONDS 60
-
-#define CHANGE_MODE_CYCLES 400
-#define IDLE_LED_ON_CYCLES 400
-#define IDLE_LED_OFF_CYCLES 2800
-
 char s[BUF_L + 1];
 
 static unsigned char mode_ignition = MODE_CLOCK;
@@ -17,10 +11,11 @@ static bool blinkLED = false;
 static int idleLEDCycles = 0;
 static int changeModeCycles = 0;
 
-void setDisplaytMode(void);
+static void setDisplaytMode(void);
+static void setup_runtime(void);
 
-void helloMessage(void) {
-    lcd_init(LCD_DISP_ON);    // init lcd and turn on
+static void helloMessage(void) {
+	lcd_init(LCD_DISP_ON);
 
 	lcd_clrscr();
 
@@ -33,170 +28,178 @@ void helloMessage(void) {
 	lcd_puts("FIESTA");
 }
 
-static void setup(void) {
-    wdt_enable( WDTO_2S );
+static void setup_runtime(void) {
+	hal_watchdog_enable(CFG_WATCHDOG_TIMEOUT_MS, false);
 
-	sbi(DDRC, PC0); //red led
-	sbi(DDRC, PC1); //orange led
-	sbi(DDRC, PC2);	//blue led
+	hal_gpio_set_mode(PIN_LED_RED, HAL_GPIO_OUTPUT);
+	hal_gpio_set_mode(PIN_LED_ORANGE, HAL_GPIO_OUTPUT);
+	hal_gpio_set_mode(PIN_LED_BLUE, HAL_GPIO_OUTPUT);
+	redLED(false);
+	orangeLED(false);
+	blueLED(false);
 
-	//ADC6 = voltomierz
+	hal_gpio_set_mode(PIN_BUTTON_HOUR, HAL_GPIO_INPUT_PULLUP);
+	hal_gpio_set_mode(PIN_BUTTON_MINUTE, HAL_GPIO_INPUT_PULLUP);
+	hal_gpio_set_mode(PIN_BUTTON_SET, HAL_GPIO_INPUT_PULLUP);
 
-	cbi(DDRD, PD0); //increase hour
-	cbi(DDRD, PD1); //increase minute
-	cbi(DDRD, PD4); //set clock
+	hal_gpio_set_mode(PIN_IGNITION, HAL_GPIO_INPUT_PULLUP);
 
-	cbi(DDRC, PC3); //ignition
+	hal_adc_set_resolution((uint8_t)CFG_ADC_RESOLUTION_BITS);
 
-    TWI_Init();
+	TWI_Init();
+
+	idleTimer = false;
+	blinkLED = false;
+	idleLEDCycles = 0;
+	changeModeCycles = 0;
+	mode_ignition = MODE_CLOCK;
 
     helloMessage();
-
-    idleTimer = blinkLED = false;
-    idleLEDCycles = 0;
 
     PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
 
     temp_initial_read();
 
     lcd_clrscr();
-
-    sei();
 }
 
-int main(void) {
+void setup_c(void) {
+	setup_runtime();
+}
 
-	setup();
+void loop_c(void) {
+	hal_watchdog_feed();
 
-    while(1) {
-    	wdt_reset();
+	bool ig = ignition();
+	if (ig != lastIgnition) {
+		lastIgnition = ig;
+		blinkLED = false;
+		blueLED(false);
+		changeModeCycles = 0;
 
-    	bool ig = ignition();
-    	if(ig != lastIgnition) {
-    		lastIgnition = ig;
-    		blinkLED = false;
+		helloMessage();
+
+		temp_initial_read();
+
+		lcd_clrscr();
+	}
+
+	if (idleTimer) {
+		if (checkIfTimerReached()) {
+			lcd_sleep(true);
+			blinkLED = true;
+		}
+
+		if (blinkLED) {
+			if (idleLEDCycles++ > (CFG_IDLE_LED_OFF_CYCLES + CFG_IDLE_LED_ON_CYCLES)) {
+				idleLEDCycles = 0;
+			}
+
+			blueLED(idleLEDCycles < CFG_IDLE_LED_ON_CYCLES);
+		}
+
+	} else {
+		lcd_sleep(false);
+	}
+
+	if (!ig) {
+		orangeLED(false);
+		redLED(false);
+
+		if (!idleTimer) {
+			idleTimer = true;
+			startTimerForSeconds((unsigned char)CFG_IDLE_SECONDS);
+		}
+
+		if (anyButton() || isClockSetMode()) {
+			idleTimer = false;
+			blinkLED = false;
 			blueLED(false);
-			changeModeCycles = 0;
+		}
 
-			helloMessage();
+		if (!blinkLED) {
+			clockMainFunction();
+		}
 
-    		temp_initial_read();
-
-    		lcd_clrscr();
-
-    	}
-
-    	if(idleTimer) {
-    		if(checkIfTimerReached()) {
-    			lcd_sleep(true);
-    			blinkLED = true;
-    		}
-
-    		if(blinkLED) {
-
-    			if(idleLEDCycles++ > (IDLE_LED_OFF_CYCLES + IDLE_LED_ON_CYCLES)) {
-    				idleLEDCycles = 0;
-    			}
-
-    			blueLED(idleLEDCycles < IDLE_LED_ON_CYCLES);
-    		}
-
-    	} else {
-			lcd_sleep(false);
-    	}
-
-    	if(!ig) {
-
-    		orangeLED(false);
-    		redLED(false);
-
-    		if(!idleTimer) {
-    			idleTimer = true;
-    			startTimerForSeconds(IDLE_SECONDS);
-    		}
-
-    		if(anyButton() || isClockSetMode()) {
-    			idleTimer = false;
-    			blinkLED = false;
-				blueLED(false);
-    		}
-
-    		if(!blinkLED) {
-    			clockMainFunction();
-    		}
-
-    	} else {
-    		idleTimer = false;
-
-    		setDisplaytMode();
-    	}
+	} else {
+		idleTimer = false;
+		setDisplaytMode();
     }
 }
 
-void setDisplaytMode(void) {
-	switch(mode_ignition) {
-	case MODE_CLOCK:
-    	clockMainFunction();
-		break;
-	case MODE_TEMP:
-		temp_read_display();
-		break;
-	case MODE_VOLT:
-		voltMainFunction();
-		break;
-	}
-
-	if(ignition()) {
-
-		if(setButtonPressed()) {
-			changeModeCycles = 0;
-			mode_ignition++;
-			if(mode_ignition > MODE_VOLT) {
-				mode_ignition = MODE_CLOCK;
-			}
-			lcd_clrscr();
-		}
-
-		int countVal = CHANGE_MODE_CYCLES;
-		switch(mode_ignition) {
+static void setDisplaytMode(void) {
+	switch (mode_ignition) {
+		case MODE_CLOCK:
+			clockMainFunction();
+			break;
 		case MODE_TEMP:
-			countVal = CHANGE_MODE_CYCLES / 6;
+			temp_read_display();
 			break;
 		case MODE_VOLT:
-			countVal = CHANGE_MODE_CYCLES / 4;
+			voltMainFunction();
 			break;
-		}
+		default:
+			mode_ignition = MODE_CLOCK;
+			break;
+	}
 
-		if(countVal < changeModeCycles++) {
+	if (ignition()) {
+		if (setButtonPressed()) {
 			changeModeCycles = 0;
 			mode_ignition++;
-			if(mode_ignition > MODE_VOLT) {
+			if (mode_ignition > MODE_VOLT) {
 				mode_ignition = MODE_CLOCK;
 			}
 			lcd_clrscr();
 		}
 
+		int countVal = CFG_CHANGE_MODE_CYCLES;
+		switch (mode_ignition) {
+			case MODE_TEMP:
+				countVal = CFG_CHANGE_MODE_CYCLES / 6;
+				break;
+			case MODE_VOLT:
+				countVal = CFG_CHANGE_MODE_CYCLES / 4;
+				break;
+			default:
+				break;
+		}
+
+		if (countVal < changeModeCycles++) {
+			changeModeCycles = 0;
+			mode_ignition++;
+			if (mode_ignition > MODE_VOLT) {
+				mode_ignition = MODE_CLOCK;
+			}
+			lcd_clrscr();
+		}
 	}
 }
 
 void redLED(bool state) {
-	(state) ? sbi(PORTC, PC0) : cbi(PORTC, PC0);
+	const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
+	hal_gpio_write(PIN_LED_RED, level);
 }
+
 void orangeLED(bool state) {
-	(state) ? sbi(PORTC, PC1) : cbi(PORTC, PC1);
+	const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
+	hal_gpio_write(PIN_LED_ORANGE, level);
 }
+
 void blueLED(bool state) {
-	(state) ? sbi(PORTC, PC2) : cbi(PORTC, PC2);
+	const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
+	hal_gpio_write(PIN_LED_BLUE, level);
 }
 
 bool ignition(void) {
-	return bit_is_clear(PINC, PC3);
+	return hal_gpio_read(PIN_IGNITION) == IGNITION_ACTIVE_LEVEL;
 }
+
 bool setButtonPressed(void) {
 	bool state = false;
 
-	while(setButton()) {
-		wdt_reset();
+	while (setButton()) {
+		hal_watchdog_feed();
 		state = true;
 		blueLED(true);
 	}
@@ -204,14 +207,17 @@ bool setButtonPressed(void) {
 
 	return state;
 }
+
 bool setButton(void) {
-	return bit_is_clear(PIND, PD4);
+	return hal_gpio_read(PIN_BUTTON_SET) == BUTTON_ACTIVE_LEVEL;
 }
+
 bool setHour(void) {
-	return bit_is_clear(PIND, PD0);
+	return hal_gpio_read(PIN_BUTTON_HOUR) == BUTTON_ACTIVE_LEVEL;
 }
+
 bool setMinute(void) {
-	return bit_is_clear(PIND, PD1);
+	return hal_gpio_read(PIN_BUTTON_MINUTE) == BUTTON_ACTIVE_LEVEL;
 }
 
 bool anyButton(void) {

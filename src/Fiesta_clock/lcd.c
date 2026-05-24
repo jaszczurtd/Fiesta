@@ -99,7 +99,9 @@ const uint8_t init_sequence [] PROGMEM = {    // Initialization Sequence
     
     
 };
+#ifdef __clang__
 #pragma mark LCD COMMUNICATION
+#endif
 void lcd_command(uint8_t cmd[], uint8_t size) {
 #if defined I2C
 	TWI_Start();
@@ -138,8 +140,10 @@ void lcd_data(uint8_t data[], uint16_t size) {
     LCD_PORT |= (1 << CS_PIN);
 #endif
 }
+#ifdef __clang__
 #pragma mark -
 #pragma mark GENERAL FUNCTIONS
+#endif
 void lcd_init(uint8_t dispAttr){
 #if defined I2C
 	TWI_Init();
@@ -222,16 +226,30 @@ void lcd_putc(char c){
     switch (c) {
         case '\b':
             // backspace
-            lcd_gotoxy(cursorPosition.x-charMode, cursorPosition.y);
+            if (cursorPosition.x >= charMode) {
+                lcd_gotoxy((uint8_t)(cursorPosition.x - charMode), cursorPosition.y);
+            } else {
+                lcd_gotoxy(0, cursorPosition.y);
+            }
             lcd_putc(' ');
-            lcd_gotoxy(cursorPosition.x-charMode, cursorPosition.y);
+            if (cursorPosition.x >= charMode) {
+                lcd_gotoxy((uint8_t)(cursorPosition.x - charMode), cursorPosition.y);
+            } else {
+                lcd_gotoxy(0, cursorPosition.y);
+            }
             break;
         case '\t':
             // tab
-            if( (cursorPosition.x+charMode*4) < (DISPLAY_WIDTH/ sizeof(FONT[0])-charMode*4) ){
-                lcd_gotoxy(cursorPosition.x+charMode*4, cursorPosition.y);
-            }else{
-                lcd_gotoxy(DISPLAY_WIDTH/ sizeof(FONT[0]), cursorPosition.y);
+            {
+                const int cursor_x = (int)cursorPosition.x;
+                const int tab_step = (int)charMode * 4;
+                const int max_text_cols = (int)(DISPLAY_WIDTH / sizeof(FONT[0]));
+
+                if ((cursor_x + tab_step) < (max_text_cols - tab_step)) {
+                    lcd_gotoxy((uint8_t)(cursor_x + tab_step), cursorPosition.y);
+                } else {
+                    lcd_gotoxy((uint8_t)max_text_cols, cursorPosition.y);
+                }
             }
             break;
         case '\n':
@@ -246,7 +264,10 @@ void lcd_putc(char c){
             break;
         default:
             // char doesn't fit in line
-            if( (cursorPosition.x >= DISPLAY_WIDTH-sizeof(FONT[0])) || (c < ' ') ) break;
+            {
+                const int max_char_x = (int)DISPLAY_WIDTH - (int)sizeof(FONT[0]);
+                if (((int)cursorPosition.x >= max_char_x) || (c < ' ')) break;
+            }
             // mapping char
             c -= ' ';
             if (c >= pgm_read_byte(&special_char[0][1]) ) {

@@ -1,0 +1,8 @@
+{
+    "board": "rp2040:rp2040:waveshare_rp2040_zero",
+    "configuration": "freq=125,dbgport=Disabled,dbglvl=None,usbstack=picosdk",
+    "port": "/dev/ttyACM0",
+    "programmer": "rp2040:edbg",
+    "sketch": "Fiesta_clock.ino",
+    "output": "./.build"
+}

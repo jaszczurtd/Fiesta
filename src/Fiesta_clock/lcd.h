@@ -47,13 +47,18 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-    
-#if (__GNUC__ * 100 + __GNUC_MINOR__) < 303
-#error "This library requires AVR-GCC 3.3 or later, update to newer AVR-GCC compiler !"
-#endif
-    
+
 #include <inttypes.h>
-#include <avr/pgmspace.h>
+
+#include "hardwareConfig.h"
+
+#ifndef PROGMEM
+#define PROGMEM
+#endif
+
+#ifndef pgm_read_byte
+#define pgm_read_byte(addr) (*(const uint8_t *)(addr))
+#endif
 
 	/* TODO: define bus */
 #define I2C			// I2C or SPI	
@@ -70,7 +75,7 @@ extern "C" {
     // using 7-bit-adress for lcd-library
     // if you use your own library for twi check I2C-adress-handle
 
-#define SSD1306_ADDRESS 0x3C
+#define SSD1306_ADDRESS OLED_I2C_ADDR
 
     
 #ifdef I2C

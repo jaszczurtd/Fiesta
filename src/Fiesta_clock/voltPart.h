@@ -11,8 +11,6 @@
 #include <stdio.h>
 #include "main.h"
 
-#define VOLT_DELAY_LOOPS 6
-
 void voltMainFunction(void);
 
 #endif /* VOLTPART_H_ */

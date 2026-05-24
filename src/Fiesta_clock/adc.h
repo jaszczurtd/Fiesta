@@ -1,18 +1,10 @@
-//
-//  adc.h
-//  Index
-//
-//  Created by Marcin Kielesiński on 26/12/2019.
-//
+#ifndef ADC_H_
+#define ADC_H_
 
-#ifndef adc_h
-#define adc_h
+#include <stdint.h>
 
-#include <string.h>
-#include <avr/io.h>
-#include <util/delay.h>
 #include "utils.h"
 
 int getADCValue(unsigned char ADCchannel);
 
-#endif /* adc_h */
+#endif /* ADC_H_ */

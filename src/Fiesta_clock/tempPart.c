@@ -29,15 +29,15 @@ void check_temp_for_leds(void) {
 }
 
 void init_delay(void) {
-	temp_in_delay = TEMP_DELAY_LOOPS;
-	temp_out_delay = TEMP_DELAY_LOOPS * 2;
+	temp_in_delay = CFG_TEMP_DELAY_LOOPS;
+	temp_out_delay = CFG_TEMP_DELAY_LOOPS * 2;
 }
 
 void temp_initial_read(void) {
-	ds18b20_setPin(PD2);
+	ds18b20_setPin(PIN_DS18B20_INSIDE);
 	ds18b20_gettemp(&temp_in_hi, &temp_in_lo, NULL);
 
-	ds18b20_setPin(PD3);
+	ds18b20_setPin(PIN_DS18B20_OUTSIDE);
 	ds18b20_gettemp(&temp_out_hi, &temp_out_lo, &temp_out);
 
 	if(ignition()) {
@@ -53,14 +53,14 @@ void temp_read_display(void) {
 	}
 
 	if(temp_in_delay-- <= 0) {
-		temp_in_delay = TEMP_DELAY_LOOPS;
-		ds18b20_setPin(PD2);
+		temp_in_delay = CFG_TEMP_DELAY_LOOPS;
+		ds18b20_setPin(PIN_DS18B20_INSIDE);
 		ds18b20_gettemp(&temp_in_hi, &temp_in_lo, NULL);
 	}
 
 	if(temp_out_delay-- <= 0) {
-		temp_out_delay = TEMP_DELAY_LOOPS;
-		ds18b20_setPin(PD3);
+		temp_out_delay = CFG_TEMP_DELAY_LOOPS;
+		ds18b20_setPin(PIN_DS18B20_OUTSIDE);
 		ds18b20_gettemp(&temp_out_hi, &temp_out_lo, &temp_out);
 		check_temp_for_leds();
 	}
