@@ -11,7 +11,6 @@
 
 #include "twi_i2c.h"
 #include "utils.h"
-#include "lcd.h"
 
 #define PCF8563_READ_ADDR                0xA3
 #define PCF8563_WRITE_ADDR                0xA2

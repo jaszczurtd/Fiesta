@@ -1,0 +1,84 @@
+// =====================================================================
+// Arduino keyboard shortcuts for VS Code
+//
+// Active when editing .ino or C/C++ files.
+//
+// Installation:
+//   Ctrl+K Ctrl+S  -> open keyboard shortcuts editor
+//   Click the {} icon (top-right) -> open keybindings.json
+//   Paste entries below into the [] array.
+// =====================================================================
+[
+    {
+        "key": "ctrl+shift+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Build",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Upload",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+3",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Monitor (persistent)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+4",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Upload (UF2 / BOOTSEL)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+5",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Monitor (Debug Probe)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+6",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Refresh IntelliSense",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+7",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Clean",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+8",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: List ports",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+9",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Change port",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+0",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Install library",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+alt+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Select board (GUI)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    },
+    {
+        "key": "ctrl+shift+alt+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Arduino: Select board (interactive)",
+        "when": "resourceExtname == .ino || editorLangId == cpp"
+    }
+]

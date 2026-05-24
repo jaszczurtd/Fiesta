@@ -7,13 +7,6 @@
 
 #include "clockPart.h"
 
-#define SET_DELAY 80
-
-#define CLOCK_OPERATION_DELAY 120
-#define ITEM_VISIBILITY_CYCLES_COUNTER 10
-
-#define CLOCK_SET_MODE_DELAY_LOPS 80
-
 static PCF_DateTime pcfDateTime;
 static bool clockSetMode = false;
 
@@ -53,26 +46,26 @@ void printCurrentItemsState(void) {
 
     switch(pcfDateTime.weekday) {
         case 0:
-            snprintf(weekday, sizeof(weekday) - 1, "pon.");
+            strcpy(weekday, "pon.");
             break;
         case 1:
-        	snprintf(weekday, sizeof(weekday) - 1, "wt.");
+	        strcpy(weekday, "wt.");
             break;
         case 2:
-        	snprintf(weekday, sizeof(weekday) - 1, "sr.");
+	        strcpy(weekday, "sr.");
             weekday[0] = 0x7f;
             break;
         case 3:
-        	snprintf(weekday, sizeof(weekday) - 1, "czw.");
+	        strcpy(weekday, "czw.");
             break;
         case 4:
-        	snprintf(weekday, sizeof(weekday) - 1, "pt.");
+	        strcpy(weekday, "pt.");
             break;
         case 5:
-        	snprintf(weekday, sizeof(weekday) - 1, "sob.");
+	        strcpy(weekday, "sob.");
             break;
         case 6:
-        	snprintf(weekday, sizeof(weekday) - 1, "niedz.");
+	        strcpy(weekday, "niedz.");
             break;
     }
 }
@@ -109,7 +102,7 @@ void setItemVisible(void) {
 }
 
 void pause(void) {
-	_delay_ms(CLOCK_OPERATION_DELAY);
+    hal_delay_ms(CFG_CLOCK_OPERATION_DELAY_MS);
 }
 
 void setItem(bool increase) {
@@ -254,7 +247,7 @@ static int hourDelay = 0, minuteDelay = 0;
 void manageSetMode(void) {
 	if(setButton()) {
 
-		if(CLOCK_SET_MODE_DELAY_LOPS < clockSetModeDelayLoops++) {
+        if(CFG_CLOCK_SET_MODE_DELAY_LOOPS < clockSetModeDelayLoops++) {
 			clockSetModeOrdered = true;
 			clockSetModeDelayLoops = 0;
 			activeItem = 0;
@@ -298,13 +291,13 @@ void clockMainFunction(void) {
     					break;
     				}
     				hourDelay++;
-    				_delay_ms(SET_DELAY);
+                        hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
     			}
 
     			activeItem = D_HOUR;
     			setItem(true);
     			PCF_SetDateTime(&pcfDateTime);
-    			_delay_ms(SET_DELAY);
+                hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
     		} else {
     			hourDelay = 0;
     		}
@@ -316,13 +309,13 @@ void clockMainFunction(void) {
     					break;
     				}
     				minuteDelay++;
-    				_delay_ms(SET_DELAY);
+                        hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
     			}
 
     			activeItem = D_MINUTE;
     			setItem(true);
     			PCF_SetDateTime(&pcfDateTime);
-    			_delay_ms(SET_DELAY);
+                hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
     		} else {
     			minuteDelay = 0;
     		}
@@ -345,7 +338,7 @@ void clockMainFunction(void) {
 			 setItem(false);
 		 }
         
-        if(itemVisibilityCounter++ > ITEM_VISIBILITY_CYCLES_COUNTER) {
+        if(itemVisibilityCounter++ > CFG_CLOCK_ITEM_VISIBILITY_CYCLES) {
             itemVisibilityCounter = 0;
             
             if(itemVisible) {

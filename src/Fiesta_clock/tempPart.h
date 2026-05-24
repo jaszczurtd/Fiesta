@@ -11,8 +11,6 @@
 #include <stdio.h>
 #include "main.h"
 
-#define TEMP_DELAY_LOOPS 20
-
 extern char s[];
 
 void temp_initial_read(void);

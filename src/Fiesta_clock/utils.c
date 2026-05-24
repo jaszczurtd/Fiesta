@@ -9,22 +9,27 @@
 
 void delay_ms(int ms) {
     while (0 < ms) {
-        _delay_ms(1);
+        hal_delay_ms(1);
         --ms;
     }
 }
 
 int binatoi(char *s) {
-    int i,l=0,w=1;
+    int l = 0;
+    int w = 1;
+
+    if (s == NULL) {
+        return 0;
+    }
     
-    for(i=0; i < strlen(s); i++)
+    for (char *p = s; *p != '\0'; ++p)
     {
-        if (s [i]=='1')
+        if (*p == '1')
         {
             l+=w;
             w*=2;
         }
-        if(s [i]=='0')
+        if (*p == '0')
         {
             w*=2;
         }
@@ -56,7 +61,7 @@ unsigned char BinToBCD(unsigned char bin) {
 }
 
 
-unsigned char reverse(unsigned char b) {
+unsigned char reverse_bits8(unsigned char b) {
    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
