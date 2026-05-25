@@ -479,6 +479,9 @@ static const char *module_source_dir_name(const char *module_display_name)
     if (strcmp(module_display_name, SC_MODULE_OIL_AND_SPEED) == 0) {
         return SC_MODULE_OIL_AND_SPEED;
     }
+    if (strcmp(module_display_name, SC_MODULE_CLOCK) == 0) {
+        return "Fiesta_clock";
+    }
     return NULL;
 }
 

@@ -59,6 +59,7 @@ static int test_load_missing_file_is_clean_empty(void)
     TEST_ASSERT_STR_EQ(p.entries[0].manifest, "", "ECU manifest zeroed");
     TEST_ASSERT_STR_EQ(p.entries[1].uf2, "", "Clocks uf2 zeroed");
     TEST_ASSERT_STR_EQ(p.entries[2].manifest, "", "OilAndSpeed manifest zeroed");
+    TEST_ASSERT_STR_EQ(p.entries[3].uf2, "", "RTC_Clock uf2 zeroed");
     return 0;
 }
 
@@ -89,6 +90,8 @@ static int test_save_then_load_round_trip(void)
                        "", "Clocks manifest stays empty");
     TEST_ASSERT_STR_EQ(sc_flash_paths_get_uf2(&out, SC_MODULE_OIL_AND_SPEED),
                        "", "OilAndSpeed uf2 stays empty");
+    TEST_ASSERT_STR_EQ(sc_flash_paths_get_manifest(&out, SC_MODULE_CLOCK),
+                       "", "RTC_Clock manifest stays empty");
     return 0;
 }
 

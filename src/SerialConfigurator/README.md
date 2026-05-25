@@ -82,7 +82,7 @@ Detection (read-only, no auth):
   `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`.
 - Detection runs in a background thread, so the GTK window stays responsive
   after button click (`Detecting...` state is shown immediately).
-- Module status indicators (ECU, Clocks, OilAndSpeed) start red and switch to
+- Module status indicators (ECU, Clocks, OilAndSpeed, RTC_Clock) start red and switch to
   green when a valid `OK HELLO ... module=<name> ...` response is received.
 - Metadata + read-only parameter catalog/value reads run in the same detection
   worker flow (sequentially, no separate queue).
@@ -93,7 +93,7 @@ Detection (read-only, no auth):
   be flagged as ambiguous targets.
 - A scrollable log view shows HELLO responses and detection details.
 - Core and CLI support read-only `SC_*` requests across all
-  in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`):
+  in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`, `RTC_Clock`):
   `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`.
 
 Authenticated bootloader entry (Phase 3 + 5):
@@ -149,6 +149,9 @@ Module-specific behaviour above the common baseline:
   schema-versioned KV blob).
 - `Clocks` and `OilAndSpeed` expose read-only / not-persisted descriptors
   mirroring their compile-time thresholds and sampling intervals.
+- `RTC_Clock` exposes writable RTC calendar fields
+  (`rtc_year/month/day/hour/minute/second`) plus read-only
+  `rtc_integrity`; commit is validated as a full date-time tuple.
 
 The wire vocabulary, descriptor types, and reply machinery for every
 module are shared via [`src/common/scDefinitions/`](../common/scDefinitions/);
@@ -166,9 +169,10 @@ see `ARCHITECTURE.md` §4.3.
 
 ## CI / Test Baseline
 
-The project ships 16 host CTest targets covering core / protocol /
+The project ships 17 host CTest targets covering core / protocol /
 crypto / flash / manifest / orchestrator surfaces:
 
+- `serial-configurator-progressbar-tests` (custom flash progress bar widget)
 - `serial-configurator-core-tests` (smoke checks)
 - `serial-configurator-core-api-tests` (API contract checks)
 - `serial-configurator-core-protocol-tests` (read-only protocol parsing + flow)

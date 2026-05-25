@@ -12,6 +12,8 @@
 /* ── Per-row + per-subtab state, attached to widgets via
  *    g_object_set_data_full so destruction is automatic. ──────────── */
 
+typedef struct ModuleSubtab ModuleSubtab;
+
 typedef struct ParamRow {
     char id[SC_PARAM_ID_MAX];
     int16_t applied_value;        /* last value confirmed in firmware staging */
@@ -19,14 +21,20 @@ typedef struct ParamRow {
     GtkWidget *status_label;
     bool dirty;
     bool suppress_change_signal;
+    ModuleSubtab *owner;
 } ParamRow;
 
-typedef struct ModuleSubtab {
+struct ModuleSubtab {
     AppState *state;
     size_t module_index;
     GPtrArray *rows;              /* of ParamRow* (owns) */
     GtkWidget *footer_status;
-} ModuleSubtab;
+    bool is_rtc_clock;
+    bool suppress_rtc_recompute;
+    ParamRow *rtc_year_row;
+    ParamRow *rtc_month_row;
+    ParamRow *rtc_day_row;
+};
 
 static void param_row_free(gpointer data)
 {
@@ -114,6 +122,83 @@ static void footer_set_status(ModuleSubtab *m, const char *text)
                        (text != NULL) ? text : "");
 }
 
+static void row_set_dirty_state(ParamRow *row, int16_t current_value)
+{
+    if (row == NULL) {
+        return;
+    }
+    row->dirty = (current_value != row->applied_value);
+    if (row->status_label == NULL) {
+        return;
+    }
+
+    if (row->dirty) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "edited (was %d)",
+                 (int)row->applied_value);
+        gtk_label_set_text(GTK_LABEL(row->status_label), buf);
+        return;
+    }
+
+    gtk_label_set_text(GTK_LABEL(row->status_label), "");
+}
+
+static bool is_rtc_calendar_param(const char *id)
+{
+    if (id == NULL) {
+        return false;
+    }
+    return strcmp(id, "rtc_year") == 0 ||
+           strcmp(id, "rtc_month") == 0 ||
+           strcmp(id, "rtc_day") == 0;
+}
+
+static int rtc_days_in_month(int year, int month)
+{
+    static const int k_days[12] = {
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+
+    if (month < 1 || month > 12) {
+        return 31;
+    }
+    if (month != 2) {
+        return k_days[month - 1];
+    }
+
+    const bool leap =
+        ((year % 400) == 0) ||
+        (((year % 4) == 0) && ((year % 100) != 0));
+    return leap ? 29 : 28;
+}
+
+static void rtc_recompute_day_constraints(ModuleSubtab *m)
+{
+    if (m == NULL || !m->is_rtc_clock || m->suppress_rtc_recompute) {
+        return;
+    }
+    if (m->rtc_year_row == NULL || m->rtc_month_row == NULL || m->rtc_day_row == NULL) {
+        return;
+    }
+
+    const int year = (int)gtk_adjustment_get_value(m->rtc_year_row->adjustment);
+    const int month = (int)gtk_adjustment_get_value(m->rtc_month_row->adjustment);
+    const int day_max = rtc_days_in_month(year, month);
+
+    gtk_adjustment_set_upper(m->rtc_day_row->adjustment, (double)day_max);
+
+    int16_t day_cur = (int16_t)gtk_adjustment_get_value(m->rtc_day_row->adjustment);
+    if (day_cur > day_max) {
+        m->suppress_rtc_recompute = true;
+        m->rtc_day_row->suppress_change_signal = true;
+        gtk_adjustment_set_value(m->rtc_day_row->adjustment, (double)day_max);
+        m->rtc_day_row->suppress_change_signal = false;
+        m->suppress_rtc_recompute = false;
+        day_cur = (int16_t)day_max;
+    }
+    row_set_dirty_state(m->rtc_day_row, day_cur);
+}
+
 /* ── Row construction + value-changed handler ────────────────────── */
 
 static void on_value_changed(GtkAdjustment *adj, gpointer user_data)
@@ -123,15 +208,15 @@ static void on_value_changed(GtkAdjustment *adj, gpointer user_data)
         return;
     }
     const int16_t cur = (int16_t)gtk_adjustment_get_value(adj);
-    row->dirty = (cur != row->applied_value);
-    if (row->status_label != NULL) {
-        if (row->dirty) {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "edited (was %d)",
-                     (int)row->applied_value);
-            gtk_label_set_text(GTK_LABEL(row->status_label), buf);
-        } else {
-            gtk_label_set_text(GTK_LABEL(row->status_label), "");
+    row_set_dirty_state(row, cur);
+
+    ModuleSubtab *m = row->owner;
+    if (m != NULL && m->is_rtc_clock && is_rtc_calendar_param(row->id)) {
+        rtc_recompute_day_constraints(m);
+        if (strcmp(row->id, "rtc_day") == 0) {
+            const int16_t day_cur =
+                (int16_t)gtk_adjustment_get_value(row->adjustment);
+            row_set_dirty_state(row, day_cur);
         }
     }
 }
@@ -142,6 +227,7 @@ static GtkWidget *build_param_row(ModuleSubtab *m,
     ParamRow *row = g_new0(ParamRow, 1);
     snprintf(row->id, sizeof(row->id), "%s", detail->id);
     row->applied_value = typed_value_to_i16(&detail->value);
+    row->owner = m;
 
     /* Spin/scale share one adjustment for tandem-sync without manual
      * binding code. The descriptor's [min, max] becomes the adjustment
@@ -347,6 +433,7 @@ static void on_revert_clicked(GtkButton *btn, gpointer user_data)
                 gtk_label_set_text(GTK_LABEL(row->status_label), "");
             }
         }
+        rtc_recompute_day_constraints(m);
         footer_set_status(m, sc_i18n_string_get(SC_I18N_VALUES_REVERT_OK));
         return;
     }
@@ -401,6 +488,8 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index)
         sc_core_module_status(&state->core, module_index);
     const char *target_name = (target_status != NULL && target_status->display_name != NULL)
         ? target_status->display_name : "?";
+    m->is_rtc_clock = (target_status != NULL && target_status->display_name != NULL &&
+                       strcmp(target_status->display_name, SC_MODULE_CLOCK) == 0);
 
     if (!sc_core_sc_get_param_list(&state->core, module_index,
                                    &result, cmd_log, sizeof(cmd_log))) {
@@ -493,8 +582,21 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index)
         }
 
         GtkWidget *row_widget = build_param_row(m, &detail);
+        if (m->is_rtc_clock && m->rows->len > 0u) {
+            ParamRow *built_row =
+                (ParamRow *)g_ptr_array_index(m->rows, m->rows->len - 1u);
+            if (strcmp(detail.id, "rtc_year") == 0) {
+                m->rtc_year_row = built_row;
+            } else if (strcmp(detail.id, "rtc_month") == 0) {
+                m->rtc_month_row = built_row;
+            } else if (strcmp(detail.id, "rtc_day") == 0) {
+                m->rtc_day_row = built_row;
+            }
+        }
         gtk_box_append(GTK_BOX(section_boxes[section_idx]), row_widget);
     }
+
+    rtc_recompute_day_constraints(m);
 
     /* Footer with [Apply staged] [Commit] [Revert] + status label. */
     GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

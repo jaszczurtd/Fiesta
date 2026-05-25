@@ -1,13 +1,10 @@
 /*
- * PCF8563.h
- *
- * Created: 2014-11-18 20:00:42
- *  Author: Jakub Pachciarek
+ * RTC.h
  */
 
 
-#ifndef PCF8563_H_
-#define PCF8563_H_
+#ifndef RTC_H_
+#define RTC_H_
 
 #include "twi_i2c.h"
 #include "utils.h"
@@ -71,6 +68,7 @@ unsigned char PCF_GetAlarm(PCF_Alarm *alarm);
 
 unsigned char PCF_SetDateTime(PCF_DateTime *dateTime);
 unsigned char PCF_GetDateTime(PCF_DateTime *dateTime);
+unsigned char PCF_GetClockIntegrity(bool *integrityOk);
 
 
-#endif /* PCF8563_H_ */
+#endif /* RTC_H_ */

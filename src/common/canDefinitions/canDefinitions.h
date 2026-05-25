@@ -123,6 +123,15 @@ enum {
     CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO,
 };
 
+#define CAN_ID_RTC_UPDATE 0x130
+enum {
+    CAN_FRAME_RTC_UPDATE_DT_HI = 1,    // packed datetime: YYYY offset from 2020 (4b), MM (4b), DD (5b), HH (5b), mm (6b)
+    CAN_FRAME_RTC_UPDATE_DT_MD,
+    CAN_FRAME_RTC_UPDATE_DT_LO,
+    CAN_FRAME_RTC_UPDATE_SECOND,       // seconds 0..59
+    CAN_FRAME_RTC_UPDATE_INTEGRITY,    // 1 = RTC integrity OK, 0 = integrity lost
+};
+
 enum {
     F_FUEL,
     F_COOLANT_TEMP,

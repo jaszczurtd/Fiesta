@@ -4,7 +4,44 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-05-10 (latest)
+## 2026-05-25 (latest)
+
+- Migrated every Fiesta firmware module to the JaszczurHAL 1.6.0 opt-in
+  configuration model. Each `hal_project_config.h` was rewritten to only
+  `#define HAL_ENABLE_*` flags for modules actually used by the sketch,
+  relying on the new dependency propagation in `hal_config.h`
+  (e.g. `HAL_ENABLE_PCF8563 -> RTC + I2C`,
+  `HAL_ENABLE_ILI9341 -> TFT + DISPLAY`,
+  `HAL_ENABLE_KV -> EEPROM`, `HAL_ENABLE_GPS -> SWSERIAL`):
+  - Adjustometer: `I2C_SLAVE`, `RGB_LED`.
+  - Clocks: `CAN`, `ILI9341` (+ `HAL_DISPLAY_ILI9341`), `RGB_LED`, `CRYPTO`.
+  - ECU: `I2C`, `KV`, `CAN`, `GPS`, `PWM_FREQ`, `CRYPTO`.
+  - OilAndSpeed: `CAN`, `MCP9600`, `RGB_LED`, `CRYPTO`.
+  - Fiesta_clock: `PCF8563`, `DS18B20`.
+  All five sketches compile cleanly with `arduino-cli` against
+  JaszczurHAL 1.6.0. SerialConfigurator does not use HAL and is
+  unaffected.
+- Host test builds for Adjustometer / Clocks / ECU / OilAndSpeed now
+  ship a test-only override at `tests/include/hal_project_config.h`
+  that enables the full HAL_ENABLE_* matrix. This mirrors the host
+  hal_mock target in JaszczurHAL's root `CMakeLists.txt` and is required
+  because the `.mock` backend in JaszczurHAL references types from every
+  optional HAL module unconditionally. Each project's `CMakeLists.txt`
+  now puts `${PROJ_SRC}/tests/include` `BEFORE PUBLIC` on the mock
+  static library so the override wins over the firmware config.
+- Fixed an upstream `-Wmissing-field-initializers` issue in
+  JaszczurHAL's `.mock/hal_rtc.cpp` (two `hal_rtc_datetime_t dt = {0}`
+  aggregate initializers replaced with value-initialization `{}`),
+  so ECU's `-Wall -Wextra -Werror` gate on `ecu_mock` keeps applying
+  uniformly to upstream and project sources alike — no waiver needed.
+- ECU test override bumps `HAL_PWM_FREQ_MAX_CHANNELS` to 128 because
+  each Unity `setUp()` calls `initSensors()` which allocates three
+  frequency-PWM channels without releasing them; the default 8-slot
+  pool would otherwise exhaust across multi-case test executables.
+- Host regression status after migration: Adjustometer 3/3, Clocks 3/3,
+  OilAndSpeed 3/3, ECU 17/17 — all green on clean rebuilds.
+
+## 2026-05-10
 
 - ECU bootstrap SerialConfigurator step was fixed after integration
   regression: `src/ECU/scripts/bootstrap.sh` now invokes

@@ -17,7 +17,8 @@ static int test_init_defaults(void)
     const char *expected_names[SC_MODULE_COUNT] = {
         SC_MODULE_ECU,
         SC_MODULE_CLOCKS,
-        SC_MODULE_OIL_AND_SPEED
+        SC_MODULE_OIL_AND_SPEED,
+        SC_MODULE_CLOCK
     };
 
     TEST_ASSERT(sc_core_module_count() == SC_MODULE_COUNT, "module count mismatch");

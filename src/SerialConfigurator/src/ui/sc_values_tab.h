@@ -5,7 +5,7 @@
  * Phase 8.6: third top-level notebook page - "Values".
  *
  * Holds an inner GtkNotebook with one sub-tab per *detected* module
- * (ECU / Clocks / OilAndSpeed). Sub-tabs are added on
+ * (ECU / Clocks / OilAndSpeed / RTC_Clock). Sub-tabs are added on
  * @ref sc_values_tab_rebuild and removed when the module disappears
  * from the next detection cycle.
  *

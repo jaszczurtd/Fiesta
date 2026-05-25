@@ -74,6 +74,7 @@ add_library(ecu_mock STATIC
 # ECU_STUBS first: provides arduino-timer.h stub that shadows the real library
 # HAL_STUBS second: provides Arduino.h / SD.h / SPI.h stubs for tools.cpp
 target_include_directories(ecu_mock BEFORE PUBLIC
+    ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
     ${ECU_STUBS}
     ${HAL_STUBS}
 )

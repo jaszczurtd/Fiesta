@@ -1,4 +1,4 @@
-#include "PCF8563.h"
+#include "RTC.h"
 
 #include <string.h>
 
@@ -245,4 +245,18 @@ unsigned char PCF_GetDateTime(PCF_DateTime *dateTime) {
     dateTime->year = (int)dt.year;
 
     return dt.clock_integrity ? 0u : 1u;
+}
+
+unsigned char PCF_GetClockIntegrity(bool *integrityOk) {
+    if (integrityOk == NULL || !pcf_ensure_rtc()) {
+        return 1u;
+    }
+
+    bool ok = false;
+    if (!hal_rtc_get_clock_integrity(s_rtc, &ok)) {
+        return 1u;
+    }
+
+    *integrityOk = ok;
+    return 0u;
 }

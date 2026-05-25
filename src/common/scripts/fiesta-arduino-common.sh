@@ -9,6 +9,7 @@ fiesta_module_token_for() {
         ECU)           printf '%s\n' "ECU" ;;
         Clocks)        printf '%s\n' "CLOCKS" ;;
         OilAndSpeed)   printf '%s\n' "OIL&SPD" ;;
+        Fiesta_clock)  printf '%s\n' "RTC_CLK" ;;
         Adjustometer)  printf '%s\n' "ADJ" ;;
         *)
             return 1
@@ -21,6 +22,7 @@ fiesta_module_usb_by_id_tag_for() {
         ECU)           printf '%s\n' "Fiesta_ECU" ;;
         Clocks)        printf '%s\n' "Fiesta_Clocks" ;;
         OilAndSpeed)   printf '%s\n' "Fiesta_OilAndSpeed" ;;
+        Fiesta_clock)  printf '%s\n' "Fiesta_RTC_Clock" ;;
         Adjustometer)  printf '%s\n' "Fiesta_Adjustometer" ;;
         *)
             return 1
@@ -50,6 +52,7 @@ fiesta_usb_product_for() {
         ECU)           printf '%s\n' "Fiesta ECU" ;;
         Clocks)        printf '%s\n' "Fiesta Clocks" ;;
         OilAndSpeed)   printf '%s\n' "Fiesta OilAndSpeed" ;;
+        Fiesta_clock)  printf '%s\n' "Fiesta RTC Clock" ;;
         Adjustometer)  printf '%s\n' "Fiesta Adjustometer" ;;
         *)             printf 'Fiesta %s\n' "$1" ;;
     esac

@@ -44,3 +44,13 @@
 #define HAL_ENABLE_CRYPTO
 #define HAL_ENABLE_CJSON
 #define HAL_ENABLE_UNITY
+
+/*
+ * Each Unity test calls setUp() -> initSensors(), which acquires 3
+ * frequency-PWM channels via hal_pwm_freq_create() and never releases
+ * them (the firmware acquires them once at boot). With ~10 test cases
+ * per executable that exceeds the default 8-slot mock pool, so bump
+ * the cap high enough for the largest binary to drain it without
+ * tripping the HAL_ASSERT.
+ */
+#define HAL_PWM_FREQ_MAX_CHANNELS 128
