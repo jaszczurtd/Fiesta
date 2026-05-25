@@ -8,6 +8,8 @@
 #define MODE_TEMP 1
 #define MODE_VOLT 2
 
+#include <tools_c.h>
+
 #include "config.h"
 #include "hardwareConfig.h"
 
@@ -15,12 +17,13 @@
 #include "lcd.h"
 
 #include "twi_i2c.h"
-#include "PCF8563.h"
+#include "RTC.h"
 #include "clockPart.h"
 #include "ds18b20.h"
 #include "tempPart.h"
 #include "adc.h"
 #include "voltPart.h"
+#include "can.h"
 
 bool ignition(void);
 bool setButtonPressed(void);

@@ -15,7 +15,8 @@
  *   {
  *     "ECU":         { "uf2_path": "...", "manifest_path": "..." },
  *     "Clocks":      { ... },
- *     "OilAndSpeed": { ... }
+ *     "OilAndSpeed": { ... },
+ *     "RTC_Clock":   { ... }
  *   }
  *
  * Adjustometer never appears here - out-of-scope by policy lock v1.32.
@@ -91,7 +92,7 @@ bool sc_flash_paths_load(ScFlashPaths *out);
 bool sc_flash_paths_save(const ScFlashPaths *in);
 
 /* Per-slot accessors keyed by module display name. Unknown name
- * (not one of ECU/Clocks/OilAndSpeed) is a no-op for setters and
+ * (not one of ECU/Clocks/OilAndSpeed/RTC_Clock) is a no-op for setters and
  * returns "" for getters. */
 const char *sc_flash_paths_get_uf2(const ScFlashPaths *p,
                                    const char *module_display_name);

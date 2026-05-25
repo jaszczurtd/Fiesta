@@ -41,6 +41,7 @@ add_library(oilspeed_mock STATIC
 )
 
 target_include_directories(oilspeed_mock BEFORE PUBLIC
+    ${OILSPEED_SRC}/tests/include   # test-only hal_project_config.h override
     ${OILSPEED_TEST_STUBS}
 )
 

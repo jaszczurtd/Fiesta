@@ -40,6 +40,10 @@ add_library(clocks_mock STATIC
     ${SCDEFS}/sc_param_handlers.c
 )
 
+target_include_directories(clocks_mock BEFORE PUBLIC
+    ${CLOCKS_SRC}/tests/include   # test-only hal_project_config.h override
+)
+
 target_include_directories(clocks_mock PUBLIC
     ${CLOCKS_SRC}
     ${UNITY_INCLUDE_DIR}

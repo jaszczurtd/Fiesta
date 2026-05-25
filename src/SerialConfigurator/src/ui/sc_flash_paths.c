@@ -16,7 +16,8 @@
 static const char *const k_module_names[SC_MODULE_COUNT] = {
     SC_MODULE_ECU,
     SC_MODULE_CLOCKS,
-    SC_MODULE_OIL_AND_SPEED
+    SC_MODULE_OIL_AND_SPEED,
+    SC_MODULE_CLOCK
 };
 
 static const char *s_test_override = NULL;

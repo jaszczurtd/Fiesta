@@ -26,6 +26,7 @@ static const ScModuleDef k_module_defs[SC_MODULE_COUNT] = {
     { SC_MODULE_TOKEN_ECU, SC_MODULE_ECU },
     { SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS },
     { SC_MODULE_TOKEN_OIL_AND_SPEED, SC_MODULE_OIL_AND_SPEED },
+    { SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK },
 };
 
 static void copy_string(char *dst, size_t dst_size, const char *src)

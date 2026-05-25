@@ -4,26 +4,17 @@
  * @file hal_project_config.h
  * @brief JaszczurHAL module configuration for Fiesta_clock (RP2040 Zero).
  *
- * Keep only modules used by Fiesta_clock runtime (GPIO, ADC, I2C, RTC/PCF8563,
- * DS18B20, watchdog) and disable unused features.
+ * Opt-in model (HAL >= 1.6.0): only HAL_ENABLE_* modules listed here are
+ * compiled in. Core APIs (GPIO, ADC, timer, watchdog) are always
+ * available.
  *
- * Note: graphics stay on legacy lcd.c path for now, so HAL display backends are
- * intentionally disabled.
+ * Note: graphics stay on the legacy lcd.c path for now, so no HAL display
+ * backend is enabled.
  */
 
-#define HAL_DISABLE_WIFI
-#define HAL_DISABLE_EEPROM
-#define HAL_DISABLE_GPS
-#define HAL_DISABLE_UART
-#define HAL_DISABLE_SWSERIAL
-#define HAL_DISABLE_CAN
-#define HAL_DISABLE_EXTERNAL_ADC
-#define HAL_DISABLE_I2C_SLAVE
-#define HAL_DISABLE_RGB_LED
-#define HAL_DISABLE_THERMOCOUPLE
-#define HAL_DISABLE_MCP9600
-#define HAL_DISABLE_MAX6675
-#define HAL_DISABLE_DISPLAY
-#define HAL_DISABLE_TFT
-#define HAL_DISABLE_SSD1306
-#define HAL_DISABLE_UNITY
+/* ── Modules used by Fiesta_clock ────────────────────────────────────── */
+
+#define HAL_ENABLE_PCF8563          /* PCF8563 RTC -> RTC, I2C            */
+#define HAL_ENABLE_DS18B20          /* DS18B20 1-Wire -> ONEWIRE          */
+#define HAL_ENABLE_CAN              /* MCP2515 CAN bus                    */
+#define HAL_ENABLE_CRYPTO           /* hal_crypto + hal_sc_auth (SC link) */

@@ -1,5 +1,6 @@
 
 #include "main.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 char s[BUF_L + 1];
 
@@ -57,6 +58,8 @@ static void setup_runtime(void) {
     helloMessage();
 
     PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
+	clockCanInit();
+	configSessionInit();
 
     temp_initial_read();
 
@@ -64,11 +67,18 @@ static void setup_runtime(void) {
 }
 
 void setup_c(void) {
+	debugInit();
+	setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCK);
+
+	deb("Build timestamp: %s", BUILD_ID);
+
 	setup_runtime();
 }
 
 void loop_c(void) {
 	hal_watchdog_feed();
+	clockCanTick();
+	configSessionTick();
 
 	bool ig = ignition();
 	if (ig != lastIgnition) {

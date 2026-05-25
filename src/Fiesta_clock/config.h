@@ -1,7 +1,17 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+#include <stdbool.h>
 #include <stdint.h>
+
+/* Fiesta-project firmware identity for the configurator HELLO response. */
+#ifndef FW_VERSION
+#define FW_VERSION "0.1.0"
+#endif
+
+#ifndef BUILD_ID
+#define BUILD_ID (__DATE__ " " __TIME__)
+#endif
 
 #define CFG_WATCHDOG_TIMEOUT_MS 2000u
 
@@ -24,5 +34,10 @@
 
 #define CFG_VOLT_TOO_LOW_INT 5
 #define CFG_VOLT_TOO_LOW_V 5.0
+
+void configSessionInit(void);
+void configSessionTick(void);
+bool configSessionActive(void);
+uint32_t configSessionId(void);
 
 #endif /* CONFIG_H_ */

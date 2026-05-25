@@ -1,8 +1,7 @@
 #include <JaszczurHAL.h>
 
-extern "C" {
-#include "main.h"
-}
+extern "C" void setup_c(void);
+extern "C" void loop_c(void);
 
 void setup(void) {
     setup_c();
