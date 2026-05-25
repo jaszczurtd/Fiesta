@@ -6,6 +6,10 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## 2026-05-26 (latest)
 
+- SerialConfigurator map view gained a dedicated recenter control.
+  The Map tab now exposes a `Recenter` / `Wyśrodkuj` button that
+  recenters the viewport to the latest GPS coordinates received from
+  ECU telemetry (`SC_GET_GPS`) after the user pans away.
 - SerialConfigurator map-tab polling cadence was aligned with ECU GPS
   refresh cadence: `src/SerialConfigurator/src/ui/sc_map_tab.c` now
   polls `SC_GET_GPS` every 4 s (4000 ms), matching firmware
