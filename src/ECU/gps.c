@@ -1,5 +1,7 @@
 #include "gps.h"
 #include <hal/hal_time.h>
+#include <math.h>
+#include <stdint.h>
 
 typedef struct {
   bool isGPSInitialized;
@@ -155,3 +157,41 @@ uint32_t gpsGetEpoch(void) {
   return hal_time_from_components(year, month, day, hour, minute, second);
 }
 
+int32_t gpsGetLatE6(void) {
+  if(!isGPSAvailable()) {
+    return 0;
+  }
+  /* TinyGPS++ returns degrees as double. Scaling by 1e6 yields signed
+   * microdegrees that fit in int32 (|90e6| < INT32_MAX). lround keeps
+   * the result reproducible across compilers. */
+  double lat = hal_gps_latitude();
+  double scaled = lat * 1000000.0;
+  if(scaled >= (double)INT32_MAX) return INT32_MAX;
+  if(scaled <= (double)INT32_MIN) return INT32_MIN;
+  return (int32_t)lround(scaled);
+}
+
+int32_t gpsGetLonE6(void) {
+  if(!isGPSAvailable()) {
+    return 0;
+  }
+  double lon = hal_gps_longitude();
+  double scaled = lon * 1000000.0;
+  if(scaled >= (double)INT32_MAX) return INT32_MAX;
+  if(scaled <= (double)INT32_MIN) return INT32_MIN;
+  return (int32_t)lround(scaled);
+}
+
+int16_t gpsGetSpeedKmhX10(void) {
+  if(!isGPSAvailable()) {
+    return 0;
+  }
+  double s = hal_gps_speed_kmph();
+  if(s < GPS_MIN_KMPH_SPEED) {
+    return 0;
+  }
+  double scaled = s * 10.0;
+  if(scaled >= (double)INT16_MAX) return INT16_MAX;
+  if(scaled <= (double)INT16_MIN) return INT16_MIN;
+  return (int16_t)lround(scaled);
+}

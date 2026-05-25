@@ -66,6 +66,18 @@ if(NOT GTK4_FOUND)
     )
 endif()
 
+# Phase 8.7 - libshumate map widget used by the optional Map tab. The
+# Map tab degrades to a "feature unavailable" placeholder when shumate
+# is missing so the rest of the GUI still builds on minimal hosts.
+pkg_check_modules(SHUMATE IMPORTED_TARGET shumate-1.0)
+if(NOT SHUMATE_FOUND)
+    message(STATUS
+        "shumate-1.0 not found via pkg-config; the Map tab will show a "
+        "placeholder instead of a live map. Install libshumate-dev "
+        "(or your distro equivalent) to enable the GPS map view."
+    )
+endif()
+
 set(FIESTA_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../common")
 set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
 
@@ -92,6 +104,7 @@ add_library(serial_configurator_core STATIC
     src/core/sc_core.c
     src/core/sc_flash.c
     src/core/sc_frame.c
+    src/core/sc_gps.c
     src/core/sc_manifest.c
     src/core/sc_sha256.c
     src/core/sc_transport.c
@@ -129,6 +142,7 @@ if(GTK4_FOUND)
         src/ui/sc_flash_tab.c
         src/ui/sc_generic_gfx_helper.c
         src/ui/sc_i18n.c
+        src/ui/sc_map_tab.c
         src/ui/sc_module_details.c
         src/ui/sc_modules_view.c
         src/ui/sc_progressbar.c
@@ -141,6 +155,17 @@ if(GTK4_FOUND)
             serial_configurator_core
             PkgConfig::GTK4
     )
+
+    if(SHUMATE_FOUND)
+        target_compile_definitions(serial-configurator
+            PRIVATE
+                SC_HAVE_SHUMATE=1
+        )
+        target_link_libraries(serial-configurator
+            PRIVATE
+                PkgConfig::SHUMATE
+        )
+    endif()
 
     install(TARGETS serial-configurator
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -246,6 +271,14 @@ if(BUILD_TESTING)
     target_link_libraries(serial-configurator-sc-param-tests
         PRIVATE
             fiesta_sc_definitions
+    )
+
+    add_executable(serial-configurator-sc-gps-tests
+        tests/test_sc_gps.c
+    )
+    target_link_libraries(serial-configurator-sc-gps-tests
+        PRIVATE
+            serial_configurator_core
     )
 
     # Phase 6.3 - BOOTSEL drive watcher. Uses pthread for the
@@ -442,6 +475,11 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-sc-param-tests
         COMMAND serial-configurator-sc-param-tests
+    )
+
+    add_test(
+        NAME serial-configurator-sc-gps-tests
+        COMMAND serial-configurator-sc-gps-tests
     )
 
     add_test(

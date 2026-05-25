@@ -46,6 +46,12 @@ typedef struct AppState {
      * tab content is wholly rebuilt on every detection cycle - the
      * inner per-module notebook tracks the detected set automatically. */
     GtkWidget *values_tab_root;
+    /* Phase 8.7: notebook tab 4 root widget for the Map tab plus an
+     * opaque pointer to its internal state (ShumateSimpleMap, marker
+     * layer, poll timeout id). Kept as `void *` so sc_ui_state.h does
+     * not have to include shumate headers - only sc_map_tab.c casts. */
+    GtkWidget *map_tab_root;
+    void *map_tab_state;
     /* Phase 6.2: per-module flash UI substate (paths persisted to
      * flash-paths.json + global flash-in-progress lock flag). */
     ScFlashPaths flash_paths;

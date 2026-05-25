@@ -147,6 +147,13 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Save failed: %s",
     [SC_I18N_VALUES_REVERT_OK]              = "Reverted.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Revert failed: %s",
+
+    [SC_I18N_TAB_MAP]                       = "GPS View",
+    [SC_I18N_MAP_PLACEHOLDER]               = "Connect and detect the ECU to see the GPS position.",
+    [SC_I18N_MAP_UNAVAILABLE]               = "Map view disabled: libshumate not found at build time.",
+    [SC_I18N_MAP_WAITING_FIX]               = "Waiting for GPS fix...",
+    [SC_I18N_MAP_STATUS_FMT]                = "Lat %.6f  Lon %.6f  %.1f km/h",
+    [SC_I18N_MAP_DISCONNECTED]              = "Disconnected.",
 };
 
 /*
@@ -290,6 +297,13 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_COMMIT_FAILED_FMT]      = "Zapis nie powiódł się: %s",
     [SC_I18N_VALUES_REVERT_OK]              = "Cofnięto.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT]      = "Cofnięcie nie powiodło się: %s",
+
+    [SC_I18N_TAB_MAP]                       = "Widok GPS",
+    [SC_I18N_MAP_PLACEHOLDER]               = "Podłącz i wykryj ECU, aby zobaczyć pozycję GPS.",
+    [SC_I18N_MAP_UNAVAILABLE]               = "Widok mapy wyłączony: brak biblioteki libshumate w czasie budowania.",
+    [SC_I18N_MAP_WAITING_FIX]               = "Oczekiwanie na ustalenie pozycji GPS...",
+    [SC_I18N_MAP_STATUS_FMT]                = "Sz. %.6f  Dł. %.6f  %.1f km/h",
+    [SC_I18N_MAP_DISCONNECTED]              = "Rozłączono.",
 };
 
 static const char *const *const k_locale_tables[SC_LOCALE_COUNT] = {

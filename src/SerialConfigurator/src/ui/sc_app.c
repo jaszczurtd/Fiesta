@@ -29,6 +29,7 @@
 #include "sc_flash_tab.h"
 #include "sc_generic_gfx_helper.h"
 #include "sc_i18n.h"
+#include "sc_map_tab.h"
 #include "sc_modules_view.h"
 #include "sc_ui_state.h"
 #include "sc_values_tab.h"
@@ -92,6 +93,14 @@ static void on_activate(GtkApplication *app, gpointer user_data)
                              values_root,
                              gtk_label_new(sc_i18n_string_get(SC_I18N_TAB_VALUES)));
 
+    /* Page 4 - Map (Phase 8.7). Polls SC_GET_GPS against the ECU and
+     * renders the position on a libshumate widget (or shows a
+     * placeholder when libshumate is missing at build time). */
+    GtkWidget *map_root = sc_map_tab_build(state);
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
+                             map_root,
+                             gtk_label_new(sc_i18n_string_get(SC_I18N_TAB_MAP)));
+
     /* Idle initial state - modules not detected, log shows the
      * "press Detect" prompt, flash tab grey via the lamp refresh. */
     sc_detection_reset_connection(state, false);
@@ -108,6 +117,8 @@ int sc_app_run(int argc, char *argv[])
     state.module_list = 0;
     state.flash_tab_root = 0;
     state.values_tab_root = 0;
+    state.map_tab_root = 0;
+    state.map_tab_state = 0;
     sc_flash_paths_init(&state.flash_paths);
     state.flash_in_progress = false;
     state.connected = false;

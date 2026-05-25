@@ -5,6 +5,7 @@
 
 #include "sc_cli_output.h"
 #include "sc_core.h"
+#include "sc_gps.h"
 #include "sc_manifest.h"
 
 static bool run_detection(ScCore *core, char *log, size_t log_size)
@@ -501,5 +502,72 @@ int sc_cli_command_set_and_commit(int argc, char *argv[])
 
     printf("[OK] %s=%d staged + committed on %s.\n",
            param_id, value, port_path);
+    return 0;
+}
+
+int sc_cli_command_get_gps(int argc, char *argv[])
+{
+    CliSelectors selectors;
+    if (!sc_cli_parse_selectors(argc, argv, 2, &selectors)) {
+        return 1;
+    }
+
+    ScCore core;
+    char detection_log[CLI_DETECTION_LOG_MAX];
+    if (!run_detection(&core, detection_log, sizeof(detection_log))) {
+        fprintf(stderr, "[ERROR] Detection initialization failed.\n");
+        return 2;
+    }
+
+    char selection_error[256];
+    const int module_index = sc_cli_select_target_module(
+        &core,
+        &selectors,
+        selection_error,
+        sizeof(selection_error)
+    );
+    if (module_index < 0) {
+        fprintf(stderr, "[ERROR] %s\n", selection_error);
+        sc_cli_print_module_table(&core);
+        return 4;
+    }
+
+    char command_log[CLI_COMMAND_LOG_MAX];
+    command_log[0] = '\0';
+    ScCommandResult result;
+    if (!sc_gps_get(&core,
+                    (size_t)module_index,
+                    &result,
+                    command_log,
+                    sizeof(command_log))) {
+        fprintf(stderr, "[ERROR] Command transport failed.\n");
+        fprintf(stderr, "%s", command_log);
+        return 4;
+    }
+
+    printf("%s\n", result.response);
+
+    if (result.status == SC_COMMAND_STATUS_OK) {
+        ScGpsSnapshot snapshot;
+        char parse_error[256];
+        if (sc_gps_parse_result(&result,
+                                &snapshot,
+                                parse_error,
+                                sizeof(parse_error))) {
+            sc_cli_print_gps_snapshot(&snapshot);
+        } else {
+            fprintf(stderr, "[WARN] %s\n", parse_error);
+        }
+    }
+
+    if (result.status != SC_COMMAND_STATUS_OK) {
+        fprintf(
+            stderr,
+            "[ERROR] Device returned non-OK status: %s\n",
+            sc_command_status_name(result.status)
+        );
+        return 5;
+    }
+
     return 0;
 }

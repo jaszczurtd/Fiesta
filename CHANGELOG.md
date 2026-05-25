@@ -4,7 +4,33 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-05-25 (latest)
+## 2026-05-26 (latest)
+
+- SerialConfigurator map-tab polling cadence was aligned with ECU GPS
+  refresh cadence: `src/SerialConfigurator/src/ui/sc_map_tab.c` now
+  polls `SC_GET_GPS` every 4 s (4000 ms), matching firmware
+  `GPS_UPDATE`.
+- SerialConfigurator GPS telemetry support was added end-to-end.
+  Protocol vocabulary now includes a dedicated `SC_GET_GPS` command and
+  `SC_OK GPS ...` reply payload (`available`, `lat_e6`, `lon_e6`,
+  `speed_kmh_x10`, `epoch`) for ECU real-time position data.
+- ECU firmware now exposes GPS snapshot getters and handles
+  `SC_GET_GPS` in the SC command dispatcher.
+- Host-side GPS logic was split into a dedicated module
+  (`src/SerialConfigurator/src/core/sc_gps.c/.h`) instead of inflating
+  `sc_core`, with a thin public send-command facade in `sc_core` for
+  transport reuse.
+- SerialConfigurator CLI gained `get-gps` with parsed output.
+- A dedicated parser test target was added:
+  `tests/test_sc_gps.c` / `serial-configurator-sc-gps-tests`.
+- SerialConfigurator GUI gained a fourth tab (`Map`/`Mapa`) implemented
+  with libshumate when available, polling GPS every 2 s and showing the
+  live marker/status; builds gracefully degrade to a placeholder when
+  `shumate-1.0` is missing.
+- Bootstrap dependencies were updated for this GUI feature set:
+  `src/ECU/scripts/bootstrap.sh` now installs `libshumate-dev`.
+
+## 2026-05-25
 
 - Migrated every Fiesta firmware module to the JaszczurHAL 1.6.0 opt-in
   configuration model. Each `hal_project_config.h` was rewritten to only

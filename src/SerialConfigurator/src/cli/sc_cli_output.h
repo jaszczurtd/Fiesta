@@ -46,6 +46,10 @@ void sc_cli_print_parsed_param_list(const ScParamListData *list);
 /** @brief Print parsed `SC_GET_PARAM <id>` detail (used by `get-param`). */
 void sc_cli_print_parsed_param_detail(const ScParamDetailData *detail);
 
+/** @brief Print decoded `SC_GET_GPS` snapshot (used by `get-gps`). */
+struct ScGpsSnapshot;
+void sc_cli_print_gps_snapshot(const struct ScGpsSnapshot *snapshot);
+
 #ifdef __cplusplus
 }
 #endif

@@ -62,6 +62,27 @@ bool isGPSAvailable(void);
  */
 uint32_t gpsGetEpoch(void);
 
+/**
+ * @brief Get current latitude in microdegrees (degrees * 1e6).
+ * @return Signed latitude * 1e6 when GPS is available, otherwise 0.
+ *         Range when valid: -90_000_000 .. +90_000_000.
+ */
+int32_t gpsGetLatE6(void);
+
+/**
+ * @brief Get current longitude in microdegrees (degrees * 1e6).
+ * @return Signed longitude * 1e6 when GPS is available, otherwise 0.
+ *         Range when valid: -180_000_000 .. +180_000_000.
+ */
+int32_t gpsGetLonE6(void);
+
+/**
+ * @brief Get current vehicle speed in tenths of km/h (km/h * 10).
+ * @return Speed * 10 when GPS is available and above the project
+ *         minimum threshold, otherwise 0. Capped to int16 range.
+ */
+int16_t gpsGetSpeedKmhX10(void);
+
 #ifdef __cplusplus
 }
 #endif

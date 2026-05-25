@@ -1,4 +1,5 @@
 #include "sc_detection.h"
+#include "sc_map_tab.h"
 #include "sc_values_tab.h"
 
 #include <stdio.h>
@@ -588,6 +589,7 @@ static void on_detection_finished(GObject *source_object,
     state->core = result->core;
     state->connected = true;
     sc_modules_view_refresh_lamps(state);
+    sc_map_tab_set_connected(state, true);
 
     if (state->log_buffer != 0 && result->log_text != 0) {
         gtk_text_buffer_set_text(state->log_buffer, result->log_text, -1);
@@ -718,6 +720,10 @@ void sc_detection_reset_connection(AppState *state, bool by_user_request)
     /* Phase 8.6: collapse the Values tab back to the placeholder
      * when the operator disconnects or boot-time idle is reasserted. */
     sc_values_tab_rebuild(state, false);
+    /* Phase 8.7: hide the GPS marker and freeze the status label so
+     * the operator gets immediate visual feedback that polling is
+     * paused; the timer itself stays armed (see sc_map_tab.c). */
+    sc_map_tab_set_connected(state, false);
 }
 
 void sc_detection_on_detect_clicked(GtkButton *button, gpointer user_data)
