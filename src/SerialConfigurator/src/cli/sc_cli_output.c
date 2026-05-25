@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "sc_gps.h"
+
 const char *sc_cli_value_or_dash(const char *value)
 {
     return (value != 0 && value[0] != '\0') ? value : "-";
@@ -139,5 +141,32 @@ void sc_cli_print_parsed_param_detail(const ScParamDetailData *detail)
             default_text,
             sc_value_type_name(detail->default_value.type)
         );
+    }
+}
+
+void sc_cli_print_gps_snapshot(const struct ScGpsSnapshot *snapshot)
+{
+    if (snapshot == 0) {
+        return;
+    }
+
+    /* Six decimal places matches the wire's microdegree resolution
+     * (1e-6 deg ≈ 11 cm at the equator). Speed gets one decimal
+     * because the firmware ships speed_kmh_x10. Epoch=0 means
+     * "no GPS time available yet" - render it as `-` so shell users
+     * can tell it apart from genuine 1970-01-01 fixes (which we'd
+     * never see in practice but stay distinguishable). */
+    printf("PARSED available=%s\n",
+           snapshot->available ? "true" : "false");
+    if (snapshot->available) {
+        printf("  lat=%.6f deg\n", snapshot->latitude_deg);
+        printf("  lon=%.6f deg\n", snapshot->longitude_deg);
+        printf("  speed=%.1f km/h\n", snapshot->speed_kmh);
+        if (snapshot->epoch_utc != 0u) {
+            printf("  epoch=%lu (UTC seconds)\n",
+                   (unsigned long)snapshot->epoch_utc);
+        } else {
+            printf("  epoch=- (no GPS time yet)\n");
+        }
     }
 }

@@ -1697,6 +1697,29 @@ bool sc_core_sc_get_param(
     );
 }
 
+bool sc_core_send_sc_command(
+    ScCore *core,
+    size_t module_index,
+    const char *command,
+    ScCommandResult *result,
+    char *log_output,
+    size_t log_output_size
+)
+{
+    /* Public façade over the static dispatcher. Intentionally just a
+     * forwarder so the file-local helper can keep its precondition
+     * checks, error logging and parse_sc_command_result wiring as the
+     * single source of truth for every SC command path. */
+    return sc_core_send_sc_command_internal(
+        core,
+        module_index,
+        command,
+        result,
+        log_output,
+        log_output_size
+    );
+}
+
 /* ── Phase 5: authenticated bootloader entry ───────────────────────────── */
 
 static void set_phase5_error(char *error, size_t error_size, const char *fmt, ...)

@@ -29,6 +29,7 @@ static void print_usage(const char *program_name)
     fprintf(stderr, "  %s param-list [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s get-values [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s get-param <param-id> [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
+    fprintf(stderr, "  %s get-gps [--module <name>] [--uid <hex>] [--port <path>]\n", program_name);
     fprintf(stderr, "  %s reboot-bootloader [--module <name>] [--uid <hex>] [--port <path>]\n",
             program_name);
     fprintf(stderr, "      [--manifest <path>] [--artifact <path>]\n");
@@ -95,6 +96,10 @@ int main(int argc, char *argv[])
 
     if (strcmp(command, "set-and-commit") == 0) {
         return sc_cli_command_set_and_commit(argc, argv);
+    }
+
+    if (strcmp(command, "get-gps") == 0) {
+        return sc_cli_command_get_gps(argc, argv);
     }
 
     if (strcmp(command, "get-param") == 0) {

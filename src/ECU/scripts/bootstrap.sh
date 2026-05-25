@@ -96,6 +96,11 @@ APT_PKGS=(
     git build-essential cmake python3 curl ca-certificates cppcheck
     # SerialConfigurator desktop build + Debian package
     pkg-config libgtk-4-dev dpkg-dev
+    # SerialConfigurator Map tab (Phase 8.7). Optional at build time -
+    # CMake degrades to a placeholder when shumate-1.0 is missing - but
+    # bootstrap.sh sets up the full feature surface so first-time devs
+    # get a working live GPS map without extra steps.
+    libshumate-dev
 )
 
 install_apt() {

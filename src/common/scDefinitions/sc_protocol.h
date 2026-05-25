@@ -59,6 +59,12 @@ extern "C" {
 #define SC_CMD_COMMIT_PARAMS        "SC_COMMIT_PARAMS"
 #define SC_CMD_REVERT_PARAMS        "SC_REVERT_PARAMS"
 
+/* Read-only telemetry endpoint outside the descriptor framework
+ * (sibling to SC_GET_META). Returns an atomic GPS snapshot (lat/lon
+ * in microdegrees, speed in 0.1 km/h units, Unix epoch and an
+ * availability flag). Not auth-gated, not persisted, never staged. */
+#define SC_CMD_GET_GPS              "SC_GET_GPS"
+
 /* ── Outbound reply status tokens (device -> host) ──────────────────── */
 
 #define SC_STATUS_OK                "SC_OK"
@@ -86,6 +92,8 @@ extern "C" {
 #define SC_REPLY_TAG_PARAM_SET             "PARAM_SET"
 #define SC_REPLY_TAG_PARAMS_COMMITTED      "PARAMS_COMMITTED"
 #define SC_REPLY_TAG_PARAMS_REVERTED       "PARAMS_REVERTED"
+
+#define SC_REPLY_TAG_GPS                   "GPS"
 
 /* Structural HELLO reply head - emitted by the HAL session helper as
  * "OK HELLO module=... proto=... session=... fw=... build=... uid=..."
@@ -194,6 +202,25 @@ extern "C" {
  * value outside the descriptor's declared [min, max]. */
 #define SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT                                \
     SC_STATUS_BAD_REQUEST " out_of_range id=%s min=%d max=%d"
+
+/* ── GPS telemetry snapshot reply ──────────────────────────────────── */
+
+/* "SC_OK GPS available=<0|1> lat_e6=<int32> lon_e6=<int32>
+ *  speed_kmh_x10=<int16> epoch=<uint32>"
+ *
+ * lat_e6 / lon_e6  : latitude / longitude scaled by 1e6 (microdegrees).
+ *                    Valid only when available=1. -90e6..+90e6 / -180e6..+180e6.
+ * speed_kmh_x10    : speed-over-ground in 0.1 km/h units. Below the
+ *                    project minimum threshold the firmware clamps to 0.
+ * epoch            : UTC Unix epoch derived from the GPS RMC sentence;
+ *                    0 when GPS time is not yet synced.
+ *
+ * available=0 implies the lat/lon/speed/epoch fields are stale or
+ * unset; hosts must not consume them. The reply is always single-line
+ * so the SC frame parser handles it without continuation logic. */
+#define SC_REPLY_GPS_FMT                                                     \
+    SC_STATUS_OK " " SC_REPLY_TAG_GPS                                        \
+    " available=%u lat_e6=%ld lon_e6=%ld speed_kmh_x10=%d epoch=%lu"
 
 #ifdef __cplusplus
 }

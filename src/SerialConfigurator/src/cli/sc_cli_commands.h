@@ -55,6 +55,15 @@ int sc_cli_command_commit_params(int argc, char *argv[]);
 int sc_cli_command_revert_params(int argc, char *argv[]);
 int sc_cli_command_set_and_commit(int argc, char *argv[]);
 
+/**
+ * @brief Send `SC_GET_GPS` and pretty-print the decoded snapshot.
+ *
+ * Uses the standard --module/--uid/--port selectors. Exits with code
+ * 5 when the device returns a non-OK reply (no fix at the time of
+ * the request still counts as OK with `available=0`).
+ */
+int sc_cli_command_get_gps(int argc, char *argv[]);
+
 #ifdef __cplusplus
 }
 #endif

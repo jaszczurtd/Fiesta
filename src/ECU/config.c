@@ -2,6 +2,7 @@
 #include "config.h"
 #include "tests.h"
 #include "ecu_unit_testing.h"
+#include "gps.h"
 #include <hal/hal_crypto.h>
 
 #include <hal/hal_kv.h>
@@ -348,6 +349,29 @@ static void configSessionReplyGetMeta(void) {
   hal_serial_session_println(&s_configSession, response);
 }
 
+/* Emit a single-line GPS telemetry snapshot. This is sibling to
+ * SC_GET_META: a read-only, never-persisted endpoint that sits outside
+ * the descriptor framework because lat/lon are int32 (microdegrees)
+ * and the descriptor reply format is int16-shaped. Keeping it out of
+ * the parameter catalogue avoids extending SC_REPLY_PARAM_FMT, blob
+ * persistence and the host int16 parser for telemetry that nothing
+ * configures. */
+static void configSessionReplyGetGps(void) {
+  bool available = isGPSAvailable();
+  int32_t latE6 = available ? gpsGetLatE6() : 0;
+  int32_t lonE6 = available ? gpsGetLonE6() : 0;
+  int16_t speed = available ? gpsGetSpeedKmhX10() : 0;
+  uint32_t epoch = available ? gpsGetEpoch() : 0u;
+
+  char response[128] = {0};
+  snprintf(response, sizeof(response), SC_REPLY_GPS_FMT,
+           (unsigned)(available ? 1u : 0u),
+           (long)latE6, (long)lonE6,
+           (int)speed,
+           (unsigned long)epoch);
+  hal_serial_session_println(&s_configSession, response);
+}
+
 static bool configSessionHandleScGetParamCommand(const char *line) {
   if(line == NULL) {
     hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
@@ -524,6 +548,11 @@ static bool configSessionHandleScCommand(const char *line) {
 
   if(strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
+    return true;
+  }
+
+  if(strcmp(line, SC_CMD_GET_GPS) == 0) {
+    configSessionReplyGetGps();
     return true;
   }
 

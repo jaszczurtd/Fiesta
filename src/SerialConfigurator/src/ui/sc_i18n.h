@@ -170,6 +170,14 @@ typedef enum ScI18nKey {
     SC_I18N_VALUES_REVERT_OK,
     SC_I18N_VALUES_REVERT_FAILED_FMT,       /* "Revert failed: %s" */
 
+    /* ── Phase 8.7: Map tab (libshumate GPS view) ──────────────────── */
+    SC_I18N_TAB_MAP,
+    SC_I18N_MAP_PLACEHOLDER,                /* shown before any GPS fix */
+    SC_I18N_MAP_UNAVAILABLE,                /* shumate not compiled in */
+    SC_I18N_MAP_WAITING_FIX,                /* connected but available=0 */
+    SC_I18N_MAP_STATUS_FMT,                 /* "Lat %.6f  Lon %.6f  %.1f km/h" */
+    SC_I18N_MAP_DISCONNECTED,
+
     SC_I18N_KEY_COUNT
 } ScI18nKey;
 

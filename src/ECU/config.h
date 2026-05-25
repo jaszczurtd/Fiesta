@@ -41,7 +41,7 @@ extern "C" {
  * ==========================================================================*/
 
 // BASIC CONTROL VALUES
-#define VP37
+//#define VP37
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15

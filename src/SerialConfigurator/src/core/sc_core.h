@@ -169,6 +169,26 @@ bool sc_core_sc_get_param(
     size_t log_output_size
 );
 
+/**
+ * @brief Dispatch a raw, already-composed SC command line and capture
+ *        the reply.
+ *
+ * Same transport / logging contract as the typed sc_core_sc_* helpers
+ * (sc_core_sc_get_meta etc.). Intended for sibling modules in
+ * src/core/ (sc_gps.c, future telemetry endpoints) that need to issue
+ * their own command token without each one carrying a private copy of
+ * the transport plumbing. Returns false on transport/precondition
+ * failure; on success @p result holds the parsed reply.
+ */
+bool sc_core_send_sc_command(
+    ScCore *core,
+    size_t module_index,
+    const char *command,
+    ScCommandResult *result,
+    char *log_output,
+    size_t log_output_size
+);
+
 bool sc_core_parse_param_list_result(
     const ScCommandResult *result,
     ScParamListData *parsed,
