@@ -52,7 +52,10 @@ typedef struct ScMapTabState {
     GtkWidget *status_label;
     guint poll_timeout_id;
     bool have_fix;
+    double last_latitude_deg;
+    double last_longitude_deg;
 #ifdef SC_HAVE_SHUMATE
+    GtkWidget *recenter_button;
     ShumateSimpleMap *simple_map;
     ShumateMapSourceRegistry *registry;
     ShumateMarkerLayer *marker_layer;
@@ -99,11 +102,41 @@ static void sc_map_set_status(ScMapTabState *m, const char *text)
 }
 
 #ifdef SC_HAVE_SHUMATE
+static void sc_map_set_recenter_enabled(ScMapTabState *m, bool enabled)
+{
+    if (m == 0 || m->recenter_button == 0) {
+        return;
+    }
+    gtk_widget_set_sensitive(m->recenter_button, enabled ? TRUE : FALSE);
+}
+
+static void sc_map_center_on_last_fix(ScMapTabState *m)
+{
+    if (m == 0 || m->viewport == 0 || !m->have_fix) {
+        return;
+    }
+    shumate_location_set_location(
+        SHUMATE_LOCATION(m->viewport),
+        m->last_latitude_deg,
+        m->last_longitude_deg
+    );
+}
+
+static void on_recenter_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;
+    ScMapTabState *m = (ScMapTabState *)user_data;
+    sc_map_center_on_last_fix(m);
+}
+
 static void sc_map_apply_fix(ScMapTabState *m, const ScGpsSnapshot *snap)
 {
     if (m == 0 || snap == 0 || !snap->available) {
         return;
     }
+
+    m->last_latitude_deg = snap->latitude_deg;
+    m->last_longitude_deg = snap->longitude_deg;
 
     if (m->marker != 0) {
         shumate_location_set_location(
@@ -128,6 +161,7 @@ static void sc_map_apply_fix(ScMapTabState *m, const ScGpsSnapshot *snap)
         }
     }
     m->have_fix = true;
+    sc_map_set_recenter_enabled(m, true);
 
     char buf[160];
     (void)snprintf(buf, sizeof(buf),
@@ -148,6 +182,9 @@ static gboolean sc_map_poll_tick(gpointer user_data)
     }
 
     if (!state->connected) {
+#ifdef SC_HAVE_SHUMATE
+        sc_map_set_recenter_enabled(m, false);
+#endif
         sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_DISCONNECTED));
         return G_SOURCE_CONTINUE;
     }
@@ -159,6 +196,9 @@ static gboolean sc_map_poll_tick(gpointer user_data)
 
     const size_t ecu_idx = find_ecu_module(state);
     if (ecu_idx >= SC_MODULE_COUNT) {
+#ifdef SC_HAVE_SHUMATE
+        sc_map_set_recenter_enabled(m, false);
+#endif
         sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_PLACEHOLDER));
         return G_SOURCE_CONTINUE;
     }
@@ -180,6 +220,9 @@ static gboolean sc_map_poll_tick(gpointer user_data)
     }
 
     if (!snap.available) {
+#ifdef SC_HAVE_SHUMATE
+        sc_map_set_recenter_enabled(m, false);
+#endif
         sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_WAITING_FIX));
         return G_SOURCE_CONTINUE;
     }
@@ -202,6 +245,16 @@ static gboolean sc_map_poll_tick(gpointer user_data)
 #ifdef SC_HAVE_SHUMATE
 static void sc_map_build_shumate(ScMapTabState *m, GtkWidget *parent_box)
 {
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append(GTK_BOX(parent_box), toolbar);
+
+    m->recenter_button = gtk_button_new_with_label(
+        sc_i18n_string_get(SC_I18N_MAP_BTN_RECENTER));
+    g_signal_connect(m->recenter_button, "clicked",
+                     G_CALLBACK(on_recenter_clicked), m);
+    gtk_widget_set_sensitive(m->recenter_button, FALSE);
+    gtk_box_append(GTK_BOX(toolbar), m->recenter_button);
+
     m->simple_map = shumate_simple_map_new();
     gtk_widget_set_hexpand(GTK_WIDGET(m->simple_map), TRUE);
     gtk_widget_set_vexpand(GTK_WIDGET(m->simple_map), TRUE);
@@ -293,6 +346,9 @@ void sc_map_tab_set_connected(AppState *state, bool connected)
     }
     if (!connected) {
         m->have_fix = false;
+    #ifdef SC_HAVE_SHUMATE
+        sc_map_set_recenter_enabled(m, false);
+    #endif
 #ifdef SC_HAVE_SHUMATE
         if (m->marker != 0) {
             gtk_widget_set_visible(GTK_WIDGET(m->marker), FALSE);

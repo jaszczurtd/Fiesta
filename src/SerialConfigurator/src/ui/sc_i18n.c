@@ -153,6 +153,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_MAP_UNAVAILABLE]               = "Map view disabled: libshumate not found at build time.",
     [SC_I18N_MAP_WAITING_FIX]               = "Waiting for GPS fix...",
     [SC_I18N_MAP_STATUS_FMT]                = "Lat %.6f  Lon %.6f  %.1f km/h",
+    [SC_I18N_MAP_BTN_RECENTER]              = "Recenter",
     [SC_I18N_MAP_DISCONNECTED]              = "Disconnected.",
 };
 
@@ -303,6 +304,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_MAP_UNAVAILABLE]               = "Widok mapy wyłączony: brak biblioteki libshumate w czasie budowania.",
     [SC_I18N_MAP_WAITING_FIX]               = "Oczekiwanie na ustalenie pozycji GPS...",
     [SC_I18N_MAP_STATUS_FMT]                = "Sz. %.6f  Dł. %.6f  %.1f km/h",
+    [SC_I18N_MAP_BTN_RECENTER]              = "Wyśrodkuj",
     [SC_I18N_MAP_DISCONNECTED]              = "Rozłączono.",
 };
 

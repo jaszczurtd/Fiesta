@@ -176,6 +176,7 @@ typedef enum ScI18nKey {
     SC_I18N_MAP_UNAVAILABLE,                /* shumate not compiled in */
     SC_I18N_MAP_WAITING_FIX,                /* connected but available=0 */
     SC_I18N_MAP_STATUS_FMT,                 /* "Lat %.6f  Lon %.6f  %.1f km/h" */
+    SC_I18N_MAP_BTN_RECENTER,
     SC_I18N_MAP_DISCONNECTED,
 
     SC_I18N_KEY_COUNT
