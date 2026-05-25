@@ -10,14 +10,13 @@ focuses on setup, safety guidance, and build procedures.
 
 ## 1. System scope
 
-Fiesta is **not** a single firmware binary. It is a multi-module electronic
-stack for a Ford Fiesta 1.8 (M)TDDI with custom electronics replacing parts
-of the OEM wiring. Each firmware module has its own binary, its own PCB
+Fiesta is a multi-module electronic stack for a Ford Fiesta 1.8 (M)TDDI
+with custom electronics replacing parts of the OEM wiring. Each firmware
+module has its own binary, its own PCB
 (see [`Fiesta_pcbs/`](Fiesta_pcbs/)), and communicates with the others over
 well-defined physical buses (CAN, I²C). A **desktop companion**, the
 Fiesta Serial Configurator, sits off-vehicle and talks to each firmware
-module over USB CDC for diagnostics, calibration, and flashing - it is a
-full member of the family (§5.5).
+module over USB CDC for diagnostics, calibration, and flashing.
 
 The system replaces and augments the following vehicle functions:
 
@@ -26,7 +25,7 @@ The system replaces and augments the following vehicle functions:
 - diagnostics (OBD-II / UDS over CAN, mimics Ford EEC-V),
 - driver-facing instrumentation (dashboard gauges, display, buzzer),
 - auxiliary telemetry (oil pressure, wheel speed, exhaust gas temperatures,
-  GPS speed and time),
+  GPS speed/time and RTC time broadcast),
 - off-vehicle runtime configuration and re-flashing via the Serial
   Configurator, over a per-module USB CDC serial session.
 
@@ -71,7 +70,8 @@ High-level module map (active firmware + desktop companion):
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
-│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed)    │
+│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed/    │
+│            │  RTC_Clock)                                               │
 │            │  Additional encrypted layer later for flashing/settings   │
 │            │  changes                                                  │
 │            │                                                           │
@@ -84,19 +84,23 @@ High-level module map (active firmware + desktop companion):
 │     │                                                     │            │
 │     └─────────────────────────────────────────────────────┘            │
 │                                                                        │
-│     (Clocks and OilAndSpeed expose the same USB CDC session pattern    │
-│     as ECU. Adjustometer is currently outside the primary              │
+│     (Clocks, OilAndSpeed, and RTC_Clock expose the same USB CDC        │
+│     session pattern as ECU. Adjustometer is currently outside the      │
 │     configurator/flashing flow.)                                       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+The map is intentionally simplified around the ECU hub; `Fiesta_clock`
+(`RTC_Clock` in SC/UI) is an additional CAN0 peer that publishes RTC state
+once per second when clock integrity is valid (`CAN_ID_RTC_UPDATE`, `0x130`).
 
 ---
 
 ## 2. Hardware platform
 
-All four active modules target **RP2040** (ARM Cortex-M0+ dual-core, 133 MHz,
-264 KB SRAM, 2 MB flash) packaged as a Raspberry Pi Pico. The reasons for
-picking this part:
+All active firmware modules target **RP2040** (ARM Cortex-M0+ dual-core,
+133 MHz). Depending on module, the board is a Raspberry Pi Pico,
+RP2040-Plus, or RP2040-Zero. The reasons for picking RP2040:
 
 - cheap, widely available, two cores,
 - 8 PIO state machines (used for the engine Hall sensor and the VP37
@@ -106,9 +110,6 @@ picking this part:
 That said, the system is not locked to this silicon - the HAL abstraction
 is designed so that a port to a different MCU is a relatively contained
 effort rather than a rewrite.
-
-The legacy [`src/Fiesta_clock`](src/Fiesta_clock/) module targets AVR and is
-no longer under active development; it is kept for historical reference.
 
 PCB assets for every module live under [`Fiesta_pcbs/`](Fiesta_pcbs/),
 including schematics (`.pdf`), layouts, and the `pinout.txt` / `wirings.txt`
@@ -126,6 +127,7 @@ loom.
 | [`ECU`](src/ECU/) | C (+ `.ino` wrapper) | engine control, diagnostics, actuator orchestration | **in scope** |
 | [`Clocks`](src/Clocks/) | C++ | dashboard / instrument cluster rendering | out of scope |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure and wheel speed telemetry, EGT acquisition | out of scope |
+| [`Fiesta_clock` (`RTC_Clock`)](src/Fiesta_clock/) | C (+ `.ino` wrapper) | RTC calendar module; publishes RTC time/integrity on CAN and exposes RTC set/get via SerialConfigurator | out of scope |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump-coil resonance feedback (I²C slave) | out of scope |
 
 ### Desktop companion
@@ -136,10 +138,8 @@ loom.
 
 The configurator is a full family member, not a development-time utility.
 
-### Completed / archived
+### Legacy / archived
 
-- [`src/Fiesta_clock`](src/Fiesta_clock/) - standalone AVR clock/temperature
-  display, finished project.
 - [`legacy/`](legacy/) - archival sources (`DPF_main`, `AdaptiveLights`,
   `Fading`). Not built, not tested, kept for migration reference.
 
@@ -176,16 +176,17 @@ and **will not** compile out of the box in the Arduino IDE (see
 
 `canDefinitions` is the in-tree single source of truth for CAN frame IDs,
 signal layouts, and scaling (`canDefinitions.h`). It is shared across ECU,
-Clocks, and OilAndSpeed so that they agree on the wire format without
-duplicating header files. Because it is versioned inside this repository,
-there is no separate clone/update step for this layer in `bootstrap.sh`.
+Clocks, OilAndSpeed, and Fiesta_clock so that they agree on the wire format
+without duplicating header files. Because it is versioned inside this
+repository, there is no separate clone/update step for this layer in
+`bootstrap.sh`.
 
 ### 4.3 scDefinitions ([`src/common/scDefinitions`](src/common/scDefinitions/))
 
 `scDefinitions` is the in-tree single source of truth for the
 SerialConfigurator wire vocabulary and the descriptor-driven SC reply
-machinery shared by ECU, Clocks, OilAndSpeed, and the desktop
-configurator. Unlike `JaszczurHAL` (out-of-tree external lib) it lives
+machinery shared by ECU, Clocks, OilAndSpeed, Fiesta_clock, and the
+desktop configurator. Unlike `JaszczurHAL` (out-of-tree external lib) it lives
 inside the Fiesta repository because the
 contract is Fiesta-specific.
 
@@ -225,7 +226,10 @@ through `${SCDEFS}`.
 
 ### 4.4 Per-module layout convention
 
-Every active module follows the same file layout:
+Most active modules follow the same file layout (ECU, Clocks,
+OilAndSpeed, Adjustometer). `Fiesta_clock` keeps a flatter legacy naming
+layout (`main.c`, `RTC.c`, etc.) but uses the same shared HAL/SC/script
+foundation:
 
 ```
 src/<Module>/
@@ -440,14 +444,48 @@ Status bits (`ADJ_STATUS_*`):
 and be verified before the baseline is considered valid. The ECU waits up
 to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms`(max value, usually everything is ready after ~250ms) for the `BASELINE_PENDING` status bit to clear before trusting the frequency reading.
 
-### 5.5 Fiesta Serial Configurator - desktop companion
+### 5.5 Fiesta_clock (`RTC_Clock`) - [`src/Fiesta_clock`](src/Fiesta_clock/)
+
+**Role.** Dedicated RTC/clock module. It maintains calendar time via the
+PCF8563 and publishes it on the main CAN bus as `CAN_ID_RTC_UPDATE`
+(`0x130`). The same module exposes RTC read/write over the shared
+SerialConfigurator protocol (`module=RTC_CLK`, display name `RTC_Clock`).
+
+**Responsibility map.**
+
+| File | Responsibility |
+|---|---|
+| [`main.c`](src/Fiesta_clock/main.c) | runtime init/loop orchestration (display, buttons, CAN tick, SC session tick) |
+| [`RTC.c`](src/Fiesta_clock/RTC.c) | HAL-backed PCF8563 RTC access (`get/set datetime`, integrity read) |
+| [`can.c`](src/Fiesta_clock/can.c) | periodic CAN TX of RTC update frame (`CAN_ID_RTC_UPDATE`) |
+| [`config.c`](src/Fiesta_clock/config.c) | SC session wrapper + descriptor-driven RTC parameter handling |
+| [`clockPart.c`](src/Fiesta_clock/clockPart.c), [`tempPart.c`](src/Fiesta_clock/tempPart.c), [`voltPart.c`](src/Fiesta_clock/voltPart.c) | local UI/runtime functions (clock, temperature, voltage display modes) |
+
+**Hardware interfaces** (from [`hardwareConfig.h`](src/Fiesta_clock/hardwareConfig.h)):
+
+- **SPI** (MISO=0, MOSI=3, SCK=2) -> MCP2515 CAN controller (CS=1, INT=4).
+- **I²C** (SDA=8, SCL=9 @ 100 kHz) -> PCF8563 RTC (`0x51`).
+- **GPIO**: clock control buttons (10/11/12), ignition input (13), RGB LED (14/15/16).
+- **ADC**: supply voltage read on pin 26.
+- **1-Wire GPIO**: DS18B20 inside/outside temperature sensors on pins 6/7.
+
+**Direction of data.** In current scope this module is CAN **TX-only**:
+it sends one `CAN_ID_RTC_UPDATE` frame per second, and sends nothing when
+RTC integrity is invalid or the datetime payload is not valid.
+
+**SC surface for RTC.** The descriptor set in
+[`config.c`](src/Fiesta_clock/config.c) exposes writable
+`rtc_year/month/day/hour/minute/second` plus read-only `rtc_integrity`.
+Commit validates the full date tuple (including month/day and leap year)
+before writing to RTC.
+
+### 5.6 Fiesta Serial Configurator - desktop companion
 
 **Role.** Off-vehicle desktop application used to discover Fiesta modules on
-USB, inspect identity/metadata, and run read-only protocol queries over the
-shared serial session. It replaces ad-hoc `arduino-cli` + manual `picocom`
-probing with a single tool that enforces unambiguous target selection.
-Writable configuration and full flashing orchestration remain phased follow-up
-work behind authenticated protocol layers.
+USB, inspect identity/metadata, read/write descriptor-driven parameters,
+and orchestrate authenticated BOOTSEL/UF2 flashing with manifest checks.
+It replaces ad-hoc `arduino-cli` + manual `picocom` probing with a single
+tool that enforces unambiguous target selection.
 
 Implementation milestones and phase-closure updates are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
@@ -480,8 +518,7 @@ discovery, config-file location, packaging (see the design doc §4.2).
 **Contract with firmware modules.** The configurator depends on two
 per-module invariants:
 1. Every active firmware module runs a configurator session wired through
-  `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed; Adjustometer is out
-   of the primary flow). The session answers the bootstrap handshake with
+  `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed, RTC_Clock; Adjustometer is out of the primary flow). The session answers the bootstrap handshake with
    the module's canonical identity, firmware version, build id, and
    device UID - sourced from compile-time `SC_MODULE_TOKEN_*` / `FW_VERSION` /
    `BUILD_ID` plus `hal_get_device_uid_hex()`.
@@ -499,20 +536,13 @@ paths that must agree.
 
 | Phase | Status | Scope |
 |---|---|---|
-| 1 - Runtime parameters foundation | done | `ecu_params` with staging / apply / commit semantics backed by HAL KV; descriptor-driven across all three modules after R1 (§5.5 below). |
-| 2 - Framed read-only `SC_*` | done | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM` over `$SC,<seq>,<payload>*<crc8>\n` framing, on ECU/Clocks/OilAndSpeed. |
+| 1 - Runtime parameters foundation | done | `ecu_params` with staging / apply / commit semantics backed by HAL KV; descriptor-driven across all four SC modules after R1 (§5.6 below). |
+| 2 - Framed read-only `SC_*` | done | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM` over `$SC,<seq>,<payload>*<crc8>\n` framing, on ECU/Clocks/OilAndSpeed/RTC_Clock. |
 | 3 - Authentication handshake | done | `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` with HMAC-SHA256 over a per-device key derived from the RP2040 UID; one-shot challenge consumption defeats replay. |
 | 4 - Manifest pre-flash gate | done | Hard-rejecting host-side parser that requires `module_name`, `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte. |
 | 5 - Auth-gated bootloader entry | done | `SC_REBOOT_BOOTLOADER` accepted only after a successful `SC_AUTH_PROVE`; firmware ACKs, drains the ACK frame, and hands control to the boot ROM. |
 | 6 - Flash flow | done | `sc_core_flash` orchestrator composes format check + manifest verify + auth + reboot + BOOTSEL drive watcher + UF2 copy with progress + re-enumeration waiter + post-flash HELLO with optional `fw_version` match. GUI runs the flow on a worker thread, marshals progress via `g_idle_add`. |
 | 7 - Hardening | next | Auth-failure lockout policy on `auth_failures`, ed25519 manifest signature backend (the field is already parsed and exposed today), key rotation, audit logs. |
-
-**R1 cross-cutting refactor (done).** Folded between Phase 6 slices to
-collapse ~70% copy&paste between ECU/Clocks/OilAndSpeed `config.{c,cpp}`
-onto the new `src/common/scDefinitions/` framework (see §4.3) and to
-strip Fiesta-specific SC tokens out of JaszczurHAL. Net firmware shrink
-across the three modules: 1228 → 865 LOC (-29%); JaszczurHAL `src/`
-SC_* literal count: 55 → 0.
 
 ---
 
@@ -524,7 +554,7 @@ There are two physically separate CAN buses, both attached to the ECU:
 
 | Bus | Attached to | Purpose | ECU controller |
 |---|---|---|---|
-| CAN0 "main" | ECU, Clocks, OilAndSpeed | inter-module signalling | SPI, CS=17, INT=15 |
+| CAN0 "main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | inter-module signalling | SPI, CS=17, INT=15 |
 | CAN1 "OBD-2" | ECU, OBD-II diagnostic port | external diagnostics | SPI, CS=6, INT=14 |
 
 Frame IDs and signal layouts live in the shared in-tree `canDefinitions` header
@@ -543,6 +573,10 @@ Clocks ──── consumes: RPM, speed, temperatures, pressures
 
 OilAndSpeed ── publishes: oil pressure, wheel speed, EGT pre/mid-DPF
              ── consumes: (minimal - heartbeat / context)
+
+RTC_Clock (Fiesta_clock) ── publishes: RTC datetime + integrity
+                            (`CAN_ID_RTC_UPDATE`, 1 Hz)
+                         ── consumes: (none in current firmware scope)
 
 OBD-2 bus ── ECU responds to UDS / OBD-II service requests from
              whatever diagnostic tool is plugged into the port
@@ -564,8 +598,9 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
 ### 6.3 Other interfaces
 
 - **SPI** - shared on the ECU between CAN0, CAN1, and the SD card; uses
-  per-device chip-selects. Clocks and OilAndSpeed each run their own SPI
-  bus for their own CAN controllers and displays.
+  per-device chip-selects. Clocks, OilAndSpeed, and Fiesta_clock each run
+  their own SPI bus for CAN peripherals (Clocks also shares that bus with
+  its TFT display).
 - **UART** - ECU-only, NMEA GPS input on RX=22, TX=21.
 - **PIO** - used where pin-level timing matters: engine Hall (ECU),
   VP37 injection outputs (ECU), turbo solenoid (ECU), DPF lamp (ECU),
@@ -574,9 +609,9 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
 ### 6.4 Desktop configurator channel (USB CDC)
 
 Every RP2040-based firmware module in the **primary configurator flow**
-(ECU, Clocks, OilAndSpeed) exposes a **configurator session** over its
+(ECU, Clocks, OilAndSpeed, RTC_Clock) exposes a **configurator session** over its
 native USB CDC port. This is the transport the Fiesta Serial Configurator
-(§5.5; UI title is "Fiesta USB Configurator") uses off-vehicle.
+(§5.6; UI title is "Fiesta USB Configurator") uses off-vehicle.
 Implementation is shared through JaszczurHAL's `hal_serial_session_*`
 helper - each firmware module only owns a thin wrapper
 (`configSessionInit/Tick/Active/Id`) and static identity strings.
@@ -598,10 +633,6 @@ Channel responsibilities:
 - coexist with the existing debug log output on the same CDC stream
   (mutex-serialised, see §6.4.5).
 
-The channel evolves through phases tracked in §5.5. Phase 1–6 are
-landed; Phase 7 (lockout, ed25519 manifest signatures, key rotation,
-audit logs) is next on the list.
-
 #### 6.4.1 Wire framing
 
 Every line on the CDC stream that the configurator cares about is wrapped
@@ -614,7 +645,7 @@ $SC,<seq>,<inner>*<crc8>\n
 - `$SC,` - hard prefix. Lines that do not start with this sentinel are
   silently discarded by the firmware session helper, and the host
   parser drops them as `non_sc` (counted in the timeout-diag string).
-  This is intentional: legacy `deb()`/`derr()` debug lines coexist on
+  This is intentional: serial utility `deb()`/`derr()` debug lines coexist on
   the same CDC stream and must never be mistaken for protocol traffic.
 - `<seq>` - per-request 16-bit sequence number assigned by the host.
   The firmware echoes the same seq on its reply so the host can
@@ -653,11 +684,13 @@ $ lsusb
 ... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta ECU
 ... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta Clocks
 ... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta OilAndSpeed
+... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta RTC Clock
 
 $ ls /dev/serial/by-id/
 usb-Jaszczur_Fiesta_ECU_DE62A875579C612A-if00
 usb-Jaszczur_Fiesta_Clocks_E6625887D3475937-if00
 usb-Jaszczur_Fiesta_OilAndSpeed_E661A4D1234567AB-if00
+usb-Jaszczur_Fiesta_RTC_Clock_E660112233445566-if00
 ```
 
 The two layers that produce that identity:
@@ -941,6 +974,9 @@ authoritative 104-pin ECU connector map.
 
 - GPS receiver on the ECU UART provides date/time; parsed NMEA is
   republished as a CAN frame.
+- `Fiesta_clock` publishes RTC datetime + integrity on CAN as
+  `CAN_ID_RTC_UPDATE` (`0x130`) and suppresses transmit when RTC integrity
+  is invalid.
 - Micro-SD card on the ECU SPI bus used for logging (legacy functionality).
 
 ---
@@ -1024,7 +1060,7 @@ as a warning quality gate.
 systemd service + timer that runs `bootstrap.sh` daily on a Raspberry Pi
 and emails a PASS/FAIL status summary. This is the slow-cycle integration
 signal - it exercises the whole tree, including firmware compilation for
-all four modules, once per day. Setup notes in
+ECU/Clocks/OilAndSpeed/Fiesta_clock/Adjustometer once per day. Setup notes in
 [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 ### 10.3 Bootstrap entry point
@@ -1054,13 +1090,13 @@ Fiesta/
 │   ├── ECU/                     # safety-critical engine control (MISRA scope)
 │   ├── Clocks/                  # dashboard / instrument cluster
 │   ├── OilAndSpeed/             # oil + ABS speed + EGT telemetry
+│   ├── Fiesta_clock/            # RTC_Clock module (RTC + CAN + SC session)
 │   ├── Adjustometer/            # VP37 feedback (I²C slave)
 │   ├── SerialConfigurator/      # GTK4 + CLI desktop companion (detect / inspect / flash)
 │   ├── common/
 │   │   ├── canDefinitions/      # shared CAN IDs/signals (in-tree, single source)
 │   │   ├── scDefinitions/       # SC wire vocabulary + descriptor framework (§4.3)
 │   │   └── scripts/             # shared bash helpers (arduino-build / upload / refresh-intellisense / ...)
-│   └── Fiesta_clock/            # AVR-based standalone clock (archived)
 ├── Fiesta_pcbs/                 # schematics, PCB layouts, connector maps
 │   ├── ecu/                     # ecuv1 + ecuv2
 │   ├── dashboard/ clock/ oil_and_speed/

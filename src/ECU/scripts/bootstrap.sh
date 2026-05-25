@@ -10,6 +10,7 @@
 #   - ECU                (host tests + firmware, -Werror)
 #   - Clocks             (host tests + firmware)
 #   - OilAndSpeed        (host tests + firmware)
+#   - Fiesta_clock       (firmware)
 #   - Adjustometer       (host tests + firmware, -Werror)
 #   - SerialConfigurator (CMake desktop build + tests + .deb package)
 # Idempotent - safe to re-run. Also covers the deps used by
@@ -49,6 +50,7 @@ FW_MODULES=(
     "ECU:1"
     "Clocks:0"
     "OilAndSpeed:0"
+    "Fiesta_clock:0"
     "Adjustometer:1"
 )
 
