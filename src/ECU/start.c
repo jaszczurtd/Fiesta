@@ -171,14 +171,18 @@ void initialization(void) {
   resetEEPROM();
   #endif
 
-  initSDLogger(SD_CARD_CS);
-  if (!isSDLoggerInitialized()) {
+#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
+  hal_sdlogger_init(SD_CARD_CS);
+  if (!hal_sdlogger_is_initialized()) {
     deb("SD Card failed, or not present");
   } else {
     deb("SD Card initialized");
   }
+#endif
 
   if(s_startRuntimeState.wValuesPtr != NULL) {
+    watchdog_feed();
+#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
     char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
     memset(dateAndTime, 0, sizeof(dateAndTime));
     const bool hasWatchdogSnapshot = (s_startRuntimeState.wSizeVal >= 4);
@@ -191,25 +195,25 @@ void initialization(void) {
         getGPSDate(), getGPSTime());
     }
 
-    watchdog_feed();
-    initCrashLogger(dateAndTime, SD_CARD_CS);
+    hal_sdlogger_crash_init(dateAndTime, SD_CARD_CS);
     if(validDateAndTime) {
-      crashReport("date:%s time:%s", getGPSDate(), getGPSTime());
+      hal_sdlogger_crash_report("date:%s time:%s", getGPSDate(), getGPSTime());
     }
     if(hasWatchdogSnapshot) {
-      crashReport("core0 started: %d", s_startRuntimeState.wValuesPtr[0]);
-      crashReport("core0 was running: %d", s_startRuntimeState.wValuesPtr[1]);
-      crashReport("core1 started: %d", s_startRuntimeState.wValuesPtr[2]);
-      crashReport("core1 was running: %d", s_startRuntimeState.wValuesPtr[3]);
+      hal_sdlogger_crash_report("core0 started: %d", s_startRuntimeState.wValuesPtr[0]);
+      hal_sdlogger_crash_report("core0 was running: %d", s_startRuntimeState.wValuesPtr[1]);
+      hal_sdlogger_crash_report("core1 started: %d", s_startRuntimeState.wValuesPtr[2]);
+      hal_sdlogger_crash_report("core1 was running: %d", s_startRuntimeState.wValuesPtr[3]);
     } else {
-      crashReport("watchdog snapshot truncated: size=%d", s_startRuntimeState.wSizeVal);
+      hal_sdlogger_crash_report("watchdog snapshot truncated: size=%d", s_startRuntimeState.wSizeVal);
     }
-    crashReport("build: %s", ecu_BuildDateTime);
+    hal_sdlogger_crash_report("build: %s", ecu_BuildDateTime);
 
-    crashReport("sv0: %d", s_startPersistentState.statusVariable0Val);
-    crashReport("sv1: %d", s_startPersistentState.statusVariable1Val);
+    hal_sdlogger_crash_report("sv0: %d", s_startPersistentState.statusVariable0Val);
+    hal_sdlogger_crash_report("sv1: %d", s_startPersistentState.statusVariable1Val);
 
-    saveCrashLoggerAndClose();
+    hal_sdlogger_crash_close();
+#endif
     watchdog_feed();
 
     s_startRuntimeState.wSizeVal = 0;
