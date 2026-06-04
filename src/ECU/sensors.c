@@ -475,11 +475,15 @@ bool isDPFRegenerating(void) {
 void updateValsForDebug(void) {
 
   char stamp[24];
-  if(isSDLoggerInitialized()) {
-    snprintf(stamp, sizeof(stamp), "LN:%d ", getSDLoggerNumber() - 1);
+#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
+  if(hal_sdlogger_is_initialized()) {
+    snprintf(stamp, sizeof(stamp), "LN:%d ", hal_sdlogger_get_log_number() - 1);
   } else {
     snprintf(stamp, sizeof(stamp), "NL/");
   }
+#else
+  snprintf(stamp, sizeof(stamp), "NL/");
+#endif
 
   float volts = rroundf(getGlobalValue(F_VOLTS));
   if(s_sensorsState.lastVoltage != volts) {
