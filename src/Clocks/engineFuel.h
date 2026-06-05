@@ -45,10 +45,10 @@ public:
 private:
   bool f_drawOnce; 
 
-  const char *half = (char*)F("1/2");
-  const char *full = (char*)F("F");
-  const char *empty = (char*)F("E");
-  const char *emptyMessage = (char*)F("Empty tank!");
+  const char *half = "1/2";
+  const char *full = "F";
+  const char *empty = "E";
+  const char *emptyMessage = "Empty tank!";
 
   int measuredValues[FUEL_MAX_SAMPLES];
   int measuedValuesIndex;

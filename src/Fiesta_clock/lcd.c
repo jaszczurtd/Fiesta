@@ -67,7 +67,7 @@ static uint8_t displayBuffer[DISPLAY_HEIGHT/8][DISPLAY_WIDTH];
 #endif
 
 
-const uint8_t init_sequence [] PROGMEM = {    // Initialization Sequence
+const uint8_t init_sequence [] = {    // Initialization Sequence
     LCD_DISP_OFF,    // Display OFF (sleep mode)
     0x20, 0b00,      // Set Memory Addressing Mode
     // 00=Horizontal Addressing Mode; 01=Vertical Addressing Mode;
@@ -159,7 +159,7 @@ void lcd_init(uint8_t dispAttr){
 
     uint8_t commandSequence[sizeof(init_sequence)+1];
     for (uint8_t i = 0; i < sizeof (init_sequence); i++) {
-        commandSequence[i] = (pgm_read_byte(&init_sequence[i]));
+        commandSequence[i] = init_sequence[i];
     }
     commandSequence[sizeof(init_sequence)]=(dispAttr);
     lcd_command(commandSequence, sizeof(commandSequence));
@@ -270,12 +270,12 @@ void lcd_putc(char c){
             }
             // mapping char
             c -= ' ';
-            if (c >= pgm_read_byte(&special_char[0][1]) ) {
+            if (c >= special_char[0][1]) {
                 char temp = c;
                 c = 0xff;
-                for (uint8_t i=0; pgm_read_byte(&special_char[i][1]) != 0xff; i++) {
-                    if ( pgm_read_byte(&special_char[i][0])-' ' == temp ) {
-                        c = pgm_read_byte(&special_char[i][1]);
+                for (uint8_t i=0; special_char[i][1] != 0xff; i++) {
+                    if (special_char[i][0] - ' ' == temp) {
+                        c = special_char[i][1];
                         break;
                     }
                 }
@@ -290,7 +290,7 @@ void lcd_putc(char c){
                 
                 for (uint8_t i=0; i < sizeof(FONT[0]); i++) {
                     doubleChar[i] = 0;
-                    dChar = pgm_read_byte(&(FONT[(uint8_t)c][i]));
+                    dChar = FONT[(uint8_t)c][i];
                     for (uint8_t j=0; j<8; j++) {
                         if ((dChar & (1 << j))) {
                             doubleChar[i] |= (1 << (j*2));
@@ -313,7 +313,7 @@ void lcd_putc(char c){
                 for (uint8_t i = 0; i < sizeof(FONT[0]); i++)
                 {
                     // load bit-pattern from flash
-                    displayBuffer[cursorPosition.y][cursorPosition.x+i] =pgm_read_byte(&(FONT[(uint8_t)c][i]));
+                    displayBuffer[cursorPosition.y][cursorPosition.x+i] = FONT[(uint8_t)c][i];
                 }
                 cursorPosition.x += sizeof(FONT[0]);
             }
@@ -325,7 +325,7 @@ void lcd_putc(char c){
                 
                 for (uint8_t i=0; i < sizeof(FONT[0]); i++) {
                     doubleChar[i] = 0;
-                    dChar = pgm_read_byte(&(FONT[(uint8_t)c][i]));
+                    dChar = FONT[(uint8_t)c][i];
                     for (uint8_t j=0; j<8; j++) {
                         if ((dChar & (1 << j))) {
                             doubleChar[i] |= (1 << (j*2));
@@ -380,7 +380,7 @@ void lcd_putc(char c){
             	for (uint8_t i = 0; i < sizeof(FONT[0]); i++)
                 {
                     // print font to ram, print 6 columns
-                    data[i]=(pgm_read_byte(&(FONT[(uint8_t)c][i])));
+                    data[i] = FONT[(uint8_t)c][i];
                 }
                 lcd_data(data, sizeof(FONT[0]));
                 cursorPosition.x += sizeof(FONT[0]);
@@ -400,7 +400,7 @@ void lcd_puts(const char* s){
 }
 void lcd_puts_p(const char* progmem_s){
     register uint8_t c;
-    while ((c = pgm_read_byte(progmem_s++))) {
+    while ((c = (uint8_t)(*progmem_s++))) {
         lcd_putc(c);
     }
 }
@@ -500,7 +500,7 @@ void lcd_drawBitmap(uint8_t x, uint8_t y, const uint8_t *picture, uint8_t width,
     uint8_t i,j, byteWidth = (width+7)/8;
     for (j = 0; j < height; j++) {
         for(i=0; i < width;i++){
-            if(pgm_read_byte(picture + j * byteWidth + i / 8) & (128 >> (i & 7))){
+            if (picture[j * byteWidth + i / 8] & (128 >> (i & 7))) {
                 lcd_drawPixel(x+i, y+j, color);
             } else {
                 lcd_drawPixel(x+i, y+j, !color);

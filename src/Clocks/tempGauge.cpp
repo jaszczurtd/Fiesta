@@ -74,7 +74,7 @@ void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
       return;
   } else {
       char txt[DISPLAY_TXT_SIZE];
-      hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("%d"), valToDisplay);
+      hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, "%d", valToDisplay);
       hal_display_println_prepared_text(txt);
   }
     hal_display_set_default_font();

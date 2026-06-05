@@ -107,7 +107,7 @@ void PressureGauge::showPressureGauge(void) {
     if(hi != lastHI || lo != lastLO) {
       lastHI = hi;
       lastLO = lo;
-      drawTextForPressureIndicators(getBaseX(), getBaseY(), (const char*)F("%d.%d"), hi, lo);
+      drawTextForPressureIndicators(getBaseX(), getBaseY(), "%d.%d", hi, lo);
     }
 
     switch(mode) {
@@ -152,7 +152,7 @@ void PressureGauge::showPressureGauge(void) {
         hal_display_set_default_font_with_pos_and_color(x, y, TEXT_COLOR);
         
         char txt[DISPLAY_TXT_SIZE];
-        w = hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("req:%d.%dBAR"), hi, lo);
+        w = hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, "req:%d.%dBAR", hi, lo);
 
         hal_display_fill_rect(x, y, w + 10, 8, ICONS_BG_COLOR);
         hal_display_println_prepared_text(txt);

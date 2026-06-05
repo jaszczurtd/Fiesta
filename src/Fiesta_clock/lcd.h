@@ -52,14 +52,6 @@ extern "C" {
 
 #include "hardwareConfig.h"
 
-#ifndef PROGMEM
-#define PROGMEM
-#endif
-
-#ifndef pgm_read_byte
-#define pgm_read_byte(addr) (*(const uint8_t *)(addr))
-#endif
-
 	/* TODO: define bus */
 #define I2C			// I2C or SPI	
     /* TODO: define displaycontroller */

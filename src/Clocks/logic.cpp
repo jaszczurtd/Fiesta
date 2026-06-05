@@ -3,7 +3,7 @@
 #include "buzzerStrategy.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
-const char *err = (char*)F("ERR");
+const char *err = "ERR";
 
 void callAtEverySecond(void);
 void callAtEveryHalfSecond(void);
