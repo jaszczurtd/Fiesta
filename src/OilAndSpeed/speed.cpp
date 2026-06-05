@@ -3,6 +3,8 @@
 #define IMPULSES_PER_ROTATION 43
 #define CALC_INTERVAL 125
 
+static constexpr double kPi = 3.14159265358979323846;
+
 void onImpulse(void);
 
 static volatile unsigned long impulseCount = 0;
@@ -38,7 +40,7 @@ bool calculateCircumferenceMeters(const char *tireString, double correctionFacto
   double sidewallHeight = (width * (profile / 100.0)) / 1000.0; // mm -> m
   double rimDiameterMeters = rim * 0.0254; // cale -> m
   double totalDiameter = rimDiameterMeters + (2 * sidewallHeight);
-  circumferenceMeters = totalDiameter * PI * correctionFactor;
+  circumferenceMeters = totalDiameter * kPi * correctionFactor;
 
   return true;
 }

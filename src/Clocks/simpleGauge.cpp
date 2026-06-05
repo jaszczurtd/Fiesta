@@ -75,7 +75,7 @@ SimpleGauge::SimpleGauge(int mode) {
 int SimpleGauge::drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...) {
 
   int w1 = 0, kmoffset = 0;
-  const char *km = ((const char*)F("km/h"));
+  const char *km = "km/h";
   if(mode == MODE_M_KILOMETERS) {
     hal_display_set_default_font();
     w1 = hal_display_text_width(km);
@@ -273,16 +273,16 @@ void SimpleGauge::showSimpleGauge(void) {
   if(lastShowedVal != currentVal) {
     switch(mode) {
       case SIMPLE_G_ENGINE_LOAD:
-        format = (const char*)F("%d%%");
+        format = "%d%%";
         break;
 
       case SIMPLE_G_RPM:
-        format = (const char*)F("%d");
+        format = "%d";
         break;
 
       case SIMPLE_G_GPS:
         offset = 1;
-        format = (const char*)F("%d");
+        format = "%d";
         txtMode = MODE_M_KILOMETERS;
         break;
       
@@ -293,7 +293,7 @@ void SimpleGauge::showSimpleGauge(void) {
           color = HAL_COLOR(RED);
           format = (const char*)err;
         } else {
-          format = ((const char*)F("%d"));
+          format = "%d";
         }
 
         txtMode = (error) ? MODE_M_NORMAL : MODE_M_TEMP;
@@ -366,14 +366,14 @@ void SimpleGauge::showSimpleGauge(void) {
 
       if(draw) {
         if(currentVal < TEMP_EGT_MIN) {
-          format = ((char*)F("COLD"));
+          format = "COLD";
         } else if(currentVal > TEMP_EGT_MAX) {
           format = ((char*)err);  
         } else {
-          format = (char*)F("%d");
+          format = "%d";
           if(currentIsDPF) {
             if(isDPFRegenerating()) {
-              format = (char*)F("R/%d");          
+              format = "R/%d";          
             }
           } 
         }
@@ -403,7 +403,7 @@ void SimpleGauge::showSimpleGauge(void) {
         }
 
         char txt[DISPLAY_TXT_SIZE];
-        hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, (const char*)F("%d.%dv"), v1, v2);
+        hal_display_prepare_text(txt, DISPLAY_TXT_SIZE, "%d.%dv", v1, v2);
         hal_display_set_sans_bold_with_pos_and_color(x, y, (uint16_t)color);
         hal_display_println_prepared_text(txt);
       }

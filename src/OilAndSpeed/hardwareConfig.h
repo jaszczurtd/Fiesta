@@ -17,7 +17,11 @@
 #define ABS_INPUT_PIN  14
 
 // ADC input for resistive oil pressure sender (0..10 bar, nominal 10..180 Ohm)
+#if defined(A3)
 #define OIL_PRESSURE_ADC_PIN A3
+#else
+#define OIL_PRESSURE_ADC_PIN 29
+#endif
 
 #define MCP9600_ADDR_PRE_DPF   0x60
 #define MCP9600_ADDR_MID_DPF   0x67

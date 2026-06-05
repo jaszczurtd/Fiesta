@@ -11,11 +11,7 @@
 
 #include <stdint.h>
 
-#ifndef PROGMEM
-#define PROGMEM
-#endif
-
-extern const uint8_t ssd1306oled_font[][6] PROGMEM;
-extern const uint8_t special_char[][2] PROGMEM;
+extern const uint8_t ssd1306oled_font[][6];
+extern const uint8_t special_char[][2];
 
 #endif

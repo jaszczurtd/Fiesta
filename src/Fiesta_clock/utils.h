@@ -20,15 +20,6 @@
 #include <JaszczurHAL.h>
 #endif
 
-/* AVR compatibility glue for font/lcd sources reused on RP2040. */
-#ifndef PROGMEM
-#define PROGMEM
-#endif
-
-#ifndef pgm_read_byte
-#define pgm_read_byte(addr) (*(const uint8_t *)(addr))
-#endif
-
 typedef unsigned char      u08;
 typedef char               s08;
 typedef unsigned short     u16;
