@@ -21,6 +21,11 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
+    # HAL crypto wrappers call into the shared WireGuard crypto primitives.
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/crypto.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
     ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp
     ${HAL_SRC}/hal/hal_soft_timer.cpp

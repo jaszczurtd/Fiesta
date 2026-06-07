@@ -28,6 +28,12 @@ set(
 
 set(SC_JASZCZURHAL_CRYPTO_HEADER "${SC_JASZCZURHAL_DIR}/src/hal/hal_crypto.h")
 set(SC_JASZCZURHAL_CRYPTO_SOURCE "${SC_JASZCZURHAL_DIR}/src/hal/hal_crypto.cpp")
+set(SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES
+    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/wireguard/crypto/chacha20.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/wireguard/crypto/chacha20poly1305.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/wireguard/crypto/crypto.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/wireguard/crypto/poly1305-donna.c"
+)
 
 set(SC_CRYPTO_SOURCES src/core/sc_crypto_none.c)
 set(SC_CRYPTO_INCLUDE_DIRS "")
@@ -42,6 +48,7 @@ if(SC_USE_JASZCZURHAL_CRYPTO
         SC_CRYPTO_SOURCES
         src/core/sc_crypto_jaszczurhal.cpp
         "${SC_JASZCZURHAL_CRYPTO_SOURCE}"
+        ${SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES}
     )
     set(SC_CRYPTO_INCLUDE_DIRS "${SC_JASZCZURHAL_DIR}/src")
     set(SC_CRYPTO_BACKEND_NAME "jaszczurhal")

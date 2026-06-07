@@ -4,6 +4,27 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
+## 2026-06-08 (latest)
+
+- Fixed host-link configuration for modules that compile
+  `JaszczurHAL/src/hal/hal_crypto.cpp`: the test/mock libraries now also
+  compile WireGuard crypto primitives required by that translation unit
+  (`chacha20.c`, `chacha20poly1305.c`, `crypto.c`, `poly1305-donna.c`).
+  This removes undefined-reference failures for
+  `chacha20_init_ietf/chacha20/crypto_zero/chacha20poly1305_*` during
+  host builds.
+- Scope of CMake fixes:
+  - `src/ECU/CMakeLists.txt`
+  - `src/Clocks/CMakeLists.txt`
+  - `src/OilAndSpeed/CMakeLists.txt`
+  - `src/SerialConfigurator/CMakeLists.txt`
+- Validation snapshot after the fix:
+  - ECU host tests: 17/17 PASS.
+  - Adjustometer host tests: 3/3 PASS.
+  - Clocks host tests: 3/3 PASS.
+  - OilAndSpeed host tests: 3/3 PASS.
+  - SerialConfigurator host tests: 18/18 PASS.
+
 ## 2026-05-26 (latest)
 
 - SerialConfigurator map view gained a dedicated recenter control.

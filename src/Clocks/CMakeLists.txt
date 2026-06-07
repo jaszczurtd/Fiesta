@@ -29,6 +29,11 @@ add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/config.cpp
     ${HAL_SRC}/hal/hal_config.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
+    # HAL crypto wrappers call into shared WireGuard crypto primitives.
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/crypto.c
+    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
     ${HAL_SRC}/hal/impl/.mock/hal_wifi.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_system.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
