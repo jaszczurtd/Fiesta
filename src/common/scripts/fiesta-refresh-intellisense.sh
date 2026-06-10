@@ -28,12 +28,10 @@ BUILD_DIR="$PROJECT_DIR/.build"
 
 generate_compile_db() {
     local project_dir="$1"
-    local sketch="$2"
-    local sketchbook="$3"
-    local sketch_dir libraries_dir werror_flag
+    local sketchbook libraries_dir werror_flag
 
-    sketch_dir="$(dirname "$sketch")"
-    libraries_dir="$(fiesta_resolve_libraries_dir "$sketchbook" || true)"
+    sketchbook="$(fiesta_read_json_setting "$SETTINGS_FILE" "arduino.sketchbookPath" "")"
+    libraries_dir="$(fiesta_resolve_libraries_dir "$sketchbook" "$project_dir" || true)"
     werror_flag="$(fiesta_module_use_werror "$(fiesta_module_name "$project_dir")")"
     if [[ -n "$libraries_dir" ]]; then
         info "  Libraries: $libraries_dir"
@@ -42,13 +40,13 @@ generate_compile_db() {
     mkdir -p "$BUILD_DIR"
 
     info "Compiling project..."
-    if ! fiesta_run_compile "$project_dir" build "$sketch_dir" "$werror_flag" 1 0 ""; then
+    if ! fiesta_run_compile "$project_dir" build "$project_dir" "$werror_flag" 1 0 ""; then
         warn "Compilation failed"
         warn "IntelliSense may be incomplete, continuing anyway..."
     fi
 
     info "Generating compile_commands.json..."
-    if fiesta_run_compile "$project_dir" compilation-database "$sketch_dir" "$werror_flag" 0 0 ""; then
+    if fiesta_run_compile "$project_dir" compilation-database "$project_dir" "$werror_flag" 0 0 ""; then
         ok "compile_commands.json generated"
     else
         err "Failed to generate compile_commands.json"
@@ -209,16 +207,12 @@ for entry in original_commands:
     if src_file.endswith(".ino.cpp"):
         basename = os.path.basename(src_file)
         ino_name = basename.replace(".ino.cpp", ".ino")
-
-        for root, dirs, files in os.walk(project_dir):
-            if ".build" in root:
-                continue
-            if ino_name in files:
-                original_ino = os.path.join(root, ino_name)
-                patched_entry = dict(entry)
-                patched_entry["file"] = original_ino
-                patched_commands.append(patched_entry)
-                break
+        generated_ino = os.path.join(
+            build_dir, "cmake", "sketch", os.path.basename(project_dir), ino_name)
+        if os.path.isfile(generated_ino):
+            patched_entry = dict(entry)
+            patched_entry["file"] = generated_ino
+            patched_commands.append(patched_entry)
 
 with open(patched_db_path, "w") as f:
     json.dump(patched_commands, f, indent=4)
@@ -248,7 +242,7 @@ with open(cpp_props_path, "w") as f:
 print(f"  Include paths:    {len(includes_list) - 1}")
 print(f"  Defines:          {len(defines_list)}")
 print(f"  Compiler:         {compiler_path or 'not found'}")
-print(f"  compile_commands: {patched_db_path} ({len(patched_commands)} entries, {len(patched_commands) - len(original_commands)} added for .ino)")
+print(f"  compile_commands: {patched_db_path} ({len(patched_commands)} entries, {len(patched_commands) - len(original_commands)} added for generated .ino)")
 print(f"  Output:           {cpp_props_path}")
 PYEOF
 }
@@ -261,7 +255,7 @@ main() {
     export PROJECT_DIR
     export BUILD_DIR
 
-    local cli fqbn sketch sketchbook
+    local cli fqbn generated_sketch
 
     cli="$(fiesta_find_arduino_cli "$SETTINGS_FILE" || true)"
     if [[ -z "$cli" ]]; then
@@ -277,17 +271,11 @@ main() {
     fi
     info "FQBN: $fqbn"
 
-    sketch="$(fiesta_find_sketch "$PROJECT_DIR" || true)"
-    if [[ -z "$sketch" ]]; then
-        err "No .ino file found in the project"
-        exit 1
-    fi
-    info "Sketch: $sketch"
-
-    sketchbook="$(fiesta_read_json_setting "$SETTINGS_FILE" "arduino.sketchbookPath" "")"
+    generated_sketch="$(fiesta_generated_sketch_dir "$PROJECT_DIR")"
+    info "Generated sketch: $generated_sketch"
 
     echo ""
-    generate_compile_db "$PROJECT_DIR" "$sketch" "$sketchbook"
+    generate_compile_db "$PROJECT_DIR"
 
     echo ""
     info "Generating c_cpp_properties.json..."

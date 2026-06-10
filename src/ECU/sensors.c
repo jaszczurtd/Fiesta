@@ -1,7 +1,7 @@
 
 #include "sensors.h"
-#include "ecu_unit_testing.h"
 #include "can.h"
+#include "ecu_unit_testing.h"
 #include "engineFuel.h"
 #include "gps.h"
 #include "rpm.h"
@@ -33,25 +33,24 @@ typedef struct {
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
 static sensors_runtime_state_t s_sensorsState = {
-  .collantTableIdx = 0,
-  .collantValuesSet = 0,
-  .collantTable = {0.0f},
-  .oilTableIdx = 0,
-  .oilValuesSet = 0,
-  .oilTable = {0.0f},
-  .pcf8574State = 0,
-  .pwmVp37 = NULL,
-  .pwmTurbo = NULL,
-  .pwmAngle = NULL,
-  .lowCurrentValue = 0,
-  .lastVoltage = 0.0f,
-  .lastEGTTemp = 0,
-  .lastCoolantTemp = 0,
-  .lastOilTemp = 0,
-  .lastIsEngineRunning = false,
-  .adjustometer = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false},
-  .adjCommErrors = 0
-};
+    .collantTableIdx = 0,
+    .collantValuesSet = 0,
+    .collantTable = {0.0f},
+    .oilTableIdx = 0,
+    .oilValuesSet = 0,
+    .oilTable = {0.0f},
+    .pcf8574State = 0,
+    .pwmVp37 = NULL,
+    .pwmTurbo = NULL,
+    .pwmAngle = NULL,
+    .lowCurrentValue = 0,
+    .lastVoltage = 0.0f,
+    .lastEGTTemp = 0,
+    .lastCoolantTemp = 0,
+    .lastOilTemp = 0,
+    .lastIsEngineRunning = false,
+    .adjustometer = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false},
+    .adjCommErrors = 0};
 
 m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
@@ -65,9 +64,9 @@ m_mutex_def(adjustometerStateMutex);
  * @return True when the index is valid, otherwise false.
  */
 static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
-  if((idx < 0) || (idx >= F_LAST)) {
-    derr_limited("sensors", "%s invalid value index: %d (valid: 0..%d)",
-                 caller, idx, (F_LAST - 1));
+  if ((idx < 0) || (idx >= F_LAST)) {
+    derr_limited("sensors", "%s invalid value index: %d (valid: 0..%d)", caller,
+                 idx, (F_LAST - 1));
     return false;
   }
   return true;
@@ -81,22 +80,20 @@ static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
  * @param table Averaging ring buffer storage.
  * @return Latest averaged NTC temperature in degrees Celsius.
  */
-static float sensors_readNtcViaMux(uint8_t muxChannel,
-                                   int *tableIdx, int *tableValuesSet,
-                                   float *table) {
+static float sensors_readNtcViaMux(uint8_t muxChannel, int *tableIdx,
+                                   int *tableValuesSet, float *table) {
   float a = 0.0f;
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(muxChannel);
   a = getAverageForTable(tableIdx, tableValuesSet,
-                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B),
-                         table);
+                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), table);
   m_mutex_exit(analog4051Mutex);
   return a;
 }
 
-//I2C bus recovery: toggle SCL up to 9 times on GPIO level to release
-//a slave that is holding SDA low (e.g. after master reset mid-transaction).
-//Must be called BEFORE Wire.begin() / hal_i2c_init().
+// I2C bus recovery: toggle SCL up to 9 times on GPIO level to release
+// a slave that is holding SDA low (e.g. after master reset mid-transaction).
+// Must be called BEFORE Wire.begin() / hal_i2c_init().
 
 /**
  * @brief Initialize the I2C bus and its mutex-protected access path.
@@ -104,7 +101,7 @@ static float sensors_readNtcViaMux(uint8_t muxChannel,
  */
 void initI2C(void) {
   static bool i2cMutexInited = false;
-  if(!i2cMutexInited) {
+  if (!i2cMutexInited) {
     m_mutex_init(i2cBusMutex);
     i2cMutexInited = true;
   }
@@ -117,15 +114,15 @@ void initSPI(void) {
 
   // Deassert all SPI chip-selects immediately so that no MCP2515
   // floats its /CS low during another chip's SPI transactions.
-  const uint8_t spiCsPins[] = { CAN0_GPIO, CAN1_GPIO, SD_CARD_CS };
-  for(uint32_t i = 0; i < COUNTOF(spiCsPins); i++) {
+  const uint8_t spiCsPins[] = {CAN0_GPIO, CAN1_GPIO, SD_CARD_CS};
+  for (uint32_t i = 0; i < COUNTOF(spiCsPins); i++) {
     hal_gpio_set_mode(spiCsPins[i], HAL_GPIO_OUTPUT);
     hal_gpio_write(spiCsPins[i], true);
   }
 }
 
 void setGlobalValue(int idx, float val) {
-  if(!sensors_isGlobalValueIndexValid(idx, "setGlobalValue")) {
+  if (!sensors_isGlobalValueIndexValid(idx, "setGlobalValue")) {
     return;
   }
   m_mutex_enter_blocking(valueFieldsMutex);
@@ -134,7 +131,7 @@ void setGlobalValue(int idx, float val) {
 }
 
 float getGlobalValue(int idx) {
-  if(!sensors_isGlobalValueIndexValid(idx, "getGlobalValue")) {
+  if (!sensors_isGlobalValueIndexValid(idx, "getGlobalValue")) {
     return 0.0f;
   }
   m_mutex_enter_blocking(valueFieldsMutex);
@@ -144,14 +141,20 @@ float getGlobalValue(int idx) {
 }
 
 void initSensors(void) {
-  m_mutex_init(valueFieldsMutex);
-  m_mutex_init(adjustometerStateMutex);
+  // Firmware lifetime is process-long; in host tests setUp() may call this
+  // repeatedly, so keep mutex init idempotent to avoid re-allocation churn.
+  if (valueFieldsMutex == NULL) {
+    m_mutex_init(valueFieldsMutex);
+  }
+  if (adjustometerStateMutex == NULL) {
+    m_mutex_init(adjustometerStateMutex);
+  }
   hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
   pwm_init();
 
   init4051();
 
-  for(size_t a = 0; a < F_LAST; a++) {
+  for (size_t a = 0; a < F_LAST; a++) {
     s_sensorsPersistent.valueFields[a] = 0.0;
   }
 
@@ -173,42 +176,41 @@ void initBasicPIO(void) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//Read coolant temperature
+// Read coolant temperature
 //-------------------------------------------------------------------------------------------------
 float readCoolantTemp(void) {
-  return sensors_readNtcViaMux(HC4051_I_COOLANT_TEMP,
-                               &s_sensorsState.collantTableIdx,
-                               &s_sensorsState.collantValuesSet,
-                               s_sensorsState.collantTable);
+  return sensors_readNtcViaMux(
+      HC4051_I_COOLANT_TEMP, &s_sensorsState.collantTableIdx,
+      &s_sensorsState.collantValuesSet, s_sensorsState.collantTable);
 }
 
 //-------------------------------------------------------------------------------------------------
-//Read oil temperature
+// Read oil temperature
 //-------------------------------------------------------------------------------------------------
 
 float readOilTemp(void) {
-  return sensors_readNtcViaMux(HC4051_I_OIL_TEMP,
-                               &s_sensorsState.oilTableIdx,
+  return sensors_readNtcViaMux(HC4051_I_OIL_TEMP, &s_sensorsState.oilTableIdx,
                                &s_sensorsState.oilValuesSet,
                                s_sensorsState.oilTable);
 }
 
 //-------------------------------------------------------------------------------------------------
-//Read throttle
+// Read throttle
 //-------------------------------------------------------------------------------------------------
 
 /**
- * @brief Map a raw legacy throttle ADC reading into the internal driver-demand scale.
+ * @brief Map a raw legacy throttle ADC reading into the internal driver-demand
+ * scale.
  * @param rawVal Raw ADC value measured on the throttle input.
  * @return Driver-demand signal in the internal PWM-scale range.
- * @note The input is currently named "throttle" in code, but architecturally it is the
- *       G79/G185-like driver-demand path.
+ * @note The input is currently named "throttle" in code, but architecturally it
+ * is the G79/G185-like driver-demand path.
  */
 TESTABLE_STATIC int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal) {
-  if(rawVal <= THROTTLE_MIN) {
+  if (rawVal <= THROTTLE_MIN) {
     return PWM_RESOLUTION;
   }
-  if(rawVal >= THROTTLE_MAX) {
+  if (rawVal >= THROTTLE_MAX) {
     return 0;
   }
 
@@ -220,10 +222,10 @@ TESTABLE_STATIC int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal) {
   int32_t scaled = (shifted * PWM_RESOLUTION + (range / 2)) / range;
   int32_t inverted = PWM_RESOLUTION - scaled;
 
-  if(inverted < 0) {
+  if (inverted < 0) {
     return 0;
   }
-  if(inverted > PWM_RESOLUTION) {
+  if (inverted > PWM_RESOLUTION) {
     return PWM_RESOLUTION;
   }
   return inverted;
@@ -240,7 +242,8 @@ int32_t readThrottle(void) {
 }
 
 /**
- * @brief Convert the stored legacy throttle value into a 0..100 driver-demand percentage.
+ * @brief Convert the stored legacy throttle value into a 0..100 driver-demand
+ * percentage.
  * @return Driver-demand percentage derived from the G79/G185-like input path.
  */
 int32_t getThrottlePercentage(void) {
@@ -250,7 +253,7 @@ int32_t getThrottlePercentage(void) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//Read air temperature
+// Read air temperature
 //-------------------------------------------------------------------------------------------------
 
 /**
@@ -268,7 +271,7 @@ float readAirTemperature(void) {
 }
 
 //-------------------------------------------------------------------------------------------------
-//Read bar pressure amount
+// Read bar pressure amount
 //-------------------------------------------------------------------------------------------------
 
 /**
@@ -279,13 +282,14 @@ float readBarPressure(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-  float val = ((float)getAverageValueFrom(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
-      1.0; //atmospheric pressure
+  float val =
+      ((float)getAverageValueFrom(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
+      1.0; // atmospheric pressure
   m_mutex_exit(analog4051Mutex);
 
-  if(val < 0.0) {
-      val = 0.0;
-  } 
+  if (val < 0.0) {
+    val = 0.0;
+  }
   return val;
 }
 
@@ -295,29 +299,38 @@ float readBarPressure(void) {
  * @return Constant string describing the error code.
  */
 static const char *i2cEndTransmissionError(uint8_t code) {
-  switch(code) {
-    case 1:  return "data too long";
-    case 2:  return "NACK on address";
-    case 3:  return "NACK on data";
-    case 4:  return "other error";
-    case 5:  return "timeout";
-    default: return "unknown";
+  switch (code) {
+  case 1:
+    return "data too long";
+  case 2:
+    return "NACK on address";
+  case 3:
+    return "NACK on data";
+  case 4:
+    return "other error";
+  case 5:
+    return "timeout";
+  default:
+    return "unknown";
   }
 }
 
 bool pcf8574_init(void) {
   s_sensorsState.pcf8574State = 0;
 
-  // i2cBusMutex serializes us against multi-step transactions (e.g. adjustometer)
-  // that split a begin/write/end from a later request_from; the HAL-internal
-  // mutex alone covers only a single begin/end pair.
+  // i2cBusMutex serializes us against multi-step transactions (e.g.
+  // adjustometer) that split a begin/write/end from a later request_from; the
+  // HAL-internal mutex alone covers only a single begin/end pair.
   m_mutex_enter_blocking(i2cBusMutex);
   bool success = false;
-  uint8_t notFound = hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
+  uint8_t notFound =
+      hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
-  if(!success || notFound) {
-    derr("pcf8574_init: %s (endTx=%u)", notFound ? i2cEndTransmissionError(notFound) : "write failed", (unsigned)notFound);
+  if (!success || notFound) {
+    derr("pcf8574_init: %s (endTx=%u)",
+         notFound ? i2cEndTransmissionError(notFound) : "write failed",
+         (unsigned)notFound);
   }
 
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, (!success || notFound));
@@ -325,7 +338,7 @@ bool pcf8574_init(void) {
 }
 
 void pcf8574_write(unsigned char pin, bool value) {
-  if(pin > 7) {
+  if (pin > 7) {
     derr("pcf8574_write invalid pin: %u", (unsigned)pin);
     return;
   }
@@ -335,24 +348,27 @@ void pcf8574_write(unsigned char pin, bool value) {
   // read-modify-write sequence (lost bit update). Also keeps the
   // I2C byte we push in sync with what we just stored locally.
   m_mutex_enter_blocking(i2cBusMutex);
-  if(value) {
+  if (value) {
     bitSet(s_sensorsState.pcf8574State, pin);
   } else {
     bitClear(s_sensorsState.pcf8574State, pin);
   }
   bool success = false;
-  uint8_t notFound = hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
+  uint8_t notFound =
+      hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
-  if(!success || notFound) {
-    derr("pcf8574_write: %s (endTx=%u)", notFound ? i2cEndTransmissionError(notFound) : "write failed", (unsigned)notFound);
+  if (!success || notFound) {
+    derr("pcf8574_write: %s (endTx=%u)",
+         notFound ? i2cEndTransmissionError(notFound) : "write failed",
+         (unsigned)notFound);
   }
 
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, (!success || notFound));
 }
 
 bool pcf8574_read(unsigned char pin) {
-  if(pin > 7) {
+  if (pin > 7) {
     derr("pcf8574_read invalid pin: %u", (unsigned)pin);
     return false;
   }
@@ -360,7 +376,7 @@ bool pcf8574_read(unsigned char pin) {
   m_mutex_enter_blocking(i2cBusMutex);
   bool readOk = false;
   uint8_t raw = hal_i2c_read_byte(PCF8574_ADDR, &readOk);
-  if(readOk) {
+  if (readOk) {
     // Commit the refreshed shadow latch while still holding the bus mutex,
     // so pcf8574_write() cannot race on pcf8574State between the read and
     // the store.
@@ -368,7 +384,7 @@ bool pcf8574_read(unsigned char pin) {
   }
   m_mutex_exit(i2cBusMutex);
 
-  if(!readOk) {
+  if (!readOk) {
     derr("pcf8574_read: I2C read failed");
     dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
     return false;
@@ -379,35 +395,37 @@ bool pcf8574_read(unsigned char pin) {
 }
 
 /**
- * @brief Read the legacy throttle-named value as stored in the global value table.
+ * @brief Read the legacy throttle-named value as stored in the global value
+ * table.
  * @return Current raw driver-demand value.
- * @note This is still the G79/G185-like pedal-demand signal, despite the legacy name.
+ * @note This is still the G79/G185-like pedal-demand signal, despite the legacy
+ * name.
  */
 int32_t getRAWThrottle(void) {
   return (int32_t)(getGlobalValue(F_THROTTLE_POS));
 }
 
 void readMediumValues(void) {
-  switch(s_sensorsState.lowCurrentValue) {
-    case F_COOLANT_TEMP:
-      setGlobalValue(F_COOLANT_TEMP, readCoolantTemp());
-      break;
-    case F_OIL_TEMP:
-      setGlobalValue(F_OIL_TEMP, readOilTemp());
-      break;
-    case F_INTAKE_TEMP:
-      setGlobalValue(F_INTAKE_TEMP, readAirTemperature());
-      break;
-    case F_FUEL:
-      setGlobalValue(F_FUEL, readFuel());
-      break;
+  switch (s_sensorsState.lowCurrentValue) {
+  case F_COOLANT_TEMP:
+    setGlobalValue(F_COOLANT_TEMP, readCoolantTemp());
+    break;
+  case F_OIL_TEMP:
+    setGlobalValue(F_OIL_TEMP, readOilTemp());
+    break;
+  case F_INTAKE_TEMP:
+    setGlobalValue(F_INTAKE_TEMP, readAirTemperature());
+    break;
+  case F_FUEL:
+    setGlobalValue(F_FUEL, readFuel());
+    break;
 #ifndef VP37
-    case F_VOLTS:
-      setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
-      break;
+  case F_VOLTS:
+    setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
+    break;
 #endif
   }
-  if(s_sensorsState.lowCurrentValue++ >= F_LAST) {
+  if (s_sensorsState.lowCurrentValue++ >= F_LAST) {
     s_sensorsState.lowCurrentValue = 0;
   }
 }
@@ -417,31 +435,33 @@ void readMediumValues(void) {
  * @param pressureBar Pressure input in bar.
  * @param rpm Engine speed in RPM.
  * @return Engine load percentage clamped to the 0..100 range.
- * @note This helper produces a project-local supervisory load estimate, not an OEM
- *       EDC15 quantity or air-mass model.
+ * @note This helper produces a project-local supervisory load estimate, not an
+ * OEM EDC15 quantity or air-mass model.
  */
-TESTABLE_STATIC int32_t sensors_calculateEngineLoadFromValues(float pressureBar, float rpm) {
+TESTABLE_STATIC int32_t sensors_calculateEngineLoadFromValues(float pressureBar,
+                                                              float rpm) {
   float map = (pressureBar * 255.0f / 2.55f);
   float load = (map / 255.0f) * (rpm / (float)(RPM_MAX_EVER)) * 100.0f;
   int32_t roundedLoad = (int32_t)(load + 0.5f);
 
   if (roundedLoad < 0) {
-      roundedLoad = 0;
+    roundedLoad = 0;
   } else if (roundedLoad > 100) {
-      roundedLoad = 100;
+    roundedLoad = 100;
   }
   return roundedLoad;
 }
 
 int32_t getPercentageEngineLoad(void) {
-  return sensors_calculateEngineLoadFromValues(getGlobalValue(F_PRESSURE), getGlobalValue(F_RPM));
+  return sensors_calculateEngineLoadFromValues(getGlobalValue(F_PRESSURE),
+                                               getGlobalValue(F_RPM));
 }
 
 void readHighValues(void) {
-  setGlobalValue(F_RPM,                    RPM_getCurrentRPM(getRPMInstance()));
-  setGlobalValue(F_THROTTLE_POS,           (float)readThrottle());
-  setGlobalValue(F_PRESSURE,               readBarPressure());
-  setGlobalValue(F_GPS_CAR_SPEED,          getCurrentCarSpeed());
+  setGlobalValue(F_RPM, RPM_getCurrentRPM(getRPMInstance()));
+  setGlobalValue(F_THROTTLE_POS, (float)readThrottle());
+  setGlobalValue(F_PRESSURE, readBarPressure());
+  setGlobalValue(F_GPS_CAR_SPEED, getCurrentCarSpeed());
   setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());
 
   // Transmit throttle/turbo each high-rate tick to avoid stale cluster values
@@ -453,7 +473,9 @@ void readHighValues(void) {
 void init4051(void) {
   deb("4051 init");
 
-  m_mutex_init(analog4051Mutex);
+  if (analog4051Mutex == NULL) {
+    m_mutex_init(analog4051Mutex);
+  }
 
   hal_gpio_set_mode(C_4051, HAL_GPIO_OUTPUT);
   hal_gpio_set_mode(B_4051, HAL_GPIO_OUTPUT);
@@ -468,15 +490,13 @@ void set4051ActivePin(unsigned char pin) {
   hal_gpio_write(C_4051, (pin & 0x04) > 0);
 }
 
-bool isDPFRegenerating(void) {
-  return getGlobalValue(F_DPF_REGEN) > 0;
-}
+bool isDPFRegenerating(void) { return getGlobalValue(F_DPF_REGEN) > 0; }
 
 void updateValsForDebug(void) {
 
   char stamp[24];
 #if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
-  if(hal_sdlogger_is_initialized()) {
+  if (hal_sdlogger_is_initialized()) {
     snprintf(stamp, sizeof(stamp), "LN:%d ", hal_sdlogger_get_log_number() - 1);
   } else {
     snprintf(stamp, sizeof(stamp), "NL/");
@@ -486,51 +506,61 @@ void updateValsForDebug(void) {
 #endif
 
   float volts = rroundf(getGlobalValue(F_VOLTS));
-  if(s_sensorsState.lastVoltage != volts) {
+  if (s_sensorsState.lastVoltage != volts) {
     s_sensorsState.lastVoltage = volts;
     deb("%sVoltage update: %.1fV", stamp, volts);
   }
 
   int32_t egt = (int32_t)getGlobalValue(F_EGT);
-  if(s_sensorsState.lastEGTTemp != egt) {
+  if (s_sensorsState.lastEGTTemp != egt) {
     s_sensorsState.lastEGTTemp = egt;
     deb("%sEGT update: %dC", stamp, egt);
   }
 
   int32_t coolant = (int32_t)getGlobalValue(F_COOLANT_TEMP);
-  if(s_sensorsState.lastCoolantTemp != coolant) {
+  if (s_sensorsState.lastCoolantTemp != coolant) {
     s_sensorsState.lastCoolantTemp = coolant;
     deb("%sCoolant temp. update: %dC", stamp, coolant);
   }
 
   int32_t oil = (int32_t)getGlobalValue(F_OIL_TEMP);
-  if(s_sensorsState.lastOilTemp != oil) {
+  if (s_sensorsState.lastOilTemp != oil) {
     s_sensorsState.lastOilTemp = oil;
     deb("%sOil temp. update: %dC", stamp, oil);
   }
 
   bool running = RPM_isEngineRunning(getRPMInstance());
-  if(s_sensorsState.lastIsEngineRunning != running) {
+  if (s_sensorsState.lastIsEngineRunning != running) {
     s_sensorsState.lastIsEngineRunning = running;
     deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
   }
 }
 
 void pwm_init(void) {
-  s_sensorsState.pwmVp37  = hal_pwm_freq_create(PIO_VP37_RPM,  VP37_PWM_FREQUENCY_HZ,  PWM_RESOLUTION);
-  s_sensorsState.pwmTurbo = hal_pwm_freq_create(PIO_TURBO,     TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
-  s_sensorsState.pwmAngle = hal_pwm_freq_create(PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmVp37 =
+      hal_pwm_freq_create(PIO_VP37_RPM, VP37_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmTurbo =
+      hal_pwm_freq_create(PIO_TURBO, TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmAngle = hal_pwm_freq_create(
+      PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
 void valToPWM(unsigned char pin, int32_t val) {
   hal_pwm_freq_channel_t ch = NULL;
-  switch(pin) {
-    case PIO_TURBO:      ch = s_sensorsState.pwmTurbo; break;
-    case PIO_VP37_RPM:   ch = s_sensorsState.pwmVp37;  break;
-    case PIO_VP37_ANGLE: ch = s_sensorsState.pwmAngle; break;
-    default: break;
+  switch (pin) {
+  case PIO_TURBO:
+    ch = s_sensorsState.pwmTurbo;
+    break;
+  case PIO_VP37_RPM:
+    ch = s_sensorsState.pwmVp37;
+    break;
+  case PIO_VP37_ANGLE:
+    ch = s_sensorsState.pwmAngle;
+    break;
+  default:
+    break;
   }
-  if(ch != NULL) {
+  if (ch != NULL) {
     hal_pwm_freq_write(ch, (PWM_RESOLUTION - val));
     dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, false);
   } else {
@@ -554,8 +584,9 @@ static uint8_t i2cConsecutiveErrors = 0;
  */
 static void i2cCheckRecovery(void) {
   i2cConsecutiveErrors++;
-  if(i2cConsecutiveErrors >= I2C_RECOVERY_THRESHOLD) {
-    deb("I2C: %u consecutive errors, performing bus recovery", (unsigned)i2cConsecutiveErrors);
+  if (i2cConsecutiveErrors >= I2C_RECOVERY_THRESHOLD) {
+    deb("I2C: %u consecutive errors, performing bus recovery",
+        (unsigned)i2cConsecutiveErrors);
     hal_i2c_deinit();
     initI2C();
     i2cConsecutiveErrors = 0;
@@ -572,7 +603,7 @@ static void i2cCheckRecovery(void) {
 static adjustometer_reading_t adjustometerRecordCommError(void) {
   m_mutex_enter_blocking(adjustometerStateMutex);
   s_sensorsState.adjCommErrors++;
-  if(s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
+  if (s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
     s_sensorsState.adjustometer.commOk = false;
   }
   adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
@@ -581,10 +612,12 @@ static adjustometer_reading_t adjustometerRecordCommError(void) {
 }
 
 /**
- * @brief Read the full Adjustometer register block over I2C for the VP37 quantity-feedback path.
- * @return Latest Adjustometer reading structure, reusing previous values on failure.
- * @note The returned pulse, status, and fuel-temperature fields form a project-local
- *       G149/G81-like telemetry bundle, not a literal OEM sensor block.
+ * @brief Read the full Adjustometer register block over I2C for the VP37
+ * quantity-feedback path.
+ * @return Latest Adjustometer reading structure, reusing previous values on
+ * failure.
+ * @note The returned pulse, status, and fuel-temperature fields form a
+ * project-local G149/G81-like telemetry bundle, not a literal OEM sensor block.
  */
 static adjustometer_reading_t readAdjustometer(void) {
 
@@ -593,30 +626,33 @@ static adjustometer_reading_t readAdjustometer(void) {
   // Set register pointer to 0x00 (PULSE_HI)
   uint8_t txErr = hal_i2c_write_byte(ADJUSTOMETER_I2C_ADDR,
                                      ADJUSTOMETER_REG_PULSE_HI, NULL);
-  if(txErr) {
+  if (txErr) {
     m_mutex_exit(i2cBusMutex);
-    derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr), (int)txErr);
+    derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr),
+         (int)txErr);
     i2cCheckRecovery();
     return adjustometerRecordCommError();
   }
 
   // Read 5 registers starting from 0x00
-  uint8_t received = hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_REG_COUNT);
-  if(received != ADJUSTOMETER_REG_COUNT) {
+  uint8_t received =
+      hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_REG_COUNT);
+  if (received != ADJUSTOMETER_REG_COUNT) {
     m_mutex_exit(i2cBusMutex);
-    //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-    derr("Adjustometer I2C read error: expected %d bytes, got %d", ADJUSTOMETER_REG_COUNT, (int)received);
+    // dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+    derr("Adjustometer I2C read error: expected %d bytes, got %d",
+         ADJUSTOMETER_REG_COUNT, (int)received);
     i2cCheckRecovery();
     return adjustometerRecordCommError();
   }
 
   uint8_t buf[ADJUSTOMETER_REG_COUNT];
-  for(uint8_t i = 0; i < ADJUSTOMETER_REG_COUNT; i++) {
+  for (uint8_t i = 0; i < ADJUSTOMETER_REG_COUNT; i++) {
     int b = hal_i2c_read();
-    if(b < 0) {
+    if (b < 0) {
       m_mutex_exit(i2cBusMutex);
       derr("Adjustometer I2C read error at byte %d: %d", (int)i, b);
-      //dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+      // dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
       i2cCheckRecovery();
       return adjustometerRecordCommError();
     }
@@ -625,16 +661,16 @@ static adjustometer_reading_t readAdjustometer(void) {
 
   m_mutex_exit(i2cBusMutex);
 
-  //dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
+  // dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
 
   // Build the snapshot off the shared state so parallel readers on the other
   // core never see a half-updated field block.
   adjustometer_reading_t snapshot;
-  snapshot.pulseHz    = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
+  snapshot.pulseHz = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
   snapshot.voltageRaw = buf[2];
-  snapshot.fuelTempC  = buf[3];
-  snapshot.status     = buf[4];
-  snapshot.commOk     = true;
+  snapshot.fuelTempC = buf[3];
+  snapshot.status = buf[4];
+  snapshot.commOk = true;
 
   m_mutex_enter_blocking(adjustometerStateMutex);
   s_sensorsState.adjustometer = snapshot;
@@ -643,9 +679,12 @@ static adjustometer_reading_t readAdjustometer(void) {
 
   i2cConsecutiveErrors = 0;
 
-  //dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status & ADJ_STATUS_SIGNAL_LOST) != 0);
-  //dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
-  //dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status & ADJ_STATUS_VOLTAGE_BAD) != 0);
+  // dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status &
+  // ADJ_STATUS_SIGNAL_LOST) != 0);
+  // dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status &
+  // ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
+  // dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status &
+  // ADJ_STATUS_VOLTAGE_BAD) != 0);
 
   return snapshot;
 }
@@ -656,16 +695,17 @@ static adjustometer_reading_t readAdjustometer(void) {
  */
 bool waitForAdjustometerBaseline(void) {
   uint32_t start = hal_millis();
-  while((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
+  while ((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
     adjustometer_reading_t r = readAdjustometer();
-    if(!r.commOk) {
+    if (!r.commOk) {
       /* device may still be booting – keep retrying until timeout */
       hal_delay_ms(10);
       watchdog_feed();
       continue;
     }
-    if((r.status & ADJ_STATUS_BASELINE_PENDING) == 0) {
-      deb("Adjustometer baseline ready (%lu ms)", (unsigned long)(hal_millis() - start));
+    if ((r.status & ADJ_STATUS_BASELINE_PENDING) == 0) {
+      deb("Adjustometer baseline ready (%lu ms)",
+          (unsigned long)(hal_millis() - start));
       return true;
     }
     hal_delay_ms(10);
@@ -676,14 +716,15 @@ bool waitForAdjustometerBaseline(void) {
 }
 
 /**
- * @brief Take a snapshot of the latest Adjustometer reading for the VP37 inner loop.
+ * @brief Take a snapshot of the latest Adjustometer reading for the VP37 inner
+ * loop.
  * @param out Caller-owned storage receiving the snapshot (must not be NULL).
  * @return None.
  * @note Uses readAdjustometer()'s by-value return so the caller's copy is
  *       consistent even if another core writes the shared state in between.
  */
 void getVP37Adjustometer(adjustometer_reading_t *out) {
-  if(out == NULL) {
+  if (out == NULL) {
     return;
   }
   *out = readAdjustometer();
@@ -696,7 +737,7 @@ void getVP37Adjustometer(adjustometer_reading_t *out) {
  */
 static float sensors_readSystemSupplyVoltageFromADC(void) {
   return adcToVolt((int)(getAverageValueFrom(ADC_VOLT_PIN) + 0.5f),
-                        (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
+                   (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
 }
 #endif
 
@@ -709,7 +750,7 @@ static float sensors_readSystemSupplyVoltageFromADC(void) {
 float getSystemSupplyVoltage(void) {
 #ifdef VP37
   adjustometer_reading_t reading = readAdjustometer();
-  if(!reading.commOk) {
+  if (!reading.commOk) {
     return 0.0f;
   }
   return reading.voltageRaw * 0.1f;

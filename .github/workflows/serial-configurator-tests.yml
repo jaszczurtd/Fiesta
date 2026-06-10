@@ -27,11 +27,13 @@ jobs:
         run: |
           set -eux
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config libgtk-4-dev
+          sudo apt-get install -y build-essential cmake pkg-config libgtk-4-dev valgrind clang-tidy clang-tools
 
       - name: Configure
         run: |
-          cmake -S src/SerialConfigurator -B src/SerialConfigurator/build_ci -DCMAKE_BUILD_TYPE=Release
+          cmake -S src/SerialConfigurator -B src/SerialConfigurator/build_ci \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: |
@@ -40,3 +42,11 @@ jobs:
       - name: Run tests
         run: |
           ctest --test-dir src/SerialConfigurator/build_ci --output-on-failure
+
+      - name: Run Valgrind memcheck target
+        run: |
+          cmake --build src/SerialConfigurator/build_ci --target check-valgrind --parallel
+
+      - name: Run clang-tidy target
+        run: |
+          cmake --build src/SerialConfigurator/build_ci --target check-clang-tidy --parallel

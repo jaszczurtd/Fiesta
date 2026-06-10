@@ -1,7 +1,7 @@
 
 #include "logic.h"
-#include "buzzerStrategy.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include "buzzerStrategy.h"
 
 const char *err = "ERR";
 
@@ -31,24 +31,20 @@ static hal_soft_timer_t timerCANUpdate = NULL;
 static hal_soft_timer_t timerCANCheck = NULL;
 
 static const hal_soft_timer_table_entry_t clocksTimerTable[] = {
-  { &timerEverySecond,  callAtEverySecond,        (uint32_t)SECOND },
-  { &timerHalfSecond,   callAtEveryHalfSecond,    (uint32_t)(SECOND / 2) },
-  { &timerQuarterSecond,callAtEveryHalfHalfSecond, (uint32_t)(SECOND / 4) },
-  { &timerSoftInit,     softInitDisplay,           (uint32_t)DISPLAY_SOFTINIT_TIME },
-  { &timerEGT,          changeEGT,                 (uint32_t)DPF_SHOW_TIME_INTERVAL },
-  { &timerDebug,        updateValsForDebug,        (uint32_t)DEBUG_UPDATE },
-  { &timerCANUpdate,    updateCANrecipients,       (uint32_t)CAN_UPDATE_RECIPIENTS },
-  { &timerCANCheck,     canCheckConnection,        (uint32_t)CAN_CHECK_CONNECTION }
-};
+    {&timerEverySecond, callAtEverySecond, (uint32_t)SECOND},
+    {&timerHalfSecond, callAtEveryHalfSecond, (uint32_t)(SECOND / 2)},
+    {&timerQuarterSecond, callAtEveryHalfHalfSecond, (uint32_t)(SECOND / 4)},
+    {&timerSoftInit, softInitDisplay, (uint32_t)DISPLAY_SOFTINIT_TIME},
+    {&timerEGT, changeEGT, (uint32_t)DPF_SHOW_TIME_INTERVAL},
+    {&timerDebug, updateValsForDebug, (uint32_t)DEBUG_UPDATE},
+    {&timerCANUpdate, updateCANrecipients, (uint32_t)CAN_UPDATE_RECIPIENTS},
+    {&timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION}};
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
 
-
 #ifdef DEBUG_SCREEN
-void debugFunc(void) {
-  deb("Debug function called");
-}
+void debugFunc(void) { deb("Debug function called"); }
 #endif
 
 void setupTimers(void) {
@@ -63,7 +59,7 @@ void executeByWatchdog(int *values, int size) {
   wSize = size;
 }
 
-void setup_a(void) {
+void initialization(void) {
 
   debugInit();
   setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCKS);
@@ -75,7 +71,7 @@ void setup_a(void) {
   buzzerStrategy.reset();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
-  if(!rebooted) {
+  if (!rebooted) {
     statusVariable0 = statusVariable1 = 0;
   }
 
@@ -89,14 +85,15 @@ void setup_a(void) {
   hal_display_fill_screen(HAL_COLOR(WHITE));
   const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
   const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT, HAL_COLOR(WHITE), (uint16_t*)FiestaLogo);
-#endif //DEBUG_SCREEN
+  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT,
+                         HAL_COLOR(WHITE), (uint16_t *)FiestaLogo);
+#endif // DEBUG_SCREEN
 
   hal_watchdog_feed();
 
   hal_rgb_led_set_color(canInit() ? HAL_RGB_LED_RED : HAL_RGB_LED_GREEN);
 
-  while(sec < secDest) {
+  while (sec < secDest) {
     hal_watchdog_feed();
     sec = getSeconds();
   }
@@ -107,12 +104,12 @@ void setup_a(void) {
   initFuelMeasurement();
   canCheckConnection();
 
-  #ifdef DEBUG_SCREEN
+#ifdef DEBUG_SCREEN
   debugFunc();
-  #else  
+#else
   triggerDrawHighImportanceValue(true);
   redrawAllGauges();
-  #endif
+#endif
 
   alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
 
@@ -135,14 +132,14 @@ void setup_a(void) {
   deb("Setup finished");
 }
 
-void loop_a(void) {
+void looper(void) {
 
   statusVariable0 = 0;
   updateWatchdogCore0();
 
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     statusVariable0 = -1;
-    hal_delay_ms(CORE_OPERATION_DELAY);  
+    hal_delay_ms(CORE_OPERATION_DELAY);
     hal_idle();
     return;
   }
@@ -153,7 +150,7 @@ void loop_a(void) {
   canMainLoop();
 
   hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
-  if(lastThreadSeconds < getSeconds()) {
+  if (lastThreadSeconds < getSeconds()) {
     lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
 
     deb("thread is alive");
@@ -163,7 +160,7 @@ void loop_a(void) {
   statusVariable0 = 3;
   configSessionTick();
 
-  if(isEcuConnected()) {
+  if (isEcuConnected()) {
     hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
   } else {
     hal_rgb_led_set_color(alertSwitch() ? HAL_RGB_LED_NONE : HAL_RGB_LED_RED);
@@ -181,21 +178,17 @@ void loop_a(void) {
 }
 
 void seriousAlertsDrawFunctions() {
-  #ifndef DEBUG_SCREEN
+#ifndef DEBUG_SCREEN
   drawFuelEmpty();
 
-  #endif
+#endif
 }
 
 static bool alertBlink = false, seriousAlertBlink = false;
-bool alertSwitch(void) {
-  return alertBlink;
-}
-bool seriousAlertSwitch(void) {
-  return seriousAlertBlink;
-}
+bool alertSwitch(void) { return alertBlink; }
+bool seriousAlertSwitch(void) { return seriousAlertBlink; }
 
-//timer functions
+// timer functions
 void callAtEverySecond(void) {
   alertBlink = (alertBlink) ? false : true;
 
@@ -203,7 +196,7 @@ void callAtEverySecond(void) {
   deb("System temperature: %f", hal_read_chip_temp());
 #endif
 
-  //regular draw - low importance values
+  // regular draw - low importance values
   drawLowImportanceValues();
 }
 
@@ -214,7 +207,7 @@ void callAtEveryHalfSecond(void) {
 
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
-  //draw changes of medium importance values
+  // draw changes of medium importance values
   drawMediumImportanceValues();
 }
 
@@ -226,18 +219,18 @@ void processTemperatureBuzzerAlerts(void) {
   input.oilTemp = int(valueFields[F_OIL_TEMP]);
   input.egtTemp = int(valueFields[F_EGT]);
 
-  switch(buzzerStrategy.process(input)) {
-    case BUZZER_STRATEGY_MIDDLE:
-      startBuzzer(BUZZER_MIDDLE);
-      break;
-    case BUZZER_STRATEGY_LONG:
-      startBuzzer(BUZZER_LONG);
-      break;
+  switch (buzzerStrategy.process(input)) {
+  case BUZZER_STRATEGY_MIDDLE:
+    startBuzzer(BUZZER_MIDDLE);
+    break;
+  case BUZZER_STRATEGY_LONG:
+    startBuzzer(BUZZER_LONG);
+    break;
   }
 }
 
 void callAtEveryHalfHalfSecond(void) {
-  if(alertsStartSecond <= getSeconds()) {
+  if (alertsStartSecond <= getSeconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();
@@ -253,52 +246,50 @@ void updateCluster(void) {
 }
 
 void drawLowImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
+#ifndef DEBUG_SCREEN
   showSimpleGauges();
   showFuelAmount();
-  #endif
+#endif
 }
 
 void drawHighImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
+#ifndef DEBUG_SCREEN
   showEngineLoadGauge();
   showPressureGauges();
-  #endif
+#endif
 }
 
 void drawMediumImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
+#ifndef DEBUG_SCREEN
   showTempGauges();
   showEGTGauge();
   showECUConnectionGauge();
   drawHighImportanceValues();
-  #endif
+#endif
 }
 
 void drawMediumMediumImportanceValues(void) {
-  #ifndef DEBUG_SCREEN
+#ifndef DEBUG_SCREEN
   showGPSGauge();
-  #endif
+#endif
 }
 
 void drawHighImportanceValuesIfChanged(void) {
-  //draw changes of high importance values
-  if(highImportanceValueChanged) {
+  // draw changes of high importance values
+  if (highImportanceValueChanged) {
     drawHighImportanceValues();
     triggerDrawHighImportanceValue(false);
   }
 }
 
-void setup_b(void) {
-  setStartedCore1();
-}
+void initialization1(void) { setStartedCore1(); }
 
-void loop_b(void) {
+void looper1(void) {
   updateWatchdogCore1();
 
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     statusVariable1 = -1;
-    hal_delay_ms(CORE_OPERATION_DELAY);  
+    hal_delay_ms(CORE_OPERATION_DELAY);
     hal_idle();
     return;
   }
@@ -312,7 +303,8 @@ void updateValsForDebug(void) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
   deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
-  deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(), getEngineRPM());
+  deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(),
+      getEngineRPM());
   deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]),
-                            int(valueFields[F_DPF_TEMP]));
+      int(valueFields[F_DPF_TEMP]));
 }

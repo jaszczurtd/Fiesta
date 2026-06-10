@@ -14,6 +14,50 @@ include(GNUInstallDirs)
 add_compile_options(-Wall -Wextra -Werror)
 add_compile_definitions(_POSIX_C_SOURCE=200809L)
 
+# Valgrind / CTest memcheck configuration (copied from JaszczurHAL pattern).
+# Host-only dynamic analysis for the unit-test suite:
+#   ctest --test-dir build -T memcheck --output-on-failure
+find_program(MEMORYCHECK_COMMAND NAMES valgrind)
+set(MEMORYCHECK_COMMAND_OPTIONS
+    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
+    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
+    set(_SC_VALGRIND_SUPP_FULL
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
+    set(_SC_VALGRIND_SUPP_LEGACY
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind-legacy.supp")
+
+    set(_SC_VALGRIND_SUPP_SELECTED "${_SC_VALGRIND_SUPP_FULL}")
+
+    # Some older Valgrind builds reject newer suppression classes used by
+    # NVIDIA-specific noise filters (e.g. Memcheck:ReallocZero). Probe the
+    # suppression parser at configure time and transparently fall back to a
+    # legacy-compatible suppression file when needed.
+    if(MEMORYCHECK_COMMAND AND EXISTS "${_SC_VALGRIND_SUPP_LEGACY}")
+        execute_process(
+            COMMAND "${MEMORYCHECK_COMMAND}"
+                    "--tool=memcheck"
+                    "--leak-check=no"
+                    "--quiet"
+                    "--suppressions=${_SC_VALGRIND_SUPP_FULL}"
+                    "${CMAKE_COMMAND}" -E true
+            RESULT_VARIABLE _SC_VALGRIND_SUPP_PROBE_RC
+            OUTPUT_QUIET
+            ERROR_QUIET
+        )
+
+        if(NOT _SC_VALGRIND_SUPP_PROBE_RC EQUAL 0)
+            message(STATUS
+                "Valgrind rejected tests/valgrind.supp; using legacy-compatible suppressions")
+            set(_SC_VALGRIND_SUPP_SELECTED "${_SC_VALGRIND_SUPP_LEGACY}")
+        endif()
+    endif()
+
+    set(MEMORYCHECK_SUPPRESSIONS_FILE
+        "${_SC_VALGRIND_SUPP_SELECTED}"
+    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
+endif()
+
 option(
     SC_USE_JASZCZURHAL_CRYPTO
     "Use JaszczurHAL hal_crypto backend for shared crypto helpers."
@@ -502,6 +546,30 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-flash-orchestrator-tests
         COMMAND serial-configurator-flash-orchestrator-tests
+    )
+endif()
+
+# Optional analysis helpers kept outside the default build.
+option(SERIALCONFIGURATOR_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
+if(SERIALCONFIGURATOR_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
+    add_custom_target(check-valgrind
+        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure
+        COMMENT "Running CTest memcheck (Valgrind) for SerialConfigurator"
+        VERBATIM
+    )
+endif()
+
+find_program(RUN_CLANG_TIDY_EXECUTABLE NAMES run-clang-tidy)
+option(SERIALCONFIGURATOR_ENABLE_CLANG_TIDY_TARGET "Enable check-clang-tidy custom target" ON)
+if(SERIALCONFIGURATOR_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
+    add_custom_target(check-clang-tidy
+        COMMAND ${RUN_CLANG_TIDY_EXECUTABLE}
+            -p ${CMAKE_BINARY_DIR}
+            -quiet
+            -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+            "(^.*/src/SerialConfigurator/(src|tests)/.*\\.(c|cpp)$)|(^.*/src/common/scDefinitions/.*\\.c$)"
+        COMMENT "Running clang-tidy for SerialConfigurator host-compilable sources"
+        VERBATIM
     )
 endif()
 

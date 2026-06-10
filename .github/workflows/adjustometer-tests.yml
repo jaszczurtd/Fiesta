@@ -30,11 +30,25 @@ jobs:
 
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
 
+      - name: Install analysis dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind clang-tidy clang-tools
+
       - name: Configure
-        run: cmake -S src/Adjustometer -B src/Adjustometer/build_test -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake -S src/Adjustometer -B src/Adjustometer/build_test \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: cmake --build src/Adjustometer/build_test --parallel
 
       - name: Run tests
         run: ctest --test-dir src/Adjustometer/build_test --output-on-failure
+
+      - name: Run Valgrind memcheck target
+        run: cmake --build src/Adjustometer/build_test --target check-valgrind --parallel
+
+      - name: Run clang-tidy target
+        run: cmake --build src/Adjustometer/build_test --target check-clang-tidy --parallel

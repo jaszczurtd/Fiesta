@@ -21,7 +21,7 @@
 #   LIB_DIR         default: $HOME/libraries   (parent of cloned libs)
 #   ARDUINO_CLI     default: arduino-cli       (path to binary)
 #   SKIP_APT=1      skip apt-get steps
-#   SKIP_TESTS=1    skip firmware host test build+run
+#   SKIP_TESTS=1    skip host QA run (`runalltests.sh`)
 #   SKIP_BUILD=1    skip firmware compile
 #   SKIP_DESKTOP=1          skip SerialConfigurator build + tests + package
 #   SKIP_DESKTOP_PACKAGE=1  skip SerialConfigurator .deb packaging only
@@ -41,11 +41,9 @@ source "$COMMON_SCRIPT"
 DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk"
 
 # Per-module build matrix.
-#   TEST_MODULES = modules that ship a CMakeLists.txt at src/<Module>/.
 #   FW_MODULES   = "module:werror" - werror=1 enables -Werror for that module
 #                  (matches the per-module policy used by the shared Arduino
 #                  build/upload/refresh wrappers).
-TEST_MODULES=(ECU Clocks OilAndSpeed Adjustometer)
 FW_MODULES=(
     "ECU:1"
     "Clocks:0"
@@ -93,7 +91,7 @@ fi
 # -----------------------------------------------------------------------------
 APT_PKGS=(
     # Common toolchain
-    git build-essential cmake python3 curl ca-certificates cppcheck
+    git build-essential cmake python3 curl ca-certificates perl
     # SerialConfigurator desktop build + Debian package
     pkg-config libgtk-4-dev dpkg-dev
     # SerialConfigurator Map tab (Phase 8.7). Optional at build time -
@@ -101,6 +99,8 @@ APT_PKGS=(
     # bootstrap.sh sets up the full feature surface so first-time devs
     # get a working live GPS map without extra steps.
     libshumate-dev
+    # quality checking
+    clang-format clang-tidy valgrind cppcheck
 )
 
 install_apt() {
@@ -315,26 +315,46 @@ sync_lib() {
 fetch_libraries() {
     mkdir -p "$LIB_DIR"
     sync_lib JaszczurHAL   https://github.com/jaszczurtd/JaszczurHAL.git
+
+    # Keep dependency validation generic: bootstrap already hard-resets to
+    # origin/<default-branch>, so we should not gate on implementation details
+    # of a specific upstream commit.
+    local hal_dir="$LIB_DIR/JaszczurHAL"
+    if [[ ! -d "$hal_dir/.git" ]]; then
+        err "JaszczurHAL checkout missing or invalid at: $hal_dir"
+        return 1
+    fi
+    local hal_branch hal_rev
+    hal_branch="$(resolve_origin_default_branch "$hal_dir" || echo "unknown")"
+    hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+    ok "JaszczurHAL synchronized (${hal_branch}@${hal_rev})"
 }
 
 # -----------------------------------------------------------------------------
-# 5. Host tests (per module)
+# 4b. Git hooks
 # -----------------------------------------------------------------------------
-run_tests_for() {
-    local module="$1"
-    local src="$SRC_ROOT/$module"
-    local build="$src/build_test"
-    if [[ ! -f "$src/CMakeLists.txt" ]]; then
-        info "[$module] no CMakeLists.txt - skipping tests"
-        return 0
+setup_git_hooks() {
+    local repo_root hooks_dir
+    if ! repo_root=$(git -C "$PROJECT_DIR/.." rev-parse --show-toplevel 2>/dev/null); then
+        warn "Could not resolve git repo root - skipping git hooks setup"
+        return
     fi
-    info "[$module] configuring host tests"
-    cmake -S "$src" -B "$build" -DCMAKE_BUILD_TYPE=Release
-    info "[$module] building host tests"
-    cmake --build "$build" --parallel
-    info "[$module] running ctest"
-    ctest --test-dir "$build" --output-on-failure
-    ok "[$module] host tests passed"
+
+    hooks_dir="$repo_root/.githooks"
+    if [[ ! -d "$hooks_dir" ]]; then
+        warn "No .githooks directory at $hooks_dir - skipping git hooks setup"
+        return
+    fi
+
+    info "Configuring git hooks path: $hooks_dir"
+    git -C "$repo_root" config core.hooksPath "$hooks_dir"
+
+    # Ensure hooks are executable even after fresh clone / archive extraction.
+    while IFS= read -r -d '' hook_file; do
+        chmod +x "$hook_file"
+    done < <(find "$hooks_dir" -mindepth 1 -maxdepth 1 -type f -print0)
+
+    ok "Git hooks configured (core.hooksPath=.githooks)"
 }
 
 run_tests() {
@@ -342,10 +362,20 @@ run_tests() {
         info "SKIP_TESTS=1 - skipping host tests"
         return
     fi
-    local module
-    for module in "${TEST_MODULES[@]}"; do
-        run_tests_for "$module"
-    done
+
+    local repo_root runalltests_script
+    repo_root="$(dirname "$SRC_ROOT")"
+    runalltests_script="$repo_root/runalltests.sh"
+
+    if [[ ! -x "$runalltests_script" ]]; then
+        err "runalltests.sh not found or not executable at: $runalltests_script"
+        err "Cannot continue host QA from bootstrap."
+        return 1
+    fi
+
+    info "Running host QA via runalltests.sh"
+    "$runalltests_script"
+    ok "runalltests.sh completed"
 }
 
 # -----------------------------------------------------------------------------
@@ -383,25 +413,14 @@ compile_firmware_for() {
         info "[$module] no .vscode/arduino.json - using default FQBN"
     fi
 
-    local werror_flag=""
-    [[ "$werror" = "1" ]] && werror_flag=" -Werror"
-
-    local usb_manufacturer usb_product
-    usb_manufacturer=$(fiesta_usb_manufacturer)
-    usb_product=$(fiesta_usb_product_for "$module")
-
     info "[$module] compiling firmware (FQBN: $fqbn)"
-    "$ARDUINO_CLI" compile \
-        --fqbn "$fqbn" \
-        --libraries "$LIB_DIR" \
-        --build-path "$build" \
-        --build-property "compiler.cpp.extra_flags=-I '$src'$werror_flag" \
-        --build-property "compiler.c.extra_flags=-I '$src'$werror_flag" \
-        --build-property "build.usb_manufacturer=\"$usb_manufacturer\"" \
-        --build-property "build.usb_product=\"$usb_product\"" \
-        "$src"
+    FIESTA_ARDUINO_CLI="$ARDUINO_CLI" \
+    FIESTA_ARDUINO_FQBN="$fqbn" \
+    FIESTA_LIBRARIES_DIR="$LIB_DIR" \
+        fiesta_run_compile "$src" build "$src" "$werror" 1 0 ""
+
     local uf2
-    uf2=$(find "$build" -maxdepth 2 -name '*.uf2' -type f | head -1)
+    uf2=$(fiesta_find_uf2_artifact "$build" || true)
     if [[ -n "$uf2" ]]; then
         ok "[$module] firmware: $uf2"
         local manifest
@@ -450,7 +469,7 @@ build_serial_configurator() {
 
     local sc_dir="$SRC_ROOT/SerialConfigurator"
     local sc_build_script="$sc_dir/scripts/desktop-build.sh"
-    
+
     if [[ ! -f "$sc_build_script" ]]; then
         warn "SerialConfigurator: desktop-build.sh not found at $sc_build_script - skipping"
         return
@@ -461,7 +480,7 @@ build_serial_configurator() {
         err "[SerialConfigurator] build failed"
         return 1
     fi
-    
+
     if ! bash "$sc_build_script" test; then
         err "[SerialConfigurator] tests failed"
         return 1
@@ -509,6 +528,7 @@ check_cppcheck
 install_arduino_cli
 setup_arduino_core
 fetch_libraries
+setup_git_hooks
 run_tests
 compile_firmware
 build_serial_configurator

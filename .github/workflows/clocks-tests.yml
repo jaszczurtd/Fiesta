@@ -30,9 +30,16 @@ jobs:
 
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
 
+      - name: Install analysis dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind clang-tidy clang-tools
+
       - name: Configure
         run: |
-          cmake -S src/Clocks -B src/Clocks/build_test -DCMAKE_BUILD_TYPE=Release
+          cmake -S src/Clocks -B src/Clocks/build_test \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: Build
         run: |
@@ -41,3 +48,11 @@ jobs:
       - name: Run tests
         run: |
           ctest --test-dir src/Clocks/build_test --output-on-failure
+
+      - name: Run Valgrind memcheck target
+        run: |
+          cmake --build src/Clocks/build_test --target check-valgrind --parallel
+
+      - name: Run clang-tidy target
+        run: |
+          cmake --build src/Clocks/build_test --target check-clang-tidy --parallel

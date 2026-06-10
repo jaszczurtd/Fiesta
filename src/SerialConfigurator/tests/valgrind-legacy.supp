@@ -1,0 +1,16 @@
+{
+   fontconfig-expat-process-leak
+   Memcheck:Leak
+   fun:malloc
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   fun:XML_ParseBuffer
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+}

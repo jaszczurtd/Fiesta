@@ -292,6 +292,23 @@
                 "showReuseMessage": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Configure Git hooks",
+            "detail": "Auto-run on folder open - set core.hooksPath to repo .githooks",
+            "type": "shell",
+            "command": "repo_root=\"$(git -C \"${workspaceFolder}\" rev-parse --show-toplevel)\" && git -C \"$repo_root\" config core.hooksPath \"$repo_root/.githooks\" && find \"$repo_root/.githooks\" -mindepth 1 -maxdepth 1 -type f -exec chmod +x {} +",
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "never",
+                "focus": false,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
         }
     ]
 }
