@@ -2,7 +2,5 @@
     "board": "rp2040:rp2040:waveshare_rp2040_plus",
     "configuration": "flash=4194304_0,freq=200,dbgport=Disabled,dbglvl=None,usbstack=picosdk",
     "port": "COM19",
-    "programmer": "rp2040:picoprobe",
-    "sketch": "main.ino",
-    "output": "../ArduinoOutput"
+    "programmer": "rp2040:picoprobe"
 }

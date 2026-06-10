@@ -180,11 +180,35 @@ fiesta_resolve_libraries_dir() {
     return 1
 }
 
+fiesta_cmake_bool() {
+    if fiesta_truthy "${1:-0}"; then
+        printf '%s\n' "ON"
+    else
+        printf '%s\n' "OFF"
+    fi
+}
+
+fiesta_firmware_cmake_source_dir() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    printf '%s\n' "$(dirname "$script_dir")/cmake/FiestaArduinoFirmware"
+}
+
+fiesta_firmware_cmake_build_dir() {
+    local project_dir="$1"
+    printf '%s\n' "$project_dir/.build/cmake"
+}
+
+fiesta_generated_sketch_dir() {
+    local project_dir="$1"
+    printf '%s\n' "$(fiesta_firmware_cmake_build_dir "$project_dir")/sketch/$(fiesta_module_name "$project_dir")"
+}
+
 fiesta_find_sketch() {
     local project_dir="$1"
     local sketch
 
-    sketch=$(find "$project_dir" -maxdepth 2 -name "*.ino" -not -path "*/.build/*" | head -1)
+    sketch=$(find "$(fiesta_generated_sketch_dir "$project_dir")" -maxdepth 1 -name "*.ino" 2>/dev/null | head -1)
     if [[ -z "$sketch" ]]; then
         return 1
     fi
@@ -214,66 +238,68 @@ fiesta_run_compile() {
     local port="${7:-}"
 
     local module settings_file build_dir cli fqbn sketchbook libraries_dir
-    local extra_flags usb_manufacturer usb_product
-    local cmd=()
+    local cmake_src cmake_build target
+    local usb_manufacturer usb_product
+    local cmake_werror cmake_warnings cmake_verbose
 
+    : "$sketch_dir"
     module=$(fiesta_module_name "$project_dir")
     settings_file="$project_dir/.vscode/settings.json"
     build_dir="$project_dir/.build"
 
-    cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
-    fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
+    if [[ -n "${FIESTA_ARDUINO_CLI:-}" ]]; then
+        cli="$FIESTA_ARDUINO_CLI"
+    else
+        cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
+    fi
+    if ! command -v cmake >/dev/null 2>&1; then
+        echo "cmake not found" >&2
+        return 1
+    fi
+
+    if [[ -n "${FIESTA_ARDUINO_FQBN:-}" ]]; then
+        fqbn="$FIESTA_ARDUINO_FQBN"
+    else
+        fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
+    fi
     sketchbook=$(fiesta_read_json_setting "$settings_file" "arduino.sketchbookPath" "")
-    libraries_dir=$(fiesta_resolve_libraries_dir "$sketchbook" "$project_dir" || true)
-    extra_flags=$(fiesta_compiler_extra_flags "$sketch_dir" "$include_werror")
+    if [[ -n "${FIESTA_LIBRARIES_DIR:-}" ]]; then
+        libraries_dir="$FIESTA_LIBRARIES_DIR"
+    else
+        libraries_dir=$(fiesta_resolve_libraries_dir "$sketchbook" "$project_dir" || true)
+    fi
     usb_manufacturer=$(fiesta_usb_manufacturer)
     usb_product=$(fiesta_usb_product_for "$module")
+    cmake_src=$(fiesta_firmware_cmake_source_dir)
+    cmake_build=$(fiesta_firmware_cmake_build_dir "$project_dir")
+    cmake_werror=$(fiesta_cmake_bool "$include_werror")
+    cmake_warnings=$(fiesta_cmake_bool "$include_warnings")
+    cmake_verbose=$(fiesta_cmake_bool "$verbose")
 
     mkdir -p "$build_dir"
 
-    cmd=("$cli" compile --fqbn "$fqbn" --build-path "$build_dir")
-
-    if [[ -n "$libraries_dir" ]]; then
-        cmd+=(--libraries "$libraries_dir")
-    fi
-
-    cmd+=(
-        --build-property "compiler.cpp.extra_flags=$extra_flags"
-        --build-property "compiler.c.extra_flags=$extra_flags"
-        --build-property "build.usb_manufacturer=\"$usb_manufacturer\""
-        --build-property "build.usb_product=\"$usb_product\""
-    )
+    cmake -S "$cmake_src" -B "$cmake_build" \
+        -DFIESTA_PROJECT_DIR="$project_dir" \
+        -DARDUINO_CLI="$cli" \
+        -DARDUINO_FQBN="$fqbn" \
+        -DARDUINO_UPLOAD_PORT="$port" \
+        -DARDUINO_VERBOSE="$cmake_verbose" \
+        -DFIESTA_WARNINGS="$cmake_warnings" \
+        -DFIESTA_WERROR="$cmake_werror" \
+        -DFIESTA_LIBRARIES_DIR="$libraries_dir" \
+        -DFIESTA_USB_MANUFACTURER="$usb_manufacturer" \
+        -DFIESTA_USB_PRODUCT="$usb_product" \
+        >/dev/null
 
     case "$mode" in
-        build)
-            ;;
-        debug)
-            cmd+=(--optimize-for-debug)
-            ;;
-        upload)
-            cmd+=(--upload)
-            if [[ -n "$port" ]]; then
-                cmd+=(--port "$port")
-            fi
-            ;;
-        compilation-database)
-            cmd+=(--only-compilation-database)
-            ;;
-        *)
-            return 2
-            ;;
+        build)                target="firmware" ;;
+        debug)                target="firmware_debug" ;;
+        upload)               target="firmware_upload" ;;
+        compilation-database) target="firmware_compile_db" ;;
+        *)                    return 2 ;;
     esac
 
-    if fiesta_truthy "$include_warnings"; then
-        cmd+=(--warnings all)
-    fi
-
-    if fiesta_truthy "$verbose"; then
-        cmd+=(-v)
-    fi
-
-    cmd+=("$sketch_dir")
-    "${cmd[@]}"
+    cmake --build "$cmake_build" --target "$target"
 }
 
 fiesta_run_upload_from_file() {
@@ -355,6 +381,18 @@ import sys
 build_dir = pathlib.Path(sys.argv[1])
 if not build_dir.exists():
     raise SystemExit
+
+module_name = build_dir.parent.name
+preferred_names = []
+if module_name:
+    preferred_names.append(f"{module_name}.uf2")
+preferred_names.append("firmware.uf2")
+
+for name in preferred_names:
+    preferred = build_dir / name
+    if preferred.is_file():
+        print(str(preferred))
+        raise SystemExit
 
 candidates = [p for p in build_dir.rglob("*.uf2") if p.is_file()]
 if not candidates:

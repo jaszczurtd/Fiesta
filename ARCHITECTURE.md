@@ -124,10 +124,10 @@ loom.
 
 | Module | Language | Role | MISRA scope |
 |---|---|---|---|
-| [`ECU`](src/ECU/) | C (+ `.ino` wrapper) | engine control, diagnostics, actuator orchestration | **in scope** |
+| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuator orchestration | **in scope** |
 | [`Clocks`](src/Clocks/) | C++ | dashboard / instrument cluster rendering | out of scope |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure and wheel speed telemetry, EGT acquisition | out of scope |
-| [`Fiesta_clock` (`RTC_Clock`)](src/Fiesta_clock/) | C (+ `.ino` wrapper) | RTC calendar module; publishes RTC time/integrity on CAN and exposes RTC set/get via SerialConfigurator | out of scope |
+| [`Fiesta_clock` (`RTC_Clock`)](src/Fiesta_clock/) | C | RTC calendar module; publishes RTC time/integrity on CAN and exposes RTC set/get via SerialConfigurator | out of scope |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump-coil resonance feedback (I²C slave) | out of scope |
 
 ### Desktop companion
@@ -154,23 +154,32 @@ descriptions below only describe what is specific to each.
 
 `JaszczurHAL` ([github.com/jaszczurtd/JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL))
 is a separate repository, cloned into `<parent-of-repo-root>/libraries/JaszczurHAL`
-by [`bootstrap.sh`](src/ECU/scripts/bootstrap.sh). It provides:
+by the setup flow (`runmefirst.sh`, implemented by
+[`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh)). It provides:
 
 - a HAL abstraction layer (I²C, CAN, GPIO, PWM, timers, ADC) with an
-  RP2040-Arduino-backed production implementation and a mock backend used
-  for host tests,
+  RP2040 production backend used by the current firmware build and a mock
+  backend used for host tests,
 - decoupling of module code from any specific MCU architecture,
 - utilities: soft-timer table, PID controller, KV store backed by emulated
   EEPROM, logging macros,
-- Arduino host stubs (`Arduino.h`, `SPI.h`, `SD.h`) so that the firmware
+- compatibility stubs (`Arduino.h`, `SPI.h`, `SD.h`) so that firmware
   sources can be compiled by a host C/C++ compiler (GCC on Linux) for unit
-  tests without the Arduino toolchain.
+  tests without the firmware toolchain.
 
-The `.ino` files in each module are deliberately thin wrappers around
-`setup()`, `loop()`, and `loop1()`; everything else is regular C/C++ behind
-the HAL. This is why the project is not a conventional Arduino application
-and **will not** compile out of the box in the Arduino IDE (see
-[README § Build and development](README.md#build-and-development)).
+The active modules do not carry hand-written `.ino` sketches. Each module owns
+its real firmware entry contract in `firmware_entry.h` and implements
+`initialization()` / `looper()` (plus `initialization1()` / `looper1()` for
+modules that opt in to core 1). The firmware build configures
+[`src/common/cmake/FiestaArduinoFirmware`](src/common/cmake/FiestaArduinoFirmware/),
+which creates a temporary sketch under `.build/cmake/sketch/<Module>/`,
+symlinks the module sources into it, and generates the minimal `setup()` /
+`loop()` adapter required by the current RP2040 build toolchain.
+
+This generated adapter is build plumbing only. The official Arduino IDE cannot
+build this repository, and the project does not treat Arduino as an application
+API or as a Pico SDK delivery layer. See
+[README § Build and development](README.md#build-and-development).
 
 ### 4.2 canDefinitions ([`src/common/canDefinitions`](src/common/canDefinitions/))
 
@@ -179,7 +188,7 @@ signal layouts, and scaling (`canDefinitions.h`). It is shared across ECU,
 Clocks, OilAndSpeed, and Fiesta_clock so that they agree on the wire format
 without duplicating header files. Because it is versioned inside this
 repository, there is no separate clone/update step for this layer in
-`bootstrap.sh`.
+the setup flow.
 
 ### 4.3 scDefinitions ([`src/common/scDefinitions`](src/common/scDefinitions/))
 
@@ -218,11 +227,12 @@ in the values struct, and (if persisted) a `schema_since` bump - no
 edits to reply machinery. See `src/SerialConfigurator/tests/test_sc_param.c`
 for the contract.
 
-Each firmware sketch carries a one-line `sc_param_handlers_glue.c`
-that `#include`s the common .c, so arduino-cli (which only auto-compiles
-files inside the sketch directory) picks the implementation up without
-library plumbing. Host CMake builds compile the same source directly
-through `${SCDEFS}`.
+Modules that expose the descriptor-driven SC surface carry a one-line
+`sc_param_handlers_glue.c` that `#include`s the common `.c`. The generated
+firmware build sketch symlinks that glue file alongside the rest of the module
+sources, so the current `arduino-cli` compile path picks the implementation up
+exactly once without extra library plumbing. Host CMake builds compile the same
+source directly through `${SCDEFS}`.
 
 ### 4.4 Per-module layout convention
 
@@ -233,7 +243,7 @@ foundation:
 
 ```
 src/<Module>/
-├── <Module>.ino           # Arduino entry point (setup/loop/loop1)
+├── firmware_entry.h       # module-owned firmware entry contract
 ├── start.{c,cpp}/.h       # init, soft-timer table, watchdog hookup
 ├── hardwareConfig.h       # pin/address constants (single source of truth)
 ├── hal_project_config.h   # per-module HAL feature flags
@@ -247,6 +257,12 @@ src/<Module>/
                            # refresh-intellisense.sh, select-board.sh,
                            # serial-persistent.py, serial-monitor.{sh,py}
 ```
+
+During firmware builds, CMake also creates
+`.build/cmake/sketch/<Module>/<Module>.ino` as a temporary adapter for the
+current RP2040 compile toolchain. That generated file is not source
+architecture and must not be treated as an Arduino sketch entry point owned by
+the module.
 
 ---
 
@@ -329,7 +345,7 @@ and ownership analysis tractable.
 **Timing model.** On RP2040, ECU does not use an RTOS. Work is scheduled by a soft-timer
 table installed in `start.c`: each entry is a `(period, callback)` pair
 invoked from the main loop. In addition, both RP2040 cores are used, and the second core is handling engine-related (VP37 / turbo), time-critical tasks. Typical cadences are high-rate sensor reads (~10 ms), medium-rate reads (~100 ms), CAN publish cycles, and slower
-per-second housekeeping. 
+per-second housekeeping.
 
 ### 5.2 Clocks - [`src/Clocks`](src/Clocks/)
 
@@ -525,8 +541,9 @@ per-module invariants:
 2. USB descriptor identity: `iSerialNumber` is populated by the arduino-pico
    core from `pico_get_unique_board_id()`;
    `iProduct` is customised per module to `Fiesta <ModuleName>` via
-   `arduino-cli --build-property build.usb_product=...` in each module's
-   `scripts/upload-uf2.sh` and in the shared `bootstrap.sh`.
+   `build.usb_product=...` properties passed by the shared firmware build
+   wrapper (`fiesta_run_compile` in
+   [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)).
 
 The UID reported in the handshake and the USB `iSerialNumber` carry the same
 64-bit flash unique id, giving the host two independent identification
@@ -697,16 +714,17 @@ The two layers that produce that identity:
 
 | Layer | Source | Wired through |
 |---|---|---|
-| `iManufacturer` = `Jaszczur` | compile-time | `arduino-cli --build-property build.usb_manufacturer=Jaszczur` |
-| `iProduct` = `Fiesta <Module>` | compile-time | `arduino-cli --build-property build.usb_product='Fiesta_<Module>'` |
+| `iManufacturer` = `Jaszczur` | compile-time | `FIESTA_USB_MANUFACTURER` -> `arduino-cli --build-property build.usb_manufacturer=...` |
+| `iProduct` = `Fiesta <Module>` | compile-time | `FIESTA_USB_PRODUCT` -> `arduino-cli --build-property build.usb_product=...` |
 | `iSerialNumber` = 16-hex-char flash UID | runtime, populated by the arduino-pico core from `pico_get_unique_board_id()` | nothing per-module - lives in the arduino-pico USB CDC stack |
 
 The build-property values come from the shared
 [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
-helpers `fiesta_module_token_for` and
-`fiesta_module_usb_by_id_tag_for`, so a module name like `OilAndSpeed`
-maps to `Fiesta_OilAndSpeed` in the descriptor (no spaces - basename
-also has to be a valid filename for the manifest sidecar).
+helpers `fiesta_usb_manufacturer` and `fiesta_usb_product_for`. A module name
+like `OilAndSpeed` maps to the descriptor product string
+`Fiesta OilAndSpeed`; Linux then normalizes spaces to underscores in
+`/dev/serial/by-id/` names such as `usb-Jaszczur_Fiesta_OilAndSpeed_<UID>-if00`.
+The explicit by-id matching tags live in `fiesta_module_usb_by_id_tag_for`.
 
 The same flash UID is then echoed back inside the SC `HELLO` reply
 (`uid=<hex>`), giving the host **two independent identification paths
@@ -721,16 +739,16 @@ and refused. On Windows, `usbser.sys` sticky-binds the COM# to
 `iSerialNumber`, so the same matching logic works there once the
 Windows portability layer lands.
 
-#### 6.4.3 Build pipeline (firmware -> UF2 + manifest)
+#### 6.4.3 Build pipeline (firmware -> generated adapter -> UF2 + manifest)
 
-The path from `*.cpp` source to a flashable artefact is shared across
+The path from `*.c` / `*.cpp` source to a flashable artefact is shared across
 every module. Module-local scripts in `src/<Module>/scripts/` are thin
 wrappers over the shared implementations in
 [`src/common/scripts/`](src/common/scripts/):
 
 - [`fiesta-arduino-task.sh`](src/common/scripts/fiesta-arduino-task.sh)
   - end-to-end build / upload entry point used by the VS Code task
-  integration. Takes `MODE=build|upload|debug`.
+  integration. Module wrappers pass `build`, `upload`, or `debug`.
 - [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
   - shared library of bash helpers: `fiesta_run_compile`,
   `fiesta_find_uf2_artifact`, `fiesta_generate_manifest`,
@@ -739,6 +757,15 @@ wrappers over the shared implementations in
   manual fallback that copies the UF2 to a BOOTSEL-mounted Pico
   without going through arduino-cli. Useful when the device is
   already in BOOTSEL.
+
+The firmware compile path is intentionally not an Arduino IDE build. The shared
+wrapper configures
+[`src/common/cmake/FiestaArduinoFirmware`](src/common/cmake/FiestaArduinoFirmware/),
+which generates a temporary sketch adapter in `.build/cmake/sketch/<Module>/`,
+links in the real module sources, and invokes `arduino-cli` against that
+generated directory. The module-owned source entry point remains
+`firmware_entry.h`; the generated `.ino` exists only to satisfy the current
+RP2040 compile frontend.
 
 **Manifest auto-generation.** Every successful firmware compile
 produces an artefact pair:
@@ -764,13 +791,15 @@ last possible moment before reboot.
 
 #### 6.4.4 Upload pipeline & port auto-detection
 
-`fiesta-arduino-task.sh MODE=upload` runs four steps:
+The upload path (`arduino-build.sh upload`, delegated to
+`fiesta-arduino-task.sh <project-dir> upload`) runs four steps:
 
 1. **Resolve the target port** via
    `fiesta_resolve_upload_port "<project_dir>" "<settings_uploadPort>"`.
 2. Compile the module fresh into `<project_dir>/.build/`.
 3. Generate + verify the manifest sidecar against the produced UF2.
-4. Invoke `arduino-cli upload --input-file <uf2> --port <resolved_port>`.
+4. Invoke `arduino-cli upload --input-file <uf2> --port <resolved_port>` via
+   `fiesta_run_upload_from_file`.
 
 Step 1 is the safety-critical one: it makes "flash the wrong module"
 structurally impossible, even with several Picos plugged in.
@@ -957,7 +986,7 @@ authoritative 104-pin ECU connector map.
 ### 7.3 Driver interface (modules -> driver)
 
 - Speedometer, tachometer, oil gauge - driven by Clocks with PWM square
-  waves on pins 9 / 10 / 11 (the analog gauges are Ford OEM / mechanical-style 
+  waves on pins 9 / 10 / 11 (the analog gauges are Ford OEM / mechanical-style
   units expecting a frequency input),
 - TFT display - driven by Clocks over SPI,
 - Buzzer - driven by Clocks on pin 14,
@@ -1002,18 +1031,24 @@ is for logging only (legacy).
 
 | Dependency | Role | Provisioning |
 |---|---|---|
-| `JaszczurHAL` | HAL + utilities + Arduino stubs | cloned by `bootstrap.sh` into `$LIB_DIR/JaszczurHAL` |
+| `JaszczurHAL` | HAL + utilities + compatibility stubs | cloned/refreshed by `runmefirst.sh` / `src/ECU/scripts/bootstrap.sh` into `$LIB_DIR/JaszczurHAL` |
 | `src/common/canDefinitions/canDefinitions.h` | shared CAN frame definitions | in-tree (versioned with Fiesta repo) |
-| `rp2040:rp2040` core (earlephilhower/arduino-pico) | RP2040 Arduino core | arduino-cli user dirs |
+| `rp2040:rp2040` core (earlephilhower/arduino-pico) | RP2040 compile/upload frontend used by the generated firmware adapter | arduino-cli user dirs |
 
 `$LIB_DIR` defaults to `<parent-of-repo-root>/libraries`, which matches the
 path expected for `JaszczurHAL` by module `CMakeLists.txt` files.
 
 ### 9.2 Tooling
 
-`git`, `build-essential`, `cmake`, `python3`, `curl`, `cppcheck` (with the
-MISRA addon shipped by Debian's `cppcheck` package), and `arduino-cli`. Full
-install procedure in [README § One-shot setup](README.md#one-shot-setup-debian-like-linux--wsl).
+The Debian-like setup flow installs the firmware, host-test, static-analysis,
+and desktop-toolchain surface used by the repository: `git`,
+`build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `perl`,
+`pkg-config`, `libgtk-4-dev`, `dpkg-dev`, `libshumate-dev`, `clang-format`,
+`clang-tidy`, `valgrind`, `cppcheck` (including the MISRA addon shipped by the
+Debian package), and `arduino-cli`.
+
+Full install procedure in
+[README § One-shot setup](README.md#one-shot-setup-debian-like-linux--wsl).
 
 ---
 
@@ -1022,25 +1057,28 @@ install procedure in [README § One-shot setup](README.md#one-shot-setup-debian-
 Three build paths exist today:
 
 - **Host tests** - per-module `CMakeLists.txt` builds a Unity-based test
-  binary compiled as C++ with the HAL mock backend. Fast to run locally;
-  no hardware required.
-- **Firmware build** - `arduino-cli` compiles each module into a `.uf2`
-  file using the `rp2040:rp2040` core. Deployed over USB with the module
-  in BOOTSEL mode via `scripts/upload-uf2.sh`. The module-local scripts are
-  thin wrappers over shared implementations in `src/common/scripts/`. The
-  upload/build paths also pass `build.usb_manufacturer` /
-  `build.usb_product` per module so that each module surfaces under a
-  distinct USB iProduct string on the host.
+  binary compiled as C++ with the HAL mock backend. `runalltests.sh` runs the
+  module test matrix, ECU cppcheck gate, Valgrind memcheck targets, and
+  clang-tidy targets. Fast to run locally; no hardware required.
+- **Firmware build** - module-local wrappers configure the shared
+  `src/common/cmake/FiestaArduinoFirmware` project, which generates a temporary
+  adapter sketch and invokes `arduino-cli` against it using the `rp2040:rp2040`
+  core. The result is a module-named `.uf2` plus a generated and verified
+  `.manifest.json`. Deployed either through manifest-gated `arduino-cli upload`
+  or by copying the UF2 to a BOOTSEL-mounted drive via `scripts/upload-uf2.sh`.
+  The build path also passes `build.usb_manufacturer` / `build.usb_product` per
+  module so each module surfaces under a distinct USB iProduct string on the
+  host.
 - **Desktop configurator build/test** - `src/SerialConfigurator` is built
   with CMake/GTK4 and tested with CTest via
   [`scripts/desktop-build.sh`](src/SerialConfigurator/scripts/desktop-build.sh)
-  (`build`, `run`, `test`, `clean`). CI is in
+  (`build`, `run`, `test`, `package`, `clean`). CI is in
   [`.github/workflows/serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml).
-  Repository scope currently covers source build/test; release packaging paths
-  are not yet standardized in-tree.
+  The local Debian package target exists; release distribution policy is not
+  yet standardized in-tree.
 
-The ECU firmware build additionally enforces `-Werror` on the Arduino path
-as a warning quality gate.
+The ECU and Adjustometer firmware builds additionally enforce `-Werror` on the
+firmware compile path as warning quality gates.
 
 ### 10.1 GitHub Actions workflows ([`.github/workflows/`](.github/workflows/))
 
@@ -1057,7 +1095,7 @@ as a warning quality gate.
 ### 10.2 Unattended daily build
 
 [`src/ECU/scripts/systemd/`](src/ECU/scripts/systemd/) ships a user-scope
-systemd service + timer that runs `bootstrap.sh` daily on a Raspberry Pi
+systemd service + timer that runs the bootstrap flow daily on a Raspberry Pi
 and emails a PASS/FAIL status summary. This is the slow-cycle integration
 signal - it exercises the whole tree, including firmware compilation for
 ECU/Clocks/OilAndSpeed/Fiesta_clock/Adjustometer once per day. Setup notes in
@@ -1065,13 +1103,15 @@ ECU/Clocks/OilAndSpeed/Fiesta_clock/Adjustometer once per day. Setup notes in
 
 ### 10.3 Bootstrap entry point
 
-[`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh) is the
-single idempotent project entry point that sets up a fresh machine end-to-end:
-system packages -> arduino-cli + rp2040 core -> cloning/refreshing the
-external `JaszczurHAL` repo -> host tests for every module that has a
-`CMakeLists.txt` -> firmware `.uf2` build for every module. Env overrides:
+[`runmefirst.sh`](runmefirst.sh) is the user-facing idempotent project entry
+point; it delegates to
+[`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh). The flow sets
+up a fresh Debian-like machine end-to-end: system packages -> `arduino-cli` +
+rp2040 core -> cloning/refreshing the external `JaszczurHAL` repo -> git hook
+setup -> `runalltests.sh` host QA -> firmware `.uf2` + manifest build for every
+module -> SerialConfigurator build/test/package. Env overrides:
 `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT`, `SKIP_APT`, `SKIP_TESTS`,
-`SKIP_BUILD`.
+`SKIP_BUILD`, `SKIP_DESKTOP`, `SKIP_DESKTOP_PACKAGE`.
 
 ---
 

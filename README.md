@@ -60,17 +60,15 @@ Required toolchain:
 
 ## Build and development
 
-In theory, each module is an Arduino-style application (*.ino + companion sources). However, the .ino file is only a thin wrapper around setup() and loop()/loop1(). And that is where the similarities to a typical Arduino project ends. 
-Arduino is used here as a toolchain facade rather than an application API, so this project is unlikely to compile out of the box in the official **Arduino IDE**.
-The code is fully virtualized by the JaszczurHAL library.
+Note: this is not an Arduino project. The official Arduino IDE cannot build this repository, and that workflow will not be supported in the future. The project is expected to move even farther away from the Arduino ecosystem over time.
 
-If you still want to build it there, expect extra manual steps/setup: replicate the per-module include paths, add `-I <project-dir>` build flags, and provide the external library (`JaszczurHAL`) plus the in-tree shared headers (`src/common/*`) exactly as handled by `bootstrap.sh` and the per-module wrappers from `src/common/scripts/`.
+`arduino-cli` is used only as part of the current toolchain: to access the `earlephilhower/arduino-pico` core and to preserve driver-level compatibility where it is useful. Useful drivers are absorbed into `JaszczurHAL` only after being rewritten for its API, adapted for multithreaded use, and stripped of unrelated Arduino-specific code. The supported development flow is based on Bash scripts, CMake, and VS Code.
 
-Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppcheck` + MISRA addon) have no native Arduino IDE equivalent.
+Each firmware module is a regular C/C++ application with a CMake-generated application entry point. That entry point adapts the module-owned `initialization()` / `looper()` functions to the `setup()` / `loop()` symbols expected by the current RP2040 build toolchain; modules that opt in to the second core expose `setup1()` / `loop1()` the same way.
 
 ### One-shot setup (Debian-like Linux / WSL)
 
-`src/ECU/scripts/bootstrap.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
+`runmefirst.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
 
 1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`, `gtk-4`),
 2. verifies Python 3 is available,
@@ -79,49 +77,49 @@ Also note that host-side tests (`cmake` / `ctest`) and MISRA screening (`cppchec
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
-8. compiles firmware for every Fiesta module and reports each `.uf2`and `manifests` artifacts: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN,
-9. compiles Fiesta USB Configurator tool (`SerialConfigurator`). 
+8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN,
+9. compiles Fiesta USB Configurator tool (`SerialConfigurator`).
 
-The toolchain set up by `bootstrap.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
+The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
 Run from repository root as a regular (non-root) user - the script uses `sudo` only for apt and arduino-cli install and will prompt for the password when needed:
 
 ```bash
-bash src/ECU/scripts/bootstrap.sh
+bash runmefirst.sh
 ```
 
-Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds. 
+Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds.
 The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
 
-IMPORTANT: `bootstrap.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
+IMPORTANT: `runmefirst.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
-`bootstrap.sh` exercises all four Fiesta modules and SerialConfigurator end-to-end (compile & run all tests, compile all modules). 
+`runmefirst.sh` exercises all five Fiesta firmware modules and SerialConfigurator end-to-end (compile & run all tests, compile all modules).
 
 ### Development environment
 
 The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
-`Clocks`, `OilAndSpeed`, `Adjustometer`) ship ready-to-use `.vscode/` setups
+`Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`) ship ready-to-use `.vscode/` setups
 (`tasks.json`, `launch.json`, `extensions.json`, `settings.json`; plus
-`arduino.json` in `ECU` and `Adjustometer`), so compile, upload,
+`arduino.json` in `ECU`, `Adjustometer`, and `Fiesta_clock`), so compile, upload,
 serial monitor, host tests, and debugger flows are wired out of the box.
 `src/SerialConfigurator` ships its own CMake-oriented VS Code task setup, with compatible keybindings.
 
 Platform support summary:
 
-- **Linux (Debian-like)** - primary target. `bootstrap.sh`, per-module `arduino-build.sh` / `upload-uf2.sh` / `refresh-intellisense.sh`, host tests, MISRA screening, and the daily Pi runner all work.
+- **Linux (Debian-like)** - primary target. `runmefirst.sh`, per-module `arduino-build.sh` / `upload-uf2.sh` / `refresh-intellisense.sh`, host tests, MISRA screening, and the daily Pi runner all work.
 - **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `scripts/arduino-build.sh upload` and `upload-uf2.sh` still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
-- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the repo's VS Code tasks now invoke Bash wrappers (`arduino-build.sh`, `upload-uf2.sh`, `refresh-intellisense.sh`, `bootstrap.sh`). Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
+- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the repo's VS Code tasks now invoke Bash wrappers (`arduino-build.sh`, `upload-uf2.sh`, `refresh-intellisense.sh`, `runmefirst.sh`). Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
 - **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell scripts likely need minor tweaks.
 
 ### Unattended daily build on a Raspberry Pi
 
-`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `bootstrap.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
+`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `runmefirst.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 Helper scripts are available in module-specific `scripts/` directories:
 
-- Mentioned before `bootstrap.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
+- Mentioned before `runmefirst.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
 - `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
 - `select-board.sh` (per module wrapper for the shared board-selection helper)
 - `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
@@ -144,10 +142,24 @@ ctest --test-dir src/<Module>/build_test --output-on-failure
 
 All modules have their own separate tests.
 
+For a single command that runs host tests across all primary modules (ECU,
+Adjustometer, Clocks, OilAndSpeed, SerialConfigurator) and then executes
+module-level `check-valgrind` / `check-clang-tidy` targets, use:
+
+```bash
+./runalltests.sh
+```
+
+The host-test gate runs runtime tests only (`ctest -LE static-analysis`) so
+static analyzers do not look like a stuck test run.
+
+Useful flags: `-j<N>`, `--skip-cppcheck`, `--skip-valgrind`,
+`--skip-clang-tidy`.
+
 ### Firmware build - per module
 
 ```bash
-cd src/<ECU|Clocks|OilAndSpeed|Adjustometer>
+cd src/<ECU|Clocks|OilAndSpeed|Adjustometer|Fiesta_clock>
 ./scripts/arduino-build.sh build
 ./scripts/arduino-build.sh upload
 ./scripts/upload-uf2.sh
@@ -185,9 +197,9 @@ Prerequisites:
 - Debug Probe firmware v2 or later (USB VID:PID `2e8a:000c`). Older Picoprobe firmware (`2e8a:0004`) also works since the shipped configs use `interface/cmsis-dap.cfg`.
 - SWD wiring: probe `SC`->target `SWCLK`, `SD`->`SWDIO`, `GND`->`GND`. Power the target independently or from the probe's debug header.
 - The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
-- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `bootstrap.sh`). Paths are already set in each module's `.vscode/settings.json` - review them if your core version differs from the committed defaults.
+- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `runmefirst.sh`). Paths are already set in each module's `.vscode/settings.json` - review them if your core version differs from the committed defaults.
 
-Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Arduino: Build (Debug)` as `preLaunchTask` so the ELF at `${workspaceFolder}/.build/*.ino.elf` stays fresh; `attach` variants skip the build step.
+Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Arduino: Build (Debug)` as `preLaunchTask` so the module-named ELF at `${workspaceFolder}/.build/*.elf` stays fresh; `attach` variants skip the build step.
 
 Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for upload - it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path. For a companion serial log during debug, `Ctrl+Shift+5` starts `serial-persistent.py -m probe` against the Debug Probe's UART pass-through.
 
@@ -215,17 +227,16 @@ Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for u
 
 ## For Embedded Engineers Who Usually Skip Arduino Projects
 
-Fiesta project started with Arduino because it enabled fast prototyping.  
-In this repository, Arduino is used primarily as a build/upload frontend (`arduino-cli`), not as the application architecture.
+The Arduino footprint in this repository is a tooling detail, not the shape of
+the software. The interesting parts are the boundaries: firmware modules with
+explicit ownership, hardware access forced through `JaszczurHAL`, host-testable
+logic, generated entry points, and safety work concentrated where the ECU path
+needs it.
 
-The firmware itself is organized as regular modules, with thin `*.ino` entry points and most logic implemented outside Arduino-specific code.  
-Hardware-facing code is isolated through `JaszczurHAL`, host-side tests run with CMake/CTest, and CI validates key build/test paths.
-
-This is a personal retrofit project, not a certified automotive product.  
-The focus is practical engineering discipline: clear module boundaries, repeatable tooling, test coverage growth, and explicit safety-oriented work in the ECU path.
-
-Still, if the word "Arduino" closes your perspective, this repository is probably not
-for you.
+This is still a one-car/engine retrofit, with the limits listed above. Within that
+scope, the project is deliberately biased toward practical embedded discipline:
+repeatable builds, visible trade-offs, growing tests, static analysis, and code
+that can keep moving away from convenience-framework assumptions.
 
 ## The main rule is: safety-first. Always.
 

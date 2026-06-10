@@ -4,7 +4,128 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-06-08 (latest)
+## 2026-06-10 (latest)
+
+- Fixed CI clang-tidy target failures caused by missing
+  `compile_commands.json` in module test workflows.
+  - Configure steps in all module CI test workflows now pass
+    `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`:
+    - `.github/workflows/adjustometer-tests.yml`
+    - `.github/workflows/ecu-tests.yml`
+    - `.github/workflows/clocks-tests.yml`
+    - `.github/workflows/oilandspeed-tests.yml`
+    - `.github/workflows/serial-configurator-tests.yml`
+  - Outcome: `check-clang-tidy` can always locate a compilation database
+    in CI (`-p <build_dir>`), avoiding FileNotFoundError crashes.
+
+- SerialConfigurator Valgrind compatibility was hardened for older
+  distro toolchains that reject newer suppression classes and can fail
+  all memcheck tests immediately (0/18):
+  - `src/SerialConfigurator/CMakeLists.txt` now probes suppression-file
+    parser compatibility at configure time by running a tiny Valgrind
+    command.
+  - When `tests/valgrind.supp` is rejected, CMake automatically falls
+    back to `tests/valgrind-legacy.supp` (portable syntax only), instead
+    of crashing every memcheck test invocation.
+  - Added `src/SerialConfigurator/tests/valgrind-legacy.supp` for
+    cross-version compatibility.
+  - Outcome: modern hosts keep the NVIDIA-specific suppressions, while
+    older Valgrind builds continue running `check-valgrind` normally.
+
+- Standardized clang-tidy noisy-security heuristic suppression across all
+  module `check-clang-tidy` targets.
+  - Added
+    `-checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling`
+    to:
+    - `src/ECU/CMakeLists.txt`
+    - `src/Adjustometer/CMakeLists.txt`
+    - `src/Clocks/CMakeLists.txt`
+    - `src/OilAndSpeed/CMakeLists.txt`
+    - `src/SerialConfigurator/CMakeLists.txt`
+  - Outcome: uniform analyzer signal quality in local and CI module gates
+    without disabling unrelated clang-analyzer checks.
+
+- GitHub Actions module test workflows were expanded from runtime tests only
+  to full host QA targets:
+  - `serial-configurator-tests.yml`, `ecu-tests.yml`,
+    `adjustometer-tests.yml`, `clocks-tests.yml`,
+    `oilandspeed-tests.yml` now install `valgrind`, `clang-tidy`,
+    and `clang-tools` and run both:
+    - `cmake --build <build-dir> --target check-valgrind --parallel`
+    - `cmake --build <build-dir> --target check-clang-tidy --parallel`
+  - Existing `ctest --output-on-failure` runtime step remains unchanged and
+    still executes before static/dynamic analysis gates.
+- Dead-store warning cleanup continued:
+  - removed repeated `Value stored to 'oscillating' is never read` reports in
+    `src/ECU/tests/test_hal_wrappers.cpp` by keeping warm-up calls explicit and
+    asserting only on the final meaningful oscillation state.
+  - Validation snapshot from refreshed logs: dead-store warning count in
+    `/tmp/fiesta_runalltests_after_ci_deadstore.log` is now `0`.
+
+- Reduced SerialConfigurator clang-tidy output noise while keeping analysis
+  active:
+  - `check-clang-tidy` for SerialConfigurator now excludes the
+    `clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling`
+    checker (the dominant source of repetitive warnings for standard C APIs).
+  - Fixed remaining actionable analyzer warnings in touched paths:
+    - dead stores in `src/SerialConfigurator/src/core/sc_flash.c`,
+    - dead stores in `src/common/scDefinitions/sc_param_handlers.c`,
+    - potential malloc leak path in
+      `src/SerialConfigurator/tests/test_sc_flash_copy_reenum.c`,
+    - struct padding warning in `src/SerialConfigurator/src/core/sc_transport.c`,
+    - intentional enum out-of-range casts in
+      `src/SerialConfigurator/tests/test_sc_i18n.c` marked with focused
+      `NOLINTNEXTLINE` comments.
+  - Validation snapshot: `cmake --build src/SerialConfigurator/build --target check-clang-tidy`
+    now completes with `WARN_COUNT=0` in captured output.
+
+- SerialConfigurator valgrind gate stabilization completed:
+  - Fixed uninitialized-stack reads in protocol readonly host tests by
+    zero-initializing local log/error buffers in
+    `src/SerialConfigurator/tests/test_sc_core_protocol_readonly.c`
+    (eliminates `strlen`/`log_append` memcheck noise from non-NUL stack data).
+  - Added targeted third-party-only Valgrind suppressions in
+    `src/SerialConfigurator/tests/valgrind.supp` for known host-driver noise
+    from NVIDIA EGL and fontconfig/expat during
+    `serial-configurator-progressbar-tests`.
+  - SerialConfigurator CMake now force-applies
+    `MEMORYCHECK_SUPPRESSIONS_FILE` when the suppression file exists,
+    preventing stale cache values from silently disabling suppressions in
+    existing build directories.
+  - Validation snapshot: `cmake --build src/SerialConfigurator/build --target check-valgrind`
+    now passes 18/18; full repository `./runalltests.sh` passes all 5 gates.
+
+- Extended host QA gates across all primary module CMake projects with
+  JaszczurHAL-style dynamic/static analysis integration:
+  - Valgrind memcheck configuration (`MEMORYCHECK_COMMAND*`) is now
+    defined before `include(CTest)` in:
+    - `src/ECU/CMakeLists.txt`
+    - `src/Adjustometer/CMakeLists.txt`
+    - `src/Clocks/CMakeLists.txt`
+    - `src/OilAndSpeed/CMakeLists.txt`
+    - `src/SerialConfigurator/CMakeLists.txt`
+  - Added per-module custom targets:
+    - `check-valgrind` -> `ctest -T memcheck --output-on-failure`
+    - `check-clang-tidy` -> `run-clang-tidy -p <build-dir> -quiet`
+  - clang-tidy scope is restricted to module-owned host-compilable sources
+    (plus shared `src/common/scDefinitions` where used), avoiding broad
+    analysis of external/vendor trees.
+- Validation snapshot:
+  - CMake target discovery confirms both custom targets exist for all five
+    modules (`ECU`, `Adjustometer`, `Clocks`, `OilAndSpeed`,
+    `SerialConfigurator`).
+- Added root `runalltests.sh` (JaszczurHAL-inspired gate runner) to execute
+  cross-module host QA in one command:
+  - tool-presence gate,
+  - host runtime tests (`cmake` + `ctest -LE static-analysis`) for
+    ECU/Adjustometer/Clocks/OilAndSpeed/
+    SerialConfigurator,
+  - dedicated cppcheck gate (`check-cppcheck` for ECU),
+  - `check-valgrind` for each module,
+  - `check-clang-tidy` for each module,
+  with CLI switches for parallelism and skipping selected gates.
+
+## 2026-06-08
 
 - Fixed host-link configuration for modules that compile
   `JaszczurHAL/src/hal/hal_crypto.cpp`: the test/mock libraries now also

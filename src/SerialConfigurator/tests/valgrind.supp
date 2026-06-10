@@ -1,0 +1,51 @@
+{
+   nvidia-egl-realloc-size-zero
+   Memcheck:ReallocZero
+   fun:realloc
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   fun:NvGlEglApiInit
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   fun:loadEGLExternalPlatform
+}
+
+{
+   nvidia-egl-posix-memalign-size-zero
+   Memcheck:BadSize
+   fun:posix_memalign
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   obj:*/libnvidia-eglcore.so*
+   fun:NvGlEglApiInit
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   obj:*/libEGL_nvidia.so*
+   fun:loadEGLExternalPlatform
+}
+
+{
+   fontconfig-expat-process-leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   obj:*/libexpat.so*
+   fun:XML_ParseBuffer
+   obj:*/libfontconfig.so*
+   obj:*/libfontconfig.so*
+}

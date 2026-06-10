@@ -13,17 +13,17 @@
 #include "config.h"
 #include "hardwareConfig.h"
 
-#include "utils.h"
 #include "lcd.h"
+#include "utils.h"
 
-#include "twi_i2c.h"
 #include "RTC.h"
+#include "adc.h"
+#include "can.h"
 #include "clockPart.h"
 #include "ds18b20.h"
 #include "tempPart.h"
-#include "adc.h"
+#include "twi_i2c.h"
 #include "voltPart.h"
-#include "can.h"
 
 bool ignition(void);
 bool setButtonPressed(void);
@@ -36,7 +36,7 @@ void redLED(bool state);
 void orangeLED(bool state);
 void blueLED(bool state);
 
-void setup_c(void);
-void loop_c(void);
+void initialization(void);
+void looper(void);
 
 #endif /* MAIN_H_ */

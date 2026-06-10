@@ -4,7 +4,20 @@ project(OilAndSpeed_Tests CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 
-enable_testing()
+# Valgrind / CTest memcheck configuration (copied from JaszczurHAL pattern).
+# Host-only dynamic analysis for the unit-test suite (NOT firmware):
+#   ctest --test-dir build_test -T memcheck --output-on-failure
+find_program(MEMORYCHECK_COMMAND NAMES valgrind)
+set(MEMORYCHECK_COMMAND_OPTIONS
+    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
+    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
+    set(MEMORYCHECK_SUPPRESSIONS_FILE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
+        CACHE FILEPATH "Valgrind suppressions for known third-party/system noise")
+endif()
+
+include(CTest)
 
 set(OILSPEED_SRC ${CMAKE_CURRENT_SOURCE_DIR})
 set(OILSPEED_TEST_STUBS ${CMAKE_CURRENT_SOURCE_DIR}/tests/stubs)
@@ -73,3 +86,27 @@ target_compile_options(oilspeed_mock PRIVATE
 )
 
 add_subdirectory(tests)
+
+# Optional analysis helpers kept outside the default build.
+option(OILANDSPEED_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
+if(OILANDSPEED_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
+    add_custom_target(check-valgrind
+        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure
+        COMMENT "Running CTest memcheck (Valgrind) for OilAndSpeed"
+        VERBATIM
+    )
+endif()
+
+find_program(RUN_CLANG_TIDY_EXECUTABLE NAMES run-clang-tidy)
+option(OILANDSPEED_ENABLE_CLANG_TIDY_TARGET "Enable check-clang-tidy custom target" ON)
+if(OILANDSPEED_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
+    add_custom_target(check-clang-tidy
+        COMMAND ${RUN_CLANG_TIDY_EXECUTABLE}
+            -p ${CMAKE_BINARY_DIR}
+            -quiet
+            -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+            "^.*/src/(OilAndSpeed|common/scDefinitions)/.*\\.(c|cpp)$"
+        COMMENT "Running clang-tidy for OilAndSpeed host-compilable sources"
+        VERBATIM
+    )
+endif()

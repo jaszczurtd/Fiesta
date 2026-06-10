@@ -1,0 +1,65 @@
+#!/bin/sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -n "$staged_files" ] || exit 0
+
+fix_text_file() {
+    file="$1"
+
+    # Skip deleted or non-regular files.
+    [ -f "$file" ] || return 0
+
+    # Skip binary files.
+    if ! grep -Iq . "$file"; then
+        return 0
+    fi
+
+    # 1) Normalize CRLF to LF.
+    perl -i -pe 's/\r$//' "$file"
+
+    # 2) Remove trailing horizontal whitespace.
+    sed -i 's/[[:blank:]]\+$//' "$file"
+
+    # 3) Ensure trailing newline at EOF.
+    if [ -s "$file" ] && [ "$(tail -c 1 "$file" | wc -l)" -eq 0 ]; then
+        printf '\n' >> "$file"
+    fi
+
+    # 4) Replace problematic UTF-8 punctuation with ASCII equivalents.
+    # NBSP -> space
+    # Left/Right single quote -> '
+    # Left/Right double quote -> "
+    # En dash/Em dash -> -
+    # Right arrow -> ->
+    # Ellipsis -> ...
+    perl -i -pe 's/\x{00A0}/ /g; s/[\x{2018}\x{2019}]/\x27/g; s/[\x{201C}\x{201D}]/\x22/g; s/[\x{2013}\x{2014}]/-/g; s/\x{2192}/->/g; s/\x{2026}/.../g' "$file"
+}
+
+format_cpp_file() {
+    file="$1"
+    [ -f "$file" ] || return 0
+
+    case "$file" in
+        *.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx)
+            if command -v clang-format >/dev/null 2>&1; then
+                clang-format -i "$file"
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+echo "[pre-commit] Normalizing staged files..."
+echo "$staged_files" | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    fix_text_file "$file"
+    format_cpp_file "$file"
+    git add -- "$file"
+done
+
+echo "[pre-commit] Done."
