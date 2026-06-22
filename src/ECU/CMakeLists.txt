@@ -44,6 +44,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
     ${HAL_SRC}/hal/impl/shared/wireguard/crypto/crypto.c
     ${HAL_SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
+    ${HAL_SRC}/hal/impl/shared/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp
     ${HAL_SRC}/hal/hal_soft_timer.cpp

@@ -7,9 +7,7 @@ hal_can_t oilspeedTestGetCanHandle(void);
 static hal_can_t canHandle = NULL;
 
 #ifdef UNIT_TEST
-hal_can_t oilspeedTestGetCanHandle(void) {
-  return canHandle;
-}
+hal_can_t oilspeedTestGetCanHandle(void) { return canHandle; }
 #endif
 
 static unsigned char frameNumber = 0;
@@ -27,8 +25,11 @@ bool canInit(void) {
 
   bool error = false;
 
-  canHandle = hal_can_create_with_retry(CAN_CS, CAN_INT, NULL,
-                                         MAX_RETRIES, watchdog_feed);
+  hal_can_config_t canCfg = hal_can_default_config();
+  canCfg.mcp2515.cs_pin = CAN_CS;
+
+  canHandle = hal_can_create_with_retry(&canCfg, CAN_INT, NULL, MAX_RETRIES,
+                                        watchdog_feed);
   error = (canHandle == NULL);
   if (!error) {
     deb("CAN BUS Shield init ok!");
@@ -47,9 +48,11 @@ void updateCANrecipients(void) {
   floatToDec(getGlobalValue(F_OIL_PRESSURE), &hi, &lo);
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (uint8_t)hi;
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
-  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)getGlobalValue(F_ABS_CAR_SPEED);
+  buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] =
+      (uint8_t)getGlobalValue(F_ABS_CAR_SPEED);
 
-  hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
+  hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+               CAN_FRAME_MAX_LENGTH, buf);
 }
 
 void updateEGTrecipients(void) {
@@ -76,50 +79,46 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
   switch (canID) {
 
-    case CAN_ID_ECU_UPDATE_01:
-    case CAN_ID_RPM:
-    case CAN_ID_THROTTLE:
-    case CAN_ID_ECU_UPDATE_03:
-    case CAN_ID_TURBO_PRESSURE:
-      ecuMessages++; ecuConnected = true;
-      break;
-
-    case CAN_ID_CLOCK_BRIGHTNESS:
-      clusterMessages++; clusterConnected = true;
-      break;
-
-    case CAN_ID_ECU_UPDATE_02: {
-      if (len <= CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED) {
-        derr("Received truncated ECU_UPDATE_02 frame with len: %d", len);
-        return;
-      }
-      ecuMessages++; ecuConnected = true;
-
-      setGlobalValue(F_INTAKE_TEMP, buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
-      setGlobalValue(F_FUEL, MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
-                                         buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
-      setGlobalValue(F_GPS_IS_AVAILABLE, buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
-      setGlobalValue(F_GPS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
-    }
+  case CAN_ID_ECU_UPDATE_01:
+  case CAN_ID_RPM:
+  case CAN_ID_THROTTLE:
+  case CAN_ID_ECU_UPDATE_03:
+  case CAN_ID_TURBO_PRESSURE:
+    ecuMessages++;
+    ecuConnected = true;
     break;
 
-    default:
-      deb("received unknown CAN frame:%03x len:%d\n", canID, len);
-      break;
+  case CAN_ID_CLOCK_BRIGHTNESS:
+    clusterMessages++;
+    clusterConnected = true;
+    break;
+
+  case CAN_ID_ECU_UPDATE_02: {
+    if (len <= CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED) {
+      derr("Received truncated ECU_UPDATE_02 frame with len: %d", len);
+      return;
+    }
+    ecuMessages++;
+    ecuConnected = true;
+
+    setGlobalValue(F_INTAKE_TEMP, buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
+    setGlobalValue(F_FUEL, MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
+                                       buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
+    setGlobalValue(F_GPS_IS_AVAILABLE, buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
+    setGlobalValue(F_GPS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
+  } break;
+
+  default:
+    deb("received unknown CAN frame:%03x len:%d\n", canID, len);
+    break;
   }
 }
 
-void canMainLoop(void) {
-  hal_can_process_all(canHandle, onCanFrame);
-}
+void canMainLoop(void) { hal_can_process_all(canHandle, onCanFrame); }
 
-bool isClusterConnected(void) {
-  return clusterConnected;
-}
+bool isClusterConnected(void) { return clusterConnected; }
 
-bool isEcuConnected(void) {
-  return ecuConnected;
-}
+bool isEcuConnected(void) { return ecuConnected; }
 
 void canCheckConnection(void) {
   static int lastColor = 0;

@@ -12,10 +12,11 @@
 
 /* ── Modules used by ECU ─────────────────────────────────────────────── */
 
-#define HAL_ENABLE_I2C              /* I2C master (sensors + AT24C256)    */
-#define HAL_ENABLE_KV               /* KV store -> EEPROM                 */
-#define HAL_ENABLE_CAN              /* MCP2515 CAN bus                    */
-#define HAL_ENABLE_SWSERIAL         /* Software serial (GPS)               */
-#define HAL_ENABLE_GPS              /* TinyGPS++ -> SWSERIAL              */
-#define HAL_ENABLE_PWM_FREQ         /* Frequency-controlled PWM           */
-#define HAL_ENABLE_CRYPTO           /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_I2C      /* I2C master (sensors + AT24C256)    */
+#define HAL_ENABLE_KV       /* KV store -> EEPROM                 */
+#define HAL_ENABLE_CAN      /* Generic CAN API facade             */
+#define HAL_ENABLE_MCP2515  /* MCP2515 CAN backend                */
+#define HAL_ENABLE_SWSERIAL /* Software serial (GPS)               */
+#define HAL_ENABLE_GPS      /* TinyGPS++ -> SWSERIAL              */
+#define HAL_ENABLE_PWM_FREQ /* Frequency-controlled PWM           */
+#define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
