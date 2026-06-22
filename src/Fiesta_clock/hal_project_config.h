@@ -14,7 +14,8 @@
 
 /* ── Modules used by Fiesta_clock ────────────────────────────────────── */
 
-#define HAL_ENABLE_PCF8563          /* PCF8563 RTC -> RTC, I2C            */
-#define HAL_ENABLE_DS18B20          /* DS18B20 1-Wire -> ONEWIRE          */
-#define HAL_ENABLE_CAN              /* MCP2515 CAN bus                    */
-#define HAL_ENABLE_CRYPTO           /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_PCF8563 /* PCF8563 RTC -> RTC, I2C            */
+#define HAL_ENABLE_DS18B20 /* DS18B20 1-Wire -> ONEWIRE          */
+#define HAL_ENABLE_CAN     /* Generic CAN API facade             */
+#define HAL_ENABLE_MCP2515 /* MCP2515 CAN backend                */
+#define HAL_ENABLE_CRYPTO  /* hal_crypto + hal_sc_auth (SC link) */

@@ -31,6 +31,7 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 # ── HAL utility sources compilable on host ─────────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/impl/shared/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp
     ${HAL_SRC}/hal/hal_soft_timer.cpp

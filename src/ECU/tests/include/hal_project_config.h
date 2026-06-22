@@ -29,16 +29,17 @@
 #define HAL_ENABLE_I2C
 #define HAL_ENABLE_I2C_SLAVE
 #define HAL_ENABLE_CAN
-#define HAL_ENABLE_PCF8563        /* -> RTC + I2C */
+#define HAL_ENABLE_MCP2515
+#define HAL_ENABLE_PCF8563 /* -> RTC + I2C */
 #define HAL_ENABLE_DS3231
-#define HAL_ENABLE_MCP9600        /* -> THERMOCOUPLE + I2C */
+#define HAL_ENABLE_MCP9600 /* -> THERMOCOUPLE + I2C */
 #define HAL_ENABLE_MAX6675
-#define HAL_ENABLE_DS18B20        /* -> ONEWIRE */
-#define HAL_ENABLE_EXTERNAL_ADC   /* -> I2C */
-#define HAL_ENABLE_GPS            /* -> SWSERIAL */
+#define HAL_ENABLE_DS18B20      /* -> ONEWIRE */
+#define HAL_ENABLE_EXTERNAL_ADC /* -> I2C */
+#define HAL_ENABLE_GPS          /* -> SWSERIAL */
 #define HAL_ENABLE_PWM_FREQ
 #define HAL_ENABLE_RGB_LED
-#define HAL_ENABLE_ILI9341        /* -> TFT + DISPLAY */
+#define HAL_ENABLE_ILI9341 /* -> TFT + DISPLAY */
 #define HAL_DISPLAY_ILI9341
 #define HAL_ENABLE_SSD1306
 #define HAL_ENABLE_CRYPTO

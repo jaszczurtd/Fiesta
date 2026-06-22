@@ -12,7 +12,8 @@
 
 /* ── Modules used by OilAndSpeed ─────────────────────────────────────── */
 
-#define HAL_ENABLE_CAN              /* MCP2515 CAN bus                    */
-#define HAL_ENABLE_MCP9600          /* MCP9600 -> THERMOCOUPLE, I2C       */
-#define HAL_ENABLE_RGB_LED          /* NeoPixel status LED                */
-#define HAL_ENABLE_CRYPTO           /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_CAN     /* Generic CAN API facade             */
+#define HAL_ENABLE_MCP2515 /* MCP2515 CAN backend                */
+#define HAL_ENABLE_MCP9600 /* MCP9600 -> THERMOCOUPLE, I2C       */
+#define HAL_ENABLE_RGB_LED /* NeoPixel status LED                */
+#define HAL_ENABLE_CRYPTO  /* hal_crypto + hal_sc_auth (SC link) */
