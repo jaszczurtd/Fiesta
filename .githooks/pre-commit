@@ -30,13 +30,15 @@ fix_text_file() {
     fi
 
     # 4) Replace problematic UTF-8 punctuation with ASCII equivalents.
+    # Use byte sequences so this works even when Perl does not decode input
+    # as UTF-8 by default.
     # NBSP -> space
     # Left/Right single quote -> '
     # Left/Right double quote -> "
     # En dash/Em dash -> -
     # Right arrow -> ->
     # Ellipsis -> ...
-    perl -i -pe 's/\x{00A0}/ /g; s/[\x{2018}\x{2019}]/\x27/g; s/[\x{201C}\x{201D}]/\x22/g; s/[\x{2013}\x{2014}]/-/g; s/\x{2192}/->/g; s/\x{2026}/.../g' "$file"
+    perl -i -pe 's/\xC2\xA0/ /g; s/\xE2\x80[\x98\x99]/\x27/g; s/\xE2\x80[\x9C\x9D]/\x22/g; s/\xE2\x80[\x93\x94]/-/g; s/\xE2\x86\x92/->/g; s/\xE2\x80\xA6/.../g' "$file"
 }
 
 format_cpp_file() {
