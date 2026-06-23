@@ -2,6 +2,12 @@
 set -eu
 
 commit_msg_file="$1"
+
+# Normalize problematic UTF-8 punctuation in the commit message itself.
+# Use byte sequences so this works even when Perl does not decode input
+# as UTF-8 by default.
+perl -i -pe 's/\xC2\xA0/ /g; s/\xE2\x80[\x98\x99]/\x27/g; s/\xE2\x80[\x9C\x9D]/\x22/g; s/\xE2\x80[\x93\x94]/-/g; s/\xE2\x86\x92/->/g; s/\xE2\x80\xA6/.../g' "$commit_msg_file"
+
 first_line="$(sed -n '1p' "$commit_msg_file")"
 
 sed -i '/^[[:space:]]*co[[:space:]_-]*authored[[:space:]_-]*by[[:space:]]*:/Id' "$commit_msg_file"

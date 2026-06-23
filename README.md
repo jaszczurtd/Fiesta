@@ -60,7 +60,7 @@ Required toolchain:
 
 ## Build and development
 
-Note: this is not an Arduino project. The official Arduino IDE cannot build this repository, and that workflow will not be supported in the future. The project is expected to move even farther away from the Arduino ecosystem over time.
+Please note: despite relying on `arduino-cli`, this is not an Arduino project. The official Arduino IDE cannot build this repository, and that workflow will not be supported in the future. The project is expected to move even farther away from the Arduino ecosystem over time.
 
 `arduino-cli` is used only as part of the current toolchain: to access the `earlephilhower/arduino-pico` core and to preserve driver-level compatibility where it is useful. Useful drivers are absorbed into `JaszczurHAL` only after being rewritten for its API, adapted for multithreaded use, and stripped of unrelated Arduino-specific code. The supported development flow is based on Bash scripts, CMake, and VS Code.
 
