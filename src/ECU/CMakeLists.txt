@@ -38,18 +38,19 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 # ── HAL utility sources (no Arduino dependency) ────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/impl/shared/compat/debug_format/hal_debug_format.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
     # HAL crypto wrappers call into the shared WireGuard crypto primitives.
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/crypto.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
-    ${HAL_SRC}/hal/impl/shared/mcp2515/hal_can_mcp2515_config.cpp
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/crypto.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c
+    ${HAL_SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp
     ${HAL_SRC}/hal/hal_soft_timer.cpp
     ${HAL_SRC}/hal/hal_pid_controller.cpp
-    ${HAL_SRC}/utils/SmartTimers.cpp
+    ${HAL_SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
     ${HAL_SRC}/utils/pidController.cpp
     ${HAL_SRC}/utils/unity.c
 )

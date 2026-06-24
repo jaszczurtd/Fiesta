@@ -19,6 +19,7 @@ if(NOT EXISTS "${JASZCZURHAL_ROOT}/src/hal/hal.h")
     message(FATAL_ERROR "JaszczurHAL not found: ${JASZCZURHAL_ROOT}")
 endif()
 
+
 set(JH_SRC "${JASZCZURHAL_ROOT}/src")
 set(G474 "${JH_SRC}/hal/impl/stm32g474")
 set(LDSCRIPT "${JASZCZURHAL_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
@@ -45,12 +46,12 @@ set(HAL_COMMON
 
 set(UTILS
     "${JH_SRC}/utils/tools.cpp"
-    "${JH_SRC}/utils/SmartTimers.cpp"
+    "${JH_SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp"
     "${JH_SRC}/utils/multicoreWatchdog.cpp"
     "${JH_SRC}/utils/pidController.cpp"
     "${JH_SRC}/utils/draw7Segment.cpp"
-    "${JH_SRC}/utils/cJSON.c"
-    "${JH_SRC}/utils/cJSON_Utils.c"
+    "${JH_SRC}/hal/impl/shared/frameworks/cjson/cJSON.c"
+    "${JH_SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c"
 )
 
 set(CLOCKS_SOURCES
@@ -140,4 +141,3 @@ if(CMAKE_OBJCOPY)
         VERBATIM
     )
 endif()
-

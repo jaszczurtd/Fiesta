@@ -324,6 +324,30 @@ fetch_libraries() {
         err "JaszczurHAL checkout missing or invalid at: $hal_dir"
         return 1
     fi
+    local required_hal_paths=(
+        "$hal_dir/src/JaszczurHAL.h"
+        "$hal_dir/src/hal/hal_config.cpp"
+        "$hal_dir/src/hal/impl/.mock/hal_mock.h"
+        "$hal_dir/src/hal/impl/shared/compat/debug_format/hal_debug_format.cpp"
+        "$hal_dir/src/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp"
+        "$hal_dir/src/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp"
+        "$hal_dir/src/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c"
+        "$hal_dir/src/utils/tools.cpp"
+        "$hal_dir/src/utils/unity.c"
+    )
+    local missing=()
+    local path
+    for path in "${required_hal_paths[@]}"; do
+        [[ -e "$path" ]] || missing+=("$path")
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        err "JaszczurHAL checkout layout is not compatible with this Fiesta tree."
+        err "Missing expected path(s):"
+        for path in "${missing[@]}"; do
+            err "  $path"
+        done
+        return 1
+    fi
     local hal_branch hal_rev
     hal_branch="$(resolve_origin_default_branch "$hal_dir" || echo "unknown")"
     hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"

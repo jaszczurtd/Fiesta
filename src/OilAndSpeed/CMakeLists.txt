@@ -41,12 +41,13 @@ endif()
 add_library(oilspeed_mock STATIC
     ${OILSPEED_SRC}/config.cpp
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/impl/shared/compat/debug_format/hal_debug_format.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
     # HAL crypto wrappers call into shared WireGuard crypto primitives.
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/crypto.c
-    ${HAL_SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/crypto.c
+    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c
     ${HAL_SRC}/hal/impl/.mock/hal_wifi.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_system.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
