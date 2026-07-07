@@ -253,16 +253,18 @@ src/<Module>/
 ├── CMakeLists.txt         # host-test build
 ├── tests/                 # host unit tests (compiled as C++)
 ├── build_test/            # CMake build output (git-ignored)
-└── scripts/               # thin wrappers: arduino-build.sh, upload-uf2.sh,
-                           # refresh-intellisense.sh, select-board.sh,
-                           # serial-persistent.py, serial-monitor.{sh,py}
+├── .vscode/               # jh-vscode manifest, tasks, launch, settings
+└── .build/                # generated firmware artefacts (git-ignored)
 ```
 
 During firmware builds, CMake also creates
 `.build/cmake/sketch/<Module>/<Module>.ino` as a temporary adapter for the
 current RP2040 compile toolchain. That generated file is not source
 architecture and must not be treated as an Arduino sketch entry point owned by
-the module.
+the module. Module-local VS Code wrapper scripts were removed during the
+JaszczurHAL migration; firmware build, debug build, upload, monitor, and
+IntelliSense refresh now go through
+`../libraries/JaszczurHAL/vscode/entry/jh-vscode`.
 
 ---
 
