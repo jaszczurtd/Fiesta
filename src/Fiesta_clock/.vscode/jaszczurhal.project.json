@@ -1,0 +1,40 @@
+{
+    "$schema": "../../../libraries/JaszczurHAL/vscode/schema/jh_vscode_project.schema.json",
+    "project": "Fiesta",
+    "module": "Fiesta_clock",
+    "toolchain": "cmake",
+    "fqbn": "rp2040:rp2040:waveshare_rp2040_zero",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../common/cmake/FiestaArduinoFirmware",
+        "cache": {
+            "FIESTA_PROJECT_DIR": "${project}",
+            "FIESTA_WARNINGS": true,
+            "FIESTA_WERROR": false,
+            "FIESTA_LIBRARIES_DIR": "${project}/../../../libraries",
+            "FIESTA_USB_MANUFACTURER": "Jaszczur",
+            "FIESTA_USB_PRODUCT": "Fiesta RTC Clock"
+        },
+        "targets": {
+            "build": "firmware",
+            "buildDebug": "firmware_debug",
+            "upload": "firmware_upload",
+            "compileDb": "firmware_compile_db"
+        }
+    },
+    "identity": {
+        "enabled": true,
+        "usbManufacturer": "Jaszczur",
+        "usbProduct": "Fiesta RTC Clock",
+        "byIdHint": "Fiesta_RTC_Clock"
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    },
+    "upload": {
+        "strategy": "serial"
+    }
+}

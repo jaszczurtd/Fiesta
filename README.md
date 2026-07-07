@@ -101,33 +101,32 @@ IMPORTANT: `runmefirst.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable
 
 The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
 `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`) ship ready-to-use `.vscode/` setups
-(`tasks.json`, `launch.json`, `extensions.json`, `settings.json`; plus
-`arduino.json` in `ECU`, `Adjustometer`, and `Fiesta_clock`), so compile, upload,
+(`tasks.json`, `launch.json`, `extensions.json`, `settings.json`, and
+`jaszczurhal.project.json`), so compile, upload,
 serial monitor, host tests, and debugger flows are wired out of the box.
 `src/SerialConfigurator` ships its own CMake-oriented VS Code task setup, with compatible keybindings.
 
 Platform support summary:
 
-- **Linux (Debian-like)** - primary target. `runmefirst.sh`, per-module `arduino-build.sh` / `upload-uf2.sh` / `refresh-intellisense.sh`, host tests, MISRA screening, and the daily Pi runner all work.
-- **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `scripts/arduino-build.sh upload` and `upload-uf2.sh` still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
-- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the repo's VS Code tasks now invoke Bash wrappers (`arduino-build.sh`, `upload-uf2.sh`, `refresh-intellisense.sh`, `runmefirst.sh`). Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
+- **Linux (Debian-like)** - primary target. `runmefirst.sh`, JaszczurHAL `jh-vscode` firmware tasks, host tests, MISRA screening, and the daily Pi runner all work.
+- **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `jh-vscode upload` and BOOTSEL upload still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
+- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the current shared VS Code entry is Linux/Bash-oriented. Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
 - **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell scripts likely need minor tweaks.
 
 ### Unattended daily build on a Raspberry Pi
 
 `src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `runmefirst.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
-Helper scripts are available in module-specific `scripts/` directories:
+Firmware modules use the shared JaszczurHAL VS Code entry instead of
+module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
-- Mentioned before `runmefirst.sh` (in `src/ECU/scripts/` - one-shot dev-env setup + tests + firmware build for all Fiesta modules). You can start immediately by invoking this script right after clone. See `One-shot setup` section below.
-- `arduino-build.sh` (per module - wrapper used by VS Code Build / Build Debug / Upload tasks; `upload` corresponds to the common `Ctrl+Shift+2` workflow)
-- `select-board.sh` (per module wrapper for the shared board-selection helper)
-- `upload-uf2.sh` (per module wrapper for the BOOTSEL / UF2 path)
-- `refresh-intellisense.sh` (per module wrapper for compile DB / IntelliSense regeneration)
-- `serial-persistent.py` (per module wrapper used by the VS Code monitor tasks, including `Ctrl+Shift+3`; it re-reads the preferred port from project settings so `Ctrl+Shift+9` changes take effect without restarting the monitor)
-- `serial-monitor.py` / `serial-monitor.sh` (compatibility wrappers over the shared persistent monitor)
-
-Shared implementations for those wrappers live in `src/common/scripts/`.
+- `src/ECU/scripts/bootstrap.sh` - one-shot dev-env setup + tests + firmware
+  build for all Fiesta modules. You can start immediately by invoking this
+  script right after clone. See `One-shot setup` section below.
+- `src/common/scripts/fiesta-arduino-common.sh` - Fiesta-only module token,
+  manifest, UF2, and bootstrap helpers.
+- `src/common/scripts/fiesta-upload-built-uf2.sh` - CMake `firmware_upload`
+  bridge used after JaszczurHAL has verified the upload target.
 
 ### Host tests (CMake) - per module
 
@@ -160,19 +159,21 @@ Useful flags: `-j<N>`, `--skip-cppcheck`, `--skip-valgrind`,
 
 ```bash
 cd src/<ECU|Clocks|OilAndSpeed|Adjustometer|Fiesta_clock>
-./scripts/arduino-build.sh build
-./scripts/arduino-build.sh upload
-./scripts/upload-uf2.sh
-./scripts/refresh-intellisense.sh
+../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+../../../libraries/JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
+../../../libraries/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project "$PWD"
+../../../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
 ```
 
 Notes:
 
-- `./scripts/arduino-build.sh upload` is the same code path used by the VS Code upload task / `Ctrl+Shift+2`.
-- `./scripts/upload-uf2.sh` is the BOOTSEL mass-storage path.
-- `python3 ./scripts/serial-persistent.py -m pico` is the same path used by the VS Code monitor task / `Ctrl+Shift+3`.
-- `Ctrl+Shift+9` updates `arduino.uploadPort` in `.vscode/settings.json`; the persistent monitor notices that change and switches to the new preferred port without needing a manual restart.
-- The module-local scripts are thin wrappers; the shared implementation lives in `src/common/scripts/`.
+- `Project: Upload` / `Ctrl+Shift+2` uses the same `jh-vscode upload` path.
+- `Project: Upload (UF2 / BOOTSEL)` is the BOOTSEL mass-storage path.
+- `Project: Monitor` / `Ctrl+Shift+3` uses `jh-vscode monitor` with stable
+  `/dev/serial/by-id/usb-Jaszczur_Fiesta_*` identity matching.
+- The module-local VS Code wrappers were removed; task behavior now comes from
+  `libraries/JaszczurHAL/vscode/`.
 
 ### Desktop companion build (SerialConfigurator)
 
@@ -199,9 +200,9 @@ Prerequisites:
 - The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
 - `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `runmefirst.sh`). Paths are already set in each module's `.vscode/settings.json` - review them if your core version differs from the committed defaults.
 
-Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Arduino: Build (Debug)` as `preLaunchTask` so the module-named ELF at `${workspaceFolder}/.build/*.elf` stays fresh; `attach` variants skip the build step.
+Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Project: Build (Debug)` as `preLaunchTask` so `${workspaceFolder}/.build/firmware.elf` stays fresh; `attach` variants skip the build step.
 
-Note: `./scripts/arduino-build.sh` / `build.sh` does **not** use the probe for upload - it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path. For a companion serial log during debug, `Ctrl+Shift+5` starts `serial-persistent.py -m probe` against the Debug Probe's UART pass-through.
+Note: `jh-vscode upload` does **not** use the probe for upload - it flashes over USB CDC. The probe is only used by Cortex-Debug's GDB path.
 
 ### What this project does *not* claim
 

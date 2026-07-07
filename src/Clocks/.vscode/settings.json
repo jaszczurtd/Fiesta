@@ -1,11 +1,4 @@
 {
-    "arduino.cliPath": "arduino-cli",
-    "arduino.fqbn": "rp2040:rp2040:rpipico",
-    "arduino.boardDescription": "Raspberry Pi Pico",
-    "arduino.uploadPort": "/dev/ttyACM2",
-    "arduino.sketchbookPath": "",
-    "arduino.buildDir": "${workspaceFolder}/.build",
-    "arduino.verbose": true,
     "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
     "C_Cpp.errorSquiggles": "enabled",
     "cortex-debug.openocdPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/bin/openocd",
@@ -22,5 +15,10 @@
     "search.exclude": {
         "**/.build": true
     },
-    "task.allowAutomaticTasks": "on"
+    "task.allowAutomaticTasks": "on",
+    "jaszczurhal.root": "../../../libraries/JaszczurHAL",
+    "jaszczurhal.vscodeEntry": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode",
+    "jaszczurhal.cliPath": "arduino-cli",
+    "jaszczurhal.verbose": true,
+    "jaszczurhal.uploadPort": "/dev/serial/by-id/usb-Jaszczur_Fiesta_Clocks_E6625887D3475937-if00"
 }

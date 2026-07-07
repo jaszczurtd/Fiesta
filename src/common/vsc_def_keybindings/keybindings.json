@@ -23,7 +23,7 @@
     {
         "key": "ctrl+shift+3",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Monitor (persistent)",
+        "args": "Project: Serial Monitor",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     },
     {
@@ -35,7 +35,7 @@
     {
         "key": "ctrl+shift+5",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Monitor (Debug Probe)",
+        "args": "Project: Debug Probe Monitor",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     },
     {
@@ -83,7 +83,7 @@
     {
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board (interactive)",
+        "args": "Project: Select board",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     }
 ]

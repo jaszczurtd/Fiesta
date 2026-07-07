@@ -5,8 +5,12 @@ project(FiestaArduinoFirmware NONE)
 set(FIESTA_PROJECT_DIR "" CACHE PATH "Fiesta firmware module directory")
 set(ARDUINO_CLI "arduino-cli" CACHE STRING "arduino-cli executable")
 set(ARDUINO_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Arduino fully qualified board name")
+set(ARDUINO_SKETCHBOOK "" CACHE PATH "Compatibility cache var accepted from jh-vscode")
 set(ARDUINO_UPLOAD_PORT "" CACHE STRING "Arduino upload port")
 set(ARDUINO_VERBOSE OFF CACHE BOOL "Enable verbose Arduino CLI output")
+set(JH_ROOT "" CACHE PATH "Compatibility cache var accepted from jh-vscode")
+set(JH_USB_MANUFACTURER "" CACHE STRING "Compatibility cache var accepted from jh-vscode")
+set(JH_USB_PRODUCT "" CACHE STRING "Compatibility cache var accepted from jh-vscode")
 set(FIESTA_WARNINGS OFF CACHE BOOL "Enable Arduino warnings")
 set(FIESTA_WERROR OFF CACHE BOOL "Treat compiler warnings as errors")
 set(FIESTA_LIBRARIES_DIR "" CACHE PATH "Arduino libraries directory")
@@ -40,6 +44,10 @@ set(LEGACY_FIRMWARE_MAP "${FIESTA_OUTPUT_DIR}/firmware.map")
 set(LEGACY_FIRMWARE_MANIFEST "${FIESTA_OUTPUT_DIR}/firmware.manifest.json")
 set(COMPILE_COMMANDS_OUT "${FIESTA_OUTPUT_DIR}/compile_commands.json")
 set(FIRMWARE_ENTRY_HEADER "${FIESTA_PROJECT_DIR}/firmware_entry.h")
+get_filename_component(FIESTA_COMMON_DIR "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+set(FIESTA_UPLOAD_BUILT_UF2_SCRIPT "${FIESTA_COMMON_DIR}/scripts/fiesta-upload-built-uf2.sh")
+
+find_program(BASH_EXECUTABLE bash REQUIRED)
 
 file(REMOVE_RECURSE "${SKETCH_DIR}")
 file(MAKE_DIRECTORY "${SKETCH_DIR}" "${ARDUINO_BUILD_DIR}" "${FIESTA_OUTPUT_DIR}")
@@ -182,6 +190,18 @@ function(fiesta_add_arduino_target target_name)
             COMMAND "${CMAKE_COMMAND}" -E copy
                 "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.map"
                 "${FIRMWARE_MAP}"
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.elf"
+                "${LEGACY_FIRMWARE_ELF}"
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.bin"
+                "${LEGACY_FIRMWARE_BIN}"
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.uf2"
+                "${LEGACY_FIRMWARE_UF2}"
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.map"
+                "${LEGACY_FIRMWARE_MAP}"
             VERBATIM
         )
     endif()
@@ -189,8 +209,25 @@ endfunction()
 
 fiesta_add_arduino_target(firmware)
 fiesta_add_arduino_target(firmware_debug DEBUG)
-fiesta_add_arduino_target(firmware_upload UPLOAD)
 fiesta_add_arduino_target(firmware_compile_db COMPILE_DB)
+
+set(_arduino_verbose_flag 0)
+if(ARDUINO_VERBOSE)
+    set(_arduino_verbose_flag 1)
+endif()
+
+add_custom_target(firmware_upload
+    COMMAND "${BASH_EXECUTABLE}"
+        "${FIESTA_UPLOAD_BUILT_UF2_SCRIPT}"
+        "${FIESTA_PROJECT_DIR}"
+        "${LEGACY_FIRMWARE_UF2}"
+        "${ARDUINO_UPLOAD_PORT}"
+        "${_arduino_verbose_flag}"
+    DEPENDS firmware
+    WORKING_DIRECTORY "${FIESTA_PROJECT_DIR}"
+    USES_TERMINAL
+    VERBATIM
+)
 
 message(STATUS "Fiesta module: ${FIESTA_MODULE_NAME}")
 message(STATUS "Arduino FQBN: ${ARDUINO_FQBN}")
