@@ -36,8 +36,9 @@ COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-arduino-common.sh"
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
 
-# Fallback FQBN for modules that do not ship a .vscode/arduino.json
-# (every Fiesta board in use is an RP2040 Pi Pico with the same flash layout).
+# Fallback FQBN for modules that do not ship a VS Code project manifest.
+# This is only a last-resort bootstrap default; migrated firmware modules keep
+# their board contract in .vscode/jaszczurhal.project.json.
 DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk"
 
 # Per-module build matrix.
@@ -405,7 +406,7 @@ run_tests() {
 # -----------------------------------------------------------------------------
 # 6. Firmware compile (per module)
 # -----------------------------------------------------------------------------
-read_arduino_json_key() {
+read_json_key() {
     local file="$1" key="$2"
     [[ -f "$file" ]] || { echo ""; return; }
     python3 -c "
@@ -423,18 +424,22 @@ compile_firmware_for() {
     local module="$1" werror="$2"
     local src="$SRC_ROOT/$module"
     local build="$src/.build"
+    local manifest="$src/.vscode/jaszczurhal.project.json"
     local ajson="$src/.vscode/arduino.json"
 
     local board config fqbn=""
-    board=$(read_arduino_json_key "$ajson" board)
-    config=$(read_arduino_json_key "$ajson" configuration)
-    if [[ -n "$board" ]]; then
-        fqbn="$board"
-        [[ -n "$config" ]] && fqbn="${board}:${config}"
+    fqbn=$(read_json_key "$manifest" fqbn)
+    if [[ -z "$fqbn" ]]; then
+        board=$(read_json_key "$ajson" board)
+        config=$(read_json_key "$ajson" configuration)
+        if [[ -n "$board" ]]; then
+            fqbn="$board"
+            [[ -n "$config" ]] && fqbn="${board}:${config}"
+        fi
     fi
     if [[ -z "$fqbn" ]]; then
         fqbn="$DEFAULT_FQBN"
-        info "[$module] no .vscode/arduino.json - using default FQBN"
+        info "[$module] no VS Code project manifest/arduino.json FQBN - using default FQBN"
     fi
 
     info "[$module] compiling firmware (FQBN: $fqbn)"

@@ -1,13 +1,3 @@
-// =====================================================================
-// Arduino keyboard shortcuts for VS Code
-//
-// Active when editing .ino or C/C++ files.
-//
-// Installation:
-//   Ctrl+K Ctrl+S  -> open keyboard shortcuts editor
-//   Click the {} icon (top-right) -> open keybindings.json
-//   Paste entries below into the [] array.
-// =====================================================================
 [
     {
         "key": "ctrl+shift+1",
@@ -24,7 +14,7 @@
     {
         "key": "ctrl+shift+3",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Monitor (persistent)",
+        "args": "Project: Serial Monitor",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     },
     {
@@ -36,7 +26,7 @@
     {
         "key": "ctrl+shift+5",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Monitor (Debug Probe)",
+        "args": "Project: Debug Probe Monitor",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     },
     {
@@ -84,7 +74,7 @@
     {
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board (interactive)",
+        "args": "Project: Select board",
         "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
     }
 ]

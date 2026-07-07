@@ -2,43 +2,22 @@
     "version": "2.0.0",
     "inputs": [
         {
-            "id": "boardChoice",
-            "description": "Select target board",
-            "type": "pickString",
-            "options": [
-                "rp2040:rp2040:rpipico          - Raspberry Pi Pico",
-                "rp2040:rp2040:rpipicow         - Raspberry Pi Pico W",
-                "rp2040:rp2040:rpipico2         - Raspberry Pi Pico 2",
-                "rp2040:rp2040:rpipico2w        - Raspberry Pi Pico 2 W",
-                "rp2040:rp2040:waveshare_rp2040_zero - Waveshare RP2040-Zero",
-                "rp2040:rp2040:waveshare_rp2040_plus - Waveshare RP2040-Plus"
-            ],
-            "default": "rp2040:rp2040:rpipico          - Raspberry Pi Pico"
-        },
-        {
             "id": "libraryName",
             "description": "Library name (e.g. 'Adafruit MCP9600')",
             "type": "promptString",
             "default": ""
-        },
-        {
-            "id": "uploadPort",
-            "description": "Serial port (e.g. /dev/ttyACM0)",
-            "type": "promptString",
-            "default": "/dev/ttyACM0"
         }
     ],
     "tasks": [
         {
             "label": "Project: Build",
-            "detail": "Ctrl+Shift+1 - compile sketch",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/arduino-build.sh",
-            "args": ["build"],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
@@ -49,7 +28,10 @@
             },
             "problemMatcher": {
                 "owner": "arduino",
-                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
                 "pattern": {
                     "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
                     "file": 1,
@@ -58,15 +40,22 @@
                     "severity": 4,
                     "message": 5
                 }
+            },
+            "detail": "Ctrl+Shift+1 - compile firmware",
+            "group": {
+                "kind": "build",
+                "isDefault": true
             }
         },
         {
             "label": "Project: Build (Debug)",
-            "detail": "Compile with debug symbols (auto-run by F5/Run)",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/arduino-build.sh",
-            "args": ["debug"],
-            "group": "build",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build-debug",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
@@ -77,7 +66,10 @@
             },
             "problemMatcher": {
                 "owner": "arduino",
-                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
                 "pattern": {
                     "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
                     "file": 1,
@@ -86,14 +78,19 @@
                     "severity": 4,
                     "message": 5
                 }
-            }
+            },
+            "detail": "Compile with debug symbols",
+            "group": "build"
         },
         {
             "label": "Project: Upload",
-            "detail": "Ctrl+Shift+2 - start persistent monitor (if needed) + compile + upload",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/arduino-build.sh",
-            "args": ["upload"],
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
@@ -104,7 +101,10 @@
             },
             "problemMatcher": {
                 "owner": "arduino",
-                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
                 "pattern": {
                     "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
                     "file": 1,
@@ -113,29 +113,58 @@
                     "severity": 4,
                     "message": 5
                 }
-            }
+            },
+            "detail": "Ctrl+Shift+2 - verified serial upload"
         },
         {
             "label": "Project: Upload (UF2 / BOOTSEL)",
-            "detail": "Ctrl+Shift+4 - compile + copy UF2 to BOOTSEL drive",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/upload-uf2.sh",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "upload-uf2",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
-                "focus": true,
+                "focus": false,
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": true
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Ctrl+Shift+4 - compile + copy UF2 to single BOOTSEL drive"
+        },
+        {
+            "label": "Project: Serial Monitor",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "problemMatcher": [],
+            "detail": "Ctrl+Shift+3 - persistent Pico serial monitor",
+            "isBackground": true
         },
         {
             "label": "Project: Monitor (persistent)",
-            "detail": "Ctrl+Shift+3 - waits for Pico (VID:PID), connects, then reconnects after unplug",
             "type": "shell",
-            "command": "python3",
-            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "pico"],
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
@@ -143,79 +172,79 @@
                 "panel": "dedicated",
                 "showReuseMessage": false
             },
-            "isBackground": true,
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Compatibility alias for old Ctrl+Shift+3 keybindings",
+            "isBackground": true
+        },
+        {
+            "label": "Project: Debug Probe Monitor",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor-probe",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
+            },
+            "problemMatcher": [],
+            "detail": "Ctrl+Shift+5 - monitor Raspberry Pi Debug Probe / Picoprobe",
+            "isBackground": true
         },
         {
             "label": "Project: Monitor (Debug Probe)",
-            "detail": "Ctrl+Shift+5 - monitor for Raspberry Pi Debug Probe / Picoprobe",
             "type": "shell",
-            "command": "python3",
-            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "probe"],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "dedicated",
-                "showReuseMessage": false
-            },
-            "isBackground": true,
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Monitor (any port)",
-            "detail": "Monitor any /dev/ttyACM* or /dev/ttyUSB* device",
-            "type": "shell",
-            "command": "python3",
-            "args": ["${workspaceFolder}/scripts/serial-persistent.py", "-m", "any"],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "dedicated",
-                "showReuseMessage": false
-            },
-            "isBackground": true,
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Select board (GUI)",
-            "detail": "Ctrl+Shift+Alt+1 - quick selection from VS Code dropdown",
-            "type": "shell",
-            "command": "bash",
+            "command": "${config:jaszczurhal.vscodeEntry}",
             "args": [
-                "-c",
-                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *-.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*- *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Project: Refresh IntelliSense')\""
+                "monitor-probe",
+                "--project",
+                "${workspaceFolder}"
             ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Compatibility alias for old Ctrl+Shift+5 keybindings",
+            "isBackground": true
         },
         {
-            "label": "Project: Select board (interactive)",
-            "detail": "Ctrl+Shift+Alt+2 - full menu with advanced options (flash, freq, USB, debug)",
+            "label": "Project: Serial Monitor (Any)",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/select-board.sh",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor-any",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
                 "focus": true,
-                "panel": "shared",
+                "panel": "dedicated",
                 "showReuseMessage": false
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Monitor any /dev/ttyACM* or /dev/ttyUSB* device",
+            "isBackground": true
         },
         {
             "label": "Project: Refresh IntelliSense",
-            "detail": "Ctrl+Shift+6 - compile project and generate c_cpp_properties.json",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
@@ -224,20 +253,143 @@
                 "showReuseMessage": false,
                 "clear": true
             },
-            "problemMatcher": []
+            "problemMatcher": [],
+            "detail": "Ctrl+Shift+6 - generate compile database and c_cpp_properties.json"
         },
         {
-            "label": "Project: Install library",
-            "detail": "Ctrl+Shift+0 - install library via arduino-cli",
+            "label": "Project: Clean",
             "type": "shell",
-            "command": "${config:arduino.cliPath}",
+            "command": "${config:jaszczurhal.vscodeEntry}",
             "args": [
-                "lib", "install", "${input:libraryName}"
+                "clean",
+                "--project",
+                "${workspaceFolder}"
             ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
-                "focus": true,
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "Ctrl+Shift+7 - remove .build directory"
+        },
+        {
+            "label": "Project: Clear USB Identity",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "clear-identity",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "Flash neutral USB identity firmware to a verified target"
+        },
+        {
+            "label": "Project: List ports",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "list-ports",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "List serial ports (tooling backlog)"
+        },
+        {
+            "label": "Project: Change port",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "change-port",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "Change upload port (tooling backlog)"
+        },
+        {
+            "label": "Project: Select board",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "select-board",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "Select board (tooling backlog)"
+        },
+        {
+            "label": "Project: Select board (GUI)",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "select-board",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": [],
+            "detail": "Select board from GUI (tooling backlog)"
+        },
+        {
+            "label": "Project: Install library",
+            "detail": "Install Arduino library via arduino-cli",
+            "type": "shell",
+            "command": "${config:jaszczurhal.cliPath}",
+            "args": [
+                "lib",
+                "install",
+                "${input:libraryName}"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": true
@@ -263,7 +415,10 @@
             },
             "problemMatcher": {
                 "owner": "cppcheck",
-                "fileLocation": ["autoDetect", "${workspaceFolder}"],
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
                 "pattern": {
                     "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning|style|performance|portability|information):\\s+(.+)\\s+\\[([^\\]]+)\\]$",
                     "file": 1,
@@ -274,55 +429,6 @@
                     "code": 6
                 }
             }
-        },
-        {
-            "label": "Project: Clean",
-            "detail": "Ctrl+Shift+7 - remove .build directory",
-            "type": "shell",
-            "command": "rm",
-            "args": ["-rf", "${workspaceFolder}/.build"],
-            "presentation": {
-                "echo": true,
-                "reveal": "silent",
-                "panel": "shared",
-                "showReuseMessage": false
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: List ports",
-            "detail": "Ctrl+Shift+8 - list connected Arduino devices",
-            "type": "shell",
-            "command": "${config:arduino.cliPath}",
-            "args": ["board", "list"],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Change port",
-            "detail": "Ctrl+Shift+9 - set upload port in settings.json",
-            "type": "shell",
-            "command": "python3",
-            "args": [
-                "-c",
-                "import json, sys; f = sys.argv[1]; port = sys.argv[2]; s = json.load(open(f)); s[\"arduino.uploadPort\"] = port; json.dump(s, open(f, \"w\"), indent=4); print(\"Port set to: \" + port)",
-                "${workspaceFolder}/.vscode/settings.json",
-                "${input:uploadPort}"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false
-            },
-            "problemMatcher": []
         },
         {
             "label": "Project: Configure Git hooks",

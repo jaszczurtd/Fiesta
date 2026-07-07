@@ -317,8 +317,8 @@ and ownership analysis tractable.
 **Hardware interfaces** (from [`hardwareConfig.h`](src/ECU/hardwareConfig.h)):
 
 - **I²C** (`PIN_SDA=0`, `PIN_SCL=1` @ 400 kHz):
-  - Adjustometer slave at `0x57` (registers `0x00–0x04`, see §6.2),
-  - PCF8574 relay expander at `0x38` (bits 0–7 map to glow plugs, fan,
+  - Adjustometer slave at `0x57` (registers `0x00-0x04`, see §6.2),
+  - PCF8574 relay expander at `0x38` (bits 0-7 map to glow plugs, fan,
     heater HI/LO, glow-plug lamp, heated window L/P, VP37 enable).
 - **CAN0** (main vehicle bus): SPI-attached controller, CS=GPIO 17, INT=15.
 - **CAN1** (OBD-2 port): SPI-attached controller, CS=GPIO 6, INT=14.
@@ -549,7 +549,7 @@ The UID reported in the handshake and the USB `iSerialNumber` carry the same
 64-bit flash unique id, giving the host two independent identification
 paths that must agree.
 
-**Rollout phases.** Phases 1–6 are landed; Phase 7 is the next bucket.
+**Rollout phases.** Phases 1-6 are landed; Phase 7 is the next bucket.
 
 | Phase | Status | Scope |
 |---|---|---|
@@ -741,22 +741,20 @@ Windows portability layer lands.
 
 #### 6.4.3 Build pipeline (firmware -> generated adapter -> UF2 + manifest)
 
-The path from `*.c` / `*.cpp` source to a flashable artefact is shared across
-every module. Module-local scripts in `src/<Module>/scripts/` are thin
-wrappers over the shared implementations in
-[`src/common/scripts/`](src/common/scripts/):
+The VS Code entry point for every firmware module is now the shared
+JaszczurHAL command
+[`../libraries/JaszczurHAL/vscode/entry/jh-vscode`](../libraries/JaszczurHAL/vscode/entry/jh-vscode).
+Module-local VS Code wrapper scripts were removed during the migration. The
+Fiesta-specific layer left in [`src/common/scripts/`](src/common/scripts/) is
+intentionally narrow:
 
-- [`fiesta-arduino-task.sh`](src/common/scripts/fiesta-arduino-task.sh)
-  - end-to-end build / upload entry point used by the VS Code task
-  integration. Module wrappers pass `build`, `upload`, or `debug`.
 - [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
-  - shared library of bash helpers: `fiesta_run_compile`,
-  `fiesta_find_uf2_artifact`, `fiesta_generate_manifest`,
-  `fiesta_verify_manifest`, `fiesta_resolve_upload_port`, etc.
-- [`fiesta-upload-uf2.sh`](src/common/scripts/fiesta-upload-uf2.sh) -
-  manual fallback that copies the UF2 to a BOOTSEL-mounted Pico
-  without going through arduino-cli. Useful when the device is
-  already in BOOTSEL.
+  - shared Fiesta helpers for module tokens, manifest generation/verification,
+  UF2 lookup, and the bootstrap path.
+- [`fiesta-upload-built-uf2.sh`](src/common/scripts/fiesta-upload-built-uf2.sh)
+  - called by the CMake `firmware_upload` target after JaszczurHAL has selected
+  and verified the target port; it prepares the Fiesta manifest and uploads the
+  already-built canonical UF2.
 
 The firmware compile path is intentionally not an Arduino IDE build. The shared
 wrapper configures
@@ -771,8 +769,8 @@ RP2040 compile frontend.
 produces an artefact pair:
 
 ```
-<module>.uf2
-<module>.manifest.json   # generated next to the UF2 by fiesta_prepare_manifest_for_uf2
+.build/firmware.uf2
+.build/firmware.manifest.json   # generated next to the UF2 by fiesta_prepare_manifest_for_uf2
 ```
 
 The manifest JSON carries `module_name`, `fw_version`, `build_id`,
@@ -791,22 +789,23 @@ last possible moment before reboot.
 
 #### 6.4.4 Upload pipeline & port auto-detection
 
-The upload path (`arduino-build.sh upload`, delegated to
-`fiesta-arduino-task.sh <project-dir> upload`) runs four steps:
+The VS Code upload path (`Project: Upload`, delegated to
+`jh-vscode upload --project <project-dir>`) runs four steps:
 
-1. **Resolve the target port** via
-   `fiesta_resolve_upload_port "<project_dir>" "<settings_uploadPort>"`.
+1. **Resolve and verify the target port** in JaszczurHAL using the module's USB
+   identity from `.vscode/jaszczurhal.project.json` and the configured/stable
+   by-id path when present.
 2. Compile the module fresh into `<project_dir>/.build/`.
-3. Generate + verify the manifest sidecar against the produced UF2.
-4. Invoke `arduino-cli upload --input-file <uf2> --port <resolved_port>` via
+3. Generate + verify the Fiesta manifest sidecar against the produced canonical
+   UF2.
+4. Invoke `arduino-cli upload --input-file <uf2> --port <verified_port>` via
    `fiesta_run_upload_from_file`.
 
 Step 1 is the safety-critical one: it makes "flash the wrong module"
 structurally impossible, even with several Picos plugged in.
-[`fiesta_resolve_upload_port`](src/common/scripts/fiesta-arduino-common.sh)
-implements a four-tier policy. The order is "narrowest match first";
-each tier returns one selected port plus a string label encoding the
-reason.
+JaszczurHAL implements a fail-closed policy. The order is "narrowest match
+first"; each accepted target must match the expected USB identity before upload
+continues.
 
 | Tier | Predicate | Outcome |
 |---|---|---|
@@ -831,11 +830,9 @@ has never run Fiesta firmware, so does not yet identify itself as
 excluded so that a connected picoprobe never gets mistaken for a
 target.
 
-The persistent serial monitor (`scripts/serial-persistent.py`) is
-launched in the background pinned to the resolved port via
-`fiesta_start_persistent_monitor "<project_dir>" "<port>"`, so
-operator log output continues uninterrupted across the upload cycle
-once the device re-enumerates.
+The serial monitor is handled by JaszczurHAL (`jh-vscode monitor`), preserving
+reconnect, DTR/RTS, HUPCL, lock handling, and behavior after USB
+re-enumeration without module-local monitor wrappers.
 
 #### 6.4.5 Session lifecycle and TX serialisation
 
@@ -962,7 +959,7 @@ authoritative 104-pin ECU connector map.
 - Oil temperature (NTC, via HC4051 mux),
 - Intake air temperature (NTC, via HC4051 mux),
 - Fuel level (resistive, via HC4051 mux),
-- Throttle / driver demand (analog 0–5 V, via HC4051 mux),
+- Throttle / driver demand (analog 0-5 V, via HC4051 mux),
 - Manifold / boost pressure (analog, via HC4051 mux),
 - Engine RPM (Hall sensor -> PIO),
 - Heated-windows button (GPIO),
@@ -1060,12 +1057,13 @@ Three build paths exist today:
   binary compiled as C++ with the HAL mock backend. `runalltests.sh` runs the
   module test matrix, ECU cppcheck gate, Valgrind memcheck targets, and
   clang-tidy targets. Fast to run locally; no hardware required.
-- **Firmware build** - module-local wrappers configure the shared
+- **Firmware build** - JaszczurHAL `jh-vscode` configures the shared
   `src/common/cmake/FiestaArduinoFirmware` project, which generates a temporary
   adapter sketch and invokes `arduino-cli` against it using the `rp2040:rp2040`
-  core. The result is a module-named `.uf2` plus a generated and verified
-  `.manifest.json`. Deployed either through manifest-gated `arduino-cli upload`
-  or by copying the UF2 to a BOOTSEL-mounted drive via `scripts/upload-uf2.sh`.
+  core. The result is the canonical `.build/firmware.uf2` plus a generated and
+  verified `.build/firmware.manifest.json`. Deployed either through
+  identity-verified `jh-vscode upload` with the Fiesta manifest gate or through
+  the explicit BOOTSEL task.
   The build path also passes `build.usb_manufacturer` / `build.usb_product` per
   module so each module surfaces under a distinct USB iProduct string on the
   host.

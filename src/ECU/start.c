@@ -1,8 +1,8 @@
 
 #include "start.h"
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "ecuContext.h"
 #include <hal/hal_soft_timer.h>
-#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances
@@ -14,9 +14,7 @@ static ecu_context_t s_ctx;
  * @brief Return the single ECU context instance shared by both cores.
  * @return Pointer to the global ECU context.
  */
-ecu_context_t *getECUContext(void) {
-  return &s_ctx;
-}
+ecu_context_t *getECUContext(void) { return &s_ctx; }
 
 //-----------------------------------------------------------------------------
 
@@ -40,18 +38,17 @@ typedef struct {
 } start_persistent_state_t;
 
 static start_runtime_state_t s_startRuntimeState = {
-  .timerEverySecondHandle = NULL,
-  .timerMediumHandle = NULL,
-  .timerHighHandle = NULL,
-  .timerGPSHandle = NULL,
-  .timerDebugHandle = NULL,
-  .timerCANUpdateHandle = NULL,
-  .timerCANLoopHandle = NULL,
-  .timerCANCheckHandle = NULL,
-  .wValuesPtr = NULL,
-  .wSizeVal = 0,
-  .alertBlinkState = false
-};
+    .timerEverySecondHandle = NULL,
+    .timerMediumHandle = NULL,
+    .timerHighHandle = NULL,
+    .timerGPSHandle = NULL,
+    .timerDebugHandle = NULL,
+    .timerCANUpdateHandle = NULL,
+    .timerCANLoopHandle = NULL,
+    .timerCANCheckHandle = NULL,
+    .wValuesPtr = NULL,
+    .wSizeVal = 0,
+    .alertBlinkState = false};
 
 NOINIT static start_persistent_state_t s_startPersistentState;
 static hal_mutex_t turboStateMutex = NULL;
@@ -65,11 +62,11 @@ static hal_mutex_t vp37StateMutex = NULL;
  */
 static void start_initContextMutexes(void) {
   hal_critical_section_enter();
-  if(turboStateMutex == NULL) {
+  if (turboStateMutex == NULL) {
     turboStateMutex = hal_mutex_create();
   }
 #ifdef VP37
-  if(vp37StateMutex == NULL) {
+  if (vp37StateMutex == NULL) {
     vp37StateMutex = hal_mutex_create();
   }
 #endif
@@ -85,7 +82,7 @@ static void start_initContextMutexes(void) {
 static void start_forceWatchdogReset(const char *reason) {
   derr("Forcing watchdog reset: %s", reason);
   bool ledOn = false;
-  while(true) {
+  while (true) {
     ledOn = !ledOn;
     hal_gpio_write(HAL_LED_PIN, ledOn);
     // Intentionally do not feed/update watchdog.
@@ -96,17 +93,21 @@ static void start_forceWatchdogReset(const char *reason) {
 #endif
 
 static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
-  { &s_startRuntimeState.timerEverySecondHandle, callAtEverySecond, (uint32_t)SECOND },
-  { &s_startRuntimeState.timerMediumHandle, readMediumValues,
-    (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER) },
-  { &s_startRuntimeState.timerHighHandle, readHighValues,
-    (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER) },
-  { &s_startRuntimeState.timerGPSHandle, getGPSData, (uint32_t)GPS_UPDATE },
-  { &s_startRuntimeState.timerDebugHandle, updateValsForDebug, (uint32_t)DEBUG_UPDATE },
-  { &s_startRuntimeState.timerCANUpdateHandle, CAN_updaterecipients_01, (uint32_t)CAN_UPDATE_RECIPIENTS },
-  { &s_startRuntimeState.timerCANLoopHandle, canMainLoop, (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
-  { &s_startRuntimeState.timerCANCheckHandle, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION }
-};
+    {&s_startRuntimeState.timerEverySecondHandle, callAtEverySecond,
+     (uint32_t)SECOND},
+    {&s_startRuntimeState.timerMediumHandle, readMediumValues,
+     (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER)},
+    {&s_startRuntimeState.timerHighHandle, readHighValues,
+     (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER)},
+    {&s_startRuntimeState.timerGPSHandle, getGPSData, (uint32_t)GPS_UPDATE},
+    {&s_startRuntimeState.timerDebugHandle, updateValsForDebug,
+     (uint32_t)DEBUG_UPDATE},
+    {&s_startRuntimeState.timerCANUpdateHandle, CAN_updaterecipients_01,
+     (uint32_t)CAN_UPDATE_RECIPIENTS},
+    {&s_startRuntimeState.timerCANLoopHandle, canMainLoop,
+     (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL},
+    {&s_startRuntimeState.timerCANCheckHandle, canCheckConnection,
+     (uint32_t)CAN_CHECK_CONNECTION}};
 
 /**
  * @brief Configure the shared soft-timer table used by core 0.
@@ -145,8 +146,8 @@ void initialization(void) {
   deb("EEPROM layout: FIRST_ADDR=%u", (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
 #ifdef HAL_TOOLS_EEPROM_LOGGER_ADDR
   deb("EEPROM layout: LOGGER_ADDR=%u CRASH_ADDR=%u",
-    (unsigned)HAL_TOOLS_EEPROM_LOGGER_ADDR,
-    (unsigned)HAL_TOOLS_EEPROM_CRASH_ADDR);
+      (unsigned)HAL_TOOLS_EEPROM_LOGGER_ADDR,
+      (unsigned)HAL_TOOLS_EEPROM_CRASH_ADDR);
 #endif
 
   dtcManagerInit();
@@ -160,16 +161,17 @@ void initialization(void) {
   initSPI();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
-  if(!rebooted) {
-    s_startPersistentState.statusVariable0Val = s_startPersistentState.statusVariable1Val = 0;
+  if (!rebooted) {
+    s_startPersistentState.statusVariable0Val =
+        s_startPersistentState.statusVariable1Val = 0;
     initGPSDateAndTime();
   }
 
   pcf8574_init();
 
-  #ifdef RESET_EEPROM
+#ifdef RESET_EEPROM
   resetEEPROM();
-  #endif
+#endif
 
 #if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
   hal_sdlogger_init(SD_CARD_CS);
@@ -180,37 +182,45 @@ void initialization(void) {
   }
 #endif
 
-  if(s_startRuntimeState.wValuesPtr != NULL) {
+  if (s_startRuntimeState.wValuesPtr != NULL) {
     watchdog_feed();
 #if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
     char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
     memset(dateAndTime, 0, sizeof(dateAndTime));
     const bool hasWatchdogSnapshot = (s_startRuntimeState.wSizeVal >= 4);
 
-    bool validDateAndTime = isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
-      isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
+    bool validDateAndTime =
+        isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
+        isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
 
-    if(validDateAndTime) {
-      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s",
-        getGPSDate(), getGPSTime());
+    if (validDateAndTime) {
+      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", getGPSDate(),
+               getGPSTime());
     }
 
     hal_sdlogger_crash_init(dateAndTime, SD_CARD_CS);
-    if(validDateAndTime) {
+    if (validDateAndTime) {
       hal_sdlogger_crash_report("date:%s time:%s", getGPSDate(), getGPSTime());
     }
-    if(hasWatchdogSnapshot) {
-      hal_sdlogger_crash_report("core0 started: %d", s_startRuntimeState.wValuesPtr[0]);
-      hal_sdlogger_crash_report("core0 was running: %d", s_startRuntimeState.wValuesPtr[1]);
-      hal_sdlogger_crash_report("core1 started: %d", s_startRuntimeState.wValuesPtr[2]);
-      hal_sdlogger_crash_report("core1 was running: %d", s_startRuntimeState.wValuesPtr[3]);
+    if (hasWatchdogSnapshot) {
+      hal_sdlogger_crash_report("core0 started: %d",
+                                s_startRuntimeState.wValuesPtr[0]);
+      hal_sdlogger_crash_report("core0 was running: %d",
+                                s_startRuntimeState.wValuesPtr[1]);
+      hal_sdlogger_crash_report("core1 started: %d",
+                                s_startRuntimeState.wValuesPtr[2]);
+      hal_sdlogger_crash_report("core1 was running: %d",
+                                s_startRuntimeState.wValuesPtr[3]);
     } else {
-      hal_sdlogger_crash_report("watchdog snapshot truncated: size=%d", s_startRuntimeState.wSizeVal);
+      hal_sdlogger_crash_report("watchdog snapshot truncated: size=%d",
+                                s_startRuntimeState.wSizeVal);
     }
     hal_sdlogger_crash_report("build: %s", ecu_BuildDateTime);
 
-    hal_sdlogger_crash_report("sv0: %d", s_startPersistentState.statusVariable0Val);
-    hal_sdlogger_crash_report("sv1: %d", s_startPersistentState.statusVariable1Val);
+    hal_sdlogger_crash_report("sv0: %d",
+                              s_startPersistentState.statusVariable0Val);
+    hal_sdlogger_crash_report("sv1: %d",
+                              s_startPersistentState.statusVariable1Val);
 
     hal_sdlogger_crash_close();
 #endif
@@ -222,9 +232,9 @@ void initialization(void) {
 
   initBasicPIO();
 
-  #ifdef I2C_SCANNER
+#ifdef I2C_SCANNER
   i2cScanner();
-  #endif
+#endif
 
   initSensors();
   configSessionInit();
@@ -236,7 +246,7 @@ void initialization(void) {
 
   float coolant = readCoolantTemp();
   setGlobalValue(F_COOLANT_TEMP, coolant);
-  if(coolant <= TEMP_LOWEST) {
+  if (coolant <= TEMP_LOWEST) {
     coolant = TEMP_LOWEST;
   }
   glowPlugs_initGlowPlugsTime(getGlowPlugsInstance(), coolant);
@@ -246,22 +256,22 @@ void initialization(void) {
   VP37InitStatus vp37InitStatus = VP37_init(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 
-  switch(vp37InitStatus) {
-    case VP37_INIT_OK:
-      break;
-    case VP37_INIT_ALREADY_INITIALIZED:
-      deb("VP37 already initialized");
-      break;
-    case VP37_INIT_BASELINE_NOT_READY:
-      derr("VP37 init failed: adjustometer baseline not ready");
-      start_forceWatchdogReset("VP37 baseline not ready at startup");
-      break;
-    case VP37_INIT_PID_CREATE_FAILED:
-      derr("VP37 init failed: PID controller create failed");
-      break;
-    default:
-      derr("VP37 init failed: unknown status=%d", (int)vp37InitStatus);
-      break;
+  switch (vp37InitStatus) {
+  case VP37_INIT_OK:
+    break;
+  case VP37_INIT_ALREADY_INITIALIZED:
+    deb("VP37 already initialized");
+    break;
+  case VP37_INIT_BASELINE_NOT_READY:
+    derr("VP37 init failed: adjustometer baseline not ready");
+    start_forceWatchdogReset("VP37 baseline not ready at startup");
+    break;
+  case VP37_INIT_PID_CREATE_FAILED:
+    derr("VP37 init failed: PID controller create failed");
+    break;
+  default:
+    derr("VP37 init failed: unknown status=%d", (int)vp37InitStatus);
+    break;
   }
 #endif
   watchdog_feed();
@@ -295,13 +305,14 @@ void initialization(void) {
   startTests();
 }
 
-//timer functions
+// timer functions
 /**
  * @brief Execute periodic once-per-second housekeeping outputs.
  * @return None.
  */
 void callAtEverySecond(void) {
-  s_startRuntimeState.alertBlinkState = (s_startRuntimeState.alertBlinkState) ? false : true;
+  s_startRuntimeState.alertBlinkState =
+      (s_startRuntimeState.alertBlinkState) ? false : true;
   hal_gpio_write(HAL_LED_PIN, s_startRuntimeState.alertBlinkState);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
   CAN_sendGpsExtended();
@@ -322,12 +333,10 @@ void looper(void) {
   s_startPersistentState.statusVariable0Val = 1;
   glowPlugs_process(getGlowPlugsInstance());
 
-  // Drain GPS serial FIFO every iteration - the PIO SoftwareSerial
-  // buffer is only 32 bytes; at 9600 baud it overflows in ~33 ms.
   hal_gps_update();
 
   s_startPersistentState.statusVariable0Val = 2;
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     s_startPersistentState.statusVariable0Val = -1;
     hal_idle();
     return;
@@ -388,7 +397,7 @@ void looper1(void) {
   s_startPersistentState.statusVariable1Val = 0;
   updateWatchdogCore1();
 
-  if(!isEnvironmentStarted()) {
+  if (!isEnvironmentStarted()) {
     s_startPersistentState.statusVariable1Val = -1;
     hal_idle();
     return;

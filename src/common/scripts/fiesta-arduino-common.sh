@@ -108,6 +108,12 @@ fiesta_find_arduino_cli() {
     local settings_file="$1"
     local cli_path
 
+    cli_path=$(fiesta_read_json_setting "$settings_file" "jaszczurhal.cliPath" "")
+    if [[ -n "$cli_path" ]] && command -v "$cli_path" >/dev/null 2>&1; then
+        command -v "$cli_path"
+        return 0
+    fi
+
     cli_path=$(fiesta_read_json_setting "$settings_file" "arduino.cliPath" "")
     if [[ -n "$cli_path" ]] && command -v "$cli_path" >/dev/null 2>&1; then
         command -v "$cli_path"
@@ -130,8 +136,20 @@ fiesta_find_arduino_cli() {
 fiesta_resolve_fqbn() {
     local project_dir="$1"
     local settings_file="$project_dir/.vscode/settings.json"
+    local jh_project_file="$project_dir/.vscode/jaszczurhal.project.json"
     local arduino_json="$project_dir/.vscode/arduino.json"
     local fqbn board config
+
+    if [[ -n "${FIESTA_ARDUINO_FQBN:-}" ]]; then
+        printf '%s\n' "$FIESTA_ARDUINO_FQBN"
+        return 0
+    fi
+
+    fqbn=$(fiesta_read_json_setting "$jh_project_file" "fqbn" "")
+    if [[ -n "$fqbn" ]]; then
+        printf '%s\n' "$fqbn"
+        return 0
+    fi
 
     fqbn=$(fiesta_read_json_setting "$settings_file" "arduino.fqbn" "")
     if [[ -n "$fqbn" ]]; then
@@ -344,31 +362,6 @@ fiesta_run_upload_from_file() {
     fi
 
     "${cmd[@]}"
-}
-
-fiesta_start_persistent_monitor() {
-    local project_dir="$1"
-    local preferred_port="${2:-}"
-    local monitor="$project_dir/scripts/serial-persistent.py"
-
-    [[ -f "$monitor" ]] || return 0
-
-    # Keep exactly one monitor instance per project to avoid mixed serial output.
-    if pgrep -f -- "$project_dir/scripts/serial-persistent.py" >/dev/null 2>&1 \
-        || pgrep -f -- "$project_dir/scripts/serial-monitor.py" >/dev/null 2>&1 \
-        || pgrep -f -- "fiesta-serial-persistent.py .*--project-dir $project_dir" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if [[ -n "$preferred_port" ]]; then
-        if fiesta_is_bootsel_mount_path "$preferred_port" || fiesta_is_bootsel_block_device "$preferred_port"; then
-            nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
-            return 0
-        fi
-        nohup python3 "$monitor" "$preferred_port" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
-    else
-        nohup python3 "$monitor" -m pico >/tmp/fiesta-persistent-monitor.log 2>&1 &
-    fi
 }
 
 fiesta_find_uf2_artifact() {

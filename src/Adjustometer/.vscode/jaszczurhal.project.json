@@ -1,0 +1,40 @@
+{
+    "$schema": "../../../libraries/JaszczurHAL/vscode/schema/jh_vscode_project.schema.json",
+    "project": "Fiesta",
+    "module": "Adjustometer",
+    "toolchain": "cmake",
+    "fqbn": "rp2040:rp2040:rpipico",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../common/cmake/FiestaArduinoFirmware",
+        "cache": {
+            "FIESTA_PROJECT_DIR": "${project}",
+            "FIESTA_WARNINGS": true,
+            "FIESTA_WERROR": true,
+            "FIESTA_LIBRARIES_DIR": "${project}/../../../libraries",
+            "FIESTA_USB_MANUFACTURER": "Jaszczur",
+            "FIESTA_USB_PRODUCT": "Fiesta Adjustometer"
+        },
+        "targets": {
+            "build": "firmware",
+            "buildDebug": "firmware_debug",
+            "upload": "firmware_upload",
+            "compileDb": "firmware_compile_db"
+        }
+    },
+    "identity": {
+        "enabled": true,
+        "usbManufacturer": "Jaszczur",
+        "usbProduct": "Fiesta Adjustometer",
+        "byIdHint": "Fiesta_Adjustometer"
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    },
+    "upload": {
+        "strategy": "serial"
+    }
+}

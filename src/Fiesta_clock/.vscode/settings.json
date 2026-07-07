@@ -1,12 +1,4 @@
 {
-    "arduino.cliPath": "arduino-cli",
-    "arduino.fqbn": "rp2040:rp2040:waveshare_rp2040_zero",
-    "arduino.boardDescription": "Waveshare RP2040-Zero (RP2040)",
-    "arduino.lockFqbn": true,
-    "arduino.uploadPort": "/dev/ttyACM0",
-    "arduino.sketchbookPath": "/home/jaszczurtd/development/projects_git",
-    "arduino.buildDir": "${workspaceFolder}/.build",
-    "arduino.verbose": true,
     "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
     "C_Cpp.errorSquiggles": "enabled",
     "cortex-debug.openocdPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/bin/openocd",
@@ -23,5 +15,9 @@
     "search.exclude": {
         "**/.build": true
     },
-    "persistentSerialMonitor.port": "/dev/ttyACM0"
+    "jaszczurhal.root": "../../../libraries/JaszczurHAL",
+    "jaszczurhal.vscodeEntry": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode",
+    "jaszczurhal.cliPath": "arduino-cli",
+    "jaszczurhal.verbose": true,
+    "task.allowAutomaticTasks": "on"
 }
