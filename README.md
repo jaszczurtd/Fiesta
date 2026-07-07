@@ -77,7 +77,7 @@ Each firmware module is a regular C/C++ application with a CMake-generated appli
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
-8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`. Modules without a `.vscode/arduino.json` use a shared RP2040 Pi Pico FQBN,
+8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
 9. compiles Fiesta USB Configurator tool (`SerialConfigurator`).
 
 The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
@@ -170,7 +170,7 @@ Notes:
 
 - `Project: Upload` / `Ctrl+Shift+2` uses the same `jh-vscode upload` path.
 - `Project: Upload (UF2 / BOOTSEL)` is the BOOTSEL mass-storage path.
-- `Project: Monitor` / `Ctrl+Shift+3` uses `jh-vscode monitor` with stable
+- `Project: Serial Monitor` / `Ctrl+Shift+3` uses `jh-vscode monitor` with stable
   `/dev/serial/by-id/usb-Jaszczur_Fiesta_*` identity matching.
 - The module-local VS Code wrappers were removed; task behavior now comes from
   `libraries/JaszczurHAL/vscode/`.

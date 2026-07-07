@@ -1,5 +1,5 @@
 // =====================================================================
-// Arduino keyboard shortcuts for VS Code
+// Project keyboard shortcuts for VS Code
 //
 //
 // Installation:
@@ -11,79 +11,66 @@
     {
         "key": "ctrl+shift+1",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Build",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Build"
     },
     {
         "key": "ctrl+shift+2",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Upload",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Upload"
     },
     {
         "key": "ctrl+shift+3",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Serial Monitor",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Serial Monitor"
     },
     {
         "key": "ctrl+shift+4",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Upload (UF2 / BOOTSEL)",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Upload (UF2 / BOOTSEL)"
     },
     {
         "key": "ctrl+shift+5",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Debug Probe Monitor",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Debug Probe Monitor"
     },
     {
         "key": "ctrl+shift+6",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Refresh IntelliSense",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Refresh IntelliSense"
     },
     {
         "key": "ctrl+shift+7",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Clean",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Clean"
     },
     {
         "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: List ports",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: List ports"
     },
     {
         "key": "ctrl+shift+9",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Change port",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Change port"
     },
     {
         "key": "ctrl+shift+0",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Install library",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Install library"
     },
     {
         "key": "ctrl+shift+y",
         "command": "workbench.action.tasks.runTask",
-        "args": "Quality: Cppcheck baseline",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Quality: Cppcheck baseline"
     },
     {
         "key": "ctrl+shift+alt+1",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board (GUI)",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Select board (GUI)"
     },
     {
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board",
-        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Select board"
     }
 ]

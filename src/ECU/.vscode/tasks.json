@@ -157,26 +157,6 @@
             "isBackground": true
         },
         {
-            "label": "Project: Monitor (persistent)",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": [
-                "monitor",
-                "--project",
-                "${workspaceFolder}"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "dedicated",
-                "showReuseMessage": false
-            },
-            "problemMatcher": [],
-            "detail": "Compatibility alias for old Ctrl+Shift+3 keybindings",
-            "isBackground": true
-        },
-        {
             "label": "Project: Debug Probe Monitor",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
@@ -194,26 +174,6 @@
             },
             "problemMatcher": [],
             "detail": "Ctrl+Shift+5 - monitor Raspberry Pi Debug Probe / Picoprobe",
-            "isBackground": true
-        },
-        {
-            "label": "Project: Monitor (Debug Probe)",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": [
-                "monitor-probe",
-                "--project",
-                "${workspaceFolder}"
-            ],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "dedicated",
-                "showReuseMessage": false
-            },
-            "problemMatcher": [],
-            "detail": "Compatibility alias for old Ctrl+Shift+5 keybindings",
             "isBackground": true
         },
         {
