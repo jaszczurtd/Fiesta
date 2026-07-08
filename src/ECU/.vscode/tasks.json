@@ -6,6 +6,20 @@
             "description": "Library name (e.g. 'Adafruit MCP9600')",
             "type": "promptString",
             "default": ""
+        },
+        {
+            "id": "boardSelection",
+            "description": "Target/board",
+            "type": "pickString",
+            "options": [
+                "rp2040:pico - Raspberry Pi Pico (RP2040)",
+                "rp2040:picow - Raspberry Pi Pico W (RP2040)",
+                "rp2040:pico2 - Raspberry Pi Pico 2 (RP2350)",
+                "rp2040:pico2w - Raspberry Pi Pico 2 W (RP2350)",
+                "stm32g474:nucleo-g474re - NUCLEO-G474RE (STM32G474RE)",
+                "esp32:esp32-devkitc - ESP32-DevKitC (skeleton)"
+            ],
+            "default": "rp2040:pico - Raspberry Pi Pico (RP2040)"
         }
     ],
     "tasks": [
@@ -114,7 +128,7 @@
                     "message": 5
                 }
             },
-            "detail": "Ctrl+Shift+2 - verified serial upload"
+            "detail": "Ctrl+Shift+2 - upload through the active target backend"
         },
         {
             "label": "Project: Upload (UF2 / BOOTSEL)",
@@ -134,7 +148,7 @@
                 "clear": true
             },
             "problemMatcher": [],
-            "detail": "Ctrl+Shift+4 - compile + copy UF2 to single BOOTSEL drive"
+            "detail": "Ctrl+Shift+4 - RP2040 only: compile + copy UF2 to single BOOTSEL drive"
         },
         {
             "label": "Project: Serial Monitor",
@@ -303,18 +317,19 @@
             "args": [
                 "select-board",
                 "--project",
-                "${workspaceFolder}"
+                "${workspaceFolder}",
+                "--interactive"
             ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",
-                "focus": false,
+                "focus": true,
                 "panel": "shared",
                 "showReuseMessage": false,
                 "clear": true
             },
             "problemMatcher": [],
-            "detail": "Select board (tooling backlog)"
+            "detail": "Ctrl+Shift+Alt+2 - interactive target/board selection"
         },
         {
             "label": "Project: Select board (GUI)",
@@ -323,7 +338,9 @@
             "args": [
                 "select-board",
                 "--project",
-                "${workspaceFolder}"
+                "${workspaceFolder}",
+                "--selection",
+                "${input:boardSelection}"
             ],
             "presentation": {
                 "echo": true,
@@ -334,7 +351,7 @@
                 "clear": true
             },
             "problemMatcher": [],
-            "detail": "Select board from GUI (tooling backlog)"
+            "detail": "Ctrl+Shift+Alt+1 - GUI target/board selection"
         },
         {
             "label": "Project: Install library",
