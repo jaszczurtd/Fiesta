@@ -124,9 +124,8 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
   build for all Fiesta modules. You can start immediately by invoking this
   script right after clone. See `One-shot setup` section below.
 - `src/common/scripts/fiesta-arduino-common.sh` - Fiesta-only module token,
-  manifest, UF2, and bootstrap helpers.
-- `src/common/scripts/fiesta-upload-built-uf2.sh` - CMake `firmware_upload`
-  bridge used after JaszczurHAL has verified the upload target.
+  manifest, UF2, and bootstrap helpers. The firmware build routes through the
+  JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
 
 ### Host tests (CMake) - per module
 
