@@ -170,11 +170,11 @@ by the setup flow (`runmefirst.sh`, implemented by
 The active modules do not carry hand-written `.ino` sketches. Each module owns
 its real firmware entry contract in `firmware_entry.h` and implements
 `initialization()` / `looper()` (plus `initialization1()` / `looper1()` for
-modules that opt in to core 1). The firmware build configures
-[`src/common/cmake/FiestaArduinoFirmware`](src/common/cmake/FiestaArduinoFirmware/),
-which creates a temporary sketch under `.build/cmake/sketch/<Module>/`,
-symlinks the module sources into it, and generates the minimal `setup()` /
-`loop()` adapter required by the current RP2040 build toolchain.
+modules that opt in to core 1). The firmware build configures the JaszczurHAL
+multi-target dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`);
+its RP2040 recipe creates a temporary sketch under `.build/cmake/sketch/<Module>/`,
+symlinks the module sources into it, and generates the canonical entry adapter
+(`initialization()`/`looper()` -> `app_start`/`app_task0`) from `firmware_entry.h`.
 
 This generated adapter is build plumbing only. The official Arduino IDE cannot
 build this repository, and the project does not treat Arduino as an application
@@ -726,7 +726,8 @@ helpers `fiesta_usb_manufacturer` and `fiesta_usb_product_for`. A module name
 like `OilAndSpeed` maps to the descriptor product string
 `Fiesta OilAndSpeed`; Linux then normalizes spaces to underscores in
 `/dev/serial/by-id/` names such as `usb-Jaszczur_Fiesta_OilAndSpeed_<UID>-if00`.
-The explicit by-id matching tags live in `fiesta_module_usb_by_id_tag_for`.
+The by-id identity matching is performed by JaszczurHAL `jh-vscode` from the
+module's `identity` block in `.vscode/jaszczurhal.project.json`.
 
 The same flash UID is then echoed back inside the SC `HELLO` reply
 (`uid=<hex>`), giving the host **two independent identification paths
@@ -752,16 +753,13 @@ intentionally narrow:
 
 - [`fiesta-arduino-common.sh`](src/common/scripts/fiesta-arduino-common.sh)
   - shared Fiesta helpers for module tokens, manifest generation/verification,
-  UF2 lookup, and the bootstrap path.
-- [`fiesta-upload-built-uf2.sh`](src/common/scripts/fiesta-upload-built-uf2.sh)
-  - called by the CMake `firmware_upload` target after JaszczurHAL has selected
-  and verified the target port; it prepares the Fiesta manifest and uploads the
-  already-built canonical UF2.
+  UF2 lookup, and the bootstrap path. The firmware build routes through the
+  JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
 
 The firmware compile path is intentionally not an Arduino IDE build. The shared
-wrapper configures
-[`src/common/cmake/FiestaArduinoFirmware`](src/common/cmake/FiestaArduinoFirmware/),
-which generates a temporary sketch adapter in `.build/cmake/sketch/<Module>/`,
+wrapper configures the JaszczurHAL multi-target dispatcher
+(`libraries/JaszczurHAL/cmake/jh_firmware_project`), whose RP2040 recipe
+generates a temporary sketch adapter in `.build/cmake/sketch/<Module>/`,
 links in the real module sources, and invokes `arduino-cli` against that
 generated directory. The module-owned source entry point remains
 `firmware_entry.h`; the generated `.ino` exists only to satisfy the current
@@ -801,7 +799,7 @@ The VS Code upload path (`Project: Upload`, delegated to
 3. Generate + verify the Fiesta manifest sidecar against the produced canonical
    UF2.
 4. Invoke `arduino-cli upload --input-file <uf2> --port <verified_port>` via
-   `fiesta_run_upload_from_file`.
+   JaszczurHAL `jh-vscode upload`.
 
 Step 1 is the safety-critical one: it makes "flash the wrong module"
 structurally impossible, even with several Picos plugged in.
@@ -1059,10 +1057,9 @@ Three build paths exist today:
   binary compiled as C++ with the HAL mock backend. `runalltests.sh` runs the
   module test matrix, ECU cppcheck gate, Valgrind memcheck targets, and
   clang-tidy targets. Fast to run locally; no hardware required.
-- **Firmware build** - JaszczurHAL `jh-vscode` configures the shared
-  `src/common/cmake/FiestaArduinoFirmware` project, which generates a temporary
-  adapter sketch and invokes `arduino-cli` against it using the `rp2040:rp2040`
-  core. The result is the canonical `.build/firmware.uf2` plus a generated and
+- **Firmware build** - JaszczurHAL `jh-vscode` configures the multi-target dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`), whose RP2040
+  recipe generates a temporary adapter sketch and invokes `arduino-cli` against
+  it using the `rp2040:rp2040` core. The result is the canonical `.build/firmware.uf2` plus a generated and
   verified `.build/firmware.manifest.json`. Deployed either through
   identity-verified `jh-vscode upload` with the Fiesta manifest gate or through
   the explicit BOOTSEL task.

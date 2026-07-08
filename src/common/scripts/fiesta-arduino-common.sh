@@ -17,32 +17,6 @@ fiesta_module_token_for() {
     esac
 }
 
-fiesta_module_usb_by_id_tag_for() {
-    case "$1" in
-        ECU)           printf '%s\n' "Fiesta_ECU" ;;
-        Clocks)        printf '%s\n' "Fiesta_Clocks" ;;
-        OilAndSpeed)   printf '%s\n' "Fiesta_OilAndSpeed" ;;
-        Fiesta_clock)  printf '%s\n' "Fiesta_RTC_Clock" ;;
-        Adjustometer)  printf '%s\n' "Fiesta_Adjustometer" ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-fiesta_serial_by_id_dir() {
-    printf '%s\n' "${FIESTA_SERIAL_BY_ID_DIR:-/dev/serial/by-id}"
-}
-
-fiesta_canonical_path() {
-    local path="$1"
-    if [[ -z "$path" ]]; then
-        printf '\n'
-        return 0
-    fi
-    readlink -f "$path" 2>/dev/null || printf '%s\n' "$path"
-}
-
 fiesta_usb_manufacturer() {
     printf '%s\n' "Jaszczur"
 }
@@ -55,13 +29,6 @@ fiesta_usb_product_for() {
         Fiesta_clock)  printf '%s\n' "Fiesta RTC Clock" ;;
         Adjustometer)  printf '%s\n' "Fiesta Adjustometer" ;;
         *)             printf 'Fiesta %s\n' "$1" ;;
-    esac
-}
-
-fiesta_module_use_werror() {
-    case "$1" in
-        ECU|Adjustometer) printf '%s\n' "1" ;;
-        *)                printf '%s\n' "0" ;;
     esac
 }
 
@@ -207,43 +174,16 @@ fiesta_cmake_bool() {
 }
 
 fiesta_firmware_cmake_source_dir() {
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    printf '%s\n' "$(dirname "$script_dir")/cmake/FiestaArduinoFirmware"
+    # JaszczurHAL multi-target dispatcher (replaces the retired in-repo
+    # FiestaArduinoFirmware recipe). Arg: the libraries dir (parent of
+    # JaszczurHAL). This script path targets rp2040.
+    local libraries_dir="$1"
+    printf '%s\n' "$libraries_dir/JaszczurHAL/cmake/jh_firmware_project"
 }
 
 fiesta_firmware_cmake_build_dir() {
     local project_dir="$1"
     printf '%s\n' "$project_dir/.build/cmake"
-}
-
-fiesta_generated_sketch_dir() {
-    local project_dir="$1"
-    printf '%s\n' "$(fiesta_firmware_cmake_build_dir "$project_dir")/sketch/$(fiesta_module_name "$project_dir")"
-}
-
-fiesta_find_sketch() {
-    local project_dir="$1"
-    local sketch
-
-    sketch=$(find "$(fiesta_generated_sketch_dir "$project_dir")" -maxdepth 1 -name "*.ino" 2>/dev/null | head -1)
-    if [[ -z "$sketch" ]]; then
-        return 1
-    fi
-
-    printf '%s\n' "$sketch"
-}
-
-fiesta_compiler_extra_flags() {
-    local include_dir="$1"
-    local include_werror="${2:-0}"
-    local werror_flag=""
-
-    if fiesta_truthy "$include_werror"; then
-        werror_flag=" -Werror"
-    fi
-
-    printf -- "-I '%s'%s" "$include_dir" "$werror_flag"
 }
 
 fiesta_run_compile() {
@@ -258,7 +198,7 @@ fiesta_run_compile() {
     local module settings_file build_dir cli fqbn sketchbook libraries_dir
     local cmake_src cmake_build target
     local usb_manufacturer usb_product
-    local cmake_werror cmake_warnings cmake_verbose
+    local cmake_werror cmake_verbose
 
     : "$sketch_dir"
     module=$(fiesta_module_name "$project_dir")
@@ -288,25 +228,29 @@ fiesta_run_compile() {
     fi
     usb_manufacturer=$(fiesta_usb_manufacturer)
     usb_product=$(fiesta_usb_product_for "$module")
-    cmake_src=$(fiesta_firmware_cmake_source_dir)
+    cmake_src=$(fiesta_firmware_cmake_source_dir "$libraries_dir")
     cmake_build=$(fiesta_firmware_cmake_build_dir "$project_dir")
     cmake_werror=$(fiesta_cmake_bool "$include_werror")
-    cmake_warnings=$(fiesta_cmake_bool "$include_warnings")
     cmake_verbose=$(fiesta_cmake_bool "$verbose")
 
     mkdir -p "$build_dir"
 
+    # Build through the JaszczurHAL multi-target dispatcher (rp2040 target). The
+    # former FIESTA_* cache vars map onto the dispatcher's names; the rp2040
+    # recipe discovers JaszczurHAL/Credentials/canDefinitions via --libraries and
+    # generates the Fiesta entry adapter from firmware_entry.h. --warnings all is
+    # always on in the recipe (matches the modules' FIESTA_WARNINGS=true).
     cmake -S "$cmake_src" -B "$cmake_build" \
-        -DFIESTA_PROJECT_DIR="$project_dir" \
+        -DJH_TARGET=rp2040 \
+        -DJH_PROJECT_DIR="$project_dir" \
         -DARDUINO_CLI="$cli" \
         -DARDUINO_FQBN="$fqbn" \
         -DARDUINO_UPLOAD_PORT="$port" \
         -DARDUINO_VERBOSE="$cmake_verbose" \
-        -DFIESTA_WARNINGS="$cmake_warnings" \
-        -DFIESTA_WERROR="$cmake_werror" \
-        -DFIESTA_LIBRARIES_DIR="$libraries_dir" \
-        -DFIESTA_USB_MANUFACTURER="$usb_manufacturer" \
-        -DFIESTA_USB_PRODUCT="$usb_product" \
+        -DARDUINO_LIBRARIES="$libraries_dir" \
+        -DARDUINO_WERROR="$cmake_werror" \
+        -DJH_USB_MANUFACTURER="$usb_manufacturer" \
+        -DJH_USB_PRODUCT="$usb_product" \
         >/dev/null
 
     case "$mode" in
@@ -318,50 +262,6 @@ fiesta_run_compile() {
     esac
 
     cmake --build "$cmake_build" --target "$target"
-}
-
-fiesta_run_upload_from_file() {
-    local project_dir="$1"
-    local uf2_path="$2"
-    local port="${3:-}"
-    local verbose="${4:-0}"
-
-    local settings_file cli fqbn
-    local cmd=()
-
-    settings_file="$project_dir/.vscode/settings.json"
-
-    if fiesta_is_bootsel_mount_path "$port"; then
-        cp "$uf2_path" "$port/"
-        sync
-        return 0
-    fi
-
-    if fiesta_is_bootsel_block_device "$port"; then
-        local bootsel_mount
-        bootsel_mount="$(fiesta_ensure_bootsel_mount "$USER" || true)"
-        if [[ -n "$bootsel_mount" ]]; then
-            cp "$uf2_path" "$bootsel_mount/"
-            sync
-            return 0
-        fi
-        return 1
-    fi
-
-    cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
-    fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
-
-    cmd=("$cli" upload --fqbn "$fqbn" --input-file "$uf2_path")
-
-    if [[ -n "$port" ]]; then
-        cmd+=(--port "$port")
-    fi
-
-    if fiesta_truthy "$verbose"; then
-        cmd+=(-v)
-    fi
-
-    "${cmd[@]}"
 }
 
 fiesta_find_uf2_artifact() {
@@ -394,308 +294,6 @@ if not candidates:
 latest = max(candidates, key=lambda p: p.stat().st_mtime)
 print(str(latest))
 PYEOF
-}
-
-fiesta_list_module_serial_ports() {
-    local module_name="$1"
-    local by_id_dir tag
-    by_id_dir="$(fiesta_serial_by_id_dir)"
-    tag="$(fiesta_module_usb_by_id_tag_for "$module_name")" || return 1
-
-    [[ -d "$by_id_dir" ]] || return 0
-
-    declare -A seen=()
-    local link resolved entry
-    while IFS= read -r link; do
-        resolved="$(fiesta_canonical_path "$link")"
-        if [[ -z "$resolved" ]]; then
-            continue
-        fi
-        if [[ -z "${seen[$resolved]+x}" ]]; then
-            entry="$resolved|$(basename "$link")"
-            seen[$resolved]="$entry"
-            printf '%s\n' "$entry"
-        fi
-    done < <(find "$by_id_dir" -maxdepth 1 -type l -name "usb-*${tag}*" -print | sort)
-}
-
-fiesta_print_fiesta_port_map() {
-    local by_id_dir link target
-    by_id_dir="$(fiesta_serial_by_id_dir)"
-    if [[ ! -d "$by_id_dir" ]]; then
-        echo "  (no $by_id_dir directory)"
-        return 0
-    fi
-
-    local any=0
-    while IFS= read -r link; do
-        any=1
-        target="$(fiesta_canonical_path "$link")"
-        echo "  $(basename "$link") -> $target"
-    done < <(find "$by_id_dir" -maxdepth 1 -type l -name "usb-*Fiesta_*" -print | sort)
-
-    if [[ "$any" -eq 0 ]]; then
-        echo "  (no Fiesta serial entries in $by_id_dir)"
-    fi
-}
-
-fiesta_is_debug_probe_device_name() {
-    local base_name="$1"
-    case "$base_name" in
-        *Debug_Probe*|*Picoprobe*|*CMSIS-DAP*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-fiesta_is_fresh_pico_device_name() {
-    local base_name="$1"
-    case "$base_name" in
-        *Fiesta_*)
-            return 1
-            ;;
-        *Raspberry_Pi_Pico*|*RP2040*|*RP2350*|*MicroPython_Board*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-fiesta_list_fresh_pico_serial_ports() {
-    local by_id_dir
-    by_id_dir="$(fiesta_serial_by_id_dir)"
-
-    [[ -d "$by_id_dir" ]] || return 0
-
-    declare -A seen=()
-    local link base_name resolved entry
-    while IFS= read -r link; do
-        base_name="$(basename "$link")"
-        if fiesta_is_debug_probe_device_name "$base_name"; then
-            continue
-        fi
-        if ! fiesta_is_fresh_pico_device_name "$base_name"; then
-            continue
-        fi
-
-        resolved="$(fiesta_canonical_path "$link")"
-        if [[ -z "$resolved" ]]; then
-            continue
-        fi
-        if [[ -z "${seen[$resolved]+x}" ]]; then
-            entry="$resolved|$base_name"
-            seen[$resolved]="$entry"
-            printf '%s\n' "$entry"
-        fi
-    done < <(find "$by_id_dir" -maxdepth 1 -type l -name "usb-*" -print | sort)
-}
-
-fiesta_resolve_upload_port() {
-    local project_dir="$1"
-    local preferred_port="${2:-}"
-
-    local module_name preferred_canon by_id_dir
-    module_name="$(fiesta_module_name "$project_dir")"
-    preferred_canon="$(fiesta_canonical_path "$preferred_port")"
-    by_id_dir="$(fiesta_serial_by_id_dir)"
-
-    local detected=()
-    local item
-    while IFS= read -r item; do
-        detected+=("$item")
-    done < <(fiesta_list_module_serial_ports "$module_name" || true)
-
-    if [[ "${#detected[@]}" -eq 1 ]]; then
-        local det_port="${detected[0]%%|*}"
-        local det_dev="${detected[0]#*|}"
-        printf '%s|auto:%s|%s\n' "$det_port" "$module_name" "$det_dev"
-        return 0
-    fi
-
-    if [[ "${#detected[@]}" -gt 1 ]]; then
-        if [[ -n "$preferred_canon" ]]; then
-            for item in "${detected[@]}"; do
-                local item_port="${item%%|*}"
-                local item_dev="${item#*|}"
-                if [[ "$(fiesta_canonical_path "$item_port")" == "$preferred_canon" ]]; then
-                    printf '%s|settings-among-multiple:%s|%s\n' "$item_port" "$module_name" "$item_dev"
-                    return 0
-                fi
-            done
-        fi
-
-        echo "Multiple serial ports detected for module '$module_name':" >&2
-        for item in "${detected[@]}"; do
-            local item_port="${item%%|*}"
-            local item_dev="${item#*|}"
-            echo "  - $item_port ($item_dev)" >&2
-        done
-        echo "Set arduino.uploadPort to one of the listed ports." >&2
-        echo "Visible Fiesta serial map:" >&2
-        fiesta_print_fiesta_port_map >&2
-        return 1
-    fi
-
-    local fresh_detected=()
-    while IFS= read -r item; do
-        fresh_detected+=("$item")
-    done < <(fiesta_list_fresh_pico_serial_ports || true)
-
-    if [[ "${#fresh_detected[@]}" -eq 1 ]]; then
-        local fresh_port="${fresh_detected[0]%%|*}"
-        local fresh_dev="${fresh_detected[0]#*|}"
-        printf '%s|fresh:auto:%s|%s\n' "$fresh_port" "$module_name" "$fresh_dev"
-        return 0
-    fi
-
-    if [[ "${#fresh_detected[@]}" -gt 1 ]]; then
-        if [[ -n "$preferred_canon" ]]; then
-            for item in "${fresh_detected[@]}"; do
-                local fresh_port="${item%%|*}"
-                local fresh_dev="${item#*|}"
-                if [[ "$(fiesta_canonical_path "$fresh_port")" == "$preferred_canon" ]]; then
-                    printf '%s|fresh:settings-among-multiple:%s|%s\n' "$fresh_port" "$module_name" "$fresh_dev"
-                    return 0
-                fi
-            done
-        fi
-
-        echo "Multiple fresh Pico devices detected (not yet labeled as Fiesta modules):" >&2
-        for item in "${fresh_detected[@]}"; do
-            local fresh_port="${item%%|*}"
-            local fresh_dev="${item#*|}"
-            echo "  - $fresh_port ($fresh_dev)" >&2
-        done
-        echo "Set arduino.uploadPort to the intended fresh device and rerun upload." >&2
-        return 1
-    fi
-
-    local visible_fiesta_links=()
-    if [[ -d "$by_id_dir" ]]; then
-        while IFS= read -r item; do
-            visible_fiesta_links+=("$item")
-        done < <(find "$by_id_dir" -maxdepth 1 -type l -name "usb-*Fiesta_*" -print)
-    fi
-
-    if [[ "${#visible_fiesta_links[@]}" -gt 0 ]]; then
-        echo "No '$module_name' module detected on serial by-id, but other Fiesta modules are visible." >&2
-        echo "Refusing fallback to prevent cross-module flash." >&2
-        echo "Visible Fiesta serial map:" >&2
-        fiesta_print_fiesta_port_map >&2
-        return 1
-    fi
-
-    if [[ -n "$preferred_port" ]]; then
-        if [[ -e "$preferred_port" || -e "$preferred_canon" ]]; then
-            printf '%s|settings-fallback:%s|manual-or-unknown\n' "$preferred_canon" "$module_name"
-            return 0
-        fi
-        echo "Preferred upload port does not exist: $preferred_port" >&2
-    fi
-
-    local bootsel_mount
-    bootsel_mount="$(fiesta_ensure_bootsel_mount "$USER" || true)"
-    if [[ -n "$bootsel_mount" ]]; then
-        printf '%s|bootsel:auto:%s|%s\n' "$bootsel_mount" "$module_name" "$(basename "$bootsel_mount")"
-        return 0
-    fi
-
-    echo "No serial port auto-detected for module '$module_name'." >&2
-    echo "Visible Fiesta serial map:" >&2
-    fiesta_print_fiesta_port_map >&2
-    return 1
-}
-
-fiesta_find_bootsel_mount() {
-    local user_name="${1:-$USER}"
-    local base name mount
-
-    for base in "/media/$user_name" "/run/media/$user_name"; do
-        [[ -d "$base" ]] || continue
-        for name in RPI-RP2 RP2350 RPI-RP2350; do
-            mount=$(find "$base" -maxdepth 1 -name "$name" -type d 2>/dev/null | head -1)
-            if [[ -n "$mount" ]]; then
-                printf '%s\n' "$mount"
-                return 0
-            fi
-        done
-    done
-
-    return 1
-}
-
-fiesta_find_bootsel_block_device() {
-    local name link
-
-    for name in RPI-RP2 RP2350 RPI-RP2350; do
-        link="/dev/disk/by-label/$name"
-        if [[ -e "$link" || -L "$link" ]]; then
-            fiesta_canonical_path "$link"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-fiesta_is_bootsel_mount_path() {
-    local path="$1"
-
-    [[ -d "$path" ]] || return 1
-
-    case "$(basename "$path")" in
-        RPI-RP2|RP2350|RPI-RP2350)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-fiesta_is_bootsel_block_device() {
-    local path="$1"
-    local canon_path bootsel_device
-
-    [[ -n "$path" ]] || return 1
-
-    canon_path="$(fiesta_canonical_path "$path")"
-    bootsel_device="$(fiesta_find_bootsel_block_device || true)"
-
-    [[ -n "$canon_path" && -n "$bootsel_device" && "$canon_path" == "$(fiesta_canonical_path "$bootsel_device")" ]]
-}
-
-fiesta_ensure_bootsel_mount() {
-    local user_name="${1:-$USER}"
-    local mount block_device
-
-    mount="$(fiesta_find_bootsel_mount "$user_name" || true)"
-    if [[ -n "$mount" ]]; then
-        printf '%s\n' "$mount"
-        return 0
-    fi
-
-    block_device="$(fiesta_find_bootsel_block_device || true)"
-    if [[ -z "$block_device" ]]; then
-        return 1
-    fi
-
-    if command -v udisksctl >/dev/null 2>&1; then
-        udisksctl mount -b "$block_device" >/dev/null 2>&1 || true
-    fi
-
-    mount="$(fiesta_find_bootsel_mount "$user_name" || true)"
-    if [[ -n "$mount" ]]; then
-        printf '%s\n' "$mount"
-        return 0
-    fi
-
-    return 1
 }
 
 fiesta_manifest_path_for_uf2() {

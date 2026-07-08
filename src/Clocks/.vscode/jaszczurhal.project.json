@@ -7,14 +7,10 @@
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
-        "sourceDir": "${project}/../common/cmake/FiestaArduinoFirmware",
+        "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
-            "FIESTA_PROJECT_DIR": "${project}",
-            "FIESTA_WARNINGS": true,
-            "FIESTA_WERROR": false,
-            "FIESTA_LIBRARIES_DIR": "${project}/../../../libraries",
-            "FIESTA_USB_MANUFACTURER": "Jaszczur",
-            "FIESTA_USB_PRODUCT": "Fiesta Clocks"
+            "JH_PROJECT_DIR": "${project}",
+            "ARDUINO_LIBRARIES": "${project}/../../../libraries"
         },
         "targets": {
             "build": "firmware",
