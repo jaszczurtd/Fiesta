@@ -186,6 +186,56 @@ fiesta_firmware_cmake_build_dir() {
     printf '%s\n' "$project_dir/.build/cmake"
 }
 
+fiesta_cmake_cache_source_dir() {
+    local cache_file="$1"
+
+    [[ -f "$cache_file" ]] || return 1
+    sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache_file" | head -n 1
+}
+
+fiesta_cmake_real_dir() {
+    local dir="$1"
+
+    (cd "$dir" 2>/dev/null && pwd -P)
+}
+
+fiesta_reset_stale_cmake_cache_if_needed() {
+    local source_dir="$1"
+    local build_dir="$2"
+    local project_dir="$3"
+
+    local cache_file cached_source source_real cached_real project_real build_real
+    cache_file="$build_dir/CMakeCache.txt"
+
+    [[ -f "$cache_file" ]] || return 0
+
+    cached_source=$(fiesta_cmake_cache_source_dir "$cache_file" || true)
+    [[ -n "$cached_source" ]] || return 0
+
+    source_real=$(fiesta_cmake_real_dir "$source_dir") || return 1
+    cached_real=$(fiesta_cmake_real_dir "$cached_source" || printf '%s\n' "$cached_source")
+
+    if [[ "$cached_real" == "$source_real" ]]; then
+        return 0
+    fi
+
+    project_real=$(fiesta_cmake_real_dir "$project_dir") || return 1
+    mkdir -p "$build_dir"
+    build_real=$(fiesta_cmake_real_dir "$build_dir") || return 1
+
+    case "$build_real" in
+        "$project_real"/*) ;;
+        *)
+            echo "refusing to reset CMake cache outside project: $build_real" >&2
+            return 1
+            ;;
+    esac
+
+    echo "stale CMake cache in $build_dir points to $cached_source; resetting it" >&2
+    rm -f "$cache_file"
+    rm -rf "$build_dir/CMakeFiles"
+}
+
 fiesta_run_compile() {
     local project_dir="$1"
     local mode="$2"
@@ -234,6 +284,7 @@ fiesta_run_compile() {
     cmake_verbose=$(fiesta_cmake_bool "$verbose")
 
     mkdir -p "$build_dir"
+    fiesta_reset_stale_cmake_cache_if_needed "$cmake_src" "$cmake_build" "$project_dir" || return 1
 
     # Build through the JaszczurHAL multi-target dispatcher (rp2040 target). The
     # former FIESTA_* cache vars map onto the dispatcher's names; the rp2040

@@ -18,7 +18,7 @@ https://postimg.cc/gallery/pHF4jy2
 
 ## Repository scope
 
-Fiesta is a multi-module system, not a single firmware binary.
+Fiesta is a system composed of several tightly integrated modules working together.
 
 Some modules are already tested in the car (non-safety-critical paths such as
 the Clocks extension, and ECU in supervisory/engine-parameter mode without
@@ -60,10 +60,6 @@ Required toolchain:
 
 ## Build and development
 
-Please note: despite relying on `arduino-cli`, this is not an Arduino project. The official Arduino IDE cannot build this repository, and that workflow will not be supported in the future. The project is expected to move even farther away from the Arduino ecosystem over time.
-
-`arduino-cli` is used only as part of the current toolchain: to access the `earlephilhower/arduino-pico` core and to preserve driver-level compatibility where it is useful. Useful drivers are absorbed into `JaszczurHAL` only after being rewritten for its API, adapted for multithreaded use, and stripped of unrelated Arduino-specific code. The supported development flow is based on Bash scripts, CMake, and VS Code.
-
 Each firmware module is a regular C/C++ application with a CMake-generated application entry point. That entry point adapts the module-owned `initialization()` / `looper()` functions to the `setup()` / `loop()` symbols expected by the current RP2040 build toolchain; modules that opt in to the second core expose `setup1()` / `loop1()` the same way.
 
 ### One-shot setup (Debian-like Linux / WSL)
@@ -99,19 +95,16 @@ IMPORTANT: `runmefirst.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable
 
 ### Development environment
 
-The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`,
-`Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`) ship ready-to-use `.vscode/` setups
-(`tasks.json`, `launch.json`, `extensions.json`, `settings.json`, and
-`jaszczurhal.project.json`), so compile, upload,
-serial monitor, host tests, and debugger flows are wired out of the box.
+The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`) ship ready-to-use `.vscode/` setups (`tasks.json`, `launch.json`, `extensions.json`, `settings.json`, and
+`jaszczurhal.project.json`), so compile, upload, serial monitor, host tests, and debugger flows are wired out of the box, and fully controlled by JaszczurHAL scripts.
 `src/SerialConfigurator` ships its own CMake-oriented VS Code task setup, with compatible keybindings.
 
 Platform support summary:
 
 - **Linux (Debian-like)** - primary target. `runmefirst.sh`, JaszczurHAL `jh-vscode` firmware tasks, host tests, MISRA screening, and the daily Pi runner all work.
 - **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `jh-vscode upload` and BOOTSEL upload still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
-- **Native Windows** - partially supported. Raw `arduino-cli` and CMake can work, but the current shared VS Code entry is Linux/Bash-oriented. Use WSL2 or a Bash-backed VS Code shell (for example Git Bash) if you want task parity.
-- **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell scripts likely need minor tweaks.
+- **Native Windows** - not tested and probably not working, because the primary development environment is currently Linux and the JaszczurHAL tooling does not support Windows at the moment.
+- **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell/python scripts likely need minor tweaks.
 
 ### Unattended daily build on a Raspberry Pi
 
@@ -224,21 +217,6 @@ Note: `jh-vscode upload` does **not** use the probe for upload - it flashes over
   VP37 pump-coil resonance), and flash-backed EEPROM picked over automotive
   silicon precisely because the vehicle is a personal car, not a production
   platform.
-
-## For Embedded Engineers Who Usually Skip Arduino Projects
-
-The Arduino footprint in this repository is a tooling detail, not the shape of
-the software. The interesting parts are the boundaries: firmware modules with
-explicit ownership, hardware access forced through `JaszczurHAL`, host-testable
-logic, generated entry points, and safety work concentrated where the ECU path
-needs it.
-
-This is still a one-car/engine retrofit, with the limits listed above. Within that
-scope, the project is deliberately biased toward practical embedded discipline:
-repeatable builds, visible trade-offs, growing tests, static analysis, and code
-that can keep moving away from convenience-framework assumptions.
-
-## The main rule is: safety-first. Always.
 
 Even though the full stack is not yet running in a real car as one integrated
 system, safety is treated as a first-class priority.
