@@ -129,11 +129,11 @@ less ~/.cache/fiesta-bootstrap/last.log
 - tildes (`~`).
 
 If you put `FIESTA_DIR=%h/Documents/Fiesta` in `fiesta-bootstrap.env`, the
-runner will treat `%h/Documents/Fiesta` as a relative path (rooted at the
-service's `WorkingDirectory`, i.e. `$HOME`), end up creating a literal
-`$HOME/%h/Documents/Fiesta/` directory, and arduino-cli will fail with a
-confusing `ld: cannot open map file ...` because the `%h` token leaks into
-the linker recipe.
+value reaches the runner literally. Older runner versions could then create a
+literal `%h` directory and eventually fail in arduino-cli with a confusing
+linker error. The current runner rejects unexpanded `%...`, `~`, and `$...`
+tokens before any checkout or build work and also requires `FIESTA_DIR` to be
+absolute.
 
 The runner now fail-fasts with a clear error when it sees a `%...` / `~` /
 `$...` in `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR`, or `BRANCH`, and

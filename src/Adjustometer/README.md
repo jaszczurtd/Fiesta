@@ -10,7 +10,9 @@ If this text ever diverges from the code, the source of truth is:
 - `led.c`
 - `config.h`
 - `hardwareConfig.h`
+- `firmware_entry.h`
 - `tests/test_sensors.cpp`
+- `tests/test_sensors_internal.cpp`
 - `tests/test_led.cpp`
 
 ## How it works
@@ -129,7 +131,9 @@ Examples:
 
 ### Core split
 
-- `Adjustometer.ino` delegates to `start.c`.
+- `firmware_entry.h` declares the module-owned `initialization()` / `looper()`
+  contract. JaszczurHAL generates the temporary RP2040 `.ino` adapter in the
+  build directory; there is no source-owned `Adjustometer.ino`.
 - Core0 initialises sensors and hosts the GPIO interrupt used for pulse counting.
 - Core1 updates the I2C registers, updates the LED state machine, and handles diagnostic logging.
 
@@ -200,13 +204,14 @@ Current purpose of supply-voltage measurement:
 
 | File | Description |
 |------|-------------|
-| `Adjustometer.ino` | Arduino entry point delegating to `start.c`. |
+| `firmware_entry.h` | Module entry contract consumed by the generated JaszczurHAL adapter. |
 | `start.c / start.h` | RP2040 core initialisation, Core1 loop, I2C register publishing, LED updates. |
 | `sensors.c / sensors.h` | Pulse ISR, frequency measurement, baseline logic, zero-hold, ADC reads, status generation. |
 | `led.c / led.h` | LED state machine and fault indication logic. |
 | `config.h` | Runtime constants for register map, baseline, verification, zero-hold, ADC filtering. |
 | `hardwareConfig.h` | Pin assignments, divider ratios, NTC constants. |
 | `tests/test_sensors.cpp` | Host tests for baseline, pulse path, status bits, zero-hold, signal loss. |
+| `tests/test_sensors_internal.cpp` + `sensors_internal_bridge.cpp` | Internal-state tests for convergence, verification, EMA, and zero-hold transitions. |
 | `tests/test_led.cpp` | Host tests for LED behavior. |
 
 The project uses **JaszczurHAL** as the hardware abstraction layer.
@@ -218,6 +223,7 @@ typically built under `build_test/`):
 
 - `test_sensors`
 - `test_led`
+- `test_sensors_internal`
 
 These tests validate the current source behavior for pulse measurement, baseline, status bits, and LED signaling.
 
@@ -267,7 +273,8 @@ The current status logic treats voltage outside `8.0 .. 15.0 V` as bad.
 
 Requirements:
 - `arduino-cli` with the `rp2040:rp2040` board package installed
-- **JaszczurHAL** library in the sketchbook/libraries path
+- **JaszczurHAL** at `<parent-of-Fiesta>/libraries/JaszczurHAL`, matching the
+  repository-wide layout used by CMake and `jh-vscode`
 
 ```bash
 cd src/Adjustometer

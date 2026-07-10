@@ -51,17 +51,17 @@ Process rules:
 - Keep `deviation-register.md` synchronized with `suppressions.txt`.
 - Treat this runner as evidence support for the ECU MISRA migration, not as proof of compliance on its own.
 
-Latest snapshot (2026-04-21):
+Latest snapshot (2026-07-10, cppcheck 2.13.0, no licensed rule texts):
 
-- active findings: `787`,
+- active findings: `1026` across `33` rule IDs,
 - top open buckets:
-  - `misra-c2012-2.5`: `165`,
-  - `misra-c2012-15.5`: `132`,
-  - `misra-c2012-8.4`: `109`,
-  - `misra-c2012-10.4`: `95`.
+  - `misra-c2012-15.5`: `250`,
+  - `misra-c2012-2.5`: `169`,
+  - `misra-c2012-8.4`: `118`,
+  - `misra-c2012-10.4`: `108`,
+  - `misra-c2012-12.1`: `82`.
 
-Recent progress:
-
-- `obd-2.c` was cleaned up for mixed essential-type comparisons (rule 10.4),
-- UDS/KWP request-handling regression coverage was expanded in `test_obd2.cpp`,
-- last pass reduced overall active findings and significantly lowered rule 10.4 findings.
+The previous recorded snapshot (2026-04-21) was `787` findings across `25`
+rule IDs. It is not directly comparable as a quality trend because the scanned
+source/include surface changed. Preserve generated summaries when making future
+like-for-like comparisons.

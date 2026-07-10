@@ -7,10 +7,10 @@ Fiesta project. The only module currently in MISRA-C migration scope is
 
 ## ECU MISRA-C migration status
 
-Two-level estimate:
-
-- engineering/architecture alignment: **~80-85%**,
-- formal compliance readiness (tooling + evidence): **~55-60%**.
+The project does not maintain a percentage-complete figure: the source tree has
+no objective denominator from which such a number could be derived. Current
+status is therefore expressed through concrete migrated areas and the
+repeatable screening snapshot below. Formal MISRA compliance is not claimed.
 
 Scope:
 
@@ -20,7 +20,8 @@ Scope:
 Completed areas include:
 
 - class-to-struct migration for core ECU modules,
-- central state ownership (`ecu_context_t`),
+- aggregation of the main control instances in `ecu_context_t`, with
+  supporting subsystems retaining explicit file-local state ownership,
 - HAL C wrappers for PID and soft timers,
 - `extern "C"` guards in public ECU headers,
 - ECU source migration to `.c` files,
@@ -42,9 +43,23 @@ Pending areas:
 
 ## Latest screening snapshot
 
-- Latest ECU project-local MISRA screening snapshot (2026-04-21) reports 787 active findings across 25 rule IDs, so the runner should be treated as a triage/evidence path, not a pass signal.
-- Recent ECU hardening reduced rule 10.4 findings to 95 (mainly `obd-2.c` essential-type cleanup with regression-test coverage updates).
-- ECU now has a dedicated project-local MISRA screening runner under `src/ECU/misra/`, a deviation register scaffold, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
+Local run on 2026-07-10 with cppcheck 2.13.0, without licensed rule texts:
+
+- active findings: **1026** across **33** rule IDs,
+- largest buckets: rule 15.5 (`250`), rule 2.5 (`169`), rule 8.4 (`118`),
+  rule 10.4 (`108`), and rule 12.1 (`82`),
+- severity split is unavailable because no licensed Mandatory / Required /
+  Advisory rule-text extract was supplied,
+- the result is a triage/evidence snapshot, not a pass signal or compliance
+  certificate.
+
+The previous recorded snapshot (2026-04-21) was 787 findings across 25 rule
+IDs. Counts between these dates are not a normalized quality trend: the scanned
+source/include surface and tool-visible shared code changed. Use the generated
+`summary.txt` and `rule-counts.txt` artifacts when comparing future runs.
+
+ECU has a dedicated project-local runner under `src/ECU/misra/`, a deviation
+register, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
 
 ## MISRA documentation policy (mandatory)
 
@@ -74,5 +89,5 @@ Notes:
 
 See also:
 
-- [`src/ECU/misra/README.md`](src/ECU/misra/README.md) — runner documentation, artifacts, and process rules,
-- [`src/ECU/misra/deviation-register.md`](src/ECU/misra/deviation-register.md) — accepted deviations and tool false positives.
+- [`src/ECU/misra/README.md`](src/ECU/misra/README.md) - runner documentation, artifacts, and process rules,
+- [`src/ECU/misra/deviation-register.md`](src/ECU/misra/deviation-register.md) - accepted deviations and tool false positives.
