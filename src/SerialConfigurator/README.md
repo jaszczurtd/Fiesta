@@ -11,6 +11,16 @@ sudo apt update
 sudo apt install -y build-essential cmake pkg-config libgtk-4-dev dpkg-dev
 ```
 
+Optional/full-development packages:
+
+```bash
+# Live OpenStreetMap GPS view; without it the Map tab shows a placeholder.
+sudo apt install -y libshumate-dev
+
+# Local check-valgrind / check-clang-tidy targets.
+sudo apt install -y valgrind clang-tidy clang-tools
+```
+
 ## Build
 
 ```bash
@@ -56,6 +66,14 @@ cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
 ./build/serial-configurator-cli param-list --module ECU
 ./build/serial-configurator-cli get-values --uid E661A4D1234567AB
 ./build/serial-configurator-cli get-param nominal_rpm --module ECU
+./build/serial-configurator-cli get-gps --module ECU
+./build/serial-configurator-cli reboot-bootloader --module ECU \
+  --manifest /path/to/firmware.manifest.json
+./build/serial-configurator-cli set-param --id nominal_rpm --value 900 --module ECU
+./build/serial-configurator-cli commit-params --module ECU
+./build/serial-configurator-cli revert-params --module ECU
+./build/serial-configurator-cli set-and-commit \
+  --id nominal_rpm --value 900 --module ECU
 ```
 
 ## Test
@@ -137,11 +155,32 @@ Flash flow (Phase 6, end-to-end):
 CLI:
 
 - CLI supports `detect`, `list`, `meta`, `param-list`, `get-values`,
-  and `get-param <id>`.
+  `get-param <id>`, `get-gps`, `reboot-bootloader`, `set-param`,
+  `commit-params`, `revert-params`, and `set-and-commit`.
 - CLI prints parsed payloads with inferred value types
   (`BOOL`/`INT`/`UINT`/`FLOAT`/`TEXT`) for parameter responses.
 - CLI target selection is fail-closed: ambiguous target resolution is rejected
   (use selectors `--module`, `--uid`, or `--port`).
+
+Authenticated parameter writes (Phase 8):
+
+- ECU and RTC_Clock writable descriptors use a staged transaction:
+  `SC_SET_PARAM` changes staging, `SC_COMMIT_PARAMS` validates and applies it,
+  and `SC_REVERT_PARAMS` restores staging from active values.
+- The GUI Values tab exposes per-module forms and Apply staged / Commit /
+  Revert controls. Clocks and OilAndSpeed remain read-only.
+- The CLI exposes the same flow and provides `set-and-commit` as a
+  single-command operator convenience under one authenticated session; on
+  commit failure it attempts to revert staging.
+
+GPS view:
+
+- ECU exposes the read-only `SC_GET_GPS` snapshot (`available`, latitude,
+  longitude, speed, and UTC epoch).
+- The GUI GPS View tab polls on the ECU update cadence (4 seconds). With
+  libshumate it renders an OpenStreetMap marker and recenter control; without
+  libshumate it builds a placeholder instead.
+- `get-gps` exposes the same snapshot in the CLI.
 
 Module-specific behaviour above the common baseline:
 
@@ -160,17 +199,25 @@ see `ARCHITECTURE.md` §4.3.
 ## Code Structure
 
 - `src/ui/main.c` is a thin entrypoint only (`sc_app_run(...)`).
-- `src/ui/sc_app.c` contains GTK window/UI logic and async detection workflow.
+- `src/ui/sc_app.c` assembles the GTK window and top-level tabs.
+- `src/ui/sc_detection.c` owns the asynchronous detection workflow.
 - `src/ui/sc_module_details.c` contains module details rendering helpers.
+- `src/ui/sc_flash_tab.c`, `sc_values_tab.c`, and `sc_map_tab.c` own the
+  Flash, Values, and GPS View tabs respectively.
 - `src/core/sc_core.c` contains discovery/session/protocol orchestration.
 - `src/core/sc_transport.c` contains Linux/POSIX serial transport operations.
+- `src/core/sc_flash.c`, `sc_manifest.c`, and `sc_gps.c` own UF2/BOOTSEL,
+  manifest, and GPS-specific logic.
 - `src/core/sc_crypto.h` contains shared crypto bridge API (backend-selected).
-- `src/cli/sc_cli_main.c` contains CLI shell implementation.
+- `src/cli/sc_cli_main.c` dispatches CLI commands; command, selector, and
+  output logic live in the adjacent `sc_cli_*` files.
 
 ## CI / Test Baseline
 
-The project ships 17 host CTest targets covering core / protocol /
-crypto / flash / manifest / orchestrator surfaces:
+The project registers 17 non-GTK host CTest targets. When GTK4 is available,
+the progress-bar target is registered as well, making 18 targets in the full
+documented desktop environment. They cover core / protocol / crypto / flash /
+manifest / parameter-write / GPS / orchestrator surfaces:
 
 - `serial-configurator-progressbar-tests` (custom flash progress bar widget)
 - `serial-configurator-core-tests` (smoke checks)
@@ -181,12 +228,14 @@ crypto / flash / manifest / orchestrator surfaces:
 - `serial-configurator-auth-tests` (HMAC-SHA256 + per-device key derivation)
 - `serial-configurator-manifest-tests` (Phase 4 hard-reject parser)
 - `serial-configurator-phase5-tests` (auth + reboot orchestration)
+- `serial-configurator-phase8-host-tests` (authenticated parameter-write host flow)
 - `serial-configurator-i18n-tests` (compiled-in EN+PL string tables)
 - `serial-configurator-flash-tests` (UF2 format checker)
 - `serial-configurator-flash-paths-tests` (`flash-paths.json` persistence)
 - `serial-configurator-sc-param-tests` (descriptor framework - find /
   validate / get / set / load_defaults / 3 reply emitters /
   schema-versioned blob codec)
+- `serial-configurator-sc-gps-tests` (`SC_GET_GPS` parsing and validation)
 - `serial-configurator-flash-bootsel-tests` (Phase 6.3 BOOTSEL drive watcher)
 - `serial-configurator-flash-copy-reenum-tests` (Phase 6.4 UF2 copy +
   re-enumeration waiter)

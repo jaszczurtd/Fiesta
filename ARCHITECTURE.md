@@ -98,13 +98,15 @@ once per second when clock integrity is valid (`CAN_ID_RTC_UPDATE`, `0x130`).
 
 ## 2. Hardware platform
 
-All active firmware modules target **RP2040** (ARM Cortex-M0+ dual-core,
-133 MHz). Depending on module, the board is a Raspberry Pi Pico,
-RP2040-Plus, or RP2040-Zero. The reasons for picking RP2040:
+All active firmware modules target **RP2040** (ARM Cortex-M0+ dual-core).
+Depending on module, the board is a Raspberry Pi Pico, RP2040-Plus, or
+RP2040-Zero. Clock frequency is part of each module's FQBN: ECU currently
+selects 200 MHz explicitly, while the other committed manifests use their
+board/core defaults. The reasons for picking RP2040:
 
 - cheap, widely available, two cores,
-- 8 PIO state machines (used for the engine Hall sensor and the VP37
-  resonance capture),
+- two cores plus flexible GPIO interrupt and PWM peripherals (the current
+  engine Hall and VP37 resonance inputs use GPIO edge interrupts),
 - flash-backed emulated EEPROM used for persistent state (DTCs, config).
 
 That said, the system is not locked to this silicon - the HAL abstraction
@@ -247,7 +249,7 @@ src/<Module>/
 ├── start.{c,cpp}/.h       # init, soft-timer table, watchdog hookup
 ├── hardwareConfig.h       # pin/address constants (single source of truth)
 ├── hal_project_config.h   # per-module HAL feature flags
-├── config.{c,cpp}/.h      # persistent configuration (KV store)
+├── config.{c,cpp}/.h      # module configuration and/or SC session surface
 ├── can.{c,cpp}/.h         # CAN TX/RX adapters
 ├── <domain logic files>
 ├── CMakeLists.txt         # host-test build
@@ -288,11 +290,12 @@ PCF8574 shadow latch, DTC manager + its KV persistence). See the "dual-core
 state synchronization pass" bullet in [`MISRA.md`](MISRA.md) for the list of
 covered structures.
 
-**Central state.** All per-module state is consolidated into a single
-`ecu_context_t` struct (see [`ecuContext.h`](src/ECU/ecuContext.h)). There
-are no free-floating globals for business state - modules read and write
-through this struct, which is a deliberate move to make MISRA-C auditing
-and ownership analysis tractable.
+**State ownership.** The main controller instances (`fan`, `heater`, windows,
+glow plugs, RPM, engine operation, turbo, and VP37) are consolidated in one
+`ecu_context_t` struct (see [`ecuContext.h`](src/ECU/ecuContext.h)). Supporting
+subsystems such as CAN, sensors, DTC storage, GPS, OBD, and the SC session own
+file-local static state structs. This keeps ownership explicit without claiming
+that every mutable ECU byte lives inside `ecu_context_t`.
 
 **Responsibility map.**
 
@@ -304,7 +307,7 @@ and ownership analysis tractable.
 | [`obd-2.c`](src/ECU/obd-2.c) | OBD-II / UDS service handlers on the OBD-2 CAN controller; largest single file, active MISRA hotspot |
 | [`obd-2_mapping.c`](src/ECU/obd-2_mapping.c) | mapping from OBD PIDs to ECU signals |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC set/clear, persistence via KV store, retrieval for OBD responses |
-| [`rpm.c`](src/ECU/rpm.c) | engine RPM via Hall sensor captured by PIO state machine |
+| [`rpm.c`](src/ECU/rpm.c) | engine RPM via Hall-sensor GPIO edge interrupt |
 | [`vp37.c`](src/ECU/vp37.c) | VP37 injection pump control: PID loop using adjustometer feedback |
 | [`turbo.c`](src/ECU/turbo.c) | turbo boost control (N75 solenoid, MAP-based) |
 | [`engineFan.c`](src/ECU/engineFan.c) | fan relay control with hysteresis |
@@ -331,18 +334,19 @@ and ownership analysis tractable.
   throttle position (ch 2), air temp (ch 3), fuel level (ch 4), manifold/boost
   pressure (ch 5). `ADC_VOLT_PIN=28` reads ECU supply voltage through a
   ~47 kΩ / 10 kΩ divider.
-- **PIO state machines**:
-  - `PIO_INTERRUPT_HALL=7` - engine Hall sensor (RPM),
-  - `PIO_VP37_RPM=9`, `PIO_VP37_ANGLE=5` - VP37 injection control outputs,
+- **Timing-sensitive GPIO/PWM paths** (legacy pin constants retain the
+  `PIO_*` prefix):
+  - `PIO_INTERRUPT_HALL=7` - engine Hall sensor GPIO interrupt (RPM),
+  - `PIO_VP37_RPM=9`, `PIO_VP37_ANGLE=5` - VP37 PWM outputs,
   - `PIO_TURBO=10` - N75 solenoid PWM,
-  - `PIO_DPF_LAMP=8` - DPF warning lamp.
+  - `PIO_DPF_LAMP=8` - DPF warning-lamp output.
 - **PWM**: `PWM_WRITE_RESOLUTION=11` (2047 levels); frequencies configured
   per output (`VP37_PWM_FREQUENCY_HZ`, `TURBO_PWM_FREQUENCY_HZ`,
   `ANGLE_PWM_FREQUENCY_HZ`).
 - **UART** (RX=22, TX=21): GPS receiver.
 - **GPIO**: heated-windows switch input on pin 20, status LED on pin 25.
-- **Persistent store**: `ECU_EEPROM_SIZE_BYTES` (currently is 2048) bytes of flash-backed emulated EEPROM
-  (`ECU_EEPROM_SIZE_BYTES`), used for DTCs and configuration.
+- **Persistent store**: `ECU_EEPROM_SIZE_BYTES` (currently 32768 bytes) of
+  flash-backed emulated EEPROM, used for DTCs and configuration.
 
 **Timing model.** On RP2040, ECU does not use an RTOS. Work is scheduled by a soft-timer
 table installed in `start.c`: each entry is a `(period, callback)` pair
@@ -394,7 +398,7 @@ thermocouple amplifiers for pre-DPF/KAT and mid-DPF exhaust gas temperatures.
 | [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC -> bar conversion for the resistive oil sender (10..180 Ω nominal) |
 | [`speed.cpp`](src/OilAndSpeed/speed.cpp) | frequency-counter on ABS pulse line -> vehicle speed |
 | [`can.cpp`](src/OilAndSpeed/can.cpp) | CAN TX of oil/speed/EGT frames (IDs from `src/common/canDefinitions/canDefinitions.h`) |
-| [`config.cpp`](src/OilAndSpeed/config.cpp) | persistent config |
+| [`config.cpp`](src/OilAndSpeed/config.cpp) | SC session plus read-only, non-persisted sampling-interval catalogue |
 | [`periperials.cpp`](src/OilAndSpeed/periperials.cpp) | GPIO/SPI/I²C init *(file name kept as-is in the source tree)* |
 | `start.cpp` | init sequence |
 
@@ -416,7 +420,7 @@ both the ECU (for DTC/diagnostic use) and Clocks (for display).
 **Role.** A dedicated feedback module for the VP37 injection pump. It is
 electrically close to the ECU (commonly co-located on the ECU PCB) but
 runs independent firmware because the measurement is timing-critical and
-needs dedicated PIO resources.
+benefits from a dedicated core and high-priority GPIO interrupt path.
 
 It measures the pump control coil's resonance frequency with a Hartley
 oscillator, subtracts a self-calibrated baseline, and exposes the result
@@ -427,13 +431,15 @@ as an **I²C slave** at address `0x57`.
 
 | File | Responsibility |
 |---|---|
-| [`sensors.c`](src/Adjustometer/sensors.c) | oscillator capture via PIO, baseline calibration, signal-lost detection, voltage / fuel-temp read, status bit assembly |
+| [`sensors.c`](src/Adjustometer/sensors.c) | oscillator capture via GPIO interrupt, baseline calibration, signal-lost detection, voltage / fuel-temp read, status bit assembly |
 | [`led.c`](src/Adjustometer/led.c) | RGB status LED patterns |
 | `start.c` | init, I²C slave setup, soft-timer table |
 
 **Hardware interfaces** (from [`hardwareConfig.h`](src/Adjustometer/hardwareConfig.h)):
 
-- **PIO**: `PIO_INTERRUPT_HALL=2` captures the ~37 kHz oscillator.
+- **GPIO interrupt**: pin `PIO_INTERRUPT_HALL=2` (legacy constant name)
+  captures falling edges from the ~37 kHz oscillator; the handler runs at the
+  highest configured GPIO IRQ priority.
 - **I²C** (SDA=0, SCL=1 @ 400 kHz): **slave** side; the ECU is the master.
 - **ADC**: `ADC_VOLT_PIN=29` (supply voltage, 47k/10k divider -> ≈18.8 V
   max), `ADC_FUEL_TEMP_PIN=28` (NTC fuel-temp sensor, `R_VP37_FUEL_A=2300`,
@@ -621,9 +627,11 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
   their own SPI bus for CAN peripherals (Clocks also shares that bus with
   its TFT display).
 - **UART** - ECU-only, NMEA GPS input on RX=22, TX=21.
-- **PIO** - used where pin-level timing matters: engine Hall (ECU),
-  VP37 injection outputs (ECU), turbo solenoid (ECU), DPF lamp (ECU),
-  VP37 oscillator capture (Adjustometer).
+- **GPIO IRQ / PWM** - timing-sensitive paths use GPIO edge interrupts for the
+  engine Hall and Adjustometer oscillator inputs, plus PWM outputs for VP37,
+  the turbo solenoid, and the DPF lamp. Several pin constants retain a legacy
+  `PIO_*` name, but the current source does not configure PIO capture state
+  machines for those inputs.
 
 ### 6.4 Desktop configurator channel (USB CDC)
 
@@ -961,7 +969,7 @@ authoritative 104-pin ECU connector map.
 - Fuel level (resistive, via HC4051 mux),
 - Throttle / driver demand (analog 0-5 V, via HC4051 mux),
 - Manifold / boost pressure (analog, via HC4051 mux),
-- Engine RPM (Hall sensor -> PIO),
+- Engine RPM (Hall sensor -> GPIO edge interrupt),
 - Heated-windows button (GPIO),
 - ECU supply voltage (divider -> ADC 28 on ECU, ADC 29 on Adjustometer),
 - Oil pressure (resistive, ADC on OilAndSpeed),
@@ -973,11 +981,11 @@ authoritative 104-pin ECU connector map.
 - Glow plug relay + indicator lamp (PCF8574 bits 0 / 4),
 - Fuel pump (PWM),
 - VP37 injection pump (PWM + enable relay via PCF8574 bit 7),
-- Turbo boost solenoid / N75 (PWM on PIO pin 10),
+- Turbo boost solenoid / N75 (PWM on pin 10),
 - Engine cooling fan relay (PCF8574 bit 1),
 - Block heater HI / LO relays (PCF8574 bits 2 / 3),
 - Heated windshield relays L / P (PCF8574 bits 5 / 6),
-- DPF warning lamp (PIO pin 8),
+- DPF warning lamp (output on pin 8),
 - MCU Status LED on the ECU board (pin 25).
 
 ### 7.3 Driver interface (modules -> driver)
@@ -1081,13 +1089,13 @@ firmware compile path as warning quality gates.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | push/PR on `src/ECU/**` | clones deps, configures CMake, runs ctest for ECU |
-| [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | push/PR | runs cppcheck against the baseline in [`src/ECU/cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log), fails if new findings appear |
+| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | push/PR on `src/ECU/**` | clones deps, builds ECU, runs CTest (including its cppcheck test), Valgrind, and clang-tidy |
+| [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | runs cppcheck against the baseline in [`src/ECU/cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log), fails if new findings appear |
 | [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | runs [`src/ECU/misra/check_misra.sh`](src/ECU/misra/) and uploads a MISRA findings artifact |
-| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | ctest for Clocks |
-| [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | ctest for OilAndSpeed |
-| [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | ctest for Adjustometer |
-| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | configures and builds the GTK4 desktop app, then runs CTest (core smoke, core API contract, core protocol, crypto bridge, and frame codec targets) |
+| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | builds Clocks, then runs CTest, Valgrind, and clang-tidy |
+| [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | builds OilAndSpeed, then runs CTest, Valgrind, and clang-tidy |
+| [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | builds Adjustometer, then runs CTest, Valgrind, and clang-tidy |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | builds the GTK4 app + CLI, runs the complete CTest matrix, then executes Valgrind and clang-tidy targets |
 
 ### 10.2 Unattended daily build
 
@@ -1133,7 +1141,7 @@ Fiesta/
 │   ├── common/
 │   │   ├── canDefinitions/      # shared CAN IDs/signals (in-tree, single source)
 │   │   ├── scDefinitions/       # SC wire vocabulary + descriptor framework (§4.3)
-│   │   └── scripts/             # shared bash helpers (arduino-build / upload / refresh-intellisense / ...)
+│   │   └── scripts/             # Fiesta manifest, UF2, module-token, and bootstrap helpers
 ├── Fiesta_pcbs/                 # schematics, PCB layouts, connector maps
 │   ├── ecu/                     # ecuv1 + ecuv2
 │   ├── dashboard/ clock/ oil_and_speed/

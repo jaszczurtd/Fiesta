@@ -4,7 +4,39 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-06-10 (latest)
+## 2026-07-10 (latest)
+
+- Synchronized repository documentation with the post-migration source tree:
+  - corrected ECU EEPROM size (`32768` bytes) and its explicit 200 MHz FQBN,
+  - documented GPIO-interrupt capture for ECU RPM and Adjustometer instead of
+    describing those inputs as PIO state machines,
+  - aligned OilAndSpeed documentation with its read-only, non-persisted SC
+    parameter catalogue,
+  - aligned the ECU cppcheck workflow description with its manual trigger,
+  - updated bootstrap dependencies, environment overrides, and the actual
+    host-test matrix (`Fiesta_clock` remains firmware-build-only),
+  - expanded SerialConfigurator documentation for Phase 8 writes, GPS/Map,
+    the current CLI, and the conditional 17/18-test CTest matrix,
+  - replaced obsolete source-owned Adjustometer `.ino` references with the
+    generated JaszczurHAL entry-adapter model.
+- Recorded the current build-system baseline introduced after 2026-06-10:
+  - all five firmware modules use `.vscode/jaszczurhal.project.json` and the
+    shared `jh-vscode` entry,
+  - module-local build/upload/monitor wrappers and the experimental Clocks
+    STM32 PoC were removed,
+  - firmware builds route through JaszczurHAL's multi-target dispatcher and
+    retain Fiesta-specific manifest/UF2 helpers only,
+  - bootstrap was repaired for the new CMake build/cache layout.
+- Recorded the CAN migration to the current JaszczurHAL CAN API across ECU,
+  Clocks, OilAndSpeed, and Fiesta_clock.
+- Validation after the documentation audit: all 43 runtime host tests passed
+  (`ECU` 16, `Adjustometer` 3, `Clocks` 3, `OilAndSpeed` 3,
+  `SerialConfigurator` 18). A fresh ECU MISRA screening run with cppcheck
+  2.13.0 recorded 1026 active findings across 33 rule IDs. This snapshot does
+  not claim fresh Valgrind, clang-tidy, general cppcheck-baseline, firmware, or
+  hardware validation.
+
+## 2026-06-10
 
 - Fixed CI clang-tidy target failures caused by missing
   `compile_commands.json` in module test workflows.
@@ -146,7 +178,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   - OilAndSpeed host tests: 3/3 PASS.
   - SerialConfigurator host tests: 18/18 PASS.
 
-## 2026-05-26 (latest)
+## 2026-05-26
 
 - SerialConfigurator map view gained a dedicated recenter control.
   The Map tab now exposes a `Recenter` / `Wyśrodkuj` button that
@@ -170,9 +202,10 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 - A dedicated parser test target was added:
   `tests/test_sc_gps.c` / `serial-configurator-sc-gps-tests`.
 - SerialConfigurator GUI gained a fourth tab (`Map`/`Mapa`) implemented
-  with libshumate when available, polling GPS every 2 s and showing the
-  live marker/status; builds gracefully degrade to a placeholder when
-  `shumate-1.0` is missing.
+  with libshumate when available and showing the live marker/status; its
+  polling cadence was subsequently aligned to the ECU's 4-second update
+  interval. Builds gracefully degrade to a placeholder when `shumate-1.0`
+  is missing.
 - Bootstrap dependencies were updated for this GUI feature set:
   `src/ECU/scripts/bootstrap.sh` now installs `libshumate-dev`.
 
@@ -205,13 +238,13 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   JaszczurHAL's `.mock/hal_rtc.cpp` (two `hal_rtc_datetime_t dt = {0}`
   aggregate initializers replaced with value-initialization `{}`),
   so ECU's `-Wall -Wextra -Werror` gate on `ecu_mock` keeps applying
-  uniformly to upstream and project sources alike — no waiver needed.
+  uniformly to upstream and project sources alike - no waiver needed.
 - ECU test override bumps `HAL_PWM_FREQ_MAX_CHANNELS` to 128 because
   each Unity `setUp()` calls `initSensors()` which allocates three
   frequency-PWM channels without releasing them; the default 8-slot
   pool would otherwise exhaust across multi-case test executables.
 - Host regression status after migration: Adjustometer 3/3, Clocks 3/3,
-  OilAndSpeed 3/3, ECU 17/17 — all green on clean rebuilds.
+  OilAndSpeed 3/3, ECU 17/17 - all green on clean rebuilds.
 
 ## 2026-05-10
 
@@ -266,7 +299,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 - SerialConfigurator detection latency reduced: the host transport now
   reuses warm port file descriptors across repeated Detect-button
   presses (cache reconciliation instead of full close-and-rebuild) and
-  the per-port HELLO budget was retuned (primary 1500 ms → 400 ms,
+  the per-port HELLO budget was retuned (primary 1500 ms -> 400 ms,
   retry 1500 ms, three attempts). The worst-case detection budget is
   unchanged; the happy-path warm-cache budget improves substantially.
 - Module parameter catalog parity: Clocks and OilAndSpeed now return

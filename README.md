@@ -33,8 +33,11 @@ The desktop companion lives in
 Current scope: GTK detection / details UI, per-module Flash sections
 with UF2 format check + manifest pre-flash gate, end-to-end flashing
 flow (auth + reboot + BOOTSEL drive watcher + UF2 copy with progress +
-re-enumeration), and a first-class CLI shell (`detect`, `list`, `meta`,
-`param-list`, `get-values`, `get-param`) over the same core.
+re-enumeration), descriptor-driven parameter reads and authenticated writes,
+and a live ECU GPS view (libshumate when available). The first-class CLI shell
+exposes `detect`, `list`, `meta`, `param-list`, `get-values`, `get-param`,
+`get-gps`, `reboot-bootloader`, `set-param`, `commit-params`, `revert-params`,
+and `set-and-commit` over the same core.
 Implementation status and milestone snapshots are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -54,8 +57,12 @@ into `/home/you/projects/libraries/`.
 
 Required toolchain:
 
-- `git`, `build-essential`, `cmake`, `python3`, `curl`, `gtk-4`, `ca-certificates`
-- `cppcheck` (static analysis; ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
+- firmware/common: `git`, `build-essential`, `cmake`, `python3`, `curl`,
+  `ca-certificates`, `perl`
+- desktop/package: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`; `libshumate-dev`
+  enables the live map instead of its fallback placeholder
+- QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`
+  (`cppcheck` ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
 - `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
 
 ## Build and development
@@ -66,15 +73,18 @@ Each firmware module is a regular C/C++ application with a CMake-generated appli
 
 `runmefirst.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
 
-1. installs required apt packages (`git`, `build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `cppcheck`, `gtk-4`),
+1. installs the firmware, desktop/package, map, and QA packages listed above,
 2. verifies Python 3 is available,
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
 5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
-7. configures, builds, and runs host tests (`ctest`) for every module that ships a `CMakeLists.txt`: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer` (ECU includes `test_cppcheck` once `cppcheck` is present),
+7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
+   `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime
+   CTest plus cppcheck/Valgrind/clang-tidy gates),
 8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
-9. compiles Fiesta USB Configurator tool (`SerialConfigurator`).
+9. builds and tests `SerialConfigurator` and, unless disabled, creates its
+   Debian package.
 
 The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
@@ -87,11 +97,16 @@ bash runmefirst.sh
 Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds.
 The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
-Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`, `SKIP_TESTS=1`, `SKIP_BUILD=1`.
+Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`,
+`SKIP_TESTS=1`, `SKIP_BUILD=1`, `SKIP_DESKTOP=1`,
+`SKIP_DESKTOP_PACKAGE=1`.
 
 IMPORTANT: `runmefirst.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
-`runmefirst.sh` exercises all five Fiesta firmware modules and SerialConfigurator end-to-end (compile & run all tests, compile all modules).
+`runmefirst.sh` exercises all five Fiesta firmware modules and
+SerialConfigurator end-to-end. `Fiesta_clock` currently has firmware-build
+validation only; the other four firmware modules and SerialConfigurator also
+have host-test projects.
 
 ### Development environment
 
@@ -108,7 +123,11 @@ Platform support summary:
 
 ### Unattended daily build on a Raspberry Pi
 
-`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs `runmefirst.sh`, and emails a PASS/FAIL status summary (HEAD SHA + commit subject + last 80 lines of log; full log attached, capped at 512 KB). Setup and SMTP notes are documented in [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
+`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs
+`src/ECU/scripts/bootstrap.sh` with `SKIP_APT=1`, and emails a PASS/FAIL status
+summary (HEAD SHA + commit subject + last 80 lines of log; full log attached,
+capped at 512 KB). Setup and SMTP notes are documented in
+[`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 Firmware modules use the shared JaszczurHAL VS Code entry instead of
 module-local wrapper scripts. Fiesta keeps only project-specific helpers:
@@ -122,8 +141,10 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
 ### Host tests (CMake) - per module
 
-CMake in this repository is used for Serial Configurator compilation, and host test configuration/build; test
-targets are compiled as C++ (`.cpp`). Same pattern for every module:
+CMake in this repository is used for SerialConfigurator compilation and host
+test configuration/build. The four host-tested firmware modules compile their
+test targets as C++ (`.cpp`); SerialConfigurator has its own C project. The
+firmware-module pattern is:
 
 ```bash
 cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
@@ -131,7 +152,9 @@ cmake --build src/<Module>/build_test --parallel
 ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-All modules have their own separate tests.
+`ECU`, `Clocks`, `OilAndSpeed`, and `Adjustometer` have separate host-test
+projects. `Fiesta_clock` does not currently have host tests and is covered by
+firmware compilation in the bootstrap/build workflow.
 
 For a single command that runs host tests across all primary modules (ECU,
 Adjustometer, Clocks, OilAndSpeed, SerialConfigurator) and then executes
@@ -213,10 +236,10 @@ Note: `jh-vscode upload` does **not** use the probe for upload - it flashes over
   cppcheck gating, MISRA screening, CI on every push. Test code is the
   proxy reviewer.
 - **No AEC-Q100 silicon.** RP2040 is consumer-grade, deliberately. Cost,
-  dual-core, PIO state machines (used for engine Hall sensor capture and
-  VP37 pump-coil resonance), and flash-backed EEPROM picked over automotive
-  silicon precisely because the vehicle is a personal car, not a production
-  platform.
+  dual-core execution, flexible GPIO/PWM peripherals, and flash-backed EEPROM
+  were picked over automotive silicon precisely because the vehicle is a
+  personal car, not a production platform. The current engine Hall and
+  Adjustometer resonance inputs use GPIO edge interrupts, not PIO capture.
 
 Even though the full stack is not yet running in a real car as one integrated
 system, safety is treated as a first-class priority.

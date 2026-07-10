@@ -14,6 +14,11 @@ Module-local MISRA tooling:
 - suppressions + deviation register: [`misra/`](misra/),
 - manual CI artifact workflow: `.github/workflows/ecu-misra.yml`.
 
+Latest local screening snapshot (2026-07-10, cppcheck 2.13.0, no licensed
+rule texts): 1026 active findings across 33 rule IDs. This is triage evidence,
+not a compliance/pass result; detailed buckets and comparison caveats are in
+[`MISRA.md`](../../MISRA.md).
+
 ## Build
 
 Firmware build (Arduino path):
