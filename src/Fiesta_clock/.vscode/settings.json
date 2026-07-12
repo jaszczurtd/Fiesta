@@ -1,5 +1,6 @@
 {
-    "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cortex-debug.openocdPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/bin/openocd",
     "cortex-debug.openocdScriptsPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/4.1.0-1aec55e/share/openocd/scripts",
@@ -15,6 +16,8 @@
     "search.exclude": {
         "**/.build": true
     },
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 500,
     "jaszczurhal.root": "../../../libraries/JaszczurHAL",
     "jaszczurhal.vscodeEntry": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode",
     "jaszczurhal.cliPath": "arduino-cli",
