@@ -10,6 +10,7 @@ If this text ever diverges from the code, the source of truth is:
 - `led.c`
 - `config.h`
 - `hardwareConfig.h`
+- `../common/adjustometer_protocol.h`
 - `firmware_entry.h`
 - `tests/test_sensors.cpp`
 - `tests/test_sensors_internal.cpp`
@@ -37,7 +38,12 @@ Important current-state note:
 
 - the current sources do **not** implement active thermal compensation of the pulse signal,
 - fuel temperature is still sampled, filtered, reported over I2C, and used for diagnostics,
-- fuel temperature remains available for future ECU-side compensation or supervisory logic.
+- the ECU now uses that fuel-temperature value as a proxy for actuator-coil
+  temperature and expands only the positive VP37 control headroom when the
+  pump is warm,
+- raw oscillator frequency, baseline, signed frequency displacement, and
+  RP2040 die temperature are available in an optional versioned telemetry
+  extension.
 
 ### Oscillator hardware
 
@@ -73,7 +79,8 @@ What is different in this project:
 - the implementation is built around an external RP2040 module,
 - feedback is exported digitally over I2C,
 - the current firmware exports a non-negative pulse magnitude,
-- thermal compensation is not currently performed inside Adjustometer.
+- thermal compensation is not performed inside Adjustometer; actuator-drive
+  compensation belongs to the ECU control loop.
 
 ## Circuit schematic
 
@@ -96,6 +103,67 @@ Fiesta_pcbs/vp37_adjustometer/
 | `0x02` | uint8 | `VOLTAGE` | Supply voltage in tenths of a volt. Example: `135 = 13.5 V`. |
 | `0x03` | uint8 | `FUEL_TEMP` | Fuel temperature in whole degrees C, `0-255`. |
 | `0x04` | uint8 | `STATUS` | Status bitmask. `0x00 = all OK`. |
+| `0x05` | uint8 | `EXT_VERSION` | Optional telemetry-extension version. Current value: `1`. |
+| `0x06` | uint8 | `EXT_SEQ_BEGIN` | Snapshot sequence; valid when equal to `EXT_SEQ_END` and even. |
+| `0x07` | uint8 | `EXT_FLAGS` | Validity bits for signal, baseline, and RP2040 temperature. |
+| `0x08-0x0B` | uint32, big-endian | `SIGNAL_HZ` | Filtered absolute oscillator frequency in hertz. |
+| `0x0C-0x0F` | uint32, big-endian | `BASELINE_HZ` | Locked oscillator baseline in hertz. |
+| `0x10-0x13` | int32, big-endian | `SIGNED_DELTA_HZ` | Signed `SIGNAL_HZ - BASELINE_HZ`, without `abs()` or zero-hold. |
+| `0x14-0x15` | int16, big-endian | `CHIP_TEMP_DECI_C` | Approximate RP2040 die temperature in `0.1 C` units. |
+| `0x16` | uint8 | `EXT_SEQ_END` | End sequence for coherent-snapshot validation. |
+
+Registers `0x00-0x04` retain their original layout. The ECU reads the
+extension separately and treats it as optional diagnostic data, so the VP37
+control path remains compatible with Adjustometer firmware that implements
+only the legacy block.
+
+The extension is refreshed every `10 ms` after baseline readiness. The
+RP2040 die-temperature sample is refreshed every `250 ms`. During an update,
+`EXT_SEQ_BEGIN` is odd. A reader accepts a snapshot only when
+`EXT_SEQ_BEGIN == EXT_SEQ_END` and the matching value is even. This prevents a
+partially replaced multi-byte value from being interpreted as a coherent
+sample.
+
+`EXT_FLAGS` uses the following bits:
+
+| Bit | Mask | Meaning |
+|-----|------|---------|
+| 0 | `0x01` | `SIGNAL_HZ` is valid. |
+| 1 | `0x02` | `BASELINE_HZ` and `SIGNED_DELTA_HZ` are valid. |
+| 2 | `0x04` | `CHIP_TEMP_DECI_C` is valid. |
+
+### ECU consumption and diagnostic logs
+
+The ECU keeps the two protocol paths separate:
+
+- the normal VP37 controller still reads only `0x00-0x04` and uses `PULSE` as
+  its feedback value,
+- the `0x05-0x16` extension is read separately every `500 ms` by the VP37
+  diagnostic path,
+- extension read/version/sequence failures do not change legacy `commOk`, the
+  legacy communication-error counter, or the PWM controller input.
+
+ECU diagnostics are emitted as two lines. The first describes controller
+state; the second mirrors the Adjustometer measurements:
+
+```text
+ECU: VP37 thr:... des:... adj:... V:... t:... pwm:... err:... ff:... corr:... lim+:... sat+:... nom:...
+ECU: VP37 ADJ p:... f:...Hz d:... v:... ft:... tc:... s:... bl:... ext:... fl:0x..
+```
+
+`ext:1` means a fresh version-1 snapshot passed the coherence checks.
+`fl:0x07` means signal, baseline/signed delta, and RP2040 temperature are all
+valid. The voltage field remains encoded in `0.1 V`; for example `v:144`
+means `14.4 V`.
+
+The ECU currently uses fuel temperature for actuator-drive compensation, not
+for modifying `SIGNAL_HZ`, `BASELINE_HZ`, `SIGNED_DELTA_HZ`, or legacy
+`PULSE`. Above the `22 °C` reference, it estimates the increase in copper-coil
+resistance and expands only the positive PID correction limit from the cold
+`220` PWM counts up to a hard maximum of `340`. The negative limit remains
+`-220`. Invalid temperature/status data or lost Adjustometer communication
+falls back to the original cold limit. Voltage compensation remains a
+separate `12 V / measured voltage` scaling step in the ECU.
 
 #### STATUS register bitmask
 
@@ -193,7 +261,8 @@ Current purpose of fuel-temperature measurement:
 
 - expose current pump fuel temperature over I2C,
 - detect a broken temperature sensor,
-- preserve the signal for future ECU-side thermal handling.
+- provide the ECU with the current proxy used for positive VP37 thermal
+  headroom.
 
 Current purpose of supply-voltage measurement:
 
@@ -208,7 +277,8 @@ Current purpose of supply-voltage measurement:
 | `start.c / start.h` | RP2040 core initialisation, Core1 loop, I2C register publishing, LED updates. |
 | `sensors.c / sensors.h` | Pulse ISR, frequency measurement, baseline logic, zero-hold, ADC reads, status generation. |
 | `led.c / led.h` | LED state machine and fault indication logic. |
-| `config.h` | Runtime constants for register map, baseline, verification, zero-hold, ADC filtering. |
+| `config.h` | Runtime constants for baseline, verification, zero-hold, telemetry cadence, and ADC filtering. |
+| `../common/adjustometer_protocol.h` | Shared, versioned I2C register map used by Adjustometer and ECU. |
 | `hardwareConfig.h` | Pin assignments, divider ratios, NTC constants. |
 | `tests/test_sensors.cpp` | Host tests for baseline, pulse path, status bits, zero-hold, signal loss. |
 | `tests/test_sensors_internal.cpp` + `sensors_internal_bridge.cpp` | Internal-state tests for convergence, verification, EMA, and zero-hold transitions. |
@@ -225,7 +295,10 @@ typically built under `build_test/`):
 - `test_led`
 - `test_sensors_internal`
 
-These tests validate the current source behavior for pulse measurement, baseline, status bits, and LED signaling.
+These tests validate the current source behavior for pulse measurement,
+signed displacement, baseline, status bits, and LED signaling. ECU integration
+tests additionally cover legacy-only compatibility, extension decoding,
+unknown versions, and torn-snapshot rejection.
 
 ## Key configuration constants
 

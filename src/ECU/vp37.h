@@ -1,16 +1,16 @@
 #ifndef T_VP37
 #define T_VP37
 
-#include <tools_c.h>
 #include <hal/hal_pid_controller.h>
 #include <hal/hal_serial.h>
+#include <tools_c.h>
 
 #include "config.h"
-#include "rpm.h"
-#include "obd-2.h"
-#include "turbo.h"
 #include "hardwareConfig.h"
+#include "obd-2.h"
+#include "rpm.h"
 #include "tests.h"
+#include "turbo.h"
 
 #include "engineMaps.h"
 
@@ -18,9 +18,9 @@
 extern "C" {
 #endif
 
-#define VP37_DEBUG_UPDATE 500
+#define VP37_DEBUG_UPDATE 250
 
-#define DEFAULT_INJECTION_PRESSURE 300 //bar
+#define DEFAULT_INJECTION_PRESSURE 300 // bar
 
 #define VP37_PID_TIME_UPDATE 150.0
 // PID + Feedforward (FF) architecture:
@@ -34,14 +34,27 @@ extern "C" {
 #define VP37_PID_KD 0.015f
 #define VP37_PID_TF 0.068f
 #define VP37_PID_MAX_INTEGRAL 4096
+#define VP37_PID_MAX_INTEGRAL_WARM 6000
 
 // Error deadband [Hz]: errors smaller than this are treated as zero
 // to prevent integral windup near the setpoint. ~0.6% of full range.
 #define VP37_PID_DEADBAND 40
-// Maximum PID correction magnitude in PWM units. PID adds at most
-// +/- VP37_PID_CORR_LIMIT to the feedforward PWM. Keeps the controller
-// from ramming the actuator into mechanical stops on transients.
-#define VP37_PID_CORR_LIMIT 220
+// PID correction limits in PWM units.  The negative side and the cold
+// positive side retain the original 220-count limit.  When the pump is warm,
+// only the positive side is expanded to compensate for the higher copper
+// resistance of the N146 actuator coil.
+#define VP37_PID_CORR_LIMIT 220.0f
+#define VP37_PID_CORR_LIMIT_NEGATIVE VP37_PID_CORR_LIMIT
+#define VP37_PID_CORR_LIMIT_POSITIVE_COLD VP37_PID_CORR_LIMIT
+#define VP37_PID_CORR_LIMIT_POSITIVE_MAX 340.0f
+
+// The Adjustometer fuel-temperature reading is used as the closest available
+// proxy for actuator temperature.  Scaling the maximum total nominal command
+// (FF_MAX + cold correction) by copper's temperature coefficient gives about
+// +324 PWM at 51 C and +338 PWM at 55 C, matching the observed loss of travel.
+#define VP37_THERMAL_REFERENCE_TEMP_C 22.0f
+#define VP37_COPPER_TEMP_COEFFICIENT 0.00393f
+#define VP37_THERMAL_TEMP_VALID_MAX_C 120.0f
 // Feedforward steady-state PWM at adjustometer MIN/MAX positions.
 // Determined empirically from logs (steady-state PWM observed at idle vs.
 // near full position). Linear interpolation between these points provides
@@ -62,7 +75,7 @@ extern "C" {
 // calibration / stabilization values
 #define PERCENTAGE_ERROR 3.0
 
-#define VP37_OPERATION_DELAY 5 //microseconds
+#define VP37_OPERATION_DELAY 5 // microseconds
 
 #define STABILITY_ADJUSTOMETER_TAB_SIZE 4
 #define MIN_ADJUSTOMETER_VAL 10
@@ -71,17 +84,25 @@ extern "C" {
 #define VP37_AVERAGE_VALUES_AMOUNT 5
 
 #define VP37_PWM_MIN 378
-#define VP37_PWM_MAX (VP37_PWM_MIN * 6.0)
+#define VP37_PWM_MAX PWM_RESOLUTION
 
-#define VP37_ADJUST_TIMER 200
+// Calibration samples are spaced in time and accepted only after a complete
+// window is stable.  This lets a warm actuator take longer than the old fixed
+// 200 ms delay without slowing a normally settling actuator unnecessarily.
+#define VP37_CALIBRATION_SAMPLE_INTERVAL_MS 20
+#define VP37_CALIBRATION_MIN_SETTLE_MS 200
+#define VP37_CALIBRATION_TIMEOUT_MS 1000
+#define VP37_CALIBRATION_STABLE_SAMPLES 6
+#define VP37_CALIBRATION_STABLE_SPAN_HZ 40
+#define VP37_CALIBRATION_MIN_TRAVEL_HZ 6000
 
-//define this, to avoid magic numbers in the code
+// define this, to avoid magic numbers in the code
 #define VP37_PERCENT_MIN 0
 #define VP37_PERCENT_MAX 100
 
-//Throttle range in percentage units. 
-//Adjusting this, we can limit the maximum throttle range available to the user. 
-//100 means full range, 50 means half, etc.
+// Throttle range in percentage units.
+// Adjusting this, we can limit the maximum throttle range available to the
+// user. 100 means full range, 50 means half, etc.
 #define VP37_ACCELERATION_MIN 0
 #define VP37_ACCELERATION_MAX 100
 
@@ -110,7 +131,8 @@ extern "C" {
 /**
  * @brief Reserved legacy hook for VP37-side fuel temperature sampling.
  * @return None.
- * @note When implemented, this would correspond to a G81-like fuel-temperature input.
+ * @note When implemented, this would correspond to a G81-like fuel-temperature
+ * input.
  */
 void measureFuelTemp(void);
 
@@ -127,34 +149,56 @@ typedef struct {
   float lastThrottle;
   bool calibrationDone;
   // Setpoint pipeline (current names -> functional meaning):
-  //   desiredAdjustometerTarget : raw quantity-position target written by VP37_setVP37Throttle()
-  //   desiredAdjustometer       : slew-rate limited quantity-position target actually fed to PID
+  //   desiredAdjustometerTarget : raw quantity-position target written by
+  //   VP37_setVP37Throttle() desiredAdjustometer       : slew-rate limited
+  //   quantity-position target actually fed to PID
   int32_t desiredAdjustometerTarget;
   int32_t desiredAdjustometer;
   int32_t currentAdjustometerPosition;
   int32_t pidErr;
+  float pwmFeedForward;
+  float pidCorrection;
+  float pidPositiveLimit;
   float pwmValue;
   float voltageCorrection;
   int32_t lastPWMval;
   int32_t finalPWM;
   float lastVolts;
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
-  int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX, VP37_OPERATE_MAX;
+  int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX,
+      VP37_OPERATE_MAX;
   float pidTimeUpdate;
   float pidTf;
   uint32_t adjCommLostSince;
   uint32_t throttleRampLastMs;
+  uint8_t lastAdjustometerStatus;
+  bool pidSaturatedHigh;
 } VP37Pump;
 
 typedef enum {
   VP37_INIT_OK = 0,
   VP37_INIT_ALREADY_INITIALIZED,
   VP37_INIT_BASELINE_NOT_READY,
-  VP37_INIT_PID_CREATE_FAILED
+  VP37_INIT_PID_CREATE_FAILED,
+  VP37_INIT_CALIBRATION_FAILED
 } VP37InitStatus;
 
 /**
- * @brief Initialize the VP37 inner quantity-control loop and calibrate Adjustometer limits.
+ * @brief Compute the available positive PID correction for a temperature.
+ * @param fuelTempC Adjustometer fuel-temperature reading in degrees Celsius.
+ * @param adjustometerStatus Latest Adjustometer status-bit field.
+ * @param pwmFeedForward Nominal feedforward at the current requested position.
+ * @return Positive PID correction limit in nominal-voltage PWM counts.
+ * @note A broken or implausible temperature signal falls back to the original
+ *       cold limit, so a sensor fault can never request extra actuator drive.
+ */
+float VP37_computePositiveCorrectionLimit(float fuelTempC,
+                                          uint8_t adjustometerStatus,
+                                          float pwmFeedForward);
+
+/**
+ * @brief Initialize the VP37 inner quantity-control loop and calibrate
+ * Adjustometer limits.
  * @param self VP37 controller instance to initialize.
  * @return Initialization status code.
  * @note Functionally this brings up the project-local N146/G149-like path.
@@ -167,7 +211,8 @@ VP37InitStatus VP37_init(VP37Pump *self);
  * @param self VP37 controller instance to process.
  * @return None.
  * @note This is the low-level N146/G149-like loop. Higher-level requested-fuel-
- *       quantity arbitration is still represented only partially in the current code.
+ *       quantity arbitration is still represented only partially in the current
+ * code.
  */
 void VP37_process(VP37Pump *self);
 
@@ -176,8 +221,8 @@ void VP37_process(VP37Pump *self);
  * @param self VP37 controller instance issuing the command.
  * @param enable True to enable the actuator path, false to disable it.
  * @return None.
- * @note This is a project-local run/enable output and is only loosely comparable to
- *       the OEM N109 stop-solenoid path.
+ * @note This is a project-local run/enable output and is only loosely
+ * comparable to the OEM N109 stop-solenoid path.
  */
 void VP37_enableVP37(VP37Pump *self, bool enable);
 
@@ -185,7 +230,8 @@ void VP37_enableVP37(VP37Pump *self, bool enable);
  * @brief Read back the current VP37 enable output state.
  * @param self VP37 controller instance to inspect.
  * @return True when VP37 output is enabled, otherwise false.
- * @note The signal is project-local and should not be treated as a literal N109 alias.
+ * @note The signal is project-local and should not be treated as a literal N109
+ * alias.
  */
 bool VP37_isVP37Enabled(VP37Pump *self);
 
@@ -201,18 +247,21 @@ void VP37_showDebug(VP37Pump *self);
  * @param self VP37 controller instance issuing the command.
  * @param angle Requested timing angle in the 0..100 range.
  * @return None.
- * @note In OEM terminology this is closest to commanding the N108 start-of-injection
- *       actuator path. Closed-loop G80/G28 SOI feedback is not implemented here yet.
+ * @note In OEM terminology this is closest to commanding the N108
+ * start-of-injection actuator path. Closed-loop G80/G28 SOI feedback is not
+ * implemented here yet.
  */
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 
 /**
- * @brief Convert legacy accelerator demand into a VP37 quantity-feedback target.
+ * @brief Convert legacy accelerator demand into a VP37 quantity-feedback
+ * target.
  * @param self VP37 controller instance to update.
  * @param accel Accelerator / driver-demand input in percentage-like units.
  * @return None.
- * @note Despite the legacy "Throttle" name, this function currently maps G79/G185-like
- *       driver demand directly into the project-local N146/G149-like target.
+ * @note Despite the legacy "Throttle" name, this function currently maps
+ * G79/G185-like driver demand directly into the project-local N146/G149-like
+ * target.
  */
 void VP37_setVP37Throttle(VP37Pump *self, float accel);
 
@@ -222,10 +271,12 @@ void VP37_setVP37Throttle(VP37Pump *self, float accel);
  * @param kp New proportional gain.
  * @param ki New integral gain.
  * @param kd New derivative gain.
- * @param shouldTriggerReset True to reset controller state after applying gains.
+ * @param shouldTriggerReset True to reset controller state after applying
+ * gains.
  * @return None.
  */
-void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd, bool shouldTriggerReset);
+void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
+                     bool shouldTriggerReset);
 
 /**
  * @brief Read back the current VP37 PID gains.

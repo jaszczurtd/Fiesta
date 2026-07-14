@@ -2,29 +2,35 @@
 #ifndef T_SENSORS
 #define T_SENSORS
 
-#include <libConfig.h>
 #include "config.h"
+#include <libConfig.h>
 
-#include <tools_c.h>
 #include "../common/canDefinitions/canDefinitions.h"
+#include <tools_c.h>
 
+#include "dtcManager.h"
 #include "hardwareConfig.h"
 #include "tests.h"
-#include "dtcManager.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-  int16_t  pulseHz;       // deviation from baseline [Hz]
-  uint8_t  voltageRaw;    // supply voltage in 0.1 V units
-  uint8_t  fuelTempC;     // fuel temperature °C
-  uint8_t  status;        // bitmask (ADJ_STATUS_*)
-  bool     commOk;        // true if I2C transaction succeeded
+  int16_t pulseHz;             // deviation from baseline [Hz]
+  uint8_t voltageRaw;          // supply voltage in 0.1 V units
+  uint8_t fuelTempC;           // fuel temperature °C
+  uint8_t status;              // bitmask (ADJ_STATUS_*)
+  bool commOk;                 // true if I2C transaction succeeded
+  uint32_t signalHz;           // filtered absolute oscillator frequency [Hz]
+  uint32_t baselineHz;         // locked zero-reference frequency [Hz]
+  int32_t signedDeltaHz;       // signalHz - baselineHz, without abs/zero-hold
+  int16_t chipTempDeciC;       // RP2040 die temperature in 0.1 °C units
+  uint8_t extendedFlags;       // bitmask (ADJUSTOMETER_EXT_FLAG_*)
+  bool extendedTelemetryValid; // versioned extension is coherent
 } adjustometer_reading_t;
 
-//in miliseconds, print values into serial
+// in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 
 #define GPS_TIME_DATE_BUFFER_SIZE 16
@@ -35,7 +41,7 @@ typedef struct {
  * @param val Value to store.
  * @return None.
  */
-void  setGlobalValue(int idx, float val);
+void setGlobalValue(int idx, float val);
 
 /**
  * @brief Read one global runtime value.
@@ -67,7 +73,7 @@ void initSensors(void);
  * @return None.
  */
 void initBasicPIO(void);
-//readers
+// readers
 
 /**
  * @brief Read averaged coolant temperature.
@@ -83,10 +89,11 @@ float readCoolantTemp(void);
 float readOilTemp(void);
 
 /**
- * @brief Read the legacy throttle-named driver-demand input and map it into PWM-scale units.
+ * @brief Read the legacy throttle-named driver-demand input and map it into
+ * PWM-scale units.
  * @return Driver-demand signal in the internal PWM-scale range.
- * @note In EDC15/VW terms this is closest to the G79/G185 accelerator-pedal path,
- *       not to a gasoline throttle plate.
+ * @note In EDC15/VW terms this is closest to the G79/G185 accelerator-pedal
+ * path, not to a gasoline throttle plate.
  */
 int32_t readThrottle(void);
 
@@ -105,7 +112,8 @@ float readAirTemperature(void);
 float readBarPressure(void);
 
 /**
- * @brief Convert the stored legacy throttle value into a 0..100 driver-demand percentage.
+ * @brief Convert the stored legacy throttle value into a 0..100 driver-demand
+ * percentage.
  * @return Driver-demand percentage.
  * @note In EDC15/VW terms this is closest to G79/G185-derived pedal demand.
  */
@@ -114,8 +122,8 @@ int32_t getThrottlePercentage(void);
 /**
  * @brief Calculate engine load percentage from current pressure and RPM.
  * @return Engine load percentage in the 0..100 range.
- * @note This is a project-local supervisory load estimate, not a literal OEM air-mass
- *       or mg/stroke quantity variable.
+ * @note This is a project-local supervisory load estimate, not a literal OEM
+ * air-mass or mg/stroke quantity variable.
  */
 int32_t getPercentageEngineLoad(void);
 
@@ -204,10 +212,19 @@ void pwm_init(void);
 void getVP37Adjustometer(adjustometer_reading_t *out);
 
 /**
- * @brief Wait until the Adjustometer reports that its quantity-feedback baseline capture is ready.
+ * @brief Refresh the optional Adjustometer diagnostic-telemetry extension.
+ * @param out Snapshot receiving legacy and cached extension fields.
+ * @return True when a new coherent version-1 extension was received.
+ * @note Failure does not affect legacy commOk or the VP37 control path.
+ */
+bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out);
+
+/**
+ * @brief Wait until the Adjustometer reports that its quantity-feedback
+ * baseline capture is ready.
  * @return True when baseline becomes ready before timeout, otherwise false.
- * @note Baseline readiness gates the project-local G149-like feedback path before the
- *       ECU enables the inner VP37 loop.
+ * @note Baseline readiness gates the project-local G149-like feedback path
+ * before the ECU enables the inner VP37 loop.
  */
 bool waitForAdjustometerBaseline(void);
 

@@ -1,259 +1,342 @@
-#include "unity.h"
-#include "sensors.h"
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "sensors.h"
+#include "unity.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // Injects Adjustometer register data into mock I2C RX buffer.
 // Layout: [pulseHi, pulseLo, voltage, fuelTemp, status]
 static void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
-                                   uint8_t fuelTemp, uint8_t status) {
-    uint8_t buf[5];
-    buf[0] = (uint8_t)((uint16_t)pulseHz >> 8);
-    buf[1] = (uint8_t)((uint16_t)pulseHz & 0xFF);
-    buf[2] = voltage;
-    buf[3] = fuelTemp;
-    buf[4] = status;
-    hal_mock_i2c_inject_rx(buf, 5);
+                                  uint8_t fuelTemp, uint8_t status) {
+  uint8_t buf[5];
+  buf[0] = (uint8_t)((uint16_t)pulseHz >> 8);
+  buf[1] = (uint8_t)((uint16_t)pulseHz & 0xFF);
+  buf[2] = voltage;
+  buf[3] = fuelTemp;
+  buf[4] = status;
+  hal_mock_i2c_inject_rx(buf, 5);
+}
+
+static void writeU32BE(uint8_t *buf, uint8_t offset, uint32_t value) {
+  buf[offset] = (uint8_t)(value >> 24);
+  buf[offset + 1U] = (uint8_t)(value >> 16);
+  buf[offset + 2U] = (uint8_t)(value >> 8);
+  buf[offset + 3U] = (uint8_t)value;
+}
+
+static void injectAdjExtendedData(uint8_t version, uint8_t seqBegin,
+                                  uint8_t seqEnd, uint8_t flags,
+                                  uint32_t signalHz, uint32_t baselineHz,
+                                  int32_t signedDeltaHz,
+                                  int16_t chipTempDeciC) {
+  uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT] = {0};
+  buf[ADJUSTOMETER_REG_EXT_VERSION - ADJUSTOMETER_EXT_REG_START] = version;
+  buf[ADJUSTOMETER_REG_EXT_SEQ_BEGIN - ADJUSTOMETER_EXT_REG_START] = seqBegin;
+  buf[ADJUSTOMETER_REG_EXT_FLAGS - ADJUSTOMETER_EXT_REG_START] = flags;
+  writeU32BE(buf, ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START,
+             signalHz);
+  writeU32BE(buf, ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START,
+             baselineHz);
+  writeU32BE(buf, ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START,
+             (uint32_t)signedDeltaHz);
+  buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START] =
+      (uint8_t)((uint16_t)chipTempDeciC >> 8);
+  buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START + 1U] =
+      (uint8_t)(uint16_t)chipTempDeciC;
+  buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START] = seqEnd;
+  hal_mock_i2c_inject_rx(buf, ADJUSTOMETER_EXT_REG_COUNT);
 }
 
 static void injectSupplyVoltageAdc(float volts) {
-    const float ratio = ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
-    int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
-    if(adc < 0) {
-        adc = 0;
-    }
-    if(adc > 4095) {
-        adc = 4095;
-    }
-    hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  const float ratio =
+      ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+  int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
+  if (adc < 0) {
+    adc = 0;
+  }
+  if (adc > 4095) {
+    adc = 4095;
+  }
+  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 void setUp(void) {
-    hal_mock_set_millis(0);
-    hal_mock_adc_inject(ADC_VOLT_PIN, 0);
-    hal_i2c_init(4, 5, 400000);
-    initSensors();
-    initI2C();
-    dtcManagerInit();
-    dtcManagerClearAll();
+  hal_mock_set_millis(0);
+  hal_mock_adc_inject(ADC_VOLT_PIN, 0);
+  hal_i2c_init(4, 5, 400000);
+  initSensors();
+  initI2C();
+  dtcManagerInit();
+  dtcManagerClearAll();
 }
 
-void tearDown(void) {
-    hal_mock_i2c_set_busy(false);
-}
+void tearDown(void) { hal_mock_i2c_set_busy(false); }
 
 // ── Adjustometer readout tests ───────────────────────────────────────────────
 
 void test_adjustometer_positive_pulse(void) {
-    // +500 Hz deviation, 13.2 V, 45 °C, status OK
-    injectAdjRegisterData(500, 132, 45, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(500, r.pulseHz);
+  // +500 Hz deviation, 13.2 V, 45 °C, status OK
+  injectAdjRegisterData(500, 132, 45, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(500, r.pulseHz);
 }
 
 void test_adjustometer_negative_pulse(void) {
-    // -200 Hz deviation
-    injectAdjRegisterData(-200, 120, 30, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(-200, r.pulseHz);
+  // -200 Hz deviation
+  injectAdjRegisterData(-200, 120, 30, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(-200, r.pulseHz);
 }
 
 void test_adjustometer_zero_pulse(void) {
-    injectAdjRegisterData(0, 140, 50, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
+  injectAdjRegisterData(0, 140, 50, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
 }
 
 void test_adjustometer_large_negative(void) {
-    // INT16_MIN boundary
-    injectAdjRegisterData(-32768, 100, 20, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(-32768, r.pulseHz);
+  // INT16_MIN boundary
+  injectAdjRegisterData(-32768, 100, 20, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(-32768, r.pulseHz);
 }
 
 void test_adjustometer_voltage_conversion(void) {
 #ifdef VP37
-    // Register value 138 -> 13.8 V
-    injectAdjRegisterData(0, 138, 40, ADJ_STATUS_OK);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 13.8f, v);
+  // Register value 138 -> 13.8 V
+  injectAdjRegisterData(0, 138, 40, ADJ_STATUS_OK);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 13.8f, v);
 #else
-    injectSupplyVoltageAdc(13.8f);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 13.8f, v);
+  injectSupplyVoltageAdc(13.8f);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 13.8f, v);
 #endif
 }
 
 void test_adjustometer_voltage_zero(void) {
 #ifdef VP37
-    injectAdjRegisterData(0, 0, 25, ADJ_STATUS_OK);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
+  injectAdjRegisterData(0, 0, 25, ADJ_STATUS_OK);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
 #else
-    injectSupplyVoltageAdc(0.0f);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, v);
+  injectSupplyVoltageAdc(0.0f);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, v);
 #endif
 }
 
 void test_adjustometer_voltage_max(void) {
 #ifdef VP37
-    // 255 -> 25.5 V
-    injectAdjRegisterData(0, 255, 20, ADJ_STATUS_OK);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 25.5f, v);
+  // 255 -> 25.5 V
+  injectAdjRegisterData(0, 255, 20, ADJ_STATUS_OK);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 25.5f, v);
 #else
-    injectSupplyVoltageAdc(16.0f);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 16.0f, v);
+  injectSupplyVoltageAdc(16.0f);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 16.0f, v);
 #endif
 }
 
 void test_adjustometer_fuel_temp(void) {
-    injectAdjRegisterData(0, 130, 85, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_UINT8(85, r.fuelTempC);
+  injectAdjRegisterData(0, 130, 85, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_UINT8(85, r.fuelTempC);
 }
 
 void test_adjustometer_fuel_temp_zero(void) {
-    injectAdjRegisterData(0, 130, 0, ADJ_STATUS_OK);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_UINT8(0, r.fuelTempC);
+  injectAdjRegisterData(0, 130, 0, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_UINT8(0, r.fuelTempC);
+}
+
+void test_adjustometer_legacy_read_does_not_require_extension(void) {
+  injectAdjRegisterData(321, 137, 44, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+
+  TEST_ASSERT_TRUE(r.commOk);
+  TEST_ASSERT_EQUAL_INT32(321, r.pulseHz);
+  TEST_ASSERT_FALSE(r.extendedTelemetryValid);
+}
+
+void test_adjustometer_extended_telemetry_decodes_coherent_snapshot(void) {
+  injectAdjRegisterData(500, 132, 45, ADJ_STATUS_OK);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+
+  const uint8_t flags = ADJUSTOMETER_EXT_FLAG_SIGNAL_VALID |
+                        ADJUSTOMETER_EXT_FLAG_BASELINE_VALID |
+                        ADJUSTOMETER_EXT_FLAG_CHIP_TEMP_VALID;
+  injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 12U, 12U, flags, 3654321U,
+                        3620000U, -34321, 427);
+
+  TEST_ASSERT_TRUE(getVP37AdjustometerExtendedTelemetry(&r));
+  TEST_ASSERT_TRUE(r.commOk);
+  TEST_ASSERT_TRUE(r.extendedTelemetryValid);
+  TEST_ASSERT_EQUAL_UINT32(3654321U, r.signalHz);
+  TEST_ASSERT_EQUAL_UINT32(3620000U, r.baselineHz);
+  TEST_ASSERT_EQUAL_INT32(-34321, r.signedDeltaHz);
+  TEST_ASSERT_EQUAL_INT16(427, r.chipTempDeciC);
+  TEST_ASSERT_EQUAL_UINT8(flags, r.extendedFlags);
+}
+
+void test_adjustometer_extended_telemetry_rejects_unknown_version(void) {
+  adjustometer_reading_t r;
+  injectAdjExtendedData(0U, 2U, 2U, 0U, 36000U, 35000U, 1000, 250);
+
+  TEST_ASSERT_FALSE(getVP37AdjustometerExtendedTelemetry(&r));
+}
+
+void test_adjustometer_extended_telemetry_rejects_torn_snapshot(void) {
+  adjustometer_reading_t r;
+  injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 4U, 6U, 0U, 36000U, 35000U,
+                        1000, 250);
+
+  TEST_ASSERT_FALSE(getVP37AdjustometerExtendedTelemetry(&r));
 }
 
 // ── Adjustometer status flags are currently informational only ──────────────
 
 void test_adjustometer_status_signal_lost_does_not_auto_set_dtc(void) {
-    injectAdjRegisterData(0, 120, 40, ADJ_STATUS_SIGNAL_LOST);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  injectAdjRegisterData(0, 120, 40, ADJ_STATUS_SIGNAL_LOST);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc(void) {
-    injectAdjRegisterData(0, 120, 0, ADJ_STATUS_FUEL_TEMP_BROKEN);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_UINT8(ADJ_STATUS_FUEL_TEMP_BROKEN, r.status);
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  injectAdjRegisterData(0, 120, 0, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_UINT8(ADJ_STATUS_FUEL_TEMP_BROKEN, r.status);
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_status_voltage_bad_does_not_auto_set_dtc(void) {
 #ifdef VP37
-    injectAdjRegisterData(0, 50, 40, ADJ_STATUS_VOLTAGE_BAD);
-    TEST_ASSERT_FLOAT_WITHIN(0.05f, 5.0f, getSystemSupplyVoltage());
+  injectAdjRegisterData(0, 50, 40, ADJ_STATUS_VOLTAGE_BAD);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 5.0f, getSystemSupplyVoltage());
 #else
-    injectSupplyVoltageAdc(5.0f);
-    TEST_ASSERT_FLOAT_WITHIN(0.8f, 5.0f, getSystemSupplyVoltage());
+  injectSupplyVoltageAdc(5.0f);
+  TEST_ASSERT_FLOAT_WITHIN(0.8f, 5.0f, getSystemSupplyVoltage());
 #endif
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_comm_lost_on_nack(void) {
 #ifdef VP37
-    // Simulate I2C NACK - set busy flag so endTransmission returns != 0.
-    // commOk goes false after ADJ_COMM_ERROR_THRESHOLD (3) consecutive errors.
-    hal_mock_i2c_set_busy(true);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);  // error 1
-    getVP37Adjustometer(&r);  // error 2
-    getVP37Adjustometer(&r);  // error 3 -> commOk = false
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
-    hal_mock_i2c_set_busy(false);
+  // Simulate I2C NACK - set busy flag so endTransmission returns != 0.
+  // commOk goes false after ADJ_COMM_ERROR_THRESHOLD (3) consecutive errors.
+  hal_mock_i2c_set_busy(true);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r); // error 1
+  getVP37Adjustometer(&r); // error 2
+  getVP37Adjustometer(&r); // error 3 -> commOk = false
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, v);
+  hal_mock_i2c_set_busy(false);
 #else
-    // With VP37 disabled, supply voltage must not depend on Adjustometer I2C.
-    hal_mock_i2c_set_busy(true);
-    injectSupplyVoltageAdc(12.0f);
-    float v = getSystemSupplyVoltage();
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 12.0f, v);
-    hal_mock_i2c_set_busy(false);
+  // With VP37 disabled, supply voltage must not depend on Adjustometer I2C.
+  hal_mock_i2c_set_busy(true);
+  injectSupplyVoltageAdc(12.0f);
+  float v = getSystemSupplyVoltage();
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 12.0f, v);
+  hal_mock_i2c_set_busy(false);
 #endif
 }
 
 // ── DTC array expansion test ─────────────────────────────────────────────────
 
 void test_dtc_array_covers_adjustometer_codes(void) {
-    // Verify all 4 new DTC codes are recognized by dtcManager
-    dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-    dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST, true);
-    dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, true);
-    dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD, true);
+  // Verify all 4 new DTC codes are recognized by dtcManager
+  dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
+  dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST, true);
+  dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, true);
+  dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD, true);
 
-    uint16_t codes[16];
-    uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
-    TEST_ASSERT_GREATER_OR_EQUAL(4, count);
+  uint16_t codes[16];
+  uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
+  TEST_ASSERT_GREATER_OR_EQUAL(4, count);
 
-    bool foundComm = false, foundSig = false, foundFt = false, foundVolt = false;
-    for(uint8_t i = 0; i < count; i++) {
-        if(codes[i] == DTC_ADJ_COMM_LOST) foundComm = true;
-        if(codes[i] == DTC_ADJ_SIGNAL_LOST) foundSig = true;
-        if(codes[i] == DTC_ADJ_FUEL_TEMP_BROKEN) foundFt = true;
-        if(codes[i] == DTC_ADJ_VOLTAGE_BAD) foundVolt = true;
-    }
-    TEST_ASSERT_TRUE(foundComm);
-    TEST_ASSERT_TRUE(foundSig);
-    TEST_ASSERT_TRUE(foundFt);
-    TEST_ASSERT_TRUE(foundVolt);
+  bool foundComm = false, foundSig = false, foundFt = false, foundVolt = false;
+  for (uint8_t i = 0; i < count; i++) {
+    if (codes[i] == DTC_ADJ_COMM_LOST)
+      foundComm = true;
+    if (codes[i] == DTC_ADJ_SIGNAL_LOST)
+      foundSig = true;
+    if (codes[i] == DTC_ADJ_FUEL_TEMP_BROKEN)
+      foundFt = true;
+    if (codes[i] == DTC_ADJ_VOLTAGE_BAD)
+      foundVolt = true;
+  }
+  TEST_ASSERT_TRUE(foundComm);
+  TEST_ASSERT_TRUE(foundSig);
+  TEST_ASSERT_TRUE(foundFt);
+  TEST_ASSERT_TRUE(foundVolt);
 }
 
 // ── Int16 BE encoding edge cases ────────────────────────────────────────────
 
 void test_adjustometer_big_endian_byte_order(void) {
-    // Manually inject raw bytes: 0x01, 0x00 -> +256 Hz
-    uint8_t buf[5] = {0x01, 0x00, 130, 50, 0x00};
-    hal_mock_i2c_inject_rx(buf, 5);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(256, r.pulseHz);
+  // Manually inject raw bytes: 0x01, 0x00 -> +256 Hz
+  uint8_t buf[5] = {0x01, 0x00, 130, 50, 0x00};
+  hal_mock_i2c_inject_rx(buf, 5);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(256, r.pulseHz);
 }
 
 void test_adjustometer_big_endian_negative(void) {
-    // 0xFF, 0x00 -> -256 in int16_t (0xFF00 = -256)
-    uint8_t buf[5] = {0xFF, 0x00, 130, 50, 0x00};
-    hal_mock_i2c_inject_rx(buf, 5);
-    adjustometer_reading_t r;
-    getVP37Adjustometer(&r);
-    TEST_ASSERT_EQUAL_INT32(-256, r.pulseHz);
+  // 0xFF, 0x00 -> -256 in int16_t (0xFF00 = -256)
+  uint8_t buf[5] = {0xFF, 0x00, 130, 50, 0x00};
+  hal_mock_i2c_inject_rx(buf, 5);
+  adjustometer_reading_t r;
+  getVP37Adjustometer(&r);
+  TEST_ASSERT_EQUAL_INT32(-256, r.pulseHz);
 }
 
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 int main(void) {
-    UNITY_BEGIN();
+  UNITY_BEGIN();
 
-    // Adjustometer readout
-    RUN_TEST(test_adjustometer_positive_pulse);
-    RUN_TEST(test_adjustometer_negative_pulse);
-    RUN_TEST(test_adjustometer_zero_pulse);
-    RUN_TEST(test_adjustometer_large_negative);
-    RUN_TEST(test_adjustometer_voltage_conversion);
-    RUN_TEST(test_adjustometer_voltage_zero);
-    RUN_TEST(test_adjustometer_voltage_max);
-    RUN_TEST(test_adjustometer_fuel_temp);
-    RUN_TEST(test_adjustometer_fuel_temp_zero);
+  // Adjustometer readout
+  RUN_TEST(test_adjustometer_positive_pulse);
+  RUN_TEST(test_adjustometer_negative_pulse);
+  RUN_TEST(test_adjustometer_zero_pulse);
+  RUN_TEST(test_adjustometer_large_negative);
+  RUN_TEST(test_adjustometer_voltage_conversion);
+  RUN_TEST(test_adjustometer_voltage_zero);
+  RUN_TEST(test_adjustometer_voltage_max);
+  RUN_TEST(test_adjustometer_fuel_temp);
+  RUN_TEST(test_adjustometer_fuel_temp_zero);
+  RUN_TEST(test_adjustometer_legacy_read_does_not_require_extension);
+  RUN_TEST(test_adjustometer_extended_telemetry_decodes_coherent_snapshot);
+  RUN_TEST(test_adjustometer_extended_telemetry_rejects_unknown_version);
+  RUN_TEST(test_adjustometer_extended_telemetry_rejects_torn_snapshot);
 
-    // Byte order
-    RUN_TEST(test_adjustometer_big_endian_byte_order);
-    RUN_TEST(test_adjustometer_big_endian_negative);
+  // Byte order
+  RUN_TEST(test_adjustometer_big_endian_byte_order);
+  RUN_TEST(test_adjustometer_big_endian_negative);
 
-    // DTC status
-    RUN_TEST(test_adjustometer_status_signal_lost_does_not_auto_set_dtc);
-    RUN_TEST(test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc);
-    RUN_TEST(test_adjustometer_status_voltage_bad_does_not_auto_set_dtc);
-    RUN_TEST(test_adjustometer_comm_lost_on_nack);
-    RUN_TEST(test_dtc_array_covers_adjustometer_codes);
+  // DTC status
+  RUN_TEST(test_adjustometer_status_signal_lost_does_not_auto_set_dtc);
+  RUN_TEST(test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc);
+  RUN_TEST(test_adjustometer_status_voltage_bad_does_not_auto_set_dtc);
+  RUN_TEST(test_adjustometer_comm_lost_on_nack);
+  RUN_TEST(test_dtc_array_covers_adjustometer_codes);
 
-    return UNITY_END();
+  return UNITY_END();
 }

@@ -269,6 +269,9 @@ void initialization(void) {
   case VP37_INIT_PID_CREATE_FAILED:
     derr("VP37 init failed: PID controller create failed");
     break;
+  case VP37_INIT_CALIBRATION_FAILED:
+    derr("VP37 init failed: actuator calibration did not settle");
+    break;
   default:
     derr("VP37 init failed: unknown status=%d", (int)vp37InitStatus);
     break;
