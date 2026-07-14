@@ -49,7 +49,17 @@ static sensors_runtime_state_t s_sensorsState = {
     .lastCoolantTemp = 0,
     .lastOilTemp = 0,
     .lastIsEngineRunning = false,
-    .adjustometer = {0, 0, 0, ADJ_STATUS_SIGNAL_LOST, false},
+    .adjustometer = {.pulseHz = 0,
+                     .voltageRaw = 0,
+                     .fuelTempC = 0,
+                     .status = ADJ_STATUS_SIGNAL_LOST,
+                     .commOk = false,
+                     .signalHz = 0U,
+                     .baselineHz = 0U,
+                     .signedDeltaHz = 0,
+                     .chipTempDeciC = 0,
+                     .extendedFlags = 0U,
+                     .extendedTelemetryValid = false},
     .adjCommErrors = 0};
 
 m_mutex_def(analog4051Mutex);
@@ -612,6 +622,74 @@ static adjustometer_reading_t adjustometerRecordCommError(void) {
 }
 
 /**
+ * @brief Decode one big-endian uint32_t from an I2C byte buffer.
+ * @param bytes Address of the four-byte value.
+ * @return Decoded value.
+ */
+static uint32_t adjustometerDecodeU32BE(const uint8_t *bytes) {
+  return ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16) |
+         ((uint32_t)bytes[2] << 8) | (uint32_t)bytes[3];
+}
+
+/**
+ * @brief Read and validate the optional versioned telemetry block.
+ * @param out Decoded extension fields; legacy fields are left unchanged.
+ * @return True when version and sequence checks pass.
+ * @note The caller must hold i2cBusMutex. Failure is intentionally not counted
+ *       as a legacy communication error.
+ */
+static bool adjustometerReadExtendedLocked(adjustometer_reading_t *out) {
+  const uint8_t txErr = hal_i2c_write_byte(ADJUSTOMETER_I2C_ADDR,
+                                           ADJUSTOMETER_EXT_REG_START, NULL);
+  if (txErr != 0U) {
+    return false;
+  }
+
+  const uint8_t received =
+      hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_EXT_REG_COUNT);
+  if (received != ADJUSTOMETER_EXT_REG_COUNT) {
+    return false;
+  }
+
+  uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT];
+  for (uint8_t i = 0U; i < ADJUSTOMETER_EXT_REG_COUNT; i++) {
+    const int value = hal_i2c_read();
+    if (value < 0) {
+      return false;
+    }
+    buf[i] = (uint8_t)value;
+  }
+
+  const uint8_t version =
+      buf[ADJUSTOMETER_REG_EXT_VERSION - ADJUSTOMETER_EXT_REG_START];
+  const uint8_t seqBegin =
+      buf[ADJUSTOMETER_REG_EXT_SEQ_BEGIN - ADJUSTOMETER_EXT_REG_START];
+  const uint8_t seqEnd =
+      buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START];
+  if (version != ADJUSTOMETER_EXT_VERSION || seqBegin != seqEnd ||
+      (seqBegin & 1U) != 0U) {
+    return false;
+  }
+
+  out->extendedFlags =
+      buf[ADJUSTOMETER_REG_EXT_FLAGS - ADJUSTOMETER_EXT_REG_START];
+  out->signalHz = adjustometerDecodeU32BE(
+      &buf[ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START]);
+  out->baselineHz = adjustometerDecodeU32BE(
+      &buf[ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START]);
+  out->signedDeltaHz = (int32_t)adjustometerDecodeU32BE(
+      &buf[ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START]);
+  out->chipTempDeciC =
+      (int16_t)(((uint16_t)buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C -
+                               ADJUSTOMETER_EXT_REG_START]
+                 << 8) |
+                (uint16_t)buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C -
+                              ADJUSTOMETER_EXT_REG_START + 1U]);
+  out->extendedTelemetryValid = true;
+  return true;
+}
+
+/**
  * @brief Read the full Adjustometer register block over I2C for the VP37
  * quantity-feedback path.
  * @return Latest Adjustometer reading structure, reusing previous values on
@@ -635,19 +713,19 @@ static adjustometer_reading_t readAdjustometer(void) {
   }
 
   // Read 5 registers starting from 0x00
-  uint8_t received =
-      hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_REG_COUNT);
-  if (received != ADJUSTOMETER_REG_COUNT) {
+  uint8_t received = hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR,
+                                          ADJUSTOMETER_LEGACY_REG_COUNT);
+  if (received != ADJUSTOMETER_LEGACY_REG_COUNT) {
     m_mutex_exit(i2cBusMutex);
     // dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
     derr("Adjustometer I2C read error: expected %d bytes, got %d",
-         ADJUSTOMETER_REG_COUNT, (int)received);
+         ADJUSTOMETER_LEGACY_REG_COUNT, (int)received);
     i2cCheckRecovery();
     return adjustometerRecordCommError();
   }
 
-  uint8_t buf[ADJUSTOMETER_REG_COUNT];
-  for (uint8_t i = 0; i < ADJUSTOMETER_REG_COUNT; i++) {
+  uint8_t buf[ADJUSTOMETER_LEGACY_REG_COUNT];
+  for (uint8_t i = 0; i < ADJUSTOMETER_LEGACY_REG_COUNT; i++) {
     int b = hal_i2c_read();
     if (b < 0) {
       m_mutex_exit(i2cBusMutex);
@@ -665,7 +743,9 @@ static adjustometer_reading_t readAdjustometer(void) {
 
   // Build the snapshot off the shared state so parallel readers on the other
   // core never see a half-updated field block.
-  adjustometer_reading_t snapshot;
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
+  m_mutex_exit(adjustometerStateMutex);
   snapshot.pulseHz = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
   snapshot.voltageRaw = buf[2];
   snapshot.fuelTempC = buf[3];
@@ -698,7 +778,7 @@ bool waitForAdjustometerBaseline(void) {
   while ((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
     adjustometer_reading_t r = readAdjustometer();
     if (!r.commOk) {
-      /* device may still be booting – keep retrying until timeout */
+      /* device may still be booting - keep retrying until timeout */
       hal_delay_ms(10);
       watchdog_feed();
       continue;
@@ -728,6 +808,52 @@ void getVP37Adjustometer(adjustometer_reading_t *out) {
     return;
   }
   *out = readAdjustometer();
+}
+
+/**
+ * @brief Read a coherent versioned Adjustometer telemetry extension.
+ * @param out Snapshot receiving legacy and extension fields (must not be NULL).
+ * @return True when a fresh extension snapshot passed version and sequence
+ * checks.
+ * @note Extension failures are intentionally isolated from the legacy
+ * communication-error counter and from the VP37 control path.
+ */
+bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out) {
+  if (out == NULL) {
+    return false;
+  }
+
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
+  m_mutex_exit(adjustometerStateMutex);
+
+  m_mutex_enter_blocking(i2cBusMutex);
+  bool received = false;
+  for (uint8_t attempt = 0U; attempt < 2U && !received; attempt++) {
+    received = adjustometerReadExtendedLocked(&snapshot);
+  }
+  m_mutex_exit(i2cBusMutex);
+
+  if (received) {
+    m_mutex_enter_blocking(adjustometerStateMutex);
+    s_sensorsState.adjustometer.signalHz = snapshot.signalHz;
+    s_sensorsState.adjustometer.baselineHz = snapshot.baselineHz;
+    s_sensorsState.adjustometer.signedDeltaHz = snapshot.signedDeltaHz;
+    s_sensorsState.adjustometer.chipTempDeciC = snapshot.chipTempDeciC;
+    s_sensorsState.adjustometer.extendedFlags = snapshot.extendedFlags;
+    s_sensorsState.adjustometer.extendedTelemetryValid = true;
+
+    // Refresh legacy fields in the returned snapshot without changing them.
+    snapshot.pulseHz = s_sensorsState.adjustometer.pulseHz;
+    snapshot.voltageRaw = s_sensorsState.adjustometer.voltageRaw;
+    snapshot.fuelTempC = s_sensorsState.adjustometer.fuelTempC;
+    snapshot.status = s_sensorsState.adjustometer.status;
+    snapshot.commOk = s_sensorsState.adjustometer.commOk;
+    m_mutex_exit(adjustometerStateMutex);
+  }
+
+  *out = snapshot;
+  return received;
 }
 
 #ifndef VP37

@@ -2,6 +2,38 @@
 
 Safety-critical ECU module for Ford Fiesta custom electronics.
 
+## VP37 and Adjustometer
+
+The VP37 quantity-actuator loop uses the separate RP2040 Adjustometer module at
+I2C address `0x57`. The controller keeps the original five-byte feedback block
+(`PULSE`, voltage, fuel temperature, and status) and reads an optional
+version-1 diagnostic extension separately. The extension reports filtered raw
+oscillator frequency, locked baseline, signed `signalHz - baselineHz`, RP2040
+die temperature, and validity metadata. Its failure does not affect the legacy
+`commOk` state or PWM feedback path.
+
+Current ECU-side thermal handling uses Adjustometer fuel temperature as the
+closest available proxy for VP37 actuator-coil temperature. Above the `22 °C`
+reference, only positive PID correction authority is expanded according to the
+copper-resistance estimate, from the cold `+220` limit up to `+340` PWM counts.
+Negative authority remains `-220`. Invalid temperature/status or lost
+communication falls back to the cold limit. This compensates actuator-force
+loss; it does not modify the measured oscillator signal or baseline.
+
+VP37 diagnostics are emitted every `500 ms` as separate controller and sensor
+lines so the raw Adjustometer data is not hidden at the end of a long control
+record:
+
+```text
+ECU: VP37 thr:... des:... adj:... pwm:... err:... ff:... corr:... lim+:... sat+:... nom:...
+ECU: VP37 ADJ p:... f:...Hz d:... v:... ft:... tc:... s:... bl:... ext:... fl:0x..
+```
+
+See the detailed
+[VP37/Adjustometer context](doc/Fiesta-context-providers/vp37-adjustometer-context-provider.txt),
+the [Adjustometer README](../Adjustometer/README.md), and the shared
+[I2C register map](../common/adjustometer_protocol.h).
+
 ## MISRA-C migration status
 
 This module is in MISRA-C migration scope. Repository-level migration

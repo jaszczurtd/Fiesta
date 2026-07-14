@@ -1,20 +1,14 @@
 #pragma once
 
+#include "../common/adjustometer_protocol.h"
 #include "hardwareConfig.h"
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
+#define ADJUSTOMETER_EXT_UPDATE_MS 10U
 
 #define DEBUG_DEEP 1
-
-// I2C slave register map.
-#define ADJUSTOMETER_I2C_ADDR       0x57
-#define ADJUSTOMETER_REG_PULSE_HI   0x00  // int16_t big-endian (2 bytes)
-#define ADJUSTOMETER_REG_PULSE_LO   0x01
-#define ADJUSTOMETER_REG_VOLTAGE    0x02  // uint8_t: supply voltage (scaled)
-#define ADJUSTOMETER_REG_FUEL_TEMP  0x03  // uint8_t: fuel temperature
-#define ADJUSTOMETER_REG_STATUS     0x04  // uint8_t: status bitmask (see sensors.h)
 
 // Oscillator warm-up time after cold power-on [ms].
 // The LC oscillator frequency can overshoot during the first few hundred
@@ -37,8 +31,8 @@
 // VERIFY_DRIFT_HZ from the captured baseline, convergence restarts.
 // This catches slow oscillator warm-up drift that the fast convergence
 // window (±12 Hz over ~21 ms) cannot detect.
-#define ADJUSTOMETER_BASELINE_VERIFY_MS        1000U
-#define ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ  500U
+#define ADJUSTOMETER_BASELINE_VERIFY_MS 1000U
+#define ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ 500U
 
 // Near-zero spike suppression with hysteresis.
 // Enter threshold must be wide enough to suppress post-manipulation thermal/
@@ -51,4 +45,3 @@
 // ADC EMA filter: alpha = 1/(2^SHIFT).  SHIFT=3 -> 12.5% new, 87.5% old.
 // Fuel temp and voltage change slowly, so heavy smoothing is fine.
 #define ADC_EMA_SHIFT 3U
-

@@ -25,18 +25,6 @@ extern "C" {
 #define ADJUSTOMETER_SIGNAL_LOSS_MIN_US 10000U
 #define ADJUSTOMETER_SIGNAL_LOSS_MAX_US 200000U
 
-// Status register bitmask (register 0x04).
-// Bit 0: oscillation signal lost.
-// Bit 1: fuel temperature sensor broken (readings near 3.3V, ntcToTemp < 0).
-// Bit 2: baseline calibration in progress.
-// Bit 3: supply voltage out of range (below 8V or above 15V).
-// All bits 0 = everything OK.
-#define ADJ_STATUS_OK 0x00
-#define ADJ_STATUS_SIGNAL_LOST (1 << 0)
-#define ADJ_STATUS_FUEL_TEMP_BROKEN (1 << 1)
-#define ADJ_STATUS_BASELINE_PENDING (1 << 2)
-#define ADJ_STATUS_VOLTAGE_BAD (1 << 3)
-
 // Supply voltage thresholds (tenths of a volt).
 #define ADJ_VOLTAGE_MIN_TV 80  // 8.0 V
 #define ADJ_VOLTAGE_MAX_TV 150 // 15.0 V
@@ -80,6 +68,12 @@ int32_t getAdjustometerPulses(void);
  * G149-like quantity-feedback path.
  */
 uint32_t getAdjustometerSignalHz(void);
+
+/**
+ * @brief Return the signed filtered-frequency displacement from baseline.
+ * @return signalHz - baselineHz in hertz, without abs() or zero-hold.
+ */
+int32_t getAdjustometerSignedDeltaHz(void);
 
 /**
  * @brief Return the packed module status bitmask.
