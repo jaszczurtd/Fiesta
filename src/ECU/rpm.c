@@ -1,5 +1,6 @@
 #include "rpm.h"
 #include "ecuContext.h"
+#include <hal/hal_gpio.h>
 #include <hal/hal_soft_timer.h>
 
 // RPM formula (integer-only, no floats):
@@ -27,8 +28,8 @@ static void cycleCheckTimerCallback(void) {
 }
 #endif
 
-void RPM_create(void) {
-  RPM_init(getRPMInstance());
+hal_status_t RPM_create(void) {
+  return RPM_init(getRPMInstance());
 }
 
 RPM *getRPMInstance(void) {
@@ -76,7 +77,11 @@ void RPM_interrupt(RPM *self) {
   }
 }
 
-void RPM_init(RPM *self) {
+hal_status_t RPM_init(RPM *self) {
+  if (self == NULL) {
+    return HAL_EINVAL;
+  }
+
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
 
   self->rpmValue = 0;
@@ -104,16 +109,33 @@ void RPM_init(RPM *self) {
   s_lastIDeltaQ10 = 0;
 #endif
 
-  hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE);
-
 #ifndef VP37
   if(self->rpmCycleTimer == NULL) {
     self->rpmCycleTimer = hal_soft_timer_create();
   }
-  (void)hal_soft_timer_begin(self->rpmCycleTimer, cycleCheckTimerCallback, HAL_SOFT_TIMER_STOP);
+  if (self->rpmCycleTimer == NULL) {
+    return HAL_ENOMEM;
+  }
+  if (!hal_soft_timer_begin(self->rpmCycleTimer, cycleCheckTimerCallback,
+                            HAL_SOFT_TIMER_STOP)) {
+    hal_soft_timer_destroy(self->rpmCycleTimer);
+    self->rpmCycleTimer = NULL;
+    return HAL_EINTERNAL;
+  }
 #endif
 
+  const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
+      PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE, RPM_IRQ_OWNER_CORE);
+  if (irqStatus != HAL_OK) {
+#ifndef VP37
+    hal_soft_timer_destroy(self->rpmCycleTimer);
+    self->rpmCycleTimer = NULL;
+#endif
+    return irqStatus;
+  }
+
   RPM_setAccelMaxRPM(self);
+  return HAL_OK;
 }
 
 void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage) {

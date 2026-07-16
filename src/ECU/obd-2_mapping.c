@@ -262,6 +262,8 @@ const char *getDtcName(uint16_t code) {
       return "U190A Adjustometer fuel temperature sensor fault";
     case DTC_ADJ_VOLTAGE_BAD:
       return "U190B Adjustometer supply voltage out of range";
+    case DTC_RPM_IRQ_INIT_FAIL:
+      return "U190C RPM interrupt core-affinity/init failure";
     default:
       return "Unknown DTC";
   }

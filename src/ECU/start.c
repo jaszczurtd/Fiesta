@@ -30,6 +30,8 @@ typedef struct {
   int *wValuesPtr;
   int wSizeVal;
   bool alertBlinkState;
+  volatile hal_status_t core1InitStatus;
+  bool core1InitErrorReported;
 } start_runtime_state_t;
 
 typedef struct {
@@ -48,7 +50,9 @@ static start_runtime_state_t s_startRuntimeState = {
     .timerCANCheckHandle = NULL,
     .wValuesPtr = NULL,
     .wSizeVal = 0,
-    .alertBlinkState = false};
+    .alertBlinkState = false,
+    .core1InitStatus = HAL_NONE,
+    .core1InitErrorReported = false};
 
 NOINIT static start_persistent_state_t s_startPersistentState;
 static hal_mutex_t turboStateMutex = NULL;
@@ -71,6 +75,25 @@ static void start_initContextMutexes(void) {
   }
 #endif
   hal_critical_section_exit();
+}
+
+/**
+ * @brief Persist and log a core-1 RPM initialization failure from core 0.
+ * @return None.
+ * @note DTC persistence intentionally remains on core 0 so core 1 never writes
+ *       flash while reporting its startup failure.
+ */
+static void start_reportCore1InitError(void) {
+  const hal_status_t status = s_startRuntimeState.core1InitStatus;
+  if (!hal_status_is_error(status) ||
+      s_startRuntimeState.core1InitErrorReported) {
+    return;
+  }
+
+  s_startRuntimeState.core1InitErrorReported = true;
+  derr("Core 1 RPM initialization failed: %s (%d)",
+       hal_status_to_string(status), (int)status);
+  dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, true);
 }
 
 #ifdef VP37
@@ -301,6 +324,8 @@ void initialization(void) {
 
   setStartedCore0();
 
+  start_reportCore1InitError();
+
   deb("Fiesta MTDDI started: %s\n", isEnvironmentStarted() ? "yes" : "no");
 
   dtcManagerLogStorageStats();
@@ -332,6 +357,7 @@ void callAtEverySecond(void) {
 void looper(void) {
   s_startPersistentState.statusVariable0Val = 0;
   updateWatchdogCore0();
+  start_reportCore1InitError();
 
   s_startPersistentState.statusVariable0Val = 1;
   glowPlugs_process(getGlowPlugsInstance());
@@ -379,7 +405,11 @@ void looper(void) {
  */
 void initialization1(void) {
   start_initContextMutexes();
-  RPM_create();
+  const hal_status_t rpmStatus = RPM_create();
+  s_startRuntimeState.core1InitStatus = rpmStatus;
+  if (rpmStatus != HAL_OK) {
+    return;
+  }
   createEngineOperation();
 
   setStartedCore1();
@@ -398,6 +428,12 @@ void initialization1(void) {
 void looper1(void) {
 
   s_startPersistentState.statusVariable1Val = 0;
+  if (hal_status_is_error(s_startRuntimeState.core1InitStatus)) {
+    s_startPersistentState.statusVariable1Val = -2;
+    hal_idle();
+    hal_delay_ms(CORE_OPERATION_DELAY);
+    return;
+  }
   updateWatchdogCore1();
 
   if (!isEnvironmentStarted()) {

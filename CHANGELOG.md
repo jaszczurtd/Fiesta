@@ -4,7 +4,24 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-07-10 (latest)
+## 2026-07-16 (latest)
+
+- Migrated ECU RPM interrupt initialization to the JaszczurHAL status API with
+  explicit core-1 ownership:
+  - wrong-core registration now propagates `HAL_ESTATE` through `RPM_init()`,
+    `RPM_create()`, and the core-1 startup path,
+  - core 0 logs the exact HAL status and persists new DTC `U190C`,
+  - failed core-1 startup withholds its started flag and watchdog liveness
+    updates, allowing the dual-core watchdog to reset the ECU after the DTC
+    write,
+  - the existing nine-entry legacy DTC migration remains bounded to its old
+    layout while the new DTC uses an appended KV slot.
+- Added host coverage for successful core-1 IRQ ownership, wrong-core failure,
+  RPM resource cleanup, and `U190C` reporting/persistence. The ECU host suite,
+  cppcheck static analysis, and the RP2040 firmware build pass with warnings
+  treated as errors.
+
+## 2026-07-10
 
 - Synchronized repository documentation with the post-migration source tree:
   - corrected ECU EEPROM size (`32768` bytes) and its explicit 200 MHz FQBN,

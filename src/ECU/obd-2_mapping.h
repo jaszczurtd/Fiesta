@@ -39,6 +39,7 @@ extern "C" {
 #define DTC_ADJ_SIGNAL_LOST        0xD909  // U1909 Adjustometer oscillator signal lost
 #define DTC_ADJ_FUEL_TEMP_BROKEN   0xD90A  // U190A Adjustometer fuel temperature sensor fault
 #define DTC_ADJ_VOLTAGE_BAD        0xD90B  // U190B Adjustometer supply voltage out of range
+#define DTC_RPM_IRQ_INIT_FAIL      0xD90C  // U190C RPM interrupt core-affinity/init failure
 
 /**
  * @brief Translate a PID number into a human-readable label.

@@ -2,6 +2,7 @@
 #ifndef T_RPM
 #define T_RPM
 
+#include <hal/hal_status.h>
 #include <tools_c.h>
 
 #include "config.h"
@@ -35,6 +36,9 @@ extern "C" {
 //debug log cadence (in milliseconds)
 #define RPM_DEBUG_UPDATE_MS 500
 
+// The Hall-sensor IRQ is part of the time-critical core-1 control path.
+#define RPM_IRQ_OWNER_CORE 1u
+
 //since solenoid has some time lag we have to compensate it
 //values defined as ms
 #define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 4000
@@ -67,10 +71,11 @@ typedef struct {
 /**
  * @brief Initialize RPM measurement state and related hardware resources.
  * @param self RPM controller instance to initialize.
- * @return None.
+ * @return HAL_OK on success, or a HAL error propagated from resource/IRQ
+ *         initialization.
  * @note The Hall input used here is the project's G28-like engine-speed reference.
  */
-void RPM_init(RPM *self);
+hal_status_t RPM_init(RPM *self);
 
 /**
  * @brief Update RPM value and optional non-VP37 idle-control logic.
@@ -161,9 +166,9 @@ RPM *getRPMInstance(void);
 
 /**
  * @brief Create and initialize the shared RPM controller instance.
- * @return None.
+ * @return HAL_OK on success, or the RPM initialization error.
  */
-void RPM_create(void);
+hal_status_t RPM_create(void);
 
 #ifdef __cplusplus
 }

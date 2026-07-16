@@ -285,6 +285,16 @@ figures, migration status, and screening entry points.
 - `core-1` runs the time-critical engine control path - VP37 servicing and
   the rest of the tight-loop engine logic.
 
+The RPM Hall GPIO interrupt has an explicit core-affinity contract: it is
+registered from core 1 with `hal_gpio_attach_interrupt_ex()` and owner core
+`1`. A caller/core mismatch is a startup error (`HAL_ESTATE`), not an implicit
+interrupt migration. `RPM_create()` propagates this status to the core-1
+startup path. Core 1 then remains unstarted and stops its watchdog liveness
+updates, while core 0 logs the exact HAL status and persists DTC `U190C` before
+the dual-core watchdog resets the ECU. DTC persistence deliberately stays on
+core 0. A future FreeRTOS task hosting this path must remain pinned to core 1
+and retain the same registration and failure contract.
+
 Cross-core state is protected by dedicated mutexes (adjustometer snapshot,
 PCF8574 shadow latch, DTC manager + its KV persistence). See the "dual-core
 state synchronization pass" bullet in [`MISRA.md`](MISRA.md) for the list of
