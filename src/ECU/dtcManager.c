@@ -7,6 +7,7 @@
 #define DTC_EEPROM_BASE          (HAL_TOOLS_EEPROM_FIRST_ADDR + 96)
 #define DTC_EEPROM_HEADER_SIZE   5u
 #define DTC_EEPROM_SLOT_SIZE     2u
+#define DTC_LEGACY_ENTRY_COUNT   9u
 #define DTC_FLAG_STORED          0x01u
 #define DTC_FLAG_PERMANENT       0x02u
 
@@ -30,7 +31,7 @@ typedef struct {
 } dtc_entry_t;
 
 typedef struct {
-  dtc_entry_t dtcs[9];
+  dtc_entry_t dtcs[10];
   bool initialized;
 } dtc_manager_state_t;
 
@@ -44,7 +45,8 @@ static dtc_manager_state_t s_dtcState = {
     {DTC_ADJ_COMM_LOST, false, false, false, 0},
     {DTC_ADJ_SIGNAL_LOST, false, false, false, 0},
     {DTC_ADJ_FUEL_TEMP_BROKEN, false, false, false, 0},
-    {DTC_ADJ_VOLTAGE_BAD, false, false, false, 0}
+    {DTC_ADJ_VOLTAGE_BAD, false, false, false, 0},
+    {DTC_RPM_IRQ_INIT_FAIL, false, false, false, 0}
   },
   .initialized = false
 };
@@ -211,7 +213,7 @@ static bool tryMigrateLegacyFromEeprom(void) {
     return false;
   }
 
-  for(uint8_t i = 0; i < DTC_COUNT; i++) {
+  for(uint8_t i = 0; i < DTC_LEGACY_ENTRY_COUNT; i++) {
     uint8_t flags = hal_eeprom_read_byte(dtcSlotAddr(i));
     applyFlagsToIndex(i, flags);
     s_dtcState.dtcs[i].active = false;

@@ -97,6 +97,28 @@ void test_find_dtc_index_returns_expected_slots(void) {
     TEST_ASSERT_EQUAL_INT(0, findDtcIndex(DTC_OBD_CAN_INIT_FAIL));
     TEST_ASSERT_EQUAL_INT(1, findDtcIndex(DTC_PCF8574_COMM_FAIL));
     TEST_ASSERT_EQUAL_INT(8, findDtcIndex(DTC_ADJ_VOLTAGE_BAD));
+    TEST_ASSERT_EQUAL_INT(9, findDtcIndex(DTC_RPM_IRQ_INIT_FAIL));
+}
+
+void test_rpm_irq_init_failure_is_reportable_and_persistent(void) {
+    dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, true);
+
+    uint16_t codes[2] = {0};
+    uint8_t activeCount =
+        dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, COUNTOF(codes));
+    TEST_ASSERT_EQUAL_UINT8(1, activeCount);
+    TEST_ASSERT_TRUE(
+        containsCode(codes, activeCount, DTC_RPM_IRQ_INIT_FAIL));
+    TEST_ASSERT_EQUAL_STRING(
+        "U190C RPM interrupt core-affinity/init failure",
+        getDtcName(DTC_RPM_IRQ_INIT_FAIL));
+
+    dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, false);
+    uint8_t storedCount =
+        dtcManagerGetCodes(DTC_KIND_STORED, codes, COUNTOF(codes));
+    TEST_ASSERT_EQUAL_UINT8(1, storedCount);
+    TEST_ASSERT_TRUE(
+        containsCode(codes, storedCount, DTC_RPM_IRQ_INIT_FAIL));
 }
 
 void test_find_dtc_index_returns_minus_one_for_unknown_code(void) {
@@ -165,6 +187,7 @@ int main(void) {
     RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
     RUN_TEST(test_dtc_get_codes_respects_output_limit);
     RUN_TEST(test_find_dtc_index_returns_expected_slots);
+    RUN_TEST(test_rpm_irq_init_failure_is_reportable_and_persistent);
     RUN_TEST(test_find_dtc_index_returns_minus_one_for_unknown_code);
     RUN_TEST(test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom);
     RUN_TEST(test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small);
