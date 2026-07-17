@@ -1048,7 +1048,7 @@ is for logging only (legacy).
 |---|---|---|
 | `JaszczurHAL` | HAL + utilities + compatibility stubs | cloned/refreshed by `runmefirst.sh` / `src/ECU/scripts/bootstrap.sh` into `$LIB_DIR/JaszczurHAL` |
 | `src/common/canDefinitions/canDefinitions.h` | shared CAN frame definitions | in-tree (versioned with Fiesta repo) |
-| `rp2040:rp2040` core (earlephilhower/arduino-pico) | RP2040 compile/upload frontend used by the generated firmware adapter | arduino-cli user dirs |
+| `rp2040:rp2040@5.4.0` core (earlephilhower/arduino-pico) | Pinned RP2040 compile/upload frontend used by the generated firmware adapter | arduino-cli user dirs |
 
 `$LIB_DIR` defaults to `<parent-of-repo-root>/libraries`, which matches the
 path expected for `JaszczurHAL` by module `CMakeLists.txt` files.
@@ -1077,7 +1077,7 @@ Three build paths exist today:
   clang-tidy targets. Fast to run locally; no hardware required.
 - **Firmware build** - JaszczurHAL `jh-vscode` configures the multi-target dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`), whose RP2040
   recipe generates a temporary adapter sketch and invokes `arduino-cli` against
-  it using the `rp2040:rp2040` core. The result is the canonical `.build/firmware.uf2` plus a generated and
+  it using the pinned `rp2040:rp2040@5.4.0` core. The result is the canonical `.build/firmware.uf2` plus a generated and
   verified `.build/firmware.manifest.json`. Deployed either through
   identity-verified `jh-vscode upload` with the Fiesta manifest gate or through
   the explicit BOOTSEL task.

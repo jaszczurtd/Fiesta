@@ -39,6 +39,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       ARDUINO_BOARD_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+      ARDUINO_CORE: rp2040:rp2040@5.4.0
     permissions:
       contents: read
 
@@ -60,7 +61,7 @@ jobs:
         run: |
           set -eux
           arduino-cli core update-index --additional-urls "$ARDUINO_BOARD_URL"
-          arduino-cli core install rp2040:rp2040 --additional-urls "$ARDUINO_BOARD_URL"
+          arduino-cli core install "$ARDUINO_CORE" --additional-urls "$ARDUINO_BOARD_URL"
 
       - name: Verify release build
         working-directory: src/${{ matrix.module }}
