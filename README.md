@@ -63,7 +63,7 @@ Required toolchain:
   enables the live map instead of its fallback placeholder
 - QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`
   (`cppcheck` ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
-- `arduino-cli` + `rp2040:rp2040` core (earlephilhower/arduino-pico)
+- `arduino-cli` + `rp2040:rp2040@5.4.0` core (earlephilhower/arduino-pico)
 
 ## Build and development
 
@@ -77,7 +77,8 @@ Each firmware module is a regular C/C++ application with a CMake-generated appli
 2. verifies Python 3 is available,
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. installs `arduino-cli` if missing,
-5. registers the rp2040 board manager URL and installs the `rp2040:rp2040` core,
+5. registers the rp2040 board manager URL and installs the pinned
+   `rp2040:rp2040@5.4.0` core, replacing another installed version if needed,
 6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
    `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime

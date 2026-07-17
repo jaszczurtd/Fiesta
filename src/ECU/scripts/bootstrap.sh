@@ -60,6 +60,7 @@ DEFAULT_LIB_DIR="$(cd "$PROJECT_DIR/../../.." && pwd)/libraries"
 LIB_DIR="${LIB_DIR:-$DEFAULT_LIB_DIR}"
 ARDUINO_CLI="${ARDUINO_CLI:-arduino-cli}"
 BOARD_URL="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
+RP2040_CORE_VERSION="5.4.0"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
@@ -210,26 +211,19 @@ setup_arduino_core() {
             2>/dev/null || "$ARDUINO_CLI" config set board_manager.additional_urls "$BOARD_URL"
     fi
     "$ARDUINO_CLI" core update-index >/dev/null
-    if "$ARDUINO_CLI" core list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "rp2040:rp2040"; then
-        local installed_version
-        installed_version=$("$ARDUINO_CLI" core list 2>/dev/null \
-            | awk '$1=="rp2040:rp2040" {print $2}')
-        ok "rp2040:rp2040 core already installed (version: ${installed_version:-unknown})"
-        # The arduino-pico core ships new board IDs across releases (e.g.
-        # `waveshare_rp2040_plus` was added in v2.0, RP2350 boards in v4.0).
-        # The presence-only check above does NOT catch a stale install that
-        # predates a board the operator's settings.json targets - `compile`
-        # then dies with a terse "board ... not found". Upgrade
-        # unconditionally so already-current installs become a no-op while
-        # stale ones are brought up to date.
-        info "Upgrading rp2040:rp2040 to the latest version (no-op if current)"
-        if ! "$ARDUINO_CLI" core upgrade rp2040:rp2040; then
-            warn "core upgrade exited non-zero - continuing with whatever is installed"
-        fi
+    local installed_version
+    installed_version=$("$ARDUINO_CLI" core list 2>/dev/null \
+        | awk '$1=="rp2040:rp2040" {print $2}')
+    if [[ "$installed_version" == "$RP2040_CORE_VERSION" ]]; then
+        ok "rp2040:rp2040 core already installed at pinned version $RP2040_CORE_VERSION"
     else
-        info "Installing rp2040:rp2040 core (this can take a few minutes)"
-        "$ARDUINO_CLI" core install rp2040:rp2040
-        ok "rp2040 core installed"
+        if [[ -n "$installed_version" ]]; then
+            info "Replacing rp2040:rp2040 $installed_version with pinned version $RP2040_CORE_VERSION"
+        else
+            info "Installing pinned rp2040:rp2040 core $RP2040_CORE_VERSION (this can take a few minutes)"
+        fi
+        "$ARDUINO_CLI" core install "rp2040:rp2040@$RP2040_CORE_VERSION"
+        ok "rp2040 core $RP2040_CORE_VERSION installed"
     fi
 
     # Sanity-check: every Fiesta module currently targets the
@@ -243,7 +237,7 @@ setup_arduino_core() {
         err "Required board '$probe_board' missing from rp2040:rp2040."
         err "Likely cause: an arduino-pico install older than v2.0 (this board was"
         err "added in 2.0). Fix:"
-        err "  $ARDUINO_CLI core install --force rp2040:rp2040"
+        err "  $ARDUINO_CLI core install rp2040:rp2040@$RP2040_CORE_VERSION"
         err "Then re-run bootstrap.sh. If the failure persists, verify the board"
         err "manager URL is the earlephilhower one ($BOARD_URL)."
         exit 1

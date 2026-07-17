@@ -4,7 +4,15 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-07-16 (latest)
+## 2026-07-17 (latest)
+
+- Pinned the bootstrap Arduino-Pico core to `rp2040:rp2040@5.4.0`. Re-running
+  bootstrap now replaces a different installed core version instead of
+  upgrading unconditionally to the latest release, keeping firmware builds
+  reproducible across development and test machines. The firmware GitHub
+  Actions matrix uses the same pinned core instead of the latest release.
+
+## 2026-07-16
 
 - Migrated ECU RPM interrupt initialization to the JaszczurHAL status API with
   explicit core-1 ownership:
