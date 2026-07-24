@@ -49,3 +49,15 @@
    obj:*/libfontconfig.so*
    obj:*/libfontconfig.so*
 }
+
+{
+   gtk4-gio-init-io-module-scan-leak
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:g_malloc0
+   ...
+   fun:g_io_modules_scan_all_in_directory_with_scope
+   ...
+   fun:gtk_init_check
+}

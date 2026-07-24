@@ -141,10 +141,14 @@ check_python() {
 # 2c. cppcheck (static analysis + MISRA screening via bundled addon)
 # -----------------------------------------------------------------------------
 find_misra_addon() {
-    # Fast path: dpkg knows exactly which files cppcheck ships.
+    # Fast path: dpkg knows exactly which files cppcheck ships. Capture once and
+    # test the result; `grep -q` inside a pipe can hit the pipefail+SIGPIPE false
+    # negative, and it re-ran the same query twice.
     if command -v dpkg >/dev/null 2>&1; then
-        if dpkg -L cppcheck 2>/dev/null | grep -qE '/misra\.py$'; then
-            dpkg -L cppcheck 2>/dev/null | grep -E '/misra\.py$' | head -1
+        local dpkg_hit
+        dpkg_hit=$(dpkg -L cppcheck 2>/dev/null | grep -m1 -E '/misra\.py$') || true
+        if [[ -n "$dpkg_hit" ]]; then
+            echo "$dpkg_hit"
             return 0
         fi
     fi
@@ -205,7 +209,11 @@ install_arduino_cli() {
 
 setup_arduino_core() {
     info "Configuring arduino-cli board manager (rp2040)"
-    if ! "$ARDUINO_CLI" config dump 2>/dev/null | grep -q "$BOARD_URL"; then
+    # Capture then match on a here-string: a `grep -q` in the pipe can hit the
+    # pipefail+SIGPIPE false negative and needlessly overwrite the CLI config.
+    local config_dump=""
+    config_dump=$("$ARDUINO_CLI" config dump 2>/dev/null) || true
+    if ! grep -qF "$BOARD_URL" <<<"$config_dump"; then
         "$ARDUINO_CLI" config init --overwrite >/dev/null 2>&1 || true
         "$ARDUINO_CLI" config add board_manager.additional_urls "$BOARD_URL" \
             2>/dev/null || "$ARDUINO_CLI" config set board_manager.additional_urls "$BOARD_URL"
@@ -231,12 +239,21 @@ setup_arduino_core() {
     # core is too old and lacks that ID, fail fast with an actionable error
     # instead of letting the operator re-run the whole pipeline only to hit
     # arduino-cli's terse "Invalid FQBN: board ... not found" later on.
+    # Capture the catalogue, then test membership. Piping `board listall` into
+    # `grep -q` lets grep close the pipe on first match; under `set -o pipefail`
+    # the upstream SIGPIPE (141) then reads as a false "board missing".
     local probe_board="rp2040:rp2040:waveshare_rp2040_plus"
-    if ! "$ARDUINO_CLI" board listall rp2040:rp2040 2>/dev/null \
-            | awk '{print $NF}' | grep -qx "$probe_board"; then
+    local board_catalogue=""
+    if ! board_catalogue=$("$ARDUINO_CLI" board listall rp2040:rp2040 2>/dev/null); then
+        err "Failed to query the rp2040:rp2040 board catalogue via arduino-cli."
+        err "Verify the core installed cleanly:"
+        err "  $ARDUINO_CLI core install rp2040:rp2040@$RP2040_CORE_VERSION"
+        exit 1
+    fi
+    if ! awk -v want="$probe_board" '$NF==want{hit=1} END{exit hit?0:1}' \
+            <<<"$board_catalogue"; then
         err "Required board '$probe_board' missing from rp2040:rp2040."
-        err "Likely cause: an arduino-pico install older than v2.0 (this board was"
-        err "added in 2.0). Fix:"
+        err "Likely cause: a wrong or incomplete arduino-pico core. Fix:"
         err "  $ARDUINO_CLI core install rp2040:rp2040@$RP2040_CORE_VERSION"
         err "Then re-run bootstrap.sh. If the failure persists, verify the board"
         err "manager URL is the earlephilhower one ($BOARD_URL)."
@@ -323,7 +340,7 @@ fetch_libraries() {
         "$hal_dir/src/JaszczurHAL.h"
         "$hal_dir/src/hal/hal_config.cpp"
         "$hal_dir/src/hal/impl/.mock/hal_mock.h"
-        "$hal_dir/src/hal/impl/shared/compat/debug_format/hal_debug_format.cpp"
+        "$hal_dir/src/hal/impl/shared/debug/hal_debug_format.cpp"
         "$hal_dir/src/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp"
         "$hal_dir/src/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp"
         "$hal_dir/src/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c"
