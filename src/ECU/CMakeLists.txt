@@ -38,7 +38,7 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 # ── HAL utility sources (no Arduino dependency) ────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
-    ${HAL_SRC}/hal/impl/shared/compat/debug_format/hal_debug_format.cpp
+    ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
     # HAL crypto wrappers call into the shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
