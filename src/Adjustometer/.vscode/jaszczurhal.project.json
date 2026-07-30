@@ -3,15 +3,16 @@
     "project": "Fiesta",
     "module": "Adjustometer",
     "toolchain": "cmake",
-    "fqbn": "rp2040:rp2040:rpipico",
+    "target": "rp2040",
+    "board": "rp2040-zero",
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "ARDUINO_LIBRARIES": "${project}/../../../libraries",
-            "ARDUINO_WERROR": true
+            "JH_MODULE_NAME": "Adjustometer",
+            "JH_EXTRA_SOURCES": "${project}/../common/fiesta_app_entry.cpp"
         },
         "targets": {
             "build": "firmware",

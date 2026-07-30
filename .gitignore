@@ -61,3 +61,5 @@ Fiesta_pcbs/**/fp-info-cache
 Fiesta_pcbs/**/*-backups/
 Fiesta_pcbs/**/*#autosave*
 
+# jh-vscode user-local active board selection
+src/Fiesta_clock/.vscode/jaszczurhal.local.json

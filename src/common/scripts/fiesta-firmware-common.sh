@@ -71,72 +71,6 @@ print(value)
 PYEOF
 }
 
-fiesta_find_arduino_cli() {
-    local settings_file="$1"
-    local cli_path
-
-    cli_path=$(fiesta_read_json_setting "$settings_file" "jaszczurhal.cliPath" "")
-    if [[ -n "$cli_path" ]] && command -v "$cli_path" >/dev/null 2>&1; then
-        command -v "$cli_path"
-        return 0
-    fi
-
-    cli_path=$(fiesta_read_json_setting "$settings_file" "arduino.cliPath" "")
-    if [[ -n "$cli_path" ]] && command -v "$cli_path" >/dev/null 2>&1; then
-        command -v "$cli_path"
-        return 0
-    fi
-
-    if command -v arduino-cli >/dev/null 2>&1; then
-        command -v arduino-cli
-        return 0
-    fi
-
-    if [[ -x "$HOME/.local/bin/arduino-cli" ]]; then
-        printf '%s\n' "$HOME/.local/bin/arduino-cli"
-        return 0
-    fi
-
-    return 1
-}
-
-fiesta_resolve_fqbn() {
-    local project_dir="$1"
-    local settings_file="$project_dir/.vscode/settings.json"
-    local jh_project_file="$project_dir/.vscode/jaszczurhal.project.json"
-    local arduino_json="$project_dir/.vscode/arduino.json"
-    local fqbn board config
-
-    if [[ -n "${FIESTA_ARDUINO_FQBN:-}" ]]; then
-        printf '%s\n' "$FIESTA_ARDUINO_FQBN"
-        return 0
-    fi
-
-    fqbn=$(fiesta_read_json_setting "$jh_project_file" "fqbn" "")
-    if [[ -n "$fqbn" ]]; then
-        printf '%s\n' "$fqbn"
-        return 0
-    fi
-
-    fqbn=$(fiesta_read_json_setting "$settings_file" "arduino.fqbn" "")
-    if [[ -n "$fqbn" ]]; then
-        printf '%s\n' "$fqbn"
-        return 0
-    fi
-
-    board=$(fiesta_read_json_setting "$arduino_json" "board" "")
-    config=$(fiesta_read_json_setting "$arduino_json" "configuration" "")
-    if [[ -z "$board" ]]; then
-        return 1
-    fi
-
-    if [[ -n "$config" ]]; then
-        printf '%s:%s\n' "$board" "$config"
-    else
-        printf '%s\n' "$board"
-    fi
-}
-
 fiesta_resolve_libraries_dir() {
     local sketchbook="$1"
     local project_dir="${2:-}"
@@ -155,7 +89,7 @@ fiesta_resolve_libraries_dir() {
         fi
     fi
 
-    for candidate in "$HOME/libraries" "$HOME/Arduino/libraries"; do
+    for candidate in "$HOME/libraries"; do
         if [[ -d "$candidate" ]]; then
             printf '%s\n' "$candidate"
             return 0
@@ -174,9 +108,8 @@ fiesta_cmake_bool() {
 }
 
 fiesta_firmware_cmake_source_dir() {
-    # JaszczurHAL multi-target dispatcher (replaces the retired in-repo
-    # FiestaArduinoFirmware recipe). Arg: the libraries dir (parent of
-    # JaszczurHAL). This script path targets rp2040.
+    # JaszczurHAL multi-target dispatcher. Arg: the libraries dir (parent of
+    # JaszczurHAL).
     local libraries_dir="$1"
     printf '%s\n' "$libraries_dir/JaszczurHAL/cmake/jh_firmware_project"
 }
@@ -245,74 +178,36 @@ fiesta_run_compile() {
     local verbose="${6:-0}"
     local port="${7:-}"
 
-    local module settings_file build_dir cli fqbn sketchbook libraries_dir
-    local cmake_src cmake_build target
-    local usb_manufacturer usb_product
-    local cmake_werror cmake_verbose
+    local libraries_dir jh_entry action
 
-    : "$sketch_dir"
-    module=$(fiesta_module_name "$project_dir")
-    settings_file="$project_dir/.vscode/settings.json"
-    build_dir="$project_dir/.build"
+    # Native builds always enable warnings-as-errors. Keep the legacy function
+    # signature so bootstrap callers remain source-compatible.
+    : "$sketch_dir" "$include_werror" "$include_warnings" "$verbose"
 
-    if [[ -n "${FIESTA_ARDUINO_CLI:-}" ]]; then
-        cli="$FIESTA_ARDUINO_CLI"
-    else
-        cli=$(fiesta_find_arduino_cli "$settings_file") || return 1
-    fi
-    if ! command -v cmake >/dev/null 2>&1; then
-        echo "cmake not found" >&2
-        return 1
-    fi
-
-    if [[ -n "${FIESTA_ARDUINO_FQBN:-}" ]]; then
-        fqbn="$FIESTA_ARDUINO_FQBN"
-    else
-        fqbn=$(fiesta_resolve_fqbn "$project_dir") || return 1
-    fi
-    sketchbook=$(fiesta_read_json_setting "$settings_file" "arduino.sketchbookPath" "")
     if [[ -n "${FIESTA_LIBRARIES_DIR:-}" ]]; then
         libraries_dir="$FIESTA_LIBRARIES_DIR"
     else
-        libraries_dir=$(fiesta_resolve_libraries_dir "$sketchbook" "$project_dir" || true)
+        libraries_dir=$(fiesta_resolve_libraries_dir "" "$project_dir" || true)
     fi
-    usb_manufacturer=$(fiesta_usb_manufacturer)
-    usb_product=$(fiesta_usb_product_for "$module")
-    cmake_src=$(fiesta_firmware_cmake_source_dir "$libraries_dir")
-    cmake_build=$(fiesta_firmware_cmake_build_dir "$project_dir")
-    cmake_werror=$(fiesta_cmake_bool "$include_werror")
-    cmake_verbose=$(fiesta_cmake_bool "$verbose")
-
-    mkdir -p "$build_dir"
-    fiesta_reset_stale_cmake_cache_if_needed "$cmake_src" "$cmake_build" "$project_dir" || return 1
-
-    # Build through the JaszczurHAL multi-target dispatcher (rp2040 target). The
-    # former FIESTA_* cache vars map onto the dispatcher's names; the rp2040
-    # recipe discovers JaszczurHAL/Credentials/canDefinitions via --libraries and
-    # generates the Fiesta entry adapter from firmware_entry.h. --warnings all is
-    # always on in the recipe (matches the modules' FIESTA_WARNINGS=true).
-    cmake -S "$cmake_src" -B "$cmake_build" \
-        -DJH_TARGET=rp2040 \
-        -DJH_PROJECT_DIR="$project_dir" \
-        -DARDUINO_CLI="$cli" \
-        -DARDUINO_FQBN="$fqbn" \
-        -DARDUINO_UPLOAD_PORT="$port" \
-        -DARDUINO_VERBOSE="$cmake_verbose" \
-        -DARDUINO_LIBRARIES="$libraries_dir" \
-        -DARDUINO_WERROR="$cmake_werror" \
-        -DJH_USB_MANUFACTURER="$usb_manufacturer" \
-        -DJH_USB_PRODUCT="$usb_product" \
-        >/dev/null
+    jh_entry="$libraries_dir/JaszczurHAL/vscode/entry/jh-vscode"
+    if [[ ! -x "$jh_entry" ]]; then
+        echo "JaszczurHAL VS Code entry not found: $jh_entry" >&2
+        return 1
+    fi
 
     case "$mode" in
-        build)                target="firmware" ;;
-        debug)                target="firmware_debug" ;;
-        upload)               target="firmware_upload" ;;
-        compilation-database) target="firmware_compile_db" ;;
+        build)                action="build" ;;
+        debug)                action="build-debug" ;;
+        upload)               action="upload" ;;
+        compilation-database) action="refresh-intellisense" ;;
         *)                    return 2 ;;
     esac
 
-    cmake --build "$cmake_build" --target "$target"
+    if [[ "$mode" == "upload" && -n "$port" ]]; then
+        "$jh_entry" "$action" --project "$project_dir" --port "$port"
+    else
+        "$jh_entry" "$action" --project "$project_dir"
+    fi
 }
 
 fiesta_find_uf2_artifact() {

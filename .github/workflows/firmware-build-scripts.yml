@@ -8,8 +8,7 @@ on:
       - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
-      - "src/common/cmake/**"
-      - "src/common/scripts/**"
+      - "src/common/**"
       - ".github/workflows/firmware-build-scripts.yml"
   pull_request:
     paths:
@@ -18,8 +17,7 @@ on:
       - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
-      - "src/common/cmake/**"
-      - "src/common/scripts/**"
+      - "src/common/**"
       - ".github/workflows/firmware-build-scripts.yml"
   workflow_dispatch:
 
@@ -38,8 +36,6 @@ jobs:
           - Fiesta_clock
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      ARDUINO_BOARD_URL: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-      ARDUINO_CORE: rp2040:rp2040@5.4.0
     permissions:
       contents: read
 
@@ -52,21 +48,24 @@ jobs:
           set -eux
           mkdir -p ../libraries
 
-          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+          git clone --depth 1 --recurse-submodules --shallow-submodules \
+            https://github.com/jaszczurtd/JaszczurHAL.git \
+            ../libraries/JaszczurHAL
 
-      - name: Setup arduino-cli
-        uses: arduino/setup-arduino-cli@v2
-
-      - name: Install rp2040 core
+      - name: Setup native RP toolchain
         run: |
           set -eux
-          arduino-cli core update-index --additional-urls "$ARDUINO_BOARD_URL"
-          arduino-cli core install "$ARDUINO_CORE" --additional-urls "$ARDUINO_BOARD_URL"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            libusb-1.0-0-dev python3
+          ../libraries/JaszczurHAL/scripts/ensure_picotool.sh --enable
 
       - name: Verify release build
         working-directory: src/${{ matrix.module }}
         run: |
           set -eux
+          ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
           ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
 
       - name: Verify debug build
