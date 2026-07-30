@@ -3,15 +3,17 @@
     "project": "Fiesta",
     "module": "ECU",
     "toolchain": "cmake",
-    "fqbn": "rp2040:rp2040:waveshare_rp2040_plus:flash=4194304_0,freq=200,dbgport=Disabled,dbglvl=None,usbstack=picosdk",
+    "target": "rp2040",
+    "board": "rp2040-plus-4mb",
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "ARDUINO_LIBRARIES": "${project}/../../../libraries",
-            "ARDUINO_WERROR": true
+            "JH_MODULE_NAME": "ECU",
+            "JH_EXTRA_SOURCES": "${project}/../common/fiesta_app_entry.cpp",
+            "JH_EXTRA_DEFINES": "HAL_ENABLE_KV"
         },
         "targets": {
             "build": "firmware",

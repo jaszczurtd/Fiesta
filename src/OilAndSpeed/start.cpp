@@ -13,13 +13,13 @@ static hal_soft_timer_t timerDebug = NULL;
 static hal_soft_timer_t timerThermocouples = NULL;
 
 static const hal_soft_timer_table_entry_t oilSpeedTimerTable[] = {
-  { &timerCANUpdate,     updateCANrecipients,  (uint32_t)CAN_UPDATE_RECIPIENTS },
-  { &timerCANLoop,       canMainLoop,          (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL },
-  { &timerCANCheck,      canCheckConnection,   (uint32_t)CAN_CHECK_CONNECTION },
-  { &timerOilPressure,   readOilPressure,      (uint32_t)OIL_PRESSURE_READ_INTERVAL },
-  { &timerThermocouples, readThermocouples,     (uint32_t)THERMOCOUPLE_READ_INTERVAL },
-  { &timerDebug,         updateValsForDebug,   (uint32_t)DEBUG_UPDATE }
-};
+    {&timerCANUpdate, updateCANrecipients, (uint32_t)CAN_UPDATE_RECIPIENTS},
+    {&timerCANLoop, canMainLoop, (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL},
+    {&timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION},
+    {&timerOilPressure, readOilPressure, (uint32_t)OIL_PRESSURE_READ_INTERVAL},
+    {&timerThermocouples, readThermocouples,
+     (uint32_t)THERMOCOUPLE_READ_INTERVAL},
+    {&timerDebug, updateValsForDebug, (uint32_t)DEBUG_UPDATE}};
 
 hal_thermocouple_t egt_pre_dpf = NULL;
 hal_thermocouple_t egt_mid_dpf = NULL;
@@ -56,7 +56,7 @@ void initialization(void) {
   initSPI();
 
   result = canInit();
-  setLEDColor(result ? RED: GREEN);
+  setLEDColor(result ? RED : GREEN);
   if (result) {
     derr("cannot setup CAN, exiting");
     return;
@@ -78,7 +78,7 @@ void initialization(void) {
   configSessionInit();
 
   result = setupSpeedometer();
-  setLEDColor(result ? GREEN: YELLOW);
+  setLEDColor(result ? GREEN : YELLOW);
   if (!result) {
     derr("cannot setup speedometer, exiting");
     return;
@@ -89,11 +89,12 @@ void initialization(void) {
   setGlobalValue(F_EGT, 0);
   setGlobalValue(F_DPF_TEMP, 0);
 
-  hal_thermocouple_config_t egt_cfg;
-  egt_cfg.chip             = HAL_THERMOCOUPLE_CHIP_MCP9600;
-  egt_cfg.bus.i2c.sda_pin  = PIN_I2C_SDA;
-  egt_cfg.bus.i2c.scl_pin  = PIN_I2C_SCL;
+  hal_thermocouple_config_t egt_cfg = {};
+  egt_cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
+  egt_cfg.bus.i2c.sda_pin = PIN_I2C_SDA;
+  egt_cfg.bus.i2c.scl_pin = PIN_I2C_SCL;
   egt_cfg.bus.i2c.clock_hz = 100000UL;
+  egt_cfg.bus.i2c.i2c_bus = 0;
   egt_cfg.bus.i2c.i2c_addr = MCP9600_ADDR_PRE_DPF;
 
   egt_pre_dpf = hal_thermocouple_init(&egt_cfg);
@@ -101,20 +102,25 @@ void initialization(void) {
     derr("[EGT] MCP9600 #1 not found!");
   } else {
     hal_thermocouple_set_type(egt_pre_dpf, HAL_THERMOCOUPLE_TYPE_K);
-    hal_thermocouple_set_adc_resolution(egt_pre_dpf, HAL_THERMOCOUPLE_ADC_RES_18);
-    hal_thermocouple_set_ambient_resolution(egt_pre_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
+    hal_thermocouple_set_adc_resolution(egt_pre_dpf,
+                                        HAL_THERMOCOUPLE_ADC_RES_18);
+    hal_thermocouple_set_ambient_resolution(
+        egt_pre_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
     hal_thermocouple_set_filter(egt_pre_dpf, 3);
     hal_thermocouple_enable(egt_pre_dpf, true);
     deb("[EGT] MCP9600 #1 OK");
   }
 
+  egt_cfg.bus.i2c.i2c_addr = MCP9600_ADDR_MID_DPF;
   egt_mid_dpf = hal_thermocouple_init(&egt_cfg);
   if (!egt_mid_dpf) {
     derr("[EGT] MCP9600 #2 not found!");
   } else {
     hal_thermocouple_set_type(egt_mid_dpf, HAL_THERMOCOUPLE_TYPE_K);
-    hal_thermocouple_set_adc_resolution(egt_mid_dpf, HAL_THERMOCOUPLE_ADC_RES_18);
-    hal_thermocouple_set_ambient_resolution(egt_mid_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
+    hal_thermocouple_set_adc_resolution(egt_mid_dpf,
+                                        HAL_THERMOCOUPLE_ADC_RES_18);
+    hal_thermocouple_set_ambient_resolution(
+        egt_mid_dpf, HAL_THERMOCOUPLE_AMBIENT_RES_0_0625);
     hal_thermocouple_set_filter(egt_mid_dpf, 3);
     hal_thermocouple_enable(egt_mid_dpf, true);
     deb("[EGT] MCP9600 #2 OK");
@@ -158,10 +164,7 @@ void looper() {
   hal_idle();
 }
 
-
-void initialization1() {
-  setStartedCore1();
-}
+void initialization1() { setStartedCore1(); }
 
 void looper1() {
   updateWatchdogCore1();
@@ -179,9 +182,9 @@ void looper1() {
 }
 
 void updateValsForDebug(void) {
-  deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR", isEcuConnected() ? "on" : "off",
-                                                          isClusterConnected() ? "on" : "off",
-                                                          getCircumference(),
-                                                          getGlobalValue(F_OIL_PRESSURE));
-  deb("thermo1: %fC, thermo2: %fC", getGlobalValue(F_EGT), getGlobalValue(F_DPF_TEMP));
+  deb("ECU:%s, cluster:%s, circumference:%f, oil:%fBAR",
+      isEcuConnected() ? "on" : "off", isClusterConnected() ? "on" : "off",
+      getCircumference(), getGlobalValue(F_OIL_PRESSURE));
+  deb("thermo1: %fC, thermo2: %fC", getGlobalValue(F_EGT),
+      getGlobalValue(F_DPF_TEMP));
 }

@@ -17,3 +17,4 @@
 #define HAL_DISPLAY_ILI9341 /* Select ILI9341 as the TFT driver    */
 #define HAL_ENABLE_RGB_LED  /* NeoPixel status LED                */
 #define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_APP_TASK1

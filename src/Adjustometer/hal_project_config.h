@@ -11,5 +11,6 @@
 
 /* ── Modules used by Adjustometer ────────────────────────────────────── */
 
-#define HAL_ENABLE_I2C_SLAVE        /* I2C slave register map - ECU link  */
-#define HAL_ENABLE_RGB_LED          /* NeoPixel status LED                */
+#define HAL_ENABLE_I2C_SLAVE /* I2C slave register map - ECU link  */
+#define HAL_ENABLE_RGB_LED   /* NeoPixel status LED                */
+#define HAL_ENABLE_APP_TASK1

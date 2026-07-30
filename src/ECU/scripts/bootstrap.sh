@@ -3,8 +3,8 @@
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
 # Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
-# arduino-cli + rp2040 core, syncs required Arduino library (JaszczurHAL),
-# runs host tests, compiles firmware for every Fiesta
+# native RP toolchain, syncs JaszczurHAL, runs host tests, compiles firmware
+# for every Fiesta
 # module, and finally builds + tests + packages the SerialConfigurator
 # desktop tool:
 #   - ECU                (host tests + firmware, -Werror)
@@ -19,7 +19,6 @@
 #
 # Env overrides:
 #   LIB_DIR         default: $HOME/libraries   (parent of cloned libs)
-#   ARDUINO_CLI     default: arduino-cli       (path to binary)
 #   SKIP_APT=1      skip apt-get steps
 #   SKIP_TESTS=1    skip host QA run (`runalltests.sh`)
 #   SKIP_BUILD=1    skip firmware compile
@@ -31,26 +30,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
-COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-arduino-common.sh"
+COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-firmware-common.sh"
 
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
 
-# Fallback FQBN for modules that do not ship a VS Code project manifest.
-# This is only a last-resort bootstrap default; migrated firmware modules keep
-# their board contract in .vscode/jaszczurhal.project.json.
-DEFAULT_FQBN="rp2040:rp2040:rpipico:flash=2097152_0,freq=125,dbgport=Serial,dbglvl=None,usbstack=picosdk"
-
 # Per-module build matrix.
-#   FW_MODULES   = "module:werror" - werror=1 enables -Werror for that module
-#                  (matches the per-module policy used by the shared Arduino
-#                  build/upload/refresh wrappers).
+# Native JaszczurHAL builds use -Werror for every module.
 FW_MODULES=(
-    "ECU:1"
-    "Clocks:0"
-    "OilAndSpeed:0"
-    "Fiesta_clock:0"
-    "Adjustometer:1"
+    "ECU"
+    "Clocks"
+    "OilAndSpeed"
+    "Fiesta_clock"
+    "Adjustometer"
 )
 
 # src/ECU/CMakeLists.txt resolves libraries at ${PROJECT_DIR}/../../../libraries
@@ -58,9 +50,6 @@ FW_MODULES=(
 # test build will fail to find JaszczurHAL sources.
 DEFAULT_LIB_DIR="$(cd "$PROJECT_DIR/../../.." && pwd)/libraries"
 LIB_DIR="${LIB_DIR:-$DEFAULT_LIB_DIR}"
-ARDUINO_CLI="${ARDUINO_CLI:-arduino-cli}"
-BOARD_URL="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
-RP2040_CORE_VERSION="5.4.0"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
@@ -70,11 +59,10 @@ err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 if [[ $EUID -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
 
-# Running as root puts arduino-cli config + rp2040 core under /root/.arduino15/
-# and the rest of the workflow uses the wrong $HOME, which breaks later
-# non-root use of arduino-cli compile. Require an explicit opt-in.
+# Keep generated build trees and user-level configuration owned by the
+# developer rather than root.
 if [[ $EUID -eq 0 && "${ALLOW_ROOT:-0}" != "1" ]]; then
-    err "Do not run bootstrap.sh as root - it uses sudo only for apt and arduino-cli install."
+    err "Do not run bootstrap.sh as root - it uses sudo only for apt."
     err "Re-run as a regular user (you will be prompted for the sudo password)."
     err "To proceed anyway, set ALLOW_ROOT=1."
     exit 1
@@ -94,6 +82,7 @@ fi
 APT_PKGS=(
     # Common toolchain
     git build-essential cmake python3 curl ca-certificates perl
+    gcc-arm-none-eabi libnewlib-arm-none-eabi libusb-1.0-0-dev pkg-config
     # SerialConfigurator desktop build + Debian package
     pkg-config libgtk-4-dev dpkg-dev
     # SerialConfigurator Map tab (Phase 8.7). Optional at build time -
@@ -186,80 +175,6 @@ check_cppcheck() {
         warn "cppcheck misra.py addon not found - misra/check_misra.sh may fail"
         warn "On Debian/Ubuntu the addon ships with the 'cppcheck' package; check 'dpkg -L cppcheck | grep misra'"
     fi
-}
-
-# -----------------------------------------------------------------------------
-# 3. arduino-cli
-# -----------------------------------------------------------------------------
-install_arduino_cli() {
-    if command -v "$ARDUINO_CLI" >/dev/null 2>&1; then
-        ok "arduino-cli present: $("$ARDUINO_CLI" version | head -1)"
-        return
-    fi
-    info "Installing arduino-cli to /usr/local/bin"
-    local tmp
-    tmp=$(mktemp -d)
-    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
-        | BINDIR="$tmp" sh
-    $SUDO install -m 0755 "$tmp/arduino-cli" /usr/local/bin/arduino-cli
-    rm -rf "$tmp"
-    ARDUINO_CLI="arduino-cli"
-    ok "arduino-cli installed: $("$ARDUINO_CLI" version | head -1)"
-}
-
-setup_arduino_core() {
-    info "Configuring arduino-cli board manager (rp2040)"
-    # Capture then match on a here-string: a `grep -q` in the pipe can hit the
-    # pipefail+SIGPIPE false negative and needlessly overwrite the CLI config.
-    local config_dump=""
-    config_dump=$("$ARDUINO_CLI" config dump 2>/dev/null) || true
-    if ! grep -qF "$BOARD_URL" <<<"$config_dump"; then
-        "$ARDUINO_CLI" config init --overwrite >/dev/null 2>&1 || true
-        "$ARDUINO_CLI" config add board_manager.additional_urls "$BOARD_URL" \
-            2>/dev/null || "$ARDUINO_CLI" config set board_manager.additional_urls "$BOARD_URL"
-    fi
-    "$ARDUINO_CLI" core update-index >/dev/null
-    local installed_version
-    installed_version=$("$ARDUINO_CLI" core list 2>/dev/null \
-        | awk '$1=="rp2040:rp2040" {print $2}')
-    if [[ "$installed_version" == "$RP2040_CORE_VERSION" ]]; then
-        ok "rp2040:rp2040 core already installed at pinned version $RP2040_CORE_VERSION"
-    else
-        if [[ -n "$installed_version" ]]; then
-            info "Replacing rp2040:rp2040 $installed_version with pinned version $RP2040_CORE_VERSION"
-        else
-            info "Installing pinned rp2040:rp2040 core $RP2040_CORE_VERSION (this can take a few minutes)"
-        fi
-        "$ARDUINO_CLI" core install "rp2040:rp2040@$RP2040_CORE_VERSION"
-        ok "rp2040 core $RP2040_CORE_VERSION installed"
-    fi
-
-    # Sanity-check: every Fiesta module currently targets the
-    # `waveshare_rp2040_plus` board (see src/*/.vscode/settings.json). If the
-    # core is too old and lacks that ID, fail fast with an actionable error
-    # instead of letting the operator re-run the whole pipeline only to hit
-    # arduino-cli's terse "Invalid FQBN: board ... not found" later on.
-    # Capture the catalogue, then test membership. Piping `board listall` into
-    # `grep -q` lets grep close the pipe on first match; under `set -o pipefail`
-    # the upstream SIGPIPE (141) then reads as a false "board missing".
-    local probe_board="rp2040:rp2040:waveshare_rp2040_plus"
-    local board_catalogue=""
-    if ! board_catalogue=$("$ARDUINO_CLI" board listall rp2040:rp2040 2>/dev/null); then
-        err "Failed to query the rp2040:rp2040 board catalogue via arduino-cli."
-        err "Verify the core installed cleanly:"
-        err "  $ARDUINO_CLI core install rp2040:rp2040@$RP2040_CORE_VERSION"
-        exit 1
-    fi
-    if ! awk -v want="$probe_board" '$NF==want{hit=1} END{exit hit?0:1}' \
-            <<<"$board_catalogue"; then
-        err "Required board '$probe_board' missing from rp2040:rp2040."
-        err "Likely cause: a wrong or incomplete arduino-pico core. Fix:"
-        err "  $ARDUINO_CLI core install rp2040:rp2040@$RP2040_CORE_VERSION"
-        err "Then re-run bootstrap.sh. If the failure persists, verify the board"
-        err "manager URL is the earlephilhower one ($BOARD_URL)."
-        exit 1
-    fi
-    ok "rp2040:rp2040 board catalogue includes the project default ($probe_board)"
 }
 
 # -----------------------------------------------------------------------------
@@ -364,6 +279,11 @@ fetch_libraries() {
     hal_branch="$(resolve_origin_default_branch "$hal_dir" || echo "unknown")"
     hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
     ok "JaszczurHAL synchronized (${hal_branch}@${hal_rev})"
+
+    info "Ensuring pinned native RP tools"
+    "$hal_dir/scripts/ensure_pico_sdk.sh" --enable
+    "$hal_dir/scripts/ensure_picotool.sh" --enable
+    ok "Native RP SDK and picotool are ready"
 }
 
 # -----------------------------------------------------------------------------
@@ -417,47 +337,14 @@ run_tests() {
 # -----------------------------------------------------------------------------
 # 6. Firmware compile (per module)
 # -----------------------------------------------------------------------------
-read_json_key() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || { echo ""; return; }
-    python3 -c "
-import json, sys
-try:
-    with open('$file') as f:
-        s = json.load(f)
-except Exception:
-    sys.exit(0)
-print(s.get('$key', ''))
-"
-}
-
 compile_firmware_for() {
-    local module="$1" werror="$2"
+    local module="$1"
     local src="$SRC_ROOT/$module"
     local build="$src/.build"
-    local manifest="$src/.vscode/jaszczurhal.project.json"
-    local ajson="$src/.vscode/arduino.json"
 
-    local board config fqbn=""
-    fqbn=$(read_json_key "$manifest" fqbn)
-    if [[ -z "$fqbn" ]]; then
-        board=$(read_json_key "$ajson" board)
-        config=$(read_json_key "$ajson" configuration)
-        if [[ -n "$board" ]]; then
-            fqbn="$board"
-            [[ -n "$config" ]] && fqbn="${board}:${config}"
-        fi
-    fi
-    if [[ -z "$fqbn" ]]; then
-        fqbn="$DEFAULT_FQBN"
-        info "[$module] no VS Code project manifest/arduino.json FQBN - using default FQBN"
-    fi
-
-    info "[$module] compiling firmware (FQBN: $fqbn)"
-    FIESTA_ARDUINO_CLI="$ARDUINO_CLI" \
-    FIESTA_ARDUINO_FQBN="$fqbn" \
+    info "[$module] compiling native firmware from tracked target/board manifest"
     FIESTA_LIBRARIES_DIR="$LIB_DIR" \
-        fiesta_run_compile "$src" build "$src" "$werror" 1 0 ""
+        fiesta_run_compile "$src" build "$src" 1 1 0 ""
 
     local uf2
     uf2=$(fiesta_find_uf2_artifact "$build" || true)
@@ -480,11 +367,9 @@ compile_firmware() {
         info "SKIP_BUILD=1 - skipping firmware compile"
         return
     fi
-    local entry module werror
-    for entry in "${FW_MODULES[@]}"; do
-        module="${entry%%:*}"
-        werror="${entry##*:}"
-        compile_firmware_for "$module" "$werror"
+    local module
+    for module in "${FW_MODULES[@]}"; do
+        compile_firmware_for "$module"
     done
 }
 
@@ -565,8 +450,6 @@ info "  LIB_DIR:  $LIB_DIR"
 install_apt
 check_python
 check_cppcheck
-install_arduino_cli
-setup_arduino_core
 fetch_libraries
 setup_git_hooks
 run_tests
