@@ -82,9 +82,10 @@ fi
 APT_PKGS=(
     # Common toolchain
     git build-essential cmake python3 curl ca-certificates perl
-    gcc-arm-none-eabi libnewlib-arm-none-eabi libusb-1.0-0-dev pkg-config
+    gcc-arm-none-eabi libstdc++-arm-none-eabi-newlib
+    libusb-1.0-0-dev pkg-config
     # SerialConfigurator desktop build + Debian package
-    pkg-config libgtk-4-dev dpkg-dev
+    libgtk-4-dev dpkg-dev
     # SerialConfigurator Map tab (Phase 8.7). Optional at build time -
     # CMake degrades to a placeholder when shumate-1.0 is missing - but
     # bootstrap.sh sets up the full feature surface so first-time devs
@@ -127,7 +128,25 @@ check_python() {
 }
 
 # -----------------------------------------------------------------------------
-# 2c. cppcheck (static analysis + MISRA screening via bundled addon)
+# 2c. Arm C++ runtime
+# -----------------------------------------------------------------------------
+check_arm_cpp_toolchain() {
+    local libstdcpp
+    if ! command -v arm-none-eabi-g++ >/dev/null 2>&1; then
+        err "arm-none-eabi-g++ not found after apt step."
+        exit 1
+    fi
+    libstdcpp="$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
+    if [[ "$libstdcpp" == "libstdc++.a" || ! -f "$libstdcpp" ]]; then
+        err "Arm libstdc++.a not found after apt step."
+        err "Install libstdc++-arm-none-eabi-newlib and re-run."
+        exit 1
+    fi
+    ok "Arm C++ runtime present: $libstdcpp"
+}
+
+# -----------------------------------------------------------------------------
+# 2d. cppcheck (static analysis + MISRA screening via bundled addon)
 # -----------------------------------------------------------------------------
 find_misra_addon() {
     # Fast path: dpkg knows exactly which files cppcheck ships. Capture once and
@@ -280,10 +299,11 @@ fetch_libraries() {
     hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
     ok "JaszczurHAL synchronized (${hal_branch}@${hal_rev})"
 
-    info "Ensuring pinned native RP tools"
+    info "Ensuring pinned native RP dependencies"
+    "$hal_dir/scripts/ensure_bearssl.sh" --force
     "$hal_dir/scripts/ensure_pico_sdk.sh" --enable
     "$hal_dir/scripts/ensure_picotool.sh" --enable
-    ok "Native RP SDK and picotool are ready"
+    ok "Native RP dependencies are ready"
 }
 
 # -----------------------------------------------------------------------------
@@ -449,6 +469,7 @@ info "  LIB_DIR:  $LIB_DIR"
 
 install_apt
 check_python
+check_arm_cpp_toolchain
 check_cppcheck
 fetch_libraries
 setup_git_hooks
