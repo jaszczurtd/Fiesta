@@ -57,8 +57,11 @@ jobs:
           set -eux
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            libusb-1.0-0-dev python3
+            build-essential cmake gcc-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
+          test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
+          ../libraries/JaszczurHAL/scripts/ensure_bearssl.sh --force
+          ../libraries/JaszczurHAL/scripts/ensure_pico_sdk.sh --enable
           ../libraries/JaszczurHAL/scripts/ensure_picotool.sh --enable
 
       - name: Verify release build
