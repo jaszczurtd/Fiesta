@@ -89,8 +89,8 @@ second core also expose `initialization1()` / `looper1()` through
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. verifies the Arm C++ runtime required by native firmware builds,
 5. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
-6. prepares the pinned BearSSL, Pico SDK, and `picotool` dependencies managed
-   by JaszczurHAL,
+6. prepares JaszczurHAL's pinned source dependencies, plus the Pico SDK and
+   `picotool` required by native RP firmware builds,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
    `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime
    CTest plus cppcheck/Valgrind/clang-tidy gates),

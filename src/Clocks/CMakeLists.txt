@@ -25,6 +25,9 @@ set(HAL_SRC ${HAL_LIB_EXTERNAL}/src)
 set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 set(SCDEFS  ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 
+include(${HAL_LIB_EXTERNAL}/cmake/jh_managed_frameworks.cmake)
+jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
+
 if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_INCLUDE_DIR ${HAL_LIB_EXTERNAL})
@@ -65,6 +68,7 @@ target_include_directories(clocks_mock BEFORE PUBLIC
 )
 
 target_include_directories(clocks_mock PUBLIC
+    ${HAL_MANAGED_INCLUDE_DIRS}
     ${CLOCKS_SRC}
     ${UNITY_INCLUDE_DIR}
     ${HAL_LIB_EXTERNAL}

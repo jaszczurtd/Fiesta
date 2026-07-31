@@ -6,6 +6,11 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## 2026-07-31 (latest)
 
+- Fixed fresh-checkout CI and bootstrap provisioning after JaszczurHAL moved
+  its source libraries into managed `third_party` checkouts. A shared helper
+  now prepares the complete pinned source dependency set for host jobs and
+  adds the Pico SDK plus `picotool` for native RP firmware builds. Host CMake
+  targets now consume JaszczurHAL's managed framework include set.
 - Aligned repository documentation with the native JaszczurHAL RP workflow:
   CMake and the pinned Pico SDK now describe the firmware build, the shared
   Fiesta entry adapter, USB identity, bootstrap dependencies, and BOOTSEL/UF2

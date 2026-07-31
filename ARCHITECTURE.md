@@ -1081,13 +1081,13 @@ firmware compile path as warning quality gates.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | push/PR on `src/ECU/**` | clones deps, builds ECU, runs CTest (including its cppcheck test), Valgrind, and clang-tidy |
+| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | push/PR on `src/ECU/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds ECU, runs CTest (including its cppcheck test), Valgrind, and clang-tidy |
 | [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | runs cppcheck against the baseline in [`src/ECU/cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log), fails if new findings appear |
 | [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | runs [`src/ECU/misra/check_misra.sh`](src/ECU/misra/) and uploads a MISRA findings artifact |
-| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` | builds Clocks, then runs CTest, Valgrind, and clang-tidy |
-| [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` | builds OilAndSpeed, then runs CTest, Valgrind, and clang-tidy |
-| [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` | builds Adjustometer, then runs CTest, Valgrind, and clang-tidy |
-| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | push/PR on firmware modules, `src/common/**`, or the workflow | builds release/debug firmware and refreshes IntelliSense for all five modules with the native RP toolchain |
+| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds Clocks, then runs CTest, Valgrind, and clang-tidy |
+| [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds OilAndSpeed, then runs CTest, Valgrind, and clang-tidy |
+| [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds Adjustometer, then runs CTest, Valgrind, and clang-tidy |
+| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | push/PR on firmware modules, `src/common/**`, or the workflow | prepares managed JaszczurHAL and RP toolchain dependencies, builds release/debug firmware, and refreshes IntelliSense for all five modules |
 | [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | builds the GTK4 app + CLI, runs the complete CTest matrix, then executes Valgrind and clang-tidy targets |
 
 ### 10.2 Unattended daily build
@@ -1105,8 +1105,9 @@ ECU/Clocks/OilAndSpeed/Fiesta_clock/Adjustometer once per day. Setup notes in
 point; it delegates to
 [`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh). The flow sets
 up a fresh Debian-like machine end-to-end: system packages ->
-cloning/refreshing the external `JaszczurHAL` repo -> pinned BearSSL, Pico SDK,
-and `picotool` preparation -> git hook setup -> `runalltests.sh` host QA ->
+cloning/refreshing the external `JaszczurHAL` repo -> pinned managed source,
+Pico SDK, and `picotool` dependency preparation -> git hook setup ->
+`runalltests.sh` host QA ->
 firmware `.uf2` + manifest build for every module -> SerialConfigurator
 build/test/package. Env overrides:
 `LIB_DIR`, `ALLOW_ROOT`, `SKIP_APT`, `SKIP_TESTS`,

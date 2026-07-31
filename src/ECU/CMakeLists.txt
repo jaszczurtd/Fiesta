@@ -25,11 +25,15 @@ endif()
 include(CTest)
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-set(HAL_SRC   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL/src)
+set(HAL_LIB   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
+set(HAL_SRC   ${HAL_LIB}/src)
 set(ECU_SRC   ${CMAKE_CURRENT_SOURCE_DIR})
 set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 set(SCDEFS    ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 set(ECU_STUBS ${ECU_SRC}/tests/stubs)
+
+include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
+jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 
 # ── Mock implementations (from JaszczurHAL) ────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
@@ -98,6 +102,7 @@ target_include_directories(ecu_mock BEFORE PUBLIC
     ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
 )
 target_include_directories(ecu_mock PUBLIC
+    ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}
     ${HAL_SRC}/utils
     ${ECU_SRC}

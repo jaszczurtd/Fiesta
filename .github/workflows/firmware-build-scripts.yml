@@ -60,9 +60,8 @@ jobs:
             build-essential cmake gcc-arm-none-eabi \
             libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
           test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
-          ../libraries/JaszczurHAL/scripts/ensure_bearssl.sh --force
-          ../libraries/JaszczurHAL/scripts/ensure_pico_sdk.sh --enable
-          ../libraries/JaszczurHAL/scripts/ensure_picotool.sh --enable
+          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
+            ../libraries/JaszczurHAL rp
 
       - name: Verify release build
         working-directory: src/${{ matrix.module }}

@@ -24,6 +24,9 @@ set(HAL_LIB  ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 set(HAL_SRC  ${HAL_LIB}/src)
 set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 
+include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
+jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
+
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 
@@ -46,8 +49,12 @@ set(ADJ_SOURCES
     ${ADJ_SRC}/led.c
 )
 
-# Compile .c sources as C++ so __atomic_* builtins and hal C++ APIs work
-set_source_files_properties(${ADJ_SOURCES} PROPERTIES LANGUAGE CXX)
+# Compile .c sources explicitly as C++ so host tools do not infer the language
+# from the file extension.
+set_source_files_properties(${ADJ_SOURCES} PROPERTIES
+    LANGUAGE CXX
+    COMPILE_OPTIONS "-x;c++"
+)
 
 find_package(Threads REQUIRED)
 
@@ -63,6 +70,7 @@ target_include_directories(adj_mock BEFORE PUBLIC
     ${ADJ_SRC}/tests/include   # test-only hal_project_config.h override
 )
 target_include_directories(adj_mock PUBLIC
+    ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}
     ${HAL_SRC}/utils
     ${ADJ_SRC}
@@ -88,6 +96,7 @@ target_include_directories(adj_mock_common BEFORE PUBLIC
     ${HAL_STUBS}
 )
 target_include_directories(adj_mock_common PUBLIC
+    ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}
     ${HAL_SRC}/utils
     ${ADJ_SRC}
