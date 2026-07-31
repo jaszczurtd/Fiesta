@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "src/OilAndSpeed/**"
+      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/oilandspeed-tests.yml"
   pull_request:
     paths:
       - "src/OilAndSpeed/**"
+      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/oilandspeed-tests.yml"
   workflow_dispatch:
 
@@ -29,6 +31,8 @@ jobs:
           mkdir -p ../libraries
 
           git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
+            ../libraries/JaszczurHAL host
 
       - name: Install analysis dependencies
         run: |

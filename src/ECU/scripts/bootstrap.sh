@@ -31,6 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
 COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-firmware-common.sh"
+DEPENDENCY_SCRIPT="$SRC_ROOT/common/scripts/ensure-jaszczurhal-dependencies.sh"
 
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
@@ -299,10 +300,8 @@ fetch_libraries() {
     hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
     ok "JaszczurHAL synchronized (${hal_branch}@${hal_rev})"
 
-    info "Ensuring pinned native RP dependencies"
-    "$hal_dir/scripts/ensure_bearssl.sh" --force
-    "$hal_dir/scripts/ensure_pico_sdk.sh" --enable
-    "$hal_dir/scripts/ensure_picotool.sh" --enable
+    info "Ensuring pinned JaszczurHAL and native RP dependencies"
+    "$DEPENDENCY_SCRIPT" "$hal_dir" rp
     ok "Native RP dependencies are ready"
 }
 
