@@ -1,4 +1,4 @@
-# Arduino build output (also covered by parent .gitignore)
+# Legacy build output (also covered by parent .gitignore)
 .build/
 
 # Cppcheck baseline (generated, machine-specific)

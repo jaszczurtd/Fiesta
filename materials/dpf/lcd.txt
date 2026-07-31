@@ -5,6 +5,3 @@
 #05 RES - D8 or any digital
 #06 DC  - D7 or any digital
 #07 BLK - NC
-
-
-https://github.com/cbm80amiga/Arduino_ST7789_Fast

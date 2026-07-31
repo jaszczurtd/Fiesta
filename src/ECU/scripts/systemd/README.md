@@ -63,7 +63,7 @@ sudo systemctl --user daemon-reload       # NO
 mkdir -p ~/Documents
 git clone https://github.com/jaszczurtd/Fiesta.git ~/Documents/Fiesta
 
-# 2. Run bootstrap manually once so apt deps and the arduino-cli env are set up
+# 2. Run bootstrap manually once so system and native RP dependencies are set up
 bash ~/Documents/Fiesta/src/ECU/scripts/bootstrap.sh
 
 # 3. Create and protect the env file
@@ -130,8 +130,8 @@ less ~/.cache/fiesta-bootstrap/last.log
 
 If you put `FIESTA_DIR=%h/Documents/Fiesta` in `fiesta-bootstrap.env`, the
 value reaches the runner literally. Older runner versions could then create a
-literal `%h` directory and eventually fail in arduino-cli with a confusing
-linker error. The current runner rejects unexpanded `%...`, `~`, and `$...`
+literal `%h` directory and eventually fail during firmware linking with a
+confusing error. The current runner rejects unexpanded `%...`, `~`, and `$...`
 tokens before any checkout or build work and also requires `FIESTA_DIR` to be
 absolute.
 

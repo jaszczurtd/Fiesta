@@ -12,9 +12,6 @@ add_executable(test_speed
     ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
 )
 target_link_libraries(test_speed PRIVATE oilspeed_mock)
-target_include_directories(test_speed BEFORE PRIVATE
-    ${HAL_SRC}/arduino_host_stubs
-)
 target_compile_definitions(test_speed PRIVATE
     PI=3.14159265358979323846
 )
@@ -32,9 +29,8 @@ add_executable(test_can
 target_link_libraries(test_can PRIVATE oilspeed_mock)
 # HAL_SRC BEFORE so <tools.h> resolves to the HAL aggregator that also
 # re-exports multicoreWatchdog's watchdog_feed(), not to utils/tools.h
-# (which is the Arduino-dependent C++ utility surface).
+# (which is the legacy C++ utility surface).
 target_include_directories(test_can BEFORE PRIVATE
     ${HAL_SRC}
-    ${HAL_SRC}/arduino_host_stubs
 )
 add_test(NAME test_can COMMAND test_can)

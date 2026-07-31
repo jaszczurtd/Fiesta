@@ -25,12 +25,14 @@ Completed areas include:
 - HAL C wrappers for PID and soft timers,
 - `extern "C"` guards in public ECU headers,
 - ECU source migration to `.c` files,
-- Arduino build path compiles ECU `.c` sources as C while final firmware link remains mixed C/C++,
+- the native Pico SDK build compiles ECU `.c` sources as C while the final
+  firmware link remains mixed C/C++,
 - state consolidation in ECU modules (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`, `start`, `obd-2`),
 - explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
 - targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
 - dual-core state synchronization pass in `src/ECU`: dedicated mutex for adjustometer snapshot, PCF8574 shadow-latch race fix, `dtcManager` state and KV persistence under a dedicated mutex; adjustometer reader API migrated from shared-pointer to out-parameter snapshot; `readHighValues()` change-detection cache removed (CAN helpers self-dedupe).
-- warning quality gate for ECU host tests and Arduino ECU build paths (`-Werror`).
+- warning quality gate for ECU host tests and native ECU firmware builds
+  (`-Werror`).
 - warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
 - defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.
 - project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
@@ -38,7 +40,8 @@ Completed areas include:
 Pending areas:
 
 - full C linkage path for required HAL/tool APIs,
-- replacement of C++ dependencies (Arduino core/HAL/test path) if full project-level C-only build is required,
+- replacement of remaining C++ HAL and test dependencies if a full
+  project-level C-only build is required,
 - MISRA hardening pass (in progress): remaining casts/bounds/overflow cleanup outside `obd-2.c`, plus naming consistency and volatile/mutex review across ECU modules.
 
 ## Latest screening snapshot
