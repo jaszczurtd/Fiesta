@@ -22,7 +22,6 @@ include(CTest)
 set(ADJ_SRC  ${CMAKE_CURRENT_SOURCE_DIR})
 set(HAL_LIB  ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
 set(HAL_SRC  ${HAL_LIB}/src)
-set(HAL_STUBS ${HAL_SRC}/arduino_host_stubs)
 set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 
 # ── Mock implementations ───────────────────────────────────────────────────────
@@ -57,13 +56,11 @@ add_library(adj_mock STATIC
     ${MOCK_SOURCES}
     ${HAL_UTIL_SOURCES}
     ${ADJ_SOURCES}
-    # tools.cpp needs Arduino.h / SD.h / SPI.h stubs
     ${HAL_SRC}/utils/tools.cpp
 )
 
 target_include_directories(adj_mock BEFORE PUBLIC
     ${ADJ_SRC}/tests/include   # test-only hal_project_config.h override
-    ${HAL_STUBS}
 )
 target_include_directories(adj_mock PUBLIC
     ${HAL_SRC}

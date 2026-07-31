@@ -26,7 +26,7 @@ LOG_DIR="${FIESTA_LOG_DIR:-$HOME/.cache/fiesta-bootstrap}"
 
 # systemd's EnvironmentFile= does not expand %h / %u / $HOME / ~. Catch the
 # common mistake early - otherwise the literal specifier leaks into every
-# downstream path and arduino-cli will fail with a confusing linker error.
+# downstream path and the firmware build fails with a confusing linker error.
 for var in FIESTA_DIR FIESTA_REPO_URL LOG_DIR BRANCH; do
     val="${!var}"
     case "$val" in

@@ -4,13 +4,17 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
-## 2026-07-17 (latest)
+## 2026-07-31 (latest)
 
-- Pinned the bootstrap Arduino-Pico core to `rp2040:rp2040@5.4.0`. Re-running
-  bootstrap now replaces a different installed core version instead of
-  upgrading unconditionally to the latest release, keeping firmware builds
-  reproducible across development and test machines. The firmware GitHub
-  Actions matrix uses the same pinned core instead of the latest release.
+- Aligned repository documentation with the native JaszczurHAL RP workflow:
+  CMake and the pinned Pico SDK now describe the firmware build, the shared
+  Fiesta entry adapter, USB identity, bootstrap dependencies, and BOOTSEL/UF2
+  upload path. Removed obsolete frontend references from documentation,
+  source and CMake comments, and related external material links.
+- Added the JaszczurHAL acknowledgment and repository link to the project
+  overview.
+- Removed stale host-test include paths for compatibility headers no longer
+  shipped by JaszczurHAL, together with the unused ECU timer shim.
 
 ## 2026-07-16
 
@@ -32,7 +36,8 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 ## 2026-07-10
 
 - Synchronized repository documentation with the post-migration source tree:
-  - corrected ECU EEPROM size (`32768` bytes) and its explicit 200 MHz FQBN,
+  - corrected ECU EEPROM size (`32768` bytes) and documented its configured
+    firmware clock,
   - documented GPIO-interrupt capture for ECU RPM and Adjustometer instead of
     describing those inputs as PIO state machines,
   - aligned OilAndSpeed documentation with its read-only, non-persisted SC
@@ -42,8 +47,8 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
     host-test matrix (`Fiesta_clock` remains firmware-build-only),
   - expanded SerialConfigurator documentation for Phase 8 writes, GPS/Map,
     the current CLI, and the conditional 17/18-test CTest matrix,
-  - replaced obsolete source-owned Adjustometer `.ino` references with the
-    generated JaszczurHAL entry-adapter model.
+  - replaced obsolete source-owned Adjustometer entry-point references with
+    the shared JaszczurHAL entry-adapter model.
 - Recorded the current build-system baseline introduced after 2026-06-10:
   - all five firmware modules use `.vscode/jaszczurhal.project.json` and the
     shared `jh-vscode` entry,
@@ -238,7 +243,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 - Migrated every Fiesta firmware module to the JaszczurHAL 1.6.0 opt-in
   configuration model. Each `hal_project_config.h` was rewritten to only
-  `#define HAL_ENABLE_*` flags for modules actually used by the sketch,
+  `#define HAL_ENABLE_*` flags for modules actually used by the firmware,
   relying on the new dependency propagation in `hal_config.h`
   (e.g. `HAL_ENABLE_PCF8563 -> RTC + I2C`,
   `HAL_ENABLE_ILI9341 -> TFT + DISPLAY`,
@@ -248,9 +253,8 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   - ECU: `I2C`, `KV`, `CAN`, `GPS`, `PWM_FREQ`, `CRYPTO`.
   - OilAndSpeed: `CAN`, `MCP9600`, `RGB_LED`, `CRYPTO`.
   - Fiesta_clock: `PCF8563`, `DS18B20`.
-  All five sketches compile cleanly with `arduino-cli` against
-  JaszczurHAL 1.6.0. SerialConfigurator does not use HAL and is
-  unaffected.
+  All five firmware modules compile cleanly against JaszczurHAL 1.6.0.
+  SerialConfigurator does not use HAL and is unaffected.
 - Host test builds for Adjustometer / Clocks / ECU / OilAndSpeed now
   ship a test-only override at `tests/include/hal_project_config.h`
   that enables the full HAL_ENABLE_* matrix. This mirrors the host
@@ -384,7 +388,9 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 - Dedicated SerialConfigurator CI workflow added: [`.github/workflows/serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml).
 - Firmware-side Phase 0 (bootstrap identity groundwork) is closed: active modules expose the shared configurator session through JaszczurHAL `hal_serial_session_*` and report module identity, firmware version, build id, and device UID on first contact.
 - SerialConfigurator implementation-status details were moved out of `ARCHITECTURE.md`; architecture docs now stay changelog-neutral.
-- Pre-commit validation snapshot (2026-04-24): SerialConfigurator CTest (2/2) PASS; ECU host CTest (14/14) PASS; Arduino firmware builds PASS for ECU, Clocks, OilAndSpeed, and Adjustometer.
+- Pre-commit validation snapshot (2026-04-24): SerialConfigurator CTest (2/2)
+  PASS; ECU host CTest (14/14) PASS; firmware builds PASS for ECU, Clocks,
+  OilAndSpeed, and Adjustometer.
 
 ## 2026-04-23
 

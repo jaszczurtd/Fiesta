@@ -27,7 +27,7 @@ __pycache__/
 *.o
 *.srec
 
-# Arduino and module build outputs
+# Module build outputs
 **/.build/
 **/build/
 **/.build_diag/

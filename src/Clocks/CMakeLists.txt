@@ -54,8 +54,8 @@ add_library(clocks_mock STATIC
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp
     ${UNITY_SOURCE}
     # R1.4: descriptor-driven SC reply machinery shared with the host
-    # SerialConfigurator. Firmware arduino-cli build picks this up via
-    # sc_param_handlers_glue.c instead, so each source TU compiles
+    # SerialConfigurator. The native firmware build picks this up through
+    # sc_param_handlers_glue.c, so each source TU compiles
     # exactly once on either path.
     ${SCDEFS}/sc_param_handlers.c
 )

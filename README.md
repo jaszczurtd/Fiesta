@@ -12,9 +12,12 @@ frame in a garage.
 
 The repository contains multiple embedded applications, hardware assets, and validation materials used to build a complete vehicle electronics stack.
 
-Gallery:
-https://postimg.cc/gallery/pHF4jy2
+This project would not exist without all the magic happening in
+[JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL).
 
+## Credits
+
+Author: Marcin "Jaszczur" Kielesiński
 
 ## Repository scope
 
@@ -63,11 +66,19 @@ Required toolchain:
   enables the live map instead of its fallback placeholder
 - QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`
   (`cppcheck` ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
-- `arduino-cli` + `rp2040:rp2040@5.4.0` core (earlephilhower/arduino-pico)
+- native RP firmware: `gcc-arm-none-eabi`,
+  `libstdc++-arm-none-eabi-newlib`, `libusb-1.0-0-dev`, and `pkg-config`;
+  the setup flow prepares the pinned Pico SDK and `picotool` through
+  JaszczurHAL
 
 ## Build and development
 
-Each firmware module is a regular C/C++ application with a CMake-generated application entry point. That entry point adapts the module-owned `initialization()` / `looper()` functions to the `setup()` / `loop()` symbols expected by the current RP2040 build toolchain; modules that opt in to the second core expose `setup1()` / `loop1()` the same way.
+Each firmware module is a regular C/C++ application built with CMake and the
+native Pico SDK toolchain. The shared Fiesta entry adapter maps the
+module-owned `initialization()` / `looper()` functions to JaszczurHAL's
+portable `app_start()` / `app_task0()` contract; modules that opt in to the
+second core also expose `initialization1()` / `looper1()` through
+`app_task1()`.
 
 ### One-shot setup (Debian-like Linux / WSL)
 
@@ -76,10 +87,10 @@ Each firmware module is a regular C/C++ application with a CMake-generated appli
 1. installs the firmware, desktop/package, map, and QA packages listed above,
 2. verifies Python 3 is available,
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
-4. installs `arduino-cli` if missing,
-5. registers the rp2040 board manager URL and installs the pinned
-   `rp2040:rp2040@5.4.0` core, replacing another installed version if needed,
-6. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
+4. verifies the Arm C++ runtime required by native firmware builds,
+5. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
+6. prepares the pinned BearSSL, Pico SDK, and `picotool` dependencies managed
+   by JaszczurHAL,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
    `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime
    CTest plus cppcheck/Valgrind/clang-tidy gates),
@@ -89,16 +100,18 @@ Each firmware module is a regular C/C++ application with a CMake-generated appli
 
 The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
 
-Run from repository root as a regular (non-root) user - the script uses `sudo` only for apt and arduino-cli install and will prompt for the password when needed:
+Run from repository root as a regular (non-root) user - the script uses `sudo`
+only for apt and will prompt for the password when needed:
 
 ```bash
 bash runmefirst.sh
 ```
 
-Do not run this script under `sudo` - because arduino-cli config, rp2040 core, and cloned libraries would end up under `/root/` and break later non-root builds.
+Do not run this script under `sudo` - generated build trees and cloned
+libraries would end up owned by `root` and break later non-root builds.
 The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
-Useful env overrides: `LIB_DIR`, `ARDUINO_CLI`, `ALLOW_ROOT=1`, `SKIP_APT=1`,
+Useful env overrides: `LIB_DIR`, `ALLOW_ROOT=1`, `SKIP_APT=1`,
 `SKIP_TESTS=1`, `SKIP_BUILD=1`, `SKIP_DESKTOP=1`,
 `SKIP_DESKTOP_PACKAGE=1`.
 
@@ -120,7 +133,8 @@ Platform support summary:
 - **Linux (Debian-like)** - primary target. `runmefirst.sh`, JaszczurHAL `jh-vscode` firmware tasks, host tests, MISRA screening, and the daily Pi runner all work.
 - **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `jh-vscode upload` and BOOTSEL upload still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
 - **Native Windows** - not tested and probably not working, because the primary development environment is currently Linux and the JaszczurHAL tooling does not support Windows at the moment.
-- **macOS** - untested; `arduino-cli` and the CMake host tests should work, shell/python scripts likely need minor tweaks.
+- **macOS** - untested; the CMake host tests should work, while the native RP
+  toolchain and shell/Python scripts likely need minor tweaks.
 
 ### Unattended daily build on a Raspberry Pi
 
@@ -136,7 +150,7 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 - `src/ECU/scripts/bootstrap.sh` - one-shot dev-env setup + tests + firmware
   build for all Fiesta modules. You can start immediately by invoking this
   script right after clone. See `One-shot setup` section below.
-- `src/common/scripts/fiesta-arduino-common.sh` - Fiesta-only module token,
+- `src/common/scripts/fiesta-firmware-common.sh` - Fiesta-only module token,
   manifest, UF2, and bootstrap helpers. The firmware build routes through the
   JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
 
@@ -214,7 +228,9 @@ Prerequisites:
 - Debug Probe firmware v2 or later (USB VID:PID `2e8a:000c`). Older Picoprobe firmware (`2e8a:0004`) also works since the shipped configs use `interface/cmsis-dap.cfg`.
 - SWD wiring: probe `SC`->target `SWCLK`, `SD`->`SWDIO`, `GND`->`GND`. Power the target independently or from the probe's debug header.
 - The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
-- `openocd` and `arm-none-eabi-gdb` come bundled with the `rp2040:rp2040` Arduino core (installed by `runmefirst.sh`). Paths are already set in each module's `.vscode/settings.json` - review them if your core version differs from the committed defaults.
+- `openocd` and `arm-none-eabi-gdb` must be available to Cortex-Debug. Review
+  each module's `.vscode/settings.json` if their paths differ from the
+  configured defaults.
 
 Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Project: Build (Debug)` as `preLaunchTask` so `${workspaceFolder}/.build/firmware.elf` stays fresh; `attach` variants skip the build step.
 
@@ -259,14 +275,8 @@ dedicated document: [`MISRA.md`](MISRA.md).
 Per-module build, test, and CI history is tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
-## Credits
-
-Author: Marcin "Jaszczur" Kielesiński
-
-Libraries used in `src/Fiesta_clock`:
-
-- DS18B20 library origin: Davide Gironi.
-- `PCF8563.c` created 2014-11-18 by Jakub Pachciarek.
+Gallery:
+https://postimg.cc/gallery/pHF4jy2
 
 ## Photos
 

@@ -2,9 +2,9 @@
 #define FIESTA_FIRMWARE_ENTRY_H
 
 /*
- * Entry contract for the CMake-generated application entry point.
+ * Entry contract consumed by the shared Fiesta application adapter.
  * Fiesta_clock is C-only and single-core, so this header exposes the C entry
- * points to the generated C++ .ino without enabling setup1()/loop1().
+ * points to the C++ adapter without enabling FIESTA_ENABLE_CORE1.
  */
 #include <JaszczurHAL.h>
 

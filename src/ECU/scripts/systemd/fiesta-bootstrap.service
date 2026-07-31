@@ -10,5 +10,5 @@ ExecStart=%h/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh
 # Don't disturb interactive use on the Pi.
 Nice=10
 IOSchedulingClass=idle
-# Bound the daily build so a hung arduino-cli cannot sit forever.
+# Bound the daily build so a hung firmware build cannot sit forever.
 TimeoutStartSec=30min

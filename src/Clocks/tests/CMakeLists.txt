@@ -19,9 +19,8 @@ add_executable(test_can
 target_link_libraries(test_can PRIVATE clocks_mock)
 # HAL_SRC BEFORE so <tools.h> resolves to the HAL aggregator that also
 # re-exports multicoreWatchdog's watchdog_feed(), not to utils/tools.h
-# (which is the Arduino-dependent C++ utility surface).
+# (which is the legacy C++ utility surface).
 target_include_directories(test_can BEFORE PRIVATE
     ${HAL_SRC}
-    ${HAL_SRC}/arduino_host_stubs
 )
 add_test(NAME test_can COMMAND test_can)

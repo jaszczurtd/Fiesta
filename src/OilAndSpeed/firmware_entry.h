@@ -2,9 +2,8 @@
 #define FIESTA_FIRMWARE_ENTRY_H
 
 /*
- * Entry contract for the CMake-generated application entry point.
- * The generated .ino includes only this file, so module-local headers and
- * core1 enablement stay owned by the module instead of the generator.
+ * Entry contract consumed by the shared Fiesta application adapter.
+ * Module-local headers and core1 enablement remain owned by the module.
  */
 #define FIESTA_ENABLE_CORE1 1
 

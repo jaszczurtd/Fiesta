@@ -53,7 +53,7 @@ not a compliance/pass result; detailed buckets and comparison caveats are in
 
 ## Build
 
-Firmware build (Arduino path):
+Native firmware build:
 
 ```bash
 cd src/ECU

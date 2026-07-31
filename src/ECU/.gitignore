@@ -10,7 +10,7 @@ build_asan/
 misra/.results/
 misra/rule-texts.local.txt
 
-# Arduino IDE legacy output (referenced in arduino.json as "../ArduinoOutput")
+# Legacy module build output
 ../ArduinoOutput/
 
 # Python cache

@@ -29,13 +29,12 @@ set(HAL_SRC   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL/src)
 set(ECU_SRC   ${CMAKE_CURRENT_SOURCE_DIR})
 set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 set(SCDEFS    ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
-set(HAL_STUBS ${HAL_SRC}/arduino_host_stubs)
 set(ECU_STUBS ${ECU_SRC}/tests/stubs)
 
 # ── Mock implementations (from JaszczurHAL) ────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 
-# ── HAL utility sources (no Arduino dependency) ────────────────────────────────
+# ── HAL utility sources used by the host build ─────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_config.cpp
     ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
@@ -55,9 +54,9 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/utils/unity.c
 )
 
-# ── ECU sources compilable without arduino-timer / multicoreWatchdog ───────────
+# ── ECU sources compilable without the multicoreWatchdog runtime ───────────────
 #
-# start.c - excluded: uses multicoreWatchdog (which uses arduino-timer)
+# start.c - excluded: uses the multicoreWatchdog runtime dependency
 # tests.c - excluded: placeholder only (empty initTests / startTests)
 #
 set(ECU_SOURCES
@@ -79,9 +78,9 @@ set(ECU_SOURCES
     ${ECU_SRC}/turbo.c
     ${ECU_SRC}/vp37.c
     # R1.2: descriptor-driven SC reply machinery shared with the host
-    # SerialConfigurator. The arduino-cli build picks this up through
-    # the sc_param_handlers_glue.c include shim instead, so the
-    # firmware sketch and host tests both end up compiling the same
+    # SerialConfigurator. The native firmware build picks this up through
+    # the sc_param_handlers_glue.c include shim, so firmware and host tests
+    # both compile the same
     # source file exactly once.
     ${SCDEFS}/sc_param_handlers.c
 )
@@ -92,16 +91,11 @@ add_library(ecu_mock STATIC
     ${HAL_UTIL_SOURCES}
     ${ECU_SOURCES}
     ${ECU_STUBS}/ecu_stubs.cpp
-    # tools.cpp requires arduino_host_stubs so <Arduino.h>/<SD.h>/<SPI.h> resolve
     ${HAL_SRC}/utils/tools.cpp
 )
 
-# ECU_STUBS first: provides arduino-timer.h stub that shadows the real library
-# HAL_STUBS second: provides Arduino.h / SD.h / SPI.h stubs for tools.cpp
 target_include_directories(ecu_mock BEFORE PUBLIC
     ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
-    ${ECU_STUBS}
-    ${HAL_STUBS}
 )
 target_include_directories(ecu_mock PUBLIC
     ${HAL_SRC}

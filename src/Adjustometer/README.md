@@ -200,8 +200,8 @@ Examples:
 ### Core split
 
 - `firmware_entry.h` declares the module-owned `initialization()` / `looper()`
-  contract. JaszczurHAL generates the temporary RP2040 `.ino` adapter in the
-  build directory; there is no source-owned `Adjustometer.ino`.
+  contract. The shared Fiesta adapter maps it to JaszczurHAL's portable
+  `app_start()` / `app_task0()` entry points.
 - Core0 initialises sensors and hosts the GPIO interrupt used for pulse counting.
 - Core1 updates the I2C registers, updates the LED state machine, and handles diagnostic logging.
 
@@ -345,7 +345,7 @@ The current status logic treats voltage outside `8.0 .. 15.0 V` as bad.
 ## Building
 
 Requirements:
-- `arduino-cli` with the `rp2040:rp2040` board package installed
+- native Arm toolchain and pinned Pico SDK prepared by `runmefirst.sh`
 - **JaszczurHAL** at `<parent-of-Fiesta>/libraries/JaszczurHAL`, matching the
   repository-wide layout used by CMake and `jh-vscode`
 
