@@ -60,8 +60,8 @@ into `/home/you/projects/libraries/`.
 
 Required toolchain:
 
-- firmware/common: `git`, `build-essential`, `cmake`, `python3`, `curl`,
-  `ca-certificates`, `perl`
+- firmware/common: `git`, `build-essential`, `cmake`, `ninja-build`, `python3`,
+  `curl`, `ca-certificates`, `perl`
 - desktop/package: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`; `libshumate-dev`
   enables the live map instead of its fallback placeholder
 - QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`
@@ -112,6 +112,7 @@ libraries would end up owned by `root` and break later non-root builds.
 The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
 Useful env overrides: `LIB_DIR`, `ALLOW_ROOT=1`, `SKIP_APT=1`,
+`APT_NONINTERACTIVE=1`,
 `SKIP_TESTS=1`, `SKIP_BUILD=1`, `SKIP_DESKTOP=1`,
 `SKIP_DESKTOP_PACKAGE=1`.
 
@@ -138,10 +139,13 @@ Platform support summary:
 
 ### Unattended daily build on a Raspberry Pi
 
-`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that once-a-day (13:00 local) pulls the repo, wipes ECU build artifacts, runs
-`src/ECU/scripts/bootstrap.sh` with `SKIP_APT=1`, and emails a PASS/FAIL status
-summary (HEAD SHA + commit subject + last 80 lines of log; full log attached,
-capped at 512 KB). Setup and SMTP notes are documented in
+`src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that
+once a day (13:00 local) pulls the repo, wipes ECU build artifacts, repairs
+missing apt dependencies through non-interactive `sudo`, runs
+`src/ECU/scripts/bootstrap.sh`, and emails a PASS/FAIL status summary with the
+HEAD SHA, commit subject, and last 80 lines of the log. The full log is attached
+and capped at 512 KB.
+Setup, sudo requirements, and SMTP notes are documented in
 [`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
 
 Firmware modules use the shared JaszczurHAL VS Code entry instead of

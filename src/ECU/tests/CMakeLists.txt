@@ -22,3 +22,8 @@ add_ecu_test(test_turbo)
 add_ecu_test(test_adjustometer)
 add_ecu_test(test_vp37)
 add_ecu_test(test_rpm)
+
+if(UNIX)
+    add_test(NAME test_bootstrap_dependencies
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/test_bootstrap_dependencies.sh")
+endif()

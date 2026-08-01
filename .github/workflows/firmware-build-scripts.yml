@@ -57,7 +57,7 @@ jobs:
           set -eux
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake gcc-arm-none-eabi \
+            build-essential cmake ninja-build gcc-arm-none-eabi \
             libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
           test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
           ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \

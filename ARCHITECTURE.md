@@ -1110,7 +1110,7 @@ Pico SDK, and `picotool` dependency preparation -> git hook setup ->
 `runalltests.sh` host QA ->
 firmware `.uf2` + manifest build for every module -> SerialConfigurator
 build/test/package. Env overrides:
-`LIB_DIR`, `ALLOW_ROOT`, `SKIP_APT`, `SKIP_TESTS`,
+`LIB_DIR`, `ALLOW_ROOT`, `SKIP_APT`, `APT_NONINTERACTIVE`, `SKIP_TESTS`,
 `SKIP_BUILD`, `SKIP_DESKTOP`, `SKIP_DESKTOP_PACKAGE`.
 
 ---

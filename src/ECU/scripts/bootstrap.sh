@@ -20,6 +20,7 @@
 # Env overrides:
 #   LIB_DIR         default: $HOME/libraries   (parent of cloned libs)
 #   SKIP_APT=1      skip apt-get steps
+#   APT_NONINTERACTIVE=1  require passwordless sudo instead of prompting
 #   SKIP_TESTS=1    skip host QA run (`runalltests.sh`)
 #   SKIP_BUILD=1    skip firmware compile
 #   SKIP_DESKTOP=1          skip SerialConfigurator build + tests + package
@@ -32,6 +33,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
 COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-firmware-common.sh"
 DEPENDENCY_SCRIPT="$SRC_ROOT/common/scripts/ensure-jaszczurhal-dependencies.sh"
+SYSTEM_DEPENDENCY_SCRIPT="$SCRIPT_DIR/ensure-system-dependencies.sh"
 
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
@@ -58,8 +60,6 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 err()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
-if [[ $EUID -eq 0 ]]; then SUDO=""; else SUDO="sudo"; fi
-
 # Keep generated build trees and user-level configuration owned by the
 # developer rather than root.
 if [[ $EUID -eq 0 && "${ALLOW_ROOT:-0}" != "1" ]]; then
@@ -80,41 +80,21 @@ fi
 # -----------------------------------------------------------------------------
 # 2. System packages
 # -----------------------------------------------------------------------------
-APT_PKGS=(
-    # Common toolchain
-    git build-essential cmake python3 curl ca-certificates perl
-    gcc-arm-none-eabi libstdc++-arm-none-eabi-newlib
-    libusb-1.0-0-dev pkg-config
-    # SerialConfigurator desktop build + Debian package
-    libgtk-4-dev dpkg-dev
-    # SerialConfigurator Map tab (Phase 8.7). Optional at build time -
-    # CMake degrades to a placeholder when shumate-1.0 is missing - but
-    # bootstrap.sh sets up the full feature surface so first-time devs
-    # get a working live GPS map without extra steps.
-    libshumate-dev
-    # quality checking
-    clang-format clang-tidy valgrind cppcheck
-)
-
 install_apt() {
     if [[ "${SKIP_APT:-0}" = "1" ]]; then
         info "SKIP_APT=1 - skipping apt step"
         return
     fi
-    local missing=()
-    for pkg in "${APT_PKGS[@]}"; do
-        if ! dpkg -s "$pkg" >/dev/null 2>&1; then
-            missing+=("$pkg")
-        fi
-    done
-    if [[ ${#missing[@]} -eq 0 ]]; then
-        ok "System packages already present: ${APT_PKGS[*]}"
-        return
+    if [[ ! -x "$SYSTEM_DEPENDENCY_SCRIPT" ]]; then
+        err "System dependency helper missing or not executable:"
+        err "  $SYSTEM_DEPENDENCY_SCRIPT"
+        return 1
     fi
-    info "Installing apt packages: ${missing[*]}"
-    $SUDO apt-get update -y
-    $SUDO apt-get install -y --no-install-recommends "${missing[@]}"
-    ok "apt packages installed"
+    local arguments=(--install)
+    if [[ "${APT_NONINTERACTIVE:-0}" = "1" ]]; then
+        arguments+=(--non-interactive)
+    fi
+    "$SYSTEM_DEPENDENCY_SCRIPT" "${arguments[@]}"
 }
 
 # -----------------------------------------------------------------------------
@@ -122,7 +102,7 @@ install_apt() {
 # -----------------------------------------------------------------------------
 check_python() {
     if ! command -v python3 >/dev/null 2>&1; then
-        err "python3 not found after apt step - install it manually and re-run."
+        err "python3 is unavailable after system dependency provisioning."
         exit 1
     fi
     ok "python3 present: $(python3 --version 2>&1)"
@@ -134,13 +114,12 @@ check_python() {
 check_arm_cpp_toolchain() {
     local libstdcpp
     if ! command -v arm-none-eabi-g++ >/dev/null 2>&1; then
-        err "arm-none-eabi-g++ not found after apt step."
+        err "arm-none-eabi-g++ is unavailable after system dependency provisioning."
         exit 1
     fi
     libstdcpp="$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
     if [[ "$libstdcpp" == "libstdc++.a" || ! -f "$libstdcpp" ]]; then
-        err "Arm libstdc++.a not found after apt step."
-        err "Install libstdc++-arm-none-eabi-newlib and re-run."
+        err "Arm libstdc++.a is unavailable after system dependency provisioning."
         exit 1
     fi
     ok "Arm C++ runtime present: $libstdcpp"
@@ -184,7 +163,7 @@ find_misra_addon() {
 
 check_cppcheck() {
     if ! command -v cppcheck >/dev/null 2>&1; then
-        err "cppcheck not found after apt step - install it manually and re-run."
+        err "cppcheck is unavailable after system dependency provisioning."
         exit 1
     fi
     ok "cppcheck present: $(cppcheck --version 2>&1 | head -1)"
