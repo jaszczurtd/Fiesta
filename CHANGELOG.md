@@ -4,6 +4,16 @@ Repository-level status log for the Fiesta project. This file captures
 build, test, and CI state for each module over time. Detailed
 MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
+## Unreleased
+
+- Made the Raspberry Pi daily bootstrap repair missing apt dependencies through
+  non-interactive sudo instead of forcing `SKIP_APT=1`.
+- Centralized the Debian package contract in a tested helper and added Ninja,
+  GNU Arm C++, and analysis prerequisites required by the current JaszczurHAL
+  workflow.
+- Declared Ninja explicitly in the native firmware CI toolchain instead of
+  relying on the runner image to provide it implicitly.
+
 ## 2026-07-31 (latest)
 
 - Fixed fresh-checkout CI and bootstrap provisioning after JaszczurHAL moved

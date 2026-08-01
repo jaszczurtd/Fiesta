@@ -7,8 +7,7 @@
 #      origin/$BRANCH otherwise - this runner is unattended and expects no
 #      local changes on the Pi).
 #   2. Remove previous ECU build artifacts (build_test/, .build/).
-#   3. Run src/ECU/scripts/bootstrap.sh with SKIP_APT=1 (system packages are
-#      set up once, manually, on the Pi; the user service cannot sudo).
+#   3. Run src/ECU/scripts/bootstrap.sh with unattended package provisioning.
 #   4. Compose a status email and hand it to send-status.py.
 #
 # Config comes from fiesta-bootstrap.env (loaded by the systemd unit):
@@ -97,15 +96,16 @@ echo "[INFO] Cleaning previous ECU artifacts"
 rm -rf "$FIESTA_DIR/src/ECU/build_test" "$FIESTA_DIR/src/ECU/.build"
 
 # -----------------------------------------------------------------------------
-# 3. Run bootstrap (SKIP_APT=1 - apt requires sudo which user service lacks)
+# 3. Run bootstrap with non-interactive package provisioning
 # -----------------------------------------------------------------------------
 bootstrap_rc=0
 if [[ $sync_rc -ne 0 ]]; then
     echo "[ERROR] Skipping bootstrap because repo sync failed (rc=$sync_rc)"
     bootstrap_rc=$sync_rc
 else
-    echo "[INFO] Running bootstrap.sh with SKIP_APT=1"
-    SKIP_APT=1 bash "$FIESTA_DIR/src/ECU/scripts/bootstrap.sh"
+    echo "[INFO] Running bootstrap.sh with unattended apt provisioning"
+    SKIP_APT=0 APT_NONINTERACTIVE=1 \
+        bash "$FIESTA_DIR/src/ECU/scripts/bootstrap.sh"
     bootstrap_rc=$?
 fi
 echo "[INFO] Bootstrap exit: $bootstrap_rc"

@@ -7,8 +7,8 @@ What the runner does, in order:
 
 1. clone or hard-reset `$FIESTA_DIR` to `origin/$BRANCH`,
 2. remove `src/ECU/build_test/` and `src/ECU/.build/` (pre-run clean),
-3. run `src/ECU/scripts/bootstrap.sh` with `SKIP_APT=1`
-   (system packages are set up once, manually - the user service cannot sudo),
+3. repair missing apt packages through non-interactive `sudo` and run
+   `src/ECU/scripts/bootstrap.sh`,
 4. send an email with PASS/FAIL, HEAD SHA, commit subject, and the last
    80 lines of the log (full log attached).
 
@@ -63,8 +63,11 @@ sudo systemctl --user daemon-reload       # NO
 mkdir -p ~/Documents
 git clone https://github.com/jaszczurtd/Fiesta.git ~/Documents/Fiesta
 
-# 2. Run bootstrap manually once so system and native RP dependencies are set up
+# 2. Run bootstrap once so system and native RP dependencies are set up
 bash ~/Documents/Fiesta/src/ECU/scripts/bootstrap.sh
+
+# The daily user service must be able to reuse sudo without a prompt.
+sudo -n true
 
 # 3. Create and protect the env file
 mkdir -p ~/.config
@@ -155,9 +158,13 @@ rm -rf "$HOME/%h"
 
 - The runner uses `git reset --hard origin/$BRANCH` on every run. Do **not**
   keep local changes in the Pi's checkout; they will be discarded.
-- `SKIP_APT=1` is forced because the user-scope service cannot `sudo apt-get`
-  without prompting. Re-run the full bootstrap manually to pick up new apt
-  deps (e.g. after adding a package to `bootstrap.sh`).
+- The runner invokes apt only when a tracked package is missing. It uses
+  `sudo -n`, so the `sudo -n true` check during service installation must pass.
+  Once it passes, later package additions are handled without an interactive
+  repair. The runner never edits sudo policy.
+- Package ownership lives in
+  `src/ECU/scripts/ensure-system-dependencies.sh`. New dependencies added there
+  are installed automatically by the next daily run.
 - The runner caps attached log size at 512 KB (tail); the full file stays
   under `$FIESTA_LOG_DIR`.
 - `TimeoutStartSec=30min` is a safety net; adjust if the Pi 5 needs more.
