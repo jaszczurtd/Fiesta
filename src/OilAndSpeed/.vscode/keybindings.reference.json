@@ -37,22 +37,12 @@
     {
         "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: List ports"
+        "args": "Project: Upload (OTA)"
     },
     {
         "key": "ctrl+shift+9",
         "command": "workbench.action.tasks.runTask",
-        "args": "Project: Change port"
-    },
-    {
-        "key": "ctrl+shift+0",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Install library"
-    },
-    {
-        "key": "ctrl+shift+y",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Quality: Cppcheck baseline"
+        "args": "Project: Config Dump"
     },
     {
         "key": "ctrl+shift+alt+1",
@@ -63,5 +53,10 @@
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
         "args": "Project: Select board"
+    },
+    {
+        "key": "ctrl+shift+alt+3",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Discover OTA devices"
     }
 ]

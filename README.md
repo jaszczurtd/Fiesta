@@ -133,7 +133,12 @@ Platform support summary:
 
 - **Linux (Debian-like)** - primary target. `runmefirst.sh`, JaszczurHAL `jh-vscode` firmware tasks, host tests, MISRA screening, and the daily Pi runner all work.
 - **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `jh-vscode upload` and BOOTSEL upload still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
-- **Native Windows** - not tested and probably not working, because the primary development environment is currently Linux and the JaszczurHAL tooling does not support Windows at the moment.
+- **Native Windows** - supported for firmware development in all five modules.
+  Run JaszczurHAL's `runmefirst.ps1`, then use the generated VS Code tasks or
+  `jh-vscode.cmd` for release/debug builds, IntelliSense, identity-guarded
+  upload, BOOTSEL/UF2 upload and serial monitoring. Host test, cppcheck, MISRA,
+  Valgrind and desktop SerialConfigurator workflows remain Linux-oriented;
+  the two direct quality tasks report this explicitly on Windows.
 - **macOS** - untested; the CMake host tests should work, while the native RP
   toolchain and shell/Python scripts likely need minor tweaks.
 
@@ -151,12 +156,24 @@ Setup, sudo requirements, and SMTP notes are documented in
 Firmware modules use the shared JaszczurHAL VS Code entry instead of
 module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
+- `scripts/sync_vscode_projects.py` - regenerates cross-platform settings,
+  tasks and keybinding references for all five modules from JaszczurHAL's
+  board/task registry. Run it with `--check` in review or CI.
+- `scripts/configure_git_hooks.py` - configures the repository-local hook path
+  from Linux, macOS or Windows without requiring Bash.
+
 - `src/ECU/scripts/bootstrap.sh` - one-shot dev-env setup + tests + firmware
   build for all Fiesta modules. You can start immediately by invoking this
   script right after clone. See `One-shot setup` section below.
 - `src/common/scripts/fiesta-firmware-common.sh` - Fiesta-only module token,
   manifest, UF2, and bootstrap helpers. The firmware build routes through the
   JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
+
+Tracked module settings contain no COM port. Board and port selections are
+written to ignored `.vscode/jaszczurhal.local.json` files. The `Windows
+firmware` workflow repeats generation checks, builds every module and refreshes
+all five compile databases on a native `windows-2025` runner; physical upload
+remains a manual identity-guarded smoke test.
 
 ### Host tests (CMake) - per module
 

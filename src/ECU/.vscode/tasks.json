@@ -22,253 +22,252 @@
   "tasks": [
     {
       "label": "Project: Build",
+      "detail": "Compile ECU through JaszczurHAL VS Code entry",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "build",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": "$gcc",
-      "detail": "Ctrl+Shift+1 - compile firmware",
       "group": {
         "kind": "build",
         "isDefault": true
-      }
+      },
+      "problemMatcher": "$gcc"
     },
     {
       "label": "Project: Build (Debug)",
+      "detail": "Debug build ECU through JaszczurHAL VS Code entry",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "build-debug",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": "$gcc",
-      "detail": "Compile with debug symbols",
-      "group": "build"
+      "group": "build",
+      "problemMatcher": "$gcc"
     },
     {
       "label": "Project: Upload",
+      "detail": "Upload ECU through the active target backend",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "upload",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": "$gcc",
-      "detail": "Ctrl+Shift+2 - upload through the active target backend"
+      "problemMatcher": "$gcc"
     },
     {
       "label": "Project: Upload (UF2 / BOOTSEL)",
+      "detail": "RP2040 only: build ECU and copy UF2 to the single visible BOOTSEL drive",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "upload-uf2",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+4 - RP2040 only: compile + copy UF2 to single BOOTSEL drive"
+      "problemMatcher": []
     },
     {
-      "label": "Project: Serial Monitor",
+      "label": "Project: Upload (OTA)",
+      "detail": "Build, authenticate, and upload ECU to a discovered native RP device",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
-        "monitor",
+        "upload-ota",
+        "--project",
+        "${workspaceFolder}",
+        "--interactive"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Discover OTA devices",
+      "detail": "List JaszczurHAL devices advertising native OTA",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "ota-discover",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "dedicated",
-        "showReuseMessage": false
-      },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+3 - persistent Pico serial monitor",
-      "isBackground": true
-    },
-    {
-      "label": "Project: Debug Probe Monitor",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "monitor-probe",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "dedicated",
-        "showReuseMessage": false
-      },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+5 - monitor Raspberry Pi Debug Probe / Picoprobe",
-      "isBackground": true
-    },
-    {
-      "label": "Project: Serial Monitor (Any)",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "monitor-any",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": true,
-        "panel": "dedicated",
-        "showReuseMessage": false
-      },
-      "problemMatcher": [],
-      "detail": "Monitor any /dev/ttyACM* or /dev/ttyUSB* device",
-      "isBackground": true
-    },
-    {
-      "label": "Project: Refresh IntelliSense",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "refresh-intellisense",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+6 - generate compile database and c_cpp_properties.json"
-    },
-    {
-      "label": "Project: Clean",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "clean",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+7 - remove .build directory"
-    },
-    {
-      "label": "Project: Clear USB Identity",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "clear-identity",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "Flash neutral USB identity firmware to a verified target"
+      "problemMatcher": []
     },
     {
       "label": "Project: List ports",
+      "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "list-ports",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
-      },
-      "problemMatcher": [],
-      "detail": "List serial ports (tooling backlog)"
+      "problemMatcher": []
     },
     {
       "label": "Project: Change port",
+      "detail": "Interactively persist the upload/monitor serial port",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "change-port",
         "--project",
         "${workspaceFolder}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Serial Monitor",
+      "detail": "Persistent ECU serial monitor",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
       },
-      "problemMatcher": [],
-      "detail": "Change upload port (tooling backlog)"
+      "args": [
+        "monitor",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "replace-own"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Debug Probe Monitor",
+      "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "monitor-probe",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "replace-own"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Serial Monitor (Any)",
+      "detail": "Any serial monitor through JaszczurHAL VS Code entry",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "monitor-any",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "wait"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Refresh IntelliSense",
+      "detail": "Refresh ECU IntelliSense through JaszczurHAL VS Code entry",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "refresh-intellisense",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Clean",
+      "detail": "Clean ECU build directory",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "clean",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Clear USB Identity",
+      "detail": "Flash neutral firmware after verifying current Fiesta ECU identity",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "clear-identity",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Config Dump",
+      "detail": "Show resolved JaszczurHAL VS Code project configuration",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "config-dump",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
     },
     {
       "label": "Project: Select board",
+      "detail": "Interactive target/board selection",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "select-board",
         "--project",
@@ -283,13 +282,16 @@
         "showReuseMessage": false,
         "clear": true
       },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+Alt+2 - interactive target/board selection"
+      "problemMatcher": []
     },
     {
       "label": "Project: Select board (GUI)",
+      "detail": "Pick target/board from the VS Code input menu",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
       "args": [
         "select-board",
         "--project",
@@ -297,16 +299,31 @@
         "--selection",
         "${input:boardSelection}"
       ],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared",
-        "showReuseMessage": false,
-        "clear": true
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Sync board picker",
+      "detail": "Refresh target/board options from the JaszczurHAL registry",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
       },
-      "problemMatcher": [],
-      "detail": "Ctrl+Shift+Alt+1 - GUI target/board selection"
+      "args": [
+        "sync-board-picker",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen",
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
     },
     {
       "label": "Quality: Cppcheck baseline",
@@ -340,6 +357,14 @@
           "message": 5,
           "code": 6
         }
+      },
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "Write-Error 'Quality: Cppcheck baseline is Linux-only (P2); use the existing Ubuntu CI or a Linux shell.'; exit 8"
+        ]
       }
     },
     {
@@ -374,13 +399,31 @@
           "message": 5,
           "code": 6
         }
+      },
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "Write-Error 'Quality: MISRA scan is Linux-only (P2); use the existing Ubuntu CI or a Linux shell.'; exit 8"
+        ]
       }
     },
     {
       "label": "Project: Configure Git hooks",
       "detail": "Auto-run on folder open - set core.hooksPath to repo .githooks",
-      "type": "shell",
-      "command": "repo_root=\"$(git -C \"${workspaceFolder}\" rev-parse --show-toplevel)\" && git -C \"$repo_root\" config core.hooksPath \"$repo_root/.githooks\" && find \"$repo_root/.githooks\" -mindepth 1 -maxdepth 1 -type f -exec chmod +x {} +",
+      "type": "process",
+      "command": "python3",
+      "windows": {
+        "command": "py",
+        "args": [
+          "-3",
+          "${workspaceFolder}/../../scripts/configure_git_hooks.py"
+        ]
+      },
+      "args": [
+        "${workspaceFolder}/../../scripts/configure_git_hooks.py"
+      ],
       "runOptions": {
         "runOn": "folderOpen"
       },
@@ -389,27 +432,6 @@
         "reveal": "never",
         "focus": false,
         "panel": "dedicated",
-        "showReuseMessage": false
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Project: Sync board picker",
-      "detail": "Refresh target/board options from the JaszczurHAL registry",
-      "type": "shell",
-      "command": "${config:jaszczurhal.vscodeEntry}",
-      "args": [
-        "sync-board-picker",
-        "--project",
-        "${workspaceFolder}"
-      ],
-      "runOptions": {
-        "runOn": "folderOpen",
-        "instanceLimit": 1
-      },
-      "presentation": {
-        "reveal": "never",
-        "panel": "shared",
         "showReuseMessage": false
       },
       "problemMatcher": []
