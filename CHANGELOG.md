@@ -6,6 +6,11 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Restored host-test compatibility with the current JaszczurHAL assertion
+  runtime by linking `hal_assert.cpp` into the ECU, Adjustometer, Clocks, and
+  OilAndSpeed mock libraries. The full five-gate `runalltests.sh -j8` matrix
+  passes: 45 runtime tests, cppcheck, Valgrind, and clang-tidy across all five
+  host-tested modules.
 - Added native Windows firmware workflows for all five modules, generated
   `.cmd`-backed VS Code tasks, local-only COM selection, synchronized
   keybindings and a Windows CI build/IntelliSense gate. Direct MISRA and

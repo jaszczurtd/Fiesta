@@ -43,6 +43,7 @@ endif()
 add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
     ${CLOCKS_SRC}/config.cpp
+    ${HAL_SRC}/hal/hal_assert.cpp
     ${HAL_SRC}/hal/hal_config.cpp
     ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
