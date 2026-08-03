@@ -1,0 +1,86 @@
+name: Windows firmware
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUTF8: "1"
+
+jobs:
+  windows-firmware:
+    runs-on: windows-2025
+
+    steps:
+      - name: Check out Fiesta
+        uses: actions/checkout@v5
+        with:
+          path: workspace/Fiesta
+
+      - name: Check out JaszczurHAL
+        uses: actions/checkout@v5
+        with:
+          repository: jaszczurtd/JaszczurHAL
+          path: workspace/libraries/JaszczurHAL
+
+      - name: Cache authenticated Windows tools
+        uses: actions/cache@v4
+        with:
+          path: C:\jh\tools
+          key: fiesta-windows-tools-${{ hashFiles('workspace/libraries/JaszczurHAL/third_party/windows_tools_version.conf', 'workspace/libraries/JaszczurHAL/third_party/riscv_toolchain_version.conf', 'workspace/libraries/JaszczurHAL/third_party/windows_requirements.txt') }}
+
+      - name: Prepare native Windows environment
+        shell: powershell
+        working-directory: workspace/libraries/JaszczurHAL
+        run: >-
+          .\runmefirst.ps1 -Force -ConfigureHost -FirmwareOnly
+          -ToolsRoot C:\jh\tools
+          -BuildRoot C:\jh\build
+
+      - name: Validate generated VS Code projects
+        shell: powershell
+        working-directory: workspace/Fiesta
+        run: |
+          $python = '..\libraries\JaszczurHAL\.build\windows\venv\Scripts\python.exe'
+          & $python -m unittest discover -s tests -p 'test_windows_*.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Fiesta Windows project tests failed.' }
+
+      - name: Build all firmware modules and IntelliSense databases
+        shell: powershell
+        working-directory: workspace/Fiesta
+        run: |
+          $entry = '..\libraries\JaszczurHAL\vscode\entry\jh-vscode.cmd'
+          $modules = @('ECU', 'Clocks', 'OilAndSpeed', 'Adjustometer', 'Fiesta_clock')
+          $artifacts = '.build\windows-artifacts'
+          New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+          foreach ($module in $modules) {
+            $project = Join-Path 'src' $module
+            & $entry build --project $project
+            if ($LASTEXITCODE -ne 0) { throw "$module firmware build failed." }
+            & $entry refresh-intellisense --project $project
+            if ($LASTEXITCODE -ne 0) { throw "$module IntelliSense refresh failed." }
+            Copy-Item (Join-Path $project '.build\firmware.uf2') `
+              (Join-Path $artifacts "$module.uf2")
+          }
+
+      - name: Verify checkout stayed clean
+        shell: powershell
+        working-directory: workspace/Fiesta
+        run: |
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'Build modified tracked files.' }
+          $unexpected = git status --porcelain --untracked-files=all
+          if ($unexpected) {
+            throw "Build left unexpected repository files:`n$unexpected"
+          }
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiesta-windows-firmware
+          path: workspace/Fiesta/.build/windows-artifacts/*.uf2
+          if-no-files-found: error

@@ -6,6 +6,12 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Added native Windows firmware workflows for all five modules, generated
+  `.cmd`-backed VS Code tasks, local-only COM selection, synchronized
+  keybindings and a Windows CI build/IntelliSense gate. Direct MISRA and
+  cppcheck tasks are explicitly classified as Linux-only.
+- Replaced the Bash-only Git-hook setup task with a cross-platform Python
+  helper and added a generator/check command for all module VS Code files.
 - Made the Raspberry Pi daily bootstrap repair missing apt dependencies through
   non-interactive sudo instead of forcing `SKIP_APT=1`.
 - Centralized the Debian package contract in a tested helper and added Ninja,
