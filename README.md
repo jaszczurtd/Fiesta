@@ -249,9 +249,10 @@ Prerequisites:
 - Debug Probe firmware v2 or later (USB VID:PID `2e8a:000c`). Older Picoprobe firmware (`2e8a:0004`) also works since the shipped configs use `interface/cmsis-dap.cfg`.
 - SWD wiring: probe `SC`->target `SWCLK`, `SD`->`SWDIO`, `GND`->`GND`. Power the target independently or from the probe's debug header.
 - The `marus25.cortex-debug` extension (listed in each module's `.vscode/extensions.json`).
-- `openocd` and `arm-none-eabi-gdb` must be available to Cortex-Debug. Review
-  each module's `.vscode/settings.json` if their paths differ from the
-  configured defaults.
+- `openocd` and `arm-none-eabi-gdb` must be available to Cortex-Debug. Native
+  Windows `runmefirst.ps1` configures the verified paths in the VS Code user
+  profile. Other hosts may use `PATH` or their platform-specific Cortex-Debug
+  user settings. Module launch files do not require machine-local path keys.
 
 Usage: open the module in VS Code, press `F5`, and pick the configuration. The `launch` variants run `Project: Build (Debug)` as `preLaunchTask` so `${workspaceFolder}/.build/firmware.elf` stays fresh; `attach` variants skip the build step.
 

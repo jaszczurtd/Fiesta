@@ -6,6 +6,10 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Removed legacy machine-local Cortex-Debug path, scripts-root, and SVD
+  variables from all five firmware launch profiles. Native Windows now uses
+  the verified user settings configured by JaszczurHAL's bootstrap, with a
+  regression test covering every module.
 - Restored host-test compatibility with the current JaszczurHAL assertion
   runtime by linking `hal_assert.cpp` into the ECU, Adjustometer, Clocks, and
   OilAndSpeed mock libraries. The full five-gate `runalltests.sh -j8` matrix

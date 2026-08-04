@@ -87,6 +87,13 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             for forbidden in ("/dev/", "/home/", ".arduino15"):
                 self.assertNotIn(forbidden, content, str(path.relative_to(REPO_ROOT)))
 
+    def test_launch_profiles_need_no_private_cortex_debug_settings(self) -> None:
+        for module in MODULES:
+            launch = (
+                REPO_ROOT / "src" / module / ".vscode" / "launch.json"
+            ).read_text(encoding="utf-8")
+            self.assertNotIn("${config:cortex-debug.", launch, module)
+
 
 if __name__ == "__main__":
     unittest.main()
