@@ -1,6 +1,7 @@
 
 #include "main.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include <hal/hal_app.h>
 
 char s[BUF_L + 1];
 
@@ -66,7 +67,7 @@ static void setup_runtime(void) {
   lcd_clrscr();
 }
 
-void initialization(void) {
+void app_start(void) {
   debugInit();
   setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCK);
 
@@ -75,7 +76,7 @@ void initialization(void) {
   setup_runtime();
 }
 
-void looper(void) {
+void app_task0(void) {
   hal_watchdog_feed();
   clockCanTick();
   configSessionTick();

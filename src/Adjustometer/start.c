@@ -2,9 +2,11 @@
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "led.h"
+#include <hal/hal_app.h>
 #include <hal/hal_i2c_slave.h>
 #include <hal/hal_soft_timer.h>
 #include <hal/hal_system.h>
+#include <hal/hal_target.h>
 #include <limits.h>
 
 #if defined(__cplusplus)
@@ -104,7 +106,7 @@ static void updateExtendedI2CRegisters(uint8_t status) {
  * @brief Initialize core-0 services, sensors and status reporting.
  * @return None.
  */
-void initialization(void) {
+static void initializeCore0(void) {
 
   debugInit();
   setDebugPrefixWithColon(SC_MODULE_TOKEN_ADJUSTOMETER);
@@ -126,7 +128,7 @@ void initialization(void) {
  * @brief Run one iteration of the idle core-0 maintenance loop.
  * @return None.
  */
-void looper(void) {
+static void runCore0(void) {
   updateWatchdogCore0();
 
   if (!isEnvironmentStarted()) {
@@ -199,7 +201,7 @@ static void updateI2CRegisters(void) {
  * @brief Initialize the second core used for I2C register publishing.
  * @return None.
  */
-void initialization1(void) {
+static void initializeCore1(void) {
   setStartedCore1();
 
   deb("Second core initialized");
@@ -213,7 +215,7 @@ void initialization1(void) {
  * @brief Run one iteration of the core-1 Adjustometer loop.
  * @return None.
  */
-void looper1(void) {
+static void runCore1(void) {
 
   updateWatchdogCore1();
 
@@ -227,4 +229,24 @@ void looper1(void) {
 
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);
+}
+
+void app_start(void) {
+  initializeCore0();
+#if !HAL_TARGET_IS_RP
+  initializeCore1();
+#endif
+}
+
+void app_task0(void) { runCore0(); }
+
+void app_task1(void) {
+#if HAL_TARGET_IS_RP
+  static bool initialized = false;
+  if (!initialized) {
+    initializeCore1();
+    initialized = true;
+  }
+#endif
+  runCore1();
 }

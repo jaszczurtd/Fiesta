@@ -15,11 +15,6 @@
 #include <hal/hal.h>
 #include <hal/hal_display.h>
 
-void initialization(void);
-void looper(void);
-void initialization1(void);
-void looper1(void);
-
 bool alertSwitch(void);
 bool seriousAlertSwitch(void);
 void triggerDrawHighImportanceValue(bool state);

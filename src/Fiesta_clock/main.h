@@ -36,7 +36,4 @@ void redLED(bool state);
 void orangeLED(bool state);
 void blueLED(bool state);
 
-void initialization(void);
-void looper(void);
-
 #endif /* MAIN_H_ */

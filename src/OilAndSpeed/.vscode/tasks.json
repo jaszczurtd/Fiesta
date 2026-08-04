@@ -303,7 +303,7 @@
     },
     {
       "label": "Project: Sync board picker",
-      "detail": "Refresh target/board options from the JaszczurHAL registry",
+      "detail": "Refresh target/board options and managed debug profiles",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {

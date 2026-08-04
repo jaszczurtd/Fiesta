@@ -11,8 +11,7 @@
         "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "Clocks",
-            "JH_EXTRA_SOURCES": "${project}/../common/fiesta_app_entry.cpp"
+            "JH_MODULE_NAME": "Clocks"
         },
         "targets": {
             "build": "firmware",

@@ -1,6 +1,8 @@
 
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include <hal/hal_app.h>
+#include <hal/hal_target.h>
 
 void updateValsForDebug(void);
 void readThermocouples(void);
@@ -39,7 +41,7 @@ void setupTimers(void) {
                              watchdog_feed, CORE_OPERATION_DELAY);
 }
 
-void initialization(void) {
+static void initializeCore0(void) {
   bool result = false;
 
   debugInit();
@@ -141,7 +143,7 @@ void readThermocouples(void) {
   updateEGTrecipients();
 }
 
-void looper() {
+static void runCore0(void) {
 
   statusVariable0 = 0;
   updateWatchdogCore0();
@@ -164,9 +166,9 @@ void looper() {
   hal_idle();
 }
 
-void initialization1() { setStartedCore1(); }
+static void initializeCore1(void) { setStartedCore1(); }
 
-void looper1() {
+static void runCore1(void) {
   updateWatchdogCore1();
 
   if (!isEnvironmentStarted()) {
@@ -187,4 +189,24 @@ void updateValsForDebug(void) {
       getCircumference(), getGlobalValue(F_OIL_PRESSURE));
   deb("thermo1: %fC, thermo2: %fC", getGlobalValue(F_EGT),
       getGlobalValue(F_DPF_TEMP));
+}
+
+extern "C" void app_start(void) {
+  initializeCore0();
+#if !HAL_TARGET_IS_RP
+  initializeCore1();
+#endif
+}
+
+extern "C" void app_task0(void) { runCore0(); }
+
+extern "C" void app_task1(void) {
+#if HAL_TARGET_IS_RP
+  static bool initialized = false;
+  if (!initialized) {
+    initializeCore1();
+    initialized = true;
+  }
+#endif
+  runCore1();
 }

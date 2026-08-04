@@ -2,27 +2,27 @@
 #ifndef T_START
 #define T_START
 
-#include <libConfig.h>
 #include "config.h"
+#include <libConfig.h>
 
 #include <tools_c.h>
 
-#include "hardwareConfig.h"
-#include "sensors.h"
-#include "rpm.h"
-#include "engine_operation.h"
-#include "turbo.h"
-#include "engineFan.h"
-#include "engineHeater.h"
-#include "heatedWindshield.h"
-#include "glowPlugs.h"
 #include "can.h"
-#include "obd-2.h"
-#include "vp37.h"
-#include "gps.h"
-#include "engineFuel.h"
-#include "tests.h"
 #include "dtcManager.h"
+#include "engineFan.h"
+#include "engineFuel.h"
+#include "engineHeater.h"
+#include "engine_operation.h"
+#include "glowPlugs.h"
+#include "gps.h"
+#include "hardwareConfig.h"
+#include "heatedWindshield.h"
+#include "obd-2.h"
+#include "rpm.h"
+#include "sensors.h"
+#include "tests.h"
+#include "turbo.h"
+#include "vp37.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,30 +36,6 @@ extern "C" {
  * @return None.
  */
 void callAtEverySecond(void);
-
-/**
- * @brief Initialize all core-0 ECU services and modules.
- * @return None.
- */
-void initialization(void);
-
-/**
- * @brief Initialize core-1 services used by the split runtime.
- * @return None.
- */
-void initialization1(void);
-
-/**
- * @brief Run one iteration of the core-0 main loop.
- * @return None.
- */
-void looper(void);
-
-/**
- * @brief Run one iteration of the core-1 main loop.
- * @return None.
- */
-void looper1(void);
 
 /**
  * @brief Reserved legacy severe-alert input helper.

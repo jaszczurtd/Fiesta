@@ -8,9 +8,10 @@
 //       - RPM_CORRECTION_VAL
 // Keep this derived from RPM_REFRESH_INTERVAL so timing tuning cannot desync
 // RPM conversion scaling.
-#define RPM_PULSES_PER_REVOLUTION  32L
-#define RPM_NUMERATOR_PER_MINUTE   60000L
-#define RPM_DENOMINATOR            ((int64_t)RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
+#define RPM_PULSES_PER_REVOLUTION 32L
+#define RPM_NUMERATOR_PER_MINUTE 60000L
+#define RPM_DENOMINATOR                                                        \
+  ((int64_t)RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
 
 #ifndef VP37
 static unsigned long s_lastPiStepAtMs = 0;
@@ -28,25 +29,18 @@ static void cycleCheckTimerCallback(void) {
 }
 #endif
 
-hal_status_t RPM_create(void) {
-  return RPM_init(getRPMInstance());
-}
+hal_status_t RPM_create(void) { return RPM_init(getRPMInstance()); }
 
-RPM *getRPMInstance(void) {
-  return &getECUContext()->rpm;
-}
+RPM *getRPMInstance(void) { return &getECUContext()->rpm; }
 
 /**
- * @brief Forward a Hall-sensor edge interrupt to the shared G28-like RPM instance.
+ * @brief Forward a Hall-sensor edge interrupt to the shared G28-like RPM
+ * instance.
  * @return None.
  */
-void countRPM(void) {
-  RPM_interrupt(getRPMInstance());
-}
+void countRPM(void) { RPM_interrupt(getRPMInstance()); }
 
-void RPM_resetRPMCycle(RPM *self) {
-  self->rpmCycle = false;
-}
+void RPM_resetRPMCycle(RPM *self) { self->rpmCycle = false; }
 
 /*
  G28-like crank sensor ISR - called on every crankshaft pulse edge.
@@ -110,7 +104,7 @@ hal_status_t RPM_init(RPM *self) {
 #endif
 
 #ifndef VP37
-  if(self->rpmCycleTimer == NULL) {
+  if (self->rpmCycleTimer == NULL) {
     self->rpmCycleTimer = hal_soft_timer_create();
   }
   if (self->rpmCycleTimer == NULL) {
@@ -124,8 +118,14 @@ hal_status_t RPM_init(RPM *self) {
   }
 #endif
 
+#if HAL_TARGET_IS_RP
   const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
       PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE, RPM_IRQ_OWNER_CORE);
+#else
+  const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
+      PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE, 0);
+#endif
+
   if (irqStatus != HAL_OK) {
 #ifndef VP37
     hal_soft_timer_destroy(self->rpmCycleTimer);
@@ -152,9 +152,11 @@ void RPM_setAccelMaxRPM(RPM *self) {
 
 #ifndef VP37
 /**
- * @brief Check whether legacy throttle / driver-demand input exceeds the non-VP37 acceleration threshold.
+ * @brief Check whether legacy throttle / driver-demand input exceeds the
+ * non-VP37 acceleration threshold.
  * @param self RPM controller instance using the throttle signal.
- * @return True when throttle is above the configured threshold, otherwise false.
+ * @return True when throttle is above the configured threshold, otherwise
+ * false.
  */
 static bool RPM_isEngineThrottlePressed(RPM *self) {
   (void)self;
@@ -162,19 +164,20 @@ static bool RPM_isEngineThrottlePressed(RPM *self) {
 }
 #endif
 
-int32_t RPM_getCurrentRPM(const RPM *self) {
-  return self->rpmValue;
-}
+int32_t RPM_getCurrentRPM(const RPM *self) { return self->rpmValue; }
 
 void RPM_process(RPM *self) {
   if (self->rpmReady) {
     self->rpmReady = false;
 
-    int64_t scaled = ((int64_t)self->snapshotPulses * RPM_NUMERATOR_PER_MINUTE
-      + (RPM_DENOMINATOR / 2)) / RPM_DENOMINATOR;
+    int64_t scaled = ((int64_t)self->snapshotPulses * RPM_NUMERATOR_PER_MINUTE +
+                      (RPM_DENOMINATOR / 2)) /
+                     RPM_DENOMINATOR;
     int32_t rpm = (int32_t)scaled - RPM_CORRECTION_VAL;
-    if (rpm < 0) rpm = 0;
-    if (rpm > RPM_MAX_EVER) rpm = RPM_MAX_EVER;
+    if (rpm < 0)
+      rpm = 0;
+    if (rpm > RPM_MAX_EVER)
+      rpm = RPM_MAX_EVER;
 
     self->rpmValue = rpm;
 #ifndef VP37
@@ -183,8 +186,9 @@ void RPM_process(RPM *self) {
     } else if (self->rpmFiltered == 0) {
       self->rpmFiltered = rpm;
     } else {
-      self->rpmFiltered = (self->rpmFiltered * (RPM_CONTROL_FILTER_WINDOW - 1) + rpm)
-        / RPM_CONTROL_FILTER_WINDOW;
+      self->rpmFiltered =
+          (self->rpmFiltered * (RPM_CONTROL_FILTER_WINDOW - 1) + rpm) /
+          RPM_CONTROL_FILTER_WINDOW;
     }
 #endif
   }
@@ -227,29 +231,29 @@ void RPM_process(RPM *self) {
 
   int desiredRPM = ecuParamsNominalRpm();
 
-  if(((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
+  if (((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE) {
     desiredRPM = COLD_RPM_VALUE;
   }
 
-  if(isDPFRegenerating()) {
+  if (isDPFRegenerating()) {
     desiredRPM = REGEN_RPM_VALUE;
   }
 
-  if(RPM_isEngineThrottlePressed(self) ||
-    currentRPM < RPM_MIN) {
-      RPM_setAccelRPMPercentage(self, ACCELLERATE_RPM_PERCENT_VALUE); //percent
-      self->rpmPercentValue = ACCELLERATE_RPM_PERCENT_VALUE;
-      self->piInitialized = false;
-      self->rpmIntegratorQ10 = 0;
-      self->rpmCycle = false;
-      s_lastPTermQ10 = 0;
-      s_lastIDeltaQ10 = 0;
-      valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
-      return;
+  if (RPM_isEngineThrottlePressed(self) || currentRPM < RPM_MIN) {
+    RPM_setAccelRPMPercentage(self, ACCELLERATE_RPM_PERCENT_VALUE); // percent
+    self->rpmPercentValue = ACCELLERATE_RPM_PERCENT_VALUE;
+    self->piInitialized = false;
+    self->rpmIntegratorQ10 = 0;
+    self->rpmCycle = false;
+    s_lastPTermQ10 = 0;
+    s_lastIDeltaQ10 = 0;
+    valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+    return;
   }
 
   if (!self->vacuumReady) {
-    self->rpmPercentValue = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
+    self->rpmPercentValue =
+        (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
     self->piInitialized = false;
     self->rpmIntegratorQ10 = 0;
     self->rpmCycle = false;
@@ -264,7 +268,8 @@ void RPM_process(RPM *self) {
     return;
   }
 
-  int32_t rpmForControl = (self->rpmFiltered > 0) ? self->rpmFiltered : currentRPM;
+  int32_t rpmForControl =
+      (self->rpmFiltered > 0) ? self->rpmFiltered : currentRPM;
   int32_t error = desiredRPM - rpmForControl;
 
   if (error <= RPM_PI_DEADBAND_RPM && error >= -RPM_PI_DEADBAND_RPM) {
@@ -278,7 +283,8 @@ void RPM_process(RPM *self) {
   int32_t maxQ10 = MAX_RPM_PERCENT_VALUE * RPM_PI_Q10_SCALE;
 
   if (!self->piInitialized) {
-    self->rpmPercentValue = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
+    self->rpmPercentValue =
+        (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
     if (self->rpmPercentValue > MAX_RPM_PERCENT_VALUE) {
       self->rpmPercentValue = MAX_RPM_PERCENT_VALUE;
     } else if (self->rpmPercentValue < MIN_RPM_PERCENT_VALUE) {
@@ -289,7 +295,9 @@ void RPM_process(RPM *self) {
   }
 
   int32_t pTermQ10 = error * RPM_PI_KP_Q10;
-  int32_t iDeltaQ10 = (int32_t)(((int64_t)error * RPM_PI_KI_Q10 * RPM_PI_UPDATE_INTERVAL_MS) / 1000);
+  int32_t iDeltaQ10 =
+      (int32_t)(((int64_t)error * RPM_PI_KI_Q10 * RPM_PI_UPDATE_INTERVAL_MS) /
+                1000);
   int32_t uUnsatQ10 = self->rpmIntegratorQ10 + pTermQ10;
   bool atHigh = (uUnsatQ10 > maxQ10);
   bool atLow = (uUnsatQ10 < minQ10);
@@ -298,7 +306,8 @@ void RPM_process(RPM *self) {
     iDeltaQ10 = 0;
   }
 
-  int64_t nextIntegratorQ10 = (int64_t)self->rpmIntegratorQ10 + (int64_t)iDeltaQ10;
+  int64_t nextIntegratorQ10 =
+      (int64_t)self->rpmIntegratorQ10 + (int64_t)iDeltaQ10;
   if (nextIntegratorQ10 > maxQ10) {
     nextIntegratorQ10 = maxQ10;
   } else if (nextIntegratorQ10 < minQ10) {
@@ -342,7 +351,8 @@ void RPM_showDebug(RPM *self) {
   lastPeriodicLogMs = now;
 
   int desiredRPM = ecuParamsNominalRpm();
-  bool coldEngine = ((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE;
+  bool coldEngine =
+      ((int32_t)getGlobalValue(F_COOLANT_TEMP)) <= TEMP_COLD_ENGINE;
   if (coldEngine) {
     desiredRPM = COLD_RPM_VALUE;
   }
@@ -351,31 +361,23 @@ void RPM_showDebug(RPM *self) {
     desiredRPM = REGEN_RPM_VALUE;
   }
 
-  int32_t rpmForControl = (self->rpmFiltered > 0) ? self->rpmFiltered : RPM_getCurrentRPM(self);
+  int32_t rpmForControl =
+      (self->rpmFiltered > 0) ? self->rpmFiltered : RPM_getCurrentRPM(self);
   int32_t error = desiredRPM - rpmForControl;
   int32_t iPercent = self->rpmIntegratorQ10 / RPM_PI_Q10_SCALE;
-  int32_t outPercent = (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
+  int32_t outPercent =
+      (int32_t)((self->currentRPMSolenoid * 100) / PWM_RESOLUTION);
   int32_t pTermDeciPct = (s_lastPTermQ10 * 10) / RPM_PI_Q10_SCALE;
   int32_t iDeltaDeciPct = (s_lastIDeltaQ10 * 10) / RPM_PI_Q10_SCALE;
-  unsigned long piStepAgoMs = (s_lastPiStepAtMs == 0)
-    ? 0
-    : (now - s_lastPiStepAtMs);
+  unsigned long piStepAgoMs =
+      (s_lastPiStepAtMs == 0) ? 0 : (now - s_lastPiStepAtMs);
 
-  deb("rpmPI rpm:%d filt:%d des:%d err:%d out:%d cmd:%d i:%d vac:%d cyc:%d stepAgo:%lu p10:%d iD10:%d thr:%d regen:%d cold:%d",
-      RPM_getCurrentRPM(self),
-      self->rpmFiltered,
-      desiredRPM,
-      error,
-      self->rpmPercentValue,
-      outPercent,
-      iPercent,
-      self->vacuumReady ? 1 : 0,
-      self->rpmCycle ? 1 : 0,
-      piStepAgoMs,
-      pTermDeciPct,
-      iDeltaDeciPct,
-      RPM_isEngineThrottlePressed(self) ? 1 : 0,
-      regenActive ? 1 : 0,
+  deb("rpmPI rpm:%d filt:%d des:%d err:%d out:%d cmd:%d i:%d vac:%d cyc:%d "
+      "stepAgo:%lu p10:%d iD10:%d thr:%d regen:%d cold:%d",
+      RPM_getCurrentRPM(self), self->rpmFiltered, desiredRPM, error,
+      self->rpmPercentValue, outPercent, iPercent, self->vacuumReady ? 1 : 0,
+      self->rpmCycle ? 1 : 0, piStepAgoMs, pTermDeciPct, iDeltaDeciPct,
+      RPM_isEngineThrottlePressed(self) ? 1 : 0, regenActive ? 1 : 0,
       coldEngine ? 1 : 0);
 #else
   deb("rpm:%d current:%d", RPM_getCurrentRPM(self), self->currentRPMSolenoid);

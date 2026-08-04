@@ -2,6 +2,8 @@
 #include "logic.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "buzzerStrategy.h"
+#include <hal/hal_app.h>
+#include <hal/hal_target.h>
 
 const char *err = "ERR";
 
@@ -59,7 +61,7 @@ void executeByWatchdog(int *values, int size) {
   wSize = size;
 }
 
-void initialization(void) {
+static void initializeCore0(void) {
 
   debugInit();
   setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCKS);
@@ -132,8 +134,7 @@ void initialization(void) {
   deb("Setup finished");
 }
 
-void looper(void) {
-
+extern "C" void app_task0(void) {
   statusVariable0 = 0;
   updateWatchdogCore0();
 
@@ -282,9 +283,9 @@ void drawHighImportanceValuesIfChanged(void) {
   }
 }
 
-void initialization1(void) { setStartedCore1(); }
+static void initializeCore1(void) { setStartedCore1(); }
 
-void looper1(void) {
+static void runCore1(void) {
   updateWatchdogCore1();
 
   if (!isEnvironmentStarted()) {
@@ -307,4 +308,22 @@ void updateValsForDebug(void) {
       getEngineRPM());
   deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]),
       int(valueFields[F_DPF_TEMP]));
+}
+
+extern "C" void app_start(void) {
+  initializeCore0();
+#if !HAL_TARGET_IS_RP
+  initializeCore1();
+#endif
+}
+
+extern "C" void app_task1(void) {
+#if HAL_TARGET_IS_RP
+  static bool initialized = false;
+  if (!initialized) {
+    initializeCore1();
+    initialized = true;
+  }
+#endif
+  runCore1();
 }

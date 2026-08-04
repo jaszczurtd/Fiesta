@@ -13,6 +13,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODULES = ("ECU", "Clocks", "OilAndSpeed", "Adjustometer", "Fiesta_clock")
 LINUX_ONLY_TASKS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
+MANAGED_DEBUG_PROFILES = {
+    "Project: Debug Firmware",
+    "Project: Debug Firmware (RP2350 ARM)",
+    "Project: Debug Firmware (STM32G474 / ST-Link)",
+}
 
 
 class WindowsVscodeProjectTests(unittest.TestCase):
@@ -81,7 +86,11 @@ class WindowsVscodeProjectTests(unittest.TestCase):
     def test_generated_json_has_no_unix_machine_paths(self) -> None:
         paths = [REPO_ROOT / ".vscode" / "tasks.json"]
         for module in MODULES:
-            paths.extend((REPO_ROOT / "src" / module / ".vscode").glob("*.json"))
+            paths.extend(
+                path
+                for path in (REPO_ROOT / "src" / module / ".vscode").glob("*.json")
+                if path.name != "c_cpp_properties.json"
+            )
         for path in paths:
             content = path.read_text(encoding="utf-8")
             for forbidden in ("/dev/", "/home/", ".arduino15"):
@@ -89,10 +98,22 @@ class WindowsVscodeProjectTests(unittest.TestCase):
 
     def test_launch_profiles_need_no_private_cortex_debug_settings(self) -> None:
         for module in MODULES:
-            launch = (
-                REPO_ROOT / "src" / module / ".vscode" / "launch.json"
-            ).read_text(encoding="utf-8")
+            launch_path = REPO_ROOT / "src" / module / ".vscode" / "launch.json"
+            launch = launch_path.read_text(encoding="utf-8")
             self.assertNotIn("${config:cortex-debug.", launch, module)
+            document = json.loads(launch)
+            profiles = {
+                profile["name"]: profile
+                for profile in document["configurations"]
+            }
+            self.assertEqual(set(profiles), MANAGED_DEBUG_PROFILES, module)
+            self.assertEqual(
+                profiles["Project: Debug Firmware (STM32G474 / ST-Link)"][
+                    "configFiles"
+                ],
+                ["board/st_nucleo_g4.cfg"],
+                module,
+            )
 
 
 if __name__ == "__main__":
