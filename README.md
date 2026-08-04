@@ -73,11 +73,9 @@ Required toolchain:
 
 ## Build and development
 
-Each firmware module is a regular C/C++ application built with CMake and the
-native Pico SDK toolchain. The shared Fiesta entry adapter maps the
-module-owned `initialization()` / `looper()` functions to JaszczurHAL's
-portable `app_start()` / `app_task0()` contract; modules that opt in to the
-second core also expose `initialization1()` / `looper1()` through
+Each firmware module is a regular C/C++ application built with CMake and uses
+JaszczurHAL's portable `app_start()` / `app_task0()` contract directly.
+Modules that opt in to the second execution context also implement
 `app_task1()`.
 
 ### One-shot setup (Debian-like Linux / WSL)

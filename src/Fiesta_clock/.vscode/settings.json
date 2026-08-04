@@ -17,5 +17,6 @@
     "jaszczurhal.vscodeEntry": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode",
     "jaszczurhal.verbose": true,
     "task.allowAutomaticTasks": "on",
-    "jaszczurhal.vscodeEntryWindows": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd"
+    "jaszczurhal.vscodeEntryWindows": "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd",
+    "cortex-debug.gdbPath.linux": "gdb-multiarch"
 }

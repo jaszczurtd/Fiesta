@@ -168,14 +168,11 @@ by the setup flow (`runmefirst.sh`, implemented by
 - a mock backend and host-test support that let firmware logic compile with a
   host C/C++ compiler (GCC on Linux) without the target toolchain.
 
-Each module owns its firmware entry contract in `firmware_entry.h` and implements
-`initialization()` / `looper()` (plus `initialization1()` / `looper1()` for
-modules that opt in to core 1). The firmware build configures the JaszczurHAL
-multi-target dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`).
-The shared [`fiesta_app_entry.cpp`](src/common/fiesta_app_entry.cpp) adapter
-maps `initialization()` / `looper()` to `app_start()` / `app_task0()` and maps
-the optional core-1 contract to `app_task1()`. The RP2040 recipe compiles the
-module and adapter directly with CMake and the native Pico SDK toolchain. See
+Each module implements JaszczurHAL's portable `app_start()` / `app_task0()`
+entry contract directly and adds `app_task1()` when it opts in to the second
+execution context. The firmware build configures the JaszczurHAL multi-target
+dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`) without a
+Fiesta-specific entry adapter. See
 [README § Build and development](README.md#build-and-development).
 
 ### 4.2 canDefinitions ([`src/common/canDefinitions`](src/common/canDefinitions/))
@@ -240,8 +237,7 @@ foundation:
 
 ```
 src/<Module>/
-├── firmware_entry.h       # module-owned firmware entry contract
-├── start.{c,cpp}/.h       # init, soft-timer table, watchdog hookup
+├── start.{c,cpp}/.h       # app entry, soft-timer table, watchdog hookup
 ├── hardwareConfig.h       # pin/address constants (single source of truth)
 ├── hal_project_config.h   # per-module HAL feature flags
 ├── config.{c,cpp}/.h      # module configuration and/or SC session surface
@@ -764,9 +760,9 @@ intentionally narrow:
 
 The shared wrapper configures the JaszczurHAL multi-target dispatcher
 (`libraries/JaszczurHAL/cmake/jh_firmware_project`). Its RP2040 recipe imports
-the pinned Pico SDK, compiles the module sources together with the shared
-Fiesta entry adapter, and links the selected native JaszczurHAL backend. The
-module-owned source entry contract remains `firmware_entry.h`.
+the pinned Pico SDK, compiles the module sources, and links the selected native
+JaszczurHAL backend. Every module implements the portable `app_start()` /
+`app_task0()` contract directly and optionally provides `app_task1()`.
 
 **Manifest auto-generation.** Every successful firmware compile
 produces an artefact pair:

@@ -2,7 +2,9 @@
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "ecuContext.h"
+#include <hal/hal_app.h>
 #include <hal/hal_soft_timer.h>
+#include <hal/hal_target.h>
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances
@@ -156,7 +158,7 @@ void executeByWatchdog(int *values, int size) {
  * @brief Initialize all core-0 peripherals, modules and watchdog state.
  * @return None.
  */
-void initialization(void) {
+static void initializeCore0(void) {
 
   debugInit();
   setDebugPrefixWithColon(SC_MODULE_TOKEN_ECU);
@@ -354,7 +356,7 @@ void callAtEverySecond(void) {
  * @brief Run one core-0 scheduler iteration for I/O and service tasks.
  * @return None.
  */
-void looper(void) {
+static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 0;
   updateWatchdogCore0();
   start_reportCore1InitError();
@@ -403,7 +405,7 @@ void looper(void) {
  * @brief Initialize the second core runtime context.
  * @return None.
  */
-void initialization1(void) {
+static void initializeCore1(void) {
   start_initContextMutexes();
   const hal_status_t rpmStatus = RPM_create();
   s_startRuntimeState.core1InitStatus = rpmStatus;
@@ -425,7 +427,7 @@ void initialization1(void) {
  * @brief Run one core-1 control-loop iteration.
  * @return None.
  */
-void looper1(void) {
+static void runCore1(void) {
 
   s_startPersistentState.statusVariable1Val = 0;
   if (hal_status_is_error(s_startRuntimeState.core1InitStatus)) {
@@ -464,4 +466,25 @@ void looper1(void) {
   s_startPersistentState.statusVariable1Val = 3;
 
   hal_idle();
+}
+
+void app_start(void) {
+  initializeCore0();
+// init core1 here only if target is not RP2040
+#if !HAL_TARGET_IS_RP
+  initializeCore1();
+#endif
+}
+
+void app_task0(void) { runCore0(); }
+
+void app_task1(void) {
+#if HAL_TARGET_IS_RP
+  static bool initialized = false;
+  if (!initialized) {
+    initializeCore1();
+    initialized = true;
+  }
+#endif
+  runCore1();
 }

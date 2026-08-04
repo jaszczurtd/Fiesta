@@ -11,7 +11,6 @@ If this text ever diverges from the code, the source of truth is:
 - `config.h`
 - `hardwareConfig.h`
 - `../common/adjustometer_protocol.h`
-- `firmware_entry.h`
 - `tests/test_sensors.cpp`
 - `tests/test_sensors_internal.cpp`
 - `tests/test_led.cpp`
@@ -199,9 +198,8 @@ Examples:
 
 ### Core split
 
-- `firmware_entry.h` declares the module-owned `initialization()` / `looper()`
-  contract. The shared Fiesta adapter maps it to JaszczurHAL's portable
-  `app_start()` / `app_task0()` entry points.
+- `start.c` implements JaszczurHAL's portable `app_start()` / `app_task0()` /
+  `app_task1()` entry points directly.
 - Core0 initialises sensors and hosts the GPIO interrupt used for pulse counting.
 - Core1 updates the I2C registers, updates the LED state machine, and handles diagnostic logging.
 
@@ -273,8 +271,7 @@ Current purpose of supply-voltage measurement:
 
 | File | Description |
 |------|-------------|
-| `firmware_entry.h` | Module entry contract consumed by the generated JaszczurHAL adapter. |
-| `start.c / start.h` | RP2040 core initialisation, Core1 loop, I2C register publishing, LED updates. |
+| `start.c / start.h` | Portable app entry, core initialisation, Core1 loop, I2C register publishing, LED updates. |
 | `sensors.c / sensors.h` | Pulse ISR, frequency measurement, baseline logic, zero-hold, ADC reads, status generation. |
 | `led.c / led.h` | LED state machine and fault indication logic. |
 | `config.h` | Runtime constants for baseline, verification, zero-hold, telemetry cadence, and ADC filtering. |

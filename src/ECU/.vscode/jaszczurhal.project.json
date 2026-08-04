@@ -12,7 +12,6 @@
         "cache": {
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "ECU",
-            "JH_EXTRA_SOURCES": "${project}/../common/fiesta_app_entry.cpp",
             "JH_EXTRA_DEFINES": "HAL_ENABLE_KV"
         },
         "targets": {
