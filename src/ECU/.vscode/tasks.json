@@ -14,7 +14,8 @@
         "rp2350-arm:pico2 - Raspberry Pi Pico 2",
         "rp2350-arm:pico2w - Raspberry Pi Pico 2 W",
         "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
-        "stm32g474:nucleo-g474re - ST NUCLEO-G474RE"
+        "stm32g474:nucleo-g474re - ST NUCLEO-G474RE",
+        "stm32g474:nucleo-g474re-pim730 - ST NUCLEO-G474RE with PIM730/RM2"
       ],
       "default": "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB"
     }

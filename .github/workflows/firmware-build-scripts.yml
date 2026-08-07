@@ -52,6 +52,21 @@ jobs:
             https://github.com/jaszczurtd/JaszczurHAL.git \
             ../libraries/JaszczurHAL
 
+      - name: Validate HAL feature configuration
+        if: matrix.module == 'ECU'
+        run: |
+          python3 ../libraries/JaszczurHAL/scripts/generate_hal_features.py \
+            --lint --effective --input-root "$GITHUB_WORKSPACE" \
+            --resolution-output "$RUNNER_TEMP/fiesta-effective-feature-resolution.json"
+
+      - name: Upload effective feature resolution
+        if: always() && matrix.module == 'ECU'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fiesta-effective-feature-resolution
+          path: ${{ runner.temp }}/fiesta-effective-feature-resolution.json
+          if-no-files-found: error
+
       - name: Setup native RP toolchain
         run: |
           set -eux

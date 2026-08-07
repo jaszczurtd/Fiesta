@@ -11,8 +11,7 @@
         "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "ECU",
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_KV"
+            "JH_MODULE_NAME": "ECU"
         },
         "targets": {
             "build": "firmware",
