@@ -2,15 +2,15 @@
 
 #include <cstdio>
 #include <cstring>
-#include <hal/hal_serial_session.h>
 #include <hal/hal_crypto.h>
+#include <hal/hal_serial.h>
+#include <hal/hal_serial_session.h>
 
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
 #include "../common/scDefinitions/sc_session_vocabulary.h"
-#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
-
 
 static hal_serial_session_t s_configSession;
 
@@ -23,32 +23,27 @@ typedef struct {
 } oas_values_t;
 
 static const oas_values_t k_oas_values = {
-  .oil_pressure_read_interval_ms = (int16_t)OIL_PRESSURE_READ_INTERVAL,
-  .thermocouple_read_interval_ms = (int16_t)THERMOCOUPLE_READ_INTERVAL,
+    .oil_pressure_read_interval_ms = (int16_t)OIL_PRESSURE_READ_INTERVAL,
+    .thermocouple_read_interval_ms = (int16_t)THERMOCOUPLE_READ_INTERVAL,
 };
 
 static const sc_param_descriptor_t k_oas_params[] = {
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_pressure_read_interval_ms",
-                                       oas_values_t,
-                                       oil_pressure_read_interval_ms,
-                                       50, 500,
-                                       (int16_t)OIL_PRESSURE_READ_INTERVAL, 1,
-                                       "sampling"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("thermocouple_read_interval_ms",
-                                       oas_values_t,
-                                       thermocouple_read_interval_ms,
-                                       500, 5000,
-                                       (int16_t)THERMOCOUPLE_READ_INTERVAL, 1,
-                                       "sampling"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
+        "oil_pressure_read_interval_ms", oas_values_t,
+        oil_pressure_read_interval_ms, 50, 500,
+        (int16_t)OIL_PRESSURE_READ_INTERVAL, 1, "sampling"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
+        "thermocouple_read_interval_ms", oas_values_t,
+        thermocouple_read_interval_ms, 500, 5000,
+        (int16_t)THERMOCOUPLE_READ_INTERVAL, 1, "sampling"),
 };
-static const size_t k_oas_params_count =
-  COUNTOF(k_oas_params);
+static const size_t k_oas_params_count = COUNTOF(k_oas_params);
 
 static const char *configSessionSkipSpaces(const char *cursor) {
-  if(cursor == nullptr) {
+  if (cursor == nullptr) {
     return nullptr;
   }
-  while(*cursor == ' ') {
+  while (*cursor == ' ') {
     cursor++;
   }
   return cursor;
@@ -63,7 +58,7 @@ static void configSessionEmitThroughHal(const char *payload, void *user) {
 
 static void configSessionReplyGetMeta(void) {
   char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
-  if(!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
+  if (!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
     uidHex[0] = '\0';
   }
 
@@ -74,91 +69,88 @@ static void configSessionReplyGetMeta(void) {
                     &buildB64Len);
 
   char response[256] = {0};
-  snprintf(response, sizeof(response),
-           SC_REPLY_META_FMT,
+  snprintf(response, sizeof(response), SC_REPLY_META_FMT,
            SC_MODULE_TOKEN_OIL_AND_SPEED,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-           (unsigned long)configSessionId(),
-           FW_VERSION,
-           buildB64,
+           (unsigned long)configSessionId(), FW_VERSION, buildB64,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
   hal_serial_session_println(&s_configSession, response);
 }
 
 static bool configSessionHandleScGetParamCommand(const char *line) {
-  if(line == nullptr) {
+  if (line == nullptr) {
     hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return true;
   }
 
   const char *cursor = line + strlen(SC_CMD_GET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == nullptr || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == nullptr || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
   char paramId[SC_PARAM_ID_MAX] = {0};
   size_t idLen = 0u;
-  while(cursor[idLen] != '\0' && cursor[idLen] != ' ' && idLen + 1u < sizeof(paramId)) {
+  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
+         idLen + 1u < sizeof(paramId)) {
     paramId[idLen] = cursor[idLen];
     idLen++;
   }
   paramId[idLen] = '\0';
 
-  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " param_id_too_long");
+                               SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == nullptr || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == nullptr || cursor[0] != '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
-  sc_param_reply_get_param(k_oas_params, k_oas_params_count,
-                           &k_oas_values, paramId,
-                           configSessionEmitThroughHal, &s_configSession);
+  sc_param_reply_get_param(k_oas_params, k_oas_params_count, &k_oas_values,
+                           paramId, configSessionEmitThroughHal,
+                           &s_configSession);
   return true;
 }
 
 static bool configSessionHandleScCommand(const char *line) {
-  if(line == nullptr || strncmp(line, "SC_", 3u) != 0) {
+  if (line == nullptr || strncmp(line, "SC_", 3u) != 0) {
     return false;
   }
 
-  if(!configSessionActive()) {
+  if (!configSessionActive()) {
     hal_serial_session_println(&s_configSession,
-        SC_REPLY_NOT_READY_HELLO_REQUIRED);
+                               SC_REPLY_NOT_READY_HELLO_REQUIRED);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_META) == 0) {
+  if (strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
+  if (strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
     sc_param_reply_get_param_list(k_oas_params, k_oas_params_count,
                                   configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_VALUES) == 0) {
+  if (strcmp(line, SC_CMD_GET_VALUES) == 0) {
     sc_param_reply_get_values_i16(k_oas_params, k_oas_params_count,
-                                  &k_oas_values,
-                                  configSessionEmitThroughHal,
+                                  &k_oas_values, configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
   }
 
-  if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
+  if (strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
     return configSessionHandleScGetParamCommand(line);
   }
 
@@ -169,7 +161,7 @@ static bool configSessionHandleScCommand(const char *line) {
 static void configSession_onUnknownLine(const char *line, void *user) {
   (void)user;
 
-  if(configSessionHandleScCommand(line)) {
+  if (configSessionHandleScCommand(line)) {
     return;
   }
 
@@ -177,13 +169,11 @@ static void configSession_onUnknownLine(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  hal_serial_session_init_with_vocabulary(&s_configSession,
-                                          SC_MODULE_TOKEN_OIL_AND_SPEED,
-                                          FW_VERSION, BUILD_ID,
-                                          &fiesta_default_vocabulary);
+  hal_serial_session_init_with_vocabulary(
+      &s_configSession, SC_MODULE_TOKEN_OIL_AND_SPEED, FW_VERSION, BUILD_ID,
+      &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,
-                                         &configSession_onUnknownLine,
-                                         nullptr);
+                                         &configSession_onUnknownLine, nullptr);
 }
 
 void configSessionTick(void) {

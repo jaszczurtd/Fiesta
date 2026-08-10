@@ -2,14 +2,15 @@
 
 #include <cstdio>
 #include <cstring>
-#include <hal/hal_serial_session.h>
 #include <hal/hal_crypto.h>
+#include <hal/hal_serial.h>
+#include <hal/hal_serial_session.h>
 
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
 #include "../common/scDefinitions/sc_session_vocabulary.h"
-#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 static hal_serial_session_t s_configSession;
 
@@ -30,42 +31,41 @@ typedef struct {
 } clocks_values_t;
 
 static const clocks_values_t k_clocks_values = {
-  .coolant_warn_c = (int16_t)TEMP_OK_HI,
-  .coolant_max_c  = (int16_t)TEMP_MAX,
-  .oil_warn_c     = (int16_t)TEMP_OIL_OK_HI,
-  .oil_max_c      = (int16_t)TEMP_OIL_MAX,
-  .egt_warn_c     = (int16_t)TEMP_EGT_OK_HI,
-  .egt_max_c      = (int16_t)TEMP_EGT_MAX,
+    .coolant_warn_c = (int16_t)TEMP_OK_HI,
+    .coolant_max_c = (int16_t)TEMP_MAX,
+    .oil_warn_c = (int16_t)TEMP_OIL_OK_HI,
+    .oil_max_c = (int16_t)TEMP_OIL_MAX,
+    .egt_warn_c = (int16_t)TEMP_EGT_OK_HI,
+    .egt_max_c = (int16_t)TEMP_EGT_MAX,
 };
 
 static const sc_param_descriptor_t k_clocks_params[] = {
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_warn_c", clocks_values_t,
-                                       coolant_warn_c, 80, 120,
-                                       (int16_t)TEMP_OK_HI, 1, "coolant"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_max_c", clocks_values_t,
-                                       coolant_max_c, 100, 140,
-                                       (int16_t)TEMP_MAX, 1, "coolant"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_warn_c", clocks_values_t,
-                                       oil_warn_c, 90, 130,
-                                       (int16_t)TEMP_OIL_OK_HI, 1, "oil"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_max_c", clocks_values_t,
-                                       oil_max_c, 120, 160,
-                                       (int16_t)TEMP_OIL_MAX, 1, "oil"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_warn_c", clocks_values_t,
-                                       egt_warn_c, 700, 1100,
-                                       (int16_t)TEMP_EGT_OK_HI, 1, "egt"),
-  SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
-                                       egt_max_c, 1300, 1800,
-                                       (int16_t)TEMP_EGT_MAX, 1, "egt"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_warn_c", clocks_values_t,
+                                         coolant_warn_c, 80, 120,
+                                         (int16_t)TEMP_OK_HI, 1, "coolant"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("coolant_max_c", clocks_values_t,
+                                         coolant_max_c, 100, 140,
+                                         (int16_t)TEMP_MAX, 1, "coolant"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_warn_c", clocks_values_t,
+                                         oil_warn_c, 90, 130,
+                                         (int16_t)TEMP_OIL_OK_HI, 1, "oil"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("oil_max_c", clocks_values_t,
+                                         oil_max_c, 120, 160,
+                                         (int16_t)TEMP_OIL_MAX, 1, "oil"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_warn_c", clocks_values_t,
+                                         egt_warn_c, 700, 1100,
+                                         (int16_t)TEMP_EGT_OK_HI, 1, "egt"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
+                                         egt_max_c, 1300, 1800,
+                                         (int16_t)TEMP_EGT_MAX, 1, "egt"),
 };
-static const size_t k_clocks_params_count =
-  COUNTOF(k_clocks_params);
+static const size_t k_clocks_params_count = COUNTOF(k_clocks_params);
 
 static const char *configSessionSkipSpaces(const char *cursor) {
-  if(cursor == nullptr) {
+  if (cursor == nullptr) {
     return nullptr;
   }
-  while(*cursor == ' ') {
+  while (*cursor == ' ') {
     cursor++;
   }
   return cursor;
@@ -80,7 +80,7 @@ static void configSessionEmitThroughHal(const char *payload, void *user) {
 
 static void configSessionReplyGetMeta(void) {
   char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
-  if(!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
+  if (!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
     uidHex[0] = '\0';
   }
 
@@ -91,50 +91,48 @@ static void configSessionReplyGetMeta(void) {
                     &buildB64Len);
 
   char response[256] = {0};
-  snprintf(response, sizeof(response),
-           SC_REPLY_META_FMT,
+  snprintf(response, sizeof(response), SC_REPLY_META_FMT,
            SC_MODULE_TOKEN_CLOCKS,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-           (unsigned long)configSessionId(),
-           FW_VERSION,
-           buildB64,
+           (unsigned long)configSessionId(), FW_VERSION, buildB64,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
   hal_serial_session_println(&s_configSession, response);
 }
 
 static bool configSessionHandleScGetParamCommand(const char *line) {
-  if(line == nullptr) {
+  if (line == nullptr) {
     hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return true;
   }
 
   const char *cursor = line + strlen(SC_CMD_GET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == nullptr || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == nullptr || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
   char paramId[SC_PARAM_ID_MAX] = {0};
   size_t idLen = 0u;
-  while(cursor[idLen] != '\0' && cursor[idLen] != ' ' && idLen + 1u < sizeof(paramId)) {
+  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
+         idLen + 1u < sizeof(paramId)) {
     paramId[idLen] = cursor[idLen];
     idLen++;
   }
   paramId[idLen] = '\0';
 
-  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " param_id_too_long");
+                               SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == nullptr || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == nullptr || cursor[0] != '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
@@ -145,37 +143,36 @@ static bool configSessionHandleScGetParamCommand(const char *line) {
 }
 
 static bool configSessionHandleScCommand(const char *line) {
-  if(line == nullptr || strncmp(line, "SC_", 3u) != 0) {
+  if (line == nullptr || strncmp(line, "SC_", 3u) != 0) {
     return false;
   }
 
-  if(!configSessionActive()) {
+  if (!configSessionActive()) {
     hal_serial_session_println(&s_configSession,
-        SC_REPLY_NOT_READY_HELLO_REQUIRED);
+                               SC_REPLY_NOT_READY_HELLO_REQUIRED);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_META) == 0) {
+  if (strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
+  if (strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
     sc_param_reply_get_param_list(k_clocks_params, k_clocks_params_count,
                                   configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_VALUES) == 0) {
+  if (strcmp(line, SC_CMD_GET_VALUES) == 0) {
     sc_param_reply_get_values_i16(k_clocks_params, k_clocks_params_count,
-                                  &k_clocks_values,
-                                  configSessionEmitThroughHal,
+                                  &k_clocks_values, configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
   }
 
-  if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
+  if (strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
     return configSessionHandleScGetParamCommand(line);
   }
 
@@ -186,7 +183,7 @@ static bool configSessionHandleScCommand(const char *line) {
 static void configSession_onUnknownLine(const char *line, void *user) {
   (void)user;
 
-  if(configSessionHandleScCommand(line)) {
+  if (configSessionHandleScCommand(line)) {
     return;
   }
 
@@ -194,12 +191,11 @@ static void configSession_onUnknownLine(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  hal_serial_session_init_with_vocabulary(&s_configSession, SC_MODULE_TOKEN_CLOCKS,
-                                          FW_VERSION, BUILD_ID,
-                                          &fiesta_default_vocabulary);
+  hal_serial_session_init_with_vocabulary(&s_configSession,
+                                          SC_MODULE_TOKEN_CLOCKS, FW_VERSION,
+                                          BUILD_ID, &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,
-                                         &configSession_onUnknownLine,
-                                         nullptr);
+                                         &configSession_onUnknownLine, nullptr);
 }
 
 void configSessionTick(void) {

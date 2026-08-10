@@ -7,10 +7,11 @@
  * The .mock backend in JaszczurHAL references types from every optional
  * HAL module unconditionally (hal_can_t, hal_rgb_led_color_t,
  * hal_pwm_freq_channel_t, ...). To compile the mock library on host we
- * therefore enable the full HAL_ENABLE_* matrix - mirroring the host
- * hal_mock target declared in JaszczurHAL/CMakeLists.txt.
+ * therefore enable a broad HAL_ENABLE_* matrix mirroring the host hal_mock
+ * target declared in JaszczurHAL/CMakeLists.txt. Features not consumed by
+ * Adjustometer should remain disabled to avoid artificial source dependencies.
  *
- * Picked up before the real Clocks/hal_project_config.h via
+ * Picked up before the real Adjustometer/hal_project_config.h via
  * target_include_directories(... BEFORE PUBLIC ${SRC}/tests/include) in
  * the project CMakeLists.txt.
  */
@@ -36,7 +37,6 @@
 #define HAL_ENABLE_MAX6675
 #define HAL_ENABLE_DS18B20      /* -> ONEWIRE */
 #define HAL_ENABLE_EXTERNAL_ADC /* -> I2C */
-#define HAL_ENABLE_GPS          /* -> SWSERIAL */
 #define HAL_ENABLE_PWM_FREQ
 #define HAL_ENABLE_RGB_LED
 #define HAL_ENABLE_ILI9341 /* -> TFT + DISPLAY */

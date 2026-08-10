@@ -1,11 +1,12 @@
 
 #include "config.h"
-#include "tests.h"
 #include "ecu_unit_testing.h"
 #include "gps.h"
+#include "tests.h"
 #include <hal/hal_crypto.h>
 
 #include <hal/hal_kv.h>
+#include <hal/hal_serial.h>
 #include <hal/hal_serial_session.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,19 +14,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
 #include "../common/scDefinitions/sc_session_vocabulary.h"
-#include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 const char *err = "ERR";
 
-#define ECU_PARAMS_SCHEMA_V1    1u
-#define ECU_PARAMS_SCHEMA_V2    2u
+#define ECU_PARAMS_SCHEMA_V1 1u
+#define ECU_PARAMS_SCHEMA_V2 2u
 #define ECU_PARAMS_BLOB_SIZE_V1 16u
 #define ECU_PARAMS_BLOB_SIZE_V2 18u
-#define ECU_PARAMS_BLOB_KEY     0xDA10u
+#define ECU_PARAMS_BLOB_KEY 0xDA10u
 
 /* Wire-visible parameter catalogue. R1.2 routes every SC reply for these
  * params through the descriptor-driven helpers in src/common/scDefinitions/.
@@ -33,34 +34,24 @@ const char *err = "ERR";
  * fields, 18-byte blob) backwards compatibility. */
 static const sc_param_descriptor_t k_ecu_params[] = {
     SC_PARAM_SCALAR_I16("fan_coolant_start_c", ecu_params_values_t,
-                        fanCoolantStartC,
-                        ECU_PARAMS_COOLANT_START_MIN,
-                        ECU_PARAMS_COOLANT_START_MAX,
-                        TEMP_FAN_START, 1, "cooling_fan"),
+                        fanCoolantStartC, ECU_PARAMS_COOLANT_START_MIN,
+                        ECU_PARAMS_COOLANT_START_MAX, TEMP_FAN_START, 1,
+                        "cooling_fan"),
     SC_PARAM_SCALAR_I16("fan_coolant_stop_c", ecu_params_values_t,
-                        fanCoolantStopC,
-                        ECU_PARAMS_COOLANT_STOP_MIN,
-                        ECU_PARAMS_COOLANT_STOP_MAX,
-                        TEMP_FAN_STOP, 1, "cooling_fan"),
-    SC_PARAM_SCALAR_I16("fan_air_start_c", ecu_params_values_t,
-                        fanAirStartC,
-                        ECU_PARAMS_AIR_START_MIN,
-                        ECU_PARAMS_AIR_START_MAX,
+                        fanCoolantStopC, ECU_PARAMS_COOLANT_STOP_MIN,
+                        ECU_PARAMS_COOLANT_STOP_MAX, TEMP_FAN_STOP, 1,
+                        "cooling_fan"),
+    SC_PARAM_SCALAR_I16("fan_air_start_c", ecu_params_values_t, fanAirStartC,
+                        ECU_PARAMS_AIR_START_MIN, ECU_PARAMS_AIR_START_MAX,
                         AIR_TEMP_FAN_START, 1, "intercooler_fan"),
-    SC_PARAM_SCALAR_I16("fan_air_stop_c", ecu_params_values_t,
-                        fanAirStopC,
-                        ECU_PARAMS_AIR_STOP_MIN,
-                        ECU_PARAMS_AIR_STOP_MAX,
+    SC_PARAM_SCALAR_I16("fan_air_stop_c", ecu_params_values_t, fanAirStopC,
+                        ECU_PARAMS_AIR_STOP_MIN, ECU_PARAMS_AIR_STOP_MAX,
                         AIR_TEMP_FAN_STOP, 1, "intercooler_fan"),
-    SC_PARAM_SCALAR_I16("heater_stop_c", ecu_params_values_t,
-                        heaterStopC,
-                        ECU_PARAMS_HEATER_STOP_MIN,
-                        ECU_PARAMS_HEATER_STOP_MAX,
+    SC_PARAM_SCALAR_I16("heater_stop_c", ecu_params_values_t, heaterStopC,
+                        ECU_PARAMS_HEATER_STOP_MIN, ECU_PARAMS_HEATER_STOP_MAX,
                         TEMP_HEATER_STOP, 1, "engine_heater"),
-    SC_PARAM_SCALAR_I16("nominal_rpm", ecu_params_values_t,
-                        nominalRpm,
-                        ECU_PARAMS_NOMINAL_RPM_MIN,
-                        ECU_PARAMS_NOMINAL_RPM_MAX,
+    SC_PARAM_SCALAR_I16("nominal_rpm", ecu_params_values_t, nominalRpm,
+                        ECU_PARAMS_NOMINAL_RPM_MIN, ECU_PARAMS_NOMINAL_RPM_MAX,
                         NOMINAL_RPM_VALUE, 2, "idle"),
 };
 static const size_t k_ecu_params_count = COUNTOF(k_ecu_params);
@@ -71,109 +62,106 @@ static const size_t k_ecu_params_count = COUNTOF(k_ecu_params);
  * request was framed; otherwise it falls back to plain text. */
 static hal_serial_session_t s_configSession;
 
-static ecu_params_values_t s_active = {
-  .fanCoolantStartC = TEMP_FAN_START,
-  .fanCoolantStopC = TEMP_FAN_STOP,
-  .fanAirStartC = AIR_TEMP_FAN_START,
-  .fanAirStopC = AIR_TEMP_FAN_STOP,
-  .heaterStopC = TEMP_HEATER_STOP,
-  .nominalRpm = NOMINAL_RPM_VALUE
-};
+static ecu_params_values_t s_active = {.fanCoolantStartC = TEMP_FAN_START,
+                                       .fanCoolantStopC = TEMP_FAN_STOP,
+                                       .fanAirStartC = AIR_TEMP_FAN_START,
+                                       .fanAirStopC = AIR_TEMP_FAN_STOP,
+                                       .heaterStopC = TEMP_HEATER_STOP,
+                                       .nominalRpm = NOMINAL_RPM_VALUE};
 
-static ecu_params_values_t s_staging = {
-  .fanCoolantStartC = TEMP_FAN_START,
-  .fanCoolantStopC = TEMP_FAN_STOP,
-  .fanAirStartC = AIR_TEMP_FAN_START,
-  .fanAirStopC = AIR_TEMP_FAN_STOP,
-  .heaterStopC = TEMP_HEATER_STOP,
-  .nominalRpm = NOMINAL_RPM_VALUE
-};
+static ecu_params_values_t s_staging = {.fanCoolantStartC = TEMP_FAN_START,
+                                        .fanCoolantStopC = TEMP_FAN_STOP,
+                                        .fanAirStartC = AIR_TEMP_FAN_START,
+                                        .fanAirStopC = AIR_TEMP_FAN_STOP,
+                                        .heaterStopC = TEMP_HEATER_STOP,
+                                        .nominalRpm = NOMINAL_RPM_VALUE};
 
 static bool s_initialized = false;
 
 TESTABLE_STATIC void ecuParamsLoadDefaults(ecu_params_values_t *outValues) {
-  if(outValues == NULL) {
+  if (outValues == NULL) {
     return;
   }
   (void)sc_param_load_defaults(k_ecu_params, k_ecu_params_count, outValues);
 }
 
-TESTABLE_STATIC bool ecuParamsValidate(const ecu_params_values_t *candidate, const char **reason) {
-  if(reason != NULL) {
+TESTABLE_STATIC bool ecuParamsValidate(const ecu_params_values_t *candidate,
+                                       const char **reason) {
+  if (reason != NULL) {
     *reason = NULL;
   }
 
-  if(candidate == NULL) {
-    if(reason != NULL) {
+  if (candidate == NULL) {
+    if (reason != NULL) {
       *reason = "null";
     }
     return false;
   }
 
-  if(candidate->fanCoolantStartC < ECU_PARAMS_COOLANT_START_MIN
-    || candidate->fanCoolantStartC > ECU_PARAMS_COOLANT_START_MAX) {
-    if(reason != NULL) {
+  if (candidate->fanCoolantStartC < ECU_PARAMS_COOLANT_START_MIN ||
+      candidate->fanCoolantStartC > ECU_PARAMS_COOLANT_START_MAX) {
+    if (reason != NULL) {
       *reason = "fan_coolant_start_range";
     }
     return false;
   }
 
-  if(candidate->fanCoolantStopC < ECU_PARAMS_COOLANT_STOP_MIN
-    || candidate->fanCoolantStopC > ECU_PARAMS_COOLANT_STOP_MAX) {
-    if(reason != NULL) {
+  if (candidate->fanCoolantStopC < ECU_PARAMS_COOLANT_STOP_MIN ||
+      candidate->fanCoolantStopC > ECU_PARAMS_COOLANT_STOP_MAX) {
+    if (reason != NULL) {
       *reason = "fan_coolant_stop_range";
     }
     return false;
   }
 
-  if(candidate->fanAirStartC < ECU_PARAMS_AIR_START_MIN
-    || candidate->fanAirStartC > ECU_PARAMS_AIR_START_MAX) {
-    if(reason != NULL) {
+  if (candidate->fanAirStartC < ECU_PARAMS_AIR_START_MIN ||
+      candidate->fanAirStartC > ECU_PARAMS_AIR_START_MAX) {
+    if (reason != NULL) {
       *reason = "fan_air_start_range";
     }
     return false;
   }
 
-  if(candidate->fanAirStopC < ECU_PARAMS_AIR_STOP_MIN
-    || candidate->fanAirStopC > ECU_PARAMS_AIR_STOP_MAX) {
-    if(reason != NULL) {
+  if (candidate->fanAirStopC < ECU_PARAMS_AIR_STOP_MIN ||
+      candidate->fanAirStopC > ECU_PARAMS_AIR_STOP_MAX) {
+    if (reason != NULL) {
       *reason = "fan_air_stop_range";
     }
     return false;
   }
 
-  if(candidate->heaterStopC < ECU_PARAMS_HEATER_STOP_MIN
-    || candidate->heaterStopC > ECU_PARAMS_HEATER_STOP_MAX) {
-    if(reason != NULL) {
+  if (candidate->heaterStopC < ECU_PARAMS_HEATER_STOP_MIN ||
+      candidate->heaterStopC > ECU_PARAMS_HEATER_STOP_MAX) {
+    if (reason != NULL) {
       *reason = "heater_stop_range";
     }
     return false;
   }
 
-  if(candidate->nominalRpm < ECU_PARAMS_NOMINAL_RPM_MIN
-    || candidate->nominalRpm > ECU_PARAMS_NOMINAL_RPM_MAX) {
-    if(reason != NULL) {
+  if (candidate->nominalRpm < ECU_PARAMS_NOMINAL_RPM_MIN ||
+      candidate->nominalRpm > ECU_PARAMS_NOMINAL_RPM_MAX) {
+    if (reason != NULL) {
       *reason = "nominal_rpm_range";
     }
     return false;
   }
 
-  if(candidate->fanCoolantStopC >= candidate->fanCoolantStartC) {
-    if(reason != NULL) {
+  if (candidate->fanCoolantStopC >= candidate->fanCoolantStartC) {
+    if (reason != NULL) {
       *reason = "fan_coolant_hysteresis";
     }
     return false;
   }
 
-  if(candidate->fanAirStopC >= candidate->fanAirStartC) {
-    if(reason != NULL) {
+  if (candidate->fanAirStopC >= candidate->fanAirStartC) {
+    if (reason != NULL) {
       *reason = "fan_air_hysteresis";
     }
     return false;
   }
 
-  if(candidate->heaterStopC >= candidate->fanCoolantStartC) {
-    if(reason != NULL) {
+  if (candidate->heaterStopC >= candidate->fanCoolantStartC) {
+    if (reason != NULL) {
       *reason = "heater_vs_fan_order";
     }
     return false;
@@ -182,33 +170,34 @@ TESTABLE_STATIC bool ecuParamsValidate(const ecu_params_values_t *candidate, con
   return true;
 }
 
-TESTABLE_STATIC bool ecuParamsStage(const ecu_params_values_t *candidate, const char **reason) {
-  if(!ecuParamsValidate(candidate, reason)) {
+TESTABLE_STATIC bool ecuParamsStage(const ecu_params_values_t *candidate,
+                                    const char **reason) {
+  if (!ecuParamsValidate(candidate, reason)) {
     return false;
   }
   s_staging = *candidate;
   return true;
 }
 
-TESTABLE_STATIC void ecuParamsApply(void) {
-  s_active = s_staging;
-}
+TESTABLE_STATIC void ecuParamsApply(void) { s_active = s_staging; }
 
 TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
-  if(outValues == NULL) {
+  if (outValues == NULL) {
     return false;
   }
 
   uint16_t blobLen = 0u;
-  if(!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, NULL, 0u, &blobLen)) {
+  if (!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, NULL, 0u, &blobLen)) {
     return false;
   }
-  if(blobLen != ECU_PARAMS_BLOB_SIZE_V1 && blobLen != ECU_PARAMS_BLOB_SIZE_V2) {
+  if (blobLen != ECU_PARAMS_BLOB_SIZE_V1 &&
+      blobLen != ECU_PARAMS_BLOB_SIZE_V2) {
     return false;
   }
 
   uint8_t blob[ECU_PARAMS_BLOB_SIZE_V2] = {0};
-  if(!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob), &blobLen)) {
+  if (!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob),
+                       &blobLen)) {
     return false;
   }
 
@@ -218,12 +207,12 @@ TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
   ecuParamsLoadDefaults(&decoded);
 
   uint16_t schema = 0u;
-  if(!sc_param_blob_decode(k_ecu_params, k_ecu_params_count, &decoded,
-                           blob, blobLen, &schema)) {
+  if (!sc_param_blob_decode(k_ecu_params, k_ecu_params_count, &decoded, blob,
+                            blobLen, &schema)) {
     return false;
   }
 
-  if(!ecuParamsValidate(&decoded, NULL)) {
+  if (!ecuParamsValidate(&decoded, NULL)) {
     return false;
   }
 
@@ -237,15 +226,15 @@ TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
  * lifted this out of the UNIT_TEST guard so production COMMIT_PARAMS
  * can persist the staged blob. */
 TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
-  if(!ecuParamsValidate(values, NULL)) {
+  if (!ecuParamsValidate(values, NULL)) {
     return false;
   }
 
   uint8_t blob[ECU_PARAMS_BLOB_SIZE_V2] = {0};
-  const size_t written = sc_param_blob_encode(
-      k_ecu_params, k_ecu_params_count, values, ECU_PARAMS_SCHEMA_V2,
-      blob, sizeof(blob));
-  if(written != ECU_PARAMS_BLOB_SIZE_V2) {
+  const size_t written =
+      sc_param_blob_encode(k_ecu_params, k_ecu_params_count, values,
+                           ECU_PARAMS_SCHEMA_V2, blob, sizeof(blob));
+  if (written != ECU_PARAMS_BLOB_SIZE_V2) {
     return false;
   }
   return hal_kv_set_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob));
@@ -264,7 +253,7 @@ TESTABLE_STATIC void ecuParamsResetRuntimeStateForTest(void) {
 #endif
 
 void ecuParamsInit(void) {
-  if(s_initialized) {
+  if (s_initialized) {
     return;
   }
 
@@ -272,47 +261,33 @@ void ecuParamsInit(void) {
   ecuParamsApply();
 
   ecu_params_values_t loaded = {0};
-  if(ecuParamsLoadPersisted(&loaded) && ecuParamsStage(&loaded, NULL)) {
+  if (ecuParamsLoadPersisted(&loaded) && ecuParamsStage(&loaded, NULL)) {
     ecuParamsApply();
   }
 
   s_initialized = true;
 }
 
-const ecu_params_values_t *ecuParamsActive(void) {
-  return &s_active;
-}
+const ecu_params_values_t *ecuParamsActive(void) { return &s_active; }
 
-int16_t ecuParamsFanCoolantStart(void) {
-  return s_active.fanCoolantStartC;
-}
+int16_t ecuParamsFanCoolantStart(void) { return s_active.fanCoolantStartC; }
 
-int16_t ecuParamsFanCoolantStop(void) {
-  return s_active.fanCoolantStopC;
-}
+int16_t ecuParamsFanCoolantStop(void) { return s_active.fanCoolantStopC; }
 
-int16_t ecuParamsFanAirStart(void) {
-  return s_active.fanAirStartC;
-}
+int16_t ecuParamsFanAirStart(void) { return s_active.fanAirStartC; }
 
-int16_t ecuParamsFanAirStop(void) {
-  return s_active.fanAirStopC;
-}
+int16_t ecuParamsFanAirStop(void) { return s_active.fanAirStopC; }
 
-int16_t ecuParamsHeaterStop(void) {
-  return s_active.heaterStopC;
-}
+int16_t ecuParamsHeaterStop(void) { return s_active.heaterStopC; }
 
-int16_t ecuParamsNominalRpm(void) {
-  return s_active.nominalRpm;
-}
+int16_t ecuParamsNominalRpm(void) { return s_active.nominalRpm; }
 
 TESTABLE_INLINE_STATIC const char *configSessionSkipSpaces(const char *cursor) {
-  if(cursor == NULL) {
+  if (cursor == NULL) {
     return NULL;
   }
 
-  while(*cursor == ' ') {
+  while (*cursor == ' ') {
     cursor++;
   }
   return cursor;
@@ -327,7 +302,7 @@ static void configSessionEmitThroughHal(const char *payload, void *user) {
 
 static void configSessionReplyGetMeta(void) {
   char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
-  if(!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
+  if (!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
     uidHex[0] = '\0';
   }
 
@@ -338,13 +313,9 @@ static void configSessionReplyGetMeta(void) {
                     &buildB64Len);
 
   char response[256] = {0};
-  snprintf(response, sizeof(response),
-           SC_REPLY_META_FMT,
-           SC_MODULE_TOKEN_ECU,
+  snprintf(response, sizeof(response), SC_REPLY_META_FMT, SC_MODULE_TOKEN_ECU,
            (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-           (unsigned long)configSessionId(),
-           FW_VERSION,
-           buildB64,
+           (unsigned long)configSessionId(), FW_VERSION, buildB64,
            uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
   hal_serial_session_println(&s_configSession, response);
 }
@@ -365,138 +336,137 @@ static void configSessionReplyGetGps(void) {
 
   char response[128] = {0};
   snprintf(response, sizeof(response), SC_REPLY_GPS_FMT,
-           (unsigned)(available ? 1u : 0u),
-           (long)latE6, (long)lonE6,
-           (int)speed,
-           (unsigned long)epoch);
+           (unsigned)(available ? 1u : 0u), (long)latE6, (long)lonE6,
+           (int)speed, (unsigned long)epoch);
   hal_serial_session_println(&s_configSession, response);
 }
 
 static bool configSessionHandleScGetParamCommand(const char *line) {
-  if(line == NULL) {
+  if (line == NULL) {
     hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
     return true;
   }
 
   const char *cursor = line + strlen(SC_CMD_GET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == NULL || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
   char paramId[SC_PARAM_ID_MAX] = {0};
   size_t idLen = 0u;
-  while(cursor[idLen] != '\0' && cursor[idLen] != ' ' && idLen + 1u < sizeof(paramId)) {
+  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
+         idLen + 1u < sizeof(paramId)) {
     paramId[idLen] = cursor[idLen];
     idLen++;
   }
   paramId[idLen] = '\0';
 
-  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " param_id_too_long");
+                               SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == NULL || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_GET_PARAM "_<param_id>");
+  if (cursor == NULL || cursor[0] != '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
     return true;
   }
 
-  sc_param_reply_get_param(k_ecu_params, k_ecu_params_count, &s_active,
-                           paramId,
+  sc_param_reply_get_param(k_ecu_params, k_ecu_params_count, &s_active, paramId,
                            configSessionEmitThroughHal, &s_configSession);
   return true;
 }
 
-/* Phase 8.3 — auth-gated SET_PARAM. Wire format:
+/* Phase 8.3 - auth-gated SET_PARAM. Wire format:
  *     SC_SET_PARAM <param_id> <value>
  * <value> is parsed as a base-10 signed integer and clamped to the
  * int16_t domain before being passed to the descriptor helper, which
  * applies the per-descriptor [min, max] check on top. */
 static bool configSessionHandleScSetParamCommand(const char *line) {
-  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+  if (!hal_serial_session_is_authenticated(&s_configSession)) {
     hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
     return true;
   }
 
   const char *cursor = line + strlen(SC_CMD_SET_PARAM);
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+  if (cursor == NULL || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_SET_PARAM
+                               " <param_id> <value>");
     return true;
   }
 
   char paramId[SC_PARAM_ID_MAX] = {0};
   size_t idLen = 0u;
-  while(cursor[idLen] != '\0' && cursor[idLen] != ' '
-        && idLen + 1u < sizeof(paramId)) {
+  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
+         idLen + 1u < sizeof(paramId)) {
     paramId[idLen] = cursor[idLen];
     idLen++;
   }
   paramId[idLen] = '\0';
 
-  if(cursor[idLen] != '\0' && cursor[idLen] != ' ') {
+  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " param_id_too_long");
+                               SC_STATUS_BAD_REQUEST " param_id_too_long");
     return true;
   }
 
   cursor += idLen;
   cursor = configSessionSkipSpaces(cursor);
-  if(cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+  if (cursor == NULL || cursor[0] == '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_SET_PARAM
+                               " <param_id> <value>");
     return true;
   }
 
   char *endptr = NULL;
   const long parsed = strtol(cursor, &endptr, 10);
-  if(endptr == cursor) {
+  if (endptr == cursor) {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " value_not_int16");
+                               SC_STATUS_BAD_REQUEST " value_not_int16");
     return true;
   }
   const char *tail = configSessionSkipSpaces(endptr);
-  if(tail != NULL && tail[0] != '\0') {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " expected=" SC_CMD_SET_PARAM " <param_id> <value>");
+  if (tail != NULL && tail[0] != '\0') {
+    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
+                               " expected=" SC_CMD_SET_PARAM
+                               " <param_id> <value>");
     return true;
   }
-  if(parsed < INT16_MIN || parsed > INT16_MAX) {
+  if (parsed < INT16_MIN || parsed > INT16_MAX) {
     hal_serial_session_println(&s_configSession,
-        SC_STATUS_BAD_REQUEST " value_not_int16");
+                               SC_STATUS_BAD_REQUEST " value_not_int16");
     return true;
   }
 
-  (void)sc_param_reply_set_param(k_ecu_params, k_ecu_params_count,
-                                 &s_staging, &s_active,
-                                 paramId, (int16_t)parsed,
-                                 configSessionEmitThroughHal,
-                                 &s_configSession);
+  (void)sc_param_reply_set_param(k_ecu_params, k_ecu_params_count, &s_staging,
+                                 &s_active, paramId, (int16_t)parsed,
+                                 configSessionEmitThroughHal, &s_configSession);
   return true;
 }
 
-/* Phase 8.3 — auth-gated COMMIT_PARAMS. Validates staging via
+/* Phase 8.3 - auth-gated COMMIT_PARAMS. Validates staging via
  * cross-field ecuParamsValidate, persists the encoded blob FIRST, then
  * promotes staging to active. Persisting before promoting keeps active
  * and the on-disk blob consistent: if the KV write fails, active stays
  * at the last known-good state and a subsequent reboot reloads the same
  * old blob. */
 static bool configSessionHandleScCommitParamsCommand(void) {
-  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+  if (!hal_serial_session_is_authenticated(&s_configSession)) {
     hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
     return true;
   }
 
   const char *reason = NULL;
-  if(!ecuParamsValidate(&s_staging, &reason)) {
+  if (!ecuParamsValidate(&s_staging, &reason)) {
     char response[96];
     snprintf(response, sizeof(response), SC_REPLY_COMMIT_FAILED_FMT,
              (reason != NULL) ? reason : "unknown");
@@ -504,9 +474,9 @@ static bool configSessionHandleScCommitParamsCommand(void) {
     return true;
   }
 
-  if(!ecuParamsPersist(&s_staging)) {
-    hal_serial_session_println(&s_configSession,
-        SC_STATUS_COMMIT_FAILED " reason=persist_failed");
+  if (!ecuParamsPersist(&s_staging)) {
+    hal_serial_session_println(&s_configSession, SC_STATUS_COMMIT_FAILED
+                               " reason=persist_failed");
     return true;
   }
 
@@ -520,11 +490,11 @@ static bool configSessionHandleScCommitParamsCommand(void) {
   return true;
 }
 
-/* Phase 8.3 — auth-gated REVERT_PARAMS. Resets staging from active and
+/* Phase 8.3 - auth-gated REVERT_PARAMS. Resets staging from active and
  * always succeeds: there is no validation step because active was
  * already validated when it was committed. */
 static bool configSessionHandleScRevertParamsCommand(void) {
-  if(!hal_serial_session_is_authenticated(&s_configSession)) {
+  if (!hal_serial_session_is_authenticated(&s_configSession)) {
     hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
     return true;
   }
@@ -536,54 +506,53 @@ static bool configSessionHandleScRevertParamsCommand(void) {
 }
 
 static bool configSessionHandleScCommand(const char *line) {
-  if(line == NULL || strncmp(line, "SC_", 3u) != 0) {
+  if (line == NULL || strncmp(line, "SC_", 3u) != 0) {
     return false;
   }
 
-  if(!configSessionActive()) {
+  if (!configSessionActive()) {
     hal_serial_session_println(&s_configSession,
-        SC_REPLY_NOT_READY_HELLO_REQUIRED);
+                               SC_REPLY_NOT_READY_HELLO_REQUIRED);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_META) == 0) {
+  if (strcmp(line, SC_CMD_GET_META) == 0) {
     configSessionReplyGetMeta();
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_GPS) == 0) {
+  if (strcmp(line, SC_CMD_GET_GPS) == 0) {
     configSessionReplyGetGps();
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
+  if (strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
     sc_param_reply_get_param_list(k_ecu_params, k_ecu_params_count,
                                   configSessionEmitThroughHal,
                                   &s_configSession);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_GET_VALUES) == 0) {
-    sc_param_reply_get_values_i16(k_ecu_params, k_ecu_params_count,
-                                  ecuParamsActive(),
-                                  configSessionEmitThroughHal,
-                                  &s_configSession);
+  if (strcmp(line, SC_CMD_GET_VALUES) == 0) {
+    sc_param_reply_get_values_i16(
+        k_ecu_params, k_ecu_params_count, ecuParamsActive(),
+        configSessionEmitThroughHal, &s_configSession);
     return true;
   }
 
-  if(strcmp(line, SC_CMD_COMMIT_PARAMS) == 0) {
+  if (strcmp(line, SC_CMD_COMMIT_PARAMS) == 0) {
     return configSessionHandleScCommitParamsCommand();
   }
 
-  if(strcmp(line, SC_CMD_REVERT_PARAMS) == 0) {
+  if (strcmp(line, SC_CMD_REVERT_PARAMS) == 0) {
     return configSessionHandleScRevertParamsCommand();
   }
 
-  if(strncmp(line, SC_CMD_SET_PARAM, strlen(SC_CMD_SET_PARAM)) == 0) {
+  if (strncmp(line, SC_CMD_SET_PARAM, strlen(SC_CMD_SET_PARAM)) == 0) {
     return configSessionHandleScSetParamCommand(line);
   }
 
-  if(strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
+  if (strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
     return configSessionHandleScGetParamCommand(line);
   }
 
@@ -593,7 +562,7 @@ static bool configSessionHandleScCommand(const char *line) {
 
 static void configSession_onUnknownLine(const char *line, void *user) {
   (void)user;
-  if(configSessionHandleScCommand(line)) {
+  if (configSessionHandleScCommand(line)) {
     return;
   }
 
@@ -609,8 +578,7 @@ void configSessionInit(void) {
                                           FW_VERSION, BUILD_ID,
                                           &fiesta_default_vocabulary);
   hal_serial_session_set_unknown_handler(&s_configSession,
-                                         &configSession_onUnknownLine,
-                                         NULL);
+                                         &configSession_onUnknownLine, NULL);
 }
 
 void configSessionTick(void) {

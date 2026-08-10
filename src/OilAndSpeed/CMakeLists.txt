@@ -45,7 +45,11 @@ add_library(oilspeed_mock STATIC
     ${OILSPEED_SRC}/config.cpp
     ${HAL_SRC}/hal/hal_assert.cpp
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/hal_sc_auth.cpp
+    ${HAL_SRC}/hal/hal_serial.cpp
+    ${HAL_SRC}/hal/hal_serial_session.cpp
     ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+    ${HAL_SRC}/hal/impl/shared/jh_secure_random.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
     # HAL crypto wrappers call into shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
@@ -56,6 +60,7 @@ add_library(oilspeed_mock STATIC
     ${HAL_SRC}/hal/impl/.mock/hal_system.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp
+    ${HAL_SRC}/hal/impl/.mock/hal_secure_random.cpp
     ${UNITY_SOURCE}
     # R1.5: descriptor-driven SC reply machinery shared with the host
     # SerialConfigurator. The native firmware build picks this up through
