@@ -42,7 +42,16 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_assert.cpp
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/hal_gps.cpp
+    ${HAL_SRC}/hal/hal_sc_auth.cpp
+    ${HAL_SRC}/hal/hal_serial.cpp
+    ${HAL_SRC}/hal/hal_serial_session.cpp
+    ${HAL_SRC}/hal/hal_time.cpp
     ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+    ${HAL_SRC}/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp
+    ${HAL_SRC}/hal/impl/shared/frameworks/gps/hal_gps_core.cpp
+    ${HAL_SRC}/hal/impl/shared/time/jh_calendar.c
+    ${HAL_SRC}/hal/impl/shared/jh_secure_random.cpp
     ${HAL_SRC}/hal/hal_crypto.cpp
     # HAL crypto wrappers call into the shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c

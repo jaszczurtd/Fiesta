@@ -29,12 +29,19 @@ jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
+# Adjustometer has no GPS responsibility; keep its test graph free from the
+# feature-specific mock injection translation unit as well.
+list(FILTER MOCK_SOURCES EXCLUDE REGEX "/hal_gps\\.cpp$")
 
 # ── HAL utility sources compilable on host ─────────────────────────────────────
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/hal_assert.cpp
     ${HAL_SRC}/hal/hal_config.cpp
+    ${HAL_SRC}/hal/hal_serial.cpp
+    ${HAL_SRC}/hal/hal_time.cpp
     ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+    ${HAL_SRC}/hal/impl/shared/time/jh_calendar.c
+    ${HAL_SRC}/hal/impl/shared/jh_secure_random.cpp
     ${HAL_SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/hal_can_util.cpp
     ${HAL_SRC}/hal/hal_kv.cpp

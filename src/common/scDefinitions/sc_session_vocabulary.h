@@ -56,6 +56,7 @@ static const hal_serial_session_vocabulary_t fiesta_default_vocabulary = {
     .reply_auth_failed_bad_mac = SC_REPLY_AUTH_FAILED_BAD_MAC,
     .reply_not_authorized = SC_STATUS_NOT_AUTHORIZED,
     .reply_reboot_ok = SC_REPLY_REBOOT_OK,
+    .reply_auth_failed_entropy = SC_REPLY_AUTH_FAILED_ENTROPY,
 };
 
 #ifdef __cplusplus
