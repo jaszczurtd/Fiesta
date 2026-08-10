@@ -9,6 +9,7 @@
         "rp2040:pico - Raspberry Pi Pico",
         "rp2040:pico-rm2 - Raspberry Pi Pico with PIM730/RM2",
         "rp2040:picow - Raspberry Pi Pico W",
+        "rp2040:rp2040-lora-lf - Waveshare RP2040-LoRa-LF",
         "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB",
         "rp2040:rp2040-zero - Waveshare RP2040-Zero compatible",
         "rp2350-arm:pico2 - Raspberry Pi Pico 2",
