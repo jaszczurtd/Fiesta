@@ -3,12 +3,13 @@
 
 #include <tools.h>
 
+#include "Gauge.h"
+#include "TFTExtension.h"
 #include "config.h"
 #include "logic.h"
-#include "TFTExtension.h"
 
-//fuel value read without average calculation
-//#define JUST_RAW_FUEL_VAL
+// fuel value read without average calculation
+// #define JUST_RAW_FUEL_VAL
 
 #define FUEL_MAX_SAMPLES 128
 #define FUEL_INIT_VALUE -1
@@ -43,7 +44,7 @@ public:
   void drawChangeableFuelContent(int w, int fh, int y);
 
 private:
-  bool f_drawOnce; 
+  bool f_drawOnce;
 
   const char *half = "1/2";
   const char *full = "F";
@@ -69,6 +70,5 @@ void initFuelMeasurement(void);
 void redrawFuel(void);
 void drawFuelEmpty(void);
 void showFuelAmount(void);
-
 
 #endif
