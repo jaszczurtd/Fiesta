@@ -10,6 +10,6 @@
 #include "oilPressure.h"
 #include "peripherials.h"
 #include "speed.h"
-#include <hal/hal_soft_timer.h>
+#include <hal/timers/hal_soft_timer.h>
 
 #endif

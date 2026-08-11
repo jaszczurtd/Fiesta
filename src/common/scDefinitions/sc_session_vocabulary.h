@@ -18,7 +18,7 @@
 
 #include "sc_protocol.h"
 
-#include "hal/hal_serial_session_vocabulary.h"
+#include "hal/serial/hal_serial_session_vocabulary.h"
 
 #ifdef __cplusplus
 extern "C" {

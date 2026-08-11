@@ -2,7 +2,7 @@
 #define SC_AUTH_H
 
 /*
- * Host-side mirror of `libraries/JaszczurHAL/src/hal/hal_sc_auth.h`.
+ * Host-side mirror of `libraries/JaszczurHAL/src/hal/security/hal_sc_auth.h`.
  *
  * The firmware derives a per-device key as
  *   K_device = HMAC-SHA256(key=salt, message=uid_bytes)
@@ -64,10 +64,8 @@ size_t sc_auth_salt_len(void);
  * @param out_key Output buffer of @ref SC_AUTH_KEY_BYTES bytes.
  * @return true on success, false on invalid args or crypto-backend failure.
  */
-bool sc_auth_derive_device_key(
-    const uint8_t *uid,
-    size_t uid_len,
-    uint8_t out_key[SC_AUTH_KEY_BYTES]);
+bool sc_auth_derive_device_key(const uint8_t *uid, size_t uid_len,
+                               uint8_t out_key[SC_AUTH_KEY_BYTES]);
 
 /**
  * @brief Compute the expected challenge response.
@@ -77,17 +75,16 @@ bool sc_auth_derive_device_key(
  *
  * @param device_key    Per-device key from @ref sc_auth_derive_device_key.
  * @param challenge     Challenge nonce (must not be NULL).
- * @param challenge_len Challenge length (typically @ref SC_AUTH_CHALLENGE_BYTES).
+ * @param challenge_len Challenge length (typically @ref
+ * SC_AUTH_CHALLENGE_BYTES).
  * @param session_id    Session id (must match the one returned by HELLO).
  * @param out_response  Output MAC of @ref SC_AUTH_RESPONSE_BYTES bytes.
  * @return true on success, false on invalid args or crypto-backend failure.
  */
-bool sc_auth_compute_response(
-    const uint8_t device_key[SC_AUTH_KEY_BYTES],
-    const uint8_t *challenge,
-    size_t challenge_len,
-    uint32_t session_id,
-    uint8_t out_response[SC_AUTH_RESPONSE_BYTES]);
+bool sc_auth_compute_response(const uint8_t device_key[SC_AUTH_KEY_BYTES],
+                              const uint8_t *challenge, size_t challenge_len,
+                              uint32_t session_id,
+                              uint8_t out_response[SC_AUTH_RESPONSE_BYTES]);
 
 /**
  * @brief Convenience wrapper that derives the key and computes the response
@@ -108,20 +105,17 @@ bool sc_auth_compute_response(
  * @param out_hex_size    Size of @p out_hex in bytes.
  * @return true on success, false on invalid args / buffer / backend failure.
  */
-bool sc_auth_compute_response_hex(
-    const uint8_t *uid,
-    size_t uid_len,
-    const uint8_t *challenge,
-    size_t challenge_len,
-    uint32_t session_id,
-    char *out_hex,
-    size_t out_hex_size);
+bool sc_auth_compute_response_hex(const uint8_t *uid, size_t uid_len,
+                                  const uint8_t *challenge,
+                                  size_t challenge_len, uint32_t session_id,
+                                  char *out_hex, size_t out_hex_size);
 
 /**
  * @brief Decode a hex challenge string (e.g. from `SC_OK AUTH_CHALLENGE <hex>`)
  *        into its binary form.
  *
- * @param hex      NUL-terminated hex string (must be exactly @p out_len * 2 chars).
+ * @param hex      NUL-terminated hex string (must be exactly @p out_len * 2
+ * chars).
  * @param out      Output buffer.
  * @param out_len  Expected output length in bytes.
  * @return true on a clean parse, false otherwise (out is then untouched).

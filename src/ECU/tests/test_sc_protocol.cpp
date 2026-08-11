@@ -3,12 +3,12 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "config.h"
 #include "dtcManager.h"
-#include "hal/hal_eeprom.h"
-#include "hal/hal_kv.h"
-#include "hal/hal_sc_auth.h"
-#include "hal/hal_serial_frame.h"
-#include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/security/hal_sc_auth.h"
+#include "hal/serial/hal_serial_frame.h"
+#include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_kv.h"
+#include "hal/system/hal_system.h"
 #include "testable/ecuParams_testable.h"
 
 #include <stdint.h>

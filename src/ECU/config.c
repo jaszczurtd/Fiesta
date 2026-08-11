@@ -3,11 +3,11 @@
 #include "ecu_unit_testing.h"
 #include "gps.h"
 #include "tests.h"
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 
-#include <hal/hal_kv.h>
-#include <hal/hal_serial.h>
-#include <hal/hal_serial_session.h>
+#include <hal/serial/hal_serial.h>
+#include <hal/serial/hal_serial_session.h>
+#include <hal/storage/hal_kv.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

@@ -12,8 +12,8 @@
 #include "config.h"
 #include "hardwareConfig.h"
 #include "peripherials.h"
+#include <hal/display/hal_display.h>
 #include <hal/hal.h>
-#include <hal/hal_display.h>
 
 bool alertSwitch(void);
 bool seriousAlertSwitch(void);

@@ -2,11 +2,11 @@
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "led.h"
-#include <hal/hal_app.h>
-#include <hal/hal_i2c_slave.h>
-#include <hal/hal_soft_timer.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/i2c/hal_i2c_slave.h>
+#include <hal/system/hal_system.h>
+#include <hal/timers/hal_soft_timer.h>
 #include <limits.h>
 
 #if defined(__cplusplus)

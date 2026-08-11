@@ -25,7 +25,8 @@ extern "C" {
  *             including) the leading '$' and the '*' separator.
  *
  * This must stay byte-for-byte compatible with
- * `libraries/JaszczurHAL/src/hal/hal_serial_frame.h` on the firmware side.
+ * `libraries/JaszczurHAL/src/hal/serial/hal_serial_frame.h` on the firmware
+ * side.
  */
 
 #define SC_FRAME_PREFIX "$SC,"
@@ -46,11 +47,8 @@ uint8_t sc_frame_crc8(const uint8_t *data, size_t len);
  * @param out_len   Optional, receives written bytes (excluding NUL).
  * @return true on success.
  */
-bool sc_frame_encode(uint16_t seq,
-                     const char *payload,
-                     char *out,
-                     size_t out_size,
-                     size_t *out_len);
+bool sc_frame_encode(uint16_t seq, const char *payload, char *out,
+                     size_t out_size, size_t *out_len);
 
 /**
  * @brief Parse a trimmed framed line into (seq, payload).
@@ -59,9 +57,7 @@ bool sc_frame_encode(uint16_t seq,
  * Leading whitespace and trailing CR/LF must already be stripped by the
  * caller.
  */
-bool sc_frame_decode(const char *line,
-                     uint16_t *seq_out,
-                     char *payload_out,
+bool sc_frame_decode(const char *line, uint16_t *seq_out, char *payload_out,
                      size_t payload_out_size);
 
 #ifdef __cplusplus

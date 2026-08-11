@@ -1,8 +1,8 @@
-#include "unity.h"
-#include "config.h"
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
-#include "hal/hal_serial_frame.h"
+#include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/serial/hal_serial_frame.h"
+#include "unity.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,9 +20,11 @@ static uint8_t refCrc8(const char *data, size_t len) {
   return crc;
 }
 
-static void buildFrame(uint16_t seq, const char *payload, char *out, size_t out_size) {
+static void buildFrame(uint16_t seq, const char *payload, char *out,
+                       size_t out_size) {
   char body[160];
-  const int body_len = snprintf(body, sizeof(body), "SC,%u,%s", (unsigned)seq, payload);
+  const int body_len =
+      snprintf(body, sizeof(body), "SC,%u,%s", (unsigned)seq, payload);
   TEST_ASSERT_TRUE(body_len > 0 && (size_t)body_len < sizeof(body));
   const uint8_t crc = refCrc8(body, (size_t)body_len);
   const int written = snprintf(out, out_size, "$%s*%02X\n", body, crc);
@@ -51,7 +53,9 @@ static const char *sendSerialLine(const char *inner_with_eol) {
   inner[len] = '\0';
 
   s_test_seq = (uint16_t)(s_test_seq + 1u);
-  if (s_test_seq == 0u) { s_test_seq = 1u; }
+  if (s_test_seq == 0u) {
+    s_test_seq = 1u;
+  }
 
   char frame[200];
   buildFrame(s_test_seq, inner, frame, sizeof(frame));
@@ -67,8 +71,8 @@ static const char *sendSerialLine(const char *inner_with_eol) {
   TEST_ASSERT_TRUE_MESSAGE(
       hal_serial_frame_decode(raw, &got_seq, unwrapped, sizeof(unwrapped)),
       "firmware reply is not a valid frame");
-  TEST_ASSERT_EQUAL_UINT16_MESSAGE(s_test_seq, got_seq,
-      "firmware reply seq does not match request seq");
+  TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+      s_test_seq, got_seq, "firmware reply seq does not match request seq");
   return unwrapped;
 }
 
@@ -175,7 +179,7 @@ void test_clocks_sc_unknown_command_returns_sc_unknown_cmd(void) {
   TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
-/* Phase 8.4 — Clocks intentionally does NOT wire the SET_PARAM /
+/* Phase 8.4 - Clocks intentionally does NOT wire the SET_PARAM /
  * COMMIT_PARAMS / REVERT_PARAMS branches. All Clocks descriptors are
  * read-only, so the helper would reject every id with
  * SC_BAD_REQUEST read_only anyway; rather than add per-module code

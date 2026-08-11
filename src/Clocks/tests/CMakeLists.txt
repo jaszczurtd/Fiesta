@@ -10,12 +10,12 @@ add_clocks_test(test_config_session)
 add_executable(test_can
     test_can.cpp
     ${CLOCKS_SRC}/can.cpp
-    ${HAL_SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
-    ${HAL_SRC}/hal/hal_can_util.cpp
+    ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
+    ${HAL_SRC}/hal/can/hal_can_util.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_can.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
-    ${HAL_SRC}/hal/hal_time.cpp
-    ${HAL_SRC}/hal/impl/shared/time/jh_calendar.c
+    ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/utils/tools.cpp
 )
 target_link_libraries(test_can PRIVATE clocks_mock)

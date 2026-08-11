@@ -1,7 +1,7 @@
 #include "rpm.h"
 #include "ecuContext.h"
-#include <hal/hal_gpio.h>
-#include <hal/hal_soft_timer.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/timers/hal_soft_timer.h>
 
 // RPM formula (integer-only, no floats):
 // rpm = pulses * 60000 / (RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)

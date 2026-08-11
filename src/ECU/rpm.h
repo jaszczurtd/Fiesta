@@ -2,7 +2,7 @@
 #ifndef T_RPM
 #define T_RPM
 
-#include <hal/hal_status.h>
+#include <hal/core/hal_status.h>
 #include <tools_c.h>
 
 #include "config.h"
@@ -13,34 +13,34 @@
 extern "C" {
 #endif
 
-//is it really needed? To evaluate later
+// is it really needed? To evaluate later
 #define RPM_CORRECTION_VAL 50
 
-//tweakable value:
-//by how much percentage should the solenoid position change from RPM?
+// tweakable value:
+// by how much percentage should the solenoid position change from RPM?
 #define RPM_PERCENTAGE_CORRECTION_VAL 2
 
-//vacuum accumulator fill time before corrections (in milliseconds)
+// vacuum accumulator fill time before corrections (in milliseconds)
 #define RPM_CONTROL_VACUUM_FILL_MS 1200
 
-//simple RPM smoothing window for control (>= 2)
+// simple RPM smoothing window for control (>= 2)
 #define RPM_CONTROL_FILTER_WINDOW 4
 
-//PI controller tuning (Q10 scale, percent units)
+// PI controller tuning (Q10 scale, percent units)
 #define RPM_PI_Q10_SCALE 1024
 #define RPM_PI_UPDATE_INTERVAL_MS 400
 #define RPM_PI_DEADBAND_RPM 20
 #define RPM_PI_KP_Q10 40
 #define RPM_PI_KI_Q10 6
 
-//debug log cadence (in milliseconds)
+// debug log cadence (in milliseconds)
 #define RPM_DEBUG_UPDATE_MS 500
 
 // The Hall-sensor IRQ is part of the time-critical core-1 control path.
 #define RPM_IRQ_OWNER_CORE 1u
 
-//since solenoid has some time lag we have to compensate it
-//values defined as ms
+// since solenoid has some time lag we have to compensate it
+// values defined as ms
 #define RPM_TIME_TO_POSITIVE_CORRECTION_RPM_PERCENTAGE 4000
 #define RPM_TIME_TO_NEGATIVE_CORRECTION_RPM_PERCENTAGE 4000
 
@@ -73,7 +73,8 @@ typedef struct {
  * @param self RPM controller instance to initialize.
  * @return HAL_OK on success, or a HAL error propagated from resource/IRQ
  *         initialization.
- * @note The Hall input used here is the project's G28-like engine-speed reference.
+ * @note The Hall input used here is the project's G28-like engine-speed
+ * reference.
  */
 hal_status_t RPM_init(RPM *self);
 
@@ -81,7 +82,8 @@ hal_status_t RPM_init(RPM *self);
  * @brief Update RPM value and optional non-VP37 idle-control logic.
  * @param self RPM controller instance to process.
  * @return None.
- * @note The underlying speed signal is derived from the project's G28-like crank path.
+ * @note The underlying speed signal is derived from the project's G28-like
+ * crank path.
  */
 void RPM_process(RPM *self);
 
@@ -173,6 +175,5 @@ hal_status_t RPM_create(void);
 #ifdef __cplusplus
 }
 #endif
-
 
 #endif

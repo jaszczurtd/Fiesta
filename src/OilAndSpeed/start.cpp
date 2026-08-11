@@ -1,8 +1,8 @@
 
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
-#include <hal/hal_app.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
 
 void updateValsForDebug(void);
 void readThermocouples(void);

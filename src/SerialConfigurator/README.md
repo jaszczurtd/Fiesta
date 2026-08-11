@@ -31,7 +31,7 @@ cmake --build build
 ### Optional: shared crypto via JaszczurHAL
 
 `SerialConfigurator` now exposes `src/core/sc_crypto.h` and, when available,
-uses `JaszczurHAL/src/hal/hal_crypto.cpp` as the backend (no duplicated crypto
+uses `JaszczurHAL/src/hal/security/hal_crypto.cpp` as the backend (no duplicated crypto
 implementation in this repository).
 
 Defaults:

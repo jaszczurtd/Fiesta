@@ -1,8 +1,8 @@
-#include "unity.h"
-#include "config.h"
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
-#include "hal/hal_serial_frame.h"
+#include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/serial/hal_serial_frame.h"
+#include "unity.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,9 +20,11 @@ static uint8_t refCrc8(const char *data, size_t len) {
   return crc;
 }
 
-static void buildFrame(uint16_t seq, const char *payload, char *out, size_t out_size) {
+static void buildFrame(uint16_t seq, const char *payload, char *out,
+                       size_t out_size) {
   char body[160];
-  const int body_len = snprintf(body, sizeof(body), "SC,%u,%s", (unsigned)seq, payload);
+  const int body_len =
+      snprintf(body, sizeof(body), "SC,%u,%s", (unsigned)seq, payload);
   TEST_ASSERT_TRUE(body_len > 0 && (size_t)body_len < sizeof(body));
   const uint8_t crc = refCrc8(body, (size_t)body_len);
   const int written = snprintf(out, out_size, "$%s*%02X\n", body, crc);
@@ -39,7 +41,9 @@ static const char *sendRawSerialLine(const char *line) {
 static uint16_t s_test_seq = 0u;
 static uint16_t nextTestSeq(void) {
   s_test_seq = (uint16_t)(s_test_seq + 1u);
-  if (s_test_seq == 0u) { s_test_seq = 1u; }
+  if (s_test_seq == 0u) {
+    s_test_seq = 1u;
+  }
   return s_test_seq;
 }
 
@@ -68,8 +72,8 @@ static const char *sendSerialLine(const char *inner_with_eol) {
   TEST_ASSERT_TRUE_MESSAGE(
       hal_serial_frame_decode(raw, &got_seq, unwrapped, sizeof(unwrapped)),
       "firmware reply is not a valid frame");
-  TEST_ASSERT_EQUAL_UINT16_MESSAGE(seq, got_seq,
-      "firmware reply seq does not match request seq");
+  TEST_ASSERT_EQUAL_UINT16_MESSAGE(
+      seq, got_seq, "firmware reply seq does not match request seq");
   return unwrapped;
 }
 
@@ -97,7 +101,8 @@ void test_oilspeed_hello_activates_session_and_reports_module(void) {
   TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
 
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "OK HELLO"));
-  TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
+  TEST_ASSERT_NOT_EQUAL(NULL,
+                        strstr(inner, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "proto=1"));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "fw=" FW_VERSION));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(inner, "build="));
@@ -154,7 +159,8 @@ void test_oilspeed_handles_multiple_hello_commands_in_one_rx_buffer(void) {
   const char *raw = hal_mock_serial_last_line();
   TEST_ASSERT_NOT_NULL(raw);
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "OK HELLO"));
-  TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
+  TEST_ASSERT_NOT_EQUAL(NULL,
+                        strstr(raw, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
 }
 
 void test_oilspeed_sc_get_meta_requires_hello_first(void) {
@@ -168,7 +174,8 @@ void test_oilspeed_sc_get_meta_returns_identity_fields(void) {
 
   const char *response = sendSerialLine("SC_GET_META\n");
   TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK META"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
+  TEST_ASSERT_NOT_NULL(
+      strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_NOT_NULL(strstr(response, "proto=1"));
   TEST_ASSERT_NOT_NULL(strstr(response, "session="));
   TEST_ASSERT_NOT_NULL(strstr(response, "fw=" FW_VERSION));
@@ -197,7 +204,8 @@ void test_oilspeed_sc_get_values_returns_empty_snapshot_baseline(void) {
 void test_oilspeed_sc_get_param_known_id_returns_value_and_bounds(void) {
   performHello();
 
-  const char *response = sendSerialLine("SC_GET_PARAM oil_pressure_read_interval_ms\n");
+  const char *response =
+      sendSerialLine("SC_GET_PARAM oil_pressure_read_interval_ms\n");
   TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK PARAM"));
   TEST_ASSERT_NOT_NULL(strstr(response, "id=oil_pressure_read_interval_ms"));
   TEST_ASSERT_NOT_NULL(strstr(response, "value="));
@@ -222,7 +230,7 @@ void test_oilspeed_sc_unknown_command_returns_sc_unknown_cmd(void) {
   TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
-/* Phase 8.4 — OilAndSpeed intentionally does NOT wire the SET_PARAM /
+/* Phase 8.4 - OilAndSpeed intentionally does NOT wire the SET_PARAM /
  * COMMIT_PARAMS / REVERT_PARAMS branches. All descriptors here are
  * read-only, so the helper would reject every id with
  * SC_BAD_REQUEST read_only anyway; the dispatcher's default branch
@@ -244,7 +252,8 @@ void test_oilspeed_framed_hello_responds_with_same_seq(void) {
   TEST_ASSERT_NOT_NULL(response);
   TEST_ASSERT_EQUAL_STRING_LEN("$SC,77,", response, 7);
   TEST_ASSERT_NOT_NULL(strstr(response, "OK HELLO"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
+  TEST_ASSERT_NOT_NULL(
+      strstr(response, "module=" SC_MODULE_TOKEN_OIL_AND_SPEED));
   TEST_ASSERT_TRUE(configSessionActive());
 }
 
