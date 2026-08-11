@@ -2,9 +2,9 @@
 
 #include <cstdio>
 #include <cstring>
-#include <hal/hal_crypto.h>
-#include <hal/hal_serial.h>
-#include <hal/hal_serial_session.h>
+#include <hal/security/hal_crypto.h>
+#include <hal/serial/hal_serial.h>
+#include <hal/serial/hal_serial_session.h>
 
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../common/scDefinitions/sc_param_handlers.h"

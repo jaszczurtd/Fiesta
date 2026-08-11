@@ -43,19 +43,19 @@ endif()
 add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
     ${CLOCKS_SRC}/config.cpp
-    ${HAL_SRC}/hal/hal_assert.cpp
-    ${HAL_SRC}/hal/hal_config.cpp
-    ${HAL_SRC}/hal/hal_sc_auth.cpp
-    ${HAL_SRC}/hal/hal_serial.cpp
-    ${HAL_SRC}/hal/hal_serial_session.cpp
-    ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
-    ${HAL_SRC}/hal/impl/shared/jh_secure_random.cpp
-    ${HAL_SRC}/hal/hal_crypto.cpp
+    ${HAL_SRC}/hal/core/hal_assert.cpp
+    ${HAL_SRC}/hal/core/hal_config.cpp
+    ${HAL_SRC}/hal/security/hal_sc_auth.cpp
+    ${HAL_SRC}/hal/serial/hal_serial.cpp
+    ${HAL_SRC}/hal/serial/hal_serial_session.cpp
+    ${HAL_SRC}/hal/debug/hal_debug_format.cpp
+    ${HAL_SRC}/hal/security/jh_secure_random.cpp
+    ${HAL_SRC}/hal/security/hal_crypto.cpp
     # HAL crypto wrappers call into shared WireGuard crypto primitives.
-    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
-    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c
-    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/crypto.c
-    ${HAL_SRC}/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c
+    ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20.c
+    ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c
+    ${HAL_SRC}/hal/network/wireguard/core/crypto/crypto.c
+    ${HAL_SRC}/hal/network/wireguard/core/crypto/poly1305-donna.c
     ${HAL_SRC}/hal/impl/.mock/hal_wifi.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_system.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp

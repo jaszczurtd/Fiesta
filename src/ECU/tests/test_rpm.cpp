@@ -1,6 +1,6 @@
-#include "hal/hal_gpio.h"
-#include "hal/hal_soft_timer.h"
+#include "hal/gpio/hal_gpio.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/timers/hal_soft_timer.h"
 #include "rpm.h"
 #include "unity.h"
 

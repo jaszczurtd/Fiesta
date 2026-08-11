@@ -1,7 +1,7 @@
 
 #include "main.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
-#include <hal/hal_app.h>
+#include <hal/core/hal_app.h>
 
 char s[BUF_L + 1];
 

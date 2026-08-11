@@ -1,5 +1,5 @@
 #include "vp37.h"
-#include <hal/hal_soft_timer.h>
+#include <hal/timers/hal_soft_timer.h>
 
 /**
  * @brief Run the VP37 calibration sweep and capture Adjustometer limits.

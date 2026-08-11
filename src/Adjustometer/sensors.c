@@ -1,6 +1,6 @@
 
 #include "sensors.h"
-#include <hal/hal_i2c_slave.h>
+#include <hal/i2c/hal_i2c_slave.h>
 
 // Signed right-shift must be arithmetic (sign-extending) for EMA filters to
 // work correctly. GCC guarantees this; the assertion guards against

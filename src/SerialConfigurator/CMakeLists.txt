@@ -70,13 +70,13 @@ set(
     "Path to JaszczurHAL repository root."
 )
 
-set(SC_JASZCZURHAL_CRYPTO_HEADER "${SC_JASZCZURHAL_DIR}/src/hal/hal_crypto.h")
-set(SC_JASZCZURHAL_CRYPTO_SOURCE "${SC_JASZCZURHAL_DIR}/src/hal/hal_crypto.cpp")
+set(SC_JASZCZURHAL_CRYPTO_HEADER "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.h")
+set(SC_JASZCZURHAL_CRYPTO_SOURCE "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.cpp")
 set(SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES
-    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c"
-    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c"
-    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/frameworks/wireguard/crypto/crypto.c"
-    "${SC_JASZCZURHAL_DIR}/src/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20poly1305.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/crypto.c"
+    "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/poly1305-donna.c"
 )
 
 set(SC_CRYPTO_SOURCES src/core/sc_crypto_none.c)

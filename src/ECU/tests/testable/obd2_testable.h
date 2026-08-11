@@ -1,8 +1,8 @@
 #ifndef ECU_TESTABLE_OBD2_H
 #define ECU_TESTABLE_OBD2_H
 
+#include "hal/can/hal_can.h"
 #include <stdint.h>
-#include "hal/hal_can.h"
 
 #ifdef UNIT_TEST
 #ifdef __cplusplus

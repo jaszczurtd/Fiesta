@@ -1,10 +1,10 @@
 #ifndef T_GPS
 #define T_GPS
 
+#include "../common/canDefinitions/canDefinitions.h"
+#include <hal/gps/hal_gps.h>
 #include <libConfig.h>
 #include <tools_c.h>
-#include <hal/hal_gps.h>
-#include "../common/canDefinitions/canDefinitions.h"
 
 #include "config.h"
 #include "sensors.h"
@@ -34,7 +34,8 @@ void getGPSData(void);
 
 /**
  * @brief Get current vehicle speed derived from GPS.
- * @return Vehicle speed in km/h, or 0 when GPS is unavailable or below threshold.
+ * @return Vehicle speed in km/h, or 0 when GPS is unavailable or below
+ * threshold.
  */
 float getCurrentCarSpeed(void);
 

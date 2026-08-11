@@ -1,7 +1,7 @@
 #ifndef T_TESTS
 #define T_TESTS
 
-#include <hal/hal_soft_timer.h>
+#include <hal/timers/hal_soft_timer.h>
 #include <tools_c.h>
 
 #ifdef __cplusplus

@@ -220,7 +220,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 ## 2026-06-08
 
 - Fixed host-link configuration for modules that compile
-  `JaszczurHAL/src/hal/hal_crypto.cpp`: the test/mock libraries now also
+  `JaszczurHAL/src/hal/security/hal_crypto.cpp`: the test/mock libraries now also
   compile WireGuard crypto primitives required by that translation unit
   (`chacha20.c`, `chacha20poly1305.c`, `crypto.c`, `poly1305-donna.c`).
   This removes undefined-reference failures for

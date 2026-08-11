@@ -2,9 +2,9 @@
 
 #include "RTC.h"
 
-#include <hal/hal_crypto.h>
-#include <hal/hal_serial.h>
-#include <hal/hal_serial_session.h>
+#include <hal/security/hal_crypto.h>
+#include <hal/serial/hal_serial.h>
+#include <hal/serial/hal_serial_session.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>

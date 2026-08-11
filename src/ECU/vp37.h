@@ -1,8 +1,8 @@
 #ifndef T_VP37
 #define T_VP37
 
-#include <hal/hal_pid_controller.h>
-#include <hal/hal_serial.h>
+#include <hal/control/hal_pid_controller.h>
+#include <hal/serial/hal_serial.h>
 #include <tools_c.h>
 
 #include "config.h"

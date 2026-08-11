@@ -35,18 +35,20 @@ list(FILTER MOCK_SOURCES EXCLUDE REGEX "/hal_gps\\.cpp$")
 
 # ── HAL utility sources compilable on host ─────────────────────────────────────
 set(HAL_UTIL_SOURCES
-    ${HAL_SRC}/hal/hal_assert.cpp
-    ${HAL_SRC}/hal/hal_config.cpp
-    ${HAL_SRC}/hal/hal_serial.cpp
-    ${HAL_SRC}/hal/hal_time.cpp
-    ${HAL_SRC}/hal/impl/shared/debug/hal_debug_format.cpp
-    ${HAL_SRC}/hal/impl/shared/time/jh_calendar.c
-    ${HAL_SRC}/hal/impl/shared/jh_secure_random.cpp
-    ${HAL_SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
-    ${HAL_SRC}/hal/hal_can_util.cpp
-    ${HAL_SRC}/hal/hal_kv.cpp
-    ${HAL_SRC}/hal/hal_soft_timer.cpp
-    ${HAL_SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
+    ${HAL_SRC}/hal/core/hal_assert.cpp
+    ${HAL_SRC}/hal/core/hal_config.cpp
+    ${HAL_SRC}/hal/i2c/hal_i2c.cpp
+    ${HAL_SRC}/hal/spi/hal_spi.cpp
+    ${HAL_SRC}/hal/serial/hal_serial.cpp
+    ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/debug/hal_debug_format.cpp
+    ${HAL_SRC}/hal/time/jh_calendar.c
+    ${HAL_SRC}/hal/security/jh_secure_random.cpp
+    ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
+    ${HAL_SRC}/hal/can/hal_can_util.cpp
+    ${HAL_SRC}/hal/storage/hal_kv.cpp
+    ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
+    ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
     ${HAL_SRC}/utils/pidController.cpp
     ${HAL_SRC}/utils/unity.c
 )

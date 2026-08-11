@@ -2,9 +2,9 @@
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "ecuContext.h"
-#include <hal/hal_app.h>
-#include <hal/hal_soft_timer.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/timers/hal_soft_timer.h>
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances

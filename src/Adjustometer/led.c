@@ -1,14 +1,15 @@
 #include "led.h"
 #include "sensors.h"
-#include <hal/hal_rgb_led.h>
-#include <hal/hal_i2c_slave.h>
+#include <hal/gpio/hal_rgb_led.h>
+#include <hal/i2c/hal_i2c_slave.h>
 
-#define LED_BLINK_NO_OSCILLATION_MS  (SECOND / 8)   // 4x per second = toggle every 125 ms
-#define LED_BLINK_STATUS_MS          (SECOND / 2)   // status cycle step every 500 ms
-#define LED_BRIGHTNESS_FULL          30
-#define LED_BRIGHTNESS_HALF          15
+#define LED_BLINK_NO_OSCILLATION_MS                                            \
+  (SECOND / 8)                           // 4x per second = toggle every 125 ms
+#define LED_BLINK_STATUS_MS (SECOND / 2) // status cycle step every 500 ms
+#define LED_BRIGHTNESS_FULL 30
+#define LED_BRIGHTNESS_HALF 15
 
-#define LED_SEQ_MAX  4
+#define LED_SEQ_MAX 4
 #define LED_I2C_TIMEOUT_MS 2000U
 
 static uint32_t ledLastToggleMs = 0;

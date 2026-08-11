@@ -1,143 +1,140 @@
-#include "unity.h"
 #include "dtcManager.h"
+#include "hal/impl/.mock/hal_mock.h"
+#include "hal/storage/hal_eeprom.h"
 #include "sensors.h"
 #include "testable/dtcManager_testable.h"
-#include "hal/hal_eeprom.h"
-#include "hal/impl/.mock/hal_mock.h"
+#include "unity.h"
 
 static bool containsCode(const uint16_t *codes, uint8_t count, uint16_t code) {
-    for(uint8_t i = 0; i < count; i++) {
-        if(codes[i] == code) {
-            return true;
-        }
+  for (uint8_t i = 0; i < count; i++) {
+    if (codes[i] == code) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
 void setUp(void) {
-    hal_mock_set_millis(0);
-    hal_mock_eeprom_reset();
-    hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
-    initSensors();
-    hal_mock_gps_reset();
+  hal_mock_set_millis(0);
+  hal_mock_eeprom_reset();
+  hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
+  initSensors();
+  hal_mock_gps_reset();
 
-    dtcManagerInit();
-    dtcManagerClearAll();
+  dtcManagerInit();
+  dtcManagerClearAll();
 }
 
 void tearDown(void) {}
 
 void test_dtc_set_active_updates_all_kinds(void) {
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
 
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_STORED));
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_PERMANENT));
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_STORED));
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_PERMANENT));
 
-    uint16_t codes[4] = {0};
-    uint8_t n = dtcManagerGetCodes(DTC_KIND_STORED, codes, 4);
-    TEST_ASSERT_EQUAL_UINT8(1, n);
-    TEST_ASSERT_TRUE(containsCode(codes, n, DTC_OBD_CAN_INIT_FAIL));
+  uint16_t codes[4] = {0};
+  uint8_t n = dtcManagerGetCodes(DTC_KIND_STORED, codes, 4);
+  TEST_ASSERT_EQUAL_UINT8(1, n);
+  TEST_ASSERT_TRUE(containsCode(codes, n, DTC_OBD_CAN_INIT_FAIL));
 }
 
 void test_dtc_deactivate_clears_only_active_flag(void) {
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
 
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_STORED));
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_PERMANENT));
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_STORED));
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_PERMANENT));
 }
 
 void test_dtc_clear_all_resets_all_kinds(void) {
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
 
-    dtcManagerClearAll();
+  dtcManagerClearAll();
 
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_PERMANENT));
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_PERMANENT));
 }
 
 void test_dtc_timestamp_nonzero_when_gps_is_available(void) {
-    hal_mock_gps_set_valid(true);
-    hal_mock_gps_set_age(0);
-    hal_mock_gps_set_date(2026, 4, 4);
-    hal_mock_gps_set_time(12, 0, 0);
+  hal_mock_gps_set_valid(true);
+  hal_mock_gps_set_age(0);
+  hal_mock_gps_set_date(2026, 4, 4);
+  hal_mock_gps_set_time(12, 0, 0);
 
-    dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
-    uint32_t ts = dtcManagerGetTimestamp(DTC_PWM_CHANNEL_NOT_INIT);
+  dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
+  uint32_t ts = dtcManagerGetTimestamp(DTC_PWM_CHANNEL_NOT_INIT);
 
-    TEST_ASSERT_TRUE(ts > 0u);
+  TEST_ASSERT_TRUE(ts > 0u);
 }
 
 void test_dtc_timestamp_zero_when_gps_is_unavailable(void) {
-    hal_mock_gps_set_valid(false);
-    hal_mock_gps_set_age(0);
+  hal_mock_gps_set_valid(false);
+  hal_mock_gps_set_age(0);
 
-    dtcManagerSetActive(DTC_DPF_COMM_LOST, true);
-    uint32_t ts = dtcManagerGetTimestamp(DTC_DPF_COMM_LOST);
+  dtcManagerSetActive(DTC_DPF_COMM_LOST, true);
+  uint32_t ts = dtcManagerGetTimestamp(DTC_DPF_COMM_LOST);
 
-    TEST_ASSERT_EQUAL_UINT32(0u, ts);
+  TEST_ASSERT_EQUAL_UINT32(0u, ts);
 }
 
 void test_dtc_get_codes_respects_output_limit(void) {
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
-    dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+  dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
 
-    uint16_t codes[2] = {0};
-    uint8_t n = dtcManagerGetCodes(DTC_KIND_STORED, codes, 2);
+  uint16_t codes[2] = {0};
+  uint8_t n = dtcManagerGetCodes(DTC_KIND_STORED, codes, 2);
 
-    TEST_ASSERT_EQUAL_UINT8(2, n);
+  TEST_ASSERT_EQUAL_UINT8(2, n);
 }
 
 void test_find_dtc_index_returns_expected_slots(void) {
-    TEST_ASSERT_EQUAL_INT(0, findDtcIndex(DTC_OBD_CAN_INIT_FAIL));
-    TEST_ASSERT_EQUAL_INT(1, findDtcIndex(DTC_PCF8574_COMM_FAIL));
-    TEST_ASSERT_EQUAL_INT(8, findDtcIndex(DTC_ADJ_VOLTAGE_BAD));
-    TEST_ASSERT_EQUAL_INT(9, findDtcIndex(DTC_RPM_IRQ_INIT_FAIL));
+  TEST_ASSERT_EQUAL_INT(0, findDtcIndex(DTC_OBD_CAN_INIT_FAIL));
+  TEST_ASSERT_EQUAL_INT(1, findDtcIndex(DTC_PCF8574_COMM_FAIL));
+  TEST_ASSERT_EQUAL_INT(8, findDtcIndex(DTC_ADJ_VOLTAGE_BAD));
+  TEST_ASSERT_EQUAL_INT(9, findDtcIndex(DTC_RPM_IRQ_INIT_FAIL));
 }
 
 void test_rpm_irq_init_failure_is_reportable_and_persistent(void) {
-    dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, true);
+  dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, true);
 
-    uint16_t codes[2] = {0};
-    uint8_t activeCount =
-        dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, COUNTOF(codes));
-    TEST_ASSERT_EQUAL_UINT8(1, activeCount);
-    TEST_ASSERT_TRUE(
-        containsCode(codes, activeCount, DTC_RPM_IRQ_INIT_FAIL));
-    TEST_ASSERT_EQUAL_STRING(
-        "U190C RPM interrupt core-affinity/init failure",
-        getDtcName(DTC_RPM_IRQ_INIT_FAIL));
+  uint16_t codes[2] = {0};
+  uint8_t activeCount =
+      dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, COUNTOF(codes));
+  TEST_ASSERT_EQUAL_UINT8(1, activeCount);
+  TEST_ASSERT_TRUE(containsCode(codes, activeCount, DTC_RPM_IRQ_INIT_FAIL));
+  TEST_ASSERT_EQUAL_STRING("U190C RPM interrupt core-affinity/init failure",
+                           getDtcName(DTC_RPM_IRQ_INIT_FAIL));
 
-    dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, false);
-    uint8_t storedCount =
-        dtcManagerGetCodes(DTC_KIND_STORED, codes, COUNTOF(codes));
-    TEST_ASSERT_EQUAL_UINT8(1, storedCount);
-    TEST_ASSERT_TRUE(
-        containsCode(codes, storedCount, DTC_RPM_IRQ_INIT_FAIL));
+  dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, false);
+  uint8_t storedCount =
+      dtcManagerGetCodes(DTC_KIND_STORED, codes, COUNTOF(codes));
+  TEST_ASSERT_EQUAL_UINT8(1, storedCount);
+  TEST_ASSERT_TRUE(containsCode(codes, storedCount, DTC_RPM_IRQ_INIT_FAIL));
 }
 
 void test_find_dtc_index_returns_minus_one_for_unknown_code(void) {
-    TEST_ASSERT_EQUAL_INT(-1, findDtcIndex(0xFFFFu));
+  TEST_ASSERT_EQUAL_INT(-1, findDtcIndex(0xFFFFu));
 }
 
 void test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom(void) {
-    uint16_t span = dtcKvEffectiveSpan();
+  uint16_t span = dtcKvEffectiveSpan();
 
-    TEST_ASSERT_GREATER_THAN_UINT16(0u, span);
-    TEST_ASSERT_EQUAL_UINT16(0u, (uint16_t)(span & 1u));
-    TEST_ASSERT_TRUE(span <= (ECU_EEPROM_SIZE_BYTES / 2u));
+  TEST_ASSERT_GREATER_THAN_UINT16(0u, span);
+  TEST_ASSERT_EQUAL_UINT16(0u, (uint16_t)(span & 1u));
+  TEST_ASSERT_TRUE(span <= (ECU_EEPROM_SIZE_BYTES / 2u));
 }
 
 void test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small(void) {
-    hal_mock_eeprom_reset();
-    hal_eeprom_init(HAL_EEPROM_RP2040, 32, 0);
+  hal_mock_eeprom_reset();
+  hal_eeprom_init(HAL_EEPROM_RP2040, 32, 0);
 
-    TEST_ASSERT_EQUAL_UINT16(0u, dtcKvEffectiveSpan());
+  TEST_ASSERT_EQUAL_UINT16(0u, dtcKvEffectiveSpan());
 }
 
 // ── mutex balance / re-entrancy guards ──────────────────────────────────────
@@ -149,51 +146,51 @@ void test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small(void) {
 // is enough to catch both failure modes in a single-threaded suite.
 
 void test_dtc_manager_init_is_idempotent_and_releases_lock(void) {
-    dtcManagerInit();
-    dtcManagerInit();
-    // If the second call deadlocks or leaks the lock, the next mutex-guarded
-    // read would hang; the test would never reach UNITY_END.
-    (void)dtcManagerCount(DTC_KIND_ACTIVE);
+  dtcManagerInit();
+  dtcManagerInit();
+  // If the second call deadlocks or leaks the lock, the next mutex-guarded
+  // read would hang; the test would never reach UNITY_END.
+  (void)dtcManagerCount(DTC_KIND_ACTIVE);
 }
 
 void test_dtc_manager_set_active_releases_lock_between_calls(void) {
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-    dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
-    TEST_ASSERT_EQUAL_UINT8(2, dtcManagerCount(DTC_KIND_ACTIVE));
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+  TEST_ASSERT_EQUAL_UINT8(2, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_dtc_manager_clear_all_releases_lock(void) {
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-    dtcManagerClearAll();
-    dtcManagerClearAll();  // must not deadlock on back-to-back calls
-    TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  dtcManagerClearAll();
+  dtcManagerClearAll(); // must not deadlock on back-to-back calls
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
 }
 
 void test_dtc_manager_get_timestamp_releases_lock(void) {
-    (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
-    (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
-    // If the getter forgot to release the mutex, dtcManagerSetActive() below
-    // would block forever.
-    dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-    TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
+  (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
+  (void)dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL);
+  // If the getter forgot to release the mutex, dtcManagerSetActive() below
+  // would block forever.
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 int main(void) {
-    UNITY_BEGIN();
-    RUN_TEST(test_dtc_set_active_updates_all_kinds);
-    RUN_TEST(test_dtc_deactivate_clears_only_active_flag);
-    RUN_TEST(test_dtc_clear_all_resets_all_kinds);
-    RUN_TEST(test_dtc_timestamp_nonzero_when_gps_is_available);
-    RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
-    RUN_TEST(test_dtc_get_codes_respects_output_limit);
-    RUN_TEST(test_find_dtc_index_returns_expected_slots);
-    RUN_TEST(test_rpm_irq_init_failure_is_reportable_and_persistent);
-    RUN_TEST(test_find_dtc_index_returns_minus_one_for_unknown_code);
-    RUN_TEST(test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom);
-    RUN_TEST(test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small);
-    RUN_TEST(test_dtc_manager_init_is_idempotent_and_releases_lock);
-    RUN_TEST(test_dtc_manager_set_active_releases_lock_between_calls);
-    RUN_TEST(test_dtc_manager_clear_all_releases_lock);
-    RUN_TEST(test_dtc_manager_get_timestamp_releases_lock);
-    return UNITY_END();
+  UNITY_BEGIN();
+  RUN_TEST(test_dtc_set_active_updates_all_kinds);
+  RUN_TEST(test_dtc_deactivate_clears_only_active_flag);
+  RUN_TEST(test_dtc_clear_all_resets_all_kinds);
+  RUN_TEST(test_dtc_timestamp_nonzero_when_gps_is_available);
+  RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
+  RUN_TEST(test_dtc_get_codes_respects_output_limit);
+  RUN_TEST(test_find_dtc_index_returns_expected_slots);
+  RUN_TEST(test_rpm_irq_init_failure_is_reportable_and_persistent);
+  RUN_TEST(test_find_dtc_index_returns_minus_one_for_unknown_code);
+  RUN_TEST(test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom);
+  RUN_TEST(test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small);
+  RUN_TEST(test_dtc_manager_init_is_idempotent_and_releases_lock);
+  RUN_TEST(test_dtc_manager_set_active_releases_lock_between_calls);
+  RUN_TEST(test_dtc_manager_clear_all_releases_lock);
+  RUN_TEST(test_dtc_manager_get_timestamp_releases_lock);
+  return UNITY_END();
 }
