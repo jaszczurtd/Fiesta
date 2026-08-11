@@ -41,12 +41,15 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/spi/hal_spi.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
     ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/time/hal_time_ntp.cpp
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/can/hal_can_util.cpp
+    ${HAL_SRC}/hal/storage/hal_eeprom.cpp
     ${HAL_SRC}/hal/storage/hal_kv.cpp
+    ${HAL_SRC}/hal/temperature/hal_thermocouple.cpp
     ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
     ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
     ${HAL_SRC}/utils/pidController.cpp
