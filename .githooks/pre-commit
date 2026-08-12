@@ -4,6 +4,22 @@ set -eu
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+sync_vscode_projects() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 scripts/sync_vscode_projects.py --stage
+    elif command -v py >/dev/null 2>&1; then
+        py -3 scripts/sync_vscode_projects.py --stage
+    elif command -v python >/dev/null 2>&1; then
+        python scripts/sync_vscode_projects.py --stage
+    else
+        echo "ERROR: Python 3 is required to synchronize generated VS Code files." >&2
+        return 1
+    fi
+}
+
+echo "[pre-commit] Synchronizing generated VS Code files..."
+sync_vscode_projects
+
 staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
 [ -n "$staged_files" ] || exit 0
 

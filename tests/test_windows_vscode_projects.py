@@ -34,6 +34,14 @@ class WindowsVscodeProjectTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_pre_commit_regenerates_and_stages_generated_files(self) -> None:
+        hook = (REPO_ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
+        self.assertIn("sync_vscode_projects.py --stage", hook)
+        self.assertLess(
+            hook.index("sync_vscode_projects.py --stage"),
+            hook.index("git diff --cached"),
+        )
+
     def test_module_tasks_are_unique_and_have_windows_commands(self) -> None:
         for module in MODULES:
             vscode_dir = REPO_ROOT / "src" / module / ".vscode"
