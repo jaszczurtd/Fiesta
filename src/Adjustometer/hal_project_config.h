@@ -14,3 +14,7 @@
 #define HAL_ENABLE_I2C_SLAVE /* I2C slave register map - ECU link  */
 #define HAL_ENABLE_RGB_LED   /* NeoPixel status LED                */
 #define HAL_ENABLE_APP_TASK1
+
+/* Native RP system stacks, in bytes. */
+#define HAL_RP_CORE0_STACK_SIZE 4096u
+#define HAL_RP_CORE1_STACK_SIZE 4096u

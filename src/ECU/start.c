@@ -166,8 +166,8 @@ static void initializeCore0(void) {
   deb("Build timestamp: %s", ecu_BuildDateTime);
 
   // Force local flash-backed EEPROM for this ECU build.
-  hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
-  deb("EEPROM backend: RP2040 (%u bytes)", (unsigned)hal_eeprom_size());
+  hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
+  deb("EEPROM backend: internal flash (%u bytes)", (unsigned)hal_eeprom_size());
   deb("EEPROM layout: FIRST_ADDR=%u", (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
 #ifdef HAL_TOOLS_EEPROM_LOGGER_ADDR
   deb("EEPROM layout: LOGGER_ADDR=%u CRASH_ADDR=%u",

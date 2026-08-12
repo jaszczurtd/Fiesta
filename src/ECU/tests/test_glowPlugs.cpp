@@ -173,7 +173,7 @@ int main(void) {
   /* initSensors() creates mutexes and zeros the global value array.
    * It must be called once before any test that uses setGlobalValue(). */
   initSensors();
-  hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
   UNITY_BEGIN();
 

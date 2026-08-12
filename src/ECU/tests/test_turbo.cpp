@@ -9,7 +9,7 @@
 void setUp(void) {
   hal_mock_set_millis(0);
   hal_mock_eeprom_reset();
-  hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
   initSensors();
   dtcManagerInit();
   dtcManagerClearAll();
