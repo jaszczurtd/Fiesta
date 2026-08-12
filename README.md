@@ -156,7 +156,8 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
 - `scripts/sync_vscode_projects.py` - regenerates cross-platform settings,
   tasks and keybinding references for all five modules from JaszczurHAL's
-  board/task registry. Run it with `--check` in review or CI.
+  board/task registry. The repository pre-commit hook runs it with `--stage`
+  and stages changed managed outputs. Run it with `--check` in review or CI.
 - `scripts/configure_git_hooks.py` - configures the repository-local hook path
   from Linux, macOS or Windows without requiring Bash.
 

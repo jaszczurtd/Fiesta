@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 from typing import Any
 
@@ -139,7 +140,13 @@ def desired_root_tasks() -> dict[str, Any]:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Fail if generated files differ.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Fail if generated files differ.")
+    mode.add_argument(
+        "--stage",
+        action="store_true",
+        help="Regenerate stale files and stage changed managed outputs.",
+    )
     parser.add_argument(
         "--jaszczurhal-root",
         type=Path,
@@ -181,9 +188,50 @@ def main(argv: list[str]) -> int:
         print(f"Fiesta VS Code files are synchronized ({len(expected)} files).")
         return 0
 
-    for path, content in expected.items():
+    missing_paths = {
+        str(path.relative_to(REPO_ROOT)) for path in mismatches if not path.is_file()
+    }
+    for path in mismatches:
+        content = expected[path]
         write_text_lf(path, content)
         print(f"generated {path.relative_to(REPO_ROOT)}")
+
+    if args.stage:
+        relative_paths = [str(path.relative_to(REPO_ROOT)) for path in expected]
+        changed_result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                "diff",
+                "--name-only",
+                "--",
+                *relative_paths,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if changed_result.returncode != 0:
+            print("error: failed to inspect generated VS Code files", file=sys.stderr)
+            return changed_result.returncode
+        changed_paths = {
+            line.strip() for line in changed_result.stdout.splitlines() if line.strip()
+        }
+        changed_paths.update(missing_paths)
+        if not changed_paths:
+            print(f"Fiesta VS Code files are synchronized ({len(expected)} files).")
+            return 0
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "add", "--", *sorted(changed_paths)],
+            check=False,
+        )
+        if result.returncode != 0:
+            print("error: failed to stage generated VS Code files", file=sys.stderr)
+            return result.returncode
+        print(f"staged {len(changed_paths)} generated VS Code file(s)")
+    elif not mismatches:
+        print(f"Fiesta VS Code files are synchronized ({len(expected)} files).")
     return 0
 
 

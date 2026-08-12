@@ -6,6 +6,8 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Made the pre-commit hook regenerate and stage managed VS Code project files,
+  preventing board-registry updates from reaching CI with stale task pickers.
 - Increased both native RP core stack reservations to 4096 bytes.
 - Migrated ECU internal-flash EEPROM selection to the target-neutral
   `HAL_EEPROM_FLASH` API.
