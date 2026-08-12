@@ -131,7 +131,7 @@ void test_timer_expiry_disables_heating(void) {
 
 int main(void) {
   initSensors();
-  hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
   UNITY_BEGIN();
 

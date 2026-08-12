@@ -20,3 +20,7 @@
 #ifndef HAL_ENABLE_APP_TASK1
 #define HAL_ENABLE_APP_TASK1
 #endif
+
+/* Native RP system stacks, in bytes. */
+#define HAL_RP_CORE0_STACK_SIZE 4096u
+#define HAL_RP_CORE1_STACK_SIZE 4096u

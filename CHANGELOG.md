@@ -6,6 +6,9 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Increased both native RP core stack reservations to 4096 bytes.
+- Migrated ECU internal-flash EEPROM selection to the target-neutral
+  `HAL_EEPROM_FLASH` API.
 - Removed legacy machine-local Cortex-Debug path, scripts-root, and SVD
   variables from all five firmware launch profiles. Native Windows now uses
   the verified user settings configured by JaszczurHAL's bootstrap, with a

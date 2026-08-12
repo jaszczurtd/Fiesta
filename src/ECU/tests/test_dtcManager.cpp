@@ -17,7 +17,7 @@ static bool containsCode(const uint16_t *codes, uint8_t count, uint16_t code) {
 void setUp(void) {
   hal_mock_set_millis(0);
   hal_mock_eeprom_reset();
-  hal_eeprom_init(HAL_EEPROM_RP2040, ECU_EEPROM_SIZE_BYTES, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
   initSensors();
   hal_mock_gps_reset();
 
@@ -132,7 +132,7 @@ void test_dtc_kv_effective_span_is_even_and_nonzero_for_default_eeprom(void) {
 
 void test_dtc_kv_effective_span_returns_zero_when_eeprom_is_too_small(void) {
   hal_mock_eeprom_reset();
-  hal_eeprom_init(HAL_EEPROM_RP2040, 32, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, 32, 0);
 
   TEST_ASSERT_EQUAL_UINT16(0u, dtcKvEffectiveSpan());
 }

@@ -1034,7 +1034,7 @@ void test_uds_control_dtc_setting_short_frame_returns_nrc13(void) {
 // ──────────────────────────────────────────────────────────────────────
 
 int main(void) {
-  hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
   initSensors();
 
   UNITY_BEGIN();

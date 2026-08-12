@@ -216,7 +216,7 @@ void test_fan_writes_state_to_global_value(void) {
 
 int main(void) {
   initSensors();
-  hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
   UNITY_BEGIN();
 
