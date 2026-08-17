@@ -135,7 +135,8 @@ SUBJECT="[Fiesta] daily bootstrap $STATUS - $SHORT_SHA"
     echo "Log file:    $LOG_FILE"
     echo
     echo "── last 80 lines of log ──────────────────────────────────────────"
-    tail -n 80 "$LOG_FILE"
+    tail -n 80 "$LOG_FILE" \
+        | perl -pe 's/\e\[[0-9;]*m//g'
 } > "$BODY_FILE"
 
 if command -v python3 >/dev/null 2>&1; then
