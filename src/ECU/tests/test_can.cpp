@@ -1,191 +1,267 @@
-#include "unity.h"
 #include "can.h"
-#include "sensors.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "sensors.h"
+#include "unity.h"
 
 static void ensure_can_ready(void) {
-    if (canTestGetCanHandle() == NULL) {
-        canInit(1);
-    }
-    TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
-    hal_mock_can_reset(canTestGetCanHandle());
+  if (canTestGetCanHandle() == NULL) {
+    canInit(1);
+  }
+  TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
+  hal_mock_can_reset(canTestGetCanHandle());
 }
 
 static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
-    return hal_mock_can_get_sent(canTestGetCanHandle(), id, len, data);
+  return hal_mock_can_get_sent(canTestGetCanHandle(), id, len, data);
 }
 
 #ifndef VP37
 static void injectSupplyVoltageAdc(float volts) {
-    const float ratio = ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
-    int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
-    if(adc < 0) {
-        adc = 0;
-    }
-    if(adc > 4095) {
-        adc = 4095;
-    }
-    hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  const float ratio =
+      ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+  int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
+  if (adc < 0) {
+    adc = 0;
+  }
+  if (adc > 4095) {
+    adc = 4095;
+  }
+  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
 }
 
 static void refreshMediumValuesUntilVoltsUpdated(void) {
-    for(int i = 0; i < (F_LAST + 2); i++) {
-        readMediumValues();
-        if(getGlobalValue(F_VOLTS) > 0.0f) {
-            return;
-        }
+  for (int i = 0; i < (F_LAST + 2); i++) {
+    readMediumValues();
+    if (getGlobalValue(F_VOLTS) > 0.0f) {
+      return;
     }
+  }
 }
 #endif
 
 void setUp(void) {
-    initSensors();
-    ensure_can_ready();
-    for(int32_t i = 0; i < F_LAST; i++) {
-        setGlobalValue(i, 0.0f);
-    }
+  initSensors();
+  ensure_can_ready();
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  hal_mock_set_millis(0u);
+  canTestResetRpmPublisher();
+  for (int32_t i = 0; i < F_LAST; i++) {
+    setGlobalValue(i, 0.0f);
+  }
 }
 
-void tearDown(void) {
-    hal_mock_i2c_set_busy(false);
-}
+void tearDown(void) { hal_mock_i2c_set_busy(false); }
 
 void test_pack_gps_datetime_valid(void) {
-    // 2026-04-03 14:27 -> yy=26 => offset=6
-    // packed: [yearOff:4][month:4][day:5][hour:5][min:6]
-    uint32_t packed = CAN_packGpsDateTime(260403, 1427);
-    uint32_t expected = (6u << 20) | (4u << 16) | (3u << 11) | (14u << 6) | 27u;
-    TEST_ASSERT_EQUAL_UINT32(expected, packed);
+  // 2026-04-03 14:27 -> yy=26 => offset=6
+  // packed: [yearOff:4][month:4][day:5][hour:5][min:6]
+  uint32_t packed = CAN_packGpsDateTime(260403, 1427);
+  uint32_t expected = (6u << 20) | (4u << 16) | (3u << 11) | (14u << 6) | 27u;
+  TEST_ASSERT_EQUAL_UINT32(expected, packed);
 }
 
 void test_pack_gps_datetime_invalid_returns_zero(void) {
-    TEST_ASSERT_EQUAL_UINT32(0u, CAN_packGpsDateTime(261303, 1427)); // invalid month
-    TEST_ASSERT_EQUAL_UINT32(0u, CAN_packGpsDateTime(260403, 2460)); // invalid time
+  TEST_ASSERT_EQUAL_UINT32(0u,
+                           CAN_packGpsDateTime(261303, 1427)); // invalid month
+  TEST_ASSERT_EQUAL_UINT32(0u,
+                           CAN_packGpsDateTime(260403, 2460)); // invalid time
 }
 
 void test_build_gps_lat_lon_frames_encode_high_precision_values(void) {
-    setGlobalValue(F_LATITUDE, 52.2297f);
-    setGlobalValue(F_LONGITUDE, 21.0122f);
-    setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
-    setGlobalValue(F_GPS_DATE, 260403.0f); // YYMMDD
-    setGlobalValue(F_GPS_TIME, 1427.0f);   // HHMM
+  setGlobalValue(F_LATITUDE, 52.2297f);
+  setGlobalValue(F_LONGITUDE, 21.0122f);
+  setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
+  setGlobalValue(F_GPS_DATE, 260403.0f); // YYMMDD
+  setGlobalValue(F_GPS_TIME, 1427.0f);   // HHMM
 
-    uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
-    uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-    TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x33, latBuf, (int)sizeof(latBuf)));
-    TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x34, lonBuf, (int)sizeof(lonBuf)));
+  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
+  uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x33, latBuf, (int)sizeof(latBuf)));
+  TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x34, lonBuf, (int)sizeof(lonBuf)));
 
-    TEST_ASSERT_EQUAL_UINT8(0x33, latBuf[CAN_FRAME_NUMBER]);
-    TEST_ASSERT_EQUAL_UINT8(0x34, lonBuf[CAN_FRAME_NUMBER]);
-    TEST_ASSERT_EQUAL_UINT8(1, latBuf[CAN_FRAME_GPS_EXT_STATUS]);
+  TEST_ASSERT_EQUAL_UINT8(0x33, latBuf[CAN_FRAME_NUMBER]);
+  TEST_ASSERT_EQUAL_UINT8(0x34, lonBuf[CAN_FRAME_NUMBER]);
+  TEST_ASSERT_EQUAL_UINT8(1, latBuf[CAN_FRAME_GPS_EXT_STATUS]);
 
-    int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24)
-                          | ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16)
-                          | ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8)
-                          | (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
-    int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24)
-                          | ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16)
-                          | ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8)
-                          | (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+  int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
+                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
+                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
+                          (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
+  int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
+                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
+                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
+                          (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
 
-    TEST_ASSERT_EQUAL_INT(52229700, lat); // 52.229700 * 1e6
-    TEST_ASSERT_EQUAL_INT(21012200, lon); // 21.012200 * 1e6
+  TEST_ASSERT_EQUAL_INT(52229700, lat); // 52.229700 * 1e6
+  TEST_ASSERT_EQUAL_INT(21012200, lon); // 21.012200 * 1e6
 
-    uint32_t packedDt = ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_HI] << 16)
-                      | ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_MD] << 8)
-                      | (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_LO];
-    TEST_ASSERT_EQUAL_UINT32(CAN_packGpsDateTime(260403, 1427), packedDt);
+  uint32_t packedDt = ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_HI] << 16) |
+                      ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_MD] << 8) |
+                      (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_LO];
+  TEST_ASSERT_EQUAL_UINT32(CAN_packGpsDateTime(260403, 1427), packedDt);
 }
 
 void test_build_gps_lat_lon_frames_clamp_coordinates(void) {
-    setGlobalValue(F_LATITUDE, 120.0f);
-    setGlobalValue(F_LONGITUDE, -250.0f);
-    setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
-    setGlobalValue(F_GPS_DATE, 260403.0f);
-    setGlobalValue(F_GPS_TIME, 1427.0f);
+  setGlobalValue(F_LATITUDE, 120.0f);
+  setGlobalValue(F_LONGITUDE, -250.0f);
+  setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
+  setGlobalValue(F_GPS_DATE, 260403.0f);
+  setGlobalValue(F_GPS_TIME, 1427.0f);
 
-    uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
-    uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-    TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
-    TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
+  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
+  uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
+  TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
 
-    int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24)
-                          | ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16)
-                          | ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8)
-                          | (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
-    int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24)
-                          | ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16)
-                          | ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8)
-                          | (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+  int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
+                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
+                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
+                          (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
+  int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
+                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
+                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
+                          (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
 
-    TEST_ASSERT_EQUAL_INT(90000000, lat);
-    TEST_ASSERT_EQUAL_INT(-180000000, lon);
+  TEST_ASSERT_EQUAL_INT(90000000, lat);
+  TEST_ASSERT_EQUAL_INT(-180000000, lon);
 }
 
 void test_truncated_egt_frame_is_ignored(void) {
-    setGlobalValue(F_EGT, 321.0f);
-    setGlobalValue(F_DPF_TEMP, 654.0f);
+  setGlobalValue(F_EGT, 321.0f);
+  setGlobalValue(F_DPF_TEMP, 654.0f);
 
-    uint8_t shortFrame[3] = {0x00, 0x12, 0x34};
-    hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE, 3, shortFrame);
-    canMainLoop();
+  uint8_t shortFrame[3] = {0x00, 0x12, 0x34};
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE, 3, shortFrame);
+  canMainLoop();
 
-    TEST_ASSERT_EQUAL_FLOAT(321.0f, getGlobalValue(F_EGT));
-    TEST_ASSERT_EQUAL_FLOAT(654.0f, getGlobalValue(F_DPF_TEMP));
+  TEST_ASSERT_EQUAL_FLOAT(321.0f, getGlobalValue(F_EGT));
+  TEST_ASSERT_EQUAL_FLOAT(654.0f, getGlobalValue(F_DPF_TEMP));
 }
 
 void test_truncated_oil_and_speed_frame_is_ignored(void) {
-    setGlobalValue(F_OIL_PRESSURE, 4.2f);
-    setGlobalValue(F_ABS_CAR_SPEED, 88.0f);
+  setGlobalValue(F_OIL_PRESSURE, 4.2f);
+  setGlobalValue(F_ABS_CAR_SPEED, 88.0f);
 
-    uint8_t shortFrame[2] = {0x01, 0x02};
-    hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, 2, shortFrame);
-    canMainLoop();
+  uint8_t shortFrame[2] = {0x01, 0x02};
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      2, shortFrame);
+  canMainLoop();
 
-    TEST_ASSERT_EQUAL_FLOAT(4.2f, getGlobalValue(F_OIL_PRESSURE));
-    TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_ABS_CAR_SPEED));
+  TEST_ASSERT_EQUAL_FLOAT(4.2f, getGlobalValue(F_OIL_PRESSURE));
+  TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_ABS_CAR_SPEED));
+}
+
+static void assert_rpm_frame(int32_t expectedRpm) {
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, data));
+  TEST_ASSERT_EQUAL_UINT32(CAN_ID_RPM, id);
+  TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
+  TEST_ASSERT_EQUAL_INT(expectedRpm,
+                        MsbLsbToInt(data[CAN_FRAME_RPM_UPDATE_HI],
+                                    data[CAN_FRAME_RPM_UPDATE_LO]));
+}
+
+void test_can_init_uses_one_shot_with_software_retry(void) {
+  hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
+
+  TEST_ASSERT_TRUE(hal_can_get_mode(canTestGetCanHandle(), &mode));
+  TEST_ASSERT_NOT_EQUAL(0u, mode & HAL_CAN_MODE_ONE_SHOT);
+}
+
+void test_rpm_update_retries_after_failed_send(void) {
+  getRPMInstance()->rpmValue = 1234;
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_BUS_OFF);
+
+  CAN_updaterecipients_02();
+
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &len, data));
+
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  hal_mock_advance_millis(CAN_RPM_RETRY_INTERVAL_MS - 1u);
+  getRPMInstance()->rpmValue = 1300;
+  CAN_updaterecipients_02();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &len, data));
+
+  hal_mock_advance_millis(1u);
+  CAN_updaterecipients_02();
+  assert_rpm_frame(1300);
+}
+
+void test_rpm_update_sends_periodic_heartbeat(void) {
+  getRPMInstance()->rpmValue = 2345;
+
+  CAN_updaterecipients_02();
+  assert_rpm_frame(2345);
+
+  CAN_updaterecipients_02();
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &len, data));
+
+  getRPMInstance()->rpmValue = 2400;
+  CAN_updaterecipients_02();
+  assert_rpm_frame(2400);
+
+  hal_mock_advance_millis(CAN_RPM_HEARTBEAT_INTERVAL_MS - 1u);
+  CAN_updaterecipients_02();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &len, data));
+
+  hal_mock_advance_millis(1u);
+  CAN_updaterecipients_02();
+  assert_rpm_frame(2400);
 }
 
 #ifndef VP37
 void test_can_update_01_contains_adc_supply_voltage_without_vp37(void) {
-    hal_mock_i2c_set_busy(true); // Ensure this path does not depend on Adjustometer I2C.
-    injectSupplyVoltageAdc(13.8f);
+  hal_mock_i2c_set_busy(
+      true); // Ensure this path does not depend on Adjustometer I2C.
+  injectSupplyVoltageAdc(13.8f);
 
-    setGlobalValue(F_VOLTS, 0.0f);
-    refreshMediumValuesUntilVoltsUpdated();
+  setGlobalValue(F_VOLTS, 0.0f);
+  refreshMediumValuesUntilVoltsUpdated();
 
-    float measuredVolts = getGlobalValue(F_VOLTS);
-    TEST_ASSERT_TRUE(measuredVolts > 1.0f);
+  float measuredVolts = getGlobalValue(F_VOLTS);
+  TEST_ASSERT_TRUE(measuredVolts > 1.0f);
 
-    CAN_updaterecipients_01();
+  CAN_updaterecipients_01();
 
-    uint32_t id = 0;
-    uint8_t len = 0;
-    uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  uint32_t id = 0;
+  uint8_t len = 0;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
 
-    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, data));
-    TEST_ASSERT_EQUAL_UINT32(CAN_ID_ECU_UPDATE_01, id);
-    TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, data));
+  TEST_ASSERT_EQUAL_UINT32(CAN_ID_ECU_UPDATE_01, id);
+  TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
 
-    int hi = 0;
-    int lo = 0;
-    floatToDec(measuredVolts, &hi, &lo);
+  int hi = 0;
+  int lo = 0;
+  floatToDec(measuredVolts, &hi, &lo);
 
-    TEST_ASSERT_EQUAL_UINT8((uint8_t)hi, data[CAN_FRAME_ECU_UPDATE_VOLTS_HI]);
-    TEST_ASSERT_EQUAL_UINT8((uint8_t)lo, data[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)hi, data[CAN_FRAME_ECU_UPDATE_VOLTS_HI]);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)lo, data[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
 }
 #endif
 
 int main(void) {
-    UNITY_BEGIN();
-    RUN_TEST(test_pack_gps_datetime_valid);
-    RUN_TEST(test_pack_gps_datetime_invalid_returns_zero);
-    RUN_TEST(test_build_gps_lat_lon_frames_encode_high_precision_values);
-    RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
-    RUN_TEST(test_truncated_egt_frame_is_ignored);
-    RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
+  UNITY_BEGIN();
+  RUN_TEST(test_pack_gps_datetime_valid);
+  RUN_TEST(test_pack_gps_datetime_invalid_returns_zero);
+  RUN_TEST(test_build_gps_lat_lon_frames_encode_high_precision_values);
+  RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
+  RUN_TEST(test_truncated_egt_frame_is_ignored);
+  RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
+  RUN_TEST(test_can_init_uses_one_shot_with_software_retry);
+  RUN_TEST(test_rpm_update_retries_after_failed_send);
+  RUN_TEST(test_rpm_update_sends_periodic_heartbeat);
 #ifndef VP37
-    RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
+  RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
 #endif
-    return UNITY_END();
+  return UNITY_END();
 }

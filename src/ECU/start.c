@@ -373,9 +373,9 @@ static void runCore0(void) {
     return;
   }
 
-  hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
-  s_startPersistentState.statusVariable0Val = 3;
   CAN_updaterecipients_02();
+  s_startPersistentState.statusVariable0Val = 3;
+  hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
   s_startPersistentState.statusVariable0Val = 4;
   obdLoop();
   s_startPersistentState.statusVariable0Val = 5;

@@ -348,7 +348,16 @@ that every mutable ECU byte lives inside `ecu_context_t`.
 **Timing model.** On RP2040, ECU does not use an RTOS. Work is scheduled by a soft-timer
 table installed in `start.c`: each entry is a `(period, callback)` pair
 invoked from the main loop. In addition, both RP2040 cores are used, and the second core is handling engine-related (VP37 / turbo), time-critical tasks. Typical cadences are high-rate sensor reads (~10 ms), medium-rate reads (~100 ms), CAN publish cycles, and slower
-per-second housekeeping.
+per-second housekeeping. RPM becomes eligible for immediate publication when
+it changes and for heartbeat publication after 100 ms while unchanged. A
+failed RPM transmission remains pending and becomes eligible for retry after
+10 ms. Each eligible transmission runs on the next core-0 loop iteration, so
+those thresholds are not hard latency limits if the synchronous loop stalls.
+The MCP2515 remains in one-shot mode so an unacknowledged frame cannot occupy
+one of its three TX buffers indefinitely; the driver reports one-shot failure
+flags to the publisher. The RPM publisher runs before the soft-timer table on
+each core-0 iteration so callbacks due in that iteration cannot add their
+execution time to the RPM-to-CAN path.
 
 ### 5.2 Clocks - [`src/Clocks`](src/Clocks/)
 
@@ -367,7 +376,7 @@ warnings.
 | [`logic.cpp`](src/Clocks/logic.cpp) | state machine mapping CAN signals to display/gauge/buzzer state |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tone generation + warning pattern strategy |
 | [`engineFuel.cpp`](src/Clocks/engineFuel.cpp) | fuel-level aggregation for the cluster |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN RX filtering (shares IDs with ECU via `src/common/canDefinitions/canDefinitions.h`) |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN RX filtering and decode; MCP2515 acceptance filters admit only the Fiesta standard-ID range |
 | [`peripherials.cpp`](src/Clocks/peripherials.cpp) | GPIO/PWM init |
 
 **Hardware interfaces** (from [`hardwareConfig.h`](src/Clocks/hardwareConfig.h)):
