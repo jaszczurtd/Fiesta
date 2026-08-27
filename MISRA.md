@@ -34,7 +34,7 @@ Completed areas include:
 - warning quality gate for ECU host tests and native ECU firmware builds
   (`-Werror`).
 - warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
-- defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames.
+- defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames, and the RPM publisher updates its delivery cache only after a successful transmission while using retry and heartbeat eligibility thresholds.
 - project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
 
 Pending areas:

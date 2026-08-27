@@ -1,12 +1,12 @@
 #ifndef T_CAN
 #define T_CAN
 
-#include <tools_c.h>
 #include "../common/canDefinitions/canDefinitions.h"
+#include <tools_c.h>
 
-#include "sensors.h"
 #include "config.h"
 #include "rpm.h"
+#include "sensors.h"
 #include "tests.h"
 
 #ifdef __cplusplus
@@ -35,8 +35,8 @@ void CAN_sendAll(void);
 /**
  * @brief Send a legacy throttle-position CAN update when needed.
  * @return None.
- * @note In the current diesel-oriented codebase this frame carries the G79/G185-like
- *       driver-demand signal, despite the historical throttle naming.
+ * @note In the current diesel-oriented codebase this frame carries the
+ * G79/G185-like driver-demand signal, despite the historical throttle naming.
  */
 void CAN_sendThrottleUpdate(void);
 
@@ -60,9 +60,11 @@ void CAN_updaterecipients_02(void);
 
 /**
  * @brief Reserved legacy API for sending a single throttle frame.
- * @param value Driver-demand value to transmit using the historical throttle frame format.
+ * @param value Driver-demand value to transmit using the historical throttle
+ * frame format.
  * @return None.
- * @note The payload is the legacy throttle-named signal, not a real throttle-plate angle.
+ * @note The payload is the legacy throttle-named signal, not a real
+ * throttle-plate angle.
  */
 void sendThrottleValueCAN(int value);
 
@@ -118,6 +120,7 @@ void canCheckConnection(void);
 
 #ifdef UNIT_TEST
 hal_can_t canTestGetCanHandle(void);
+void canTestResetRpmPublisher(void);
 #endif
 
 #ifdef __cplusplus

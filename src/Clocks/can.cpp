@@ -20,6 +20,18 @@ static bool lastOilSpeedModuleConnected = false;
 static bool interrupt = false;
 static hal_can_t canHandle = NULL;
 
+static bool configureFiestaCanFilters(void) {
+  const hal_can_filter_t filter = {CAN_FIESTA_STD_ID_BASE,
+                                   CAN_FIESTA_STD_ID_MASK, 0u};
+
+  for (uint8_t index = 0u; index < HAL_CAN_MAX_FILTERS; index++) {
+    if (!hal_can_set_filter(canHandle, index, &filter)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 #ifdef UNIT_TEST
 hal_can_t clocksTestGetCanHandle(void) { return canHandle; }
 #endif
@@ -38,6 +50,12 @@ bool canInit(void) {
   canHandle = hal_can_create_with_retry(&canCfg, CAN_INT, receivedCanMessage,
                                         MAX_RETRIES, hal_watchdog_feed);
   error = (canHandle == NULL);
+  if (!error && !configureFiestaCanFilters()) {
+    derr("CAN acceptance-filter configuration failed");
+    hal_can_destroy(canHandle);
+    canHandle = NULL;
+    error = true;
+  }
   if (!error) {
     deb("CAN BUS Shield init ok!");
     canMainLoop();

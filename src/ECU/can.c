@@ -21,7 +21,11 @@ typedef struct {
   unsigned long lastEgtMessagesCount;
   hal_can_t canBusHandle;
   bool isInitialized;
+  bool rpmHasBeenSent;
   int32_t lastRpmSent;
+  uint32_t lastRpmSentAtMs;
+  uint32_t lastRpmAttemptAtMs;
+  bool rpmRetryPending;
   float lastTurboHiSent;
   float lastTurboLoSent;
   float lastTurboHiDesiredSent;
@@ -41,20 +45,40 @@ static can_state_t s_canState = {.frameNumberVal = 0u,
                                  .lastEgtMessagesCount = 0uL,
                                  .canBusHandle = NULL,
                                  .isInitialized = false,
-                                 .lastRpmSent = (int32_t)C_INIT_VAL,
+                                 .rpmHasBeenSent = false,
+                                 .lastRpmSent = 0,
+                                 .lastRpmSentAtMs = 0u,
+                                 .lastRpmAttemptAtMs = 0u,
+                                 .rpmRetryPending = false,
                                  .lastTurboHiSent = (float)C_INIT_VAL,
                                  .lastTurboLoSent = (float)C_INIT_VAL,
                                  .lastTurboHiDesiredSent = (float)C_INIT_VAL,
                                  .lastTurboLoDesiredSent = (float)C_INIT_VAL,
                                  .lastThrottleSent = (int32_t)C_INIT_VAL};
 
+/**
+ * @brief Reset the RPM publisher cache and retry state.
+ * @return None.
+ */
+static void resetRpmPublisher(void) {
+  const uint32_t now = hal_millis();
+  s_canState.rpmHasBeenSent = false;
+  s_canState.lastRpmSent = 0;
+  s_canState.lastRpmSentAtMs = now;
+  s_canState.lastRpmAttemptAtMs = now;
+  s_canState.rpmRetryPending = false;
+}
+
 #ifdef UNIT_TEST
 hal_can_t canTestGetCanHandle(void) { return s_canState.canBusHandle; }
+
+void canTestResetRpmPublisher(void) { resetRpmPublisher(); }
 #endif
 
 static hal_can_config_t can0Config(void) {
   hal_can_config_t cfg = hal_can_default_config();
   cfg.mcp2515.cs_pin = CAN0_GPIO;
+  cfg.mcp2515.one_shot_tx = true;
   return cfg;
 }
 
@@ -67,6 +91,7 @@ void canInit(int retries) {
   s_canState.egtEverSeenFlag = false;
   s_canState.egtMessagesCount = 0uL;
   s_canState.lastEgtMessagesCount = 0uL;
+  resetRpmPublisher();
 
   hal_can_config_t canCfg = can0Config();
   s_canState.canBusHandle =
@@ -247,17 +272,36 @@ void CAN_updaterecipients_01(void) {
 
 void CAN_updaterecipients_02(void) {
   if (s_canState.isInitialized) {
-    int32_t rpm = RPM_getCurrentRPM(getRPMInstance());
-    if (s_canState.lastRpmSent != rpm) {
-      s_canState.lastRpmSent = rpm;
+    const uint32_t now = hal_millis();
+    const int32_t rpm = RPM_getCurrentRPM(getRPMInstance());
+    const bool retryDue = s_canState.rpmRetryPending &&
+                          ((uint32_t)(now - s_canState.lastRpmAttemptAtMs) >=
+                           CAN_RPM_RETRY_INTERVAL_MS);
+    const bool heartbeatDue = ((uint32_t)(now - s_canState.lastRpmSentAtMs) >=
+                               CAN_RPM_HEARTBEAT_INTERVAL_MS);
+    const bool valueChanged =
+        (!s_canState.rpmHasBeenSent) || (s_canState.lastRpmSent != rpm);
+    const bool shouldSend =
+        s_canState.rpmRetryPending ? retryDue : (valueChanged || heartbeatDue);
 
+    if (shouldSend) {
       uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
-      buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+      buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal;
+      s_canState.frameNumberVal++;
       buf[CAN_FRAME_RPM_UPDATE_HI] = MSB(rpm);
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
 
-      hal_can_send(s_canState.canBusHandle, CAN_ID_RPM, CAN_FRAME_MAX_LENGTH,
-                   buf);
+      s_canState.lastRpmAttemptAtMs = now;
+      const bool rpmSent = hal_can_send(s_canState.canBusHandle, CAN_ID_RPM,
+                                        CAN_FRAME_MAX_LENGTH, buf);
+      if (rpmSent) {
+        s_canState.rpmHasBeenSent = true;
+        s_canState.lastRpmSent = rpm;
+        s_canState.lastRpmSentAtMs = now;
+        s_canState.rpmRetryPending = false;
+      } else {
+        s_canState.rpmRetryPending = true;
+      }
     }
   }
 }
@@ -393,7 +437,6 @@ bool isDPFConnected(void) { return s_canState.dpfConnectedFlag; }
 bool isEGTConnected(void) { return s_canState.egtConnectedFlag; }
 
 void canCheckConnection(void) {
-  s_canState.lastRpmSent = C_INIT_VAL;
   s_canState.lastThrottleSent = C_INIT_VAL;
 
   s_canState.egtConnectedFlag =

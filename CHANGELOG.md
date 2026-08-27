@@ -6,6 +6,12 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Hardened ECU-to-Clocks RPM delivery with explicit MCP2515 one-shot failure
+  reporting, success-only TX state updates, a 10 ms retry threshold, and a
+  100 ms heartbeat threshold so a dropped change-only frame is republished.
+  Eligible sends run on the next core-0 loop iteration. The RPM publisher now
+  runs before soft-timer callbacks, and Clocks rejects CAN traffic outside the
+  Fiesta standard-ID range in hardware.
 - Made the pre-commit hook regenerate and stage managed VS Code project files,
   preventing board-registry updates from reaching CI with stale task pickers.
 - Increased both native RP core stack reservations to 4096 bytes.
