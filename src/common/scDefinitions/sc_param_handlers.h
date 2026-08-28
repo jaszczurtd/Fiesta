@@ -5,12 +5,11 @@
  * @brief Generic SC reply machinery, accessors, and persistence helpers
  *        driven by an array of @ref sc_param_descriptor_t.
  *
- * The intent is that a module's SC unknown-handler delegates the four
- * read-side replies (@c GET_META, @c GET_PARAM_LIST, @c GET_VALUES,
- * @c GET_PARAM) to the helpers below, passing its descriptor array,
- * its values-struct pointer, and an @ref sc_emit_fn that wraps each
- * reply payload in a framed @c hal_serial_session_println - collapsing
- * ~70% copy&paste between ECU/Clocks/OilAndSpeed @c config.c[pp].
+ * The shared SC command service delegates parameter reads and writes to these
+ * helpers, passing a descriptor array, a values-struct pointer, and an
+ * @ref sc_emit_fn that appends the reply payload to a router response. This
+ * keeps parameter formatting and persistence identical across firmware
+ * modules and host tests.
  *
  * Helpers do not depend on JaszczurHAL: replies are emitted via the
  * caller-supplied callback, so the same code paths drive on-target
@@ -30,9 +29,8 @@ extern "C" {
 /**
  * @brief Reply-emit callback type.
  *
- * The helper writes one reply payload per call. The caller is
- * responsible for the SC frame envelope - typically by routing this
- * callback through @c hal_serial_session_println.
+ * The helper writes one reply payload per call. The caller selects its
+ * destination; @c sc_command_service uses a command-router response body.
  */
 typedef void (*sc_emit_fn)(const char *payload, void *user);
 
@@ -44,8 +42,9 @@ typedef void (*sc_emit_fn)(const char *payload, void *user);
  * Returns NULL when @p id has no matching descriptor or any input is
  * NULL.
  */
-const sc_param_descriptor_t *sc_param_find_by_id(
-    const sc_param_descriptor_t *descs, size_t count, const char *id);
+const sc_param_descriptor_t *
+sc_param_find_by_id(const sc_param_descriptor_t *descs, size_t count,
+                    const char *id);
 
 /** Return true when @p value is within the descriptor's [min, max]. */
 bool sc_param_validate_range(const sc_param_descriptor_t *desc, int16_t value);
@@ -121,7 +120,7 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
                               const void *values_ctx, const char *requested_id,
                               sc_emit_fn emit, void *emit_user);
 
-/* ── Phase 8 — staging-mirror writes ─────────────────────────────── */
+/* ── Phase 8 - staging-mirror writes ─────────────────────────────── */
 
 /**
  * @brief Emit a SET_PARAM reply for @p requested_id with @p value, writing
@@ -141,8 +140,8 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
  * that do not yet split staging/active mirrors.
  *
  * Caller responsibilities:
- *   - auth-gate SC_SET_PARAM at the protocol layer (this helper has
- *     no notion of authentication state),
+ *   - auth-gate SC_SET_PARAM in the command layer (this helper has no notion
+ *     of authentication state),
  *   - parse the wire payload "<id> <value>" before the call.
  *
  * Returns true when the staging slot was written (happy path), false on

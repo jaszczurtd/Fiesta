@@ -43,19 +43,19 @@ extern "C" {
  *  Defined in src/config.h (single source of config). */
 
 typedef struct ScFlashPathsEntry {
-    char uf2[SC_FLASH_PATHS_PATH_MAX];
-    char manifest[SC_FLASH_PATHS_PATH_MAX];
+  char uf2[SC_FLASH_PATHS_PATH_MAX];
+  char manifest[SC_FLASH_PATHS_PATH_MAX];
 } ScFlashPathsEntry;
 
 typedef struct ScFlashPaths {
-    ScFlashPathsEntry entries[SC_MODULE_COUNT];
+  ScFlashPathsEntry entries[SC_MODULE_COUNT];
 } ScFlashPaths;
 
 /** @brief Zero-initialise a paths struct (all slots empty). */
 void sc_flash_paths_init(ScFlashPaths *out);
 
 /**
- * @brief Resolve the canonical config file location for the running
+ * @brief Resolve the default config file location for the running
  *        platform. Returns a static string for the lifetime of the
  *        process.
  *
@@ -98,8 +98,7 @@ const char *sc_flash_paths_get_uf2(const ScFlashPaths *p,
                                    const char *module_display_name);
 const char *sc_flash_paths_get_manifest(const ScFlashPaths *p,
                                         const char *module_display_name);
-void sc_flash_paths_set_uf2(ScFlashPaths *p,
-                            const char *module_display_name,
+void sc_flash_paths_set_uf2(ScFlashPaths *p, const char *module_display_name,
                             const char *path);
 void sc_flash_paths_set_manifest(ScFlashPaths *p,
                                  const char *module_display_name,

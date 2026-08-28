@@ -74,7 +74,7 @@ Required toolchain:
 ## Build and development
 
 Each firmware module is a regular C/C++ application built with CMake and uses
-JaszczurHAL's portable `app_start()` / `app_task0()` contract directly.
+JaszczurHAL's portable `app_start()` / `app_task0()` entry points directly.
 Modules that opt in to the second execution context also implement
 `app_task1()`.
 

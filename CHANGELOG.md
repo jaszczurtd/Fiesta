@@ -6,6 +6,23 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
 
 ## Unreleased
 
+- Moved SerialConfigurator command handling into the shared router service and
+  adopted the shared JaszczurHAL serial frame codec. Parameter commits now use
+  a storage-specific response deadline instead of entering recovery while an
+  ECU flash write is still in progress. Firmware registrations currently
+  accept Serial Session requests only, while the service API and JaszczurHAL
+  router remain ready for separately enabled BLE or LoRa adapters.
+- Serialized ECU parameter and DTC persistence around the GPS transport,
+  added retry and write gating during transient storage recovery, and batched a
+  complete DTC snapshot, migration marker, and schema into one flash commit.
+  Existing KV layouts and unrelated keys are retained, stale legacy DTC bytes
+  cannot reappear after a clear, and DTC clearing remains limited to DTC-owned
+  keys so stored ECU parameters stay intact.
+- Validated SerialConfigurator on physical ECU and Clocks modules: unique
+  discovery, metadata, parameter catalogues and all six values per module,
+  ECU GPS availability, authenticated parameter commit, persistence across a
+  bootloader restart, and rejection of writes by the read-only Clocks module.
+  Adjustometer remained explicitly excluded from enumeration and flashing.
 - Hardened ECU-to-Clocks RPM delivery with explicit MCP2515 one-shot failure
   reporting, success-only TX state updates, a 10 ms retry threshold, and a
   100 ms heartbeat threshold so a dropped change-only frame is republished.
@@ -34,7 +51,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   helper and added a generator/check command for all module VS Code files.
 - Made the Raspberry Pi daily bootstrap repair missing apt dependencies through
   non-interactive sudo instead of forcing `SKIP_APT=1`.
-- Centralized the Debian package contract in a tested helper and added Ninja,
+- Centralized the Debian package set in a tested helper and added Ninja,
   GNU Arm C++, and analysis prerequisites required by the current JaszczurHAL
   workflow.
 - Declared Ninja explicitly in the native firmware CI toolchain instead of
@@ -395,8 +412,7 @@ MISRA-C migration status lives in [`MISRA.md`](MISRA.md).
   3/3, Adjustometer 3/3.
 - JaszczurHAL `hal_serial_session.h` rewritten as a framed-only helper
   (see `libraries/JaszczurHAL/CHANGELOG.md`); module wrappers
-  (`configSessionInit/Tick/Active/Id`) and identity contract are
-  unchanged.
+  (`configSessionInit/Tick/Active/Id`) and identity behavior are unchanged.
 
 ## 2026-04-26
 

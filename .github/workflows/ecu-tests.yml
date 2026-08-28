@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - "src/ECU/**"
+      - "src/common/scDefinitions/**"
       - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/ecu-tests.yml"
   pull_request:
     paths:
       - "src/ECU/**"
+      - "src/common/scDefinitions/**"
       - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/ecu-tests.yml"
   workflow_dispatch:

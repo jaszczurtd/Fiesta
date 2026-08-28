@@ -703,7 +703,7 @@ static bool bootsel_attempt_udisks_mount(const char *device, char *err_buf,
   }
 
   char cmd[1024];
-  /* The realpath() output is a canonical /dev/sdXN form with no shell
+  /* The realpath() output is a normalized /dev/sdXN form with no shell
    * metacharacters. Wrap in single quotes anyway as defense-in-depth
    * - never embed an unquoted user-supplied path into a shell
    * command line. */

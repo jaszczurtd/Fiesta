@@ -45,7 +45,8 @@
 extern "C" {
 #endif
 
-/** @brief Maximum length of `module_name` (matches `MODULE_NAME` in firmware). */
+/** @brief Maximum length of `module_name` (matches `MODULE_NAME` in firmware).
+ */
 #define SC_MANIFEST_MODULE_NAME_MAX 32u
 
 /** @brief Maximum length of `fw_version`. */
@@ -71,41 +72,41 @@ extern "C" {
  * as a hard refusal to flash.
  */
 typedef enum {
-    SC_MANIFEST_OK = 0,
-    SC_MANIFEST_ERR_NULL_ARG,
-    SC_MANIFEST_ERR_BAD_JSON,
-    SC_MANIFEST_ERR_MISSING_FIELD,
-    SC_MANIFEST_ERR_DUPLICATE_FIELD,
-    SC_MANIFEST_ERR_FIELD_TOO_LONG,
-    SC_MANIFEST_ERR_FIELD_EMPTY,
-    SC_MANIFEST_ERR_BAD_SHA256_FORMAT,
-    SC_MANIFEST_ERR_BAD_UF2_FILE,
-    SC_MANIFEST_ERR_UF2_FILE_MISSING,
-    SC_MANIFEST_ERR_UNKNOWN_FIELD,
-    SC_MANIFEST_ERR_FILE_OPEN,
-    SC_MANIFEST_ERR_FILE_READ,
-    SC_MANIFEST_ERR_FILE_TOO_LARGE,
-    SC_MANIFEST_ERR_HASH_BACKEND,
-    SC_MANIFEST_ERR_ARTIFACT_HASH_MISMATCH,
-    SC_MANIFEST_ERR_MODULE_MISMATCH,
-    SC_MANIFEST_ERR_SIGNATURE_NOT_SUPPORTED
+  SC_MANIFEST_OK = 0,
+  SC_MANIFEST_ERR_NULL_ARG,
+  SC_MANIFEST_ERR_BAD_JSON,
+  SC_MANIFEST_ERR_MISSING_FIELD,
+  SC_MANIFEST_ERR_DUPLICATE_FIELD,
+  SC_MANIFEST_ERR_FIELD_TOO_LONG,
+  SC_MANIFEST_ERR_FIELD_EMPTY,
+  SC_MANIFEST_ERR_BAD_SHA256_FORMAT,
+  SC_MANIFEST_ERR_BAD_UF2_FILE,
+  SC_MANIFEST_ERR_UF2_FILE_MISSING,
+  SC_MANIFEST_ERR_UNKNOWN_FIELD,
+  SC_MANIFEST_ERR_FILE_OPEN,
+  SC_MANIFEST_ERR_FILE_READ,
+  SC_MANIFEST_ERR_FILE_TOO_LARGE,
+  SC_MANIFEST_ERR_HASH_BACKEND,
+  SC_MANIFEST_ERR_ARTIFACT_HASH_MISMATCH,
+  SC_MANIFEST_ERR_MODULE_MISMATCH,
+  SC_MANIFEST_ERR_SIGNATURE_NOT_SUPPORTED
 } sc_manifest_status_t;
 
 /** @brief Parsed manifest. All strings are NUL-terminated. */
 typedef struct {
-    char module_name[SC_MANIFEST_MODULE_NAME_MAX + 1u];
-    char fw_version[SC_MANIFEST_FW_VERSION_MAX + 1u];
-    char build_id[SC_MANIFEST_BUILD_ID_MAX + 1u];
-    /** Lowercase hex (always 64 chars), NUL-terminated. */
-    char sha256_hex[SC_MANIFEST_SHA256_HEX_BUF_SIZE];
-    /** Decoded SHA-256 bytes (computed from @ref sha256_hex at parse time). */
-    uint8_t sha256[SC_CRYPTO_SHA256_DIGEST_BYTES];
-    /** Optional UF2 filename (basename only, no path separators). */
-    char uf2_file[SC_MANIFEST_UF2_FILE_MAX + 1u];
-    bool has_uf2_file;
-    /** Optional signature string (verbatim from JSON), or empty. */
-    char signature[SC_MANIFEST_SIGNATURE_MAX + 1u];
-    bool has_signature;
+  char module_name[SC_MANIFEST_MODULE_NAME_MAX + 1u];
+  char fw_version[SC_MANIFEST_FW_VERSION_MAX + 1u];
+  char build_id[SC_MANIFEST_BUILD_ID_MAX + 1u];
+  /** Lowercase hex (always 64 chars), NUL-terminated. */
+  char sha256_hex[SC_MANIFEST_SHA256_HEX_BUF_SIZE];
+  /** Decoded SHA-256 bytes (computed from @ref sha256_hex at parse time). */
+  uint8_t sha256[SC_CRYPTO_SHA256_DIGEST_BYTES];
+  /** Optional UF2 filename (basename only, no path separators). */
+  char uf2_file[SC_MANIFEST_UF2_FILE_MAX + 1u];
+  bool has_uf2_file;
+  /** Optional signature string (verbatim from JSON), or empty. */
+  char signature[SC_MANIFEST_SIGNATURE_MAX + 1u];
+  bool has_signature;
 } sc_manifest_t;
 
 /**
@@ -124,8 +125,7 @@ const char *sc_manifest_status_str(sc_manifest_status_t status);
  * @param out      Receives parsed manifest on success.
  * @return @c SC_MANIFEST_OK on success; otherwise @p out is left undefined.
  */
-sc_manifest_status_t sc_manifest_parse(const char *json,
-                                       size_t json_len,
+sc_manifest_status_t sc_manifest_parse(const char *json, size_t json_len,
                                        sc_manifest_t *out);
 
 /**
@@ -148,9 +148,8 @@ sc_manifest_status_t sc_manifest_load_file(const char *path,
  *         error code (@c SC_MANIFEST_ERR_ARTIFACT_HASH_MISMATCH for a
  *         declared-vs-computed mismatch).
  */
-sc_manifest_status_t sc_manifest_verify_artifact(
-    const sc_manifest_t *manifest,
-    const char *artifact_path);
+sc_manifest_status_t sc_manifest_verify_artifact(const sc_manifest_t *manifest,
+                                                 const char *artifact_path);
 
 /**
  * @brief Resolve manifest-sidecar UF2 path from @p manifest_path and
@@ -165,24 +164,23 @@ sc_manifest_status_t sc_manifest_verify_artifact(
  *         - @c SC_MANIFEST_ERR_FIELD_TOO_LONG if output buffer is too small,
  *         - @c SC_MANIFEST_ERR_NULL_ARG on invalid args.
  */
-sc_manifest_status_t sc_manifest_resolve_uf2_path(
-    const char *manifest_path,
-    const sc_manifest_t *manifest,
-    char *out_path,
-    size_t out_path_size);
+sc_manifest_status_t sc_manifest_resolve_uf2_path(const char *manifest_path,
+                                                  const sc_manifest_t *manifest,
+                                                  char *out_path,
+                                                  size_t out_path_size);
 
 /**
  * @brief Verify that @p manifest targets the expected module name.
  *
  * Comparison is byte-exact (case-sensitive); module names are short
- * canonical tokens defined in each firmware module's `config.h`.
+ * identifiers defined in each firmware module's `config.h`.
  *
  * @return @c SC_MANIFEST_OK on match, @c SC_MANIFEST_ERR_MODULE_MISMATCH
  *         on disagreement.
  */
-sc_manifest_status_t sc_manifest_check_module_match(
-    const sc_manifest_t *manifest,
-    const char *expected_module_name);
+sc_manifest_status_t
+sc_manifest_check_module_match(const sc_manifest_t *manifest,
+                               const char *expected_module_name);
 
 /**
  * @brief Verify the optional ed25519 signature. NOT IMPLEMENTED.
@@ -192,8 +190,8 @@ sc_manifest_status_t sc_manifest_check_module_match(
  * unverified. Once an ed25519 backend lands, this entry point will
  * verify the signature against a host-side public-key set.
  */
-sc_manifest_status_t sc_manifest_verify_signature(
-    const sc_manifest_t *manifest);
+sc_manifest_status_t
+sc_manifest_verify_signature(const sc_manifest_t *manifest);
 
 #ifdef __cplusplus
 }

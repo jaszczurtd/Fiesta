@@ -3,7 +3,9 @@
 This directory contains the project-local MISRA screening entry points for `src/ECU`.
 
 It is intentionally a screening layer, not a claim of formal MISRA compliance.
-The goal is to make rule-by-rule review, deviation tracking, and CI artifacts repeatable without vendor-copying third-party project glue or shipping licensed MISRA text extracts in the repository.
+The goal is to make rule-by-rule review, deviation tracking, and CI artifacts
+repeatable without vendor-copying third-party project integration code or
+shipping licensed MISRA text extracts in the repository.
 
 Contents:
 

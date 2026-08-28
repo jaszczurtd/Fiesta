@@ -954,7 +954,7 @@ void test_kwp_read_local_id_compact_ident_returns_nrc31(void) {
 }
 
 // ── UDS short-frame negative-response regression guards (NRC 0x13) ───────────
-// These cover the requireMinLength() boolean contract at call sites where
+// These cover requireMinLength() boolean behavior at call sites where
 // commit 04cebf9 refactored the early-return style into single-exit; a future
 // accidental polarity flip or missing requireMinLength() call will surface
 // here instead of silently letting an under-sized UDS request fall through.

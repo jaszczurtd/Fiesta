@@ -10,11 +10,12 @@ extern "C" {
 #endif
 
 void ecuParamsLoadDefaults(ecu_params_values_t *outValues);
-bool ecuParamsValidate(const ecu_params_values_t *candidate, const char **reason);
+bool ecuParamsValidate(const ecu_params_values_t *candidate,
+                       const char **reason);
 bool ecuParamsStage(const ecu_params_values_t *candidate, const char **reason);
 void ecuParamsApply(void);
 bool ecuParamsLoadPersisted(ecu_params_values_t *outValues);
-bool ecuParamsPersist(const ecu_params_values_t *values);
+hal_status_t ecuParamsPersist(const ecu_params_values_t *values);
 uint16_t ecuParamsBlobKeyForTest(void);
 void ecuParamsResetRuntimeStateForTest(void);
 

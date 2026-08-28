@@ -233,6 +233,13 @@ typedef struct {
 void ecuParamsInit(void);
 
 /**
+ * @brief Retry loading persisted ECU parameters after transient storage errors.
+ *
+ * Call from the core-0 service loop after the shared EEPROM/KV recovery poll.
+ */
+void ecuParamsPoll(void);
+
+/**
  * @brief Return the currently active runtime parameter set.
  * @return Pointer to active immutable runtime parameters.
  */

@@ -47,7 +47,7 @@ void test_ecu_params_init_loads_valid_persisted_blob(void) {
                                    .nominalRpm = 930};
 
   TEST_ASSERT_TRUE(ecuParamsValidate(&candidate, NULL));
-  TEST_ASSERT_TRUE(ecuParamsPersist(&candidate));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&candidate));
 
   ecuParamsResetRuntimeStateForTest();
   ecuParamsInit();
@@ -68,6 +68,26 @@ void test_ecu_params_init_falls_back_to_defaults_on_malformed_blob(void) {
                                   .heaterStopC = TEMP_HEATER_STOP,
                                   .nominalRpm = NOMINAL_RPM_VALUE};
   assertActiveEquals(&expected);
+}
+
+void test_ecu_params_poll_loads_blob_after_transient_read_failure(void) {
+  ecu_params_values_t candidate = {.fanCoolantStartC = 108,
+                                   .fanCoolantStopC = 96,
+                                   .fanAirStartC = 58,
+                                   .fanAirStopC = 44,
+                                   .heaterStopC = 79,
+                                   .nominalRpm = 930};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&candidate));
+
+  ecuParamsResetRuntimeStateForTest();
+  hal_mock_eeprom_set_io_status(HAL_EIO);
+  ecuParamsInit();
+  TEST_ASSERT_EQUAL_INT16(NOMINAL_RPM_VALUE, ecuParamsNominalRpm());
+
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  hal_mock_advance_millis(1000u);
+  ecuParamsPoll();
+  assertActiveEquals(&candidate);
 }
 
 void test_ecu_params_validate_rejects_invalid_hysteresis(void) {
@@ -126,6 +146,7 @@ int main(void) {
   RUN_TEST(test_ecu_params_init_uses_config_defaults_when_blob_missing);
   RUN_TEST(test_ecu_params_init_loads_valid_persisted_blob);
   RUN_TEST(test_ecu_params_init_falls_back_to_defaults_on_malformed_blob);
+  RUN_TEST(test_ecu_params_poll_loads_blob_after_transient_read_failure);
   RUN_TEST(test_ecu_params_validate_rejects_invalid_hysteresis);
   RUN_TEST(test_ecu_params_validate_rejects_nominal_rpm_out_of_range);
   RUN_TEST(test_ecu_params_stage_and_apply_updates_active_set);

@@ -5,10 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include "../config.h"
 #include "sc_protocol.h"
 #include "sc_transport.h"
-#include "../config.h"
-#include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,68 +24,68 @@ extern "C" {
 #define SC_PARAM_ITEMS_MAX 64u
 
 typedef struct ScIdentityData {
-    bool valid;
-    char module_name[SC_IDENTITY_FIELD_MAX];
-    int proto_version;
-    bool proto_present;
-    uint32_t session_id;
-    bool session_present;
-    char fw_version[SC_IDENTITY_FIELD_MAX];
-    char build_id[SC_IDENTITY_FIELD_MAX];
-    char uid[SC_IDENTITY_FIELD_MAX];
+  bool valid;
+  char module_name[SC_IDENTITY_FIELD_MAX];
+  int proto_version;
+  bool proto_present;
+  uint32_t session_id;
+  bool session_present;
+  char fw_version[SC_IDENTITY_FIELD_MAX];
+  char build_id[SC_IDENTITY_FIELD_MAX];
+  char uid[SC_IDENTITY_FIELD_MAX];
 } ScIdentityData;
 
 typedef enum ScCommandStatus {
-    SC_COMMAND_STATUS_UNPARSEABLE = 0,
-    SC_COMMAND_STATUS_OK,
-    SC_COMMAND_STATUS_UNKNOWN_CMD,
-    SC_COMMAND_STATUS_BAD_REQUEST,
-    SC_COMMAND_STATUS_NOT_READY,
-    SC_COMMAND_STATUS_INVALID_PARAM_ID,
-    SC_COMMAND_STATUS_OTHER
+  SC_COMMAND_STATUS_UNPARSEABLE = 0,
+  SC_COMMAND_STATUS_OK,
+  SC_COMMAND_STATUS_UNKNOWN_CMD,
+  SC_COMMAND_STATUS_BAD_REQUEST,
+  SC_COMMAND_STATUS_NOT_READY,
+  SC_COMMAND_STATUS_INVALID_PARAM_ID,
+  SC_COMMAND_STATUS_OTHER
 } ScCommandStatus;
 
 typedef struct ScCommandResult {
-    ScCommandStatus status;
-    char status_token[SC_COMMAND_STATUS_TOKEN_MAX];
-    char topic[SC_COMMAND_TOPIC_MAX];
-    char details[SC_HELLO_RESPONSE_MAX];
-    char response[SC_HELLO_RESPONSE_MAX];
+  ScCommandStatus status;
+  char status_token[SC_COMMAND_STATUS_TOKEN_MAX];
+  char topic[SC_COMMAND_TOPIC_MAX];
+  char details[SC_HELLO_RESPONSE_MAX];
+  char response[SC_HELLO_RESPONSE_MAX];
 } ScCommandResult;
 
 typedef enum ScValueType {
-    SC_VALUE_TYPE_UNKNOWN = 0,
-    SC_VALUE_TYPE_BOOL,
-    SC_VALUE_TYPE_INT,
-    SC_VALUE_TYPE_UINT,
-    SC_VALUE_TYPE_FLOAT,
-    SC_VALUE_TYPE_TEXT
+  SC_VALUE_TYPE_UNKNOWN = 0,
+  SC_VALUE_TYPE_BOOL,
+  SC_VALUE_TYPE_INT,
+  SC_VALUE_TYPE_UINT,
+  SC_VALUE_TYPE_FLOAT,
+  SC_VALUE_TYPE_TEXT
 } ScValueType;
 
 typedef struct ScTypedValue {
-    ScValueType type;
-    bool bool_value;
-    int64_t int_value;
-    uint64_t uint_value;
-    double float_value;
-    char raw[SC_PARAM_TEXT_MAX];
+  ScValueType type;
+  bool bool_value;
+  int64_t int_value;
+  uint64_t uint_value;
+  double float_value;
+  char raw[SC_PARAM_TEXT_MAX];
 } ScTypedValue;
 
 typedef struct ScParamValueEntry {
-    char id[SC_PARAM_ID_MAX];
-    ScTypedValue value;
+  char id[SC_PARAM_ID_MAX];
+  ScTypedValue value;
 } ScParamValueEntry;
 
 typedef struct ScParamListData {
-    size_t count;
-    bool truncated;
-    char ids[SC_PARAM_ITEMS_MAX][SC_PARAM_ID_MAX];
+  size_t count;
+  bool truncated;
+  char ids[SC_PARAM_ITEMS_MAX][SC_PARAM_ID_MAX];
 } ScParamListData;
 
 typedef struct ScParamValuesData {
-    size_t count;
-    bool truncated;
-    ScParamValueEntry entries[SC_PARAM_ITEMS_MAX];
+  size_t count;
+  bool truncated;
+  ScParamValueEntry entries[SC_PARAM_ITEMS_MAX];
 } ScParamValuesData;
 
 /* Snake-case section name from `group=` in the SC_OK PARAM reply.
@@ -94,140 +94,105 @@ typedef struct ScParamValuesData {
 #define SC_PARAM_GROUP_MAX 32u
 
 typedef struct ScParamDetailData {
-    bool valid;
-    char id[SC_PARAM_ID_MAX];
-    bool has_value;
-    ScTypedValue value;
-    bool has_min;
-    ScTypedValue min;
-    bool has_max;
-    ScTypedValue max;
-    bool has_default;
-    ScTypedValue default_value;
-    char group[SC_PARAM_GROUP_MAX];
+  bool valid;
+  char id[SC_PARAM_ID_MAX];
+  bool has_value;
+  ScTypedValue value;
+  bool has_min;
+  ScTypedValue min;
+  bool has_max;
+  ScTypedValue max;
+  bool has_default;
+  ScTypedValue default_value;
+  char group[SC_PARAM_GROUP_MAX];
 } ScParamDetailData;
 
 typedef struct ScModuleStatus {
-    const char *display_name;
-    bool detected;
-    size_t detected_instances;
-    bool target_ambiguous;
-    char port_path[SC_PORT_PATH_MAX];
-    char hello_response[SC_HELLO_RESPONSE_MAX];
-    ScIdentityData hello_identity;
-    ScIdentityData meta_identity;
+  const char *display_name;
+  bool detected;
+  size_t detected_instances;
+  bool target_ambiguous;
+  char port_path[SC_PORT_PATH_MAX];
+  char hello_response[SC_HELLO_RESPONSE_MAX];
+  ScIdentityData hello_identity;
+  ScIdentityData meta_identity;
 } ScModuleStatus;
 
 typedef struct ScCore {
-    ScModuleStatus modules[SC_MODULE_COUNT];
-    ScTransport transport;
+  ScModuleStatus modules[SC_MODULE_COUNT];
+  ScTransport transport;
 } ScCore;
 
 void sc_core_init(ScCore *core);
 void sc_core_set_transport(ScCore *core, const ScTransport *transport);
 void sc_core_reset_detection(ScCore *core);
-void sc_core_detect_modules(ScCore *core, char *log_output, size_t log_output_size);
+void sc_core_detect_modules(ScCore *core, char *log_output,
+                            size_t log_output_size);
 size_t sc_core_module_count(void);
 const ScModuleStatus *sc_core_module_status(const ScCore *core, size_t index);
 const char *sc_command_status_name(ScCommandStatus status);
 const char *sc_value_type_name(ScValueType type);
 
-bool sc_core_sc_get_meta(
-    ScCore *core,
-    size_t module_index,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
-bool sc_core_sc_get_param_list(
-    ScCore *core,
-    size_t module_index,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
-bool sc_core_sc_get_values(
-    ScCore *core,
-    size_t module_index,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
-bool sc_core_sc_bye(
-    ScCore *core,
-    size_t module_index,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
-bool sc_core_sc_get_param(
-    ScCore *core,
-    size_t module_index,
-    const char *param_id,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
+bool sc_core_sc_get_meta(ScCore *core, size_t module_index,
+                         ScCommandResult *result, char *log_output,
+                         size_t log_output_size);
+bool sc_core_sc_get_param_list(ScCore *core, size_t module_index,
+                               ScCommandResult *result, char *log_output,
+                               size_t log_output_size);
+bool sc_core_sc_get_values(ScCore *core, size_t module_index,
+                           ScCommandResult *result, char *log_output,
+                           size_t log_output_size);
+bool sc_core_sc_bye(ScCore *core, size_t module_index, ScCommandResult *result,
+                    char *log_output, size_t log_output_size);
+bool sc_core_sc_get_param(ScCore *core, size_t module_index,
+                          const char *param_id, ScCommandResult *result,
+                          char *log_output, size_t log_output_size);
 
 /**
  * @brief Dispatch a raw, already-composed SC command line and capture
  *        the reply.
  *
- * Same transport / logging contract as the typed sc_core_sc_* helpers
- * (sc_core_sc_get_meta etc.). Intended for sibling modules in
- * src/core/ (sc_gps.c, future telemetry endpoints) that need to issue
- * their own command token without each one carrying a private copy of
- * the transport plumbing. Returns false on transport/precondition
- * failure; on success @p result holds the parsed reply.
+ * Uses the same transport and logging behavior as the typed
+ * sc_core_sc_* helpers (sc_core_sc_get_meta etc.). Intended for sibling modules
+ * in src/core/ (sc_gps.c, future telemetry endpoints) that need to issue their
+ * own command token without each one carrying a private copy of the transport
+ * plumbing. Returns false on transport/precondition failure; on success @p
+ * result holds the parsed reply.
  */
-bool sc_core_send_sc_command(
-    ScCore *core,
-    size_t module_index,
-    const char *command,
-    ScCommandResult *result,
-    char *log_output,
-    size_t log_output_size
-);
+bool sc_core_send_sc_command(ScCore *core, size_t module_index,
+                             const char *command, ScCommandResult *result,
+                             char *log_output, size_t log_output_size);
 
-bool sc_core_parse_param_list_result(
-    const ScCommandResult *result,
-    ScParamListData *parsed,
-    char *error,
-    size_t error_size
-);
-bool sc_core_parse_param_values_result(
-    const ScCommandResult *result,
-    ScParamValuesData *parsed,
-    char *error,
-    size_t error_size
-);
-bool sc_core_parse_param_result(
-    const ScCommandResult *result,
-    ScParamDetailData *parsed,
-    char *error,
-    size_t error_size
-);
+bool sc_core_parse_param_list_result(const ScCommandResult *result,
+                                     ScParamListData *parsed, char *error,
+                                     size_t error_size);
+bool sc_core_parse_param_values_result(const ScCommandResult *result,
+                                       ScParamValuesData *parsed, char *error,
+                                       size_t error_size);
+bool sc_core_parse_param_result(const ScCommandResult *result,
+                                ScParamDetailData *parsed, char *error,
+                                size_t error_size);
 
 /* ── Phase 5: authenticated bootloader entry ────────────────────────── */
 
 typedef enum ScAuthStatus {
-    SC_AUTH_OK = 0,
-    SC_AUTH_ERR_NULL_ARG,
-    SC_AUTH_ERR_HELLO_FAILED,
-    SC_AUTH_ERR_HELLO_PARSE,
-    SC_AUTH_ERR_BEGIN_FAILED,
-    SC_AUTH_ERR_BAD_CHALLENGE,
-    SC_AUTH_ERR_RESPONSE_COMPUTE,
-    SC_AUTH_ERR_PROVE_FAILED,
-    SC_AUTH_ERR_AUTH_REJECTED
+  SC_AUTH_OK = 0,
+  SC_AUTH_ERR_NULL_ARG,
+  SC_AUTH_ERR_HELLO_FAILED,
+  SC_AUTH_ERR_HELLO_PARSE,
+  SC_AUTH_ERR_BEGIN_FAILED,
+  SC_AUTH_ERR_BAD_CHALLENGE,
+  SC_AUTH_ERR_RESPONSE_COMPUTE,
+  SC_AUTH_ERR_PROVE_FAILED,
+  SC_AUTH_ERR_AUTH_REJECTED
 } ScAuthStatus;
 
 typedef enum ScRebootStatus {
-    SC_REBOOT_OK = 0,
-    SC_REBOOT_ERR_NULL_ARG,
-    SC_REBOOT_ERR_TRANSPORT,
-    SC_REBOOT_ERR_NOT_AUTHORIZED,
-    SC_REBOOT_ERR_UNEXPECTED_REPLY
+  SC_REBOOT_OK = 0,
+  SC_REBOOT_ERR_NULL_ARG,
+  SC_REBOOT_ERR_TRANSPORT,
+  SC_REBOOT_ERR_NOT_AUTHORIZED,
+  SC_REBOOT_ERR_UNEXPECTED_REPLY
 } ScRebootStatus;
 
 const char *sc_auth_status_name(ScAuthStatus status);
@@ -247,11 +212,9 @@ const char *sc_reboot_status_name(ScRebootStatus status);
  * @param error_size   Size of @p error.
  * @return @c SC_AUTH_OK on success, otherwise a precise reason code.
  */
-ScAuthStatus sc_core_authenticate(
-    const ScTransport *transport,
-    const char *device_path,
-    char *error,
-    size_t error_size);
+ScAuthStatus sc_core_authenticate(const ScTransport *transport,
+                                  const char *device_path, char *error,
+                                  size_t error_size);
 
 /**
  * @brief Send `SC_REBOOT_BOOTLOADER` and verify the firmware ACK.
@@ -265,11 +228,9 @@ ScAuthStatus sc_core_authenticate(
  * control to the boot ROM; the host should stop using the port and let
  * the Phase 6 watcher pick up the BOOTSEL/UF2 mass-storage device.
  */
-ScRebootStatus sc_core_reboot_to_bootloader(
-    const ScTransport *transport,
-    const char *device_path,
-    char *error,
-    size_t error_size);
+ScRebootStatus sc_core_reboot_to_bootloader(const ScTransport *transport,
+                                            const char *device_path,
+                                            char *error, size_t error_size);
 
 /* ── Phase 8.5: parameter staging host orchestrator ───────────────── */
 
@@ -282,14 +243,14 @@ ScRebootStatus sc_core_reboot_to_bootloader(
  *  SC_REPLY_INVALID_PARAM_ID_FMT, SC_STATUS_NOT_AUTHORIZED).
  */
 typedef enum ScSetParamStatus {
-    SC_SET_PARAM_OK = 0,
-    SC_SET_PARAM_ERR_NULL_ARG,
-    SC_SET_PARAM_ERR_TRANSPORT,
-    SC_SET_PARAM_ERR_NOT_AUTHORIZED,
-    SC_SET_PARAM_ERR_INVALID_ID,
-    SC_SET_PARAM_ERR_READ_ONLY,
-    SC_SET_PARAM_ERR_OUT_OF_RANGE,
-    SC_SET_PARAM_ERR_UNEXPECTED_REPLY
+  SC_SET_PARAM_OK = 0,
+  SC_SET_PARAM_ERR_NULL_ARG,
+  SC_SET_PARAM_ERR_TRANSPORT,
+  SC_SET_PARAM_ERR_NOT_AUTHORIZED,
+  SC_SET_PARAM_ERR_INVALID_ID,
+  SC_SET_PARAM_ERR_READ_ONLY,
+  SC_SET_PARAM_ERR_OUT_OF_RANGE,
+  SC_SET_PARAM_ERR_UNEXPECTED_REPLY
 } ScSetParamStatus;
 
 /**
@@ -303,20 +264,20 @@ typedef enum ScSetParamStatus {
  * that only care about pass/fail.
  */
 typedef enum ScCommitParamsStatus {
-    SC_COMMIT_PARAMS_OK = 0,
-    SC_COMMIT_PARAMS_ERR_NULL_ARG,
-    SC_COMMIT_PARAMS_ERR_TRANSPORT,
-    SC_COMMIT_PARAMS_ERR_NOT_AUTHORIZED,
-    SC_COMMIT_PARAMS_ERR_COMMIT_FAILED,
-    SC_COMMIT_PARAMS_ERR_UNEXPECTED_REPLY
+  SC_COMMIT_PARAMS_OK = 0,
+  SC_COMMIT_PARAMS_ERR_NULL_ARG,
+  SC_COMMIT_PARAMS_ERR_TRANSPORT,
+  SC_COMMIT_PARAMS_ERR_NOT_AUTHORIZED,
+  SC_COMMIT_PARAMS_ERR_COMMIT_FAILED,
+  SC_COMMIT_PARAMS_ERR_UNEXPECTED_REPLY
 } ScCommitParamsStatus;
 
 typedef enum ScRevertParamsStatus {
-    SC_REVERT_PARAMS_OK = 0,
-    SC_REVERT_PARAMS_ERR_NULL_ARG,
-    SC_REVERT_PARAMS_ERR_TRANSPORT,
-    SC_REVERT_PARAMS_ERR_NOT_AUTHORIZED,
-    SC_REVERT_PARAMS_ERR_UNEXPECTED_REPLY
+  SC_REVERT_PARAMS_OK = 0,
+  SC_REVERT_PARAMS_ERR_NULL_ARG,
+  SC_REVERT_PARAMS_ERR_TRANSPORT,
+  SC_REVERT_PARAMS_ERR_NOT_AUTHORIZED,
+  SC_REVERT_PARAMS_ERR_UNEXPECTED_REPLY
 } ScRevertParamsStatus;
 
 const char *sc_set_param_status_name(ScSetParamStatus status);
@@ -332,13 +293,10 @@ const char *sc_revert_params_status_name(ScRevertParamsStatus status);
  * next HELLO. SET_PARAM mutates the firmware's staging mirror only -
  * the active mirror remains untouched until @ref sc_core_commit_params.
  */
-ScSetParamStatus sc_core_set_param(
-    const ScTransport *transport,
-    const char *device_path,
-    const char *param_id,
-    int16_t value,
-    char *error,
-    size_t error_size);
+ScSetParamStatus sc_core_set_param(const ScTransport *transport,
+                                   const char *device_path,
+                                   const char *param_id, int16_t value,
+                                   char *error, size_t error_size);
 
 /**
  * @brief Send `SC_COMMIT_PARAMS` and parse the reply.
@@ -347,11 +305,9 @@ ScSetParamStatus sc_core_set_param(
  * reason=fan_coolant_hysteresis") is preserved verbatim in @p error
  * so the caller can render the precise rule that fired.
  */
-ScCommitParamsStatus sc_core_commit_params(
-    const ScTransport *transport,
-    const char *device_path,
-    char *error,
-    size_t error_size);
+ScCommitParamsStatus sc_core_commit_params(const ScTransport *transport,
+                                           const char *device_path, char *error,
+                                           size_t error_size);
 
 /**
  * @brief Send `SC_REVERT_PARAMS` and parse the reply.
@@ -360,11 +316,9 @@ ScCommitParamsStatus sc_core_commit_params(
  * pure data move (active -> staging). Only fails for transport / auth
  * problems.
  */
-ScRevertParamsStatus sc_core_revert_params(
-    const ScTransport *transport,
-    const char *device_path,
-    char *error,
-    size_t error_size);
+ScRevertParamsStatus sc_core_revert_params(const ScTransport *transport,
+                                           const char *device_path, char *error,
+                                           size_t error_size);
 
 /* ── Phase 6.5: end-to-end flashing orchestrator ──────────────────── */
 
@@ -377,19 +331,19 @@ ScRevertParamsStatus sc_core_revert_params(
  * across versions and matched by tests.
  */
 typedef enum ScFlashStatus {
-    SC_FLASH_STATUS_OK = 0,
-    SC_FLASH_STATUS_NULL_ARG,
-    SC_FLASH_STATUS_FORMAT_REJECTED,
-    SC_FLASH_STATUS_MANIFEST_PARSE_FAILED,
-    SC_FLASH_STATUS_MANIFEST_MODULE_MISMATCH,
-    SC_FLASH_STATUS_MANIFEST_ARTIFACT_MISMATCH,
-    SC_FLASH_STATUS_AUTH_FAILED,
-    SC_FLASH_STATUS_REBOOT_FAILED,
-    SC_FLASH_STATUS_BOOTSEL_TIMEOUT,
-    SC_FLASH_STATUS_COPY_FAILED,
-    SC_FLASH_STATUS_REENUM_TIMEOUT,
-    SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED,
-    SC_FLASH_STATUS_POST_FLASH_FW_MISMATCH
+  SC_FLASH_STATUS_OK = 0,
+  SC_FLASH_STATUS_NULL_ARG,
+  SC_FLASH_STATUS_FORMAT_REJECTED,
+  SC_FLASH_STATUS_MANIFEST_PARSE_FAILED,
+  SC_FLASH_STATUS_MANIFEST_MODULE_MISMATCH,
+  SC_FLASH_STATUS_MANIFEST_ARTIFACT_MISMATCH,
+  SC_FLASH_STATUS_AUTH_FAILED,
+  SC_FLASH_STATUS_REBOOT_FAILED,
+  SC_FLASH_STATUS_BOOTSEL_TIMEOUT,
+  SC_FLASH_STATUS_COPY_FAILED,
+  SC_FLASH_STATUS_REENUM_TIMEOUT,
+  SC_FLASH_STATUS_POST_FLASH_HELLO_FAILED,
+  SC_FLASH_STATUS_POST_FLASH_FW_MISMATCH
 } ScFlashStatus;
 
 /**
@@ -402,20 +356,19 @@ typedef enum ScFlashStatus {
  * switch to a determinate fraction.
  */
 typedef enum ScFlashPhase {
-    SC_FLASH_PHASE_FORMAT_CHECK = 0,
-    SC_FLASH_PHASE_MANIFEST_VERIFY,
-    SC_FLASH_PHASE_AUTHENTICATE,
-    SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,
-    SC_FLASH_PHASE_WAIT_BOOTSEL,
-    SC_FLASH_PHASE_COPY,
-    SC_FLASH_PHASE_WAIT_REENUM,
-    SC_FLASH_PHASE_POST_FLASH_HELLO
+  SC_FLASH_PHASE_FORMAT_CHECK = 0,
+  SC_FLASH_PHASE_MANIFEST_VERIFY,
+  SC_FLASH_PHASE_AUTHENTICATE,
+  SC_FLASH_PHASE_REBOOT_TO_BOOTLOADER,
+  SC_FLASH_PHASE_WAIT_BOOTSEL,
+  SC_FLASH_PHASE_COPY,
+  SC_FLASH_PHASE_WAIT_REENUM,
+  SC_FLASH_PHASE_POST_FLASH_HELLO
 } ScFlashPhase;
 
 typedef void (*sc_core_flash_progress_cb)(ScFlashPhase phase,
                                           uint64_t bytes_written,
-                                          uint64_t bytes_total,
-                                          void *user);
+                                          uint64_t bytes_total, void *user);
 
 /**
  * @brief Optional knobs for @ref sc_core_flash; pass NULL to use the
@@ -426,17 +379,17 @@ typedef void (*sc_core_flash_progress_cb)(ScFlashPhase phase,
  * suite finishes in well under a second.
  */
 typedef struct ScFlashOptions {
-    /** Override for `/media/$USER` and `/run/media/$USER`. NULL entries
-     *  are skipped; an all-NULL array uses the production defaults. */
-    const char *bootsel_parents[2];
-    /** Override for `/dev/serial/by-id/`. NULL -> production default. */
-    const char *by_id_parent;
-    /** 0 -> SC_FLASH_DEFAULT_BOOTSEL_TIMEOUT_MS. */
-    uint32_t bootsel_timeout_ms;
-    /** 0 -> SC_FLASH_DEFAULT_REENUM_TIMEOUT_MS. */
-    uint32_t reenum_timeout_ms;
-    /** 0 -> SC_FLASH_DEFAULT_REENUM_GRACE_MS. */
-    uint32_t grace_after_reenum_ms;
+  /** Override for `/media/$USER` and `/run/media/$USER`. NULL entries
+   *  are skipped; an all-NULL array uses the production defaults. */
+  const char *bootsel_parents[2];
+  /** Override for `/dev/serial/by-id/`. NULL -> production default. */
+  const char *by_id_parent;
+  /** 0 -> SC_FLASH_DEFAULT_BOOTSEL_TIMEOUT_MS. */
+  uint32_t bootsel_timeout_ms;
+  /** 0 -> SC_FLASH_DEFAULT_REENUM_TIMEOUT_MS. */
+  uint32_t reenum_timeout_ms;
+  /** 0 -> SC_FLASH_DEFAULT_REENUM_GRACE_MS. */
+  uint32_t grace_after_reenum_ms;
 } ScFlashOptions;
 
 /**
@@ -471,16 +424,14 @@ typedef struct ScFlashOptions {
  *
  * @p progress_cb may be NULL.
  */
-ScFlashStatus sc_core_flash(
-    const ScTransport *transport,
-    size_t module_index,
-    const char *device_path,
-    const char *uid_hex,
-    const char *uf2_path,
-    const char *manifest_path_or_null,
-    const ScFlashOptions *options_or_null,
-    sc_core_flash_progress_cb progress_cb, void *progress_user,
-    char *error_buf, size_t error_size);
+ScFlashStatus sc_core_flash(const ScTransport *transport, size_t module_index,
+                            const char *device_path, const char *uid_hex,
+                            const char *uf2_path,
+                            const char *manifest_path_or_null,
+                            const ScFlashOptions *options_or_null,
+                            sc_core_flash_progress_cb progress_cb,
+                            void *progress_user, char *error_buf,
+                            size_t error_size);
 
 const char *sc_flash_status_name(ScFlashStatus status);
 const char *sc_flash_phase_name(ScFlashPhase phase);

@@ -10,6 +10,7 @@ extern "C" {
 
 int findDtcIndex(uint16_t code);
 uint16_t dtcKvEffectiveSpan(void);
+void dtcManagerResetRuntimeStateForTest(void);
 
 #ifdef __cplusplus
 }

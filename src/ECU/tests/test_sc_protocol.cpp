@@ -144,6 +144,7 @@ static void performAuth(void) {
 
 void setUp(void) {
   hal_mock_set_millis(0);
+  hal_mock_eeprom_set_io_status(HAL_OK);
   hal_mock_secure_random_reset();
   hal_mock_secure_random_set_seed(0x0123456789ABCDEFull);
   hal_mock_secure_random_set_status(HAL_OK);
@@ -154,6 +155,7 @@ void setUp(void) {
   configSessionInit();
   ecuParamsInit();
   test_stubs_reset_forwarded_serial();
+  hal_mock_bootloader_reset_flag();
   hal_mock_serial_reset();
 }
 
@@ -177,6 +179,13 @@ void test_sc_get_meta_returns_sc_ok_with_identity_fields(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "fw="));
   TEST_ASSERT_NOT_NULL(strstr(response, "build="));
   TEST_ASSERT_NOT_NULL(strstr(response, "uid="));
+}
+
+void test_sc_get_meta_with_trailing_space_returns_unknown(void) {
+  performHello();
+
+  const char *response = sendSerialLine("SC_GET_META \n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
 void test_sc_get_param_list_returns_all_known_ids(void) {
@@ -225,7 +234,7 @@ void test_sc_unknown_command_returns_sc_unknown_cmd(void) {
   performHello();
 
   const char *response = sendSerialLine("SC_DO_SOMETHING\n");
-  TEST_ASSERT_NOT_NULL(strstr(response, "SC_UNKNOWN_CMD"));
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
 }
 
 void test_sc_get_values_returns_snapshot(void) {
@@ -239,6 +248,44 @@ void test_sc_get_values_returns_snapshot(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "fan_air_stop_c=45"));
   TEST_ASSERT_NOT_NULL(strstr(response, "heater_stop_c=80"));
   TEST_ASSERT_NOT_NULL(strstr(response, "nominal_rpm=890"));
+}
+
+void test_reboot_before_hello_preserves_not_authorized_reply(void) {
+  const char *response = sendSerialLine("SC_REBOOT_BOOTLOADER\n");
+  TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", response);
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+}
+
+void test_reboot_with_trailing_space_stays_unknown_and_never_reboots(void) {
+  const char *response = sendSerialLine("SC_REBOOT_BOOTLOADER \n");
+  TEST_ASSERT_EQUAL_STRING("SC_NOT_READY HELLO_REQUIRED", response);
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+
+  performHello();
+  response = sendSerialLine("SC_REBOOT_BOOTLOADER \n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+
+  performAuth();
+  response = sendSerialLine("SC_REBOOT_BOOTLOADER \n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+}
+
+void test_authenticated_reboot_replies_before_deferred_bootloader_entry(void) {
+  performAuth();
+
+  const char *response = sendSerialLine("SC_REBOOT_BOOTLOADER\n");
+  TEST_ASSERT_EQUAL_STRING("SC_OK REBOOT", response);
+  TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
+}
+
+void test_framed_non_sc_payload_is_forwarded_to_pid_fallback(void) {
+  const char *response = sendSerialLine("PID_KP 12\n");
+  TEST_ASSERT_EQUAL_STRING("", response);
+  TEST_ASSERT_EQUAL_UINT(1u, test_stubs_forwarded_serial_count());
+  TEST_ASSERT_EQUAL_STRING("PID_KP 12",
+                           test_stubs_last_forwarded_serial_line());
 }
 
 void test_non_framed_lines_are_silently_discarded(void) {
@@ -331,6 +378,17 @@ void test_sc_commit_params_rejects_without_auth(void) {
   performHello();
   const char *response = sendSerialLine("SC_COMMIT_PARAMS\n");
   TEST_ASSERT_NOT_NULL(strstr(response, "SC_NOT_AUTHORIZED"));
+}
+
+void test_sc_commit_with_trailing_space_stays_unknown_across_auth(void) {
+  performHello();
+  const char *response = sendSerialLine("SC_COMMIT_PARAMS \n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+
+  performAuth();
+  response = sendSerialLine("SC_COMMIT_PARAMS \n");
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+  TEST_ASSERT_EQUAL_INT16(TEMP_FAN_START, ecuParamsFanCoolantStart());
 }
 
 void test_sc_revert_params_rejects_without_auth(void) {
@@ -447,6 +505,23 @@ void test_sc_set_param_rejects_malformed_payload(void) {
   TEST_ASSERT_NOT_NULL(strstr(outOfDomain, "value_not_int16"));
 }
 
+void test_sc_writes_wait_for_parameter_storage_recovery(void) {
+  performAuth();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(ecuParamsActive()));
+  ecuParamsResetRuntimeStateForTest();
+  hal_mock_eeprom_set_io_status(HAL_EIO);
+  ecuParamsInit();
+
+  const char *blocked = sendSerialLine("SC_SET_PARAM nominal_rpm 900\n");
+  TEST_ASSERT_EQUAL_STRING("SC_NOT_READY STORAGE_RECOVERY", blocked);
+
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  hal_mock_advance_millis(1000u);
+  ecuParamsPoll();
+  const char *accepted = sendSerialLine("SC_SET_PARAM nominal_rpm 900\n");
+  TEST_ASSERT_NOT_NULL(strstr(accepted, "SC_OK PARAM_SET"));
+}
+
 int main(void) {
   /* Phase 8.3 brought a production caller of ecuParamsPersist (the
    * SC_COMMIT_PARAMS branch), so KV-backed persistence has to work
@@ -463,12 +538,17 @@ int main(void) {
 
   RUN_TEST(test_sc_get_meta_requires_hello_first);
   RUN_TEST(test_sc_get_meta_returns_sc_ok_with_identity_fields);
+  RUN_TEST(test_sc_get_meta_with_trailing_space_returns_unknown);
   RUN_TEST(test_sc_get_param_list_returns_all_known_ids);
   RUN_TEST(test_sc_get_param_returns_value_and_bounds);
   RUN_TEST(test_sc_get_param_rejects_unknown_parameter);
   RUN_TEST(test_sc_get_param_requires_argument);
   RUN_TEST(test_sc_unknown_command_returns_sc_unknown_cmd);
   RUN_TEST(test_sc_get_values_returns_snapshot);
+  RUN_TEST(test_reboot_before_hello_preserves_not_authorized_reply);
+  RUN_TEST(test_reboot_with_trailing_space_stays_unknown_and_never_reboots);
+  RUN_TEST(test_authenticated_reboot_replies_before_deferred_bootloader_entry);
+  RUN_TEST(test_framed_non_sc_payload_is_forwarded_to_pid_fallback);
   RUN_TEST(test_non_framed_lines_are_silently_discarded);
   RUN_TEST(test_framed_hello_responds_with_same_seq_and_valid_crc);
   RUN_TEST(test_framed_request_with_bad_crc_is_silently_dropped);
@@ -477,6 +557,7 @@ int main(void) {
   /* Phase 8.3 - auth-gated SET / COMMIT / REVERT. */
   RUN_TEST(test_sc_set_param_rejects_without_auth);
   RUN_TEST(test_sc_commit_params_rejects_without_auth);
+  RUN_TEST(test_sc_commit_with_trailing_space_stays_unknown_across_auth);
   RUN_TEST(test_sc_revert_params_rejects_without_auth);
   RUN_TEST(test_sc_set_param_writes_only_staging_after_auth);
   RUN_TEST(test_sc_set_param_rejects_out_of_range);
@@ -485,6 +566,7 @@ int main(void) {
   RUN_TEST(test_sc_commit_fails_on_hysteresis_rule);
   RUN_TEST(test_sc_revert_restores_staging_from_active);
   RUN_TEST(test_sc_set_param_rejects_malformed_payload);
+  RUN_TEST(test_sc_writes_wait_for_parameter_storage_recovery);
 
   return UNITY_END();
 }
