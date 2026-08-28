@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Canonical Fiesta vocabulary instance.
+ * @brief Shared Fiesta vocabulary instance.
  *
  * Pass to @c hal_serial_session_init_with_vocabulary() so the HAL
  * session helper speaks the Fiesta dialect. The contents currently
@@ -42,7 +42,8 @@ static const hal_serial_session_vocabulary_t fiesta_default_vocabulary = {
     .cmd_bye = SC_CMD_BYE,
     .cmd_auth_begin = SC_CMD_AUTH_BEGIN,
     .cmd_auth_prove = SC_CMD_AUTH_PROVE,
-    .cmd_reboot_bootloader = SC_CMD_REBOOT_BOOTLOADER,
+    /* Device operations are dispatched by hal_command_router. */
+    .cmd_reboot_bootloader = NULL,
     .reply_bye_ok = SC_REPLY_BYE_OK,
     .reply_unknown_cmd = SC_STATUS_UNKNOWN_CMD,
     .reply_not_ready_hello_required = SC_REPLY_NOT_READY_HELLO_REQUIRED,

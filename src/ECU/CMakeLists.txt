@@ -42,11 +42,14 @@ file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
+    ${HAL_SRC}/hal/core/jh_handle_pool.cpp
+    ${HAL_SRC}/hal/commands/hal_command_router.cpp
     ${HAL_SRC}/hal/i2c/hal_i2c.cpp
     ${HAL_SRC}/hal/spi/hal_spi.cpp
     ${HAL_SRC}/hal/gps/hal_gps.cpp
     ${HAL_SRC}/hal/security/hal_sc_auth.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
+    ${HAL_SRC}/hal/serial/hal_serial_commands.cpp
     ${HAL_SRC}/hal/serial/hal_serial_session.cpp
     ${HAL_SRC}/hal/time/hal_time.cpp
     ${HAL_SRC}/hal/time/hal_time_ntp.cpp
@@ -90,18 +93,17 @@ set(ECU_SOURCES
     ${ECU_SRC}/obd-2_mapping.c
     ${ECU_SRC}/obd-2.c
     ${ECU_SRC}/dtcManager.c
+    ${ECU_SRC}/ecuPersistence.c
     ${ECU_SRC}/engineMaps.c
     ${ECU_SRC}/config.c
     ${ECU_SRC}/gps.c
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
     ${ECU_SRC}/vp37.c
-    # R1.2: descriptor-driven SC reply machinery shared with the host
-    # SerialConfigurator. The native firmware build picks this up through
-    # the sc_param_handlers_glue.c include shim, so firmware and host tests
-    # both compile the same
-    # source file exactly once.
+    # Shared SC parameter and router service implementations. The native
+    # firmware source bridge includes the same files once.
     ${SCDEFS}/sc_param_handlers.c
+    ${SCDEFS}/sc_command_handlers.c
 )
 
 # ── ecu_mock: hal mock + tools + ECU sources + stubs for excluded modules ──────
@@ -155,10 +157,12 @@ if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
         --enable=all
         --std=c99
         -I.
+        --include=hal_project_config.h
         --suppress=missingInclude
         --suppress=missingIncludeSystem
         --suppress=unusedFunction
         --suppress=knownConditionTrueFalse
+        --suppress=constParameterCallback
         --suppress=checkersReport
     )
 

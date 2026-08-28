@@ -22,7 +22,18 @@
 #define HAL_ENABLE_GPS      /* TinyGPS++ -> SWSERIAL              */
 #define HAL_ENABLE_PWM_FREQ /* Frequency-controlled PWM           */
 #define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_SERIAL_COMMANDS
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
 #define HAL_ENABLE_APP_TASK1
+
+/* ECU persistence uses the full 32 KiB flash-backed EEPROM reservation. */
+#ifndef HAL_RP_FLASH_EEPROM_SIZE
+#define HAL_RP_FLASH_EEPROM_SIZE 32768
+#endif
+
+/* The transaction engine applies this per coordination phase. Three bounded
+ * waits plus the measured 32 KiB erase/program stay below the 4 s watchdog. */
+#define HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS 750u
 
 /* Native RP system stacks, in bytes. */
 #define HAL_RP_CORE0_STACK_SIZE 4096u

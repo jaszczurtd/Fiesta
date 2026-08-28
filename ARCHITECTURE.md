@@ -169,7 +169,7 @@ by the setup flow (`runmefirst.sh`, implemented by
   host C/C++ compiler (GCC on Linux) without the target toolchain.
 
 Each module implements JaszczurHAL's portable `app_start()` / `app_task0()`
-entry contract directly and adds `app_task1()` when it opts in to the second
+entry points directly and adds `app_task1()` when it opts in to the second
 execution context. The firmware build configures the JaszczurHAL multi-target
 dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`) without a
 Fiesta-specific entry adapter. See
@@ -190,8 +190,7 @@ the setup flow.
 SerialConfigurator wire vocabulary and the descriptor-driven SC reply
 machinery shared by ECU, Clocks, OilAndSpeed, Fiesta_clock, and the
 desktop configurator. Unlike `JaszczurHAL` (out-of-tree external lib) it lives
-inside the Fiesta repository because the
-contract is Fiesta-specific.
+inside the Fiesta repository because the wire rules are Fiesta-specific.
 
 Files:
 
@@ -212,20 +211,38 @@ Files:
   load_defaults, three reply emitters (`PARAM_LIST` / `PARAM_VALUES` /
   `PARAM`), schema-versioned blob_encode/decode, and the shared
   CRC32 (PKZIP) helper.
+- [`sc_command_handlers.{h,c}`](src/common/scDefinitions/) - shared router
+  registration, text-argument parsing, source/auth policies, SC response
+  bodies, and deferred bootloader entry.
 
-Each firmware module's `config.{c,cpp}` declares a `static const
-sc_param_descriptor_t k_<module>_params[]` array and routes its SC
-unknown-handler through the generic emitters. Adding a new
-wire-visible parameter is one row in `k_<module>_params[]`, one field
-in the values struct, and (if persisted) a `schema_since` bump - no
-edits to reply machinery. See `src/SerialConfigurator/tests/test_sc_param.c`
-for the contract.
+The firmware path for an application command is:
 
-Modules that expose the descriptor-driven SC surface carry a one-line
-`sc_param_handlers_glue.c` that `#include`s the common `.c`. The native
-firmware build collects that glue file alongside the rest of the module
-sources, so the native CMake path compiles the implementation exactly once
-without extra library plumbing. Host CMake builds compile the same source
+```text
+USB CDC frame
+  -> hal_serial_session
+  -> hal_serial_commands
+  -> hal_command_router
+  -> sc_command_service
+```
+
+`hal_serial_session` keeps framing and the structural `HELLO`, `SC_BYE`,
+`SC_AUTH_BEGIN`, and `SC_AUTH_PROVE` lifecycle. `hal_serial_commands` splits
+the first word from the text arguments and adds session/auth metadata. The
+router performs exact-name lookup plus source and authentication checks. The
+Fiesta service handles `SC_GET_*`, parameter writes, commit/revert, and
+`SC_REBOOT_BOOTLOADER`; reboot entry is deferred until the serial reply has
+been emitted. Current module registrations allow only
+`HAL_COMMAND_SOURCE_SERIAL_SESSION`; JaszczurHAL can attach other adapters
+without changing these Fiesta policies. Enabling reboot from BLE or LoRa later
+will require an adapter completion or transmit-drain hook before the service
+may enter the bootloader; the current deferred path is safe only after a
+Serial Session reply.
+
+Each firmware module's `config.{c,cpp}` declares its descriptor table and
+supplies only module-specific state callbacks. Adding a wire-visible parameter
+is one descriptor row, one values-struct field, and, when persisted, a
+`schema_since` bump. A module-local source bridge includes both shared `.c`
+implementations for native firmware; host CMake builds compile the same files
 directly through `${SCDEFS}`.
 
 ### 4.4 Per-module layout convention
@@ -272,7 +289,7 @@ figures, migration status, and screening entry points.
 - `core-1` runs the time-critical engine control path - VP37 servicing and
   the rest of the tight-loop engine logic.
 
-The RPM Hall GPIO interrupt has an explicit core-affinity contract: it is
+The RPM Hall GPIO interrupt has an explicit core-affinity requirement: it is
 registered from core 1 with `hal_gpio_attach_interrupt_ex()` and owner core
 `1`. A caller/core mismatch is a startup error (`HAL_ESTATE`), not an implicit
 interrupt migration. `RPM_create()` propagates this status to the core-1
@@ -280,7 +297,7 @@ startup path. Core 1 then remains unstarted and stops its watchdog liveness
 updates, while core 0 logs the exact HAL status and persists DTC `U190C` before
 the dual-core watchdog resets the ECU. DTC persistence deliberately stays on
 core 0. A future FreeRTOS task hosting this path must remain pinned to core 1
-and retain the same registration and failure contract.
+and retain the same registration and failure behavior.
 
 Cross-core state is protected by dedicated mutexes (adjustometer snapshot,
 PCF8574 shadow latch, DTC manager + its KV persistence). See the "dual-core
@@ -545,7 +562,7 @@ No business logic may carry platform `#ifdef`s. OS-specific code lives in
 five named seams: device enumeration, hot-plug detection, UF2 drive
 discovery, config-file location, packaging (see the design doc §4.2).
 
-**Contract with firmware modules.** The configurator depends on two
+**Requirements for firmware modules.** The configurator depends on two
 per-module invariants:
 1. Every active firmware module runs a configurator session wired through
   `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed, RTC_Clock; Adjustometer is out of the primary flow). The session answers the bootstrap handshake with
@@ -690,10 +707,10 @@ $SC,<seq>,<inner>*<crc8>\n
   (`SC_TRANSPORT_PRIMARY_TIMEOUT_MS` is capped at +60 ms grace from
   the first corrupt frame).
 
-The codec lives in `hal_serial_frame.h` on the firmware side
-(JaszczurHAL repo) and
-[`sc_frame.{c,h}`](src/SerialConfigurator/src/core/sc_frame.h) on the
-host. Two structural commands - `HELLO` and `SC_BYE` - are
+Firmware and SerialConfigurator compile the codec directly from
+`JaszczurHAL/src/hal/serial/hal_serial_frame.h`. The host build resolves the
+JaszczurHAL checkout through `SC_JASZCZURHAL_DIR` and carries no local codec
+implementation. Two structural commands - `HELLO` and `SC_BYE` - are
 recognised verbatim by every session implementation; everything else
 goes through the project-supplied vocabulary table
 (`fiesta_default_vocabulary` in
@@ -771,7 +788,7 @@ The shared wrapper configures the JaszczurHAL multi-target dispatcher
 (`libraries/JaszczurHAL/cmake/jh_firmware_project`). Its RP2040 recipe imports
 the pinned Pico SDK, compiles the module sources, and links the selected native
 JaszczurHAL backend. Every module implements the portable `app_start()` /
-`app_task0()` contract directly and optionally provides `app_task1()`.
+`app_task0()` entry points directly and optionally provides `app_task1()`.
 
 **Manifest auto-generation.** Every successful firmware compile
 produces an artefact pair:

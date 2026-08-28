@@ -12,7 +12,7 @@ extern "C" {
 /* ── Flash-path persistence ───────────────────────────────────────── */
 
 #ifdef _WIN32
-//nothing yet
+// nothing yet
 #else
 /* Primary location: $XDG_CONFIG_HOME/fiesta-configurator/flash-paths.json */
 #define SC_FLASH_PATHS_XDG "%s/fiesta-configurator/flash-paths.json"
@@ -23,7 +23,8 @@ extern "C" {
 #endif
 /* Maximum absolute path length handled by flash-path persistence helpers. */
 #define SC_FLASH_PATHS_PATH_MAX 1024u
-/* Hard cap for flash-paths.json size (defense against malformed giant files). */
+/* Hard cap for flash-paths.json size (defense against malformed giant files).
+ */
 #define SC_FLASH_PATHS_JSON_MAX_BYTES (64u * 1024u)
 /* Hard cap for manifest.json size accepted by the parser. */
 #define SC_MANIFEST_MAX_JSON_SIZE (64u * 1024u)
@@ -44,12 +45,12 @@ extern "C" {
  * recompiling, but on developer workstations this output is too noisy
  * to leave on permanently. Comment / uncomment below for release vs
  * debug builds. */
-//#define SC_DEBUG_DEEP
+// #define SC_DEBUG_DEEP
 
 /* ── Transport defaults ───────────────────────────────────────────── */
 
 #ifdef _WIN32
-//nothing yet
+// nothing yet
 #else
 /* Linux device discovery pattern used by Detect (by-id symlink namespace). */
 #define SC_TRANSPORT_GLOB_PATTERN "/dev/serial/by-id/usb-Jaszczur_Fiesta_*"
@@ -58,6 +59,9 @@ extern "C" {
 #define SC_TRANSPORT_PRIMARY_TIMEOUT_MS 400
 /* Extended timeout for retry attempts after a transient failure/reset. */
 #define SC_TRANSPORT_RETRY_TIMEOUT_MS 1500
+/* Flash-backed parameter commits may erase and program a 32 KiB partition. */
+#define SC_TRANSPORT_COMMIT_PRIMARY_TIMEOUT_MS 2000
+#define SC_TRANSPORT_COMMIT_RETRY_TIMEOUT_MS 3000
 /* Pause after opening CDC ACM before first exchange (driver/device settle). */
 #define SC_TRANSPORT_OPEN_SETTLE_USEC 100000
 /* Delay between retries to avoid tight-loop hammering on flapping links. */
@@ -66,14 +70,16 @@ extern "C" {
 #define SC_TRANSPORT_HELLO_ATTEMPTS 3
 /* Number of generic SC command attempts before giving up. */
 #define SC_TRANSPORT_SC_ATTEMPTS 2
-/* Size of open-port FD cache (keeps sessions warm across repeated operations). */
+/* Size of open-port FD cache (keeps sessions warm across repeated operations).
+ */
 #define SC_TRANSPORT_MAX_CACHED_PORTS 8u
 
 /* ── Flash flow defaults ──────────────────────────────────────────── */
 
 /* Overall timeout for detecting the BOOTSEL mass-storage drive after reboot. */
 #define SC_FLASH_DEFAULT_BOOTSEL_TIMEOUT_MS 60000u
-/* Timeout for waiting until the flashed module re-enumerates as serial again. */
+/* Timeout for waiting until the flashed module re-enumerates as serial again.
+ */
 #define SC_FLASH_DEFAULT_REENUM_TIMEOUT_MS 30000u
 /* Extra grace after copy to absorb USB stack jitter before strict checks. */
 #define SC_FLASH_DEFAULT_REENUM_GRACE_MS 2500u
@@ -136,7 +142,8 @@ extern "C" {
 #define SC_UI_FLASH_PHASE_WAIT_REENUM_START 0.80
 #define SC_UI_FLASH_PHASE_POST_FLASH_HELLO_START 0.95
 
-/* Expected phase durations used by the UI smoother/predictive progress model. */
+/* Expected phase durations used by the UI smoother/predictive progress model.
+ */
 #define SC_UI_FLASH_PHASE_FORMAT_CHECK_EXPECTED_MS 200.0
 #define SC_UI_FLASH_PHASE_MANIFEST_VERIFY_EXPECTED_MS 300.0
 #define SC_UI_FLASH_PHASE_AUTHENTICATE_EXPECTED_MS 500.0

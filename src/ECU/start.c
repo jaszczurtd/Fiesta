@@ -2,6 +2,7 @@
 #include "start.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "ecuContext.h"
+#include "ecuPersistence.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>
@@ -154,6 +155,11 @@ void executeByWatchdog(int *values, int size) {
   s_startRuntimeState.wSizeVal = size;
 }
 
+static void feedWatchdogDuringPersistence(void *user) {
+  (void)user;
+  watchdog_feed();
+}
+
 /**
  * @brief Initialize all core-0 peripherals, modules and watchdog state.
  * @return None.
@@ -165,8 +171,19 @@ static void initializeCore0(void) {
 
   deb("Build timestamp: %s", ecu_BuildDateTime);
 
+  const hal_status_t persistenceStatus = ecuPersistenceInit();
+  if (persistenceStatus != HAL_OK) {
+    derr("Persistence initialization failed: %s",
+         hal_status_to_string(persistenceStatus));
+  }
+
   // Force local flash-backed EEPROM for this ECU build.
-  hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
+  const hal_status_t eepromStatus =
+      hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
+  if (eepromStatus != HAL_OK) {
+    derr("EEPROM initialization failed: %s (%d)",
+         hal_status_to_string(eepromStatus), (int)eepromStatus);
+  }
   deb("EEPROM backend: internal flash (%u bytes)", (unsigned)hal_eeprom_size());
   deb("EEPROM layout: FIRST_ADDR=%u", (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
 #ifdef HAL_TOOLS_EEPROM_LOGGER_ADDR
@@ -186,6 +203,12 @@ static void initializeCore0(void) {
   initSPI();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
+  const hal_status_t progressStatus =
+      hal_eeprom_set_progress_callback(feedWatchdogDuringPersistence, NULL);
+  if (progressStatus != HAL_OK) {
+    derr("EEPROM progress callback setup failed: %s",
+         hal_status_to_string(progressStatus));
+  }
   if (!rebooted) {
     s_startPersistentState.statusVariable0Val =
         s_startPersistentState.statusVariable1Val = 0;
@@ -365,6 +388,9 @@ static void runCore0(void) {
   glowPlugs_process(getGlowPlugsInstance());
 
   hal_gps_update();
+  ecuPersistencePoll();
+  dtcManagerPoll();
+  ecuParamsPoll();
 
   s_startPersistentState.statusVariable0Val = 2;
   if (!isEnvironmentStarted()) {

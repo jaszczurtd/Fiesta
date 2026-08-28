@@ -1,8 +1,9 @@
 #include "sc_transport.h"
 #include "../config.h"
+#include "sc_transport_timeout.h"
 
-#include "sc_frame.h"
 #include "sc_protocol.h"
+#include <hal/serial/hal_serial_frame.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -202,7 +203,7 @@ static bool read_framed_response_with_deadline(int fd, uint16_t expected_seq,
     error[0] = '\0';
   }
 
-  char line[SC_FRAME_LINE_MAX];
+  char line[HAL_SERIAL_FRAME_LINE_MAX];
   size_t used = 0u;
   bool line_overflow = false;
   line[0] = '\0';
@@ -306,12 +307,13 @@ static bool read_framed_response_with_deadline(int fd, uint16_t expected_seq,
           const char *trimmed = trim_leading_spaces(line);
           const char *framed = NULL;
           bool repaired_prefix = false;
-          char repaired_line[SC_FRAME_LINE_MAX + 2u];
+          char repaired_line[HAL_SERIAL_FRAME_LINE_MAX + 2u];
           /* Strict prefix match - only true frames are even
            * considered (this replaces the previous strstr-based
            * substring search that was vulnerable to false matches
            * inside debug log lines). */
-          if (strncmp(trimmed, SC_FRAME_PREFIX, SC_FRAME_PREFIX_LEN) == 0) {
+          if (strncmp(trimmed, HAL_SERIAL_FRAME_PREFIX,
+                      HAL_SERIAL_FRAME_PREFIX_LEN) == 0) {
             framed = trimmed;
           } else if (strncmp(trimmed, "SC,", 3u) == 0) {
             /* Field logs from real hardware occasionally show a
@@ -331,7 +333,8 @@ static bool read_framed_response_with_deadline(int fd, uint16_t expected_seq,
           if (framed != NULL) {
             uint16_t got_seq = 0u;
             char inner[SC_TRANSPORT_RESPONSE_MAX];
-            if (sc_frame_decode(framed, &got_seq, inner, sizeof(inner))) {
+            if (hal_serial_frame_decode(framed, &got_seq, inner,
+                                        sizeof(inner))) {
               if (repaired_prefix) {
                 repaired_missing_dollar++;
                 transport_log("frame repaired (missing '$') seq=%u",
@@ -620,10 +623,10 @@ static bool framed_exchange_on_fd(int fd, uint16_t seq, const char *inner,
                                   int timeout_ms, char *response,
                                   size_t response_size, char *error,
                                   size_t error_size) {
-  char framed_line[SC_FRAME_LINE_MAX + 2u];
+  char framed_line[HAL_SERIAL_FRAME_LINE_MAX + 2u];
   size_t framed_len = 0u;
-  if (!sc_frame_encode(seq, inner, framed_line, sizeof(framed_line) - 1u,
-                       &framed_len)) {
+  if (!hal_serial_frame_encode(seq, inner, framed_line,
+                               sizeof(framed_line) - 1u, &framed_len)) {
     set_error(error, error_size, "failed to encode SC frame");
     return false;
   }
@@ -819,7 +822,7 @@ static bool default_send_sc_command(void *context, const char *device_path,
 
   /* Strip a trailing newline if the caller supplied one - framing adds its
    * own terminator and disallows raw '\n' inside the payload. */
-  char inner[SC_FRAME_PAYLOAD_MAX];
+  char inner[HAL_SERIAL_FRAME_PAYLOAD_MAX];
   size_t cmd_len = strlen(command);
   while (cmd_len > 0u &&
          (command[cmd_len - 1u] == '\n' || command[cmd_len - 1u] == '\r')) {
@@ -844,8 +847,7 @@ static bool default_send_sc_command(void *context, const char *device_path,
     int fd = -1;
     size_t slot = 0u;
     bool success = false;
-    const int timeout_ms = (attempt == 0) ? SC_TRANSPORT_PRIMARY_TIMEOUT_MS
-                                          : SC_TRANSPORT_RETRY_TIMEOUT_MS;
+    const int timeout_ms = sc_transport_command_timeout_ms(inner, attempt);
 
     do {
       if (!acquire_cached_port(device_path, &fd, &slot, last_error,

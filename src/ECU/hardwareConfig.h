@@ -17,7 +17,7 @@
 #define I2C_SPEED_HZ 400000
 
 // RP2040 flash-backed EEPROM emulation size used by ECU module.
-#define ECU_EEPROM_SIZE_BYTES 32768u
+#define ECU_EEPROM_SIZE_BYTES HAL_RP_FLASH_EEPROM_SIZE
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047

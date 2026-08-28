@@ -1,6 +1,7 @@
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_kv.h"
 #include "sensors.h"
 #include "testable/dtcManager_testable.h"
 #include "unity.h"
@@ -58,6 +59,25 @@ void test_dtc_clear_all_resets_all_kinds(void) {
   TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
   TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_STORED));
   TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_PERMANENT));
+}
+
+void test_dtc_clear_all_preserves_foreign_kv_entries(void) {
+  static const uint16_t foreignKey = 0xDA10u;
+  const uint8_t expected[] = {0x45u, 0x43u, 0x55u};
+  uint8_t actual[sizeof(expected)] = {0u};
+  uint16_t actualSize = 0u;
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_kv_set_blob_ex(foreignKey, expected, sizeof(expected)));
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+
+  dtcManagerClearAll();
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      hal_kv_get_blob_ex(foreignKey, actual, sizeof(actual), &actualSize));
+  TEST_ASSERT_EQUAL_UINT16(sizeof(expected), actualSize);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, actual, sizeof(expected));
 }
 
 void test_dtc_timestamp_nonzero_when_gps_is_available(void) {
@@ -180,6 +200,7 @@ int main(void) {
   RUN_TEST(test_dtc_set_active_updates_all_kinds);
   RUN_TEST(test_dtc_deactivate_clears_only_active_flag);
   RUN_TEST(test_dtc_clear_all_resets_all_kinds);
+  RUN_TEST(test_dtc_clear_all_preserves_foreign_kv_entries);
   RUN_TEST(test_dtc_timestamp_nonzero_when_gps_is_available);
   RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
   RUN_TEST(test_dtc_get_codes_respects_output_limit);

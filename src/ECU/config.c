@@ -1,19 +1,19 @@
 
 #include "config.h"
+#include "ecuPersistence.h"
 #include "ecu_unit_testing.h"
 #include "gps.h"
 #include "tests.h"
-#include <hal/security/hal_crypto.h>
 
 #include <hal/serial/hal_serial.h>
+#include <hal/serial/hal_serial_commands.h>
 #include <hal/serial/hal_serial_session.h>
 #include <hal/storage/hal_kv.h>
+#include <hal/system/hal_system.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
+#include "../common/scDefinitions/sc_command_handlers.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
@@ -56,11 +56,10 @@ static const sc_param_descriptor_t k_ecu_params[] = {
 };
 static const size_t k_ecu_params_count = COUNTOF(k_ecu_params);
 
-/* Forward-declared session state used by every SC_* reply helper below.
- * `hal_serial_session_println(&s_configSession, ...)` automatically wraps the
- * payload into the `$SC,<seq>,<payload>*<crc>` frame when the in-flight
- * request was framed; otherwise it falls back to plain text. */
+/* The adapter attaches the shared SC router service to this serial session. */
 static hal_serial_session_t s_configSession;
+static hal_serial_commands_t s_serialCommands;
+static sc_command_service_t s_commandService;
 
 static ecu_params_values_t s_active = {.fanCoolantStartC = TEMP_FAN_START,
                                        .fanCoolantStopC = TEMP_FAN_STOP,
@@ -77,6 +76,10 @@ static ecu_params_values_t s_staging = {.fanCoolantStartC = TEMP_FAN_START,
                                         .nominalRpm = NOMINAL_RPM_VALUE};
 
 static bool s_initialized = false;
+static bool s_loadPending = true;
+static uint32_t s_lastLoadAttemptMs = 0u;
+
+#define ECU_PARAMS_LOAD_RETRY_MS 1000u
 
 TESTABLE_STATIC void ecuParamsLoadDefaults(ecu_params_values_t *outValues) {
   if (outValues == NULL) {
@@ -170,6 +173,7 @@ TESTABLE_STATIC bool ecuParamsValidate(const ecu_params_values_t *candidate,
   return true;
 }
 
+#ifdef UNIT_TEST
 TESTABLE_STATIC bool ecuParamsStage(const ecu_params_values_t *candidate,
                                     const char **reason) {
   if (!ecuParamsValidate(candidate, reason)) {
@@ -178,27 +182,31 @@ TESTABLE_STATIC bool ecuParamsStage(const ecu_params_values_t *candidate,
   s_staging = *candidate;
   return true;
 }
+#endif
 
 TESTABLE_STATIC void ecuParamsApply(void) { s_active = s_staging; }
 
-TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
+static hal_status_t ecuParamsLoadPersistedEx(ecu_params_values_t *outValues) {
   if (outValues == NULL) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uint16_t blobLen = 0u;
-  if (!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, NULL, 0u, &blobLen)) {
-    return false;
+  hal_status_t status =
+      hal_kv_get_blob_ex(ECU_PARAMS_BLOB_KEY, NULL, 0u, &blobLen);
+  if (status != HAL_OK) {
+    return status;
   }
   if (blobLen != ECU_PARAMS_BLOB_SIZE_V1 &&
       blobLen != ECU_PARAMS_BLOB_SIZE_V2) {
-    return false;
+    return HAL_EPROTO;
   }
 
   uint8_t blob[ECU_PARAMS_BLOB_SIZE_V2] = {0};
-  if (!hal_kv_get_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob),
-                       &blobLen)) {
-    return false;
+  status = hal_kv_get_blob_ex(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob),
+                              &blobLen);
+  if (status != HAL_OK) {
+    return status;
   }
 
   /* Pre-load defaults so V2-only fields keep a sane value when a V1
@@ -209,25 +217,42 @@ TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
   uint16_t schema = 0u;
   if (!sc_param_blob_decode(k_ecu_params, k_ecu_params_count, &decoded, blob,
                             blobLen, &schema)) {
-    return false;
+    return HAL_EPROTO;
   }
 
   if (!ecuParamsValidate(&decoded, NULL)) {
-    return false;
+    return HAL_EPROTO;
   }
 
   *outValues = decoded;
-  return true;
+  return HAL_OK;
 }
 
-/* Encode the descriptor-driven blob and write it to KV. Returns false
- * when the candidate fails cross-field validation, when the encoder
- * cannot fill the V2 layout, or when the KV write fails. Phase 8.3
- * lifted this out of the UNIT_TEST guard so production COMMIT_PARAMS
- * can persist the staged blob. */
-TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
+#ifdef UNIT_TEST
+TESTABLE_STATIC bool ecuParamsLoadPersisted(ecu_params_values_t *outValues) {
+  return ecuParamsLoadPersistedEx(outValues) == HAL_OK;
+}
+#endif
+
+/* Encode the descriptor-driven blob and write it to KV. */
+typedef struct {
+  const uint8_t *blob;
+  uint16_t size;
+} ecu_params_persist_context_t;
+
+static hal_status_t ecuParamsPersistBlob(const void *user) {
+  const ecu_params_persist_context_t *context =
+      (const ecu_params_persist_context_t *)user;
+  if (context == NULL) {
+    return HAL_EINVAL;
+  }
+  return hal_kv_set_blob_ex(ECU_PARAMS_BLOB_KEY, context->blob, context->size);
+}
+
+TESTABLE_STATIC hal_status_t
+ecuParamsPersist(const ecu_params_values_t *values) {
   if (!ecuParamsValidate(values, NULL)) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uint8_t blob[ECU_PARAMS_BLOB_SIZE_V2] = {0};
@@ -235,9 +260,24 @@ TESTABLE_STATIC bool ecuParamsPersist(const ecu_params_values_t *values) {
       sc_param_blob_encode(k_ecu_params, k_ecu_params_count, values,
                            ECU_PARAMS_SCHEMA_V2, blob, sizeof(blob));
   if (written != ECU_PARAMS_BLOB_SIZE_V2) {
-    return false;
+    return HAL_EIO;
   }
-  return hal_kv_set_blob(ECU_PARAMS_BLOB_KEY, blob, (uint16_t)sizeof(blob));
+
+  ecu_params_persist_context_t context = {
+      .blob = blob,
+      .size = (uint16_t)sizeof(blob),
+  };
+  hal_status_t resumeStatus = HAL_NONE;
+  const hal_status_t persistStatus =
+      ecuPersistenceExecute(ecuParamsPersistBlob, &context, &resumeStatus);
+  if (persistStatus != HAL_OK) {
+    hal_derr("ECU params persistence failed: %s",
+             hal_status_to_string(persistStatus));
+  } else if (resumeStatus != HAL_OK) {
+    hal_derr("ECU params committed; GPS resume queued: %s",
+             hal_status_to_string(resumeStatus));
+  }
+  return persistStatus;
 }
 
 #ifdef UNIT_TEST
@@ -249,23 +289,51 @@ TESTABLE_STATIC void ecuParamsResetRuntimeStateForTest(void) {
   ecuParamsLoadDefaults(&s_active);
   s_staging = s_active;
   s_initialized = false;
+  s_loadPending = true;
+  s_lastLoadAttemptMs = 0u;
 }
 #endif
 
-void ecuParamsInit(void) {
-  if (s_initialized) {
+static void ecuParamsTryLoadPersisted(void) {
+  ecu_params_values_t loaded = {0};
+  const hal_status_t loadStatus = ecuParamsLoadPersistedEx(&loaded);
+  s_lastLoadAttemptMs = hal_millis();
+
+  if (loadStatus == HAL_OK) {
+    s_active = loaded;
+    s_staging = loaded;
+    s_loadPending = false;
     return;
   }
+  if (loadStatus == HAL_ENOENT || loadStatus == HAL_EPROTO) {
+    s_staging = s_active;
+    s_loadPending = false;
+    return;
+  }
+  s_loadPending = true;
+}
 
-  ecuParamsLoadDefaults(&s_staging);
-  ecuParamsApply();
-
-  ecu_params_values_t loaded = {0};
-  if (ecuParamsLoadPersisted(&loaded) && ecuParamsStage(&loaded, NULL)) {
+void ecuParamsInit(void) {
+  if (!s_initialized) {
+    ecuParamsLoadDefaults(&s_staging);
     ecuParamsApply();
+    s_initialized = true;
+    s_loadPending = true;
   }
 
-  s_initialized = true;
+  ecuParamsTryLoadPersisted();
+}
+
+void ecuParamsPoll(void) {
+  if (!s_initialized) {
+    ecuParamsInit();
+    return;
+  }
+  const uint32_t now = hal_millis();
+  if (s_loadPending &&
+      (uint32_t)(now - s_lastLoadAttemptMs) >= ECU_PARAMS_LOAD_RETRY_MS) {
+    ecuParamsTryLoadPersisted();
+  }
 }
 
 const ecu_params_values_t *ecuParamsActive(void) { return &s_active; }
@@ -282,307 +350,127 @@ int16_t ecuParamsHeaterStop(void) { return s_active.heaterStopC; }
 
 int16_t ecuParamsNominalRpm(void) { return s_active.nominalRpm; }
 
-TESTABLE_INLINE_STATIC const char *configSessionSkipSpaces(const char *cursor) {
-  if (cursor == NULL) {
-    return NULL;
+/* Persist staging before promotion so a failed KV write leaves active state
+ * and the stored blob at the previous known-good values. */
+static hal_status_t configSessionCommit(void *user, const char **outReason,
+                                        size_t *outCount) {
+  (void)user;
+  if (outReason == NULL || outCount == NULL) {
+    return HAL_EINVAL;
+  }
+  *outReason = NULL;
+  *outCount = 0u;
+
+  if (s_loadPending) {
+    *outReason = "storage_recovery";
+    return HAL_EUNINIT;
   }
 
-  while (*cursor == ' ') {
-    cursor++;
+  if (!ecuParamsValidate(&s_staging, outReason)) {
+    return HAL_EINVAL;
   }
-  return cursor;
+  const hal_status_t persistStatus = ecuParamsPersist(&s_staging);
+  if (persistStatus != HAL_OK) {
+    *outReason = hal_status_to_string(persistStatus);
+    return persistStatus;
+  }
+
+  *outCount = sc_param_copy_staging_to_active(k_ecu_params, k_ecu_params_count,
+                                              &s_staging, &s_active);
+  return HAL_OK;
 }
 
-/* Adapter that bridges the descriptor-driven `sc_emit_fn` callback to
- * the framed reply helper from JaszczurHAL. The session pointer is
- * passed as the opaque emit_user parameter. */
-static void configSessionEmitThroughHal(const char *payload, void *user) {
-  hal_serial_session_println((hal_serial_session_t *)user, payload);
-}
-
-static void configSessionReplyGetMeta(void) {
-  char uidHex[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
-  if (!hal_get_device_uid_hex(uidHex, sizeof(uidHex))) {
-    uidHex[0] = '\0';
-  }
-
-  char buildB64[32];
-  size_t buildB64Len = 0u;
-  const uint8_t *b = (const uint8_t *)(BUILD_ID);
-  hal_base64_encode(b, strlen((const char *)b), buildB64, sizeof(buildB64),
-                    &buildB64Len);
-
-  char response[256] = {0};
-  snprintf(response, sizeof(response), SC_REPLY_META_FMT, SC_MODULE_TOKEN_ECU,
-           (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-           (unsigned long)configSessionId(), FW_VERSION, buildB64,
-           uidHex[0] != '\0' ? uidHex : HAL_SERIAL_SESSION_UNKNOWN);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-/* Emit a single-line GPS telemetry snapshot. This is sibling to
- * SC_GET_META: a read-only, never-persisted endpoint that sits outside
- * the descriptor framework because lat/lon are int32 (microdegrees)
- * and the descriptor reply format is int16-shaped. Keeping it out of
- * the parameter catalogue avoids extending SC_REPLY_PARAM_FMT, blob
- * persistence and the host int16 parser for telemetry that nothing
- * configures. */
-static void configSessionReplyGetGps(void) {
-  bool available = isGPSAvailable();
-  int32_t latE6 = available ? gpsGetLatE6() : 0;
-  int32_t lonE6 = available ? gpsGetLonE6() : 0;
-  int16_t speed = available ? gpsGetSpeedKmhX10() : 0;
-  uint32_t epoch = available ? gpsGetEpoch() : 0u;
-
-  char response[128] = {0};
-  snprintf(response, sizeof(response), SC_REPLY_GPS_FMT,
-           (unsigned)(available ? 1u : 0u), (long)latE6, (long)lonE6,
-           (int)speed, (unsigned long)epoch);
-  hal_serial_session_println(&s_configSession, response);
-}
-
-static bool configSessionHandleScGetParamCommand(const char *line) {
-  if (line == NULL) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST);
-    return true;
-  }
-
-  const char *cursor = line + strlen(SC_CMD_GET_PARAM);
-  cursor = configSessionSkipSpaces(cursor);
-  if (cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
-                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
-    return true;
-  }
-
-  char paramId[SC_PARAM_ID_MAX] = {0};
-  size_t idLen = 0u;
-  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
-         idLen + 1u < sizeof(paramId)) {
-    paramId[idLen] = cursor[idLen];
-    idLen++;
-  }
-  paramId[idLen] = '\0';
-
-  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
-    hal_serial_session_println(&s_configSession,
-                               SC_STATUS_BAD_REQUEST " param_id_too_long");
-    return true;
-  }
-
-  cursor += idLen;
-  cursor = configSessionSkipSpaces(cursor);
-  if (cursor == NULL || cursor[0] != '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
-                               " expected=" SC_CMD_GET_PARAM "_<param_id>");
-    return true;
-  }
-
-  sc_param_reply_get_param(k_ecu_params, k_ecu_params_count, &s_active, paramId,
-                           configSessionEmitThroughHal, &s_configSession);
-  return true;
-}
-
-/* Phase 8.3 - auth-gated SET_PARAM. Wire format:
- *     SC_SET_PARAM <param_id> <value>
- * <value> is parsed as a base-10 signed integer and clamped to the
- * int16_t domain before being passed to the descriptor helper, which
- * applies the per-descriptor [min, max] check on top. */
-static bool configSessionHandleScSetParamCommand(const char *line) {
-  if (!hal_serial_session_is_authenticated(&s_configSession)) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
-    return true;
-  }
-
-  const char *cursor = line + strlen(SC_CMD_SET_PARAM);
-  cursor = configSessionSkipSpaces(cursor);
-  if (cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
-                               " expected=" SC_CMD_SET_PARAM
-                               " <param_id> <value>");
-    return true;
-  }
-
-  char paramId[SC_PARAM_ID_MAX] = {0};
-  size_t idLen = 0u;
-  while (cursor[idLen] != '\0' && cursor[idLen] != ' ' &&
-         idLen + 1u < sizeof(paramId)) {
-    paramId[idLen] = cursor[idLen];
-    idLen++;
-  }
-  paramId[idLen] = '\0';
-
-  if (cursor[idLen] != '\0' && cursor[idLen] != ' ') {
-    hal_serial_session_println(&s_configSession,
-                               SC_STATUS_BAD_REQUEST " param_id_too_long");
-    return true;
-  }
-
-  cursor += idLen;
-  cursor = configSessionSkipSpaces(cursor);
-  if (cursor == NULL || cursor[0] == '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
-                               " expected=" SC_CMD_SET_PARAM
-                               " <param_id> <value>");
-    return true;
-  }
-
-  char *endptr = NULL;
-  const long parsed = strtol(cursor, &endptr, 10);
-  if (endptr == cursor) {
-    hal_serial_session_println(&s_configSession,
-                               SC_STATUS_BAD_REQUEST " value_not_int16");
-    return true;
-  }
-  const char *tail = configSessionSkipSpaces(endptr);
-  if (tail != NULL && tail[0] != '\0') {
-    hal_serial_session_println(&s_configSession, SC_STATUS_BAD_REQUEST
-                               " expected=" SC_CMD_SET_PARAM
-                               " <param_id> <value>");
-    return true;
-  }
-  if (parsed < INT16_MIN || parsed > INT16_MAX) {
-    hal_serial_session_println(&s_configSession,
-                               SC_STATUS_BAD_REQUEST " value_not_int16");
-    return true;
-  }
-
-  (void)sc_param_reply_set_param(k_ecu_params, k_ecu_params_count, &s_staging,
-                                 &s_active, paramId, (int16_t)parsed,
-                                 configSessionEmitThroughHal, &s_configSession);
-  return true;
-}
-
-/* Phase 8.3 - auth-gated COMMIT_PARAMS. Validates staging via
- * cross-field ecuParamsValidate, persists the encoded blob FIRST, then
- * promotes staging to active. Persisting before promoting keeps active
- * and the on-disk blob consistent: if the KV write fails, active stays
- * at the last known-good state and a subsequent reboot reloads the same
- * old blob. */
-static bool configSessionHandleScCommitParamsCommand(void) {
-  if (!hal_serial_session_is_authenticated(&s_configSession)) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
-    return true;
-  }
-
-  const char *reason = NULL;
-  if (!ecuParamsValidate(&s_staging, &reason)) {
-    char response[96];
-    snprintf(response, sizeof(response), SC_REPLY_COMMIT_FAILED_FMT,
-             (reason != NULL) ? reason : "unknown");
-    hal_serial_session_println(&s_configSession, response);
-    return true;
-  }
-
-  if (!ecuParamsPersist(&s_staging)) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_COMMIT_FAILED
-                               " reason=persist_failed");
-    return true;
-  }
-
-  const size_t count = sc_param_copy_staging_to_active(
-      k_ecu_params, k_ecu_params_count, &s_staging, &s_active);
-
-  char response[64];
-  snprintf(response, sizeof(response), SC_REPLY_PARAMS_COMMITTED_FMT,
-           (unsigned)count);
-  hal_serial_session_println(&s_configSession, response);
-  return true;
-}
-
-/* Phase 8.3 - auth-gated REVERT_PARAMS. Resets staging from active and
- * always succeeds: there is no validation step because active was
- * already validated when it was committed. */
-static bool configSessionHandleScRevertParamsCommand(void) {
-  if (!hal_serial_session_is_authenticated(&s_configSession)) {
-    hal_serial_session_println(&s_configSession, SC_STATUS_NOT_AUTHORIZED);
-    return true;
-  }
-
+static void configSessionRevert(void *user) {
+  (void)user;
   (void)sc_param_copy_active_to_staging(k_ecu_params, k_ecu_params_count,
                                         &s_active, &s_staging);
-  hal_serial_session_println(&s_configSession, SC_REPLY_PARAMS_REVERTED);
-  return true;
 }
 
-static bool configSessionHandleScCommand(const char *line) {
-  if (line == NULL || strncmp(line, "SC_", 3u) != 0) {
-    return false;
-  }
-
-  if (!configSessionActive()) {
-    hal_serial_session_println(&s_configSession,
-                               SC_REPLY_NOT_READY_HELLO_REQUIRED);
-    return true;
-  }
-
-  if (strcmp(line, SC_CMD_GET_META) == 0) {
-    configSessionReplyGetMeta();
-    return true;
-  }
-
-  if (strcmp(line, SC_CMD_GET_GPS) == 0) {
-    configSessionReplyGetGps();
-    return true;
-  }
-
-  if (strcmp(line, SC_CMD_GET_PARAM_LIST) == 0) {
-    sc_param_reply_get_param_list(k_ecu_params, k_ecu_params_count,
-                                  configSessionEmitThroughHal,
-                                  &s_configSession);
-    return true;
-  }
-
-  if (strcmp(line, SC_CMD_GET_VALUES) == 0) {
-    sc_param_reply_get_values_i16(
-        k_ecu_params, k_ecu_params_count, ecuParamsActive(),
-        configSessionEmitThroughHal, &s_configSession);
-    return true;
-  }
-
-  if (strcmp(line, SC_CMD_COMMIT_PARAMS) == 0) {
-    return configSessionHandleScCommitParamsCommand();
-  }
-
-  if (strcmp(line, SC_CMD_REVERT_PARAMS) == 0) {
-    return configSessionHandleScRevertParamsCommand();
-  }
-
-  if (strncmp(line, SC_CMD_SET_PARAM, strlen(SC_CMD_SET_PARAM)) == 0) {
-    return configSessionHandleScSetParamCommand(line);
-  }
-
-  if (strncmp(line, SC_CMD_GET_PARAM, strlen(SC_CMD_GET_PARAM)) == 0) {
-    return configSessionHandleScGetParamCommand(line);
-  }
-
-  hal_serial_session_println(&s_configSession, SC_STATUS_UNKNOWN_CMD);
-  return true;
-}
-
-static void configSession_onUnknownLine(const char *line, void *user) {
+static bool configSessionWritesReady(void *user) {
   (void)user;
-  if (configSessionHandleScCommand(line)) {
+  return !s_loadPending;
+}
+
+static void configSessionReadGps(void *user,
+                                 sc_command_gps_snapshot_t *outSnapshot) {
+  (void)user;
+  if (outSnapshot == NULL) {
     return;
   }
+  outSnapshot->available = isGPSAvailable();
+  outSnapshot->lat_e6 = outSnapshot->available ? gpsGetLatE6() : 0;
+  outSnapshot->lon_e6 = outSnapshot->available ? gpsGetLonE6() : 0;
+  outSnapshot->speed_kmh_x10 = outSnapshot->available ? gpsGetSpeedKmhX10() : 0;
+  outSnapshot->epoch = outSnapshot->available ? gpsGetEpoch() : 0u;
+}
 
-  /* Forward non-protocol command lines (PID tuning, etc.) to test fixtures.
-   * This keeps the bootstrap session parser as the sole consumer of raw
-   * serial bytes; secondary consumers receive whole lines only after HELLO
-   * and friends have been handled. */
+static void configSessionForwardNonSc(const char *line, void *user) {
+  (void)user;
   tickTestsHandleSerialLine(line);
 }
 
 void configSessionInit(void) {
+  if (s_serialCommands.initialized) {
+    const hal_status_t detachStatus =
+        hal_serial_commands_deinit(&s_serialCommands);
+    if (detachStatus != HAL_OK) {
+      hal_derr("ECU SC adapter detach failed: %s",
+               hal_status_to_string(detachStatus));
+      return;
+    }
+  }
+  if (s_commandService.initialized) {
+    const hal_status_t serviceStatus =
+        sc_command_service_deinit(&s_commandService);
+    if (serviceStatus != HAL_OK) {
+      hal_derr("ECU SC service detach failed: %s",
+               hal_status_to_string(serviceStatus));
+      return;
+    }
+  }
+
   hal_serial_session_init_with_vocabulary(&s_configSession, SC_MODULE_TOKEN_ECU,
                                           FW_VERSION, BUILD_ID,
                                           &fiesta_default_vocabulary);
-  hal_serial_session_set_unknown_handler(&s_configSession,
-                                         &configSession_onUnknownLine, NULL);
+
+  sc_command_service_config_t serviceConfig = {0};
+  serviceConfig.module_token = SC_MODULE_TOKEN_ECU;
+  serviceConfig.firmware_version = FW_VERSION;
+  serviceConfig.build_id = BUILD_ID;
+  serviceConfig.params = k_ecu_params;
+  serviceConfig.param_count = k_ecu_params_count;
+  serviceConfig.active_values = &s_active;
+  serviceConfig.staging_values = &s_staging;
+  serviceConfig.commit = configSessionCommit;
+  serviceConfig.revert = configSessionRevert;
+  serviceConfig.writes_ready = configSessionWritesReady;
+  serviceConfig.read_gps = configSessionReadGps;
+  serviceConfig.allowed_sources =
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
+
+  hal_status_t status =
+      sc_command_service_init(&s_commandService, NULL, &serviceConfig);
+  if (status == HAL_OK) {
+    hal_serial_commands_config_t adapterConfig =
+        hal_serial_commands_config_defaults(&s_configSession);
+    adapterConfig.router = sc_command_service_router(&s_commandService);
+    adapterConfig.command_prefix = SC_COMMAND_PREFIX;
+    adapterConfig.formatter = sc_command_format_serial_response;
+    adapterConfig.allow_inactive = sc_command_allow_inactive_reboot;
+    adapterConfig.fallback = configSessionForwardNonSc;
+    status = hal_serial_commands_init(&s_serialCommands, &adapterConfig);
+  }
+  if (status != HAL_OK) {
+    if (s_commandService.initialized) {
+      (void)sc_command_service_deinit(&s_commandService);
+    }
+    hal_derr("ECU SC adapter init failed: %s", hal_status_to_string(status));
+  }
 }
 
 void configSessionTick(void) {
   hal_serial_session_poll(&s_configSession);
+  sc_command_service_process_deferred(&s_commandService);
   /* Keep debug chatter off the same CDC channel while SC session is active.
    * Without this, async deb()/derr() logs can interleave with framed replies
    * from another core and corrupt host parsing. */

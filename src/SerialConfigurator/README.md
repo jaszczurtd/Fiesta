@@ -28,16 +28,33 @@ cmake -S . -B build
 cmake --build build
 ```
 
-### Optional: shared crypto via JaszczurHAL
+### JaszczurHAL integration
+
+The serial frame codec is compiled directly from
+`JaszczurHAL/src/hal/serial/hal_serial_frame.h`. The build requires a
+JaszczurHAL checkout and stops during CMake configuration when the header is
+missing. There is no local frame-codec fallback.
+
+Default path:
+
+- `SC_JASZCZURHAL_DIR=../../../libraries/JaszczurHAL` (relative to this repo)
+
+Override it when JaszczurHAL is stored elsewhere:
+
+```bash
+cmake -S . -B build \
+  -DSC_JASZCZURHAL_DIR=/absolute/path/to/JaszczurHAL
+```
+
+#### Optional shared crypto backend
 
 `SerialConfigurator` now exposes `src/core/sc_crypto.h` and, when available,
-uses `JaszczurHAL/src/hal/security/hal_crypto.cpp` as the backend (no duplicated crypto
-implementation in this repository).
+uses `JaszczurHAL/src/hal/security/hal_crypto.cpp` as the backend (no
+duplicated crypto implementation in this repository).
 
 Defaults:
 
 - `SC_USE_JASZCZURHAL_CRYPTO=ON`
-- `SC_JASZCZURHAL_DIR=../../../libraries/JaszczurHAL` (relative to this repo)
 
 Examples:
 
@@ -206,6 +223,8 @@ see `ARCHITECTURE.md` §4.3.
   Flash, Values, and GPS View tabs respectively.
 - `src/core/sc_core.c` contains discovery/session/protocol orchestration.
 - `src/core/sc_transport.c` contains Linux/POSIX serial transport operations.
+- `JaszczurHAL/src/hal/serial/hal_serial_frame.h` provides the shared serial
+  frame codec used by transport and host tests.
 - `src/core/sc_flash.c`, `sc_manifest.c`, and `sc_gps.c` own UF2/BOOTSEL,
   manifest, and GPS-specific logic.
 - `src/core/sc_crypto.h` contains shared crypto bridge API (backend-selected).
@@ -221,7 +240,7 @@ manifest / parameter-write / GPS / orchestrator surfaces:
 
 - `serial-configurator-progressbar-tests` (custom flash progress bar widget)
 - `serial-configurator-core-tests` (smoke checks)
-- `serial-configurator-core-api-tests` (API contract checks)
+- `serial-configurator-core-api-tests` (API surface checks)
 - `serial-configurator-core-protocol-tests` (read-only protocol parsing + flow)
 - `serial-configurator-crypto-tests` (bridge checks for `sc_crypto`)
 - `serial-configurator-frame-tests` (`$SC,...*<crc>` codec)

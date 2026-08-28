@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - "src/Clocks/**"
+      - "src/common/scDefinitions/**"
       - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/clocks-tests.yml"
   pull_request:
     paths:
       - "src/Clocks/**"
+      - "src/common/scDefinitions/**"
       - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/clocks-tests.yml"
   workflow_dispatch:

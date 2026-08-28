@@ -129,19 +129,27 @@ float getCurrentCarSpeed(void) {
   return 0.0;
 }
 
-bool isGPSAvailable(void) {
+static bool gpsLocationIsFresh(void) {
   bool isavail = hal_gps_location_is_valid();
   if (isavail) {
     if (hal_gps_location_age() > MAX_GPS_AGE) {
       isavail = false;
     }
   }
+  return isavail;
+}
+
+bool isGPSAvailable(void) {
+  const bool isavail = gpsLocationIsFresh();
   setGlobalValue(F_GPS_IS_AVAILABLE, isavail);
   return isavail;
 }
 
 uint32_t gpsGetEpoch(void) {
-  if (!isGPSAvailable()) {
+  /* DTCs may be raised before initSensors() has created its value-table mutex.
+   * Timestamp acquisition must therefore avoid isGPSAvailable(), whose public
+   * side effect updates that table. */
+  if (!gpsLocationIsFresh()) {
     return 0;
   }
 

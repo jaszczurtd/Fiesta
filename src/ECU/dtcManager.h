@@ -1,8 +1,8 @@
 #ifndef T_DTC_MANAGER
 #define T_DTC_MANAGER
 
-#include <tools_c.h>
 #include "obd-2_mapping.h"
+#include <tools_c.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,10 +30,18 @@ void dtcManagerInit(void);
 void dtcManagerSetActive(uint16_t code, bool active);
 
 /**
- * @brief Clear all DTC runtime and persisted state.
- * @return None.
+ * @brief Retry DTC persistence work left pending by a transient storage error.
+ *
+ * Call from the core-0 service loop. Retries are rate-limited internally.
  */
-void dtcManagerClearAll(void);
+void dtcManagerPoll(void);
+
+/**
+ * @brief Clear all DTC runtime and persisted state.
+ * @return True when persisted DTC keys were cleared immediately. False means
+ *         runtime state was cleared and a durable retry was queued.
+ */
+bool dtcManagerClearAll(void);
 
 /**
  * @brief Print DTC storage statistics for diagnostics.
@@ -55,7 +63,8 @@ uint8_t dtcManagerCount(dtc_kind_t kind);
  * @param maxCodes Maximum number of codes that fit in the output buffer.
  * @return Number of codes written to the output buffer.
  */
-uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes, uint8_t maxCodes);
+uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes,
+                           uint8_t maxCodes);
 
 /**
  * @brief Get the first-occurrence timestamp for a DTC.

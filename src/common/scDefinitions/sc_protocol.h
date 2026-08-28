@@ -8,8 +8,8 @@
  * Every SC_* command and status token used anywhere in firmware
  * (ECU, Clocks, OilAndSpeed) or host (SerialConfigurator core / CLI / UI)
  * MUST live here. Adding a raw "SC_..." literal directly in module
- * config.c, host transport, or CLI handlers bypasses the
- * single-source-of-truth contract and is forbidden - see provider §11
+ * config.c, host transport, or CLI handlers bypasses this shared
+ * definition and is forbidden - see provider §11
  * Rule 5 (effective from refactor R1.1 onward).
  *
  * @note This header is intentionally HAL-free. The HAL-bound
@@ -34,7 +34,7 @@ extern "C" {
  * @brief Buffer size (with NUL terminator) for a parameter id on the wire.
  *
  * Both host and firmware MUST use this constant when sizing their
- * parameter-id buffers so the contract stays in one place. Strings on
+ * parameter-id buffers so the limit stays in one place. Strings on
  * the wire may be up to @c SC_PARAM_ID_MAX-1 bytes; longer payloads
  * are rejected by the firmware with @c SC_BAD_REQUEST param_id_too_long.
  */
@@ -42,6 +42,7 @@ extern "C" {
 
 /* ── Inbound command tokens (host -> device) ────────────────────────── */
 
+#define SC_COMMAND_PREFIX "SC_"
 #define SC_CMD_HELLO "HELLO"
 #define SC_CMD_BYE "SC_BYE"
 #define SC_CMD_GET_META "SC_GET_META"
@@ -50,8 +51,9 @@ extern "C" {
 #define SC_CMD_GET_PARAM                                                       \
   "SC_GET_PARAM" /**< prefix; followed by " <param_id>". */
 #define SC_CMD_AUTH_BEGIN "SC_AUTH_BEGIN"
-#define SC_CMD_AUTH_PROVE "SC_AUTH_PROVE" /**< prefix; followed by " <hex>".   \
-                                           */
+#define SC_CMD_AUTH_PROVE                                                      \
+  "SC_AUTH_PROVE" /**< prefix; followed by " <hex>".                           \
+                   */
 #define SC_CMD_REBOOT_BOOTLOADER "SC_REBOOT_BOOTLOADER"
 
 /* Phase 8 - auth-gated parameter staging. SET_PARAM mutates a staging
@@ -83,6 +85,7 @@ extern "C" {
 /* ── Reply sub-tokens ──────────────────────────────────────────────── */
 
 #define SC_REPLY_TAG_HELLO_REQUIRED "HELLO_REQUIRED"
+#define SC_REPLY_TAG_STORAGE_RECOVERY "STORAGE_RECOVERY"
 
 #define SC_REPLY_TAG_META "META"
 #define SC_REPLY_TAG_BYE "BYE"
@@ -161,6 +164,10 @@ extern "C" {
 #define SC_REPLY_NOT_READY_HELLO_REQUIRED                                      \
   SC_STATUS_NOT_READY " " SC_REPLY_TAG_HELLO_REQUIRED
 
+/* "SC_NOT_READY STORAGE_RECOVERY" */
+#define SC_REPLY_NOT_READY_STORAGE_RECOVERY                                    \
+  SC_STATUS_NOT_READY " " SC_REPLY_TAG_STORAGE_RECOVERY
+
 /* "SC_OK BYE" */
 #define SC_REPLY_BYE_OK SC_STATUS_OK " " SC_REPLY_TAG_BYE
 
@@ -216,8 +223,8 @@ extern "C" {
  * so the SC frame parser handles it without continuation logic. */
 #define SC_REPLY_GPS_FMT                                                       \
   SC_STATUS_OK                                                                 \
-      " " SC_REPLY_TAG_GPS                                                     \
-      " available=%u lat_e6=%ld lon_e6=%ld speed_kmh_x10=%d epoch=%lu"
+  " " SC_REPLY_TAG_GPS                                                         \
+  " available=%u lat_e6=%ld lon_e6=%ld speed_kmh_x10=%d epoch=%lu"
 
 #ifdef __cplusplus
 }

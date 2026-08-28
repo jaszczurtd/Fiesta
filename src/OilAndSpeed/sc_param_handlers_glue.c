@@ -1,8 +1,8 @@
 /*
- * R1.5 native firmware build glue - see src/ECU/sc_param_handlers_glue.c
- * for the rationale. Host CMake compiles the common .c directly via
- * the OilAndSpeed mock library, so each source TU is built exactly
- * once on either path.
+ * Native firmware source bridge for the shared SC command service.
+ * Host CMake compiles both common sources directly, so each implementation
+ * is built exactly once on either path.
  */
 
+#include "../common/scDefinitions/sc_command_handlers.c"
 #include "../common/scDefinitions/sc_param_handlers.c"

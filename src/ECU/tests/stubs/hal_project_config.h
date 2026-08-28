@@ -6,5 +6,6 @@
  */
 
 #define HAL_DISABLE_ASSERTS
-#define HAL_ENABLE_CRYPTO /* config.c uses hal_base64_encode for SC_GET_META   \
-                           */
+#define HAL_ENABLE_CRYPTO /* Serial session authentication and metadata. */
+#define HAL_ENABLE_SERIAL_COMMANDS
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u

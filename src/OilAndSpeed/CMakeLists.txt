@@ -45,8 +45,11 @@ add_library(oilspeed_mock STATIC
     ${OILSPEED_SRC}/config.cpp
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
+    ${HAL_SRC}/hal/core/jh_handle_pool.cpp
+    ${HAL_SRC}/hal/commands/hal_command_router.cpp
     ${HAL_SRC}/hal/security/hal_sc_auth.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
+    ${HAL_SRC}/hal/serial/hal_serial_commands.cpp
     ${HAL_SRC}/hal/serial/hal_serial_session.cpp
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
@@ -62,11 +65,10 @@ add_library(oilspeed_mock STATIC
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_secure_random.cpp
     ${UNITY_SOURCE}
-    # R1.5: descriptor-driven SC reply machinery shared with the host
-    # SerialConfigurator. The native firmware build picks this up through
-    # sc_param_handlers_glue.c, so each source TU compiles
-    # exactly once on either path.
+    # Shared SC parameter and router service implementations. The native
+    # firmware source bridge includes the same files once.
     ${SCDEFS}/sc_param_handlers.c
+    ${SCDEFS}/sc_command_handlers.c
 )
 
 target_include_directories(oilspeed_mock BEFORE PUBLIC

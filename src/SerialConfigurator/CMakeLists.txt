@@ -70,6 +70,35 @@ set(
     "Path to JaszczurHAL repository root."
 )
 
+set(SC_JASZCZURHAL_INCLUDE_DIR "${SC_JASZCZURHAL_DIR}/src")
+set(
+    SC_JASZCZURHAL_SERIAL_FRAME_HEADER
+    "${SC_JASZCZURHAL_INCLUDE_DIR}/hal/serial/hal_serial_frame.h"
+)
+
+if(NOT EXISTS "${SC_JASZCZURHAL_SERIAL_FRAME_HEADER}")
+    message(FATAL_ERROR
+        "JaszczurHAL serial framing header was not found at "
+        "'${SC_JASZCZURHAL_SERIAL_FRAME_HEADER}'. Set "
+        "SC_JASZCZURHAL_DIR to the JaszczurHAL repository root."
+    )
+endif()
+
+# SerialConfigurator consumes the shared header directly. Keep this guard so
+# the removed host-side codec cannot silently return as a second implementation.
+foreach(_SC_LOCAL_FRAME_COPY IN ITEMS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_frame.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_frame.h")
+    if(EXISTS "${_SC_LOCAL_FRAME_COPY}")
+        message(FATAL_ERROR
+            "Local serial framing implementation '${_SC_LOCAL_FRAME_COPY}' "
+            "must not exist. Include hal/serial/hal_serial_frame.h from "
+            "SC_JASZCZURHAL_DIR directly."
+        )
+    endif()
+endforeach()
+unset(_SC_LOCAL_FRAME_COPY)
+
 set(SC_JASZCZURHAL_CRYPTO_HEADER "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.h")
 set(SC_JASZCZURHAL_CRYPTO_SOURCE "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.cpp")
 set(SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES
@@ -137,11 +166,11 @@ set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
 # CLI, host tests starting in R1.3) and firmware modules (ECU/Clocks/
 # OilAndSpeed migrating onto it from R1.2 onward via the shared firmware build).
 #
-# Intentionally JaszczurHAL-free: sc_param_handlers.c includes only the
+# This library remains JaszczurHAL-free: sc_param_handlers.c includes only the
 # HAL-free sc_protocol.h. The HAL-bound fiesta_default_vocabulary lives in
-# sc_session_vocabulary.h, which firmware modules include directly via
-# the shared firmware path; host CI runs that fall back to sc_crypto_none do not
-# need it and must not require JaszczurHAL on the include path.
+# sc_session_vocabulary.h, which firmware modules include directly via the
+# shared firmware path. SerialConfigurator's core consumes JaszczurHAL framing
+# separately below.
 add_library(fiesta_sc_definitions STATIC
     "${FIESTA_SC_DEFINITIONS_DIR}/sc_param_handlers.c"
 )
@@ -154,7 +183,6 @@ add_library(serial_configurator_core STATIC
     src/core/sc_auth.c
     src/core/sc_core.c
     src/core/sc_flash.c
-    src/core/sc_frame.c
     src/core/sc_gps.c
     src/core/sc_manifest.c
     src/core/sc_sha256.c
@@ -164,6 +192,7 @@ add_library(serial_configurator_core STATIC
 
 target_include_directories(serial_configurator_core
     PUBLIC
+        ${SC_JASZCZURHAL_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     PRIVATE
         ${SC_CRYPTO_INCLUDE_DIRS}
@@ -304,6 +333,10 @@ if(BUILD_TESTING)
         tests/test_sc_phase8_host.c
     )
 
+    add_executable(serial-configurator-transport-timeout-tests
+        tests/test_sc_transport_timeout.c
+    )
+
     add_executable(serial-configurator-i18n-tests
         tests/test_sc_i18n.c
     )
@@ -413,6 +446,11 @@ if(BUILD_TESTING)
             serial_configurator_core
     )
 
+    target_link_libraries(serial-configurator-transport-timeout-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
     # i18n test embeds src/ui/sc_i18n.c by #include - it is pure C with no
     # GTK or core deps, so the test target stands alone (linkable on
     # hosts that lack libgtk-4-dev).
@@ -506,6 +544,11 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-phase8-host-tests
         COMMAND serial-configurator-phase8-host-tests
+    )
+
+    add_test(
+        NAME serial-configurator-transport-timeout-tests
+        COMMAND serial-configurator-transport-timeout-tests
     )
 
     add_test(

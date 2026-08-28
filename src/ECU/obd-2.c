@@ -1019,9 +1019,12 @@ static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId,
     iso_tp(responseId, dtcLen, DTCs);
     handled = true;
   } else if (mode == (uint8_t)OBD_MODE_CLEAR_DTC) {
-    dtcManagerClearAll();
-    txData[0] = 0x01;
-    *tx = true;
+    if (dtcManagerClearAll()) {
+      txData[0] = 0x01;
+      *tx = true;
+    } else {
+      negAck(responseId, mode, NRC_CONDITIONS_NOT_CORRECT);
+    }
     handled = true;
   } else if (mode == (uint8_t)OBD_MODE_ONBOARD_MONITORING) {
     handled = handleMode06(pid, responseId, mode, txData, tx);
@@ -2243,11 +2246,13 @@ static bool handleUdsService(uint8_t mode, uint8_t numofBytes,
       deb("UDS 0x14 clearDTC (no group bytes)");
     }
 
-    dtcManagerClearAll();
-
-    txData[0] = 0x01;
-    txData[1] = UDS_RSP_CLEAR_DTC;
-    *tx = true;
+    if (dtcManagerClearAll()) {
+      txData[0] = 0x01;
+      txData[1] = UDS_RSP_CLEAR_DTC;
+      *tx = true;
+    } else {
+      negAck(responseId, mode, NRC_CONDITIONS_NOT_CORRECT);
+    }
   } else if (mode == (uint8_t)KWP_SVC_READ_DTC_BY_STATUS) {
     handled = true;
     // KWP2000 readDiagnosticTroubleCodesByStatus (ISO 14230-3)
