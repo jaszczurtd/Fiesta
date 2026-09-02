@@ -6,6 +6,7 @@
       "description": "Target/board",
       "type": "pickString",
       "options": [
+        "esp32:esp32-devkitc-v4 - Espressif ESP32-DevKitC V4",
         "esp32s3:waveshare-esp32-s3-zero - Waveshare ESP32-S3-Zero SKU 25081",
         "rp2040:pico - Raspberry Pi Pico",
         "rp2040:pico-core1262-hf - Raspberry Pi Pico with Core1262-HF",

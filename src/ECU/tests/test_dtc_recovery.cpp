@@ -131,7 +131,13 @@ void test_legacy_migration_uses_one_snapshot_commit(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_eeprom_set_progress_callback(nullptr, nullptr));
 
-  TEST_ASSERT_EQUAL_UINT32(1u, commitCount);
+  /* One coalesced KV publish (legacy-migrated key + schema key + DTC flags
+   * batched under a single hal_kv_commit(), not one write per key) now
+   * flashes in 3 crash-safe phases -- invalidate the destination header,
+   * write+verify the body, then publish the new header -- instead of one
+   * flat write. 3 notifications therefore still means exactly one snapshot
+   * commit; see hal_kv.cpp's publish_locked()/jh_eeprom_replace_region(). */
+  TEST_ASSERT_EQUAL_UINT32(3u, commitCount);
   TEST_ASSERT_EQUAL_UINT8(1u, dtcManagerCount(DTC_KIND_STORED));
   uint32_t value = 0u;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(kLegacyMigratedKey, &value));

@@ -17,8 +17,6 @@
 #define DTC_KV_BASE (DTC_EEPROM_BASE + 32u)
 #define DTC_KV_PREVIOUS_BASE DTC_EEPROM_BASE
 #define DTC_KV_SIZE (ECU_EEPROM_SIZE_BYTES / 2)
-#define DTC_KV_BANK_MAGIC 0x4B56u
-#define DTC_KV_BANK_VERSION 1u
 #define DTC_KV_SCHEMA_KEY 0xD700u
 #define DTC_KV_SCHEMA_VERSION 1u
 #define DTC_KV_LEGACY_MIGRATED_KEY 0xD701u
@@ -459,37 +457,25 @@ TESTABLE_STATIC uint16_t dtcKvEffectiveSpan(void) {
   return dtcKvEffectiveSpanForBase(s_dtcKvBase);
 }
 
-static hal_status_t previousKvBankLooksValid(uint16_t bankBase,
-                                             bool *outValid) {
-  if (outValid == NULL) {
-    return HAL_EINVAL;
-  }
-  uint8_t headerPrefix[3] = {0u};
-  const hal_status_t status = hal_eeprom_read_bytes(
-      bankBase, headerPrefix, (uint16_t)sizeof(headerPrefix));
-  if (status != HAL_OK) {
-    return status;
-  }
-  const uint16_t magic =
-      (uint16_t)headerPrefix[0] | ((uint16_t)headerPrefix[1] << 8u);
-  *outValid =
-      magic == DTC_KV_BANK_MAGIC && headerPrefix[2] == DTC_KV_BANK_VERSION;
-  return HAL_OK;
-}
-
 static hal_status_t selectKvBase(void) {
   s_dtcKvBase = DTC_KV_BASE;
   if (s_dtcState.legacyValid) {
     return HAL_OK;
   }
 
+  /* hal_kv's on-disk bank header is a private implementation detail (it
+   * already changed shape once, see JaszczurHAL hal_kv.cpp format v1 -> v2);
+   * hal_kv_bank_looks_present_ex() is the supported way to detect a bank at
+   * a candidate address without hand-decoding that layout. */
+  const uint16_t previousBankSize = (uint16_t)(DTC_KV_SIZE / 2u);
   bool firstBank = false;
   bool secondBank = false;
-  hal_status_t status =
-      previousKvBankLooksValid(DTC_KV_PREVIOUS_BASE, &firstBank);
+  hal_status_t status = hal_kv_bank_looks_present_ex(
+      DTC_KV_PREVIOUS_BASE, previousBankSize, &firstBank);
   if (status == HAL_OK) {
-    status = previousKvBankLooksValid(
-        (uint16_t)(DTC_KV_PREVIOUS_BASE + (DTC_KV_SIZE / 2u)), &secondBank);
+    status = hal_kv_bank_looks_present_ex(
+        (uint16_t)(DTC_KV_PREVIOUS_BASE + previousBankSize), previousBankSize,
+        &secondBank);
   }
   if (status == HAL_OK && (firstBank || secondBank)) {
     s_dtcKvBase = DTC_KV_PREVIOUS_BASE;
@@ -526,7 +512,16 @@ static hal_status_t initializeKvOperation(const void *user) {
   if (span < 2u) {
     return HAL_EOVERFLOW;
   }
-  return hal_kv_init_ex(s_dtcKvBase, span);
+  status = hal_kv_init_ex(s_dtcKvBase, span);
+  if (status != HAL_OK) {
+    return status;
+  }
+  /* ECU commands (e.g. SC_SET_PARAM) gate on live storage health, and DTC/ECU
+   * param recovery must notice a fault that develops after init, not only
+   * one caught at init or at the next write. hal_kv defaults to serving gets
+   * from its RAM cache for speed; opt into read-through so a live EEPROM
+   * fault surfaces through hal_kv_get_*_ex() instead of being masked. */
+  return hal_kv_set_read_through(true);
 }
 
 static hal_status_t initializeKvStorage(uint16_t *outSpan) {
