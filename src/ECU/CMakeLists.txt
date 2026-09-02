@@ -50,6 +50,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/spi/hal_spi.cpp
     ${HAL_SRC}/hal/gps/hal_gps.cpp
     ${HAL_SRC}/hal/security/hal_sc_auth.cpp
+    ${HAL_SRC}/hal/security/hal_crc.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
     ${HAL_SRC}/hal/serial/hal_serial_commands.cpp
     ${HAL_SRC}/hal/serial/hal_serial_session.cpp
