@@ -1,6 +1,9 @@
 
 #include "sensors.h"
+#include "../common/fiesta_sensor_helpers.h"
 #include <hal/i2c/hal_i2c_slave.h>
+#include <math.h>
+#include <stdlib.h>
 
 // Signed right-shift must be arithmetic (sign-extending) for EMA filters to
 // work correctly. GCC guarantees this; the assertion guards against
@@ -38,7 +41,7 @@ void initI2C(void) {
  */
 void initBasicPIO(void) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
-  hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
+  hal_adc_set_resolution(HAL_ADC_UTIL_DEFAULT_BITS);
 }
 
 /**
@@ -457,9 +460,13 @@ static float adcEma(float raw, float prev) {
  * @return Tenths-of-volt value clamped to an 8-bit register.
  */
 uint8_t getSupplyVoltageRaw(void) {
-  float avgAdc = getAverageValueFrom(ADC_VOLT_PIN);
-  float volts =
-      adcToVolt((int)(avgAdc + 0.5f), (float)VDIV_R1_KOHM, (float)VDIV_R2_KOHM);
+  float avgAdc = 0.0f;
+  float volts = 0.0f;
+  if (fiesta_adc_read_average_ex(ADC_VOLT_PIN, &avgAdc) != HAL_OK ||
+      fiesta_adc_to_voltage_ex((int)(avgAdc + 0.5f), (float)VDIV_R1_KOHM,
+                               (float)VDIV_R2_KOHM, &volts) != HAL_OK) {
+    volts = 0.0f;
+  }
   filteredVoltage = adcEma(volts, filteredVoltage);
   if (isnan(filteredVoltage) || filteredVoltage < 0.0f)
     filteredVoltage = 0.0f;
@@ -476,7 +483,11 @@ uint8_t getSupplyVoltageRaw(void) {
  * @note This is the module's G81-like fuel-temperature input.
  */
 uint8_t getFuelTemperatureRaw(void) {
-  float tempC = ntcToTemp(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A, R_VP37_FUEL_B);
+  float tempC = 0.0f;
+  if (fiesta_ntc_read_temperature_ex(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A,
+                                     R_VP37_FUEL_B, &tempC) != HAL_OK) {
+    tempC = 0.0f;
+  }
   if (isnan(tempC))
     tempC = 0.0f;
   filteredFuelTemp = adcEma(tempC, filteredFuelTemp);

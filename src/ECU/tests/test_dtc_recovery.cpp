@@ -1,10 +1,12 @@
 #include "dtcManager.h"
+
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
 #include "hal/storage/hal_kv.h"
 #include "hardwareConfig.h"
 #include "testable/dtcManager_testable.h"
 #include "unity.h"
+#include <utils/tools_logger_config.h>
 
 static constexpr uint16_t kLegacyBase = HAL_TOOLS_EEPROM_FIRST_ADDR + 96u;
 static constexpr uint16_t kPreviousKvBase = kLegacyBase;
@@ -127,9 +129,13 @@ void test_legacy_migration_uses_one_snapshot_commit(void) {
   uint32_t commitCount = 0u;
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_set_progress_callback(countCommit, &commitCount));
+  hal_kv_stats_t before = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&before));
   dtcManagerInit();
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_eeprom_set_progress_callback(nullptr, nullptr));
+  hal_kv_stats_t after = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&after));
 
   /* One coalesced KV publish (legacy-migrated key + schema key + DTC flags
    * batched under a single hal_kv_commit(), not one write per key) now
@@ -138,6 +144,7 @@ void test_legacy_migration_uses_one_snapshot_commit(void) {
    * flat write. 3 notifications therefore still means exactly one snapshot
    * commit; see hal_kv.cpp's publish_locked()/jh_eeprom_replace_region(). */
   TEST_ASSERT_EQUAL_UINT32(3u, commitCount);
+  TEST_ASSERT_EQUAL_UINT32(before.generation + 1u, after.generation);
   TEST_ASSERT_EQUAL_UINT8(1u, dtcManagerCount(DTC_KIND_STORED));
   uint32_t value = 0u;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(kLegacyMigratedKey, &value));

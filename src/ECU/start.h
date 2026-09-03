@@ -5,7 +5,7 @@
 #include "config.h"
 #include <libConfig.h>
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "can.h"
 #include "dtcManager.h"

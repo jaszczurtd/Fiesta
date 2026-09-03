@@ -160,8 +160,8 @@ static void assert_rpm_frame(int32_t expectedRpm) {
   TEST_ASSERT_EQUAL_UINT32(CAN_ID_RPM, id);
   TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
   TEST_ASSERT_EQUAL_INT(expectedRpm,
-                        MsbLsbToInt(data[CAN_FRAME_RPM_UPDATE_HI],
-                                    data[CAN_FRAME_RPM_UPDATE_LO]));
+                        jh_u16_from_bytes(data[CAN_FRAME_RPM_UPDATE_HI],
+                                          data[CAN_FRAME_RPM_UPDATE_LO]));
 }
 
 void test_can_init_uses_one_shot_with_software_retry(void) {
@@ -242,7 +242,7 @@ void test_can_update_01_contains_adc_supply_voltage_without_vp37(void) {
 
   int hi = 0;
   int lo = 0;
-  floatToDec(measuredVolts, &hi, &lo);
+  fiesta_can_split_decimal_tenths(measuredVolts, &hi, &lo);
 
   TEST_ASSERT_EQUAL_UINT8((uint8_t)hi, data[CAN_FRAME_ECU_UPDATE_VOLTS_HI]);
   TEST_ASSERT_EQUAL_UINT8((uint8_t)lo, data[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);

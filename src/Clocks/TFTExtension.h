@@ -9,8 +9,8 @@
 #include "pressureGauge.h"
 #include "simpleGauge.h"
 #include "tempGauge.h"
+#include <JaszczurHAL.h>
 #include <hal/display/hal_display.h>
-#include <tools.h>
 
 void initTFT(void);
 void softInitDisplay(void);

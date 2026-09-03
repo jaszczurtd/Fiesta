@@ -6,6 +6,9 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>
+#include <utils/multicoreWatchdog.h>
+#include <utils/tools_common_defs.h>
+#include <utils/tools_logger_config.h>
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances
@@ -166,8 +169,8 @@ static void feedWatchdogDuringPersistence(void *user) {
  */
 static void initializeCore0(void) {
 
-  debugInit();
-  setDebugPrefixWithColon(SC_MODULE_TOKEN_ECU);
+  hal_debug_init_default();
+  hal_debug_set_module_prefix(SC_MODULE_TOKEN_ECU);
 
   deb("Build timestamp: %s", ecu_BuildDateTime);
 
@@ -238,8 +241,8 @@ static void initializeCore0(void) {
     const bool hasWatchdogSnapshot = (s_startRuntimeState.wSizeVal >= 4);
 
     bool validDateAndTime =
-        isValidString(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
-        isValidString(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
+        hal_text_is_printable(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
+        hal_text_is_printable(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
 
     if (validDateAndTime) {
       snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", getGPSDate(),
@@ -345,7 +348,7 @@ static void initializeCore0(void) {
   CAN_sendAll();
   setupTimers();
 
-  deb("System temperature:%.1fC", rroundf(hal_read_chip_temp()));
+  deb("System temperature:%.1fC", hal_math_round_tenth(hal_read_chip_temp()));
 
   setStartedCore0();
 

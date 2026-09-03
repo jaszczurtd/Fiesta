@@ -1,5 +1,7 @@
 #include "can.h"
 
+#include <utils/multicoreWatchdog.h>
+
 #ifdef UNIT_TEST
 hal_can_t oilspeedTestGetCanHandle(void);
 #endif
@@ -45,7 +47,7 @@ void updateCANrecipients(void) {
   buf[CAN_FRAME_NUMBER] = frameNumber++;
 
   int hi, lo;
-  floatToDec(getGlobalValue(F_OIL_PRESSURE), &hi, &lo);
+  fiesta_can_split_decimal_tenths(getGlobalValue(F_OIL_PRESSURE), &hi, &lo);
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (uint8_t)hi;
   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
   buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] =
@@ -102,8 +104,9 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     ecuConnected = true;
 
     setGlobalValue(F_INTAKE_TEMP, buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
-    setGlobalValue(F_FUEL, MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
-                                       buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
+    setGlobalValue(F_FUEL,
+                   jh_u16_from_bytes(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
+                                     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
     setGlobalValue(F_GPS_IS_AVAILABLE, buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
     setGlobalValue(F_GPS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
   } break;
@@ -163,19 +166,23 @@ bool canSendLoop(void) {
   static int amountCounter = 0;
   static int lastSpeed = 0;
   static unsigned long pauseUntil = 0;
+  static hal_periodic_random_int_t speedRandom = {};
 
   unsigned long now = hal_millis();
+  int speed = -1;
 
   if (pauseUntil != 0) {
     if (now < pauseUntil) {
-      getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
+      (void)hal_periodic_random_int_get_ex(
+          &speedRandom, now, ABS_CAR_SPEED_SEQUENCE_DELAY, 200, &speed);
       return true;
     } else {
       pauseUntil = 0;
     }
   }
 
-  int speed = getRandomEverySomeMillis(ABS_CAR_SPEED_SEQUENCE_DELAY, 200);
+  (void)hal_periodic_random_int_get_ex(
+      &speedRandom, now, ABS_CAR_SPEED_SEQUENCE_DELAY, 200, &speed);
   if (lastSpeed != speed) {
     amountCounter++;
     if (amountCounter == 4) {
@@ -210,7 +217,10 @@ bool canSendLoop(void) {
 
 #ifdef OIL_PRESSURE_PACKET_TEST
   static float lastPressure = 0.0f;
-  float pressure = getRandomFloatEverySomeMillis(4500, 4.0);
+  static hal_periodic_random_float_t pressureRandom = {};
+  float pressure = -1.0f;
+  (void)hal_periodic_random_float_get_ex(&pressureRandom, hal_millis(), 4500u,
+                                         4.0f, &pressure);
   if (lastPressure != pressure) {
     lastPressure = pressure;
     deb("new pressure: %f", pressure);

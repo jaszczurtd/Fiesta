@@ -1,7 +1,10 @@
 #include "gps.h"
 #include <hal/time/hal_time.h>
+
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <utils/tools_common_defs.h>
 
 typedef struct {
   bool isGPSInitialized;
@@ -93,7 +96,7 @@ static void getAdjustedDateTime(int *year, int *month, int *day, int *hour,
   *hour = hal_gps_time_hour();
   *minute = hal_gps_time_minute();
   *second = hal_gps_time_second();
-  adjustTime(year, month, day, hour, minute);
+  hal_time_adjust_cet_cest(year, month, day, hour, minute);
 }
 
 const char *getGPSDate(void) {

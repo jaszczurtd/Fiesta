@@ -2,7 +2,7 @@
 #ifndef ENGINE_MAPS
 #define ENGINE_MAPS
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #ifdef __cplusplus
 extern "C" {

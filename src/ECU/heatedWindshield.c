@@ -35,7 +35,8 @@ static void heatedWindshields_disableHeatedWindows(heatedWindshields *self) {
   self->lastHeatedWindowsSecond = 0;
 }
 
-void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int32_t side) {
+void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable,
+                                    int32_t side) {
   (void)self;
   pcf8574_write(side, enable);
 }
@@ -58,15 +59,15 @@ bool heatedWindshields_isHeatedWindowEnabled(const heatedWindshields *self) {
 void heatedWindshields_process(heatedWindshields *self) {
 
   float volts = getGlobalValue(F_VOLTS);
-  if(volts < MINIMUM_VOLTS_AMOUNT) {
-    if(heatedWindshields_isHeatedWindowEnabled(self)) {
+  if (volts < MINIMUM_VOLTS_AMOUNT) {
+    if (heatedWindshields_isHeatedWindowEnabled(self)) {
       heatedWindshields_disableHeatedWindows(self);
       return;
     }
   }
 
-  if(self->waitingForUnpress) {
-    if(heatedWindshields_isHeatedButtonPressed(self)) {
+  if (self->waitingForUnpress) {
+    if (heatedWindshields_isHeatedButtonPressed(self)) {
       self->waitingForUnpress = false;
     }
     return;
@@ -74,26 +75,26 @@ void heatedWindshields_process(heatedWindshields *self) {
 
     bool pressed = false;
 
-    if(!heatedWindshields_isHeatedButtonPressed(self)) {
+    if (!heatedWindshields_isHeatedButtonPressed(self)) {
       pressed = true;
       self->waitingForUnpress = true;
     }
 
-    if(pressed) {
+    if (pressed) {
 
-      if(heatedWindshields_isHeatedWindowEnabled(self)) {
+      if (heatedWindshields_isHeatedWindowEnabled(self)) {
         heatedWindshields_disableHeatedWindows(self);
         deb("disable heated windshield");
 
       } else {
 
-        if(volts < MINIMUM_VOLTS_AMOUNT) {
+        if (volts < MINIMUM_VOLTS_AMOUNT) {
           deb("voltage too low to enable heated windshield");
           return;
         }
 
         self->heatedWindowsOverallTimer = (HEATED_WINDOWS_TIME * 60);
-        self->lastHeatedWindowsSecond = getSeconds();
+        self->lastHeatedWindowsSecond = hal_get_seconds();
 
         self->heatedWindowEnabled = true;
 
@@ -103,22 +104,23 @@ void heatedWindshields_process(heatedWindshields *self) {
       return;
     }
 
-    if(heatedWindshields_isHeatedWindowEnabled(self)) {
-      if(self->lastHeatedWindowsSecond != getSeconds()) {
-        self->lastHeatedWindowsSecond = getSeconds();
+    if (heatedWindshields_isHeatedWindowEnabled(self)) {
+      if (self->lastHeatedWindowsSecond != hal_get_seconds()) {
+        self->lastHeatedWindowsSecond = hal_get_seconds();
 
-        if(self->heatedWindowsOverallTimer-- <= 0) {
+        if (self->heatedWindowsOverallTimer-- <= 0) {
           heatedWindshields_disableHeatedWindows(self);
         }
-
       }
     }
 
-    //execute action
-    if(self->heatedWindowEnabled != self->lastHeatedWindowEnabled) {
+    // execute action
+    if (self->heatedWindowEnabled != self->lastHeatedWindowEnabled) {
       self->lastHeatedWindowEnabled = self->heatedWindowEnabled;
-      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled, PCF8574_O_HEATED_WINDOW_L);
-      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled, PCF8574_O_HEATED_WINDOW_P);
+      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled,
+                                     PCF8574_O_HEATED_WINDOW_L);
+      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled,
+                                     PCF8574_O_HEATED_WINDOW_P);
     }
   }
 }

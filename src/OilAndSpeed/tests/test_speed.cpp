@@ -1,43 +1,11 @@
-#include "unity.h"
-#include "speed.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "speed.h"
+#include "unity.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <string.h>
 
 static float s_globalValues[F_LAST];
-
-extern "C" int parseNumber(const char **str) {
-  int value = 0;
-
-  if ((str == NULL) || (*str == NULL)) {
-    return 0;
-  }
-
-  while (isdigit((unsigned char)**str)) {
-    value = (value * 10) + (**str - '0');
-    (*str)++;
-  }
-
-  return value;
-}
-
-extern "C" void removeSpaces(char *str) {
-  char *dst = str;
-
-  if (str == NULL) {
-    return;
-  }
-
-  for (char *src = str; *src != '\0'; ++src) {
-    if (!isspace((unsigned char)*src)) {
-      *dst++ = *src;
-    }
-  }
-
-  *dst = '\0';
-}
 
 void setGlobalValue(int idx, float val) {
   if ((idx >= 0) && (idx < F_LAST)) {
@@ -63,7 +31,8 @@ void tearDown(void) {}
 void test_calculateCircumferenceMeters_accepts_standard_tire_format(void) {
   double expectedSidewallHeight = (185.0 * (55.0 / 100.0)) / 1000.0;
   double expectedRimDiameter = 15.0 * 0.0254;
-  double expectedDiameter = expectedRimDiameter + (2.0 * expectedSidewallHeight);
+  double expectedDiameter =
+      expectedRimDiameter + (2.0 * expectedSidewallHeight);
   double expectedCircumference = expectedDiameter * PI;
 
   TEST_ASSERT_TRUE(calculateCircumferenceMeters("185/55 R15", 1.0));
@@ -92,8 +61,7 @@ void test_setupSpeedometer_interrupts_drive_abs_speed_updates(void) {
   hal_mock_set_millis(125);
   onImpulseTranslating();
 
-  TEST_ASSERT_FLOAT_WITHIN(0.01f,
-                           (float)(getCircumference() * 8.0 * 3.6),
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, (float)(getCircumference() * 8.0 * 3.6),
                            getGlobalValue(F_ABS_CAR_SPEED));
 }
 

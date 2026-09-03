@@ -1,13 +1,14 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "config.h"
 #include "hal/control/hal_pid_controller.h"
+#include "hal/core/hal_array.h"
+#include "hal/core/hal_math.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_serial_frame.h"
 #include "hal/system/hal_system.h"
 #include "hal/timers/hal_soft_timer.h"
 #include "unity.h"
-#include "utils/tools_api.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -330,21 +331,22 @@ void test_ecu_config_session_non_framed_input_is_silently_dropped(void) {
   TEST_ASSERT_EQUAL_UINT(0u, test_stubs_forwarded_serial_count());
 }
 
-// ── float_to_u32 / u32_to_float tests ───────────────────────────────────────
+// ── hal_math_float_to_u32 / hal_math_u32_to_float tests
+// ───────────────────────────────────────
 
 void test_float_to_u32_roundtrip(void) {
   float values[] = {0.0f, 1.0f, -1.0f, 0.42f, 3.14159f, 1e10f, 1e-10f};
   for (size_t i = 0; i < COUNTOF(values); i++) {
-    uint32_t u = float_to_u32(values[i]);
-    float back = u32_to_float(u);
+    uint32_t u = hal_math_float_to_u32(values[i]);
+    float back = hal_math_u32_to_float(u);
     TEST_ASSERT_EQUAL_FLOAT(values[i], back);
   }
 }
 
 void test_float_to_u32_known_pattern(void) {
   // IEEE 754: 1.0f = 0x3F800000
-  TEST_ASSERT_EQUAL_HEX32(0x3F800000u, float_to_u32(1.0f));
-  TEST_ASSERT_EQUAL_FLOAT(1.0f, u32_to_float(0x3F800000u));
+  TEST_ASSERT_EQUAL_HEX32(0x3F800000u, hal_math_float_to_u32(1.0f));
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, hal_math_u32_to_float(0x3F800000u));
 }
 
 int main(void) {

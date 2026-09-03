@@ -1,6 +1,10 @@
 #include "can.h"
+
 #include "dtcManager.h"
 #include "gps.h"
+#include <math.h>
+#include <utils/multicoreWatchdog.h>
+#include <utils/tools_common_defs.h>
 
 /**
  * @brief Mark that a CAN interrupt signalled pending traffic.
@@ -232,7 +236,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] =
         (uint8_t)getGlobalValue(F_CALCULATED_ENGINE_LOAD);
 
-    floatToDec(getGlobalValue(F_VOLTS), &hi, &lo);
+    fiesta_can_split_decimal_tenths(getGlobalValue(F_VOLTS), &hi, &lo);
     buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI] = (uint8_t)hi;
     buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO] = (uint8_t)lo;
 
@@ -311,8 +315,9 @@ void CAN_sendTurboUpdate(void) {
     int hi, lo;
     int hi_d, lo_d;
 
-    floatToDec(getGlobalValue(F_PRESSURE), &hi, &lo);
-    floatToDec(getGlobalValue(F_PRESSURE_DESIRED), &hi_d, &lo_d);
+    fiesta_can_split_decimal_tenths(getGlobalValue(F_PRESSURE), &hi, &lo);
+    fiesta_can_split_decimal_tenths(getGlobalValue(F_PRESSURE_DESIRED), &hi_d,
+                                    &lo_d);
     uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
 
     s_canState.lastTurboLoSent = lo;
@@ -382,11 +387,11 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     s_canState.egtMessagesCount++;
     s_canState.egtEverSeenFlag = true;
 
-    setGlobalValue(F_EGT, MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
-                                      buf[CAN_FRAME_EGT_UPDATE_EGT_LO]));
+    setGlobalValue(F_EGT, jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
+                                            buf[CAN_FRAME_EGT_UPDATE_EGT_LO]));
     setGlobalValue(F_DPF_TEMP,
-                   MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
-                               buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
+                   jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                                     buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
   } break;
 
   case CAN_ID_CLOCK_BRIGHTNESS: {
@@ -394,9 +399,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       derr("Received truncated clock-brightness frame with len: %d", len);
       return;
     }
-    setGlobalValue(F_CLOCK_BRIGHTNESS,
-                   MsbLsbToInt(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI],
-                               buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]));
+    setGlobalValue(
+        F_CLOCK_BRIGHTNESS,
+        jh_u16_from_bytes(buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI],
+                          buf[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO]));
   } break;
 
   case CAN_ID_LUMENS: {
@@ -404,9 +410,9 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       derr("Received truncated lumens frame with len: %d", len);
       return;
     }
-    setGlobalValue(F_OUTSIDE_LUMENS,
-                   decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
-                              buf[CAN_FRAME_LIGHTS_UPDATE_LO]));
+    setGlobalValue(F_OUTSIDE_LUMENS, fiesta_can_join_decimal_tenths(
+                                         buf[CAN_FRAME_LIGHTS_UPDATE_HI],
+                                         buf[CAN_FRAME_LIGHTS_UPDATE_LO]));
   } break;
 
   case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
@@ -415,8 +421,9 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       return;
     }
     setGlobalValue(F_OIL_PRESSURE,
-                   decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                              buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
+                   fiesta_can_join_decimal_tenths(
+                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
+                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
     setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
   } break;
 

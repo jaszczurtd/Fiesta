@@ -1,4 +1,5 @@
 #include "peripherials.h"
+#include <utils/tools_common_defs.h>
 
 static volatile float valueFields[F_LAST];
 m_mutex_def(valueFieldsMutex);
@@ -22,14 +23,29 @@ void initBasicPIO(void) {
 
 void setLEDColor(int ledColor) {
   switch (ledColor) {
-    case NONE:   hal_rgb_led_set_color(HAL_RGB_LED_NONE);   break;
-    case RED:    hal_rgb_led_set_color(HAL_RGB_LED_RED);    break;
-    case GREEN:  hal_rgb_led_set_color(HAL_RGB_LED_GREEN);  break;
-    case BLUE:   hal_rgb_led_set_color(HAL_RGB_LED_BLUE);   break;
-    case YELLOW: hal_rgb_led_set_color(HAL_RGB_LED_YELLOW); break;
-    case WHITE:  hal_rgb_led_set_color(HAL_RGB_LED_WHITE);  break;
-    case PURPLE: hal_rgb_led_set_color(HAL_RGB_LED_PURPLE); break;
-    default:     break;
+  case NONE:
+    hal_rgb_led_set_color(HAL_RGB_LED_NONE);
+    break;
+  case RED:
+    hal_rgb_led_set_color(HAL_RGB_LED_RED);
+    break;
+  case GREEN:
+    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+    break;
+  case BLUE:
+    hal_rgb_led_set_color(HAL_RGB_LED_BLUE);
+    break;
+  case YELLOW:
+    hal_rgb_led_set_color(HAL_RGB_LED_YELLOW);
+    break;
+  case WHITE:
+    hal_rgb_led_set_color(HAL_RGB_LED_WHITE);
+    break;
+  case PURPLE:
+    hal_rgb_led_set_color(HAL_RGB_LED_PURPLE);
+    break;
+  default:
+    break;
   }
 }
 
@@ -45,4 +61,3 @@ float getGlobalValue(int idx) {
   m_mutex_exit(valueFieldsMutex);
   return v;
 }
-

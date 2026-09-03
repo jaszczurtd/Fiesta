@@ -2,7 +2,7 @@
 #define T_CAN
 
 #include "../common/canDefinitions/canDefinitions.h"
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "config.h"
 #include "rpm.h"

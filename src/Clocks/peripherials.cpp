@@ -15,9 +15,7 @@ void initSPI(void) {
   enableOilLamp(true);
 }
 
-void enableOilLamp(bool enable) {
-  hal_gpio_write(OIL_OUTPUT_PIN, enable);
-}
+void enableOilLamp(bool enable) { hal_gpio_write(OIL_OUTPUT_PIN, enable); }
 
 void initBasicPIO(void) {
   hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
@@ -35,6 +33,5 @@ void lcdBrightness(int val) {
 int getThrottlePercentage(void) {
   int currentVal = int(valueFields[F_THROTTLE_POS]);
   float percent = (currentVal * 100) / PWM_RESOLUTION;
-  return percentToGivenVal(percent, 100);
+  return hal_math_percent_to_value(percent, 100);
 }
-

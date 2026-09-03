@@ -1,13 +1,13 @@
 #ifndef T_TURBO
 #define T_TURBO
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 #include <float.h>
 
-#include "config.h"
 #include "../common/canDefinitions/canDefinitions.h"
-#include "rpm.h"
+#include "config.h"
 #include "hardwareConfig.h"
+#include "rpm.h"
 #include "tests.h"
 
 #include "engineMaps.h"
@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-//#define JUST_TEST_BY_THROTTLE
+// #define JUST_TEST_BY_THROTTLE
 
 #define SOLENOID_UPDATE_TIME 700
 #define PRESSURE_LIMITER_FACTOR 2
@@ -47,12 +47,14 @@ typedef struct {
 void Turbo_init(Turbo *self);
 
 /**
- * @brief Update turbo actuator command from legacy driver-demand, RPM, and boost state.
+ * @brief Update turbo actuator command from legacy driver-demand, RPM, and
+ * boost state.
  * @param self Turbo controller instance to process.
  * @return None.
- * @note The `n75` field intentionally follows OEM N75 terminology for the boost-control
- *       solenoid path. The demand input still comes from legacy throttle-named driver
- *       demand rather than from a final allowed-fuel-quantity variable.
+ * @note The `n75` field intentionally follows OEM N75 terminology for the
+ * boost-control solenoid path. The demand input still comes from legacy
+ * throttle-named driver demand rather than from a final allowed-fuel-quantity
+ * variable.
  */
 void Turbo_process(Turbo *self);
 

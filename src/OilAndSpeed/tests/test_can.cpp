@@ -1,7 +1,7 @@
-#include "unity.h"
 #include "can.h"
-#include "peripherials.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "peripherials.h"
+#include "unity.h"
 
 #include <cstring>
 
@@ -24,9 +24,6 @@ float getGlobalValue(int idx) {
 
 void setLEDColor(int) {}
 extern "C" void watchdog_feed(void) {}
-// tools.cpp pulls in getAverageValueFrom which references hal_adc_read;
-// provide a no-op stub so the symbol resolves without pulling hal_adc mock.
-extern "C" int hal_adc_read(uint8_t) { return 0; }
 
 static void ensure_can_ready(void) {
   if (oilspeedTestGetCanHandle() == NULL) {
@@ -57,34 +54,33 @@ void test_truncated_ecu_update_02_frame_is_ignored(void) {
   // ECU_UPDATE_02 reads up to CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED (index 5);
   // a 3-byte frame must be rejected without touching state.
   uint8_t shortFrame[3] = {0x00, 0x11, 0x22};
-  hal_mock_can_inject(oilspeedTestGetCanHandle(),
-                      CAN_ID_ECU_UPDATE_02, 3, shortFrame);
+  hal_mock_can_inject(oilspeedTestGetCanHandle(), CAN_ID_ECU_UPDATE_02, 3,
+                      shortFrame);
   canMainLoop();
 
-  TEST_ASSERT_EQUAL_FLOAT(55.0f,   getGlobalValue(F_INTAKE_TEMP));
+  TEST_ASSERT_EQUAL_FLOAT(55.0f, getGlobalValue(F_INTAKE_TEMP));
   TEST_ASSERT_EQUAL_FLOAT(4321.0f, getGlobalValue(F_FUEL));
-  TEST_ASSERT_EQUAL_FLOAT(1.0f,    getGlobalValue(F_GPS_IS_AVAILABLE));
-  TEST_ASSERT_EQUAL_FLOAT(88.0f,   getGlobalValue(F_GPS_CAR_SPEED));
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, getGlobalValue(F_GPS_IS_AVAILABLE));
+  TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_GPS_CAR_SPEED));
 }
 
 void test_full_ecu_update_02_frame_updates_state(void) {
   // Positive counterpart: a well-formed frame must update all four fields.
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
-  frame[CAN_FRAME_ECU_UPDATE_INTAKE]         = 45;
-  frame[CAN_FRAME_ECU_UPDATE_FUEL_HI]        = 0x10;  // 4096
-  frame[CAN_FRAME_ECU_UPDATE_FUEL_LO]        = 0x00;
-  frame[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]  = 1;
-  frame[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]  = 60;
+  frame[CAN_FRAME_ECU_UPDATE_INTAKE] = 45;
+  frame[CAN_FRAME_ECU_UPDATE_FUEL_HI] = 0x10; // 4096
+  frame[CAN_FRAME_ECU_UPDATE_FUEL_LO] = 0x00;
+  frame[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = 1;
+  frame[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = 60;
 
-  hal_mock_can_inject(oilspeedTestGetCanHandle(),
-                      CAN_ID_ECU_UPDATE_02,
+  hal_mock_can_inject(oilspeedTestGetCanHandle(), CAN_ID_ECU_UPDATE_02,
                       CAN_FRAME_MAX_LENGTH, frame);
   canMainLoop();
 
-  TEST_ASSERT_EQUAL_FLOAT(45.0f,   getGlobalValue(F_INTAKE_TEMP));
+  TEST_ASSERT_EQUAL_FLOAT(45.0f, getGlobalValue(F_INTAKE_TEMP));
   TEST_ASSERT_EQUAL_FLOAT(4096.0f, getGlobalValue(F_FUEL));
-  TEST_ASSERT_EQUAL_FLOAT(1.0f,    getGlobalValue(F_GPS_IS_AVAILABLE));
-  TEST_ASSERT_EQUAL_FLOAT(60.0f,   getGlobalValue(F_GPS_CAR_SPEED));
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, getGlobalValue(F_GPS_IS_AVAILABLE));
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, getGlobalValue(F_GPS_CAR_SPEED));
 }
 
 void test_clock_brightness_frame_marks_cluster_connected(void) {
@@ -94,8 +90,7 @@ void test_clock_brightness_frame_marks_cluster_connected(void) {
   TEST_ASSERT_FALSE(isClusterConnected());
 
   uint8_t dummy[CAN_FRAME_MAX_LENGTH] = {0};
-  hal_mock_can_inject(oilspeedTestGetCanHandle(),
-                      CAN_ID_CLOCK_BRIGHTNESS,
+  hal_mock_can_inject(oilspeedTestGetCanHandle(), CAN_ID_CLOCK_BRIGHTNESS,
                       CAN_FRAME_MAX_LENGTH, dummy);
   canMainLoop();
 
@@ -108,11 +103,12 @@ void test_unknown_can_id_does_not_update_state(void) {
   // accidentally drop into a typo'd case label.
   setGlobalValue(F_INTAKE_TEMP, 77.0f);
   setGlobalValue(F_FUEL, 1234.0f);
-  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22};
-  hal_mock_can_inject(oilspeedTestGetCanHandle(),
-                      0x7FFu, CAN_FRAME_MAX_LENGTH, frame);
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0xAA, 0xBB, 0xCC, 0xDD,
+                                         0xEE, 0xFF, 0x11, 0x22};
+  hal_mock_can_inject(oilspeedTestGetCanHandle(), 0x7FFu, CAN_FRAME_MAX_LENGTH,
+                      frame);
   canMainLoop();
-  TEST_ASSERT_EQUAL_FLOAT(77.0f,   getGlobalValue(F_INTAKE_TEMP));
+  TEST_ASSERT_EQUAL_FLOAT(77.0f, getGlobalValue(F_INTAKE_TEMP));
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, getGlobalValue(F_FUEL));
 }
 

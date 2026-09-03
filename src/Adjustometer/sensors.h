@@ -6,7 +6,7 @@
 #include <libConfig.h>
 
 #include "../common/canDefinitions/canDefinitions.h"
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "hardwareConfig.h"
 
@@ -29,8 +29,8 @@ extern "C" {
 #define ADJ_VOLTAGE_MIN_TV 80  // 8.0 V
 #define ADJ_VOLTAGE_MAX_TV 150 // 15.0 V
 
-// Fuel temp raw == 0 means sensor reads near 3.3V / ntcToTemp returned
-// negative.
+// Fuel temp raw == 0 means the sensor conversion failed or returned a
+// negative value.
 #define ADJ_FUEL_TEMP_SENSOR_BROKEN 0
 
 /**

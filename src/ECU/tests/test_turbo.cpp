@@ -37,7 +37,8 @@ void test_turbo_uses_last_rpm_row_when_rpm_exceeds_limit(void) {
   TEST_ASSERT_EQUAL_INT(expectedPressure,
                         (int)getGlobalValue(F_PRESSURE_PERCENTAGE));
   TEST_ASSERT_EQUAL_INT(
-      percentToGivenVal((float)expectedPressure, PWM_RESOLUTION), turbo.n75);
+      hal_math_percent_to_value((float)expectedPressure, PWM_RESOLUTION),
+      turbo.n75);
 }
 
 void test_turbo_applies_intake_temperature_correction(void) {
@@ -55,7 +56,8 @@ void test_turbo_applies_intake_temperature_correction(void) {
   TEST_ASSERT_EQUAL_INT(expectedPressure,
                         (int)getGlobalValue(F_PRESSURE_PERCENTAGE));
   TEST_ASSERT_EQUAL_INT(
-      percentToGivenVal((float)expectedPressure, PWM_RESOLUTION), turbo.n75);
+      hal_math_percent_to_value((float)expectedPressure, PWM_RESOLUTION),
+      turbo.n75);
 }
 
 void test_turbo_overboost_path_never_sets_negative_pressure_percentage(void) {

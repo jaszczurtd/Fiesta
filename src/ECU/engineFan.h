@@ -1,20 +1,18 @@
 #ifndef T_FAN
 #define T_FAN
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
+#include "../common/canDefinitions/canDefinitions.h"
 #include "config.h"
 #include "sensors.h"
 #include "tests.h"
-#include "../common/canDefinitions/canDefinitions.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-enum {
-  FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR
-};
+enum { FAN_REASON_NONE, FAN_REASON_COOLANT, FAN_REASON_AIR };
 
 typedef struct {
   int32_t fanEnabled;

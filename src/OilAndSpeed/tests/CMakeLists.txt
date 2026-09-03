@@ -26,12 +26,8 @@ add_executable(test_can
     ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
     ${HAL_SRC}/hal/time/hal_time.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
-    ${HAL_SRC}/utils/tools.cpp
 )
 target_link_libraries(test_can PRIVATE oilspeed_mock)
-# HAL_SRC BEFORE so <tools.h> resolves to the HAL aggregator that also
-# re-exports multicoreWatchdog's watchdog_feed(), not to utils/tools.h
-# (which is the legacy C++ utility surface).
 target_include_directories(test_can BEFORE PRIVATE
     ${HAL_SRC}
 )

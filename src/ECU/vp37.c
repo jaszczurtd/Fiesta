@@ -1,5 +1,7 @@
 #include "vp37.h"
+
 #include <hal/timers/hal_soft_timer.h>
+#include <utils/multicoreWatchdog.h>
 
 /**
  * @brief Run the VP37 calibration sweep and capture Adjustometer limits.
@@ -327,10 +329,10 @@ static void VP37_throttleCycle(VP37Pump *self) {
   // Feedforward carries the expected steady-state command at the current
   // requested position.  It is computed before the PID limit because the
   // thermal headroom scales the complete cold saturated command (FF + 220).
-  self->pwmFeedForward =
-      mapfloat((float)self->desiredAdjustometer, (float)self->VP37_ADJUST_MIN,
-               (float)self->VP37_ADJUST_MAX, (float)VP37_PWM_FF_AT_MIN,
-               (float)VP37_PWM_FF_AT_MAX);
+  self->pwmFeedForward = hal_math_map_f32(
+      (float)self->desiredAdjustometer, (float)self->VP37_ADJUST_MIN,
+      (float)self->VP37_ADJUST_MAX, (float)VP37_PWM_FF_AT_MIN,
+      (float)VP37_PWM_FF_AT_MAX);
 
   // Preserve the original +/-220 authority at room temperature.  When the
   // pump is warm and its temperature reading is valid, expand only the
@@ -377,10 +379,10 @@ static void VP37_throttleCycle(VP37Pump *self) {
   // overshoot/recovery the controller must be free to lower PWM.
   if (self->desiredAdjustometerTarget > 0 &&
       self->currentAdjustometerPosition < self->desiredAdjustometerTarget) {
-    float pwmFFTarget =
-        mapfloat((float)self->desiredAdjustometerTarget,
-                 (float)self->VP37_ADJUST_MIN, (float)self->VP37_ADJUST_MAX,
-                 (float)VP37_PWM_FF_AT_MIN, (float)VP37_PWM_FF_AT_MAX);
+    float pwmFFTarget = hal_math_map_f32(
+        (float)self->desiredAdjustometerTarget, (float)self->VP37_ADJUST_MIN,
+        (float)self->VP37_ADJUST_MAX, (float)VP37_PWM_FF_AT_MIN,
+        (float)VP37_PWM_FF_AT_MAX);
     float softFloor = pwmFFTarget - (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
     if (self->pwmValue < softFloor) {
       self->pwmValue = softFloor;
@@ -437,13 +439,14 @@ void VP37_setVP37Throttle(VP37Pump *self, float accel) {
     return;
   }
 
-  accel = mapfloat(accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX,
-                   (float)VP37_ACCELERATION_MIN, (float)VP37_ACCELERATION_MAX);
+  accel = hal_math_map_f32(
+      accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX,
+      (float)VP37_ACCELERATION_MIN, (float)VP37_ACCELERATION_MAX);
 
   accel =
       hal_constrain(accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX);
   self->lastThrottle = accel;
-  self->desiredAdjustometerTarget = (int32_t)mapfloat(
+  self->desiredAdjustometerTarget = (int32_t)hal_math_map_f32(
       accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX, (float)self->VP37_ADJUST_MIN,
       (float)self->VP37_ADJUST_MAX);
 }

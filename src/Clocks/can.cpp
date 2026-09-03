@@ -96,8 +96,8 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
     valueFields[F_CALCULATED_ENGINE_LOAD] =
         buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD];
-    valueFields[F_VOLTS] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI],
-                                      buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
+    valueFields[F_VOLTS] = fiesta_can_join_decimal_tenths(
+        buf[CAN_FRAME_ECU_UPDATE_VOLTS_HI], buf[CAN_FRAME_ECU_UPDATE_VOLTS_LO]);
     valueFields[F_COOLANT_TEMP] =
         static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_COOLANT]);
     valueFields[F_OIL_TEMP] =
@@ -121,7 +121,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     ecuMessages++;
     ecuConnected = true;
 
-    valueFields[F_THROTTLE_POS] = MsbLsbToInt(
+    valueFields[F_THROTTLE_POS] = jh_u16_from_bytes(
         buf[CAN_FRAME_THROTTLE_UPDATE_HI], buf[CAN_FRAME_THROTTLE_UPDATE_LO]);
     triggerDrawHighImportanceValue(true);
   } break;
@@ -134,11 +134,12 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     ecuMessages++;
     ecuConnected = true;
 
-    valueFields[F_PRESSURE] = decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI],
-                                         buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO]);
-    valueFields[F_PRESSURE_DESIRED] =
-        decToFloat(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI],
-                   buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO]);
+    valueFields[F_PRESSURE] =
+        fiesta_can_join_decimal_tenths(buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI],
+                                       buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO]);
+    valueFields[F_PRESSURE_DESIRED] = fiesta_can_join_decimal_tenths(
+        buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI],
+        buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO]);
     triggerDrawHighImportanceValue(true);
   } break;
 
@@ -150,8 +151,8 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     ecuMessages++;
     ecuConnected = true;
 
-    valueFields[F_RPM] =
-        MsbLsbToInt(buf[CAN_FRAME_RPM_UPDATE_HI], buf[CAN_FRAME_RPM_UPDATE_LO]);
+    valueFields[F_RPM] = jh_u16_from_bytes(buf[CAN_FRAME_RPM_UPDATE_HI],
+                                           buf[CAN_FRAME_RPM_UPDATE_LO]);
     updateCluster();
   } break;
 
@@ -165,8 +166,8 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
     valueFields[F_INTAKE_TEMP] =
         static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_INTAKE]);
-    valueFields[F_FUEL] = MsbLsbToInt(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
-                                      buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
+    valueFields[F_FUEL] = jh_u16_from_bytes(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
+                                            buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]);
     valueFields[F_GPS_IS_AVAILABLE] = buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE];
     valueFields[F_GPS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED];
   } break;
@@ -194,9 +195,9 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     oilSpeedModuleMessages++;
     oilSpeedModuleConnected = true;
 
-    valueFields[F_OIL_PRESSURE] =
-        decToFloat(buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                   buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+    valueFields[F_OIL_PRESSURE] = fiesta_can_join_decimal_tenths(
+        buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
+        buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
     valueFields[F_ABS_CAR_SPEED] = buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED];
     updateCluster();
   } break;
@@ -209,11 +210,11 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     oilSpeedModuleMessages++;
     oilSpeedModuleConnected = true;
 
-    valueFields[F_EGT] = MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
-                                     buf[CAN_FRAME_EGT_UPDATE_EGT_LO]);
+    valueFields[F_EGT] = jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
+                                           buf[CAN_FRAME_EGT_UPDATE_EGT_LO]);
     valueFields[F_DPF_TEMP] =
-        MsbLsbToInt(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
-                    buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]);
+        jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                          buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]);
 
   } break;
 
@@ -222,8 +223,8 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
       derr("Received truncated lumens frame with len: %d", len);
       return;
     }
-    valueFields[F_OUTSIDE_LUMENS] = decToFloat(buf[CAN_FRAME_LIGHTS_UPDATE_HI],
-                                               buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
+    valueFields[F_OUTSIDE_LUMENS] = fiesta_can_join_decimal_tenths(
+        buf[CAN_FRAME_LIGHTS_UPDATE_HI], buf[CAN_FRAME_LIGHTS_UPDATE_LO]);
   } break;
   default:
     deb("received unknown CAN frame:%03x len:%d\n", canID, len);

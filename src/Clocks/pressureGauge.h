@@ -2,7 +2,7 @@
 #ifndef T_PRESSURE_GAUGE
 #define T_PRESSURE_GAUGE
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "TFTExtension.h"
 #include "config.h"
@@ -36,9 +36,10 @@ private:
   int lastLO;
   int lastHI_d;
   int lastLO_d;
-  unsigned short *lastAnimImg; 
+  unsigned short *lastAnimImg;
 
-  static void drawTextForPressureIndicators(int x, int y, const char *format, ...);
+  static void drawTextForPressureIndicators(int x, int y, const char *format,
+                                            ...);
 };
 
 void redrawPressureGauges(void);

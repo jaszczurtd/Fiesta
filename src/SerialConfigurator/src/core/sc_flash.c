@@ -1,6 +1,8 @@
 #include "sc_flash.h"
 #include "../config.h"
 
+#include <hal/core/hal_array.h>
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>

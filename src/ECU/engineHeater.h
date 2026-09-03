@@ -1,12 +1,12 @@
 #ifndef T_HEATER
 #define T_HEATER
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "config.h"
+#include "engineFan.h"
 #include "sensors.h"
 #include "tests.h"
-#include "engineFan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +27,8 @@ typedef struct {
 void engineHeater_init(engineHeater *self);
 
 /**
- * @brief Update heater outputs from coolant, voltage, fan, glow plug, and RPM state.
+ * @brief Update heater outputs from coolant, voltage, fan, glow plug, and RPM
+ * state.
  * @param self Heater controller instance to process.
  * @return None.
  */

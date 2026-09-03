@@ -1,6 +1,8 @@
 #include "sc_core.h"
 #include "sc_fiesta_module_tokens.h"
 
+#include <hal/core/hal_array.h>
+
 #include <stdio.h>
 #include <string.h>
 
@@ -591,9 +593,9 @@ static int test_meta_base64_build_without_padding_is_decoded(void) {
   const MockDevice devices[] = {{
       .candidate_path = "/dev/mock/by-id/clocks-build-missing-padding",
       .device_path = "/dev/mock/ttyACM10",
-      .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_CLOCKS
-                        " proto=1 session=10 fw=v1 "
-                        "build=QXByIDI2IDIwMjYgMTM6MTI6MzE= uid=CLOCKS",
+      .hello_response =
+          "OK HELLO module=" SC_MODULE_TOKEN_CLOCKS " proto=1 session=10 fw=v1 "
+          "build=QXByIDI2IDIwMjYgMTM6MTI6MzE= uid=CLOCKS",
       .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_CLOCKS
                        " proto=1 session=11 fw=v1 "
                        "build=QXByIDI2IDIwMjYgMTM6MTI6MzE uid=CLOCKS",
@@ -637,12 +639,12 @@ test_meta_corrupted_base64_build_falls_back_to_empty_meta_build(void) {
   const MockDevice devices[] = {{
       .candidate_path = "/dev/mock/by-id/ecu-corrupted-build",
       .device_path = "/dev/mock/ttyACM6",
-      .hello_response = "OK HELLO module=" SC_MODULE_TOKEN_ECU
-                        " proto=1 session=42 fw=v1 "
-                        "build=QXByIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
-      .meta_response = "SC_OK META module=" SC_MODULE_TOKEN_ECU
-                       " proto=1 session=42 fw=v1 "
-                       "build=QXyIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
+      .hello_response =
+          "OK HELLO module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 "
+          "build=QXByIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
+      .meta_response =
+          "SC_OK META module=" SC_MODULE_TOKEN_ECU " proto=1 session=42 fw=v1 "
+          "build=QXyIDI2IDIwMjYgMTM6MzE6MDA= uid=E661A4",
       .values_response = "SC_OK PARAM_VALUES nominal_rpm=890",
       .param_list_response = "SC_OK PARAM_LIST nominal_rpm",
       .param_nominal_response =

@@ -2,7 +2,7 @@
 #define T_DTC_MANAGER
 
 #include "obd-2_mapping.h"
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #ifdef __cplusplus
 extern "C" {

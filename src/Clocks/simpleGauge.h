@@ -2,7 +2,7 @@
 #ifndef T_SIMPLE_GAUGE
 #define T_SIMPLE_GAUGE
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "TFTExtension.h"
 #include "config.h"
@@ -22,12 +22,8 @@ enum {
   SIMPLE_G_SPEED_AND_OIL
 };
 
-//text modes
-enum {
-  MODE_M_NORMAL,
-  MODE_M_TEMP,
-  MODE_M_KILOMETERS
-};
+// text modes
+enum { MODE_M_NORMAL, MODE_M_TEMP, MODE_M_KILOMETERS };
 
 #define ECU_CONNECTION_RADIUS 4
 
@@ -39,7 +35,8 @@ extern const char *err;
 class SimpleGauge : public Gauge {
 public:
   SimpleGauge(int mode);
-  int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode, const char *format, ...);
+  int drawTextForMiddleIcons(int x, int y, int offset, int color, int mode,
+                             const char *format, ...);
   void redraw(void);
   void switchCurrentEGTMode(void);
   void resetCurrentEGTMode(void);

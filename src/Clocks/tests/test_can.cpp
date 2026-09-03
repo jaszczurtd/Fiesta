@@ -17,10 +17,6 @@ void updateCluster(void) { clusterUpdateCount++; }
 // definition lives in a module we don't compile here; stub it out.
 extern "C" void watchdog_feed(void) {}
 
-// tools.cpp pulls in getAverageValueFrom which references hal_adc_read;
-// provide a no-op stub so the symbol resolves without pulling hal_adc mock.
-extern "C" int hal_adc_read(uint8_t) { return 0; }
-
 static void ensure_can_ready(void) {
   if (clocksTestGetCanHandle() == NULL) {
     canInit();

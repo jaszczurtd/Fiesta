@@ -253,12 +253,15 @@ fetch_libraries() {
     local required_hal_paths=(
         "$hal_dir/src/JaszczurHAL.h"
         "$hal_dir/src/hal/core/hal_config.cpp"
+        "$hal_dir/src/hal/core/hal_math.cpp"
+        "$hal_dir/src/hal/core/hal_text.cpp"
+        "$hal_dir/src/hal/core/jh_endian.cpp"
+        "$hal_dir/src/hal/analog/hal_adc_utils.cpp"
         "$hal_dir/src/hal/impl/.mock/hal_mock.h"
         "$hal_dir/src/hal/debug/hal_debug_format.cpp"
         "$hal_dir/src/hal/can/mcp2515/hal_can_mcp2515_config.cpp"
         "$hal_dir/src/hal/timers/smart_timers/SmartTimers.cpp"
         "$hal_dir/src/hal/network/wireguard/core/crypto/chacha20.c"
-        "$hal_dir/src/utils/tools.cpp"
         "$hal_dir/src/utils/unity.c"
     )
     local missing=()

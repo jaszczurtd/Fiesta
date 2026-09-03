@@ -11,6 +11,8 @@
 #include "ecuContext.h"
 #include "rpm.h"
 
+#include <utils/multicoreWatchdog.h>
+
 // ── Central context stub (start.cpp is excluded in tests) ────────────────────
 
 static ecu_context_t s_ctx;

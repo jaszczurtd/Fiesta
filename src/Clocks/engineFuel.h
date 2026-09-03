@@ -1,7 +1,7 @@
 #ifndef T_FUEL
 #define T_FUEL
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "Gauge.h"
 #include "TFTExtension.h"

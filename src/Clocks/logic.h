@@ -3,7 +3,7 @@
 #define C_LOGIC
 
 #include "../common/canDefinitions/canDefinitions.h"
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "Cluster.h"
 #include "TFTExtension.h"

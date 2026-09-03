@@ -38,7 +38,8 @@ static void lockBaseline(uint32_t freqHz) {
 
 /**
  * Inject ADC for supply voltage at given tenths-of-volt.
- * Accounts for adcCompe offset (+8..+32) by back-calculating.
+ * Accounts for hal_adc_compensate_rp2040_12bit offset (+8..+32) by
+ * back-calculating.
  */
 static void injectVoltage(int tenthsOfVolt) {
   const float ratio =
@@ -52,8 +53,8 @@ static void injectVoltage(int tenthsOfVolt) {
 
 /**
  * Inject ADC for fuel temperature sensor.
- * broken=true -> ADC near max -> ntcToTemp returns negative -> 0.
- * broken=false -> ADC mid-range -> ntcToTemp returns positive.
+ * broken=true -> ADC near max -> NTC conversion fails -> 0.
+ * broken=false -> ADC mid-range -> NTC conversion returns a positive value.
  */
 static void injectFuelTemp(bool broken) {
   hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, broken ? 4090 : 2000);
@@ -236,22 +237,24 @@ void test_thermal_comp_skipped_when_sensor_broken(void) {
   TEST_ASSERT_INT32_WITHIN(15, 0, pulseBroken);
 }
 
-/* ── NaN immunity (regression for adcCompe > ADC_MAX) ────────────────────────
+/* ── NaN immunity (regression for hal_adc_compensate_rp2040_12bit > ADC_MAX)
+ * ────────────────────────
  */
 
 /**
- * When ADC reads near max (4090), adcCompe pushes it to ~4122 (> ADC_MAX=4095).
- * ntcToTemp computes 4095/4122-1 -> negative -> log(negative) -> NaN.
- * Without the isnan guard, NaN permanently poisons the EMA filter.
- * This test verifies the filter recovers after a broken sensor phase.
+ * When ADC reads near max (4090), hal_adc_compensate_rp2040_12bit pushes it to
+ * ~4122 (> ADC_MAX=4095). The historical NTC calculation evaluated 4095/4122-1
+ * and then log(negative), producing NaN. Without the isnan guard, NaN
+ * permanently poisons the EMA filter. This test verifies the filter recovers
+ * after a broken sensor phase.
  */
 void test_nan_recovery_after_broken_sensor(void) {
-  injectFuelTemp(true); /* ADC=4090 -> adcCompe > 4095 -> NaN from ntcToTemp */
+  injectFuelTemp(true); /* ADC=4090 -> compensated value exceeds 4095. */
   settleAdcFilters();
   uint8_t broken = getFuelTemperatureRaw();
   TEST_ASSERT_EQUAL_UINT8(ADJ_FUEL_TEMP_SENSOR_BROKEN, broken);
 
-  injectFuelTemp(false); /* ADC=2000 -> ntcToTemp ≈ 13°C */
+  injectFuelTemp(false); /* ADC=2000 -> approximately 13 degrees C. */
   for (int i = 0; i < 30; i++)
     getFuelTemperatureRaw();
   uint8_t recovered = getFuelTemperatureRaw();
