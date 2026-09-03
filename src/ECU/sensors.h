@@ -6,7 +6,7 @@
 #include <libConfig.h>
 
 #include "../common/canDefinitions/canDefinitions.h"
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "dtcManager.h"
 #include "hardwareConfig.h"

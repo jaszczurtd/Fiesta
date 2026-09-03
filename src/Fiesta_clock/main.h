@@ -8,7 +8,7 @@
 #define MODE_TEMP 1
 #define MODE_VOLT 2
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "config.h"
 #include "hardwareConfig.h"

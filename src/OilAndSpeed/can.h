@@ -1,9 +1,9 @@
 #ifndef CAN_F_0
 #define CAN_F_0
 
-#include <tools.h>
 #include "../common/canDefinitions/canDefinitions.h"
 #include "hardwareConfig.h"
+#include <JaszczurHAL.h>
 
 #include "start.h"
 

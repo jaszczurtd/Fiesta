@@ -25,7 +25,9 @@ set(HAL_SRC  ${HAL_LIB}/src)
 set(CANDEFS ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)
 
 include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
+fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
@@ -37,6 +39,7 @@ list(FILTER MOCK_SOURCES EXCLUDE REGEX "/hal_gps\\.cpp$")
 set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
+    ${HAL_HELPER_SOURCES}
     ${HAL_SRC}/hal/i2c/hal_i2c.cpp
     ${HAL_SRC}/hal/spi/hal_spi.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
@@ -45,6 +48,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
+    ${HAL_SRC}/hal/security/hal_crc.cpp
     ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/can/hal_can_util.cpp
     ${HAL_SRC}/hal/storage/hal_eeprom.cpp
@@ -76,7 +80,6 @@ add_library(adj_mock STATIC
     ${MOCK_SOURCES}
     ${HAL_UTIL_SOURCES}
     ${ADJ_SOURCES}
-    ${HAL_SRC}/utils/tools.cpp
 )
 
 target_include_directories(adj_mock BEFORE PUBLIC
@@ -101,7 +104,6 @@ target_compile_options(adj_mock PRIVATE -Wall -Wextra -Wno-unused-parameter)
 add_library(adj_mock_common STATIC
     ${MOCK_SOURCES}
     ${HAL_UTIL_SOURCES}
-    ${HAL_SRC}/utils/tools.cpp
 )
 
 target_include_directories(adj_mock_common BEFORE PUBLIC

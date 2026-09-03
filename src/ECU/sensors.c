@@ -1,22 +1,27 @@
 
 #include "sensors.h"
+#include "../common/fiesta_sensor_helpers.h"
 #include "can.h"
 #include "ecu_unit_testing.h"
 #include "engineFuel.h"
 #include "gps.h"
 #include "rpm.h"
 
+#include <stdio.h>
+#include <utils/multicoreWatchdog.h>
+#include <utils/tools_common_defs.h>
+
 typedef struct {
   volatile float valueFields[F_LAST];
 } sensors_persistent_state_t;
 
 typedef struct {
-  int collantTableIdx;
-  int collantValuesSet;
-  float collantTable[HAL_TOOLS_TEMPERATURE_TABLES_SIZE];
-  int oilTableIdx;
-  int oilValuesSet;
-  float oilTable[HAL_TOOLS_TEMPERATURE_TABLES_SIZE];
+  size_t collantTableIdx;
+  size_t collantValuesSet;
+  float collantTable[HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE];
+  size_t oilTableIdx;
+  size_t oilValuesSet;
+  float oilTable[HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE];
   unsigned char pcf8574State;
   hal_pwm_freq_channel_t pwmVp37;
   hal_pwm_freq_channel_t pwmTurbo;
@@ -90,15 +95,22 @@ static bool sensors_isGlobalValueIndexValid(int idx, const char *caller) {
  * @param table Averaging ring buffer storage.
  * @return Latest averaged NTC temperature in degrees Celsius.
  */
-static float sensors_readNtcViaMux(uint8_t muxChannel, int *tableIdx,
-                                   int *tableValuesSet, float *table) {
-  float a = 0.0f;
+static float sensors_readNtcViaMux(uint8_t muxChannel, size_t *tableIdx,
+                                   size_t *tableValuesSet, float *table) {
+  float temperature = 0.0f;
+  float average = 0.0f;
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(muxChannel);
-  a = getAverageForTable(tableIdx, tableValuesSet,
-                         ntcToTemp(ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B), table);
+  const hal_status_t temperature_status = fiesta_ntc_read_temperature_ex(
+      ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B, &temperature);
+  const hal_status_t average_status =
+      temperature_status == HAL_OK
+          ? hal_math_rolling_average_f32_ex(
+                tableIdx, tableValuesSet, temperature, table,
+                HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE, &average)
+          : temperature_status;
   m_mutex_exit(analog4051Mutex);
-  return a;
+  return average_status == HAL_OK ? average : 0.0f;
 }
 
 // I2C bus recovery: toggle SCL up to 9 times on GPIO level to release
@@ -159,7 +171,7 @@ void initSensors(void) {
   if (adjustometerStateMutex == NULL) {
     m_mutex_init(adjustometerStateMutex);
   }
-  hal_adc_set_resolution(HAL_TOOLS_ADC_BITS);
+  hal_adc_set_resolution(HAL_ADC_UTIL_DEFAULT_BITS);
   pwm_init();
 
   init4051();
@@ -245,7 +257,9 @@ int32_t readThrottle(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_THROTTLE_POS);
 
-  int32_t rawVal = (int32_t)getAverageValueFrom(ADC_SENSORS_PIN);
+  float average = 0.0f;
+  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average);
+  int32_t rawVal = (int32_t)average;
   m_mutex_exit(analog4051Mutex);
 
   return sensors_computeThrottlePositionFromRaw(rawVal);
@@ -259,7 +273,7 @@ int32_t readThrottle(void) {
 int32_t getThrottlePercentage(void) {
   int32_t currentVal = (int32_t)(getGlobalValue(F_THROTTLE_POS));
   float percent = (currentVal * 100) / PWM_RESOLUTION;
-  return percentToGivenVal(percent, 100);
+  return hal_math_percent_to_value(percent, 100);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -275,7 +289,10 @@ float readAirTemperature(void) {
   m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_AIR_TEMP);
-  a = ntcToTemp(ADC_SENSORS_PIN, R_TEMP_AIR_A, R_TEMP_AIR_B);
+  if (fiesta_ntc_read_temperature_ex(ADC_SENSORS_PIN, R_TEMP_AIR_A,
+                                     R_TEMP_AIR_B, &a) != HAL_OK) {
+    a = 0.0f;
+  }
   m_mutex_exit(analog4051Mutex);
   return a;
 }
@@ -292,9 +309,9 @@ float readBarPressure(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(HC4051_I_BAR_PRESSURE);
 
-  float val =
-      ((float)getAverageValueFrom(ADC_SENSORS_PIN) / DIVIDER_PRESSURE_BAR) -
-      1.0; // atmospheric pressure
+  float average = 0.0f;
+  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average);
+  float val = (average / DIVIDER_PRESSURE_BAR) - 1.0f; // atmospheric pressure
   m_mutex_exit(analog4051Mutex);
 
   if (val < 0.0) {
@@ -515,7 +532,7 @@ void updateValsForDebug(void) {
   snprintf(stamp, sizeof(stamp), "NL/");
 #endif
 
-  float volts = rroundf(getGlobalValue(F_VOLTS));
+  float volts = hal_math_round_tenth(getGlobalValue(F_VOLTS));
   if (s_sensorsState.lastVoltage != volts) {
     s_sensorsState.lastVoltage = volts;
     deb("%sVoltage update: %.1fV", stamp, volts);
@@ -862,8 +879,14 @@ bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out) {
  * @return Supply voltage in volts, clamped to 0 on invalid conversion.
  */
 static float sensors_readSystemSupplyVoltageFromADC(void) {
-  return adcToVolt((int)(getAverageValueFrom(ADC_VOLT_PIN) + 0.5f),
-                   (float)V_DIVIDER_R1, (float)V_DIVIDER_R2);
+  float average = 0.0f;
+  float voltage = 0.0f;
+  if (fiesta_adc_read_average_ex(ADC_VOLT_PIN, &average) != HAL_OK ||
+      fiesta_adc_to_voltage_ex((int)(average + 0.5f), (float)V_DIVIDER_R1,
+                               (float)V_DIVIDER_R2, &voltage) != HAL_OK) {
+    return 0.0f;
+  }
+  return voltage;
 }
 #endif
 

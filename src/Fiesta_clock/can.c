@@ -5,7 +5,7 @@
 
 #include "../common/canDefinitions/canDefinitions.h"
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #define CLOCK_CAN_RETRIES 4
 #define CLOCK_CAN_SEND_INTERVAL_MS 1000u

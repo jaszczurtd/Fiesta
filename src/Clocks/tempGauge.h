@@ -2,7 +2,7 @@
 #ifndef T_TEMP_GAUGE
 #define T_TEMP_GAUGE
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "TFTExtension.h"
 #include "config.h"
@@ -10,9 +10,9 @@
 
 #include "Gauge.h"
 
-#define TEMP_GAUGE_NONE     0
-#define TEMP_GAUGE_OIL      1
-#define TEMP_GAUGE_COOLANT  2
+#define TEMP_GAUGE_NONE 0
+#define TEMP_GAUGE_OIL 1
+#define TEMP_GAUGE_COOLANT 2
 
 #define TEMP_BAR_MAXHEIGHT 40
 #define TEMP_BAR_WIDTH 6

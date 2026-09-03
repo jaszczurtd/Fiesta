@@ -9,9 +9,11 @@
 */
 
 #include "obd-2.h"
+
 #include "ecu_unit_testing.h"
 #include "rpm.h"
 #include "vp37.h"
+#include <utils/multicoreWatchdog.h>
 
 void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data);
 void negAck(uint32_t responseId, uint8_t mode, uint8_t reason);
@@ -384,7 +386,8 @@ static void encodeMode01FuelSysStatus(uint8_t *txData) {
  */
 static void encodeMode01EngineLoad(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
+  txData[3] =
+      hal_math_percent_to_value(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
 }
 
 /**
@@ -394,7 +397,8 @@ static void encodeMode01EngineLoad(uint8_t *txData) {
  */
 static void encodeMode01AbsoluteLoad(uint8_t *txData) {
   txData[0] = 0x04;
-  int l = percentToGivenVal(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
+  int l =
+      hal_math_percent_to_value(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
   txData[3] = MSB(l);
   txData[4] = LSB(l);
 }
@@ -464,7 +468,7 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
   if (fuelPercentage > 100) {
     fuelPercentage = 100;
   }
-  txData[3] = percentToGivenVal(fuelPercentage, 255);
+  txData[3] = hal_math_percent_to_value(fuelPercentage, 255);
 }
 
 /**
@@ -511,7 +515,7 @@ static void encodeMode01IntakeTemp(uint8_t *txData) {
 static void encodeMode01ThrottlePos(uint8_t *txData) {
   txData[0] = 0x03;
   float percent = (getGlobalValue(F_THROTTLE_POS) * 100) / PWM_RESOLUTION;
-  txData[3] = percentToGivenVal(percent, 255);
+  txData[3] = hal_math_percent_to_value(percent, 255);
 }
 
 /**
@@ -1049,10 +1053,10 @@ static bool handleObdService(uint8_t mode, uint8_t pid, uint32_t responseId,
 
 // Pack a string into a fixed-width field at buf[0..width-1], using chosen
 // padding.
-#define packFieldPad hal_pack_field_pad
+#define packFieldPad hal_text_pack_field_pad
 
 // Pack a string into a fixed-width null-padded field at buf[0..width-1].
-#define packField hal_pack_field
+#define packField hal_text_pack_field
 
 /**
  * @brief Send a UDS 0x22 response containing a fixed-width ASCII field.

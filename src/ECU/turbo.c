@@ -24,30 +24,30 @@ static int32_t Turbo_scaleTurboValues(Turbo *self, int32_t value) {
 /**
  * @brief Derive a pressure correction factor from intake temperature.
  * @param self Turbo controller instance using the correction rule.
- * @return Integer correction factor subtracted from requested pressure percentage.
- * @note The temperature input is the project's G72-like intake-air-temperature path.
+ * @return Integer correction factor subtracted from requested pressure
+ * percentage.
+ * @note The temperature input is the project's G72-like intake-air-temperature
+ * path.
  */
 TESTABLE_STATIC int32_t Turbo_correctPressureFactor(Turbo *self) {
   (void)self;
   int32_t temperature = (int32_t)getGlobalValue(F_INTAKE_TEMP);
-  return (temperature < MIN_TEMPERATURE_CORRECTION) ?
-      0 : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) + 1; //each 5 degrees
+  return (temperature < MIN_TEMPERATURE_CORRECTION)
+             ? 0
+             : ((temperature - MIN_TEMPERATURE_CORRECTION) / 5) +
+                   1; // each 5 degrees
 }
 
-void Turbo_init(Turbo *self) {
-  (void)self;
-}
+void Turbo_init(Turbo *self) { (void)self; }
 
-void Turbo_turboTest(Turbo *self) {
-  (void)self;
-}
+void Turbo_turboTest(Turbo *self) { (void)self; }
 
 /**
  * @brief Update the boost-control command for the N75-like turbo path.
  * @param self Turbo controller instance to process.
  * @return None.
- * @note The current demand source is legacy throttle-named driver demand, not yet a
- *       quantity-centric allowed-fuel signal.
+ * @note The current demand source is legacy throttle-named driver demand, not
+ * yet a quantity-centric allowed-fuel signal.
  */
 void Turbo_process(Turbo *self) {
 
@@ -55,28 +55,30 @@ void Turbo_process(Turbo *self) {
   self->posThrottle = (self->engineThrottlePercentageValue / 10);
 
 #ifdef JUST_TEST_BY_THROTTLE
-  self->engineThrottlePercentageValue = Turbo_scaleTurboValues(self, self->engineThrottlePercentageValue);
-  self->n75 = percentToGivenVal(self->engineThrottlePercentageValue, PWM_RESOLUTION);
+  self->engineThrottlePercentageValue =
+      Turbo_scaleTurboValues(self, self->engineThrottlePercentageValue);
+  self->n75 = hal_math_percent_to_value(self->engineThrottlePercentageValue,
+                                        PWM_RESOLUTION);
 #else
   int32_t pressurePercentage = 0;
 
-  if(getGlobalValue(F_PRESSURE) < MAX_BOOST_PRESSURE) {
+  if (getGlobalValue(F_PRESSURE) < MAX_BOOST_PRESSURE) {
     bool pedalPressed = false;
-    
-    if(self->engineThrottlePercentageValue > 0) {
+
+    if (self->engineThrottlePercentageValue > 0) {
       pedalPressed = true;
     }
 
     int32_t rpm = (int32_t)getGlobalValue(F_RPM);
-    if(rpm > RPM_MAX_EVER) {
+    if (rpm > RPM_MAX_EVER) {
       rpm = RPM_MAX_EVER;
     }
 
     self->RPM_index = (rpm - 1500) / 500; // determine RPM index
-    if(self->RPM_index < 0) {
+    if (self->RPM_index < 0) {
       self->RPM_index = 0;
     }
-    if(self->RPM_index > RPM_PRESCALERS - 1) {
+    if (self->RPM_index > RPM_PRESCALERS - 1) {
       self->RPM_index = RPM_PRESCALERS - 1;
     }
 
@@ -119,7 +121,7 @@ void Turbo_process(Turbo *self) {
 
   setGlobalValue(F_PRESSURE_PERCENTAGE, pressurePercentage);
 
-  self->n75 = percentToGivenVal(pressurePercentage, PWM_RESOLUTION);
+  self->n75 = hal_math_percent_to_value(pressurePercentage, PWM_RESOLUTION);
 
 #endif
 
@@ -129,33 +131,35 @@ void Turbo_process(Turbo *self) {
 void Turbo_showDebug(Turbo *self) {
   bool pr = false;
 
-  if((int32_t)getGlobalValue(F_THROTTLE_POS) != self->lastThrottlePos){
+  if ((int32_t)getGlobalValue(F_THROTTLE_POS) != self->lastThrottlePos) {
     self->lastThrottlePos = (int32_t)getGlobalValue(F_THROTTLE_POS);
     pr = true;
   }
-  if(self->posThrottle != self->lastPosThrottle) {
+  if (self->posThrottle != self->lastPosThrottle) {
     self->lastPosThrottle = self->posThrottle;
     pr = true;
   }
   bool pp = getThrottlePercentage() > 0;
-  if(pp != self->lastPedalPressed) {
+  if (pp != self->lastPedalPressed) {
     self->lastPedalPressed = pp;
     pr = true;
   }
-  if(self->RPM_index != self->lastRPM_index) {
+  if (self->RPM_index != self->lastRPM_index) {
     self->lastRPM_index = self->RPM_index;
     pr = true;
   }
-  if((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE) != self->lastPressurePercentage) {
-    self->lastPressurePercentage = (int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE);
+  if ((int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE) !=
+      self->lastPressurePercentage) {
+    self->lastPressurePercentage =
+        (int32_t)getGlobalValue(F_PRESSURE_PERCENTAGE);
     pr = true;
   }
-  if(self->n75 != self->lastN75) {
+  if (self->n75 != self->lastN75) {
     self->lastN75 = self->n75;
     pr = true;
   }
 
-  if(pr) {
+  if (pr) {
     static uint32_t lastPeriodicLogMs = 0;
 
     uint32_t now = hal_millis();
@@ -163,8 +167,8 @@ void Turbo_showDebug(Turbo *self) {
       lastPeriodicLogMs = now;
 
       deb("r:%d throttle:%d pressed:%d rpm:%d pressure:%d n75:%d",
-       self->lastThrottlePos, self->lastPosThrottle, self->lastPedalPressed, self->lastRPM_index,
-       self->lastPressurePercentage, self->n75);
+          self->lastThrottlePos, self->lastPosThrottle, self->lastPedalPressed,
+          self->lastRPM_index, self->lastPressurePercentage, self->n75);
     }
   }
 }

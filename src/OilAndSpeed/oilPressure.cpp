@@ -1,10 +1,12 @@
 #include "oilPressure.h"
+#include <utils/pidController.h>
 
 static float filteredPressure = 0.0f;
 
 static float mapResistanceToBars(float resistanceOhm) {
-  float normalized = (resistanceOhm - OIL_PRESSURE_SENSOR_RES_MIN_OHM) /
-                     (OIL_PRESSURE_SENSOR_RES_MAX_OHM - OIL_PRESSURE_SENSOR_RES_MIN_OHM);
+  float normalized =
+      (resistanceOhm - OIL_PRESSURE_SENSOR_RES_MIN_OHM) /
+      (OIL_PRESSURE_SENSOR_RES_MAX_OHM - OIL_PRESSURE_SENSOR_RES_MIN_OHM);
 
   normalized = pid_clamp(normalized, 0.0f, 1.0f);
   return normalized * OIL_PRESSURE_MAX_BAR;
@@ -28,7 +30,8 @@ static float readSenderResistanceOhm(int raw) {
   // Rs(sensor) -> Vref, Rp -> GND, ADC on divider node
   // Vadc = Vref * Rp / (Rp + Rs)
   // Rs = Rp * (Vref - Vadc) / Vadc
-  return (OIL_PRESSURE_PULLUP_OHM * (OIL_PRESSURE_ADC_REF_V - voltage)) / voltage;
+  return (OIL_PRESSURE_PULLUP_OHM * (OIL_PRESSURE_ADC_REF_V - voltage)) /
+         voltage;
 #endif
 }
 

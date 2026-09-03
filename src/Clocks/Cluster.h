@@ -1,7 +1,7 @@
 #ifndef T_CLUSTER
 #define T_CLUSTER
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include <algorithm>
 #include <array>
@@ -11,11 +11,11 @@
 #include <hal/hal.h>
 
 typedef struct {
-  volatile uint32_t       half_period_us;
-  volatile bool           state;
-  unsigned int            pin;
-  volatile unsigned int   freq;
-  hal_timer_t             timer;
+  volatile uint32_t half_period_us;
+  volatile bool state;
+  unsigned int pin;
+  volatile unsigned int freq;
+  hal_timer_t timer;
 } cluster_s;
 
 class Cluster {
@@ -38,6 +38,5 @@ private:
   unsigned int lastSpeed;
   unsigned int lastRpm;
 };
-
 
 #endif

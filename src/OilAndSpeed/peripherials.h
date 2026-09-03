@@ -1,16 +1,15 @@
 #ifndef S_PERIPHERIALS_H
 #define S_PERIPHERIALS_H
 
-#include <tools.h>
 #include "../common/canDefinitions/canDefinitions.h"
+#include <JaszczurHAL.h>
 
 #include "config.h"
 #include "hardwareConfig.h"
 
+enum { NONE, RED, GREEN, YELLOW, WHITE, BLUE, PURPLE };
 
-enum {NONE, RED, GREEN, YELLOW, WHITE, BLUE, PURPLE};
-
-void  setGlobalValue(int idx, float val);
+void setGlobalValue(int idx, float val);
 float getGlobalValue(int idx);
 void setupOnboardLed(void);
 void initSPI(void);

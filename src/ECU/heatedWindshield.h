@@ -1,10 +1,10 @@
 #ifndef T_HEATED_WINDSHIELD
 #define T_HEATED_WINDSHIELD
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
-#include "config.h"
 #include "../common/canDefinitions/canDefinitions.h"
+#include "config.h"
 #include "tests.h"
 
 #ifdef __cplusplus
@@ -48,7 +48,8 @@ void heatedWindshields_showDebug(heatedWindshields *self);
  * @param side PCF8574 output identifier for the requested side.
  * @return None.
  */
-void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable, int32_t side);
+void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable,
+                                    int32_t side);
 
 /**
  * @brief Check whether heated windshield mode is currently active.
@@ -64,7 +65,8 @@ bool heatedWindshields_isHeatedWindowEnabled(const heatedWindshields *self);
 heatedWindshields *getHeatedWindshieldsInstance(void);
 
 /**
- * @brief Create and initialize the shared heated windshield controller instance.
+ * @brief Create and initialize the shared heated windshield controller
+ * instance.
  * @return None.
  */
 void createHeatedWindshields(void);

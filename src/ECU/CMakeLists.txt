@@ -34,8 +34,10 @@ set(ECU_STUBS ${ECU_SRC}/tests/stubs)
 
 include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
+fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 
 # ── Mock implementations (from JaszczurHAL) ────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
@@ -45,6 +47,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
     ${HAL_SRC}/hal/core/jh_handle_pool.cpp
+    ${HAL_HELPER_SOURCES}
     ${HAL_COMMAND_SOURCES}
     ${HAL_SRC}/hal/i2c/hal_i2c.cpp
     ${HAL_SRC}/hal/spi/hal_spi.cpp
@@ -58,6 +61,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/time/hal_time_ntp.cpp
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/gps/gps_nmea_parser.cpp
+    ${HAL_SRC}/hal/gps/hal_gps_nmea_utils.cpp
     ${HAL_SRC}/hal/gps/hal_gps_core.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
@@ -109,13 +113,12 @@ set(ECU_SOURCES
     ${SCDEFS}/sc_command_handlers.c
 )
 
-# ── ecu_mock: hal mock + tools + ECU sources + stubs for excluded modules ──────
+# ── ecu_mock: HAL mock + ECU sources + stubs for excluded modules ─────────────
 add_library(ecu_mock STATIC
     ${MOCK_SOURCES}
     ${HAL_UTIL_SOURCES}
     ${ECU_SOURCES}
     ${ECU_STUBS}/ecu_stubs.cpp
-    ${HAL_SRC}/utils/tools.cpp
 )
 
 target_include_directories(ecu_mock BEFORE PUBLIC

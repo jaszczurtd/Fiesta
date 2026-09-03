@@ -1,21 +1,17 @@
 #ifndef T_BUZZER
 #define T_BUZZER
 
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "config.h"
 #include <hal/hal.h>
 
-enum {
-  BUZZER_SHORT, BUZZER_MIDDLE, BUZZER_LONG, BUZZER_COUNT 
-};
+enum { BUZZER_SHORT, BUZZER_MIDDLE, BUZZER_LONG, BUZZER_COUNT };
 
-enum {
-  BUZZER_ON, BUZZER_OFF, BUZZER_DELAY
-};
+enum { BUZZER_ON, BUZZER_OFF, BUZZER_DELAY };
 
 struct BuzzerSignal {
-  int type;  
+  int type;
   unsigned int duration;
 };
 

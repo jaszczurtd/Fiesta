@@ -68,8 +68,8 @@ static void setup_runtime(void) {
 }
 
 void app_start(void) {
-  debugInit();
-  setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCK);
+  hal_debug_init_default();
+  hal_debug_set_module_prefix(SC_MODULE_TOKEN_CLOCK);
 
   deb("Build timestamp: %s", BUILD_ID);
 

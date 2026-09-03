@@ -1,10 +1,10 @@
 #ifndef CAN_F_0
 #define CAN_F_0
 
-#include <tools.h>
 #include "../common/canDefinitions/canDefinitions.h"
-#include <hal/hal.h>
 #include "logic.h"
+#include <JaszczurHAL.h>
+#include <hal/hal.h>
 
 extern volatile float valueFields[];
 

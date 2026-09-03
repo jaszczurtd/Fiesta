@@ -1,9 +1,9 @@
 #ifndef T_VP37
 #define T_VP37
 
+#include <JaszczurHAL.h>
 #include <hal/control/hal_pid_controller.h>
 #include <hal/serial/hal_serial.h>
-#include <tools_c.h>
 
 #include "config.h"
 #include "hardwareConfig.h"

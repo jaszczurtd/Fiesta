@@ -1,5 +1,7 @@
 #include "speed.h"
 
+#include <ctype.h>
+
 #define IMPULSES_PER_ROTATION 43
 #define CALC_INTERVAL 125
 
@@ -12,33 +14,34 @@ static unsigned long lastImpulseCount = 0;
 static unsigned long lastCalcTime = 0;
 static double circumferenceMeters = 0.0f;
 
+double getCircumference(void) { return circumferenceMeters; }
 
-double getCircumference(void) {
-  return circumferenceMeters;
-}
-
-bool calculateCircumferenceMeters(const char *tireString, double correctionFactor) {
+bool calculateCircumferenceMeters(const char *tireString,
+                                  double correctionFactor) {
   char buffer[32];
   strncpy(buffer, tireString, sizeof(buffer) - 1);
   buffer[sizeof(buffer) - 1] = '\0';
 
-  removeSpaces(buffer);
+  hal_text_remove_whitespace(buffer);
 
   const char *ptr = buffer;
 
-  int width = parseNumber(&ptr);
-  if (*ptr != '/') return false;
+  int width = hal_text_parse_number(&ptr);
+  if (*ptr != '/')
+    return false;
   ptr++;
 
-  int profile = parseNumber(&ptr);
-  if (toupper(*ptr) != 'R') return false;
+  int profile = hal_text_parse_number(&ptr);
+  if (toupper(*ptr) != 'R')
+    return false;
   ptr++;
 
-  int rim = parseNumber(&ptr);
-  if (width <= 0 || profile <= 0 || rim <= 0) return false;
+  int rim = hal_text_parse_number(&ptr);
+  if (width <= 0 || profile <= 0 || rim <= 0)
+    return false;
 
   double sidewallHeight = (width * (profile / 100.0)) / 1000.0; // mm -> m
-  double rimDiameterMeters = rim * 0.0254; // cale -> m
+  double rimDiameterMeters = rim * 0.0254;                      // cale -> m
   double totalDiameter = rimDiameterMeters + (2 * sidewallHeight);
   circumferenceMeters = totalDiameter * kPi * correctionFactor;
 
@@ -46,7 +49,8 @@ bool calculateCircumferenceMeters(const char *tireString, double correctionFacto
 }
 
 bool setupSpeedometer(void) {
-  bool success = calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
+  bool success =
+      calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
   if (success) {
     hal_gpio_attach_interrupt(ABS_INPUT_PIN, onImpulse, HAL_GPIO_IRQ_RISING);
     return success;
@@ -55,9 +59,7 @@ bool setupSpeedometer(void) {
   return 0;
 }
 
-void onImpulse(void) {
-  impulseCount++;
-}
+void onImpulse(void) { impulseCount++; }
 
 void onImpulseTranslating(void) {
   if (circumferenceMeters > 0) {
@@ -73,7 +75,8 @@ void onImpulseTranslating(void) {
       lastCalcTime = currentTime;
 
       float intervalSec = CALC_INTERVAL / 1000.0f;
-      float rotationsPerSecond = (float)impulsesInInterval / IMPULSES_PER_ROTATION / intervalSec;
+      float rotationsPerSecond =
+          (float)impulsesInInterval / IMPULSES_PER_ROTATION / intervalSec;
       float speed_mps = rotationsPerSecond * circumferenceMeters;
       float speed_kph = speed_mps * 3.6f;
 

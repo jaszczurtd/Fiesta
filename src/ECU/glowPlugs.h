@@ -1,10 +1,10 @@
 #ifndef T_GLOWPLUGS
 #define T_GLOWPLUGS
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
-#include "config.h"
 #include "../common/canDefinitions/canDefinitions.h"
+#include "config.h"
 #include "sensors.h"
 #include "tests.h"
 

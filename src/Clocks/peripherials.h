@@ -1,13 +1,13 @@
 #ifndef C_PERIPHERIALS
 #define C_PERIPHERIALS
 
-#include <tools.h>
 #include "../common/canDefinitions/canDefinitions.h"
+#include <JaszczurHAL.h>
 
+#include "buzzer.h"
 #include "config.h"
 #include "hardwareConfig.h"
 #include <hal/hal.h>
-#include "buzzer.h"
 
 extern volatile float valueFields[];
 

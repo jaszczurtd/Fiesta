@@ -1,7 +1,10 @@
 #include "engineFuel.h"
+#include "../common/fiesta_sensor_helpers.h"
+
+#include <stdlib.h>
 
 //-------------------------------------------------------------------------------------------------
-//Read fuel amount
+// Read fuel amount
 //-------------------------------------------------------------------------------------------------
 
 typedef struct {
@@ -13,14 +16,12 @@ typedef struct {
   long measurements;
 } engine_fuel_state_t;
 
-static engine_fuel_state_t s_engineFuel = {
-  .measuredValues = {0},
-  .measuedValuesIndex = 0,
-  .lastResult = FUEL_INIT_VALUE,
-  .nextMeasurement = 0,
-  .fuelMeasurementTime = 0,
-  .measurements = 0
-};
+static engine_fuel_state_t s_engineFuel = {.measuredValues = {0},
+                                           .measuedValuesIndex = 0,
+                                           .lastResult = FUEL_INIT_VALUE,
+                                           .nextMeasurement = 0,
+                                           .fuelMeasurementTime = 0,
+                                           .measurements = 0};
 
 /**
  * @brief Read the current tank level and update the running average state.
@@ -29,59 +30,63 @@ static engine_fuel_state_t s_engineFuel = {
 float readFuel(void) {
   set4051ActivePin(HC4051_I_FUEL_LEVEL);
 
-  int result = getAverageValueFrom(ADC_SENSORS_PIN);
+  float average_value = 0.0f;
+  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average_value);
+  int result = (int)average_value;
   int r = result;
 
   result -= FUEL_MAX;
   result = abs(result - (FUEL_MIN - FUEL_MAX));
 
-  #ifdef DEBUG
+#ifdef DEBUG
   deb("tank raw value: %d result: %d", r, result);
-  #endif
+#endif
 
-  #ifdef JUST_RAW_FUEL_VAL
+#ifdef JUST_RAW_FUEL_VAL
   deb("tank raw:%d (%d)", r, result);
   s_engineFuel.lastResult = result;
-  #else
+#else
 
   s_engineFuel.measuredValues[s_engineFuel.measuedValuesIndex] = result;
   s_engineFuel.measuedValuesIndex++;
-  if(s_engineFuel.measuedValuesIndex >= FUEL_MAX_SAMPLES) {
-      s_engineFuel.measuedValuesIndex = 0;
+  if (s_engineFuel.measuedValuesIndex >= FUEL_MAX_SAMPLES) {
+    s_engineFuel.measuedValuesIndex = 0;
   }
 
-  int sec = getSeconds();
-  if(s_engineFuel.lastResult == FUEL_INIT_VALUE) {
-      s_engineFuel.nextMeasurement = sec - 1;
+  int sec = hal_get_seconds();
+  if (s_engineFuel.lastResult == FUEL_INIT_VALUE) {
+    s_engineFuel.nextMeasurement = sec - 1;
   }
 
-  if(s_engineFuel.nextMeasurement < sec) {
+  if (s_engineFuel.nextMeasurement < sec) {
 
-      if(s_engineFuel.fuelMeasurementTime < FUEL_MEASUREMENT_TIME_DEST) {
-          s_engineFuel.fuelMeasurementTime++;
+    if (s_engineFuel.fuelMeasurementTime < FUEL_MEASUREMENT_TIME_DEST) {
+      s_engineFuel.fuelMeasurementTime++;
+    }
+    s_engineFuel.nextMeasurement = sec + s_engineFuel.fuelMeasurementTime;
+
+    long average = 0;
+    int i;
+    for (i = 0; i < FUEL_MAX_SAMPLES; i++) {
+      int v = s_engineFuel.measuredValues[i];
+      if (v == FUEL_INIT_VALUE) {
+        break;
       }
-      s_engineFuel.nextMeasurement = sec + s_engineFuel.fuelMeasurementTime;
+      average += v;
+    }
+    if (i == 0) {
+      i = 1; // prevent division by zero, if no valid samples, return 0
+    }
+    average /= i;
 
-      long average = 0;
-      int i; 
-      for (i = 0; i < FUEL_MAX_SAMPLES; i++) {
-          int v = s_engineFuel.measuredValues[i];
-          if(v == FUEL_INIT_VALUE) {
-              break;
-          }
-          average += v;
-      }
-      if(i == 0) {
-          i = 1; // prevent division by zero, if no valid samples, return 0
-      }
-      average /= i;
+    deb("raw:%d (%d) num fuel samples: %d average val: %ld next probe time: "
+        "%ds probes so far:%ld",
+        r, result, i, average, s_engineFuel.fuelMeasurementTime,
+        ++s_engineFuel.measurements);
 
-      deb("raw:%d (%d) num fuel samples: %d average val: %ld next probe time: %ds probes so far:%ld", 
-          r, result, i, average, s_engineFuel.fuelMeasurementTime, ++s_engineFuel.measurements);
-
-      s_engineFuel.lastResult = average;
+    s_engineFuel.lastResult = average;
   }
-  #endif
+#endif
 
   return s_engineFuel.lastResult;
 }
@@ -91,11 +96,13 @@ float readFuel(void) {
  * @return None.
  */
 void initFuelMeasurement(void) {
-  memset(s_engineFuel.measuredValues, FUEL_INIT_VALUE, sizeof(s_engineFuel.measuredValues));
+  memset(s_engineFuel.measuredValues, FUEL_INIT_VALUE,
+         sizeof(s_engineFuel.measuredValues));
   s_engineFuel.measuedValuesIndex = 0;
   s_engineFuel.lastResult = FUEL_INIT_VALUE;
 
   s_engineFuel.fuelMeasurementTime = FUEL_MEASUREMENT_TIME_START;
-  s_engineFuel.nextMeasurement = getSeconds() + s_engineFuel.fuelMeasurementTime;
+  s_engineFuel.nextMeasurement =
+      hal_get_seconds() + s_engineFuel.fuelMeasurementTime;
   s_engineFuel.measurements = 0;
 }

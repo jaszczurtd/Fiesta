@@ -2,9 +2,9 @@
 #define T_GPS
 
 #include "../common/canDefinitions/canDefinitions.h"
+#include <JaszczurHAL.h>
 #include <hal/gps/hal_gps.h>
 #include <libConfig.h>
-#include <tools_c.h>
 
 #include "config.h"
 #include "sensors.h"

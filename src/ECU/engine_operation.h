@@ -1,11 +1,11 @@
 #ifndef T_ENGINE_OPERATION
 #define T_ENGINE_OPERATION
 
-#include <tools_c.h>
+#include <JaszczurHAL.h>
 
 #include "config.h"
-#include "sensors.h"
 #include "rpm.h"
+#include "sensors.h"
 #include "vp37.h"
 
 #ifdef __cplusplus

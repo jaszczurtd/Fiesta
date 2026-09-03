@@ -1,11 +1,11 @@
 #ifndef T_LED
 #define T_LED
 
-#include <libConfig.h>
 #include "config.h"
+#include <libConfig.h>
 
-#include <tools_c.h>
 #include "hardwareConfig.h"
+#include <JaszczurHAL.h>
 
 #ifdef __cplusplus
 extern "C" {

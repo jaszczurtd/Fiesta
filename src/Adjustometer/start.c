@@ -8,6 +8,7 @@
 #include <hal/system/hal_system.h>
 #include <hal/timers/hal_soft_timer.h>
 #include <limits.h>
+#include <utils/multicoreWatchdog.h>
 
 #if defined(__cplusplus)
 static_assert(ADJUSTOMETER_TOTAL_REG_COUNT <= HAL_I2C_SLAVE_REG_MAP_SIZE,
@@ -108,8 +109,8 @@ static void updateExtendedI2CRegisters(uint8_t status) {
  */
 static void initializeCore0(void) {
 
-  debugInit();
-  setDebugPrefixWithColon(SC_MODULE_TOKEN_ADJUSTOMETER);
+  hal_debug_init_default();
+  hal_debug_set_module_prefix(SC_MODULE_TOKEN_ADJUSTOMETER);
 
   setupWatchdog(NULL, WATCHDOG_TIME);
 

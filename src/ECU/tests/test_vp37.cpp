@@ -139,7 +139,7 @@ void test_vp37_throttle_caps_target_to_configured_range(void) {
 
   VP37_setVP37Throttle(pump, 100.0f);
 
-  int32_t expectedTarget = (int32_t)mapfloat(
+  int32_t expectedTarget = (int32_t)hal_math_map_f32(
       (float)VP37_ACCELERATION_MAX, VP37_PERCENT_MIN, VP37_PERCENT_MAX,
       (float)pump->VP37_ADJUST_MIN, (float)pump->VP37_ADJUST_MAX);
   TEST_ASSERT_EQUAL_INT32(expectedTarget, pump->desiredAdjustometerTarget);

@@ -139,7 +139,8 @@ hal_status_t RPM_init(RPM *self) {
 }
 
 void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage) {
-  self->currentRPMSolenoid = percentToGivenVal(percentage, PWM_RESOLUTION);
+  self->currentRPMSolenoid =
+      hal_math_percent_to_value(percentage, PWM_RESOLUTION);
 }
 
 int32_t RPM_getCurrentRPMSolenoid(const RPM *self) {

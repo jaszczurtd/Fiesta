@@ -1,7 +1,9 @@
 #include "dtcManager.h"
+
 #include "ecuPersistence.h"
 #include "ecu_unit_testing.h"
 #include "gps.h"
+#include <utils/tools_common_defs.h>
 
 #include <hal/system/hal_system.h>
 

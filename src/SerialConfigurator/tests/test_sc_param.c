@@ -18,6 +18,8 @@
 #include "sc_param_types.h"
 #include "sc_protocol.h"
 
+#include <hal/core/hal_array.h>
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>

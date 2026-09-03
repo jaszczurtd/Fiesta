@@ -28,8 +28,10 @@ set(SCDEFS  ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 
 include(${HAL_LIB_EXTERNAL}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
+fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 
 if(EXISTS ${HAL_LIB_EXTERNAL}/unity.c)
     set(UNITY_SOURCE ${HAL_LIB_EXTERNAL}/unity.c)
@@ -48,6 +50,7 @@ add_library(oilspeed_mock STATIC
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
     ${HAL_SRC}/hal/core/jh_handle_pool.cpp
+    ${HAL_HELPER_SOURCES}
     ${HAL_COMMAND_SOURCES}
     ${HAL_SRC}/hal/security/hal_sc_auth.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp

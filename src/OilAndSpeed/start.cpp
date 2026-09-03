@@ -1,8 +1,10 @@
 
 #include "start.h"
+
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <utils/multicoreWatchdog.h>
 
 void updateValsForDebug(void);
 void readThermocouples(void);
@@ -44,8 +46,8 @@ void setupTimers(void) {
 static void initializeCore0(void) {
   bool result = false;
 
-  debugInit();
-  setDebugPrefixWithColon(SC_MODULE_TOKEN_OIL_AND_SPEED);
+  hal_debug_init_default();
+  hal_debug_set_module_prefix(SC_MODULE_TOKEN_OIL_AND_SPEED);
 
   setupOnboardLed();
   initBasicPIO();

@@ -4,6 +4,8 @@
 #include "buzzerStrategy.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <utils/multicoreWatchdog.h>
+#include <utils/tools_common_defs.h>
 
 const char *err = "ERR";
 
@@ -63,8 +65,8 @@ void executeByWatchdog(int *values, int size) {
 
 static void initializeCore0(void) {
 
-  debugInit();
-  setDebugPrefixWithColon(SC_MODULE_TOKEN_CLOCKS);
+  hal_debug_init_default();
+  hal_debug_set_module_prefix(SC_MODULE_TOKEN_CLOCKS);
 
   deb("Setup started");
 
@@ -80,7 +82,7 @@ static void initializeCore0(void) {
   initSPI();
   initTFT();
 
-  int sec = getSeconds();
+  int sec = hal_get_seconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
 
 #ifndef DEBUG_SCREEN
@@ -97,7 +99,7 @@ static void initializeCore0(void) {
 
   while (sec < secDest) {
     hal_watchdog_feed();
-    sec = getSeconds();
+    sec = hal_get_seconds();
   }
 
   softInitDisplay();
@@ -113,7 +115,7 @@ static void initializeCore0(void) {
   redrawAllGauges();
 #endif
 
-  alertsStartSecond = getSeconds() + SERIOUS_ALERTS_DELAY_TIME;
+  alertsStartSecond = hal_get_seconds() + SERIOUS_ALERTS_DELAY_TIME;
 
   callAtEverySecond();
   callAtEveryHalfSecond();
@@ -151,8 +153,8 @@ extern "C" void app_task0(void) {
   canMainLoop();
 
   hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
-  if (lastThreadSeconds < getSeconds()) {
-    lastThreadSeconds = getSeconds() + THREAD_CONTROL_SECONDS;
+  if (lastThreadSeconds < hal_get_seconds()) {
+    lastThreadSeconds = hal_get_seconds() + THREAD_CONTROL_SECONDS;
 
     deb("thread is alive");
   }
@@ -231,7 +233,7 @@ void processTemperatureBuzzerAlerts(void) {
 }
 
 void callAtEveryHalfHalfSecond(void) {
-  if (alertsStartSecond <= getSeconds()) {
+  if (alertsStartSecond <= hal_get_seconds()) {
     seriousAlertsDrawFunctions();
   }
   drawMediumMediumImportanceValues();

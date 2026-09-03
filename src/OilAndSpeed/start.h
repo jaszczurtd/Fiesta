@@ -2,7 +2,7 @@
 #define S_START_H
 
 #include "../common/canDefinitions/canDefinitions.h"
-#include <tools.h>
+#include <JaszczurHAL.h>
 
 #include "can.h"
 #include "config.h"

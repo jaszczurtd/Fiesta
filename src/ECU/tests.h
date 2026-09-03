@@ -1,8 +1,8 @@
 #ifndef T_TESTS
 #define T_TESTS
 
+#include <JaszczurHAL.h>
 #include <hal/timers/hal_soft_timer.h>
-#include <tools_c.h>
 
 #ifdef __cplusplus
 extern "C" {

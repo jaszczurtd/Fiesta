@@ -20,68 +20,64 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef COUNTOF
-#define COUNTOF(x) (sizeof(x) / sizeof((x)[0]))
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef enum {
-    SC_PARAM_KIND_SCALAR_I16 = 1,
-    /* Reserved for future kinds. Helpers in this slice (R1.1) treat
-     * descriptors of these kinds as opaque and skip them. */
-    SC_PARAM_KIND_AXIS_I16   = 2,
-    SC_PARAM_KIND_MAP_1D_I16 = 3,
-    SC_PARAM_KIND_MAP_2D_I16 = 4,
+  SC_PARAM_KIND_SCALAR_I16 = 1,
+  /* Reserved for future kinds. Helpers in this slice (R1.1) treat
+   * descriptors of these kinds as opaque and skip them. */
+  SC_PARAM_KIND_AXIS_I16 = 2,
+  SC_PARAM_KIND_MAP_1D_I16 = 3,
+  SC_PARAM_KIND_MAP_2D_I16 = 4,
 } sc_param_kind_t;
 
 typedef enum {
-    SC_PARAM_FLAG_NONE          = 0u,
-    /** Reject @c sc_param_set_i16 and skip during blob decode writes. */
-    SC_PARAM_FLAG_READ_ONLY     = 1u << 0,
-    /** Skip during @c sc_param_blob_encode and @c sc_param_blob_decode. */
-    SC_PARAM_FLAG_NOT_PERSISTED = 1u << 1,
+  SC_PARAM_FLAG_NONE = 0u,
+  /** Reject @c sc_param_set_i16 and skip during blob decode writes. */
+  SC_PARAM_FLAG_READ_ONLY = 1u << 0,
+  /** Skip during @c sc_param_blob_encode and @c sc_param_blob_decode. */
+  SC_PARAM_FLAG_NOT_PERSISTED = 1u << 1,
 } sc_param_flags_t;
 
 typedef struct {
-    /** Wire identifier (e.g. "fan_coolant_start_c"). Must be unique. */
-    const char *id;
-    sc_param_kind_t kind;
-    /** Bitfield of @ref sc_param_flags_t. */
-    uint16_t flags;
-    /**
-     * @brief First schema version that contains this descriptor.
-     *
-     * @c sc_param_blob_decode skips writing this field when the loaded
-     * blob's schema is strictly less than @c schema_since, leaving
-     * whatever default the values struct had at decode time. Module
-     * declarations start at 1 and bump the value when a new parameter
-     * is introduced - this matches ECU's V1->V2 history (V1 had 5
-     * params, V2 added @c nominalRpm with @c schema_since=2).
-     */
-    uint16_t schema_since;
-    /**
-     * @brief Group name for UI sectioning (e.g. "cooling_fan").
-     *
-     * Snake-case wire token (no spaces - the wire format uses spaces
-     * as token separators). The host GUI renders the human-friendly
-     * label by replacing `_` with ` ` and Title-Casing. Empty string
-     * or NULL means "no group" (descriptor sits in an unnamed bucket).
-     * Emitted as `group=<name>` in the SC_GET_PARAM reply alongside
-     * value/min/max/default.
-     */
-    const char *group;
-    union {
-        struct {
-            /** Byte offset of the @c int16_t field inside the values struct. */
-            size_t value_offset;
-            int16_t min_value;
-            int16_t max_value;
-            int16_t default_value;
-        } scalar_i16;
-    } as;
+  /** Wire identifier (e.g. "fan_coolant_start_c"). Must be unique. */
+  const char *id;
+  sc_param_kind_t kind;
+  /** Bitfield of @ref sc_param_flags_t. */
+  uint16_t flags;
+  /**
+   * @brief First schema version that contains this descriptor.
+   *
+   * @c sc_param_blob_decode skips writing this field when the loaded
+   * blob's schema is strictly less than @c schema_since, leaving
+   * whatever default the values struct had at decode time. Module
+   * declarations start at 1 and bump the value when a new parameter
+   * is introduced - this matches ECU's V1->V2 history (V1 had 5
+   * params, V2 added @c nominalRpm with @c schema_since=2).
+   */
+  uint16_t schema_since;
+  /**
+   * @brief Group name for UI sectioning (e.g. "cooling_fan").
+   *
+   * Snake-case wire token (no spaces - the wire format uses spaces
+   * as token separators). The host GUI renders the human-friendly
+   * label by replacing `_` with ` ` and Title-Casing. Empty string
+   * or NULL means "no group" (descriptor sits in an unnamed bucket).
+   * Emitted as `group=<name>` in the SC_GET_PARAM reply alongside
+   * value/min/max/default.
+   */
+  const char *group;
+  union {
+    struct {
+      /** Byte offset of the @c int16_t field inside the values struct. */
+      size_t value_offset;
+      int16_t min_value;
+      int16_t max_value;
+      int16_t default_value;
+    } scalar_i16;
+  } as;
 } sc_param_descriptor_t;
 
 /**
@@ -93,21 +89,19 @@ typedef struct {
  * @p group_str is the snake-case section name surfaced over the wire
  * (see `group` field on the struct). Pass `""` for ungrouped.
  */
-#define SC_PARAM_SCALAR_I16(id_str, struct_t, field, min_v, max_v,            \
-                            default_v, since, group_str)                      \
-    {                                                                         \
-        .id = (id_str),                                                       \
-        .kind = SC_PARAM_KIND_SCALAR_I16,                                     \
-        .flags = (uint16_t)SC_PARAM_FLAG_NONE,                                \
-        .schema_since = (uint16_t)(since),                                    \
-        .group = (group_str),                                                 \
-        .as = { .scalar_i16 = {                                               \
-            .value_offset = offsetof(struct_t, field),                        \
-            .min_value = (int16_t)(min_v),                                    \
-            .max_value = (int16_t)(max_v),                                    \
-            .default_value = (int16_t)(default_v),                            \
-        } },                                                                  \
-    }
+#define SC_PARAM_SCALAR_I16(id_str, struct_t, field, min_v, max_v, default_v,  \
+                            since, group_str)                                  \
+  {                                                                            \
+    .id = (id_str), .kind = SC_PARAM_KIND_SCALAR_I16,                          \
+    .flags = (uint16_t)SC_PARAM_FLAG_NONE, .schema_since = (uint16_t)(since),  \
+    .group = (group_str),                                                      \
+    .as = {.scalar_i16 = {                                                     \
+               .value_offset = offsetof(struct_t, field),                      \
+               .min_value = (int16_t)(min_v),                                  \
+               .max_value = (int16_t)(max_v),                                  \
+               .default_value = (int16_t)(default_v),                          \
+           }},                                                                 \
+  }
 
 /**
  * @brief Builder for a read-only / not-persisted SCALAR_I16 descriptor.
@@ -116,23 +110,20 @@ typedef struct {
  * compile-time defines so they are visible on the wire but never
  * mutated and never persisted.
  */
-#define SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(id_str, struct_t, field,         \
-                                             min_v, max_v, default_v, since,  \
-                                             group_str)                       \
-    {                                                                         \
-        .id = (id_str),                                                       \
-        .kind = SC_PARAM_KIND_SCALAR_I16,                                     \
-        .flags = (uint16_t)(SC_PARAM_FLAG_READ_ONLY                           \
-                            | SC_PARAM_FLAG_NOT_PERSISTED),                   \
-        .schema_since = (uint16_t)(since),                                    \
-        .group = (group_str),                                                 \
-        .as = { .scalar_i16 = {                                               \
-            .value_offset = offsetof(struct_t, field),                        \
-            .min_value = (int16_t)(min_v),                                    \
-            .max_value = (int16_t)(max_v),                                    \
-            .default_value = (int16_t)(default_v),                            \
-        } },                                                                  \
-    }
+#define SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(                                  \
+    id_str, struct_t, field, min_v, max_v, default_v, since, group_str)        \
+  {                                                                            \
+    .id = (id_str), .kind = SC_PARAM_KIND_SCALAR_I16,                          \
+    .flags =                                                                   \
+        (uint16_t)(SC_PARAM_FLAG_READ_ONLY | SC_PARAM_FLAG_NOT_PERSISTED),     \
+    .schema_since = (uint16_t)(since), .group = (group_str),                   \
+    .as = {.scalar_i16 = {                                                     \
+               .value_offset = offsetof(struct_t, field),                      \
+               .min_value = (int16_t)(min_v),                                  \
+               .max_value = (int16_t)(max_v),                                  \
+               .default_value = (int16_t)(default_v),                          \
+           }},                                                                 \
+  }
 
 #ifdef __cplusplus
 }

@@ -456,7 +456,13 @@ if(BUILD_TESTING)
     # hosts that lack libgtk-4-dev).
     target_include_directories(serial-configurator-i18n-tests
         PRIVATE
+            ${SC_JASZCZURHAL_INCLUDE_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+
+    target_include_directories(serial-configurator-sc-param-tests
+        PRIVATE
+            ${SC_JASZCZURHAL_INCLUDE_DIR}
     )
 
     target_link_libraries(serial-configurator-flash-tests

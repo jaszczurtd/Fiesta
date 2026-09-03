@@ -2,8 +2,8 @@
 #ifndef T_RPM
 #define T_RPM
 
+#include <JaszczurHAL.h>
 #include <hal/core/hal_status.h>
-#include <tools_c.h>
 
 #include "config.h"
 #include "sensors.h"

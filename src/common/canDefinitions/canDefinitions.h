@@ -1,6 +1,8 @@
 #ifndef CAN_DEFINITIONS_0
 #define CAN_DEFINITIONS_0
 
+#include "fiesta_can_codec.h"
+
 // how many times CAN modules should be initialized in case of error?
 #define CAN_RETRIES 4
 

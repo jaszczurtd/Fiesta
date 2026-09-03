@@ -5,13 +5,9 @@
 // glow plugs
 //-----------------------------------------------------------------------------
 
-void createGlowPlugs(void) {
-  glowPlugs_init(getGlowPlugsInstance());
-}
+void createGlowPlugs(void) { glowPlugs_init(getGlowPlugsInstance()); }
 
-glowPlugs *getGlowPlugsInstance(void) {
-  return &getECUContext()->glowP;
-}
+glowPlugs *getGlowPlugsInstance(void) { return &getECUContext()->glowP; }
 
 /**
  * @brief Calculate glow plug heating time from coolant temperature.
@@ -20,8 +16,10 @@ glowPlugs *getGlowPlugsInstance(void) {
  * @return None.
  */
 static void glowPlugs_calculateGlowPlugsTime(glowPlugs *self, float temp) {
-  if(temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
-    self->glowPlugsTime = (int32_t)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) / TEMP_MINIMUM_FOR_GLOW_PLUGS);
+  if (temp < TEMP_MINIMUM_FOR_GLOW_PLUGS) {
+    self->glowPlugsTime =
+        (int32_t)(MAX_GLOW_PLUGS_TIME * (TEMP_MINIMUM_FOR_GLOW_PLUGS - temp) /
+                  TEMP_MINIMUM_FOR_GLOW_PLUGS);
   } else {
     self->glowPlugsTime = 0;
   }
@@ -48,7 +46,8 @@ static void glowPlugs_calculateGlowPlugLampTime(glowPlugs *self, float temp) {
   }
 
   // Ensure the lamp time is non-negative
-  self->glowPlugsLampTime = (self->glowPlugsLampTime < 0) ? 0 : self->glowPlugsLampTime;
+  self->glowPlugsLampTime =
+      (self->glowPlugsLampTime < 0) ? 0 : self->glowPlugsLampTime;
 }
 
 void glowPlugs_init(glowPlugs *self) {
@@ -79,13 +78,13 @@ void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp) {
 
   glowPlugs_calculateGlowPlugsTime(self, temp);
 
-  if(self->glowPlugsTime > 0) {
+  if (self->glowPlugsTime > 0) {
     glowPlugs_enableGlowPlugs(self, true);
     glowPlugs_glowPlugsLamp(self, true);
 
     glowPlugs_calculateGlowPlugLampTime(self, temp);
 
-    self->lastSecond = getSeconds();
+    self->lastSecond = hal_get_seconds();
   }
 
   self->initialized = true;
@@ -93,54 +92,53 @@ void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp) {
 
 void glowPlugs_process(glowPlugs *self) {
 
-  if(!self->initialized) {
+  if (!self->initialized) {
     return;
   }
 
   float temp = getGlobalValue(F_COOLANT_TEMP);
-  if(temp > TEMP_COLD_ENGINE) {
+  if (temp > TEMP_COLD_ENGINE) {
     self->warmAfterStart = true;
   }
 
-  if(!self->warmAfterStart) {
-    if(temp <= TEMP_COLD_ENGINE &&
-      getGlobalValue(F_RPM) > RPM_MIN) {
-        glowPlugs_calculateGlowPlugsTime(self, temp);
-        if(self->glowPlugsTime > 0) {
-          glowPlugs_enableGlowPlugs(self, true);
-          self->warmAfterStart = true;
-        }
+  if (!self->warmAfterStart) {
+    if (temp <= TEMP_COLD_ENGINE && getGlobalValue(F_RPM) > RPM_MIN) {
+      glowPlugs_calculateGlowPlugsTime(self, temp);
+      if (self->glowPlugsTime > 0) {
+        glowPlugs_enableGlowPlugs(self, true);
+        self->warmAfterStart = true;
+      }
     }
   }
 
-  if(self->glowPlugsTime >= 0 || self->glowPlugsLampTime >= 0) {
+  if (self->glowPlugsTime >= 0 || self->glowPlugsLampTime >= 0) {
     bool pr = false;
 
-    if(self->lastGlowPlugsTime != self->glowPlugsTime) {
+    if (self->lastGlowPlugsTime != self->glowPlugsTime) {
       self->lastGlowPlugsTime = self->glowPlugsTime;
       pr = true;
     }
-    if(self->lastGlowPlugsLampTime != self->glowPlugsLampTime) {
+    if (self->lastGlowPlugsLampTime != self->glowPlugsLampTime) {
       self->lastGlowPlugsLampTime = self->glowPlugsLampTime;
       pr = true;
     }
 
-    if(pr) {
+    if (pr) {
       deb("glowPlugsTime: %d %d", self->glowPlugsTime, self->glowPlugsLampTime);
     }
   }
 
-  if(self->glowPlugsTime >= 0) {
-    if(getSeconds() != self->lastSecond) {
-      self->lastSecond = getSeconds();
+  if (self->glowPlugsTime >= 0) {
+    if (hal_get_seconds() != self->lastSecond) {
+      self->lastSecond = hal_get_seconds();
 
-      if(self->glowPlugsTime-- <= 0) {
+      if (self->glowPlugsTime-- <= 0) {
         glowPlugs_enableGlowPlugs(self, false);
 
         deb("glow plugs disabled");
       }
 
-      if(self->glowPlugsLampTime >= 0 && self->glowPlugsLampTime-- <= 0) {
+      if (self->glowPlugsLampTime >= 0 && self->glowPlugsLampTime-- <= 0) {
         glowPlugs_glowPlugsLamp(self, false);
 
         deb("glow plugs lamp off");
