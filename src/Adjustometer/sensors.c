@@ -63,6 +63,10 @@ void initSensors(void) {
 static volatile int32_t adjustometerPulse = 0;
 static volatile uint32_t adjustometerLastEdgeUs = 0;
 static volatile uint32_t adjustometerSignalHz = 0;
+static uint32_t adjustometerRawHz = 0;
+static uint32_t adjustometerMeasuredUs = 0;
+static uint32_t adjustometerSampleSequence = 0;
+static uint32_t auxiliaryTelemetry = 0;
 // ISR-only state can stay non-volatile for tighter generated code.
 static uint32_t adjustometerWindowStartUs = 0;
 static uint32_t adjustometerWindowCount = 0;
@@ -92,10 +96,8 @@ static float filteredVoltage = -1.0f;
 // At 37 kHz this gives ~3.5 ms window, lowering output latency.
 #define ADJUSTOMETER_PULSE_WINDOW 128U
 #define ADJUSTOMETER_SIGNAL_LOSS_US 200000U
-// EMA filter: weight = 1/(2^SHIFT). SHIFT=3 means new sample has 12.5% weight.
-// With 128-pulse window this keeps jitter low while preserving fast step
-// response.
-#define ADJUSTOMETER_EMA_SHIFT 3U
+// EMA filter: new sample weight 1/4, following each 128-pulse window.
+#define ADJUSTOMETER_EMA_SHIFT 2U
 #define ADJUSTOMETER_BASELINE_MIN_TIME_US                                      \
   (ADJUSTOMETER_BASELINE_MIN_TIME_MS * 1000UL)
 #define ADJUSTOMETER_BASELINE_MAX_TIME_US                                      \
@@ -171,12 +173,15 @@ static void countAdjustometerPulses(void) {
   adjustometerWindowCount++;
 
   if (adjustometerWindowCount >= ADJUSTOMETER_PULSE_WINDOW) {
+    __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_ACQ_REL);
     const uint32_t elapsedUs = nowUs - adjustometerWindowStartUs;
     if (elapsedUs > 0U) {
       const uint32_t rawHz =
           (uint32_t)(((uint64_t)adjustometerWindowCount * US_PER_SECOND +
                       (elapsedUs / 2U)) /
                      (uint64_t)elapsedUs);
+      __atomic_store_n(&adjustometerRawHz, rawHz, __ATOMIC_RELAXED);
+      __atomic_store_n(&adjustometerMeasuredUs, nowUs, __ATOMIC_RELAXED);
       uint32_t filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
       adjustometerFilteredHz = filtered;
       __atomic_store_n(&adjustometerSignalHz, filtered, __ATOMIC_RELEASE);
@@ -303,6 +308,7 @@ static void countAdjustometerPulses(void) {
     }
     adjustometerWindowStartUs = nowUs;
     adjustometerWindowCount = 0U;
+    __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_RELEASE);
   }
 }
 
@@ -380,19 +386,8 @@ uint8_t getAdjustometerStatus(void) {
   if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
-  // Fuel-temp sensor health: filteredFuelTemp is updated by
-  // getFuelTemperatureRaw() on the same core (Core1) just before this function
-  // is called from updateI2CRegisters().  Reading it directly is therefore safe
-  // and avoids the need for a separate cross-core atomic.
-  if ((uint8_t)(filteredFuelTemp + 0.5f) == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
-    status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
-  }
-  {
-    uint8_t v = getSupplyVoltageRaw();
-    if (v < ADJ_VOLTAGE_MIN_TV || v > ADJ_VOLTAGE_MAX_TV) {
-      status |= ADJ_STATUS_VOLTAGE_BAD;
-    }
-  }
+  status |=
+      (uint8_t)(__atomic_load_n(&auxiliaryTelemetry, __ATOMIC_ACQUIRE) >> 16);
 
   return status;
 }
@@ -422,6 +417,11 @@ uint32_t getBaseline(void) {
  * @return None.
  */
 static void resetSensorsState(void) {
+  adjustometerRawHz = 0;
+  adjustometerMeasuredUs = 0;
+  adjustometerSampleSequence = 0;
+  auxiliaryTelemetry =
+      (uint32_t)(ADJ_STATUS_FUEL_TEMP_BROKEN | ADJ_STATUS_VOLTAGE_BAD) << 16;
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
@@ -496,4 +496,60 @@ uint8_t getFuelTemperatureRaw(void) {
   if (filteredFuelTemp > 255.0f)
     filteredFuelTemp = 255.0f;
   return (uint8_t)(filteredFuelTemp + 0.5f);
+}
+
+void updateAuxiliarySensors(void) {
+  const uint8_t voltage = getSupplyVoltageRaw();
+  const uint8_t fuelTemp = getFuelTemperatureRaw();
+  uint8_t status = 0U;
+  if (fuelTemp == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
+    status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
+  }
+  if (voltage < ADJ_VOLTAGE_MIN_TV || voltage > ADJ_VOLTAGE_MAX_TV) {
+    status |= ADJ_STATUS_VOLTAGE_BAD;
+  }
+  const uint32_t packed =
+      voltage | ((uint32_t)fuelTemp << 8) | ((uint32_t)status << 16);
+  __atomic_store_n(&auxiliaryTelemetry, packed, __ATOMIC_RELEASE);
+}
+
+hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
+  for (unsigned int attempt = 0U; attempt < 3U; attempt++) {
+    const uint32_t before =
+        __atomic_load_n(&adjustometerSampleSequence, __ATOMIC_ACQUIRE);
+    if ((before & 1U) != 0U) {
+      continue;
+    }
+    adjustometer_feedback_t sample;
+    sample.rawHz = __atomic_load_n(&adjustometerRawHz, __ATOMIC_RELAXED);
+    sample.filteredHz =
+        __atomic_load_n(&adjustometerSignalHz, __ATOMIC_RELAXED);
+    sample.baselineHz =
+        __atomic_load_n(&adjustometerBaseline, __ATOMIC_RELAXED);
+    sample.measuredUs =
+        __atomic_load_n(&adjustometerMeasuredUs, __ATOMIC_RELAXED);
+    sample.number = before >> 1;
+    sample.pulseHz =
+        (int16_t)hal_constrain(getAdjustometerPulses(), 0, INT16_MAX);
+    sample.status = getAdjustometerStatus() &
+                    (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING);
+    const uint32_t auxiliary =
+        __atomic_load_n(&auxiliaryTelemetry, __ATOMIC_ACQUIRE);
+    sample.status |= (uint8_t)(auxiliary >> 16);
+    sample.voltage = (uint8_t)auxiliary;
+    sample.fuelTemp = (uint8_t)(auxiliary >> 8);
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    if (before !=
+        __atomic_load_n(&adjustometerSampleSequence, __ATOMIC_ACQUIRE)) {
+      continue;
+    }
+    const uint32_t ageUs = hal_micros() - sample.measuredUs;
+    sample.ageUs = (uint16_t)(ageUs > UINT16_MAX ? UINT16_MAX : ageUs);
+    *out = sample;
+    return HAL_OK;
+  }
+  return HAL_EAGAIN;
 }

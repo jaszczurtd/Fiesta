@@ -1,6 +1,7 @@
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "sensors.h"
+#include "testable/adjustometer_test_helpers.h"
 #include "unity.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -309,8 +310,74 @@ void test_adjustometer_big_endian_negative(void) {
 
 // ── Runner ───────────────────────────────────────────────────────────────────
 
+void test_fast_feedback_age_sequence_and_clock_wrap(void) {
+  setVP37AdjustometerFastFeedback(true);
+  adjustometer_feedback_t sample = {};
+  sample.number = 42U;
+  sample.measuredUs = UINT32_MAX - 100U;
+  sample.rawHz = 26000U;
+  sample.filteredHz = 26500U;
+  sample.baselineHz = 34000U;
+  sample.pulseHz = 7500;
+  sample.ageUs = 700U;
+  hal_mock_set_micros(100000);
+  injectFastAdjustometer(sample);
+  adjustometer_reading_t reading;
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_TRUE(reading.commOk && reading.feedbackFresh);
+  TEST_ASSERT_EQUAL_UINT32(26000U, reading.rawHz);
+  TEST_ASSERT_EQUAL_INT16(7500, reading.pulseHz);
+
+  hal_mock_set_micros(105000);
+  injectFastAdjustometer(sample);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_TRUE(reading.feedbackFresh);
+  hal_mock_set_micros(120000);
+  injectFastAdjustometer(sample);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_FALSE(reading.feedbackFresh);
+
+  sample.number++;
+  sample.measuredUs = 200U; // Natural clock wrap remains forward progress.
+  injectFastAdjustometer(sample);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_TRUE(reading.feedbackFresh);
+  sample.number++;
+  sample.measuredUs =
+      100U; // A sensor restart cannot retain the ECU calibration.
+  injectFastAdjustometer(sample);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_FALSE(reading.feedbackFresh);
+  sample.number++;
+  sample.measuredUs = 400U;
+  sample.ageUs = ADJUSTOMETER_FEEDBACK_MAX_AGE_US + 1U;
+  injectFastAdjustometer(sample);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_FALSE(reading.feedbackFresh);
+}
+
+void test_fast_feedback_rejects_mixed_or_unknown_frames(void) {
+  adjustometer_feedback_t sample = {};
+  uint8_t frames[ADJUSTOMETER_FEEDBACK_BYTES * 2U];
+  adjustometer_feedback_encode(frames, &sample, 4U);
+  frames[ADJUSTOMETER_FEEDBACK_BYTES - 1U] = 5U;
+  memcpy(frames + ADJUSTOMETER_FEEDBACK_BYTES, frames,
+         ADJUSTOMETER_FEEDBACK_BYTES);
+  setVP37AdjustometerFastFeedback(true);
+  hal_mock_i2c_inject_rx(frames, (int)COUNTOF(frames));
+  adjustometer_reading_t reading;
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_FALSE(reading.commOk);
+  frames[0] = 99U;
+  hal_mock_i2c_inject_rx(frames, ADJUSTOMETER_FEEDBACK_BYTES);
+  getVP37Adjustometer(&reading);
+  TEST_ASSERT_FALSE(reading.commOk);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_fast_feedback_age_sequence_and_clock_wrap);
+  RUN_TEST(test_fast_feedback_rejects_mixed_or_unknown_frames);
 
   // Adjustometer readout
   RUN_TEST(test_adjustometer_positive_pulse);

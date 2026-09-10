@@ -46,10 +46,32 @@ void test_engine_operation_cranking_uses_start_demand(void) {
                           ctx->injectionPump.desiredAdjustometerTarget);
 }
 
+void test_engine_operation_closed_throttle_keeps_engine_start_and_idle_demand(
+    void) {
+  ecu_context_t *ctx = getECUContext();
+  setupPumpForEngineOperation(&ctx->injectionPump);
+  engineOperation_init(&ctx->engineOp);
+  setGlobalValue(F_THROTTLE_POS, 0.0f);
+  setGlobalValue(F_COOLANT_TEMP, 90.0f);
+  getRPMInstance()->rpmValue = 0;
+  engineOperation_process(&ctx->engineOp);
+  TEST_ASSERT_EQUAL_INT(ENGINE_OP_STATE_STOPPED, ctx->engineOp.state);
+  TEST_ASSERT_EQUAL_FLOAT(ENGINE_OP_START_DEMAND_MIN,
+                          ctx->injectionPump.lastThrottle);
+
+  getRPMInstance()->rpmValue = 900;
+  hal_mock_set_millis(50);
+  engineOperation_process(&ctx->engineOp);
+  TEST_ASSERT_EQUAL_INT(ENGINE_OP_STATE_IDLE, ctx->engineOp.state);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0, ctx->injectionPump.lastThrottle);
+}
+
 int main(void) {
   UNITY_BEGIN();
 
   RUN_TEST(test_engine_operation_cranking_uses_start_demand);
+  RUN_TEST(
+      test_engine_operation_closed_throttle_keeps_engine_start_and_idle_demand);
 
   return UNITY_END();
 }

@@ -2,6 +2,7 @@
 #ifndef T_SENSORS
 #define T_SENSORS
 
+#include "../common/adjustometer_feedback.h"
 #include "config.h"
 #include <libConfig.h>
 
@@ -52,6 +53,14 @@ void initBasicPIO(void);
  * for the VP37 control path.
  */
 void initSensors(void);
+
+/** @brief Read a coherent oscillator window without ADC or USB I/O.
+ * @param out Non-NULL destination; errors leave it unchanged.
+ * @return HAL_OK, HAL_EINVAL, or HAL_EAGAIN if a concurrent ISR keeps updating.
+ */
+hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out);
+/** @brief Read and cache voltage/temperature on their owning auxiliary core. */
+void updateAuxiliarySensors(void);
 
 /**
  * @brief Return the current Adjustometer pulse magnitude.

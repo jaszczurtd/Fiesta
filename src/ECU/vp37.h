@@ -18,59 +18,70 @@
 extern "C" {
 #endif
 
-#define VP37_DEBUG_UPDATE 250
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#define VP37_DEBUG_UPDATE 20U
+#else
+#define VP37_DEBUG_UPDATE 250U
+#endif
+#define VP37_TELEMETRY_UPDATE 500U
 
 #define DEFAULT_INJECTION_PRESSURE 300 // bar
 
-#define VP37_PID_TIME_UPDATE 150.0
+#define VP37_PID_TIME_UPDATE 5.0f // minimum control period [ms]
 // PID + Feedforward (FF) architecture:
 //   pwm = pwm_ff(desired) + pid_correction
 // PID output is now interpreted as PWM correction (units: PWM counts),
 // NOT as a position estimate. Gains are in PWM/Hz (Kp), PWM/(Hz*s) (Ki),
 // PWM*s/Hz (Kd). Old position-tracking gains were ~4x larger because the
 // adj->PWM linear map had ratio ~0.236 (1890 PWM / 8000 Hz).
-#define VP37_PID_KP 0.08f
-#define VP37_PID_KI 0.06f
-#define VP37_PID_KD 0.015f
-#define VP37_PID_TF 0.068f
-#define VP37_PID_MAX_INTEGRAL 4096
-#define VP37_PID_MAX_INTEGRAL_WARM 6000
+#define VP37_PID_KP 0.05f
+#define VP37_PID_KI 0.2f
+#define VP37_PID_KD 0.001f
+// Feedback already has an EMA; keep D's additional lag below one control step.
+#define VP37_PID_TF 0.003f
+// Preserve integral output authority when changing Ki (nominal PWM counts).
+// Residual authority above the holding map, tapered near the upper endpoint.
+#define VP37_PID_TRIM_PWM 120.0f
+#define VP37_PID_TRIM_TOP_PWM 45.0f
+#define VP37_PID_TRIM_TAPER_PERCENT 75.0f
+#define VP37_BENCH_INTEGRAL_CAP_PWM VP37_PID_TRIM_PWM
+#define VP37_PID_MAX_INTEGRAL (VP37_PID_TRIM_PWM / VP37_PID_KI)
 
-// Error deadband [Hz]: errors smaller than this are treated as zero
-// to prevent integral windup near the setpoint. ~0.6% of full range.
-#define VP37_PID_DEADBAND 40
-// PID correction limits in PWM units.  The negative side and the cold
-// positive side retain the original 220-count limit.  When the pump is warm,
-// only the positive side is expanded to compensate for the higher copper
-// resistance of the N146 actuator coil.
+// Continuous dead zone for integration only [Hz]. P and D remain active.
+#define VP37_PID_DEADBAND 12
+// Correction limits are calculated at the PWM reference temperature.
+// The 22 C curve below defines their original electrical authority.
 #define VP37_PID_CORR_LIMIT 220.0f
 #define VP37_PID_CORR_LIMIT_NEGATIVE VP37_PID_CORR_LIMIT
 #define VP37_PID_CORR_LIMIT_POSITIVE_COLD VP37_PID_CORR_LIMIT
 #define VP37_PID_CORR_LIMIT_POSITIVE_MAX 340.0f
 
-// The Adjustometer fuel-temperature reading is used as the closest available
-// proxy for actuator temperature.  Scaling the maximum total nominal command
-// (FF_MAX + cold correction) by copper's temperature coefficient gives about
-// +324 PWM at 51 C and +338 PWM at 55 C, matching the observed loss of travel.
+// Fuel temperature approximates coil temperature. The copper model is
+// anchored at 22 C; the complete control command is normalized to 49 C.
 #define VP37_THERMAL_REFERENCE_TEMP_C 22.0f
 #define VP37_COPPER_TEMP_COEFFICIENT 0.00393f
 #define VP37_THERMAL_TEMP_VALID_MAX_C 120.0f
-// Feedforward steady-state PWM at adjustometer MIN/MAX positions.
-// Determined empirically from logs (steady-state PWM observed at idle vs.
-// near full position). Linear interpolation between these points provides
-// the bulk of the control signal; PID only trims the residual.
-#define VP37_PWM_FF_AT_MIN 480
-#define VP37_PWM_FF_AT_MAX 690
-// Setpoint slew rate limit [Hz per PID cycle].
-// Caps how fast desiredAdjustometer can change between PID updates.
-// Prevents the FF term from issuing huge instantaneous PWM jumps when
-// throttle changes rapidly. 400/cycle @ 150ms = ~2667 Hz/s = full range
-// (8000 Hz) traversal in ~3 s.
-// Asymmetric: down-slew is slower because mechanical inertia + return spring
-// already drag the actuator back; matching FF too quickly causes the actuator
-// to overshoot the new (lower) target by 500-1100 Hz on throttle release.
-#define VP37_DESIRED_SLEW_PER_CYCLE 800
-#define VP37_DESIRED_SLEW_PER_CYCLE_DOWN 500
+// FF and PID use the warm bench reference; temperature scales their sum once.
+#define VP37_PWM_REFERENCE_TEMP_C 49.0f
+#define VP37_TEMPERATURE_FACTOR_MIN 0.8f
+#define VP37_TEMPERATURE_FACTOR_MAX 1.2f
+#define VP37_TEMPERATURE_FILTER_S 2.0f
+// Endpoints of the nonlinear positive-demand feedforward map [nominal PWM].
+#define VP37_PWM_FF_AT_MIN 585
+#define VP37_PWM_FF_AT_MAX 820
+// Upper upward-motion correction at the reference rate [nominal PWM].
+#define VP37_PWM_FF_MOTION_BOOST 32.0f
+#define VP37_PWM_FF_MOTION_FILTER_S 0.01f
+#define VP37_PWM_FF_MOTION_REFERENCE_RATE 125.0f
+// Percent of calibrated travel per second; permits the existing cyclic ramp.
+#define VP37_DESIRED_SLEW_PERCENT_PER_SECOND 300.0f
+#define VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND 275.0f
+#define VP37_DESIRED_UPPER_SLEW_START_PERCENT 75.0f
+// An unchanged target uses a softer approach; moving ramps retain their rate.
+#define VP37_TARGET_STABLE_MS 25U
+#define VP37_STATIONARY_SLEW_PERCENT_PER_SECOND 150.0f
+#define VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND 125.0f
+#define VP37_STATIONARY_MOTION_WEIGHT 0.3f
 
 // calibration / stabilization values
 #define PERCENTAGE_ERROR 3.0
@@ -110,19 +121,14 @@ extern "C" {
 // Higher = faster descent. 0.5 = smooth, 5+ = snappy.
 #define VP37_THROTTLE_RAMP_DOWN_STEP 2.9f
 #define VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS 20
-// Time in seconds with commOk==false before VP37 is disabled.
-#define VP37_ADJ_COMM_CUTOFF_S 5
+// Hold the last PWM briefly on a failed transfer, without integrating stale
+// data.
+#define VP37_ADJ_COMM_CUTOFF_MS 20U
 
 #define VP37_MIN_COMPENSATION_VOLTAGE 7.0f
 
-// Soft floor on the commanded PWM (in nominal-voltage units), applied BEFORE
-// voltage compensation. While the actuator is still travelling toward a
-// higher target, the slewed setpoint (and thus FF) is well below the
-// final target's FF. PID alone may not push hard enough on the way up,
-// causing sluggish climb. The soft floor keeps pwmValue at least
-// (FF_at_target - margin) so the coil always has enough drive to reach
-// the target promptly. Margin allows PID to undershoot slightly when the
-// adjustometer overshoots, without yanking PWM back to the FF curve.
+// Climb floor follows the slewed demand and releases above that demand.
+// It must not inject the final target's feedforward ahead of the ramp.
 #define VP37_PWM_FF_SOFT_FLOOR_MARGIN 80
 
 #define TIMING_PWM_MIN 0
@@ -157,6 +163,9 @@ typedef struct {
   int32_t currentAdjustometerPosition;
   int32_t pidErr;
   float pwmFeedForward;
+  float feedForwardRiseBlend; /**< Filtered upward slew, normalized to the FF
+                                 reference rate. */
+  float feedForwardMotion;    /**< Additional nominal PWM for upward motion. */
   float pidCorrection;
   float pidPositiveLimit;
   float pwmValue;
@@ -173,7 +182,87 @@ typedef struct {
   uint32_t throttleRampLastMs;
   uint8_t lastAdjustometerStatus;
   bool pidSaturatedHigh;
+  hal_pid_terms_t pidTerms;
+  float pidNegativeLimit;
+  float pidUpperLimit;
+  float desiredPosition;
+  uint32_t targetChangedMs;
+  float pidKp, pidKi, pidKd;
+  float pidIntegralLimit;    /**< Available integral contribution in nominal PWM
+                                counts. */
+  float pidIntegralOverride; /**< Bench cap in nominal PWM; zero selects
+                                position profile. */
+  float lastFuelTemp;
+  float temperatureCorrection; /**< Filtered multiplier of the complete FF + PID
+                                  command. */
+  float temperatureCompensationWeight; /**< Bench blend: 0 disables, 1 applies
+                                          the model. */
+  bool temperatureReady; /**< A valid temperature has initialized the
+                            multiplier. */
+  uint32_t controlLastUs;
+  uint32_t controlDtUs;
+  uint32_t controlSequence;
+  bool controlStarted;
+  bool softFloorActive;
+  bool pwmLimited;
+  bool quantityAtRest; /**< Zero demand after slew: PWM off, PID state cleared.
+                        */
+  bool feedbackFresh;
+  uint32_t feedbackRawHz, feedbackFilteredHz, feedbackNumber, feedbackUs;
+  uint16_t feedbackAgeUs;
+  hal_status_t feedbackReadStatus;
+  uint32_t feedbackReadUs;
+  uint8_t feedbackRetries;
+  bool adjCommFailed;
+  bool pidStarted;
+  uint32_t pidLastUs, pidDtUs;
 } VP37Pump;
+
+/** @brief One control step; positions in Hz, elapsed time in us, output in PWM
+ * counts. */
+typedef struct {
+  uint32_t us, dt,
+      sequence;   /**< MCU timestamp, elapsed time and step number. */
+  float throttle; /**< Requested percentage. */
+  int32_t target, desired, measured,
+      pwm;             /**< Target, slewed target, feedback and PWM. */
+  float motionFF;      /**< Upward-motion component included in feedforward. */
+  float ff, low, high; /**< Feedforward and effective correction limits. */
+  float volts,
+      fuelTemp; /**< Voltage (V) and fuel temperature (C) used by control. */
+  float temperatureCorrection; /**< Temperature multiplier used by this step. */
+  hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
+  bool softFloor, hardwareClamp; /**< Active downstream bounds. */
+  bool quantityAtRest;           /**< Quantity drive released at zero demand. */
+  uint8_t status; /**< Adjustometer status from this control step. */
+  uint32_t rawHz, filteredHz, sampleNumber, measuredUs;
+  uint16_t ageUs;
+  hal_status_t readStatus;
+  uint32_t readUs;
+  uint8_t retries;
+  bool fresh;
+  uint32_t
+      pidDtUs; /**< Elapsed time for a successful PID step; zero when held. */
+} VP37TraceSample;
+
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+/** @brief Number of consecutive steps in a bench RAM capture. */
+#define VP37_TRACE_SAMPLES 1024U
+/** @brief Start a capture under the owner mutex. Non-NULL self must be running.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EBUSY if capturing/draining,
+ * or HAL_EAGAIN when control is inactive. */
+hal_status_t VP37_startTrace(VP37Pump *self);
+/** @brief Read a completed capture under the owner mutex; both pointers
+ * non-NULL. A stopped controller completes a partial capture. Error leaves
+ * sample unchanged.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN while recording, or
+ * HAL_ENOENT. */
+hal_status_t VP37_readTrace(VP37Pump *self, VP37TraceSample *sample);
+/** @brief Whether RAM recording is active; caller holds the owner mutex. */
+bool VP37_traceCapturing(void);
+/** @brief Print a non-NULL captured sample outside the owner mutex. */
+void VP37_showTrace(const VP37TraceSample *sample);
+#endif
 
 typedef enum {
   VP37_INIT_OK = 0,
@@ -226,6 +315,10 @@ void VP37_process(VP37Pump *self);
  */
 void VP37_enableVP37(VP37Pump *self, bool enable);
 
+/** @brief Latch control off and remove PWM. Non-NULL self; restart requires
+ * initialization. */
+void VP37_stop(VP37Pump *self);
+
 /**
  * @brief Read back the current VP37 enable output state.
  * @param self VP37 controller instance to inspect.
@@ -237,7 +330,8 @@ bool VP37_isVP37Enabled(VP37Pump *self);
 
 /**
  * @brief Print VP37 controller state for diagnostics.
- * @param self VP37 controller instance to report.
+ * @param self Snapshot copied while holding the controller owner mutex.
+ * @note Call outside that mutex; this function performs serial and I2C I/O.
  * @return None.
  */
 void VP37_showDebug(VP37Pump *self);

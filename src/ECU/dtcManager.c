@@ -16,9 +16,6 @@
 #define DTC_FLAG_STORED 0x01u
 #define DTC_FLAG_PERMANENT 0x02u
 
-#define DTC_KV_BASE (DTC_EEPROM_BASE + 32u)
-#define DTC_KV_PREVIOUS_BASE DTC_EEPROM_BASE
-#define DTC_KV_SIZE (ECU_EEPROM_SIZE_BYTES / 2)
 #define DTC_KV_SCHEMA_KEY 0xD700u
 #define DTC_KV_SCHEMA_VERSION 1u
 #define DTC_KV_LEGACY_MIGRATED_KEY 0xD701u
@@ -31,7 +28,7 @@
 #error "DTC KV requires at least 1024B EEPROM"
 #endif
 
-#if DTC_KV_BASE < (DTC_EEPROM_BASE + DTC_EEPROM_HEADER_SIZE +                  \
+#if ECU_KV_BASE < (DTC_EEPROM_BASE + DTC_EEPROM_HEADER_SIZE +                  \
                    (DTC_LEGACY_ENTRY_COUNT * DTC_EEPROM_SLOT_SIZE))
 #error "DTC KV must not overlap legacy DTC storage"
 #endif
@@ -77,8 +74,6 @@ static dtc_manager_state_t s_dtcState = {
     .legacyFlags = {0u},
     .lastRetryMs = 0u,
     .initialized = false};
-
-static uint16_t s_dtcKvBase = DTC_KV_BASE;
 
 m_mutex_def(dtcManagerMutex);
 
@@ -436,7 +431,7 @@ static void mergeNonPendingLegacyState(void) {
  */
 static uint16_t dtcKvEffectiveSpanForBase(uint16_t base) {
   uint32_t start = (uint32_t)base;
-  uint32_t end = start + (uint32_t)DTC_KV_SIZE;
+  uint32_t end = start + (uint32_t)ECU_KV_SIZE;
   uint16_t eepromSize = hal_eeprom_size();
   uint32_t maxEnd = (uint32_t)eepromSize;
 
@@ -456,33 +451,7 @@ static uint16_t dtcKvEffectiveSpanForBase(uint16_t base) {
 }
 
 TESTABLE_STATIC uint16_t dtcKvEffectiveSpan(void) {
-  return dtcKvEffectiveSpanForBase(s_dtcKvBase);
-}
-
-static hal_status_t selectKvBase(void) {
-  s_dtcKvBase = DTC_KV_BASE;
-  if (s_dtcState.legacyValid) {
-    return HAL_OK;
-  }
-
-  /* hal_kv's on-disk bank header is a private implementation detail (it
-   * already changed shape once, see JaszczurHAL hal_kv.cpp format v1 -> v2);
-   * hal_kv_bank_looks_present_ex() is the supported way to detect a bank at
-   * a candidate address without hand-decoding that layout. */
-  const uint16_t previousBankSize = (uint16_t)(DTC_KV_SIZE / 2u);
-  bool firstBank = false;
-  bool secondBank = false;
-  hal_status_t status = hal_kv_bank_looks_present_ex(
-      DTC_KV_PREVIOUS_BASE, previousBankSize, &firstBank);
-  if (status == HAL_OK) {
-    status = hal_kv_bank_looks_present_ex(
-        (uint16_t)(DTC_KV_PREVIOUS_BASE + previousBankSize), previousBankSize,
-        &secondBank);
-  }
-  if (status == HAL_OK && (firstBank || secondBank)) {
-    s_dtcKvBase = DTC_KV_PREVIOUS_BASE;
-  }
-  return status;
+  return dtcKvEffectiveSpanForBase(ECU_KV_BASE);
 }
 
 static hal_status_t initializeKvOperation(const void *user) {
@@ -505,16 +474,11 @@ static hal_status_t initializeKvOperation(const void *user) {
     return status;
   }
 
-  status = selectKvBase();
-  if (status != HAL_OK) {
-    return status;
-  }
-
   const uint16_t span = dtcKvEffectiveSpan();
   if (span < 2u) {
     return HAL_EOVERFLOW;
   }
-  status = hal_kv_init_ex(s_dtcKvBase, span);
+  status = hal_kv_init_ex(ECU_KV_BASE, span);
   if (status != HAL_OK) {
     return status;
   }
@@ -554,8 +518,8 @@ static hal_status_t loadOrPrepareSchema(bool preserveRuntime) {
       schemaStatus == HAL_OK && schemaVersion == DTC_KV_SCHEMA_VERSION;
   const bool migratedValid = migratedStatus == HAL_OK &&
                              migratedVersion == DTC_KV_LEGACY_MIGRATED_VERSION;
-  const bool useLegacy = !schemaValid && !migratedValid &&
-                         s_dtcState.legacyValid && s_dtcKvBase == DTC_KV_BASE;
+  const bool useLegacy =
+      !schemaValid && !migratedValid && s_dtcState.legacyValid;
 
   hal_status_t loadStatus = HAL_OK;
   if (useLegacy) {
@@ -615,7 +579,7 @@ static bool clearDtcKeys(void) {
 
 void dtcManagerLogStorageStats(void) {
   const uint16_t eepromSize = hal_eeprom_size();
-  const uint32_t kvStart = (uint32_t)s_dtcKvBase;
+  const uint32_t kvStart = (uint32_t)ECU_KV_BASE;
   const uint16_t kvSpan = dtcKvEffectiveSpan();
   const uint32_t kvEndExclusive = kvStart + (uint32_t)kvSpan;
   const uint16_t bankSize = kvSpan / 2u;
@@ -670,8 +634,8 @@ void dtcManagerInit(void) {
   if (initStatus != HAL_OK) {
     derr("DTC: storage initialization failed: %s (base=%u requested=%u "
          "effective=%u)",
-         hal_status_to_string(initStatus), (unsigned)s_dtcKvBase,
-         (unsigned)DTC_KV_SIZE, (unsigned)kvSpan);
+         hal_status_to_string(initStatus), (unsigned)ECU_KV_BASE,
+         (unsigned)ECU_KV_SIZE, (unsigned)kvSpan);
     resetAllState();
     s_dtcState.storageReady = false;
     s_dtcState.schemaPending = true;
@@ -874,7 +838,6 @@ TESTABLE_STATIC void dtcManagerResetRuntimeStateForTest(void) {
   }
   s_dtcState.lastRetryMs = 0u;
   s_dtcState.initialized = false;
-  s_dtcKvBase = DTC_KV_BASE;
   m_mutex_exit(dtcManagerMutex);
 }
 #endif

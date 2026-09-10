@@ -56,12 +56,29 @@ static int test_status_contract(void) {
   return 0;
 }
 
+static bool mock_list_candidates(void *context, ScTransportCandidateList *list,
+                                 char *error, size_t error_size) {
+  (void)error;
+  (void)error_size;
+  unsigned *calls = context;
+  ++*calls;
+  memset(list, 0, sizeof(*list));
+  return true;
+}
+
 static int test_detect_modules_preserves_status_layout(void) {
   ScCore core;
   sc_core_init(&core);
+  // Host API checks must never enumerate or send HELLO to attached hardware.
+  unsigned list_calls = 0u;
+  static const ScTransportOps ops = {.list_candidates = mock_list_candidates};
+  ScTransport transport;
+  sc_transport_init_custom(&transport, &ops, &list_calls);
+  sc_core_set_transport(&core, &transport);
 
   char log[2048];
   sc_core_detect_modules(&core, log, sizeof(log));
+  TEST_ASSERT(list_calls == 1u, "detection must use the injected transport");
 
   for (size_t i = 0u; i < sc_core_module_count(); ++i) {
     const ScModuleStatus *status = sc_core_module_status(&core, i);

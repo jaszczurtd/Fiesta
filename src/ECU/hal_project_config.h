@@ -13,6 +13,8 @@
 /* ── Modules used by ECU ─────────────────────────────────────────────── */
 
 #define HAL_ENABLE_I2C /* I2C master (sensors + AT24C256)    */
+/* Bound failed feedback transfers; the 30-byte frame normally needs < 1 ms. */
+#define HAL_RP_I2C_TIMEOUT_US 2000U
 #ifndef HAL_ENABLE_KV
 #define HAL_ENABLE_KV /* KV store -> EEPROM                 */
 #endif
@@ -26,9 +28,19 @@
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
 #define HAL_ENABLE_APP_TASK1
 
-/* ECU persistence uses the full 32 KiB flash-backed EEPROM reservation. */
+/* One storage layout for firmware and host tests. CMake reads the reservation
+ * here to keep the linker boundary and C definitions consistent. */
 #ifndef HAL_RP_FLASH_EEPROM_SIZE
 #define HAL_RP_FLASH_EEPROM_SIZE 32768
+#endif
+#define ECU_KV_BASE 4096u
+#define ECU_KV_SIZE (HAL_RP_FLASH_EEPROM_SIZE / 2u)
+#define HAL_KV_MAX_BANK_SIZE (ECU_KV_SIZE / 2u)
+
+#if (ECU_KV_SIZE % 8192u) != 0u ||                                             \
+    (ECU_KV_BASE + ECU_KV_SIZE) > HAL_RP_FLASH_EEPROM_SIZE
+#error                                                                         \
+    "ECU KV requires two complete flash sectors within the EEPROM reservation"
 #endif
 
 /* The transaction engine applies this per coordination phase. Three bounded

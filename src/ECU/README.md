@@ -4,35 +4,41 @@ Safety-critical ECU module for Ford Fiesta custom electronics.
 
 ## VP37 and Adjustometer
 
-The VP37 quantity-actuator loop uses the separate RP2040 Adjustometer module at
-I2C address `0x57`. The controller keeps the original five-byte feedback block
-(`PULSE`, voltage, fuel temperature, and status) and reads an optional
-version-1 diagnostic extension separately. The extension reports filtered raw
-oscillator frequency, locked baseline, signed `signalHz - baselineHz`, RP2040
-die temperature, and validity metadata. Its failure does not affect the legacy
-`commOk` state or PWM feedback path.
+The VP37 quantity-actuator loop reads versioned feedback from the separate
+RP2040 Adjustometer at I2C address `0x57`. Its fast block contains position,
+raw/filtered frequency, sample number, timestamp, age, voltage, temperature
+and status. Invalid or stale feedback cannot drive the controller. The original
+register layouts remain available for older readers; current ECU firmware
+requires an Adjustometer with fast-block support.
 
-Current ECU-side thermal handling uses Adjustometer fuel temperature as the
-closest available proxy for VP37 actuator-coil temperature. Above the `22 °C`
-reference, only positive PID correction authority is expanded according to the
-copper-resistance estimate, from the cold `+220` limit up to `+340` PWM counts.
-Negative authority remains `-220`. Invalid temperature/status or lost
-communication falls back to the cold limit. This compensates actuator-force
-loss; it does not modify the measured oscillator signal or baseline.
+ECU uses fuel temperature as a proxy for the VP37 coil temperature and scales
+the complete FF+PID command relative to the warm 49°C reference. The bounded
+factor is filtered after initialization; bad temperature data holds its last
+value. Physical output limits are accounted for before PID integration.
+This model does not correct oscillator frequency or sensor baseline.
+Failed communication holds PID briefly and stops drive after 20 ms;
+invalid position status stops it immediately.
 
-VP37 diagnostics are emitted every `500 ms` as separate controller and sensor
-lines so the raw Adjustometer data is not hidden at the end of a long control
-record:
+The control loop uses an explicit period and elapsed seconds. Diagnostic
+snapshots contain individual P/I/D terms and the effective correction limits;
+serial output runs outside the controller mutex. See the
+[Adjustometer README](../Adjustometer/README.md) for the measurement path, and
+the shared [I2C register map](../common/adjustometer_protocol.h).
 
-```text
-ECU: VP37 thr:... des:... adj:... pwm:... err:... ff:... corr:... lim+:... sat+:... nom:...
-ECU: VP37 ADJ p:... f:...Hz d:... v:... ft:... tc:... s:... bl:... ext:... fl:0x..
-```
+## Persistent data and GPS
 
-See the detailed
-[VP37/Adjustometer context](doc/Fiesta-context-providers/vp37-adjustometer-context-provider.txt),
-the [Adjustometer README](../Adjustometer/README.md), and the shared
-[I2C register map](../common/adjustometer_protocol.h).
+ECU reserves 32 KiB of flash-backed EEPROM. The KV region begins at byte 4096
+and contains two 8192-byte banks; the first sector remains separate from KV.
+Firmware and host tests use the layout in `hal_project_config.h`. Old KV bank
+locations at 96/128 are ignored; their data is not migrated. DTC clearing
+removes only DTC keys and retains stored configuration.
+
+Parameter and DTC operations are serialized on core 0. EEPROM flash-write
+callbacks pause GPS only for a physical write and resume it after the attempt,
+including a write failure. This releases the PIO/DMA receiver required by the
+RP flash coordinator. Reads, invalid layouts, unchanged values and RAM-only
+batches leave GPS running. A failed GPS resume is logged and retried once per
+second; it does not turn a successful storage commit into a failed one.
 
 ## MISRA-C migration status
 
@@ -46,8 +52,8 @@ Module-local MISRA tooling:
 - suppressions + deviation register: [`misra/`](misra/),
 - manual CI artifact workflow: `.github/workflows/ecu-misra.yml`.
 
-Latest local screening snapshot (2026-07-10, cppcheck 2.13.0, no licensed
-rule texts): 1026 active findings across 33 rule IDs. This is triage evidence,
+Latest local screening snapshot (2026-09-09, cppcheck 2.13.0, no licensed
+rule texts): 1262 active findings across 33 rule IDs. This is triage evidence,
 not a compliance/pass result; detailed buckets and comparison caveats are in
 [`MISRA.md`](../../MISRA.md).
 

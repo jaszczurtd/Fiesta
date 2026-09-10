@@ -14,6 +14,9 @@
 #define HAL_ENABLE_I2C_SLAVE /* I2C slave register map - ECU link  */
 #define HAL_ENABLE_RGB_LED   /* NeoPixel status LED                */
 #define HAL_ENABLE_APP_TASK1
+#define HAL_I2C_SLAVE_REG_MAP_SIZE 64U
+/* Debug may drop output instead of delaying the auxiliary core. */
+#define HAL_USB_CDC_WRITE_TIMEOUT_MS 0U
 
 /* Native RP system stacks, in bytes. */
 #define HAL_RP_CORE0_STACK_SIZE 4096u

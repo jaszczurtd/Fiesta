@@ -30,6 +30,9 @@ Completed areas include:
 - state consolidation in ECU modules (`engineFuel`, `dtcManager`, `gps`, `sensors`, `can`, `start`, `obd-2`),
 - explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
 - targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
+- VP37 control uses explicit elapsed time and checked PID status; invalid steps
+  disable the output stage. Bench tuning is applied on the controller core,
+  while periodic logging formats a snapshot after releasing the control mutex.
 - dual-core state synchronization pass in `src/ECU`: dedicated mutex for adjustometer snapshot, PCF8574 shadow-latch race fix, `dtcManager` state and KV persistence under a dedicated mutex; adjustometer reader API migrated from shared-pointer to out-parameter snapshot; `readHighValues()` change-detection cache removed (CAN helpers self-dedupe).
 - warning quality gate for ECU host tests and native ECU firmware builds
   (`-Werror`).
@@ -46,18 +49,20 @@ Pending areas:
 
 ## Latest screening snapshot
 
-Local run on 2026-07-10 with cppcheck 2.13.0, without licensed rule texts:
+Local run on 2026-09-09 with cppcheck 2.13.0, without licensed rule texts:
 
-- active findings: **1026** across **33** rule IDs,
-- largest buckets: rule 15.5 (`250`), rule 2.5 (`169`), rule 8.4 (`118`),
-  rule 10.4 (`108`), and rule 12.1 (`82`),
+- active findings: **1262** across **33** rule IDs,
 - severity split is unavailable because no licensed Mandatory / Required /
   Advisory rule-text extract was supplied,
 - the result is a triage/evidence snapshot, not a pass signal or compliance
   certificate.
 
-The previous recorded snapshot (2026-04-21) was 787 findings across 25 rule
-IDs. Counts between these dates are not a normalized quality trend: the scanned
+The scan also reports unresolved configuration constants in CAN and command-router
+sources (`misra-config`), so its findings are incomplete. These need separate
+screening-configuration work before using the report as compliance evidence.
+
+The previous recorded snapshot (2026-07-10) was 1026 findings across 33 rule
+IDs; the 2026-04-21 snapshot was 787 across 25. Counts are not a normalized quality trend: the scanned
 source/include surface and tool-visible shared code changed. Use the generated
 `summary.txt` and `rule-counts.txt` artifacts when comparing future runs.
 

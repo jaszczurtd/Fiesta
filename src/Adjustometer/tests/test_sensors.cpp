@@ -66,8 +66,7 @@ static void injectFuelTemp(bool broken) {
  */
 static void settleAdcFilters(void) {
   for (int i = 0; i < 30; i++) {
-    getFuelTemperatureRaw();
-    getSupplyVoltageRaw();
+    updateAuxiliarySensors();
   }
 }
 
@@ -320,8 +319,33 @@ void test_signal_loss_consistency_pulses_vs_status(void) {
 /* ── Runner ─────────────────────────────────────────────────────────────────
  */
 
+void test_feedback_exposes_raw_window_and_status_does_not_sample_adc(void) {
+  lockBaseline(10000);
+  updateAuxiliarySensors();
+  // ADC advances mock time without generating edges; finish that window first.
+  simulatePulses(128, 10000);
+  adjustometer_feedback_t before, after;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&before));
+  simulatePulses(128, 8000);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&after));
+  TEST_ASSERT_EQUAL_UINT32(before.number + 1U, after.number);
+  TEST_ASSERT_EQUAL_UINT32(8000U, after.rawHz);
+  TEST_ASSERT_GREATER_THAN_UINT32(after.rawHz, after.filteredHz);
+  TEST_ASSERT_EQUAL_UINT32(before.baselineHz, after.baselineHz);
+  const uint32_t now = hal_micros();
+  for (int i = 0; i < 10; i++) {
+    (void)getAdjustometerStatus();
+  }
+  TEST_ASSERT_EQUAL_UINT32(now, hal_micros());
+  hal_mock_advance_micros(70000);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&after));
+  TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, after.ageUs);
+  TEST_ASSERT_BITS_HIGH(ADJ_STATUS_SIGNAL_LOST, after.status);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_feedback_exposes_raw_window_and_status_does_not_sample_adc);
   RUN_TEST(test_no_pulses_returns_zero);
   RUN_TEST(test_pulses_before_baseline_returns_zero);
   RUN_TEST(test_baseline_locks_after_stable_signal);

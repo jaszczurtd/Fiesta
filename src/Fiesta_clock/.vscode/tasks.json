@@ -3,7 +3,7 @@
   "inputs": [
     {
       "id": "boardSelection",
-      "description": "Target/board",
+      "description": "Select a target architecture and board",
       "type": "pickString",
       "options": [
         "esp32:esp32-devkitc-v4 - Espressif ESP32-DevKitC V4",
@@ -28,7 +28,7 @@
   "tasks": [
     {
       "label": "Project: Build",
-      "detail": "Compile Fiesta_clock through JaszczurHAL VS Code entry",
+      "detail": "Build the Fiesta_clock firmware for the selected board.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -47,7 +47,7 @@
     },
     {
       "label": "Project: Build (Debug)",
-      "detail": "Debug build Fiesta_clock through JaszczurHAL VS Code entry",
+      "detail": "Build the Fiesta_clock firmware with debug settings.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -63,7 +63,7 @@
     },
     {
       "label": "Project: Upload",
-      "detail": "Upload Fiesta_clock through the active target backend",
+      "detail": "Upload the Fiesta_clock firmware to the selected board.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -78,7 +78,7 @@
     },
     {
       "label": "Project: Upload (UF2 / BOOTSEL)",
-      "detail": "RP2040 only: build Fiesta_clock and copy UF2 to the single visible BOOTSEL drive",
+      "detail": "RP2040 only: build the Fiesta_clock firmware and copy its UF2 file to the only detected BOOTSEL drive.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -93,7 +93,7 @@
     },
     {
       "label": "Project: Upload (OTA)",
-      "detail": "Build, authenticate, and upload Fiesta_clock to a discovered native RP device",
+      "detail": "Build the Fiesta_clock firmware, authenticate, and upload it to one RP device discovered on the network.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -109,7 +109,7 @@
     },
     {
       "label": "Project: Discover OTA devices",
-      "detail": "List JaszczurHAL devices advertising native OTA",
+      "detail": "List JaszczurHAL devices available for native OTA updates.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -124,7 +124,7 @@
     },
     {
       "label": "Project: List ports",
-      "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
+      "detail": "List serial ports, matching device identities, and possible BOOTSEL drives.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -139,7 +139,7 @@
     },
     {
       "label": "Project: Change port",
-      "detail": "Interactively persist the upload/monitor serial port",
+      "detail": "Select and save the serial port used for uploads and monitoring.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -154,7 +154,7 @@
     },
     {
       "label": "Project: Serial Monitor",
-      "detail": "Persistent Fiesta_clock serial monitor",
+      "detail": "Open the project's persistent serial monitor.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -172,7 +172,7 @@
     },
     {
       "label": "Project: Debug Probe Monitor",
-      "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
+      "detail": "Monitor serial output through the Debug Probe.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -190,7 +190,7 @@
     },
     {
       "label": "Project: Serial Monitor (Any)",
-      "detail": "Any serial monitor through JaszczurHAL VS Code entry",
+      "detail": "Monitor output from any serial port.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -208,7 +208,7 @@
     },
     {
       "label": "Project: Refresh IntelliSense",
-      "detail": "Refresh Fiesta_clock IntelliSense through JaszczurHAL VS Code entry",
+      "detail": "Update IntelliSense data for this project's sources.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -223,7 +223,7 @@
     },
     {
       "label": "Project: Clean",
-      "detail": "Clean Fiesta_clock build directory",
+      "detail": "Remove the project's build files.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -238,7 +238,7 @@
     },
     {
       "label": "Project: Clear USB Identity",
-      "detail": "Flash neutral firmware after verifying current Fiesta RTC Clock identity",
+      "detail": "Replace the installed application with neutral firmware after verifying the Fiesta RTC Clock USB device identity.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -253,7 +253,7 @@
     },
     {
       "label": "Project: Config Dump",
-      "detail": "Show resolved JaszczurHAL VS Code project configuration",
+      "detail": "Show the effective project configuration.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -268,7 +268,7 @@
     },
     {
       "label": "Project: Select board",
-      "detail": "Interactive target/board selection",
+      "detail": "Choose a target architecture and board in the interactive selector.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -292,7 +292,7 @@
     },
     {
       "label": "Project: Select board (GUI)",
-      "detail": "Pick target/board from the VS Code input menu",
+      "detail": "Choose a target architecture and board from the VS Code menu.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -309,7 +309,7 @@
     },
     {
       "label": "Project: Sync board picker",
-      "detail": "Refresh target/board options and managed debug profiles",
+      "detail": "Update the board-selection list and managed debug configurations.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {

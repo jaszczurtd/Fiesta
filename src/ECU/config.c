@@ -273,7 +273,7 @@ ecuParamsPersist(const ecu_params_values_t *values) {
   if (persistStatus != HAL_OK) {
     hal_derr("ECU params persistence failed: %s",
              hal_status_to_string(persistStatus));
-  } else if (resumeStatus != HAL_OK) {
+  } else if (hal_status_is_error(resumeStatus)) {
     hal_derr("ECU params committed; GPS resume queued: %s",
              hal_status_to_string(resumeStatus));
   }

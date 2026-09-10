@@ -16,4 +16,5 @@ endfunction()
 
 add_adj_test(test_sensors)
 add_adj_test(test_led)
+add_adj_test(test_telemetry)
 add_adj_internal_test(test_sensors_internal)

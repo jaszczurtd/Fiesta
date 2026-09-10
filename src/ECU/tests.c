@@ -4,7 +4,10 @@
 #include "ecuContext.h"
 #include "sensors.h"
 #include "vp37.h"
+#include <errno.h>
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 //=============================================================================
 // Global state
@@ -33,12 +36,23 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
 void VP37_TunePID(VP37Pump *self);
 
 static CyclicTest s_ct;
+static hal_mutex_t s_tuneMutex = NULL;
+static float s_holdDemand = -1.0f;
+static uint32_t s_holdStartedMs;
+static uint32_t s_holdDurationMs;
 
 /**
  * @brief Generate a repeating 0-100-0 throttle ramp for VP37 testing.
  * @return Current cyclic throttle demand.
  */
-static int VP37cyclicTest(void) {
+static float VP37cyclicTest(void) {
+  if (s_holdDemand >= 0.0f) {
+    if (s_holdDemand > 0.0f &&
+        hal_millis_deadline_expired(s_holdStartedMs, s_holdDurationMs)) {
+      s_holdDemand = 0.0f;
+    }
+    return s_holdDemand;
+  }
   uint32_t currentMillis = hal_millis();
 
   if (currentMillis - s_ct.previousMillis >= CYCLIC_DELAYTIME) {
@@ -64,10 +78,19 @@ static int VP37cyclicTest(void) {
  */
 bool initTests(void) {
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
+  if (s_tuneMutex == NULL) {
+    s_tuneMutex = hal_mutex_create();
+    if (s_tuneMutex == NULL) {
+      return false;
+    }
+  }
   s_ct.cmdLen = 0;
   s_ct.cmdBuf[0] = '\0';
 
   s_ct.increment = 1;
+  s_holdDemand = -1.0f;
+  s_holdStartedMs = 0U;
+  s_holdDurationMs = 0U;
   s_ct.uv = 0.001f;
   s_ct.value = 0;
   s_ct.previousMillis = hal_millis();
@@ -106,7 +129,7 @@ void tickTests(void) {
     return;
   }
 
-  int thr = VP37cyclicTest();
+  float thr = VP37cyclicTest();
   ecu_context_t *ctx = getECUContext();
   VP37_setVP37Throttle(&ctx->injectionPump, thr);
   VP37_TunePID(&ctx->injectionPump);
@@ -125,8 +148,21 @@ void tickTestsHandleSerialLine(const char *line) {
   if (!s_testsInitialized || line == NULL || line[0] == '\0') {
     return;
   }
-  ecu_context_t *ctx = getECUContext();
-  VP37_processSerialCommand(&ctx->injectionPump, line);
+  const size_t length = strlen(line);
+  if (length >= COUNTOF(s_ct.cmdBuf)) {
+    derr("PID command too long");
+    return;
+  }
+  hal_mutex_lock(s_tuneMutex);
+  const bool busy = s_ct.cmdLen != 0U;
+  if (!busy) {
+    (void)memcpy(s_ct.cmdBuf, line, length + 1U);
+    s_ct.cmdLen = (uint8_t)length;
+  }
+  hal_mutex_unlock(s_tuneMutex);
+  if (busy) {
+    derr("PID command pending; retry after acknowledgement");
+  }
 #else
   (void)line;
 #endif
@@ -134,22 +170,22 @@ void tickTestsHandleSerialLine(const char *line) {
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
 /**
- * @brief Apply live PID tuning commands previously routed by the HAL serial
- *        session unknown-line callback.
- *
- * VP37_TunePID no longer reads from the serial port directly - it would
- * race against @ref hal_serial_session_poll for individual bytes on the
- * shared USB CDC stream. Instead, @ref tickTestsHandleSerialLine receives a
- * complete line and forwards it here.
- *
- * @param self VP37 instance under test.
+ * @brief Apply one queued command on the core that owns PID state.
+ * @param self Controller updated under the caller's VP37 mutex.
  * @return None.
  */
 void VP37_TunePID(VP37Pump *self) {
-  (void)self;
-  /* Intentionally empty: command bytes are now delivered as whole lines via
-   * tickTestsHandleSerialLine() once the HAL session parser has rejected
-   * them as non-protocol commands. */
+  char command[VP37_CMD_BUF_SIZE];
+  hal_mutex_lock(s_tuneMutex);
+  const uint8_t length = s_ct.cmdLen;
+  if (length != 0U) {
+    (void)memcpy(command, s_ct.cmdBuf, (size_t)length + 1U);
+    s_ct.cmdLen = 0U;
+  }
+  hal_mutex_unlock(s_tuneMutex);
+  if (length != 0U) {
+    VP37_processSerialCommand(self, command);
+  }
 }
 
 /**
@@ -159,8 +195,6 @@ void VP37_TunePID(VP37Pump *self) {
  * @return None.
  */
 void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
-  float val;
-
   if (cmd[0] == '?' || cmd[0] == 'H' || cmd[0] == 'h') {
     float kp, ki, kd;
     VP37_getVP37PIDValues(self, &kp, &ki, &kd);
@@ -168,17 +202,40 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
         kd, self->pidTimeUpdate, self->pidTf);
     deb("\033[33mCAL: MIN=%d MID=%d MAX=%d\033[0m", self->VP37_ADJUST_MIN,
         self->VP37_ADJUST_MIDDLE, self->VP37_ADJUST_MAX);
-    deb("\033[33mCMD: P<val> I<val> D<val> T<val> F<val> R(reset) "
-        "?(help)\033[0m");
+    deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
+        "F<seconds> R(reset) B(trace) "
+        "L<PWM cap;0=auto> W<thermal weight 0..1> S<timed hold 0..100> "
+        "C(cyclic) X(stop) ?(help)\033[0m");
+    return;
+  }
+
+  if (((cmd[0] == 'B') || (cmd[0] == 'b')) && (cmd[1] == '\0')) {
+    const hal_status_t status = VP37_startTrace(self);
+    deb("VP37 trace: %s samples:%u", hal_status_to_string(status),
+        (unsigned int)VP37_TRACE_SAMPLES);
+    return;
+  }
+
+  if ((cmd[0] == 'X' || cmd[0] == 'x') && cmd[1] == '\0') {
+    VP37_stop(self);
+    deb("VP37 stopped; restart ECU to initialize");
+    return;
+  }
+  if ((cmd[0] == 'C' || cmd[0] == 'c') && cmd[1] == '\0') {
+    s_ct.value = (int)hal_constrain(self->lastThrottle, 0.0f, 100.0f);
+    s_ct.increment = s_ct.value >= 100 ? -1 : 1;
+    s_ct.previousMillis = hal_millis();
+    s_holdDemand = -1.0f;
+    deb("VP37 cyclic resumed");
     return;
   }
 
   if (cmd[0] == 'R' || cmd[0] == 'r') {
-    hal_pid_controller_set_kp(self->adjustController, VP37_PID_KP);
-    hal_pid_controller_set_ki(self->adjustController, VP37_PID_KI);
-    hal_pid_controller_set_kd(self->adjustController, VP37_PID_KD);
+    VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
     self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
     self->pidTf = VP37_PID_TF;
+    self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
+    self->temperatureCompensationWeight = 1.0f;
     hal_pid_controller_set_tf(self->adjustController, self->pidTf);
     hal_pid_controller_reset(self->adjustController);
     self->lastPWMval = -1;
@@ -190,29 +247,63 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     return;
   }
 
-  // Parse single-letter commands: P0.42  I0.11  D0.02  T80  F0.068
+  // Gains use seconds; T selects the minimum control period in milliseconds.
   char prefix = cmd[0];
   if ((prefix == 'P' || prefix == 'p' || prefix == 'I' || prefix == 'i' ||
        prefix == 'D' || prefix == 'd' || prefix == 'T' || prefix == 't' ||
-       prefix == 'F' || prefix == 'f') &&
+       prefix == 'F' || prefix == 'f' || prefix == 'L' || prefix == 'l' ||
+       prefix == 'S' || prefix == 's' || prefix == 'W' || prefix == 'w') &&
       cmd[1] != '\0') {
 
-    val = (float)atof(&cmd[1]);
+    char *end = NULL;
+    errno = 0;
+    const float val = strtof(&cmd[1], &end);
+    if ((errno != 0) || (end == &cmd[1]) || (*end != '\0') || !isfinite(val) ||
+        (val < 0.0f) ||
+        (((prefix == 'T') || (prefix == 't')) &&
+         ((val < 1.0f) || (val > 100.0f))) ||
+        (((prefix == 'S') || (prefix == 's')) && (val > 100.0f)) ||
+        (((prefix == 'W') || (prefix == 'w')) && (val > 1.0f)) ||
+        (((prefix == 'L') || (prefix == 'l')) &&
+         (val > VP37_BENCH_INTEGRAL_LIMIT_MAX))) {
+      derr("Invalid PID setting: '%s'", cmd);
+      return;
+    }
 
     switch (prefix) {
+    case 'W':
+    case 'w':
+      self->temperatureCompensationWeight = val;
+      deb("VP37 thermal weight: %.2f", val);
+      break;
+    case 'L':
+    case 'l':
+      self->pidIntegralOverride = val;
+      deb("VP37 integral cap: %.1f (0=position profile)", val);
+      break;
+    case 'S':
+    case 's':
+      s_holdDemand = val;
+      s_holdStartedMs = hal_millis();
+      s_holdDurationMs = val >= VP37_BENCH_HIGH_HOLD_PERCENT
+                             ? VP37_BENCH_HIGH_HOLD_MS
+                             : VP37_BENCH_HOLD_MS;
+      deb("VP37 hold: %.1f timeout:%lu ms (then zero)", val,
+          (unsigned long)(val > 0.0f ? s_holdDurationMs : 0U));
+      break;
     case 'P':
     case 'p':
-      hal_pid_controller_set_kp(self->adjustController, val);
+      VP37_setVP37PID(self, val, self->pidKi, self->pidKd, false);
       deb("\033[33mKp = %.4f\033[0m", val);
       break;
     case 'I':
     case 'i':
-      hal_pid_controller_set_ki(self->adjustController, val);
+      VP37_setVP37PID(self, self->pidKp, val, self->pidKd, false);
       deb("\033[33mKi = %.4f\033[0m", val);
       break;
     case 'D':
     case 'd':
-      hal_pid_controller_set_kd(self->adjustController, val);
+      VP37_setVP37PID(self, self->pidKp, self->pidKi, val, false);
       deb("\033[33mKd = %.4f\033[0m", val);
       break;
     case 'T':
@@ -225,6 +316,8 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
       self->pidTf = val;
       hal_pid_controller_set_tf(self->adjustController, val);
       deb("\033[33mTF = %.4f\033[0m", val);
+      break;
+    default:
       break;
     }
     return;

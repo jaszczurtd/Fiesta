@@ -9,9 +9,6 @@
 #include <utils/tools_logger_config.h>
 
 static constexpr uint16_t kLegacyBase = HAL_TOOLS_EEPROM_FIRST_ADDR + 96u;
-static constexpr uint16_t kPreviousKvBase = kLegacyBase;
-static constexpr uint16_t kDtcKvBase = HAL_TOOLS_EEPROM_FIRST_ADDR + 128u;
-static constexpr uint16_t kDtcKvSize = ECU_EEPROM_SIZE_BYTES / 2u;
 static constexpr uint16_t kSchemaKey = 0xD700u;
 static constexpr uint16_t kLegacyMigratedKey = 0xD701u;
 static constexpr uint16_t kFlagsBase = 0xD800u;
@@ -39,7 +36,7 @@ void tearDown(void) {}
 void test_recovery_merges_persisted_and_pending_dtc_entries(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(kDtcKvBase, kDtcKvSize));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kSchemaKey, kSchemaVersion));
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_kv_set_u32_ex(kFlagsBase, kStoredAndPermanent));
@@ -116,7 +113,7 @@ void test_legacy_state_is_read_before_initializing_separate_kv(void) {
 void test_legacy_migration_uses_one_snapshot_commit(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(kDtcKvBase, kDtcKvSize));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_write_int(kLegacyBase, (int32_t)kLegacyMagic));
   TEST_ASSERT_EQUAL_INT(
@@ -158,7 +155,7 @@ void test_legacy_migration_uses_one_snapshot_commit(void) {
 void test_migration_marker_prevents_legacy_resurrection_on_schema_change(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(kDtcKvBase, kDtcKvSize));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_kv_set_u32_ex(kLegacyMigratedKey, kLegacyMigratedVersion));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kSchemaKey, 99u));
@@ -183,11 +180,11 @@ void test_migration_marker_prevents_legacy_resurrection_on_schema_change(void) {
                           hal_eeprom_read_int(kLegacyBase));
 }
 
-void test_existing_previous_kv_layout_remains_selected(void) {
+void test_current_kv_layout_preserves_unrelated_keys(void) {
   static const uint8_t foreignValue[] = {0x45u, 0x43u, 0x55u};
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(kPreviousKvBase, kDtcKvSize));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kSchemaKey, kSchemaVersion));
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_kv_set_u32_ex(kFlagsBase, kStoredAndPermanent));
@@ -210,7 +207,7 @@ void test_existing_previous_kv_layout_remains_selected(void) {
 void test_schema_retry_persists_full_snapshot_and_removes_zero_timestamp(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(kDtcKvBase, kDtcKvSize));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kTimestampBase, 123456u));
 
   hal_mock_eeprom_set_commit_status(HAL_EIO);
@@ -230,6 +227,37 @@ void test_schema_retry_persists_full_snapshot_and_removes_zero_timestamp(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_kv_get_u32_ex(kTimestampBase, &value));
 }
 
+void test_unaligned_previous_banks_are_not_selected(void) {
+  /* Seed a valid old-location image through byte-addressable storage. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_AT24C256, 0u, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(128u, ECU_KV_SIZE));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kForeignKey, 123u));
+  uint8_t previous[ECU_KV_SIZE];
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_read_bytes(128u, previous, sizeof(previous)));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_write_bytes(128u, previous, sizeof(previous)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_commit());
+  dtcManagerInit();
+  uint32_t value = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_kv_get_u32_ex(kForeignKey, &value));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(kForeignKey, 456u));
+  dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
+  dtcManagerPoll();
+  dtcManagerResetRuntimeStateForTest();
+  hal_mock_kv_full_reset();
+  dtcManagerInit();
+  TEST_ASSERT_EQUAL_UINT8(1u, dtcManagerCount(DTC_KIND_STORED));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(kForeignKey, &value));
+  TEST_ASSERT_EQUAL_UINT32(456u, value);
+  TEST_ASSERT_TRUE(dtcManagerClearAll());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(kForeignKey, &value));
+  TEST_ASSERT_EQUAL_UINT32(456u, value);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_recovery_merges_persisted_and_pending_dtc_entries);
@@ -237,7 +265,8 @@ int main(void) {
   RUN_TEST(test_legacy_state_is_read_before_initializing_separate_kv);
   RUN_TEST(test_legacy_migration_uses_one_snapshot_commit);
   RUN_TEST(test_migration_marker_prevents_legacy_resurrection_on_schema_change);
-  RUN_TEST(test_existing_previous_kv_layout_remains_selected);
+  RUN_TEST(test_current_kv_layout_preserves_unrelated_keys);
   RUN_TEST(test_schema_retry_persists_full_snapshot_and_removes_zero_timestamp);
+  RUN_TEST(test_unaligned_previous_banks_are_not_selected);
   return UNITY_END();
 }

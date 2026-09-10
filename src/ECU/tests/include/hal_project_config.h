@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../hal_project_config.h"
+
 /**
  * @file tests/include/hal_project_config.h
  * @brief Test-only HAL configuration override.

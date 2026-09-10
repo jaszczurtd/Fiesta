@@ -1,5 +1,6 @@
 
 #include "sensors.h"
+#include "../common/adjustometer_feedback.h"
 #include "../common/fiesta_sensor_helpers.h"
 #include "can.h"
 #include "ecu_unit_testing.h"
@@ -34,6 +35,9 @@ typedef struct {
   bool lastIsEngineRunning;
   adjustometer_reading_t adjustometer;
   uint8_t adjCommErrors;
+  bool fastFeedback;
+  bool sampleTracked;
+  uint32_t sampleChangedUs;
 } sensors_runtime_state_t;
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
@@ -64,7 +68,16 @@ static sensors_runtime_state_t s_sensorsState = {
                      .signedDeltaHz = 0,
                      .chipTempDeciC = 0,
                      .extendedFlags = 0U,
-                     .extendedTelemetryValid = false},
+                     .extendedTelemetryValid = false,
+                     .fastFeedback = false,
+                     .feedbackFresh = false,
+                     .rawHz = 0U,
+                     .sampleNumber = 0U,
+                     .measuredUs = 0U,
+                     .ageUs = 0U,
+                     .readStatus = HAL_EAGAIN,
+                     .readUs = 0U,
+                     .readRetries = 0U},
     .adjCommErrors = 0};
 
 m_mutex_def(analog4051Mutex);
@@ -163,6 +176,11 @@ float getGlobalValue(int idx) {
 }
 
 void initSensors(void) {
+  s_sensorsState.fastFeedback = false;
+  s_sensorsState.sampleTracked = false;
+  memset(&s_sensorsState.adjustometer, 0, sizeof(s_sensorsState.adjustometer));
+  s_sensorsState.adjustometer.status = ADJ_STATUS_SIGNAL_LOST;
+  s_sensorsState.adjCommErrors = 0U;
   // Firmware lifetime is process-long; in host tests setUp() may call this
   // repeatedly, so keep mutex init idempotent to avoid re-allocation churn.
   if (valueFieldsMutex == NULL) {
@@ -564,6 +582,16 @@ void updateValsForDebug(void) {
 }
 
 void pwm_init(void) {
+  // Reinitialization replaces channels; do not abandon their pool slots.
+  if (s_sensorsState.pwmVp37 != NULL) {
+    hal_pwm_freq_destroy(s_sensorsState.pwmVp37);
+  }
+  if (s_sensorsState.pwmTurbo != NULL) {
+    hal_pwm_freq_destroy(s_sensorsState.pwmTurbo);
+  }
+  if (s_sensorsState.pwmAngle != NULL) {
+    hal_pwm_freq_destroy(s_sensorsState.pwmAngle);
+  }
   s_sensorsState.pwmVp37 =
       hal_pwm_freq_create(PIO_VP37_RPM, VP37_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
   s_sensorsState.pwmTurbo =
@@ -639,16 +667,6 @@ static adjustometer_reading_t adjustometerRecordCommError(void) {
 }
 
 /**
- * @brief Decode one big-endian uint32_t from an I2C byte buffer.
- * @param bytes Address of the four-byte value.
- * @return Decoded value.
- */
-static uint32_t adjustometerDecodeU32BE(const uint8_t *bytes) {
-  return ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16) |
-         ((uint32_t)bytes[2] << 8) | (uint32_t)bytes[3];
-}
-
-/**
  * @brief Read and validate the optional versioned telemetry block.
  * @param out Decoded extension fields; legacy fields are left unchanged.
  * @return True when version and sequence checks pass.
@@ -690,18 +708,14 @@ static bool adjustometerReadExtendedLocked(adjustometer_reading_t *out) {
 
   out->extendedFlags =
       buf[ADJUSTOMETER_REG_EXT_FLAGS - ADJUSTOMETER_EXT_REG_START];
-  out->signalHz = adjustometerDecodeU32BE(
+  out->signalHz = jh_load_be32(
       &buf[ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->baselineHz = adjustometerDecodeU32BE(
+  out->baselineHz = jh_load_be32(
       &buf[ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->signedDeltaHz = (int32_t)adjustometerDecodeU32BE(
+  out->signedDeltaHz = (int32_t)jh_load_be32(
       &buf[ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->chipTempDeciC =
-      (int16_t)(((uint16_t)buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C -
-                               ADJUSTOMETER_EXT_REG_START]
-                 << 8) |
-                (uint16_t)buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C -
-                              ADJUSTOMETER_EXT_REG_START + 1U]);
+  out->chipTempDeciC = (int16_t)jh_load_be16(
+      &buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START]);
   out->extendedTelemetryValid = true;
   return true;
 }
@@ -714,7 +728,79 @@ static bool adjustometerReadExtendedLocked(adjustometer_reading_t *out) {
  * @note The returned pulse, status, and fuel-temperature fields form a
  * project-local G149/G81-like telemetry bundle, not a literal OEM sensor block.
  */
+void setVP37AdjustometerFastFeedback(bool enabled) {
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  s_sensorsState.fastFeedback = enabled;
+  s_sensorsState.sampleTracked = false;
+  m_mutex_exit(adjustometerStateMutex);
+}
+
+static adjustometer_reading_t readAdjustometerFeedback(void) {
+  const uint32_t startedUs = hal_micros();
+  uint8_t retries = 0U;
+  uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
+  adjustometer_feedback_t decoded = {0};
+  hal_status_t status = HAL_EBUS;
+  m_mutex_enter_blocking(i2cBusMutex);
+  for (unsigned int attempt = 0U; attempt < 3U; attempt++) {
+    retries = (uint8_t)attempt;
+    const uint8_t start = ADJUSTOMETER_FEEDBACK_START;
+    status = hal_i2c_write_read_bus_ex(0, ADJUSTOMETER_I2C_ADDR, &start, 1U,
+                                       frame, COUNTOF(frame));
+    if (status != HAL_OK) {
+      break;
+    }
+    status = adjustometer_feedback_decode(frame, &decoded);
+    if (status != HAL_EAGAIN) {
+      break;
+    }
+  }
+  const uint32_t nowUs = hal_micros();
+  m_mutex_enter_blocking(adjustometerStateMutex);
+  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
+  snapshot.fastFeedback = true;
+  snapshot.readStatus = status;
+  snapshot.readUs = nowUs - startedUs;
+  snapshot.readRetries = retries;
+  snapshot.feedbackFresh = false;
+  snapshot.commOk = status == HAL_OK;
+  if (status == HAL_OK) {
+    const bool tracked = s_sensorsState.sampleTracked;
+    const bool advanced = !tracked || decoded.number != snapshot.sampleNumber;
+    const bool clockBackwards =
+        tracked && (uint32_t)(decoded.measuredUs - snapshot.measuredUs) >=
+                       UINT32_C(0x80000000);
+    if (advanced) {
+      s_sensorsState.sampleChangedUs = nowUs;
+    }
+    snapshot.feedbackFresh =
+        !clockBackwards && decoded.ageUs <= ADJUSTOMETER_FEEDBACK_MAX_AGE_US &&
+        !hal_elapsed_u32(nowUs, s_sensorsState.sampleChangedUs,
+                         ADJUSTOMETER_FEEDBACK_MAX_AGE_US);
+    s_sensorsState.sampleTracked = true;
+    snapshot.pulseHz = decoded.pulseHz;
+    snapshot.voltageRaw = decoded.voltage;
+    snapshot.fuelTempC = decoded.fuelTemp;
+    snapshot.status = decoded.status;
+    snapshot.rawHz = decoded.rawHz;
+    snapshot.signalHz = decoded.filteredHz;
+    snapshot.baselineHz = decoded.baselineHz;
+    snapshot.signedDeltaHz =
+        (int32_t)decoded.filteredHz - (int32_t)decoded.baselineHz;
+    snapshot.sampleNumber = decoded.number;
+    snapshot.measuredUs = decoded.measuredUs;
+    snapshot.ageUs = decoded.ageUs;
+  }
+  s_sensorsState.adjustometer = snapshot;
+  m_mutex_exit(adjustometerStateMutex);
+  m_mutex_exit(i2cBusMutex);
+  return snapshot;
+}
+
 static adjustometer_reading_t readAdjustometer(void) {
+  if (s_sensorsState.fastFeedback) {
+    return readAdjustometerFeedback();
+  }
 
   m_mutex_enter_blocking(i2cBusMutex);
 
@@ -763,11 +849,12 @@ static adjustometer_reading_t readAdjustometer(void) {
   m_mutex_enter_blocking(adjustometerStateMutex);
   adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
   m_mutex_exit(adjustometerStateMutex);
-  snapshot.pulseHz = (int16_t)((uint16_t)buf[0] << 8 | buf[1]);
+  snapshot.pulseHz = (int16_t)jh_load_be16(buf);
   snapshot.voltageRaw = buf[2];
   snapshot.fuelTempC = buf[3];
   snapshot.status = buf[4];
   snapshot.commOk = true;
+  snapshot.fastFeedback = false;
 
   m_mutex_enter_blocking(adjustometerStateMutex);
   s_sensorsState.adjustometer = snapshot;
@@ -800,7 +887,9 @@ bool waitForAdjustometerBaseline(void) {
       watchdog_feed();
       continue;
     }
-    if ((r.status & ADJ_STATUS_BASELINE_PENDING) == 0) {
+    if ((r.status & (ADJ_STATUS_BASELINE_PENDING | ADJ_STATUS_SIGNAL_LOST)) ==
+            0 &&
+        (!r.fastFeedback || r.feedbackFresh)) {
       deb("Adjustometer baseline ready (%lu ms)",
           (unsigned long)(hal_millis() - start));
       return true;
