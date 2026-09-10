@@ -38,6 +38,7 @@ typedef struct {
   bool alertBlinkState;
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
+  uint32_t vp37DebugLastMs;
 } start_runtime_state_t;
 
 typedef struct {
@@ -304,6 +305,7 @@ static void initializeCore0(void) {
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
+  setVP37AdjustometerFastFeedback(true);
   VP37InitStatus vp37InitStatus = VP37_init(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 
@@ -418,9 +420,32 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 9;
 
 #ifdef VP37
-  m_mutex_enter_blocking(vp37StateMutex);
-  VP37_showDebug(&s_ctx.injectionPump);
-  m_mutex_exit(vp37StateMutex);
+  if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
+                                      VP37_DEBUG_UPDATE)) {
+    m_mutex_enter_blocking(vp37StateMutex);
+    VP37Pump snapshot = s_ctx.injectionPump;
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+    VP37TraceSample samples[4];
+    size_t sampleCount = 0U;
+    while (!hal_debug_is_muted() && (sampleCount < COUNTOF(samples)) &&
+           (VP37_readTrace(&s_ctx.injectionPump, &samples[sampleCount]) ==
+            HAL_OK)) {
+      sampleCount++;
+    }
+    const bool recording = VP37_traceCapturing();
+#endif
+    m_mutex_exit(vp37StateMutex);
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+    if (!recording) {
+      VP37_showDebug(&snapshot);
+    }
+    for (size_t i = 0U; i < sampleCount; i++) {
+      VP37_showTrace(&samples[i]);
+    }
+#else
+    VP37_showDebug(&snapshot);
+#endif
+  }
 #endif
   m_mutex_enter_blocking(turboStateMutex);
   Turbo_showDebug(&s_ctx.turbo);
@@ -483,6 +508,8 @@ static void runCore1(void) {
   hal_mutex_lock(vp37StateMutex);
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   tickTests();
+#elif defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
+  VP37_setVP37Throttle(&s_ctx.injectionPump, (float)getThrottlePercentage());
 #else
   engineOperation_process(&s_ctx.engineOp);
   engineOperation_showDebug(&s_ctx.engineOp);

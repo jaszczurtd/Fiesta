@@ -534,9 +534,6 @@ and orchestrate authenticated BOOTSEL/UF2 flashing with manifest checks.
 It replaces ad-hoc command-line build and serial-terminal probing with a
 single tool that enforces unambiguous target selection.
 
-Implementation milestones and phase-closure updates are tracked in
-[`CHANGELOG.md`](CHANGELOG.md).
-
 **Target platforms.**
 - Linux (Debian-like desktops) - primary target; source build and local
   execution are supported in-tree.
@@ -1143,7 +1140,6 @@ build/test/package. Env overrides:
 Fiesta/
 ├── README.md                    # project overview
 ├── MISRA.md                     # MISRA-C status, policy, entry points (authoritative)
-├── CHANGELOG.md                 # per-module build/test/CI status log
 ├── ARCHITECTURE.md              # this file
 ├── LICENSE
 ├── .github/

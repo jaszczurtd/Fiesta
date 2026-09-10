@@ -135,6 +135,7 @@ target_include_directories(ecu_mock PUBLIC
 
 target_compile_definitions(ecu_mock PUBLIC
     UNIT_TEST
+    START_TEST_VP37_MODE=0
     UNITY_INCLUDE_CONFIG_H
     HAL_TARGET_MOCK
     SERIAL_7N1=2

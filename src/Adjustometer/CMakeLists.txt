@@ -63,6 +63,7 @@ set(HAL_UTIL_SOURCES
 # ── Adjustometer sources under test ────────────────────────────────────────────
 set(ADJ_SOURCES
     ${ADJ_SRC}/sensors.c
+    ${ADJ_SRC}/telemetry.c
     ${ADJ_SRC}/led.c
 )
 

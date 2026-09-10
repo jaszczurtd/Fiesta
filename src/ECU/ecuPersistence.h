@@ -13,13 +13,15 @@ typedef hal_status_t (*ecu_persistence_operation_fn)(const void *user);
 hal_status_t ecuPersistenceInit(void);
 
 /**
- * @brief Run one core-0 storage operation with GPS transport quiesced.
+ * @brief Serialize one core-0 storage operation.
  *
- * Calls are serialized. The operation runs only after GPS is paused, and GPS
- * resume is attempted before the mutex is released. The return value reports
- * the pause or storage result. A failed resume is retained for automatic retry
- * by ecuPersistencePoll() and reported through @p outResumeStatus when
- * provided.
+ * GPS is paused only by the EEPROM flash-write callbacks, immediately around
+ * a physical write. Reads, validation and RAM staging leave GPS running. All
+ * ECU EEPROM/KV writes and GPS polling must remain on core 0. The return value
+ * reports the storage operation (including a failed write preparation).
+ * A failed GPS resume is retained for retry by ecuPersistencePoll(). Optional
+ * outResumeStatus receives the latest resume result, or HAL_NONE when no
+ * physical write was attempted.
  */
 hal_status_t ecuPersistenceExecute(ecu_persistence_operation_fn operation,
                                    const void *user,

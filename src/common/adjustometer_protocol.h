@@ -6,13 +6,12 @@
  * Adjustometer I2C register map.
  *
  * Registers 0x00..0x04 are the original, control-path-compatible block and
- * must not change.  Registers 0x05 and above are optional diagnostic
- * telemetry.  An ECU may ignore the extension completely or reject it when
- * the version/sequence checks fail while still using the legacy block.
+ * must not change. Registers 0x05..0x16 provide optional diagnostics;
+ * the current ECU selects the coherent feedback block at 0x17 for control.
  */
 #define ADJUSTOMETER_I2C_ADDR 0x57U
 
-/* Legacy block: stable wire format used by the VP37 controller. */
+/* Legacy block: retained for older readers. */
 #define ADJUSTOMETER_REG_PULSE_HI 0x00U
 #define ADJUSTOMETER_REG_PULSE_LO 0x01U
 #define ADJUSTOMETER_REG_VOLTAGE 0x02U
@@ -30,8 +29,9 @@
 /*
  * Optional extension, version 1.  Multi-byte values are big-endian.
  *
- * A writer marks SEQ_BEGIN odd while replacing the payload, then publishes
- * the same even value in SEQ_END and SEQ_BEGIN.  A reader accepts a snapshot
+ * A writer marks SEQ_END odd BEFORE replacing any payload or SEQ_BEGIN,
+ * then marks SEQ_BEGIN odd. After the payload it publishes the same even
+ * value in SEQ_BEGIN and finally SEQ_END. A reader accepts a snapshot
  * only when both sequence bytes match and are even.
  */
 #define ADJUSTOMETER_EXT_VERSION 1U
@@ -51,4 +51,13 @@
 #define ADJUSTOMETER_EXT_REG_START ADJUSTOMETER_REG_EXT_VERSION
 #define ADJUSTOMETER_EXT_REG_COUNT                                             \
   (ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START + 1U)
-#define ADJUSTOMETER_TOTAL_REG_COUNT (ADJUSTOMETER_REG_EXT_SEQ_END + 1U)
+
+/** @brief Versioned fast feedback, following the unchanged legacy/extension
+ * blocks. */
+#define ADJUSTOMETER_FEEDBACK_START (ADJUSTOMETER_REG_EXT_SEQ_END + 1U)
+#define ADJUSTOMETER_FEEDBACK_VERSION 1U
+#define ADJUSTOMETER_FEEDBACK_BYTES 30U
+#define ADJUSTOMETER_TOTAL_REG_COUNT                                           \
+  (ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES)
+/** @brief Maximum accepted measurement age in microseconds. */
+#define ADJUSTOMETER_FEEDBACK_MAX_AGE_US 20000U

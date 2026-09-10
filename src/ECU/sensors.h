@@ -28,6 +28,12 @@ typedef struct {
   int16_t chipTempDeciC;       // RP2040 die temperature in 0.1 °C units
   uint8_t extendedFlags;       // bitmask (ADJUSTOMETER_EXT_FLAG_*)
   bool extendedTelemetryValid; // versioned extension is coherent
+  bool fastFeedback, feedbackFresh;
+  uint32_t rawHz, sampleNumber, measuredUs;
+  uint16_t ageUs;
+  hal_status_t readStatus;
+  uint32_t readUs;
+  uint8_t readRetries;
 } adjustometer_reading_t;
 
 // in miliseconds, print values into serial
@@ -210,6 +216,11 @@ void pwm_init(void);
  *       implementation.
  */
 void getVP37Adjustometer(adjustometer_reading_t *out);
+
+/** @brief Select versioned fast feedback before starting control; false retains
+ * legacy API behavior. Changing mode resets sample-age tracking. Call during
+ * single-owner initialization. */
+void setVP37AdjustometerFastFeedback(bool enabled);
 
 /**
  * @brief Refresh the optional Adjustometer diagnostic-telemetry extension.

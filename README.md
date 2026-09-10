@@ -41,8 +41,6 @@ and a live ECU GPS view (libshumate when available). The first-class CLI shell
 exposes `detect`, `list`, `meta`, `param-list`, `get-values`, `get-param`,
 `get-gps`, `reboot-bootloader`, `set-param`, `commit-params`, `revert-params`,
 and `set-and-commit` over the same core.
-Implementation status and milestone snapshots are tracked in
-[`CHANGELOG.md`](CHANGELOG.md).
 
 ## Dependencies
 
@@ -291,12 +289,8 @@ system, safety is treated as a first-class priority.
 MISRA-C migration status, policy, and screening entry points live in a
 dedicated document: [`MISRA.md`](MISRA.md).
 
-## Current status
+## Gallery
 
-Per-module build, test, and CI history is tracked in
-[`CHANGELOG.md`](CHANGELOG.md).
-
-Gallery:
 https://postimg.cc/gallery/pHF4jy2
 
 ## Photos

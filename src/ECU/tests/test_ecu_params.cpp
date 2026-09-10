@@ -137,6 +137,15 @@ void test_ecu_params_validate_rejects_nominal_rpm_out_of_range(void) {
   TEST_ASSERT_EQUAL_STRING("nominal_rpm_range", reason);
 }
 
+void test_unchanged_parameters_skip_flash_and_gps_recovery(void) {
+  ecu_params_values_t values = {};
+  ecuParamsLoadDefaults(&values);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&values));
+  hal_mock_eeprom_clear_write_count();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&values));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
+}
+
 int main(void) {
   hal_mock_eeprom_reset();
   hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
@@ -150,5 +159,6 @@ int main(void) {
   RUN_TEST(test_ecu_params_validate_rejects_invalid_hysteresis);
   RUN_TEST(test_ecu_params_validate_rejects_nominal_rpm_out_of_range);
   RUN_TEST(test_ecu_params_stage_and_apply_updates_active_set);
+  RUN_TEST(test_unchanged_parameters_skip_flash_and_gps_recovery);
   return UNITY_END();
 }

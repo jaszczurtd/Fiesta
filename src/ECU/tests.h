@@ -11,13 +11,31 @@ extern "C" {
 // Inject DTC_PCF8574_COMM_FAIL at startup for diagnostics testing
 // #define START_TEST_ENABLE_DTC_INJECTION
 
-// enable functional tests for VP37 cyclic control via keyboard
-#define START_TEST_ENABLE_VP37_CYCLIC // Cyclic test: ramps VP37 throttle
-                                      // 0-100-0%,
-// allows PID tuning via Serial commands (send '?' for help)
+// 0: engine start/idle/driver demand; 1: cyclic bench; 2: direct potentiometer
+// bench. A build definition can override the local selection without editing
+// this file.
+#ifndef START_TEST_VP37_MODE
+#define START_TEST_VP37_MODE 0
+#endif
+#if START_TEST_VP37_MODE == 1
+#define START_TEST_ENABLE_VP37_CYCLIC
+#elif START_TEST_VP37_MODE == 2
+#define START_TEST_ENABLE_VP37_POTENTIOMETER
+#elif START_TEST_VP37_MODE != 0
+#error "Invalid START_TEST_VP37_MODE (expected 0, 1 or 2)"
+#endif
+#if defined(START_TEST_ENABLE_VP37_CYCLIC) &&                                  \
+    defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
+#error "Select only one VP37 bench demand source"
+#endif
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
-#define CYCLIC_DELAYTIME 8
+#define CYCLIC_DELAYTIME 12
+// Hold deadlines include setpoint slew; expiry selects zero demand.
+#define VP37_BENCH_HOLD_MS 2000U
+#define VP37_BENCH_HIGH_HOLD_MS 1000U
+#define VP37_BENCH_HIGH_HOLD_PERCENT 80.0f
+#define VP37_BENCH_INTEGRAL_LIMIT_MAX 360.0f
 
 // Serial command buffer for runtime PID tuning
 #define VP37_CMD_BUF_SIZE 64

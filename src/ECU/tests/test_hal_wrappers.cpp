@@ -214,6 +214,9 @@ void test_pid_stability_and_oscillation_helpers(void) {
 }
 
 void test_pid_null_safety(void) {
+  hal_pid_terms_t terms = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pid_controller_step_ex(
+                                        NULL, 1.0f, 0.0f, .005f, 0.0f, &terms));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, hal_pid_controller_get_kp(NULL));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, hal_pid_controller_get_ki(NULL));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, hal_pid_controller_get_kd(NULL));
