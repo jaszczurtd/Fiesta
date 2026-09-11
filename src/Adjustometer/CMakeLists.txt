@@ -37,6 +37,7 @@ list(FILTER MOCK_SOURCES EXCLUDE REGEX "/hal_gps\\.cpp$")
 
 # ── HAL utility sources compilable on host ─────────────────────────────────────
 set(HAL_UTIL_SOURCES
+    ${HAL_SRC}/hal/analog/hal_pulse_capture.cpp
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
     ${HAL_HELPER_SOURCES}

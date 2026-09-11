@@ -25,6 +25,11 @@ się poza mutexem regulatora. Tor pomiarowy opisuje
 [README Adjustometera](../Adjustometer/README.pl.md) i wspólna
 [mapa rejestrów I2C](../common/adjustometer_protocol.h).
 
+W kompilacji stanowiskowej można nadpisać `VP37_PWM_FREQUENCY_HZ` oraz
+`CYCLIC_DELAYTIME`. Domyślne wartości dla VP37 pozostają równe 200 Hz i 12 ms;
+`START_TEST_VP37_MODE=1` wybiera próby cyclic. Limity czasu dodatniego
+zadania nadal obejmują rampę.
+
 ## Trwałe dane i GPS
 
 ECU rezerwuje 32 KiB EEPROM emulowanego we flash. Obszar KV zaczyna się od

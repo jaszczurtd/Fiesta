@@ -6,11 +6,22 @@ frequency-derived feedback to the ECU over I2C.
 ## Measurement
 
 The pump sensor coils form the resonant element of a modified Hartley oscillator.
-Frequency varies roughly within 22-37 kHz with actuator position. The RP2040
-counts falling GPIO edges, measures frequency over 128 pulses, and applies an
-integer EMA. The exported `PULSE` is the absolute filtered deviation from the
+Frequency varies roughly within 22-37 kHz with actuator position. Hardware
+period capture in JaszczurHAL supplies blocks of 32 complete periods; the
+Adjustometer combines four blocks into a 128-period window and applies an
+integer EMA. RP2040 captures timestamps through PIO and DMA, without a GPIO
+interrupt for each edge. The exported `PULSE` is the absolute filtered deviation from the
 locked baseline, with near-zero hysteresis. It is a position observable in Hz;
 calibration and actuator-drive compensation belong to the ECU.
+
+The experimental build definition `ADJUSTOMETER_SLIDING_WINDOW=1` keeps
+128 periods in each measurement and updates it every 32 periods after baseline
+acquisition. Its fractional EMA uses weight 71/1024 to approximate the original
+filter time constant; zero release requires eight short updates. Baseline
+acquisition keeps the original cadence. The default remains disjoint windows.
+`ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` optionally spaces fast I2C publications;
+its default is zero, and status changes are published immediately. The HAL snapshot
+keeps each I2C read coherent while new measurements are published.
 
 This follows the resonant-sensing idea used around VP37/EDC15, with an external
 RP2040 and digital I2C feedback. It does not reproduce the OEM electronics or
@@ -29,8 +40,11 @@ stable windows within 12 Hz. A further 1000 ms verification restarts convergence
 if drift exceeds 500 Hz. Wait for readiness before calibrating ECU travel.
 
 Near-zero hold enters within 40 Hz and releases beyond 50 Hz after two
-consecutive windows with the same sign. Signal loss uses three periods of the
-filtered frequency, clamped to 10-200 ms. A lost signal produces zero pulse
+consecutive windows with the same sign. Signal loss uses the latest completed capture block and three periods of the
+filtered frequency, clamped to 10-200 ms. Capture errors discard the partial
+window and invalidate feedback; overflow or a peripheral fault causes capture
+to restart after 100 ms. A locked baseline is retained; interrupted startup
+verification starts again. A lost signal produces zero pulse
 and sets `SIGNAL_LOST`; consumers must inspect status and freshness.
 
 Reset Adjustometer with ECU actuator drive off and the mechanism settled.
@@ -39,7 +53,9 @@ closing USB CDC may reset a board; follow the same sequence for Adjustometer.
 
 ## I2C and auxiliary sensors
 
-The slave address is `0x57`; ECU uses 400 kHz. Wire definitions are shared in
+The slave address is `0x57`; ECU uses 400 kHz. Feedback and diagnostic blocks
+are published atomically. `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` freezes the map for
+each read; sequence markers and ECU freshness checks remain in use. Wire definitions are shared in
 [adjustometer_protocol.h](../common/adjustometer_protocol.h).
 
 | Registers | Purpose |
@@ -67,7 +83,7 @@ measurements are valid. It is sampled independently of control feedback.
 
 ## Core split and LED
 
-Core 0 initializes sensors, handles Hall interrupts and publishes fast feedback
+Core 0 initializes sensors, drains hardware capture every 1 ms and publishes fast feedback
 and its legacy mirror. Core 1 reads auxiliary ADC inputs every 10 ms, publishes
 the diagnostic extension, and handles LED and USB logging. Chip temperature and
 logs update every 250 ms. USB writes use a zero timeout and can drop text when

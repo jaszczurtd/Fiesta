@@ -21,8 +21,7 @@ extern "C" {
 #define ADJUSTOMETER_SIGNAL_LOSS_MULTIPLIER 3U
 // Minimum timeout for signal-loss detection.  At the operating range (~37 kHz)
 // the dynamic timeout (period × 3 ≈ 81 µs) is always clamped here.  10 ms gives
-// safe margin against false loss during rapid frequency transients above ~100
-// Hz.
+// margin for 32-period capture batches at the operating frequency.
 #define ADJUSTOMETER_SIGNAL_LOSS_MIN_US 10000U
 #define ADJUSTOMETER_SIGNAL_LOSS_MAX_US 200000U
 
@@ -47,16 +46,19 @@ void initI2C(void);
 void initBasicPIO(void);
 
 /**
- * @brief Initialize runtime sensor state and attach the Hall interrupt.
+ * @brief Initialize runtime sensor state and hardware period capture.
  * @return None.
  * @note This module acts as a project-local G149-like quantity-feedback source
  * for the VP37 control path.
  */
 void initSensors(void);
 
+/** @brief Drain hardware capture on Core0 before publishing feedback. */
+void updateAdjustometerCapture(void);
+
 /** @brief Read a coherent oscillator window without ADC or USB I/O.
  * @param out Non-NULL destination; errors leave it unchanged.
- * @return HAL_OK, HAL_EINVAL, or HAL_EAGAIN if a concurrent ISR keeps updating.
+ * @return HAL_OK, HAL_EINVAL, or HAL_EAGAIN if the producer keeps updating.
  */
 hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out);
 /** @brief Read and cache voltage/temperature on their owning auxiliary core. */

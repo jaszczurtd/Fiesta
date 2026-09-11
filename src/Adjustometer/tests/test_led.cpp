@@ -5,6 +5,7 @@
  */
 
 #include "hal/impl/.mock/hal_mock.h"
+#include "include/adj_capture_fixture.h"
 #include "led.h"
 #include "sensors.h"
 #include "utils/unity.h"
@@ -15,14 +16,6 @@
 #define LED_BLINK_STATUS_MS 500U
 #define LED_BLINK_NO_OSC_MS 125U
 
-static void simulatePulses(uint32_t count, uint32_t freqHz) {
-  const uint32_t periodUs = 1000000U / freqHz;
-  for (uint32_t i = 0; i < count; i++) {
-    hal_mock_advance_micros(periodUs);
-    hal_mock_gpio_fire_interrupt(PIO_INTERRUPT_HALL);
-  }
-}
-
 static void lockBaseline(uint32_t freqHz) {
   const uint32_t pulseWindow = 128U;
   const uint32_t periodUs = 1000000U / freqHz;
@@ -31,7 +24,7 @@ static void lockBaseline(uint32_t freqHz) {
       (ADJUSTOMETER_BASELINE_MAX_TIME_MS + ADJUSTOMETER_BASELINE_VERIFY_MS) *
       1000UL;
   const uint32_t windows = (totalTimeUs / windowUs) + 5U;
-  simulatePulses(windows * pulseWindow, freqHz);
+  adj_test_capture_pulses(windows * pulseWindow + 1U, freqHz);
 }
 
 /** Inject ADC so fuel temp appears OK or broken. */
@@ -72,7 +65,7 @@ static void bumpI2C(void) {
  * Ensure signal is alive by feeding recent pulses so isSignalLost()==false.
  * Uses a small burst at the baseline frequency.
  */
-static void keepSignalAlive(void) { simulatePulses(128, 10000); }
+static void keepSignalAlive(void) { adj_test_capture_pulses(256, 10000); }
 
 /* ── Setup / Teardown ────────────────────────────────────────────────────────
  */

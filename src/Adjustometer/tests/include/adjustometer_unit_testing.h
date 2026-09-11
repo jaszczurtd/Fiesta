@@ -12,8 +12,6 @@ typedef struct {
   int32_t pulse;
   uint32_t lastEdgeUs;
   uint32_t signalHz;
-  uint32_t windowStartUs;
-  uint32_t windowCount;
   uint32_t filteredHz;
   uint32_t baselineStartUs;
   uint32_t baselineEstimate;
@@ -33,7 +31,9 @@ void adj_test_sensors_reset_state(void);
 void adj_test_sensors_get_state(adj_sensors_test_state_t *state);
 void adj_test_sensors_set_state(const adj_sensors_test_state_t *state);
 void adj_test_sensors_count_edge(void);
-uint32_t adj_test_sensors_apply_adjustometer_ema(uint32_t rawHz, uint32_t filteredHz);
+void adj_test_sensors_process_frequency(uint32_t rawHz, uint32_t nowUs);
+uint32_t adj_test_sensors_apply_adjustometer_ema(uint32_t rawHz,
+                                                 uint32_t filteredHz);
 float adj_test_sensors_apply_adc_ema(float raw, float prev);
 bool adj_test_sensors_is_signal_lost(void);
 
