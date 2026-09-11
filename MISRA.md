@@ -39,6 +39,7 @@ Completed areas include:
 - warning cleanups required by the quality gate (unused-parameter fixes in ECU and aligned external HAL dependency).
 - defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames, and the RPM publisher updates its delivery cache only after a successful transmission while using retry and heartbeat eligibility thresholds.
 - project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
+- screening configuration fix: the runner now forces `hal_project_config.h` into every translation unit, so the scan sees the same opt-in HAL modules as the firmware build.
 
 Pending areas:
 
@@ -49,22 +50,43 @@ Pending areas:
 
 ## Latest screening snapshot
 
-Local run on 2026-09-09 with cppcheck 2.13.0, without licensed rule texts:
+Reference run on 2026-09-11 with cppcheck 2.13.0, without licensed rule texts.
+This is the first run with the screening configuration corrected (see below),
+so it replaces earlier counts as the comparison baseline:
 
-- active findings: **1262** across **33** rule IDs,
+- active findings: **1257** across **32** rule IDs,
+- `src/ECU` carries 1027 of them, shared `src/common` sources the remaining 230,
 - severity split is unavailable because no licensed Mandatory / Required /
   Advisory rule-text extract was supplied,
 - the result is a triage/evidence snapshot, not a pass signal or compliance
   certificate.
 
-The scan also reports unresolved configuration constants in CAN and command-router
-sources (`misra-config`), so its findings are incomplete. These need separate
-screening-configuration work before using the report as compliance evidence.
+Largest rule buckets: `misra-c2012-15.5` 330, `2.5` 197, `12.1` 154, `8.4` 118,
+`10.4` 106, `17.7` 65. Largest files: `obd-2.c` 254, `obd-2_mapping.c` 123,
+`obd-2.h` 109, `dtcManager.c` 76, `sensors.c` 72, `vp37.c` 60.
 
-The previous recorded snapshot (2026-07-10) was 1026 findings across 33 rule
-IDs; the 2026-04-21 snapshot was 787 across 25. Counts are not a normalized quality trend: the scanned
-source/include surface and tool-visible shared code changed. Use the generated
-`summary.txt` and `rule-counts.txt` artifacts when comparing future runs.
+### Screening configuration correction
+
+The build system reads `hal_project_config.h` and turns its `HAL_ENABLE_*`
+lines into `-D` flags, while HAL headers pull the same file in through an
+`__has_include` hook. cppcheck resolved neither, so every run before this one
+screened an ECU with all opt-in modules switched off. Consequences that are now
+gone: HAL declarations hidden behind their `#ifdef` guards were reported as
+implicit function calls (rule 17.3), CAN and command-router constants could not
+be resolved (`misra-config`), and the EEPROM layout guard in `dtcManager.c`
+fired, aborting analysis of that file so it reported zero findings. The runner
+now forces the project configuration into every translation unit.
+
+Two known artifacts remain, both outside `src/ECU`: `__ATOMIC_*` in the HAL
+`hal_mutex_once.h` are unknown to cppcheck, and one rule 17.3 finding in
+`sc_command_handlers.c` comes from a feature-closure macro the analyzer does not
+resolve in every configuration it explores.
+
+Earlier snapshots were 1262 findings across 33 rule IDs (2026-09-09), 1026
+across 33 (2026-07-10) and 787 across 25 (2026-04-21). None of them is
+comparable with the reference run: they screened a different, reduced ECU. Use
+the generated `summary.txt` and `rule-counts.txt` artifacts when comparing
+future runs.
 
 ECU has a dedicated project-local runner under `src/ECU/misra/`, a deviation
 register, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).
