@@ -11,21 +11,9 @@
 static const uint32_t kPulseWindow = 128U;
 
 static void runCompletedWindow(uint32_t nowUs, uint32_t periodUs) {
-  adj_sensors_test_state_t state = {};
-  const uint32_t windowUs = kPulseWindow * periodUs;
-  uint32_t windowStartUs = nowUs - windowUs;
-
-  if (windowStartUs == 0U) {
-    windowStartUs = 1U;
-    nowUs = windowStartUs + windowUs;
-  }
-
-  adj_test_sensors_get_state(&state);
-  state.windowStartUs = windowStartUs;
-  state.windowCount = kPulseWindow - 1U;
-  adj_test_sensors_set_state(&state);
   hal_mock_set_micros(nowUs);
-  adj_test_sensors_count_edge();
+  adj_test_sensors_process_frequency((1000000U + periodUs / 2U) / periodUs,
+                                     nowUs);
 }
 
 void setUp(void) {
@@ -56,8 +44,6 @@ void test_internal_state_round_trip(void) {
   expected.pulse = -123;
   expected.lastEdgeUs = 4567U;
   expected.signalHz = 9876U;
-  expected.windowStartUs = 1111U;
-  expected.windowCount = 64U;
   expected.filteredHz = 9950U;
   expected.baselineStartUs = 2222U;
   expected.baselineEstimate = 10010U;
@@ -80,8 +66,6 @@ void test_internal_state_round_trip(void) {
   TEST_ASSERT_EQUAL_INT32(expected.pulse, actual.pulse);
   TEST_ASSERT_EQUAL_UINT32(expected.lastEdgeUs, actual.lastEdgeUs);
   TEST_ASSERT_EQUAL_UINT32(expected.signalHz, actual.signalHz);
-  TEST_ASSERT_EQUAL_UINT32(expected.windowStartUs, actual.windowStartUs);
-  TEST_ASSERT_EQUAL_UINT32(expected.windowCount, actual.windowCount);
   TEST_ASSERT_EQUAL_UINT32(expected.filteredHz, actual.filteredHz);
   TEST_ASSERT_EQUAL_UINT32(expected.baselineStartUs, actual.baselineStartUs);
   TEST_ASSERT_EQUAL_UINT32(expected.baselineEstimate, actual.baselineEstimate);
@@ -106,8 +90,6 @@ void test_reset_state_clears_internal_runtime(void) {
   dirty.pulse = 77;
   dirty.lastEdgeUs = 100U;
   dirty.signalHz = 12000U;
-  dirty.windowStartUs = 10U;
-  dirty.windowCount = 12U;
   dirty.filteredHz = 11800U;
   dirty.baselineStartUs = 20U;
   dirty.baselineEstimate = 11950U;
@@ -131,8 +113,6 @@ void test_reset_state_clears_internal_runtime(void) {
   TEST_ASSERT_EQUAL_INT32(0, actual.pulse);
   TEST_ASSERT_EQUAL_UINT32(0U, actual.lastEdgeUs);
   TEST_ASSERT_EQUAL_UINT32(0U, actual.signalHz);
-  TEST_ASSERT_EQUAL_UINT32(0U, actual.windowStartUs);
-  TEST_ASSERT_EQUAL_UINT32(0U, actual.windowCount);
   TEST_ASSERT_EQUAL_UINT32(0U, actual.filteredHz);
   TEST_ASSERT_EQUAL_UINT32(0U, actual.baselineStartUs);
   TEST_ASSERT_EQUAL_UINT32(0U, actual.baselineEstimate);

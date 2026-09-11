@@ -1,23 +1,16 @@
 /**
  * @file test_sensors.cpp
- * @brief Host-side tests for Adjustometer sensor logic (ISR, baseline,
+ * @brief Host-side tests for Adjustometer sensor logic (capture, baseline,
  *        thermal compensation, zero-hold, status bitmask).
  */
 
 #include "hal/impl/.mock/hal_mock.h"
+#include "include/adj_capture_fixture.h"
 #include "sensors.h"
 #include "utils/unity.h"
 
 /* ── Helpers ─────────────────────────────────────────────────────────────────
  */
-
-static void simulatePulses(uint32_t count, uint32_t freqHz) {
-  const uint32_t periodUs = 1000000U / freqHz;
-  for (uint32_t i = 0; i < count; i++) {
-    hal_mock_advance_micros(periodUs);
-    hal_mock_gpio_fire_interrupt(PIO_INTERRUPT_HALL);
-  }
-}
 
 /**
  * Lock baseline at freqHz by driving enough pulses to exceed
@@ -33,7 +26,7 @@ static void lockBaseline(uint32_t freqHz) {
       (ADJUSTOMETER_BASELINE_MAX_TIME_MS + ADJUSTOMETER_BASELINE_VERIFY_MS) *
       1000UL;
   const uint32_t windows = (totalTimeUs / windowUs) + 5U;
-  simulatePulses(windows * pulseWindow, freqHz);
+  adj_test_capture_pulses(windows * pulseWindow + 1U, freqHz);
 }
 
 /**
@@ -91,7 +84,7 @@ void test_no_pulses_returns_zero(void) {
 }
 
 void test_pulses_before_baseline_returns_zero(void) {
-  simulatePulses(256, 10000);
+  adj_test_capture_pulses(256, 10000);
   TEST_ASSERT_EQUAL_INT32(0, getAdjustometerPulses());
 }
 
@@ -100,7 +93,7 @@ void test_pulses_before_baseline_returns_zero(void) {
 
 void test_baseline_locks_after_stable_signal(void) {
   lockBaseline(10000);
-  simulatePulses(256, 10000);
+  adj_test_capture_pulses(256, 10000);
   int32_t pulse = getAdjustometerPulses();
   TEST_ASSERT_INT32_WITHIN(15, 0, pulse);
 }
@@ -108,7 +101,7 @@ void test_baseline_locks_after_stable_signal(void) {
 void test_frequency_shift_produces_nonzero_pulse(void) {
   lockBaseline(10000);
   /* Shift from 10000 Hz baseline to ~11111 Hz (period 90us) */
-  simulatePulses(2048, 11111);
+  adj_test_capture_pulses(2048, 11111);
   int32_t pulse = getAdjustometerPulses();
   TEST_ASSERT_TRUE(pulse > 200);
   TEST_ASSERT_TRUE(getAdjustometerSignalHz() > getBaseline());
@@ -118,7 +111,7 @@ void test_frequency_shift_produces_nonzero_pulse(void) {
 void test_signed_delta_preserves_negative_frequency_shift(void) {
   lockBaseline(10000);
   /* Shift below baseline to ~9009 Hz (period 111 us). */
-  simulatePulses(2048, 9009);
+  adj_test_capture_pulses(2048, 9009);
 
   TEST_ASSERT_TRUE(getAdjustometerPulses() > 200);
   TEST_ASSERT_TRUE(getAdjustometerSignalHz() < getBaseline());
@@ -129,10 +122,12 @@ void test_signed_delta_preserves_negative_frequency_shift(void) {
  */
 
 void test_small_shift_within_zero_hold(void) {
-  /* Use 1000 Hz where 1 us period change -> small Hz shift */
-  lockBaseline(1000);
-  /* Shift to ~1010 Hz (period 990us): Δ=10 Hz < ENTER=20 Hz */
-  simulatePulses(512, 1010);
+  /* Capture a real small shift with sub-microsecond tick precision. */
+  lockBaseline(10000);
+  adj_test_capture_pulses(512, 10010);
+  TEST_ASSERT_TRUE(isAdjustometerReady());
+  TEST_ASSERT_BITS_LOW(ADJ_STATUS_SIGNAL_LOST, getAdjustometerStatus());
+  TEST_ASSERT_GREATER_THAN_UINT32(10000U, getAdjustometerSignalHz());
   int32_t pulse = getAdjustometerPulses();
   TEST_ASSERT_EQUAL_INT32(0, pulse);
 }
@@ -142,7 +137,7 @@ void test_small_shift_within_zero_hold(void) {
 
 void test_signal_lost_returns_zero(void) {
   lockBaseline(10000);
-  simulatePulses(256, 10000);
+  adj_test_capture_pulses(256, 10000);
   /* Advance time well past signal loss timeout without any pulses */
   hal_mock_advance_micros(ADJUSTOMETER_SIGNAL_LOSS_MAX_US + 100000U);
   TEST_ASSERT_EQUAL_INT32(0, getAdjustometerPulses());
@@ -164,7 +159,7 @@ void test_status_baseline_pending_initially(void) {
 
 void test_status_baseline_clears_after_lock(void) {
   lockBaseline(10000);
-  simulatePulses(128, 10000);
+  adj_test_capture_pulses(128, 10000);
   uint8_t status = getAdjustometerStatus();
   TEST_ASSERT_BITS_LOW(ADJ_STATUS_BASELINE_PENDING, status);
 }
@@ -220,16 +215,16 @@ void test_thermal_comp_skipped_when_sensor_broken(void) {
   injectFuelTemp(false);
   settleAdcFilters();
   lockBaseline(10000);
-  simulatePulses(256, 10000);
+  adj_test_capture_pulses(256, 10000);
   int32_t pulseOk = getAdjustometerPulses();
 
   /* settleAdcFilters() advances mock micros (~2400 us via hal_delay_us),
-   * creating a timing gap that corrupts the first ISR window.
+   * creating a timing gap that corrupts the first capture window.
    * Feed enough extra pulses (16 windows) to flush the gap and let
    * the EMA reconverge to the true frequency. */
   injectFuelTemp(true);
   settleAdcFilters();
-  simulatePulses(4096 + 256, 10000);
+  adj_test_capture_pulses(4096 + 256, 10000);
   int32_t pulseBroken = getAdjustometerPulses();
 
   TEST_ASSERT_INT32_WITHIN(15, 0, pulseOk);
@@ -302,7 +297,7 @@ void test_status_does_not_mutate_fuel_temp_ema(void) {
  */
 void test_signal_loss_consistency_pulses_vs_status(void) {
   lockBaseline(10000);
-  simulatePulses(256, 10000);
+  adj_test_capture_pulses(256, 10000);
 
   /* Signal alive - both should agree */
   TEST_ASSERT_TRUE(getAdjustometerPulses() >= 0);
@@ -323,10 +318,10 @@ void test_feedback_exposes_raw_window_and_status_does_not_sample_adc(void) {
   lockBaseline(10000);
   updateAuxiliarySensors();
   // ADC advances mock time without generating edges; finish that window first.
-  simulatePulses(128, 10000);
+  adj_test_capture_pulses(128, 10000);
   adjustometer_feedback_t before, after;
   TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&before));
-  simulatePulses(128, 8000);
+  adj_test_capture_pulses(128, 8000);
   TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&after));
   TEST_ASSERT_EQUAL_UINT32(before.number + 1U, after.number);
   TEST_ASSERT_EQUAL_UINT32(8000U, after.rawHz);
@@ -343,8 +338,59 @@ void test_feedback_exposes_raw_window_and_status_does_not_sample_adc(void) {
   TEST_ASSERT_BITS_HIGH(ADJ_STATUS_SIGNAL_LOST, after.status);
 }
 
+void test_capture_delayed_drain_preserves_hardware_frequency(void) {
+  uint32_t ticks = hal_micros() * 16U;
+  for (unsigned i = 0; i < 129U; ++i) {
+    ticks += 448U;
+    hal_mock_advance_micros(28U);
+    TEST_ASSERT_EQUAL(HAL_OK, hal_mock_pulse_capture_edge(ticks, hal_micros()));
+  }
+  const uint32_t measured = hal_micros();
+  hal_mock_advance_micros(2000U);
+  updateAdjustometerCapture();
+  adjustometer_feedback_t feedback;
+  TEST_ASSERT_EQUAL(HAL_OK, getAdjustometerFeedback(&feedback));
+  TEST_ASSERT_EQUAL_UINT32(35714U, feedback.rawHz);
+  TEST_ASSERT_EQUAL_UINT32(measured, feedback.measuredUs);
+  TEST_ASSERT_BITS_LOW(ADJ_STATUS_SIGNAL_LOST, feedback.status);
+}
+
+void test_capture_overflow_invalidates_and_recovers_without_rezero(void) {
+  lockBaseline(10000);
+  const uint32_t baseline = getBaseline();
+  hal_mock_pulse_capture_fault(HAL_EOVERFLOW);
+  updateAdjustometerCapture();
+  TEST_ASSERT_BITS_HIGH(ADJ_STATUS_SIGNAL_LOST, getAdjustometerStatus());
+  TEST_ASSERT_EQUAL_INT32(0, getAdjustometerPulses());
+  hal_mock_advance_micros(99999U);
+  updateAdjustometerCapture();
+  TEST_ASSERT_EQUAL(HAL_EUNINIT, hal_mock_pulse_capture_edge(0, hal_micros()));
+  hal_mock_advance_micros(1U);
+  updateAdjustometerCapture();
+  adj_test_capture_pulses(128U, 10000U);
+  TEST_ASSERT_BITS_HIGH(ADJ_STATUS_SIGNAL_LOST, getAdjustometerStatus());
+  adj_test_capture_pulses(1U, 10000U);
+  TEST_ASSERT_BITS_LOW(ADJ_STATUS_SIGNAL_LOST, getAdjustometerStatus());
+  TEST_ASSERT_TRUE(isAdjustometerReady());
+  TEST_ASSERT_EQUAL_UINT32(baseline, getBaseline());
+}
+
+void test_capture_loss_restarts_pending_baseline_verification(void) {
+  adj_test_capture_pulses(4097U, 10000U);
+  TEST_ASSERT_FALSE(isAdjustometerReady());
+  hal_mock_advance_micros(1500000U);
+  updateAdjustometerCapture();
+  adj_test_capture_pulses(256U, 10000U);
+  TEST_ASSERT_FALSE(isAdjustometerReady());
+  lockBaseline(10000U);
+  TEST_ASSERT_TRUE(isAdjustometerReady());
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_capture_loss_restarts_pending_baseline_verification);
+  RUN_TEST(test_capture_delayed_drain_preserves_hardware_frequency);
+  RUN_TEST(test_capture_overflow_invalidates_and_recovers_without_rezero);
   RUN_TEST(test_feedback_exposes_raw_window_and_status_does_not_sample_adc);
   RUN_TEST(test_no_pulses_returns_zero);
   RUN_TEST(test_pulses_before_baseline_returns_zero);

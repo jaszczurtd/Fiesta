@@ -16,7 +16,14 @@ _Static_assert((-1 >> 1) == -1,
                "Arithmetic right-shift required for signed integers");
 #endif
 
-static void countAdjustometerPulses(void);
+static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs);
+static bool captureStarted;
+static uint32_t captureRetryUs;
+static bool captureHealthy;
+static uint32_t captureTicks[4];
+static uint8_t captureIndex, captureFilled;
+static const hal_pulse_capture_config_t captureConfig = {
+    PIO_INTERRUPT_HALL, true, ADJUSTOMETER_SIGNAL_LOSS_MIN_US};
 static void resetSensorsState(void);
 static bool isSignalLost(void);
 
@@ -45,19 +52,16 @@ void initBasicPIO(void) {
 }
 
 /**
- * @brief Reset sensor state and attach the Hall-signal interrupt handler.
+ * @brief Reset sensor state and start hardware period capture.
  * @return None.
  */
 void initSensors(void) {
   resetSensorsState();
   initBasicPIO();
 
-  hal_gpio_attach_interrupt(PIO_INTERRUPT_HALL, countAdjustometerPulses,
-                            HAL_GPIO_IRQ_FALLING);
-
-  // Elevate GPIO IRQ above I2C slave so Hall-sensor edges
-  // are never blocked by I2C transactions - prevents pulse coalescence.
-  hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGHEST);
+  (void)hal_pulse_capture_deinit();
+  captureStarted = hal_pulse_capture_init(&captureConfig) == HAL_OK;
+  captureRetryUs = hal_micros();
 }
 
 static volatile int32_t adjustometerPulse = 0;
@@ -67,15 +71,13 @@ static uint32_t adjustometerRawHz = 0;
 static uint32_t adjustometerMeasuredUs = 0;
 static uint32_t adjustometerSampleSequence = 0;
 static uint32_t auxiliaryTelemetry = 0;
-// ISR-only state can stay non-volatile for tighter generated code.
-static uint32_t adjustometerWindowStartUs = 0;
-static uint32_t adjustometerWindowCount = 0;
+// Processing state belongs to Core0.
 static uint32_t adjustometerFilteredHz = 0;
 static uint32_t adjustometerBaselineStartUs = 0;
 static uint32_t adjustometerBaselineEstimate = 0;
 static uint32_t adjustometerBaselineStableWindows = 0;
 static uint32_t adjustometerBaseline = 0;
-// Cross-core: written by ISR (Core0), read by getters (Core1).
+// Cross-core: written by Core0, read by getters on both cores.
 static volatile bool adjustometerBaselineReady = false;
 // Post-convergence verification state.
 static bool adjustometerVerifying = false;
@@ -83,6 +85,10 @@ static uint32_t adjustometerVerifyStartUs = 0;
 static bool adjustometerZeroHold = true;
 static int8_t adjustometerZeroCandidateSign = 0;
 static uint8_t adjustometerZeroCandidateWindows = 0;
+
+#if ADJUSTOMETER_SLIDING_WINDOW
+static int32_t slidingEmaFraction;
+#endif
 
 // ADC EMA filter state for fuel-temp and supply-voltage readings.
 // Used by Core1 only - no atomics needed.
@@ -126,6 +132,18 @@ static inline uint32_t applyAdjustometerEma(uint32_t rawHz,
     return rawHz;
   }
 
+#if ADJUSTOMETER_SLIDING_WINDOW
+  if (adjustometerBaselineReady) {
+    // 71/1024 approximates 1-(3/4)^(1/4); retain fractional hertz.
+    const int64_t previous = (int64_t)filteredHz * 65536 + slidingEmaFraction;
+    const int64_t next =
+        previous + (((int64_t)rawHz * 65536 - previous) * 71) / 1024;
+    const uint32_t rounded = (uint32_t)((next + 32768) / 65536);
+    slidingEmaFraction = (int32_t)(next - (int64_t)rounded * 65536);
+    return rounded;
+  }
+#endif
+
   // EMA: filtered += (rawHz - filtered) / (2^SHIFT)
   // Guarantee minimum ±1 step when delta != 0 to prevent integer truncation
   // stall (positive delta < 2^SHIFT would otherwise truncate to 0).
@@ -147,168 +165,194 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
   return (a >= b) ? (a - b) : (b - a);
 }
 
-// ISR - intentionally does all frequency computation, baseline calibration,
-// thermal compensation and zero-hold filtering in interrupt context.
-// While best practice favours minimal ISRs, here the design is deliberate:
-//  • Determinism - every 128-pulse window is processed immediately, without
-//    jitter from loop scheduling or competing tasks.
-//  • Responsiveness - the PID feedback value is always up-to-date the moment
-//    Core1 reads it; no deferred work queue or flag polling.
-//  • CPU budget - Core0 has no other duties; voltage and temperature ADC reads
-//    are auxiliary, non-time-critical tasks handled on Core1, so the ISR can
-//    safely use the full Core0 bandwidth.
-/**
- * @brief Process one Hall edge and update filtered pulse/frequency state.
- * @return None.
- */
-static void countAdjustometerPulses(void) {
-  const uint32_t nowUs = hal_micros();
-  __atomic_store_n(&adjustometerLastEdgeUs, nowUs, __ATOMIC_RELEASE);
+/** @brief Update filtering, baseline and zero hysteresis from a complete
+ * window. */
+static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
+  __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_ACQ_REL);
+  __atomic_store_n(&captureHealthy, true, __ATOMIC_RELEASE);
+  __atomic_store_n(&adjustometerRawHz, rawHz, __ATOMIC_RELAXED);
+  __atomic_store_n(&adjustometerMeasuredUs, nowUs, __ATOMIC_RELAXED);
+  uint32_t filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
+  adjustometerFilteredHz = filtered;
+  __atomic_store_n(&adjustometerSignalHz, filtered, __ATOMIC_RELEASE);
 
-  if (adjustometerWindowStartUs == 0U) {
-    adjustometerWindowStartUs = nowUs;
-    adjustometerWindowCount = 0U;
-  }
-
-  adjustometerWindowCount++;
-
-  if (adjustometerWindowCount >= ADJUSTOMETER_PULSE_WINDOW) {
-    __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_ACQ_REL);
-    const uint32_t elapsedUs = nowUs - adjustometerWindowStartUs;
-    if (elapsedUs > 0U) {
-      const uint32_t rawHz =
-          (uint32_t)(((uint64_t)adjustometerWindowCount * US_PER_SECOND +
-                      (elapsedUs / 2U)) /
-                     (uint64_t)elapsedUs);
-      __atomic_store_n(&adjustometerRawHz, rawHz, __ATOMIC_RELAXED);
-      __atomic_store_n(&adjustometerMeasuredUs, nowUs, __ATOMIC_RELAXED);
-      uint32_t filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
-      adjustometerFilteredHz = filtered;
-      __atomic_store_n(&adjustometerSignalHz, filtered, __ATOMIC_RELEASE);
-
-      if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
-        if (!adjustometerVerifying) {
-          // Phase 1: Convergence tracking
-          if (adjustometerBaselineStartUs == 0U) {
-            adjustometerBaselineStartUs = nowUs;
-            adjustometerBaselineEstimate = filtered;
-            adjustometerBaselineStableWindows = 0U;
-          } else {
-            adjustometerBaselineEstimate =
-                adjustometerBaselineEstimate +
-                (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
-                 ADJUSTOMETER_BASELINE_TRACK_SHIFT);
-
-            if (absDiffU32(filtered, adjustometerBaselineEstimate) <=
-                ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ) {
-              adjustometerBaselineStableWindows++;
-            } else {
-              adjustometerBaselineStableWindows = 0U;
-            }
-          }
-
-          const uint32_t baselineElapsedUs =
-              nowUs - adjustometerBaselineStartUs;
-          const bool minTimeReached =
-              (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MIN_TIME_US);
-          const bool maxTimeReached =
-              (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MAX_TIME_US);
-          const bool baselineConverged =
-              minTimeReached && (adjustometerBaselineStableWindows >=
-                                 ADJUSTOMETER_BASELINE_LOCK_WINDOWS);
-
-          if (baselineConverged || maxTimeReached) {
-            // Convergence succeeded - enter verification phase
-            __atomic_store_n(&adjustometerBaseline,
-                             adjustometerBaselineEstimate, __ATOMIC_RELEASE);
-            adjustometerFilteredHz = adjustometerBaselineEstimate;
-            __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
-                             __ATOMIC_RELEASE);
-            adjustometerVerifying = true;
-            adjustometerVerifyStartUs = nowUs;
-          }
-        } else {
-          // Phase 2: Post-convergence verification
-          // Detect slow oscillator drift invisible to the fast convergence
-          // window.
-          const uint32_t currentBaseline =
-              __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
-          const uint32_t drift = absDiffU32(filtered, currentBaseline);
-          if (drift > ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ) {
-            // Oscillator still settling - restart convergence from scratch
-            adjustometerVerifying = false;
-            adjustometerBaselineStartUs = nowUs;
-            adjustometerBaselineEstimate = filtered;
-            adjustometerFilteredHz = filtered;
-            adjustometerBaselineStableWindows = 0U;
-          } else if ((nowUs - adjustometerVerifyStartUs) >=
-                     ADJUSTOMETER_BASELINE_VERIFY_US) {
-            // Verification passed - finalise baseline
-            __atomic_store_n(&adjustometerBaseline,
-                             adjustometerBaselineEstimate, __ATOMIC_RELEASE);
-            adjustometerFilteredHz = adjustometerBaselineEstimate;
-            __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
-                             __ATOMIC_RELEASE);
-            adjustometerPulse = 0;
-            adjustometerZeroHold = true;
-            adjustometerZeroCandidateSign = 0;
-            adjustometerZeroCandidateWindows = 0U;
-            __atomic_store_n(&adjustometerBaselineReady, true,
-                             __ATOMIC_RELEASE);
-          } else {
-            // Still verifying - keep EMA-tracking so final baseline is accurate
-            adjustometerBaselineEstimate =
-                adjustometerBaselineEstimate +
-                (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
-                 ADJUSTOMETER_BASELINE_TRACK_SHIFT);
-          }
-        }
-        __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
+  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
+    if (!adjustometerVerifying) {
+      // Phase 1: Convergence tracking
+      if (adjustometerBaselineStartUs == 0U) {
+        adjustometerBaselineStartUs = nowUs;
+        adjustometerBaselineEstimate = filtered;
+        adjustometerBaselineStableWindows = 0U;
       } else {
-        const uint32_t currentBaseline =
-            __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
-        int32_t pulse = (int32_t)filtered - (int32_t)currentBaseline;
+        adjustometerBaselineEstimate =
+            adjustometerBaselineEstimate +
+            (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
+             ADJUSTOMETER_BASELINE_TRACK_SHIFT);
 
-        const int32_t absPulse = absI32(pulse);
-
-        if (absPulse <= (int32_t)ADJUSTOMETER_ZERO_HOLD_ENTER_HZ) {
-          pulse = 0;
-          adjustometerZeroHold = true;
-          adjustometerZeroCandidateSign = 0;
-          adjustometerZeroCandidateWindows = 0U;
-        } else if (adjustometerZeroHold) {
-          if (absPulse < (int32_t)ADJUSTOMETER_ZERO_HOLD_EXIT_HZ) {
-            pulse = 0;
-            adjustometerZeroCandidateSign = 0;
-            adjustometerZeroCandidateWindows = 0U;
-          } else {
-            const int8_t pulseSign = (pulse > 0) ? 1 : -1;
-            if (pulseSign == adjustometerZeroCandidateSign) {
-              if (adjustometerZeroCandidateWindows < 255U) {
-                adjustometerZeroCandidateWindows++;
-              }
-            } else {
-              adjustometerZeroCandidateSign = pulseSign;
-              adjustometerZeroCandidateWindows = 1U;
-            }
-
-            if (adjustometerZeroCandidateWindows <
-                ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS) {
-              pulse = 0;
-            } else {
-              adjustometerZeroHold = false;
-              adjustometerZeroCandidateSign = 0;
-              adjustometerZeroCandidateWindows = 0U;
-            }
-          }
+        if (absDiffU32(filtered, adjustometerBaselineEstimate) <=
+            ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ) {
+          adjustometerBaselineStableWindows++;
+        } else {
+          adjustometerBaselineStableWindows = 0U;
         }
+      }
 
-        __atomic_store_n(&adjustometerPulse, pulse, __ATOMIC_RELEASE);
+      const uint32_t baselineElapsedUs = nowUs - adjustometerBaselineStartUs;
+      const bool minTimeReached =
+          (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MIN_TIME_US);
+      const bool maxTimeReached =
+          (baselineElapsedUs >= ADJUSTOMETER_BASELINE_MAX_TIME_US);
+      const bool baselineConverged =
+          minTimeReached && (adjustometerBaselineStableWindows >=
+                             ADJUSTOMETER_BASELINE_LOCK_WINDOWS);
+
+      if (baselineConverged || maxTimeReached) {
+        // Convergence succeeded - enter verification phase
+        __atomic_store_n(&adjustometerBaseline, adjustometerBaselineEstimate,
+                         __ATOMIC_RELEASE);
+        adjustometerFilteredHz = adjustometerBaselineEstimate;
+        __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
+                         __ATOMIC_RELEASE);
+        adjustometerVerifying = true;
+        adjustometerVerifyStartUs = nowUs;
+      }
+    } else {
+      // Phase 2: Post-convergence verification
+      // Detect slow oscillator drift invisible to the fast convergence
+      // window.
+      const uint32_t currentBaseline =
+          __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+      const uint32_t drift = absDiffU32(filtered, currentBaseline);
+      if (drift > ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ) {
+        // Oscillator still settling - restart convergence from scratch
+        adjustometerVerifying = false;
+        adjustometerBaselineStartUs = nowUs;
+        adjustometerBaselineEstimate = filtered;
+        adjustometerFilteredHz = filtered;
+        adjustometerBaselineStableWindows = 0U;
+      } else if ((nowUs - adjustometerVerifyStartUs) >=
+                 ADJUSTOMETER_BASELINE_VERIFY_US) {
+        // Verification passed - finalise baseline
+        __atomic_store_n(&adjustometerBaseline, adjustometerBaselineEstimate,
+                         __ATOMIC_RELEASE);
+        adjustometerFilteredHz = adjustometerBaselineEstimate;
+        __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
+                         __ATOMIC_RELEASE);
+        adjustometerPulse = 0;
+        adjustometerZeroHold = true;
+        adjustometerZeroCandidateSign = 0;
+        adjustometerZeroCandidateWindows = 0U;
+        __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
+      } else {
+        // Still verifying - keep EMA-tracking so final baseline is accurate
+        adjustometerBaselineEstimate =
+            adjustometerBaselineEstimate +
+            (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
+             ADJUSTOMETER_BASELINE_TRACK_SHIFT);
       }
     }
-    adjustometerWindowStartUs = nowUs;
-    adjustometerWindowCount = 0U;
-    __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_RELEASE);
+    __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
+  } else {
+    const uint32_t currentBaseline =
+        __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+    int32_t pulse = (int32_t)filtered - (int32_t)currentBaseline;
+
+    const int32_t absPulse = absI32(pulse);
+
+    if (absPulse <= (int32_t)ADJUSTOMETER_ZERO_HOLD_ENTER_HZ) {
+      pulse = 0;
+      adjustometerZeroHold = true;
+      adjustometerZeroCandidateSign = 0;
+      adjustometerZeroCandidateWindows = 0U;
+    } else if (adjustometerZeroHold) {
+      if (absPulse < (int32_t)ADJUSTOMETER_ZERO_HOLD_EXIT_HZ) {
+        pulse = 0;
+        adjustometerZeroCandidateSign = 0;
+        adjustometerZeroCandidateWindows = 0U;
+      } else {
+        const int8_t pulseSign = (pulse > 0) ? 1 : -1;
+        if (pulseSign == adjustometerZeroCandidateSign) {
+          if (adjustometerZeroCandidateWindows < 255U) {
+            adjustometerZeroCandidateWindows++;
+          }
+        } else {
+          adjustometerZeroCandidateSign = pulseSign;
+          adjustometerZeroCandidateWindows = 1U;
+        }
+
+        if (adjustometerZeroCandidateWindows <
+            ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS *
+                (ADJUSTOMETER_SLIDING_WINDOW ? 4U : 1U)) {
+          pulse = 0;
+        } else {
+          adjustometerZeroHold = false;
+          adjustometerZeroCandidateSign = 0;
+          adjustometerZeroCandidateWindows = 0U;
+        }
+      }
+    }
+
+    __atomic_store_n(&adjustometerPulse, pulse, __ATOMIC_RELEASE);
+  }
+  __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_RELEASE);
+}
+
+/** @brief Discard an incomplete window after capture loss. */
+static void discardCaptureWindow(void) {
+  captureIndex = 0U;
+  captureFilled = 0U;
+  __atomic_store_n(&captureHealthy, false, __ATOMIC_RELEASE);
+  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
+    adjustometerBaselineStartUs = 0U;
+    adjustometerBaselineStableWindows = 0U;
+    adjustometerVerifying = false;
+  }
+}
+
+void updateAdjustometerCapture(void) {
+  if (!captureStarted) {
+    const uint32_t nowUs = hal_micros();
+    if (!hal_elapsed_u32(nowUs, captureRetryUs, 100000U))
+      return;
+    captureRetryUs = nowUs;
+    captureStarted = hal_pulse_capture_deinit() == HAL_OK &&
+                     hal_pulse_capture_init(&captureConfig) == HAL_OK;
+    return;
+  }
+  for (unsigned int block = 0U; block < 64U; ++block) {
+    hal_pulse_capture_sample_t sample;
+    const hal_status_t status = hal_pulse_capture_read(&sample);
+    if (status == HAL_EAGAIN)
+      return;
+    if (status != HAL_OK) {
+      discardCaptureWindow();
+      if (status == HAL_ETIMEOUT)
+        return;
+      (void)hal_pulse_capture_deinit();
+      captureStarted = false;
+      captureRetryUs = hal_micros();
+      return;
+    }
+    __atomic_store_n(&adjustometerLastEdgeUs, sample.measured_us,
+                     __ATOMIC_RELEASE);
+    captureTicks[captureIndex] = sample.ticks;
+    captureIndex = (uint8_t)((captureIndex + 1U) % COUNTOF(captureTicks));
+    if (captureFilled < COUNTOF(captureTicks))
+      ++captureFilled;
+    if (captureFilled < COUNTOF(captureTicks))
+      continue;
+    uint64_t ticks = 0U;
+    for (size_t i = 0U; i < COUNTOF(captureTicks); ++i)
+      ticks += captureTicks[i];
+    const uint32_t rawHz =
+        (uint32_t)(((uint64_t)ADJUSTOMETER_PULSE_WINDOW * sample.clock_hz +
+                    ticks / 2U) /
+                   ticks);
+    processAdjustometerFrequency(rawHz, sample.measured_us);
+    if (!ADJUSTOMETER_SLIDING_WINDOW || !adjustometerBaselineReady) {
+      captureIndex = 0U;
+      captureFilled = 0U;
+    }
   }
 }
 
@@ -319,7 +363,7 @@ static void countAdjustometerPulses(void) {
 static bool isSignalLost(void) {
   const uint32_t lastEdgeUs =
       __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
-  if (lastEdgeUs == 0U) {
+  if (!__atomic_load_n(&captureHealthy, __ATOMIC_ACQUIRE)) {
     return true;
   }
 
@@ -425,8 +469,8 @@ static void resetSensorsState(void) {
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
-  adjustometerWindowStartUs = 0;
-  adjustometerWindowCount = 0;
+  captureIndex = captureFilled = 0U;
+  __atomic_store_n(&captureHealthy, false, __ATOMIC_RELEASE);
   adjustometerFilteredHz = 0;
   adjustometerBaselineStartUs = 0;
   adjustometerBaselineEstimate = 0;
@@ -438,6 +482,9 @@ static void resetSensorsState(void) {
   adjustometerZeroHold = true;
   adjustometerZeroCandidateSign = 0;
   adjustometerZeroCandidateWindows = 0;
+#if ADJUSTOMETER_SLIDING_WINDOW
+  slidingEmaFraction = 0;
+#endif
   filteredFuelTemp = -1.0f;
   filteredVoltage = -1.0f;
 }

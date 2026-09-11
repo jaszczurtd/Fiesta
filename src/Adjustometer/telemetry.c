@@ -11,23 +11,18 @@ _Static_assert(ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES <=
                "Adjustometer feedback exceeds register map");
 #endif
 
-/* Invalidate the trailer first: a reader that already read the old header
- * must reject any payload changed by this publication. Each block has one
- * writer. */
-static void publishSequencedRegisters(uint8_t start, const uint8_t *frame,
+/* Each block has one writer; the HAL freezes complete publications for I2C. */
+static void publishSequencedRegisters(uint8_t start, uint8_t *frame,
                                       uint8_t count, uint8_t *sequence) {
   const uint8_t next = (uint8_t)((*sequence + 2U) & 0xFEU);
-  const uint8_t last = (uint8_t)(start + count - 1U);
-  hal_i2c_slave_reg_write8(last, (uint8_t)(next | 1U));
-  hal_i2c_slave_reg_write8((uint8_t)(start + 1U), (uint8_t)(next | 1U));
-  for (uint8_t i = 0U; i < count - 1U; i++) {
-    if (i != 1U) {
-      hal_i2c_slave_reg_write8((uint8_t)(start + i), frame[i]);
-    }
+  frame[1] = next;
+  frame[count - 1U] = next;
+  const hal_status_t status =
+      hal_i2c_slave_reg_write_block(start, frame, count);
+  HAL_ASSERT(status == HAL_OK, "Adjustometer publication exceeds register map");
+  if (status == HAL_OK) {
+    *sequence = next;
   }
-  hal_i2c_slave_reg_write8((uint8_t)(start + 1U), next);
-  hal_i2c_slave_reg_write8(last, next);
-  *sequence = next;
 }
 
 void publishAdjustometerFeedback(const adjustometer_feedback_t *sample) {

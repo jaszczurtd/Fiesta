@@ -25,6 +25,11 @@ serial output runs outside the controller mutex. See the
 [Adjustometer README](../Adjustometer/README.md) for the measurement path, and
 the shared [I2C register map](../common/adjustometer_protocol.h).
 
+Bench builds can override `VP37_PWM_FREQUENCY_HZ` and `CYCLIC_DELAYTIME`
+through compile definitions. Their VP37 defaults remain 200 Hz and 12 ms;
+`START_TEST_VP37_MODE=1` selects cyclic tests. Hold deadlines still include
+the setpoint ramp.
+
 ## Persistent data and GPS
 
 ECU reserves 32 KiB of flash-backed EEPROM. The KV region begins at byte 4096

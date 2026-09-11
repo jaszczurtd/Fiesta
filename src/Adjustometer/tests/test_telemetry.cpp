@@ -1,84 +1,115 @@
 #include "hal/i2c/hal_i2c_slave.h"
+#include "hal/impl/.mock/hal_mock.h"
 #include "telemetry.h"
 #include "utils/unity.h"
 #include <cstring>
 
-struct RegisterWrite {
-  uint8_t reg, value;
-};
-static RegisterWrite writes[96];
-static size_t writeCount;
-static void recordWrite(uint8_t reg, uint8_t value) {
-  TEST_ASSERT_LESS_THAN_UINT32(COUNTOF(writes), writeCount);
-  writes[writeCount++] = {reg, value};
-}
-
-// Exercise the production publisher with individually scheduled register
-// stores.
-#define hal_i2c_slave_reg_write8 recordWrite
 #include "../telemetry.c"
-#undef hal_i2c_slave_reg_write8
 
-void setUp(void) { writeCount = 0U; }
-void tearDown(void) {}
+static adjustometer_feedback_t nextSample;
+static uint8_t updateAfter;
 
-static void applyWrite(uint8_t *map, const RegisterWrite &write) {
-  map[write.reg] = write.value;
+void setUp(void) {
+  hal_mock_i2c_slave_set_read_hook(nullptr);
+  hal_i2c_slave_init(4, 5, 0x57);
+}
+void tearDown(void) { hal_mock_i2c_slave_set_read_hook(nullptr); }
+
+static adjustometer_feedback_t makeSample(uint32_t number) {
+  adjustometer_feedback_t sample = {};
+  sample.pulseHz = (int16_t)(8100U + number);
+  sample.rawHz = 31000U + number;
+  sample.filteredHz = 30000U + number;
+  sample.baselineHz = 29000U + number;
+  sample.number = number;
+  sample.measuredUs = 100000U + number * 1000U;
+  sample.ageUs = 150U;
+  sample.voltage = 140U;
+  sample.fuelTemp = 28U;
+  return sample;
 }
 
-void test_reader_never_accepts_a_partially_published_feedback_frame(void) {
-  adjustometer_feedback_t oldSample = {};
-  oldSample.pulseHz = 8191;
-  oldSample.rawHz = 31000;
-  oldSample.filteredHz = 30000;
-  oldSample.number = 25;
-  oldSample.measuredUs = 100000;
-  uint8_t oldMap[HAL_I2C_SLAVE_REG_MAP_SIZE] = {};
-  publishAdjustometerFeedback(&oldSample);
-  for (size_t i = 0; i < writeCount; i++) {
-    applyWrite(oldMap, writes[i]);
+static void publishDuringRead(uint8_t bus, uint8_t reg) {
+  TEST_ASSERT_EQUAL_UINT8(0U, bus);
+  if (reg == updateAfter) {
+    publishAdjustometerFeedback(&nextSample);
+    publishAdjustometerExtension(&nextSample, 350);
   }
-  adjustometer_feedback_t newSample = oldSample;
-  newSample.pulseHz = 8192;
-  newSample.rawHz = 28000;
-  newSample.filteredHz = 29000;
-  newSample.number++;
-  newSample.measuredUs += 4000;
-  writeCount = 0;
-  publishAdjustometerFeedback(&newSample);
-  uint8_t newMap[HAL_I2C_SLAVE_REG_MAP_SIZE];
-  memcpy(newMap, oldMap, sizeof(newMap));
-  for (size_t i = 0; i < writeCount; i++) {
-    applyWrite(newMap, writes[i]);
+}
+
+static void readFeedback(uint8_t *frame) {
+  const uint8_t start = ADJUSTOMETER_FEEDBACK_START;
+  hal_mock_i2c_slave_simulate_receive(&start, 1);
+  TEST_ASSERT_EQUAL_INT(
+      ADJUSTOMETER_FEEDBACK_BYTES,
+      hal_mock_i2c_slave_simulate_request(frame, ADJUSTOMETER_FEEDBACK_BYTES));
+}
+
+static void assertSample(const adjustometer_feedback_t *sample,
+                         const uint8_t *frame) {
+  adjustometer_feedback_t decoded;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, adjustometer_feedback_decode(frame, &decoded));
+  uint8_t expected[ADJUSTOMETER_FEEDBACK_BYTES];
+  adjustometer_feedback_encode(expected, sample, frame[1]);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, frame, COUNTOF(expected));
+}
+
+void test_reader_gets_one_publication_at_every_byte_boundary(void) {
+  const adjustometer_feedback_t oldSample = makeSample(25U);
+  nextSample = makeSample(26U);
+  for (uint8_t split = 0U; split < ADJUSTOMETER_FEEDBACK_BYTES; ++split) {
+    publishAdjustometerFeedback(&oldSample);
+    updateAfter = (uint8_t)(ADJUSTOMETER_FEEDBACK_START + split);
+    hal_mock_i2c_slave_set_read_hook(publishDuringRead);
+    uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
+    readFeedback(frame);
+    assertSample(&oldSample, frame);
+    hal_mock_i2c_slave_set_read_hook(nullptr);
+    readFeedback(frame);
+    assertSample(&nextSample, frame);
   }
-  for (size_t readPrefix = 0; readPrefix <= ADJUSTOMETER_FEEDBACK_BYTES;
-       readPrefix++) {
-    for (size_t writePrefix = 0; writePrefix <= writeCount; writePrefix++) {
-      uint8_t map[HAL_I2C_SLAVE_REG_MAP_SIZE];
-      uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
-      memcpy(map, oldMap, sizeof(map));
-      memcpy(frame, map + ADJUSTOMETER_FEEDBACK_START, readPrefix);
-      for (size_t i = 0; i < writePrefix; i++) {
-        applyWrite(map, writes[i]);
-      }
-      memcpy(frame + readPrefix, map + ADJUSTOMETER_FEEDBACK_START + readPrefix,
-             COUNTOF(frame) - readPrefix);
-      adjustometer_feedback_t decoded;
-      if (adjustometer_feedback_decode(frame, &decoded) == HAL_OK) {
-        const bool isOld =
-            memcmp(frame + 2, oldMap + ADJUSTOMETER_FEEDBACK_START + 2,
-                   ADJUSTOMETER_FEEDBACK_BYTES - 3U) == 0;
-        const bool isNew =
-            memcmp(frame + 2, newMap + ADJUSTOMETER_FEEDBACK_START + 2,
-                   ADJUSTOMETER_FEEDBACK_BYTES - 3U) == 0;
-        TEST_ASSERT_TRUE(isOld || isNew);
-      }
+}
+
+void test_complete_frames_remain_valid_across_sequence_wrap(void) {
+  uint8_t previous = 0U;
+  for (uint32_t number = 0U; number < 140U; ++number) {
+    const adjustometer_feedback_t sample = makeSample(number);
+    publishAdjustometerFeedback(&sample);
+    uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
+    readFeedback(frame);
+    assertSample(&sample, frame);
+    if (number != 0U) {
+      TEST_ASSERT_EQUAL_UINT8((uint8_t)(previous + 2U), frame[1]);
     }
+    previous = frame[1];
   }
+}
+
+void test_publisher_keeps_legacy_and_extension_registers(void) {
+  const adjustometer_feedback_t sample = makeSample(25U);
+  publishAdjustometerFeedback(&sample);
+  publishAdjustometerExtension(&sample, 350);
+  TEST_ASSERT_EQUAL_UINT16((uint16_t)sample.pulseHz,
+                           hal_i2c_slave_reg_read16(ADJUSTOMETER_REG_PULSE_HI));
+  TEST_ASSERT_EQUAL_UINT8(sample.voltage,
+                          hal_i2c_slave_reg_read8(ADJUSTOMETER_REG_VOLTAGE));
+  const uint8_t start = ADJUSTOMETER_EXT_REG_START;
+  uint8_t frame[ADJUSTOMETER_EXT_REG_COUNT];
+  hal_mock_i2c_slave_simulate_receive(&start, 1);
+  TEST_ASSERT_EQUAL_INT(COUNTOF(frame), hal_mock_i2c_slave_simulate_request(
+                                            frame, COUNTOF(frame)));
+  TEST_ASSERT_EQUAL_UINT8(ADJUSTOMETER_EXT_VERSION, frame[0]);
+  TEST_ASSERT_EQUAL_UINT8(0U, frame[1] & 1U);
+  TEST_ASSERT_EQUAL_UINT8(frame[1], frame[COUNTOF(frame) - 1U]);
+  TEST_ASSERT_EQUAL_UINT32(sample.filteredHz, jh_load_be32(frame + 3));
+  TEST_ASSERT_EQUAL_UINT32(sample.baselineHz, jh_load_be32(frame + 7));
+  TEST_ASSERT_EQUAL_UINT16(350U, jh_load_be16(frame + 15));
 }
 
 int main(void) {
   UNITY_BEGIN();
-  RUN_TEST(test_reader_never_accepts_a_partially_published_feedback_frame);
+  RUN_TEST(test_reader_gets_one_publication_at_every_byte_boundary);
+  RUN_TEST(test_complete_frames_remain_valid_across_sequence_wrap);
+  RUN_TEST(test_publisher_keeps_legacy_and_extension_registers);
   return UNITY_END();
 }

@@ -30,7 +30,9 @@ extern "C" {
 #endif
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifndef CYCLIC_DELAYTIME
 #define CYCLIC_DELAYTIME 12
+#endif
 // Hold deadlines include setpoint slew; expiry selects zero demand.
 #define VP37_BENCH_HOLD_MS 2000U
 #define VP37_BENCH_HIGH_HOLD_MS 1000U

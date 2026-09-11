@@ -54,15 +54,23 @@ static void runCore0(void) {
     return;
   }
 
+  updateAdjustometerCapture();
+
   static uint32_t lastNumber = UINT32_MAX;
   static uint32_t lastPublishMs = 0U;
+  static uint8_t lastStatus = UINT8_MAX;
   adjustometer_feedback_t sample;
+  const uint32_t nowMs = hal_millis();
   if (getAdjustometerFeedback(&sample) == HAL_OK &&
-      (sample.number != lastNumber ||
-       hal_elapsed_u32(hal_millis(), lastPublishMs, 5U))) {
+      (sample.status != lastStatus ||
+       ((sample.number != lastNumber ||
+         hal_elapsed_u32(nowMs, lastPublishMs, 5U)) &&
+        hal_elapsed_u32(nowMs, lastPublishMs,
+                        ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS)))) {
     publishAdjustometerFeedback(&sample);
     lastNumber = sample.number;
-    lastPublishMs = hal_millis();
+    lastPublishMs = nowMs;
+    lastStatus = sample.status;
   }
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);

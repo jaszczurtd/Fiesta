@@ -7,10 +7,21 @@ na częstotliwości przez I2C.
 
 Cewki czujnika pompy są elementem rezonansowym zmodyfikowanego generatora
 Hartleya. Częstotliwość zmienia się w przybliżeniu w zakresie 22-37 kHz wraz
-z położeniem nastawnika. RP2040 zlicza opadające zbocza GPIO, mierzy częstotliwość
-co 128 impulsów i stosuje całkowitoliczbowy filtr EMA. Wartość `PULSE` jest
+z położeniem nastawnika. Sprzętowy pomiar okresów w JaszczurHAL dostarcza bloki
+32 pełnych okresów. Adjustometer składa cztery bloki w okno 128 okresów i stosuje
+całkowitoliczbowy filtr EMA. RP2040 zapisuje znaczniki czasu przez PIO i DMA,
+bez przerwania GPIO na każde zbocze. Wartość `PULSE` jest
 modułem odchylenia filtrowanej częstotliwości od ustalonego zera, z histerezą
 w pobliżu zera. Kalibracja położenia i kompensacja sterowania należą do ECU.
+
+Eksperymentalna definicja kompilacji `ADJUSTOMETER_SLIDING_WINDOW=1` zachowuje
+128 okresów w pomiarze i odświeża wynik co 32 okresy po ustaleniu baseline.
+EMA przechowuje ułamki herca i używa wagi 71/1024, aby przybliżyć dotychczasową
+stałą czasową; wyjście z zera wymaga ośmiu krótkich aktualizacji. Ustalanie
+baseline zachowuje pierwotne tempo. Domyślnie okna nadal są rozłączne.
+`ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` pozwala ustalić minimalny odstęp
+publikacji I2C; domyślnie wynosi zero, a zmiany statusu są publikowane od razu.
+Snapshot w HAL zapewnia spójność odczytu I2C podczas publikacji nowych pomiarów.
 
 Układ wykorzystuje ideę pomiaru rezonansowego znaną z VP37/EDC15, z zewnętrznym
 RP2040 i cyfrowym I2C. Nie odwzorowuje elektroniki OEM ani nie podaje dawki
@@ -30,7 +41,11 @@ dopiero po uzyskaniu gotowości czujnika.
 
 Zero hold włącza się w granicach 40 Hz, a zwalnia po przekroczeniu 50 Hz przez
 dwa kolejne okna o tym samym znaku. Utrata sygnału jest wykrywana po trzech
-okresach filtrowanej częstotliwości, z ograniczeniem do 10-200 ms. Wtedy pulse
+okresach filtrowanej częstotliwości od ostatniego pełnego bloku capture,
+z ograniczeniem do 10-200 ms. Błąd capture odrzuca niepełne okno i unieważnia
+pomiar; po przepełnieniu lub błędzie peryferium pomiar uruchamia się ponownie
+po 100 ms. Ustalony baseline zostaje zachowany; przerwana weryfikacja
+podczas startu rozpoczyna się ponownie. Przy utracie sygnału pulse
 wynosi zero i ustawiany jest `SIGNAL_LOST`; odbiorca musi sprawdzać status
 oraz aktualność pomiaru.
 
@@ -41,7 +56,9 @@ obowiązuje wtedy ta sama kolejność.
 
 ## I2C i czujniki pomocnicze
 
-Adres slave to `0x57`; ECU używa 400 kHz. Wspólne definicje znajdują się w
+Adres slave to `0x57`; ECU używa 400 kHz. Bloki feedbacku i diagnostyki są
+publikowane atomowo. `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` utrwala mapę na czas
+odczytu; znaczniki sekwencji i kontrola świeżości w ECU pozostają aktywne. Wspólne definicje znajdują się w
 [adjustometer_protocol.h](../common/adjustometer_protocol.h).
 
 | Rejestry | Przeznaczenie |
@@ -68,7 +85,7 @@ z trzema poprawnymi pomiarami. Ta próbka jest niezależna od odczytu regulatora
 
 ## Podział rdzeni i LED
 
-Core 0 inicjalizuje czujniki, obsługuje przerwania Hall i publikuje szybkie dane
+Core 0 inicjalizuje czujniki, odbiera dane capture co 1 ms i publikuje szybkie dane
 oraz ich kopię w pierwotnych rejestrach. Core 1 odczytuje ADC co 10 ms, publikuje
 rozszerzenie diagnostyczne, obsługuje LED i USB. Temperaturę układu i logi
 odświeża co 250 ms. Zapis USB ma zerowy timeout i może pomijać tekst, jeśli host

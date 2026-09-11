@@ -8,6 +8,23 @@
 #define CORE_OPERATION_DELAY 1
 #define ADJUSTOMETER_EXT_UPDATE_MS 10U
 
+// Minimum spacing of fast I2C publications; status changes bypass this limit.
+#ifndef ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS
+#define ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS 0U
+#endif
+#if ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS < 0 ||                                \
+    ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS > 5
+#error "ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS must be in 0..5 ms"
+#endif
+
+// Experimental feedback: retain 128 periods, update every 32 after baseline.
+#ifndef ADJUSTOMETER_SLIDING_WINDOW
+#define ADJUSTOMETER_SLIDING_WINDOW 0
+#endif
+#if ADJUSTOMETER_SLIDING_WINDOW != 0 && ADJUSTOMETER_SLIDING_WINDOW != 1
+#error "ADJUSTOMETER_SLIDING_WINDOW must be 0 or 1"
+#endif
+
 #define DEBUG_DEEP 1
 
 // Oscillator warm-up time after cold power-on [ms].
