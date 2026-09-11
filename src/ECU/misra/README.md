@@ -53,17 +53,21 @@ Process rules:
 - Keep `deviation-register.md` synchronized with `suppressions.txt`.
 - Treat this runner as evidence support for the ECU MISRA migration, not as proof of compliance on its own.
 
-Latest snapshot (2026-07-10, cppcheck 2.13.0, no licensed rule texts):
+Latest snapshot (2026-09-11, cppcheck 2.13.0, no licensed rule texts):
 
-- active findings: `1026` across `33` rule IDs,
+- active findings: `1257` across `32` rule IDs,
+- `src/ECU` 1027, shared `src/common` sources 230,
 - top open buckets:
-  - `misra-c2012-15.5`: `250`,
-  - `misra-c2012-2.5`: `169`,
+  - `misra-c2012-15.5`: `330`,
+  - `misra-c2012-2.5`: `197`,
+  - `misra-c2012-12.1`: `154`,
   - `misra-c2012-8.4`: `118`,
-  - `misra-c2012-10.4`: `108`,
-  - `misra-c2012-12.1`: `82`.
+  - `misra-c2012-10.4`: `106`.
 
-The previous recorded snapshot (2026-04-21) was `787` findings across `25`
-rule IDs. It is not directly comparable as a quality trend because the scanned
-source/include surface changed. Preserve generated summaries when making future
-like-for-like comparisons.
+This is the first run in which the scan sees the same opt-in HAL modules as the
+firmware build: the runner forces `hal_project_config.h` into every translation
+unit, because cppcheck resolves neither the build system's generated `-D` flags
+nor the `__has_include` hook in the HAL headers. Earlier snapshots (`1262` on
+2026-09-09, `1026` on 2026-07-10, `787` on 2026-04-21) screened a reduced ECU
+with every opt-in module switched off and are not comparable. Preserve generated
+summaries when making future like-for-like comparisons.

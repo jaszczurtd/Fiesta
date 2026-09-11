@@ -155,6 +155,20 @@ define_args=(
     -DSERIAL_8N1=6
 )
 
+# The build system reads hal_project_config.h and turns its HAL_ENABLE_* lines
+# into -D flags, while HAL headers pull the same file in through an
+# __has_include hook. cppcheck resolves neither, so without a forced include
+# every opt-in module is invisible: HAL declarations disappear behind their
+# #ifdef guards, calls to them are reported as implicit declarations, and the
+# EEPROM layout guard in dtcManager.c fires and aborts that file.
+project_config="$project_root/hal_project_config.h"
+config_args=()
+if [[ -f "$project_config" ]]; then
+    config_args=(--include="$project_config")
+else
+    echo "Warning: $project_config not found; HAL feature flags stay invisible to the scan." >&2
+fi
+
 pushd "$project_root" >/dev/null
 
 set +e
@@ -167,6 +181,7 @@ set +e
     --inline-suppr \
     "${include_args[@]}" \
     "${define_args[@]}" \
+    "${config_args[@]}" \
     "${suppressions_args[@]}" \
     --suppress=missingInclude \
     --suppress=missingIncludeSystem \
