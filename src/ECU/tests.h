@@ -15,7 +15,7 @@ extern "C" {
 // bench. A build definition can override the local selection without editing
 // this file.
 #ifndef START_TEST_VP37_MODE
-#define START_TEST_VP37_MODE 0
+#define START_TEST_VP37_MODE 1
 #endif
 #if START_TEST_VP37_MODE == 1
 #define START_TEST_ENABLE_VP37_CYCLIC
@@ -30,8 +30,21 @@ extern "C" {
 #endif
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
-#ifndef CYCLIC_DELAYTIME
-#define CYCLIC_DELAYTIME 12
+#ifndef CYCLIC_DELAYTIME_A
+#define CYCLIC_DELAYTIME_A 4
+#endif
+#ifndef CYCLIC_DELAYTIME_B
+#define CYCLIC_DELAYTIME_B 6
+#endif
+#ifndef CYCLIC_DELAYTIME_C
+#define CYCLIC_DELAYTIME_C 12
+#endif
+#ifndef CYCLIC_DELAYTIME_D
+// 2 ms requests 500 %/s, beyond the normal demand slew limit: stress test.
+#define CYCLIC_DELAYTIME_D 2
+#endif
+#ifndef CYCLIC_FULL_CYCLES
+#define CYCLIC_FULL_CYCLES 6
 #endif
 // Hold deadlines include setpoint slew; expiry selects zero demand.
 #define VP37_BENCH_HOLD_MS 2000U
@@ -51,6 +64,11 @@ typedef struct {
   uint8_t cmdLen;
 } CyclicTest;
 
+#endif
+
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+/** @brief Return the active deterministic cyclic-test step delay. */
+uint32_t getCurrentVP37CyclicDelayMs(void);
 #endif
 
 /**

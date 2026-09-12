@@ -28,7 +28,8 @@ void watchdog_feed(void) {}
 static char s_lastForwardedLine[128] = {0};
 static unsigned s_forwardedCount = 0;
 
-extern "C" void tickTestsHandleSerialLine(const char *line) {
+extern "C" __attribute__((weak)) void
+tickTestsHandleSerialLine(const char *line) {
   s_forwardedCount++;
   if (line == nullptr) {
     s_lastForwardedLine[0] = '\0';

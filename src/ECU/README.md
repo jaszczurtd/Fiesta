@@ -19,16 +19,27 @@ This model does not correct oscillator frequency or sensor baseline.
 Failed communication holds PID briefly and stops drive after 20 ms;
 invalid position status stops it immediately.
 
+Supply-voltage compensation uses the Adjustometer reading. Its 1 s steady-state
+filter suppresses quantization and bench-supply ripple. A drop larger than
+0.5 V uses a 20 ms path, while a large voltage recovery immediately limits the
+filtered lag to less than 0.1 V. Trace output records measured voltage as `V`
+and compensation voltage as `Vc`.
+
 The control loop uses an explicit period and elapsed seconds. Diagnostic
 snapshots contain individual P/I/D terms and the effective correction limits;
 serial output runs outside the controller mutex. See the
 [Adjustometer README](../Adjustometer/README.md) for the measurement path, and
 the shared [I2C register map](../common/adjustometer_protocol.h).
 
-Bench builds can override `VP37_PWM_FREQUENCY_HZ` and `CYCLIC_DELAYTIME`
-through compile definitions. Their VP37 defaults remain 200 Hz and 12 ms;
-`START_TEST_VP37_MODE=1` selects cyclic tests. Hold deadlines still include
-the setpoint ramp.
+Bench builds can override `VP37_PWM_FREQUENCY_HZ` and the four
+`CYCLIC_DELAYTIME_*` values through compile definitions. Their VP37 defaults
+are 200 Hz and deterministic 4, 6, 12 and 2 ms cyclic steps, with six complete
+0-100-0 cycles at each speed. The 2 ms step exceeds the normal demand slew
+limit and is a stress case. `START_TEST_VP37_MODE=1` selects cyclic tests; the
+fixture starts at zero demand and `C` restarts the complete sequence from zero.
+Trace samples include the active delay as `cyms`. `V<seconds>` selects the
+bench voltage-filter time constant and `V0` bypasses it. Hold deadlines still
+include the setpoint ramp.
 
 ## Persistent data and GPS
 

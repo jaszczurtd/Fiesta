@@ -26,8 +26,9 @@ add_ecu_test(test_dtc_recovery)
 add_ecu_test(test_turbo)
 add_ecu_test(test_adjustometer)
 add_ecu_test(test_vp37)
-# Exercise the optional RAM trace even when the firmware uses normal demand.
-add_executable(test_vp37_cyclic test_vp37.cpp ../vp37.c)
+# Exercise the cyclic fixture and optional RAM trace even when the host library
+# uses normal demand.
+add_executable(test_vp37_cyclic test_vp37.cpp ../vp37.c ../tests.c)
 target_compile_definitions(test_vp37_cyclic PRIVATE START_TEST_ENABLE_VP37_CYCLIC)
 target_link_libraries(test_vp37_cyclic PRIVATE ecu_mock)
 add_test(NAME test_vp37_cyclic COMMAND test_vp37_cyclic)
