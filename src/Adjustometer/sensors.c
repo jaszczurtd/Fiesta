@@ -1,6 +1,7 @@
 
 #include "sensors.h"
 #include "../common/fiesta_sensor_helpers.h"
+#include "hal/core/hal_compiler.h"
 #include <hal/i2c/hal_i2c_slave.h>
 #include <math.h>
 #include <stdlib.h>
@@ -168,15 +169,15 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
 /** @brief Update filtering, baseline and zero hysteresis from a complete
  * window. */
 static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
-  __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_ACQ_REL);
-  __atomic_store_n(&captureHealthy, true, __ATOMIC_RELEASE);
-  __atomic_store_n(&adjustometerRawHz, rawHz, __ATOMIC_RELAXED);
-  __atomic_store_n(&adjustometerMeasuredUs, nowUs, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&adjustometerSampleSequence, 1U, HAL_ATOMIC_ACQ_REL);
+  HAL_ATOMIC_STORE(&captureHealthy, true, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerRawHz, rawHz, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&adjustometerMeasuredUs, nowUs, HAL_ATOMIC_RELAXED);
   uint32_t filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
   adjustometerFilteredHz = filtered;
-  __atomic_store_n(&adjustometerSignalHz, filtered, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerSignalHz, filtered, HAL_ATOMIC_RELEASE);
 
-  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE)) {
     if (!adjustometerVerifying) {
       // Phase 1: Convergence tracking
       if (adjustometerBaselineStartUs == 0U) {
@@ -208,11 +209,11 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
 
       if (baselineConverged || maxTimeReached) {
         // Convergence succeeded - enter verification phase
-        __atomic_store_n(&adjustometerBaseline, adjustometerBaselineEstimate,
-                         __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&adjustometerBaseline, adjustometerBaselineEstimate,
+                         HAL_ATOMIC_RELEASE);
         adjustometerFilteredHz = adjustometerBaselineEstimate;
-        __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
-                         __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&adjustometerSignalHz, adjustometerFilteredHz,
+                         HAL_ATOMIC_RELEASE);
         adjustometerVerifying = true;
         adjustometerVerifyStartUs = nowUs;
       }
@@ -221,7 +222,7 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
       // Detect slow oscillator drift invisible to the fast convergence
       // window.
       const uint32_t currentBaseline =
-          __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+          HAL_ATOMIC_LOAD(&adjustometerBaseline, HAL_ATOMIC_ACQUIRE);
       const uint32_t drift = absDiffU32(filtered, currentBaseline);
       if (drift > ADJUSTOMETER_BASELINE_VERIFY_DRIFT_HZ) {
         // Oscillator still settling - restart convergence from scratch
@@ -233,16 +234,16 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
       } else if ((nowUs - adjustometerVerifyStartUs) >=
                  ADJUSTOMETER_BASELINE_VERIFY_US) {
         // Verification passed - finalise baseline
-        __atomic_store_n(&adjustometerBaseline, adjustometerBaselineEstimate,
-                         __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&adjustometerBaseline, adjustometerBaselineEstimate,
+                         HAL_ATOMIC_RELEASE);
         adjustometerFilteredHz = adjustometerBaselineEstimate;
-        __atomic_store_n(&adjustometerSignalHz, adjustometerFilteredHz,
-                         __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&adjustometerSignalHz, adjustometerFilteredHz,
+                         HAL_ATOMIC_RELEASE);
         adjustometerPulse = 0;
         adjustometerZeroHold = true;
         adjustometerZeroCandidateSign = 0;
         adjustometerZeroCandidateWindows = 0U;
-        __atomic_store_n(&adjustometerBaselineReady, true, __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&adjustometerBaselineReady, true, HAL_ATOMIC_RELEASE);
       } else {
         // Still verifying - keep EMA-tracking so final baseline is accurate
         adjustometerBaselineEstimate =
@@ -251,10 +252,10 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
              ADJUSTOMETER_BASELINE_TRACK_SHIFT);
       }
     }
-    __atomic_store_n(&adjustometerPulse, (int32_t)0, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&adjustometerPulse, (int32_t)0, HAL_ATOMIC_RELEASE);
   } else {
     const uint32_t currentBaseline =
-        __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+        HAL_ATOMIC_LOAD(&adjustometerBaseline, HAL_ATOMIC_ACQUIRE);
     int32_t pulse = (int32_t)filtered - (int32_t)currentBaseline;
 
     const int32_t absPulse = absI32(pulse);
@@ -292,17 +293,17 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
       }
     }
 
-    __atomic_store_n(&adjustometerPulse, pulse, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&adjustometerPulse, pulse, HAL_ATOMIC_RELEASE);
   }
-  __atomic_fetch_add(&adjustometerSampleSequence, 1U, __ATOMIC_RELEASE);
+  HAL_ATOMIC_FETCH_ADD(&adjustometerSampleSequence, 1U, HAL_ATOMIC_RELEASE);
 }
 
 /** @brief Discard an incomplete window after capture loss. */
 static void discardCaptureWindow(void) {
   captureIndex = 0U;
   captureFilled = 0U;
-  __atomic_store_n(&captureHealthy, false, __ATOMIC_RELEASE);
-  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
+  HAL_ATOMIC_STORE(&captureHealthy, false, HAL_ATOMIC_RELEASE);
+  if (!HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE)) {
     adjustometerBaselineStartUs = 0U;
     adjustometerBaselineStableWindows = 0U;
     adjustometerVerifying = false;
@@ -333,8 +334,8 @@ void updateAdjustometerCapture(void) {
       captureRetryUs = hal_micros();
       return;
     }
-    __atomic_store_n(&adjustometerLastEdgeUs, sample.measured_us,
-                     __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&adjustometerLastEdgeUs, sample.measured_us,
+                     HAL_ATOMIC_RELEASE);
     captureTicks[captureIndex] = sample.ticks;
     captureIndex = (uint8_t)((captureIndex + 1U) % COUNTOF(captureTicks));
     if (captureFilled < COUNTOF(captureTicks))
@@ -362,15 +363,15 @@ void updateAdjustometerCapture(void) {
  */
 static bool isSignalLost(void) {
   const uint32_t lastEdgeUs =
-      __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
-  if (!__atomic_load_n(&captureHealthy, __ATOMIC_ACQUIRE)) {
+      HAL_ATOMIC_LOAD(&adjustometerLastEdgeUs, HAL_ATOMIC_ACQUIRE);
+  if (!HAL_ATOMIC_LOAD(&captureHealthy, HAL_ATOMIC_ACQUIRE)) {
     return true;
   }
 
   const uint32_t nowUs = hal_micros();
   uint32_t signalLossUs = ADJUSTOMETER_SIGNAL_LOSS_US;
   const uint32_t signalHz =
-      __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&adjustometerSignalHz, HAL_ATOMIC_ACQUIRE);
   if (signalHz > 0U) {
     const uint32_t periodUs =
         (uint32_t)((US_PER_SECOND + (signalHz / 2U)) / signalHz);
@@ -396,7 +397,7 @@ int32_t getAdjustometerPulses(void) {
   if (isSignalLost()) {
     return 0;
   }
-  return abs(__atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE));
+  return abs(HAL_ATOMIC_LOAD(&adjustometerPulse, HAL_ATOMIC_ACQUIRE));
 }
 
 /**
@@ -406,14 +407,14 @@ int32_t getAdjustometerPulses(void) {
  * G149-like quantity-feedback path.
  */
 uint32_t getAdjustometerSignalHz(void) {
-  return __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&adjustometerSignalHz, HAL_ATOMIC_ACQUIRE);
 }
 
 int32_t getAdjustometerSignedDeltaHz(void) {
   const uint32_t signalHz =
-      __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&adjustometerSignalHz, HAL_ATOMIC_ACQUIRE);
   const uint32_t baselineHz =
-      __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&adjustometerBaseline, HAL_ATOMIC_ACQUIRE);
   return (int32_t)signalHz - (int32_t)baselineHz;
 }
 
@@ -427,11 +428,11 @@ uint8_t getAdjustometerStatus(void) {
   if (isSignalLost()) {
     status |= ADJ_STATUS_SIGNAL_LOST;
   }
-  if (!__atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE)) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
   status |=
-      (uint8_t)(__atomic_load_n(&auxiliaryTelemetry, __ATOMIC_ACQUIRE) >> 16);
+      (uint8_t)(HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE) >> 16);
 
   return status;
 }
@@ -443,7 +444,7 @@ uint8_t getAdjustometerStatus(void) {
  * before enabling its N146/G149-like inner loop.
  */
 bool isAdjustometerReady(void) {
-  return __atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE);
 }
 
 /**
@@ -453,7 +454,7 @@ bool isAdjustometerReady(void) {
  * quantity-feedback path.
  */
 uint32_t getBaseline(void) {
-  return __atomic_load_n(&adjustometerBaseline, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&adjustometerBaseline, HAL_ATOMIC_ACQUIRE);
 }
 
 /**
@@ -470,13 +471,13 @@ static void resetSensorsState(void) {
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
   captureIndex = captureFilled = 0U;
-  __atomic_store_n(&captureHealthy, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&captureHealthy, false, HAL_ATOMIC_RELEASE);
   adjustometerFilteredHz = 0;
   adjustometerBaselineStartUs = 0;
   adjustometerBaselineEstimate = 0;
   adjustometerBaselineStableWindows = 0;
-  __atomic_store_n(&adjustometerBaseline, 0U, __ATOMIC_RELEASE);
-  __atomic_store_n(&adjustometerBaselineReady, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerBaseline, 0U, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerBaselineReady, false, HAL_ATOMIC_RELEASE);
   adjustometerVerifying = false;
   adjustometerVerifyStartUs = 0;
   adjustometerZeroHold = true;
@@ -557,7 +558,7 @@ void updateAuxiliarySensors(void) {
   }
   const uint32_t packed =
       voltage | ((uint32_t)fuelTemp << 8) | ((uint32_t)status << 16);
-  __atomic_store_n(&auxiliaryTelemetry, packed, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&auxiliaryTelemetry, packed, HAL_ATOMIC_RELEASE);
 }
 
 hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out) {
@@ -566,31 +567,31 @@ hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out) {
   }
   for (unsigned int attempt = 0U; attempt < 3U; attempt++) {
     const uint32_t before =
-        __atomic_load_n(&adjustometerSampleSequence, __ATOMIC_ACQUIRE);
+        HAL_ATOMIC_LOAD(&adjustometerSampleSequence, HAL_ATOMIC_ACQUIRE);
     if ((before & 1U) != 0U) {
       continue;
     }
     adjustometer_feedback_t sample;
-    sample.rawHz = __atomic_load_n(&adjustometerRawHz, __ATOMIC_RELAXED);
+    sample.rawHz = HAL_ATOMIC_LOAD(&adjustometerRawHz, HAL_ATOMIC_RELAXED);
     sample.filteredHz =
-        __atomic_load_n(&adjustometerSignalHz, __ATOMIC_RELAXED);
+        HAL_ATOMIC_LOAD(&adjustometerSignalHz, HAL_ATOMIC_RELAXED);
     sample.baselineHz =
-        __atomic_load_n(&adjustometerBaseline, __ATOMIC_RELAXED);
+        HAL_ATOMIC_LOAD(&adjustometerBaseline, HAL_ATOMIC_RELAXED);
     sample.measuredUs =
-        __atomic_load_n(&adjustometerMeasuredUs, __ATOMIC_RELAXED);
+        HAL_ATOMIC_LOAD(&adjustometerMeasuredUs, HAL_ATOMIC_RELAXED);
     sample.number = before >> 1;
     sample.pulseHz =
         (int16_t)hal_constrain(getAdjustometerPulses(), 0, INT16_MAX);
     sample.status = getAdjustometerStatus() &
                     (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING);
     const uint32_t auxiliary =
-        __atomic_load_n(&auxiliaryTelemetry, __ATOMIC_ACQUIRE);
+        HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE);
     sample.status |= (uint8_t)(auxiliary >> 16);
     sample.voltage = (uint8_t)auxiliary;
     sample.fuelTemp = (uint8_t)(auxiliary >> 8);
-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    HAL_ATOMIC_THREAD_FENCE(HAL_ATOMIC_SEQ_CST);
     if (before !=
-        __atomic_load_n(&adjustometerSampleSequence, __ATOMIC_ACQUIRE)) {
+        HAL_ATOMIC_LOAD(&adjustometerSampleSequence, HAL_ATOMIC_ACQUIRE)) {
       continue;
     }
     const uint32_t ageUs = hal_micros() - sample.measuredUs;
