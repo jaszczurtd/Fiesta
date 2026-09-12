@@ -66,6 +66,9 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->temperatureCorrection = 1.0f;
   pump->temperatureCompensationWeight = 1.0f;
+  pump->compensationVolts = NOMINAL_VOLTAGE;
+  pump->voltageFilterTimeConstant = VP37_VOLTAGE_FILTER_S;
+  pump->voltageReady = false;
   pump->throttleRampLastMs = hal_millis();
   pump->lastAdjustometerStatus = ADJ_STATUS_OK;
   VP37_setVP37PID(pump, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
@@ -344,6 +347,80 @@ void test_vp37_process_updates_globals_from_adjustometer_reading(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 44.0f, getGlobalValue(F_FUEL_TEMP));
 }
 
+void test_vp37_voltage_filter_rejects_quantized_steady_ripple(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37Throttle(pump, 73.0f);
+
+  injectAdjRegisterData(6670, 145, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 14.5f, pump->compensationVolts);
+
+  float minimum = pump->compensationVolts;
+  float maximum = pump->compensationVolts;
+  for (uint32_t ms = 5U; ms <= 2000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    const uint8_t voltage = (ms % 10U) == 0U ? 143U : 147U;
+    injectAdjRegisterData(6670, voltage, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+    if (ms >= 1000U) {
+      minimum = fminf(minimum, pump->compensationVolts);
+      maximum = fmaxf(maximum, pump->compensationVolts);
+    }
+  }
+
+  TEST_ASSERT_LESS_THAN_FLOAT(.03f, maximum - minimum);
+  TEST_ASSERT_FLOAT_WITHIN(.03f, 14.5f, pump->compensationVolts);
+}
+
+void test_vp37_voltage_filter_handles_cranking_drop_and_recovery(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37Throttle(pump, 50.0f);
+
+  injectAdjRegisterData(4600, 150, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 15.0f, pump->compensationVolts);
+
+  for (uint32_t ms = 5U; ms <= 60U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 80, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.5f, 8.0f, pump->compensationVolts);
+  TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(8.0f, pump->compensationVolts);
+
+  hal_mock_set_millis(65U);
+  injectAdjRegisterData(4600, 150, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(14.9f, pump->compensationVolts);
+  TEST_ASSERT_LESS_OR_EQUAL_FLOAT(15.0f, pump->compensationVolts);
+}
+
+void test_vp37_voltage_filter_bypass_and_validation(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        VP37_setVoltageFilterTimeConstant(NULL, .25f));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        VP37_setVoltageFilterTimeConstant(pump, NAN));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        VP37_setVoltageFilterTimeConstant(pump, -.01f));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        VP37_setVoltageFilterTimeConstant(
+                            pump, VP37_VOLTAGE_FILTER_MAX_S + .01f));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setVoltageFilterTimeConstant(pump, 0.0f));
+
+  VP37_setVP37Throttle(pump, 50.0f);
+  injectAdjRegisterData(4600, 80, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 8.0f, pump->compensationVolts);
+  hal_mock_set_millis(5U);
+  injectAdjRegisterData(4600, 150, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 15.0f, pump->compensationVolts);
+}
+
 void test_vp37_period_skips_duplicate_updates_and_handles_wrap(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -547,6 +624,50 @@ void test_vp37_trace_preserves_consecutive_steps_until_drained(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readTrace(pump, &sample));
   TEST_ASSERT_EQUAL_INT32(4700, sample.measured);
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT, VP37_readTrace(pump, &sample));
+}
+
+void test_vp37_cyclic_counts_full_cycles_and_restarts_deterministically(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_TRUE(initTests());
+
+  tickTests();
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->lastThrottle);
+  tickTestsHandleSerialLine("C");
+  tickTests();
+  TEST_ASSERT_EQUAL_UINT32(CYCLIC_DELAYTIME_A, getCurrentVP37CyclicDelayMs());
+
+  for (uint32_t step = 1U; step <= 200U * CYCLIC_FULL_CYCLES; ++step) {
+    hal_mock_set_millis(step * CYCLIC_DELAYTIME_A);
+    tickTests();
+    if (step == 100U) {
+      TEST_ASSERT_FLOAT_WITHIN(.001f, 100.0f, pump->lastThrottle);
+    }
+    if (step == 200U) {
+      TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->lastThrottle);
+      TEST_ASSERT_EQUAL_UINT32(CYCLIC_DELAYTIME_A,
+                               getCurrentVP37CyclicDelayMs());
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT32(CYCLIC_DELAYTIME_B, getCurrentVP37CyclicDelayMs());
+
+  tickTestsHandleSerialLine("C");
+  tickTests();
+  TEST_ASSERT_EQUAL_UINT32(CYCLIC_DELAYTIME_A, getCurrentVP37CyclicDelayMs());
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->lastThrottle);
+  hal_mock_set_millis(hal_millis() + CYCLIC_DELAYTIME_A);
+  tickTests();
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 1.0f, pump->lastThrottle);
+}
+
+void test_vp37_cyclic_voltage_filter_command(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_TRUE(initTests());
+  tickTestsHandleSerialLine("V0.5");
+  tickTests();
+  TEST_ASSERT_FLOAT_WITHIN(.001f, .5f, pump->voltageFilterTimeConstant);
+  TEST_ASSERT_FALSE(pump->voltageReady);
 }
 #endif
 
@@ -1066,6 +1187,9 @@ int main(void) {
   RUN_TEST(test_vp37_process_disables_after_adj_comm_cutoff_timeout);
   RUN_TEST(test_vp37_process_disables_when_rpm_above_max);
   RUN_TEST(test_vp37_process_updates_globals_from_adjustometer_reading);
+  RUN_TEST(test_vp37_voltage_filter_rejects_quantized_steady_ripple);
+  RUN_TEST(test_vp37_voltage_filter_handles_cranking_drop_and_recovery);
+  RUN_TEST(test_vp37_voltage_filter_bypass_and_validation);
 
   RUN_TEST(test_vp37_period_skips_duplicate_updates_and_handles_wrap);
   RUN_TEST(test_vp37_pwm_floor_is_visible_to_integrator);
@@ -1077,6 +1201,8 @@ int main(void) {
   RUN_TEST(test_vp37_invalid_timing_or_pid_step_disables_output);
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   RUN_TEST(test_vp37_trace_preserves_consecutive_steps_until_drained);
+  RUN_TEST(test_vp37_cyclic_counts_full_cycles_and_restarts_deterministically);
+  RUN_TEST(test_vp37_cyclic_voltage_filter_command);
 #endif
   RUN_TEST(test_vp37_integral_authority_is_independent_of_ki);
   RUN_TEST(test_vp37_bench_cap_and_stop);

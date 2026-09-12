@@ -126,6 +126,13 @@ extern "C" {
 #define VP37_ADJ_COMM_CUTOFF_MS 20U
 
 #define VP37_MIN_COMPENSATION_VOLTAGE 7.0f
+// Slow filtering rejects the Adjustometer's 0.1 V quantization at steady
+// supply. Large cranking transients use separate safety-oriented paths.
+#define VP37_VOLTAGE_FILTER_S 1.0f
+#define VP37_VOLTAGE_FILTER_MAX_S 2.0f
+#define VP37_VOLTAGE_TRANSIENT_THRESHOLD_V 0.5f
+#define VP37_VOLTAGE_DROP_FILTER_S 0.02f
+#define VP37_VOLTAGE_RISE_MAX_LAG_V 0.1f
 
 // Climb floor follows the slewed demand and releases above that demand.
 // It must not inject the final target's feedforward ahead of the ramp.
@@ -170,6 +177,9 @@ typedef struct {
   float pidPositiveLimit;
   float pwmValue;
   float voltageCorrection;
+  float compensationVolts; /**< Filtered supply voltage used to scale PWM. */
+  float voltageFilterTimeConstant; /**< Slow-path voltage filter constant. */
+  bool voltageReady; /**< Compensation voltage has been initialized. */
   int32_t lastPWMval;
   int32_t finalPWM;
   float lastVolts;
@@ -228,8 +238,9 @@ typedef struct {
       pwm;             /**< Target, slewed target, feedback and PWM. */
   float motionFF;      /**< Upward-motion component included in feedforward. */
   float ff, low, high; /**< Feedforward and effective correction limits. */
-  float volts,
-      fuelTemp; /**< Voltage (V) and fuel temperature (C) used by control. */
+  float volts;         /**< Latest measured supply voltage (V). */
+  float compensationVolts;     /**< Supply voltage used for PWM scaling (V). */
+  float fuelTemp;              /**< Fuel temperature (C) used by control. */
   float temperatureCorrection; /**< Temperature multiplier used by this step. */
   hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
   bool softFloor, hardwareClamp; /**< Active downstream bounds. */
@@ -241,6 +252,7 @@ typedef struct {
   uint32_t readUs;
   uint8_t retries;
   bool fresh;
+  uint32_t cyclicDelayMs; /**< Active cyclic step delay, or zero otherwise. */
   uint32_t
       pidDtUs; /**< Elapsed time for a successful PID step; zero when held. */
 } VP37TraceSample;
@@ -388,6 +400,16 @@ void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
  * @return PID update time in milliseconds.
  */
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
+
+/**
+ * @brief Select and restart the slow supply-voltage filter.
+ * @param self VP37 controller instance to update.
+ * @param timeConstantS Slow-path time constant in seconds; zero bypasses the
+ * filter.
+ * @return HAL_OK, or HAL_EINVAL for a null instance or an invalid value.
+ */
+hal_status_t VP37_setVoltageFilterTimeConstant(VP37Pump *self,
+                                               float timeConstantS);
 
 #ifdef __cplusplus
 }
