@@ -1,8 +1,9 @@
+#include "config.h"
 #include "gps.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
 #include "obd-2.h"
-#include "obd-2_mapping.h"
+#include "obd_protocol.h"
 #include "sensors.h"
 #include "testable/obd2_testable.h"
 #include "unity.h"
@@ -21,10 +22,42 @@ static void ensure_obd_can_ready(void) {
   }
   TEST_ASSERT_NOT_NULL(obdTestGetCanHandle());
   hal_mock_can_reset(obdTestGetCanHandle());
+  hal_mock_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  obdTestResetTransport();
+  hal_mock_set_millis(0u);
 }
 
 static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
   return hal_mock_can_get_sent(obdTestGetCanHandle(), id, len, data);
+}
+
+static void request_mode09_vin(void) {
+  const uint8_t request[8] = {
+      0x02u, OBD_MODE_VEHICLE_INFO, MODE09_PID_VIN, 0u, 0u, 0u, 0u, 0u};
+  obdReq(LISTEN_ID, request);
+}
+
+static void inject_flow_control(uint8_t flowStatus, uint8_t blockSize,
+                                uint8_t stMin) {
+  const uint8_t frame[8] = {
+      (uint8_t)(0x30u | flowStatus), blockSize, stMin, 0u, 0u, 0u, 0u, 0u};
+  hal_mock_can_inject(obdTestGetCanHandle(), LISTEN_ID, 8u, frame);
+}
+
+static void assert_mode01_request_is_answered(void) {
+  const uint8_t request[8] = {
+      0x02u, OBD_MODE_CURRENT_DATA, ENGINE_RPM, 0u, 0u, 0u, 0u, 0u};
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  obdReq(LISTEN_ID, request);
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+  TEST_ASSERT_EQUAL_UINT8(8u, length);
+  TEST_ASSERT_EQUAL_UINT8(0x04u, frame[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x41u, frame[1]);
+  TEST_ASSERT_EQUAL_UINT8(ENGINE_RPM, frame[2]);
 }
 
 void setUp(void) {
@@ -1030,6 +1063,141 @@ void test_uds_control_dtc_setting_short_frame_returns_nrc13(void) {
   TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
 }
 
+void test_isotp_vin_response_completes_after_flow_control(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x10u, frame[0]);
+  TEST_ASSERT_EQUAL_UINT8(20u, frame[1]);
+  TEST_ASSERT_EQUAL_UINT8(0x49u, frame[2]);
+  TEST_ASSERT_EQUAL_UINT8(MODE09_PID_VIN, frame[3]);
+  TEST_ASSERT_EQUAL_UINT8(0x01u, frame[4]);
+
+  inject_flow_control(0x00u, 0u, 0u);
+  obdLoop();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, frame));
+
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x21u, frame[0]);
+  for (size_t i = 0u; i < 7u; i++) {
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)vehicle_Vin[i + 3u], frame[i + 1u]);
+  }
+
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x22u, frame[0]);
+  for (size_t i = 0u; i < 7u; i++) {
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)vehicle_Vin[i + 10u], frame[i + 1u]);
+  }
+}
+
+void test_isotp_honors_block_size_one(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  inject_flow_control(0x00u, 1u, 0u);
+  obdLoop();
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x21u, frame[0]);
+
+  obdLoop();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, frame));
+
+  inject_flow_control(0x00u, 1u, 0u);
+  obdLoop();
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x22u, frame[0]);
+}
+
+void test_isotp_honors_stmin_between_consecutive_frames(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  inject_flow_control(0x00u, 0u, 5u);
+  obdLoop();
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+
+  obdLoop();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, frame));
+  hal_mock_advance_millis(5u);
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x22u, frame[0]);
+}
+
+void test_isotp_flow_control_abort_releases_transport(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  inject_flow_control(0x02u, 0u, 0u);
+  obdLoop();
+  assert_mode01_request_is_answered();
+}
+
+void test_isotp_flow_control_timeout_releases_transport(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  hal_mock_advance_millis(1000u);
+  obdLoop();
+  assert_mode01_request_is_answered();
+}
+
+void test_isotp_failed_first_frame_does_not_lock_transport(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  hal_mock_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_BUS_OFF);
+  request_mode09_vin();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, frame));
+
+  hal_mock_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  assert_mode01_request_is_answered();
+}
+
+void test_isotp_failed_consecutive_frame_retries_same_payload(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t frame[8] = {0u};
+
+  request_mode09_vin();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  inject_flow_control(0x00u, 0u, 0u);
+  obdLoop();
+
+  hal_mock_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_BUS_OFF);
+  obdLoop();
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, frame));
+
+  hal_mock_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  obdLoop();
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, frame));
+  TEST_ASSERT_EQUAL_UINT8(0x21u, frame[0]);
+  for (size_t i = 0u; i < 7u; i++) {
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)vehicle_Vin[i + 3u], frame[i + 1u]);
+  }
+}
+
 // ── main
 // ──────────────────────────────────────────────────────────────────────
 
@@ -1105,6 +1273,15 @@ int main(void) {
   RUN_TEST(test_uds_read_data_by_id_short_frame_returns_nrc13);
   RUN_TEST(test_uds_read_memory_by_addr_short_frame_returns_nrc13);
   RUN_TEST(test_uds_control_dtc_setting_short_frame_returns_nrc13);
+
+  // ISO-TP transmit state machine
+  RUN_TEST(test_isotp_vin_response_completes_after_flow_control);
+  RUN_TEST(test_isotp_honors_block_size_one);
+  RUN_TEST(test_isotp_honors_stmin_between_consecutive_frames);
+  RUN_TEST(test_isotp_flow_control_abort_releases_transport);
+  RUN_TEST(test_isotp_flow_control_timeout_releases_transport);
+  RUN_TEST(test_isotp_failed_first_frame_does_not_lock_transport);
+  RUN_TEST(test_isotp_failed_consecutive_frame_retries_same_payload);
 
   RUN_TEST(test_stmin_to_ms_preserves_millisecond_values);
   RUN_TEST(test_stmin_to_ms_clamps_submillisecond_range_to_one_ms);

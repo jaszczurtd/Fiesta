@@ -50,7 +50,9 @@ Pending areas:
 - full C linkage path for required HAL/tool APIs,
 - replacement of remaining C++ HAL and test dependencies if a full
   project-level C-only build is required,
-- MISRA hardening pass (in progress): remaining casts/bounds/overflow cleanup outside `obd-2.c`, plus naming consistency and volatile/mutex review across ECU modules.
+- MISRA hardening pass (in progress): remaining casts/bounds/overflow cleanup in
+  the Ford diagnostic services and other ECU modules, plus naming consistency
+  and volatile/mutex review.
 
 ## Latest screening snapshot
 
@@ -58,16 +60,18 @@ Reference run on 2026-09-12 with cppcheck 2.13.0, without licensed rule texts.
 This run uses the corrected project configuration and the JaszczurHAL atomic
 model (see below), so it is the current comparison baseline:
 
-- active findings: **1257** across **32** rule IDs,
-- `src/ECU` carries 1027 of them, shared `src/common` sources the remaining 230,
+- active findings: **949** across **33** rule IDs,
+- `src/ECU` carries 719 of them, shared `src/common` sources the remaining 230,
 - severity split is unavailable because no licensed Mandatory / Required /
   Advisory rule-text extract was supplied,
 - the result is a triage/evidence snapshot, not a pass signal or compliance
   certificate.
 
-Largest rule buckets: `misra-c2012-15.5` 330, `2.5` 197, `12.1` 154, `8.4` 118,
-`10.4` 106, `17.7` 65. Largest files: `obd-2.c` 254, `obd-2_mapping.c` 123,
-`obd-2.h` 109, `dtcManager.c` 76, `sensors.c` 72, `vp37.c` 60.
+Largest rule buckets: `misra-c2012-15.5` 323, `12.1` 168, `10.4` 86,
+`2.5` 81, `17.7` 37. Largest files: `sc_command_handlers.c` 104,
+`obd_ford_diag.c` 92, `dtcManager.c` 77, `sensors.c` 72, and `vp37.c` 72.
+The OBD refactor reduced the directly affected OBD source/header findings from
+486 to 143 without adding suppressions.
 
 ### Screening configuration correction
 
@@ -88,11 +92,12 @@ HAL `hal_mutex_once.h`. One rule 17.3 finding remains in
 `sc_command_handlers.c`; it comes from a feature-closure macro the analyzer
 does not resolve in every configuration it explores.
 
-Earlier snapshots were 1262 findings across 33 rule IDs (2026-09-09), 1026
-across 33 (2026-07-10) and 787 across 25 (2026-04-21). None of them is
-comparable with the reference run: they screened a different, reduced ECU. Use
-the generated `summary.txt` and `rule-counts.txt` artifacts when comparing
-future runs.
+The immediately preceding, like-for-like snapshot contained 1290 findings
+across 33 rule IDs before the OBD refactor. Earlier reduced-configuration
+snapshots were 1262 findings across 33 rule IDs (2026-09-09), 1026 across 33
+(2026-07-10), and 787 across 25 (2026-04-21); those older runs are not directly
+comparable. Use the generated `summary.txt` and `rule-counts.txt` artifacts when
+comparing future runs.
 
 ECU has a dedicated project-local runner under `src/ECU/misra/`, a deviation
 register, and a manual artifact workflow (`.github/workflows/ecu-misra.yml`).

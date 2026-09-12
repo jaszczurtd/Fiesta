@@ -97,8 +97,9 @@ set(ECU_SOURCES
     ${ECU_SRC}/engine_operation.c
     ${ECU_SRC}/engineFuel.c
     ${ECU_SRC}/heatedWindshield.c
-    ${ECU_SRC}/obd-2_mapping.c
     ${ECU_SRC}/obd-2.c
+    ${ECU_SRC}/obd_j1979.c
+    ${ECU_SRC}/obd_ford_diag.c
     ${ECU_SRC}/dtcManager.c
     ${ECU_SRC}/ecuPersistence.c
     ${ECU_SRC}/engineMaps.c

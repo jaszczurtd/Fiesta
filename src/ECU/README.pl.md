@@ -56,8 +56,8 @@ Narzędzia modułu:
 - wyciszenia i rejestr odstępstw w [`misra/`](misra/),
 - ręczny workflow CI `.github/workflows/ecu-misra.yml`.
 
-Zapisany wynik analizy z 2026-09-09 (cppcheck 2.13.0, bez licencjonowanych
-tekstów reguł) obejmuje 1262 zgłoszenia z 33 reguł. Służy do oceny i porządkowania
+Zapisany wynik analizy z 2026-09-12 (cppcheck 2.13.0, bez licencjonowanych
+tekstów reguł) obejmuje 949 zgłoszeń z 33 reguł. Służy do oceny i porządkowania
 problemów; nie potwierdza zgodności. Szczegóły i ograniczenia porównania są
 w [`MISRA.md`](../../MISRA.md).
 

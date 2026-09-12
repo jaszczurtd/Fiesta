@@ -7,7 +7,6 @@
 
 #include "config.h"
 #include "hardwareConfig.h"
-#include "obd-2.h"
 #include "rpm.h"
 #include "tests.h"
 #include "turbo.h"

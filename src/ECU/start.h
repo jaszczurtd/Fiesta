@@ -17,7 +17,6 @@
 #include "gps.h"
 #include "hardwareConfig.h"
 #include "heatedWindshield.h"
-#include "obd-2.h"
 #include "rpm.h"
 #include "sensors.h"
 #include "tests.h"

@@ -140,7 +140,7 @@ bool startTests(void) {
     const uint16_t code = (uint16_t)DTC_PCF8574_COMM_FAIL;
     dtcManagerSetActive(code, true);
     deb("TEST: startup DTC injected: 0x%04X (%s)", (unsigned)code,
-        getDtcName(code));
+        dtcManagerGetName(code));
     dtcInjected = true;
   }
 #endif
