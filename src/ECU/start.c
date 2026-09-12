@@ -1,8 +1,10 @@
 
 #include "start.h"
+
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "ecuContext.h"
 #include "ecuPersistence.h"
+#include "obd-2.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>

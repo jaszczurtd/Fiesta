@@ -318,9 +318,10 @@ that every mutable ECU byte lives inside `ecu_context_t`.
 | [`start.c`](src/ECU/start.c) | init sequence, soft-timer registration, watchdog startup, reboot-snapshot readback |
 | [`sensors.c`](src/ECU/sensors.c) | HC4051 mux sweep, ADC sampling, PCF8574 driver, adjustometer I²C reads |
 | [`can.c`](src/ECU/can.c) | main-CAN frame packing and dispatch; uses shared CAN IDs from `src/common/canDefinitions/canDefinitions.h` |
-| [`obd-2.c`](src/ECU/obd-2.c) | OBD-II / UDS service handlers on the OBD-2 CAN controller; largest single file, active MISRA hotspot |
-| [`obd-2_mapping.c`](src/ECU/obd-2_mapping.c) | mapping from OBD PIDs to ECU signals |
-| [`dtcManager.c`](src/ECU/dtcManager.c) | DTC set/clear, persistence via KV store, retrieval for OBD responses |
+| [`obd-2.c`](src/ECU/obd-2.c) | OBD CAN ingress and non-blocking ISO-TP response transport |
+| [`obd_j1979.c`](src/ECU/obd_j1979.c) | SAE J1979 services, Mode 01 PID encoders, and PID descriptions |
+| [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP diagnostic services |
+| [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalog, set/clear, KV persistence, and retrieval for diagnostic responses |
 | [`rpm.c`](src/ECU/rpm.c) | engine RPM via Hall-sensor GPIO edge interrupt |
 | [`vp37.c`](src/ECU/vp37.c) | VP37 injection pump control: PID loop using adjustometer feedback |
 | [`turbo.c`](src/ECU/turbo.c) | turbo boost control (N75 solenoid, MAP-based) |
@@ -1007,10 +1008,13 @@ authoritative 104-pin ECU connector map.
 
 ### 7.4 Diagnostic interface
 
-- OBD-II port connected to the ECU's CAN1 controller. The ECU implements
-  OBD-II / UDS service handlers in [`src/ECU/obd-2.c`](src/ECU/obd-2.c); and presents itself as an ECC-V Ford Fiesta 1.8 DI ECU.
-  the PID -> internal signal mapping lives in
-  [`src/ECU/obd-2_mapping.c`](src/ECU/obd-2_mapping.c).
+- OBD-II port connected to the ECU's CAN1 controller. The transport in
+  [`src/ECU/obd-2.c`](src/ECU/obd-2.c) validates CAN requests and sends
+  single- or multi-frame ISO-TP responses. Standard OBD services and PID
+  encoders live in [`src/ECU/obd_j1979.c`](src/ECU/obd_j1979.c), while Ford
+  EEC-V UDS/KWP/SCP compatibility lives in
+  [`src/ECU/obd_ford_diag.c`](src/ECU/obd_ford_diag.c). The emulator presents
+  itself as a Ford Fiesta 1.8 DI EEC-V ECU.
 
 ### 7.5 Auxiliary
 

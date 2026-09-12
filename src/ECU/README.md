@@ -68,8 +68,8 @@ Module-local MISRA tooling:
 - suppressions + deviation register: [`misra/`](misra/),
 - manual CI artifact workflow: `.github/workflows/ecu-misra.yml`.
 
-Latest local screening snapshot (2026-09-09, cppcheck 2.13.0, no licensed
-rule texts): 1262 active findings across 33 rule IDs. This is triage evidence,
+Latest local screening snapshot (2026-09-12, cppcheck 2.13.0, no licensed
+rule texts): 949 active findings across 33 rule IDs. This is triage evidence,
 not a compliance/pass result; detailed buckets and comparison caveats are in
 [`MISRA.md`](../../MISRA.md).
 

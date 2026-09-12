@@ -693,7 +693,8 @@ void dtcManagerSetActive(uint16_t code, bool active) {
 
   if (s_dtcState.dtcs[idx].active != active) {
     s_dtcState.dtcs[idx].active = active;
-    deb("DTC 0x%04X (%s) active=%d", code, getDtcName(code), active ? 1 : 0);
+    deb("DTC 0x%04X (%s) active=%d", code, dtcManagerGetName(code),
+        active ? 1 : 0);
   }
 
   if (active) {
@@ -915,4 +916,53 @@ uint32_t dtcManagerGetTimestamp(uint16_t code) {
   uint32_t ts = (idx < 0) ? 0u : s_dtcState.dtcs[idx].firstOccurrence;
   m_mutex_exit(dtcManagerMutex);
   return ts;
+}
+
+typedef struct {
+  uint16_t code;
+  const char *name;
+} dtc_name_entry_t;
+
+const char *dtcManagerGetName(uint16_t code) {
+  static const dtc_name_entry_t names[] = {
+      {DTC_OBD_CAN_INIT_FAIL, "U1900 Network CAN communication fault"},
+      {DTC_PCF8574_COMM_FAIL, "U0073 Control module communication bus off"},
+      {DTC_PWM_CHANNEL_NOT_INIT,
+       "P0657 Actuator supply voltage A circuit/open"},
+      {DTC_DPF_COMM_LOST,
+       "U0100 Lost communication with DPF module (project mapping)"},
+      {DTC_EGT_COMM_LOST, "U1902 Lost communication with EGT module"},
+      {DTC_CAN0_INIT_FAIL, "U1903 CAN0 bus init failure"},
+      {DTC_GPS_SIGNAL_LOST, "U1904 GPS data unavailable/stale"},
+      {DTC_SD_LOGGER_NOT_READY, "U1905 SD logger missing/not initialized"},
+      {DTC_ISOTP_FC_TIMEOUT, "U1906 ISO-TP flow-control timeout"},
+      {DTC_ISOTP_FC_ABORT, "U1907 ISO-TP flow-control abort from tester"},
+      {DTC_ENGINE_OVERSPEED, "P0219 Engine overspeed condition"},
+      {DTC_ECM_EEPROM_FAULT, "P062F Internal control module EEPROM error"},
+      {DTC_SYSTEM_VOLTAGE_LOW, "P0562 System voltage low"},
+      {DTC_SYSTEM_VOLTAGE_HIGH, "P0563 System voltage high"},
+      {DTC_THROTTLE_RANGE_PERF,
+       "P0121 Throttle/Pedal position range/performance"},
+      {DTC_COOLANT_TEMP_RANGE,
+       "P0116 Engine coolant temperature range/performance"},
+      {DTC_INTAKE_TEMP_RANGE, "P0111 Intake air temperature range/performance"},
+      {DTC_MAP_BARO_RANGE, "P0106 MAP/BARO pressure range/performance"},
+      {DTC_FUEL_LEVEL_RANGE, "P0460 Fuel level sensor range/performance"},
+      {DTC_ADJ_COMM_LOST, "U1908 Lost communication with Adjustometer module"},
+      {DTC_ADJ_SIGNAL_LOST, "U1909 Adjustometer oscillator signal lost"},
+      {DTC_ADJ_FUEL_TEMP_BROKEN,
+       "U190A Adjustometer fuel temperature sensor fault"},
+      {DTC_ADJ_VOLTAGE_BAD, "U190B Adjustometer supply voltage out of range"},
+      {DTC_RPM_IRQ_INIT_FAIL, "U190C RPM interrupt core-affinity/init failure"},
+  };
+  const char *name = "Unknown DTC";
+
+  for (size_t i = 0u; i < COUNTOF(names); i++) {
+    if (names[i].code == code) {
+      name = names[i].name;
+      break;
+    }
+  }
+
+  return name;
 }

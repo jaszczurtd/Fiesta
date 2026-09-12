@@ -1,7 +1,7 @@
 #ifndef T_DTC_MANAGER
 #define T_DTC_MANAGER
 
-#include "obd-2_mapping.h"
+#include "dtc_codes.h"
 #include <JaszczurHAL.h>
 
 #ifdef __cplusplus
@@ -14,6 +14,13 @@ typedef enum {
   DTC_KIND_PERMANENT,
   DTC_KIND_ACTIVE,
 } dtc_kind_t;
+
+/**
+ * @brief Translate a project DTC code into a human-readable label.
+ * @param code Diagnostic trouble code to describe.
+ * @return Pointer to a static name string.
+ */
+const char *dtcManagerGetName(uint16_t code);
 
 /**
  * @brief Initialize DTC storage and load persisted state.

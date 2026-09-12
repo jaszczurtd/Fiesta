@@ -57,21 +57,22 @@ Process rules:
 
 Latest snapshot (2026-09-12, cppcheck 2.13.0, no licensed rule texts):
 
-- active findings: `1257` across `32` rule IDs,
-- `src/ECU` 1027, shared `src/common` sources 230,
+- active findings: `949` across `33` rule IDs,
+- `src/ECU` 719, shared `src/common` sources 230,
 - top open buckets:
-  - `misra-c2012-15.5`: `330`,
-  - `misra-c2012-2.5`: `197`,
-  - `misra-c2012-12.1`: `154`,
-  - `misra-c2012-8.4`: `118`,
-  - `misra-c2012-10.4`: `106`.
+  - `misra-c2012-15.5`: `323`,
+  - `misra-c2012-12.1`: `168`,
+  - `misra-c2012-10.4`: `86`,
+  - `misra-c2012-2.5`: `81`,
+  - `misra-c2012-17.7`: `37`.
 
 The scan sees the same opt-in HAL modules as the firmware build: the runner
 forces `hal_project_config.h` into every translation unit, because cppcheck
 resolves neither the build system's generated `-D` flags nor the
 `__has_include` hook in the HAL headers. It also selects the GNU-like
-`hal_compiler.h` branch and loads JaszczurHAL's cppcheck atomic model. Earlier
-snapshots (`1262` on 2026-09-09, `1026` on 2026-07-10, `787` on 2026-04-21)
-screened a reduced ECU with every opt-in module switched off and are not
-comparable. Preserve generated summaries when making future like-for-like
-comparisons.
+`hal_compiler.h` branch and loads JaszczurHAL's cppcheck atomic model. The
+immediately preceding like-for-like snapshot contained `1290` findings before
+the OBD refactor. Earlier snapshots (`1262` on 2026-09-09, `1026` on
+2026-07-10, `787` on 2026-04-21) screened a reduced ECU with every opt-in module
+switched off and are not comparable. Preserve generated summaries when making
+future like-for-like comparisons.
