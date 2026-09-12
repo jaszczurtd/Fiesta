@@ -40,6 +40,10 @@ Completed areas include:
 - defensive CAN updates currently applied in ECU: TX buffers are zero-initialized before send, RX path rejects invalid `NULL`/oversized frames, and the RPM publisher updates its delivery cache only after a successful transmission while using retry and heartbeat eligibility thresholds.
 - project-local MISRA screening infrastructure for ECU: repeatable runner, CI artifact path, and deviation register bootstrap.
 - screening configuration fix: the runner now forces `hal_project_config.h` into every translation unit, so the scan sees the same opt-in HAL modules as the firmware build.
+- compiler-dependent atomics in Adjustometer now use the JaszczurHAL
+  `HAL_ATOMIC_*` API, and the ECU runner loads the matching cppcheck model.
+  This removes atomic-related analyzer artifacts without changing the current
+  MISRA scope.
 
 Pending areas:
 
@@ -50,9 +54,9 @@ Pending areas:
 
 ## Latest screening snapshot
 
-Reference run on 2026-09-11 with cppcheck 2.13.0, without licensed rule texts.
-This is the first run with the screening configuration corrected (see below),
-so it replaces earlier counts as the comparison baseline:
+Reference run on 2026-09-12 with cppcheck 2.13.0, without licensed rule texts.
+This run uses the corrected project configuration and the JaszczurHAL atomic
+model (see below), so it is the current comparison baseline:
 
 - active findings: **1257** across **32** rule IDs,
 - `src/ECU` carries 1027 of them, shared `src/common` sources the remaining 230,
@@ -75,12 +79,14 @@ gone: HAL declarations hidden behind their `#ifdef` guards were reported as
 implicit function calls (rule 17.3), CAN and command-router constants could not
 be resolved (`misra-config`), and the EEPROM layout guard in `dtcManager.c`
 fired, aborting analysis of that file so it reported zero findings. The runner
-now forces the project configuration into every translation unit.
+now forces the project configuration into every translation unit. It also
+selects the GNU-like branch of `hal_compiler.h` and loads the JaszczurHAL
+cppcheck model for compiler atomic operations.
 
-Two known artifacts remain, both outside `src/ECU`: `__ATOMIC_*` in the HAL
-`hal_mutex_once.h` are unknown to cppcheck, and one rule 17.3 finding in
-`sc_command_handlers.c` comes from a feature-closure macro the analyzer does not
-resolve in every configuration it explores.
+The atomic model removes the former rule 17.3 and `misra-config` artifacts from
+HAL `hal_mutex_once.h`. One rule 17.3 finding remains in
+`sc_command_handlers.c`; it comes from a feature-closure macro the analyzer
+does not resolve in every configuration it explores.
 
 Earlier snapshots were 1262 findings across 33 rule IDs (2026-09-09), 1026
 across 33 (2026-07-10) and 787 across 25 (2026-04-21). None of them is

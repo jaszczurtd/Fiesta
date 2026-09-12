@@ -10,17 +10,17 @@ extern "C" void adj_test_sensors_get_state(adj_sensors_test_state_t *state) {
     return;
   }
 
-  state->pulse = __atomic_load_n(&adjustometerPulse, __ATOMIC_ACQUIRE);
+  state->pulse = HAL_ATOMIC_LOAD(&adjustometerPulse, HAL_ATOMIC_ACQUIRE);
   state->lastEdgeUs =
-      __atomic_load_n(&adjustometerLastEdgeUs, __ATOMIC_ACQUIRE);
-  state->signalHz = __atomic_load_n(&adjustometerSignalHz, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&adjustometerLastEdgeUs, HAL_ATOMIC_ACQUIRE);
+  state->signalHz = HAL_ATOMIC_LOAD(&adjustometerSignalHz, HAL_ATOMIC_ACQUIRE);
   state->filteredHz = adjustometerFilteredHz;
   state->baselineStartUs = adjustometerBaselineStartUs;
   state->baselineEstimate = adjustometerBaselineEstimate;
   state->baselineStableWindows = adjustometerBaselineStableWindows;
   state->baseline = adjustometerBaseline;
   state->baselineReady =
-      __atomic_load_n(&adjustometerBaselineReady, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE);
   state->verifying = adjustometerVerifying;
   state->verifyStartUs = adjustometerVerifyStartUs;
   state->zeroHold = adjustometerZeroHold;
@@ -36,18 +36,19 @@ adj_test_sensors_set_state(const adj_sensors_test_state_t *state) {
     return;
   }
 
-  __atomic_store_n(&adjustometerPulse, state->pulse, __ATOMIC_RELEASE);
-  __atomic_store_n(&adjustometerLastEdgeUs, state->lastEdgeUs,
-                   __ATOMIC_RELEASE);
-  __atomic_store_n(&adjustometerSignalHz, state->signalHz, __ATOMIC_RELEASE);
-  __atomic_store_n(&captureHealthy, state->lastEdgeUs != 0U, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerPulse, state->pulse, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerLastEdgeUs, state->lastEdgeUs,
+                   HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerSignalHz, state->signalHz, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&captureHealthy, state->lastEdgeUs != 0U,
+                   HAL_ATOMIC_RELEASE);
   adjustometerFilteredHz = state->filteredHz;
   adjustometerBaselineStartUs = state->baselineStartUs;
   adjustometerBaselineEstimate = state->baselineEstimate;
   adjustometerBaselineStableWindows = state->baselineStableWindows;
   adjustometerBaseline = state->baseline;
-  __atomic_store_n(&adjustometerBaselineReady, state->baselineReady,
-                   __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerBaselineReady, state->baselineReady,
+                   HAL_ATOMIC_RELEASE);
   adjustometerVerifying = state->verifying;
   adjustometerVerifyStartUs = state->verifyStartUs;
   adjustometerZeroHold = state->zeroHold;
@@ -75,7 +76,7 @@ extern "C" bool adj_test_sensors_is_signal_lost(void) { return isSignalLost(); }
 
 extern "C" void adj_test_sensors_process_frequency(uint32_t rawHz,
                                                    uint32_t nowUs) {
-  __atomic_store_n(&adjustometerLastEdgeUs, nowUs, __ATOMIC_RELEASE);
-  __atomic_store_n(&captureHealthy, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&adjustometerLastEdgeUs, nowUs, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&captureHealthy, true, HAL_ATOMIC_RELEASE);
   processAdjustometerFrequency(rawHz, nowUs);
 }

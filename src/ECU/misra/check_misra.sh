@@ -45,7 +45,9 @@ rule_texts="${MISRA_RULE_TEXTS:-}"
 quiet=0
 fail_on_findings=0
 temp_addon_config=""
-hal_src="$project_root/../../../libraries/JaszczurHAL/src"
+hal_root="$project_root/../../../libraries/JaszczurHAL"
+hal_src="$hal_root/src"
+hal_cppcheck_config="$hal_root/config/tooling/cppcheck-atomics.cfg"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -145,14 +147,22 @@ if [[ $quiet -eq 1 ]]; then
 fi
 
 include_args=(-I.)
+library_args=()
 if [[ -d "$hal_src" ]]; then
     include_args+=(-I"$hal_src" -I"$hal_src/utils")
+    if [[ ! -f "$hal_cppcheck_config" ]]; then
+        echo "JaszczurHAL cppcheck atomic model not found: $hal_cppcheck_config" >&2
+        exit 2
+    fi
+    library_args+=(--library="$hal_cppcheck_config")
 fi
 
 define_args=(
     -DUNIT_TEST
     -DSERIAL_7N1=2
     -DSERIAL_8N1=6
+    -DHAL_COMPILER_IS_GNU_LIKE=1
+    -DHAL_COMPILER_IS_MSVC=0
 )
 
 # The build system reads hal_project_config.h and turns its HAL_ENABLE_* lines
@@ -180,6 +190,7 @@ set +e
     --language=c \
     --inline-suppr \
     "${include_args[@]}" \
+    "${library_args[@]}" \
     "${define_args[@]}" \
     "${config_args[@]}" \
     "${suppressions_args[@]}" \
