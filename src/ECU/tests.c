@@ -254,6 +254,9 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
         "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
         "W<thermal weight 0..1> S<persistent demand 0..100> "
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+        "G(dump phase capture, forces demand 0) "
+#endif
         "X(stop) ?(help)\033[0m");
 #endif
     return;
@@ -271,6 +274,16 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     deb("VP37 stopped; restart ECU to initialize");
     return;
   }
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+  if (((cmd[0] == 'G') || (cmd[0] == 'g')) && (cmd[1] == '\0')) {
+    // The dump is long and blocks on USB. Release the actuator first so a slow
+    // host cannot extend the excitation.
+    s_commandDemand = 0.0f;
+    VP37_setVP37Throttle(self, 0.0f);
+    VP37_dumpCurrentPhaseSamples();
+    return;
+  }
+#endif
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   if ((cmd[0] == 'C' || cmd[0] == 'c') && cmd[1] == '\0') {
     VP37_resetCyclicTest();

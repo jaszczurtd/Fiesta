@@ -59,6 +59,34 @@ to mode 3 for bench firmware; an engine build must override it with mode 0.
 Mode 2 rejects isolated one-percent potentiometer steps unless they persist for
 150 ms; larger changes are immediate.
 
+### Source-shunt current telemetry
+
+`START_TEST_ENABLE_VP37_CURRENT_TELEMETRY` adds a bench-only read of the
+0.22 ohm resistor in the actuator MOSFET source, on ADC0 (GPIO26). The build
+refuses `HAL_ENABLE_SDLOGGER`, which used the same pin as an SPI chip select.
+
+Two views alternate so the blocked core-0 time stays roughly what it was. The
+aggregate window bins samples into an ADC histogram and reports the mean,
+active-sample fraction, the P05 to P95 percentiles of the ON phase, the shunt
+RMS and the resistor power, logged as `VP37 ISENSE`. The percentile spread says
+what the mean cannot: evenly spaced values mean the current ramps through the
+ON phase, values bunched near P95 mean it saturates early.
+
+The phase capture waits for a gate turn-on edge, stores raw samples with their
+timestamps and gate level, then segments them into PWM cycles and reports the
+current at the start and end of the ON phase, the rise rate, the charge and the
+RMS, logged as `VP37 IPHASE`. `I0`, the current in the first ON sample, is what
+the coil retained through the freewheel phase. Well above zero it means the coil
+never stops conducting, so its mean current is near `Ion` rather than near
+`Isw` - the source shunt cannot see the freewheel current that bypasses it.
+
+Both views record the PWM command, position pair, supply voltage and fuel
+temperature that produced them. `G` on the bench console releases the actuator
+and dumps the stored phase capture sample by sample as `VP37 IRAW`.
+
+Neither view is thermal protection. The shunt sees the MOSFET ON current only,
+so its RMS bounds the resistor loss, never the winding loss.
+
 ## Persistent data and GPS
 
 ECU reserves 32 KiB of flash-backed EEPROM. The KV region begins at byte 4096

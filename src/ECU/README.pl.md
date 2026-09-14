@@ -59,6 +59,36 @@ firmware stanowiskowego; build do pracy z silnikiem musi nadpisać go trybem 0.
 W trybie 2 pojedyncza zmiana potencjometru o jeden procent musi utrzymać się
 przez 150 ms; większe zmiany są przyjmowane od razu.
 
+### Telemetria prądu z bocznika źródłowego
+
+`START_TEST_ENABLE_VP37_CURRENT_TELEMETRY` włącza stanowiskowy odczyt rezystora
+0,22 Ω w źródle MOSFET-a nastawnika, przez ADC0 (GPIO26). Build odrzuca
+`HAL_ENABLE_SDLOGGER`, który używał tego samego pinu jako SPI chip select.
+
+Dwa widoki działają naprzemiennie, więc czas blokady core 0 pozostaje zbliżony
+do wcześniejszego. Okno agregujące zlicza próbki w histogramie ADC i podaje
+średnią, udział próbek aktywnych, percentyle P05-P95 fazy ON, wartość skuteczną
+prądu bocznika oraz moc rezystora; log to `VP37 ISENSE`. Rozrzut percentyli mówi
+to, czego nie powie średnia: równe odstępy oznaczają narastanie prądu przez całą
+fazę ON, skupienie przy P95 oznacza wczesne nasycenie.
+
+Przechwycenie fazowe czeka na zbocze załączenia bramki, zapisuje surowe próbki
+ze znacznikami czasu i stanem bramki, dzieli je na okresy PWM i podaje prąd na
+początku i końcu fazy ON, szybkość narastania, ładunek oraz wartość skuteczną;
+log to `VP37 IPHASE`. `I0`, czyli prąd w pierwszej próbce fazy ON, to prąd, który
+cewka zachowała przez fazę swobodnego przepływu. Wartość wyraźnie powyżej zera
+oznacza, że cewka przewodzi bez przerwy, więc jej prąd średni jest bliski `Ion`,
+a nie `Isw` - bocznik źródłowy nie widzi prądu, który go omija.
+
+Oba widoki zapisują komendę PWM, parę pozycji, napięcie zasilania i temperaturę
+paliwa, przy których powstały. Polecenie `G` na konsoli stanowiskowej zwalnia
+nastawnik i zrzuca zapisane przechwycenie fazowe próbka po próbce jako
+`VP37 IRAW`.
+
+Żaden z widoków nie jest ochroną cieplną. Bocznik widzi tylko prąd fazy ON
+MOSFET-a, więc jego wartość skuteczna ogranicza straty rezystora, nigdy strat
+uzwojenia.
+
 ## Trwałe dane i GPS
 
 ECU rezerwuje 32 KiB EEPROM emulowanego we flash. Obszar KV zaczyna się od
