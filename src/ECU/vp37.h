@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
 #define VP37_DEBUG_UPDATE 20U
 #else
 #define VP37_DEBUG_UPDATE 250U
@@ -35,8 +35,11 @@ extern "C" {
 // adj->PWM linear map had ratio ~0.236 (1890 PWM / 8000 Hz).
 #define VP37_PID_KP 0.05f
 #define VP37_PID_KI 0.2f
-#define VP37_PID_KD 0.001f
-// Feedback already has an EMA; keep D's additional lag below one control step.
+// The delayed position path turns derivative kick from a mechanical impact
+// into sustained limit cycling. Keep D disabled unless a bounded derivative
+// implementation is validated on hardware.
+#define VP37_PID_KD 0.0f
+// Retained for runtime derivative experiments in the bench build.
 #define VP37_PID_TF 0.003f
 // Preserve integral output authority when changing Ki (nominal PWM counts).
 // Residual authority above the holding map, tapered near the upper endpoint.
@@ -48,6 +51,15 @@ extern "C" {
 
 // Continuous dead zone for integration only [Hz]. P and D remain active.
 #define VP37_PID_DEADBAND 12
+// Once a settled target enters the narrow band, hold integral state until a
+// persistent error leaves the wider band. This avoids winding force against
+// static friction and releasing it as a visible position jump.
+#define VP37_INTEGRAL_HOLD_ENTER_HZ 20
+#define VP37_INTEGRAL_HOLD_EXIT_HZ 40
+#define VP37_INTEGRAL_HOLD_RELEASE_MS 500U
+// A one-percent potentiometer transition must persist before it changes the
+// demand. Larger driver changes remain immediate.
+#define VP37_POTENTIOMETER_STEP_CONFIRM_MS 150U
 // Correction limits are calculated at the PWM reference temperature.
 // The 22 C curve below defines their original electrical authority.
 #define VP37_PID_CORR_LIMIT 220.0f
@@ -125,13 +137,17 @@ extern "C" {
 #define VP37_ADJ_COMM_CUTOFF_MS 20U
 
 #define VP37_MIN_COMPENSATION_VOLTAGE 7.0f
-// Slow filtering rejects the Adjustometer's 0.1 V quantization at steady
-// supply. Large cranking transients use separate safety-oriented paths.
-#define VP37_VOLTAGE_FILTER_S 1.0f
-#define VP37_VOLTAGE_FILTER_MAX_S 2.0f
-#define VP37_VOLTAGE_TRANSIENT_THRESHOLD_V 0.5f
-#define VP37_VOLTAGE_DROP_FILTER_S 0.02f
-#define VP37_VOLTAGE_RISE_MAX_LAG_V 0.1f
+/** Hold the last compensation voltage until this measurement delta is exceeded.
+ */
+// The powered actuator modulates the local rail by about 0.4 V on the bench.
+// Keep that load-correlated ripple out of the voltage-compensation loop while
+// retaining immediate tracking of larger supply changes.
+#define VP37_VOLTAGE_HYSTERESIS_V 0.5f
+#define VP37_VOLTAGE_TRACKING_CENTER_FILTER_S 0.05f
+#define VP37_VOLTAGE_TRACKING_HOLD_MS 1000U
+// If both voltage sources fail, choose the highest expected supply so the
+// fallback cannot increase actuator drive.
+#define VP37_MAX_EXPECTED_SUPPLY_VOLTAGE 15.0f
 
 // Climb floor follows the slewed demand and releases above that demand.
 // It must not inject the final target's feedforward ahead of the ramp.
@@ -159,6 +175,10 @@ typedef struct {
 
   bool vp37Initialized;
   float lastThrottle;
+  int32_t potentiometerDemand;
+  int32_t potentiometerCandidate;
+  uint32_t potentiometerCandidateSinceMs;
+  bool potentiometerDemandReady;
   bool calibrationDone;
   // Setpoint pipeline (current names -> functional meaning):
   //   desiredAdjustometerTarget : raw quantity-position target written by
@@ -176,12 +196,20 @@ typedef struct {
   float pidPositiveLimit;
   float pwmValue;
   float voltageCorrection;
-  float compensationVolts; /**< Filtered supply voltage used to scale PWM. */
-  float voltageFilterTimeConstant; /**< Slow-path voltage filter constant. */
-  bool voltageReady; /**< Compensation voltage has been initialized. */
+  float compensationInputVolts; /**< Fused voltage before hysteresis. */
+  float compensationVolts;      /**< Held supply voltage used to scale PWM. */
+  bool voltageReady;    /**< Compensation voltage has been initialized. */
+  bool voltageTracking; /**< Fast tracking is active after a supply change. */
+  uint32_t voltageTrackingStartedMs;
+  float voltageTrackingAnchorVolts;
+  float voltageTrackingAverageVolts;
   int32_t lastPWMval;
   int32_t finalPWM;
   float lastVolts;
+  float localVolts;         /**< Unfiltered local ECU ADC voltage. */
+  float previousLocalVolts; /**< Previous local ADC sample. */
+  float localVoltageScale;  /**< Slow local-to-Adjustometer calibration. */
+  bool localVoltageReady;   /**< Local ADC source has a previous sample. */
   int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
   int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX,
       VP37_OPERATE_MAX;
@@ -192,6 +220,9 @@ typedef struct {
   uint8_t lastAdjustometerStatus;
   bool pidSaturatedHigh;
   hal_pid_terms_t pidTerms;
+  bool integralHold; /**< Settled-position hysteresis currently freezes I. */
+  bool integralHoldReleasePending;
+  uint32_t integralHoldReleaseStartedMs;
   float pidNegativeLimit;
   float pidUpperLimit;
   float desiredPosition;
@@ -238,7 +269,12 @@ typedef struct {
   float motionFF;      /**< Upward-motion component included in feedforward. */
   float ff, low, high; /**< Feedforward and effective correction limits. */
   float volts;         /**< Latest measured supply voltage (V). */
-  float compensationVolts;     /**< Supply voltage used for PWM scaling (V). */
+  float localVolts;    /**< Simultaneous local ECU ADC supply voltage (V). */
+  float compensationInputVolts; /**< Fused voltage before hysteresis (V). */
+  float compensationVolts;      /**< Supply voltage used for PWM scaling (V). */
+  float voltageCorrection;      /**< Effective supply-voltage multiplier. */
+  bool voltageTracking;         /**< Fast voltage tracking is active. */
+  bool integralHold;           /**< Settled-position integral hold is active. */
   float fuelTemp;              /**< Fuel temperature (C) used by control. */
   float temperatureCorrection; /**< Temperature multiplier used by this step. */
   hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
@@ -256,7 +292,7 @@ typedef struct {
       pidDtUs; /**< Elapsed time for a successful PID step; zero when held. */
 } VP37TraceSample;
 
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
 /** @brief Number of consecutive steps in a bench RAM capture. */
 #define VP37_TRACE_SAMPLES 1024U
 /** @brief Start a capture under the owner mutex. Non-NULL self must be running.
@@ -371,6 +407,17 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 void VP37_setVP37Throttle(VP37Pump *self, float accel);
 
 /**
+ * @brief Apply the direct potentiometer demand with single-step debounce.
+ * @param self VP37 controller instance to update.
+ * @param accel Integer potentiometer demand in the 0..100 range.
+ * @return None.
+ * @note A one-percent change must persist for
+ *       VP37_POTENTIOMETER_STEP_CONFIRM_MS; changes of at least two percent
+ *       remain immediate.
+ */
+void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel);
+
+/**
  * @brief Update VP37 PID gains and optionally reset controller state.
  * @param self VP37 controller instance to update.
  * @param kp New proportional gain.
@@ -399,16 +446,6 @@ void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
  * @return PID update time in milliseconds.
  */
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self);
-
-/**
- * @brief Select and restart the slow supply-voltage filter.
- * @param self VP37 controller instance to update.
- * @param timeConstantS Slow-path time constant in seconds; zero bypasses the
- * filter.
- * @return HAL_OK, or HAL_EINVAL for a null instance or an invalid value.
- */
-hal_status_t VP37_setVoltageFilterTimeConstant(VP37Pump *self,
-                                               float timeConstantS);
 
 #ifdef __cplusplus
 }

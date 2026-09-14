@@ -426,7 +426,7 @@ static void runCore0(void) {
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);
     VP37Pump snapshot = s_ctx.injectionPump;
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
     VP37TraceSample samples[4];
     size_t sampleCount = 0U;
     while (!hal_debug_is_muted() && (sampleCount < COUNTOF(samples)) &&
@@ -437,7 +437,7 @@ static void runCore0(void) {
     const bool recording = VP37_traceCapturing();
 #endif
     m_mutex_exit(vp37StateMutex);
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
     if (!recording) {
       VP37_showDebug(&snapshot);
     }
@@ -508,10 +508,11 @@ static void runCore1(void) {
   RPM_process(getRPMInstance());
 #ifdef VP37
   hal_mutex_lock(vp37StateMutex);
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#if defined(START_TEST_ENABLE_VP37_CYCLIC) ||                                  \
+    defined(START_TEST_ENABLE_VP37_SERIAL)
   tickTests();
 #elif defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
-  VP37_setVP37Throttle(&s_ctx.injectionPump, (float)getThrottlePercentage());
+  VP37_setPotentiometerThrottle(&s_ctx.injectionPump, getThrottlePercentage());
 #else
   engineOperation_process(&s_ctx.engineOp);
   engineOperation_showDebug(&s_ctx.engineOp);

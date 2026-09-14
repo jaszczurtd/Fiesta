@@ -247,6 +247,14 @@ bool waitForAdjustometerBaseline(void);
  */
 float getSystemSupplyVoltage(void);
 
+/**
+ * @brief Read ECU supply voltage directly from its local ADC divider.
+ * @return Supply voltage in volts, or 0 when the conversion fails.
+ * @note This bypasses Adjustometer transport and filtering. VP37 uses its fast
+ *       changes while retaining the Adjustometer path as its reference.
+ */
+float getLocalSystemSupplyVoltage(void);
+
 #ifdef __cplusplus
 }
 #endif

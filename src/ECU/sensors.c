@@ -962,12 +962,11 @@ bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out) {
   return received;
 }
 
-#ifndef VP37
 /**
  * @brief Read ECU supply voltage from the local ADC divider path.
  * @return Supply voltage in volts, clamped to 0 on invalid conversion.
  */
-static float sensors_readSystemSupplyVoltageFromADC(void) {
+float getLocalSystemSupplyVoltage(void) {
   float average = 0.0f;
   float voltage = 0.0f;
   if (fiesta_adc_read_average_ex(ADC_VOLT_PIN, &average) != HAL_OK ||
@@ -977,7 +976,6 @@ static float sensors_readSystemSupplyVoltageFromADC(void) {
   }
   return voltage;
 }
-#endif
 
 /**
  * @brief Read ECU system supply voltage.
@@ -993,6 +991,6 @@ float getSystemSupplyVoltage(void) {
   }
   return reading.voltageRaw * 0.1f;
 #else
-  return sensors_readSystemSupplyVoltageFromADC();
+  return getLocalSystemSupplyVoltage();
 #endif
 }
