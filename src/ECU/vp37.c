@@ -13,7 +13,18 @@
 #define VP37_LOCAL_VOLTAGE_STABLE_DELTA_V 0.1f
 
 #ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
-/** Log one bench-only VP37 source-shunt acquisition. */
+/** Collect the bench state a current window has to be read against. */
+static VP37CurrentConditions VP37_currentConditions(const VP37Pump *self,
+                                                    int32_t pwm) {
+  VP37CurrentConditions conditions;
+  conditions.pwmCommand = pwm;
+  conditions.measuredHz = self != NULL ? self->currentAdjustometerPosition : -1;
+  conditions.desiredHz = self != NULL ? self->desiredAdjustometer : -1;
+  conditions.supplyVolts = self != NULL ? self->compensationVolts : -1.0f;
+  conditions.fuelTempC = self != NULL ? self->lastFuelTemp : -1.0f;
+  return conditions;
+}
+
 static void VP37_showCurrentReading(const char *phase, int32_t pwm,
                                     const VP37CurrentReading *current) {
   float sampleRateKHz = 0.0f;
@@ -22,17 +33,68 @@ static void VP37_showCurrentReading(const char *phase, int32_t pwm,
         ((float)current->samples * 1000.0f) / (float)current->windowUs;
   }
   deb("VP37 ISENSE phase:%s pwm:%ld n:%lu win:%luus rate:%.1fkS/s "
-      "zero:%u(%d) raw:%u/%.1f/%u/%u active:%lu(%.1f%% run:%lu) "
-      "Vpk:%.3f Isw:%.3fA Ion:%.3fA I95:%.3fA Ipk:%.3fA",
+      "zero:%u(%d) raw:%u/%.1f/%u/%u active:%lu(%.1f%% run:%lu/%lu=%.2f ok:%d) "
+      "clip:%lu Vpk:%.3f Isw:%.3fA Ion:%.3fA I95:%.3fA Ipk:%.3fA "
+      "Irms:%.3fA Pr:%.2fW p05:%.3f p25:%.3f p50:%.3f p75:%.3f "
+      "V:%.1f t:%.1fC pos:%ld/%ld",
       phase, (long)pwm, (unsigned long)current->samples,
       (unsigned long)current->windowUs, sampleRateKHz,
       (unsigned int)current->zeroRaw, current->zeroValid,
       (unsigned int)current->rawMin, current->rawMean,
       (unsigned int)current->rawP95, (unsigned int)current->rawMax,
       (unsigned long)current->activeSamples, current->activePercent,
-      (unsigned long)current->maxActiveRun, current->peakVolts,
-      current->switchMeanAmps, current->activeMeanAmps, current->p95Amps,
-      current->peakAmps);
+      (unsigned long)current->maxActiveRun,
+      (unsigned long)current->expectedActiveRun, current->activeRunRatio,
+      current->activeRunPlausible, (unsigned long)current->clippedSamples,
+      current->peakVolts, current->switchMeanAmps, current->activeMeanAmps,
+      current->p95Amps, current->peakAmps, current->rmsShuntAmps,
+      current->shuntPowerWatts, current->p05Amps, current->p25Amps,
+      current->p50Amps, current->p75Amps, current->conditions.supplyVolts,
+      current->conditions.fuelTempC, (long)current->conditions.measuredHz,
+      (long)current->conditions.desiredHz);
+}
+
+/**
+ * Report one phase-aligned capture.
+ *
+ * `I0` is the current in the first ON sample. Well above zero it means the coil
+ * kept conducting through a freewheel path the source shunt cannot see, so the
+ * coil mean current is near `Ion`, not near `Isw`.
+ */
+static void VP37_showPhaseResult(const char *phase,
+                                 const VP37CurrentPhaseResult *result) {
+  deb("VP37 IPHASE phase:%s cyc:%lu rej:%lu clip:%lu per:%luus ton:%luus "
+      "I0:%.3fA I1:%.3fA rise:%.3fA/ms q:%.3fAms Irms:%.3fA Pr:%.2fW ccm:%d "
+      "pwm:%ld V:%.1f t:%.1fC pos:%ld/%ld",
+      phase, (unsigned long)result->cycles,
+      (unsigned long)result->rejectedCycles,
+      (unsigned long)result->clippedSamples,
+      (unsigned long)result->medianPeriodUs,
+      (unsigned long)result->medianOnTimeUs, result->startAmps, result->endAmps,
+      result->riseAmpsPerMs, result->chargeAmpMs, result->rmsShuntAmps,
+      result->shuntPowerWatts, result->continuousConduction,
+      (long)result->conditions.pwmCommand, result->conditions.supplyVolts,
+      result->conditions.fuelTempC, (long)result->conditions.measuredHz,
+      (long)result->conditions.desiredHz);
+}
+
+void VP37_dumpCurrentPhaseSamples(void) {
+  uint32_t count = 0U;
+  const VP37CurrentPhaseSample *samples = VP37_currentPhaseSamples(&count);
+  if ((samples == NULL) || (count == 0U)) {
+    derr("VP37 IRAW: no phase capture stored");
+    return;
+  }
+  deb("VP37 IRAW begin n:%lu shunt:%.3fohm", (unsigned long)count,
+      VP37_CURRENT_SHUNT_OHMS);
+  for (uint32_t i = 0U; i < count; i++) {
+    deb("VP37 IRAW %lu %lu %u %u %u %.4f", (unsigned long)i,
+        (unsigned long)samples[i].timestampUs,
+        (unsigned int)samples[i].rawSample, (unsigned int)samples[i].gateOn,
+        (unsigned int)samples[i].clipped,
+        VP37_currentRawToAmps(samples[i].rawSample));
+  }
+  deb("VP37 IRAW end");
 }
 #endif
 
@@ -462,8 +524,11 @@ static bool VP37_makeCalibration(VP37Pump *self) {
     maxSettled = VP37_waitForCalibrationSettle(self, &self->VP37_ADJUST_MAX);
 #ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
     if (maxSettled) {
+      const VP37CurrentConditions calibrationConditions =
+          VP37_currentConditions(self, calibrationPwm);
       calibrationCurrentValid =
-          VP37_currentSenseCapture(&calibrationCurrent) == HAL_OK;
+          VP37_currentSenseCaptureEx(&calibrationConditions,
+                                     &calibrationCurrent) == HAL_OK;
     }
 #endif
   }
@@ -1097,10 +1162,30 @@ void VP37_showDebug(VP37Pump *self) {
         (unsigned long)telemetry.baselineHz, extendedFresh,
         (unsigned int)telemetry.extendedFlags);
 #ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
-    VP37CurrentReading current;
-    if (VP37_currentSenseCapture(&current) == HAL_OK) {
-      VP37_showCurrentReading("run", self->finalPWM, &current);
+    // Alternate the two views so the bench keeps the same core-0 budget: the
+    // aggregate window compares operating points, the phase capture answers
+    // whether the coil current survives the OFF phase.
+    static bool phaseTurn = false;
+    const VP37CurrentConditions conditions =
+        VP37_currentConditions(self, self->finalPWM);
+    // A released actuator produces no gate edge, so the phase capture would
+    // only ever time out. Keep the aggregate window in that case.
+    if (phaseTurn && (self->finalPWM > 0)) {
+      VP37CurrentPhaseResult phase;
+      const hal_status_t status =
+          VP37_currentSensePhaseCapture(&conditions, &phase);
+      if (status == HAL_OK) {
+        VP37_showPhaseResult("run", &phase);
+      } else {
+        derr("VP37 IPHASE phase:run failed: %s", hal_status_to_string(status));
+      }
+    } else {
+      VP37CurrentReading current;
+      if (VP37_currentSenseCaptureEx(&conditions, &current) == HAL_OK) {
+        VP37_showCurrentReading("run", self->finalPWM, &current);
+      }
     }
+    phaseTurn = !phaseTurn;
 #endif
   }
 }

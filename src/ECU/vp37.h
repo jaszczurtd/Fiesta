@@ -383,6 +383,19 @@ bool VP37_isVP37Enabled(VP37Pump *self);
  */
 void VP37_showDebug(VP37Pump *self);
 
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+/**
+ * @brief Print the stored phase capture sample by sample.
+ *
+ * Emits one line per sample as `index timestampUs rawCode gateOn clipped amps`,
+ * so a bench session can reconstruct the waveform outside the ECU. The dump is
+ * long: release the actuator before calling it.
+ *
+ * @return None.
+ */
+void VP37_dumpCurrentPhaseSamples(void);
+#endif
+
 /**
  * @brief Set the VP37 timing-actuator output as a normalized angle command.
  * @param self VP37 controller instance issuing the command.
