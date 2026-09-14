@@ -108,6 +108,7 @@ set(ECU_SOURCES
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
     ${ECU_SRC}/vp37.c
+    ${ECU_SRC}/vp37_current.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
     ${SCDEFS}/sc_param_handlers.c

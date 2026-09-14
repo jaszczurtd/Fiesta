@@ -5,6 +5,7 @@
 #include "ecuContext.h"
 #include "ecuPersistence.h"
 #include "obd-2.h"
+#include "vp37_current.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>
@@ -291,6 +292,9 @@ static void initializeCore0(void) {
 #endif
 
   initSensors();
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+  VP37_currentSenseInit();
+#endif
   configSessionInit();
 
   createFan();

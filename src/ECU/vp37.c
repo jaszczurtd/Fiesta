@@ -1,4 +1,5 @@
 #include "vp37.h"
+#include "vp37_current.h"
 #include <math.h>
 
 #include <hal/timers/hal_soft_timer.h>
@@ -10,6 +11,30 @@
 #define VP37_LOCAL_VOLTAGE_SCALE_MAX 1.2f
 #define VP37_LOCAL_VOLTAGE_SCALE_FILTER_S 1.0f
 #define VP37_LOCAL_VOLTAGE_STABLE_DELTA_V 0.1f
+
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+/** Log one bench-only VP37 source-shunt acquisition. */
+static void VP37_showCurrentReading(const char *phase, int32_t pwm,
+                                    const VP37CurrentReading *current) {
+  float sampleRateKHz = 0.0f;
+  if (current->windowUs != 0U) {
+    sampleRateKHz =
+        ((float)current->samples * 1000.0f) / (float)current->windowUs;
+  }
+  deb("VP37 ISENSE phase:%s pwm:%ld n:%lu win:%luus rate:%.1fkS/s "
+      "zero:%u(%d) raw:%u/%.1f/%u/%u active:%lu(%.1f%% run:%lu) "
+      "Vpk:%.3f Isw:%.3fA Ion:%.3fA I95:%.3fA Ipk:%.3fA",
+      phase, (long)pwm, (unsigned long)current->samples,
+      (unsigned long)current->windowUs, sampleRateKHz,
+      (unsigned int)current->zeroRaw, current->zeroValid,
+      (unsigned int)current->rawMin, current->rawMean,
+      (unsigned int)current->rawP95, (unsigned int)current->rawMax,
+      (unsigned long)current->activeSamples, current->activePercent,
+      (unsigned long)current->maxActiveRun, current->peakVolts,
+      current->switchMeanAmps, current->activeMeanAmps, current->p95Amps,
+      current->peakAmps);
+}
+#endif
 
 /**
  * @brief Run the VP37 calibration sweep and capture Adjustometer limits.
@@ -419,6 +444,12 @@ static bool VP37_makeCalibration(VP37Pump *self) {
   self->VP37_ADJUST_MAX = self->VP37_ADJUST_MIDDLE = self->VP37_ADJUST_MIN =
       self->VP37_OPERATE_MAX = -1;
 
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+  VP37CurrentReading calibrationCurrent;
+  bool calibrationCurrentValid = false;
+#endif
+  int32_t calibrationPwm = 0;
+
   // Capture the natural/resting endpoint first.  Measuring MIN after a strong
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
   valToPWM(PIO_VP37_RPM, 0);
@@ -426,10 +457,23 @@ static bool VP37_makeCalibration(VP37Pump *self) {
 
   bool maxSettled = false;
   if (minSettled) {
-    valToPWM(PIO_VP37_RPM, VP37_getMaxAdjustometerPWMVal(self));
+    calibrationPwm = VP37_getMaxAdjustometerPWMVal(self);
+    valToPWM(PIO_VP37_RPM, calibrationPwm);
     maxSettled = VP37_waitForCalibrationSettle(self, &self->VP37_ADJUST_MAX);
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+    if (maxSettled) {
+      calibrationCurrentValid =
+          VP37_currentSenseCapture(&calibrationCurrent) == HAL_OK;
+    }
+#endif
   }
   valToPWM(PIO_VP37_RPM, 0);
+
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+  if (calibrationCurrentValid) {
+    VP37_showCurrentReading("cal", calibrationPwm, &calibrationCurrent);
+  }
+#endif
 
   if (!maxSettled || !minSettled) {
     self->calibrationDone = false;
@@ -1052,5 +1096,11 @@ void VP37_showDebug(VP37Pump *self) {
         (double)telemetry.chipTempDeciC * 0.1, (unsigned int)telemetry.status,
         (unsigned long)telemetry.baselineHz, extendedFresh,
         (unsigned int)telemetry.extendedFlags);
+#ifdef START_TEST_ENABLE_VP37_CURRENT_TELEMETRY
+    VP37CurrentReading current;
+    if (VP37_currentSenseCapture(&current) == HAL_OK) {
+      VP37_showCurrentReading("run", self->finalPWM, &current);
+    }
+#endif
   }
 }
