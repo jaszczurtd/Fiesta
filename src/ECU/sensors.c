@@ -149,7 +149,7 @@ void initSPI(void) {
 
   // Deassert all SPI chip-selects immediately so that no MCP2515
   // floats its /CS low during another chip's SPI transactions.
-  const uint8_t spiCsPins[] = {CAN0_GPIO, CAN1_GPIO, SD_CARD_CS};
+  const uint8_t spiCsPins[] = {CAN0_GPIO, CAN1_GPIO};
   for (uint32_t i = 0; i < COUNTOF(spiCsPins); i++) {
     hal_gpio_set_mode(spiCsPins[i], HAL_GPIO_OUTPUT);
     hal_gpio_write(spiCsPins[i], true);

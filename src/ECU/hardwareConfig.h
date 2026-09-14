@@ -47,9 +47,15 @@
 
 #define ADC_VOLT_PIN 28
 #define ADC_SENSORS_PIN 27
+#define ADC_VP37_CURRENT_PIN 26
 
-// chip select pin for SD card reader
-#define SD_CARD_CS 26
+// Low-side shunt installed in the VP37 quantity-actuator MOSFET source.
+#define VP37_CURRENT_SHUNT_OHMS 0.22f
+
+#ifdef HAL_ENABLE_SDLOGGER
+#error                                                                         \
+    "GPIO26 is reserved for VP37 current sensing; SD logging needs a new CS pin"
+#endif
 
 // for serial - GPS
 #define SERIAL_RX_GPIO 22
