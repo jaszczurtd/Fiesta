@@ -16,28 +16,38 @@
 static bool s_testsInitialized = false;
 
 //=============================================================================
-// VP37 Cyclic Test (START_TEST_ENABLE_VP37_CYCLIC)
+// VP37 Serial-session bench control
 //=============================================================================
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
 
 /**
- * @brief Parse one serial PID-tuning command for the VP37 cyclic test.
+ * @brief Parse one serial command for the active VP37 bench source.
  * @param self VP37 instance being tuned.
  * @param cmd Null-terminated command string.
  * @return None.
  */
-void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
+static void VP37_processSerialCommand(VP37Pump *self, const char *cmd);
 
 /**
- * @brief Poll the serial console and apply runtime VP37 tuning commands.
+ * @brief Apply a queued runtime VP37 bench command on the owner core.
  * @param self VP37 instance being tuned.
  * @return None.
  */
-void VP37_TunePID(VP37Pump *self);
+static void VP37_TunePID(VP37Pump *self);
+
+static hal_mutex_t s_tuneMutex = NULL;
+static char s_tuneCommand[VP37_CMD_BUF_SIZE];
+static uint8_t s_tuneCommandLength;
+static float s_commandDemand = 0.0f;
+
+#endif
+
+//=============================================================================
+// VP37 Cyclic Test (START_TEST_ENABLE_VP37_CYCLIC)
+//=============================================================================
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
 
 static CyclicTest s_ct;
-static hal_mutex_t s_tuneMutex = NULL;
-static float s_holdDemand = 0.0f;
 static uint32_t s_holdStartedMs;
 static uint32_t s_holdDurationMs;
 
@@ -65,12 +75,12 @@ static void VP37_resetCyclicTest(void) {
  * @return Current cyclic throttle demand.
  */
 static float VP37cyclicTest(void) {
-  if (s_holdDemand >= 0.0f) {
-    if (s_holdDemand > 0.0f &&
+  if (s_commandDemand >= 0.0f) {
+    if (s_commandDemand > 0.0f &&
         hal_millis_deadline_expired(s_holdStartedMs, s_holdDurationMs)) {
-      s_holdDemand = 0.0f;
+      s_commandDemand = 0.0f;
     }
-    return s_holdDemand;
+    return s_commandDemand;
   }
   uint32_t currentMillis = hal_millis();
 
@@ -108,21 +118,22 @@ static float VP37cyclicTest(void) {
  * @return True when initialization finished.
  */
 bool initTests(void) {
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
   if (s_tuneMutex == NULL) {
     s_tuneMutex = hal_mutex_create();
     if (s_tuneMutex == NULL) {
       return false;
     }
   }
-  s_ct.cmdLen = 0;
-  s_ct.cmdBuf[0] = '\0';
+  s_tuneCommandLength = 0U;
+  s_tuneCommand[0] = '\0';
+  s_commandDemand = 0.0f;
+#endif
 
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
   VP37_resetCyclicTest();
-  s_holdDemand = 0.0f;
   s_holdStartedMs = 0U;
   s_holdDurationMs = 0U;
-  s_ct.uv = 0.001f;
 #endif
 
   s_testsInitialized = true;
@@ -153,16 +164,19 @@ bool startTests(void) {
  * @return None.
  */
 void tickTests(void) {
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
   if (!s_testsInitialized) {
     return;
   }
 
-  float thr = VP37cyclicTest();
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
+  const float demand = VP37cyclicTest();
+#else
+  const float demand = s_commandDemand;
+#endif
   ecu_context_t *ctx = getECUContext();
-  VP37_setVP37Throttle(&ctx->injectionPump, thr);
+  VP37_setVP37Throttle(&ctx->injectionPump, demand);
   VP37_TunePID(&ctx->injectionPump);
-
 #endif
 }
 
@@ -173,20 +187,20 @@ void tickTests(void) {
  * @return None.
  */
 void tickTestsHandleSerialLine(const char *line) {
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
   if (!s_testsInitialized || line == NULL || line[0] == '\0') {
     return;
   }
   const size_t length = strlen(line);
-  if (length >= COUNTOF(s_ct.cmdBuf)) {
+  if (length >= COUNTOF(s_tuneCommand)) {
     derr("PID command too long");
     return;
   }
   hal_mutex_lock(s_tuneMutex);
-  const bool busy = s_ct.cmdLen != 0U;
+  const bool busy = s_tuneCommandLength != 0U;
   if (!busy) {
-    (void)memcpy(s_ct.cmdBuf, line, length + 1U);
-    s_ct.cmdLen = (uint8_t)length;
+    (void)memcpy(s_tuneCommand, line, length + 1U);
+    s_tuneCommandLength = (uint8_t)length;
   }
   hal_mutex_unlock(s_tuneMutex);
   if (busy) {
@@ -197,19 +211,19 @@ void tickTestsHandleSerialLine(const char *line) {
 #endif
 }
 
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
+#ifdef START_TEST_ENABLE_VP37_TUNING
 /**
  * @brief Apply one queued command on the core that owns PID state.
  * @param self Controller updated under the caller's VP37 mutex.
  * @return None.
  */
-void VP37_TunePID(VP37Pump *self) {
+static void VP37_TunePID(VP37Pump *self) {
   char command[VP37_CMD_BUF_SIZE];
   hal_mutex_lock(s_tuneMutex);
-  const uint8_t length = s_ct.cmdLen;
+  const uint8_t length = s_tuneCommandLength;
   if (length != 0U) {
-    (void)memcpy(command, s_ct.cmdBuf, (size_t)length + 1U);
-    s_ct.cmdLen = 0U;
+    (void)memcpy(command, s_tuneCommand, (size_t)length + 1U);
+    s_tuneCommandLength = 0U;
   }
   hal_mutex_unlock(s_tuneMutex);
   if (length != 0U) {
@@ -223,7 +237,7 @@ void VP37_TunePID(VP37Pump *self) {
  * @param cmd Null-terminated command string.
  * @return None.
  */
-void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
+static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
   if (cmd[0] == '?' || cmd[0] == 'H' || cmd[0] == 'h') {
     float kp, ki, kd;
     VP37_getVP37PIDValues(self, &kp, &ki, &kd);
@@ -231,10 +245,17 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
         kd, self->pidTimeUpdate, self->pidTf);
     deb("\033[33mCAL: MIN=%d MID=%d MAX=%d\033[0m", self->VP37_ADJUST_MIN,
         self->VP37_ADJUST_MIDDLE, self->VP37_ADJUST_MAX);
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
-        "F<seconds> V<seconds;0=bypass> R(reset) B(trace) "
-        "L<PWM cap;0=auto> W<thermal weight 0..1> S<timed hold 0..100> "
-        "C(cyclic) X(stop) ?(help)\033[0m");
+        "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
+        "W<thermal weight 0..1> S<timed hold 0..100> C(cyclic) "
+        "X(stop) ?(help)\033[0m");
+#else
+    deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
+        "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
+        "W<thermal weight 0..1> S<persistent demand 0..100> "
+        "X(stop) ?(help)\033[0m");
+#endif
     return;
   }
 
@@ -250,40 +271,37 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     deb("VP37 stopped; restart ECU to initialize");
     return;
   }
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
   if ((cmd[0] == 'C' || cmd[0] == 'c') && cmd[1] == '\0') {
     VP37_resetCyclicTest();
-    s_holdDemand = -1.0f;
+    s_commandDemand = -1.0f;
     deb("VP37 cyclic started: delay:%lu ms cycles:%u",
         (unsigned long)getCurrentVP37CyclicDelayMs(),
         (unsigned int)CYCLIC_FULL_CYCLES);
     return;
   }
+#endif
 
-  if (cmd[0] == 'R' || cmd[0] == 'r') {
-    VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
+  if (((cmd[0] == 'R') || (cmd[0] == 'r')) && (cmd[1] == '\0')) {
+    VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
     self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
     self->pidTf = VP37_PID_TF;
     self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
     self->temperatureCompensationWeight = 1.0f;
-    (void)VP37_setVoltageFilterTimeConstant(self, VP37_VOLTAGE_FILTER_S);
     hal_pid_controller_set_tf(self->adjustController, self->pidTf);
-    hal_pid_controller_reset(self->adjustController);
-    self->lastPWMval = -1;
-    self->finalPWM = VP37_PWM_MIN;
     deb("\033[33mPID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
-        "TF=%.4f VF=%.3f\033[0m",
+        "TF=%.4f\033[0m",
         VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE,
-        VP37_PID_TF, VP37_VOLTAGE_FILTER_S);
+        VP37_PID_TF);
     return;
   }
 
   // Gains use seconds; T selects the minimum control period in milliseconds.
-  char prefix = cmd[0];
+  const char prefix = cmd[0];
   if ((prefix == 'P' || prefix == 'p' || prefix == 'I' || prefix == 'i' ||
        prefix == 'D' || prefix == 'd' || prefix == 'T' || prefix == 't' ||
        prefix == 'F' || prefix == 'f' || prefix == 'L' || prefix == 'l' ||
-       prefix == 'S' || prefix == 's' || prefix == 'V' || prefix == 'v' ||
-       prefix == 'W' || prefix == 'w') &&
+       prefix == 'S' || prefix == 's' || prefix == 'W' || prefix == 'w') &&
       cmd[1] != '\0') {
 
     char *end = NULL;
@@ -295,8 +313,6 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
          ((val < 1.0f) || (val > 100.0f))) ||
         (((prefix == 'S') || (prefix == 's')) && (val > 100.0f)) ||
         (((prefix == 'W') || (prefix == 'w')) && (val > 1.0f)) ||
-        (((prefix == 'V') || (prefix == 'v')) &&
-         (val > VP37_VOLTAGE_FILTER_MAX_S)) ||
         (((prefix == 'L') || (prefix == 'l')) &&
          (val > VP37_BENCH_INTEGRAL_LIMIT_MAX))) {
       derr("Invalid PID setting: '%s'", cmd);
@@ -304,11 +320,6 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     }
 
     switch (prefix) {
-    case 'V':
-    case 'v':
-      (void)VP37_setVoltageFilterTimeConstant(self, val);
-      deb("VP37 voltage filter: %.3f s (0=bypass)", val);
-      break;
     case 'W':
     case 'w':
       self->temperatureCompensationWeight = val;
@@ -321,13 +332,17 @@ void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
       break;
     case 'S':
     case 's':
-      s_holdDemand = val;
+      s_commandDemand = val;
+#ifdef START_TEST_ENABLE_VP37_CYCLIC
       s_holdStartedMs = hal_millis();
       s_holdDurationMs = val >= VP37_BENCH_HIGH_HOLD_PERCENT
                              ? VP37_BENCH_HIGH_HOLD_MS
                              : VP37_BENCH_HOLD_MS;
       deb("VP37 hold: %.1f timeout:%lu ms (then zero)", val,
           (unsigned long)(val > 0.0f ? s_holdDurationMs : 0U));
+#else
+      deb("VP37 demand: %.1f persistent", val);
+#endif
       break;
     case 'P':
     case 'p':

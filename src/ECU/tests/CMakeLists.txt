@@ -32,6 +32,12 @@ add_executable(test_vp37_cyclic test_vp37.cpp ../vp37.c ../tests.c)
 target_compile_definitions(test_vp37_cyclic PRIVATE START_TEST_ENABLE_VP37_CYCLIC)
 target_link_libraries(test_vp37_cyclic PRIVATE ecu_mock)
 add_test(NAME test_vp37_cyclic COMMAND test_vp37_cyclic)
+# Exercise the persistent command-driven bench mode independently of cyclic.
+add_executable(test_vp37_serial_bench test_vp37.cpp ../vp37.c ../tests.c)
+target_compile_definitions(test_vp37_serial_bench
+    PRIVATE START_TEST_ENABLE_VP37_SERIAL)
+target_link_libraries(test_vp37_serial_bench PRIVATE ecu_mock)
+add_test(NAME test_vp37_serial_bench COMMAND test_vp37_serial_bench)
 add_ecu_test(test_rpm)
 
 if(UNIX)

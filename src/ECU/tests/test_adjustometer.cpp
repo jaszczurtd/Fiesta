@@ -110,13 +110,14 @@ void test_adjustometer_large_negative(void) {
 }
 
 void test_adjustometer_voltage_conversion(void) {
+  injectSupplyVoltageAdc(13.8f);
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 13.8f, getLocalSystemSupplyVoltage());
 #ifdef VP37
   // Register value 138 -> 13.8 V
   injectAdjRegisterData(0, 138, 40, ADJ_STATUS_OK);
   float v = getSystemSupplyVoltage();
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 13.8f, v);
 #else
-  injectSupplyVoltageAdc(13.8f);
   float v = getSystemSupplyVoltage();
   TEST_ASSERT_FLOAT_WITHIN(1.0f, 13.8f, v);
 #endif

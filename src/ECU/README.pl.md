@@ -19,16 +19,45 @@ PID. Model nie koryguje częstotliwości oscylatora ani baseline czujnika.
 Błąd komunikacji wstrzymuje PID i po 20 ms wyłącza napęd;
 nieważny status pozycji wyłącza go od razu.
 
+Kompensacja napięcia korzysta z szybkiego lokalnego ADC ECU. Pierwsza poprawna
+para po starcie lub błędzie lokalnego odczytu ustala skalę według Adjustometera;
+pozostałe zmiany skali zachodzą tylko wtedy, gdy zadanie 0% doszło do MIN, czyli
+warunku zwolnienia napędu. Adjustometer jest też źródłem zapasowym po błędzie
+lokalnego ADC. Nieważne napięcie z obu źródeł wybiera
+15 V, aby nie zwiększać sterowania. Histereza sample-and-hold 0,5 V tłumi
+tętnienia powiązane z obciążeniem. Po przekroczeniu tego pasma bezpośrednia
+korekcja `12 / Vc` przejmuje lokalny pomiar w bieżącym kroku regulatora.
+
 Pętla regulatora używa jawnego okresu i rzeczywistego upływu sekund. Logi
 zawierają osobne człony P/I/D oraz dostępne limity korekcji; wysyłanie odbywa
 się poza mutexem regulatora. Tor pomiarowy opisuje
 [README Adjustometera](../Adjustometer/README.pl.md) i wspólna
 [mapa rejestrów I2C](../common/adjustometer_protocol.h).
+Człon D jest domyślnie wyłączony, ponieważ opóźniony pomiar pozycji po udarze
+mechanicznym może wzbudzić trwałą oscylację. Przy ustalonym celu całka jest
+zatrzymywana w paśmie 20 Hz i wznawiana dopiero wtedy, gdy błąd przez 500 ms
+pozostaje poza pasmem 40 Hz. Człon P działa przez cały czas.
+Śledzenie zmian napięcia również zatrzymuje całkowanie.
 
-W kompilacji stanowiskowej można nadpisać `VP37_PWM_FREQUENCY_HZ` oraz
-`CYCLIC_DELAYTIME`. Domyślne wartości dla VP37 pozostają równe 200 Hz i 12 ms;
-`START_TEST_VP37_MODE=1` wybiera próby cyclic. Limity czasu dodatniego
-zadania nadal obejmują rampę.
+Logi zapisują napięcie z Adjustometera po dolnym ograniczeniu jako `V`, lokalny
+odczyt ADC jako `Vl`, wybrane wejście przed histerezą jako `Ve`, a napięcie
+rzeczywiście użyte jako `Vc`. `vcor` jest zastosowanym mnożnikiem, `vt` oznacza
+śledzenie zmian napięcia, a `ih` zatrzymanie całki dla ustalonego celu.
+
+W kompilacji stanowiskowej można nadpisać `VP37_PWM_FREQUENCY_HZ` oraz cztery
+wartości `CYCLIC_DELAYTIME_*`. Domyślne wartości to 200 Hz i kroki cyclic
+4, 6, 12 oraz 2 ms, po sześć pełnych przebiegów 0-100-0. Krok 2 ms jest próbą
+przeciążeniową, która przekracza zwykły limit rampy zadania.
+`START_TEST_VP37_MODE=1` wybiera test cyclic, który zaczyna od zera i jest
+uruchamiany poleceniem `C`. Limity czasu dodatniego zadania
+obejmują rampę, a aktywny krok jest zapisany jako `cyms`.
+
+`START_TEST_VP37_MODE=3` wybiera stałe zadanie z portu szeregowego. Polecenie
+`S<0..100>` działa wtedy do następnego `S`, `X` albo restartu, a zapis RAM jest
+dostępny bez uruchamiania cyclic. Nagłówek wybiera obecnie domyślnie tryb 3 dla
+firmware stanowiskowego; build do pracy z silnikiem musi nadpisać go trybem 0.
+W trybie 2 pojedyncza zmiana potencjometru o jeden procent musi utrzymać się
+przez 150 ms; większe zmiany są przyjmowane od razu.
 
 ## Trwałe dane i GPS
 

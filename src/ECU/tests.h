@@ -12,21 +12,32 @@ extern "C" {
 // #define START_TEST_ENABLE_DTC_INJECTION
 
 // 0: engine start/idle/driver demand; 1: cyclic bench; 2: direct potentiometer
-// bench. A build definition can override the local selection without editing
-// this file.
+// bench; 3: persistent Serial Session demand. A build definition can override
+// the local selection without editing this file.
 #ifndef START_TEST_VP37_MODE
-#define START_TEST_VP37_MODE 2
+#define START_TEST_VP37_MODE 0
 #endif
 #if START_TEST_VP37_MODE == 1
 #define START_TEST_ENABLE_VP37_CYCLIC
 #elif START_TEST_VP37_MODE == 2
 #define START_TEST_ENABLE_VP37_POTENTIOMETER
+#elif START_TEST_VP37_MODE == 3
+#define START_TEST_ENABLE_VP37_SERIAL
 #elif START_TEST_VP37_MODE != 0
-#error "Invalid START_TEST_VP37_MODE (expected 0, 1 or 2)"
+#error "Invalid START_TEST_VP37_MODE (expected 0, 1, 2 or 3)"
 #endif
-#if defined(START_TEST_ENABLE_VP37_CYCLIC) &&                                  \
-    defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
+#if (defined(START_TEST_ENABLE_VP37_CYCLIC) &&                                 \
+     defined(START_TEST_ENABLE_VP37_POTENTIOMETER)) ||                         \
+    (defined(START_TEST_ENABLE_VP37_CYCLIC) &&                                 \
+     defined(START_TEST_ENABLE_VP37_SERIAL)) ||                                \
+    (defined(START_TEST_ENABLE_VP37_POTENTIOMETER) &&                          \
+     defined(START_TEST_ENABLE_VP37_SERIAL))
 #error "Select only one VP37 bench demand source"
+#endif
+
+#if defined(START_TEST_ENABLE_VP37_CYCLIC) ||                                  \
+    defined(START_TEST_ENABLE_VP37_SERIAL)
+#define START_TEST_ENABLE_VP37_TUNING
 #endif
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
@@ -46,24 +57,22 @@ extern "C" {
 #ifndef CYCLIC_FULL_CYCLES
 #define CYCLIC_FULL_CYCLES 6
 #endif
-// Hold deadlines include setpoint slew; expiry selects zero demand.
+// Cyclic-mode hold deadlines include setpoint slew; expiry selects zero.
 #define VP37_BENCH_HOLD_MS 2000U
 #define VP37_BENCH_HIGH_HOLD_MS 1000U
 #define VP37_BENCH_HIGH_HOLD_PERCENT 80.0f
-#define VP37_BENCH_INTEGRAL_LIMIT_MAX 360.0f
-
-// Serial command buffer for runtime PID tuning
-#define VP37_CMD_BUF_SIZE 64
 
 typedef struct {
   uint32_t previousMillis;
   int increment;
   int value;
-  float uv;
-  char cmdBuf[VP37_CMD_BUF_SIZE];
-  uint8_t cmdLen;
 } CyclicTest;
 
+#endif
+
+#ifdef START_TEST_ENABLE_VP37_TUNING
+#define VP37_BENCH_INTEGRAL_LIMIT_MAX 360.0f
+#define VP37_CMD_BUF_SIZE 64U
 #endif
 
 #ifdef START_TEST_ENABLE_VP37_CYCLIC

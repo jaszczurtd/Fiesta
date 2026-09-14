@@ -19,27 +19,45 @@ This model does not correct oscillator frequency or sensor baseline.
 Failed communication holds PID briefly and stops drive after 20 ms;
 invalid position status stops it immediately.
 
-Supply-voltage compensation uses the Adjustometer reading. Its 1 s steady-state
-filter suppresses quantization and bench-supply ripple. A drop larger than
-0.5 V uses a 20 ms path, while a large voltage recovery immediately limits the
-filtered lag to less than 0.1 V. Trace output records measured voltage as `V`
-and compensation voltage as `Vc`.
+Supply-voltage compensation uses the fast local ECU ADC. The first valid pair
+after startup or a local conversion failure scales it against the Adjustometer;
+other scale updates occur only when zero demand reaches MIN, the condition used
+for drive release. The Adjustometer is also the fallback if the local conversion
+fails; invalid voltage from both sources selects 15 V so the fallback cannot
+increase drive. A 0.5 V
+sample-and-hold hysteresis suppresses
+steady load-correlated ripple. Once that band is exceeded, the direct
+`12 / Vc` correction follows the local input in the current control step.
 
 The control loop uses an explicit period and elapsed seconds. Diagnostic
 snapshots contain individual P/I/D terms and the effective correction limits;
 serial output runs outside the controller mutex. See the
 [Adjustometer README](../Adjustometer/README.md) for the measurement path, and
 the shared [I2C register map](../common/adjustometer_protocol.h).
+Derivative action is disabled by default because delayed position feedback can
+turn a mechanical impact into sustained limit cycling. At a settled target,
+integral state is held inside 20 Hz and released only after the error remains
+outside 40 Hz for 500 ms; proportional control remains active. Active voltage
+tracking also freezes integration.
+
+Trace output records the clamped Adjustometer-derived voltage as `V`, the local
+ADC conversion as `Vl`, the selected input before hysteresis as `Ve`, and the
+voltage actually used as `Vc`. `vcor` is the applied multiplier, `vt` marks
+active voltage tracking, and `ih` marks settled-target integral hold.
 
 Bench builds can override `VP37_PWM_FREQUENCY_HZ` and the four
 `CYCLIC_DELAYTIME_*` values through compile definitions. Their VP37 defaults
 are 200 Hz and deterministic 4, 6, 12 and 2 ms cyclic steps, with six complete
 0-100-0 cycles at each speed. The 2 ms step exceeds the normal demand slew
 limit and is a stress case. `START_TEST_VP37_MODE=1` selects cyclic tests; the
-fixture starts at zero demand and `C` restarts the complete sequence from zero.
-Trace samples include the active delay as `cyms`. `V<seconds>` selects the
-bench voltage-filter time constant and `V0` bypasses it. Hold deadlines still
-include the setpoint ramp.
+fixture starts at zero demand and `C` starts the complete sequence from zero.
+Trace samples include the active delay as `cyms`. Hold deadlines still include
+the setpoint ramp. `START_TEST_VP37_MODE=3` selects persistent serial demand:
+`S<0..100>` remains active until the next `S`, `X`, or restart, and RAM traces
+are available without running the cyclic profile. The header currently defaults
+to mode 3 for bench firmware; an engine build must override it with mode 0.
+Mode 2 rejects isolated one-percent potentiometer steps unless they persist for
+150 ms; larger changes are immediate.
 
 ## Persistent data and GPS
 
