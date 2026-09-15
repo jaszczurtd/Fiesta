@@ -342,13 +342,19 @@ that every mutable ECU byte lives inside `ecu_context_t`.
     heater HI/LO, glow-plug lamp, heated window L/P, VP37 enable).
 - **CAN0** (main vehicle bus): SPI-attached controller, CS=GPIO 17, INT=15.
 - **CAN1** (OBD-2 port): SPI-attached controller, CS=GPIO 6, INT=14.
-- **SPI** (MISO=16, MOSI=19, SCK=18): shared between CAN0, CAN1, and the SD
-  card (CS=26).
+- **SPI** (MISO=16, MOSI=19, SCK=18): shared between CAN0 and CAN1.
+  GPIO26 is reserved for the VP37 source-shunt input; SD logging requires
+  a different chip-select pin.
 - **ADC**: `ADC_SENSORS_PIN=27` fed by a HC4051 analog mux (select pins
   11/12/13) giving 6 analog inputs - coolant temp (ch 0), oil temp (ch 1),
   throttle position (ch 2), air temp (ch 3), fuel level (ch 4), manifold/boost
   pressure (ch 5). `ADC_VOLT_PIN=28` reads ECU supply voltage through a
-  ~47 kΩ / 10 kΩ divider.
+  ~47 kΩ / 10 kΩ divider. `ADC_VP37_CURRENT_PIN=26` is connected to the
+  0.22 Ω source shunt. `vp37_current.c` observes one PWM period on core 0
+  every 20 ms while active; telemetry includes ON current and waveform validity.
+  Current values are diagnostic only. The same task also averages supply voltage
+  over the period; bench `V1` selects this input for voltage compensation while
+  it remains valid and younger than 100 ms. `V0` retains the local ADC default.
 - **Timing-sensitive GPIO/PWM paths** (legacy pin constants retain the
   `PIO_*` prefix):
   - `PIO_INTERRUPT_HALL=7` - engine Hall sensor GPIO interrupt (RPM),

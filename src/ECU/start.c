@@ -5,6 +5,7 @@
 #include "ecuContext.h"
 #include "ecuPersistence.h"
 #include "obd-2.h"
+#include "vp37_current.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>
@@ -41,6 +42,7 @@ typedef struct {
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
   uint32_t vp37DebugLastMs;
+  uint32_t vp37CurrentLastMs;
 } start_runtime_state_t;
 
 typedef struct {
@@ -291,6 +293,9 @@ static void initializeCore0(void) {
 #endif
 
   initSensors();
+#ifdef VP37
+  VP37_currentSenseInit();
+#endif
   configSessionInit();
 
   createFan();
@@ -382,6 +387,46 @@ void callAtEverySecond(void) {
 #endif
 }
 
+#ifdef VP37
+/** Observe outside the pump mutex; the copied state precedes acquisition. */
+static void start_observeVP37Current(void) {
+  if (!hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37CurrentLastMs,
+                                       VP37_CURRENT_OBSERVATION_MS)) {
+    return;
+  }
+  m_mutex_enter_blocking(vp37StateMutex);
+  const VP37Pump snapshot = s_ctx.injectionPump;
+  m_mutex_exit(vp37StateMutex);
+  if (!snapshot.vp37Initialized || !snapshot.currentObservationEnabled ||
+      snapshot.quantityAtRest || (snapshot.finalPWM <= 0)) {
+    return;
+  }
+  VP37CurrentPulseResult result;
+  const hal_status_t status = VP37_currentSensePulseCapture(&result);
+  m_mutex_enter_blocking(vp37StateMutex);
+  s_ctx.injectionPump.cycleSupplyVolts = result.supplyVolts;
+  s_ctx.injectionPump.cycleSupplyUs = result.cycleStartUs + result.periodUs;
+  s_ctx.injectionPump.cycleSupplyValid = result.supplyValid;
+  m_mutex_exit(vp37StateMutex);
+  deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
+      "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
+      "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
+      "Vavg:%.4f Vok:%u",
+      (unsigned long)result.cycleStartUs,
+      (unsigned long)snapshot.controlSequence,
+      (unsigned long)snapshot.controlLastUs, (long)snapshot.finalPWM,
+      (long)snapshot.currentAdjustometerPosition,
+      (long)snapshot.desiredAdjustometer, snapshot.compensationVolts,
+      snapshot.lastFuelTemp, result.meanAmps, result.p95Amps, result.peakAmps,
+      (unsigned long)result.periodUs, (unsigned long)result.onTimeUs,
+      (long)result.pwmCommand, (unsigned long)result.samples,
+      (unsigned long)result.guardedSamples,
+      (unsigned long)result.clippedSamples, (unsigned)result.zeroRaw,
+      result.zeroValid ? 1U : 0U, result.waveformValid ? 1U : 0U, (int)status,
+      result.supplyVolts, result.supplyValid ? 1U : 0U);
+}
+#endif
+
 /**
  * @brief Run one core-0 scheduler iteration for I/O and service tasks.
  * @return None.
@@ -422,6 +467,7 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 9;
 
 #ifdef VP37
+  start_observeVP37Current();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);

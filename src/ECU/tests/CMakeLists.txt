@@ -26,6 +26,11 @@ add_ecu_test(test_dtc_recovery)
 add_ecu_test(test_turbo)
 add_ecu_test(test_adjustometer)
 add_ecu_test(test_vp37)
+add_ecu_test(test_vp37_current)
+add_executable(test_vp37_current_fast test_vp37_current.cpp ../vp37_current.c)
+target_compile_definitions(test_vp37_current_fast PRIVATE VP37_PWM_FREQUENCY_HZ=1000)
+target_link_libraries(test_vp37_current_fast PRIVATE ecu_mock)
+add_test(NAME test_vp37_current_fast COMMAND test_vp37_current_fast)
 # Exercise the cyclic fixture and optional RAM trace even when the host library
 # uses normal demand.
 add_executable(test_vp37_cyclic test_vp37.cpp ../vp37.c ../tests.c)

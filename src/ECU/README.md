@@ -16,8 +16,25 @@ the complete FF+PID command relative to the warm 49°C reference. The bounded
 factor is filtered after initialization; bad temperature data holds its last
 value. Physical output limits are accounted for before PID integration.
 This model does not correct oscillator frequency or sensor baseline.
+The installed 0.22-ohm source shunt uses a holding-map multiplier of 1.08
+(`VP37_PWM_FF_HARDWARE_GAIN`). It adjusts the base command before voltage and
+temperature compensation; the motion term and PID gains retain their own
+values. The calibrated position range remains unchanged. GPIO26 is reserved
+for the shunt input; SD logging requires a different chip-select pin.
 Failed communication holds PID briefly and stops drive after 20 ms;
 invalid position status stops it immediately.
+
+GPIO26 current acquisition runs on core 0 every 20 ms while the actuator is
+active. It observes one complete measured PWM period and excludes 60 us around
+both ON edges. `VP37 IPULSE` reports the guarded ON mean (winsorized at P95),
+P95, unfiltered peak, timing, zero calibration, clipping and validity, together
+with the controller snapshot preceding acquisition. These are source-shunt ON
+measurements; the freewheel path bypasses the shunt. Acquisition and logging
+run outside the pump mutex. Current has no path to PWM, PID or a cutoff.
+Bench commands `Q0` and `Q1` disable and enable acquisition for comparison.
+At 1 kHz and above, acquisition shortens the sampling delay from 20 to 4 us;
+the 60 us edge guards and minimum of eight guarded samples still apply.
+A short ON phase can still yield too few samples; the result remains invalid.
 
 Supply-voltage compensation uses the fast local ECU ADC. The first valid pair
 after startup or a local conversion failure scales it against the Adjustometer;
@@ -28,22 +45,28 @@ increase drive. A 0.5 V
 sample-and-hold hysteresis suppresses
 steady load-correlated ripple. Once that band is exceeded, the direct
 `12 / Vc` correction follows the local input in the current control step.
+Bench `V1` selects supply voltage averaged over a complete PWM period by the
+current acquisition task. ON and OFF means are weighted by their durations.
+An invalid result, age of 100 ms, disabled acquisition or released drive uses
+the ordinary local ADC path. `V0` selects that path explicitly and is the default.
 
 The control loop uses an explicit period and elapsed seconds. Diagnostic
 snapshots contain individual P/I/D terms and the effective correction limits;
 serial output runs outside the controller mutex. See the
 [Adjustometer README](../Adjustometer/README.md) for the measurement path, and
 the shared [I2C register map](../common/adjustometer_protocol.h).
-Derivative action is disabled by default because delayed position feedback can
-turn a mechanical impact into sustained limit cycling. At a settled target,
-integral state is held inside 20 Hz and released only after the error remains
-outside 40 Hz for 500 ms; proportional control remains active. Active voltage
-tracking also freezes integration.
+The default gains are P=0.05, I=0.20 and D=0 with a 5 ms control period.
+Integral hold requires 100 ms
+continuously inside 20 Hz; a brief crossing does not freeze I. It releases after
+500 ms continuously outside 40 Hz. Active voltage tracking freezes integration.
+Bench `E<0..1000>` selects the hold confirmation in milliseconds; `E0` allows
+comparison with immediate entry. `R` restores the default PID and confirmation.
 
 Trace output records the clamped Adjustometer-derived voltage as `V`, the local
 ADC conversion as `Vl`, the selected input before hysteresis as `Ve`, and the
 voltage actually used as `Vc`. `vcor` is the applied multiplier, `vt` marks
-active voltage tracking, and `ih` marks settled-target integral hold.
+active voltage tracking, `ih` marks settled-target integral hold, and `vp`
+marks use of the complete-period supply mean. `VP37 CFG` includes `pwm_hz`.
 
 Bench builds can override `VP37_PWM_FREQUENCY_HZ` and the four
 `CYCLIC_DELAYTIME_*` values through compile definitions. Their VP37 defaults
@@ -55,7 +78,7 @@ Trace samples include the active delay as `cyms`. Hold deadlines still include
 the setpoint ramp. `START_TEST_VP37_MODE=3` selects persistent serial demand:
 `S<0..100>` remains active until the next `S`, `X`, or restart, and RAM traces
 are available without running the cyclic profile. The header currently defaults
-to mode 3 for bench firmware; an engine build must override it with mode 0.
+to mode 2 for potentiometer bench firmware; an engine build must override it with mode 0.
 Mode 2 rejects isolated one-percent potentiometer steps unless they persist for
 150 ms; larger changes are immediate.
 

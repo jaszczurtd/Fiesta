@@ -15,7 +15,7 @@ extern "C" {
 // bench; 3: persistent Serial Session demand. A build definition can override
 // the local selection without editing this file.
 #ifndef START_TEST_VP37_MODE
-#define START_TEST_VP37_MODE 0
+#define START_TEST_VP37_MODE 2
 #endif
 #if START_TEST_VP37_MODE == 1
 #define START_TEST_ENABLE_VP37_CYCLIC

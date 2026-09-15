@@ -149,6 +149,12 @@ void test_set_global_value_invalid_index_does_not_modify_valid_slot(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 321.0f, getGlobalValue(F_RPM));
 }
 
+void test_init_spi_does_not_drive_vp37_current_sense_pin(void) {
+  hal_gpio_set_mode(ADC_VP37_CURRENT_PIN, HAL_GPIO_INPUT);
+  initSPI();
+  TEST_ASSERT_FALSE(hal_mock_gpio_is_output(ADC_VP37_CURRENT_PIN));
+}
+
 // ── internal testable helpers ───────────────────────────────────────────────
 
 void test_internal_throttle_helper_maps_min_to_full_scale(void) {
@@ -336,6 +342,7 @@ int main(void) {
   RUN_TEST(test_dpf_not_regenerating_after_flag_clear);
   RUN_TEST(test_get_global_value_invalid_index_returns_zero);
   RUN_TEST(test_set_global_value_invalid_index_does_not_modify_valid_slot);
+  RUN_TEST(test_init_spi_does_not_drive_vp37_current_sense_pin);
   RUN_TEST(test_internal_throttle_helper_maps_min_to_full_scale);
   RUN_TEST(test_internal_throttle_helper_maps_max_to_zero);
   RUN_TEST(test_internal_throttle_helper_clamps_below_min);

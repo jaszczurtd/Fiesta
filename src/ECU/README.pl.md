@@ -16,8 +16,25 @@ i skaluje całe sterowanie FF+PID względem punktu odniesienia 49°C. Ograniczon
 współczynnik jest filtrowany po inicjalizacji; błędna temperatura zatrzymuje
 jego ostatnią wartość. Fizyczne limity wyjścia są uwzględniane przed całkowaniem
 PID. Model nie koryguje częstotliwości oscylatora ani baseline czujnika.
+Dla zamontowanego bocznika 0,22 Ω mapa podtrzymania ma mnożnik 1,08
+(`VP37_PWM_FF_HARDWARE_GAIN`). Zwiększa on sterowanie bazowe przed kompensacją
+napięcia i temperatury; człon ruchu i nastawy PID zachowują własne wartości.
+Zakres kalibracji pozycji pozostaje bez zmian. GPIO26 jest zarezerwowane dla
+wejścia bocznika; zapis na karcie SD wymaga innego pinu chip-select.
 Błąd komunikacji wstrzymuje PID i po 20 ms wyłącza napęd;
 nieważny status pozycji wyłącza go od razu.
+
+Pomiar prądu na GPIO26 działa na core 0 co 20 ms przy aktywnym nastawniku.
+Obejmuje jeden pełny, zmierzony okres PWM i pomija 60 us przy obu zboczach fazy
+ON. `VP37 IPULSE` podaje średnią fazy ON z ograniczeniem próbek do P95, P95,
+surowe maksimum, timing, kalibrację zera, clipping i ważność oraz stan regulatora
+sprzed pomiaru. Są to pomiary bocznika w fazie ON; prąd freewheel omija bocznik.
+Pomiar i logowanie odbywają się poza mutexem nastawnika. Prąd nie wpływa na PWM,
+PID ani odcięcie. Komendy stanowiskowe `Q0` i `Q1` wyłączają i włączają pomiar
+na potrzeby porównania.
+Przy 1 kHz i wyższych częstotliwościach programowe opóźnienie skraca się z 20
+do 4 us; nadal obowiązuje odrzucanie 60 us przy zboczach i minimum osiem próbek.
+Krótka faza ON może nadal dać za mało próbek; taki wynik pozostaje nieważny.
 
 Kompensacja napięcia korzysta z szybkiego lokalnego ADC ECU. Pierwsza poprawna
 para po starcie lub błędzie lokalnego odczytu ustala skalę według Adjustometera;
@@ -27,22 +44,29 @@ lokalnego ADC. Nieważne napięcie z obu źródeł wybiera
 15 V, aby nie zwiększać sterowania. Histereza sample-and-hold 0,5 V tłumi
 tętnienia powiązane z obciążeniem. Po przekroczeniu tego pasma bezpośrednia
 korekcja `12 / Vc` przejmuje lokalny pomiar w bieżącym kroku regulatora.
+Stanowiskowe `V1` wybiera napięcie uśrednione przez zadanie pomiaru prądu po
+pełnym okresie PWM. Średnie faz ON i OFF są ważone ich czasem trwania.
+Nieważny wynik, wiek 100 ms, wyłączony pomiar albo zwolniony napęd wybiera
+zwykły lokalny odczyt ADC. `V0` wybiera ten tor wprost i jest ustawieniem domyślnym.
 
 Pętla regulatora używa jawnego okresu i rzeczywistego upływu sekund. Logi
 zawierają osobne człony P/I/D oraz dostępne limity korekcji; wysyłanie odbywa
 się poza mutexem regulatora. Tor pomiarowy opisuje
 [README Adjustometera](../Adjustometer/README.pl.md) i wspólna
 [mapa rejestrów I2C](../common/adjustometer_protocol.h).
-Człon D jest domyślnie wyłączony, ponieważ opóźniony pomiar pozycji po udarze
-mechanicznym może wzbudzić trwałą oscylację. Przy ustalonym celu całka jest
-zatrzymywana w paśmie 20 Hz i wznawiana dopiero wtedy, gdy błąd przez 500 ms
-pozostaje poza pasmem 40 Hz. Człon P działa przez cały czas.
-Śledzenie zmian napięcia również zatrzymuje całkowanie.
+Domyślne nastawy to P=0,05, I=0,20 i D=0 z okresem regulatora 5 ms.
+Zatrzymanie całki wymaga ciągłego utrzymania błędu
+wewnątrz 20 Hz przez 100 ms; krótkie przejście przez cel nie zamraża I.
+Całkowanie wznawia się po 500 ms ciągłego błędu poza 40 Hz. Aktywne śledzenie
+napięcia również zatrzymuje całkowanie. Stanowiskowe `E<0..1000>` wybiera czas
+potwierdzenia w ms; `E0` umożliwia porównanie z natychmiastowym zatrzymaniem.
+`R` przywraca domyślne nastawy PID i potwierdzenia.
 
 Logi zapisują napięcie z Adjustometera po dolnym ograniczeniu jako `V`, lokalny
 odczyt ADC jako `Vl`, wybrane wejście przed histerezą jako `Ve`, a napięcie
 rzeczywiście użyte jako `Vc`. `vcor` jest zastosowanym mnożnikiem, `vt` oznacza
-śledzenie zmian napięcia, a `ih` zatrzymanie całki dla ustalonego celu.
+śledzenie zmian napięcia, `ih` zatrzymanie całki dla ustalonego celu, a `vp`
+użycie średniej napięcia z pełnego okresu. `VP37 CFG` zawiera `pwm_hz`.
 
 W kompilacji stanowiskowej można nadpisać `VP37_PWM_FREQUENCY_HZ` oraz cztery
 wartości `CYCLIC_DELAYTIME_*`. Domyślne wartości to 200 Hz i kroki cyclic
@@ -54,8 +78,8 @@ obejmują rampę, a aktywny krok jest zapisany jako `cyms`.
 
 `START_TEST_VP37_MODE=3` wybiera stałe zadanie z portu szeregowego. Polecenie
 `S<0..100>` działa wtedy do następnego `S`, `X` albo restartu, a zapis RAM jest
-dostępny bez uruchamiania cyclic. Nagłówek wybiera obecnie domyślnie tryb 3 dla
-firmware stanowiskowego; build do pracy z silnikiem musi nadpisać go trybem 0.
+dostępny bez uruchamiania cyclic. Nagłówek wybiera obecnie domyślnie tryb 2 dla
+stanowiska z potencjometrem; build do pracy z silnikiem musi nadpisać go trybem 0.
 W trybie 2 pojedyncza zmiana potencjometru o jeden procent musi utrzymać się
 przez 150 ms; większe zmiany są przyjmowane od razu.
 
