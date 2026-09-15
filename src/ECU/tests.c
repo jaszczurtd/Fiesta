@@ -248,12 +248,14 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
         "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
-        "W<thermal weight 0..1> S<timed hold 0..100> C(cyclic) "
+        "W<thermal weight 0..1> Q<current observation 0|1> V<cycle voltage "
+        "0|1> E<hold confirmation ms> S<timed hold 0..100> C(cyclic) "
         "X(stop) ?(help)\033[0m");
 #else
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
         "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
-        "W<thermal weight 0..1> S<persistent demand 0..100> "
+        "W<thermal weight 0..1> Q<current observation 0|1> V<cycle voltage "
+        "0|1> E<hold confirmation ms> S<persistent demand 0..100> "
         "X(stop) ?(help)\033[0m");
 #endif
     return;
@@ -282,12 +284,28 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
   }
 #endif
 
+  if (((cmd[0] == 'Q') || (cmd[0] == 'q')) &&
+      ((cmd[1] == '0') || (cmd[1] == '1')) && (cmd[2] == '\0')) {
+    self->currentObservationEnabled = cmd[1] == '1';
+    deb("VP37 current observation: %u",
+        self->currentObservationEnabled ? 1U : 0U);
+    return;
+  }
+
+  if (((cmd[0] == 'V') || (cmd[0] == 'v')) &&
+      ((cmd[1] == '0') || (cmd[1] == '1')) && (cmd[2] == '\0')) {
+    self->cycleVoltageEnabled = cmd[1] == '1';
+    deb("VP37 cycle voltage: %u", self->cycleVoltageEnabled ? 1U : 0U);
+    return;
+  }
+
   if (((cmd[0] == 'R') || (cmd[0] == 'r')) && (cmd[1] == '\0')) {
     VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
     self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
     self->pidTf = VP37_PID_TF;
     self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
     self->temperatureCompensationWeight = 1.0f;
+    self->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
     hal_pid_controller_set_tf(self->adjustController, self->pidTf);
     deb("\033[33mPID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
         "TF=%.4f\033[0m",
@@ -301,7 +319,8 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
   if ((prefix == 'P' || prefix == 'p' || prefix == 'I' || prefix == 'i' ||
        prefix == 'D' || prefix == 'd' || prefix == 'T' || prefix == 't' ||
        prefix == 'F' || prefix == 'f' || prefix == 'L' || prefix == 'l' ||
-       prefix == 'S' || prefix == 's' || prefix == 'W' || prefix == 'w') &&
+       prefix == 'S' || prefix == 's' || prefix == 'W' || prefix == 'w' ||
+       prefix == 'E' || prefix == 'e') &&
       cmd[1] != '\0') {
 
     char *end = NULL;
@@ -312,6 +331,8 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
         (((prefix == 'T') || (prefix == 't')) &&
          ((val < 1.0f) || (val > 100.0f))) ||
         (((prefix == 'S') || (prefix == 's')) && (val > 100.0f)) ||
+        (((prefix == 'E') || (prefix == 'e')) &&
+         ((val > 1000.0f) || (val != floorf(val)))) ||
         (((prefix == 'W') || (prefix == 'w')) && (val > 1.0f)) ||
         (((prefix == 'L') || (prefix == 'l')) &&
          (val > VP37_BENCH_INTEGRAL_LIMIT_MAX))) {
@@ -320,6 +341,13 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     }
 
     switch (prefix) {
+    case 'E':
+    case 'e':
+      self->integralHoldConfirmMs = (uint32_t)val;
+      self->integralHoldEnterPending = false;
+      deb("VP37 hold confirmation: %lu ms",
+          (unsigned long)self->integralHoldConfirmMs);
+      break;
     case 'W':
     case 'w':
       self->temperatureCompensationWeight = val;

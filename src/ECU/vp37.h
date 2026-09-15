@@ -23,6 +23,7 @@ extern "C" {
 #define VP37_DEBUG_UPDATE 250U
 #endif
 #define VP37_TELEMETRY_UPDATE 500U
+#define VP37_CYCLE_VOLTAGE_MAX_AGE_US 100000U
 
 #define DEFAULT_INJECTION_PRESSURE 300 // bar
 
@@ -31,15 +32,12 @@ extern "C" {
 //   pwm = pwm_ff(desired) + pid_correction
 // PID output is now interpreted as PWM correction (units: PWM counts),
 // NOT as a position estimate. Gains are in PWM/Hz (Kp), PWM/(Hz*s) (Ki),
-// PWM*s/Hz (Kd). Old position-tracking gains were ~4x larger because the
-// adj->PWM linear map had ratio ~0.236 (1890 PWM / 8000 Hz).
+// PWM*s/Hz (Kd). Position feedback remains in Adjustometer Hz.
 #define VP37_PID_KP 0.05f
 #define VP37_PID_KI 0.2f
-// The delayed position path turns derivative kick from a mechanical impact
-// into sustained limit cycling. Keep D disabled unless a bounded derivative
-// implementation is validated on hardware.
+// Keep D disabled: bench comparisons have not confirmed better approaches.
 #define VP37_PID_KD 0.0f
-// Retained for runtime derivative experiments in the bench build.
+// Derivative filter time constant [s].
 #define VP37_PID_TF 0.003f
 // Preserve integral output authority when changing Ki (nominal PWM counts).
 // Residual authority above the holding map, tapered near the upper endpoint.
@@ -51,10 +49,11 @@ extern "C" {
 
 // Continuous dead zone for integration only [Hz]. P and D remain active.
 #define VP37_PID_DEADBAND 12
-// Once a settled target enters the narrow band, hold integral state until a
+// After 100 ms continuously inside the narrow band, hold integral until a
 // persistent error leaves the wider band. This avoids winding force against
 // static friction and releasing it as a visible position jump.
 #define VP37_INTEGRAL_HOLD_ENTER_HZ 20
+#define VP37_INTEGRAL_HOLD_CONFIRM_MS 100U
 #define VP37_INTEGRAL_HOLD_EXIT_HZ 40
 #define VP37_INTEGRAL_HOLD_RELEASE_MS 500U
 // A one-percent potentiometer transition must persist before it changes the
@@ -174,6 +173,13 @@ typedef struct {
   hal_pid_controller_t adjustController;
 
   bool vp37Initialized;
+  bool currentObservationEnabled; /**< Passive core-0 acquisition switch. */
+  bool
+      cycleVoltageEnabled; /**< Select fresh full-period supply measurements. */
+  bool cycleVoltageUsed;
+  bool cycleSupplyValid;
+  float cycleSupplyVolts;
+  uint32_t cycleSupplyUs;
   float lastThrottle;
   int32_t potentiometerDemand;
   int32_t potentiometerCandidate;
@@ -221,6 +227,9 @@ typedef struct {
   bool pidSaturatedHigh;
   hal_pid_terms_t pidTerms;
   bool integralHold; /**< Settled-position hysteresis currently freezes I. */
+  bool integralHoldEnterPending;
+  uint32_t integralHoldEnterStartedMs;
+  uint32_t integralHoldConfirmMs; /**< Continuous time inside the entry band. */
   bool integralHoldReleasePending;
   uint32_t integralHoldReleaseStartedMs;
   float pidNegativeLimit;
@@ -274,8 +283,10 @@ typedef struct {
   float compensationVolts;      /**< Supply voltage used for PWM scaling (V). */
   float voltageCorrection;      /**< Effective supply-voltage multiplier. */
   bool voltageTracking;         /**< Fast voltage tracking is active. */
-  bool integralHold;           /**< Settled-position integral hold is active. */
-  float fuelTemp;              /**< Fuel temperature (C) used by control. */
+  bool cycleVoltageUsed; /**< Selected a fresh complete PWM-period supply mean.
+                          */
+  bool integralHold;     /**< Settled-position integral hold is active. */
+  float fuelTemp;        /**< Fuel temperature (C) used by control. */
   float temperatureCorrection; /**< Temperature multiplier used by this step. */
   hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
   bool softFloor, hardwareClamp; /**< Active downstream bounds. */

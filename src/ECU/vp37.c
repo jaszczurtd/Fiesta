@@ -49,6 +49,7 @@ static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
       .compensationVolts = self->compensationVolts,
       .voltageCorrection = self->voltageCorrection,
       .voltageTracking = self->voltageTracking,
+      .cycleVoltageUsed = self->cycleVoltageUsed,
       .integralHold = self->integralHold,
       .fuelTemp = self->lastFuelTemp,
       .temperatureCorrection = self->temperatureCorrection,
@@ -220,6 +221,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->lastAdjustometerStatus = ADJ_STATUS_SIGNAL_LOST;
   self->pidSaturatedHigh = false;
   self->integralHold = false;
+  self->integralHoldEnterPending = false;
+  self->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   self->integralHoldReleasePending = false;
   self->integralHoldReleaseStartedMs = 0U;
   self->controlStarted = false;
@@ -233,6 +236,10 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->quantityAtRest = false;
   self->temperatureCorrection = 1.0f;
   self->temperatureCompensationWeight = 1.0f;
+  self->currentObservationEnabled = true;
+  self->cycleVoltageEnabled = false;
+  self->cycleVoltageUsed = false;
+  self->cycleSupplyValid = false;
   self->temperatureReady = false;
 #if defined(START_TEST_ENABLE_VP37_TUNING) ||                                  \
     defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
@@ -471,7 +478,19 @@ static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm) {
 }
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
-  const float localVolts = self->localVolts;
+  const bool quantityAtRest =
+      (self->lastThrottle <= (float)VP37_PERCENT_MIN) &&
+      (self->desiredPosition <= (float)self->VP37_ADJUST_MIN);
+  self->cycleVoltageUsed =
+      self->cycleVoltageEnabled && self->currentObservationEnabled &&
+      !quantityAtRest && self->cycleSupplyValid &&
+      isfinite(self->cycleSupplyVolts) &&
+      (self->cycleSupplyVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
+      (self->cycleSupplyVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V) &&
+      !hal_elapsed_u32(hal_micros(), self->cycleSupplyUs,
+                       VP37_CYCLE_VOLTAGE_MAX_AGE_US);
+  const float localVolts =
+      self->cycleVoltageUsed ? self->cycleSupplyVolts : self->localVolts;
   const bool localValid = isfinite(localVolts) &&
                           (localVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
                           (localVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V);
@@ -493,9 +512,6 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
       }
       self->localVoltageReady = true;
     } else {
-      const bool quantityAtRest =
-          (self->lastThrottle <= (float)VP37_PERCENT_MIN) &&
-          (self->desiredPosition <= (float)self->VP37_ADJUST_MIN);
       const float localDelta = fabsf(localVolts - self->previousLocalVolts);
       if (quantityAtRest && adjustometerVoltageValid &&
           (localDelta <= VP37_LOCAL_VOLTAGE_STABLE_DELTA_V)) {
@@ -587,11 +603,11 @@ static float VP37_feedForward(VP37Pump *self, int32_t position) {
           self->feedForwardRiseBlend *
           hal_math_map_f32(percent, points[i - 1U].percent, points[i].percent,
                            points[i - 1U].motion, points[i].motion);
-      return holding + self->feedForwardMotion;
+      return (holding * VP37_PWM_FF_HARDWARE_GAIN) + self->feedForwardMotion;
     }
   }
   self->feedForwardMotion = 0.0f;
-  return VP37_PWM_FF_AT_MAX;
+  return VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN;
 }
 
 /** @brief Update the settled-target hysteresis that freezes integration. */
@@ -599,16 +615,28 @@ static void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
   const float absoluteError = fabsf((float)self->pidErr);
   if (!targetSettled) {
     self->integralHold = false;
+    self->integralHoldEnterPending = false;
     self->integralHoldReleasePending = false;
   } else if (self->voltageTracking) {
     // Voltage feed-forward keeps acting while the rail moves. Preserve an
     // established integral trim so feedback does not learn a transient
     // mechanical lag.
     self->integralHoldReleasePending = false;
+    self->integralHoldEnterPending = false;
   } else if (!self->integralHold) {
-    if (absoluteError <= (float)VP37_INTEGRAL_HOLD_ENTER_HZ) {
-      self->integralHold = true;
-      self->integralHoldReleasePending = false;
+    if (absoluteError > (float)VP37_INTEGRAL_HOLD_ENTER_HZ) {
+      self->integralHoldEnterPending = false;
+    } else {
+      if (!self->integralHoldEnterPending) {
+        self->integralHoldEnterStartedMs = hal_millis();
+        self->integralHoldEnterPending = true;
+      }
+      if (hal_millis_deadline_expired(self->integralHoldEnterStartedMs,
+                                      self->integralHoldConfirmMs)) {
+        self->integralHold = true;
+        self->integralHoldEnterPending = false;
+        self->integralHoldReleasePending = false;
+      }
     }
   } else if (absoluteError <= (float)VP37_INTEGRAL_HOLD_EXIT_HZ) {
     self->integralHoldReleasePending = false;
@@ -619,6 +647,7 @@ static void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
     if (hal_millis_deadline_expired(self->integralHoldReleaseStartedMs,
                                     VP37_INTEGRAL_HOLD_RELEASE_MS)) {
       self->integralHold = false;
+      self->integralHoldEnterPending = false;
       self->integralHoldReleasePending = false;
     }
   }
@@ -739,6 +768,7 @@ static void VP37_throttleCycle(VP37Pump *self) {
     self->pidUpperLimit = 0.0f;
     self->pidSaturatedHigh = false;
     self->integralHold = false;
+    self->integralHoldEnterPending = false;
     self->integralHoldReleasePending = false;
     self->softFloorActive = false;
     self->pwmLimited = false;
@@ -898,6 +928,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   if (shouldTriggerReset) {
     hal_pid_controller_reset(self->adjustController);
     self->integralHold = false;
+    self->integralHoldEnterPending = false;
     self->integralHoldReleasePending = false;
     self->integralHoldReleaseStartedMs = 0U;
     self->lastPWMval = -1;
@@ -978,7 +1009,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "ff:%.1f P:%.1f I:%.1f D:%.1f raw:%.1f corr:%.1f lo:%.1f hi:%.1f "
       "sh:%d sl:%d sf:%d hw:%d rest:%d st:%u hzraw:%lu hz:%lu sn:%lu su:%lu "
       "age:%u io:%d ious:%lu retry:%u fresh:%d pdt:%lu V:%.1f Vl:%.2f "
-      "Ve:%.2f Vc:%.3f vcor:%.4f vt:%d ih:%d "
+      "Ve:%.2f Vc:%.3f vcor:%.4f vt:%d ih:%d vp:%d "
       "ft:%.0f tcf:%.4f mff:%.1f cyms:%lu",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
       (unsigned long)sample->sequence, sample->throttle, sample->target,
@@ -997,8 +1028,8 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned long)sample->pidDtUs, sample->volts, sample->localVolts,
       sample->compensationInputVolts, sample->compensationVolts,
       sample->voltageCorrection, sample->voltageTracking, sample->integralHold,
-      sample->fuelTemp, sample->temperatureCorrection, sample->motionFF,
-      (unsigned long)sample->cyclicDelayMs);
+      sample->cycleVoltageUsed, sample->fuelTemp, sample->temperatureCorrection,
+      sample->motionFF, (unsigned long)sample->cyclicDelayMs);
 }
 
 #ifdef START_TEST_ENABLE_VP37_TUNING
@@ -1029,10 +1060,11 @@ void VP37_showDebug(VP37Pump *self) {
     const char *mode = "engine";
     const uint32_t cycleDelayMs = 0U;
 #endif
-    deb("VP37 CFG rev:44 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
+    deb("VP37 CFG rev:62 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vh:%.3f "
         "vcor:%.4f vt:%d t:%.1fC imax:%.1f tw:%.2f "
-        "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f",
+        "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f "
+        "ien:%u iconfirm:%lu vsync:%u vuse:%u Vavg:%.3f pwm_hz:%u",
         self->pidKp, self->pidKi, self->pidKd, self->pidTf, self->pidTimeUpdate,
         self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX, self->lastVolts,
         self->localVolts, self->compensationInputVolts, self->compensationVolts,
@@ -1041,7 +1073,11 @@ void VP37_showDebug(VP37Pump *self) {
         self->pidIntegralLimit, self->temperatureCompensationWeight,
         self->temperatureCorrection, mode, (unsigned long)cycleDelayMs,
         VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
-        VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND);
+        VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND,
+        self->currentObservationEnabled ? 1U : 0U,
+        (unsigned long)self->integralHoldConfirmMs,
+        self->cycleVoltageEnabled ? 1U : 0U, self->cycleVoltageUsed ? 1U : 0U,
+        self->cycleSupplyVolts, (unsigned)VP37_PWM_FREQUENCY_HZ);
     adjustometer_reading_t telemetry;
     const bool extendedFresh = getVP37AdjustometerExtendedTelemetry(&telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "

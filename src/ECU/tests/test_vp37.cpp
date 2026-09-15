@@ -73,6 +73,7 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->desiredAdjustometer = -1;
   pump->lastThrottle = -1.0f;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+  pump->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   pump->temperatureCorrection = 1.0f;
   pump->temperatureCompensationWeight = 1.0f;
   pump->compensationVolts = NOMINAL_VOLTAGE;
@@ -328,10 +329,10 @@ void test_vp37_hot_positive_error_uses_expanded_range(void) {
   injectAdjRegisterData(100, 144, 55, ADJ_STATUS_OK);
   VP37_process(pump);
 
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 330.354f, pump->pidPositiveLimit);
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 330.354f, pump->pidCorrection);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 337.315f, pump->pidPositiveLimit);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 337.315f, pump->pidCorrection);
   TEST_ASSERT_TRUE(pump->pidSaturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 1150.354f, pump->pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, 1222.915f, pump->pwmValue);
 }
 
 void test_vp37_hot_negative_error_keeps_original_range(void) {
@@ -344,10 +345,10 @@ void test_vp37_hot_negative_error_keeps_original_range(void) {
   injectAdjRegisterData(14100, 144, 55, ADJ_STATUS_OK);
   VP37_process(pump);
 
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 330.354f, pump->pidPositiveLimit);
+  TEST_ASSERT_FLOAT_WITHIN(0.05f, 337.315f, pump->pidPositiveLimit);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, -220.0f, pump->pidCorrection);
   TEST_ASSERT_FALSE(pump->pidSaturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 600.0f, pump->pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, 665.6f, pump->pwmValue);
 }
 
 void test_vp37_pwm_limit_matches_physical_resolution(void) {
@@ -563,6 +564,51 @@ void test_vp37_voltage_compensation_uses_fast_local_adc_and_fallback(void) {
   TEST_ASSERT_FALSE(pump->localVoltageReady);
   TEST_ASSERT_FLOAT_WITHIN(.05f, 12.0f, pump->compensationInputVolts);
   TEST_ASSERT_FLOAT_WITHIN(.05f, 12.0f, pump->compensationVolts);
+}
+
+void test_vp37_cycle_voltage_selection_rejects_stale_invalid_and_rest_samples(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->currentObservationEnabled = true;
+  pump->cycleVoltageEnabled = true;
+  pump->cycleSupplyValid = true;
+  pump->cycleSupplyVolts = 14.2f;
+  pump->cycleSupplyUs = 0U;
+  pump->localVoltageReady = true;
+  pump->localVoltageScale = 1.0f;
+  VP37_setVP37Throttle(pump, 50);
+  const uint32_t times[] = {0U, 95000U, 100000U};
+  for (uint32_t now : times) {
+    hal_mock_set_micros(now);
+    injectAdjRegisterData(4500, 147, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL(now < 100000U, pump->cycleVoltageUsed);
+    // The raw local fixture includes RP2040 ADC compensation; scale is 1.
+    TEST_ASSERT_FLOAT_WITHIN(.02f, now < 100000U ? 14.2f : 14.8055f,
+                             pump->compensationInputVolts);
+  }
+  pump->cycleSupplyUs = 105000U;
+  pump->cycleSupplyVolts = NAN;
+  hal_mock_set_micros(105000U);
+  injectAdjRegisterData(4500, 147, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->cycleVoltageUsed);
+  pump->cycleSupplyVolts = 14.2f;
+  pump->currentObservationEnabled = false;
+  hal_mock_set_micros(110000U);
+  injectAdjRegisterData(4500, 147, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->cycleVoltageUsed);
+  pump->currentObservationEnabled = true;
+  VP37_setVP37Throttle(pump, 0);
+  pump->desiredPosition = (float)pump->VP37_ADJUST_MIN;
+  pump->desiredAdjustometer = pump->VP37_ADJUST_MIN;
+  hal_mock_set_micros(115000U);
+  injectAdjRegisterData(100, 147, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_TRUE(pump->quantityAtRest);
+  TEST_ASSERT_FALSE(pump->cycleVoltageUsed);
 }
 
 void test_vp37_voltage_compensation_uses_safe_dual_fault_fallback(void) {
@@ -898,6 +944,31 @@ void test_vp37_serial_demand_remains_until_the_next_command(void) {
 }
 #endif
 
+#ifdef START_TEST_ENABLE_VP37_TUNING
+void test_vp37_current_observation_command_preserves_control_state(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_TRUE(initTests());
+  tickTestsHandleSerialLine("S73");
+  tickTests();
+  tickTests();
+  const int32_t pwm = pump->finalPWM;
+  const float integral = pump->pidTerms.integral;
+  const int32_t target = pump->desiredAdjustometerTarget;
+  const char *commands[] = {"Q1", "Q0", "Q0.5", "Q1extra", "Q1"};
+  const bool expected[] = {true, false, false, false, true};
+  for (size_t i = 0U; i < COUNTOF(commands); i++) {
+    tickTestsHandleSerialLine(commands[i]);
+    tickTests();
+    tickTests();
+    TEST_ASSERT_EQUAL(expected[i], pump->currentObservationEnabled);
+    TEST_ASSERT_EQUAL_INT32(pwm, pump->finalPWM);
+    TEST_ASSERT_EQUAL_INT32(target, pump->desiredAdjustometerTarget);
+    TEST_ASSERT_FLOAT_WITHIN(.001f, integral, pump->pidTerms.integral);
+  }
+}
+#endif
+
 void test_vp37_integral_authority_is_independent_of_ki(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -1089,7 +1160,8 @@ void test_vp37_feedforward_is_nonlinear_and_calibration_independent(void) {
   setupPumpForProcessTests(pump);
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {2.5f, 7.5f, 37.5f, 62.5f, 95.0f};
-  const float expected[] = {597.5f, 622.5f, 747.5f, 812.5f, 828.0f};
+  // Holding commands include the measured 0.22-ohm source-shunt adjustment.
+  const float expected[] = {645.3f, 672.3f, 807.3f, 877.5f, 894.24f};
   for (unsigned range = 0; range < 2U; ++range) {
     pump->VP37_ADJUST_MIN = range == 0U ? 100 : 400;
     pump->VP37_ADJUST_MAX = range == 0U ? 9100 : 7400;
@@ -1117,7 +1189,7 @@ void test_vp37_climb_floor_does_not_bypass_target_ramp(void) {
   hal_mock_set_millis(5);
   injectAdjRegisterData(100, 144, 49, ADJ_STATUS_OK);
   VP37_process(pump);
-  TEST_ASSERT_LESS_THAN_FLOAT(595, pump->pwmValue);
+  TEST_ASSERT_LESS_THAN_FLOAT(642.6f, pump->pwmValue);
   TEST_ASSERT_LESS_THAN_FLOAT(0, pump->pidNegativeLimit);
   TEST_ASSERT_FALSE(pump->softFloorActive);
 }
@@ -1166,17 +1238,35 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
   TEST_ASSERT_FALSE(pump->integralHold);
   TEST_ASSERT_GREATER_THAN_FLOAT(0, pump->pidTerms.integral);
 
-  hal_mock_set_millis(3110U);
-  injectAdjRegisterData(4585, 144, 49, ADJ_STATUS_OK);
-  VP37_process(pump);
+  for (uint32_t ms = 3110U; ms <= 3210U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4585, 144, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL(ms >= 3210U, pump->integralHold);
+  }
   TEST_ASSERT_TRUE(pump->integralHold);
   const float heldIntegral = pump->pidTerms.integral;
-  for (uint32_t ms = 3115U; ms <= 3400U; ms += 5U) {
+  for (uint32_t ms = 3215U; ms <= 3400U; ms += 5U) {
     hal_mock_set_millis(ms);
     injectAdjRegisterData(4585, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, heldIntegral, pump->pidTerms.integral);
+}
+
+void test_vp37_integral_hold_requires_continuous_time_near_target(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37Throttle(pump, 50);
+  for (uint32_t ms = 5U; ms <= 250U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    // A brief crossing cannot freeze I; leaving the band restarts the dwell.
+    const bool crossing = (ms >= 100U) && (ms < 145U);
+    injectAdjRegisterData((crossing || (ms >= 150U)) ? 4600 : 4500, 144U, 49U,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL(ms >= 250U, pump->integralHold);
+  }
 }
 
 void test_vp37_voltage_tracking_freezes_integral(void) {
@@ -1320,7 +1410,7 @@ void test_vp37_upper_feedforward_falls_without_changing_position_target(void) {
   setupPumpForProcessTests(pump);
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {90, 92.5f, 95, 100};
-  const float expected[] = {835, 831.5f, 828, 820};
+  const float expected[] = {901.8f, 898.02f, 894.24f, 885.6f};
   for (size_t i = 0; i < COUNTOF(demand); ++i) {
     pump->desiredAdjustometer = -1;
     VP37_setVP37Throttle(pump, demand[i]);
@@ -1358,7 +1448,7 @@ void test_vp37_motion_feedforward_brakes_when_upper_ramp_stops(void) {
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->feedForwardMotion);
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 828, pump->pwmFeedForward);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 894.24f, pump->pwmFeedForward);
   TEST_ASSERT_EQUAL_INT32(pump->desiredAdjustometerTarget,
                           pump->desiredAdjustometer);
   VP37_setVP37Throttle(pump, 0);
@@ -1494,6 +1584,7 @@ int main(void) {
   RUN_TEST(test_vp37_upward_ramp_keeps_integral_for_holding_error);
   RUN_TEST(
       test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error);
+  RUN_TEST(test_vp37_integral_hold_requires_continuous_time_near_target);
   RUN_TEST(test_vp37_voltage_tracking_freezes_integral);
   RUN_TEST(test_vp37_voltage_tracking_preserves_settled_integral_hold);
   RUN_TEST(test_vp37_integral_limit_tapers_with_ramped_position);
@@ -1529,6 +1620,8 @@ int main(void) {
   RUN_TEST(test_vp37_voltage_correction_tracks_exact_gain_during_drop);
   RUN_TEST(test_vp37_voltage_tracking_settles_at_center_of_local_ripple);
   RUN_TEST(test_vp37_voltage_compensation_uses_fast_local_adc_and_fallback);
+  RUN_TEST(
+      test_vp37_cycle_voltage_selection_rejects_stale_invalid_and_rest_samples);
   RUN_TEST(test_vp37_voltage_compensation_uses_safe_dual_fault_fallback);
   RUN_TEST(test_vp37_voltage_hysteresis_tracks_gradual_supply_changes);
 
@@ -1542,6 +1635,7 @@ int main(void) {
   RUN_TEST(test_vp37_invalid_timing_or_pid_step_disables_output);
 #ifdef START_TEST_ENABLE_VP37_TUNING
   RUN_TEST(test_vp37_trace_preserves_consecutive_steps_until_drained);
+  RUN_TEST(test_vp37_current_observation_command_preserves_control_state);
 #endif
 #ifdef START_TEST_ENABLE_VP37_CYCLIC
   RUN_TEST(test_vp37_cyclic_counts_full_cycles_and_restarts_deterministically);
