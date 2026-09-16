@@ -19,9 +19,9 @@
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt);
 
 hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
-  self->scan.scanRunning = hal_adc_scan_is_running();
-  self->scan.scanFrameNs = VP37_currentScanFrameNs();
-  if (!self->scan.scanRunning) {
+  self->scan.running = hal_adc_scan_is_running();
+  self->scan.frameNs = VP37_currentScanFrameNs();
+  if (!self->scan.running) {
     return HAL_ESTATE;
   }
   VP37CurrentPulseResult result;
@@ -30,31 +30,30 @@ hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
   if (sequence == 0U) {
     return status;
   }
-  if ((self->scan.scanLastSequence != 0U) &&
-      (sequence > (self->scan.scanLastSequence + 1U))) {
-    self->scan.scanGaps += sequence - self->scan.scanLastSequence - 1U;
+  if ((self->scan.lastSequence != 0U) &&
+      (sequence > (self->scan.lastSequence + 1U))) {
+    self->scan.gaps += sequence - self->scan.lastSequence - 1U;
   }
-  self->scan.scanLastSequence = sequence;
-  self->scan.scanBlocks++;
+  self->scan.lastSequence = sequence;
+  self->scan.blocks++;
   self->scan.cycleResult = result;
   self->scan.cycleResultStatus = status;
   self->scan.cycleResultSequence++;
-  if (!self->thermal.currentObservationEnabled || self->demand.quantityAtRest ||
+  if (!self->thermal.observationEnabled || self->demand.atRest ||
       (self->output.finalPWM <= 0)) {
     return status;
   }
   const bool currentUsable = (status == HAL_OK) && result.waveformValid;
-  self->supply.cycleSupplyVolts = result.supplyVolts;
-  self->supply.cycleSupplyUs = result.cycleStartUs + result.periodUs;
-  self->supply.cycleSupplyValid = result.supplyValid;
+  self->supply.cycleVolts = result.supplyVolts;
+  self->supply.cycleUs = result.cycleStartUs + result.periodUs;
+  self->supply.cycleValid = result.supplyValid;
   // The drive command below belongs to the observation, not to its later use.
-  self->thermal.cycleCurrentValid = currentUsable;
-  self->thermal.cycleCurrentAmps = currentUsable ? result.meanAmps : 0.0f;
-  self->thermal.cycleCurrentVolts =
-      result.supplyValid ? result.supplyVolts : 0.0f;
-  self->thermal.cycleCurrentPwm = result.pwmCommand;
-  self->thermal.cycleCurrentDrive = self->output.finalPWM;
-  self->thermal.cycleCurrentUs = result.cycleStartUs + result.periodUs;
+  self->thermal.cycleValid = currentUsable;
+  self->thermal.cycleAmps = currentUsable ? result.meanAmps : 0.0f;
+  self->thermal.cycleVolts = result.supplyValid ? result.supplyVolts : 0.0f;
+  self->thermal.cyclePwm = result.pwmCommand;
+  self->thermal.cycleDrive = self->output.finalPWM;
+  self->thermal.cycleUs = result.cycleStartUs + result.periodUs;
   return status;
 }
 
@@ -63,78 +62,74 @@ void VP37_updateVoltageCorrection(VP37Pump *self, float dt) {
   if (measuredVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
     measuredVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
-  self->supply.compensationInputVolts = measuredVolts;
-  if (!self->supply.voltageReady) {
-    self->supply.compensationVolts = measuredVolts;
-    self->supply.voltageReady = true;
-  } else if (self->supply.voltageFrozen) {
+  self->supply.inputVolts = measuredVolts;
+  if (!self->supply.ready) {
+    self->supply.heldVolts = measuredVolts;
+    self->supply.ready = true;
+  } else if (self->supply.frozen) {
     // Diagnostic: keep the scale where it is so the supply loop stays open.
-  } else if (self->supply.cycleVoltageUsed) {
+  } else if (self->supply.cycleUsed) {
     // The full-period mean is already free of the intra-period alias, so the
     // scale takes it as is: a manual 15-20 V/s sweep left 0.75-1.3 V behind
     // the 50 ms filter, and cranking edges are faster still.
-    self->supply.compensationVolts = measuredVolts;
+    self->supply.heldVolts = measuredVolts;
   } else {
     // The local fallback is a 40 us snapshot; only that path needs smoothing.
-    self->supply.compensationVolts +=
-        (measuredVolts - self->supply.compensationVolts) * dt /
-        (VP37_VOLTAGE_FILTER_S + dt);
+    self->supply.heldVolts += (measuredVolts - self->supply.heldVolts) * dt /
+                              (VP37_VOLTAGE_FILTER_S + dt);
   }
-  self->supply.voltageCorrection =
-      NOMINAL_VOLTAGE / self->supply.compensationVolts;
+  self->supply.correction = NOMINAL_VOLTAGE / self->supply.heldVolts;
 }
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
   const bool quantityAtRest = VP37_demandAtRest(self);
-  self->supply.cycleVoltageUsed =
-      self->supply.cycleVoltageEnabled &&
-      self->thermal.currentObservationEnabled && !quantityAtRest &&
-      self->supply.cycleSupplyValid &&
-      isfinite(self->supply.cycleSupplyVolts) &&
-      (self->supply.cycleSupplyVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
-      !hal_elapsed_u32(hal_micros(), self->supply.cycleSupplyUs,
+  self->supply.cycleUsed =
+      self->supply.cycleEnabled && self->thermal.observationEnabled &&
+      !quantityAtRest && self->supply.cycleValid &&
+      isfinite(self->supply.cycleVolts) &&
+      (self->supply.cycleVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
+      !hal_elapsed_u32(hal_micros(), self->supply.cycleUs,
                        VP37_CYCLE_VOLTAGE_MAX_AGE_US);
-  const float localVolts = self->supply.cycleVoltageUsed
-                               ? self->supply.cycleSupplyVolts
-                               : self->supply.localVolts;
+  const float localVolts = self->supply.cycleUsed ? self->supply.cycleVolts
+                                                  : self->supply.localVolts;
   const bool localMeasured =
       isfinite(localVolts) && (localVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V);
   const bool localValid =
       localMeasured && (localVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V);
-  self->supply.voltageOverRange = localMeasured && !localValid;
+  self->supply.overRange = localMeasured && !localValid;
   const bool adjustometerVoltageValid =
-      (self->feedback.lastAdjustometerStatus & ADJ_STATUS_VOLTAGE_BAD) == 0U;
+      (self->feedback.lastStatus & ADJ_STATUS_VOLTAGE_BAD) == 0U;
   float resultVolts;
 
   if (!localMeasured) {
-    self->supply.localVoltageReady = false;
+    self->supply.localReady = false;
     resultVolts = adjustometerVoltageValid ? self->supply.lastVolts
                                            : VP37_MAX_EXPECTED_SUPPLY_VOLTAGE;
-  } else if (self->supply.voltageOverRange) {
+  } else if (self->supply.overRange) {
     // Above the calibrated range: scale with the last learned factor and
     // leave the scale alone; the Adjustometer flags its own reading bad here.
-    resultVolts = localVolts * self->supply.localVoltageScale;
+    resultVolts = localVolts * self->supply.localScale;
   } else {
     const float scaleTarget = hal_constrain(self->supply.lastVolts / localVolts,
                                             VP37_LOCAL_VOLTAGE_SCALE_MIN,
                                             VP37_LOCAL_VOLTAGE_SCALE_MAX);
-    if (!self->supply.localVoltageReady) {
+    if (!self->supply.localReady) {
       if (adjustometerVoltageValid) {
-        self->supply.localVoltageScale = scaleTarget;
+        self->supply.localScale = scaleTarget;
       }
-      self->supply.localVoltageReady = true;
+      self->supply.localReady = true;
     } else {
       const float localDelta =
           fabsf(localVolts - self->supply.previousLocalVolts);
       if (quantityAtRest && adjustometerVoltageValid &&
           (localDelta <= VP37_LOCAL_VOLTAGE_STABLE_DELTA_V)) {
-        self->supply.localVoltageScale +=
-            (scaleTarget - self->supply.localVoltageScale) * dt /
-            (VP37_LOCAL_VOLTAGE_SCALE_FILTER_S + dt);
+        self->supply.localScale += (scaleTarget - self->supply.localScale) *
+                                   dt /
+                                   (VP37_LOCAL_VOLTAGE_SCALE_FILTER_S + dt);
       }
     }
     self->supply.previousLocalVolts = localVolts;
-    resultVolts = localVolts * self->supply.localVoltageScale;
+    resultVolts = localVolts * self->supply.localScale;
   }
   return resultVolts;
 }
@@ -145,7 +140,7 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
   if (!isfinite(self->thermal.lastFuelTemp) ||
       self->thermal.lastFuelTemp < 0.0f ||
       self->thermal.lastFuelTemp > VP37_THERMAL_TEMP_VALID_MAX_C ||
-      (self->feedback.lastAdjustometerStatus & invalid) != 0U) {
+      (self->feedback.lastStatus & invalid) != 0U) {
     return; // Keep the last valid factor; initialization uses unity.
   }
   const float reference =
@@ -188,26 +183,25 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
       self->thermal.driveResistanceReady &&
       !hal_millis_deadline_expired(self->thermal.driveUpdatedMs,
                                    VP37_DRIVE_STALE_MS);
-  if (!self->thermal.driveCompensationEnabled ||
-      !self->thermal.cycleCurrentValid ||
-      !isfinite(self->thermal.cycleCurrentAmps) ||
-      !isfinite(self->thermal.cycleCurrentVolts)) {
+  if (!self->thermal.driveCompensationEnabled || !self->thermal.cycleValid ||
+      !isfinite(self->thermal.cycleAmps) ||
+      !isfinite(self->thermal.cycleVolts)) {
     return;
   }
-  if (hal_elapsed_u32(hal_micros(), self->thermal.cycleCurrentUs,
+  if (hal_elapsed_u32(hal_micros(), self->thermal.cycleUs,
                       VP37_DRIVE_MAX_AGE_US)) {
     return;
   }
-  const int32_t drive = self->thermal.cycleCurrentDrive;
+  const int32_t drive = self->thermal.cycleDrive;
   if ((drive < VP37_DRIVE_MIN_PWM) || (drive > VP37_PWM_MAX) ||
-      (self->thermal.cycleCurrentAmps < VP37_DRIVE_MIN_CURRENT_A) ||
-      (self->thermal.cycleCurrentVolts < VP37_LOCAL_VOLTAGE_VALID_MIN_V) ||
-      (self->thermal.cycleCurrentVolts > VP37_LOCAL_VOLTAGE_VALID_MAX_V)) {
+      (self->thermal.cycleAmps < VP37_DRIVE_MIN_CURRENT_A) ||
+      (self->thermal.cycleVolts < VP37_LOCAL_VOLTAGE_VALID_MIN_V) ||
+      (self->thermal.cycleVolts > VP37_LOCAL_VOLTAGE_VALID_MAX_V)) {
     return;
   }
   // Reject a capture that belongs to a different command than the live one.
   const int32_t commandDelta = drive - self->output.finalPWM;
-  const int32_t gateDelta = self->thermal.cycleCurrentPwm - drive;
+  const int32_t gateDelta = self->thermal.cyclePwm - drive;
   if ((commandDelta > VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
       (commandDelta < -VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
       (gateDelta > VP37_DRIVE_PWM_MATCH_COUNTS) ||
@@ -217,7 +211,7 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
 
   const float duty = (float)drive / (float)PWM_RESOLUTION;
   const float resistance =
-      (duty * self->thermal.cycleCurrentVolts) / self->thermal.cycleCurrentAmps;
+      (duty * self->thermal.cycleVolts) / self->thermal.cycleAmps;
   if (!isfinite(resistance) || (resistance <= 0.0f)) {
     return;
   }
@@ -268,18 +262,18 @@ void VP37_updateThermalScale(VP37Pump *self, float dt) {
   const float target = self->thermal.driveCompensationUsed
                            ? self->thermal.driveCorrection
                            : self->thermal.temperatureCorrection;
-  if (!self->thermal.thermalScaleReady) {
-    self->thermal.thermalScale = target;
-    self->thermal.thermalScaleReady = true;
+  if (!self->thermal.scaleReady) {
+    self->thermal.scale = target;
+    self->thermal.scaleReady = true;
   } else {
     const float step = VP37_THERMAL_SCALE_SLEW_PER_S * dt;
-    const float delta = target - self->thermal.thermalScale;
+    const float delta = target - self->thermal.scale;
     if (delta > step) {
-      self->thermal.thermalScale += step;
+      self->thermal.scale += step;
     } else if (delta < -step) {
-      self->thermal.thermalScale -= step;
+      self->thermal.scale -= step;
     } else {
-      self->thermal.thermalScale = target;
+      self->thermal.scale = target;
     }
   }
 }

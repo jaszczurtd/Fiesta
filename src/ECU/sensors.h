@@ -180,11 +180,26 @@ void readHighValues(void);
  */
 void init4051(void);
 
-/** Settling time after a channel change: two scan frames plus the switch.
- * Overridable so the value can be measured against the analog path. */
-#ifndef SENSORS_MUX_SETTLE_US
-#define SENSORS_MUX_SETTLE_US 60U
+/** Analog settling after a channel change: the multiplexer's switch plus the
+ * input's RC, before the converter may look at the new channel. Under the
+ * hardware-paced scan the wait grows by two scan frames, computed from the
+ * scan's own frame period, because the newest scanned sample can be up to two
+ * frames old when it is read. Overridable so the analog part can be measured
+ * against the path. */
+#ifndef SENSORS_MUX_ANALOG_SETTLE_US
+#define SENSORS_MUX_ANALOG_SETTLE_US 12U
 #endif
+
+/**
+ * @brief Whether every analog input read through hal_adc_read() is carried
+ * by the running ADC scan.
+ *
+ * While the scan owns the converter a pin outside it cannot be converted and
+ * hal_adc_read() reports it unreadable, so the sensor reads would fail for
+ * the whole run. Checked once after the scan starts; true without a scan,
+ * when reads convert live.
+ */
+bool sensors_scanCoversInputs(void);
 
 /** Bench diagnostic for the demand read: every sample near the zero threshold
  * is reported with its scan frame-mates, the margin once a second, and right

@@ -18,31 +18,30 @@ static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
 bool VP37_updateAdjustometerPosition(VP37Pump *self) {
   adjustometer_reading_t reading;
   getVP37Adjustometer(&reading);
-  self->feedback.feedbackReadStatus =
-      reading.fastFeedback ? reading.readStatus
-                           : (reading.commOk ? HAL_OK : HAL_EBUS);
-  self->feedback.feedbackReadUs = reading.readUs;
-  self->feedback.feedbackRetries = reading.readRetries;
+  self->feedback.readStatus = reading.fastFeedback
+                                  ? reading.readStatus
+                                  : (reading.commOk ? HAL_OK : HAL_EBUS);
+  self->feedback.readUs = reading.readUs;
+  self->feedback.retries = reading.readRetries;
   if (reading.commOk) {
-    self->feedback.currentAdjustometerPosition = reading.pulseHz;
-    self->feedback.adjCommLostSince = 0;
-    self->feedback.adjCommFailed = false;
-    self->feedback.lastAdjustometerStatus = reading.status;
-    self->feedback.feedbackFresh =
-        !reading.fastFeedback || reading.feedbackFresh;
-    self->feedback.feedbackRawHz = reading.rawHz;
-    self->feedback.feedbackFilteredHz = reading.signalHz;
-    self->feedback.feedbackNumber = reading.sampleNumber;
-    self->feedback.feedbackUs = reading.measuredUs;
-    self->feedback.feedbackAgeUs = reading.ageUs;
+    self->feedback.position = reading.pulseHz;
+    self->feedback.commLostSince = 0;
+    self->feedback.commFailed = false;
+    self->feedback.lastStatus = reading.status;
+    self->feedback.fresh = !reading.fastFeedback || reading.feedbackFresh;
+    self->feedback.rawHz = reading.rawHz;
+    self->feedback.filteredHz = reading.signalHz;
+    self->feedback.sampleNumber = reading.sampleNumber;
+    self->feedback.sampleUs = reading.measuredUs;
+    self->feedback.ageUs = reading.ageUs;
 
     setGlobalValue(F_FUEL_TEMP, reading.fuelTempC);
     setGlobalValue(F_VOLTS, reading.voltageRaw * 0.1f);
   } else {
-    self->feedback.feedbackFresh = false;
-    if (!self->feedback.adjCommFailed) {
-      self->feedback.adjCommFailed = true;
-      self->feedback.adjCommLostSince = hal_millis();
+    self->feedback.fresh = false;
+    if (!self->feedback.commFailed) {
+      self->feedback.commFailed = true;
+      self->feedback.commLostSince = hal_millis();
     }
   }
   return reading.commOk;
@@ -56,53 +55,52 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
  * range, not an OEM mg/stroke model.
  */
 bool VP37_makeCalibration(VP37Pump *self) {
-  self->feedback.VP37_ADJUST_MAX = self->feedback.VP37_ADJUST_MIDDLE =
-      self->feedback.VP37_ADJUST_MIN = self->feedback.VP37_OPERATE_MAX = -1;
+  self->feedback.adjustMax = self->feedback.adjustMiddle =
+      self->feedback.adjustMin = self->feedback.operateMax = -1;
 
   // Capture the natural/resting endpoint first.  Measuring MIN after a strong
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
   valToPWM(PIO_VP37_RPM, 0);
   bool minSettled =
-      VP37_waitForCalibrationSettle(self, &self->feedback.VP37_ADJUST_MIN);
+      VP37_waitForCalibrationSettle(self, &self->feedback.adjustMin);
 
   bool maxSettled = false;
   if (minSettled) {
     valToPWM(PIO_VP37_RPM, VP37_getMaxAdjustometerPWMVal(self));
-    maxSettled =
-        VP37_waitForCalibrationSettle(self, &self->feedback.VP37_ADJUST_MAX);
+    maxSettled = VP37_waitForCalibrationSettle(self, &self->feedback.adjustMax);
   }
   valToPWM(PIO_VP37_RPM, 0);
 
   if (!maxSettled || !minSettled) {
     self->feedback.calibrationDone = false;
     derr("VP37 calibration timeout: maxSettled=%d minSettled=%d MAX=%d MIN=%d",
-         maxSettled, minSettled, self->feedback.VP37_ADJUST_MAX,
-         self->feedback.VP37_ADJUST_MIN);
+         maxSettled, minSettled, self->feedback.adjustMax,
+         self->feedback.adjustMin);
     return false;
   }
 
-  self->feedback.VP37_ADJUST_MIDDLE =
-      ((self->feedback.VP37_ADJUST_MAX - self->feedback.VP37_ADJUST_MIN) / 2) +
-      self->feedback.VP37_ADJUST_MIN;
+  self->feedback.adjustMiddle =
+      ((self->feedback.adjustMax - self->feedback.adjustMin) / 2) +
+      self->feedback.adjustMin;
   const int32_t calibrationTravel =
-      self->feedback.VP37_ADJUST_MAX - self->feedback.VP37_ADJUST_MIN;
+      self->feedback.adjustMax - self->feedback.adjustMin;
   self->feedback.calibrationDone =
       calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ &&
-      self->feedback.VP37_ADJUST_MIDDLE > 0;
+      self->feedback.adjustMiddle > 0;
   if (!self->feedback.calibrationDone) {
     derr(
         "VP37 calibration range invalid: MIN=%d MAX=%d travel=%d (required=%d)",
-        self->feedback.VP37_ADJUST_MIN, self->feedback.VP37_ADJUST_MAX,
-        calibrationTravel, VP37_CALIBRATION_MIN_TRAVEL_HZ);
+        self->feedback.adjustMin, self->feedback.adjustMax, calibrationTravel,
+        VP37_CALIBRATION_MIN_TRAVEL_HZ);
   }
 
-  hal_pid_controller_set_output_limits(self->pid.adjustController,
+  hal_pid_controller_set_output_limits(self->pid.controller,
                                        -VP37_PID_CORR_LIMIT_NEGATIVE,
                                        VP37_PID_CORR_LIMIT_POSITIVE_COLD);
-  hal_pid_controller_reset(self->pid.adjustController);
+  hal_pid_controller_reset(self->pid.controller);
   deb("VP37 calibration: MIN=%d MIDDLE=%d MAX=%d OPERATE_MAX=%d",
-      self->feedback.VP37_ADJUST_MIN, self->feedback.VP37_ADJUST_MIDDLE,
-      self->feedback.VP37_ADJUST_MAX, self->feedback.VP37_OPERATE_MAX);
+      self->feedback.adjustMin, self->feedback.adjustMiddle,
+      self->feedback.adjustMax, self->feedback.operateMax);
   return self->feedback.calibrationDone;
 }
 
@@ -165,7 +163,7 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
       for (uint32_t i = 0U; i < STABILITY_ADJUSTOMETER_TAB_SIZE &&
                             i < VP37_CALIBRATION_STABLE_SAMPLES;
            i++) {
-        self->feedback.adjustStabilityTable[i] = samples[i];
+        self->feedback.stabilityTable[i] = samples[i];
       }
       return true;
     }

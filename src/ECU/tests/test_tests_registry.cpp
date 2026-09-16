@@ -12,20 +12,20 @@ void setUp(void) {}
 /** @brief Release the controller each fixture allocates, so runs stay clean. */
 void tearDown(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
-  if (pump->pid.adjustController != NULL) {
-    hal_pid_controller_destroy(pump->pid.adjustController);
-    pump->pid.adjustController = NULL;
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
   }
 }
 
 static VP37Pump *preparePump(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   memset(pump, 0, sizeof(*pump));
-  pump->pid.adjustController = hal_pid_controller_create();
+  pump->pid.controller = hal_pid_controller_create();
   pump->feedback.calibrationDone = true;
   pump->vp37Initialized = true;
-  pump->feedback.VP37_ADJUST_MIN = 100;
-  pump->feedback.VP37_ADJUST_MAX = 9100;
+  pump->feedback.adjustMin = 100;
+  pump->feedback.adjustMax = 9100;
   pump->demand.lastThrottle = -1.0f;
   hal_mock_set_millis(0U);
   return pump;

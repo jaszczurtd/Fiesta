@@ -278,8 +278,8 @@ static bool parseSwitch(const char *cmd, char *outDigit) {
 static void applyDefaults(VP37Pump *self) {
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
-  self->pid.pidTf = VP37_PID_TF;
-  self->pid.pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
+  self->pid.tf = VP37_PID_TF;
+  self->pid.integralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
   self->thermal.temperatureCompensationWeight = 1.0f;
   self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   self->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
@@ -289,7 +289,7 @@ static void applyDefaults(VP37Pump *self) {
     self->feedforward.mapTrim[i] = 0.0f;
   }
   self->feedforward.mapTrimTransfers = 0U;
-  hal_pid_controller_set_tf(self->pid.adjustController, self->pid.pidTf);
+  hal_pid_controller_set_tf(self->pid.controller, self->pid.tf);
   s_cyclic.passLimit = CYCLIC_PASSES_DEFAULT;
   s_random.durationS = RANDOM_DURATION_S_DEFAULT;
   s_random.holdS = RANDOM_HOLD_S_DEFAULT;
@@ -308,15 +308,15 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
                        ecu_test_id_t *outStart) {
   switch (prefix) {
   case 'P':
-    VP37_setVP37PID(self, value, self->pid.pidKi, self->pid.pidKd, false);
+    VP37_setVP37PID(self, value, self->pid.ki, self->pid.kd, false);
     deb(TEST_HIGHLIGHT_ON "Kp = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'I':
-    VP37_setVP37PID(self, self->pid.pidKp, value, self->pid.pidKd, false);
+    VP37_setVP37PID(self, self->pid.kp, value, self->pid.kd, false);
     deb(TEST_HIGHLIGHT_ON "Ki = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'D':
-    VP37_setVP37PID(self, self->pid.pidKp, self->pid.pidKi, value, false);
+    VP37_setVP37PID(self, self->pid.kp, self->pid.ki, value, false);
     deb(TEST_HIGHLIGHT_ON "Kd = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'T':
@@ -327,15 +327,15 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
     deb(TEST_HIGHLIGHT_ON "TU = %.1f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'F':
-    self->pid.pidTf = value;
-    hal_pid_controller_set_tf(self->pid.adjustController, value);
+    self->pid.tf = value;
+    hal_pid_controller_set_tf(self->pid.controller, value);
     deb(TEST_HIGHLIGHT_ON "TF = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'L':
     if (value > VP37_BENCH_INTEGRAL_LIMIT_MAX) {
       return false;
     }
-    self->pid.pidIntegralOverride = value;
+    self->pid.integralOverride = value;
     deb("VP37 integral cap: %.1f (0=position profile)", value);
     break;
   case 'W':
@@ -442,9 +442,9 @@ bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,
     return true;
   }
   if ((prefix == 'Q') && parseSwitch(cmd, &digit)) {
-    self->thermal.currentObservationEnabled = digit == '1';
+    self->thermal.observationEnabled = digit == '1';
     deb("VP37 current observation: %u",
-        self->thermal.currentObservationEnabled ? 1U : 0U);
+        self->thermal.observationEnabled ? 1U : 0U);
     return true;
   }
   if ((prefix == 'K') && parseSwitch(cmd, &digit)) {
@@ -472,13 +472,12 @@ bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,
       ((cmd[1] == '0') || (cmd[1] == '1') || (cmd[1] == '2'))) {
     // V2 freezes the scale where it is: the supply loop stays open so a
     // supply-side oscillation can be told from one closed through the ECU.
-    self->supply.voltageFrozen = cmd[1] == '2';
-    if (!self->supply.voltageFrozen) {
-      self->supply.cycleVoltageEnabled = cmd[1] == '1';
+    self->supply.frozen = cmd[1] == '2';
+    if (!self->supply.frozen) {
+      self->supply.cycleEnabled = cmd[1] == '1';
     }
-    deb("VP37 cycle voltage: %u frozen:%u",
-        self->supply.cycleVoltageEnabled ? 1U : 0U,
-        self->supply.voltageFrozen ? 1U : 0U);
+    deb("VP37 cycle voltage: %u frozen:%u", self->supply.cycleEnabled ? 1U : 0U,
+        self->supply.frozen ? 1U : 0U);
     return true;
   }
 

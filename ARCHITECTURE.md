@@ -353,7 +353,14 @@ that every mutable ECU byte lives inside `ecu_context_t`.
   throttle position (ch 2), air temp (ch 3), fuel level (ch 4), manifold/boost
   pressure (ch 5). `ADC_VOLT_PIN=28` reads ECU supply voltage through a
   ~47 kΩ / 10 kΩ divider. `ADC_VP37_CURRENT_PIN=26` is connected to the
-  0.22 Ω source shunt. `vp37_current.c` observes one PWM period on core 0
+  0.22 Ω source shunt. While the VP37 current scan runs it owns the converter:
+  `hal_adc_read()` of pins 26/27/28 is served from the scan ring and a pin the
+  scan does not carry reads as an error, never as 0. `sensors.c` derives the
+  mux settling wait (`SENSORS_MUX_ANALOG_SETTLE_US` plus two scan frames) and
+  the spacing of averaged samples (one frame, so four samples come from four
+  frames) from the scan's frame period; a demand that cannot be read is zero
+  demand, and core 1 checks at start-up that the scan carries the mux and
+  supply pins. `vp37_current.c` observes one PWM period on core 0
   every 20 ms while active; telemetry includes ON current and waveform validity.
   Current values are diagnostic only. The same task also averages supply voltage
   over the period; bench `V1` selects this input for voltage compensation while

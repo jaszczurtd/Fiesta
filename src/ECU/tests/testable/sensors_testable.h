@@ -10,6 +10,8 @@ extern "C" {
 
 int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal);
 int32_t sensors_calculateEngineLoadFromValues(float pressureBar, float rpm);
+uint32_t sensors_muxSettleUs(void);
+uint16_t sensors_adcSampleDelayUs(void);
 
 #ifdef __cplusplus
 }
