@@ -321,7 +321,12 @@ that every mutable ECU byte lives inside `ecu_context_t`.
 | [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP diagnostic services |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalog, set/clear, KV persistence, and retrieval for diagnostic responses |
 | [`rpm.c`](src/ECU/rpm.c) | engine RPM via Hall-sensor GPIO edge interrupt |
-| [`vp37.c`](src/ECU/vp37.c) | VP37 injection pump control: PID loop using adjustometer feedback |
+| [`vp37.c`](src/ECU/vp37.c) | VP37 injection pump: lifecycle, demand and the control cycle that calls the units below in the order the command is built |
+| [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position transfer and the calibration sweep |
+| [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | supply-voltage, fuel-temperature and measured drive-resistance multipliers, fed by the shunt scan |
+| [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned map trim, PID authority, dead zone and hold |
+| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control sample, console lines and the bench trace, on core 0 from a snapshot |
+| [`vp37_current.c`](src/ECU/vp37_current.c) | shunt capture reduction and pulse analysis, no pump state |
 | [`turbo.c`](src/ECU/turbo.c) | turbo boost control (N75 solenoid, MAP-based) |
 | [`engineFan.c`](src/ECU/engineFan.c) | fan relay control with hysteresis |
 | [`engineHeater.c`](src/ECU/engineHeater.c) | block-heater low/high relays |
@@ -330,7 +335,7 @@ that every mutable ECU byte lives inside `ecu_context_t`.
 | [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | heated-window relays with button latch |
 | [`gps.c`](src/ECU/gps.c) | NMEA parsing over UART, time/date publication |
 | [`config.c`](src/ECU/config.c) | persistent configuration via KV store |
-| [`engineMaps.c`](src/ECU/engineMaps.c) | look-up tables (boost map, fueling map) |
+| [`engineMaps.c`](src/ECU/engineMaps.c) | every shaping table as plain values: N75 duty, VP37 holding map, integral authority and dead-zone tapers |
 
 **Hardware interfaces** (from [`hardwareConfig.h`](src/ECU/hardwareConfig.h)):
 

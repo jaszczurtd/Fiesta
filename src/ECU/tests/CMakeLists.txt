@@ -40,7 +40,11 @@ add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
 # ships. These two binaries compile the same sources with the tests enabled:
 # one repeats the VP37 suite against the fixtures, the other covers the
 # registry, the sequencer and the console parser.
-set(ECU_TEST_FIXTURE_SOURCES ../vp37.c ../tests.c ../test_helpers.c)
+# Every unit of the VP37 module, so the fixture binaries never mix units
+# built with the functional tests with archive members built without.
+set(ECU_VP37_SOURCES ../vp37.c ../vp37_feedback.c ../vp37_compensation.c
+    ../vp37_control.c ../vp37_telemetry.c)
+set(ECU_TEST_FIXTURE_SOURCES ${ECU_VP37_SOURCES} ../tests.c ../test_helpers.c)
 add_executable(test_vp37_bench test_vp37.cpp ${ECU_TEST_FIXTURE_SOURCES})
 target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_vp37_bench PRIVATE ecu_mock)
