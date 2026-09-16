@@ -53,23 +53,28 @@ extern "C" {
 #define VP37_PID_KD 0.0f
 // Derivative filter time constant [s].
 #define VP37_PID_TF 0.003f
+// Column order of the stroke tapers in engineMaps.h: {demand [%], value}.
+#define VP37_TAPER_COL_PERCENT 0U
+#define VP37_TAPER_COL_VALUE 1U
 // Preserve integral output authority when changing Ki (nominal PWM counts).
-// Residual authority above the holding map, tapered near the upper endpoint.
-#define VP37_PID_TRIM_PWM 120.0f
-#define VP37_PID_TRIM_TOP_PWM 45.0f
-#define VP37_PID_TRIM_TAPER_PERCENT 75.0f
+// The residual authority above the holding map and its taper near the upper
+// endpoint are the VP37_INTEGRAL_LIMIT_MAP rows in engineMaps.h.
+#define VP37_PID_TRIM_PWM (VP37_INTEGRAL_LIMIT_MAP[0U][VP37_TAPER_COL_VALUE])
 #define VP37_BENCH_INTEGRAL_CAP_PWM VP37_PID_TRIM_PWM
 #define VP37_PID_MAX_INTEGRAL (VP37_PID_TRIM_PWM / VP37_PID_KI)
 
-// Continuous dead zone for integration only [Hz]. P and D remain active.
-#define VP37_PID_DEADBAND 12
-// Above VP37_PID_TRIM_TAPER_PERCENT the stroke loses position authority: the
-// same command settles hundreds of hertz apart and the same current holds very
-// different positions. Integration there walks until the mechanism breaks free
-// and produces a roughly 1 Hz relaxation cycle, so the dead zone widens with
-// position to a band that covers the insensitive range. Zero keeps the base
-// dead zone across the whole stroke.
-#define VP37_PID_DEADBAND_TOP_HZ 120.0f
+// Continuous dead zone for integration only; P and D remain active. Above the
+// taper start the stroke loses position authority: the same command settles
+// hundreds of hertz apart and the same current holds very different
+// positions. Integration there walks until the mechanism breaks free and
+// produces a roughly 1 Hz relaxation cycle, so the dead zone widens with
+// position to a band that covers the insensitive range; the rows are
+// VP37_INTEGRAL_DEADBAND_MAP in engineMaps.h. A zero top keeps the base dead
+// zone across the whole stroke; the bench may raise the top to this ceiling.
+#define VP37_PID_DEADBAND (VP37_INTEGRAL_DEADBAND_MAP[0U][VP37_TAPER_COL_VALUE])
+#define VP37_PID_DEADBAND_TOP_HZ                                               \
+  (VP37_INTEGRAL_DEADBAND_MAP[VP37_STROKE_TAPER_KNOTS - 1U]                    \
+                             [VP37_TAPER_COL_VALUE])
 #define VP37_PID_DEADBAND_TOP_MAX_HZ 600.0f
 // After 100 ms continuously inside the narrow band, hold integral until a
 // persistent error leaves the wider band. This avoids winding force against
@@ -151,13 +156,17 @@ extern "C" {
 // into a 375 Hz excursion. Resistance drifts about 0.0002 per second, two
 // decades below this limit, so the ramp only ever blunts a handover.
 #define VP37_THERMAL_SCALE_SLEW_PER_S 0.02f
-// Endpoints of the nonlinear positive-demand feedforward map [nominal PWM].
-#define VP37_PWM_FF_AT_MIN 566
-#define VP37_PWM_FF_AT_MAX 844
-// Upper upward-motion correction at the reference rate [nominal PWM]: the
-// scale of the map's motion column. The runtime boost below is applied as a
-// ratio to this value.
-#define VP37_PWM_FF_MOTION_BOOST 31.0f
+// Column order of the holding map in engineMaps.h: {demand [%], holding
+// command, motion correction}. Its endpoints and the scale of its motion
+// column are read from the table; the runtime boosts below are ratios and
+// offsets against them.
+#define VP37_FF_COL_PERCENT 0U
+#define VP37_FF_COL_PWM 1U
+#define VP37_FF_COL_MOTION 2U
+#define VP37_PWM_FF_AT_MIN (VP37_FF_MAP[0U][VP37_FF_COL_PWM])
+#define VP37_PWM_FF_AT_MAX (VP37_FF_MAP[VP37_FF_KNOTS - 1U][VP37_FF_COL_PWM])
+#define VP37_PWM_FF_MOTION_BOOST                                               \
+  (VP37_FF_MAP[VP37_FF_KNOTS - 1U][VP37_FF_COL_MOTION])
 // Runtime upward boost at start and after bench R: the map's column times
 // 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged),
 // carried through the same reference rescale as the map.

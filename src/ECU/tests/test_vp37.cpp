@@ -4,6 +4,7 @@
 #include "sensors.h"
 #include "test_helpers.h"
 #include "testable/adjustometer_test_helpers.h"
+#include "testable/vp37_testable.h"
 #include "unity.h"
 #include "vp37.h"
 #include <math.h>
@@ -1062,7 +1063,9 @@ void test_vp37_integral_authority_is_independent_of_ki(void) {
     injectAdjRegisterData(7000, 144, 55, ADJ_STATUS_OK);
     VP37_process(pump);
   }
-  TEST_ASSERT_FLOAT_WITHIN(.01f, VP37_PID_TRIM_TOP_PWM,
+  TEST_ASSERT_FLOAT_WITHIN(.01f,
+                           VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                                  [VP37_TAPER_COL_VALUE],
                            pump->pidTerms.integral);
   VP37_setVP37PID(pump, 0, .4f, 0, false);
   for (uint32_t ms = 3005U; ms <= 3500U; ms += 5U) {
@@ -1070,7 +1073,9 @@ void test_vp37_integral_authority_is_independent_of_ki(void) {
     injectAdjRegisterData(7000, 144, 55, ADJ_STATUS_OK);
     VP37_process(pump);
   }
-  TEST_ASSERT_FLOAT_WITHIN(.01f, VP37_PID_TRIM_TOP_PWM,
+  TEST_ASSERT_FLOAT_WITHIN(.01f,
+                           VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                                  [VP37_TAPER_COL_VALUE],
                            pump->pidTerms.integral);
   TEST_ASSERT_LESS_OR_EQUAL_FLOAT(pump->pidPositiveLimit,
                                   pump->pidTerms.integral);
@@ -1923,6 +1928,32 @@ void test_vp37_measured_drive_rejects_stale_and_mismatched_captures(void) {
   TEST_ASSERT_TRUE(pump->driveCompensationUsed);
 }
 
+// The taper holds both ends flat, returns a flat segment's value exactly and
+// interpolates linearly inside a slope; the two stroke tables rely on all
+// three, and the dead zone's runtime top rides on the same walk.
+void test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots(void) {
+  const float taper[3U * VP37_STROKE_TAPER_COLUMNS] = {0.0f,  12.0f,  75.0f,
+                                                       12.0f, 100.0f, 120.0f};
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_strokeTaper(taper, 3U, -5.0f));
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_strokeTaper(taper, 3U, 0.0f));
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_strokeTaper(taper, 3U, 50.0f));
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_strokeTaper(taper, 3U, 75.0f));
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 66.0f, VP37_strokeTaper(taper, 3U, 87.5f));
+  TEST_ASSERT_EQUAL_FLOAT(120.0f, VP37_strokeTaper(taper, 3U, 100.0f));
+  TEST_ASSERT_EQUAL_FLOAT(120.0f, VP37_strokeTaper(taper, 3U, 130.0f));
+  const float single[VP37_STROKE_TAPER_COLUMNS] = {10.0f, 7.0f};
+  TEST_ASSERT_EQUAL_FLOAT(7.0f, VP37_strokeTaper(single, 1U, 3.0f));
+  TEST_ASSERT_EQUAL_FLOAT(7.0f, VP37_strokeTaper(single, 1U, 30.0f));
+  // The real tables through the same walk.
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_TRIM_PWM,
+                          VP37_strokeTaper(&VP37_INTEGRAL_LIMIT_MAP[0U][0U],
+                                           VP37_STROKE_TAPER_KNOTS, 40.0f));
+  TEST_ASSERT_EQUAL_FLOAT(VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                                 [VP37_TAPER_COL_VALUE],
+                          VP37_strokeTaper(&VP37_INTEGRAL_LIMIT_MAP[0U][0U],
+                                           VP37_STROKE_TAPER_KNOTS, 100.0f));
+}
+
 void test_vp37_integral_deadband_widens_only_in_the_upper_stroke(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -2191,6 +2222,7 @@ int main(void) {
   RUN_TEST(test_vp37_bench_cap_and_stop);
   RUN_TEST(test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier);
   RUN_TEST(test_vp37_measured_drive_rejects_stale_and_mismatched_captures);
+  RUN_TEST(test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots);
   RUN_TEST(test_vp37_integral_deadband_widens_only_in_the_upper_stroke);
   RUN_TEST(
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
