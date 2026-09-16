@@ -47,6 +47,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
     ${HAL_SRC}/hal/core/jh_handle_pool.cpp
+    ${HAL_SRC}/hal/analog/hal_adc_scan.cpp
     ${HAL_HELPER_SOURCES}
     ${HAL_COMMAND_SOURCES}
     ${HAL_SRC}/hal/i2c/hal_i2c.cpp

@@ -533,6 +533,11 @@ void set4051ActivePin(unsigned char pin) {
   hal_gpio_write(A_4051, (pin & 0x01) > 0);
   hal_gpio_write(B_4051, (pin & 0x02) > 0);
   hal_gpio_write(C_4051, (pin & 0x04) > 0);
+  // Under the hardware-paced scan the readers see the newest scanned sample,
+  // which must already belong to the new channel; polled reads convert live.
+  if (hal_adc_scan_is_running()) {
+    hal_delay_us(SENSORS_MUX_SETTLE_US);
+  }
 }
 
 bool isDPFRegenerating(void) { return getGlobalValue(F_DPF_REGEN) > 0; }

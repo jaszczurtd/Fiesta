@@ -23,6 +23,7 @@
 #define HAL_ENABLE_SWSERIAL /* Software serial (GPS)               */
 #define HAL_ENABLE_GPS      /* TinyGPS++ -> SWSERIAL              */
 #define HAL_ENABLE_PWM_FREQ /* Frequency-controlled PWM           */
+#define HAL_ENABLE_ADC_SCAN /* Hardware-paced shunt/supply scan   */
 #define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
 #define HAL_ENABLE_SERIAL_COMMANDS
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u

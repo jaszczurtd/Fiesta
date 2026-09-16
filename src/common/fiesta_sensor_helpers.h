@@ -5,6 +5,7 @@
 #include <hal/analog/hal_adc_utils.h>
 #include <hal/temperature/hal_ntc.h>
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
