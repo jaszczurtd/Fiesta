@@ -41,117 +41,117 @@ VP37InitStatus VP37_init(VP37Pump *self) {
     return VP37_INIT_BASELINE_NOT_READY;
   }
 
-  self->lastThrottle = -1;
-  self->potentiometerDemand = 0;
-  self->potentiometerCandidate = 0;
-  self->potentiometerCandidateSinceMs = 0U;
-  self->potentiometerDemandReady = false;
-  self->calibrationDone = false;
-  self->desiredAdjustometerTarget = -1;
-  self->desiredAdjustometer = -1;
-  self->currentAdjustometerPosition = -1;
-  self->adjCommLostSince = 0;
-  self->adjCommFailed = false;
-  self->pidErr = 0;
-  self->pwmFeedForward = VP37_PWM_FF_AT_MIN;
-  self->feedForwardRiseBlend = 0.0f;
-  self->feedForwardFallBlend = 0.0f;
-  self->feedForwardMotion = 0.0f;
-  self->pidCorrection = 0.0f;
-  self->pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
-  self->pwmValue = VP37_PWM_MIN;
-  self->voltageCorrection = 1.0f;
-  self->compensationInputVolts = NOMINAL_VOLTAGE;
-  self->compensationVolts = NOMINAL_VOLTAGE;
-  self->voltageReady = false;
-  self->voltageFrozen = false;
-  self->lastPWMval = -1;
-  self->finalPWM = VP37_PWM_MIN;
-  self->localVolts = 0.0f;
-  self->previousLocalVolts = 0.0f;
-  self->localVoltageScale = 1.0f;
-  self->localVoltageReady = false;
-  self->voltageOverRange = false;
+  self->demand.lastThrottle = -1;
+  self->demand.potentiometerDemand = 0;
+  self->demand.potentiometerCandidate = 0;
+  self->demand.potentiometerCandidateSinceMs = 0U;
+  self->demand.potentiometerDemandReady = false;
+  self->feedback.calibrationDone = false;
+  self->demand.desiredAdjustometerTarget = -1;
+  self->demand.desiredAdjustometer = -1;
+  self->feedback.currentAdjustometerPosition = -1;
+  self->feedback.adjCommLostSince = 0;
+  self->feedback.adjCommFailed = false;
+  self->pid.pidErr = 0;
+  self->feedforward.pwmFeedForward = VP37_PWM_FF_AT_MIN;
+  self->feedforward.feedForwardRiseBlend = 0.0f;
+  self->feedforward.feedForwardFallBlend = 0.0f;
+  self->feedforward.feedForwardMotion = 0.0f;
+  self->pid.pidCorrection = 0.0f;
+  self->pid.pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
+  self->output.pwmValue = VP37_PWM_MIN;
+  self->supply.voltageCorrection = 1.0f;
+  self->supply.compensationInputVolts = NOMINAL_VOLTAGE;
+  self->supply.compensationVolts = NOMINAL_VOLTAGE;
+  self->supply.voltageReady = false;
+  self->supply.voltageFrozen = false;
+  self->output.lastPWMval = -1;
+  self->output.finalPWM = VP37_PWM_MIN;
+  self->supply.localVolts = 0.0f;
+  self->supply.previousLocalVolts = 0.0f;
+  self->supply.localVoltageScale = 1.0f;
+  self->supply.localVoltageReady = false;
+  self->supply.voltageOverRange = false;
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
-  self->pidTf = VP37_PID_TF;
-  self->throttleRampLastMs = hal_millis();
-  self->lastAdjustometerStatus = ADJ_STATUS_SIGNAL_LOST;
-  self->pidSaturatedHigh = false;
-  self->integralHold = false;
-  self->integralHoldEnterPending = false;
-  self->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
-  self->integralHoldReleasePending = false;
-  self->integralHoldReleaseStartedMs = 0U;
+  self->pid.pidTf = VP37_PID_TF;
+  self->demand.throttleRampLastMs = hal_millis();
+  self->feedback.lastAdjustometerStatus = ADJ_STATUS_SIGNAL_LOST;
+  self->pid.pidSaturatedHigh = false;
+  self->pid.integralHold = false;
+  self->pid.integralHoldEnterPending = false;
+  self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
+  self->pid.integralHoldReleasePending = false;
+  self->pid.integralHoldReleaseStartedMs = 0U;
   self->controlStarted = false;
   self->pidStarted = false;
   self->pidDtUs = 0U;
   self->controlSequence = 0U;
   self->controlDtUs = 0U;
-  self->pidTerms = (hal_pid_terms_t){0};
-  self->softFloorActive = false;
-  self->pwmLimited = false;
-  self->quantityAtRest = false;
-  self->temperatureCorrection = 1.0f;
-  self->temperatureCompensationWeight = 1.0f;
-  self->currentObservationEnabled = true;
-  self->cycleVoltageEnabled = true;
-  self->cycleVoltageUsed = false;
-  self->cycleSupplyValid = false;
-  self->temperatureReady = false;
-  self->cycleCurrentValid = false;
-  self->cycleCurrentAmps = 0.0f;
-  self->cycleCurrentVolts = 0.0f;
-  self->cycleCurrentPwm = 0;
-  self->cycleCurrentDrive = 0;
-  self->cycleCurrentUs = 0U;
-  (void)memset(&self->cycleResult, 0, sizeof(self->cycleResult));
-  self->cycleResultStatus = HAL_NONE;
-  self->cycleResultSequence = 0U;
-  self->scanLastSequence = 0U;
-  self->scanBlocks = 0U;
-  self->scanGaps = 0U;
-  self->scanFrameNs = 0U;
-  self->scanRunning = false;
-  self->driveResistance = VP37_DRIVE_REFERENCE_OHMS;
-  self->driveCorrection = 1.0f;
-  self->driveSamples = 0U;
-  self->driveUpdatedMs = 0U;
-  self->driveFirstSampleMs = 0U;
-  self->driveResistanceReady = false;
-  self->driveCompensationEnabled = true;
-  self->driveCompensationUsed = false;
-  self->thermalScale = 1.0f;
-  self->thermalScaleReady = false;
-  self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
-  self->integralDeadbandHz = (float)VP37_PID_DEADBAND;
-  self->motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
-  self->motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
-  for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
-    self->mapTrim[i] = 0.0f;
+  self->pid.pidTerms = (hal_pid_terms_t){0};
+  self->pid.softFloorActive = false;
+  self->output.pwmLimited = false;
+  self->demand.quantityAtRest = false;
+  self->thermal.temperatureCorrection = 1.0f;
+  self->thermal.temperatureCompensationWeight = 1.0f;
+  self->thermal.currentObservationEnabled = true;
+  self->supply.cycleVoltageEnabled = true;
+  self->supply.cycleVoltageUsed = false;
+  self->supply.cycleSupplyValid = false;
+  self->thermal.temperatureReady = false;
+  self->thermal.cycleCurrentValid = false;
+  self->thermal.cycleCurrentAmps = 0.0f;
+  self->thermal.cycleCurrentVolts = 0.0f;
+  self->thermal.cycleCurrentPwm = 0;
+  self->thermal.cycleCurrentDrive = 0;
+  self->thermal.cycleCurrentUs = 0U;
+  (void)memset(&self->scan.cycleResult, 0, sizeof(self->scan.cycleResult));
+  self->scan.cycleResultStatus = HAL_NONE;
+  self->scan.cycleResultSequence = 0U;
+  self->scan.scanLastSequence = 0U;
+  self->scan.scanBlocks = 0U;
+  self->scan.scanGaps = 0U;
+  self->scan.scanFrameNs = 0U;
+  self->scan.scanRunning = false;
+  self->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  self->thermal.driveCorrection = 1.0f;
+  self->thermal.driveSamples = 0U;
+  self->thermal.driveUpdatedMs = 0U;
+  self->thermal.driveFirstSampleMs = 0U;
+  self->thermal.driveResistanceReady = false;
+  self->thermal.driveCompensationEnabled = true;
+  self->thermal.driveCompensationUsed = false;
+  self->thermal.thermalScale = 1.0f;
+  self->thermal.thermalScaleReady = false;
+  self->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  self->pid.integralDeadbandHz = (float)VP37_PID_DEADBAND;
+  self->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
+  self->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
+  for (uint32_t i = 0U; i < COUNTOF(self->feedforward.mapTrim); i++) {
+    self->feedforward.mapTrim[i] = 0.0f;
   }
-  self->mapTrimApplied = 0.0f;
-  self->mapTrimEnabled = false;
-  self->integralHoldEntered = false;
-  self->mapTrimTransfers = 0U;
+  self->feedforward.mapTrimApplied = 0.0f;
+  self->feedforward.mapTrimEnabled = false;
+  self->pid.integralHoldEntered = false;
+  self->feedforward.mapTrimTransfers = 0U;
   // The bench cap equals the bottom of the position profile, so it only ever
   // limits what a console command lowered.
 #if ECU_FUNCTIONAL_TESTS_ENABLED
-  self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
+  self->pid.pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
 #else
-  self->pidIntegralOverride = 0.0f;
+  self->pid.pidIntegralOverride = 0.0f;
 #endif
 
-  if (self->adjustController == NULL) {
-    self->adjustController = hal_pid_controller_create();
-    if (self->adjustController == NULL) {
+  if (self->pid.adjustController == NULL) {
+    self->pid.adjustController = hal_pid_controller_create();
+    if (self->pid.adjustController == NULL) {
       derr("VP37 init failed: cannot create PID controller");
       return VP37_INIT_PID_CREATE_FAILED;
     }
   }
 
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
-  hal_pid_controller_set_tf(self->adjustController, self->pidTf);
-  hal_pid_controller_set_max_integral(self->adjustController,
+  hal_pid_controller_set_tf(self->pid.adjustController, self->pid.pidTf);
+  hal_pid_controller_set_max_integral(self->pid.adjustController,
                                       VP37_PID_MAX_INTEGRAL);
 
   valToPWM(PIO_VP37_ANGLE, 0);
@@ -162,10 +162,10 @@ VP37InitStatus VP37_init(VP37Pump *self) {
     return VP37_INIT_CALIBRATION_FAILED;
   }
   VP37_updateAdjustometerPosition(self);
-  self->desiredAdjustometerTarget = -1;
-  self->desiredAdjustometer = -1;
+  self->demand.desiredAdjustometerTarget = -1;
+  self->demand.desiredAdjustometer = -1;
 
-  VP37_enableVP37(self, self->calibrationDone);
+  VP37_enableVP37(self, self->feedback.calibrationDone);
 
   self->vp37Initialized = true;
   return VP37_INIT_OK;
@@ -179,8 +179,8 @@ void VP37_enableVP37(VP37Pump *self, bool enable) {
 
 void VP37_stop(VP37Pump *self) {
   self->vp37Initialized = false;
-  self->finalPWM = 0;
-  self->lastPWMval = 0;
+  self->output.finalPWM = 0;
+  self->output.lastPWMval = 0;
   valToPWM(PIO_VP37_RPM, 0);
   VP37_enableVP37(self, false);
 }
@@ -200,7 +200,7 @@ bool VP37_isVP37Enabled(VP37Pump *self) {
  *       project-local N146/G149-like inner-loop target.
  */
 void VP37_setVP37Throttle(VP37Pump *self, float accel) {
-  if (!self->calibrationDone) {
+  if (!self->feedback.calibrationDone) {
     derr_limited("VP37 calibration", "Calibration not done!");
     return;
   }
@@ -211,51 +211,53 @@ void VP37_setVP37Throttle(VP37Pump *self, float accel) {
 
   accel =
       hal_constrain(accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX);
-  self->lastThrottle = accel;
-  const int32_t target = (int32_t)hal_math_map_f32(
-      accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX, (float)self->VP37_ADJUST_MIN,
-      (float)self->VP37_ADJUST_MAX);
-  if (target != self->desiredAdjustometerTarget) {
-    self->targetChangedMs = hal_millis();
+  self->demand.lastThrottle = accel;
+  const int32_t target =
+      (int32_t)hal_math_map_f32(accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX,
+                                (float)self->feedback.VP37_ADJUST_MIN,
+                                (float)self->feedback.VP37_ADJUST_MAX);
+  if (target != self->demand.desiredAdjustometerTarget) {
+    self->demand.targetChangedMs = hal_millis();
   }
-  self->desiredAdjustometerTarget = target;
+  self->demand.desiredAdjustometerTarget = target;
 }
 
 void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel) {
-  if (!self->calibrationDone) {
+  if (!self->feedback.calibrationDone) {
     VP37_setVP37Throttle(self, (float)accel);
     return;
   }
 
   const int32_t demand =
       hal_constrain(accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX);
-  if (!self->potentiometerDemandReady) {
-    self->potentiometerDemand = demand;
-    self->potentiometerCandidate = demand;
-    self->potentiometerCandidateSinceMs = hal_millis();
-    self->potentiometerDemandReady = true;
+  if (!self->demand.potentiometerDemandReady) {
+    self->demand.potentiometerDemand = demand;
+    self->demand.potentiometerCandidate = demand;
+    self->demand.potentiometerCandidateSinceMs = hal_millis();
+    self->demand.potentiometerDemandReady = true;
     VP37_setVP37Throttle(self, (float)demand);
     return;
   }
 
-  const int32_t delta = demand - self->potentiometerDemand;
+  const int32_t delta = demand - self->demand.potentiometerDemand;
   const int32_t absoluteDelta = delta < 0 ? -delta : delta;
   if ((absoluteDelta == 0) || (absoluteDelta > 1)) {
-    self->potentiometerCandidate = demand;
-    self->potentiometerCandidateSinceMs = hal_millis();
+    self->demand.potentiometerCandidate = demand;
+    self->demand.potentiometerCandidateSinceMs = hal_millis();
     if (absoluteDelta > 1) {
-      self->potentiometerDemand = demand;
+      self->demand.potentiometerDemand = demand;
     }
-    VP37_setVP37Throttle(self, (float)self->potentiometerDemand);
+    VP37_setVP37Throttle(self, (float)self->demand.potentiometerDemand);
     return;
   }
 
-  if (self->potentiometerCandidate != demand) {
-    self->potentiometerCandidate = demand;
-    self->potentiometerCandidateSinceMs = hal_millis();
-  } else if (hal_millis_deadline_expired(self->potentiometerCandidateSinceMs,
-                                         VP37_POTENTIOMETER_STEP_CONFIRM_MS)) {
-    self->potentiometerDemand = demand;
+  if (self->demand.potentiometerCandidate != demand) {
+    self->demand.potentiometerCandidate = demand;
+    self->demand.potentiometerCandidateSinceMs = hal_millis();
+  } else if (hal_millis_deadline_expired(
+                 self->demand.potentiometerCandidateSinceMs,
+                 VP37_POTENTIOMETER_STEP_CONFIRM_MS)) {
+    self->demand.potentiometerDemand = demand;
     VP37_setVP37Throttle(self, (float)demand);
   }
 }
@@ -299,17 +301,17 @@ void VP37_process(VP37Pump *self) {
   (void)VP37_serviceCurrentScan(self);
 
   if (!VP37_updateAdjustometerPosition(self)) {
-    if (hal_elapsed_u32(hal_millis(), self->adjCommLostSince,
+    if (hal_elapsed_u32(hal_millis(), self->feedback.adjCommLostSince,
                         VP37_ADJ_COMM_CUTOFF_MS)) {
       VP37_stop(self);
       derr("VP37 disabled: feedback communication timeout");
     }
-  } else if (!self->feedbackFresh ||
-             (self->lastAdjustometerStatus &
+  } else if (!self->feedback.feedbackFresh ||
+             (self->feedback.lastAdjustometerStatus &
               (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) != 0U) {
     VP37_stop(self);
     derr("VP37 disabled: invalid feedback status:%u fresh:%d",
-         self->lastAdjustometerStatus, self->feedbackFresh);
+         self->feedback.lastAdjustometerStatus, self->feedback.feedbackFresh);
   } else if ((int32_t)getGlobalValue(F_RPM) > RPM_MAX_EVER) {
     VP37_stop(self);
     derr("VP37 disabled: RPM too high");
@@ -336,7 +338,7 @@ void VP37_process(VP37Pump *self) {
  * plant is the project-local N146/G149-like inner loop.
  */
 static void VP37_throttleCycle(VP37Pump *self) {
-  if (self->desiredAdjustometerTarget < 0) {
+  if (self->demand.desiredAdjustometerTarget < 0) {
     return;
   }
   VP37Cycle cycle;
@@ -344,7 +346,8 @@ static void VP37_throttleCycle(VP37Pump *self) {
   VP37_rampDemand(self, &cycle);
   VP37_blendMotion(self, &cycle);
   // FF and PID share the warm reference domain; temperature scales the sum.
-  self->pwmFeedForward = VP37_feedForward(self, self->desiredAdjustometer);
+  self->feedforward.pwmFeedForward =
+      VP37_feedForward(self, self->demand.desiredAdjustometer);
   VP37_updateAuthority(self, &cycle);
   VP37_updateMultipliers(self, &cycle);
   if (VP37_releaseAtRest(self)) {
@@ -364,13 +367,13 @@ static void VP37_throttleCycle(VP37Pump *self) {
  * @return None.
  */
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
-  cycle->previousDesired = self->desiredAdjustometer;
+  cycle->previousDesired = self->demand.desiredAdjustometer;
   cycle->previousPosition = cycle->previousDesired < 0
-                                ? (float)self->desiredAdjustometerTarget
-                                : self->desiredPosition;
+                                ? (float)self->demand.desiredAdjustometerTarget
+                                : self->demand.desiredPosition;
   cycle->dt = (float)self->pidDtUs * 0.000001f;
-  cycle->stationaryTarget =
-      hal_millis_deadline_expired(self->targetChangedMs, VP37_TARGET_STABLE_MS);
+  cycle->stationaryTarget = hal_millis_deadline_expired(
+      self->demand.targetChangedMs, VP37_TARGET_STABLE_MS);
   cycle->ki = 0.0f;
   cycle->outputScale = 1.0f;
 }
@@ -385,29 +388,31 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
  * overshoot. The error to the measured position follows from the result.
  */
 static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
-  if (self->desiredAdjustometer < 0) {
-    self->desiredPosition = (float)self->desiredAdjustometerTarget;
+  if (self->demand.desiredAdjustometer < 0) {
+    self->demand.desiredPosition =
+        (float)self->demand.desiredAdjustometerTarget;
   } else {
-    const float travel =
-        (float)self->VP37_ADJUST_MAX - (float)self->VP37_ADJUST_MIN;
-    const float delta =
-        (float)self->desiredAdjustometerTarget - self->desiredPosition;
+    const float travel = (float)self->feedback.VP37_ADJUST_MAX -
+                         (float)self->feedback.VP37_ADJUST_MIN;
+    const float delta = (float)self->demand.desiredAdjustometerTarget -
+                        self->demand.desiredPosition;
     const float upperStart =
-        (float)self->VP37_ADJUST_MIN +
+        (float)self->feedback.VP37_ADJUST_MIN +
         travel * (VP37_DESIRED_UPPER_SLEW_START_PERCENT * 0.01f);
-    float rate = delta > 0.0f && self->desiredPosition >= upperStart
+    float rate = delta > 0.0f && self->demand.desiredPosition >= upperStart
                      ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
                      : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
     if (delta > 0.0f && cycle->stationaryTarget) {
-      rate = self->desiredPosition >= upperStart
+      rate = self->demand.desiredPosition >= upperStart
                  ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
                  : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND;
     }
     const float step = travel * (rate * 0.01f) * cycle->dt;
-    self->desiredPosition += hal_constrain(delta, -step, step);
+    self->demand.desiredPosition += hal_constrain(delta, -step, step);
   }
-  self->desiredAdjustometer = (int32_t)self->desiredPosition;
-  self->pidErr = self->desiredAdjustometer - self->currentAdjustometerPosition;
+  self->demand.desiredAdjustometer = (int32_t)self->demand.desiredPosition;
+  self->pid.pidErr = self->demand.desiredAdjustometer -
+                     self->feedback.currentAdjustometerPosition;
 }
 
 /**
@@ -419,32 +424,32 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
  * map's motion column, the downward term lets the return spring work.
  */
 static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
-  const float travel =
-      (float)self->VP37_ADJUST_MAX - (float)self->VP37_ADJUST_MIN;
+  const float travel = (float)self->feedback.VP37_ADJUST_MAX -
+                       (float)self->feedback.VP37_ADJUST_MIN;
   const float upwardStep =
       travel * (VP37_PWM_FF_MOTION_REFERENCE_RATE * 0.01f) * cycle->dt;
   const float maxRise =
       VP37_DESIRED_SLEW_PERCENT_PER_SECOND / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
       (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
-      (upwardStep > 0.0f
-           ? hal_constrain((self->desiredPosition - cycle->previousPosition) /
-                               upwardStep,
-                           0.0f, maxRise)
-           : 0.0f);
-  self->feedForwardRiseBlend += (rise - self->feedForwardRiseBlend) *
-                                cycle->dt /
-                                (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
+      (upwardStep > 0.0f ? hal_constrain((self->demand.desiredPosition -
+                                          cycle->previousPosition) /
+                                             upwardStep,
+                                         0.0f, maxRise)
+                         : 0.0f);
+  self->feedforward.feedForwardRiseBlend +=
+      (rise - self->feedforward.feedForwardRiseBlend) * cycle->dt /
+      (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
   const float fall =
       (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
-      (upwardStep > 0.0f
-           ? hal_constrain((cycle->previousPosition - self->desiredPosition) /
-                               upwardStep,
-                           0.0f, maxRise)
-           : 0.0f);
-  self->feedForwardFallBlend += (fall - self->feedForwardFallBlend) *
-                                cycle->dt /
-                                (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
+      (upwardStep > 0.0f ? hal_constrain((cycle->previousPosition -
+                                          self->demand.desiredPosition) /
+                                             upwardStep,
+                                         0.0f, maxRise)
+                         : 0.0f);
+  self->feedforward.feedForwardFallBlend +=
+      (fall - self->feedforward.feedForwardFallBlend) * cycle->dt /
+      (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
 }
 
 /**
@@ -457,17 +462,17 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
  * compensate twice.
  */
 static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
-  self->pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
-  if (self->adjCommLostSince == 0U) {
-    self->pidPositiveLimit = VP37_computePositiveCorrectionLimit(
-        VP37_PWM_REFERENCE_TEMP_C, self->lastAdjustometerStatus,
-        self->pwmFeedForward);
+  self->pid.pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
+  if (self->feedback.adjCommLostSince == 0U) {
+    self->pid.pidPositiveLimit = VP37_computePositiveCorrectionLimit(
+        VP37_PWM_REFERENCE_TEMP_C, self->feedback.lastAdjustometerStatus,
+        self->feedforward.pwmFeedForward);
   }
-  self->pidIntegralLimit = VP37_integralLimit(self);
-  cycle->ki = hal_pid_controller_get_ki(self->adjustController);
+  self->pid.pidIntegralLimit = VP37_integralLimit(self);
+  cycle->ki = hal_pid_controller_get_ki(self->pid.adjustController);
   const float maxIntegral =
-      cycle->ki > 0.0f ? self->pidIntegralLimit / cycle->ki : 0.0f;
-  hal_pid_controller_set_max_integral(self->adjustController, maxIntegral);
+      cycle->ki > 0.0f ? self->pid.pidIntegralLimit / cycle->ki : 0.0f;
+  hal_pid_controller_set_max_integral(self->pid.adjustController, maxIntegral);
 }
 
 /**
@@ -479,17 +484,18 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
  * correction alike, so a supply change never reaches the loop as an error.
  */
 static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
-  self->lastVolts = getGlobalValue(F_VOLTS);
-  self->localVolts = getLocalSystemSupplyVoltage();
-  if (self->lastVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
-    self->lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
+  self->supply.lastVolts = getGlobalValue(F_VOLTS);
+  self->supply.localVolts = getLocalSystemSupplyVoltage();
+  if (self->supply.lastVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
+    self->supply.lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
-  self->lastFuelTemp = getGlobalValue(F_FUEL_TEMP);
+  self->thermal.lastFuelTemp = getGlobalValue(F_FUEL_TEMP);
   VP37_updateVoltageCorrection(self, cycle->dt);
   VP37_updateTemperatureCorrection(self, cycle->dt);
   VP37_updateDriveCorrection(self, cycle->dt);
   VP37_updateThermalScale(self, cycle->dt);
-  cycle->outputScale = self->voltageCorrection * self->thermalScale;
+  cycle->outputScale =
+      self->supply.voltageCorrection * self->thermal.thermalScale;
 }
 
 /**
@@ -500,28 +506,29 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
  * at zero demand, so every term is cleared before the next demand arrives.
  */
 static bool VP37_releaseAtRest(VP37Pump *self) {
-  self->quantityAtRest = self->lastThrottle <= (float)VP37_PERCENT_MIN &&
-                         self->desiredPosition <= (float)self->VP37_ADJUST_MIN;
-  if (self->quantityAtRest) {
-    hal_pid_controller_reset(self->adjustController);
-    self->pidTerms = (hal_pid_terms_t){0};
-    self->pwmFeedForward = 0.0f;
-    self->feedForwardRiseBlend = 0.0f;
-    self->feedForwardFallBlend = 0.0f;
-    self->feedForwardMotion = 0.0f;
-    self->pidCorrection = 0.0f;
-    self->pwmValue = 0.0f;
-    self->pidNegativeLimit = 0.0f;
-    self->pidUpperLimit = 0.0f;
-    self->pidSaturatedHigh = false;
-    self->integralHold = false;
-    self->integralHoldEnterPending = false;
-    self->integralHoldReleasePending = false;
-    self->softFloorActive = false;
-    self->pwmLimited = false;
+  self->demand.quantityAtRest =
+      self->demand.lastThrottle <= (float)VP37_PERCENT_MIN &&
+      self->demand.desiredPosition <= (float)self->feedback.VP37_ADJUST_MIN;
+  if (self->demand.quantityAtRest) {
+    hal_pid_controller_reset(self->pid.adjustController);
+    self->pid.pidTerms = (hal_pid_terms_t){0};
+    self->feedforward.pwmFeedForward = 0.0f;
+    self->feedforward.feedForwardRiseBlend = 0.0f;
+    self->feedforward.feedForwardFallBlend = 0.0f;
+    self->feedforward.feedForwardMotion = 0.0f;
+    self->pid.pidCorrection = 0.0f;
+    self->output.pwmValue = 0.0f;
+    self->pid.pidNegativeLimit = 0.0f;
+    self->pid.pidUpperLimit = 0.0f;
+    self->pid.pidSaturatedHigh = false;
+    self->pid.integralHold = false;
+    self->pid.integralHoldEnterPending = false;
+    self->pid.integralHoldReleasePending = false;
+    self->pid.softFloorActive = false;
+    self->output.pwmLimited = false;
     VP37_writeQuantityPWM(self, 0);
   }
-  return self->quantityAtRest;
+  return self->demand.quantityAtRest;
 }
 
 /**
@@ -535,23 +542,27 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
 static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   float lowerCommand =
       fmaxf((float)VP37_PWM_MIN / cycle->outputScale,
-            self->pwmFeedForward - VP37_PID_CORR_LIMIT_NEGATIVE);
+            self->feedforward.pwmFeedForward - VP37_PID_CORR_LIMIT_NEGATIVE);
   const float upperCommand = (float)VP37_PWM_MAX / cycle->outputScale;
-  self->softFloorActive = false;
-  if (self->currentAdjustometerPosition < self->desiredAdjustometer) {
+  self->pid.softFloorActive = false;
+  if (self->feedback.currentAdjustometerPosition <
+      self->demand.desiredAdjustometer) {
     const float floor =
-        self->pwmFeedForward - (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
+        self->feedforward.pwmFeedForward - (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
     if (floor > lowerCommand) {
       lowerCommand = floor;
-      self->softFloorActive = true;
+      self->pid.softFloorActive = true;
     }
   }
-  self->pidNegativeLimit =
-      fmaxf(-VP37_PID_CORR_LIMIT_NEGATIVE, lowerCommand - self->pwmFeedForward);
-  self->pidUpperLimit =
-      fminf(self->pidPositiveLimit, upperCommand - self->pwmFeedForward);
-  hal_pid_controller_set_output_limits(
-      self->adjustController, self->pidNegativeLimit, self->pidUpperLimit);
+  self->pid.pidNegativeLimit =
+      fmaxf(-VP37_PID_CORR_LIMIT_NEGATIVE,
+            lowerCommand - self->feedforward.pwmFeedForward);
+  self->pid.pidUpperLimit =
+      fminf(self->pid.pidPositiveLimit,
+            upperCommand - self->feedforward.pwmFeedForward);
+  hal_pid_controller_set_output_limits(self->pid.adjustController,
+                                       self->pid.pidNegativeLimit,
+                                       self->pid.pidUpperLimit);
 }
 
 /**
@@ -567,20 +578,20 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool rampWindup =
       cycle->previousDesired >= 0 &&
-      self->desiredAdjustometer != cycle->previousDesired &&
-      self->pidTerms.integral * cycle->ki * (float)self->pidErr >= 0.0f;
+      self->demand.desiredAdjustometer != cycle->previousDesired &&
+      self->pid.pidTerms.integral * cycle->ki * (float)self->pid.pidErr >= 0.0f;
   const bool targetSettled =
-      cycle->stationaryTarget &&
-      (self->desiredAdjustometer == self->desiredAdjustometerTarget);
-  self->integralDeadbandHz = VP37_integralDeadband(self);
+      cycle->stationaryTarget && (self->demand.desiredAdjustometer ==
+                                  self->demand.desiredAdjustometerTarget);
+  self->pid.integralDeadbandHz = VP37_integralDeadband(self);
   VP37_updateIntegralHold(self, targetSettled);
-  const bool freezeIntegral = rampWindup || self->integralHold;
-  const float integralDeadband =
-      freezeIntegral ? fabsf((float)self->pidErr) : self->integralDeadbandHz;
-  const hal_status_t pidStatus =
-      hal_pid_controller_step_ex(self->adjustController, (float)self->pidErr,
-                                 (float)self->currentAdjustometerPosition,
-                                 cycle->dt, integralDeadband, &self->pidTerms);
+  const bool freezeIntegral = rampWindup || self->pid.integralHold;
+  const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.pidErr)
+                                                : self->pid.integralDeadbandHz;
+  const hal_status_t pidStatus = hal_pid_controller_step_ex(
+      self->pid.adjustController, (float)self->pid.pidErr,
+      (float)self->feedback.currentAdjustometerPosition, cycle->dt,
+      integralDeadband, &self->pid.pidTerms);
   bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);
@@ -600,24 +611,27 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
  * telemetry can tell a limited command from a free one.
  */
 static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
-  self->pidCorrection = self->pidTerms.output;
+  self->pid.pidCorrection = self->pid.pidTerms.output;
   VP37_transferIntegralToMapTrim(self);
-  self->pidSaturatedHigh = self->pidTerms.saturated_high;
-  self->pwmValue = self->pwmFeedForward + self->pidCorrection;
-  const float compensatedPWM = self->pwmValue * cycle->outputScale;
-  self->finalPWM = (int32_t)compensatedPWM;
-  self->pwmLimited =
-      (self->finalPWM < VP37_PWM_MIN) || (self->finalPWM > VP37_PWM_MAX);
-  self->finalPWM = hal_constrain(self->finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
-  self->softFloorActive = self->softFloorActive && self->pidTerms.saturated_low;
+  self->pid.pidSaturatedHigh = self->pid.pidTerms.saturated_high;
+  self->output.pwmValue =
+      self->feedforward.pwmFeedForward + self->pid.pidCorrection;
+  const float compensatedPWM = self->output.pwmValue * cycle->outputScale;
+  self->output.finalPWM = (int32_t)compensatedPWM;
+  self->output.pwmLimited = (self->output.finalPWM < VP37_PWM_MIN) ||
+                            (self->output.finalPWM > VP37_PWM_MAX);
+  self->output.finalPWM =
+      hal_constrain(self->output.finalPWM, VP37_PWM_MIN, VP37_PWM_MAX);
+  self->pid.softFloorActive =
+      self->pid.softFloorActive && self->pid.pidTerms.saturated_low;
 
-  VP37_writeQuantityPWM(self, self->finalPWM);
+  VP37_writeQuantityPWM(self, self->output.finalPWM);
 }
 
 static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm) {
-  self->finalPWM = pwm;
-  if (self->lastPWMval != pwm) {
-    self->lastPWMval = pwm;
+  self->output.finalPWM = pwm;
+  if (self->output.lastPWMval != pwm) {
+    self->output.lastPWMval = pwm;
     valToPWM(PIO_VP37_RPM, pwm);
   }
 }

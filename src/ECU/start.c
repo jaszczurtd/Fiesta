@@ -378,11 +378,12 @@ static void start_reportVP37Current(void) {
   const VP37Pump snapshot = s_ctx.injectionPump;
   m_mutex_exit(vp37StateMutex);
   if (!snapshot.vp37Initialized ||
-      (snapshot.cycleResultSequence ==
+      (snapshot.scan.cycleResultSequence ==
        s_startRuntimeState.vp37CurrentLastSequence)) {
     return;
   }
-  s_startRuntimeState.vp37CurrentLastSequence = snapshot.cycleResultSequence;
+  s_startRuntimeState.vp37CurrentLastSequence =
+      snapshot.scan.cycleResultSequence;
   VP37_showCurrentPulse(&snapshot);
 }
 #endif
