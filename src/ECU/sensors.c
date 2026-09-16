@@ -10,6 +10,9 @@
 
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
+#if SENSORS_THROTTLE_DIAG
+#include <hal/analog/hal_adc_scan.h>
+#endif
 
 typedef struct {
   volatile float valueFields[F_LAST];
@@ -270,16 +273,181 @@ TESTABLE_STATIC int32_t sensors_computeThrottlePositionFromRaw(int32_t rawVal) {
   return inverted;
 }
 
-int32_t readThrottle(void) {
+#if SENSORS_THROTTLE_DIAG
+/** @brief One second of demand reads: where the zero end sits and how much it
+ * wanders. */
+static struct {
+  uint32_t windowStartMs;
+  uint32_t count;
+  int32_t minRaw;
+  int32_t maxRaw;
+  int32_t sumRaw;
+  uint32_t eventsThisSecond;
+} s_throttleDiag = {0U, 0U, INT32_MAX, INT32_MIN, 0, 0U};
+
+static struct {
+  uint32_t reads;
+  uint32_t hits;
+  uint32_t lastSurveyMs;
+} s_throttleStress = {0U, 0U, 0U};
+
+/** @brief Survey every mux input once, so a stray value can be named. */
+static void sensors_throttleDiagSurvey(void) {
+  int values[8];
   m_mutex_enter_blocking(analog4051Mutex);
+  for (unsigned char channel = 0U; channel < 8U; channel++) {
+    set4051ActivePin(channel);
+    (void)hal_adc_read(ADC_SENSORS_PIN);
+    hal_delay_us(10U);
+    values[channel] = hal_adc_read(ADC_SENSORS_PIN);
+  }
   set4051ActivePin(HC4051_I_THROTTLE_POS);
-
-  float average = 0.0f;
-  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average);
-  int32_t rawVal = (int32_t)average;
   m_mutex_exit(analog4051Mutex);
+  deb("THRMUX ch0:%d ch1:%d ch2:%d ch3:%d ch4:%d ch5:%d ch6:%d ch7:%d",
+      values[0], values[1], values[2], values[3], values[4], values[5],
+      values[6], values[7]);
+}
 
-  return sensors_computeThrottlePositionFromRaw(rawVal);
+/**
+ * @brief Demand read with every sample and its frame-mates recorded.
+ * @return Driver demand in the PWM domain, as the production read gives it.
+ * @note Mirrors fiesta_adc_read_average_ex() step for step: one discarded
+ * read, four kept ten microseconds apart, RP2040 transfer-gap compensation,
+ * so the demand is the one the production path would have produced. The
+ * shunt and supply samples come from the same scan frame right after each
+ * sensors sample, so a rotated frame shows as the neighbours carrying each
+ * other's values, while a stale frame shows all four samples agreeing on a
+ * value that belongs to another channel.
+ */
+static int32_t sensors_readThrottleDiag(void) {
+  int sample[5];
+  uint16_t shunt[5];
+  uint16_t supply[5];
+  m_mutex_enter_blocking(analog4051Mutex);
+  const uint32_t switchedUs = hal_micros();
+  set4051ActivePin(HC4051_I_THROTTLE_POS);
+  const uint32_t settledUs = hal_micros();
+  for (size_t i = 0U; i < 5U; i++) {
+    sample[i] = hal_adc_read(ADC_SENSORS_PIN);
+    shunt[i] = 0U;
+    supply[i] = 0U;
+    (void)hal_adc_scan_latest(ADC_VP37_CURRENT_PIN, &shunt[i]);
+    (void)hal_adc_scan_latest(ADC_VOLT_PIN, &supply[i]);
+    if (i > 0U) {
+      hal_delay_us(10U);
+    }
+  }
+  // Stress the newest-sample path while the mux is fresh on this channel.
+  const int reference = sample[4];
+  uint32_t hits = 0U;
+  uint32_t firstHit = 0U;
+  int firstValue = 0;
+  for (uint32_t i = 0U; i < SENSORS_THROTTLE_DIAG_STRESS_READS; i++) {
+    const int value = hal_adc_read(ADC_SENSORS_PIN);
+    const int delta = value - reference;
+    if ((delta > SENSORS_THROTTLE_DIAG_STRESS_BAND) ||
+        (delta < -SENSORS_THROTTLE_DIAG_STRESS_BAND)) {
+      if (hits == 0U) {
+        firstHit = i;
+        firstValue = value;
+      }
+      hits++;
+    }
+  }
+  const uint32_t stressEndUs = hal_micros();
+  const bool muxA = hal_gpio_read(A_4051);
+  const bool muxB = hal_gpio_read(B_4051);
+  const bool muxC = hal_gpio_read(C_4051);
+  m_mutex_exit(analog4051Mutex);
+  s_throttleStress.reads += SENSORS_THROTTLE_DIAG_STRESS_READS;
+  s_throttleStress.hits += hits;
+  if ((hits > 0U) &&
+      (s_throttleDiag.eventsThisSecond < SENSORS_THROTTLE_DIAG_EVENTS_PER_S)) {
+    s_throttleDiag.eventsThisSecond++;
+    deb("THRSTRESS us:%lu hits:%lu first:%lu value:%d ref:%d span:%luus "
+        "mux:%u%u%u",
+        (unsigned long)stressEndUs, (unsigned long)hits,
+        (unsigned long)firstHit, firstValue, reference,
+        (unsigned long)(stressEndUs - settledUs), muxC ? 1U : 0U,
+        muxB ? 1U : 0U, muxA ? 1U : 0U);
+  }
+
+  float sum = 0.0f;
+  for (size_t i = 1U; i < 5U; i++) {
+    sum += (float)hal_adc_compensate_rp2040_12bit(sample[i]);
+  }
+  const int32_t rawVal = (int32_t)(sum / 4.0f);
+  const int32_t demand = sensors_computeThrottlePositionFromRaw(rawVal);
+
+  const uint32_t nowMs = hal_millis();
+  if (s_throttleDiag.count == 0U) {
+    s_throttleDiag.windowStartMs = nowMs;
+  }
+  s_throttleDiag.count++;
+  s_throttleDiag.sumRaw += rawVal;
+  if (rawVal < s_throttleDiag.minRaw) {
+    s_throttleDiag.minRaw = rawVal;
+  }
+  if (rawVal > s_throttleDiag.maxRaw) {
+    s_throttleDiag.maxRaw = rawVal;
+  }
+
+  if (((demand > 0) ||
+       (rawVal < (THROTTLE_MAX + SENSORS_THROTTLE_DIAG_EDGE))) &&
+      (s_throttleDiag.eventsThisSecond < SENSORS_THROTTLE_DIAG_EVENTS_PER_S)) {
+    s_throttleDiag.eventsThisSecond++;
+    deb("THRDIAG us:%lu raw:%ld dem:%ld s:%d/%d/%d/%d/%d sh:%u/%u/%u/%u/%u "
+        "vs:%u/%u/%u/%u/%u settle:%lu",
+        (unsigned long)settledUs, (long)rawVal, (long)demand, sample[0],
+        sample[1], sample[2], sample[3], sample[4], (unsigned)shunt[0],
+        (unsigned)shunt[1], (unsigned)shunt[2], (unsigned)shunt[3],
+        (unsigned)shunt[4], (unsigned)supply[0], (unsigned)supply[1],
+        (unsigned)supply[2], (unsigned)supply[3], (unsigned)supply[4],
+        (unsigned long)(settledUs - switchedUs));
+  }
+  if (hal_millis_deadline_expired(s_throttleDiag.windowStartMs, 1000U)) {
+    deb("THRSTAT n:%lu min:%ld max:%ld mean:%ld edge:%d fr:%lu stress:%lu "
+        "hits:%lu",
+        (unsigned long)s_throttleDiag.count, (long)s_throttleDiag.minRaw,
+        (long)s_throttleDiag.maxRaw,
+        (long)(s_throttleDiag.sumRaw / (int32_t)s_throttleDiag.count),
+        THROTTLE_MAX, (unsigned long)hal_adc_scan_frame_period_ns(),
+        (unsigned long)s_throttleStress.reads,
+        (unsigned long)s_throttleStress.hits);
+    if (hal_millis_deadline_expired(s_throttleStress.lastSurveyMs,
+                                    SENSORS_THROTTLE_DIAG_SURVEY_MS)) {
+      s_throttleStress.lastSurveyMs = nowMs;
+      sensors_throttleDiagSurvey();
+    }
+    s_throttleDiag.count = 0U;
+    s_throttleDiag.sumRaw = 0;
+    s_throttleDiag.minRaw = INT32_MAX;
+    s_throttleDiag.maxRaw = INT32_MIN;
+    s_throttleDiag.eventsThisSecond = 0U;
+  }
+  return demand;
+}
+#endif /* SENSORS_THROTTLE_DIAG */
+
+hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage) {
+  hal_status_t status = HAL_EINVAL;
+  if (outAverage != NULL) {
+    m_mutex_enter_blocking(analog4051Mutex);
+    set4051ActivePin(channel);
+    status = fiesta_adc_read_average_ex(ADC_SENSORS_PIN, outAverage);
+    m_mutex_exit(analog4051Mutex);
+  }
+  return status;
+}
+
+int32_t readThrottle(void) {
+#if SENSORS_THROTTLE_DIAG
+  return sensors_readThrottleDiag();
+#else
+  float average = 0.0f;
+  (void)sensors_readMuxAverage(HC4051_I_THROTTLE_POS, &average);
+  return sensors_computeThrottlePositionFromRaw((int32_t)average);
+#endif
 }
 
 /**
@@ -323,13 +491,9 @@ float readAirTemperature(void) {
  * @return Pressure in bar relative to atmosphere.
  */
 float readBarPressure(void) {
-  m_mutex_enter_blocking(analog4051Mutex);
-  set4051ActivePin(HC4051_I_BAR_PRESSURE);
-
   float average = 0.0f;
-  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average);
+  (void)sensors_readMuxAverage(HC4051_I_BAR_PRESSURE, &average);
   float val = (average / DIVIDER_PRESSURE_BAR) - 1.0f; // atmospheric pressure
-  m_mutex_exit(analog4051Mutex);
 
   if (val < 0.0) {
     val = 0.0;

@@ -28,10 +28,11 @@ static engine_fuel_state_t s_engineFuel = {.measuredValues = {0},
  * @return Latest fuel level result after optional averaging.
  */
 float readFuel(void) {
-  set4051ActivePin(HC4051_I_FUEL_LEVEL);
-
+  // The shared analog input is read under its lock like every other channel;
+  // switching it from here without the lock would hand a demand read in
+  // progress the tank's value.
   float average_value = 0.0f;
-  (void)fiesta_adc_read_average_ex(ADC_SENSORS_PIN, &average_value);
+  (void)sensors_readMuxAverage(HC4051_I_FUEL_LEVEL, &average_value);
   int result = (int)average_value;
   int r = result;
 
