@@ -65,8 +65,6 @@ High-level module map (active firmware + desktop companion):
 │     │              │                                                   │
 │     │              │──── UART ──────────► GPS receiver                 │
 │     │              │                                                   │
-│     │              │──── SPI ───────────► SD card (logging, legacy)    │
-│     │              │                                                   │
 │     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
 │     └──────┬───────┘                                                   │
 │            │                                                           │
@@ -343,8 +341,8 @@ that every mutable ECU byte lives inside `ecu_context_t`.
 - **CAN0** (main vehicle bus): SPI-attached controller, CS=GPIO 17, INT=15.
 - **CAN1** (OBD-2 port): SPI-attached controller, CS=GPIO 6, INT=14.
 - **SPI** (MISO=16, MOSI=19, SCK=18): shared between CAN0 and CAN1.
-  GPIO26 is reserved for the VP37 source-shunt input; SD logging requires
-  a different chip-select pin.
+  GPIO26 belongs to the VP37 source-shunt input and is not available to any
+  other peripheral.
 - **ADC**: `ADC_SENSORS_PIN=27` fed by a HC4051 analog mux (select pins
   11/12/13) giving 6 analog inputs - coolant temp (ch 0), oil temp (ch 1),
   throttle position (ch 2), air temp (ch 3), fuel level (ch 4), manifold/boost
@@ -647,7 +645,7 @@ OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (1
 
 ### 6.3 Other interfaces
 
-- **SPI** - shared on the ECU between CAN0, CAN1, and the SD card; uses
+- **SPI** - shared on the ECU between CAN0 and CAN1; uses
   per-device chip-selects. Clocks, OilAndSpeed, and Fiesta_clock each run
   their own SPI bus for CAN peripherals (Clocks also shares that bus with
   its TFT display).
@@ -1029,7 +1027,6 @@ authoritative 104-pin ECU connector map.
 - `Fiesta_clock` publishes RTC datetime + integrity on CAN as
   `CAN_ID_RTC_UPDATE` (`0x130`) and suppresses transmit when RTC integrity
   is invalid.
-- Micro-SD card on the ECU SPI bus used for logging (legacy functionality).
 
 ---
 
@@ -1042,9 +1039,6 @@ backed by the RP2040 emulated EEPROM (`ECU_EEPROM_SIZE_BYTES` bytes on the ECU).
 - **DTCs** - written by `dtcManager.c`, guarded by a dedicated mutex so
   that core-1 snapshots cannot race core-0 writes,
 - **Configuration** - written by each module's `config.{c,cpp}`.
-
-There is no file system on the SD card used by firmware for state - the SD
-is for logging only (legacy).
 
 ---
 

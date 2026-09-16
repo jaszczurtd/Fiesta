@@ -9,8 +9,6 @@ extern "C" {
 
 /** Highest 12-bit ADC code; reaching it marks a clipped observation. */
 #define VP37_CURRENT_ADC_MAX_RAW 4095U
-/** Maximum ON samples in one measured PWM period. */
-#define VP37_CURRENT_PULSE_SAMPLES 256U
 /** Interval between `VP37 IPULSE` reports on core 0, in milliseconds. */
 #define VP37_CURRENT_REPORT_MS 20U
 
@@ -25,19 +23,37 @@ extern "C" {
 /** Nominal time between two samples of one pin. */
 #define VP37_CURRENT_SCAN_FRAME_NS                                             \
   (VP37_CURRENT_SCAN_CONVERSION_NS * VP37_CURRENT_SCAN_PINS)
+/** Maximum ON samples in one measured PWM period: a whole period of frames
+    plus a margin for edge quantization, so any PWM frequency fits. */
+#define VP37_CURRENT_PULSE_SAMPLES                                             \
+  ((((1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) * 1000U) /                   \
+    VP37_CURRENT_SCAN_FRAME_NS) +                                              \
+   8U)
 /** A block of 2.25 PWM periods always holds one complete rise-to-rise period,
     whatever its phase; two periods exactly left the second edge on the block
-    boundary about 1% of the time. */
+    boundary about 1% of the time. A block is never shorter than one control
+    step, so the reducer called once per step sees every block; at 1 kHz that
+    is six periods. */
+#define VP37_CURRENT_SCAN_PERIODS_NS                                           \
+  ((9U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) / 4U)
+#define VP37_CURRENT_SCAN_BLOCK_MIN_NS 6000000U
+#define VP37_CURRENT_SCAN_BLOCK_NS                                             \
+  ((VP37_CURRENT_SCAN_PERIODS_NS > VP37_CURRENT_SCAN_BLOCK_MIN_NS)             \
+       ? VP37_CURRENT_SCAN_PERIODS_NS                                          \
+       : VP37_CURRENT_SCAN_BLOCK_MIN_NS)
 #define VP37_CURRENT_SCAN_BLOCK_FRAMES                                         \
-  (((9U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) / 4U) +              \
-    VP37_CURRENT_SCAN_FRAME_NS - 1U) /                                         \
+  ((VP37_CURRENT_SCAN_BLOCK_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /            \
    VP37_CURRENT_SCAN_FRAME_NS)
 /** Gate detection from the source-shunt waveform, with hysteresis. An edge
-    counts once the new level holds for this many consecutive frames; single
-    frame excursions in the OFF phase are not a gate. */
+    counts once the new level holds for the confirmation time; the excursions
+    seen in the OFF phase at 200 Hz fit in one 24 us frame, so the time, not
+    the frame count, is what rejects them at any frame period. */
 #define VP37_CURRENT_GATE_ON_AMPS 0.5f
 #define VP37_CURRENT_GATE_OFF_AMPS 0.25f
-#define VP37_CURRENT_GATE_CONFIRM_FRAMES 3U
+#define VP37_CURRENT_GATE_CONFIRM_NS 72000U
+#define VP37_CURRENT_GATE_CONFIRM_FRAMES                                       \
+  ((VP37_CURRENT_GATE_CONFIRM_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /          \
+   VP37_CURRENT_SCAN_FRAME_NS)
 
 /** One raw sample of a PWM-phase-aligned capture. */
 typedef struct {

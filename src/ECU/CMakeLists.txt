@@ -136,9 +136,11 @@ target_include_directories(ecu_mock PUBLIC
     ${SCDEFS}
 )
 
+# The host library keeps the default ECU_FUNCTIONAL_TESTS_ENABLED from
+# tests.h, which is off. Binaries that exercise the fixtures set it to 1
+# for their own copies of the sources; see tests/CMakeLists.txt.
 target_compile_definitions(ecu_mock PUBLIC
     UNIT_TEST
-    START_TEST_VP37_MODE=0
     UNITY_INCLUDE_CONFIG_H
     HAL_TARGET_MOCK
     SERIAL_7N1=2

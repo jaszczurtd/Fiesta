@@ -8,7 +8,6 @@
 #include "gps.h"
 #include "rpm.h"
 
-#include <stdio.h>
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
 
@@ -544,45 +543,34 @@ bool isDPFRegenerating(void) { return getGlobalValue(F_DPF_REGEN) > 0; }
 
 void updateValsForDebug(void) {
 
-  char stamp[24];
-#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
-  if (hal_sdlogger_is_initialized()) {
-    snprintf(stamp, sizeof(stamp), "LN:%d ", hal_sdlogger_get_log_number() - 1);
-  } else {
-    snprintf(stamp, sizeof(stamp), "NL/");
-  }
-#else
-  snprintf(stamp, sizeof(stamp), "NL/");
-#endif
-
   float volts = hal_math_round_tenth(getGlobalValue(F_VOLTS));
   if (s_sensorsState.lastVoltage != volts) {
     s_sensorsState.lastVoltage = volts;
-    deb("%sVoltage update: %.1fV", stamp, volts);
+    deb("Voltage update: %.1fV", volts);
   }
 
   int32_t egt = (int32_t)getGlobalValue(F_EGT);
   if (s_sensorsState.lastEGTTemp != egt) {
     s_sensorsState.lastEGTTemp = egt;
-    deb("%sEGT update: %dC", stamp, egt);
+    deb("EGT update: %dC", egt);
   }
 
   int32_t coolant = (int32_t)getGlobalValue(F_COOLANT_TEMP);
   if (s_sensorsState.lastCoolantTemp != coolant) {
     s_sensorsState.lastCoolantTemp = coolant;
-    deb("%sCoolant temp. update: %dC", stamp, coolant);
+    deb("Coolant temp. update: %dC", coolant);
   }
 
   int32_t oil = (int32_t)getGlobalValue(F_OIL_TEMP);
   if (s_sensorsState.lastOilTemp != oil) {
     s_sensorsState.lastOilTemp = oil;
-    deb("%sOil temp. update: %dC", stamp, oil);
+    deb("Oil temp. update: %dC", oil);
   }
 
   bool running = RPM_isEngineRunning(getRPMInstance());
   if (s_sensorsState.lastIsEngineRunning != running) {
     s_sensorsState.lastIsEngineRunning = running;
-    deb("%sEngine is running: %s", stamp, running ? "yes" : "no");
+    deb("Engine is running: %s", running ? "yes" : "no");
   }
 }
 

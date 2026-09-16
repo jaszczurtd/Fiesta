@@ -9,9 +9,9 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/timers/hal_soft_timer.h>
+#include <hal/usb/hal_usb.h>
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
-#include <utils/tools_logger_config.h>
 
 //-----------------------------------------------------------------------------
 // Central ECU context - single owner of all module instances
@@ -164,6 +164,43 @@ void executeByWatchdog(int *values, int size) {
   s_startRuntimeState.wSizeVal = size;
 }
 
+/**
+ * @brief Report the snapshot left by a watchdog reboot, then clear it.
+ * @return None.
+ * @note The snapshot stays latched until a USB host is attached. Output sent
+ * while nobody listens is dropped by the CDC stack, and a reboot is exactly
+ * the moment the host is still reconnecting.
+ */
+static void start_reportWatchdogSnapshot(void) {
+  bool hostAttached = false;
+  if ((s_startRuntimeState.wValuesPtr == NULL) ||
+      (hal_usb_cdc_is_connected(&hostAttached) != HAL_OK) || !hostAttached) {
+    return;
+  }
+  watchdog_feed();
+  if (hal_text_is_printable(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
+      hal_text_is_printable(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE)) {
+    derr("Watchdog reboot at %s %s", getGPSDate(), getGPSTime());
+  } else {
+    derr("Watchdog reboot, time of day unknown");
+  }
+  if (s_startRuntimeState.wSizeVal >= 4) {
+    derr("Watchdog cores: core0 started:%d running:%d core1 started:%d "
+         "running:%d",
+         s_startRuntimeState.wValuesPtr[0], s_startRuntimeState.wValuesPtr[1],
+         s_startRuntimeState.wValuesPtr[2], s_startRuntimeState.wValuesPtr[3]);
+  } else {
+    derr("Watchdog snapshot truncated: size=%d", s_startRuntimeState.wSizeVal);
+  }
+  derr("Watchdog build:%s sv0:%d sv1:%d", ecu_BuildDateTime,
+       s_startPersistentState.statusVariable0Val,
+       s_startPersistentState.statusVariable1Val);
+  watchdog_feed();
+
+  s_startRuntimeState.wSizeVal = 0;
+  s_startRuntimeState.wValuesPtr = NULL;
+}
+
 static void feedWatchdogDuringPersistence(void *user) {
   (void)user;
   watchdog_feed();
@@ -194,12 +231,6 @@ static void initializeCore0(void) {
          hal_status_to_string(eepromStatus), (int)eepromStatus);
   }
   deb("EEPROM backend: internal flash (%u bytes)", (unsigned)hal_eeprom_size());
-  deb("EEPROM layout: FIRST_ADDR=%u", (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
-#ifdef HAL_TOOLS_EEPROM_LOGGER_ADDR
-  deb("EEPROM layout: LOGGER_ADDR=%u CRASH_ADDR=%u",
-      (unsigned)HAL_TOOLS_EEPROM_LOGGER_ADDR,
-      (unsigned)HAL_TOOLS_EEPROM_CRASH_ADDR);
-#endif
 
   dtcManagerInit();
   ecuParamsInit();
@@ -229,63 +260,6 @@ static void initializeCore0(void) {
 #ifdef RESET_EEPROM
   resetEEPROM();
 #endif
-
-#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
-  hal_sdlogger_init(SD_CARD_CS);
-  if (!hal_sdlogger_is_initialized()) {
-    deb("SD Card failed, or not present");
-  } else {
-    deb("SD Card initialized");
-  }
-#endif
-
-  if (s_startRuntimeState.wValuesPtr != NULL) {
-    watchdog_feed();
-#if defined(HAL_ENABLE_SDLOGGER) && (HAL_ENABLE_SDLOGGER)
-    char dateAndTime[GPS_TIME_DATE_BUFFER_SIZE * 2];
-    memset(dateAndTime, 0, sizeof(dateAndTime));
-    const bool hasWatchdogSnapshot = (s_startRuntimeState.wSizeVal >= 4);
-
-    bool validDateAndTime =
-        hal_text_is_printable(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
-        hal_text_is_printable(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE);
-
-    if (validDateAndTime) {
-      snprintf(dateAndTime, sizeof(dateAndTime) - 1, "%s-%s", getGPSDate(),
-               getGPSTime());
-    }
-
-    hal_sdlogger_crash_init(dateAndTime, SD_CARD_CS);
-    if (validDateAndTime) {
-      hal_sdlogger_crash_report("date:%s time:%s", getGPSDate(), getGPSTime());
-    }
-    if (hasWatchdogSnapshot) {
-      hal_sdlogger_crash_report("core0 started: %d",
-                                s_startRuntimeState.wValuesPtr[0]);
-      hal_sdlogger_crash_report("core0 was running: %d",
-                                s_startRuntimeState.wValuesPtr[1]);
-      hal_sdlogger_crash_report("core1 started: %d",
-                                s_startRuntimeState.wValuesPtr[2]);
-      hal_sdlogger_crash_report("core1 was running: %d",
-                                s_startRuntimeState.wValuesPtr[3]);
-    } else {
-      hal_sdlogger_crash_report("watchdog snapshot truncated: size=%d",
-                                s_startRuntimeState.wSizeVal);
-    }
-    hal_sdlogger_crash_report("build: %s", ecu_BuildDateTime);
-
-    hal_sdlogger_crash_report("sv0: %d",
-                              s_startPersistentState.statusVariable0Val);
-    hal_sdlogger_crash_report("sv1: %d",
-                              s_startPersistentState.statusVariable1Val);
-
-    hal_sdlogger_crash_close();
-#endif
-    watchdog_feed();
-
-    s_startRuntimeState.wSizeVal = 0;
-    s_startRuntimeState.wValuesPtr = NULL;
-  }
 
   initBasicPIO();
 
@@ -382,6 +356,7 @@ void callAtEverySecond(void) {
   hal_gpio_write(HAL_LED_PIN, s_startRuntimeState.alertBlinkState);
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
   CAN_sendGpsExtended();
+  start_reportWatchdogSnapshot();
 
 #if SYSTEM_TEMP
   deb("System temperature: %f", hal_read_chip_temp());
@@ -457,7 +432,7 @@ static void runCore0(void) {
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);
     VP37Pump snapshot = s_ctx.injectionPump;
-#ifdef START_TEST_ENABLE_VP37_TUNING
+#if ECU_FUNCTIONAL_TESTS_ENABLED
     VP37TraceSample samples[4];
     size_t sampleCount = 0U;
     while (!hal_debug_is_muted() && (sampleCount < COUNTOF(samples)) &&
@@ -468,7 +443,7 @@ static void runCore0(void) {
     const bool recording = VP37_traceCapturing();
 #endif
     m_mutex_exit(vp37StateMutex);
-#ifdef START_TEST_ENABLE_VP37_TUNING
+#if ECU_FUNCTIONAL_TESTS_ENABLED
     if (!recording) {
       VP37_showDebug(&snapshot);
     }
@@ -547,15 +522,18 @@ static void runCore1(void) {
   RPM_process(getRPMInstance());
 #ifdef VP37
   hal_mutex_lock(vp37StateMutex);
-#if defined(START_TEST_ENABLE_VP37_CYCLIC) ||                                  \
-    defined(START_TEST_ENABLE_VP37_SERIAL)
-  tickTests();
-#elif defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
-  VP37_setPotentiometerThrottle(&s_ctx.injectionPump, getThrottlePercentage());
+  // A running functional test owns the demand for as long as it runs; the
+  // source configured by VP37_ENGINE_OPERATION_MODE owns it the rest of the
+  // time, including every build without tests.
+  if (!tickTests()) {
+#if VP37_ENGINE_OPERATION_MODE
+    engineOperation_process(&s_ctx.engineOp);
+    engineOperation_showDebug(&s_ctx.engineOp);
 #else
-  engineOperation_process(&s_ctx.engineOp);
-  engineOperation_showDebug(&s_ctx.engineOp);
+    VP37_setPotentiometerThrottle(&s_ctx.injectionPump,
+                                  getThrottlePercentage());
 #endif
+  }
   VP37_process(&s_ctx.injectionPump);
   hal_mutex_unlock(vp37StateMutex);
 #else
