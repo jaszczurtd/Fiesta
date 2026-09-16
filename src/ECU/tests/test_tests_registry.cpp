@@ -8,7 +8,15 @@
 #include <string.h>
 
 void setUp(void) {}
-void tearDown(void) {}
+
+/** @brief Release the controller each fixture allocates, so runs stay clean. */
+void tearDown(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  if (pump->adjustController != NULL) {
+    hal_pid_controller_destroy(pump->adjustController);
+    pump->adjustController = NULL;
+  }
+}
 
 static VP37Pump *preparePump(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
