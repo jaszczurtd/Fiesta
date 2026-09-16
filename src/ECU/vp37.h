@@ -116,9 +116,15 @@ extern "C" {
 // reference temperature. Holding the actuator raises the coil resistance by
 // several percent within minutes while the fuel sensor moves by about a degree,
 // so the measured value replaces the fuel-temperature model whenever the
-// capture is healthy. Bench derivation: 1.137 ohm at 26 C fuel, divided by the
-// model factor 0.918 for that temperature.
-#define VP37_DRIVE_REFERENCE_OHMS 1.24f
+// capture is healthy. Measured at 130 Hz on 2026-09-16 by two routes that agree
+// inside one percent: eight cold-coil holds across the stroke gave 1.108 ohm at
+// 28 C fuel, which the copper model carries to 1.200 at the reference, and the
+// map's own holds ran at 1.187. The 1.24 ohm it replaces came from the 200 Hz
+// configuration, where the capture reconstructed a different duty fraction, and
+// left the measured path four percent below the model it hands over to. The
+// feedforward below carries the reciprocal of that correction, so the commands
+// stay where the map measured them.
+#define VP37_DRIVE_REFERENCE_OHMS 1.20f
 // A small command or a small current makes the ratio ill-conditioned.
 #define VP37_DRIVE_MIN_CURRENT_A 1.5f
 #define VP37_DRIVE_MIN_PWM 420
@@ -129,29 +135,43 @@ extern "C" {
 #define VP37_DRIVE_MAX_AGE_US 100000U
 #define VP37_DRIVE_FILTER_S 2.0f
 #define VP37_DRIVE_READY_SAMPLES 16U
+// The filter starts at the reference and walks toward what the path measures,
+// so the estimate is only worth using once it has had a few time constants to
+// get there. Bench 2026-09-16: without this the first captures of a cold, fast
+// ramp were reconstructed at 1.6 ohm, the correction clamped at its ceiling and
+// the actuator sat against the upper stop for six seconds.
+#define VP37_DRIVE_SETTLE_MS 6000U
 // Resistance moves on a thermal time scale; a ready estimate keeps scaling
 // the command through motion and only gives way once no capture has been
 // accepted for this long.
 #define VP37_DRIVE_STALE_MS 10000U
+// Ceiling on how fast the thermal multiplier may move, per second. The measured
+// path and the model disagree by whatever the coil has self-heated, so handing
+// over between them steps the command; bench 2026-09-16 turned a 0.037 handover
+// into a 375 Hz excursion. Resistance drifts about 0.0002 per second, two
+// decades below this limit, so the ramp only ever blunts a handover.
+#define VP37_THERMAL_SCALE_SLEW_PER_S 0.02f
 // Endpoints of the nonlinear positive-demand feedforward map [nominal PWM].
-#define VP37_PWM_FF_AT_MIN 585
-#define VP37_PWM_FF_AT_MAX 872
+#define VP37_PWM_FF_AT_MIN 566
+#define VP37_PWM_FF_AT_MAX 844
 // Upper upward-motion correction at the reference rate [nominal PWM]: the
 // scale of the map's motion column. The runtime boost below is applied as a
 // ratio to this value.
-#define VP37_PWM_FF_MOTION_BOOST 32.0f
-// Runtime upward boost at start and after bench R; 40 = the map's column times
-// 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged).
-#define VP37_PWM_FF_MOTION_BOOST_DEFAULT 40.0f
+#define VP37_PWM_FF_MOTION_BOOST 31.0f
+// Runtime upward boost at start and after bench R: the map's column times
+// 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged),
+// carried through the same reference rescale as the map.
+#define VP37_PWM_FF_MOTION_BOOST_DEFAULT 38.7f
 // Downward-motion correction at the reference rate [nominal PWM]: the command
 // drops below the holding map while the target falls, so the return spring
 // is not fighting a holding command that only the integral would unwind.
-// Same filter and rate scale as the upward term. 30 halved the descent
-// medians on 130 Hz; 20 and 40 were clearly worse, 50 and 80 overshoot.
-// Bench commands U/J.
-#define VP37_PWM_FF_DESCENT_BOOST 30.0f
+// Same filter and rate scale as the upward term. The tuned value halved the
+// descent medians on 130 Hz; a fifth below and above was clearly worse, and
+// well above that it overshoots. Rescaled with the map when the drive
+// reference was re-measured. Bench commands U/J.
+#define VP37_PWM_FF_DESCENT_BOOST 29.0f
 // Bench ceiling for either motion boost [nominal PWM].
-#define VP37_PWM_FF_MOTION_BOOST_MAX 200.0f
+#define VP37_PWM_FF_MOTION_BOOST_MAX 193.0f
 #define VP37_PWM_FF_MOTION_FILTER_S 0.01f
 #define VP37_PWM_FF_MOTION_REFERENCE_RATE 125.0f
 // Percent of calibrated travel per second; permits the existing cyclic ramp.
@@ -349,17 +369,23 @@ typedef struct {
                                   command. */
   float temperatureCompensationWeight; /**< Bench blend: 0 disables, 1 applies
                                           the model. */
-  bool temperatureReady;     /**< A valid temperature has initialized the
-                                multiplier. */
-  float driveResistance;     /**< Filtered drive-path resistance from the
-                                measured current, in ohms. */
-  float driveCorrection;     /**< Measured replacement for the fuel-temperature
-                                multiplier; unity until enough samples. */
-  uint32_t driveSamples;     /**< Accepted resistance observations. */
-  uint32_t driveUpdatedMs;   /**< Last accepted observation. */
-  bool driveResistanceReady; /**< Enough observations to drive the output. */
+  bool temperatureReady;   /**< A valid temperature has initialized the
+                              multiplier. */
+  float driveResistance;   /**< Filtered drive-path resistance from the
+                              measured current, in ohms. */
+  float driveCorrection;   /**< Measured replacement for the fuel-temperature
+                              multiplier; unity until enough samples. */
+  uint32_t driveSamples;   /**< Accepted resistance observations. */
+  uint32_t driveUpdatedMs; /**< Last accepted observation. */
+  uint32_t driveFirstSampleMs; /**< First observation of the current estimate;
+                                  the filter needs time from here, not just
+                                  a count. */
+  bool driveResistanceReady;   /**< Enough observations to drive the output. */
   bool driveCompensationEnabled; /**< Bench switch for the measured path. */
   bool driveCompensationUsed;    /**< Measured path scaled the last command. */
+  float thermalScale;            /**< Rate-limited multiplier actually applied,
+                                    between the measured path and the model. */
+  bool thermalScaleReady;        /**< The multiplier has taken a first value. */
   uint32_t controlLastUs;
   uint32_t controlDtUs;
   uint32_t controlSequence;
@@ -401,6 +427,7 @@ typedef struct {
   bool integralHold; /**< Settled-position integral hold is active. */
   float fuelTemp;    /**< Fuel temperature (C) used by control. */
   float temperatureCorrection; /**< Temperature multiplier used by this step. */
+  float thermalScale;          /**< Multiplier after the rate limit. */
   hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
   bool softFloor, hardwareClamp; /**< Active downstream bounds. */
   bool quantityAtRest;           /**< Quantity drive released at zero demand. */

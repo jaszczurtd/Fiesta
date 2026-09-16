@@ -55,6 +55,7 @@ static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
       .cycleVoltageUsed = self->cycleVoltageUsed,
       .voltageOverRange = self->voltageOverRange,
       .mapTrim = self->mapTrimApplied,
+      .thermalScale = self->thermalScale,
       .integralHold = self->integralHold,
       .fuelTemp = self->lastFuelTemp,
       .temperatureCorrection = self->temperatureCorrection,
@@ -223,22 +224,65 @@ static void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   if (!isfinite(resistance) || (resistance <= 0.0f)) {
     return;
   }
+  // Always filter from the reference. Seeding from the first accepted capture
+  // used to adopt it whole, and a capture taken while the actuator is slamming
+  // through its stroke reconstructs a resistance that is not the coil's.
+  if (!(self->driveResistance > 0.0f)) {
+    self->driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  }
+  self->driveResistance +=
+      (resistance - self->driveResistance) * dt / (VP37_DRIVE_FILTER_S + dt);
   if (self->driveSamples == 0U) {
-    self->driveResistance = resistance;
-  } else {
-    self->driveResistance +=
-        (resistance - self->driveResistance) * dt / (VP37_DRIVE_FILTER_S + dt);
+    self->driveFirstSampleMs = hal_millis();
   }
   if (self->driveSamples < VP37_DRIVE_READY_SAMPLES) {
     self->driveSamples++;
   }
   self->driveUpdatedMs = hal_millis();
-  self->driveResistanceReady = self->driveSamples >= VP37_DRIVE_READY_SAMPLES;
+  self->driveResistanceReady =
+      (self->driveSamples >= VP37_DRIVE_READY_SAMPLES) &&
+      hal_millis_deadline_expired(self->driveFirstSampleMs,
+                                  VP37_DRIVE_SETTLE_MS);
   self->driveCorrection =
       hal_constrain(self->driveResistance / VP37_DRIVE_REFERENCE_OHMS,
                     VP37_TEMPERATURE_FACTOR_MIN, VP37_TEMPERATURE_FACTOR_MAX);
   self->driveCompensationUsed =
       self->driveCompensationEnabled && self->driveResistanceReady;
+}
+
+/**
+ * @brief Slew the thermal multiplier toward whichever source is in force.
+ * @param self VP37 controller instance to update.
+ * @param dt Control period in seconds.
+ * @return None.
+ * @note One multiplier only: the measured resistance already contains the fluid
+ * effect the fuel-temperature model estimates, so they never stack. They do
+ * disagree by whatever the coil has self-heated, so handing over between them
+ * used to step the command. Resistance moves on a thermal time scale, far below
+ * the rate limit, so the ramp only blunts a handover and never lags a real
+ * change. Only the very first value is taken whole: a cyclic ramp touches zero
+ * demand several times a second, so snapping at rest would hand the command
+ * every wild estimate the ramp produces and defeat the limit where it matters
+ * most.
+ */
+static void VP37_updateThermalScale(VP37Pump *self, float dt) {
+  const float target = self->driveCompensationUsed
+                           ? self->driveCorrection
+                           : self->temperatureCorrection;
+  if (!self->thermalScaleReady) {
+    self->thermalScale = target;
+    self->thermalScaleReady = true;
+  } else {
+    const float step = VP37_THERMAL_SCALE_SLEW_PER_S * dt;
+    const float delta = target - self->thermalScale;
+    if (delta > step) {
+      self->thermalScale += step;
+    } else if (delta < -step) {
+      self->thermalScale -= step;
+    } else {
+      self->thermalScale = target;
+    }
+  }
 }
 
 VP37InitStatus VP37_init(VP37Pump *self) {
@@ -327,9 +371,12 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->driveCorrection = 1.0f;
   self->driveSamples = 0U;
   self->driveUpdatedMs = 0U;
+  self->driveFirstSampleMs = 0U;
   self->driveResistanceReady = false;
   self->driveCompensationEnabled = true;
   self->driveCompensationUsed = false;
+  self->thermalScale = 1.0f;
+  self->thermalScaleReady = false;
   self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
   self->integralDeadbandHz = (float)VP37_PID_DEADBAND;
   self->motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
@@ -735,17 +782,20 @@ static void VP37_transferIntegralToMapTrim(VP37Pump *self) {
 static float VP37_feedForward(VP37Pump *self, int32_t position) {
   // Positive-demand map at 12 V, 49 C, taken from settled holds at 130 Hz
   // (bench 2026-09-16, two series, both approach directions averaged; the
-  // upper stroke scatters about 25 counts between them).
+  // upper stroke scatters about 25 counts between them). Those holds ran with
+  // the drive reference four percent high, so every entry carries the same
+  // 1.20/1.24 rescale that re-measuring the reference called for; the commands
+  // it produces are the ones the holds measured.
   static const struct {
     float percent, pwm, motion;
   } points[] = {{0.0f, VP37_PWM_FF_AT_MIN, 0.0f},
-                {5.0f, 604.0f, 10.0f},
-                {10.0f, 623.0f, 12.0f},
-                {25.0f, 699.0f, 15.0f},
-                {50.0f, 794.0f, 20.0f},
-                {75.0f, 856.0f, 22.0f},
-                {90.0f, 866.0f, VP37_PWM_FF_MOTION_BOOST},
-                {95.0f, 872.0f, VP37_PWM_FF_MOTION_BOOST},
+                {5.0f, 585.0f, 9.7f},
+                {10.0f, 603.0f, 11.6f},
+                {25.0f, 676.0f, 14.5f},
+                {50.0f, 768.0f, 19.4f},
+                {75.0f, 828.0f, 21.3f},
+                {90.0f, 838.0f, VP37_PWM_FF_MOTION_BOOST},
+                {95.0f, 844.0f, VP37_PWM_FF_MOTION_BOOST},
                 {100.0f, VP37_PWM_FF_AT_MAX, VP37_PWM_FF_MOTION_BOOST}};
   const float percent = hal_constrain(
       hal_math_map_f32((float)position, (float)self->VP37_ADJUST_MIN,
@@ -949,12 +999,8 @@ static void VP37_throttleCycle(VP37Pump *self) {
   VP37_updateVoltageCorrection(self, dt);
   VP37_updateTemperatureCorrection(self, dt);
   VP37_updateDriveCorrection(self, dt);
-  // One thermal multiplier only: the measured resistance already contains the
-  // fluid effect the fuel-temperature model estimates, so they never stack.
-  const float thermalScale = self->driveCompensationUsed
-                                 ? self->driveCorrection
-                                 : self->temperatureCorrection;
-  const float outputScale = self->voltageCorrection * thermalScale;
+  VP37_updateThermalScale(self, dt);
+  const float outputScale = self->voltageCorrection * self->thermalScale;
 
   // Finish the commanded descent before releasing the spring-return actuator.
   // Neither feedforward nor a retained integral may energize it at zero demand.
@@ -1278,7 +1324,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "sh:%d sl:%d sf:%d hw:%d rest:%d st:%u hzraw:%lu hz:%lu sn:%lu su:%lu "
       "age:%u io:%d ious:%lu retry:%u fresh:%d pdt:%lu V:%.1f Vl:%.2f "
       "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d vp:%d vhi:%d "
-      "ft:%.0f tcf:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
+      "ft:%.0f tcf:%.4f tsc:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
       (unsigned long)sample->sequence, sample->throttle, sample->target,
       sample->desired, sample->measured, sample->pwm,
@@ -1297,7 +1343,8 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       sample->compensationInputVolts, sample->compensationVolts,
       sample->voltageCorrection, sample->integralHold, sample->cycleVoltageUsed,
       sample->voltageOverRange, sample->fuelTemp, sample->temperatureCorrection,
-      sample->motionFF, (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
+      sample->thermalScale, sample->motionFF,
+      (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED
@@ -1323,7 +1370,7 @@ void VP37_showDebug(VP37Pump *self) {
             ? activeTest
             : (VP37_ENGINE_OPERATION_MODE != 0 ? "engine" : "potentiometer");
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:73 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
+    deb("VP37 CFG rev:75 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
         "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f "

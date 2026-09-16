@@ -186,6 +186,50 @@ void init4051(void);
 #define SENSORS_MUX_SETTLE_US 60U
 #endif
 
+/** Bench diagnostic for the demand read: every sample near the zero threshold
+ * is reported with its scan frame-mates, the margin once a second, and right
+ * after each channel switch the newest-sample path is hammered while the mux
+ * is fresh on the demand input, so a frame from before the switch stands out
+ * as the previous channel's value. Build with SENSORS_THROTTLE_DIAG=1; the
+ * bench on 2026-09-16 saw one such frame in about 220 000 reads before the
+ * scan reader was fixed and none after. Off in every build unless asked. */
+#ifndef SENSORS_THROTTLE_DIAG
+#define SENSORS_THROTTLE_DIAG 0
+#endif
+/** Reads this close to the zero threshold are reported in full. */
+#ifndef SENSORS_THROTTLE_DIAG_EDGE
+#define SENSORS_THROTTLE_DIAG_EDGE 15
+#endif
+#ifndef SENSORS_THROTTLE_DIAG_EVENTS_PER_S
+#define SENSORS_THROTTLE_DIAG_EVENTS_PER_S 8U
+#endif
+/** Newest-sample reads hammered right after the switch; a frame from before
+ * it carries the previous channel and stands apart from the potentiometer by
+ * far more than the band. */
+#ifndef SENSORS_THROTTLE_DIAG_STRESS_READS
+#define SENSORS_THROTTLE_DIAG_STRESS_READS 1500U
+#endif
+#ifndef SENSORS_THROTTLE_DIAG_STRESS_BAND
+#define SENSORS_THROTTLE_DIAG_STRESS_BAND 64
+#endif
+/** The other mux inputs are surveyed this often so a stray value can be
+ * matched to its channel. */
+#ifndef SENSORS_THROTTLE_DIAG_SURVEY_MS
+#define SENSORS_THROTTLE_DIAG_SURVEY_MS 10000U
+#endif
+
+/**
+ * @brief Read one HC4051 input with the standard averaging, under the mux
+ * lock.
+ * @param channel Multiplexer channel to select.
+ * @param outAverage Non-NULL; receives the averaged, compensated ADC value.
+ * @return HAL_OK, or the averaging helper's status.
+ * @note Every reader of the shared analog input goes through here or takes
+ * the same lock itself: a channel switch from another context in the middle
+ * of a burst hands that burst the other channel's value.
+ */
+hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage);
+
 /**
  * @brief Select the active HC4051 input channel.
  * @param pin Multiplexer channel number to select.

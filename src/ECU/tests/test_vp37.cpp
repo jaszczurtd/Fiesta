@@ -334,13 +334,13 @@ void test_vp37_hot_positive_error_uses_expanded_range(void) {
   injectAdjRegisterData(100, 144, 55, ADJ_STATUS_OK);
   VP37_process(pump);
 
-  // 941.76 + 220 scaled by the 55 C copper factor exceeds the ceiling.
+  // 911.52 + 220 scaled by the 55 C copper factor exceeds the ceiling.
   TEST_ASSERT_FLOAT_WITHIN(0.05f, VP37_PID_CORR_LIMIT_POSITIVE_MAX,
                            pump->pidPositiveLimit);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, VP37_PID_CORR_LIMIT_POSITIVE_MAX,
                            pump->pidCorrection);
   TEST_ASSERT_TRUE(pump->pidSaturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 1281.76f, pump->pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, 1251.52f, pump->pwmValue);
 }
 
 void test_vp37_hot_negative_error_keeps_original_range(void) {
@@ -357,7 +357,7 @@ void test_vp37_hot_negative_error_keeps_original_range(void) {
                            pump->pidPositiveLimit);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, -220.0f, pump->pidCorrection);
   TEST_ASSERT_FALSE(pump->pidSaturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 721.76f, pump->pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, 691.52f, pump->pwmValue);
 }
 
 void test_vp37_pwm_limit_matches_physical_resolution(void) {
@@ -1170,6 +1170,9 @@ void test_vp37_temperature_scales_unsaturated_ff_and_pid_together(void) {
   // remain in the same domain; only the complete command multiplier changes.
   hal_pid_controller_reset(pump->adjustController);
   pump->temperatureReady = false;
+  // The applied multiplier is rate limited, so let it take the new value at
+  // once; the ramp itself has its own test.
+  pump->thermalScaleReady = false;
   hal_mock_set_millis(5);
   injectAdjRegisterData(4400, 144, 49, ADJ_STATUS_OK);
   VP37_process(pump);
@@ -1209,6 +1212,75 @@ void test_vp37_temperature_filter_holds_invalid_and_blends_bench_switch(void) {
   TEST_ASSERT_FLOAT_WITHIN(.0001f, 1, pump->temperatureCorrection);
 }
 
+void test_vp37_thermal_scale_ramps_the_handover_to_the_measured_path(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37Throttle(pump, 50);
+  injectAdjRegisterData(4500, 144, 29, ADJ_STATUS_OK);
+  VP37_process(pump);
+  // Without a measured estimate the model owns the command outright.
+  TEST_ASSERT_FALSE(pump->driveCompensationUsed);
+  TEST_ASSERT_EQUAL_FLOAT(pump->temperatureCorrection, pump->thermalScale);
+  const float model = pump->thermalScale;
+
+  // Hand over to a measured value the coil's self-heating has pushed above the
+  // model. Before the rate limit this landed on the command in one step.
+  pump->driveCorrection = model + .05f;
+  pump->driveResistanceReady = true;
+  pump->driveCompensationEnabled = true;
+  pump->driveUpdatedMs = hal_millis();
+  hal_mock_set_millis(5);
+  injectAdjRegisterData(4500, 144, 29, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_TRUE(pump->driveCompensationUsed);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f,
+                           model + (VP37_THERMAL_SCALE_SLEW_PER_S * .005f),
+                           pump->thermalScale);
+
+  // The ramp still closes in seconds, two decades faster than the drift it
+  // follows.
+  for (uint32_t ms = 10; ms <= 5000; ms += 5) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4500, 144, 29, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->driveCompensationUsed);
+  TEST_ASSERT_FLOAT_WITHIN(.0005f, pump->driveCorrection, pump->thermalScale);
+}
+
+void test_vp37_thermal_scale_keeps_its_limit_across_rest(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37Throttle(pump, 50);
+  injectAdjRegisterData(4500, 144, 29, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->quantityAtRest);
+
+  VP37_setVP37Throttle(pump, 0);
+  for (uint32_t ms = 5; ms <= 4000; ms += 5) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(100, 144, 29, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->quantityAtRest);
+  const float before = pump->thermalScale;
+
+  // A cyclic ramp touches zero demand several times a second. Taking the
+  // estimate whole at rest would hand the command every wild value such a ramp
+  // produces, so rest earns no exemption from the limit.
+  pump->driveCorrection = before + .05f;
+  pump->driveResistanceReady = true;
+  pump->driveCompensationEnabled = true;
+  pump->driveUpdatedMs = hal_millis();
+  hal_mock_set_millis(4005);
+  injectAdjRegisterData(100, 144, 29, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_TRUE(pump->quantityAtRest);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f,
+                           before + (VP37_THERMAL_SCALE_SLEW_PER_S * .005f),
+                           pump->thermalScale);
+}
+
 void test_vp37_temperature_bounds_and_physical_ceiling_reject_windup(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -1244,7 +1316,7 @@ void test_vp37_feedforward_is_nonlinear_and_calibration_independent(void) {
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {2.5f, 7.5f, 37.5f, 62.5f, 95.0f};
   // Holding commands include the measured 0.22-ohm source-shunt adjustment.
-  const float expected[] = {642.06f, 662.58f, 806.22f, 891.0f, 941.76f};
+  const float expected[] = {621.54f, 641.52f, 779.76f, 861.84f, 911.52f};
   for (unsigned range = 0; range < 2U; ++range) {
     pump->VP37_ADJUST_MIN = range == 0U ? 100 : 400;
     pump->VP37_ADJUST_MAX = range == 0U ? 9100 : 7400;
@@ -1496,7 +1568,7 @@ void test_vp37_upper_feedforward_flattens_without_changing_position_target(
   setupPumpForProcessTests(pump);
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {90, 92.5f, 95, 100};
-  const float expected[] = {935.28f, 938.52f, 941.76f, 941.76f};
+  const float expected[] = {905.04f, 908.28f, 911.52f, 911.52f};
   for (size_t i = 0; i < COUNTOF(demand); ++i) {
     pump->desiredAdjustometer = -1;
     VP37_setVP37Throttle(pump, demand[i]);
@@ -1534,7 +1606,7 @@ void test_vp37_motion_feedforward_brakes_when_upper_ramp_stops(void) {
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->feedForwardMotion);
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 941.76f, pump->pwmFeedForward);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 911.52f, pump->pwmFeedForward);
   TEST_ASSERT_EQUAL_INT32(pump->desiredAdjustometerTarget,
                           pump->desiredAdjustometer);
   VP37_setVP37Throttle(pump, 0);
@@ -1729,6 +1801,31 @@ static void runDriveCycles(VP37Pump *pump, uint32_t &ms, uint32_t count,
   }
 }
 
+void test_vp37_measured_drive_ignores_a_wild_capture_until_it_settles(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->driveCompensationEnabled = true;
+  VP37_setVP37Throttle(pump, 50);
+  uint32_t ms = 0U;
+
+  // A capture taken while the actuator slams through its stroke reconstructs a
+  // resistance that is not the coil's. A burst of them may not become the
+  // estimate: the filter starts at the reference and only creeps away from it.
+  const float wild = VP37_DRIVE_REFERENCE_OHMS * 1.35f;
+  runDriveCycles(pump, ms, 40U, wild, true);
+  TEST_ASSERT_FLOAT_WITHIN(.05f, VP37_DRIVE_REFERENCE_OHMS,
+                           pump->driveResistance);
+  TEST_ASSERT_FALSE(pump->driveResistanceReady);
+  TEST_ASSERT_FALSE(pump->driveCompensationUsed);
+
+  // Nor may they reach the command before the filter has had its settling
+  // time; the fuel-temperature model keeps the actuator until then.
+  runDriveCycles(pump, ms, 400U, wild, true);
+  TEST_ASSERT_FALSE(pump->driveResistanceReady);
+  TEST_ASSERT_FALSE(pump->driveCompensationUsed);
+  TEST_ASSERT_EQUAL_FLOAT(pump->temperatureCorrection, pump->thermalScale);
+}
+
 void test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -1737,7 +1834,11 @@ void test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier(void) {
   uint32_t ms = 0U;
   const float cold = VP37_DRIVE_REFERENCE_OHMS;
 
+  // Sample count alone is not enough: the filter starts at the reference and
+  // needs time to reach what the path measures.
   runDriveCycles(pump, ms, 40U, cold, true);
+  TEST_ASSERT_FALSE(pump->driveResistanceReady);
+  runDriveCycles(pump, ms, 1400U, cold, true);
   TEST_ASSERT_TRUE(pump->driveResistanceReady);
   TEST_ASSERT_TRUE(pump->driveCompensationUsed);
   TEST_ASSERT_FLOAT_WITHIN(.01f, cold, pump->driveResistance);
@@ -1763,7 +1864,7 @@ void test_vp37_measured_drive_rejects_stale_and_mismatched_captures(void) {
   VP37_setVP37Throttle(pump, 50);
   uint32_t ms = 0U;
   const float warm = VP37_DRIVE_REFERENCE_OHMS * 1.1f;
-  runDriveCycles(pump, ms, 40U, warm, true);
+  runDriveCycles(pump, ms, 1400U, warm, true);
   TEST_ASSERT_TRUE(pump->driveCompensationUsed);
   const float learned = pump->driveResistance;
   TEST_ASSERT_GREATER_THAN_FLOAT(1.0f, learned);
@@ -2033,6 +2134,9 @@ int main(void) {
   RUN_TEST(test_vp37_climb_floor_does_not_bypass_target_ramp);
   RUN_TEST(test_vp37_temperature_scales_unsaturated_ff_and_pid_together);
   RUN_TEST(test_vp37_temperature_filter_holds_invalid_and_blends_bench_switch);
+  RUN_TEST(test_vp37_thermal_scale_ramps_the_handover_to_the_measured_path);
+  RUN_TEST(test_vp37_thermal_scale_keeps_its_limit_across_rest);
+  RUN_TEST(test_vp37_measured_drive_ignores_a_wild_capture_until_it_settles);
   RUN_TEST(test_vp37_temperature_bounds_and_physical_ceiling_reject_windup);
   RUN_TEST(test_vp37_invalid_feedback_stops_and_bus_failure_freezes_integral);
 
