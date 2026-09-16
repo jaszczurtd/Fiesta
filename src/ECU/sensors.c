@@ -10,9 +10,12 @@
 
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
-#if SENSORS_THROTTLE_DIAG
+
 #include <hal/analog/hal_adc_scan.h>
-#endif
+
+// Timing derived from the ADC scan; defined with the multiplexer helpers below.
+TESTABLE_STATIC uint32_t sensors_muxSettleUs(void);
+TESTABLE_STATIC uint16_t sensors_adcSampleDelayUs(void);
 
 typedef struct {
   volatile float valueFields[F_LAST];
@@ -116,8 +119,9 @@ static float sensors_readNtcViaMux(uint8_t muxChannel, size_t *tableIdx,
   float average = 0.0f;
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(muxChannel);
-  const hal_status_t temperature_status = fiesta_ntc_read_temperature_ex(
-      ADC_SENSORS_PIN, R_TEMP_A, R_TEMP_B, &temperature);
+  const hal_status_t temperature_status = fiesta_ntc_read_temperature_spaced_ex(
+      ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), R_TEMP_A, R_TEMP_B,
+      &temperature);
   const hal_status_t average_status =
       temperature_status == HAL_OK
           ? hal_math_rolling_average_f32_ex(
@@ -311,8 +315,8 @@ static void sensors_throttleDiagSurvey(void) {
 /**
  * @brief Demand read with every sample and its frame-mates recorded.
  * @return Driver demand in the PWM domain, as the production read gives it.
- * @note Mirrors fiesta_adc_read_average_ex() step for step: one discarded
- * read, four kept ten microseconds apart, RP2040 transfer-gap compensation,
+ * @note Mirrors sensors_readMuxAverage() step for step: one discarded read,
+ * four kept one sample spacing apart, RP2040 transfer-gap compensation,
  * so the demand is the one the production path would have produced. The
  * shunt and supply samples come from the same scan frame right after each
  * sensors sample, so a rotated frame shows as the neighbours carrying each
@@ -334,7 +338,7 @@ static int32_t sensors_readThrottleDiag(void) {
     (void)hal_adc_scan_latest(ADC_VP37_CURRENT_PIN, &shunt[i]);
     (void)hal_adc_scan_latest(ADC_VOLT_PIN, &supply[i]);
     if (i > 0U) {
-      hal_delay_us(10U);
+      hal_delay_us(sensors_adcSampleDelayUs());
     }
   }
   // Stress the newest-sample path while the mux is fresh on this channel.
@@ -429,13 +433,58 @@ static int32_t sensors_readThrottleDiag(void) {
 }
 #endif /* SENSORS_THROTTLE_DIAG */
 
+/** Settling wait after a multiplexer channel change, in microseconds:
+ * SENSORS_MUX_ANALOG_SETTLE_US plus two scan frames while the scan runs, the
+ * analog part alone when reads convert live. */
+TESTABLE_STATIC uint32_t sensors_muxSettleUs(void) {
+  uint32_t settle = SENSORS_MUX_ANALOG_SETTLE_US;
+  if (hal_adc_scan_is_running()) {
+    const uint32_t frameUs = (hal_adc_scan_frame_period_ns() + 999U) / 1000U;
+    settle += 2U * frameUs;
+  }
+  return settle;
+}
+
+bool sensors_scanCoversInputs(void) {
+  static const uint8_t scannedInputs[] = {ADC_SENSORS_PIN, ADC_VOLT_PIN};
+  bool covered = true;
+  if (hal_adc_scan_is_running()) {
+    for (size_t i = 0U; i < (sizeof(scannedInputs) / sizeof(scannedInputs[0]));
+         i++) {
+      if (hal_adc_scan_pin_position(scannedInputs[i]) == UINT8_MAX) {
+        covered = false;
+      }
+    }
+  }
+  return covered;
+}
+
+/** Spacing between averaged ADC samples, in microseconds: one scan frame
+ * while the scan runs, so four samples come from four frames; ten
+ * microseconds for a polled converter. */
+TESTABLE_STATIC uint16_t sensors_adcSampleDelayUs(void) {
+  uint32_t delay = 10U;
+  if (hal_adc_scan_is_running()) {
+    const uint32_t frameUs = (hal_adc_scan_frame_period_ns() + 999U) / 1000U;
+    if (frameUs > delay) {
+      delay = frameUs;
+    }
+  }
+  return (uint16_t)delay;
+}
+
 hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage) {
   hal_status_t status = HAL_EINVAL;
   if (outAverage != NULL) {
     m_mutex_enter_blocking(analog4051Mutex);
     set4051ActivePin(channel);
-    status = fiesta_adc_read_average_ex(ADC_SENSORS_PIN, outAverage);
+    status = fiesta_adc_read_average_spaced_ex(
+        ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), outAverage);
     m_mutex_exit(analog4051Mutex);
+    if (status != HAL_OK) {
+      derr_limited("mux read", "Analog input %u unreadable: %s",
+                   (unsigned)channel, hal_status_to_string(status));
+    }
   }
   return status;
 }
@@ -444,9 +493,14 @@ int32_t readThrottle(void) {
 #if SENSORS_THROTTLE_DIAG
   return sensors_readThrottleDiag();
 #else
+  // A demand that cannot be read is no demand: the inverted mapping would
+  // otherwise turn a missing reading into full throttle.
   float average = 0.0f;
-  (void)sensors_readMuxAverage(HC4051_I_THROTTLE_POS, &average);
-  return sensors_computeThrottlePositionFromRaw((int32_t)average);
+  int32_t demand = 0;
+  if (sensors_readMuxAverage(HC4051_I_THROTTLE_POS, &average) == HAL_OK) {
+    demand = sensors_computeThrottlePositionFromRaw((int32_t)average);
+  }
+  return demand;
 #endif
 }
 
@@ -474,8 +528,9 @@ float readAirTemperature(void) {
   m_mutex_enter_blocking(analog4051Mutex);
 
   set4051ActivePin(HC4051_I_AIR_TEMP);
-  if (fiesta_ntc_read_temperature_ex(ADC_SENSORS_PIN, R_TEMP_AIR_A,
-                                     R_TEMP_AIR_B, &a) != HAL_OK) {
+  if (fiesta_ntc_read_temperature_spaced_ex(
+          ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), R_TEMP_AIR_A,
+          R_TEMP_AIR_B, &a) != HAL_OK) {
     a = 0.0f;
   }
   m_mutex_exit(analog4051Mutex);
@@ -699,7 +754,7 @@ void set4051ActivePin(unsigned char pin) {
   // Under the hardware-paced scan the readers see the newest scanned sample,
   // which must already belong to the new channel; polled reads convert live.
   if (hal_adc_scan_is_running()) {
-    hal_delay_us(SENSORS_MUX_SETTLE_US);
+    hal_delay_us(sensors_muxSettleUs());
   }
 }
 
@@ -1126,7 +1181,8 @@ bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out) {
 float getLocalSystemSupplyVoltage(void) {
   float average = 0.0f;
   float voltage = 0.0f;
-  if (fiesta_adc_read_average_ex(ADC_VOLT_PIN, &average) != HAL_OK ||
+  if (fiesta_adc_read_average_spaced_ex(
+          ADC_VOLT_PIN, sensors_adcSampleDelayUs(), &average) != HAL_OK ||
       fiesta_adc_to_voltage_ex((int)(average + 0.5f), (float)V_DIVIDER_R1,
                                (float)V_DIVIDER_R2, &voltage) != HAL_OK) {
     return 0.0f;

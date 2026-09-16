@@ -34,15 +34,15 @@ static void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
 
 static void setupPumpForProcessTests(VP37Pump *pump) {
   memset(pump, 0, sizeof(*pump));
-  pump->pid.adjustController = hal_pid_controller_create();
+  pump->pid.controller = hal_pid_controller_create();
   pump->vp37Initialized = true;
   pump->feedback.calibrationDone = true;
-  pump->feedback.VP37_ADJUST_MIN = 100;
-  pump->feedback.VP37_ADJUST_MAX = 9100;
-  pump->feedback.VP37_ADJUST_MIDDLE =
-      (pump->feedback.VP37_ADJUST_MAX + pump->feedback.VP37_ADJUST_MIN) / 2;
-  pump->demand.desiredAdjustometerTarget = -1;
-  pump->demand.desiredAdjustometer = -1;
+  pump->feedback.adjustMin = 100;
+  pump->feedback.adjustMax = 9100;
+  pump->feedback.adjustMiddle =
+      (pump->feedback.adjustMax + pump->feedback.adjustMin) / 2;
+  pump->demand.target = -1;
+  pump->demand.desired = -1;
   pump->demand.lastThrottle = -1.0f;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
@@ -50,13 +50,13 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
   pump->thermal.temperatureCorrection = 1.0f;
   pump->thermal.temperatureCompensationWeight = 1.0f;
-  pump->supply.compensationVolts = NOMINAL_VOLTAGE;
-  pump->supply.voltageReady = false;
+  pump->supply.heldVolts = NOMINAL_VOLTAGE;
+  pump->supply.ready = false;
   pump->demand.throttleRampLastMs = hal_millis();
-  pump->feedback.lastAdjustometerStatus = ADJ_STATUS_OK;
+  pump->feedback.lastStatus = ADJ_STATUS_OK;
   VP37_setVP37PID(pump, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
-  hal_pid_controller_set_tf(pump->pid.adjustController, VP37_PID_TF);
-  hal_pid_controller_set_max_integral(pump->pid.adjustController,
+  hal_pid_controller_set_tf(pump->pid.controller, VP37_PID_TF);
+  hal_pid_controller_set_max_integral(pump->pid.controller,
                                       VP37_PID_MAX_INTEGRAL);
   setGlobalValue(F_RPM, 1000.0f);
   setGlobalValue(F_VOLTS, 14.0f);
@@ -78,9 +78,9 @@ void tearDown(void) {
   hal_mock_i2c_set_busy(false);
   ecu_context_t *ctx = getECUContext();
   VP37Pump *pump = &ctx->injectionPump;
-  if (pump->pid.adjustController != NULL) {
-    hal_pid_controller_destroy(pump->pid.adjustController);
-    pump->pid.adjustController = NULL;
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
   }
 }
 
@@ -90,9 +90,9 @@ static void trackDemand(VP37Pump *pump, uint32_t *ms, uint32_t steps) {
   for (uint32_t i = 0U; i < steps; i++) {
     *ms += 5U;
     hal_mock_set_millis(*ms);
-    const int16_t position = (int16_t)(pump->demand.desiredAdjustometer < 0
-                                           ? pump->feedback.VP37_ADJUST_MIN
-                                           : pump->demand.desiredAdjustometer);
+    const int16_t position =
+        (int16_t)(pump->demand.desired < 0 ? pump->feedback.adjustMin
+                                           : pump->demand.desired);
     injectAdjRegisterData(position, 144, 29, ADJ_STATUS_OK);
     VP37_process(pump);
   }
@@ -110,11 +110,10 @@ void test_zero_demand_is_held_at_the_bottom_under_drive(void) {
   // Descend to zero demand and let the slew finish; the drive stays on.
   VP37_setVP37Throttle(pump, 0);
   trackDemand(pump, &ms, 800U);
-  TEST_ASSERT_EQUAL_INT32(pump->feedback.VP37_ADJUST_MIN,
-                          pump->demand.desiredAdjustometer);
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMin, pump->demand.desired);
   TEST_ASSERT_FALSE(VP37_demandAtRest(pump));
-  TEST_ASSERT_FALSE(pump->demand.quantityAtRest);
-  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->feedforward.pwmFeedForward);
+  TEST_ASSERT_FALSE(pump->demand.atRest);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->feedforward.pwm);
   TEST_ASSERT_GREATER_THAN_INT32(0, pump->output.finalPWM);
   TEST_ASSERT_TRUE(pump->vp37Initialized);
 }

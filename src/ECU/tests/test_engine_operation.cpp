@@ -10,10 +10,10 @@ static void setupPumpForEngineOperation(VP37Pump *pump) {
   memset(pump, 0, sizeof(*pump));
   pump->vp37Initialized = true;
   pump->feedback.calibrationDone = true;
-  pump->feedback.VP37_ADJUST_MIN = 100;
-  pump->feedback.VP37_ADJUST_MAX = 9100;
-  pump->feedback.VP37_ADJUST_MIDDLE =
-      (pump->feedback.VP37_ADJUST_MAX + pump->feedback.VP37_ADJUST_MIN) / 2;
+  pump->feedback.adjustMin = 100;
+  pump->feedback.adjustMax = 9100;
+  pump->feedback.adjustMiddle =
+      (pump->feedback.adjustMax + pump->feedback.adjustMin) / 2;
 }
 
 void setUp(void) {
@@ -40,10 +40,9 @@ void test_engine_operation_cranking_uses_start_demand(void) {
 
   int32_t expectedTarget = (int32_t)hal_math_map_f32(
       (float)ENGINE_OP_START_DEMAND_MIN, VP37_PERCENT_MIN, VP37_PERCENT_MAX,
-      (float)ctx->injectionPump.feedback.VP37_ADJUST_MIN,
-      (float)ctx->injectionPump.feedback.VP37_ADJUST_MAX);
-  TEST_ASSERT_EQUAL_INT32(expectedTarget,
-                          ctx->injectionPump.demand.desiredAdjustometerTarget);
+      (float)ctx->injectionPump.feedback.adjustMin,
+      (float)ctx->injectionPump.feedback.adjustMax);
+  TEST_ASSERT_EQUAL_INT32(expectedTarget, ctx->injectionPump.demand.target);
 }
 
 void test_engine_operation_closed_throttle_keeps_engine_start_and_idle_demand(

@@ -13,6 +13,25 @@ extern "C" {
 #endif
 
 /**
+ * @brief Read a Fiesta ADC input with an explicit spacing between samples.
+ *
+ * Discard one reading, collect four samples @p sample_delay_us apart and
+ * compensate the RP2040 12-bit ADC transfer gaps. A module whose converter is
+ * driven by a DMA scan passes at least one scan frame period, so the samples
+ * come from distinct frames; a polled converter converts on every read and ten
+ * microseconds suffice.
+ */
+static inline hal_status_t
+fiesta_adc_read_average_spaced_ex(uint8_t pin, uint16_t sample_delay_us,
+                                  float *out_average) {
+  const hal_adc_average_config_t config = {
+      pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES, sample_delay_us,
+      true, hal_adc_compensate_rp2040_12bit,
+  };
+  return hal_adc_read_average_ex(&config, out_average);
+}
+
+/**
  * @brief Read a Fiesta ADC input using the historical RP2040 sampling policy.
  *
  * This keeps the former tools helper semantics explicit: discard one reading,
@@ -21,11 +40,7 @@ extern "C" {
  */
 static inline hal_status_t fiesta_adc_read_average_ex(uint8_t pin,
                                                       float *out_average) {
-  const hal_adc_average_config_t config = {
-      pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES, 10u,
-      true, hal_adc_compensate_rp2040_12bit,
-  };
-  return hal_adc_read_average_ex(&config, out_average);
+  return fiesta_adc_read_average_spaced_ex(pin, 10u, out_average);
 }
 
 /** @brief Convert a rounded ADC code using Fiesta's 3.3 V divider policy. */
@@ -39,17 +54,19 @@ static inline hal_status_t fiesta_adc_to_voltage_ex(int raw,
 }
 
 /**
- * @brief Read a Fiesta NTC input with the historical endpoint clamping.
+ * @brief Read a Fiesta NTC input with the historical endpoint clamping and an
+ * explicit spacing between samples.
  */
-static inline hal_status_t
-fiesta_ntc_read_temperature_ex(uint8_t pin, float nominal_resistance,
-                               float series_resistance, float *out_celsius) {
+static inline hal_status_t fiesta_ntc_read_temperature_spaced_ex(
+    uint8_t pin, uint16_t sample_delay_us, float nominal_resistance,
+    float series_resistance, float *out_celsius) {
   if (out_celsius == NULL) {
     return HAL_EINVAL;
   }
 
   float average = 0.0f;
-  hal_status_t status = fiesta_adc_read_average_ex(pin, &average);
+  hal_status_t status =
+      fiesta_adc_read_average_spaced_ex(pin, sample_delay_us, &average);
   if (status != HAL_OK) {
     return status;
   }
@@ -71,6 +88,16 @@ fiesta_ntc_read_temperature_ex(uint8_t pin, float nominal_resistance,
   };
   return hal_ntc_temperature_from_adc_ex(average, full_scale, &config,
                                          out_celsius);
+}
+
+/**
+ * @brief Read a Fiesta NTC input with the historical endpoint clamping.
+ */
+static inline hal_status_t
+fiesta_ntc_read_temperature_ex(uint8_t pin, float nominal_resistance,
+                               float series_resistance, float *out_celsius) {
+  return fiesta_ntc_read_temperature_spaced_ex(pin, 10u, nominal_resistance,
+                                               series_resistance, out_celsius);
 }
 
 #ifdef __cplusplus

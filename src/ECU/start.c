@@ -482,6 +482,13 @@ static void initializeCore1(void) {
   if (scanStatus != HAL_OK) {
     derr("VP37 current scan start failed: %s",
          hal_status_to_string(scanStatus));
+  } else if (!sensors_scanCoversInputs()) {
+    // The scan owns the converter from now on: an input it does not carry
+    // cannot be read for the rest of the run.
+    derr("ADC scan leaves a sensor input unreadable (pins %u, %u expected)",
+         (unsigned)ADC_SENSORS_PIN, (unsigned)ADC_VOLT_PIN);
+  } else {
+    // The scan carries every input the sensors read through hal_adc_read().
   }
 #endif
 

@@ -3,7 +3,10 @@
 #include "rpm.h"
 #include "sensors.h"
 #include "testable/sensors_testable.h"
+#include "vp37_current.h"
+
 #include "unity.h"
+#include <hal/analog/hal_adc_scan.h>
 
 /*
  * sensors.cpp calculation tests - functions that operate purely on global
@@ -312,6 +315,54 @@ void test_throttle_adc_at_full_gives_max(void) {
   TEST_ASSERT_INT_WITHIN(100, PWM_RESOLUTION, val);
 }
 
+void test_throttle_unreadable_input_gives_zero_demand(void) {
+  /*
+   * hal_adc_read() reports an input it cannot read now as a negative value.
+   * The inverted mapping would turn a zero stand-in into full throttle, so
+   * an unreadable pedal must read as no demand.
+   */
+  hal_mock_adc_inject(ADC_SENSORS_PIN, -1);
+  int val = readThrottle();
+  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  TEST_ASSERT_EQUAL_INT(0, val);
+}
+
+// ── scan-derived timings and coverage ────────────────────────────────────────
+
+void test_scan_timings_follow_the_frame_period(void) {
+  // Without a scan the reads convert live: the analog settle alone, ten
+  // microseconds between samples and nothing left uncovered.
+  TEST_ASSERT_FALSE(hal_adc_scan_is_running());
+  TEST_ASSERT_EQUAL_UINT32(SENSORS_MUX_ANALOG_SETTLE_US, sensors_muxSettleUs());
+  TEST_ASSERT_EQUAL_UINT16(10u, sensors_adcSampleDelayUs());
+  TEST_ASSERT_TRUE(sensors_scanCoversInputs());
+
+  // The ECU's own scan carries the shunt, the mux and the supply: the settle
+  // grows by two frames and the samples are spaced one frame apart.
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t frameUs = (hal_adc_scan_frame_period_ns() + 999u) / 1000u;
+  TEST_ASSERT_TRUE(frameUs > 10u);
+  TEST_ASSERT_EQUAL_UINT32(SENSORS_MUX_ANALOG_SETTLE_US + (2u * frameUs),
+                           sensors_muxSettleUs());
+  TEST_ASSERT_EQUAL_UINT16((uint16_t)frameUs, sensors_adcSampleDelayUs());
+  TEST_ASSERT_TRUE(sensors_scanCoversInputs());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStop());
+}
+
+void test_scan_without_the_sensor_inputs_is_reported_uncovered(void) {
+  static uint16_t buffer[2u * 4u * 1u];
+  hal_adc_scan_config_t config = {};
+  config.pins[0] = ADC_VP37_CURRENT_PIN;
+  config.pin_count = 1u;
+  config.conversion_period_ns = 8000u;
+  config.buffer = buffer;
+  config.block_frames = 4u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_adc_scan_start(&config));
+  TEST_ASSERT_FALSE(sensors_scanCoversInputs());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_adc_scan_stop());
+  TEST_ASSERT_TRUE(sensors_scanCoversInputs());
+}
+
 // ── main
 // ──────────────────────────────────────────────────────────────────────
 
@@ -353,6 +404,9 @@ int main(void) {
 
   RUN_TEST(test_throttle_adc_at_idle_gives_zero);
   RUN_TEST(test_throttle_adc_at_full_gives_max);
+  RUN_TEST(test_throttle_unreadable_input_gives_zero_demand);
+  RUN_TEST(test_scan_timings_follow_the_frame_period);
+  RUN_TEST(test_scan_without_the_sensor_inputs_is_reported_uncovered);
 
   RUN_TEST(test_pcf8574_write_targets_expected_address);
   RUN_TEST(test_pcf8574_write_changes_address_free_after_release);

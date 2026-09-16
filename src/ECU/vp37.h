@@ -290,55 +290,60 @@ void measureVoltage(void);
 /** @brief Adjustometer position feedback and the calibrated range. */
 typedef struct {
   bool calibrationDone;
-  int32_t currentAdjustometerPosition;
-  int adjustStabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
-  int32_t VP37_ADJUST_MIN, VP37_ADJUST_MIDDLE, VP37_ADJUST_MAX,
-      VP37_OPERATE_MAX;
-  uint32_t adjCommLostSince;
-  uint8_t lastAdjustometerStatus;
-  bool feedbackFresh;
-  uint32_t feedbackRawHz, feedbackFilteredHz, feedbackNumber, feedbackUs;
-  uint16_t feedbackAgeUs;
-  hal_status_t feedbackReadStatus;
-  uint32_t feedbackReadUs;
-  uint8_t feedbackRetries;
-  bool adjCommFailed;
+  int32_t position; /**< Newest quantity position, in adjustometer Hz. */
+  int stabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
+  int32_t adjustMin;      /**< Calibrated bottom of the stroke. */
+  int32_t adjustMiddle;   /**< Calibrated middle of the stroke. */
+  int32_t adjustMax;      /**< Calibrated top of the stroke. */
+  int32_t operateMax;     /**< Highest position the controller may request. */
+  uint32_t commLostSince; /**< hal_millis() when the adjustometer went quiet,
+                             0 while it answers. */
+  uint8_t lastStatus;     /**< Status byte of the last adjustometer frame. */
+  bool fresh;             /**< A new sample arrived since the previous cycle. */
+  uint32_t rawHz;         /**< Unfiltered position sample. */
+  uint32_t filteredHz;    /**< Adjustometer-filtered position sample. */
+  uint32_t sampleNumber;  /**< Sequence number of the newest sample. */
+  uint32_t sampleUs;      /**< Adjustometer time stamp of the newest sample. */
+  uint16_t ageUs;         /**< Age of the newest sample when the adjustometer
+                               published it. */
+  hal_status_t readStatus; /**< Result of the last adjustometer read. */
+  uint32_t readUs;         /**< Duration of the last adjustometer read. */
+  uint8_t retries;         /**< Retries the last adjustometer read needed. */
+  bool commFailed;         /**< Adjustometer silent for longer than allowed. */
 } VP37Feedback;
 
 /** @brief Demand in, from the potentiometer or the console, and its slew
  * toward the target. */
 typedef struct {
   float lastThrottle;
-  int32_t potentiometerDemand;
-  int32_t potentiometerCandidate;
-  uint32_t potentiometerCandidateSinceMs;
-  bool potentiometerDemandReady;
-  // Setpoint pipeline (current names -> functional meaning):
-  //   desiredAdjustometerTarget : raw quantity-position target written by
-  //   VP37_setVP37Throttle() desiredAdjustometer       : slew-rate limited
-  //   quantity-position target actually fed to PID
-  int32_t desiredAdjustometerTarget;
-  int32_t desiredAdjustometer;
+  int32_t potentiometer;
+  int32_t candidate;
+  uint32_t candidateSinceMs;
+  bool potentiometerReady;
+  // Setpoint pipeline: target is the raw quantity-position written by
+  // VP37_setVP37Throttle(); desiredPosition slews toward it and desired is
+  // its integer form, the position actually fed to the PID.
+  int32_t target;
+  int32_t desired;
   uint32_t throttleRampLastMs;
   float desiredPosition;
   uint32_t targetChangedMs;
-  bool quantityAtRest; /**< Zero demand after slew: PWM off, PID state cleared.
-                        */
+  bool atRest; /**< Zero demand after slew: PWM off, PID state cleared. */
 } VP37Demand;
 
 /** @brief Holding command from the map, the motion terms and the learned
  * trim. */
 typedef struct {
-  float pwmFeedForward;
-  float feedForwardRiseBlend; /**< Filtered upward slew, normalized to the FF
-                                 reference rate. */
-  float feedForwardMotion;    /**< Additional nominal PWM for upward motion. */
+  float pwm;
+  float riseBlend;       /**< Filtered upward slew, normalized to the FF
+                                       reference rate. */
+  float motion;          /**< Additional nominal PWM for upward motion. */
   float motionBoostUp;   /**< Upward motion correction at the reference rate,
                             nominal PWM; scales the map's motion column. */
   float motionBoostDown; /**< Downward motion correction at the reference
                             rate, nominal PWM, subtracted while the target
                             falls. */
-  float feedForwardFallBlend; /**< Filtered downward rate, reference units. */
+  float fallBlend;       /**< Filtered downward rate, reference units. */
   float mapTrim[VP37_MAP_TRIM_KNOTS]; /**< Learned holding-map residual per
                                          position knot, nominal PWM. */
   float mapTrimApplied;      /**< Trim added to the feedforward this step. */
@@ -349,25 +354,25 @@ typedef struct {
 /** @brief The correction loop: gains, authority, dead zone and the settled
  * hold. */
 typedef struct {
-  hal_pid_controller_t adjustController;
-  int32_t pidErr;
-  float pidCorrection;
-  float pidPositiveLimit;
-  float pidTf;
-  bool pidSaturatedHigh;
-  hal_pid_terms_t pidTerms;
+  hal_pid_controller_t controller;
+  int32_t error; /**< Position error the controller last saw, in Hz. */
+  float correction;
+  float positiveLimit;
+  float tf;
+  bool saturatedHigh;
+  hal_pid_terms_t terms;
   bool integralHold; /**< Settled-position hysteresis currently freezes I. */
   bool integralHoldEnterPending;
   uint32_t integralHoldEnterStartedMs;
   uint32_t integralHoldConfirmMs; /**< Continuous time inside the entry band. */
   bool integralHoldReleasePending;
   uint32_t integralHoldReleaseStartedMs;
-  float pidNegativeLimit;
-  float pidUpperLimit;
-  float pidKp, pidKi, pidKd;
-  float pidIntegralLimit;    /**< Available integral contribution in nominal PWM
+  float negativeLimit;
+  float upperLimit;
+  float kp, ki, kd;
+  float integralLimit;    /**< Available integral contribution in nominal PWM
                                 counts. */
-  float pidIntegralOverride; /**< Bench cap in nominal PWM; zero selects
+  float integralOverride; /**< Bench cap in nominal PWM; zero selects
                                 position profile. */
   float integralDeadbandTopHz; /**< Dead zone at full stroke; zero keeps the
                                   base dead zone everywhere. */
@@ -378,38 +383,38 @@ typedef struct {
 
 /** @brief Supply-voltage multiplier and the sources it is fused from. */
 typedef struct {
-  bool cycleVoltageEnabled; /**< Full-period supply mean from the shunt
+  bool cycleEnabled; /**< Full-period supply mean from the shunt
                                capture scales the command; the local ADC is
                                the fallback. Bench switch V0/V1. */
-  bool cycleVoltageUsed;
-  bool cycleSupplyValid;
-  float cycleSupplyVolts;
-  uint32_t cycleSupplyUs;
-  float voltageCorrection;
-  float compensationInputVolts; /**< Fused voltage before hysteresis. */
-  float compensationVolts;      /**< Held supply voltage used to scale PWM. */
-  bool voltageReady;  /**< Compensation voltage has been initialized. */
-  bool voltageFrozen; /**< Bench V2: hold the scale, open the supply loop. */
+  bool cycleUsed;
+  bool cycleValid;
+  float cycleVolts;
+  uint32_t cycleUs;
+  float correction;
+  float inputVolts; /**< Fused voltage before hysteresis. */
+  float heldVolts;  /**< Held supply voltage used to scale PWM. */
+  bool ready;       /**< Compensation voltage has been initialized. */
+  bool frozen;      /**< Bench V2: hold the scale, open the supply loop. */
   float lastVolts;
   float localVolts;         /**< Unfiltered local ECU ADC voltage. */
   float previousLocalVolts; /**< Previous local ADC sample. */
-  float localVoltageScale;  /**< Slow local-to-Adjustometer calibration. */
-  bool localVoltageReady;   /**< Local ADC source has a previous sample. */
-  bool voltageOverRange;    /**< Local reading above the calibrated range;
-                               it still scales the command down. */
+  float localScale;         /**< Slow local-to-Adjustometer calibration. */
+  bool localReady;          /**< Local ADC source has a previous sample. */
+  bool overRange;           /**< Local reading above the calibrated range;
+                                      it still scales the command down. */
 } VP37Supply;
 
 /** @brief Thermal multiplier: the fuel-temperature model, the measured drive
  * resistance, the handover between them and the current observation that
  * feeds it. */
 typedef struct {
-  bool currentObservationEnabled; /**< Scan publish switch (bench Q0/Q1). */
-  bool cycleCurrentValid;    /**< Reduced block passed every waveform rule. */
-  float cycleCurrentAmps;    /**< ON-phase mean of the captured PWM period. */
-  float cycleCurrentVolts;   /**< Supply that belongs to that same capture. */
-  int32_t cycleCurrentPwm;   /**< Duty reconstructed from the measured gate. */
-  int32_t cycleCurrentDrive; /**< Command that was live during the capture. */
-  uint32_t cycleCurrentUs;
+  bool observationEnabled; /**< Scan publish switch (bench Q0/Q1). */
+  bool cycleValid;         /**< Reduced block passed every waveform rule. */
+  float cycleAmps;         /**< ON-phase mean of the captured PWM period. */
+  float cycleVolts;        /**< Supply that belongs to that same capture. */
+  int32_t cyclePwm;        /**< Duty reconstructed from the measured gate. */
+  int32_t cycleDrive;      /**< Command that was live during the capture. */
+  uint32_t cycleUs;
   float lastFuelTemp;
   float temperatureCorrection; /**< Filtered multiplier of the complete FF + PID
                                   command. */
@@ -429,9 +434,9 @@ typedef struct {
   bool driveResistanceReady;   /**< Enough observations to drive the output. */
   bool driveCompensationEnabled; /**< Bench switch for the measured path. */
   bool driveCompensationUsed;    /**< Measured path scaled the last command. */
-  float thermalScale;            /**< Rate-limited multiplier actually applied,
-                                    between the measured path and the model. */
-  bool thermalScaleReady;        /**< The multiplier has taken a first value. */
+  float scale;                   /**< Rate-limited multiplier actually applied,
+                                           between the measured path and the model. */
+  bool scaleReady;               /**< The multiplier has taken a first value. */
 } VP37Thermal;
 
 /** @brief Shunt scan bookkeeping and the newest reduced block. */
@@ -440,11 +445,11 @@ typedef struct {
                                          the core-0 `VP37 IPULSE` report. */
   hal_status_t cycleResultStatus;
   uint32_t cycleResultSequence; /**< Increments once per reduced block. */
-  uint32_t scanLastSequence;    /**< Scan block sequence last reduced. */
-  uint32_t scanBlocks;          /**< Blocks reduced since start. */
-  uint32_t scanGaps;            /**< Blocks the control loop never saw. */
-  uint32_t scanFrameNs;         /**< Frame period reported by the scan. */
-  bool scanRunning;
+  uint32_t lastSequence;        /**< Scan block sequence last reduced. */
+  uint32_t blocks;              /**< Blocks reduced since start. */
+  uint32_t gaps;                /**< Blocks the control loop never saw. */
+  uint32_t frameNs;             /**< Frame period reported by the scan. */
+  bool running;
 } VP37Scan;
 
 /** @brief The command as written to the actuator. */
