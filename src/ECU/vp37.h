@@ -30,6 +30,22 @@ extern "C" {
 #define VP37_ENGINE_OPERATION_MODE 0
 #endif
 
+/**
+ * @brief What zero demand does to the drive once its descent has finished.
+ *
+ * 1 releases the spring-return actuator: the PID and every feedforward term
+ * are cleared and the PWM goes off, so nothing holds the quantity at zero and
+ * no current flows at rest. 0 keeps the loop running at the calibrated bottom
+ * of the stroke instead: the holding command and the correction stay live and
+ * the actuator sits there under drive. With 0 the drive never rests, so the
+ * local supply divider is never trained against the Adjustometer's reading
+ * and the shunt capture serves the supply mean at zero demand too. Bench
+ * builds set it through JH_EXTRA_DEFINES.
+ */
+#ifndef VP37_PWM_DISABLE_AT_MIN_POSITION
+#define VP37_PWM_DISABLE_AT_MIN_POSITION 1
+#endif
+
 /* Bench telemetry is dense enough to follow single control steps. */
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 #define VP37_DEBUG_UPDATE 20U

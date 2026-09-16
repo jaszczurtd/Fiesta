@@ -22,6 +22,9 @@
 extern "C" {
 #endif
 
+// ── vp37.c ──────────────────────────────────────────────────────────────────
+bool VP37_demandAtRest(const VP37Pump *self);
+
 // ── vp37_feedback.c ─────────────────────────────────────────────────────────
 bool VP37_updateAdjustometerPosition(VP37Pump *self);
 bool VP37_makeCalibration(VP37Pump *self);
