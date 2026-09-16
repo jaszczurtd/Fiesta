@@ -54,6 +54,14 @@ add_executable(test_tests_registry test_tests_registry.cpp
 target_compile_definitions(test_tests_registry
     PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_tests_registry PRIVATE ecu_mock)
+# The release at zero demand is a build option; this binary compiles the VP37
+# units with it off and checks that the bottom is held under drive instead.
+add_executable(test_vp37_hold_at_min test_vp37_hold_at_min.cpp
+    ${ECU_VP37_SOURCES})
+target_compile_definitions(test_vp37_hold_at_min
+    PRIVATE VP37_PWM_DISABLE_AT_MIN_POSITION=0)
+target_link_libraries(test_vp37_hold_at_min PRIVATE ecu_mock)
+add_test(NAME test_vp37_hold_at_min COMMAND test_vp37_hold_at_min)
 add_test(NAME test_tests_registry COMMAND test_tests_registry)
 add_ecu_test(test_rpm)
 

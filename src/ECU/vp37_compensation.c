@@ -85,9 +85,7 @@ void VP37_updateVoltageCorrection(VP37Pump *self, float dt) {
 }
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
-  const bool quantityAtRest =
-      (self->demand.lastThrottle <= (float)VP37_PERCENT_MIN) &&
-      (self->demand.desiredPosition <= (float)self->feedback.VP37_ADJUST_MIN);
+  const bool quantityAtRest = VP37_demandAtRest(self);
   self->supply.cycleVoltageUsed =
       self->supply.cycleVoltageEnabled &&
       self->thermal.currentObservationEnabled && !quantityAtRest &&

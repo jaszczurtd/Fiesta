@@ -270,6 +270,27 @@ void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel) {
  * @note This is closest to the N108 actuator side of SOI control. G80/G28
  * closed-loop timing feedback is not implemented here yet.
  */
+/**
+ * @brief Whether zero demand has finished its descent and the drive rests.
+ * @param self VP37 controller instance to inspect.
+ * @return True when the last demand was zero and the slewed target has reached
+ * the calibrated bottom; always false when the release is compiled out.
+ * @note One definition for the release and for the supply path: at rest no
+ * current flows, so the local divider may be trained and the shunt capture
+ * has nothing to offer. With VP37_PWM_DISABLE_AT_MIN_POSITION at 0 the loop
+ * holds the bottom under drive and neither of those holds.
+ */
+bool VP37_demandAtRest(const VP37Pump *self) {
+#if VP37_PWM_DISABLE_AT_MIN_POSITION
+  return (self->demand.lastThrottle <= (float)VP37_PERCENT_MIN) &&
+         (self->demand.desiredPosition <=
+          (float)self->feedback.VP37_ADJUST_MIN);
+#else
+  (void)self;
+  return false;
+#endif
+}
+
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
   (void)self;
   angle = hal_constrain(angle, 0, 100);
@@ -506,9 +527,7 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
  * at zero demand, so every term is cleared before the next demand arrives.
  */
 static bool VP37_releaseAtRest(VP37Pump *self) {
-  self->demand.quantityAtRest =
-      self->demand.lastThrottle <= (float)VP37_PERCENT_MIN &&
-      self->demand.desiredPosition <= (float)self->feedback.VP37_ADJUST_MIN;
+  self->demand.quantityAtRest = VP37_demandAtRest(self);
   if (self->demand.quantityAtRest) {
     hal_pid_controller_reset(self->pid.adjustController);
     self->pid.pidTerms = (hal_pid_terms_t){0};
