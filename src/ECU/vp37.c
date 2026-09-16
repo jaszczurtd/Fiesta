@@ -7,7 +7,27 @@
 #include <math.h>
 #include <string.h>
 
+/** @brief What one control step carries between its stages. */
+typedef struct {
+  float dt;              /**< Control period [s]. */
+  bool stationaryTarget; /**< The target has stood for VP37_TARGET_STABLE_MS. */
+  int32_t
+      previousDesired; /**< Desired position before this step, -1 at start. */
+  float previousPosition; /**< Slewed position before this step. */
+  float ki;               /**< Integral gain in force this step. */
+  float outputScale;      /**< Supply multiplier times thermal multiplier. */
+} VP37Cycle;
+
 static void VP37_throttleCycle(VP37Pump *self);
+static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle);
+static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle);
+static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle);
+static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle);
+static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle);
+static bool VP37_releaseAtRest(VP37Pump *self);
+static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle);
+static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle);
+static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm);
 
 VP37InitStatus VP37_init(VP37Pump *self) {
@@ -308,22 +328,63 @@ void VP37_process(VP37Pump *self) {
  * @brief Execute the inner VP37 quantity-control cycle.
  * @param self VP37 controller instance to update.
  * @return None.
- * @note The current input still comes from legacy throttle-named driver demand,
- *       but the controlled plant is the project-local N146/G149-like inner
- * loop.
+ * @note One step builds the command in this order: slew the demand, track the
+ * ramp for the motion feedforward, look the holding command up, set the
+ * correction authority, scale for supply and temperature, release the actuator
+ * at rest, bound the correction, step the loop, compose and write. The input
+ * still comes from legacy throttle-named driver demand, but the controlled
+ * plant is the project-local N146/G149-like inner loop.
  */
 static void VP37_throttleCycle(VP37Pump *self) {
   if (self->desiredAdjustometerTarget < 0) {
     return;
   }
+  VP37Cycle cycle;
+  VP37_beginCycle(self, &cycle);
+  VP37_rampDemand(self, &cycle);
+  VP37_blendMotion(self, &cycle);
+  // FF and PID share the warm reference domain; temperature scales the sum.
+  self->pwmFeedForward = VP37_feedForward(self, self->desiredAdjustometer);
+  VP37_updateAuthority(self, &cycle);
+  VP37_updateMultipliers(self, &cycle);
+  if (VP37_releaseAtRest(self)) {
+    return;
+  }
+  VP37_boundCorrection(self, &cycle);
+  if (!VP37_stepCorrection(self, &cycle)) {
+    return;
+  }
+  VP37_composeCommand(self, &cycle);
+}
 
-  const int32_t previousDesired = self->desiredAdjustometer;
-  const float previousPosition = previousDesired < 0
-                                     ? (float)self->desiredAdjustometerTarget
-                                     : self->desiredPosition;
-  const float dt = (float)self->pidDtUs * 0.000001f;
-  const bool stationaryTarget =
+/**
+ * @brief Capture what this step needs to know about the previous one.
+ * @param self VP37 controller instance to read.
+ * @param cycle Step context to fill.
+ * @return None.
+ */
+static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
+  cycle->previousDesired = self->desiredAdjustometer;
+  cycle->previousPosition = cycle->previousDesired < 0
+                                ? (float)self->desiredAdjustometerTarget
+                                : self->desiredPosition;
+  cycle->dt = (float)self->pidDtUs * 0.000001f;
+  cycle->stationaryTarget =
       hal_millis_deadline_expired(self->targetChangedMs, VP37_TARGET_STABLE_MS);
+  cycle->ki = 0.0f;
+  cycle->outputScale = 1.0f;
+}
+
+/**
+ * @brief Slew the demanded position toward the target.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context.
+ * @return None.
+ * @note Rising demand slews slower in the upper stroke, and slower still once
+ * the target has settled, so a standing target is approached without
+ * overshoot. The error to the measured position follows from the result.
+ */
+static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
   if (self->desiredAdjustometer < 0) {
     self->desiredPosition = (float)self->desiredAdjustometerTarget;
   } else {
@@ -337,72 +398,108 @@ static void VP37_throttleCycle(VP37Pump *self) {
     float rate = delta > 0.0f && self->desiredPosition >= upperStart
                      ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
                      : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
-    if (delta > 0.0f && stationaryTarget) {
+    if (delta > 0.0f && cycle->stationaryTarget) {
       rate = self->desiredPosition >= upperStart
                  ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
                  : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND;
     }
-    const float step = travel * (rate * 0.01f) * dt;
+    const float step = travel * (rate * 0.01f) * cycle->dt;
     self->desiredPosition += hal_constrain(delta, -step, step);
   }
   self->desiredAdjustometer = (int32_t)self->desiredPosition;
   self->pidErr = self->desiredAdjustometer - self->currentAdjustometerPosition;
+}
 
+/**
+ * @brief Track the ramp's rate for the motion feedforward.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context.
+ * @return None.
+ * @note Rise and fall are filtered separately: the upward term scales the
+ * map's motion column, the downward term lets the return spring work.
+ */
+static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
   const float travel =
       (float)self->VP37_ADJUST_MAX - (float)self->VP37_ADJUST_MIN;
   const float upwardStep =
-      travel * (VP37_PWM_FF_MOTION_REFERENCE_RATE * 0.01f) * dt;
+      travel * (VP37_PWM_FF_MOTION_REFERENCE_RATE * 0.01f) * cycle->dt;
   const float maxRise =
       VP37_DESIRED_SLEW_PERCENT_PER_SECOND / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
-      (stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
+      (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
       (upwardStep > 0.0f
-           ? hal_constrain((self->desiredPosition - previousPosition) /
+           ? hal_constrain((self->desiredPosition - cycle->previousPosition) /
                                upwardStep,
                            0.0f, maxRise)
            : 0.0f);
-  self->feedForwardRiseBlend += (rise - self->feedForwardRiseBlend) * dt /
-                                (VP37_PWM_FF_MOTION_FILTER_S + dt);
+  self->feedForwardRiseBlend += (rise - self->feedForwardRiseBlend) *
+                                cycle->dt /
+                                (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
   const float fall =
-      (stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
+      (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
       (upwardStep > 0.0f
-           ? hal_constrain((previousPosition - self->desiredPosition) /
+           ? hal_constrain((cycle->previousPosition - self->desiredPosition) /
                                upwardStep,
                            0.0f, maxRise)
            : 0.0f);
-  self->feedForwardFallBlend += (fall - self->feedForwardFallBlend) * dt /
-                                (VP37_PWM_FF_MOTION_FILTER_S + dt);
+  self->feedForwardFallBlend += (fall - self->feedForwardFallBlend) *
+                                cycle->dt /
+                                (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
+}
 
-  // FF and PID share the warm reference domain; temperature scales the sum.
-  self->pwmFeedForward = VP37_feedForward(self, self->desiredAdjustometer);
-
-  // Keep correction and integral authority in the same reference domain.
-  // Applying the measured temperature here as well would compensate twice.
+/**
+ * @brief Set the correction authority for this step.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context; receives the integral gain in force.
+ * @return None.
+ * @note Correction and integral authority stay in the same reference domain
+ * as the feedforward. Applying the measured temperature here as well would
+ * compensate twice.
+ */
+static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
   self->pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
   if (self->adjCommLostSince == 0U) {
     self->pidPositiveLimit = VP37_computePositiveCorrectionLimit(
         VP37_PWM_REFERENCE_TEMP_C, self->lastAdjustometerStatus,
         self->pwmFeedForward);
   }
-
   self->pidIntegralLimit = VP37_integralLimit(self);
-  const float ki = hal_pid_controller_get_ki(self->adjustController);
-  const float maxIntegral = ki > 0.0f ? self->pidIntegralLimit / ki : 0.0f;
+  cycle->ki = hal_pid_controller_get_ki(self->adjustController);
+  const float maxIntegral =
+      cycle->ki > 0.0f ? self->pidIntegralLimit / cycle->ki : 0.0f;
   hal_pid_controller_set_max_integral(self->adjustController, maxIntegral);
+}
+
+/**
+ * @brief Refresh the supply and thermal multipliers of the command.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context; receives the product of both multipliers.
+ * @return None.
+ * @note Each path filters its own input; the product scales feedforward and
+ * correction alike, so a supply change never reaches the loop as an error.
+ */
+static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
   self->lastVolts = getGlobalValue(F_VOLTS);
   self->localVolts = getLocalSystemSupplyVoltage();
   if (self->lastVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
     self->lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
   self->lastFuelTemp = getGlobalValue(F_FUEL_TEMP);
-  VP37_updateVoltageCorrection(self, dt);
-  VP37_updateTemperatureCorrection(self, dt);
-  VP37_updateDriveCorrection(self, dt);
-  VP37_updateThermalScale(self, dt);
-  const float outputScale = self->voltageCorrection * self->thermalScale;
+  VP37_updateVoltageCorrection(self, cycle->dt);
+  VP37_updateTemperatureCorrection(self, cycle->dt);
+  VP37_updateDriveCorrection(self, cycle->dt);
+  VP37_updateThermalScale(self, cycle->dt);
+  cycle->outputScale = self->voltageCorrection * self->thermalScale;
+}
 
-  // Finish the commanded descent before releasing the spring-return actuator.
-  // Neither feedforward nor a retained integral may energize it at zero demand.
+/**
+ * @brief Release the spring-return actuator once the commanded descent ends.
+ * @param self VP37 controller instance to update.
+ * @return True when the step ends here with the drive off.
+ * @note Neither feedforward nor a retained integral may energize the actuator
+ * at zero demand, so every term is cleared before the next demand arrives.
+ */
+static bool VP37_releaseAtRest(VP37Pump *self) {
   self->quantityAtRest = self->lastThrottle <= (float)VP37_PERCENT_MIN &&
                          self->desiredPosition <= (float)self->VP37_ADJUST_MIN;
   if (self->quantityAtRest) {
@@ -423,14 +520,23 @@ static void VP37_throttleCycle(VP37Pump *self) {
     self->softFloorActive = false;
     self->pwmLimited = false;
     VP37_writeQuantityPWM(self, 0);
-    return;
   }
+  return self->quantityAtRest;
+}
 
-  // Express every actuator limit in the PID correction domain before stepping.
+/**
+ * @brief Express every actuator limit in the correction domain.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context.
+ * @return None.
+ * @note The soft floor keeps the correction from pulling the command far
+ * below the holding map while the actuator is still climbing to the target.
+ */
+static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   float lowerCommand =
-      fmaxf((float)VP37_PWM_MIN / outputScale,
+      fmaxf((float)VP37_PWM_MIN / cycle->outputScale,
             self->pwmFeedForward - VP37_PID_CORR_LIMIT_NEGATIVE);
-  const float upperCommand = (float)VP37_PWM_MAX / outputScale;
+  const float upperCommand = (float)VP37_PWM_MAX / cycle->outputScale;
   self->softFloorActive = false;
   if (self->currentAdjustometerPosition < self->desiredAdjustometer) {
     const float floor =
@@ -446,35 +552,59 @@ static void VP37_throttleCycle(VP37Pump *self) {
       fminf(self->pidPositiveLimit, upperCommand - self->pwmFeedForward);
   hal_pid_controller_set_output_limits(
       self->adjustController, self->pidNegativeLimit, self->pidUpperLimit);
-  // Ramp tracking lag must not build a new holding trim in either direction.
-  // Allow an existing trim to unwind, including a reversal before zero release.
+}
+
+/**
+ * @brief Step the correction loop under this step's integration rules.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context.
+ * @return False when the loop failed and the pump has been stopped.
+ * @note Ramp tracking lag must not build a new holding trim in either
+ * direction; an existing trim may unwind, including a reversal before zero
+ * release. Supply changes are scaled out of the command before it reaches
+ * the actuator, so they never freeze integration.
+ */
+static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool rampWindup =
-      previousDesired >= 0 && self->desiredAdjustometer != previousDesired &&
-      self->pidTerms.integral * ki * (float)self->pidErr >= 0.0f;
+      cycle->previousDesired >= 0 &&
+      self->desiredAdjustometer != cycle->previousDesired &&
+      self->pidTerms.integral * cycle->ki * (float)self->pidErr >= 0.0f;
   const bool targetSettled =
-      stationaryTarget &&
+      cycle->stationaryTarget &&
       (self->desiredAdjustometer == self->desiredAdjustometerTarget);
   self->integralDeadbandHz = VP37_integralDeadband(self);
   VP37_updateIntegralHold(self, targetSettled);
-  // Supply changes are scaled out of the command before it reaches the
-  // actuator, so they never freeze integration.
   const bool freezeIntegral = rampWindup || self->integralHold;
   const float integralDeadband =
       freezeIntegral ? fabsf((float)self->pidErr) : self->integralDeadbandHz;
   const hal_status_t pidStatus =
       hal_pid_controller_step_ex(self->adjustController, (float)self->pidErr,
-                                 (float)self->currentAdjustometerPosition, dt,
-                                 integralDeadband, &self->pidTerms);
+                                 (float)self->currentAdjustometerPosition,
+                                 cycle->dt, integralDeadband, &self->pidTerms);
+  bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);
     derr("VP37 PID step failed: %s", hal_status_to_string(pidStatus));
-    return;
+    stepped = false;
   }
+  return stepped;
+}
+
+/**
+ * @brief Compose the command from feedforward and correction and write it.
+ * @param self VP37 controller instance to update.
+ * @param cycle Step context.
+ * @return None.
+ * @note The learned trim absorbs a standing integral before the command is
+ * scaled to the rail; the clamp to the hardware range is recorded so the
+ * telemetry can tell a limited command from a free one.
+ */
+static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   self->pidCorrection = self->pidTerms.output;
   VP37_transferIntegralToMapTrim(self);
   self->pidSaturatedHigh = self->pidTerms.saturated_high;
   self->pwmValue = self->pwmFeedForward + self->pidCorrection;
-  const float compensatedPWM = self->pwmValue * outputScale;
+  const float compensatedPWM = self->pwmValue * cycle->outputScale;
   self->finalPWM = (int32_t)compensatedPWM;
   self->pwmLimited =
       (self->finalPWM < VP37_PWM_MIN) || (self->finalPWM > VP37_PWM_MAX);
