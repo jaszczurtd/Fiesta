@@ -9,7 +9,9 @@
 
 #define DTC_EEPROM_MAGIC 0x4454434Du // "DTCM"
 #define DTC_EEPROM_VERSION 2u
-#define DTC_EEPROM_BASE (HAL_TOOLS_EEPROM_FIRST_ADDR + 96)
+// The first 96 bytes stay reserved for legacy tooling; the DTC area has
+// started here since the store was introduced, so the value is fixed.
+#define DTC_EEPROM_BASE 96u
 #define DTC_EEPROM_HEADER_SIZE 5u
 #define DTC_EEPROM_SLOT_SIZE 2u
 #define DTC_LEGACY_ENTRY_COUNT 9u
@@ -589,8 +591,8 @@ void dtcManagerLogStorageStats(void) {
   const uint32_t approxMinBytes =
       (uint32_t)approxKeys * 21u; // ~u32 record footprint
 
-  deb("DTC storage: EEPROM=%uB, FIRST_ADDR=%u", (unsigned)eepromSize,
-      (unsigned)HAL_TOOLS_EEPROM_FIRST_ADDR);
+  deb("DTC storage: EEPROM=%uB, base=%u", (unsigned)eepromSize,
+      (unsigned)DTC_EEPROM_BASE);
   if (kvSpan > 0u) {
     deb("DTC storage: KV base=%lu size=%uB range=[%lu..%lu], bank=%uB",
         (unsigned long)kvStart, (unsigned)kvSpan, (unsigned long)kvStart,
@@ -934,7 +936,6 @@ const char *dtcManagerGetName(uint16_t code) {
       {DTC_EGT_COMM_LOST, "U1902 Lost communication with EGT module"},
       {DTC_CAN0_INIT_FAIL, "U1903 CAN0 bus init failure"},
       {DTC_GPS_SIGNAL_LOST, "U1904 GPS data unavailable/stale"},
-      {DTC_SD_LOGGER_NOT_READY, "U1905 SD logger missing/not initialized"},
       {DTC_ISOTP_FC_TIMEOUT, "U1906 ISO-TP flow-control timeout"},
       {DTC_ISOTP_FC_ABORT, "U1907 ISO-TP flow-control abort from tester"},
       {DTC_ENGINE_OVERSPEED, "P0219 Engine overspeed condition"},

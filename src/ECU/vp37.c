@@ -72,14 +72,12 @@ static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
       .readUs = self->feedbackReadUs,
       .retries = self->feedbackRetries,
       .fresh = self->feedbackFresh,
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
-      .cyclicDelayMs = getCurrentVP37CyclicDelayMs(),
-#endif
+      .cyclicDelayMs = testsCyclicDelayMs(),
       .pidDtUs = self->pidDtUs};
   return sample;
 }
 
-#ifdef START_TEST_ENABLE_VP37_TUNING
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 static struct {
   VP37TraceSample samples[VP37_TRACE_SAMPLES];
   uint32_t count, next;
@@ -268,6 +266,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pidErr = 0;
   self->pwmFeedForward = VP37_PWM_FF_AT_MIN;
   self->feedForwardRiseBlend = 0.0f;
+  self->feedForwardFallBlend = 0.0f;
   self->feedForwardMotion = 0.0f;
   self->pidCorrection = 0.0f;
   self->pidPositiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
@@ -333,6 +332,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->driveCompensationUsed = false;
   self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
   self->integralDeadbandHz = (float)VP37_PID_DEADBAND;
+  self->motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
+  self->motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
   for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
     self->mapTrim[i] = 0.0f;
   }
@@ -340,8 +341,9 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->mapTrimEnabled = false;
   self->integralHoldEntered = false;
   self->mapTrimTransfers = 0U;
-#if defined(START_TEST_ENABLE_VP37_TUNING) ||                                  \
-    defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
+  // The bench cap equals the bottom of the position profile, so it only ever
+  // limits what a console command lowered.
+#if ECU_FUNCTIONAL_TESTS_ENABLED
   self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
 #else
   self->pidIntegralOverride = 0.0f;
@@ -731,18 +733,19 @@ static void VP37_transferIntegralToMapTrim(VP37Pump *self) {
 }
 
 static float VP37_feedForward(VP37Pump *self, int32_t position) {
-  // Positive-demand map at 12 V, 49 C; the upper holding command bends
-  // downward.
+  // Positive-demand map at 12 V, 49 C, taken from settled holds at 130 Hz
+  // (bench 2026-09-16, two series, both approach directions averaged; the
+  // upper stroke scatters about 25 counts between them).
   static const struct {
     float percent, pwm, motion;
   } points[] = {{0.0f, VP37_PWM_FF_AT_MIN, 0.0f},
-                {5.0f, 610.0f, 10.0f},
-                {10.0f, 635.0f, 12.0f},
-                {25.0f, 705.0f, 15.0f},
-                {50.0f, 790.0f, 20.0f},
-                {75.0f, 835.0f, 22.0f},
-                {90.0f, 835.0f, VP37_PWM_FF_MOTION_BOOST},
-                {95.0f, 828.0f, VP37_PWM_FF_MOTION_BOOST},
+                {5.0f, 604.0f, 10.0f},
+                {10.0f, 623.0f, 12.0f},
+                {25.0f, 699.0f, 15.0f},
+                {50.0f, 794.0f, 20.0f},
+                {75.0f, 856.0f, 22.0f},
+                {90.0f, 866.0f, VP37_PWM_FF_MOTION_BOOST},
+                {95.0f, 872.0f, VP37_PWM_FF_MOTION_BOOST},
                 {100.0f, VP37_PWM_FF_AT_MAX, VP37_PWM_FF_MOTION_BOOST}};
   const float percent = hal_constrain(
       hal_math_map_f32((float)position, (float)self->VP37_ADJUST_MIN,
@@ -754,9 +757,11 @@ static float VP37_feedForward(VP37Pump *self, int32_t position) {
           hal_math_map_f32(percent, points[i - 1U].percent, points[i].percent,
                            points[i - 1U].pwm, points[i].pwm);
       self->feedForwardMotion =
-          self->feedForwardRiseBlend *
-          hal_math_map_f32(percent, points[i - 1U].percent, points[i].percent,
-                           points[i - 1U].motion, points[i].motion);
+          (self->feedForwardRiseBlend *
+           hal_math_map_f32(percent, points[i - 1U].percent, points[i].percent,
+                            points[i - 1U].motion, points[i].motion) *
+           (self->motionBoostUp / VP37_PWM_FF_MOTION_BOOST)) -
+          (self->feedForwardFallBlend * self->motionBoostDown);
       self->mapTrimApplied = VP37_mapTrimAt(self, percent);
       return (holding * VP37_PWM_FF_HARDWARE_GAIN) + self->mapTrimApplied +
              self->feedForwardMotion;
@@ -897,6 +902,15 @@ static void VP37_throttleCycle(VP37Pump *self) {
            : 0.0f);
   self->feedForwardRiseBlend += (rise - self->feedForwardRiseBlend) * dt /
                                 (VP37_PWM_FF_MOTION_FILTER_S + dt);
+  const float fall =
+      (stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
+      (upwardStep > 0.0f
+           ? hal_constrain((previousPosition - self->desiredPosition) /
+                               upwardStep,
+                           0.0f, maxRise)
+           : 0.0f);
+  self->feedForwardFallBlend += (fall - self->feedForwardFallBlend) * dt /
+                                (VP37_PWM_FF_MOTION_FILTER_S + dt);
 
   // FF and PID share the warm reference domain; temperature scales the sum.
   self->pwmFeedForward = VP37_feedForward(self, self->desiredAdjustometer);
@@ -951,6 +965,7 @@ static void VP37_throttleCycle(VP37Pump *self) {
     self->pidTerms = (hal_pid_terms_t){0};
     self->pwmFeedForward = 0.0f;
     self->feedForwardRiseBlend = 0.0f;
+    self->feedForwardFallBlend = 0.0f;
     self->feedForwardMotion = 0.0f;
     self->pidCorrection = 0.0f;
     self->pwmValue = 0.0f;
@@ -1246,7 +1261,7 @@ void VP37_process(VP37Pump *self) {
     self->pidStarted = true;
     VP37_throttleCycle(self);
   }
-#ifdef START_TEST_ENABLE_VP37_TUNING
+#if ECU_FUNCTIONAL_TESTS_ENABLED
   if (s_trace.recording) {
     s_trace.samples[s_trace.count++] = VP37_controlSample(self);
     if (s_trace.count == COUNTOF(s_trace.samples) || !self->vp37Initialized) {
@@ -1285,7 +1300,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       sample->motionFF, (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
-#ifdef START_TEST_ENABLE_VP37_TUNING
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 void VP37_showTrace(const VP37TraceSample *sample) {
   VP37_showControlSample(sample, "T");
 }
@@ -1300,27 +1315,22 @@ void VP37_showDebug(VP37Pump *self) {
   static uint32_t lastTelemetryMs = 0U;
   if (hal_millis_interval_elapsed_now(&lastTelemetryMs,
                                       VP37_TELEMETRY_UPDATE)) {
-#ifdef START_TEST_ENABLE_VP37_CYCLIC
-    const char *mode = "cyclic";
-    const uint32_t cycleDelayMs = getCurrentVP37CyclicDelayMs();
-#elif defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
-    const char *mode = "potentiometer";
-    const uint32_t cycleDelayMs = 0U;
-#elif defined(START_TEST_ENABLE_VP37_SERIAL)
-    const char *mode = "serial";
-    const uint32_t cycleDelayMs = 0U;
-#else
-    const char *mode = "engine";
-    const uint32_t cycleDelayMs = 0U;
-#endif
-    deb("VP37 CFG rev:68 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
+    // A running test borrows the demand; otherwise the configured source owns
+    // it. Both are reported under the same name so one log reads the same way.
+    const char *const activeTest = testsActiveName();
+    const char *const mode =
+        activeTest != NULL
+            ? activeTest
+            : (VP37_ENGINE_OPERATION_MODE != 0 ? "engine" : "potentiometer");
+    const uint32_t cycleDelayMs = testsCyclicDelayMs();
+    deb("VP37 CFG rev:73 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
         "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f "
         "ien:%u iconfirm:%lu vsync:%u vuse:%u vfrz:%u Vavg:%.3f pwm_hz:%u "
         "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu "
         "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
-        "scan:%u fr:%lu blk:%lu gaps:%lu",
+        "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu",
         self->pidKp, self->pidKi, self->pidKd, self->pidTf, self->pidTimeUpdate,
         self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX, self->lastVolts,
         self->localVolts, self->compensationInputVolts, self->compensationVolts,
@@ -1340,7 +1350,8 @@ void VP37_showDebug(VP37Pump *self) {
         (unsigned long)self->driveSamples, self->integralDeadbandTopHz,
         self->integralDeadbandHz, self->mapTrimEnabled ? 1U : 0U,
         (unsigned long)self->mapTrimTransfers, self->mapTrim[5],
-        self->mapTrim[9], self->mapTrim[10], self->scanRunning ? 1U : 0U,
+        self->mapTrim[9], self->mapTrim[10], self->motionBoostUp,
+        self->motionBoostDown, self->scanRunning ? 1U : 0U,
         (unsigned long)self->scanFrameNs, (unsigned long)self->scanBlocks,
         (unsigned long)self->scanGaps);
     adjustometer_reading_t telemetry;

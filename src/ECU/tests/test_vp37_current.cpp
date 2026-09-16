@@ -160,11 +160,14 @@ static uint32_t framesToUs(uint32_t frames) {
   return (uint32_t)((((uint64_t)frames * kFrameNs) + 500U) / 1000U);
 }
 
-/* Newest rising edge whose following rising edge is still inside the block;
-   a block starting inside an ON phase has no detectable edge at frame 0. */
+/* Newest rising edge whose following rising edge is confirmed inside the
+   block, i.e. its confirmation window still fits; a block starting inside an
+   ON phase has no detectable edge at frame 0. */
 static uint32_t newestPeriodStart(uint32_t offset) {
   uint32_t best = UINT32_MAX;
-  for (uint32_t rise = offset; rise + kPeriodFrames <= kBlockFrames - 1U;
+  for (uint32_t rise = offset;
+       rise + kPeriodFrames + VP37_CURRENT_GATE_CONFIRM_FRAMES - 1U <=
+       kBlockFrames - 1U;
        rise += kPeriodFrames) {
     if (rise >= 1U) {
       best = rise;
@@ -209,8 +212,9 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
 void test_scan_reduce_measures_the_newest_full_period(void) {
   hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
   VP37_currentSenseInit();
-  // Rising edges at 0, one period and two periods: the block starts inside
-  // an ON phase, and the second complete period is the newest one.
+  // Rising edges every period from frame 0: the block starts inside an ON
+  // phase, and the newest period whose closing edge is confirmed inside the
+  // block is the one reported, whatever the block length in periods.
   fillBlock({0U, 16U, 3000U, 3100U, true});
   const uint32_t startUs = 123456U;
   const VP37CurrentScanBlock view = blockView(startUs);
@@ -218,9 +222,12 @@ void test_scan_reduce_measures_the_newest_full_period(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
   TEST_ASSERT_TRUE(result.zeroValid);
   TEST_ASSERT_TRUE(result.waveformValid);
-  TEST_ASSERT_EQUAL_UINT32(kPeriodFrames, newestPeriodStart(0U));
-  TEST_ASSERT_EQUAL_UINT32(startUs + framesToUs(kPeriodFrames),
-                           result.cycleStartUs);
+  const uint32_t newest = newestPeriodStart(0U);
+  TEST_ASSERT_TRUE(newest >= kPeriodFrames);
+  TEST_ASSERT_TRUE(newest + (2U * kPeriodFrames) +
+                       VP37_CURRENT_GATE_CONFIRM_FRAMES - 1U >
+                   kBlockFrames - 1U);
+  TEST_ASSERT_EQUAL_UINT32(startUs + framesToUs(newest), result.cycleStartUs);
   TEST_ASSERT_EQUAL_UINT32(framesToUs(kPeriodFrames), result.periodUs);
   TEST_ASSERT_EQUAL_UINT32(framesToUs(kOnFrames), result.onTimeUs);
   TEST_ASSERT_EQUAL_UINT32(kOnFrames, result.samples);
@@ -265,19 +272,20 @@ void test_scan_reduce_keeps_supply_and_current_validity_separate(void) {
 
   // One clipped shunt sample inside the newest period rejects the waveform,
   // not the supply mean; the wrapped start is handled like any other.
+  const uint32_t newest = newestPeriodStart(0U);
   fillBlock({0U, 16U, 3000U, 3100U, true});
-  s_block[((kPeriodFrames + (kOnFrames / 2U)) * kScanPins) + kShuntPosition] =
+  s_block[((newest + (kOnFrames / 2U)) * kScanPins) + kShuntPosition] =
       VP37_CURRENT_ADC_MAX_RAW;
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
   TEST_ASSERT_EQUAL_UINT32(1U, result.clippedSamples);
   TEST_ASSERT_FALSE(result.waveformValid);
   TEST_ASSERT_TRUE(result.supplyValid);
-  TEST_ASSERT_EQUAL_UINT32((UINT32_MAX - 1000U) + framesToUs(kPeriodFrames),
+  TEST_ASSERT_EQUAL_UINT32((UINT32_MAX - 1000U) + framesToUs(newest),
                            result.cycleStartUs);
 
   // A supply conversion at the end stop rejects the supply mean only.
   fillBlock({0U, 16U, 3000U, 3100U, true});
-  s_block[((kPeriodFrames + kOnFrames + 1U) * kScanPins) + kSupplyPosition] =
+  s_block[((newest + kOnFrames + 1U) * kScanPins) + kSupplyPosition] =
       VP37_CURRENT_ADC_MAX_RAW;
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
   TEST_ASSERT_TRUE(result.waveformValid);

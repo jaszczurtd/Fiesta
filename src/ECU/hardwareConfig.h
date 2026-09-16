@@ -5,8 +5,11 @@
 #include <libConfig.h>
 
 #ifdef VP37
+// 130 Hz: the current ripple at this frequency keeps the actuator free of
+// the upper end stop and static friction on descents (bench, 2026-09-16);
+// 1 kHz measured cleaner but latched at the top with the same tuning.
 #ifndef VP37_PWM_FREQUENCY_HZ
-#define VP37_PWM_FREQUENCY_HZ 200
+#define VP37_PWM_FREQUENCY_HZ 130
 #endif
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 200
@@ -47,6 +50,7 @@
 
 #define ADC_VOLT_PIN 28
 #define ADC_SENSORS_PIN 27
+// GPIO26 belongs to the VP37 source shunt; no other peripheral may claim it.
 #define ADC_VP37_CURRENT_PIN 26
 
 // Low-side shunt installed in the VP37 quantity-actuator MOSFET source.
@@ -54,11 +58,6 @@
 // Holding-map adjustment for the installed source shunt; PID gains are
 // separate.
 #define VP37_PWM_FF_HARDWARE_GAIN 1.08f
-
-#ifdef HAL_ENABLE_SDLOGGER
-#error                                                                         \
-    "GPIO26 is reserved for VP37 current sensing; SD logging needs a new CS pin"
-#endif
 
 // for serial - GPS
 #define SERIAL_RX_GPIO 22

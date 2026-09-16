@@ -13,6 +13,8 @@
 
 #include <utils/multicoreWatchdog.h>
 
+#include <cstdint>
+
 // ── Central context stub (start.cpp is excluded in tests) ────────────────────
 
 static ecu_context_t s_ctx;
@@ -21,10 +23,11 @@ ecu_context_t *getECUContext(void) { return &s_ctx; }
 
 void watchdog_feed(void) {}
 
-// ── tests.c stub: tests.c is excluded from the host build, but config.c
-//    references tickTestsHandleSerialLine() via the HAL session unknown-line
-//    callback. Provide an observable no-op implementation that records the
-//    last forwarded line so unit tests can assert routing behaviour.
+// ── tests.c stubs: tests.c is excluded from the host library so a test
+//    binary can compile its own copy with ECU_FUNCTIONAL_TESTS_ENABLED.
+//    config.c routes unknown serial lines here, so the stub records the
+//    last one and lets unit tests assert the routing. vp37.c asks the test
+//    layer which test is running; without tests the answer is none.
 static char s_lastForwardedLine[128] = {0};
 static unsigned s_forwardedCount = 0;
 
@@ -54,4 +57,12 @@ extern "C" unsigned test_stubs_forwarded_serial_count(void) {
 extern "C" void test_stubs_reset_forwarded_serial(void) {
   s_lastForwardedLine[0] = '\0';
   s_forwardedCount = 0;
+}
+
+extern "C" __attribute__((weak)) const char *testsActiveName(void) {
+  return nullptr;
+}
+
+extern "C" __attribute__((weak)) uint32_t testsCyclicDelayMs(void) {
+  return 0u;
 }

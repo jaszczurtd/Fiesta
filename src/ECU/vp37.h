@@ -18,7 +18,20 @@
 extern "C" {
 #endif
 
-#ifdef START_TEST_ENABLE_VP37_TUNING
+/**
+ * @brief Source of the normal quantity demand.
+ *
+ * 1 selects the engine model, 0 the driver potentiometer read through the
+ * HC4051 multiplexer. This is not a test setting: a functional test only
+ * borrows the demand while it runs and hands it back to this source when it
+ * stops, and the selection stays available with the tests compiled out.
+ */
+#ifndef VP37_ENGINE_OPERATION_MODE
+#define VP37_ENGINE_OPERATION_MODE 0
+#endif
+
+/* Bench telemetry is dense enough to follow single control steps. */
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 #define VP37_DEBUG_UPDATE 20U
 #else
 #define VP37_DEBUG_UPDATE 250U
@@ -122,9 +135,23 @@ extern "C" {
 #define VP37_DRIVE_STALE_MS 10000U
 // Endpoints of the nonlinear positive-demand feedforward map [nominal PWM].
 #define VP37_PWM_FF_AT_MIN 585
-#define VP37_PWM_FF_AT_MAX 820
-// Upper upward-motion correction at the reference rate [nominal PWM].
+#define VP37_PWM_FF_AT_MAX 872
+// Upper upward-motion correction at the reference rate [nominal PWM]: the
+// scale of the map's motion column. The runtime boost below is applied as a
+// ratio to this value.
 #define VP37_PWM_FF_MOTION_BOOST 32.0f
+// Runtime upward boost at start and after bench R; 40 = the map's column times
+// 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged).
+#define VP37_PWM_FF_MOTION_BOOST_DEFAULT 40.0f
+// Downward-motion correction at the reference rate [nominal PWM]: the command
+// drops below the holding map while the target falls, so the return spring
+// is not fighting a holding command that only the integral would unwind.
+// Same filter and rate scale as the upward term. 30 halved the descent
+// medians on 130 Hz; 20 and 40 were clearly worse, 50 and 80 overshoot.
+// Bench commands U/J.
+#define VP37_PWM_FF_DESCENT_BOOST 30.0f
+// Bench ceiling for either motion boost [nominal PWM].
+#define VP37_PWM_FF_MOTION_BOOST_MAX 200.0f
 #define VP37_PWM_FF_MOTION_FILTER_S 0.01f
 #define VP37_PWM_FF_MOTION_REFERENCE_RATE 125.0f
 // Percent of calibrated travel per second; permits the existing cyclic ramp.
@@ -302,6 +329,12 @@ typedef struct {
                                 counts. */
   float pidIntegralOverride; /**< Bench cap in nominal PWM; zero selects
                                 position profile. */
+  float motionBoostUp;   /**< Upward motion correction at the reference rate,
+                            nominal PWM; scales the map's motion column. */
+  float motionBoostDown; /**< Downward motion correction at the reference
+                            rate, nominal PWM, subtracted while the target
+                            falls. */
+  float feedForwardFallBlend;  /**< Filtered downward rate, reference units. */
   float integralDeadbandTopHz; /**< Dead zone at full stroke; zero keeps the
                                   base dead zone everywhere. */
   float integralDeadbandHz;    /**< Dead zone applied in the last step. */
@@ -383,9 +416,12 @@ typedef struct {
       pidDtUs; /**< Elapsed time for a successful PID step; zero when held. */
 } VP37TraceSample;
 
-#ifdef START_TEST_ENABLE_VP37_TUNING
-/** @brief Number of consecutive steps in a bench RAM capture. */
+#if ECU_FUNCTIONAL_TESTS_ENABLED
+/** @brief Steps in a bench RAM capture. Each step costs one VP37TraceSample
+ * of static RAM, so this is the knob to turn when a build runs out. */
+#ifndef VP37_TRACE_SAMPLES
 #define VP37_TRACE_SAMPLES 1024U
+#endif
 /** @brief Start a capture under the owner mutex. Non-NULL self must be running.
  * @return HAL_OK, HAL_EINVAL for NULL, HAL_EBUSY if capturing/draining,
  * or HAL_EAGAIN when control is inactive. */

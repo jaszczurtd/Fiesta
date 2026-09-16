@@ -180,8 +180,11 @@ void readHighValues(void);
  */
 void init4051(void);
 
-/** Settling time after a channel change: two scan frames plus the switch. */
+/** Settling time after a channel change: two scan frames plus the switch.
+ * Overridable so the value can be measured against the analog path. */
+#ifndef SENSORS_MUX_SETTLE_US
 #define SENSORS_MUX_SETTLE_US 60U
+#endif
 
 /**
  * @brief Select the active HC4051 input channel.

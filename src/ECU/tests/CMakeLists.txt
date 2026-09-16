@@ -31,18 +31,25 @@ add_executable(test_vp37_current_fast test_vp37_current.cpp ../vp37_current.c)
 target_compile_definitions(test_vp37_current_fast PRIVATE VP37_PWM_FREQUENCY_HZ=1000)
 target_link_libraries(test_vp37_current_fast PRIVATE ecu_mock)
 add_test(NAME test_vp37_current_fast COMMAND test_vp37_current_fast)
-# Exercise the cyclic fixture and optional RAM trace even when the host library
-# uses normal demand.
-add_executable(test_vp37_cyclic test_vp37.cpp ../vp37.c ../tests.c)
-target_compile_definitions(test_vp37_cyclic PRIVATE START_TEST_ENABLE_VP37_CYCLIC)
-target_link_libraries(test_vp37_cyclic PRIVATE ecu_mock)
-add_test(NAME test_vp37_cyclic COMMAND test_vp37_cyclic)
-# Exercise the persistent command-driven bench mode independently of cyclic.
-add_executable(test_vp37_serial_bench test_vp37.cpp ../vp37.c ../tests.c)
-target_compile_definitions(test_vp37_serial_bench
-    PRIVATE START_TEST_ENABLE_VP37_SERIAL)
-target_link_libraries(test_vp37_serial_bench PRIVATE ecu_mock)
-add_test(NAME test_vp37_serial_bench COMMAND test_vp37_serial_bench)
+add_executable(test_vp37_current_200hz test_vp37_current.cpp ../vp37_current.c)
+target_compile_definitions(test_vp37_current_200hz PRIVATE VP37_PWM_FREQUENCY_HZ=200)
+target_link_libraries(test_vp37_current_200hz PRIVATE ecu_mock)
+add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
+# The host library is built without functional tests, which is how the ECU
+# ships. These two binaries compile the same sources with the tests enabled:
+# one repeats the VP37 suite against the fixtures, the other covers the
+# registry, the sequencer and the console parser.
+set(ECU_TEST_FIXTURE_SOURCES ../vp37.c ../tests.c ../test_helpers.c)
+add_executable(test_vp37_bench test_vp37.cpp ${ECU_TEST_FIXTURE_SOURCES})
+target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+target_link_libraries(test_vp37_bench PRIVATE ecu_mock)
+add_test(NAME test_vp37_bench COMMAND test_vp37_bench)
+add_executable(test_tests_registry test_tests_registry.cpp
+    ${ECU_TEST_FIXTURE_SOURCES})
+target_compile_definitions(test_tests_registry
+    PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+target_link_libraries(test_tests_registry PRIVATE ecu_mock)
+add_test(NAME test_tests_registry COMMAND test_tests_registry)
 add_ecu_test(test_rpm)
 
 if(UNIX)
