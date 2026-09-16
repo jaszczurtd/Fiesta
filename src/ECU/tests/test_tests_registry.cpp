@@ -12,21 +12,21 @@ void setUp(void) {}
 /** @brief Release the controller each fixture allocates, so runs stay clean. */
 void tearDown(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
-  if (pump->adjustController != NULL) {
-    hal_pid_controller_destroy(pump->adjustController);
-    pump->adjustController = NULL;
+  if (pump->pid.adjustController != NULL) {
+    hal_pid_controller_destroy(pump->pid.adjustController);
+    pump->pid.adjustController = NULL;
   }
 }
 
 static VP37Pump *preparePump(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   memset(pump, 0, sizeof(*pump));
-  pump->adjustController = hal_pid_controller_create();
-  pump->calibrationDone = true;
+  pump->pid.adjustController = hal_pid_controller_create();
+  pump->feedback.calibrationDone = true;
   pump->vp37Initialized = true;
-  pump->VP37_ADJUST_MIN = 100;
-  pump->VP37_ADJUST_MAX = 9100;
-  pump->lastThrottle = -1.0f;
+  pump->feedback.VP37_ADJUST_MIN = 100;
+  pump->feedback.VP37_ADJUST_MAX = 9100;
+  pump->demand.lastThrottle = -1.0f;
   hal_mock_set_millis(0U);
   return pump;
 }
@@ -71,12 +71,12 @@ void test_one_test_owns_the_demand_and_gives_it_back_on_stop(void) {
 
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_NULL(testsActiveName());
-  TEST_ASSERT_FLOAT_WITHIN(.001f, -1.0f, pump->lastThrottle);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, -1.0f, pump->demand.lastThrottle);
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_CYCLIC));
   TEST_ASSERT_EQUAL_STRING("cyclic", testsActiveName());
   TEST_ASSERT_TRUE(tickTests());
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->lastThrottle);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->demand.lastThrottle);
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, stopTests());
   TEST_ASSERT_NULL(testsActiveName());
@@ -95,14 +95,14 @@ void test_random_draws_a_bounded_and_repeatable_sequence(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_RANDOM));
   TEST_ASSERT_TRUE(tickTests());
-  const float first = pump->lastThrottle;
+  const float first = pump->demand.lastThrottle;
   TEST_ASSERT_TRUE(first >= 0.0f);
   TEST_ASSERT_TRUE(first <= 100.0f);
 
   // A second position is drawn once the hold elapses.
   hal_mock_set_millis(1100U);
   TEST_ASSERT_TRUE(tickTests());
-  const float second = pump->lastThrottle;
+  const float second = pump->demand.lastThrottle;
   TEST_ASSERT_TRUE(second >= 0.0f);
   TEST_ASSERT_TRUE(second <= 100.0f);
 
@@ -110,12 +110,12 @@ void test_random_draws_a_bounded_and_repeatable_sequence(void) {
   hal_mock_set_millis(1500U);
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_RANDOM));
   TEST_ASSERT_TRUE(tickTests());
-  TEST_ASSERT_FLOAT_WITHIN(.001f, first, pump->lastThrottle);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, first, pump->demand.lastThrottle);
 
   // The configured duration ends the test and releases the demand.
   hal_mock_set_millis(1500U + 2001U);
   TEST_ASSERT_TRUE(tickTests());
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->lastThrottle);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->demand.lastThrottle);
   TEST_ASSERT_NULL(testsActiveName());
   TEST_ASSERT_FALSE(tickTests());
 }
@@ -180,7 +180,7 @@ void test_console_starts_tests_by_name_and_keeps_parameters_on_letters(void) {
   // A demand command starts the manual test, which stays out of the sequence.
   console("S12");
   TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 12.0f, pump->lastThrottle);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 12.0f, pump->demand.lastThrottle);
 
   // Listing and help leave the active test alone.
   console("list");

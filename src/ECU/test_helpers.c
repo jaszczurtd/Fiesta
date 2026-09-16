@@ -278,18 +278,18 @@ static bool parseSwitch(const char *cmd, char *outDigit) {
 static void applyDefaults(VP37Pump *self) {
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
-  self->pidTf = VP37_PID_TF;
-  self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
-  self->temperatureCompensationWeight = 1.0f;
-  self->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
-  self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
-  self->motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
-  self->motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
-  for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
-    self->mapTrim[i] = 0.0f;
+  self->pid.pidTf = VP37_PID_TF;
+  self->pid.pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
+  self->thermal.temperatureCompensationWeight = 1.0f;
+  self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
+  self->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  self->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
+  self->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
+  for (uint32_t i = 0U; i < COUNTOF(self->feedforward.mapTrim); i++) {
+    self->feedforward.mapTrim[i] = 0.0f;
   }
-  self->mapTrimTransfers = 0U;
-  hal_pid_controller_set_tf(self->adjustController, self->pidTf);
+  self->feedforward.mapTrimTransfers = 0U;
+  hal_pid_controller_set_tf(self->pid.adjustController, self->pid.pidTf);
   s_cyclic.passLimit = CYCLIC_PASSES_DEFAULT;
   s_random.durationS = RANDOM_DURATION_S_DEFAULT;
   s_random.holdS = RANDOM_HOLD_S_DEFAULT;
@@ -308,15 +308,15 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
                        ecu_test_id_t *outStart) {
   switch (prefix) {
   case 'P':
-    VP37_setVP37PID(self, value, self->pidKi, self->pidKd, false);
+    VP37_setVP37PID(self, value, self->pid.pidKi, self->pid.pidKd, false);
     deb(TEST_HIGHLIGHT_ON "Kp = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'I':
-    VP37_setVP37PID(self, self->pidKp, value, self->pidKd, false);
+    VP37_setVP37PID(self, self->pid.pidKp, value, self->pid.pidKd, false);
     deb(TEST_HIGHLIGHT_ON "Ki = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'D':
-    VP37_setVP37PID(self, self->pidKp, self->pidKi, value, false);
+    VP37_setVP37PID(self, self->pid.pidKp, self->pid.pidKi, value, false);
     deb(TEST_HIGHLIGHT_ON "Kd = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'T':
@@ -327,52 +327,52 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
     deb(TEST_HIGHLIGHT_ON "TU = %.1f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'F':
-    self->pidTf = value;
-    hal_pid_controller_set_tf(self->adjustController, value);
+    self->pid.pidTf = value;
+    hal_pid_controller_set_tf(self->pid.adjustController, value);
     deb(TEST_HIGHLIGHT_ON "TF = %.4f" TEST_HIGHLIGHT_OFF, value);
     break;
   case 'L':
     if (value > VP37_BENCH_INTEGRAL_LIMIT_MAX) {
       return false;
     }
-    self->pidIntegralOverride = value;
+    self->pid.pidIntegralOverride = value;
     deb("VP37 integral cap: %.1f (0=position profile)", value);
     break;
   case 'W':
     if (value > 1.0f) {
       return false;
     }
-    self->temperatureCompensationWeight = value;
+    self->thermal.temperatureCompensationWeight = value;
     deb("VP37 thermal weight: %.2f", value);
     break;
   case 'E':
     if ((value > 1000.0f) || (value != floorf(value))) {
       return false;
     }
-    self->integralHoldConfirmMs = (uint32_t)value;
-    self->integralHoldEnterPending = false;
+    self->pid.integralHoldConfirmMs = (uint32_t)value;
+    self->pid.integralHoldEnterPending = false;
     deb("VP37 hold confirmation: %lu ms",
-        (unsigned long)self->integralHoldConfirmMs);
+        (unsigned long)self->pid.integralHoldConfirmMs);
     break;
   case 'N':
     if (value > VP37_PID_DEADBAND_TOP_MAX_HZ) {
       return false;
     }
-    self->integralDeadbandTopHz = value;
+    self->pid.integralDeadbandTopHz = value;
     deb("VP37 integral deadband top: %.0f Hz", value);
     break;
   case 'U':
     if (value > VP37_PWM_FF_MOTION_BOOST_MAX) {
       return false;
     }
-    self->motionBoostUp = value;
+    self->feedforward.motionBoostUp = value;
     deb("VP37 motion boost up: %.0f", value);
     break;
   case 'J':
     if (value > VP37_PWM_FF_MOTION_BOOST_MAX) {
       return false;
     }
-    self->motionBoostDown = value;
+    self->feedforward.motionBoostDown = value;
     deb("VP37 motion boost down: %.0f", value);
     break;
   case 'S':
@@ -442,42 +442,43 @@ bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,
     return true;
   }
   if ((prefix == 'Q') && parseSwitch(cmd, &digit)) {
-    self->currentObservationEnabled = digit == '1';
+    self->thermal.currentObservationEnabled = digit == '1';
     deb("VP37 current observation: %u",
-        self->currentObservationEnabled ? 1U : 0U);
+        self->thermal.currentObservationEnabled ? 1U : 0U);
     return true;
   }
   if ((prefix == 'K') && parseSwitch(cmd, &digit)) {
-    self->mapTrimEnabled = digit == '1';
-    for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
-      self->mapTrim[i] = 0.0f;
+    self->feedforward.mapTrimEnabled = digit == '1';
+    for (uint32_t i = 0U; i < COUNTOF(self->feedforward.mapTrim); i++) {
+      self->feedforward.mapTrim[i] = 0.0f;
     }
-    self->mapTrimTransfers = 0U;
-    deb("VP37 map trim: %u", self->mapTrimEnabled ? 1U : 0U);
+    self->feedforward.mapTrimTransfers = 0U;
+    deb("VP37 map trim: %u", self->feedforward.mapTrimEnabled ? 1U : 0U);
     return true;
   }
   if ((prefix == 'M') && parseSwitch(cmd, &digit)) {
-    self->driveCompensationEnabled = digit == '1';
-    if (!self->driveCompensationEnabled) {
-      self->driveSamples = 0U;
-      self->driveResistanceReady = false;
-      self->driveCompensationUsed = false;
-      self->driveCorrection = 1.0f;
+    self->thermal.driveCompensationEnabled = digit == '1';
+    if (!self->thermal.driveCompensationEnabled) {
+      self->thermal.driveSamples = 0U;
+      self->thermal.driveResistanceReady = false;
+      self->thermal.driveCompensationUsed = false;
+      self->thermal.driveCorrection = 1.0f;
     }
     deb("VP37 drive compensation: %u",
-        self->driveCompensationEnabled ? 1U : 0U);
+        self->thermal.driveCompensationEnabled ? 1U : 0U);
     return true;
   }
   if ((prefix == 'V') && (cmd[2] == '\0') &&
       ((cmd[1] == '0') || (cmd[1] == '1') || (cmd[1] == '2'))) {
     // V2 freezes the scale where it is: the supply loop stays open so a
     // supply-side oscillation can be told from one closed through the ECU.
-    self->voltageFrozen = cmd[1] == '2';
-    if (!self->voltageFrozen) {
-      self->cycleVoltageEnabled = cmd[1] == '1';
+    self->supply.voltageFrozen = cmd[1] == '2';
+    if (!self->supply.voltageFrozen) {
+      self->supply.cycleVoltageEnabled = cmd[1] == '1';
     }
-    deb("VP37 cycle voltage: %u frozen:%u", self->cycleVoltageEnabled ? 1U : 0U,
-        self->voltageFrozen ? 1U : 0U);
+    deb("VP37 cycle voltage: %u frozen:%u",
+        self->supply.cycleVoltageEnabled ? 1U : 0U,
+        self->supply.voltageFrozen ? 1U : 0U);
     return true;
   }
 

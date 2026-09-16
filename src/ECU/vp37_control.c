@@ -13,33 +13,33 @@ static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight);
 
 void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
                      bool shouldTriggerReset) {
-  self->pidKp = kp;
-  self->pidKi = ki;
-  self->pidKd = kd;
-  hal_pid_controller_set_kp(self->adjustController, kp);
-  hal_pid_controller_set_ki(self->adjustController, ki);
-  hal_pid_controller_set_kd(self->adjustController, kd);
+  self->pid.pidKp = kp;
+  self->pid.pidKi = ki;
+  self->pid.pidKd = kd;
+  hal_pid_controller_set_kp(self->pid.adjustController, kp);
+  hal_pid_controller_set_ki(self->pid.adjustController, ki);
+  hal_pid_controller_set_kd(self->pid.adjustController, kd);
 
   if (shouldTriggerReset) {
-    hal_pid_controller_reset(self->adjustController);
-    self->integralHold = false;
-    self->integralHoldEnterPending = false;
-    self->integralHoldReleasePending = false;
-    self->integralHoldReleaseStartedMs = 0U;
-    self->lastPWMval = -1;
-    self->finalPWM = VP37_PWM_MIN;
+    hal_pid_controller_reset(self->pid.adjustController);
+    self->pid.integralHold = false;
+    self->pid.integralHoldEnterPending = false;
+    self->pid.integralHoldReleasePending = false;
+    self->pid.integralHoldReleaseStartedMs = 0U;
+    self->output.lastPWMval = -1;
+    self->output.finalPWM = VP37_PWM_MIN;
   }
 }
 
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd) {
   if (kp != NULL) {
-    *kp = hal_pid_controller_get_kp(self->adjustController);
+    *kp = hal_pid_controller_get_kp(self->pid.adjustController);
   }
   if (ki != NULL) {
-    *ki = hal_pid_controller_get_ki(self->adjustController);
+    *ki = hal_pid_controller_get_ki(self->pid.adjustController);
   }
   if (kd != NULL) {
-    *kd = hal_pid_controller_get_kd(self->adjustController);
+    *kd = hal_pid_controller_get_kd(self->pid.adjustController);
   }
 }
 
@@ -56,22 +56,24 @@ float VP37_feedForward(VP37Pump *self, int32_t position) {
       const float holding = hal_math_map_f32(
           percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
           lower[VP37_FF_COL_PWM], upper[VP37_FF_COL_PWM]);
-      self->feedForwardMotion =
-          (self->feedForwardRiseBlend *
+      self->feedforward.feedForwardMotion =
+          (self->feedforward.feedForwardRiseBlend *
            hal_math_map_f32(
                percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
                lower[VP37_FF_COL_MOTION], upper[VP37_FF_COL_MOTION]) *
-           (self->motionBoostUp / VP37_PWM_FF_MOTION_BOOST)) -
-          (self->feedForwardFallBlend * self->motionBoostDown);
-      self->mapTrimApplied = VP37_mapTrimAt(self, percent);
-      return (holding * VP37_PWM_FF_HARDWARE_GAIN) + self->mapTrimApplied +
-             self->feedForwardMotion;
+           (self->feedforward.motionBoostUp / VP37_PWM_FF_MOTION_BOOST)) -
+          (self->feedforward.feedForwardFallBlend *
+           self->feedforward.motionBoostDown);
+      self->feedforward.mapTrimApplied = VP37_mapTrimAt(self, percent);
+      return (holding * VP37_PWM_FF_HARDWARE_GAIN) +
+             self->feedforward.mapTrimApplied +
+             self->feedforward.feedForwardMotion;
     }
   }
-  self->feedForwardMotion = 0.0f;
-  self->mapTrimApplied = VP37_mapTrimAt(self, 100.0f);
+  self->feedforward.feedForwardMotion = 0.0f;
+  self->feedforward.mapTrimApplied = VP37_mapTrimAt(self, 100.0f);
   return (VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN) +
-         self->mapTrimApplied;
+         self->feedforward.mapTrimApplied;
 }
 
 float VP37_computePositiveCorrectionLimit(float fuelTempC,
@@ -108,9 +110,9 @@ float VP37_computePositiveCorrectionLimit(float fuelTempC,
 float VP37_integralLimit(const VP37Pump *self) {
   float limit = VP37_strokeTaper(
       &VP37_INTEGRAL_LIMIT_MAP[0U][0U], VP37_STROKE_TAPER_KNOTS,
-      VP37_strokePercent(self, self->desiredPosition));
-  if (self->pidIntegralOverride > 0.0f) {
-    limit = fminf(limit, self->pidIntegralOverride);
+      VP37_strokePercent(self, self->demand.desiredPosition));
+  if (self->pid.pidIntegralOverride > 0.0f) {
+    limit = fminf(limit, self->pid.pidIntegralOverride);
   }
   return limit;
 }
@@ -126,60 +128,60 @@ float VP37_integralLimit(const VP37Pump *self) {
 float VP37_integralDeadband(const VP37Pump *self) {
   const float base = VP37_INTEGRAL_DEADBAND_MAP[0U][VP37_TAPER_COL_VALUE];
   float deadband = base;
-  if (self->integralDeadbandTopHz > base) {
+  if (self->pid.integralDeadbandTopHz > base) {
     // The table holds the default top; the bench may have moved it.
     float taper[VP37_STROKE_TAPER_KNOTS * VP37_STROKE_TAPER_COLUMNS];
     (void)memcpy(taper, VP37_INTEGRAL_DEADBAND_MAP, sizeof(taper));
     taper[((VP37_STROKE_TAPER_KNOTS - 1U) * VP37_STROKE_TAPER_COLUMNS) +
-          VP37_TAPER_COL_VALUE] = self->integralDeadbandTopHz;
-    deadband =
-        VP37_strokeTaper(taper, VP37_STROKE_TAPER_KNOTS,
-                         VP37_strokePercent(self, self->desiredPosition));
+          VP37_TAPER_COL_VALUE] = self->pid.integralDeadbandTopHz;
+    deadband = VP37_strokeTaper(
+        taper, VP37_STROKE_TAPER_KNOTS,
+        VP37_strokePercent(self, self->demand.desiredPosition));
   }
   return deadband;
 }
 
 /** @brief Update the settled-target hysteresis that freezes integration. */
 void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
-  const float absoluteError = fabsf((float)self->pidErr);
+  const float absoluteError = fabsf((float)self->pid.pidErr);
   // Fixed bands on purpose: widening them with the dead zone froze the
   // integral up to twice the dead zone from the target and left standing
   // errors of 120 Hz on the upper stroke. There the dead zone alone bounds
   // the error; the hold matters where the band is narrower than the zone.
   const float enterHz = (float)VP37_INTEGRAL_HOLD_ENTER_HZ;
   const float exitHz = (float)VP37_INTEGRAL_HOLD_EXIT_HZ;
-  self->integralHoldEntered = false;
+  self->pid.integralHoldEntered = false;
   if (!targetSettled) {
-    self->integralHold = false;
-    self->integralHoldEnterPending = false;
-    self->integralHoldReleasePending = false;
-  } else if (!self->integralHold) {
+    self->pid.integralHold = false;
+    self->pid.integralHoldEnterPending = false;
+    self->pid.integralHoldReleasePending = false;
+  } else if (!self->pid.integralHold) {
     if (absoluteError > enterHz) {
-      self->integralHoldEnterPending = false;
+      self->pid.integralHoldEnterPending = false;
     } else {
-      if (!self->integralHoldEnterPending) {
-        self->integralHoldEnterStartedMs = hal_millis();
-        self->integralHoldEnterPending = true;
+      if (!self->pid.integralHoldEnterPending) {
+        self->pid.integralHoldEnterStartedMs = hal_millis();
+        self->pid.integralHoldEnterPending = true;
       }
-      if (hal_millis_deadline_expired(self->integralHoldEnterStartedMs,
-                                      self->integralHoldConfirmMs)) {
-        self->integralHold = true;
-        self->integralHoldEntered = true;
-        self->integralHoldEnterPending = false;
-        self->integralHoldReleasePending = false;
+      if (hal_millis_deadline_expired(self->pid.integralHoldEnterStartedMs,
+                                      self->pid.integralHoldConfirmMs)) {
+        self->pid.integralHold = true;
+        self->pid.integralHoldEntered = true;
+        self->pid.integralHoldEnterPending = false;
+        self->pid.integralHoldReleasePending = false;
       }
     }
   } else if (absoluteError <= exitHz) {
-    self->integralHoldReleasePending = false;
-  } else if (!self->integralHoldReleasePending) {
-    self->integralHoldReleasePending = true;
-    self->integralHoldReleaseStartedMs = hal_millis();
+    self->pid.integralHoldReleasePending = false;
+  } else if (!self->pid.integralHoldReleasePending) {
+    self->pid.integralHoldReleasePending = true;
+    self->pid.integralHoldReleaseStartedMs = hal_millis();
   } else {
-    if (hal_millis_deadline_expired(self->integralHoldReleaseStartedMs,
+    if (hal_millis_deadline_expired(self->pid.integralHoldReleaseStartedMs,
                                     VP37_INTEGRAL_HOLD_RELEASE_MS)) {
-      self->integralHold = false;
-      self->integralHoldEnterPending = false;
-      self->integralHoldReleasePending = false;
+      self->pid.integralHold = false;
+      self->pid.integralHoldEnterPending = false;
+      self->pid.integralHoldReleasePending = false;
     }
   }
 }
@@ -194,36 +196,37 @@ void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
  * that would leave the bound keeps the integral where it is.
  */
 void VP37_transferIntegralToMapTrim(VP37Pump *self) {
-  if (!self->mapTrimEnabled || !self->integralHoldEntered) {
+  if (!self->feedforward.mapTrimEnabled || !self->pid.integralHoldEntered) {
     return;
   }
-  self->integralHoldEntered = false;
+  self->pid.integralHoldEntered = false;
   const float percent = hal_constrain(
-      hal_math_map_f32(self->desiredPosition, (float)self->VP37_ADJUST_MIN,
-                       (float)self->VP37_ADJUST_MAX, 0.0f, 100.0f),
+      hal_math_map_f32(self->demand.desiredPosition,
+                       (float)self->feedback.VP37_ADJUST_MIN,
+                       (float)self->feedback.VP37_ADJUST_MAX, 0.0f, 100.0f),
       0.0f, 100.0f);
   uint32_t lower = 0U;
   float weight = 0.0f;
   VP37_mapTrimKnots(percent, &lower, &weight);
   const uint32_t upper =
       (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
-  const float integral = self->pidTerms.integral;
+  const float integral = self->pid.pidTerms.integral;
   // Both knots take the whole integral: the interpolated value then rises by
   // exactly that amount at this position, and neighbouring holds average
   // out the friction share of what each of them learned.
-  const float lowerCandidate = self->mapTrim[lower] + integral;
-  const float upperCandidate = self->mapTrim[upper] + integral;
+  const float lowerCandidate = self->feedforward.mapTrim[lower] + integral;
+  const float upperCandidate = self->feedforward.mapTrim[upper] + integral;
   if (!isfinite(lowerCandidate) || !isfinite(upperCandidate) ||
       (fabsf(lowerCandidate) > VP37_MAP_TRIM_LIMIT_PWM) ||
       (fabsf(upperCandidate) > VP37_MAP_TRIM_LIMIT_PWM) ||
       (fabsf(integral) < 0.5f)) {
     return;
   }
-  self->mapTrim[lower] = lowerCandidate;
-  self->mapTrim[upper] = upperCandidate;
-  hal_pid_controller_reset(self->adjustController);
-  self->pidTerms.integral = 0.0f;
-  self->mapTrimTransfers++;
+  self->feedforward.mapTrim[lower] = lowerCandidate;
+  self->feedforward.mapTrim[upper] = upperCandidate;
+  hal_pid_controller_reset(self->pid.adjustController);
+  self->pid.pidTerms.integral = 0.0f;
+  self->feedforward.mapTrimTransfers++;
 }
 
 /**
@@ -233,10 +236,10 @@ void VP37_transferIntegralToMapTrim(VP37Pump *self) {
  * @return Demand in percent, clamped to the calibrated range.
  */
 static float VP37_strokePercent(const VP37Pump *self, float position) {
-  return hal_constrain(hal_math_map_f32(position, (float)self->VP37_ADJUST_MIN,
-                                        (float)self->VP37_ADJUST_MAX, 0.0f,
-                                        100.0f),
-                       0.0f, 100.0f);
+  return hal_constrain(
+      hal_math_map_f32(position, (float)self->feedback.VP37_ADJUST_MIN,
+                       (float)self->feedback.VP37_ADJUST_MAX, 0.0f, 100.0f),
+      0.0f, 100.0f);
 }
 
 /**
@@ -274,7 +277,7 @@ TESTABLE_STATIC float VP37_strokeTaper(const float *knots, size_t count,
 
 /** @brief Learned holding-map residual, interpolated between knots. */
 static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
-  if (!self->mapTrimEnabled) {
+  if (!self->feedforward.mapTrimEnabled) {
     return 0.0f;
   }
   uint32_t lower = 0U;
@@ -282,8 +285,8 @@ static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
   VP37_mapTrimKnots(percent, &lower, &weight);
   const uint32_t upper =
       (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
-  return (self->mapTrim[lower] * (1.0f - weight)) +
-         (self->mapTrim[upper] * weight);
+  return (self->feedforward.mapTrim[lower] * (1.0f - weight)) +
+         (self->feedforward.mapTrim[upper] * weight);
 }
 
 /**
