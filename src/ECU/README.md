@@ -24,31 +24,41 @@ for the shunt input; SD logging requires a different chip-select pin.
 Failed communication holds PID briefly and stops drive after 20 ms;
 invalid position status stops it immediately.
 
-GPIO26 current acquisition runs on core 0 every 20 ms while the actuator is
-active. It observes one complete measured PWM period and excludes 60 us around
-both ON edges. `VP37 IPULSE` reports the guarded ON mean (winsorized at P95),
-P95, unfiltered peak, timing, zero calibration, clipping and validity, together
-with the controller snapshot preceding acquisition. These are source-shunt ON
-measurements; the freewheel path bypasses the shunt. Acquisition and logging
-run outside the pump mutex. Current has no path to PWM, PID or a cutoff.
-Bench commands `Q0` and `Q1` disable and enable acquisition for comparison.
-At 1 kHz and above, acquisition shortens the sampling delay from 20 to 4 us;
-the 60 us edge guards and minimum of eight guarded samples still apply.
-A short ON phase can still yield too few samples; the result remains invalid.
+GPIO26 current acquisition is a hardware-paced scan (`HAL_ENABLE_ADC_SCAN`):
+the shunt, the sensor multiplexer (GPIO27) and the supply divider (GPIO28)
+are converted round-robin every 24 us, DMA fills blocks of 2.25 PWM periods
+(11.3 ms), and core 1 reduces the newest block once per control step. The gate
+is recovered from the shunt waveform itself (0.5 A on, 0.25 A off, an edge
+counts once its level holds for three frames): the block always holds one
+complete rise-to-rise period whatever its phase, and 60 us around both ON
+edges are excluded. `VP37 IPULSE` reports the guarded ON mean (winsorized at P95),
+P95, unfiltered peak, timing, zero calibration, clipping, validity, the
+per-phase supply mean, blocks reduced and blocks missed. These are source-shunt
+ON measurements; the freewheel path bypasses the shunt. Core 0 only prints the
+report. While the scan runs, on-demand reads of the three pins return the newest
+scanned sample, so the sensor readers are unchanged apart from a 60 us settle
+after a multiplexer change. Bench commands `Q0` and `Q1` disable and enable
+publishing of the observation; the report continues either way. At 1 kHz and
+above the conversion period drops to 2 us per pin; the 60 us edge guards and
+minimum of eight guarded samples still apply, and a short ON phase can still
+yield too few samples, which leaves the result invalid.
 
 Supply-voltage compensation uses the fast local ECU ADC. The first valid pair
 after startup or a local conversion failure scales it against the Adjustometer;
 other scale updates occur only when zero demand reaches MIN, the condition used
 for drive release. The Adjustometer is also the fallback if the local conversion
 fails; invalid voltage from both sources selects 15 V so the fallback cannot
-increase drive. A 0.5 V
-sample-and-hold hysteresis suppresses
-steady load-correlated ripple. Once that band is exceeded, the direct
-`12 / Vc` correction follows the local input in the current control step.
-Bench `V1` selects supply voltage averaged over a complete PWM period by the
-current acquisition task. ON and OFF means are weighted by their durations.
-An invalid result, age of 100 ms, disabled acquisition or released drive uses
-the ordinary local ADC path. `V0` selects that path explicitly and is the default.
+increase drive. A local reading above the calibrated 17 V range is not a
+fault: the divider saturates near 18.8 V, so such a reading is a lower bound
+of the rail and keeps scaling the command down without training the scale
+(`vhi` in the trace). The command follows the rail through one short filter
+(`VP37_VOLTAGE_FILTER_S`, 50 ms) and nothing else: no dead band and no tracking
+window. The primary input is the supply averaged over a complete PWM period by
+the current acquisition task, with ON and OFF means weighted by their durations.
+An invalid result, age of 100 ms, disabled acquisition or released drive falls
+back to the plain local ADC conversion. Bench `V0` selects the local path
+directly; `V1` is the default. A supply change never freezes integration: it is
+scaled out of the command before the command reaches the actuator.
 
 The control loop uses an explicit period and elapsed seconds. Diagnostic
 snapshots contain individual P/I/D terms and the effective correction limits;
@@ -58,14 +68,13 @@ the shared [I2C register map](../common/adjustometer_protocol.h).
 The default gains are P=0.05, I=0.20 and D=0 with a 5 ms control period.
 Integral hold requires 100 ms
 continuously inside 20 Hz; a brief crossing does not freeze I. It releases after
-500 ms continuously outside 40 Hz. Active voltage tracking freezes integration.
+500 ms continuously outside 40 Hz.
 Bench `E<0..1000>` selects the hold confirmation in milliseconds; `E0` allows
 comparison with immediate entry. `R` restores the default PID and confirmation.
 
 Trace output records the clamped Adjustometer-derived voltage as `V`, the local
-ADC conversion as `Vl`, the selected input before hysteresis as `Ve`, and the
-voltage actually used as `Vc`. `vcor` is the applied multiplier, `vt` marks
-active voltage tracking, `ih` marks settled-target integral hold, and `vp`
+ADC conversion as `Vl`, the selected input before the filter as `Ve`, and the
+voltage actually used as `Vc`. `vcor` is the applied multiplier, `ih` marks settled-target integral hold, and `vp`
 marks use of the complete-period supply mean. `VP37 CFG` includes `pwm_hz`.
 
 Bench builds can override `VP37_PWM_FREQUENCY_HZ` and the four

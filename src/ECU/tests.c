@@ -249,14 +249,18 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
         "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
         "W<thermal weight 0..1> Q<current observation 0|1> V<cycle voltage "
-        "0|1> E<hold confirmation ms> S<timed hold 0..100> C(cyclic) "
-        "X(stop) ?(help)\033[0m");
+        "0|1|2=freeze> M<measured drive compensation 0|1> K<map trim 0|1> "
+        "N<integral deadband top Hz> "
+        "E<hold confirmation ms> "
+        "S<timed hold 0..100> C(cyclic) X(stop) ?(help)\033[0m");
 #else
     deb("\033[33mSerial Session payloads: P<val> I<val> D<val> T<ms> "
         "F<seconds> R(reset) B(trace) L<PWM cap;0=auto> "
         "W<thermal weight 0..1> Q<current observation 0|1> V<cycle voltage "
-        "0|1> E<hold confirmation ms> S<persistent demand 0..100> "
-        "X(stop) ?(help)\033[0m");
+        "0|1|2=freeze> M<measured drive compensation 0|1> K<map trim 0|1> "
+        "N<integral deadband top Hz> "
+        "E<hold confirmation ms> "
+        "S<persistent demand 0..100> X(stop) ?(help)\033[0m");
 #endif
     return;
   }
@@ -293,9 +297,41 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
   }
 
   if (((cmd[0] == 'V') || (cmd[0] == 'v')) &&
+      ((cmd[1] == '0') || (cmd[1] == '1') || (cmd[1] == '2')) &&
+      (cmd[2] == '\0')) {
+    // V2 freezes the scale where it is: the supply loop stays open so a
+    // supply-side oscillation can be told from one closed through the ECU.
+    self->voltageFrozen = cmd[1] == '2';
+    if (!self->voltageFrozen) {
+      self->cycleVoltageEnabled = cmd[1] == '1';
+    }
+    deb("VP37 cycle voltage: %u frozen:%u", self->cycleVoltageEnabled ? 1U : 0U,
+        self->voltageFrozen ? 1U : 0U);
+    return;
+  }
+
+  if (((cmd[0] == 'K') || (cmd[0] == 'k')) &&
       ((cmd[1] == '0') || (cmd[1] == '1')) && (cmd[2] == '\0')) {
-    self->cycleVoltageEnabled = cmd[1] == '1';
-    deb("VP37 cycle voltage: %u", self->cycleVoltageEnabled ? 1U : 0U);
+    self->mapTrimEnabled = cmd[1] == '1';
+    for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
+      self->mapTrim[i] = 0.0f;
+    }
+    self->mapTrimTransfers = 0U;
+    deb("VP37 map trim: %u", self->mapTrimEnabled ? 1U : 0U);
+    return;
+  }
+
+  if (((cmd[0] == 'M') || (cmd[0] == 'm')) &&
+      ((cmd[1] == '0') || (cmd[1] == '1')) && (cmd[2] == '\0')) {
+    self->driveCompensationEnabled = cmd[1] == '1';
+    if (!self->driveCompensationEnabled) {
+      self->driveSamples = 0U;
+      self->driveResistanceReady = false;
+      self->driveCompensationUsed = false;
+      self->driveCorrection = 1.0f;
+    }
+    deb("VP37 drive compensation: %u",
+        self->driveCompensationEnabled ? 1U : 0U);
     return;
   }
 
@@ -306,6 +342,11 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
     self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
     self->temperatureCompensationWeight = 1.0f;
     self->integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
+    self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+    for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
+      self->mapTrim[i] = 0.0f;
+    }
+    self->mapTrimTransfers = 0U;
     hal_pid_controller_set_tf(self->adjustController, self->pidTf);
     deb("\033[33mPID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
         "TF=%.4f\033[0m",
@@ -320,7 +361,7 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
        prefix == 'D' || prefix == 'd' || prefix == 'T' || prefix == 't' ||
        prefix == 'F' || prefix == 'f' || prefix == 'L' || prefix == 'l' ||
        prefix == 'S' || prefix == 's' || prefix == 'W' || prefix == 'w' ||
-       prefix == 'E' || prefix == 'e') &&
+       prefix == 'E' || prefix == 'e' || prefix == 'N' || prefix == 'n') &&
       cmd[1] != '\0') {
 
     char *end = NULL;
@@ -335,12 +376,19 @@ static void VP37_processSerialCommand(VP37Pump *self, const char *cmd) {
          ((val > 1000.0f) || (val != floorf(val)))) ||
         (((prefix == 'W') || (prefix == 'w')) && (val > 1.0f)) ||
         (((prefix == 'L') || (prefix == 'l')) &&
-         (val > VP37_BENCH_INTEGRAL_LIMIT_MAX))) {
+         (val > VP37_BENCH_INTEGRAL_LIMIT_MAX)) ||
+        (((prefix == 'N') || (prefix == 'n')) &&
+         (val > VP37_PID_DEADBAND_TOP_MAX_HZ))) {
       derr("Invalid PID setting: '%s'", cmd);
       return;
     }
 
     switch (prefix) {
+    case 'N':
+    case 'n':
+      self->integralDeadbandTopHz = val;
+      deb("VP37 integral deadband top: %.0f Hz", val);
+      break;
     case 'E':
     case 'e':
       self->integralHoldConfirmMs = (uint32_t)val;

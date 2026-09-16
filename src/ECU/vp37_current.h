@@ -11,8 +11,33 @@ extern "C" {
 #define VP37_CURRENT_ADC_MAX_RAW 4095U
 /** Maximum ON samples in one measured PWM period. */
 #define VP37_CURRENT_PULSE_SAMPLES 256U
-/** Interval between passive observations on core 0, in milliseconds. */
-#define VP37_CURRENT_OBSERVATION_MS 20U
+/** Interval between `VP37 IPULSE` reports on core 0, in milliseconds. */
+#define VP37_CURRENT_REPORT_MS 20U
+
+/* The shunt, the sensor multiplexer and the supply divider share one
+   hardware-paced scan; every sample then has a known position in time. */
+#define VP37_CURRENT_SCAN_PINS 3U
+#if VP37_PWM_FREQUENCY_HZ >= 1000
+#define VP37_CURRENT_SCAN_CONVERSION_NS 2000U
+#else
+#define VP37_CURRENT_SCAN_CONVERSION_NS 8000U
+#endif
+/** Nominal time between two samples of one pin. */
+#define VP37_CURRENT_SCAN_FRAME_NS                                             \
+  (VP37_CURRENT_SCAN_CONVERSION_NS * VP37_CURRENT_SCAN_PINS)
+/** A block of 2.25 PWM periods always holds one complete rise-to-rise period,
+    whatever its phase; two periods exactly left the second edge on the block
+    boundary about 1% of the time. */
+#define VP37_CURRENT_SCAN_BLOCK_FRAMES                                         \
+  (((9U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) / 4U) +              \
+    VP37_CURRENT_SCAN_FRAME_NS - 1U) /                                         \
+   VP37_CURRENT_SCAN_FRAME_NS)
+/** Gate detection from the source-shunt waveform, with hysteresis. An edge
+    counts once the new level holds for this many consecutive frames; single
+    frame excursions in the OFF phase are not a gate. */
+#define VP37_CURRENT_GATE_ON_AMPS 0.5f
+#define VP37_CURRENT_GATE_OFF_AMPS 0.25f
+#define VP37_CURRENT_GATE_CONFIRM_FRAMES 3U
 
 /** One raw sample of a PWM-phase-aligned capture. */
 typedef struct {
@@ -27,19 +52,36 @@ typedef struct {
   uint32_t samples;        /**< ON-phase samples acquired. */
   uint32_t guardedSamples; /**< Samples left after both edge guards. */
   uint32_t clippedSamples;
+  uint32_t glitches; /**< Level excursions shorter than the edge confirmation
+                        anywhere in the block; not gates, but counted. */
   uint32_t cycleStartUs;
   uint32_t periodUs;
   uint32_t onTimeUs;
   int32_t pwmCommand; /**< Duty reconstructed from measured gate timing. */
   uint16_t zeroRaw;
   bool zeroValid;
-  float meanAmps; /**< P95-winsorized mean inside the guarded ON phase. */
-  float p95Amps;  /**< Guarded ON-phase 95th percentile. */
-  float peakAmps; /**< Unfiltered ON-phase maximum for diagnostics only. */
-  bool waveformValid;
+  float meanAmps;     /**< P95-winsorized mean inside the guarded ON phase. */
+  float p95Amps;      /**< Guarded ON-phase 95th percentile. */
+  float peakAmps;     /**< Unfiltered ON-phase maximum for diagnostics only. */
+  bool waveformValid; /**< False keeps meanAmps, p95Amps and peakAmps unusable;
+                         a rejected capture reports zero, not zero amperes. */
   float supplyVolts; /**< Local supply averaged over the complete PWM period. */
-  bool supplyValid;  /**< Independent of current amplitude and clipping. */
+  uint32_t
+      supplySamples; /**< Accepted supply conversions across both phases. */
+  bool supplyValid;  /**< Own sample budget and timing rule; a rejected current
+                        waveform does not invalidate the supply mean. */
 } VP37CurrentPulseResult;
+
+/** One completed scan block as seen by the reducer. */
+typedef struct {
+  const uint16_t *samples; /**< Interleaved frames, one sample per pin. */
+  uint32_t frames;
+  uint8_t pinCount;
+  uint8_t shuntPosition;  /**< Position of the shunt inside a frame. */
+  uint8_t supplyPosition; /**< Position of the supply divider inside a frame. */
+  uint32_t frameNs;       /**< Time between two samples of one pin. */
+  uint32_t startUs;       /**< hal_micros() of the first frame; may wrap. */
+} VP37CurrentScanBlock;
 
 /**
  * @brief Calibrate the source-shunt ADC zero with PWM disabled.
@@ -49,14 +91,46 @@ typedef struct {
 void VP37_currentSenseInit(void);
 
 /**
- * @brief Observe one complete PWM period, including ON-edge guards.
- * @param out Non-NULL caller-owned result; cleared even on acquisition failure.
- * @return HAL_OK, HAL_EINVAL (NULL), HAL_ESTATE (invalid zero), HAL_ETIMEOUT
- * (missing edges), HAL_EOVERFLOW (full buffer), or HAL_EAGAIN (few samples).
- * @note Single owner, core 0. Waits at most 30 ms for an edge and 15 ms for
- * a complete period. Never changes PWM or position-controller state.
+ * @brief Start the hardware-paced scan of the shunt, sensor mux and supply.
+ * @return HAL_OK, or the scan start status (HAL_EBUSY, HAL_ENOMEM, ...).
+ * @note Single owner, core 1: the completion interrupt and the reducer share
+ * that core. While the scan runs, on-demand reads of the three pins return
+ * the newest scanned sample, so the sensor readers need no change.
  */
-hal_status_t VP37_currentSensePulseCapture(VP37CurrentPulseResult *out);
+hal_status_t VP37_currentScanStart(void);
+
+/** @brief Stop the scan; idempotent. */
+hal_status_t VP37_currentScanStop(void);
+
+/** @brief Frame period reported by the scan, 0 while it is not running. */
+uint32_t VP37_currentScanFrameNs(void);
+
+/**
+ * @brief Reduce one scan block to the newest complete PWM period inside it.
+ * @param block Non-NULL block view with valid positions and frame period.
+ * @param out Non-NULL result, cleared first; zero state always filled.
+ * @return HAL_OK, HAL_EINVAL (bad view), HAL_ESTATE (invalid zero),
+ * HAL_EAGAIN (no complete rise-to-rise period or too few guarded samples),
+ * or HAL_EOVERFLOW (ON phase longer than the sample budget).
+ * @note The gate is recovered from the shunt waveform itself: the freewheel
+ * path bypasses the source shunt, so the ON phase is the only non-zero span.
+ * supplyVolts and supplyValid describe the same period and are filled on
+ * every return that found a period; read waveformValid before any amperes.
+ */
+hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
+                                    VP37CurrentPulseResult *out);
+
+/**
+ * @brief Take the newest completed scan block and reduce it.
+ * @param out Non-NULL result; untouched when no block was available.
+ * @param sequence Non-NULL; block sequence when one was taken, else 0.
+ * @return The take status (HAL_EAGAIN, HAL_ESTATE) when no block was taken,
+ * otherwise the reduce status.
+ * @note Core 1 only; a block is held for one block period, so call at least
+ * once per block period to see every block.
+ */
+hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
+                                     uint32_t *sequence);
 
 /**
  * @brief Reduce zero-corrected ON samples from one measured PWM period.
@@ -82,6 +156,13 @@ hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
  * @return Current in amperes using the configured source-shunt resistance.
  */
 float VP37_currentRawToAmps(uint16_t raw);
+
+/**
+ * @brief Convert source-shunt amperes to a zero-corrected 12-bit ADC code.
+ * @param amps Current in amperes, clamped to the 12-bit range.
+ * @return ADC code, 0..4095, rounded to nearest.
+ */
+uint16_t VP37_currentAmpsToRaw(float amps);
 
 #ifdef __cplusplus
 }

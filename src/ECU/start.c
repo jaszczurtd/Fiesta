@@ -43,6 +43,7 @@ typedef struct {
   bool core1InitErrorReported;
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
+  uint32_t vp37CurrentLastSequence;
 } start_runtime_state_t;
 
 typedef struct {
@@ -388,42 +389,26 @@ void callAtEverySecond(void) {
 }
 
 #ifdef VP37
-/** Observe outside the pump mutex; the copied state precedes acquisition. */
-static void start_observeVP37Current(void) {
+/**
+ * @brief Report the newest reduced scan block from a pump snapshot.
+ * @return None. Reduction and publishing run on core 1 inside the control
+ * step; this only prints, at most every VP37_CURRENT_REPORT_MS.
+ */
+static void start_reportVP37Current(void) {
   if (!hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37CurrentLastMs,
-                                       VP37_CURRENT_OBSERVATION_MS)) {
+                                       VP37_CURRENT_REPORT_MS)) {
     return;
   }
   m_mutex_enter_blocking(vp37StateMutex);
   const VP37Pump snapshot = s_ctx.injectionPump;
   m_mutex_exit(vp37StateMutex);
-  if (!snapshot.vp37Initialized || !snapshot.currentObservationEnabled ||
-      snapshot.quantityAtRest || (snapshot.finalPWM <= 0)) {
+  if (!snapshot.vp37Initialized ||
+      (snapshot.cycleResultSequence ==
+       s_startRuntimeState.vp37CurrentLastSequence)) {
     return;
   }
-  VP37CurrentPulseResult result;
-  const hal_status_t status = VP37_currentSensePulseCapture(&result);
-  m_mutex_enter_blocking(vp37StateMutex);
-  s_ctx.injectionPump.cycleSupplyVolts = result.supplyVolts;
-  s_ctx.injectionPump.cycleSupplyUs = result.cycleStartUs + result.periodUs;
-  s_ctx.injectionPump.cycleSupplyValid = result.supplyValid;
-  m_mutex_exit(vp37StateMutex);
-  deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
-      "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
-      "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
-      "Vavg:%.4f Vok:%u",
-      (unsigned long)result.cycleStartUs,
-      (unsigned long)snapshot.controlSequence,
-      (unsigned long)snapshot.controlLastUs, (long)snapshot.finalPWM,
-      (long)snapshot.currentAdjustometerPosition,
-      (long)snapshot.desiredAdjustometer, snapshot.compensationVolts,
-      snapshot.lastFuelTemp, result.meanAmps, result.p95Amps, result.peakAmps,
-      (unsigned long)result.periodUs, (unsigned long)result.onTimeUs,
-      (long)result.pwmCommand, (unsigned long)result.samples,
-      (unsigned long)result.guardedSamples,
-      (unsigned long)result.clippedSamples, (unsigned)result.zeroRaw,
-      result.zeroValid ? 1U : 0U, result.waveformValid ? 1U : 0U, (int)status,
-      result.supplyVolts, result.supplyValid ? 1U : 0U);
+  s_startRuntimeState.vp37CurrentLastSequence = snapshot.cycleResultSequence;
+  VP37_showCurrentPulse(&snapshot);
 }
 #endif
 
@@ -467,7 +452,7 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 9;
 
 #ifdef VP37
-  start_observeVP37Current();
+  start_reportVP37Current();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);
@@ -515,6 +500,14 @@ static void initializeCore1(void) {
     return;
   }
   createEngineOperation();
+#ifdef VP37
+  // The scan and its completion interrupt belong to this core.
+  const hal_status_t scanStatus = VP37_currentScanStart();
+  if (scanStatus != HAL_OK) {
+    derr("VP37 current scan start failed: %s",
+         hal_status_to_string(scanStatus));
+  }
+#endif
 
   setStartedCore1();
 

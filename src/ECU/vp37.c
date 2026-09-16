@@ -5,6 +5,10 @@
 #include <utils/multicoreWatchdog.h>
 
 #define VP37_LOCAL_VOLTAGE_VALID_MIN_V 5.0f
+// Upper end of the calibrated range. A reading above it still scales the
+// command: the divider saturates near 18.8 V, so a saturated reading is a
+// lower bound of the rail and can only reduce drive. It never trains the
+// scale. The 15 V dual-fault value is for a missing reading, not a high one.
 #define VP37_LOCAL_VOLTAGE_VALID_MAX_V 17.0f
 #define VP37_LOCAL_VOLTAGE_SCALE_MIN 0.8f
 #define VP37_LOCAL_VOLTAGE_SCALE_MAX 1.2f
@@ -48,8 +52,9 @@ static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
       .compensationInputVolts = self->compensationInputVolts,
       .compensationVolts = self->compensationVolts,
       .voltageCorrection = self->voltageCorrection,
-      .voltageTracking = self->voltageTracking,
       .cycleVoltageUsed = self->cycleVoltageUsed,
+      .voltageOverRange = self->voltageOverRange,
+      .mapTrim = self->mapTrimApplied,
       .integralHold = self->integralHold,
       .fuelTemp = self->lastFuelTemp,
       .temperatureCorrection = self->temperatureCorrection,
@@ -172,6 +177,72 @@ static void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
   }
 }
 
+/**
+ * @brief Track the drive-path resistance the shunt capture actually sees.
+ * @param self VP37 controller instance to update.
+ * @param dt Control period in seconds.
+ * @return None.
+ * @note Coil self-heating moves the required command by several percent while
+ * the fuel temperature barely changes, so the measured ratio replaces the
+ * fuel-temperature model. A rejected or stale capture keeps the last value and
+ * never contributes zero ohms.
+ */
+static void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
+  // A ready estimate keeps scaling the command until it goes stale; motion
+  // rejects most captures, and flipping back to the model on every rejected
+  // cycle stepped the command by the whole thermal difference.
+  self->driveCompensationUsed =
+      self->driveCompensationEnabled && self->driveResistanceReady &&
+      !hal_millis_deadline_expired(self->driveUpdatedMs, VP37_DRIVE_STALE_MS);
+  if (!self->driveCompensationEnabled || !self->cycleCurrentValid ||
+      !isfinite(self->cycleCurrentAmps) || !isfinite(self->cycleCurrentVolts)) {
+    return;
+  }
+  if (hal_elapsed_u32(hal_micros(), self->cycleCurrentUs,
+                      VP37_DRIVE_MAX_AGE_US)) {
+    return;
+  }
+  const int32_t drive = self->cycleCurrentDrive;
+  if ((drive < VP37_DRIVE_MIN_PWM) || (drive > VP37_PWM_MAX) ||
+      (self->cycleCurrentAmps < VP37_DRIVE_MIN_CURRENT_A) ||
+      (self->cycleCurrentVolts < VP37_LOCAL_VOLTAGE_VALID_MIN_V) ||
+      (self->cycleCurrentVolts > VP37_LOCAL_VOLTAGE_VALID_MAX_V)) {
+    return;
+  }
+  // Reject a capture that belongs to a different command than the live one.
+  const int32_t commandDelta = drive - self->finalPWM;
+  const int32_t gateDelta = self->cycleCurrentPwm - drive;
+  if ((commandDelta > VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
+      (commandDelta < -VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
+      (gateDelta > VP37_DRIVE_PWM_MATCH_COUNTS) ||
+      (gateDelta < -VP37_DRIVE_PWM_MATCH_COUNTS)) {
+    return;
+  }
+
+  const float duty = (float)drive / (float)PWM_RESOLUTION;
+  const float resistance =
+      (duty * self->cycleCurrentVolts) / self->cycleCurrentAmps;
+  if (!isfinite(resistance) || (resistance <= 0.0f)) {
+    return;
+  }
+  if (self->driveSamples == 0U) {
+    self->driveResistance = resistance;
+  } else {
+    self->driveResistance +=
+        (resistance - self->driveResistance) * dt / (VP37_DRIVE_FILTER_S + dt);
+  }
+  if (self->driveSamples < VP37_DRIVE_READY_SAMPLES) {
+    self->driveSamples++;
+  }
+  self->driveUpdatedMs = hal_millis();
+  self->driveResistanceReady = self->driveSamples >= VP37_DRIVE_READY_SAMPLES;
+  self->driveCorrection =
+      hal_constrain(self->driveResistance / VP37_DRIVE_REFERENCE_OHMS,
+                    VP37_TEMPERATURE_FACTOR_MIN, VP37_TEMPERATURE_FACTOR_MAX);
+  self->driveCompensationUsed =
+      self->driveCompensationEnabled && self->driveResistanceReady;
+}
+
 VP37InitStatus VP37_init(VP37Pump *self) {
   if (self->vp37Initialized) {
     return VP37_INIT_ALREADY_INITIALIZED;
@@ -205,16 +276,14 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->compensationInputVolts = NOMINAL_VOLTAGE;
   self->compensationVolts = NOMINAL_VOLTAGE;
   self->voltageReady = false;
-  self->voltageTracking = false;
-  self->voltageTrackingStartedMs = 0U;
-  self->voltageTrackingAnchorVolts = NOMINAL_VOLTAGE;
-  self->voltageTrackingAverageVolts = NOMINAL_VOLTAGE;
+  self->voltageFrozen = false;
   self->lastPWMval = -1;
   self->finalPWM = VP37_PWM_MIN;
   self->localVolts = 0.0f;
   self->previousLocalVolts = 0.0f;
   self->localVoltageScale = 1.0f;
   self->localVoltageReady = false;
+  self->voltageOverRange = false;
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   self->pidTf = VP37_PID_TF;
   self->throttleRampLastMs = hal_millis();
@@ -237,10 +306,40 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->temperatureCorrection = 1.0f;
   self->temperatureCompensationWeight = 1.0f;
   self->currentObservationEnabled = true;
-  self->cycleVoltageEnabled = false;
+  self->cycleVoltageEnabled = true;
   self->cycleVoltageUsed = false;
   self->cycleSupplyValid = false;
   self->temperatureReady = false;
+  self->cycleCurrentValid = false;
+  self->cycleCurrentAmps = 0.0f;
+  self->cycleCurrentVolts = 0.0f;
+  self->cycleCurrentPwm = 0;
+  self->cycleCurrentDrive = 0;
+  self->cycleCurrentUs = 0U;
+  (void)memset(&self->cycleResult, 0, sizeof(self->cycleResult));
+  self->cycleResultStatus = HAL_NONE;
+  self->cycleResultSequence = 0U;
+  self->scanLastSequence = 0U;
+  self->scanBlocks = 0U;
+  self->scanGaps = 0U;
+  self->scanFrameNs = 0U;
+  self->scanRunning = false;
+  self->driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  self->driveCorrection = 1.0f;
+  self->driveSamples = 0U;
+  self->driveUpdatedMs = 0U;
+  self->driveResistanceReady = false;
+  self->driveCompensationEnabled = true;
+  self->driveCompensationUsed = false;
+  self->integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  self->integralDeadbandHz = (float)VP37_PID_DEADBAND;
+  for (uint32_t i = 0U; i < COUNTOF(self->mapTrim); i++) {
+    self->mapTrim[i] = 0.0f;
+  }
+  self->mapTrimApplied = 0.0f;
+  self->mapTrimEnabled = false;
+  self->integralHoldEntered = false;
+  self->mapTrimTransfers = 0U;
 #if defined(START_TEST_ENABLE_VP37_TUNING) ||                                  \
     defined(START_TEST_ENABLE_VP37_POTENTIOMETER)
   self->pidIntegralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
@@ -486,22 +585,27 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
       !quantityAtRest && self->cycleSupplyValid &&
       isfinite(self->cycleSupplyVolts) &&
       (self->cycleSupplyVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
-      (self->cycleSupplyVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V) &&
       !hal_elapsed_u32(hal_micros(), self->cycleSupplyUs,
                        VP37_CYCLE_VOLTAGE_MAX_AGE_US);
   const float localVolts =
       self->cycleVoltageUsed ? self->cycleSupplyVolts : self->localVolts;
-  const bool localValid = isfinite(localVolts) &&
-                          (localVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
-                          (localVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V);
+  const bool localMeasured =
+      isfinite(localVolts) && (localVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V);
+  const bool localValid =
+      localMeasured && (localVolts <= VP37_LOCAL_VOLTAGE_VALID_MAX_V);
+  self->voltageOverRange = localMeasured && !localValid;
   const bool adjustometerVoltageValid =
       (self->lastAdjustometerStatus & ADJ_STATUS_VOLTAGE_BAD) == 0U;
   float resultVolts;
 
-  if (!localValid) {
+  if (!localMeasured) {
     self->localVoltageReady = false;
     resultVolts = adjustometerVoltageValid ? self->lastVolts
                                            : VP37_MAX_EXPECTED_SUPPLY_VOLTAGE;
+  } else if (self->voltageOverRange) {
+    // Above the calibrated range: scale with the last learned factor and
+    // leave the scale alone; the Adjustometer flags its own reading bad here.
+    resultVolts = localVolts * self->localVoltageScale;
   } else {
     const float scaleTarget = hal_constrain(self->lastVolts / localVolts,
                                             VP37_LOCAL_VOLTAGE_SCALE_MIN,
@@ -532,48 +636,98 @@ static void VP37_updateVoltageCorrection(VP37Pump *self, float dt) {
     measuredVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
   self->compensationInputVolts = measuredVolts;
-
   if (!self->voltageReady) {
     self->compensationVolts = measuredVolts;
     self->voltageReady = true;
-    self->voltageTracking = false;
-    self->voltageTrackingAnchorVolts = measuredVolts;
-    self->voltageTrackingAverageVolts = measuredVolts;
+  } else if (self->voltageFrozen) {
+    // Diagnostic: keep the scale where it is so the supply loop stays open.
+  } else if (self->cycleVoltageUsed) {
+    // The full-period mean is already free of the intra-period alias, so the
+    // scale takes it as is: a manual 15-20 V/s sweep left 0.75-1.3 V behind
+    // the 50 ms filter, and cranking edges are faster still.
+    self->compensationVolts = measuredVolts;
   } else {
-    const uint32_t nowMs = hal_millis();
-    const float heldDelta = fabsf(measuredVolts - self->compensationVolts);
-    if ((!self->voltageTracking) && (heldDelta > VP37_VOLTAGE_HYSTERESIS_V)) {
-      self->voltageTracking = true;
-      self->voltageTrackingStartedMs = nowMs;
-      self->voltageTrackingAnchorVolts = measuredVolts;
-      self->voltageTrackingAverageVolts = measuredVolts;
-      self->compensationVolts = measuredVolts;
-    }
-
-    if (self->voltageTracking &&
-        (fabsf(measuredVolts - self->voltageTrackingAnchorVolts) >
-         VP37_VOLTAGE_HYSTERESIS_V)) {
-      self->voltageTrackingStartedMs = nowMs;
-      self->voltageTrackingAnchorVolts = measuredVolts;
-    }
-    if (self->voltageTracking) {
-      const float averageDelta =
-          measuredVolts - self->voltageTrackingAverageVolts;
-      self->voltageTrackingAverageVolts +=
-          averageDelta * dt / (VP37_VOLTAGE_TRACKING_CENTER_FILTER_S + dt);
-      // The fast local ADC directly cancels rail movement. Keep a separate
-      // average only to center the held value when the rail settles.
-      self->compensationVolts = measuredVolts;
-    }
-    if (self->voltageTracking &&
-        hal_millis_deadline_expired(self->voltageTrackingStartedMs,
-                                    VP37_VOLTAGE_TRACKING_HOLD_MS)) {
-      self->compensationVolts = self->voltageTrackingAverageVolts;
-      self->voltageTracking = false;
-    }
+    // The local fallback is a 40 us snapshot; only that path needs smoothing.
+    self->compensationVolts += (measuredVolts - self->compensationVolts) * dt /
+                               (VP37_VOLTAGE_FILTER_S + dt);
   }
-
   self->voltageCorrection = NOMINAL_VOLTAGE / self->compensationVolts;
+}
+
+/**
+ * @brief Locate the two learned-trim knots around a stroke percentage.
+ * @param percent Stroke position, clamped to 0..100.
+ * @param lower Non-NULL; receives the lower knot index.
+ * @param weight Non-NULL; receives the upper knot's share, 0..1.
+ * @return None. The last knot pairs with itself.
+ */
+static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight) {
+  const float step = 100.0f / (float)(VP37_MAP_TRIM_KNOTS - 1U);
+  const float scaled = hal_constrain(percent, 0.0f, 100.0f) / step;
+  uint32_t index = (uint32_t)scaled;
+  if (index >= (VP37_MAP_TRIM_KNOTS - 1U)) {
+    index = VP37_MAP_TRIM_KNOTS - 1U;
+    *weight = 0.0f;
+  } else {
+    *weight = scaled - (float)index;
+  }
+  *lower = index;
+}
+
+/** @brief Learned holding-map residual, interpolated between knots. */
+static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
+  if (!self->mapTrimEnabled) {
+    return 0.0f;
+  }
+  uint32_t lower = 0U;
+  float weight = 0.0f;
+  VP37_mapTrimKnots(percent, &lower, &weight);
+  const uint32_t upper =
+      (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
+  return (self->mapTrim[lower] * (1.0f - weight)) +
+         (self->mapTrim[upper] * weight);
+}
+
+/**
+ * @brief Move the settled integral into the learned map trim.
+ * @param self VP37 controller instance to update.
+ * @return None.
+ * @note Runs once when the settled-position hold engages. The trim takes the
+ * whole integral and the controller restarts from zero, so this step's output
+ * and the next step's feedforward add up to the same command: no bump. A trim
+ * that would leave the bound keeps the integral where it is.
+ */
+static void VP37_transferIntegralToMapTrim(VP37Pump *self) {
+  if (!self->mapTrimEnabled || !self->integralHoldEntered) {
+    return;
+  }
+  self->integralHoldEntered = false;
+  const float percent = hal_constrain(
+      hal_math_map_f32(self->desiredPosition, (float)self->VP37_ADJUST_MIN,
+                       (float)self->VP37_ADJUST_MAX, 0.0f, 100.0f),
+      0.0f, 100.0f);
+  uint32_t lower = 0U;
+  float weight = 0.0f;
+  VP37_mapTrimKnots(percent, &lower, &weight);
+  const uint32_t upper =
+      (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
+  const float integral = self->pidTerms.integral;
+  // Both knots take the whole integral: the interpolated value then rises by
+  // exactly that amount at this position, and neighbouring holds average
+  // out the friction share of what each of them learned.
+  const float lowerCandidate = self->mapTrim[lower] + integral;
+  const float upperCandidate = self->mapTrim[upper] + integral;
+  if (!isfinite(lowerCandidate) || !isfinite(upperCandidate) ||
+      (fabsf(lowerCandidate) > VP37_MAP_TRIM_LIMIT_PWM) ||
+      (fabsf(upperCandidate) > VP37_MAP_TRIM_LIMIT_PWM) ||
+      (fabsf(integral) < 0.5f)) {
+    return;
+  }
+  self->mapTrim[lower] = lowerCandidate;
+  self->mapTrim[upper] = upperCandidate;
+  hal_pid_controller_reset(self->adjustController);
+  self->pidTerms.integral = 0.0f;
+  self->mapTrimTransfers++;
 }
 
 static float VP37_feedForward(VP37Pump *self, int32_t position) {
@@ -603,28 +757,58 @@ static float VP37_feedForward(VP37Pump *self, int32_t position) {
           self->feedForwardRiseBlend *
           hal_math_map_f32(percent, points[i - 1U].percent, points[i].percent,
                            points[i - 1U].motion, points[i].motion);
-      return (holding * VP37_PWM_FF_HARDWARE_GAIN) + self->feedForwardMotion;
+      self->mapTrimApplied = VP37_mapTrimAt(self, percent);
+      return (holding * VP37_PWM_FF_HARDWARE_GAIN) + self->mapTrimApplied +
+             self->feedForwardMotion;
     }
   }
   self->feedForwardMotion = 0.0f;
-  return VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN;
+  self->mapTrimApplied = VP37_mapTrimAt(self, 100.0f);
+  return (VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN) +
+         self->mapTrimApplied;
+}
+
+/**
+ * @brief Pick the integration dead zone for the demanded position.
+ * @param self VP37 controller instance to inspect.
+ * @return Dead zone in hertz, never below the base value.
+ * @note The upper stroke settles hundreds of hertz apart for the same command,
+ * so integrating small errors there only winds force against the mechanism.
+ * Below the taper start the loop keeps its full accuracy.
+ */
+static float VP37_integralDeadband(const VP37Pump *self) {
+  const float base = (float)VP37_PID_DEADBAND;
+  if (self->integralDeadbandTopHz <= base) {
+    return base;
+  }
+  const float trimStart = hal_math_map_f32(VP37_PID_TRIM_TAPER_PERCENT, 0.0f,
+                                           100.0f, (float)self->VP37_ADJUST_MIN,
+                                           (float)self->VP37_ADJUST_MAX);
+  if (self->desiredPosition <= trimStart) {
+    return base;
+  }
+  return hal_constrain(hal_math_map_f32(self->desiredPosition, trimStart,
+                                        (float)self->VP37_ADJUST_MAX, base,
+                                        self->integralDeadbandTopHz),
+                       base, self->integralDeadbandTopHz);
 }
 
 /** @brief Update the settled-target hysteresis that freezes integration. */
 static void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
   const float absoluteError = fabsf((float)self->pidErr);
+  // Fixed bands on purpose: widening them with the dead zone froze the
+  // integral up to twice the dead zone from the target and left standing
+  // errors of 120 Hz on the upper stroke. There the dead zone alone bounds
+  // the error; the hold matters where the band is narrower than the zone.
+  const float enterHz = (float)VP37_INTEGRAL_HOLD_ENTER_HZ;
+  const float exitHz = (float)VP37_INTEGRAL_HOLD_EXIT_HZ;
+  self->integralHoldEntered = false;
   if (!targetSettled) {
     self->integralHold = false;
     self->integralHoldEnterPending = false;
     self->integralHoldReleasePending = false;
-  } else if (self->voltageTracking) {
-    // Voltage feed-forward keeps acting while the rail moves. Preserve an
-    // established integral trim so feedback does not learn a transient
-    // mechanical lag.
-    self->integralHoldReleasePending = false;
-    self->integralHoldEnterPending = false;
   } else if (!self->integralHold) {
-    if (absoluteError > (float)VP37_INTEGRAL_HOLD_ENTER_HZ) {
+    if (absoluteError > enterHz) {
       self->integralHoldEnterPending = false;
     } else {
       if (!self->integralHoldEnterPending) {
@@ -634,11 +818,12 @@ static void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
       if (hal_millis_deadline_expired(self->integralHoldEnterStartedMs,
                                       self->integralHoldConfirmMs)) {
         self->integralHold = true;
+        self->integralHoldEntered = true;
         self->integralHoldEnterPending = false;
         self->integralHoldReleasePending = false;
       }
     }
-  } else if (absoluteError <= (float)VP37_INTEGRAL_HOLD_EXIT_HZ) {
+  } else if (absoluteError <= exitHz) {
     self->integralHoldReleasePending = false;
   } else if (!self->integralHoldReleasePending) {
     self->integralHoldReleasePending = true;
@@ -749,8 +934,13 @@ static void VP37_throttleCycle(VP37Pump *self) {
   self->lastFuelTemp = getGlobalValue(F_FUEL_TEMP);
   VP37_updateVoltageCorrection(self, dt);
   VP37_updateTemperatureCorrection(self, dt);
-  const float outputScale =
-      self->voltageCorrection * self->temperatureCorrection;
+  VP37_updateDriveCorrection(self, dt);
+  // One thermal multiplier only: the measured resistance already contains the
+  // fluid effect the fuel-temperature model estimates, so they never stack.
+  const float thermalScale = self->driveCompensationUsed
+                                 ? self->driveCorrection
+                                 : self->temperatureCorrection;
+  const float outputScale = self->voltageCorrection * thermalScale;
 
   // Finish the commanded descent before releasing the spring-return actuator.
   // Neither feedforward nor a retained integral may energize it at zero demand.
@@ -804,11 +994,13 @@ static void VP37_throttleCycle(VP37Pump *self) {
   const bool targetSettled =
       stationaryTarget &&
       (self->desiredAdjustometer == self->desiredAdjustometerTarget);
+  self->integralDeadbandHz = VP37_integralDeadband(self);
   VP37_updateIntegralHold(self, targetSettled);
-  const bool freezeIntegral =
-      rampWindup || self->voltageTracking || self->integralHold;
+  // Supply changes are scaled out of the command before it reaches the
+  // actuator, so they never freeze integration.
+  const bool freezeIntegral = rampWindup || self->integralHold;
   const float integralDeadband =
-      freezeIntegral ? fabsf((float)self->pidErr) : (float)VP37_PID_DEADBAND;
+      freezeIntegral ? fabsf((float)self->pidErr) : self->integralDeadbandHz;
   const hal_status_t pidStatus =
       hal_pid_controller_step_ex(self->adjustController, (float)self->pidErr,
                                  (float)self->currentAdjustometerPosition, dt,
@@ -819,6 +1011,7 @@ static void VP37_throttleCycle(VP37Pump *self) {
     return;
   }
   self->pidCorrection = self->pidTerms.output;
+  VP37_transferIntegralToMapTrim(self);
   self->pidSaturatedHigh = self->pidTerms.saturated_high;
   self->pwmValue = self->pwmFeedForward + self->pidCorrection;
   const float compensatedPWM = self->pwmValue * outputScale;
@@ -950,6 +1143,65 @@ void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd) {
 
 float VP37_getVP37PIDTimeUpdate(VP37Pump *self) { return self->pidTimeUpdate; }
 
+hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
+  self->scanRunning = hal_adc_scan_is_running();
+  self->scanFrameNs = VP37_currentScanFrameNs();
+  if (!self->scanRunning) {
+    return HAL_ESTATE;
+  }
+  VP37CurrentPulseResult result;
+  uint32_t sequence = 0U;
+  const hal_status_t status = VP37_currentScanCollect(&result, &sequence);
+  if (sequence == 0U) {
+    return status;
+  }
+  if ((self->scanLastSequence != 0U) &&
+      (sequence > (self->scanLastSequence + 1U))) {
+    self->scanGaps += sequence - self->scanLastSequence - 1U;
+  }
+  self->scanLastSequence = sequence;
+  self->scanBlocks++;
+  self->cycleResult = result;
+  self->cycleResultStatus = status;
+  self->cycleResultSequence++;
+  if (!self->currentObservationEnabled || self->quantityAtRest ||
+      (self->finalPWM <= 0)) {
+    return status;
+  }
+  const bool currentUsable = (status == HAL_OK) && result.waveformValid;
+  self->cycleSupplyVolts = result.supplyVolts;
+  self->cycleSupplyUs = result.cycleStartUs + result.periodUs;
+  self->cycleSupplyValid = result.supplyValid;
+  // The drive command below belongs to the observation, not to its later use.
+  self->cycleCurrentValid = currentUsable;
+  self->cycleCurrentAmps = currentUsable ? result.meanAmps : 0.0f;
+  self->cycleCurrentVolts = result.supplyValid ? result.supplyVolts : 0.0f;
+  self->cycleCurrentPwm = result.pwmCommand;
+  self->cycleCurrentDrive = self->finalPWM;
+  self->cycleCurrentUs = result.cycleStartUs + result.periodUs;
+  return status;
+}
+
+void VP37_showCurrentPulse(const VP37Pump *self) {
+  const VP37CurrentPulseResult *result = &self->cycleResult;
+  deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
+      "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
+      "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
+      "Vavg:%.4f Vok:%u blk:%lu gaps:%lu gl:%lu",
+      (unsigned long)result->cycleStartUs, (unsigned long)self->controlSequence,
+      (unsigned long)self->controlLastUs, (long)self->finalPWM,
+      (long)self->currentAdjustometerPosition, (long)self->desiredAdjustometer,
+      self->compensationVolts, self->lastFuelTemp, result->meanAmps,
+      result->p95Amps, result->peakAmps, (unsigned long)result->periodUs,
+      (unsigned long)result->onTimeUs, (long)result->pwmCommand,
+      (unsigned long)result->samples, (unsigned long)result->guardedSamples,
+      (unsigned long)result->clippedSamples, (unsigned)result->zeroRaw,
+      result->zeroValid ? 1U : 0U, result->waveformValid ? 1U : 0U,
+      (int)self->cycleResultStatus, result->supplyVolts,
+      result->supplyValid ? 1U : 0U, (unsigned long)self->scanBlocks,
+      (unsigned long)self->scanGaps, (unsigned long)result->glitches);
+}
+
 void VP37_process(VP37Pump *self) {
   if (!self->vp37Initialized) {
     return;
@@ -971,6 +1223,7 @@ void VP37_process(VP37Pump *self) {
   self->controlStarted = true;
   self->controlSequence++;
   self->pidDtUs = 0U;
+  (void)VP37_serviceCurrentScan(self);
 
   if (!VP37_updateAdjustometerPosition(self)) {
     if (hal_elapsed_u32(hal_millis(), self->adjCommLostSince,
@@ -1009,8 +1262,8 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "ff:%.1f P:%.1f I:%.1f D:%.1f raw:%.1f corr:%.1f lo:%.1f hi:%.1f "
       "sh:%d sl:%d sf:%d hw:%d rest:%d st:%u hzraw:%lu hz:%lu sn:%lu su:%lu "
       "age:%u io:%d ious:%lu retry:%u fresh:%d pdt:%lu V:%.1f Vl:%.2f "
-      "Ve:%.2f Vc:%.3f vcor:%.4f vt:%d ih:%d vp:%d "
-      "ft:%.0f tcf:%.4f mff:%.1f cyms:%lu",
+      "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d vp:%d vhi:%d "
+      "ft:%.0f tcf:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
       (unsigned long)sample->sequence, sample->throttle, sample->target,
       sample->desired, sample->measured, sample->pwm,
@@ -1027,9 +1280,9 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned int)sample->retries, sample->fresh,
       (unsigned long)sample->pidDtUs, sample->volts, sample->localVolts,
       sample->compensationInputVolts, sample->compensationVolts,
-      sample->voltageCorrection, sample->voltageTracking, sample->integralHold,
-      sample->cycleVoltageUsed, sample->fuelTemp, sample->temperatureCorrection,
-      sample->motionFF, (unsigned long)sample->cyclicDelayMs);
+      sample->voltageCorrection, sample->integralHold, sample->cycleVoltageUsed,
+      sample->voltageOverRange, sample->fuelTemp, sample->temperatureCorrection,
+      sample->motionFF, (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
 #ifdef START_TEST_ENABLE_VP37_TUNING
@@ -1060,24 +1313,36 @@ void VP37_showDebug(VP37Pump *self) {
     const char *mode = "engine";
     const uint32_t cycleDelayMs = 0U;
 #endif
-    deb("VP37 CFG rev:62 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
-        "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vh:%.3f "
-        "vcor:%.4f vt:%d t:%.1fC imax:%.1f tw:%.2f "
+    deb("VP37 CFG rev:68 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
+        "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
+        "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
         "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f "
-        "ien:%u iconfirm:%lu vsync:%u vuse:%u Vavg:%.3f pwm_hz:%u",
+        "ien:%u iconfirm:%lu vsync:%u vuse:%u vfrz:%u Vavg:%.3f pwm_hz:%u "
+        "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu "
+        "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
+        "scan:%u fr:%lu blk:%lu gaps:%lu",
         self->pidKp, self->pidKi, self->pidKd, self->pidTf, self->pidTimeUpdate,
         self->VP37_ADJUST_MIN, self->VP37_ADJUST_MAX, self->lastVolts,
         self->localVolts, self->compensationInputVolts, self->compensationVolts,
-        self->localVoltageScale, VP37_VOLTAGE_HYSTERESIS_V,
-        self->voltageCorrection, self->voltageTracking, self->lastFuelTemp,
-        self->pidIntegralLimit, self->temperatureCompensationWeight,
-        self->temperatureCorrection, mode, (unsigned long)cycleDelayMs,
-        VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
+        self->localVoltageScale, VP37_VOLTAGE_FILTER_S, self->voltageCorrection,
+        self->lastFuelTemp, self->pidIntegralLimit,
+        self->temperatureCompensationWeight, self->temperatureCorrection, mode,
+        (unsigned long)cycleDelayMs, VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
         VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND,
         self->currentObservationEnabled ? 1U : 0U,
         (unsigned long)self->integralHoldConfirmMs,
         self->cycleVoltageEnabled ? 1U : 0U, self->cycleVoltageUsed ? 1U : 0U,
-        self->cycleSupplyVolts, (unsigned)VP37_PWM_FREQUENCY_HZ);
+        self->voltageFrozen ? 1U : 0U, self->cycleSupplyVolts,
+        (unsigned)VP37_PWM_FREQUENCY_HZ, self->cycleCurrentAmps,
+        self->driveResistance, self->driveCorrection,
+        self->driveCompensationEnabled ? 1U : 0U,
+        self->driveCompensationUsed ? 1U : 0U,
+        (unsigned long)self->driveSamples, self->integralDeadbandTopHz,
+        self->integralDeadbandHz, self->mapTrimEnabled ? 1U : 0U,
+        (unsigned long)self->mapTrimTransfers, self->mapTrim[5],
+        self->mapTrim[9], self->mapTrim[10], self->scanRunning ? 1U : 0U,
+        (unsigned long)self->scanFrameNs, (unsigned long)self->scanBlocks,
+        (unsigned long)self->scanGaps);
     adjustometer_reading_t telemetry;
     const bool extendedFresh = getVP37AdjustometerExtendedTelemetry(&telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "

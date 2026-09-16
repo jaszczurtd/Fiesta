@@ -24,30 +24,42 @@ wejścia bocznika; zapis na karcie SD wymaga innego pinu chip-select.
 Błąd komunikacji wstrzymuje PID i po 20 ms wyłącza napęd;
 nieważny status pozycji wyłącza go od razu.
 
-Pomiar prądu na GPIO26 działa na core 0 co 20 ms przy aktywnym nastawniku.
-Obejmuje jeden pełny, zmierzony okres PWM i pomija 60 us przy obu zboczach fazy
-ON. `VP37 IPULSE` podaje średnią fazy ON z ograniczeniem próbek do P95, P95,
-surowe maksimum, timing, kalibrację zera, clipping i ważność oraz stan regulatora
-sprzed pomiaru. Są to pomiary bocznika w fazie ON; prąd freewheel omija bocznik.
-Pomiar i logowanie odbywają się poza mutexem nastawnika. Prąd nie wpływa na PWM,
-PID ani odcięcie. Komendy stanowiskowe `Q0` i `Q1` wyłączają i włączają pomiar
-na potrzeby porównania.
-Przy 1 kHz i wyższych częstotliwościach programowe opóźnienie skraca się z 20
-do 4 us; nadal obowiązuje odrzucanie 60 us przy zboczach i minimum osiem próbek.
-Krótka faza ON może nadal dać za mało próbek; taki wynik pozostaje nieważny.
+Pomiar prądu na GPIO26 to skan taktowany sprzętowo (`HAL_ENABLE_ADC_SCAN`):
+bocznik, multiplekser czujników (GPIO27) i dzielnik zasilania (GPIO28) są
+przetwarzane naprzemiennie co 24 us, DMA wypełnia bloki o długości 2,25
+okresu PWM (11,3 ms), a core 1 redukuje najnowszy blok raz na krok regulacji.
+Bramkę odtwarza się z samego przebiegu bocznika (0,5 A włączenie, 0,25 A
+wyłączenie, zbocze liczy się, gdy poziom utrzyma się trzy ramki): blok zawsze
+zawiera jeden pełny okres od zbocza do zbocza niezależnie od fazy, a 60 us
+przy obu zboczach fazy ON jest pomijane. `VP37 IPULSE` podaje średnią fazy ON
+z ograniczeniem próbek do P95, P95, surowe maksimum, timing, kalibrację zera,
+clipping, ważność, średnią zasilania ważoną fazami oraz liczbę bloków
+zredukowanych i pominiętych. Są to pomiary bocznika w fazie ON; prąd freewheel
+omija bocznik. Core 0 tylko drukuje raport. Podczas skanu odczyty na żądanie
+tych trzech pinów zwracają najnowszą próbkę skanu, więc czytniki czujników nie
+zmieniają się poza 60 us ustalania po zmianie kanału multipleksera. Komendy
+stanowiskowe `Q0` i `Q1` wyłączają i włączają publikowanie obserwacji; raport
+działa niezależnie. Przy 1 kHz i wyższych częstotliwościach okres konwersji
+spada do 2 us na pin; nadal obowiązuje odrzucanie 60 us przy zboczach i minimum
+osiem próbek, a krótka faza ON może dać za mało próbek - taki wynik pozostaje
+nieważny.
 
 Kompensacja napięcia korzysta z szybkiego lokalnego ADC ECU. Pierwsza poprawna
 para po starcie lub błędzie lokalnego odczytu ustala skalę według Adjustometera;
 pozostałe zmiany skali zachodzą tylko wtedy, gdy zadanie 0% doszło do MIN, czyli
 warunku zwolnienia napędu. Adjustometer jest też źródłem zapasowym po błędzie
 lokalnego ADC. Nieważne napięcie z obu źródeł wybiera
-15 V, aby nie zwiększać sterowania. Histereza sample-and-hold 0,5 V tłumi
-tętnienia powiązane z obciążeniem. Po przekroczeniu tego pasma bezpośrednia
-korekcja `12 / Vc` przejmuje lokalny pomiar w bieżącym kroku regulatora.
-Stanowiskowe `V1` wybiera napięcie uśrednione przez zadanie pomiaru prądu po
-pełnym okresie PWM. Średnie faz ON i OFF są ważone ich czasem trwania.
-Nieważny wynik, wiek 100 ms, wyłączony pomiar albo zwolniony napęd wybiera
-zwykły lokalny odczyt ADC. `V0` wybiera ten tor wprost i jest ustawieniem domyślnym.
+15 V, aby nie zwiększać sterowania. Odczyt lokalny powyżej skalibrowanego
+zakresu 17 V nie jest błędem: dzielnik nasyca się przy ok. 18,8 V, więc taki
+odczyt jest dolnym oszacowaniem szyny i dalej zmniejsza komendę, nie ucząc
+skali (`vhi` w trace). Komenda podąża za szyną przez jeden krótki
+filtr (`VP37_VOLTAGE_FILTER_S`, 50 ms) i nic więcej: bez pasma martwego i bez
+okna śledzenia. Wejściem podstawowym jest napięcie uśrednione przez zadanie
+pomiaru prądu po pełnym okresie PWM, ze średnimi faz ON i OFF ważonymi ich
+czasem trwania. Nieważny wynik, wiek 100 ms, wyłączony pomiar albo zwolniony
+napęd wybiera zwykły lokalny odczyt ADC. Stanowiskowe `V0` wybiera tor lokalny
+wprost; `V1` jest ustawieniem domyślnym. Zmiana zasilania nigdy nie zatrzymuje
+całkowania: jest zdejmowana z komendy, zanim komenda trafi do nastawnika.
 
 Pętla regulatora używa jawnego okresu i rzeczywistego upływu sekund. Logi
 zawierają osobne człony P/I/D oraz dostępne limity korekcji; wysyłanie odbywa
@@ -57,15 +69,13 @@ się poza mutexem regulatora. Tor pomiarowy opisuje
 Domyślne nastawy to P=0,05, I=0,20 i D=0 z okresem regulatora 5 ms.
 Zatrzymanie całki wymaga ciągłego utrzymania błędu
 wewnątrz 20 Hz przez 100 ms; krótkie przejście przez cel nie zamraża I.
-Całkowanie wznawia się po 500 ms ciągłego błędu poza 40 Hz. Aktywne śledzenie
-napięcia również zatrzymuje całkowanie. Stanowiskowe `E<0..1000>` wybiera czas
+Całkowanie wznawia się po 500 ms ciągłego błędu poza 40 Hz. Stanowiskowe `E<0..1000>` wybiera czas
 potwierdzenia w ms; `E0` umożliwia porównanie z natychmiastowym zatrzymaniem.
 `R` przywraca domyślne nastawy PID i potwierdzenia.
 
 Logi zapisują napięcie z Adjustometera po dolnym ograniczeniu jako `V`, lokalny
-odczyt ADC jako `Vl`, wybrane wejście przed histerezą jako `Ve`, a napięcie
-rzeczywiście użyte jako `Vc`. `vcor` jest zastosowanym mnożnikiem, `vt` oznacza
-śledzenie zmian napięcia, `ih` zatrzymanie całki dla ustalonego celu, a `vp`
+odczyt ADC jako `Vl`, wybrane wejście przed filtrem jako `Ve`, a napięcie
+rzeczywiście użyte jako `Vc`. `vcor` jest zastosowanym mnożnikiem, `ih` zatrzymanie całki dla ustalonego celu, a `vp`
 użycie średniej napięcia z pełnego okresu. `VP37 CFG` zawiera `pwm_hz`.
 
 W kompilacji stanowiskowej można nadpisać `VP37_PWM_FREQUENCY_HZ` oraz cztery
