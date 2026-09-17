@@ -72,6 +72,26 @@ void VP37_showDebug(VP37Pump *self) {
   }
 }
 
+/* Fields of the `VP37 IPULSE` line, one per reduced scan block:
+ *   us        start of the measured PWM period (hal_micros)
+ *   seq       control step that reduced the block; state_us its MCU time
+ *   pwm       command live at the report; adj / des measured and slewed
+ *             position [Hz]
+ *   V, FT     supply used by the loop [V] and fuel temperature [C]
+ *   Ion       P95-winsorized mean of the guarded ON phase [A]; I95 its
+ *             95th percentile; Ipk the raw ON-phase maximum, spike-prone
+ *   per, on   measured rise-to-rise period and ON time [us]
+ *   duty      PWM command reconstructed from on / per
+ *   n, gn     ON-phase samples acquired and left after the 60 us edge guards
+ *   clip      samples that hit the ADC end stop
+ *   zero, zv  shunt zero [ADC code] and whether it is valid
+ *   valid     waveformValid: the ampere fields mean something
+ *   status    hal_status_t of the reduction (HAL_EAGAIN: no complete period)
+ *   Vavg, Vok full-period supply mean [V] and its own validity
+ *   blk, gaps blocks reduced since start and blocks the loop never saw
+ *   gl        glitches: excursions across the gate hysteresis that ended
+ *             before the confirmation time, counted over the whole block;
+ *             a gate-detection quality figure, read by nothing else */
 void VP37_showCurrentPulse(const VP37Pump *self) {
   const VP37CurrentPulseResult *result = &self->scan.cycleResult;
   deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "

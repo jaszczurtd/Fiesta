@@ -62,6 +62,26 @@ static void injectAdjustometerScript(const AdjustometerScript *script) {
   hal_mock_i2c_inject_rx(script->bytes, script->length);
 }
 
+/* Holding command the map gives at a demand, interpolated between its knots
+ * and carried through the source-shunt adjustment. The feedforward tests check
+ * the shape of whichever table this build compiles, not the numbers of one
+ * frequency's calibration. */
+static float expectedHoldingFF(float percent) {
+  for (size_t i = 1U; i < VP37_FF_KNOTS; ++i) {
+    const float *lower = VP37_FF_MAP[i - 1U];
+    const float *upper = VP37_FF_MAP[i];
+    if (percent <= upper[VP37_FF_COL_PERCENT]) {
+      const float holding =
+          lower[VP37_FF_COL_PWM] +
+          (upper[VP37_FF_COL_PWM] - lower[VP37_FF_COL_PWM]) *
+              (percent - lower[VP37_FF_COL_PERCENT]) /
+              (upper[VP37_FF_COL_PERCENT] - lower[VP37_FF_COL_PERCENT]);
+      return holding * VP37_PWM_FF_HARDWARE_GAIN;
+    }
+  }
+  return VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN;
+}
+
 static void setupPumpForProcessTests(VP37Pump *pump) {
   memset(pump, 0, sizeof(*pump));
   pump->pid.controller = hal_pid_controller_create();
@@ -334,13 +354,16 @@ void test_vp37_hot_positive_error_uses_expanded_range(void) {
   injectAdjRegisterData(100, 144, 55, ADJ_STATUS_OK);
   VP37_process(pump);
 
-  // 911.52 + 220 scaled by the 55 C copper factor exceeds the ceiling.
+  // The holding command at full demand plus 220, scaled by the 55 C copper
+  // factor, exceeds the ceiling.
   TEST_ASSERT_FLOAT_WITHIN(0.05f, VP37_PID_CORR_LIMIT_POSITIVE_MAX,
                            pump->pid.positiveLimit);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, VP37_PID_CORR_LIMIT_POSITIVE_MAX,
                            pump->pid.correction);
   TEST_ASSERT_TRUE(pump->pid.saturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 1251.52f, pump->output.pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.1f, expectedHoldingFF(100) + VP37_PID_CORR_LIMIT_POSITIVE_MAX,
+      pump->output.pwmValue);
 }
 
 void test_vp37_hot_negative_error_keeps_original_range(void) {
@@ -357,7 +380,9 @@ void test_vp37_hot_negative_error_keeps_original_range(void) {
                            pump->pid.positiveLimit);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, -220.0f, pump->pid.correction);
   TEST_ASSERT_FALSE(pump->pid.saturatedHigh);
-  TEST_ASSERT_FLOAT_WITHIN(0.1f, 691.52f, pump->output.pwmValue);
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.1f, expectedHoldingFF(100) - VP37_PID_CORR_LIMIT_NEGATIVE,
+      pump->output.pwmValue);
 }
 
 void test_vp37_pwm_limit_matches_physical_resolution(void) {
@@ -1326,8 +1351,6 @@ void test_vp37_feedforward_is_nonlinear_and_calibration_independent(void) {
   setupPumpForProcessTests(pump);
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {2.5f, 7.5f, 37.5f, 62.5f, 95.0f};
-  // Holding commands include the measured 0.22-ohm source-shunt adjustment.
-  const float expected[] = {621.54f, 641.52f, 779.76f, 861.84f, 911.52f};
   for (unsigned range = 0; range < 2U; ++range) {
     pump->feedback.adjustMin = range == 0U ? 100 : 400;
     pump->feedback.adjustMax = range == 0U ? 9100 : 7400;
@@ -1338,7 +1361,8 @@ void test_vp37_feedforward_is_nonlinear_and_calibration_independent(void) {
       injectAdjRegisterData((int16_t)pump->demand.target, 144, 49,
                             ADJ_STATUS_OK);
       VP37_process(pump);
-      TEST_ASSERT_FLOAT_WITHIN(.05f, expected[i], pump->feedforward.pwm);
+      TEST_ASSERT_FLOAT_WITHIN(.05f, expectedHoldingFF(demand[i]),
+                               pump->feedforward.pwm);
       TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->pid.terms.integral);
     }
   }
@@ -1578,15 +1602,17 @@ void test_vp37_upper_feedforward_flattens_without_changing_position_target(
   setupPumpForProcessTests(pump);
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {90, 92.5f, 95, 100};
-  const float expected[] = {905.04f, 908.28f, 911.52f, 911.52f};
   for (size_t i = 0; i < COUNTOF(demand); ++i) {
     pump->demand.desired = -1;
     VP37_setVP37Throttle(pump, demand[i]);
     hal_mock_set_millis((uint32_t)(i + 1U) * 5U);
     injectAdjRegisterData((int16_t)pump->demand.target, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
-    TEST_ASSERT_FLOAT_WITHIN(.01f, expected[i], pump->feedforward.pwm);
+    TEST_ASSERT_FLOAT_WITHIN(.01f, expectedHoldingFF(demand[i]),
+                             pump->feedforward.pwm);
   }
+  // The top of the stroke holds flat: 95 % and 100 % share one command.
+  TEST_ASSERT_EQUAL_FLOAT(expectedHoldingFF(95), expectedHoldingFF(100));
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.target);
 }
 
@@ -1614,7 +1640,7 @@ void test_vp37_motion_feedforward_brakes_when_upper_ramp_stops(void) {
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->feedforward.motion);
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 911.52f, pump->feedforward.pwm);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, expectedHoldingFF(95), pump->feedforward.pwm);
   TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
   VP37_setVP37Throttle(pump, 0);
   for (uint32_t ms = 505; ms <= 1200; ms += 5) {
