@@ -94,7 +94,6 @@ float readFuel(void) {
 
 /**
  * @brief Initialize the rolling fuel measurement state and schedule.
- * @return None.
  */
 void initFuelMeasurement(void) {
   memset(s_engineFuel.measuredValues, FUEL_INIT_VALUE,

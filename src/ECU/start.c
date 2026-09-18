@@ -74,7 +74,6 @@ static hal_mutex_t vp37StateMutex = NULL;
 
 /**
  * @brief Create shared module mutexes once during startup.
- * @return None.
  */
 static void start_initContextMutexes(void) {
   hal_critical_section_enter();
@@ -91,7 +90,6 @@ static void start_initContextMutexes(void) {
 
 /**
  * @brief Persist and log a core-1 RPM initialization failure from core 0.
- * @return None.
  * @note DTC persistence intentionally remains on core 0 so core 1 never writes
  *       flash while reporting its startup failure.
  */
@@ -112,7 +110,6 @@ static void start_reportCore1InitError(void) {
 /**
  * @brief Stop feeding the watchdog and blink LED until reset occurs.
  * @param reason Human-readable reason logged before forcing reset.
- * @return None.
  */
 static void start_forceWatchdogReset(const char *reason) {
   derr("Forcing watchdog reset: %s", reason);
@@ -146,7 +143,6 @@ static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
 
 /**
  * @brief Configure the shared soft-timer table used by core 0.
- * @return None.
  */
 void setupTimers(void) {
   hal_soft_timer_setup_table(startTimerInitTable, COUNTOF(startTimerInitTable),
@@ -157,7 +153,6 @@ void setupTimers(void) {
  * @brief Store watchdog snapshot data received after an automatic reboot.
  * @param values Pointer to watchdog snapshot values.
  * @param size Number of snapshot elements available at @p values.
- * @return None.
  */
 void executeByWatchdog(int *values, int size) {
   s_startRuntimeState.wValuesPtr = values;
@@ -166,7 +161,6 @@ void executeByWatchdog(int *values, int size) {
 
 /**
  * @brief Report the snapshot left by a watchdog reboot, then clear it.
- * @return None.
  * @note The snapshot stays latched until a USB host is attached. Output sent
  * while nobody listens is dropped by the CDC stack, and a reboot is exactly
  * the moment the host is still reconnecting.
@@ -208,7 +202,6 @@ static void feedWatchdogDuringPersistence(void *user) {
 
 /**
  * @brief Initialize all core-0 peripherals, modules and watchdog state.
- * @return None.
  */
 static void initializeCore0(void) {
 
@@ -348,7 +341,6 @@ static void initializeCore0(void) {
 // timer functions
 /**
  * @brief Execute periodic once-per-second housekeeping outputs.
- * @return None.
  */
 void callAtEverySecond(void) {
   s_startRuntimeState.alertBlinkState =
@@ -366,7 +358,7 @@ void callAtEverySecond(void) {
 #ifdef VP37
 /**
  * @brief Report the newest reduced scan block from a pump snapshot.
- * @return None. Reduction and publishing run on core 1 inside the control
+ * @note Reduction and publishing run on core 1 inside the control
  * step; this only prints, at most every VP37_CURRENT_REPORT_MS.
  */
 static void start_reportVP37Current(void) {
@@ -390,7 +382,6 @@ static void start_reportVP37Current(void) {
 
 /**
  * @brief Run one core-0 scheduler iteration for I/O and service tasks.
- * @return None.
  */
 static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 0;
@@ -412,6 +403,8 @@ static void runCore0(void) {
     return;
   }
 
+  // RPM goes out before the soft-timer table so callbacks due in this pass do
+  // not delay it.
   CAN_updaterecipients_02();
   s_startPersistentState.statusVariable0Val = 3;
   hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
@@ -466,7 +459,6 @@ static void runCore0(void) {
 
 /**
  * @brief Initialize the second core runtime context.
- * @return None.
  */
 static void initializeCore1(void) {
   start_initContextMutexes();
@@ -503,7 +495,6 @@ static void initializeCore1(void) {
 
 /**
  * @brief Run one core-1 control-loop iteration.
- * @return None.
  */
 static void runCore1(void) {
 

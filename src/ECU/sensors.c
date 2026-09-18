@@ -138,7 +138,6 @@ static float sensors_readNtcViaMux(uint8_t muxChannel, size_t *tableIdx,
 
 /**
  * @brief Initialize the I2C bus and its mutex-protected access path.
- * @return None.
  */
 void initI2C(void) {
   static bool i2cMutexInited = false;
@@ -847,7 +846,6 @@ static uint8_t i2cConsecutiveErrors = 0;
 
 /**
  * @brief Count I2C errors and recover the bus when the threshold is reached.
- * @return None.
  */
 static void i2cCheckRecovery(void) {
   i2cConsecutiveErrors++;
@@ -1117,7 +1115,6 @@ bool waitForAdjustometerBaseline(void) {
  * @brief Take a snapshot of the latest Adjustometer reading for the VP37 inner
  * loop.
  * @param out Caller-owned storage receiving the snapshot (must not be NULL).
- * @return None.
  * @note Uses readAdjustometer()'s by-value return so the caller's copy is
  *       consistent even if another core writes the shared state in between.
  */

@@ -195,7 +195,6 @@ bool VP37_isVP37Enabled(VP37Pump *self) {
  * target.
  * @param self VP37 controller instance to update.
  * @param accel Accelerator / driver-demand input in percentage-like units.
- * @return None.
  * @note Despite the legacy name, this maps G79/G185-like driver demand into the
  *       project-local N146/G149-like inner-loop target.
  */
@@ -261,16 +260,7 @@ void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel) {
 }
 
 /**
- * @brief Set the current timing-actuator command for the VP37 pump.
- * @param self VP37 controller instance issuing the command.
- * @param angle Requested timing angle in the 0..100 range.
- * @return None.
- * @note This is closest to the N108 actuator side of SOI control. G80/G28
- * closed-loop timing feedback is not implemented here yet.
- */
-/**
  * @brief Whether zero demand has finished its descent and the drive rests.
- * @param self VP37 controller instance to inspect.
  * @return True when the last demand was zero and the slewed target has reached
  * the calibrated bottom; always false when the release is compiled out.
  * @note One definition for the release and for the supply path: at rest no
@@ -346,8 +336,6 @@ void VP37_process(VP37Pump *self) {
 
 /**
  * @brief Execute the inner VP37 quantity-control cycle.
- * @param self VP37 controller instance to update.
- * @return None.
  * @note One step builds the command in this order: slew the demand, track the
  * ramp for the motion feedforward, look the holding command up, set the
  * correction authority, scale for supply and temperature, release the actuator
@@ -381,7 +369,6 @@ static void VP37_throttleCycle(VP37Pump *self) {
  * @brief Capture what this step needs to know about the previous one.
  * @param self VP37 controller instance to read.
  * @param cycle Step context to fill.
- * @return None.
  */
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
   cycle->previousDesired = self->demand.desired;
@@ -399,7 +386,6 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
  * @brief Slew the demanded position toward the target.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @return None.
  * @note Rising demand slews slower in the upper stroke, and slower still once
  * the target has settled, so a standing target is approached without
  * overshoot. The error to the measured position follows from the result.
@@ -434,7 +420,6 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
  * @brief Track the ramp's rate for the motion feedforward.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @return None.
  * @note Rise and fall are filtered separately: the upward term scales the
  * map's motion column, the downward term lets the return spring work.
  */
@@ -471,7 +456,6 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
  * @brief Set the correction authority for this step.
  * @param self VP37 controller instance to update.
  * @param cycle Step context; receives the integral gain in force.
- * @return None.
  * @note Correction and integral authority stay in the same reference domain
  * as the feedforward. Applying the measured temperature here as well would
  * compensate twice.
@@ -494,7 +478,6 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
  * @brief Refresh the supply and thermal multipliers of the command.
  * @param self VP37 controller instance to update.
  * @param cycle Step context; receives the product of both multipliers.
- * @return None.
  * @note Each path filters its own input; the product scales feedforward and
  * correction alike, so a supply change never reaches the loop as an error.
  */
@@ -514,7 +497,6 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
 
 /**
  * @brief Release the spring-return actuator once the commanded descent ends.
- * @param self VP37 controller instance to update.
  * @return True when the step ends here with the drive off.
  * @note Neither feedforward nor a retained integral may energize the actuator
  * at zero demand, so every term is cleared before the next demand arrives.
@@ -547,7 +529,6 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
  * @brief Express every actuator limit in the correction domain.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @return None.
  * @note The soft floor keeps the correction from pulling the command far
  * below the holding map while the actuator is still climbing to the target.
  */
@@ -575,8 +556,6 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
 
 /**
  * @brief Step the correction loop under this step's integration rules.
- * @param self VP37 controller instance to update.
- * @param cycle Step context.
  * @return False when the loop failed and the pump has been stopped.
  * @note Ramp tracking lag must not build a new holding trim in either
  * direction; an existing trim may unwind, including a reversal before zero
@@ -612,7 +591,6 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
  * @brief Compose the command from feedforward and correction and write it.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @return None.
  * @note The learned trim absorbs a standing integral before the command is
  * scaled to the rail; the clamp to the hardware range is recorded so the
  * telemetry can tell a limited command from a free one.

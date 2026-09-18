@@ -28,7 +28,6 @@ float readFuel(void);
 
 /**
  * @brief Reset the fuel measurement buffer and timing state.
- * @return None.
  */
 void initFuelMeasurement(void);
 

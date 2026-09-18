@@ -83,7 +83,6 @@ m_mutex_def(dtcManagerMutex);
 
 /**
  * @brief Initialise dtcManagerMutex once, lazily.
- * @return None.
  * @note Called from dtcManagerInit() and the read-side getters so a caller
  *       that locks before init never touches an uninitialised mutex.
  */
@@ -157,7 +156,6 @@ static uint8_t makeFlagsForIndex(uint8_t idx) {
  * @brief Apply a persisted flag byte to one DTC entry.
  * @param idx Index of the DTC entry.
  * @param flags Packed flag byte to apply.
- * @return None.
  */
 static void applyFlagsToIndex(uint8_t idx, uint8_t flags) {
   s_dtcState.dtcs[idx].stored = (flags & DTC_FLAG_STORED) != 0u;
@@ -277,7 +275,6 @@ static bool saveSchemaSnapshotToKv(void) {
 
 /**
  * @brief Clear all runtime and persisted flags in memory.
- * @return None.
  */
 static void resetAllState(void) {
   for (uint8_t i = 0; i < DTC_COUNT; i++) {
@@ -670,7 +667,6 @@ void dtcManagerInit(void) {
 
 /**
  * @brief Ensure the module is initialised before a public API mutates state.
- * @return None.
  * @note Call BEFORE acquiring dtcManagerMutex - dtcManagerInit() takes the
  *       mutex internally.
  */

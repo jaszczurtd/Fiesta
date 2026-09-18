@@ -23,7 +23,6 @@ static int32_t Turbo_scaleTurboValues(Turbo *self, int32_t value) {
 
 /**
  * @brief Derive a pressure correction factor from intake temperature.
- * @param self Turbo controller instance using the correction rule.
  * @return Integer correction factor subtracted from requested pressure
  * percentage.
  * @note The temperature input is the project's G72-like intake-air-temperature
@@ -44,8 +43,6 @@ void Turbo_turboTest(Turbo *self) { (void)self; }
 
 /**
  * @brief Update the boost-control command for the N75-like turbo path.
- * @param self Turbo controller instance to process.
- * @return None.
  * @note The current demand source is legacy throttle-named driver demand, not
  * yet a quantity-centric allowed-fuel signal.
  */

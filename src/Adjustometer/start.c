@@ -21,7 +21,6 @@ static int16_t chipTempDeciC = INT16_MIN;
 
 /**
  * @brief Initialize core-0 services, sensors and status reporting.
- * @return None.
  */
 static void initializeCore0(void) {
 
@@ -44,7 +43,6 @@ static void initializeCore0(void) {
 
 /**
  * @brief Run one iteration of the idle core-0 maintenance loop.
- * @return None.
  */
 static void runCore0(void) {
   updateWatchdogCore0();
@@ -78,7 +76,6 @@ static void runCore0(void) {
 
 /**
  * @brief Initialize the second core used for auxiliary sensors and diagnostics.
- * @return None.
  */
 static void initializeCore1(void) {
   setStartedCore1();
@@ -92,7 +89,6 @@ static void initializeCore1(void) {
 
 /**
  * @brief Run one iteration of the core-1 Adjustometer loop.
- * @return None.
  */
 static void runCore1(void) {
 

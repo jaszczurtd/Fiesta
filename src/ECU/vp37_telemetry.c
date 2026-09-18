@@ -240,8 +240,6 @@ hal_status_t VP37_readTrace(VP37Pump *self, VP37TraceSample *sample) {
 
 /**
  * @brief Append the control sample of this step to a running trace.
- * @param self VP37 controller instance to sample.
- * @return None.
  * @note The trace stops by itself when the buffer is full or the pump has
  * been stopped, so a reader never waits on a recording that cannot end.
  */

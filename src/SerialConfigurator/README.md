@@ -211,7 +211,8 @@ Module-specific behaviour above the common baseline:
 
 The wire vocabulary, descriptor types, and reply machinery for every
 module are shared via [`src/common/scDefinitions/`](../common/scDefinitions/);
-see `ARCHITECTURE.md` §4.3.
+the protocol is described in
+[`PROTOCOL.md`](../common/scDefinitions/PROTOCOL.md).
 
 ## Code Structure
 

@@ -35,19 +35,16 @@ extern "C" {
 
 /**
  * @brief Initialize the I2C slave interface and default registers.
- * @return None.
  */
 void initI2C(void);
 
 /**
  * @brief Initialize basic GPIO and ADC resources used by the module.
- * @return None.
  */
 void initBasicPIO(void);
 
 /**
  * @brief Initialize runtime sensor state and hardware period capture.
- * @return None.
  * @note This module acts as a project-local G149-like quantity-feedback source
  * for the VP37 control path.
  */

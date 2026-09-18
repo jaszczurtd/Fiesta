@@ -168,7 +168,6 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
  * @brief Track the drive-path resistance the shunt capture actually sees.
  * @param self VP37 controller instance to update.
  * @param dt Control period in seconds.
- * @return None.
  * @note Coil self-heating moves the required command by several percent while
  * the fuel temperature barely changes, so the measured ratio replaces the
  * fuel-temperature model. A rejected or stale capture keeps the last value and
@@ -247,7 +246,6 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
  * @brief Slew the thermal multiplier toward whichever source is in force.
  * @param self VP37 controller instance to update.
  * @param dt Control period in seconds.
- * @return None.
  * @note One multiplier only: the measured resistance already contains the fluid
  * effect the fuel-temperature model estimates, so they never stack. They do
  * disagree by whatever the coil has self-heated, so handing over between them

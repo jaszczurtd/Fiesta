@@ -100,7 +100,6 @@ float VP37_computePositiveCorrectionLimit(float fuelTempC,
 
 /**
  * @brief Integral authority for the demanded position.
- * @param self VP37 controller instance to inspect.
  * @return Authority in nominal PWM counts.
  * @note The position profile tapers the authority toward the top of the
  * stroke; the bench cap only ever lowers what the profile allows.
@@ -117,7 +116,6 @@ float VP37_integralLimit(const VP37Pump *self) {
 
 /**
  * @brief Pick the integration dead zone for the demanded position.
- * @param self VP37 controller instance to inspect.
  * @return Dead zone in hertz, never below the base value.
  * @note The upper stroke settles hundreds of hertz apart for the same command,
  * so integrating small errors there only winds force against the mechanism.
@@ -186,8 +184,6 @@ void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
 
 /**
  * @brief Move the settled integral into the learned map trim.
- * @param self VP37 controller instance to update.
- * @return None.
  * @note Runs once when the settled-position hold engages. The trim takes the
  * whole integral and the controller restarts from zero, so this step's output
  * and the next step's feedforward add up to the same command: no bump. A trim
@@ -292,7 +288,7 @@ static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
  * @param percent Stroke position, clamped to 0..100.
  * @param lower Non-NULL; receives the lower knot index.
  * @param weight Non-NULL; receives the upper knot's share, 0..1.
- * @return None. The last knot pairs with itself.
+ * @note The last knot pairs with itself.
  */
 static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight) {
   const float step = 100.0f / (float)(VP37_MAP_TRIM_KNOTS - 1U);
