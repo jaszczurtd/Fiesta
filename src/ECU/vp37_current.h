@@ -102,7 +102,7 @@ typedef struct {
 /**
  * @brief Calibrate the source-shunt ADC zero with PWM disabled.
  * @pre Actuator output is zero; call once on core 0 before pump calibration.
- * @return None. An implausible zero remains visible as invalid telemetry.
+ * @note An implausible zero remains visible as invalid telemetry.
  */
 void VP37_currentSenseInit(void);
 

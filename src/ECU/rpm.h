@@ -81,7 +81,6 @@ hal_status_t RPM_init(RPM *self);
 /**
  * @brief Update RPM value and optional non-VP37 idle-control logic.
  * @param self RPM controller instance to process.
- * @return None.
  * @note The underlying speed signal is derived from the project's G28-like
  * crank path.
  */
@@ -90,28 +89,24 @@ void RPM_process(RPM *self);
 /**
  * @brief Print the current RPM and actuator state for diagnostics.
  * @param self RPM controller instance to report.
- * @return None.
  */
 void RPM_showDebug(RPM *self);
 
 /**
  * @brief Set the acceleration solenoid command to its maximum configured value.
  * @param self RPM controller instance to update.
- * @return None.
  */
 void RPM_setAccelMaxRPM(RPM *self);
 
 /**
  * @brief Reserved legacy API for resetting RPM engine state.
  * @param self RPM controller instance to reset.
- * @return None.
  */
 void RPM_resetRPMEngine(RPM *self);
 #ifndef VP37
 /**
  * @brief Reserved legacy API for historical non-VP37 idle stabilization.
  * @param self RPM controller instance to update.
- * @return None.
  */
 void RPM_stabilizeRPM(RPM *self);
 #endif
@@ -127,7 +122,6 @@ bool RPM_isEngineRunning(const RPM *self);
  * @brief Set the acceleration solenoid command as a PWM percentage.
  * @param self RPM controller instance to update.
  * @param percentage Requested percentage of `PWM_RESOLUTION`.
- * @return None.
  */
 void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage);
 
@@ -141,14 +135,12 @@ int32_t RPM_getCurrentRPMSolenoid(const RPM *self);
 /**
  * @brief Handle one Hall-sensor edge for G28-like RPM measurement.
  * @param self RPM controller instance to update from the interrupt.
- * @return None.
  */
 void RPM_interrupt(RPM *self);
 
 /**
  * @brief Clear the temporary RPM correction-cycle state.
  * @param self RPM controller instance to update.
- * @return None.
  */
 void RPM_resetRPMCycle(RPM *self);
 
@@ -168,6 +160,13 @@ RPM *getRPMInstance(void);
 
 /**
  * @brief Create and initialize the shared RPM controller instance.
+ *
+ * Call it from core 1: the Hall interrupt is registered for
+ * RPM_IRQ_OWNER_CORE, and a call from the other core fails with HAL_ESTATE
+ * instead of moving the interrupt. On failure core 1 stays unstarted and stops
+ * feeding its watchdog liveness, core 0 records DTC U190C, and the dual-core
+ * watchdog resets the ECU. A FreeRTOS task hosting this path must stay pinned
+ * to core 1.
  * @return HAL_OK on success, or the RPM initialization error.
  */
 hal_status_t RPM_create(void);

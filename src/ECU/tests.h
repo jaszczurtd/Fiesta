@@ -95,7 +95,6 @@ bool tickTests(void);
 /**
  * @brief Queue one console line for the test layer.
  * @param line NUL-terminated command line without the trailing CR or LF.
- * @return None.
  * @note Wired as the unknown-line callback of the serial session, so the
  * bootstrap protocol sees every line first. The line is applied later, on the
  * core that owns the controller. A no-op when tests are not compiled in.

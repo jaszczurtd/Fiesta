@@ -36,22 +36,16 @@ typedef struct {
 
 /**
  * @brief Initialize engine-operation state for idle and start control.
- * @param self Engine-operation instance to initialize.
- * @return None.
  */
 void engineOperation_init(engineOperation *self);
 
 /**
  * @brief Compute and apply the current VP37 demand for start/idle behavior.
- * @param self Engine-operation instance to process.
- * @return None.
  */
 void engineOperation_process(engineOperation *self);
 
 /**
  * @brief Print engine-operation state for diagnostics.
- * @param self Engine-operation instance to report.
- * @return None.
  */
 void engineOperation_showDebug(const engineOperation *self);
 
@@ -63,7 +57,6 @@ engineOperation *getEngineOperationInstance(void);
 
 /**
  * @brief Create and initialize the shared engine-operation instance.
- * @return None.
  */
 void createEngineOperation(void);
 

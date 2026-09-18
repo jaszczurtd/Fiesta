@@ -32,7 +32,6 @@ extern "C" {
 
 /**
  * @brief Execute once-per-second background tasks.
- * @return None.
  */
 void callAtEverySecond(void);
 

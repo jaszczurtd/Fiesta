@@ -109,7 +109,6 @@ static void initReadDidPayload(uint8_t *payload, uint16_t did) {
  * @param did DID being answered.
  * @param str Source string.
  * @param width Fixed payload width.
- * @return None.
  */
 static void send22Field(obd_response_t *response, uint16_t did, const char *str,
                         int width) {
@@ -139,7 +138,6 @@ static void send22Field(obd_response_t *response, uint16_t did, const char *str,
  * @param did DID being answered.
  * @param str Source string.
  * @param width Fixed payload width.
- * @return None.
  */
 static void send22IdentField(obd_response_t *response, uint16_t did,
                              const char *str, int width) {
@@ -168,7 +166,6 @@ static void send22IdentField(obd_response_t *response, uint16_t did,
  * @param response CAN response identifier.
  * @param did DID being answered.
  * @param value Value to encode.
- * @return None.
  */
 static void send22U32(obd_response_t *response, uint16_t did, uint32_t value) {
   uint8_t payload[7];
@@ -282,7 +279,6 @@ TESTABLE_STATIC bool fordPartNumberSplit(const char *pn, const char **prefixOut,
  * number.
  * @param response CAN response identifier.
  * @param did DID being answered.
- * @return None.
  */
 static void sendE217PartNumMiddle(obd_response_t *response, uint16_t did) {
   static const uint8_t midBytes[] = {ecu_PartNumMiddleHex};
@@ -305,7 +301,6 @@ static void sendE217PartNumMiddle(obd_response_t *response, uint16_t did) {
  * @brief Send DID 0xE21A containing the ASCII part-number prefix.
  * @param response CAN response identifier.
  * @param did DID being answered.
- * @return None.
  */
 static void sendE21APartNumPrefix(obd_response_t *response, uint16_t did) {
   const char *prefix, *middle, *suffix;
@@ -334,7 +329,6 @@ static void sendE21APartNumPrefix(obd_response_t *response, uint16_t did) {
  * @brief Send DID 0xE219 containing the Ford-encoded part-number suffix.
  * @param response CAN response identifier.
  * @param did DID being answered.
- * @return None.
  */
 static void sendE219PartNumSuffix(obd_response_t *response, uint16_t did) {
   const char *prefix, *middle, *suffix;
@@ -380,7 +374,6 @@ static void sendE219PartNumSuffix(obd_response_t *response, uint16_t did) {
  * @param localId Local identifier being answered.
  * @param str Source string.
  * @param width Fixed payload width.
- * @return None.
  */
 static void send12LocalField(obd_response_t *response, uint8_t localId,
                              const char *str, int width) {
@@ -409,7 +402,6 @@ static void send12LocalField(obd_response_t *response, uint8_t localId,
  * @param offset Byte offset where the field starts.
  * @param width Fixed field width.
  * @param value String to copy.
- * @return None.
  */
 static void writeAsciiField(uint8_t *block, int len, int offset, int width,
                             const char *value) {
@@ -430,7 +422,6 @@ static void writeAsciiField(uint8_t *block, int len, int offset, int width,
  * @brief Build the synthetic Ford SCP identification block used by DMR reads.
  * @param block Output block buffer.
  * @param len Size of @p block in bytes.
- * @return None.
  */
 static void buildScpIdBlock(uint8_t *block, int len) {
   if (block == NULL || len < SCP_IDBLOCK_SIZE) {
@@ -515,7 +506,6 @@ static bool readScpDmrByte(uint8_t dmrType, uint16_t addr, uint8_t *outValue) {
  * @param arg2 Second echoed argument byte.
  * @param arg3 Third echoed argument byte.
  * @param responseCode Response or NRC code.
- * @return None.
  */
 static void sendScpGeneralResponse(obd_response_t *response,
                                    uint8_t requestMode, uint8_t arg1,
@@ -531,7 +521,6 @@ static void sendScpGeneralResponse(obd_response_t *response,
  * @param response CAN response identifier.
  * @param addr Requested base address.
  * @param dmrType Ford DMR access type.
- * @return None.
  */
 static void sendScpDmrResponse(obd_response_t *response, uint16_t addr,
                                uint8_t dmrType) {
@@ -715,7 +704,6 @@ static bool handleScpPidAccess(obd_response_t *response, uint16_t pid,
  * @brief Answer Ford E3xx identification DIDs used by Fordiag.
  * @param response CAN response identifier.
  * @param did Requested DID.
- * @return None.
  */
 static void send22FordDiagE3xx(obd_response_t *response, uint16_t did) {
   if (did == (uint16_t)DID_FORD_TYPE) {

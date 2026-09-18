@@ -13,13 +13,11 @@ extern "C" {
 
 /**
  * @brief Initialize the RGB status LED driver and internal LED state.
- * @return None.
  */
 void initLed(void);
 
 /**
  * @brief Refresh the RGB status LED pattern from current module status.
- * @return None.
  */
 void updateLed(void);
 

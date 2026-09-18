@@ -54,7 +54,6 @@ static void unsupportedPrint(uint8_t mode, uint8_t pid) {
 /**
  * @brief Encode the Mode 01 supported-PID bitmap for 0x00-0x20.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_00(uint8_t *txData) {
   txData[0] = 0x06;
@@ -67,7 +66,6 @@ static void encodeMode01Pid_00(uint8_t *txData) {
 /**
  * @brief Encode MIL and active-DTC count for Mode 01 PID 0x01.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01StatusDtc(uint8_t *txData) {
   uint8_t activeDTC = dtcManagerCount(DTC_KIND_ACTIVE);
@@ -100,7 +98,6 @@ uint8_t obd_encodeTempByte(float tempC) {
 /**
  * @brief Encode diesel fuel-system status for Mode 01 PID 0x03.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelSysStatus(uint8_t *txData) {
   txData[0] = 0x04;
@@ -111,7 +108,6 @@ static void encodeMode01FuelSysStatus(uint8_t *txData) {
 /**
  * @brief Encode calculated engine load for Mode 01 PID 0x04.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EngineLoad(uint8_t *txData) {
   txData[0] = 0x03;
@@ -122,7 +118,6 @@ static void encodeMode01EngineLoad(uint8_t *txData) {
 /**
  * @brief Encode absolute engine load for Mode 01 PID 0x43.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01AbsoluteLoad(uint8_t *txData) {
   txData[0] = 0x04;
@@ -134,7 +129,6 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
 /**
  * @brief Encode coolant temperature for Mode 01 PID 0x05.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01CoolantTemp(uint8_t *txData) {
   txData[0] = 0x03;
@@ -144,7 +138,6 @@ static void encodeMode01CoolantTemp(uint8_t *txData) {
 /**
  * @brief Encode absolute intake pressure for Mode 01 PID 0x0B.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01IntakePressure(uint8_t *txData) {
   // PID 0x0B: 1 byte, kPa absolute (0-255)
@@ -164,7 +157,6 @@ static void encodeMode01IntakePressure(uint8_t *txData) {
 /**
  * @brief Encode fuel pressure placeholder for Mode 01 PID 0x0A.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelPressure(uint8_t *txData) {
   // PID 0x0A: gauge fuel pressure, 1 byte, kPa = 3*A. Not applicable for diesel
@@ -176,7 +168,6 @@ static void encodeMode01FuelPressure(uint8_t *txData) {
 /**
  * @brief Encode VP37 rail-pressure proxy for diesel-specific fuel rail PIDs.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[0] = 0x04;
@@ -188,7 +179,6 @@ static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
 /**
  * @brief Encode fuel tank level percentage for Mode 01 PID 0x2F.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelLevel(uint8_t *txData) {
   txData[0] = 0x03;
@@ -203,7 +193,6 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
 /**
  * @brief Encode engine RPM for Mode 01 PID 0x0C.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[0] = 0x04;
@@ -214,7 +203,6 @@ static void encodeMode01EngineRpm(uint8_t *txData) {
 /**
  * @brief Encode vehicle speed for Mode 01 PID 0x0D.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01VehicleSpeed(uint8_t *txData) {
   txData[0] = 0x03;
@@ -224,7 +212,6 @@ static void encodeMode01VehicleSpeed(uint8_t *txData) {
 /**
  * @brief Encode intake air temperature for Mode 01 PID 0x0F.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01IntakeTemp(uint8_t *txData) {
   txData[0] = 0x03;
@@ -235,7 +222,6 @@ static void encodeMode01IntakeTemp(uint8_t *txData) {
  * @brief Encode the legacy driver-demand signal for Mode 01 throttle-related
  * PIDs.
  * @param txData Output frame buffer.
- * @return None.
  * @note The current ECU reuses generic throttle-related OBD PIDs for the
  * G79/G185-like pedal-demand path because the internal signal is still
  * historically named `F_THROTTLE_POS`.
@@ -249,7 +235,6 @@ static void encodeMode01ThrottlePos(uint8_t *txData) {
 /**
  * @brief Encode the ECU's supported OBD standard identifier.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01ObdStandards(uint8_t *txData) {
   txData[0] = 0x04;
@@ -259,7 +244,6 @@ static void encodeMode01ObdStandards(uint8_t *txData) {
 /**
  * @brief Encode a placeholder engine runtime value.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EngineRuntime(uint8_t *txData) {
   txData[0] = 0x04;
@@ -270,7 +254,6 @@ static void encodeMode01EngineRuntime(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0x21-0x40 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_21_40(uint8_t *txData) {
   txData[0] = 0x06;
@@ -283,7 +266,6 @@ static void encodeMode01Pid_21_40(uint8_t *txData) {
 /**
  * @brief Encode catalyst-temperature style data from EGT inputs.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[0] = 0x04;
@@ -294,7 +276,6 @@ static void encodeMode01CatalystTemp(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0x41-0x60 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_41_60(uint8_t *txData) {
   txData[0] = 0x06;
@@ -309,7 +290,6 @@ static void encodeMode01Pid_41_60(uint8_t *txData) {
 /**
  * @brief Encode ECU supply voltage for Mode 01 PID 0x42.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[0] = 0x04;
@@ -320,7 +300,6 @@ static void encodeMode01EcuVoltage(uint8_t *txData) {
 /**
  * @brief Encode diesel fuel type for Mode 01 PID 0x51.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelType(uint8_t *txData) {
   txData[0] = 0x03;
@@ -330,7 +309,6 @@ static void encodeMode01FuelType(uint8_t *txData) {
 /**
  * @brief Encode engine oil temperature for Mode 01 PID 0x5C.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EngineOilTemp(uint8_t *txData) {
   txData[0] = 0x03;
@@ -340,7 +318,6 @@ static void encodeMode01EngineOilTemp(uint8_t *txData) {
 /**
  * @brief Encode a fixed fuel-injection timing value for Mode 01 PID 0x5D.
  * @param txData Output frame buffer.
- * @return None.
  * @note This is a placeholder timing report. Conceptually it is closer to the
  * N108 start-of-injection path than to a measured closed-loop G80/G28 SOI
  * result.
@@ -354,7 +331,6 @@ static void encodeMode01FuelTiming(uint8_t *txData) {
 /**
  * @brief Encode a fixed fuel-rate value for Mode 01 PID 0x5E.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01FuelRate(uint8_t *txData) {
   txData[0] = 0x04;
@@ -365,7 +341,6 @@ static void encodeMode01FuelRate(uint8_t *txData) {
 /**
  * @brief Encode the configured emissions-standard identifier.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01EmissionsStandard(uint8_t *txData) {
   txData[0] = 0x03;
@@ -375,7 +350,6 @@ static void encodeMode01EmissionsStandard(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0x61-0x80 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_61_80(uint8_t *txData) {
   txData[0] = 0x06;
@@ -388,7 +362,6 @@ static void encodeMode01Pid_61_80(uint8_t *txData) {
 /**
  * @brief Encode DPF temperature for Mode 01 PID 0x7C.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[0] = 0x04;
@@ -406,7 +379,6 @@ static void encodeMode01DpfTemp(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0x81-0xA0 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_81_A0(uint8_t *txData) {
   txData[0] = 0x06;
@@ -419,7 +391,6 @@ static void encodeMode01Pid_81_A0(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0xA1-0xC0 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_A1_C0(uint8_t *txData) {
   txData[0] = 0x06;
@@ -432,7 +403,6 @@ static void encodeMode01Pid_A1_C0(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0xC1-0xE0 range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_C1_E0(uint8_t *txData) {
   txData[0] = 0x06;
@@ -445,7 +415,6 @@ static void encodeMode01Pid_C1_E0(uint8_t *txData) {
 /**
  * @brief Encode the supported-PID bitmap for the 0xE1-0xFF range.
  * @param txData Output frame buffer.
- * @return None.
  */
 static void encodeMode01Pid_E1_FF(uint8_t *txData) {
   txData[0] = 0x06;

@@ -65,7 +65,6 @@ static const ecu_test_t *findByName(const char *name) {
 
 /**
  * @brief Raise one diagnostic trouble code so the storage path can be seen.
- * @return None.
  */
 static void startDtcInjection(void) {
   const uint16_t code = (uint16_t)DTC_PCF8574_COMM_FAIL;

@@ -10,7 +10,6 @@ static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
 
 /**
  * @brief Refresh cached Adjustometer position and telemetry values.
- * @param self VP37 controller instance to update.
  * @return True when the feedback transfer succeeds.
  * @note The refreshed values are a project-local G149-like quantity feedback
  * plus G81-like fuel temperature and supply-voltage telemetry.
@@ -49,7 +48,6 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
 
 /**
  * @brief Run the VP37 calibration sweep and capture Adjustometer limits.
- * @param self VP37 controller instance to calibrate.
  * @return True when both end positions settle and form a valid range.
  * @note This calibrates the project-local N146/G149-like quantity-feedback
  * range, not an OEM mg/stroke model.
@@ -174,7 +172,6 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
 
 /**
  * @brief Get the PWM value used during maximum-range calibration.
- * @param self VP37 controller instance using the calibration path.
  * @return PWM command used for calibration.
  */
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {

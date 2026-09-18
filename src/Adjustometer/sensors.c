@@ -30,7 +30,6 @@ static bool isSignalLost(void);
 
 /**
  * @brief Initialize the I2C slave interface and default status register.
- * @return None.
  */
 void initI2C(void) {
   hal_i2c_slave_init(PIN_SDA, PIN_SCL, ADJUSTOMETER_I2C_ADDR);
@@ -45,7 +44,6 @@ void initI2C(void) {
 
 /**
  * @brief Configure GPIO and ADC resources required by the Adjustometer.
- * @return None.
  */
 void initBasicPIO(void) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
@@ -54,7 +52,6 @@ void initBasicPIO(void) {
 
 /**
  * @brief Reset sensor state and start hardware period capture.
- * @return None.
  */
 void initSensors(void) {
   resetSensorsState();
@@ -459,7 +456,6 @@ uint32_t getBaseline(void) {
 
 /**
  * @brief Reset all runtime sensor, baseline and filter state.
- * @return None.
  */
 static void resetSensorsState(void) {
   adjustometerRawHz = 0;

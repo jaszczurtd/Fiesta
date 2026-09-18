@@ -20,7 +20,6 @@ static int32_t s_lastIDeltaQ10 = 0;
 
 /**
  * @brief Reset the temporary RPM correction cycle after the timer fires.
- * @return None.
  */
 static void cycleCheckTimerCallback(void) {
   RPM_resetRPMCycle(getRPMInstance());
@@ -36,7 +35,6 @@ RPM *getRPMInstance(void) { return &getECUContext()->rpm; }
 /**
  * @brief Forward a Hall-sensor edge interrupt to the shared G28-like RPM
  * instance.
- * @return None.
  */
 void countRPM(void) { RPM_interrupt(getRPMInstance()); }
 

@@ -16,19 +16,16 @@ extern "C" {
 
 /**
  * @brief Initialize the GPS module once.
- * @return None.
  */
 void initGPS(void);
 
 /**
  * @brief Clear persistent GPS date and time buffers.
- * @return None.
  */
 void initGPSDateAndTime(void);
 
 /**
  * @brief Poll GPS data and update global ECU values.
- * @return None.
  */
 void getGPSData(void);
 

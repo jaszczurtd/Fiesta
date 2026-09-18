@@ -117,7 +117,6 @@ uint32_t obdGetTotalDistanceKm(void) { return s_obdState.totalDistanceKmValue; }
 /**
  * @brief Update the emulated total-distance value for Ford-specific DIDs.
  * @param km New odometer value in kilometers.
- * @return None.
  */
 void obdSetTotalDistanceKm(uint32_t km) {
   s_obdState.totalDistanceKmValue = km;
@@ -127,7 +126,6 @@ void obdSetTotalDistanceKm(uint32_t km) {
 /**
  * @brief Initialize the CAN-based OBD/UDS responder.
  * @param retries Number of CAN initialization retries to request.
- * @return None.
  */
 void obdInit(int retries) {
 
@@ -154,7 +152,6 @@ void obdInit(int retries) {
 
 /**
  * @brief Poll CAN for requests and advance any active ISO-TP transmission.
- * @return None.
  */
 void obdLoop(void) {
   if (!s_obdState.initializedFlag) {
@@ -236,7 +233,6 @@ void obdResponseSetNegative(obd_response_t *response, uint8_t mode,
  * @param requestId CAN identifier of the incoming request.
  * @param dlc Number of valid bytes in @p data.
  * @param data Raw request buffer.
- * @return None.
  */
 void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data) {
   if ((data == NULL) || (dlc == 0u) || (dlc > 8u)) {
@@ -300,7 +296,6 @@ void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data) {
 /**
  * @brief Log an unsupported service request.
  * @param mode Unsupported service identifier.
- * @return None.
  */
 static void unsupportedServicePrint(uint8_t mode) {
   deb("Unsupported service $%02X requested!", mode);
@@ -371,7 +366,6 @@ static bool obdTransportSendPayload(uint32_t responseId, uint32_t requestId,
 
 /**
  * @brief Advance the ISO-TP transmit state machine by one scheduler step.
- * @return None.
  */
 static void iso_tp_process(void) {
   if (s_obdState.isoTpState.state == ISO_TP_IDLE) {

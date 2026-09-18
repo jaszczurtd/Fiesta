@@ -1,1204 +1,352 @@
 # Fiesta - System Architecture
 
-This document describes the architecture of the Fiesta firmware ecosystem:
-the modules it is composed of, what each module is responsible for, how the
-modules talk to each other and to the rest of the vehicle, and what external
-dependencies they rely on. It complements [`README.md`](README.md), which
-focuses on setup, safety guidance, and build procedures.
+Fiesta replaces and extends parts of the electronics in a Ford Fiesta 1.8
+(M)TDDI. Five firmware modules, each on its own PCB, share the car's work: the
+ECU runs the engine, the others drive the dashboard, measure what the ECU does
+not, keep time, and read the injection pump position. A desktop application,
+the Fiesta Serial Configurator, connects to the modules over USB to read and
+change their settings and to flash new firmware.
 
----
+This document explains how the pieces fit together. Setup and builds are in
+[`README.md`](README.md); the details of each part live next to its code.
 
-## 1. System scope
-
-Fiesta is a multi-module electronic stack for a Ford Fiesta 1.8 (M)TDDI
-with custom electronics replacing parts of the OEM wiring. Each firmware
-module has its own binary, its own PCB
-(see [`Fiesta_pcbs/`](Fiesta_pcbs/)), and communicates with the others over
-well-defined physical buses (CAN, I²C). A **desktop companion**, the
-Fiesta Serial Configurator, sits off-vehicle and talks to each firmware
-module over USB CDC for diagnostics, calibration, and flashing.
-
-The system replaces and augments the following vehicle functions:
-
-- engine control (fuel injection via VP37, boost control, glow plugs, fans,
-  heater, heated windshield),
-- diagnostics (OBD-II / UDS over CAN, mimics Ford EEC-V),
-- driver-facing instrumentation (dashboard gauges, display, buzzer),
-- auxiliary telemetry (oil pressure, wheel speed, exhaust gas temperatures,
-  GPS speed/time and RTC time broadcast),
-- off-vehicle runtime configuration and re-flashing via the Serial
-  Configurator, over a per-module USB CDC serial session.
-
-High-level module map (active firmware + desktop companion):
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                         Fiesta electronic stack                        │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                        │
-│     ┌──────────────┐                           ┌──────────────┐        │
-│     │              │◄──────────────────────────┤              │        │
-│     │     ECU      │      CAN (main)           │    Clocks    │        │
-│     │  (RP2040,    │──────────────────────────►┤  (RP2040,    │        │
-│     │  core-0 +    │                           │   dashboard) │        │
-│     │  core-1)     │                           │              │        │
-│     │              │                           └──────────────┘        │
-│     │              │                                                   │
-│     │              │◄──────────────────────────┐                       │
-│     │              │                           │                       │
-│     │              │      CAN (main)      ┌──────────────┐             │
-│     │              │                      │ OilAndSpeed  │             │
-│     │              │─────────────────────►┤  (RP2040)    │             │
-│     │              │                      └──────────────┘             │
-│     │              │                                                   │
-│     │              │◄──── I²C (0x57) ─────┐                            │
-│     │              │                      │                            │
-│     │              │                   ┌─────────────┐                 │
-│     │              │                   │Adjustometer │                 │
-│     │              │                   │  (RP2040,   │                 │
-│     │              │                   │ I²C slave)  │                 │
-│     │              │                   └─────────────┘                 │
-│     │              │                                                   │
-│     │              │──── CAN (OBD-2) ───► OBD-II diagnostic port       │
-│     │              │                                                   │
-│     │              │──── I²C (0x38) ────► PCF8574 (relay expander)     │
-│     │              │                                                   │
-│     │              │──── UART ──────────► GPS receiver                 │
-│     │              │                                                   │
-│     │              │──── PWM / ADC / GPIO ► sensors + actuators        │
-│     └──────┬───────┘                                                   │
-│            │                                                           │
-│            │  USB CDC (framed SC session on ECU/Clocks/OilAndSpeed/    │
-│            │  RTC_Clock)                                               │
-│            │  Additional encrypted layer later for flashing/settings   │
-│            │  changes                                                  │
-│            │                                                           │
-│     ┌──────▼──────────────────────────────────────────────┐            │
-│     │                                                     │            │
-│     │        Fiesta Serial Configurator                   │            │
-│     │        (Linux primary, Windows 10/11 secondary,     │            │
-│     │         GTK-4 GUI + platform-neutral core,          │            │
-│     │         off-vehicle)                                │            │
-│     │                                                     │            │
-│     └─────────────────────────────────────────────────────┘            │
-│                                                                        │
-│     (Clocks, OilAndSpeed, and RTC_Clock expose the same USB CDC        │
-│     session pattern as ECU. Adjustometer is currently outside the      │
-│     configurator/flashing flow.)                                       │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-The map is intentionally simplified around the ECU hub; `Fiesta_clock`
-(`RTC_Clock` in SC/UI) is an additional CAN0 peer that publishes RTC state
-once per second when clock integrity is valid (`CAN_ID_RTC_UPDATE`, `0x130`).
-
----
-
-## 2. Hardware platform
-
-All active firmware modules target **RP2040** (ARM Cortex-M0+ dual-core).
-Depending on module, the board is a Raspberry Pi Pico, RP2040-Plus, or
-RP2040-Zero. Each module selects its board through
-`.vscode/jaszczurhal.project.json`; clock configuration comes from the
-resolved native board profile and Pico SDK build. The reasons for picking
-RP2040:
-
-- cheap, widely available, two cores,
-- two cores plus flexible GPIO interrupt and PWM peripherals (the current
-  engine Hall and VP37 resonance inputs use GPIO edge interrupts),
-- flash-backed emulated EEPROM used for persistent state (DTCs, config).
-
-That said, the system is not locked to this silicon - the HAL abstraction
-is designed so that a port to a different MCU is a relatively contained
-effort rather than a rewrite.
-
-PCB assets for every module live under [`Fiesta_pcbs/`](Fiesta_pcbs/),
-including schematics (`.pdf`), layouts, and the `pinout.txt` / `wirings.txt`
-connector maps that tie firmware pin assignments to the physical 104-pin
-loom.
-
----
-
-## 3. Module inventory
-
-### Active firmware modules (`src/`)
-
-| Module | Language | Role | MISRA scope |
-|---|---|---|---|
-| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuator orchestration | **in scope** |
-| [`Clocks`](src/Clocks/) | C++ | dashboard / instrument cluster rendering | out of scope |
-| [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure and wheel speed telemetry, EGT acquisition | out of scope |
-| [`Fiesta_clock` (`RTC_Clock`)](src/Fiesta_clock/) | C | RTC calendar module; publishes RTC time/integrity on CAN and exposes RTC set/get via SerialConfigurator | out of scope |
-| [`Adjustometer`](src/Adjustometer/) | C | VP37 pump-coil resonance feedback (I²C slave) | out of scope |
-
-### Desktop companion
-
-| Component | Target platforms | Role |
-|---|---|---|
-| Fiesta Serial Configurator | Linux (primary, Debian-like), Windows 10/11 (secondary); mobile out of scope | per-module runtime parameter configuration, firmware flashing via BOOTSEL/UF2, diagnostic log capture |
-
-The configurator is a full family member, not a development-time utility.
-
-### Legacy / archived
-
-- [`legacy/`](legacy/) - archival sources (`DPF_main`, `AdaptiveLights`,
-  `Fading`). Not built, not tested, kept for migration reference.
-
----
-
-## 4. Shared foundation
-
-All active modules are built on the same foundation, so the per-module
-descriptions below only describe what is specific to each.
-
-### 4.1 JaszczurHAL
-
-`JaszczurHAL` ([github.com/jaszczurtd/JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL))
-is a separate repository, cloned into `<parent-of-repo-root>/libraries/JaszczurHAL`
-by the setup flow (`runmefirst.sh`, implemented by
-[`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh)). It provides:
-
-- a HAL abstraction layer (I²C, CAN, GPIO, PWM, timers, ADC) with a native
-  RP2040 production backend used by the current firmware build,
-- decoupling of module code from any specific MCU architecture,
-- utilities: soft-timer table, PID controller, KV store backed by emulated
-  EEPROM, logging macros,
-- a mock backend and host-test support that let firmware logic compile with a
-  host C/C++ compiler (GCC on Linux) without the target toolchain.
-
-Each module implements JaszczurHAL's portable `app_start()` / `app_task0()`
-entry points directly and adds `app_task1()` when it opts in to the second
-execution context. The firmware build configures the JaszczurHAL multi-target
-dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`) without a
-Fiesta-specific entry adapter. See
-[README § Build and development](README.md#build-and-development).
-
-### 4.2 canDefinitions ([`src/common/canDefinitions`](src/common/canDefinitions/))
-
-`canDefinitions` is the in-tree single source of truth for CAN frame IDs,
-signal layouts, and scaling (`canDefinitions.h`). It is shared across ECU,
-Clocks, OilAndSpeed, and Fiesta_clock so that they agree on the wire format
-without duplicating header files. Because it is versioned inside this
-repository, there is no separate clone/update step for this layer in
-the setup flow.
-
-### 4.3 scDefinitions ([`src/common/scDefinitions`](src/common/scDefinitions/))
-
-`scDefinitions` is the in-tree single source of truth for the
-SerialConfigurator wire vocabulary and the descriptor-driven SC reply
-machinery shared by ECU, Clocks, OilAndSpeed, Fiesta_clock, and the
-desktop configurator. Unlike `JaszczurHAL` (out-of-tree external lib) it lives
-inside the Fiesta repository because the wire rules are Fiesta-specific.
-
-Files:
-
-- [`sc_protocol.h`](src/common/scDefinitions/sc_protocol.h) - HAL-free
-  `SC_CMD_*`, `SC_STATUS_*`, reply tags and reply format strings. Every
-  `SC_*` literal used anywhere in firmware or host code lives here.
-- [`sc_session_vocabulary.h`](src/common/scDefinitions/sc_session_vocabulary.h)
-  \- HAL-bound binding that owns the `fiesta_default_vocabulary` instance
-  passed to `hal_serial_session_init_with_vocabulary` so JaszczurHAL
-  itself stays free of Fiesta-specific tokens.
-- [`sc_param_types.h`](src/common/scDefinitions/sc_param_types.h) -
-  tagged-union `sc_param_descriptor_t` (SCALAR_I16 active; AXIS / MAP
-  kinds reserved), flags (`READ_ONLY`, `NOT_PERSISTED`), and the
-  `SC_PARAM_SCALAR_I16(...)` /
-  `SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(...)` builder macros.
-- [`sc_param_handlers.{h,c}`](src/common/scDefinitions/) - generic
-  descriptor-driven machinery: lookup, range validation, get/set,
-  load_defaults, three reply emitters (`PARAM_LIST` / `PARAM_VALUES` /
-  `PARAM`), schema-versioned blob_encode/decode, and the shared
-  CRC32 (PKZIP) helper.
-- [`sc_command_handlers.{h,c}`](src/common/scDefinitions/) - shared router
-  registration, text-argument parsing, source/auth policies, SC response
-  bodies, and deferred bootloader entry.
-
-The firmware path for an application command is:
+## System overview
 
 ```text
-USB CDC frame
-  -> hal_serial_session
-  -> hal_serial_commands
-  -> hal_command_router
-  -> sc_command_service
+                 CAN0 (main)
+   ┌───────────┐ ◄──────────► Clocks          dashboard gauges, TFT, buzzer
+   │           │ ◄──────────  OilAndSpeed     oil pressure, wheel speed, EGT
+   │    ECU    │ ◄──────────  Fiesta_clock    RTC time, 1 Hz
+   │  RP2040,  │
+   │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
+   │           │ ─── I²C ───► PCF8574         relays (0x38)
+   │           │ ◄── UART ──  GPS receiver
+   │           │ ─── CAN1 ──► OBD-II port
+   └─────┬─────┘ ◄─ ADC, GPIO, PWM ─► sensors and actuators
+         │
+         │ USB CDC, off-vehicle
+         ▼
+   Fiesta Serial Configurator (Linux, GTK-4)
+     also connects to Clocks, OilAndSpeed and Fiesta_clock
 ```
 
-`hal_serial_session` keeps framing and the structural `HELLO`, `SC_BYE`,
-`SC_AUTH_BEGIN`, and `SC_AUTH_PROVE` lifecycle. `hal_serial_commands` splits
-the first word from the text arguments and adds session/auth metadata. The
-router performs exact-name lookup plus source and authentication checks. The
-Fiesta service handles `SC_GET_*`, parameter writes, commit/revert, and
-`SC_REBOOT_BOOTLOADER`; reboot entry is deferred until the serial reply has
-been emitted. Current module registrations allow only
-`HAL_COMMAND_SOURCE_SERIAL_SESSION`; JaszczurHAL can attach other adapters
-without changing these Fiesta policies. Enabling reboot from BLE or LoRa later
-will require an adapter completion or transmit-drain hook before the service
-may enter the bootloader; the current deferred path is safe only after a
-Serial Session reply.
+The ECU is the hub. It is the only module that controls the engine and the
+only one held to MISRA-C. The others either feed it data or display what it
+publishes.
 
-Each firmware module's `config.{c,cpp}` declares its descriptor table and
-supplies only module-specific state callbacks. Adding a wire-visible parameter
-is one descriptor row, one values-struct field, and, when persisted, a
-`schema_since` bump. A module-local source bridge includes both shared `.c`
-implementations for native firmware; host CMake builds compile the same files
-directly through `${SCDEFS}`.
+## Hardware platform
 
-### 4.4 Per-module layout convention
+All modules run on RP2040 boards: Raspberry Pi Pico, RP2040-Plus, or
+RP2040-Zero. Each module picks its board in
+`.vscode/jaszczurhal.project.json`. RP2040 was chosen because it is cheap and
+easy to get, has two cores, flexible GPIO interrupts and PWM, and flash that
+can emulate EEPROM for DTCs and settings. The firmware talks to the hardware
+through JaszczurHAL, so moving a module to another MCU means porting the HAL
+backend, not rewriting the module.
 
-Most active modules follow the same file layout (ECU, Clocks,
-OilAndSpeed, Adjustometer). `Fiesta_clock` keeps a flatter legacy naming
-layout (`main.c`, `RTC.c`, etc.) but uses the same shared HAL/SC/script
-foundation:
+Schematics, layouts, and connector maps for every board are in
+[`Fiesta_pcbs/`](Fiesta_pcbs/). [`pinout.txt`](Fiesta_pcbs/pinout.txt) maps
+the 104-pin ECU connector and [`wirings.txt`](Fiesta_pcbs/wirings.txt) lists
+the loom colours.
 
-```
-src/<Module>/
-├── start.{c,cpp}/.h       # app entry, soft-timer table, watchdog hookup
-├── hardwareConfig.h       # pin/address constants (single source of truth)
-├── hal_project_config.h   # per-module HAL feature flags
-├── config.{c,cpp}/.h      # module configuration and/or SC session surface
-├── can.{c,cpp}/.h         # CAN TX/RX adapters
-├── <domain logic files>
-├── CMakeLists.txt         # host-test build
-├── tests/                 # host unit tests (compiled as C++)
-├── build_test/            # CMake build output (git-ignored)
-├── .vscode/               # jh-vscode manifest, tasks, launch, settings
-└── .build/                # generated firmware artefacts (git-ignored)
-```
+## Modules
 
-Module-local VS Code wrapper scripts were removed during the
-JaszczurHAL migration; firmware build, debug build, upload, monitor, and
-IntelliSense refresh now go through
-`../libraries/JaszczurHAL/vscode/entry/jh-vscode`.
+| Module | Language | Role | MISRA |
+|---|---|---|---|
+| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required |
+| [`Clocks`](src/Clocks/) | C++ | instrument cluster | no |
+| [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure, wheel speed, exhaust gas temperature | no |
+| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
+| [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | no |
+| [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
 
----
+[`legacy/`](legacy/) keeps the retired `DPF_main`, `AdaptiveLights`, and
+`Fading` sources for reference. They are not built or tested.
 
-## 5. Module details
+### ECU
 
-### 5.1 ECU - [`src/ECU`](src/ECU/)
+The ECU controls fuel injection through the VP37 pump, boost through the N75
+solenoid, glow plugs, the fan, the block heater, and the heated windshield. It
+also stores DTCs and answers OBD-II requests, presenting itself as a Ford
+Fiesta 1.8 DI EEC-V ECU. It is the MISRA-C target; [`MISRA.md`](MISRA.md)
+describes the current state.
 
-**Role.** The ECU is the only safety-critical module. It owns engine
-control, fault management, and the OBD-II interface. It is the
-**MISRA-C target**; see [`MISRA.md`](MISRA.md) for the current alignment
-figures, migration status, and screening entry points.
+The work is split between the cores:
 
-**Dual-core split.**
-- `core-0` runs the main control loop: soft-timer table, CAN TX/RX, actuator
-  updates, OBD-II service handlers. All runtime-critical work.
-- `core-1` runs the time-critical engine control path - VP37 servicing and
-  the rest of the tight-loop engine logic.
+- **Core 0** runs the main loop: a soft-timer table, CAN traffic, OBD-II, the
+  relay outputs, DTC storage, and the Serial Configurator session.
+- **Core 1** runs the time-critical engine path: the VP37 control cycle, the
+  RPM interrupt, and turbo control.
 
-The RPM Hall GPIO interrupt has an explicit core-affinity requirement: it is
-registered from core 1 with `hal_gpio_attach_interrupt_ex()` and owner core
-`1`. A caller/core mismatch is a startup error (`HAL_ESTATE`), not an implicit
-interrupt migration. `RPM_create()` propagates this status to the core-1
-startup path. Core 1 then remains unstarted and stops its watchdog liveness
-updates, while core 0 logs the exact HAL status and persists DTC `U190C` before
-the dual-core watchdog resets the ECU. DTC persistence deliberately stays on
-core 0. A future FreeRTOS task hosting this path must remain pinned to core 1
-and retain the same registration and failure behavior.
+There is no RTOS. `start.c` installs a table of `(period, callback)` pairs
+that the core-0 loop calls when due, from about 10 ms for fast sensor reads to
+one second for housekeeping. Data shared between the cores sits behind
+dedicated mutexes: the Adjustometer snapshot, the PCF8574 output latch, and
+the DTC manager with its storage. Flash writes stay on core 0.
 
-Cross-core state is protected by dedicated mutexes (adjustometer snapshot,
-PCF8574 shadow latch, DTC manager + its KV persistence). See the "dual-core
-state synchronization pass" bullet in [`MISRA.md`](MISRA.md) for the list of
-covered structures.
-
-**State ownership.** The main controller instances (`fan`, `heater`, windows,
-glow plugs, RPM, engine operation, turbo, and VP37) are consolidated in one
-`ecu_context_t` struct (see [`ecuContext.h`](src/ECU/ecuContext.h)). Supporting
-subsystems such as CAN, sensors, DTC storage, GPS, OBD, and the SC session own
-file-local static state structs. This keeps ownership explicit without claiming
-that every mutable ECU byte lives inside `ecu_context_t`.
-
-**Responsibility map.**
+The main controllers (VP37, turbo, RPM, fan, heater, glow plugs, windows, and
+engine state) live in one `ecu_context_t` in
+[`ecuContext.h`](src/ECU/ecuContext.h). CAN, sensors, DTC storage, GPS, OBD,
+and the configurator session keep their state in file-local structs.
 
 | File | Responsibility |
 |---|---|
-| [`start.c`](src/ECU/start.c) | init sequence, soft-timer registration, watchdog startup, reboot-snapshot readback |
-| [`sensors.c`](src/ECU/sensors.c) | HC4051 mux sweep, ADC sampling, PCF8574 driver, adjustometer I²C reads |
-| [`can.c`](src/ECU/can.c) | main-CAN frame packing and dispatch; uses shared CAN IDs from `src/common/canDefinitions/canDefinitions.h` |
-| [`obd-2.c`](src/ECU/obd-2.c) | OBD CAN ingress and non-blocking ISO-TP response transport |
-| [`obd_j1979.c`](src/ECU/obd_j1979.c) | SAE J1979 services, Mode 01 PID encoders, and PID descriptions |
-| [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP diagnostic services |
-| [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalog, set/clear, KV persistence, and retrieval for diagnostic responses |
-| [`rpm.c`](src/ECU/rpm.c) | engine RPM via Hall-sensor GPIO edge interrupt |
-| [`vp37.c`](src/ECU/vp37.c) | VP37 injection pump: lifecycle, demand and the control cycle that calls the units below in the order the command is built |
-| [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position transfer and the calibration sweep |
-| [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | supply-voltage, fuel-temperature and measured drive-resistance multipliers, fed by the shunt scan |
-| [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned map trim, PID authority, dead zone and hold |
-| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control sample, console lines and the bench trace, on core 0 from a snapshot |
-| [`vp37_current.c`](src/ECU/vp37_current.c) | shunt capture reduction and pulse analysis, no pump state |
-| [`turbo.c`](src/ECU/turbo.c) | turbo boost control (N75 solenoid, MAP-based) |
-| [`engineFan.c`](src/ECU/engineFan.c) | fan relay control with hysteresis |
-| [`engineHeater.c`](src/ECU/engineHeater.c) | block-heater low/high relays |
-| [`engineFuel.c`](src/ECU/engineFuel.c) | amount of fuel measurement |
-| [`glowPlugs.c`](src/ECU/glowPlugs.c) | glow plug relay + lamp timing |
-| [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | heated-window relays with button latch |
-| [`gps.c`](src/ECU/gps.c) | NMEA parsing over UART, time/date publication |
-| [`config.c`](src/ECU/config.c) | persistent configuration via KV store |
-| [`engineMaps.c`](src/ECU/engineMaps.c) | every shaping table as plain values: N75 duty, VP37 holding map, integral authority and dead-zone tapers |
+| [`start.c`](src/ECU/start.c) | start-up order, soft-timer table, watchdog, both core loops |
+| [`sensors.c`](src/ECU/sensors.c) | analog inputs through the HC4051 multiplexer, PCF8574 outputs, Adjustometer reads |
+| [`can.c`](src/ECU/can.c) | main CAN frames, including the RPM publisher |
+| [`obd-2.c`](src/ECU/obd-2.c) | OBD CAN input and ISO-TP responses |
+| [`obd_j1979.c`](src/ECU/obd_j1979.c) | SAE J1979 services and Mode 01 PIDs |
+| [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
+| [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
+| [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
+| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, demand, and the control cycle that calls the units below |
+| [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position and the calibration sweep |
+| [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
+| [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
+| [`vp37_current.c`](src/ECU/vp37_current.c) | coil current measured on the shunt |
+| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0 |
+| [`turbo.c`](src/ECU/turbo.c) | boost control from manifold pressure |
+| [`engineMaps.c`](src/ECU/engineMaps.c) | all shaping tables: N75 duty, VP37 holding map, integral and dead-zone tapers |
+| [`engineFan.c`](src/ECU/engineFan.c), [`engineHeater.c`](src/ECU/engineHeater.c), [`glowPlugs.c`](src/ECU/glowPlugs.c), [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | relay outputs |
+| [`engineFuel.c`](src/ECU/engineFuel.c) | fuel level |
+| [`gps.c`](src/ECU/gps.c) | NMEA time and date |
+| [`config.c`](src/ECU/config.c) | stored settings and the configurator session |
 
-**Hardware interfaces** (from [`hardwareConfig.h`](src/ECU/hardwareConfig.h)):
+[`hardwareConfig.h`](src/ECU/hardwareConfig.h) assigns every pin and address.
+In short:
 
-- **I²C** (`PIN_SDA=0`, `PIN_SCL=1` @ 400 kHz):
-  - Adjustometer slave at `0x57` (registers `0x00-0x04`, see §6.2),
-  - PCF8574 relay expander at `0x38` (bits 0-7 map to glow plugs, fan,
-    heater HI/LO, glow-plug lamp, heated window L/P, VP37 enable).
-- **CAN0** (main vehicle bus): SPI-attached controller, CS=GPIO 17, INT=15.
-- **CAN1** (OBD-2 port): SPI-attached controller, CS=GPIO 6, INT=14.
-- **SPI** (MISO=16, MOSI=19, SCK=18): shared between CAN0 and CAN1.
-  GPIO26 belongs to the VP37 source-shunt input and is not available to any
-  other peripheral.
-- **ADC**: `ADC_SENSORS_PIN=27` fed by a HC4051 analog mux (select pins
-  11/12/13) giving 6 analog inputs - coolant temp (ch 0), oil temp (ch 1),
-  throttle position (ch 2), air temp (ch 3), fuel level (ch 4), manifold/boost
-  pressure (ch 5). `ADC_VOLT_PIN=28` reads ECU supply voltage through a
-  ~47 kΩ / 10 kΩ divider. `ADC_VP37_CURRENT_PIN=26` is connected to the
-  0.22 Ω source shunt. While the VP37 current scan runs it owns the converter:
-  `hal_adc_read()` of pins 26/27/28 is served from the scan ring and a pin the
-  scan does not carry reads as an error, never as 0. `sensors.c` derives the
-  mux settling wait (`SENSORS_MUX_ANALOG_SETTLE_US` plus two scan frames) and
-  the spacing of averaged samples (one frame, so four samples come from four
-  frames) from the scan's frame period; a demand that cannot be read is zero
-  demand, and core 1 checks at start-up that the scan carries the mux and
-  supply pins. `vp37_current.c` observes one PWM period on core 0
-  every 20 ms while active; telemetry includes ON current and waveform validity.
-  Current values are diagnostic only. The same task also averages supply voltage
-  over the period; bench `V1` selects this input for voltage compensation while
-  it remains valid and younger than 100 ms. `V0` retains the local ADC default.
-- **Timing-sensitive GPIO/PWM paths** (legacy pin constants retain the
-  `PIO_*` prefix):
-  - `PIO_INTERRUPT_HALL=7` - engine Hall sensor GPIO interrupt (RPM),
-  - `PIO_VP37_RPM=9`, `PIO_VP37_ANGLE=5` - VP37 PWM outputs,
-  - `PIO_TURBO=10` - N75 solenoid PWM,
-  - `PIO_DPF_LAMP=8` - DPF warning-lamp output.
-- **PWM**: `PWM_WRITE_RESOLUTION=11` (2047 levels); frequencies configured
-  per output (`VP37_PWM_FREQUENCY_HZ`, `TURBO_PWM_FREQUENCY_HZ`,
-  `ANGLE_PWM_FREQUENCY_HZ`).
-- **UART** (RX=22, TX=21): GPS receiver.
-- **GPIO**: heated-windows switch input on pin 20, status LED on pin 25.
-- **Persistent store**: `ECU_EEPROM_SIZE_BYTES` (currently 32768 bytes) of
-  flash-backed emulated EEPROM, used for DTCs and configuration.
+- **I²C** at 400 kHz, ECU as master: Adjustometer at `0x57`, PCF8574 relay
+  expander at `0x38`.
+- **SPI** shared by two MCP2515 CAN controllers, CAN0 for the car and CAN1 for
+  the OBD-II port.
+- **ADC**: six analog inputs through the HC4051 multiplexer (coolant, oil and
+  air temperature, throttle, fuel level, manifold pressure), the supply
+  voltage, and the VP37 shunt on GPIO26, which no other peripheral may use.
+  While the VP37 current scan runs it owns the converter, and the other analog
+  reads come from its buffer.
+- **PWM** for the VP37, N75, and DPF lamp outputs; **GPIO interrupt** for the
+  engine Hall sensor; **UART** for GPS.
+- **Flash-backed EEPROM** for DTCs and settings.
 
-**Timing model.** On RP2040, ECU does not use an RTOS. Work is scheduled by a soft-timer
-table installed in `start.c`: each entry is a `(period, callback)` pair
-invoked from the main loop. In addition, both RP2040 cores are used, and the second core is handling engine-related (VP37 / turbo), time-critical tasks. Typical cadences are high-rate sensor reads (~10 ms), medium-rate reads (~100 ms), CAN publish cycles, and slower
-per-second housekeeping. RPM becomes eligible for immediate publication when
-it changes and for heartbeat publication after 100 ms while unchanged. A
-failed RPM transmission remains pending and becomes eligible for retry after
-10 ms. Each eligible transmission runs on the next core-0 loop iteration, so
-those thresholds are not hard latency limits if the synchronous loop stalls.
-The MCP2515 remains in one-shot mode so an unacknowledged frame cannot occupy
-one of its three TX buffers indefinitely; the driver reports one-shot failure
-flags to the publisher. The RPM publisher runs before the soft-timer table on
-each core-0 iteration so callbacks due in that iteration cannot add their
-execution time to the RPM-to-CAN path.
+### Clocks
 
-### 5.2 Clocks - [`src/Clocks`](src/Clocks/)
-
-**Role.** Driver-facing instrument cluster. Listens to the main CAN bus
-and drives (a) the physical speedometer/tachometer/oil gauges with square
-waves, (b) a TFT LCD for auxiliary readouts, and (c) a buzzer for
-warnings.
-
-**Responsibility map.**
+Clocks drives the instrument cluster. It listens on the main CAN bus and
+produces square waves for the factory speedometer, tachometer, and oil gauge,
+draws extra readouts on a TFT display, and sounds the buzzer. It only
+consumes data; the ECU needs nothing from it.
 
 | File | Responsibility |
 |---|---|
-| [`Cluster.cpp`](src/Clocks/Cluster.cpp) | square-wave generation for the factory speedometer/tachometer inputs |
-| [`Gauge.h`](src/Clocks/Gauge.h), [`simpleGauge.cpp`](src/Clocks/simpleGauge.cpp), [`tempGauge.cpp`](src/Clocks/tempGauge.cpp), [`pressureGauge.cpp`](src/Clocks/pressureGauge.cpp) | gauge abstractions (generic / temperature / pressure scaling) |
-| [`TFTExtension.cpp`](src/Clocks/TFTExtension.cpp) | SPI TFT driver and rendering helpers |
-| [`logic.cpp`](src/Clocks/logic.cpp) | state machine mapping CAN signals to display/gauge/buzzer state |
-| [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tone generation + warning pattern strategy |
-| [`engineFuel.cpp`](src/Clocks/engineFuel.cpp) | fuel-level aggregation for the cluster |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN RX filtering and decode; MCP2515 acceptance filters admit only the Fiesta standard-ID range |
-| [`peripherials.cpp`](src/Clocks/peripherials.cpp) | GPIO/PWM init |
+| [`Cluster.cpp`](src/Clocks/Cluster.cpp) | square waves for the factory gauges |
+| [`Gauge.h`](src/Clocks/Gauge.h), [`simpleGauge.cpp`](src/Clocks/simpleGauge.cpp), [`tempGauge.cpp`](src/Clocks/tempGauge.cpp), [`pressureGauge.cpp`](src/Clocks/pressureGauge.cpp) | gauge scaling |
+| [`TFTExtension.cpp`](src/Clocks/TFTExtension.cpp) | TFT drawing |
+| [`logic.cpp`](src/Clocks/logic.cpp) | turns CAN signals into gauge, display, and buzzer state |
+| [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN reception; the MCP2515 filters admit only Fiesta IDs |
 
-**Hardware interfaces** (from [`hardwareConfig.h`](src/Clocks/hardwareConfig.h)):
+The CAN controller and the TFT share one SPI bus.
 
-- **SPI** (MISO=0, MOSI=3, SCK=2) drives both the CAN controller (CS=1,
-  INT=4) and the TFT display (CS=6, RST=7, DC=8).
-- **PWM outputs**: speed output on pin 9, tacho on pin 10, oil on pin 11,
-  backlight brightness on pin 5, buzzer on pin 14.
-- **GPIO**: RGB status LED on pin 16.
+### OilAndSpeed
 
-**Direction of data.** Clocks is primarily a CAN **consumer**. It does not
-produce signals the ECU needs for control.
-
-### 5.3 OilAndSpeed - [`src/OilAndSpeed`](src/OilAndSpeed/)
-
-**Role.** A peripheral telemetry module. Provides two signals the ECU does
-not read directly - oil pressure (resistive 0..10 bar sender) and ABS
-wheel speed (frequency on a GPIO line) - and hosts two MCP9600
-thermocouple amplifiers for pre-DPF/KAT and mid-DPF exhaust gas temperatures.
-
-**Responsibility map.**
+OilAndSpeed measures what the ECU does not read itself: oil pressure from a
+resistive sender, vehicle speed from the ABS pulse line, and exhaust gas
+temperature before and inside the DPF through two MCP9600 amplifiers on its
+own I²C bus. It sends the results on CAN for the ECU and Clocks.
 
 | File | Responsibility |
 |---|---|
-| [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC -> bar conversion for the resistive oil sender (10..180 Ω nominal) |
-| [`speed.cpp`](src/OilAndSpeed/speed.cpp) | frequency-counter on ABS pulse line -> vehicle speed |
-| [`can.cpp`](src/OilAndSpeed/can.cpp) | CAN TX of oil/speed/EGT frames (IDs from `src/common/canDefinitions/canDefinitions.h`) |
-| [`config.cpp`](src/OilAndSpeed/config.cpp) | SC session plus read-only, non-persisted sampling-interval catalogue |
-| [`periperials.cpp`](src/OilAndSpeed/periperials.cpp) | GPIO/SPI/I²C init *(file name kept as-is in the source tree)* |
-| `start.cpp` | init sequence |
+| [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC reading to bar |
+| [`speed.cpp`](src/OilAndSpeed/speed.cpp) | ABS pulse frequency to speed |
+| [`can.cpp`](src/OilAndSpeed/can.cpp) | oil, speed, and EGT frames |
+| [`config.cpp`](src/OilAndSpeed/config.cpp) | configurator session, read-only sampling intervals |
 
-**Hardware interfaces** (from [`hardwareConfig.h`](src/OilAndSpeed/hardwareConfig.h)):
+### Adjustometer
 
-- **ADC**: oil pressure sender on `A3`.
-- **GPIO**: ABS frequency input on pin 14.
-- **SPI** (MISO=0, MOSI=3, SCK=2) -> CAN controller (CS=1, INT=4). Same
-  SPI pin layout as Clocks; not shared with any display.
-- **I²C** (SDA=12, SCL=13) -> two MCP9600 thermocouple amplifiers at
-  `0x60` (pre-DPF) and `0x67` (mid-DPF).
-- **GPIO**: RGB status LED on pin 16.
+Adjustometer gives the ECU position feedback from the VP37 pump. A Hartley
+oscillator runs through the pump's control coil, and the module counts its
+frequency (around 37 kHz) with a high-priority GPIO interrupt.
+It subtracts a baseline it calibrates itself and reports the deviation. It has
+its own firmware and core because the measurement cannot share time with
+engine control. It usually sits on the ECU board.
 
-**Direction of data.** OilAndSpeed is primarily a CAN **producer** feeding
-both the ECU (for DTC/diagnostic use) and Clocks (for display).
-
-### 5.4 Adjustometer - [`src/Adjustometer`](src/Adjustometer/)
-
-**Role.** A dedicated feedback module for the VP37 injection pump. It is
-electrically close to the ECU (commonly co-located on the ECU PCB) but
-runs independent firmware because the measurement is timing-critical and
-benefits from a dedicated core and high-priority GPIO interrupt path.
-
-It measures the pump control coil's resonance frequency with a Hartley
-oscillator, subtracts a self-calibrated baseline, and exposes the result
-(plus supply voltage, fuel temperature, and a status bitmask) to the ECU
-as an **I²C slave** at address `0x57`.
-
-**Responsibility map.**
-
-| File | Responsibility |
-|---|---|
-| [`sensors.c`](src/Adjustometer/sensors.c) | oscillator capture via GPIO interrupt, baseline calibration, signal-lost detection, voltage / fuel-temp read, status bit assembly |
-| [`led.c`](src/Adjustometer/led.c) | RGB status LED patterns |
-| `start.c` | init, I²C slave setup, soft-timer table |
-
-**Hardware interfaces** (from [`hardwareConfig.h`](src/Adjustometer/hardwareConfig.h)):
-
-- **GPIO interrupt**: pin `PIO_INTERRUPT_HALL=2` (legacy constant name)
-  captures falling edges from the ~37 kHz oscillator; the handler runs at the
-  highest configured GPIO IRQ priority.
-- **I²C** (SDA=0, SCL=1 @ 400 kHz): **slave** side; the ECU is the master.
-- **ADC**: `ADC_VOLT_PIN=29` (supply voltage, 47k/10k divider -> ≈18.8 V
-  max), `ADC_FUEL_TEMP_PIN=28` (NTC fuel-temp sensor, `R_VP37_FUEL_A=2300`,
-  `R_VP37_FUEL_B=3300`).
-- **GPIO**: RGB LED on pin 16.
-
-**I²C register map** (the ECU reads all five bytes in a single burst; see
-the `ADJUSTOMETER_REG_*` constants in
-[`src/ECU/hardwareConfig.h`](src/ECU/hardwareConfig.h)):
+The ECU reads all five registers in one I²C transfer:
 
 | Register | Type | Meaning |
 |---|---|---|
-| `0x00..0x01` | int16 BE | frequency deviation from baseline [Hz] |
-| `0x02` | uint8 | supply voltage in 0.1 V units |
-| `0x03` | uint8 | fuel temperature [°C] |
-| `0x04` | uint8 | status bitmask (see below) |
+| `0x00..0x01` | int16, big-endian | frequency deviation from the baseline, Hz |
+| `0x02` | uint8 | supply voltage, 0.1 V units |
+| `0x03` | uint8 | fuel temperature, °C |
+| `0x04` | uint8 | status: `0x01` signal lost, `0x02` fuel sensor broken, `0x04` baseline pending, `0x08` supply out of range |
 
-Status bits (`ADJ_STATUS_*`):
+After power-up the oscillator needs time to settle. The ECU waits for the
+baseline-pending bit to clear, usually about 250 ms and at most
+`ADJUSTOMETER_BASELINE_WAIT_MS` (8 s), before it trusts the position. The
+constants are in [`src/ECU/hardwareConfig.h`](src/ECU/hardwareConfig.h).
 
-- `0x01` - oscillation signal lost,
-- `0x02` - fuel-temp sensor broken,
-- `0x04` - baseline calibration pending,
-- `0x08` - supply voltage out of range.
+Adjustometer does not take part in the configurator protocol.
 
-**Startup timing.** After power-on the oscillator needs to warm up, converge,
-and be verified before the baseline is considered valid. The ECU waits up
-to `ADJUSTOMETER_BASELINE_WAIT_MS = 8000 ms`(max value, usually everything is ready after ~250ms) for the `BASELINE_PENDING` status bit to clear before trusting the frequency reading.
+### Fiesta_clock
 
-### 5.5 Fiesta_clock (`RTC_Clock`) - [`src/Fiesta_clock`](src/Fiesta_clock/)
+Fiesta_clock keeps calendar time in a PCF8563 and sends it once a second as
+`CAN_ID_RTC_UPDATE` (`0x130`). It stays silent while the RTC reports lost
+integrity. The configurator can read and set the date and time; a commit is
+rejected unless the whole date is valid, leap years included. The module also
+shows the time, temperatures from two DS18B20 sensors, and the supply voltage
+on its own display.
 
-**Role.** Dedicated RTC/clock module. It maintains calendar time via the
-PCF8563 and publishes it on the main CAN bus as `CAN_ID_RTC_UPDATE`
-(`0x130`). The same module exposes RTC read/write over the shared
-SerialConfigurator protocol (`module=RTC_CLK`, display name `RTC_Clock`).
+### Serial Configurator
 
-**Responsibility map.**
+The configurator is a desktop application for Linux, written in C with GTK-4.
+It finds Fiesta modules on USB, shows their identity, reads and writes their
+parameters, and flashes firmware after checking the build manifest. A CLI
+exposes the same functions.
 
-| File | Responsibility |
+It has two layers. The core library handles serial ports, the protocol,
+authentication, parameters, and flashing, and has no GUI code. The GTK shell
+only presents; it never opens a port or parses a frame. Platform-specific
+code is limited to device enumeration, hot-plug, finding the UF2 drive,
+config file location, and packaging. Linux is the working platform. Windows
+10/11 is the intended second one, but the serial transport is still POSIX
+only.
+
+Commands, authentication, and signature status are described in the
+[Serial Configurator README](src/SerialConfigurator/README.md).
+
+## Shared code
+
+- **[JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL)** is a separate
+  repository that `runmefirst.sh` clones into `../libraries/JaszczurHAL`. It
+  provides the hardware layer (GPIO, ADC, PWM, I²C, SPI, CAN, timers), soft
+  timers, PID, a key-value store on emulated EEPROM, logging, and a mock
+  backend that lets the module code build and run in host tests. Each module
+  implements its `app_start()` and `app_task0()` entry points, plus
+  `app_task1()` when it uses the second core.
+- **[`canDefinitions`](src/common/canDefinitions/canDefinitions.h)** holds
+  every CAN ID, frame layout, and scaling used between modules.
+- **[`scDefinitions`](src/common/scDefinitions/)** holds the configurator
+  protocol shared by the firmware modules and the desktop application. The
+  protocol is described in
+  [`PROTOCOL.md`](src/common/scDefinitions/PROTOCOL.md).
+
+Most modules use the same layout. `Fiesta_clock` keeps older file names
+(`main.c`, `RTC.c`) but the same shared pieces.
+
+```text
+src/<Module>/
+├── start.{c,cpp}/.h       # entry points, soft-timer table, watchdog
+├── hardwareConfig.h       # pins and addresses
+├── hal_project_config.h   # enabled HAL features
+├── config.{c,cpp}/.h      # settings and the configurator session
+├── can.{c,cpp}/.h         # CAN frames
+├── <domain logic files>
+├── CMakeLists.txt         # host tests
+├── tests/                 # host unit tests, compiled as C++
+└── .vscode/               # jh-vscode manifest and tasks
+```
+
+## Communication
+
+### CAN
+
+The ECU sits on two separate CAN buses:
+
+| Bus | Members | Purpose |
+|---|---|---|
+| CAN0 "main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | traffic between modules |
+| CAN1 "OBD-2" | ECU, OBD-II port | external diagnostic tools |
+
+On CAN0 the ECU publishes engine state, boost, fuel, DTCs, and GPS time, and
+reads oil pressure, wheel speed, and EGT. Clocks only listens. OilAndSpeed
+and Fiesta_clock mostly transmit. On CAN1 the ECU answers OBD-II and UDS
+requests from whatever tool is connected.
+
+### I²C
+
+The ECU is the master on its bus, with Adjustometer at `0x57` and the PCF8574
+relay expander at `0x38`. OilAndSpeed and Fiesta_clock run separate I²C buses
+for their own sensors.
+
+### USB
+
+ECU, Clocks, OilAndSpeed, and Fiesta_clock each show up as a separate USB
+device named `Fiesta <Module>` with the board's unique ID as serial number.
+The configurator uses these names to find the right module even when several
+boards are connected. The protocol on that link, the identity rules, and the
+flashing sequence are in
+[`PROTOCOL.md`](src/common/scDefinitions/PROTOCOL.md).
+
+## Vehicle interfaces
+
+| Direction | Signals |
 |---|---|
-| [`main.c`](src/Fiesta_clock/main.c) | runtime init/loop orchestration (display, buttons, CAN tick, SC session tick) |
-| [`RTC.c`](src/Fiesta_clock/RTC.c) | HAL-backed PCF8563 RTC access (`get/set datetime`, integrity read) |
-| [`can.c`](src/Fiesta_clock/can.c) | periodic CAN TX of RTC update frame (`CAN_ID_RTC_UPDATE`) |
-| [`config.c`](src/Fiesta_clock/config.c) | SC session wrapper + descriptor-driven RTC parameter handling |
-| [`clockPart.c`](src/Fiesta_clock/clockPart.c), [`tempPart.c`](src/Fiesta_clock/tempPart.c), [`voltPart.c`](src/Fiesta_clock/voltPart.c) | local UI/runtime functions (clock, temperature, voltage display modes) |
+| Sensors to ECU | coolant, oil, and intake air temperature; fuel level; throttle; manifold pressure; engine RPM (Hall); heated-window button; supply voltage |
+| Sensors to OilAndSpeed | oil pressure, ABS wheel speed, EGT before and inside the DPF |
+| ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
+| Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), TFT display, buzzer |
+| Diagnostics | OBD-II port on CAN1 |
+| Auxiliary | GPS date and time on the ECU UART, republished on CAN; RTC time from Fiesta_clock |
 
-**Hardware interfaces** (from [`hardwareConfig.h`](src/Fiesta_clock/hardwareConfig.h)):
+## Persistence
 
-- **SPI** (MISO=0, MOSI=3, SCK=2) -> MCP2515 CAN controller (CS=1, INT=4).
-- **I²C** (SDA=8, SCL=9 @ 100 kHz) -> PCF8563 RTC (`0x51`).
-- **GPIO**: clock control buttons (10/11/12), ignition input (13), RGB LED (14/15/16).
-- **ADC**: supply voltage read on pin 26.
-- **1-Wire GPIO**: DS18B20 inside/outside temperature sensors on pins 6/7.
+Modules that store settings keep them in the JaszczurHAL key-value store on
+flash-backed EEPROM (`ECU_EEPROM_SIZE_BYTES` on the ECU). The ECU also stores
+its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
 
-**Direction of data.** In current scope this module is CAN **TX-only**:
-it sends one `CAN_ID_RTC_UPDATE` frame per second, and sends nothing when
-RTC integrity is invalid or the datetime payload is not valid.
+## Builds and CI
 
-**SC surface for RTC.** The descriptor set in
-[`config.c`](src/Fiesta_clock/config.c) exposes writable
-`rtc_year/month/day/hour/minute/second` plus read-only `rtc_integrity`.
-Commit validates the full date tuple (including month/day and leap year)
-before writing to RTC.
+- **Host tests.** Each module builds a Unity test binary with the HAL mock.
+  [`runalltests.sh`](runalltests.sh) runs them together with cppcheck,
+  Valgrind, and clang-tidy. No hardware is needed.
+- **Firmware.** `jh-vscode` from JaszczurHAL builds each module with the Pico
+  SDK and writes `.build/firmware.uf2` with a checked
+  `.build/firmware.manifest.json`. Each build also sets the module's USB
+  name. ECU and Adjustometer compile with `-Werror`.
+- **Desktop.** [`desktop-build.sh`](src/SerialConfigurator/scripts/desktop-build.sh)
+  builds, tests, and packages the configurator.
 
-### 5.6 Fiesta Serial Configurator - desktop companion
-
-**Role.** Off-vehicle desktop application used to discover Fiesta modules on
-USB, inspect identity/metadata, read/write descriptor-driven parameters,
-and orchestrate authenticated BOOTSEL/UF2 flashing with manifest checks.
-It replaces ad-hoc command-line build and serial-terminal probing with a
-single tool that enforces unambiguous target selection.
-
-**Target platforms.**
-- Linux (Debian-like desktops) - primary target; source build and local
-  execution are supported in-tree.
-- Windows 10 / 11 - secondary target; architectural target is preserved, but
-  current transport implementation is Linux/POSIX-first and still needs
-  dedicated portability-layer work for production Windows parity.
-- macOS - not a declared target but is essentially free given the Windows
-  portability rules.
-- Mobile - out of scope.
-
-**GUI toolkit.** GTK-4 is the selected toolkit. The current implementation
-uses C + GTK-4.
-
-**Architectural rule.** The tool is split into:
-- a **platform-neutral core library** that owns serial enumeration,
-  transport framing, session state, authentication, parameter catalog,
-  and flash orchestration. It is headless and reusable (CLI, tests, any
-  future non-GTK shell);
-- a **GTK-4 UI shell** that owns only presentation. It never opens serial
-  ports directly and never parses frames.
-
-No business logic may carry platform `#ifdef`s. OS-specific code lives in
-five named seams: device enumeration, hot-plug detection, UF2 drive
-discovery, config-file location, packaging (see the design doc §4.2).
-
-**Requirements for firmware modules.** The configurator depends on two
-per-module invariants:
-1. Every active firmware module runs a configurator session wired through
-  `configSessionInit/Tick/Active/Id` (ECU, Clocks, OilAndSpeed, RTC_Clock; Adjustometer is out of the primary flow). The session answers the bootstrap handshake with
-   the module identity, firmware version, build id, and
-   device UID - sourced from compile-time `SC_MODULE_TOKEN_*` / `FW_VERSION` /
-   `BUILD_ID` plus `hal_get_device_uid_hex()`.
-2. USB descriptor identity: the native JaszczurHAL RP backend initializes
-   `iSerialNumber` from `pico_get_unique_board_id_string()`; `iProduct` is
-   customized per module to `Fiesta <ModuleName>` from the `identity` block in
-   `.vscode/jaszczurhal.project.json`.
-
-The UID reported in the handshake and the USB `iSerialNumber` carry the same
-64-bit flash unique id, giving the host two independent identification
-paths that must agree.
-
-**Rollout phases.** Phases 1-6 are landed; Phase 7 is the next bucket.
-
-| Phase | Status | Scope |
+| Workflow | Runs on | Does |
 |---|---|---|
-| 1 - Runtime parameters foundation | done | `ecu_params` with staging / apply / commit semantics backed by HAL KV; descriptor-driven across all four SC modules after R1 (§5.6 below). |
-| 2 - Framed read-only `SC_*` | done | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM` over `$SC,<seq>,<payload>*<crc8>\n` framing, on ECU/Clocks/OilAndSpeed/RTC_Clock. |
-| 3 - Authentication handshake | done | `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` with HMAC-SHA256 over a per-device key derived from the RP2040 UID; one-shot challenge consumption defeats replay. |
-| 4 - Manifest pre-flash gate | done | Hard-rejecting host-side parser that requires `module_name`, `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte. |
-| 5 - Auth-gated bootloader entry | done | `SC_REBOOT_BOOTLOADER` accepted only after a successful `SC_AUTH_PROVE`; firmware ACKs, drains the ACK frame, and hands control to the boot ROM. |
-| 6 - Flash flow | done | `sc_core_flash` orchestrator composes format check + manifest verify + auth + reboot + BOOTSEL drive watcher + UF2 copy with progress + re-enumeration waiter + post-flash HELLO with optional `fw_version` match. GUI runs the flow on a worker thread, marshals progress via `g_idle_add`. |
-| 7 - Hardening | next | Auth-failure lockout policy on `auth_failures`, ed25519 manifest signature backend (the field is already parsed and exposed today), key rotation, audit logs. |
-
----
-
-## 6. Communication
-
-### 6.1 CAN buses
-
-There are two physically separate CAN buses, both attached to the ECU:
-
-| Bus | Attached to | Purpose | ECU controller |
-|---|---|---|---|
-| CAN0 "main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | inter-module signalling | SPI, CS=17, INT=15 |
-| CAN1 "OBD-2" | ECU, OBD-II diagnostic port | external diagnostics | SPI, CS=6, INT=14 |
-
-Frame IDs and signal layouts live in the shared in-tree `canDefinitions` header
-(`src/common/canDefinitions/canDefinitions.h`) so
-that all participants agree without copy-pasting constants.
-
-Bus roles at a glance:
-
-```
-ECU ──┬── publishes: engine state, boost, fuel, DTCs, GPS time
-      │
-      └── consumes: oil pressure, wheel speed, EGT, dashboard requests
-
-Clocks ──── consumes: RPM, speed, temperatures, pressures
-        ──── publishes: (display-side only)
-
-OilAndSpeed ── publishes: oil pressure, wheel speed, EGT pre/mid-DPF
-             ── consumes: (minimal - heartbeat / context)
-
-RTC_Clock (Fiesta_clock) ── publishes: RTC datetime + integrity
-                            (`CAN_ID_RTC_UPDATE`, 1 Hz)
-                         ── consumes: (none in current firmware scope)
-
-OBD-2 bus ── ECU responds to UDS / OBD-II service requests from
-             whatever diagnostic tool is plugged into the port
-```
-
-### 6.2 I²C (on the ECU bus)
-
-The ECU is the I²C master on `PIN_SDA=0 / PIN_SCL=1` @ 400 kHz and talks
-to two slaves:
-
-| Slave | Address | Role |
-|---|---|---|
-| Adjustometer (`src/Adjustometer`) | `0x57` | VP37 feedback - 5-byte register block (§5.4) |
-| PCF8574 | `0x38` | 8-bit relay expander (glow plugs, fan, heater HI/LO, glow-plug lamp, heated window L/P, VP37 enable) |
-
-OilAndSpeed runs its **own** I²C bus (pins 12/13) for the MCP9600 amplifiers (100 Khz)
-- obviously it is not electrically shared with the ECU's bus.
-
-### 6.3 Other interfaces
-
-- **SPI** - shared on the ECU between CAN0 and CAN1; uses
-  per-device chip-selects. Clocks, OilAndSpeed, and Fiesta_clock each run
-  their own SPI bus for CAN peripherals (Clocks also shares that bus with
-  its TFT display).
-- **UART** - ECU-only, NMEA GPS input on RX=22, TX=21.
-- **GPIO IRQ / PWM** - timing-sensitive paths use GPIO edge interrupts for the
-  engine Hall and Adjustometer oscillator inputs, plus PWM outputs for VP37,
-  the turbo solenoid, and the DPF lamp. Several pin constants retain a legacy
-  `PIO_*` name, but the current source does not configure PIO capture state
-  machines for those inputs.
-
-### 6.4 Desktop configurator channel (USB CDC)
-
-Every RP2040-based firmware module in the **primary configurator flow**
-(ECU, Clocks, OilAndSpeed, RTC_Clock) exposes a **configurator session** over its
-native USB CDC port. This is the transport the Fiesta Serial Configurator
-(§5.6; UI title is "Fiesta USB Configurator") uses off-vehicle.
-Implementation is shared through JaszczurHAL's `hal_serial_session_*`
-helper - each firmware module only owns a thin wrapper
-(`configSessionInit/Tick/Active/Id`) and static identity strings.
-Adjustometer remains outside the primary serial-configurator/flashing
-flow and is structurally skipped at host candidate enumeration time.
-
-Channel responsibilities:
-
-- carry the module bootstrap handshake (identity + firmware metadata +
-  device UID) on first contact, framed with per-request sequence numbers
-  and integrity check,
-- carry the read-only and write-staging `SC_*` queries used by the
-  desktop companion (`SC_GET_META`, `SC_GET_PARAM_LIST`,
-  `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_SET_PARAM`, `SC_COMMIT_PARAMS`,
-  `SC_REVERT_PARAMS`),
-- carry the auth-gated bootloader entry (`SC_AUTH_BEGIN` /
-  `SC_AUTH_PROVE` / `SC_REBOOT_BOOTLOADER`),
-- close cleanly on disconnect via `SC_BYE`,
-- coexist with the existing debug log output on the same CDC stream
-  (mutex-serialised, see §6.4.5).
-
-#### 6.4.1 Wire framing
-
-Every line on the CDC stream that the configurator cares about is wrapped
-in a single standard envelope:
-
-```
-$SC,<seq>,<inner>*<crc8>\n
-```
-
-- `$SC,` - hard prefix. Lines that do not start with this sentinel are
-  silently discarded by the firmware session helper, and the host
-  parser drops them as `non_sc` (counted in the timeout-diag string).
-  This is intentional: serial utility `deb()`/`derr()` debug lines coexist on
-  the same CDC stream and must never be mistaken for protocol traffic.
-- `<seq>` - per-request 16-bit sequence number assigned by the host.
-  The firmware echoes the same seq on its reply so the host can
-  correlate request/response pairs and reject stale frames from a
-  previous request.
-- `<inner>` - the actual SC payload (e.g. `SC_GET_META`, `SC_OK META
-  module=ECU proto=1 ...`). Must not contain `*`, `\r` or `\n`.
-- `*<crc8>` - CRC-8 over the bytes between `$` and `*`. CRC failures
-  are silently dropped on the firmware side; on the host they are
-  counted as `bad_sc` and trigger the fail-fast path
-  (`SC_TRANSPORT_PRIMARY_TIMEOUT_MS` is capped at +60 ms grace from
-  the first corrupt frame).
-
-Firmware and SerialConfigurator compile the codec directly from
-`JaszczurHAL/src/hal/serial/hal_serial_frame.h`. The host build resolves the
-JaszczurHAL checkout through `SC_JASZCZURHAL_DIR` and carries no local codec
-implementation. Two structural commands - `HELLO` and `SC_BYE` - are
-recognised verbatim by every session implementation; everything else
-goes through the project-supplied vocabulary table
-(`fiesta_default_vocabulary` in
-[`sc_session_vocabulary.h`](src/common/scDefinitions/sc_session_vocabulary.h)).
-
-**Frame repair.** If for whatever reason there is a corruption data detected during active session, the host transport is trying to recover the corrupted frame, then validates CRC + seq normally. The event is counted as `repaired` in the timeout-diag string and logged
-with the recovered seq.
-
-#### 6.4.2 USB device identity
-
-Every Fiesta firmware module enumerates as a **distinct USB device**
-under `lsusb` and `/dev/serial/by-id/`, identified by the per-module
-product string and the per-board flash unique id. This is what lets
-the host pick the right module on a workbench with multiple Picos
-attached:
-
-```
-$ lsusb
-... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta ECU
-... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta Clocks
-... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta OilAndSpeed
-... ID 2e8a:000a Raspberry Pi Pico SDK CDC UART  Jaszczur Fiesta RTC Clock
-
-$ ls /dev/serial/by-id/
-usb-Jaszczur_Fiesta_ECU_DE62A875579C612A-if00
-usb-Jaszczur_Fiesta_Clocks_E6625887D3475937-if00
-usb-Jaszczur_Fiesta_OilAndSpeed_E661A4D1234567AB-if00
-usb-Jaszczur_Fiesta_RTC_Clock_E660112233445566-if00
-```
-
-The two layers that produce that identity:
-
-| Layer | Source | Wired through |
-|---|---|---|
-| `iManufacturer` = `Jaszczur` | compile-time | module `identity.usbManufacturer` -> JaszczurHAL `JH_USB_MANUFACTURER` |
-| `iProduct` = `Fiesta <Module>` | compile-time | module `identity.usbProduct` -> JaszczurHAL `JH_USB_PRODUCT` |
-| `iSerialNumber` = 16-hex-char flash UID | runtime | native JaszczurHAL RP USB backend using `pico_get_unique_board_id_string()` |
-
-The identity values live in each module's
-`.vscode/jaszczurhal.project.json`. A module name like `OilAndSpeed` maps to
-the descriptor product string
-`Fiesta OilAndSpeed`; Linux then normalizes spaces to underscores in
-`/dev/serial/by-id/` names such as `usb-Jaszczur_Fiesta_OilAndSpeed_<UID>-if00`.
-The by-id identity matching is performed by JaszczurHAL `jh-vscode` from the
-module's `identity` block in `.vscode/jaszczurhal.project.json`.
-
-The same flash UID is then echoed back inside the SC `HELLO` reply
-(`uid=<hex>`), giving the host **two independent identification paths
-that must agree**:
-
-- the kernel-resolved by-id symlink path (set when the device
-  enumerates),
-- the application-level UID inside the framed `OK HELLO ...` line.
-
-A mismatch between them is treated as a misconfigured / spoofed device
-and refused. On Windows, `usbser.sys` sticky-binds the COM# to
-`iSerialNumber`, so the same matching logic works there once the
-Windows portability layer lands.
-
-#### 6.4.3 Build pipeline (firmware -> native build -> UF2 + manifest)
-
-The VS Code entry point for every firmware module is now the shared
-JaszczurHAL command
-`../libraries/JaszczurHAL/vscode/entry/jh-vscode`.
-Module-local VS Code wrapper scripts were removed during the migration. The
-Fiesta-specific layer left in [`src/common/scripts/`](src/common/scripts/) is
-intentionally narrow:
-
-- [`fiesta-firmware-common.sh`](src/common/scripts/fiesta-firmware-common.sh)
-  - shared Fiesta helpers for module tokens, manifest generation/verification,
-  UF2 lookup, and the bootstrap path. The firmware build routes through the
-  JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
-
-The shared wrapper configures the JaszczurHAL multi-target dispatcher
-(`libraries/JaszczurHAL/cmake/jh_firmware_project`). Its RP2040 recipe imports
-the pinned Pico SDK, compiles the module sources, and links the selected native
-JaszczurHAL backend. Every module implements the portable `app_start()` /
-`app_task0()` entry points directly and optionally provides `app_task1()`.
-
-**Manifest auto-generation.** Every successful firmware compile
-produces an artefact pair:
-
-```
-.build/firmware.uf2
-.build/firmware.manifest.json   # generated next to the UF2 by fiesta_prepare_manifest_for_uf2
-```
-
-The manifest JSON carries `module_name`, `fw_version`, `build_id`,
-`sha256` (over the UF2 byte-for-byte), and `uf2_file` (basename of
-the sidecar UF2). It is generated AND verified inline at build time -
-a sha256 mismatch fails the build closed. The host's manifest parser
-([`sc_manifest.{c,h}`](src/SerialConfigurator/src/core/sc_manifest.h))
-hard-rejects on any missing required field, on `uf2_file` containing
-a path separator or `.`/`..`, or on a sha256 that does not match the
-artifact byte-for-byte.
-
-This is what lets the GUI accept "manifest only" as the operator-
-facing artefact: picking a manifest fully determines which UF2 is
-about to be flashed, and the host re-runs sha256 verification at the
-last possible moment before reboot.
-
-#### 6.4.4 Upload pipeline & port auto-detection
-
-The VS Code upload path (`Project: Upload`, delegated to
-`jh-vscode upload --project <project-dir>`) runs four steps:
-
-1. **Resolve and verify the target port** in JaszczurHAL using the module's USB
-   identity from `.vscode/jaszczurhal.project.json` and the configured/stable
-   by-id path when present.
-2. Compile the module fresh into `<project_dir>/.build/`.
-3. Generate + verify the Fiesta manifest sidecar against the produced
-   UF2.
-4. Request BOOTSEL over the verified CDC port and copy the UF2 to the single
-   detected BOOTSEL drive through JaszczurHAL `jh-vscode upload`.
-
-Step 1 is the safety-critical one: it makes "flash the wrong module"
-structurally impossible, even with several Picos plugged in.
-JaszczurHAL implements a fail-closed policy. The order is "narrowest match
-first"; each accepted target must match the expected USB identity before upload
-continues.
-
-| Tier | Predicate | Outcome |
-|---|---|---|
-| 1 | exactly one `/dev/serial/by-id/usb-*Fiesta_<Module>_*` symlink visible | accept that port (`auto:<Module>`) |
-| 2 | multiple `Fiesta_<Module>_*` symlinks AND the saved module upload port matches one of them | accept the matching one (`settings-among-multiple:<Module>`); otherwise refuse and dump the visible Fiesta map for the operator |
-| 3 | no `Fiesta_<Module>` visible, but a "fresh Pico" is visible (heuristic: `usb-*Raspberry_Pi_Pico*` / `*RP2040*` / `*RP2350*` / `*MicroPython_Board*`, NOT `*Fiesta_*`, NOT `*Debug_Probe*` / `*Picoprobe*` / `*CMSIS-DAP*`) | accept that port (`fresh:auto:<Module>`); same multi-match refusal as tier 2 |
-| 4 | no `Fiesta_<Module>` visible, no fresh Pico, but a `settings.uploadPort` exists and is a real device AND no OTHER `Fiesta_*` symlinks exist | accept that port as a labelled fallback (`settings-fallback:<Module>`) |
-| - | none of the above | hard refuse and dump the visible Fiesta map |
-
-**Cross-module flash refusal.** Tier 4 deliberately refuses to fall
-back to the operator's saved upload port if any OTHER
-Fiesta module's by-id symlink is visible. Rationale: the saved
-`uploadPort` value is module-specific, so seeing a foreign Fiesta
-symlink is strong evidence the operator's bench moved between
-sessions and the saved value is stale. Better to refuse and show a
-visible-modules map than to risk pushing ECU firmware onto a Clocks
-module.
-
-The fresh-Pico heuristic in tier 3 covers the "module is brand new,
-has never run Fiesta firmware, so does not yet identify itself as
-`Fiesta_<Module>`" bring-up case. Debug probes are explicitly
-excluded so that a connected picoprobe never gets mistaken for a
-target.
-
-The serial monitor is handled by JaszczurHAL (`jh-vscode monitor`), preserving
-reconnect, DTR/RTS, HUPCL, lock handling, and behavior after USB
-re-enumeration without module-local monitor wrappers.
-
-#### 6.4.5 Session lifecycle and TX serialisation
-
-The on-wire session has three structural states:
-
-- **Inactive.** No `HELLO` has been seen. The firmware accepts only
-  `HELLO` and `SC_BYE`; everything else falls through to the unknown-
-  line handler. Auth-gated commands fail with
-  `SC_NOT_READY HELLO_REQUIRED`.
-- **Active, unauthenticated.** Set by a successful `HELLO`. Read-only
-  `SC_GET_*` and parameter staging traffic flow. The firmware also
-  starts muting its async debug logs while a session is active (see
-  below).
-- **Active, authenticated.** Set after `SC_AUTH_PROVE` matches the
-  challenge issued by `SC_AUTH_BEGIN`. Unlocks `SC_REBOOT_BOOTLOADER`
-  and (Phase 7) future config-write paths.
-
-**Graceful disconnect (R1.7).** When the GUI closes the session, it
-sends `SC_BYE` to every detected module; the firmware replies
-`SC_OK BYE`, drops `active`, and clears any pending crypto auth
-state. BYE lives outside `HAL_ENABLE_CRYPTO` so any session can be
-closed cleanly even on builds without the AUTH path. Pre-R1.7
-firmware that does not recognise `SC_BYE` returns `ERR UNKNOWN`,
-which the host downgrades to a WARN line in the disconnect log
-rather than treating as an error.
-
-**Debug log mute.** Each module's `configSessionTick()` calls
-`hal_debug_set_muted(hal_serial_session_is_active(&s_session))`
-every loop, so async `hal_deb`/`hal_derr` from the same firmware
-core stop emitting while a session is active. The mute is released
-automatically once `SC_BYE` / timeout / disconnect flips the session
-back to inactive - no polling required on the host side.
-
-**TX serialisation (R1.8).** On dual-core RP2040, even with the mute
-in place, two cores can still race the underlying USB CDC TX path:
-core 1 may invoke a different log helper (or a direct
-`hal_serial_println`) while core 0 is mid-frame. JaszczurHAL closes
-this race in two layers, both inside the `hal_serial_print/println`
-boundary so every emitter (debug helpers, session helper, direct
-callers) goes through the same gate:
-
-1. A global `s_tx_mutex` taken before the underlying
-   `hal_usb_cdc_write()` call. This stops two emitters from
-   interleaving at the API level.
-2. On the native RP backend, an optional `hal_usb_cdc_flush()` runs inside the
-   mutex window after a message. TinyUSB CDC writes can return once bytes enter
-   the CDC ring buffer; flushing before releasing the mutex preserves a single
-   in-flight frame and prevents the next emitter from overlapping its tail.
-
-STM32G474 / mock backends use plain `printf` and skip the flush
-(no CDC ring buffer hazard). All three backends share the mutex.
-
-#### 6.4.6 Reliability, diagnostics, and ambient noise
-
-The host transport is hardened against three classes of disturbance
-that show up on real benches:
-
-- **CDC byte drops.** Mitigated structurally on the firmware side
-  (§6.4.5) and absorbed reactively on the host: the frame-repair
-  path recovers `SC,...` -> `$SC,...`, and a 60 ms fail-fast
-  deadline on the FIRST corrupt `$SC,<seq>,...` frame stops the
-  host from waiting the full
-  `SC_TRANSPORT_PRIMARY_TIMEOUT_MS = 400 ms` on a frame that
-  firmware will never retransmit on its own (firmware does not
-  retry; the only recovery is reopen + retry on the host).
-  Per-command first-attempt cost on a drop is ~60 ms instead of
-  ~400 ms while pre-fix firmware is in the field.
-- **Stale frames from a previous request.** Counted as `wrong_seq`
-  and skipped; the host keeps reading until either the expected seq
-  arrives or the deadline expires.
-- **Ambient debug log lines.** Counted as `non_sc` and dropped;
-  there is no plain-text fall-through, so a `deb()` line that
-  squeaks through during a session boundary cannot be misread as a
-  protocol reply.
-
-**Timeout diagnostics.** Every transport timeout produces a
-structured error string with raw counters - byte count, line count,
-non-SC line count, bad-SC line count, wrong-seq frame count,
-repaired frame count, overflow line count, and the seq of the first
-wrong-seq frame seen. The first non-SC line and the first bad SC
-frame are also captured (truncated to 80 chars) and emitted as
-`timeout diag seq=...` log entries before the failure string. This
-turns "transport timeout" into something a field operator can
-actually act on.
-
-**Compile-time verbose toggle.**
-[`SC_DEBUG_DEEP`](src/SerialConfigurator/src/config.h) (commented out
-by default) flips `transport_log_v` and `flash_log_v` from no-ops
-into per-frame / per-readdir trace to stderr. Off in normal use to
-keep the operator log readable; the always-on `transport_log` /
-`flash_log` already covers high-signal events (open / close / cache
-hit/miss/invalidate / retry-loop attempts / repair events / timeout
-diagnostics).
-
-**Adjustometer skip.** `Fiesta_Adjustometer*` symlinks are filtered
-out at host candidate enumeration time
-([`candidate_is_out_of_scope`](src/SerialConfigurator/src/core/sc_transport.c)).
-Adjustometer never speaks the framed protocol by project policy, so
-emitting expected HELLO timeouts for it would only muddy the
-diagnostic output.
-
-Runtime parameter writes (`SC_SET_PARAM` / `SC_COMMIT_PARAMS` /
-`SC_REVERT_PARAMS`) are landed end-to-end through host orchestrator,
-CLI, and the GUI Values tab; signed-manifest verification (ed25519
-backend) remains on the Phase 7 list.
-
----
-
-## 7. External interfaces to the vehicle
-
-This is what connects the modules to the car itself (as opposed to each
-other). See [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt) for the
-authoritative 104-pin ECU connector map.
-
-### 7.1 Sensors (vehicle -> ECU/OilAndSpeed)
-
-- Coolant temperature (NTC, via HC4051 mux),
-- Oil temperature (NTC, via HC4051 mux),
-- Intake air temperature (NTC, via HC4051 mux),
-- Fuel level (resistive, via HC4051 mux),
-- Throttle / driver demand (analog 0-5 V, via HC4051 mux),
-- Manifold / boost pressure (analog, via HC4051 mux),
-- Engine RPM (Hall sensor -> GPIO edge interrupt),
-- Heated-windows button (GPIO),
-- ECU supply voltage (divider -> ADC 28 on ECU, ADC 29 on Adjustometer),
-- Oil pressure (resistive, ADC on OilAndSpeed),
-- Wheel speed (ABS pulse, frequency input on OilAndSpeed),
-- Pre-DPF + mid-DPF EGT (MCP9600 thermocouple amps on OilAndSpeed).
-
-### 7.2 Actuators (ECU -> vehicle)
-
-- Glow plug relay + indicator lamp (PCF8574 bits 0 / 4),
-- Fuel pump (PWM),
-- VP37 injection pump (PWM + enable relay via PCF8574 bit 7),
-- Turbo boost solenoid / N75 (PWM on pin 10),
-- Engine cooling fan relay (PCF8574 bit 1),
-- Block heater HI / LO relays (PCF8574 bits 2 / 3),
-- Heated windshield relays L / P (PCF8574 bits 5 / 6),
-- DPF warning lamp (output on pin 8),
-- MCU Status LED on the ECU board (pin 25).
-
-### 7.3 Driver interface (modules -> driver)
-
-- Speedometer, tachometer, oil gauge - driven by Clocks with PWM square
-  waves on pins 9 / 10 / 11 (the analog gauges are Ford OEM / mechanical-style
-  units expecting a frequency input),
-- TFT display - driven by Clocks over SPI,
-- Buzzer - driven by Clocks on pin 14,
-- Heated-windows pushbutton - read by ECU on pin 20.
-
-### 7.4 Diagnostic interface
-
-- OBD-II port connected to the ECU's CAN1 controller. The transport in
-  [`src/ECU/obd-2.c`](src/ECU/obd-2.c) validates CAN requests and sends
-  single- or multi-frame ISO-TP responses. Standard OBD services and PID
-  encoders live in [`src/ECU/obd_j1979.c`](src/ECU/obd_j1979.c), while Ford
-  EEC-V UDS/KWP/SCP compatibility lives in
-  [`src/ECU/obd_ford_diag.c`](src/ECU/obd_ford_diag.c). The emulator presents
-  itself as a Ford Fiesta 1.8 DI EEC-V ECU.
-
-### 7.5 Auxiliary
-
-- GPS receiver on the ECU UART provides date/time; parsed NMEA is
-  republished as a CAN frame.
-- `Fiesta_clock` publishes RTC datetime + integrity on CAN as
-  `CAN_ID_RTC_UPDATE` (`0x130`) and suppresses transmit when RTC integrity
-  is invalid.
-
----
-
-## 8. Persistence
-
-All persistent state is stored in flash via JaszczurHAL's KV store,
-backed by the RP2040 emulated EEPROM (`ECU_EEPROM_SIZE_BYTES` bytes on the ECU).
- The persistent domains are:
-
-- **DTCs** - written by `dtcManager.c`, guarded by a dedicated mutex so
-  that core-1 snapshots cannot race core-0 writes,
-- **Configuration** - written by each module's `config.{c,cpp}`.
-
----
-
-## 9. External dependencies
-
-### 9.1 Source-level
-
-| Dependency | Role | Provisioning |
-|---|---|---|
-| `JaszczurHAL` | HAL, native target backends, host mock, and utilities | cloned/refreshed by `runmefirst.sh` / `src/ECU/scripts/bootstrap.sh` into `$LIB_DIR/JaszczurHAL` |
-| `src/common/canDefinitions/canDefinitions.h` | shared CAN frame definitions | in-tree (versioned with Fiesta repo) |
-| Pico SDK | Native RP2040 compile and runtime foundation | pinned and prepared by JaszczurHAL |
-| `picotool` | Native RP firmware post-processing support | pinned, built, and verified by JaszczurHAL |
-
-`$LIB_DIR` defaults to `<parent-of-repo-root>/libraries`, which matches the
-path expected for `JaszczurHAL` by module `CMakeLists.txt` files.
-
-### 9.2 Tooling
-
-The Debian-like setup flow installs the firmware, host-test, static-analysis,
-and desktop-toolchain surface used by the repository: `git`,
-`build-essential`, `cmake`, `python3`, `curl`, `ca-certificates`, `perl`,
-`pkg-config`, `libgtk-4-dev`, `dpkg-dev`, `libshumate-dev`, `clang-format`,
-`clang-tidy`, `valgrind`, `cppcheck` (including the MISRA addon shipped by the
-Debian package), `gcc-arm-none-eabi`, `libstdc++-arm-none-eabi-newlib`, and
-`libusb-1.0-0-dev`.
-
-Full install procedure in
-[README § One-shot setup](README.md#one-shot-setup-debian-like-linux--wsl).
-
----
-
-## 10. Build and CI/CD architecture
-
-Three build paths exist today:
-
-- **Host tests** - per-module `CMakeLists.txt` builds a Unity-based test
-  binary compiled as C++ with the HAL mock backend. `runalltests.sh` runs the
-  module test matrix, ECU cppcheck gate, Valgrind memcheck targets, and
-  clang-tidy targets. Fast to run locally; no hardware required.
-- **Firmware build** - JaszczurHAL `jh-vscode` configures the multi-target
-  dispatcher (`libraries/JaszczurHAL/cmake/jh_firmware_project`), whose RP2040
-  recipe builds the module with CMake and the pinned native Pico SDK. The
-  result is the standard `.build/firmware.uf2` artifact plus a generated and
-  verified `.build/firmware.manifest.json`. Deployed either through
-  identity-verified `jh-vscode upload` with the Fiesta manifest gate or through
-  the explicit BOOTSEL task.
-  The build path also passes `JH_USB_MANUFACTURER` / `JH_USB_PRODUCT` per
-  module so each module surfaces under a distinct USB product string on the
-  host.
-- **Desktop configurator build/test** - `src/SerialConfigurator` is built
-  with CMake/GTK4 and tested with CTest via
-  [`scripts/desktop-build.sh`](src/SerialConfigurator/scripts/desktop-build.sh)
-  (`build`, `run`, `test`, `package`, `clean`). CI is in
-  [`.github/workflows/serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml).
-  The local Debian package target exists; release distribution policy is not
-  yet standardized in-tree.
-
-The ECU and Adjustometer firmware builds additionally enforce `-Werror` on the
-firmware compile path as warning quality gates.
-
-### 10.1 GitHub Actions workflows ([`.github/workflows/`](.github/workflows/))
-
-| Workflow | Trigger | What it does |
-|---|---|---|
-| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | push/PR on `src/ECU/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds ECU, runs CTest (including its cppcheck test), Valgrind, and clang-tidy |
-| [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | runs cppcheck against the baseline in [`src/ECU/cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log), fails if new findings appear |
-| [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | runs [`src/ECU/misra/check_misra.sh`](src/ECU/misra/) and uploads a MISRA findings artifact |
-| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml) | push/PR on `src/Clocks/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds Clocks, then runs CTest, Valgrind, and clang-tidy |
-| [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml) | push/PR on `src/OilAndSpeed/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds OilAndSpeed, then runs CTest, Valgrind, and clang-tidy |
-| [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | push/PR on `src/Adjustometer/**` or the shared dependency helper | prepares managed JaszczurHAL source dependencies, builds Adjustometer, then runs CTest, Valgrind, and clang-tidy |
-| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | push/PR on firmware modules, `src/common/**`, or the workflow | prepares managed JaszczurHAL and RP toolchain dependencies, builds release/debug firmware, and refreshes IntelliSense for all five modules |
-| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | push/PR on `src/SerialConfigurator/**` | builds the GTK4 app + CLI, runs the complete CTest matrix, then executes Valgrind and clang-tidy targets |
-
-### 10.2 Unattended daily build
-
-[`src/ECU/scripts/systemd/`](src/ECU/scripts/systemd/) ships a user-scope
-systemd service + timer that runs the bootstrap flow daily on a Raspberry Pi
-and emails a PASS/FAIL status summary. This is the slow-cycle integration
-signal - it exercises the whole tree, including firmware compilation for
-ECU/Clocks/OilAndSpeed/Fiesta_clock/Adjustometer once per day. Setup notes in
-[`src/ECU/scripts/systemd/README.md`](src/ECU/scripts/systemd/README.md).
-
-### 10.3 Bootstrap entry point
-
-[`runmefirst.sh`](runmefirst.sh) is the user-facing idempotent project entry
-point; it delegates to
-[`src/ECU/scripts/bootstrap.sh`](src/ECU/scripts/bootstrap.sh). The flow sets
-up a fresh Debian-like machine end-to-end: system packages ->
-cloning/refreshing the external `JaszczurHAL` repo -> pinned managed source,
-Pico SDK, and `picotool` dependency preparation -> git hook setup ->
-`runalltests.sh` host QA ->
-firmware `.uf2` + manifest build for every module -> SerialConfigurator
-build/test/package. Env overrides:
-`LIB_DIR`, `ALLOW_ROOT`, `SKIP_APT`, `APT_NONINTERACTIVE`, `SKIP_TESTS`,
-`SKIP_BUILD`, `SKIP_DESKTOP`, `SKIP_DESKTOP_PACKAGE`.
-
----
-
-## 11. Directory structure
-
-```
+| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | changes in `src/ECU` | ECU build, tests, cppcheck, Valgrind, clang-tidy |
+| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml), [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml), [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | changes in the module | build, tests, Valgrind, clang-tidy |
+| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | firmware or `src/common` changes | release and debug firmware for all five modules |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | changes in `src/SerialConfigurator` | GUI and CLI build, tests, Valgrind, clang-tidy |
+| [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | cppcheck against [`cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log) |
+| [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | MISRA screening report |
+
+A systemd timer in [`src/ECU/scripts/systemd/`](src/ECU/scripts/systemd/) can
+run the whole setup and build daily on a Raspberry Pi and email the result.
+[`runmefirst.sh`](runmefirst.sh) sets up a fresh machine; the README lists
+its steps and options.
+
+## Repository layout
+
+```text
 Fiesta/
-├── README.md                    # project overview
-├── MISRA.md                     # MISRA-C status, policy, entry points (authoritative)
+├── README.md                    # overview, setup, builds
 ├── ARCHITECTURE.md              # this file
-├── LICENSE
-├── .github/
-│   └── workflows/               # CI jobs (see §10.1)
+├── MISRA.md                     # MISRA-C status and policy
+├── .github/workflows/           # CI
 ├── src/
-│   ├── ECU/                     # safety-critical engine control (MISRA scope)
-│   ├── Clocks/                  # dashboard / instrument cluster
-│   ├── OilAndSpeed/             # oil + ABS speed + EGT telemetry
-│   ├── Fiesta_clock/            # RTC_Clock module (RTC + CAN + SC session)
-│   ├── Adjustometer/            # VP37 feedback (I²C slave)
-│   ├── SerialConfigurator/      # GTK4 + CLI desktop companion (detect / inspect / flash)
-│   ├── common/
-│   │   ├── canDefinitions/      # shared CAN IDs/signals (in-tree, single source)
-│   │   ├── scDefinitions/       # SC wire vocabulary + descriptor framework (§4.3)
-│   │   └── scripts/             # Fiesta manifest, UF2, module-token, and bootstrap helpers
-├── Fiesta_pcbs/                 # schematics, PCB layouts, connector maps
-│   ├── ecu/                     # ecuv1 + ecuv2
-│   ├── dashboard/ clock/ oil_and_speed/
-│   ├── vp37_adjustometer/ lamp_dimmer/ air_conditioning/
-│   ├── rpipico/
-│   ├── pinout.txt               # 104-pin ECU connector mapping
-│   └── wirings.txt              # color-coded loom notes
-├── materials/                   # reference docs, datasheets, examples, photos
-└── legacy/                      # archived modules (DPF_main, AdaptiveLights, Fading)
+│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/
+│   ├── SerialConfigurator/      # desktop application and CLI
+│   └── common/
+│       ├── canDefinitions/      # CAN IDs and frame layouts
+│       ├── scDefinitions/       # configurator protocol
+│       └── scripts/             # manifest, UF2, and module-name helpers
+├── Fiesta_pcbs/                 # schematics, layouts, connector maps
+├── materials/                   # datasheets, reference documents, photos
+└── legacy/                      # retired modules
 ```
 
----
+## Where to look next
 
-## 12. What is *not* covered here
-
-- Individual CAN frame IDs and signal layouts - see
-  [`src/common/canDefinitions/canDefinitions.h`](src/common/canDefinitions/canDefinitions.h).
-- JaszczurHAL internals - see the HAL repository.
-- MISRA-C rule-by-rule status - see the MISRA screening artifact from
-  `.github/workflows/ecu-misra.yml` and the deviation register under
-  `src/ECU/misra/`.
-- Complete ECU pinout with wire colors - see
-  [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt) and
+- Frame IDs and layouts:
+  [`canDefinitions.h`](src/common/canDefinitions/canDefinitions.h).
+- Pins and addresses: each module's `hardwareConfig.h`.
+- Start-up order and timing: each module's `start.{c,cpp}`.
+- Connector pinout and wire colours:
+  [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt),
   [`Fiesta_pcbs/wirings.txt`](Fiesta_pcbs/wirings.txt).
-- Module-level safety status / progress - see the README.
-- Internal Serial Configurator execution notes are intentionally not linked
-  from repository-level documentation.
-
-When in doubt about architecture, read the code; the `hardwareConfig.h`,
-`start.{c,cpp}`, and `can.{c,cpp}` files in each module are the best
-entry points.
+- MISRA rule status: the `ecu-misra.yml` report and
+  [`src/ECU/misra/`](src/ECU/misra/).
+- JaszczurHAL internals: the JaszczurHAL repository.

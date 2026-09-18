@@ -19,30 +19,20 @@ typedef struct {
   int32_t lastFanStatus;
 } engineFan;
 
-/**
- * @brief Initialize the fan control state.
- * @param self Fan controller instance to initialize.
- * @return None.
- */
 void engineFan_init(engineFan *self);
 
 /**
  * @brief Update fan state from current sensor values and apply output changes.
- * @param self Fan controller instance to process.
- * @return None.
  */
 void engineFan_process(engineFan *self);
 
 /**
  * @brief Print the current fan state for diagnostics.
- * @param self Fan controller instance to report.
- * @return None.
  */
 void engineFan_showDebug(const engineFan *self);
 
 /**
  * @brief Check whether the fan is currently enabled for any reason.
- * @param self Fan controller instance to inspect.
  * @return True when the fan is enabled, otherwise false.
  */
 bool engineFan_isFanEnabled(const engineFan *self);
@@ -51,7 +41,6 @@ bool engineFan_isFanEnabled(const engineFan *self);
  * @brief Drive the physical fan output.
  * @param self Fan controller instance issuing the command.
  * @param enable True to enable the fan output, false to disable it.
- * @return None.
  */
 void engineFan_fan(engineFan *self, bool enable);
 
@@ -63,7 +52,6 @@ engineFan *getFanInstance(void);
 
 /**
  * @brief Create and initialize the shared fan controller instance.
- * @return None.
  */
 void createFan(void);
 

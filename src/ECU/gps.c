@@ -27,7 +27,6 @@ NOINIT static gps_persistent_state_t s_gpsPersistent;
  * @param hour Output pointer for adjusted hour.
  * @param minute Output pointer for adjusted minute.
  * @param second Output pointer for adjusted second.
- * @return None.
  */
 static void getAdjustedDateTime(int *year, int *month, int *day, int *hour,
                                 int *minute, int *second);
@@ -86,7 +85,6 @@ void initGPSDateAndTime(void) {
  * @param hour Output pointer for adjusted hour.
  * @param minute Output pointer for adjusted minute.
  * @param second Output pointer for adjusted second.
- * @return None.
  */
 static void getAdjustedDateTime(int *year, int *month, int *day, int *hour,
                                 int *minute, int *second) {

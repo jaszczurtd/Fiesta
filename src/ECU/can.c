@@ -8,7 +8,6 @@
 
 /**
  * @brief Mark that a CAN interrupt signalled pending traffic.
- * @return None.
  */
 void receivedCanMessage(void);
 
@@ -62,7 +61,6 @@ static can_state_t s_canState = {.frameNumberVal = 0u,
 
 /**
  * @brief Reset the RPM publisher cache and retry state.
- * @return None.
  */
 static void resetRpmPublisher(void) {
   const uint32_t now = hal_millis();
@@ -358,7 +356,6 @@ void receivedCanMessage(void) { s_canState.interruptPending = true; }
  * @param canID CAN identifier of the received frame.
  * @param len Payload length in bytes.
  * @param buf Pointer to the received payload buffer.
- * @return None.
  */
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   s_canState.interruptPending = false;

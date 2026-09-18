@@ -24,7 +24,6 @@ const char *dtcManagerGetName(uint16_t code);
 
 /**
  * @brief Initialize DTC storage and load persisted state.
- * @return None.
  */
 void dtcManagerInit(void);
 
@@ -32,7 +31,6 @@ void dtcManagerInit(void);
  * @brief Set or clear the active state of one DTC.
  * @param code DTC code to update.
  * @param active True to mark the code active, false to clear it.
- * @return None.
  */
 void dtcManagerSetActive(uint16_t code, bool active);
 
@@ -52,7 +50,6 @@ bool dtcManagerClearAll(void);
 
 /**
  * @brief Print DTC storage statistics for diagnostics.
- * @return None.
  */
 void dtcManagerLogStorageStats(void);
 

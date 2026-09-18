@@ -45,7 +45,6 @@ typedef struct {
  * @brief Store one global runtime value.
  * @param idx Global value index to update.
  * @param val Value to store.
- * @return None.
  */
 void setGlobalValue(int idx, float val);
 
@@ -58,25 +57,21 @@ float getGlobalValue(int idx);
 
 /**
  * @brief Initialize the main I2C bus and recover it if needed.
- * @return None.
  */
 void initI2C(void);
 
 /**
  * @brief Initialize the main SPI bus and its chip-select lines.
- * @return None.
  */
 void initSPI(void);
 
 /**
  * @brief Initialize sensor infrastructure, globals, PWM, and GPS.
- * @return None.
  */
 void initSensors(void);
 
 /**
  * @brief Initialize basic GPIO outputs used by the ECU.
- * @return None.
  */
 void initBasicPIO(void);
 // readers
@@ -143,7 +138,6 @@ bool pcf8574_init(void);
  * @brief Write one output bit on the PCF8574 expander.
  * @param pin Expander pin index to write.
  * @param value True to set the bit, false to clear it.
- * @return None.
  */
 void pcf8574_write(unsigned char pin, bool value);
 
@@ -158,25 +152,21 @@ bool pcf8574_read(unsigned char pin);
  * @brief Write a logical output value to one PWM-controlled channel.
  * @param pin Logical PWM output identifier.
  * @param val Command value in project PWM units.
- * @return None.
  */
 void valToPWM(unsigned char pin, int32_t val);
 
 /**
  * @brief Refresh medium-rate sensor values.
- * @return None.
  */
 void readMediumValues(void);
 
 /**
  * @brief Refresh high-rate runtime values and selected CAN updates.
- * @return None.
  */
 void readHighValues(void);
 
 /**
  * @brief Initialize the HC4051 analog multiplexer control pins.
- * @return None.
  */
 void init4051(void);
 
@@ -248,7 +238,6 @@ hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage);
 /**
  * @brief Select the active HC4051 input channel.
  * @param pin Multiplexer channel number to select.
- * @return None.
  */
 void set4051ActivePin(unsigned char pin);
 
@@ -260,20 +249,17 @@ bool isDPFRegenerating(void);
 
 /**
  * @brief Print selected runtime values when they change.
- * @return None.
  */
 void updateValsForDebug(void);
 
 /**
  * @brief Create PWM channel handles used by ECU outputs.
- * @return None.
  */
 void pwm_init(void);
 
 /**
  * @brief Take a thread-safe snapshot of the latest Adjustometer state.
  * @param out Caller-owned storage receiving the snapshot. Must not be NULL.
- * @return None.
  * @note Triggers a fresh I2C read via readAdjustometer() and copies the
  *       resulting snapshot into @p out. No heap allocation; the caller
  *       provides the destination (stack or static). Adjustometer is only

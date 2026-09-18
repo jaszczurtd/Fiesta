@@ -15,26 +15,22 @@ extern "C" {
 
 /**
  * @brief Process pending CAN frames on the main CAN bus.
- * @return None.
  */
 void canMainLoop(void);
 
 /**
  * @brief Initialize the main CAN bus interface.
  * @param retries Number of initialization retries requested by the caller.
- * @return None.
  */
 void canInit(int retries);
 
 /**
  * @brief Send the full set of periodic CAN updates.
- * @return None.
  */
 void CAN_sendAll(void);
 
 /**
  * @brief Send a legacy throttle-position CAN update when needed.
- * @return None.
  * @note In the current diesel-oriented codebase this frame carries the
  * G79/G185-like driver-demand signal, despite the historical throttle naming.
  */
@@ -42,19 +38,22 @@ void CAN_sendThrottleUpdate(void);
 
 /**
  * @brief Send a turbo-pressure CAN update when needed.
- * @return None.
  */
 void CAN_sendTurboUpdate(void);
 
 /**
  * @brief Send the first group of ECU update frames.
- * @return None.
  */
 void CAN_updaterecipients_01(void);
 
 /**
- * @brief Send the second group of ECU update frames.
- * @return None.
+ * @brief Publish engine RPM on the main CAN bus.
+ *
+ * A changed value goes out at once and an unchanged one every
+ * CAN_RPM_HEARTBEAT_INTERVAL_MS. A failed send is retried after
+ * CAN_RPM_RETRY_INTERVAL_MS. The MCP2515 runs in one-shot mode, so an
+ * unacknowledged frame never holds one of its three TX buffers. All of these
+ * are due times checked once per core-0 loop, not latency guarantees.
  */
 void CAN_updaterecipients_02(void);
 
@@ -62,7 +61,6 @@ void CAN_updaterecipients_02(void);
  * @brief Reserved legacy API for sending a single throttle frame.
  * @param value Driver-demand value to transmit using the historical throttle
  * frame format.
- * @return None.
  * @note The payload is the legacy throttle-named signal, not a real
  * throttle-plate angle.
  */
@@ -96,7 +94,6 @@ bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
 
 /**
  * @brief Send the pair of extended GPS CAN frames.
- * @return None.
  */
 void CAN_sendGpsExtended(void);
 
@@ -114,7 +111,6 @@ bool isEGTConnected(void);
 
 /**
  * @brief Refresh connection state and DTCs for external CAN modules.
- * @return None.
  */
 void canCheckConnection(void);
 
