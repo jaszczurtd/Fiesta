@@ -3,15 +3,25 @@ name: ECU Tests
 on:
   push:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
+      - "runmefirst.sh"
       - "src/ECU/**"
-      - "src/common/scDefinitions/**"
-      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/ecu-tests.yml"
   pull_request:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
+      - "runmefirst.sh"
       - "src/ECU/**"
-      - "src/common/scDefinitions/**"
-      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/ecu-tests.yml"
   workflow_dispatch:
 
@@ -26,20 +36,19 @@ jobs:
     steps:
       - name: Checkout Fiesta
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
-      - name: Clone ECU dependencies
-        run: |
-          set -eux
-          mkdir -p ../libraries
-
-          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
-          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
-            ../libraries/JaszczurHAL host
+      - name: Prepare HAL dependencies
+        run: ./src/common/scripts/ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host
 
       - name: Install analysis dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cppcheck valgrind clang-tidy clang-tools
+
+      - name: Test dependency initialization and project tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Configure
         run: |

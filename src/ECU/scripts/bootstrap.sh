@@ -18,7 +18,6 @@
 # cppcheck package).
 #
 # Env overrides:
-#   LIB_DIR         default: $HOME/libraries   (parent of cloned libs)
 #   SKIP_APT=1      skip apt-get steps
 #   APT_NONINTERACTIVE=1  require passwordless sudo instead of prompting
 #   SKIP_TESTS=1    skip host QA run (`runalltests.sh`)
@@ -48,11 +47,7 @@ FW_MODULES=(
     "Adjustometer"
 )
 
-# src/ECU/CMakeLists.txt resolves libraries at ${PROJECT_DIR}/../../../libraries
-# (i.e. parent of the repo root). The default must match that path or the host
-# test build will fail to find JaszczurHAL sources.
-DEFAULT_LIB_DIR="$(cd "$PROJECT_DIR/../../.." && pwd)/libraries"
-LIB_DIR="${LIB_DIR:-$DEFAULT_LIB_DIR}"
+HAL_DIR="$SRC_ROOT/JaszczurHAL"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
@@ -179,77 +174,9 @@ check_cppcheck() {
 # -----------------------------------------------------------------------------
 # 4. GitHub libraries
 # -----------------------------------------------------------------------------
-resolve_origin_default_branch() {
-    local dest="$1"
-    local remote_head=""
-
-    git -C "$dest" remote set-head origin --auto >/dev/null 2>&1 || true
-    remote_head=$(git -C "$dest" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-
-    if [[ -z "$remote_head" ]]; then
-        if git -C "$dest" show-ref --verify --quiet refs/remotes/origin/main; then
-            remote_head="origin/main"
-        elif git -C "$dest" show-ref --verify --quiet refs/remotes/origin/master; then
-            remote_head="origin/master"
-        fi
-    fi
-
-    if [[ -z "$remote_head" ]]; then
-        return 1
-    fi
-
-    printf '%s\n' "${remote_head#origin/}"
-}
-
-sync_lib() {
-    local name="$1" url="$2" dest="$LIB_DIR/$1"
-    local default_branch=""
-
-    if [[ -e "$dest" ]] && git -C "$dest" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        warn "$name checkout exists at $dest - discarding local changes and resetting to the remote default branch"
-
-        if git -C "$dest" remote get-url origin >/dev/null 2>&1; then
-            git -C "$dest" remote set-url origin "$url"
-        else
-            git -C "$dest" remote add origin "$url"
-        fi
-
-        git -C "$dest" fetch --depth 1 --prune origin
-        default_branch=$(resolve_origin_default_branch "$dest") || {
-            err "Could not determine origin default branch for $name at $dest"
-            return 1
-        }
-
-        git -C "$dest" reset --hard
-        git -C "$dest" clean -fdx
-        git -C "$dest" checkout --force -B "$default_branch" "origin/$default_branch"
-        git -C "$dest" reset --hard "origin/$default_branch"
-
-        ok "$name reset to origin/$default_branch at $dest"
-        return
-    fi
-
-    if [[ -e "$dest" ]]; then
-        err "$dest exists but is not a git checkout - leaving it alone"
-        return 1
-    fi
-
-    info "Cloning $name into $dest"
-    git clone --depth 1 "$url" "$dest"
-}
-
 fetch_libraries() {
-    mkdir -p "$LIB_DIR"
-    sync_lib JaszczurHAL   https://github.com/jaszczurtd/JaszczurHAL.git
-
-    # Keep dependency validation generic: bootstrap already hard-resets to
-    # origin/<default-branch>, so we should not gate on implementation details
-    # of a specific upstream commit.
-    local hal_dir="$LIB_DIR/JaszczurHAL"
-    if [[ ! -d "$hal_dir/.git" ]]; then
-        err "JaszczurHAL checkout missing or invalid at: $hal_dir"
-        return 1
-    fi
+    "$SRC_ROOT/../scripts/init_hal_submodule.sh"
+    local hal_dir="$HAL_DIR"
     local required_hal_paths=(
         "$hal_dir/src/JaszczurHAL.h"
         "$hal_dir/src/hal/core/hal_config.cpp"
@@ -277,10 +204,9 @@ fetch_libraries() {
         done
         return 1
     fi
-    local hal_branch hal_rev
-    hal_branch="$(resolve_origin_default_branch "$hal_dir" || echo "unknown")"
-    hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
-    ok "JaszczurHAL synchronized (${hal_branch}@${hal_rev})"
+    local hal_rev
+    hal_rev="$(git -C "$hal_dir" rev-parse --short HEAD)"
+    ok "JaszczurHAL pinned at ${hal_rev}"
 
     info "Ensuring pinned JaszczurHAL and native RP dependencies"
     "$DEPENDENCY_SCRIPT" "$hal_dir" rp
@@ -344,8 +270,7 @@ compile_firmware_for() {
     local build="$src/.build"
 
     info "[$module] compiling native firmware from tracked target/board manifest"
-    FIESTA_LIBRARIES_DIR="$LIB_DIR" \
-        fiesta_run_compile "$src" build "$src" 1 1 0 ""
+    fiesta_run_compile "$src" build "$src" 1 1 0 ""
 
     local uf2
     uf2=$(fiesta_find_uf2_artifact "$build" || true)
@@ -377,8 +302,7 @@ compile_firmware() {
 # -----------------------------------------------------------------------------
 # 7. SerialConfigurator desktop build + tests
 # -----------------------------------------------------------------------------
-# CMake here resolves JaszczurHAL via ${PROJECT_DIR}/../../../libraries, which
-# is the same path that fetch_libraries() populates. The crypto backend
+# CMake uses the sibling JaszczurHAL submodule. The crypto backend
 # binding (sc_crypto_jaszczurhal.cpp) propagates HAL_ENABLE_CRYPTO to the
 # SerialConfigurator core target, so the firmware-shared hal_crypto.cpp gets
 # its real implementation rather than the no-op fallback.
@@ -446,7 +370,7 @@ build_serial_configurator() {
 # -----------------------------------------------------------------------------
 info "Fiesta bootstrap starting"
 info "  SRC_ROOT: $SRC_ROOT"
-info "  LIB_DIR:  $LIB_DIR"
+info "  HAL_DIR:  $HAL_DIR"
 
 install_apt
 check_python

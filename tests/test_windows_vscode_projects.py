@@ -63,7 +63,7 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             self.assertNotIn("jaszczurhal.uploadPort", settings, module)
             self.assertEqual(
                 settings["jaszczurhal.vscodeEntryWindows"],
-                "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd",
+                "../JaszczurHAL/vscode/entry/jh-vscode.cmd",
                 module,
             )
             manifest = json.loads(
@@ -72,6 +72,23 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             self.assertTrue(manifest["identity"]["enabled"], module)
             self.assertEqual(manifest["identity"]["usbVid"], "0x2e8a", module)
             self.assertEqual(manifest["identity"]["usbPid"], "0x000a", module)
+
+    def test_module_paths_resolve_to_the_pinned_checkout(self) -> None:
+        hal_root = (REPO_ROOT / "src" / "JaszczurHAL").resolve()
+        for module in MODULES:
+            project = REPO_ROOT / "src" / module
+            vscode_dir = project / ".vscode"
+            settings = json.loads((vscode_dir / "settings.json").read_text())
+            manifest = json.loads((vscode_dir / "jaszczurhal.project.json").read_text())
+            self.assertEqual((project / settings["jaszczurhal.root"]).resolve(), hal_root)
+            for key in ("jaszczurhal.vscodeEntry", "jaszczurhal.vscodeEntryWindows"):
+                entry = (project / settings[key]).resolve()
+                self.assertTrue(entry.is_file(), entry)
+                self.assertTrue(entry.is_relative_to(hal_root), entry)
+            schema = (vscode_dir / manifest["$schema"]).resolve()
+            self.assertTrue(schema.is_file(), schema)
+            source = Path(manifest["cmake"]["sourceDir"].replace("${project}", str(project)))
+            self.assertEqual(source.resolve(), hal_root / "cmake" / "jh_firmware_project")
 
     def test_linux_only_quality_tasks_fail_explicitly_on_windows(self) -> None:
         found: set[str] = set()

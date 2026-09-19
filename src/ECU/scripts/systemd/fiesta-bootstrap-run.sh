@@ -6,9 +6,9 @@
 #   1. Sync the Fiesta repo at $FIESTA_DIR (clone if missing, hard reset to
 #      origin/$BRANCH otherwise - this runner is unattended and expects no
 #      local changes on the Pi).
-#   2. Remove previous ECU build artifacts (build_test/, .build/).
-#   3. Run src/ECU/scripts/bootstrap.sh with unattended package provisioning.
-#   4. Compose a status email and hand it to send-status.py.
+#   2. Run runmefirst.sh to clean module builds and bootstrap with unattended
+#      package provisioning and the pinned HAL submodule.
+#   3. Compose a status email and hand it to send-status.py.
 #
 # Config comes from fiesta-bootstrap.env (loaded by the systemd unit):
 #   FIESTA_DIR, FIESTA_REPO_URL, BRANCH, SMTP_*, MAIL_FROM, MAIL_TO
@@ -90,28 +90,22 @@ fi
 echo "[INFO] HEAD: $HEAD_SHA - $HEAD_SUBJ"
 
 # -----------------------------------------------------------------------------
-# 2. Clean ECU build artifacts
-# -----------------------------------------------------------------------------
-echo "[INFO] Cleaning previous ECU artifacts"
-rm -rf "$FIESTA_DIR/src/ECU/build_test" "$FIESTA_DIR/src/ECU/.build"
-
-# -----------------------------------------------------------------------------
-# 3. Run bootstrap with non-interactive package provisioning
+# 2. Clean and bootstrap with non-interactive package provisioning
 # -----------------------------------------------------------------------------
 bootstrap_rc=0
 if [[ $sync_rc -ne 0 ]]; then
     echo "[ERROR] Skipping bootstrap because repo sync failed (rc=$sync_rc)"
     bootstrap_rc=$sync_rc
 else
-    echo "[INFO] Running bootstrap.sh with unattended apt provisioning"
+    echo "[INFO] Running runmefirst.sh with unattended apt provisioning"
     SKIP_APT=0 APT_NONINTERACTIVE=1 \
-        bash "$FIESTA_DIR/src/ECU/scripts/bootstrap.sh"
+        bash "$FIESTA_DIR/runmefirst.sh"
     bootstrap_rc=$?
 fi
 echo "[INFO] Bootstrap exit: $bootstrap_rc"
 
 # -----------------------------------------------------------------------------
-# 4. Compose status email
+# 3. Compose status email
 # -----------------------------------------------------------------------------
 if [[ $bootstrap_rc -eq 0 ]]; then
     STATUS="PASS"

@@ -71,47 +71,12 @@ print(value)
 PYEOF
 }
 
-fiesta_resolve_libraries_dir() {
-    local sketchbook="$1"
-    local project_dir="${2:-}"
-    local candidate
-
-    if [[ -n "$sketchbook" && -d "$sketchbook/libraries" ]]; then
-        printf '%s\n' "$sketchbook/libraries"
-        return 0
-    fi
-
-    if [[ -n "$project_dir" ]]; then
-        candidate="$(cd "$project_dir/../../.." 2>/dev/null && pwd)/libraries"
-        if [[ -d "$candidate" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    fi
-
-    for candidate in "$HOME/libraries"; do
-        if [[ -d "$candidate" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 fiesta_cmake_bool() {
     if fiesta_truthy "${1:-0}"; then
         printf '%s\n' "ON"
     else
         printf '%s\n' "OFF"
     fi
-}
-
-fiesta_firmware_cmake_source_dir() {
-    # JaszczurHAL multi-target dispatcher. Arg: the libraries dir (parent of
-    # JaszczurHAL).
-    local libraries_dir="$1"
-    printf '%s\n' "$libraries_dir/JaszczurHAL/cmake/jh_firmware_project"
 }
 
 fiesta_firmware_cmake_build_dir() {
@@ -178,18 +143,13 @@ fiesta_run_compile() {
     local verbose="${6:-0}"
     local port="${7:-}"
 
-    local libraries_dir jh_entry action
+    local jh_entry action
 
     # Native builds always enable warnings-as-errors. Keep the legacy function
     # signature so bootstrap callers remain source-compatible.
     : "$sketch_dir" "$include_werror" "$include_warnings" "$verbose"
 
-    if [[ -n "${FIESTA_LIBRARIES_DIR:-}" ]]; then
-        libraries_dir="$FIESTA_LIBRARIES_DIR"
-    else
-        libraries_dir=$(fiesta_resolve_libraries_dir "" "$project_dir" || true)
-    fi
-    jh_entry="$libraries_dir/JaszczurHAL/vscode/entry/jh-vscode"
+    jh_entry="$project_dir/../JaszczurHAL/vscode/entry/jh-vscode"
     if [[ ! -x "$jh_entry" ]]; then
         echo "JaszczurHAL VS Code entry not found: $jh_entry" >&2
         return 1

@@ -6,14 +6,15 @@ systemd), captures the result, and emails a status summary.
 What the runner does, in order:
 
 1. clone or hard-reset `$FIESTA_DIR` to `origin/$BRANCH`,
-2. remove `src/ECU/build_test/` and `src/ECU/.build/` (pre-run clean),
-3. repair missing apt packages through non-interactive `sudo` and run
-   `src/ECU/scripts/bootstrap.sh`,
+2. run `runmefirst.sh` to clear module build directories,
+3. initialize the pinned HAL submodule, repair missing apt packages through
+   non-interactive `sudo`, then build and test the project,
 4. send an email with PASS/FAIL, HEAD SHA, commit subject, and the last
    80 lines of the log (full log attached).
 
-Artifacts under `src/ECU/build_test/` and `src/ECU/.build/` are left in place
-after each run. Logs go to `$HOME/.cache/fiesta-bootstrap/run-*.log`
+Module build artifacts are left in place after each run and cleared by
+`runmefirst.sh` before the next successful repo update is built. HAL build
+directories and local VS Code settings are preserved. Logs go to `$HOME/.cache/fiesta-bootstrap/run-*.log`
 (symlinked as `last.log`).
 
 ## Files
@@ -61,10 +62,10 @@ sudo systemctl --user daemon-reload       # NO
 ```bash
 # 1. Clone the repo (the unit path assumes ~/Documents/Fiesta)
 mkdir -p ~/Documents
-git clone https://github.com/jaszczurtd/Fiesta.git ~/Documents/Fiesta
+git clone --recurse-submodules https://github.com/jaszczurtd/Fiesta.git ~/Documents/Fiesta
 
 # 2. Run bootstrap once so system and native RP dependencies are set up
-bash ~/Documents/Fiesta/src/ECU/scripts/bootstrap.sh
+bash ~/Documents/Fiesta/runmefirst.sh
 
 # The daily user service must be able to reuse sudo without a prompt.
 sudo -n true
@@ -97,6 +98,20 @@ or even better:
 sudo loginctl enable-linger pi
 
 ```
+
+## Updating an existing installation
+
+Publish the Fiesta changes before updating the Pi. The runner lives in the
+checkout, so pull it before the first run with the new cleanup flow:
+
+```bash
+git -C ~/Documents/Fiesta pull --ff-only
+systemctl --user start fiesta-bootstrap.service
+```
+
+No unit or timer reinstall is needed when only the repository scripts change.
+The bootstrap initializes the pinned HAL submodule automatically. Local HAL
+changes stop initialization; preserve them before running the service.
 
 ## Smoke test / inspection
 

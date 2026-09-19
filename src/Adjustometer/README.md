@@ -118,11 +118,12 @@ ctest --test-dir src/Adjustometer/build_test --output-on-failure
 ## Firmware build
 
 Prepare the Arm toolchain and pinned Pico SDK with `runmefirst.sh`.
-JaszczurHAL belongs in `<parent-of-Fiesta>/libraries/JaszczurHAL`.
+JaszczurHAL is pinned in `src/JaszczurHAL`. Initialize it from the Fiesta
+root with `./scripts/init_hal_submodule.sh`.
 
 ```bash
 cd src/Adjustometer
-JH=../../../libraries/JaszczurHAL/vscode/entry/jh-vscode
+JH=../JaszczurHAL/vscode/entry/jh-vscode
 "$JH" build --project "$PWD"
 "$JH" build-debug --project "$PWD"
 "$JH" upload --project "$PWD"

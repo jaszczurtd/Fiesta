@@ -184,27 +184,36 @@ own I²C bus. It sends the results on CAN for the ECU and Clocks.
 
 ### Adjustometer
 
-Adjustometer gives the ECU position feedback from the VP37 pump. A Hartley
-oscillator runs through the pump's control coil, and the module counts its
-frequency (around 37 kHz) with a high-priority GPIO interrupt.
-It subtracts a baseline it calibrates itself and reports the deviation. It has
-its own firmware and core because the measurement cannot share time with
-engine control. It usually sits on the ECU board.
+Adjustometer measures the VP37 actuator position through the frequency of a
+Hartley oscillator connected to the pump sensor coils, roughly 22-37 kHz.
+JaszczurHAL captures blocks of 32 periods through RP2040 PIO and DMA.
+The default measurement combines four blocks into a 128-period window and
+filters the result. The exported deviation from a calibrated baseline is
+measured in Hz; ECU calibration maps it to actuator position.
 
-The ECU reads all five registers in one I²C transfer:
+Core 0 drains capture data and publishes feedback. Core 1 handles auxiliary
+ADC readings, diagnostics, LED and USB logging. Adjustometer has its own
+RP2040 and usually sits on the ECU board.
 
-| Register | Type | Meaning |
-|---|---|---|
-| `0x00..0x01` | int16, big-endian | frequency deviation from the baseline, Hz |
-| `0x02` | uint8 | supply voltage, 0.1 V units |
-| `0x03` | uint8 | fuel temperature, °C |
-| `0x04` | uint8 | status: `0x01` signal lost, `0x02` fuel sensor broken, `0x04` baseline pending, `0x08` supply out of range |
+The I²C slave at `0x57` exposes three blocks:
 
-After power-up the oscillator needs time to settle. The ECU waits for the
-baseline-pending bit to clear, usually about 250 ms and at most
-`ADJUSTOMETER_BASELINE_WAIT_MS` (8 s), before it trusts the position. The
-constants are in [`src/ECU/hardwareConfig.h`](src/ECU/hardwareConfig.h).
+| Registers | Meaning |
+|---|---|
+| `0x00..0x04` | Legacy pulse, supply voltage, fuel temperature and status. |
+| `0x05..0x16` | Frequency, baseline, signed deviation and chip-temperature diagnostics. |
+| `0x17..0x34` | Versioned 30-byte control feedback with sample number, timestamp and age. |
 
+The active VP37 controller requires the control-feedback block. ECU checks
+frame coherence and freshness; old firmware exposing only the legacy block
+cannot provide this feedback. HAL freezes the register map for each I²C read.
+Status bits report signal loss (`0x01`), a broken fuel sensor (`0x02`), pending
+baseline (`0x04`) and supply outside its valid range (`0x08`).
+
+Startup includes 500 ms of warm-up, baseline convergence (80 ms minimum,
+250 ms force-lock), and 1000 ms of drift verification. ECU waits up to
+`ADJUSTOMETER_BASELINE_WAIT_MS` (8 s) before calibrating travel. Measurement,
+startup and reset details are in the
+[Adjustometer README](src/Adjustometer/README.md).
 Adjustometer does not take part in the configurator protocol.
 
 ### Fiesta_clock
@@ -237,7 +246,8 @@ Commands, authentication, and signature status are described in the
 ## Shared code
 
 - **[JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL)** is a separate
-  repository that `runmefirst.sh` clones into `../libraries/JaszczurHAL`. It
+  repository pinned as a submodule in `src/JaszczurHAL`. Fiesta records the
+  exact HAL commit; `runmefirst.sh` initializes that revision. It
   provides the hardware layer (GPIO, ADC, PWM, I²C, SPI, CAN, timers), soft
   timers, PID, a key-value store on emulated EEPROM, logging, and a mock
   backend that lets the module code build and run in host tests. Each module
@@ -328,10 +338,10 @@ its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
 
 | Workflow | Runs on | Does |
 |---|---|---|
-| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | changes in `src/ECU` | ECU build, tests, cppcheck, Valgrind, clang-tidy |
-| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml), [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml), [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | changes in the module | build, tests, Valgrind, clang-tidy |
-| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | firmware or `src/common` changes | release and debug firmware for all five modules |
-| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | changes in `src/SerialConfigurator` | GUI and CLI build, tests, Valgrind, clang-tidy |
+| [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | changes in ECU, shared code or HAL pin | ECU build, tests, cppcheck, Valgrind, clang-tidy |
+| [`clocks-tests.yml`](.github/workflows/clocks-tests.yml), [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml), [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | changes in the module, shared code or HAL pin | build, tests, Valgrind, clang-tidy |
+| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | firmware, shared code or HAL pin changes | release and debug firmware for all five modules |
+| [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | changes in SerialConfigurator, shared code or HAL pin | GUI and CLI build, tests, Valgrind, clang-tidy |
 | [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | cppcheck against [`cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log) |
 | [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | MISRA screening report |
 
@@ -350,6 +360,7 @@ Fiesta/
 ├── .github/workflows/           # CI
 ├── src/
 │   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/
+│   ├── JaszczurHAL/             # pinned HAL submodule
 │   ├── SerialConfigurator/      # desktop application and CLI
 │   └── common/
 │       ├── canDefinitions/      # CAN IDs and frame layouts

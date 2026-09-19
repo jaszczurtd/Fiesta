@@ -20,22 +20,17 @@ jobs:
         uses: actions/checkout@v5
         with:
           path: workspace/Fiesta
-
-      - name: Check out JaszczurHAL
-        uses: actions/checkout@v5
-        with:
-          repository: jaszczurtd/JaszczurHAL
-          path: workspace/libraries/JaszczurHAL
+          submodules: recursive
 
       - name: Cache authenticated Windows tools
         uses: actions/cache@v4
         with:
           path: C:\jh\tools
-          key: fiesta-windows-tools-${{ hashFiles('workspace/libraries/JaszczurHAL/third_party/windows_tools_version.conf', 'workspace/libraries/JaszczurHAL/third_party/riscv_toolchain_version.conf', 'workspace/libraries/JaszczurHAL/third_party/windows_requirements.txt') }}
+          key: fiesta-windows-tools-${{ hashFiles('workspace/Fiesta/src/JaszczurHAL/third_party/windows_tools_version.conf', 'workspace/Fiesta/src/JaszczurHAL/third_party/riscv_toolchain_version.conf', 'workspace/Fiesta/src/JaszczurHAL/third_party/windows_requirements.txt') }}
 
       - name: Prepare native Windows environment
         shell: powershell
-        working-directory: workspace/libraries/JaszczurHAL
+        working-directory: workspace/Fiesta/src/JaszczurHAL
         run: >-
           .\runmefirst.ps1 -Force -ConfigureHost -FirmwareOnly
           -ToolsRoot C:\jh\tools
@@ -45,7 +40,7 @@ jobs:
         shell: powershell
         working-directory: workspace/Fiesta
         run: |
-          $python = '..\libraries\JaszczurHAL\.build\windows\venv\Scripts\python.exe'
+          $python = 'src\JaszczurHAL\.build\windows\venv\Scripts\python.exe'
           & $python -m unittest discover -s tests -p 'test_windows_*.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'Fiesta Windows project tests failed.' }
 
@@ -53,7 +48,7 @@ jobs:
         shell: powershell
         working-directory: workspace/Fiesta
         run: |
-          $entry = '..\libraries\JaszczurHAL\vscode\entry\jh-vscode.cmd'
+          $entry = 'src\JaszczurHAL\vscode\entry\jh-vscode.cmd'
           $modules = @('ECU', 'Clocks', 'OilAndSpeed', 'Adjustometer', 'Fiesta_clock')
           $artifacts = '.build\windows-artifacts'
           New-Item -ItemType Directory -Path $artifacts -Force | Out-Null

@@ -2,7 +2,7 @@
 #define SC_AUTH_H
 
 /*
- * Host-side mirror of `libraries/JaszczurHAL/src/hal/security/hal_sc_auth.h`.
+ * Host-side mirror of `src/JaszczurHAL/src/hal/security/hal_sc_auth.h`.
  *
  * The firmware derives a per-device key as
  *   K_device = HMAC-SHA256(key=salt, message=uid_bytes)

@@ -3,13 +3,23 @@ name: SerialConfigurator Tests
 on:
   push:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/SerialConfigurator/**"
-      - "src/common/scDefinitions/**"
       - ".github/workflows/serial-configurator-tests.yml"
   pull_request:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/SerialConfigurator/**"
-      - "src/common/scDefinitions/**"
       - ".github/workflows/serial-configurator-tests.yml"
   workflow_dispatch:
 
@@ -24,12 +34,8 @@ jobs:
     steps:
       - name: Checkout Fiesta
         uses: actions/checkout@v5
-
-      - name: Clone JaszczurHAL dependency
-        run: |
-          set -eux
-          mkdir -p ../libraries
-          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
+        with:
+          submodules: recursive
 
       - name: Install Linux dependencies
         run: |

@@ -11,8 +11,8 @@
 #include <JaszczurHAL.h>
 #elif __has_include("JaszczurHAL.h")
 #include "JaszczurHAL.h"
-#elif __has_include("../../../libraries/JaszczurHAL/src/JaszczurHAL.h")
-#include "../../../libraries/JaszczurHAL/src/JaszczurHAL.h"
+#elif __has_include("../JaszczurHAL/src/JaszczurHAL.h")
+#include "../JaszczurHAL/src/JaszczurHAL.h"
 #else
 #error "JaszczurHAL.h not found. Add JaszczurHAL to include paths."
 #endif
@@ -20,19 +20,19 @@
 #include <JaszczurHAL.h>
 #endif
 
-typedef unsigned char      u08;
-typedef char               s08;
-typedef unsigned short     u16;
-typedef short              s16;
-typedef unsigned long      u32;
-typedef long               s32;
+typedef unsigned char u08;
+typedef char s08;
+typedef unsigned short u16;
+typedef short s16;
+typedef unsigned long u32;
+typedef long s32;
 typedef unsigned long long u64;
-typedef long long          s64;
+typedef long long s64;
 
-typedef unsigned char      UCHAR;
-typedef unsigned short     WORD;
-typedef unsigned long      DWORD;
-typedef char              *LPCTSTR;
+typedef unsigned char UCHAR;
+typedef unsigned short WORD;
+typedef unsigned long DWORD;
+typedef char *LPCTSTR;
 
 void delay_ms(int ms);
 int binatoi(char *s);
