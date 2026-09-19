@@ -29,6 +29,8 @@ extern "C" {
 
 #define MEDIUM_TIME_ONE_SECOND_DIVIDER 12
 #define FREQUENT_TIME_ONE_SECOND_DIVIDER 16
+/** Period of the driver-demand sensor sample, in milliseconds. */
+#define THROTTLE_UPDATE_MS 10U
 
 /**
  * @brief Execute once-per-second background tasks.

@@ -14,7 +14,7 @@ extern "C" {
  * One build flag covers every test, its parameters, the console parser and the
  * VP37 RAM trace. With ECU_FUNCTIONAL_TESTS_ENABLED set to 0 the ECU compiles
  * and runs without any of it, and no console command can bring it back. The
- * normal demand source is selected by VP37_ENGINE_OPERATION_MODE and stays
+ * normal demand source is selected by ECU_ENGINE_CONTROL_ENABLED and stays
  * available either way.
  */
 #ifndef ECU_FUNCTIONAL_TESTS_ENABLED
@@ -63,8 +63,9 @@ bool startTests(void);
  * @param test Identifier to start; START_TEST_NONE only stops what runs.
  * @return HAL_OK, HAL_EINVAL for an unknown identifier, HAL_EUNINIT before
  * initTests(), or HAL_EUNSUPPORTED when tests are not compiled in.
- * @note The test begins immediately. Any running test and any running
- * sequence are stopped first, and the demand passes to the new test.
+ * @note The test begins immediately and ends any running sequence. Selecting
+ * another test first releases the old demand; restarting the same test keeps
+ * the demand continuous.
  */
 hal_status_t startTest(ecu_test_id_t test);
 
@@ -79,7 +80,7 @@ hal_status_t stopTest(void);
  * @brief Stop the running test and end any sequence.
  * @return HAL_OK, HAL_EUNINIT before initTests(), or HAL_EUNSUPPORTED when
  * tests are not compiled in.
- * @note The demand returns to the source chosen by VP37_ENGINE_OPERATION_MODE
+ * @note The demand returns to the source chosen by ECU_ENGINE_CONTROL_ENABLED
  * after the actuator has been commanded to zero.
  */
 hal_status_t stopTests(void);

@@ -52,6 +52,20 @@ extern "C" {
 
 #define MINIMUM_FUEL_AMOUNT_PERCENTAGE 10
 
+/**
+ * @brief Enable the ECU start/idle supervisor when producing position demand.
+ * @note With zero, the application forwards driver demand directly. Both
+ * configurations use the same VP37 position API and control loop.
+ */
+#ifndef ECU_ENGINE_CONTROL_ENABLED
+#define ECU_ENGINE_CONTROL_ENABLED 0
+#endif
+
+/** Supervisor demand descent step [percentage points] per update interval. */
+#define ENGINE_OP_DEMAND_RAMP_DOWN_STEP 2.9f
+/** Supervisor demand descent update interval [ms]. */
+#define ENGINE_OP_DEMAND_RAMP_DOWN_INTERVAL_MS 20
+
 // Engine-operation demand shaping (idle + start).
 #define ENGINE_OP_IDLE_BASE_DEMAND_PERCENT MINIMUM_FUEL_AMOUNT_PERCENTAGE
 #define ENGINE_OP_CRANKING_RPM_MIN 10

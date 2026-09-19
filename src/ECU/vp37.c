@@ -18,7 +18,7 @@ typedef struct {
   float outputScale;      /**< Supply multiplier times thermal multiplier. */
 } VP37Cycle;
 
-static void VP37_throttleCycle(VP37Pump *self);
+static void VP37_positionCycle(VP37Pump *self);
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle);
 static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle);
@@ -41,11 +41,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
     return VP37_INIT_BASELINE_NOT_READY;
   }
 
-  self->demand.lastThrottle = -1;
-  self->demand.potentiometer = 0;
-  self->demand.candidate = 0;
-  self->demand.candidateSinceMs = 0U;
-  self->demand.potentiometerReady = false;
+  self->demand.requestedPercent = -1;
   self->feedback.calibrationDone = false;
   self->demand.target = -1;
   self->demand.desired = -1;
@@ -74,7 +70,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->supply.overRange = false;
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   self->pid.tf = VP37_PID_TF;
-  self->demand.throttleRampLastMs = hal_millis();
+  self->pid.topKd = VP37_PID_TOP_KD;
+  self->pid.topDBlend = 0.0f;
   self->feedback.lastStatus = ADJ_STATUS_SIGNAL_LOST;
   self->pid.saturatedHigh = false;
   self->pid.integralHold = false;
@@ -190,73 +187,27 @@ bool VP37_isVP37Enabled(VP37Pump *self) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-/**
- * @brief Convert legacy driver-demand input into a VP37 quantity-position
- * target.
- * @param self VP37 controller instance to update.
- * @param accel Accelerator / driver-demand input in percentage-like units.
- * @note Despite the legacy name, this maps G79/G185-like driver demand into the
- *       project-local N146/G149-like inner-loop target.
- */
-void VP37_setVP37Throttle(VP37Pump *self, float accel) {
-  if (!self->feedback.calibrationDone) {
-    derr_limited("VP37 calibration", "Calibration not done!");
-    return;
-  }
-
-  accel = hal_math_map_f32(
-      accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX,
-      (float)VP37_ACCELERATION_MIN, (float)VP37_ACCELERATION_MAX);
-
-  accel =
-      hal_constrain(accel, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX);
-  self->demand.lastThrottle = accel;
-  const int32_t target = (int32_t)hal_math_map_f32(
-      accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX,
-      (float)self->feedback.adjustMin, (float)self->feedback.adjustMax);
-  if (target != self->demand.target) {
-    self->demand.targetChangedMs = hal_millis();
-  }
-  self->demand.target = target;
-}
-
-void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel) {
-  if (!self->feedback.calibrationDone) {
-    VP37_setVP37Throttle(self, (float)accel);
-    return;
-  }
-
-  const int32_t demand =
-      hal_constrain(accel, VP37_PERCENT_MIN, VP37_PERCENT_MAX);
-  if (!self->demand.potentiometerReady) {
-    self->demand.potentiometer = demand;
-    self->demand.candidate = demand;
-    self->demand.candidateSinceMs = hal_millis();
-    self->demand.potentiometerReady = true;
-    VP37_setVP37Throttle(self, (float)demand);
-    return;
-  }
-
-  const int32_t delta = demand - self->demand.potentiometer;
-  const int32_t absoluteDelta = delta < 0 ? -delta : delta;
-  if ((absoluteDelta == 0) || (absoluteDelta > 1)) {
-    self->demand.candidate = demand;
-    self->demand.candidateSinceMs = hal_millis();
-    if (absoluteDelta > 1) {
-      self->demand.potentiometer = demand;
+hal_status_t VP37_setPositionDemand(VP37Pump *self, float percent) {
+  hal_status_t status = HAL_EINVAL;
+  if (self != NULL) {
+    if (!self->feedback.calibrationDone) {
+      status = HAL_ESTATE;
+    } else {
+      const bool valid = isfinite(percent);
+      const float requested =
+          valid ? hal_constrain(percent, 0.0f, 100.0f) : 0.0f;
+      const int32_t target = (int32_t)hal_math_map_f32(
+          requested, 0.0f, 100.0f, (float)self->feedback.adjustMin,
+          (float)self->feedback.adjustMax);
+      self->demand.requestedPercent = requested;
+      if (target != self->demand.target) {
+        self->demand.targetChangedMs = hal_millis();
+      }
+      self->demand.target = target;
+      status = valid ? HAL_OK : HAL_EINVAL;
     }
-    VP37_setVP37Throttle(self, (float)self->demand.potentiometer);
-    return;
   }
-
-  if (self->demand.candidate != demand) {
-    self->demand.candidate = demand;
-    self->demand.candidateSinceMs = hal_millis();
-  } else if (hal_millis_deadline_expired(self->demand.candidateSinceMs,
-                                         VP37_POTENTIOMETER_STEP_CONFIRM_MS)) {
-    self->demand.potentiometer = demand;
-    VP37_setVP37Throttle(self, (float)demand);
-  }
+  return status;
 }
 
 /**
@@ -270,7 +221,7 @@ void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel) {
  */
 bool VP37_demandAtRest(const VP37Pump *self) {
 #if VP37_PWM_DISABLE_AT_MIN_POSITION
-  return (self->demand.lastThrottle <= (float)VP37_PERCENT_MIN) &&
+  return (self->demand.requestedPercent <= (float)VP37_PERCENT_MIN) &&
          (self->demand.desiredPosition <= (float)self->feedback.adjustMin);
 #else
   (void)self;
@@ -327,7 +278,7 @@ void VP37_process(VP37Pump *self) {
     self->pidDtUs = self->pidStarted ? nowUs - self->pidLastUs : periodUs;
     self->pidLastUs = nowUs;
     self->pidStarted = true;
-    VP37_throttleCycle(self);
+    VP37_positionCycle(self);
   }
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   VP37_traceRecord(self);
@@ -340,10 +291,9 @@ void VP37_process(VP37Pump *self) {
  * ramp for the motion feedforward, look the holding command up, set the
  * correction authority, scale for supply and temperature, release the actuator
  * at rest, bound the correction, step the loop, compose and write. The input
- * still comes from legacy throttle-named driver demand, but the controlled
- * plant is the project-local N146/G149-like inner loop.
+ * is a source-independent position demand for the N146/G149-like inner loop.
  */
-static void VP37_throttleCycle(VP37Pump *self) {
+static void VP37_positionCycle(VP37Pump *self) {
   if (self->demand.target < 0) {
     return;
   }
@@ -504,6 +454,7 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
 static bool VP37_releaseAtRest(VP37Pump *self) {
   self->demand.atRest = VP37_demandAtRest(self);
   if (self->demand.atRest) {
+    VP37_updateDerivativeGain(self, false);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.terms = (hal_pid_terms_t){0};
     self->feedforward.pwm = 0.0f;
@@ -569,6 +520,7 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
       self->pid.terms.integral * cycle->ki * (float)self->pid.error >= 0.0f;
   const bool targetSettled =
       cycle->stationaryTarget && (self->demand.desired == self->demand.target);
+  VP37_updateDerivativeGain(self, targetSettled);
   self->pid.integralDeadbandHz = VP37_integralDeadband(self);
   VP37_updateIntegralHold(self, targetSettled);
   const bool freezeIntegral = rampWindup || self->pid.integralHold;

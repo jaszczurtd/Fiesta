@@ -31,6 +31,7 @@ typedef struct {
   hal_soft_timer_t timerEverySecondHandle;
   hal_soft_timer_t timerMediumHandle;
   hal_soft_timer_t timerHighHandle;
+  hal_soft_timer_t timerThrottleHandle;
   hal_soft_timer_t timerGPSHandle;
   hal_soft_timer_t timerDebugHandle;
   hal_soft_timer_t timerCANUpdateHandle;
@@ -55,6 +56,7 @@ static start_runtime_state_t s_startRuntimeState = {
     .timerEverySecondHandle = NULL,
     .timerMediumHandle = NULL,
     .timerHighHandle = NULL,
+    .timerThrottleHandle = NULL,
     .timerGPSHandle = NULL,
     .timerDebugHandle = NULL,
     .timerCANUpdateHandle = NULL,
@@ -125,6 +127,8 @@ static void start_forceWatchdogReset(const char *reason) {
 #endif
 
 static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
+    {&s_startRuntimeState.timerThrottleHandle, readThrottleValues,
+     THROTTLE_UPDATE_MS},
     {&s_startRuntimeState.timerEverySecondHandle, callAtEverySecond,
      (uint32_t)SECOND},
     {&s_startRuntimeState.timerMediumHandle, readMediumValues,
@@ -521,16 +525,15 @@ static void runCore1(void) {
   RPM_process(getRPMInstance());
 #ifdef VP37
   hal_mutex_lock(vp37StateMutex);
-  // A running functional test owns the demand for as long as it runs; the
-  // source configured by VP37_ENGINE_OPERATION_MODE owns it the rest of the
-  // time, including every build without tests.
+  // A running functional test owns the demand; the application produces it
+  // otherwise, including every build without tests.
   if (!tickTests()) {
-#if VP37_ENGINE_OPERATION_MODE
+#if ECU_ENGINE_CONTROL_ENABLED
     engineOperation_process(&s_ctx.engineOp);
     engineOperation_showDebug(&s_ctx.engineOp);
 #else
-    VP37_setPotentiometerThrottle(&s_ctx.injectionPump,
-                                  getThrottlePercentage());
+    (void)VP37_setPositionDemand(&s_ctx.injectionPump,
+                                 getDriverDemandPercent());
 #endif
   }
   VP37_process(&s_ctx.injectionPump);

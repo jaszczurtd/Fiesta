@@ -41,6 +41,11 @@ typedef struct {
 
 #define GPS_TIME_DATE_BUFFER_SIZE 16
 
+/** Driver-demand input filter time constant, in seconds. */
+#define SENSORS_DRIVER_FILTER_S 0.03f
+/** Minimum filtered change accepted as driver demand, in percentage points. */
+#define SENSORS_DRIVER_DEADBAND_PERCENT 0.1f
+
 /**
  * @brief Store one global runtime value.
  * @param idx Global value index to update.
@@ -121,6 +126,14 @@ float readBarPressure(void);
 int32_t getThrottlePercentage(void);
 
 /**
+ * @brief Read the filtered fractional driver demand.
+ * @return Cached demand in 0..100 percent; zero before the first sample.
+ * @note readThrottleValues() updates this value under the shared sensor lock.
+ * Reading it neither samples the ADC nor advances the filter.
+ */
+float getDriverDemandPercent(void);
+
+/**
  * @brief Calculate engine load percentage from current pressure and RPM.
  * @return Engine load percentage in the 0..100 range.
  * @note This is a project-local supervisory load estimate, not a literal OEM
@@ -161,7 +174,19 @@ void valToPWM(unsigned char pin, int32_t val);
 void readMediumValues(void);
 
 /**
+ * @brief Sample driver input and update its raw cache and filtered demand.
+ * @note Uses the mux lock and ADC averaging, then publishes both values under
+ * the shared sensor lock. The first sample seeds the filter; later samples use
+ * elapsed milliseconds, including counter wrap. Zero and failed reads release
+ * demand immediately. Full-scale input snaps to 100 percent within the
+ * deadband. Does not transmit CAN or refresh other sensor values.
+ */
+void readThrottleValues(void);
+
+/**
  * @brief Refresh high-rate runtime values and selected CAN updates.
+ * @note Potentiometer sampling belongs to readThrottleValues(); this reads
+ * its cached value for CAN updates.
  */
 void readHighValues(void);
 

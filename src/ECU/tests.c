@@ -95,7 +95,7 @@ static void deactivate(void) {
     return;
   }
   if (entry->drivesDemand) {
-    VP37_setVP37Throttle(&getECUContext()->injectionPump, 0.0f);
+    (void)VP37_setPositionDemand(&getECUContext()->injectionPump, 0.0f);
   }
   s_active = START_TEST_NONE;
   deb("TEST: %s stopped", entry->name);
@@ -155,7 +155,9 @@ hal_status_t startTest(ecu_test_id_t test) {
   if (entry == NULL) {
     return HAL_EINVAL;
   }
-  deactivate();
+  if (s_active != entry->id) {
+    deactivate();
+  }
   s_sequenceRunning = false;
   activate(entry);
   return HAL_OK;
@@ -321,7 +323,7 @@ bool tickTests(void) {
   }
   const bool owned = entry->drivesDemand;
   if (owned) {
-    VP37_setVP37Throttle(&getECUContext()->injectionPump, demand);
+    (void)VP37_setPositionDemand(&getECUContext()->injectionPump, demand);
   }
   if (finished) {
     deactivate();

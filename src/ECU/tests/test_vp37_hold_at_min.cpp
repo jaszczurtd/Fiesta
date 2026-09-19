@@ -43,7 +43,7 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
       (pump->feedback.adjustMax + pump->feedback.adjustMin) / 2;
   pump->demand.target = -1;
   pump->demand.desired = -1;
-  pump->demand.lastThrottle = -1.0f;
+  pump->demand.requestedPercent = -1.0f;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   pump->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST;
@@ -52,7 +52,6 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->thermal.temperatureCompensationWeight = 1.0f;
   pump->supply.heldVolts = NOMINAL_VOLTAGE;
   pump->supply.ready = false;
-  pump->demand.throttleRampLastMs = hal_millis();
   pump->feedback.lastStatus = ADJ_STATUS_OK;
   VP37_setVP37PID(pump, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);
   hal_pid_controller_set_tf(pump->pid.controller, VP37_PID_TF);
@@ -103,12 +102,12 @@ void test_zero_demand_is_held_at_the_bottom_under_drive(void) {
   setupPumpForProcessTests(pump);
   uint32_t ms = 0U;
 
-  VP37_setVP37Throttle(pump, 50);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(pump, 50.0f));
   trackDemand(pump, &ms, 400U);
   TEST_ASSERT_GREATER_THAN_INT32(0, pump->output.finalPWM);
 
   // Descend to zero demand and let the slew finish; the drive stays on.
-  VP37_setVP37Throttle(pump, 0);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(pump, 0.0f));
   trackDemand(pump, &ms, 800U);
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMin, pump->demand.desired);
   TEST_ASSERT_FALSE(VP37_demandAtRest(pump));

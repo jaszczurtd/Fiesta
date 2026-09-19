@@ -39,6 +39,20 @@ void VP37_updateThermalScale(VP37Pump *self, float dt);
 float VP37_feedForward(VP37Pump *self, int32_t position);
 float VP37_integralLimit(const VP37Pump *self);
 float VP37_integralDeadband(const VP37Pump *self);
+/**
+ * @brief Apply the derivative gain for this target without clearing PID
+ * history.
+ * @param self Non-NULL controller with a calibrated stroke; pidDtUs supplies
+ * the elapsed control time in microseconds.
+ * @param targetSettled True when the target is stationary and its ramp has
+ * ended.
+ * @note Activation follows the settled state through a 50 ms low-pass filter,
+ * so a renewed ramp fades the added damping without clearing its history.
+ * The position weight rises across 85..90% of slewed demand. At or below 85%,
+ * at rest, or with the addition disabled, the blend clears immediately and
+ * only the configured base gain remains in force.
+ */
+void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled);
 void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled);
 void VP37_transferIntegralToMapTrim(VP37Pump *self);
 

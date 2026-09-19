@@ -89,17 +89,39 @@ engine state) live in one `ecu_context_t` in
 [`ecuContext.h`](src/ECU/ecuContext.h). CAN, sensors, DTC storage, GPS, OBD,
 and the configurator session keep their state in file-local structs.
 
+VP37 accepts every normal position request through one API:
+`hal_status_t VP37_setPositionDemand(VP37Pump *pump, float percent)`, with a
+0-100% position demand. Driver input, engine control, and bench tests all use
+the same position ramp, feedforward, and PID. The controller has no input-source
+mode, source-specific setter, filter-mode flag, or alternate position path.
+Emergency stop and calibration remain separate operations.
+
+Analog input conditioning belongs to `sensors.c`. A 10 ms update preserves
+fractional percentages, applies a 30 ms filter with a 0.1 percentage-point
+deadband, and caches the result for `getDriverDemandPercent()`. Zero input
+reaches the cache without filter delay. Both direct driver demand and
+`engineOperation` read this output; the application selects which request to
+send to VP37. Optional engine control is enabled by
+`ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
+
+VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
+full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
+after the target settles and fades when movement resumes through a 50 ms
+blend. The holding map and supply/temperature compensation remain shared
+across the stroke. Telemetry revision 78 reports `mode:position` and a separate
+`test:<name|none>` field; it does not identify a potentiometer controller mode.
+
 | File | Responsibility |
 |---|---|
 | [`start.c`](src/ECU/start.c) | start-up order, soft-timer table, watchdog, both core loops |
-| [`sensors.c`](src/ECU/sensors.c) | analog inputs through the HC4051 multiplexer, PCF8574 outputs, Adjustometer reads |
+| [`sensors.c`](src/ECU/sensors.c) | analog inputs and filtered driver-demand cache, PCF8574 outputs, Adjustometer reads |
 | [`can.c`](src/ECU/can.c) | main CAN frames, including the RPM publisher |
 | [`obd-2.c`](src/ECU/obd-2.c) | OBD CAN input and ISO-TP responses |
 | [`obd_j1979.c`](src/ECU/obd_j1979.c) | SAE J1979 services and Mode 01 PIDs |
 | [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
 | [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
-| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, demand, and the control cycle that calls the units below |
+| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, one position-demand API, and the control cycle that calls the units below |
 | [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position and the calibration sweep |
 | [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
 | [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |

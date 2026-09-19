@@ -19,18 +19,6 @@ extern "C" {
 #endif
 
 /**
- * @brief Source of the normal quantity demand.
- *
- * 1 selects the engine model, 0 the driver potentiometer read through the
- * HC4051 multiplexer. This is not a test setting: a functional test only
- * borrows the demand while it runs and hands it back to this source when it
- * stops, and the selection stays available with the tests compiled out.
- */
-#ifndef VP37_ENGINE_OPERATION_MODE
-#define VP37_ENGINE_OPERATION_MODE 0
-#endif
-
-/**
  * @brief What zero demand does to the drive once its descent has finished.
  *
  * 1 releases the spring-return actuator: the PID and every feedforward term
@@ -65,8 +53,13 @@ extern "C" {
 // PWM*s/Hz (Kd). Position feedback remains in Adjustometer Hz.
 #define VP37_PID_KP 0.05f
 #define VP37_PID_KI 0.2f
-// Keep D disabled: bench comparisons have not confirmed better approaches.
+// Moving targets fade the upper-target D addition toward the base PI response.
 #define VP37_PID_KD 0.0f
+/** Additional derivative gain at settled upper targets [PWM*s/Hz]; zero
+ * disables it. */
+#define VP37_PID_TOP_KD 0.001f
+/** Time constant for engaging and releasing upper-target damping [s]. */
+#define VP37_PID_TOP_D_BLEND_S 0.05f
 // Derivative filter time constant [s].
 #define VP37_PID_TF 0.003f
 // Column order of the stroke tapers in engineMaps.h: {demand [%], value}.
@@ -112,9 +105,6 @@ extern "C" {
 // learned values of opposite sign. Bench command K1 enables it for trials.
 #define VP37_MAP_TRIM_KNOTS 11U
 #define VP37_MAP_TRIM_LIMIT_PWM 40.0f
-// A one-percent potentiometer transition must persist before it changes the
-// demand. Larger driver changes remain immediate.
-#define VP37_POTENTIOMETER_STEP_CONFIRM_MS 150U
 // Correction limits are calculated at the PWM reference temperature.
 // The 22 C curve below defines their original electrical authority.
 #define VP37_PID_CORR_LIMIT 220.0f
@@ -237,16 +227,6 @@ extern "C" {
 #define VP37_PERCENT_MIN 0
 #define VP37_PERCENT_MAX 100
 
-// Throttle range in percentage units.
-// Adjusting this, we can limit the maximum throttle range available to the
-// user. 100 means full range, 50 means half, etc.
-#define VP37_ACCELERATION_MIN 0
-#define VP37_ACCELERATION_MAX 100
-
-// Ramp-down step per cycle (in throttle percentage units).
-// Higher = faster descent. 0.5 = smooth, 5+ = snappy.
-#define VP37_THROTTLE_RAMP_DOWN_STEP 2.9f
-#define VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS 20
 // Hold the last PWM briefly on a failed transfer, without integrating stale
 // data.
 #define VP37_ADJ_COMM_CUTOFF_MS 20U
@@ -310,21 +290,13 @@ typedef struct {
   bool commFailed;         /**< Adjustometer silent for longer than allowed. */
 } VP37Feedback;
 
-/** @brief Demand in, from the potentiometer or the console, and its slew
- * toward the target. */
+/** @brief Source-independent requested position and its shared motion ramp. */
 typedef struct {
-  float lastThrottle;
-  int32_t potentiometer;
-  int32_t candidate;
-  uint32_t candidateSinceMs;
-  bool potentiometerReady;
-  // Setpoint pipeline: target is the raw quantity-position written by
-  // VP37_setVP37Throttle(); desiredPosition slews toward it and desired is
-  // its integer form, the position actually fed to the PID.
-  int32_t target;
-  int32_t desired;
-  uint32_t throttleRampLastMs;
-  float desiredPosition;
+  float requestedPercent; /**< Requested position in 0..100%; -1 before a
+                             demand. */
+  int32_t target;         /**< Calibrated position target [Hz]. */
+  int32_t desired;        /**< Ramped target sent to the PID [Hz]. */
+  float desiredPosition;  /**< Fractional ramp state [Hz]. */
   uint32_t targetChangedMs;
   bool atRest; /**< Zero demand after slew: PWM off, PID state cleared. */
 } VP37Demand;
@@ -368,10 +340,15 @@ typedef struct {
   float negativeLimit;
   float upperLimit;
   float kp, ki, kd;
-  float integralLimit;    /**< Available integral contribution in nominal PWM
-                                counts. */
-  float integralOverride; /**< Bench cap in nominal PWM; zero selects
-                                position profile. */
+  float topKd;         /**< Additional settled-target D gain [PWM*s/Hz], blended
+                            from zero at 85% to its full value at 90% demand. */
+  float effectiveKd;   /**< Base plus scheduled D gain last sent to the PID,
+                            in PWM*s/Hz. */
+  float topDBlend;     /**< Filtered upper-target damping activation, 0..1. */
+  float integralLimit; /**< Available integral contribution in nominal PWM
+                             counts. */
+  float integralOverride;      /**< Bench cap in nominal PWM; zero selects
+                                     position profile. */
   float integralDeadbandTopHz; /**< Dead zone at full stroke; zero keeps the
                                   base dead zone everywhere. */
   float integralDeadbandHz;    /**< Dead zone applied in the last step. */
@@ -487,8 +464,8 @@ typedef struct {
  * counts. */
 typedef struct {
   uint32_t us, dt,
-      sequence;   /**< MCU timestamp, elapsed time and step number. */
-  float throttle; /**< Requested percentage. */
+      sequence;           /**< MCU timestamp, elapsed time and step number. */
+  float requestedPercent; /**< Requested position [%]. */
   int32_t target, desired, measured,
       pwm;             /**< Target, slewed target, feedback and PWM. */
   float motionFF;      /**< Upward-motion component included in feedforward. */
@@ -636,32 +613,24 @@ void VP37_showDebug(VP37Pump *self);
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 
 /**
- * @brief Convert legacy accelerator demand into a VP37 quantity-feedback
- * target.
- * @param self VP37 controller instance to update.
- * @param accel Accelerator / driver-demand input in percentage-like units.
- * @note Despite the legacy "Throttle" name, this function currently maps
- * G79/G185-like driver demand directly into the project-local N146/G149-like
- * target.
+ * @brief Set the quantity actuator's position through its only demand API.
+ * @param self Controller instance; NULL returns HAL_EINVAL.
+ * @param percent Position across the calibrated stroke, clamped to 0..100%.
+ * @return HAL_OK on acceptance, HAL_ESTATE before calibration, or HAL_EINVAL
+ * for NULL/non-finite input. A non-finite value requests zero when calibrated.
+ * @note Every source uses the same ramp, feedforward, PID and limits. Analog
+ * sensor conditioning belongs to the sensor layer. Call on the control core
+ * under its state mutex. Zero follows the shared descent and release policy.
  */
-void VP37_setVP37Throttle(VP37Pump *self, float accel);
-
-/**
- * @brief Apply the direct potentiometer demand with single-step debounce.
- * @param self VP37 controller instance to update.
- * @param accel Integer potentiometer demand in the 0..100 range.
- * @note A one-percent change must persist for
- *       VP37_POTENTIOMETER_STEP_CONFIRM_MS; changes of at least two percent
- *       remain immediate.
- */
-void VP37_setPotentiometerThrottle(VP37Pump *self, int32_t accel);
+hal_status_t VP37_setPositionDemand(VP37Pump *self, float percent);
 
 /**
  * @brief Update VP37 PID gains and optionally reset controller state.
  * @param self VP37 controller instance to update.
  * @param kp New proportional gain.
  * @param ki New integral gain.
- * @param kd New derivative gain.
+ * @param kd New base derivative gain [PWM*s/Hz], before the upper-target
+ * addition.
  * @param shouldTriggerReset True to reset controller state after applying
  * gains.
  */
@@ -669,11 +638,11 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
                      bool shouldTriggerReset);
 
 /**
- * @brief Read back the current VP37 PID gains.
+ * @brief Read back the configured VP37 PID gains before position scheduling.
  * @param self VP37 controller instance to inspect.
  * @param kp Output pointer receiving proportional gain, or NULL.
  * @param ki Output pointer receiving integral gain, or NULL.
- * @param kd Output pointer receiving derivative gain, or NULL.
+ * @param kd Output pointer receiving base derivative gain [PWM*s/Hz], or NULL.
  */
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd);
 
