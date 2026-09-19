@@ -12,6 +12,7 @@
 #include <utils/tools_common_defs.h>
 
 #include <hal/analog/hal_adc_scan.h>
+#include <math.h>
 
 // Timing derived from the ADC scan; defined with the multiplexer helpers below.
 TESTABLE_STATIC uint32_t sensors_muxSettleUs(void);
@@ -43,6 +44,10 @@ typedef struct {
   bool fastFeedback;
   bool sampleTracked;
   uint32_t sampleChangedUs;
+  float driverDemandPercent;
+  float driverFilteredPercent;
+  uint32_t driverDemandUpdatedMs;
+  bool driverDemandReady;
 } sensors_runtime_state_t;
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
@@ -199,9 +204,15 @@ void initSensors(void) {
 
   init4051();
 
+  m_mutex_enter_blocking(valueFieldsMutex);
   for (size_t a = 0; a < F_LAST; a++) {
     s_sensorsPersistent.valueFields[a] = 0.0;
   }
+  s_sensorsState.driverDemandPercent = 0.0f;
+  s_sensorsState.driverFilteredPercent = 0.0f;
+  s_sensorsState.driverDemandUpdatedMs = 0U;
+  s_sensorsState.driverDemandReady = false;
+  m_mutex_exit(valueFieldsMutex);
 
   s_sensorsState.collantTableIdx = s_sensorsState.collantValuesSet = 0;
   s_sensorsState.oilTableIdx = s_sensorsState.oilValuesSet = 0;
@@ -514,6 +525,13 @@ int32_t getThrottlePercentage(void) {
   return hal_math_percent_to_value(percent, 100);
 }
 
+float getDriverDemandPercent(void) {
+  m_mutex_enter_blocking(valueFieldsMutex);
+  const float demand = s_sensorsState.driverDemandPercent;
+  m_mutex_exit(valueFieldsMutex);
+  return demand;
+}
+
 //-------------------------------------------------------------------------------------------------
 // Read air temperature
 //-------------------------------------------------------------------------------------------------
@@ -719,9 +737,42 @@ int32_t getPercentageEngineLoad(void) {
                                                getGlobalValue(F_RPM));
 }
 
+void readThrottleValues(void) {
+  const float raw = (float)readThrottle();
+  const float demand = (hal_constrain(raw, 0.0f, (float)PWM_RESOLUTION) /
+                        (float)PWM_RESOLUTION) *
+                       100.0f;
+  const uint32_t nowMs = hal_millis();
+  m_mutex_enter_blocking(valueFieldsMutex);
+  s_sensorsPersistent.valueFields[F_THROTTLE_POS] = raw;
+  if (!s_sensorsState.driverDemandReady || (demand == 0.0f)) {
+    s_sensorsState.driverDemandPercent = demand;
+    s_sensorsState.driverFilteredPercent = demand;
+    s_sensorsState.driverDemandReady = true;
+  } else {
+    const uint32_t elapsedMs = nowMs - s_sensorsState.driverDemandUpdatedMs;
+    const float dt = (float)elapsedMs * 0.001f;
+    const float alpha = dt / (SENSORS_DRIVER_FILTER_S + dt);
+    s_sensorsState.driverFilteredPercent =
+        hal_math_low_pass(alpha, demand, s_sensorsState.driverFilteredPercent);
+    if ((demand == 100.0f) &&
+        ((demand - s_sensorsState.driverFilteredPercent) <=
+         SENSORS_DRIVER_DEADBAND_PERCENT)) {
+      s_sensorsState.driverFilteredPercent = demand;
+    }
+    if ((fabsf(s_sensorsState.driverFilteredPercent -
+               s_sensorsState.driverDemandPercent) >=
+         SENSORS_DRIVER_DEADBAND_PERCENT) ||
+        (s_sensorsState.driverFilteredPercent == 100.0f)) {
+      s_sensorsState.driverDemandPercent = s_sensorsState.driverFilteredPercent;
+    }
+  }
+  s_sensorsState.driverDemandUpdatedMs = nowMs;
+  m_mutex_exit(valueFieldsMutex);
+}
+
 void readHighValues(void) {
   setGlobalValue(F_RPM, RPM_getCurrentRPM(getRPMInstance()));
-  setGlobalValue(F_THROTTLE_POS, (float)readThrottle());
   setGlobalValue(F_PRESSURE, readBarPressure());
   setGlobalValue(F_GPS_CAR_SPEED, getCurrentCarSpeed());
   setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());

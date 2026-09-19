@@ -221,7 +221,8 @@ float testHelpersManualStep(bool *outFinished) {
 
 void testHelpersPrintParameters(void) {
   deb(TEST_HIGHLIGHT_ON
-      "Parameters: P<Kp> I<Ki> D<Kd> T<period ms> F<TF s> R(reset) "
+      "Parameters: P<Kp> I<Ki> D<Kd> H<upper Kd 0..0.01> "
+      "T<period ms> F<TF s> R(reset) "
       "B(trace) L<PWM cap;0=auto> W<thermal weight 0..1> "
       "Q<current observation 0|1> V<supply 0=local|1=period|2=freeze> "
       "M<measured drive compensation 0|1> K<map trim 0|1>" TEST_HIGHLIGHT_OFF);
@@ -279,6 +280,7 @@ static void applyDefaults(VP37Pump *self) {
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   self->pid.tf = VP37_PID_TF;
+  self->pid.topKd = VP37_PID_TOP_KD;
   self->pid.integralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
   self->thermal.temperatureCompensationWeight = 1.0f;
   self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
@@ -306,6 +308,8 @@ static void applyDefaults(VP37Pump *self) {
  */
 static bool applyValue(VP37Pump *self, char prefix, float value,
                        ecu_test_id_t *outStart) {
+  const float upperDerivativeGainMax = 0.01f;
+  bool applied = true;
   switch (prefix) {
   case 'P':
     VP37_setVP37PID(self, value, self->pid.ki, self->pid.kd, false);
@@ -318,6 +322,14 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
   case 'D':
     VP37_setVP37PID(self, self->pid.kp, self->pid.ki, value, false);
     deb(TEST_HIGHLIGHT_ON "Kd = %.4f" TEST_HIGHLIGHT_OFF, value);
+    break;
+  case 'H':
+    if (value > upperDerivativeGainMax) {
+      applied = false;
+    } else {
+      self->pid.topKd = value;
+      deb("VP37 upper derivative gain: %.5f", value);
+    }
     break;
   case 'T':
     if ((value < 1.0f) || (value > 100.0f)) {
@@ -417,7 +429,7 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
   default:
     return false;
   }
-  return true;
+  return applied;
 }
 
 bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,

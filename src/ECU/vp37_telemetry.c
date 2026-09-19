@@ -16,31 +16,29 @@ void VP37_showDebug(VP37Pump *self) {
   static uint32_t lastTelemetryMs = 0U;
   if (hal_millis_interval_elapsed_now(&lastTelemetryMs,
                                       VP37_TELEMETRY_UPDATE)) {
-    // A running test borrows the demand; otherwise the configured source owns
-    // it. Both are reported under the same name so one log reads the same way.
     const char *const activeTest = testsActiveName();
-    const char *const mode =
-        activeTest != NULL
-            ? activeTest
-            : (VP37_ENGINE_OPERATION_MODE != 0 ? "engine" : "potentiometer");
+    const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:75 kp:%.4f ki:%.4f kd:%.5f tf:%.4f tu:%.1f "
+    deb("VP37 CFG rev:78 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+        "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
-        "tcf:%.4f mode:%s cyclic_ms:%lu slew:%.1f upper_slew:%.1f "
+        "tcf:%.4f mode:position test:%s cyclic_ms:%lu slew:%.1f "
+        "upper_slew:%.1f "
         "ien:%u iconfirm:%lu vsync:%u vuse:%u vfrz:%u Vavg:%.3f pwm_hz:%u "
         "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu "
         "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
         "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu",
-        self->pid.kp, self->pid.ki, self->pid.kd, self->pid.tf,
-        self->pidTimeUpdate, self->feedback.adjustMin, self->feedback.adjustMax,
+        self->pid.kp, self->pid.ki, self->pid.kd, self->pid.topKd,
+        self->pid.effectiveKd, self->pid.tf, self->pidTimeUpdate,
+        self->feedback.adjustMin, self->feedback.adjustMax,
         self->supply.lastVolts, self->supply.localVolts,
         self->supply.inputVolts, self->supply.heldVolts,
         self->supply.localScale, VP37_VOLTAGE_FILTER_S, self->supply.correction,
         self->thermal.lastFuelTemp, self->pid.integralLimit,
         self->thermal.temperatureCompensationWeight,
-        self->thermal.temperatureCorrection, mode, (unsigned long)cycleDelayMs,
-        VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
+        self->thermal.temperatureCorrection, testName,
+        (unsigned long)cycleDelayMs, VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
         VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND,
         self->thermal.observationEnabled ? 1U : 0U,
         (unsigned long)self->pid.integralHoldConfirmMs,
@@ -123,7 +121,7 @@ static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
       .us = self->controlLastUs,
       .dt = self->controlDtUs,
       .sequence = self->controlSequence,
-      .throttle = self->demand.lastThrottle,
+      .requestedPercent = self->demand.requestedPercent,
       .target = self->demand.target,
       .desired = self->demand.desired,
       .measured = self->feedback.position,
@@ -172,7 +170,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d vp:%d vhi:%d "
       "ft:%.0f tcf:%.4f tsc:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
-      (unsigned long)sample->sequence, sample->throttle, sample->target,
+      (unsigned long)sample->sequence, sample->requestedPercent, sample->target,
       sample->desired, sample->measured, sample->pwm,
       sample->desired - sample->measured, sample->ff,
       sample->terms.proportional, sample->terms.integral,

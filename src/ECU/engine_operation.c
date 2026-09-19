@@ -159,9 +159,10 @@ static float engineOperation_applyRampDown(engineOperation *self,
   }
 
   uint32_t elapsed = nowMs - self->lastRampUpdateMs;
-  if (elapsed >= VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS) {
-    float steps = (float)elapsed / (float)VP37_THROTTLE_RAMP_DOWN_INTERVAL_MS;
-    self->lastDemand -= VP37_THROTTLE_RAMP_DOWN_STEP * steps;
+  if (elapsed >= ENGINE_OP_DEMAND_RAMP_DOWN_INTERVAL_MS) {
+    float steps =
+        (float)elapsed / (float)ENGINE_OP_DEMAND_RAMP_DOWN_INTERVAL_MS;
+    self->lastDemand -= ENGINE_OP_DEMAND_RAMP_DOWN_STEP * steps;
     if (self->lastDemand < requested) {
       self->lastDemand = requested;
     }
@@ -202,7 +203,7 @@ void engineOperation_process(engineOperation *self) {
   }
 
   uint32_t nowMs = hal_millis();
-  float driverDemand = (float)getThrottlePercentage();
+  float driverDemand = getDriverDemandPercent();
   int32_t rpm = RPM_getCurrentRPM(getRPMInstance());
   bool engineRunning = (rpm >= RPM_MIN);
   bool engineCranking = (!engineRunning && (rpm > ENGINE_OP_CRANKING_RPM_MIN));
@@ -250,7 +251,7 @@ void engineOperation_process(engineOperation *self) {
   demand =
       hal_constrain(demand, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX);
 
-  VP37_setVP37Throttle(pump, demand);
+  (void)VP37_setPositionDemand(pump, demand);
 }
 
 void engineOperation_showDebug(const engineOperation *self) {

@@ -7,6 +7,7 @@
 
 #include "unity.h"
 #include <hal/analog/hal_adc_scan.h>
+#include <math.h>
 
 /*
  * sensors.cpp calculation tests - functions that operate purely on global
@@ -32,12 +33,9 @@
  */
 
 void setUp(void) {
+  initSensors();
   hal_mock_set_millis(0);
   hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
-  /* Zero all global sensor values */
-  for (int i = 0; i < F_LAST; i++) {
-    setGlobalValue(i, 0.0f);
-  }
 }
 
 void tearDown(void) {}
@@ -66,6 +64,96 @@ void test_throttle_percentage_quarter(void) {
   setGlobalValue(F_THROTTLE_POS, (float)(PWM_RESOLUTION / 4));
   int pct = getThrottlePercentage();
   TEST_ASSERT_INT_WITHIN(2, 25, pct);
+}
+
+void test_throttle_legacy_percentage_retains_integer_conversion(void) {
+  setGlobalValue(F_THROTTLE_POS, 20.9f);
+  TEST_ASSERT_EQUAL_INT(0, getThrottlePercentage());
+  setGlobalValue(F_THROTTLE_POS, 21.9f);
+  TEST_ASSERT_EQUAL_INT(1, getThrottlePercentage());
+}
+
+static float sampleDriverDemand(int adc, uint32_t ms) {
+  hal_mock_set_millis(ms);
+  hal_mock_adc_inject(ADC_SENSORS_PIN, adc);
+  readThrottleValues();
+  return getDriverDemandPercent();
+}
+
+void test_driver_demand_first_sample_retains_fractional_resolution(void) {
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
+  const float demand = sampleDriverDemand(2700, 0U);
+  const float rawPercent =
+      getGlobalValue(F_THROTTLE_POS) / (float)PWM_RESOLUTION * 100.0f;
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, rawPercent, demand);
+  TEST_ASSERT_GREATER_THAN_FLOAT(.01f, fabsf(demand - roundf(demand)));
+}
+
+void test_driver_demand_filters_steps_without_delaying_raw_cache(void) {
+  const float initial = sampleDriverDemand(3200, 0U);
+  float previous = sampleDriverDemand(2400, 10U);
+  const float rawPercent =
+      getGlobalValue(F_THROTTLE_POS) / (float)PWM_RESOLUTION * 100.0f;
+  TEST_ASSERT_GREATER_THAN_FLOAT(initial, previous);
+  TEST_ASSERT_LESS_THAN_FLOAT(rawPercent, previous);
+  TEST_ASSERT_INT_WITHIN(1, (int)rawPercent, getThrottlePercentage());
+  for (uint32_t ms = 20U; ms <= 500U; ms += 10U) {
+    const float demand = sampleDriverDemand(2400, ms);
+    TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(previous, demand);
+    TEST_ASSERT_LESS_OR_EQUAL_FLOAT(rawPercent, demand);
+    previous = demand;
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.11f, rawPercent, previous);
+}
+
+void test_driver_demand_rejects_sub_deadband_adc_jitter(void) {
+  const float initial = sampleDriverDemand(2700, 0U);
+  for (uint32_t ms = 10U; ms <= 500U; ms += 10U) {
+    const int adc = (ms % 20U) == 0U ? 2699 : 2701;
+    TEST_ASSERT_EQUAL_FLOAT(initial, sampleDriverDemand(adc, ms));
+  }
+}
+
+void test_driver_demand_reaches_endpoints_and_releases_zero_or_failed_input(
+    void) {
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, sampleDriverDemand(0, 0U));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, sampleDriverDemand(4095, 10U));
+  const float rising = sampleDriverDemand(0, 20U);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, rising);
+  TEST_ASSERT_LESS_THAN_FLOAT(100.0f, rising);
+  for (uint32_t ms = 30U; ms <= 400U; ms += 10U) {
+    const float demand = sampleDriverDemand(0, ms);
+    TEST_ASSERT_TRUE(demand >= 0.0f && demand <= 100.0f);
+  }
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, getDriverDemandPercent());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, sampleDriverDemand(THROTTLE_MAX, 410U));
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, sampleDriverDemand(0, 420U));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, sampleDriverDemand(-1, 430U));
+}
+
+void test_driver_demand_uses_elapsed_sample_time_across_clock_wrap(void) {
+  const float initial = sampleDriverDemand(3200, UINT32_MAX - 9U);
+  const float demand = sampleDriverDemand(2400, 5U);
+  const float rawPercent =
+      getGlobalValue(F_THROTTLE_POS) / (float)PWM_RESOLUTION * 100.0f;
+  // Fifteen elapsed milliseconds moves one third toward the new sample.
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, initial + (rawPercent - initial) / 3.0f,
+                           demand);
+  TEST_ASSERT_EQUAL_FLOAT(demand, sampleDriverDemand(2400, 5U));
+}
+
+void test_driver_demand_reset_and_getter_do_not_reuse_or_advance_filter(void) {
+  const float initial = sampleDriverDemand(2700, 0U);
+  setGlobalValue(F_THROTTLE_POS, NAN);
+  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  for (uint32_t ms = 10U; ms <= 500U; ms += 10U) {
+    hal_mock_set_millis(ms);
+    TEST_ASSERT_EQUAL_FLOAT(initial, getDriverDemandPercent());
+  }
+  initSensors();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_THROTTLE_POS));
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, sampleDriverDemand(0, 510U));
 }
 
 // ── getPercentageEngineLoad
@@ -251,11 +339,49 @@ void test_pcf8574_read_invalid_pin_returns_false(void) {
 // ── readHighValues field wiring ─────────────────────────────────────────────
 //
 // readHighValues() is the core polling step on the sensor timer. It must
-// refresh F_RPM, F_THROTTLE_POS, F_PRESSURE, F_GPS_CAR_SPEED and
+// refresh F_RPM, F_PRESSURE, F_GPS_CAR_SPEED and
 // F_CALCULATED_ENGINE_LOAD on every tick, and must NOT touch fields owned by
 // readMediumValues() (F_COOLANT_TEMP, F_OIL_TEMP, F_INTAKE_TEMP, F_FUEL,
 // F_VOLTS). These tests guard the explicit setGlobalValue() wiring against
 // accidental removal after the reflectionValueFields cleanup.
+
+void test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample(
+    void) {
+  for (int i = 0; i < F_LAST; ++i) {
+    setGlobalValue(i, 1000.0f + (float)i);
+  }
+  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  readThrottleValues();
+  TEST_ASSERT_EQUAL_FLOAT((float)PWM_RESOLUTION,
+                          getGlobalValue(F_THROTTLE_POS));
+  for (int i = 0; i < F_LAST; ++i) {
+    if (i != F_THROTTLE_POS) {
+      TEST_ASSERT_EQUAL_FLOAT(1000.0f + (float)i, getGlobalValue(i));
+    }
+  }
+
+  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, 100.0f, getDriverDemandPercent());
+  TEST_ASSERT_EQUAL_INT(100, getThrottlePercentage());
+  readThrottleValues();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_THROTTLE_POS));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
+
+  setGlobalValue(F_THROTTLE_POS, 1000.0f);
+  hal_mock_adc_inject(ADC_SENSORS_PIN, -1);
+  readThrottleValues();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_THROTTLE_POS));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
+}
+
+void test_readHighValues_preserves_the_independently_sampled_throttle(void) {
+  const float demand = sampleDriverDemand(2700, 0U);
+  setGlobalValue(F_THROTTLE_POS, 1234.0f);
+  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  readHighValues();
+  TEST_ASSERT_EQUAL_FLOAT(1234.0f, getGlobalValue(F_THROTTLE_POS));
+  TEST_ASSERT_EQUAL_FLOAT(demand, getDriverDemandPercent());
+}
 
 void test_readHighValues_refreshes_rpm_from_instance(void) {
   getRPMInstance()->rpmValue = 2750;
@@ -379,6 +505,14 @@ int main(void) {
   RUN_TEST(test_throttle_percentage_full);
   RUN_TEST(test_throttle_percentage_midpoint);
   RUN_TEST(test_throttle_percentage_quarter);
+  RUN_TEST(test_throttle_legacy_percentage_retains_integer_conversion);
+  RUN_TEST(test_driver_demand_first_sample_retains_fractional_resolution);
+  RUN_TEST(test_driver_demand_filters_steps_without_delaying_raw_cache);
+  RUN_TEST(test_driver_demand_rejects_sub_deadband_adc_jitter);
+  RUN_TEST(
+      test_driver_demand_reaches_endpoints_and_releases_zero_or_failed_input);
+  RUN_TEST(test_driver_demand_uses_elapsed_sample_time_across_clock_wrap);
+  RUN_TEST(test_driver_demand_reset_and_getter_do_not_reuse_or_advance_filter);
 
   RUN_TEST(test_engine_load_zero_when_rpm_zero);
   RUN_TEST(test_engine_load_zero_when_pressure_zero);
@@ -417,6 +551,9 @@ int main(void) {
 
   RUN_TEST(test_readHighValues_refreshes_rpm_from_instance);
   RUN_TEST(test_readHighValues_does_not_touch_medium_rate_fields);
+  RUN_TEST(
+      test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample);
+  RUN_TEST(test_readHighValues_preserves_the_independently_sampled_throttle);
 
   return UNITY_END();
 }

@@ -16,12 +16,14 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   self->pid.kp = kp;
   self->pid.ki = ki;
   self->pid.kd = kd;
+  self->pid.effectiveKd = kd;
   hal_pid_controller_set_kp(self->pid.controller, kp);
   hal_pid_controller_set_ki(self->pid.controller, ki);
   hal_pid_controller_set_kd(self->pid.controller, kd);
 
   if (shouldTriggerReset) {
     hal_pid_controller_reset(self->pid.controller);
+    self->pid.topDBlend = 0.0f;
     self->pid.integralHold = false;
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
@@ -33,13 +35,13 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
 
 void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd) {
   if (kp != NULL) {
-    *kp = hal_pid_controller_get_kp(self->pid.controller);
+    *kp = self->pid.kp;
   }
   if (ki != NULL) {
-    *ki = hal_pid_controller_get_ki(self->pid.controller);
+    *ki = self->pid.ki;
   }
   if (kd != NULL) {
-    *kd = hal_pid_controller_get_kd(self->pid.controller);
+    *kd = self->pid.kd;
   }
 }
 
@@ -135,6 +137,24 @@ float VP37_integralDeadband(const VP37Pump *self) {
         VP37_strokePercent(self, self->demand.desiredPosition));
   }
   return deadband;
+}
+
+void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
+  const float percent = VP37_strokePercent(self, self->demand.desiredPosition);
+  float weight = 0.0f;
+  if ((self->pid.topKd > 0.0f) && !self->demand.atRest && (percent > 85.0f)) {
+    const float dt = (float)self->pidDtUs * 0.000001f;
+    const float alpha = dt / (VP37_PID_TOP_D_BLEND_S + dt);
+    self->pid.topDBlend = hal_math_low_pass(alpha, targetSettled ? 1.0f : 0.0f,
+                                            self->pid.topDBlend);
+    weight = hal_constrain(hal_math_map_f32(percent, 85.0f, 90.0f, 0.0f, 1.0f),
+                           0.0f, 1.0f);
+  } else {
+    self->pid.topDBlend = 0.0f;
+  }
+  self->pid.effectiveKd =
+      self->pid.kd + (self->pid.topKd * weight * self->pid.topDBlend);
+  hal_pid_controller_set_kd(self->pid.controller, self->pid.effectiveKd);
 }
 
 /** @brief Update the settled-target hysteresis that freezes integration. */
