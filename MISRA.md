@@ -56,9 +56,18 @@ Pending areas:
 
 ## Latest screening snapshot
 
+The 2026-09-19 screening with cppcheck 2.13.0 reports **934 active findings**.
+The VP37 supply-acquisition and resistance-estimation changes preserve the
+findings from commit `058d0b9`: no additions after comparing source text and
+rule IDs independently of line numbers. No suppressions were added. Licensed
+rule texts remain unavailable, so this is a regression check rather than a
+compliance claim.
+
+### Earlier comparison reference
+
 Reference run on 2026-09-12 with cppcheck 2.13.0, without licensed rule texts.
 This run uses the corrected project configuration and the JaszczurHAL atomic
-model (see below), so it is the current comparison baseline:
+model (see below), and records the earlier comparison baseline:
 
 - active findings: **949** across **33** rule IDs,
 - `src/ECU` carries 719 of them, shared `src/common` sources the remaining 230,

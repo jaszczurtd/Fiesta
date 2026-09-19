@@ -29,20 +29,23 @@ extern "C" {
   ((((1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) * 1000U) /                   \
     VP37_CURRENT_SCAN_FRAME_NS) +                                              \
    8U)
-/** A block of 2.25 PWM periods always holds one complete rise-to-rise period,
-    whatever its phase; two periods exactly left the second edge on the block
-    boundary about 1% of the time. A block is never shorter than one control
-    step, so the reducer called once per step sees every block; at 1 kHz that
-    is six periods. */
+/** Completed DMA blocks arrive slightly slower than the 5 ms control step. */
+#define VP37_CURRENT_SCAN_BLOCK_NS 6000000U
+/** Retained history spans 2.25 PWM periods so a complete rise-to-rise period
+    remains available at any phase. At high PWM rates retain at least one
+    complete DMA block. */
 #define VP37_CURRENT_SCAN_PERIODS_NS                                           \
   ((9U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) / 4U)
-#define VP37_CURRENT_SCAN_BLOCK_MIN_NS 6000000U
-#define VP37_CURRENT_SCAN_BLOCK_NS                                             \
-  ((VP37_CURRENT_SCAN_PERIODS_NS > VP37_CURRENT_SCAN_BLOCK_MIN_NS)             \
+#define VP37_CURRENT_SCAN_HISTORY_NS                                           \
+  ((VP37_CURRENT_SCAN_PERIODS_NS > VP37_CURRENT_SCAN_BLOCK_NS)                 \
        ? VP37_CURRENT_SCAN_PERIODS_NS                                          \
-       : VP37_CURRENT_SCAN_BLOCK_MIN_NS)
+       : VP37_CURRENT_SCAN_BLOCK_NS)
 #define VP37_CURRENT_SCAN_BLOCK_FRAMES                                         \
   ((VP37_CURRENT_SCAN_BLOCK_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /            \
+   VP37_CURRENT_SCAN_FRAME_NS)
+/** Capacity of the contiguous history consumed by the reducer. */
+#define VP37_CURRENT_SCAN_HISTORY_FRAMES                                       \
+  ((VP37_CURRENT_SCAN_HISTORY_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /          \
    VP37_CURRENT_SCAN_FRAME_NS)
 /** Gate detection from the source-shunt waveform, with hysteresis. An edge
     counts once the new level holds for the confirmation time; the excursions
@@ -63,7 +66,7 @@ typedef struct {
   uint8_t clipped;      /**< 1 when the raw code hit the ADC end stop. */
 } VP37CurrentPhaseSample;
 
-/** Edge-filtered current from one complete, gate-aligned PWM period. */
+/** Gate-aligned current and supply, plus the newest supply-only window. */
 typedef struct {
   uint32_t samples;        /**< ON-phase samples acquired. */
   uint32_t guardedSamples; /**< Samples left after both edge guards. */
@@ -86,9 +89,14 @@ typedef struct {
       supplySamples; /**< Accepted supply conversions across both phases. */
   bool supplyValid;  /**< Own sample budget and timing rule; a rejected current
                         waveform does not invalidate the supply mean. */
+  float supplyLatestVolts; /**< Supply mean over the newest one-period window,
+                              independent of the current waveform. */
+  uint32_t supplyLatestUs; /**< Center of that window in hal_micros() time;
+                              uint32_t wrap is supported. */
+  bool supplyLatestValid;  /**< A complete window with valid supply samples. */
 } VP37CurrentPulseResult;
 
-/** One completed scan block as seen by the reducer. */
+/** Contiguous completed scan frames as seen by the reducer. */
 typedef struct {
   const uint16_t *samples; /**< Interleaved frames, one sample per pin. */
   uint32_t frames;
@@ -122,7 +130,7 @@ hal_status_t VP37_currentScanStop(void);
 uint32_t VP37_currentScanFrameNs(void);
 
 /**
- * @brief Reduce one scan block to the newest complete PWM period inside it.
+ * @brief Reduce a contiguous scan history to current and supply observations.
  * @param block Non-NULL block view with valid positions and frame period.
  * @param out Non-NULL result, cleared first; zero state always filled.
  * @return HAL_OK, HAL_EINVAL (bad view), HAL_ESTATE (invalid zero),
@@ -132,18 +140,23 @@ uint32_t VP37_currentScanFrameNs(void);
  * path bypasses the source shunt, so the ON phase is the only non-zero span.
  * supplyVolts and supplyValid describe the same period and are filled on
  * every return that found a period; read waveformValid before any amperes.
+ * supplyLatestVolts instead spans one period ending at the history's last
+ * frame. It uses the measured period when plausible, otherwise the nominal
+ * PWM period, and remains usable without valid current edges or shunt zero.
+ * Its validity is independent of the return status.
  */
 hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
                                     VP37CurrentPulseResult *out);
 
 /**
- * @brief Take the newest completed scan block and reduce it.
+ * @brief Take the newest block, retain continuous history and reduce it.
  * @param out Non-NULL result; untouched when no block was available.
  * @param sequence Non-NULL; block sequence when one was taken, else 0.
  * @return The take status (HAL_EAGAIN, HAL_ESTATE) when no block was taken,
  * otherwise the reduce status.
  * @note Core 1 only; a block is held for one block period, so call at least
- * once per block period to see every block.
+ * once per block period to see every block. Start, stop, missed blocks or
+ * discontinuous completion timestamps discard the retained history.
  */
 hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
                                      uint32_t *sequence);

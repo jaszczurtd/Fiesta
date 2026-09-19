@@ -95,6 +95,7 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->demand.desired = -1;
   pump->demand.requestedPercent = -1.0f;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+  pump->pid.topKd = VP37_PID_TOP_KD;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   pump->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST;
   pump->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
@@ -126,6 +127,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
+  (void)VP37_currentScanStop();
   hal_mock_i2c_set_busy(false);
   ecu_context_t *ctx = getECUContext();
   VP37Pump *pump = &ctx->injectionPump;
@@ -635,14 +637,14 @@ void test_vp37_cycle_voltage_selection_rejects_stale_invalid_and_rest_samples(
   pump->supply.localReady = true;
   pump->supply.localScale = 1.0f;
   VP37_setPositionDemand(pump, 50);
-  const uint32_t times[] = {0U, 95000U, 100000U};
+  const uint32_t times[] = {0U, 15000U, 20000U};
   for (uint32_t now : times) {
     hal_mock_set_micros(now);
     injectAdjRegisterData(4500, 147, 49, ADJ_STATUS_OK);
     VP37_process(pump);
-    TEST_ASSERT_EQUAL(now < 100000U, pump->supply.cycleUsed);
+    TEST_ASSERT_EQUAL(now < 20000U, pump->supply.cycleUsed);
     // The raw local fixture includes RP2040 ADC compensation; scale is 1.
-    TEST_ASSERT_FLOAT_WITHIN(.02f, now < 100000U ? 14.2f : 14.8055f,
+    TEST_ASSERT_FLOAT_WITHIN(.02f, now < 20000U ? 14.2f : 14.8055f,
                              pump->supply.inputVolts);
   }
   pump->supply.cycleUs = 105000U;
@@ -757,6 +759,392 @@ void test_vp37_voltage_scale_follows_gradual_supply_changes_closely(void) {
     TEST_ASSERT_FLOAT_WITHIN(.001f, NOMINAL_VOLTAGE / pump->supply.heldVolts,
                              pump->supply.correction);
   }
+}
+
+// Exercise acquisition and control on separate clocks. Supply is an external
+// waveform; no plant or controller equation generates the position feedback.
+struct SupplyScanFixture {
+  uint32_t startUs;
+  bool steps;
+  bool ripple;
+  bool clippedCurrent;
+};
+
+static uint16_t supplyScanRaw(float volts) {
+  const float voltsPerCode = 3.3f *
+                             ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) /
+                             ((float)V_DIVIDER_R2 * 4095.0f);
+  const int target = (int)(volts / voltsPerCode + .5f);
+  int lower = 0;
+  int upper = 4095;
+  while (lower < upper) {
+    const int middle = lower + (upper - lower) / 2;
+    if (hal_adc_compensate_rp2040_12bit(middle) < target) {
+      lower = middle + 1;
+    } else {
+      upper = middle;
+    }
+  }
+  return (uint16_t)lower;
+}
+
+static float scanRailVolts(const SupplyScanFixture &fixture, uint32_t us) {
+  if (fixture.ripple) {
+    return 14.0f;
+  }
+  if (fixture.steps) {
+    return ((us >= 120000U) && (us < 390000U)) ? 15.0f : 12.0f;
+  }
+  const float rise =
+      hal_constrain(((float)us - 120000.0f) / 150000.0f, 0.0f, 1.0f);
+  const float fall =
+      hal_constrain(((float)us - 390000.0f) / 150000.0f, 0.0f, 1.0f);
+  return 12.0f + 3.0f * (rise - fall);
+}
+
+static void completeSupplyScan(const SupplyScanFixture &fixture,
+                               uint32_t completedUs) {
+  uint16_t samples[VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS];
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  const uint32_t periodUs = 1000000U / VP37_PWM_FREQUENCY_HZ;
+  for (uint32_t i = 0U; i < VP37_CURRENT_SCAN_BLOCK_FRAMES; ++i) {
+    const uint32_t sampleUs =
+        completedUs - blockUs + i * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+    const uint32_t phase = sampleUs % periodUs;
+    const bool on = phase < (periodUs * 2U) / 5U;
+    const float ripple =
+        fixture.ripple ? ((phase < periodUs / 2U) ? .22f : -.22f) : 0.0f;
+    samples[i * VP37_CURRENT_SCAN_PINS] =
+        on ? (fixture.clippedCurrent ? 4095U : VP37_currentAmpsToRaw(4.0f))
+           : 0U;
+    samples[i * VP37_CURRENT_SCAN_PINS + 1U] = 1234U;
+    samples[i * VP37_CURRENT_SCAN_PINS + 2U] =
+        supplyScanRaw(scanRailVolts(fixture, sampleUs) + ripple);
+  }
+  hal_mock_set_micros(fixture.startUs + completedUs);
+  TEST_ASSERT_EQUAL(HAL_OK, hal_mock_adc_scan_complete(
+                                samples, VP37_CURRENT_SCAN_BLOCK_FRAMES));
+}
+
+static void setupSupplyScan(VP37Pump *pump, uint32_t startUs) {
+  setupPumpForProcessTests(pump);
+  pump->thermal.observationEnabled = true;
+  pump->thermal.temperatureCompensationWeight = 0.0f;
+  pump->supply.cycleEnabled = true;
+  pump->supply.localScale = 1.0f;
+  pump->supply.localReady = true;
+  VP37_setVP37PID(pump, 0.0f, 0.0f, 0.0f, false);
+  hal_mock_set_micros(startUs);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemand(pump, 50.0f));
+  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 0);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_currentScanStart());
+}
+
+static void runSupplyScanProfile(const SupplyScanFixture &fixture) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupSupplyScan(pump, fixture.startUs);
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  uint32_t nextBlockUs = blockUs;
+  float referenceDrive = 0.0f;
+  float minimumVolts = 100.0f;
+  float maximumVolts = 0.0f;
+  int32_t minimumPWM = PWM_RESOLUTION;
+  int32_t maximumPWM = 0;
+  for (uint32_t us = 0U; us <= 660000U; us += 5000U) {
+    while (nextBlockUs <= us) {
+      completeSupplyScan(fixture, nextBlockUs);
+      nextBlockUs += blockUs;
+    }
+    hal_mock_set_micros(fixture.startUs + us);
+    const float volts = scanRailVolts(fixture, us);
+    injectAdjRegisterData(4600, (uint8_t)(volts * 10.0f + .5f), 49U,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    if (us < 100000U) {
+      continue;
+    }
+    TEST_ASSERT_TRUE(pump->supply.cycleUsed);
+    TEST_ASSERT_FALSE(pump->output.pwmLimited);
+    TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->pid.terms.output);
+    const float drive = (float)pump->output.finalPWM * volts;
+    if (referenceDrive == 0.0f) {
+      referenceDrive = drive;
+    }
+    const bool stepSettled = !fixture.steps || (us < 120000U) ||
+                             ((us >= 150000U) && (us < 390000U)) ||
+                             (us >= 420000U);
+    if (stepSettled) {
+      TEST_ASSERT_FLOAT_WITHIN(fixture.steps ? .01f : .02f, 1.0f,
+                               drive / referenceDrive);
+    }
+    minimumVolts = fminf(minimumVolts, pump->supply.heldVolts);
+    maximumVolts = fmaxf(maximumVolts, pump->supply.heldVolts);
+    minimumPWM =
+        minimumPWM < pump->output.finalPWM ? minimumPWM : pump->output.finalPWM;
+    maximumPWM =
+        maximumPWM > pump->output.finalPWM ? maximumPWM : pump->output.finalPWM;
+  }
+  if (fixture.ripple) {
+    TEST_ASSERT_LESS_THAN_FLOAT(.05f, maximumVolts - minimumVolts);
+    TEST_ASSERT_LESS_OR_EQUAL_INT32(3, maximumPWM - minimumPWM);
+  }
+  if (fixture.clippedCurrent) {
+    TEST_ASSERT_FALSE(pump->thermal.cycleValid);
+    TEST_ASSERT_TRUE(pump->supply.cycleValid);
+  }
+}
+
+void test_vp37_scanned_supply_preserves_drive_during_fast_bidirectional_ramps(
+    void) {
+  runSupplyScanProfile({100000U, false, false, false});
+}
+
+void test_vp37_scanned_supply_recovers_both_steps_within_30ms(void) {
+  runSupplyScanProfile({100000U, true, false, false});
+}
+
+void test_vp37_scanned_supply_rejects_phase_ripple_with_clipped_current(void) {
+  runSupplyScanProfile({100000U, false, true, true});
+}
+
+void test_vp37_scanned_supply_ramp_handles_microsecond_wrap(void) {
+  runSupplyScanProfile({UINT32_MAX - 300000U, false, false, false});
+}
+
+void test_vp37_scanned_supply_expires_and_recovers_without_recalibration(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  const SupplyScanFixture fixture = {100000U, false, true, false};
+  setupSupplyScan(pump, fixture.startUs);
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  uint32_t nextBlockUs = blockUs;
+  for (uint32_t us = 0U; us <= 210000U; us += 5000U) {
+    while (nextBlockUs <= us) {
+      if ((nextBlockUs <= 120000U) || (nextBlockUs >= 180000U)) {
+        completeSupplyScan(fixture, nextBlockUs);
+      }
+      nextBlockUs += blockUs;
+    }
+    hal_mock_set_micros(fixture.startUs + us);
+    injectAdjRegisterData(4600, 140U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    if (us < 100000U) {
+      continue;
+    }
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, pump->supply.localScale);
+    if ((us >= 145000U) && (us < 180000U)) {
+      TEST_ASSERT_FALSE(pump->supply.cycleUsed);
+    } else if ((us <= 120000U) || (us >= 200000U)) {
+      TEST_ASSERT_TRUE(pump->supply.cycleUsed);
+    }
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.03f, 14.0f, pump->supply.heldVolts);
+}
+
+static void runLatchedSupplyProfile(const SupplyScanFixture &fixture,
+                                    uint32_t pwmPhaseUs = 0U) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupSupplyScan(pump, fixture.startUs);
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  const uint32_t pwmPeriodUs = 1000000U / VP37_PWM_FREQUENCY_HZ;
+  uint32_t nextBlockUs = blockUs;
+  uint32_t nextControlUs = 0U;
+  uint32_t nextWrapUs = pwmPhaseUs;
+  uint32_t nextMeasurementUs = 0U;
+  uint32_t commandReadyUs = 0U;
+  int32_t previousPWM = 0;
+  int32_t pendingPWM = 0;
+  int32_t latchedPWM = 0;
+  float referenceDrive = 0.0f;
+  float peakError = 0.0f;
+  float steadyErrorSquared = 0.0f;
+  uint32_t steadySamples = 0U;
+  int32_t minimumPWM = PWM_RESOLUTION;
+  int32_t maximumPWM = 0;
+  while (nextMeasurementUs <= 660000U) {
+    const uint32_t us = hal_min(hal_min(nextBlockUs, nextControlUs),
+                                hal_min(nextWrapUs, nextMeasurementUs));
+    // Hardware wrap precedes any software write at that instant. A write
+    // made during this control step is not applied retroactively to a period.
+    if (us == nextWrapUs) {
+      latchedPWM = us >= commandReadyUs ? pendingPWM : previousPWM;
+      nextWrapUs += pwmPeriodUs;
+    }
+    if (us == nextBlockUs) {
+      completeSupplyScan(fixture, us);
+      nextBlockUs += blockUs;
+    }
+    if (us == nextControlUs) {
+      hal_mock_set_micros(fixture.startUs + us);
+      const float volts = scanRailVolts(fixture, us);
+      injectAdjRegisterData(4600, (uint8_t)(volts * 10.0f + .5f), 49U,
+                            ADJ_STATUS_OK);
+      previousPWM = pendingPWM;
+      VP37_process(pump);
+      pendingPWM = pump->output.finalPWM;
+      commandReadyUs = us + (hal_micros() - (fixture.startUs + us));
+      nextControlUs += 5000U;
+    }
+    if (us != nextMeasurementUs) {
+      continue;
+    }
+    nextMeasurementUs += 500U;
+    if (us < 100000U) {
+      continue;
+    }
+    const float drive = (float)latchedPWM * scanRailVolts(fixture, us);
+    if (referenceDrive == 0.0f) {
+      referenceDrive = drive;
+    }
+    const bool stepSettled = !fixture.steps || (us < 120000U) ||
+                             ((us >= 150000U) && (us < 390000U)) ||
+                             (us >= 420000U);
+    if (stepSettled) {
+      peakError = fmaxf(peakError, fabsf(drive / referenceDrive - 1.0f));
+    }
+    if (!fixture.steps && !fixture.ripple &&
+        (((us >= 160000U) && (us < 270000U)) ||
+         ((us >= 430000U) && (us < 540000U)))) {
+      const float error = drive / referenceDrive - 1.0f;
+      steadyErrorSquared += error * error;
+      steadySamples++;
+    }
+    minimumPWM = hal_min(minimumPWM, latchedPWM);
+    maximumPWM = hal_max(maximumPWM, latchedPWM);
+  }
+  // PWM is held through a complete 130 Hz period; voltage is measured every
+  // 0.5 ms, including after a write and before the next hardware latch.
+  // The first 40 ms include slope acquisition. Bound that transient separately
+  // from the established ramp, whose RMS also spans every latch phase.
+  TEST_ASSERT_LESS_THAN_FLOAT(fixture.steps ? .01f : .032f, peakError);
+  if (steadySamples > 0U) {
+    TEST_ASSERT_LESS_THAN_FLOAT(
+        .015f, sqrtf(steadyErrorSquared / (float)steadySamples));
+  }
+  if (fixture.ripple) {
+    TEST_ASSERT_LESS_OR_EQUAL_INT32(3, maximumPWM - minimumPWM);
+  }
+}
+
+void test_vp37_supply_ramp_preserves_drive_between_pwm_latches(void) {
+  for (uint32_t phaseUs = 0U; phaseUs < 7600U; phaseUs += 1000U) {
+    runLatchedSupplyProfile({100000U, false, false, false}, phaseUs);
+    // Each phase is a separate acquisition and controller lifetime.
+    tearDown();
+  }
+}
+
+void test_vp37_supply_steps_settle_with_latched_pwm(void) {
+  runLatchedSupplyProfile({100000U, true, false, false});
+}
+
+void test_vp37_supply_ripple_stays_quiet_with_latched_pwm(void) {
+  runLatchedSupplyProfile({100000U, false, true, false});
+}
+
+void test_vp37_supply_prediction_handles_wrap_with_latched_pwm(void) {
+  runLatchedSupplyProfile({UINT32_MAX - 300000U, false, false, false});
+}
+
+static void setupPredictionPump(VP37Pump *pump) {
+  setupPumpForProcessTests(pump);
+  pump->thermal.observationEnabled = true;
+  pump->supply.cycleEnabled = true;
+  pump->supply.cycleValid = true;
+  pump->supply.localReady = true;
+  pump->supply.localScale = 1.0f;
+  VP37_setPositionDemand(pump, 50.0f);
+}
+
+static void processSupplyCapture(VP37Pump *pump, uint32_t nowUs,
+                                 uint32_t sampleUs, float volts) {
+  hal_mock_set_micros(nowUs);
+  injectAdjRegisterData(4600, 144U, 49U, ADJ_STATUS_OK);
+  pump->supply.cycleUs = sampleUs;
+  pump->supply.cycleVolts = volts;
+  VP37_process(pump);
+}
+
+void test_vp37_supply_prediction_stops_reverses_and_uses_each_sample_once(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPredictionPump(pump);
+  processSupplyCapture(pump, 0U, 0U, 14.0f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 5000U, 5000U, 14.1f);
+  const float slope = pump->supply.voltageSlope;
+  const float lead = pump->supply.predictionVolts;
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, slope);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, lead);
+  processSupplyCapture(pump, 10000U, 5000U, 14.1f);
+  TEST_ASSERT_EQUAL_FLOAT(slope, pump->supply.voltageSlope);
+  TEST_ASSERT_GREATER_THAN_FLOAT(lead, pump->supply.predictionVolts);
+  TEST_ASSERT_EQUAL_FLOAT(14.1f, pump->supply.inputVolts);
+  processSupplyCapture(pump, 15000U, 15000U, 14.1f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+  TEST_ASSERT_EQUAL_FLOAT(14.1f, pump->supply.heldVolts);
+  processSupplyCapture(pump, 20000U, 20000U, 14.0f);
+  TEST_ASSERT_LESS_THAN_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 25000U, 25000U, 14.1f);
+  TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+}
+
+void test_vp37_supply_prediction_resets_on_freeze_gap_fallback_and_rest(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPredictionPump(pump);
+  processSupplyCapture(pump, 0U, 0U, 14.0f);
+  processSupplyCapture(pump, 5000U, 5000U, 14.1f);
+  const float held = pump->supply.heldVolts;
+  pump->supply.frozen = true;
+  processSupplyCapture(pump, 10000U, 10000U, 14.2f);
+  TEST_ASSERT_FALSE(pump->supply.predictionReady);
+  TEST_ASSERT_EQUAL_FLOAT(held, pump->supply.heldVolts);
+  pump->supply.frozen = false;
+  processSupplyCapture(pump, 15000U, 15000U, 14.3f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 20000U, 20000U, 14.4f);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->supply.predictionVolts);
+  pump->supply.cycleValid = false;
+  processSupplyCapture(pump, 25000U, 25000U, 14.4f);
+  TEST_ASSERT_FALSE(pump->supply.predictionReady);
+  pump->supply.cycleValid = true;
+  processSupplyCapture(pump, 30000U, 30000U, 14.5f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 35000U, 35000U, 14.6f);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 60000U, 60000U, 14.8f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+  processSupplyCapture(pump, 65000U, 65000U, 14.9f);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->supply.predictionVolts);
+  VP37_setPositionDemand(pump, 0.0f);
+  pump->demand.desiredPosition = (float)pump->feedback.adjustMin;
+  pump->demand.desired = pump->feedback.adjustMin;
+  processSupplyCapture(pump, 70000U, 70000U, 15.0f);
+  TEST_ASSERT_TRUE(pump->demand.atRest);
+  TEST_ASSERT_FALSE(pump->supply.predictionReady);
+  TEST_ASSERT_EQUAL_INT32(0, pump->output.finalPWM);
+  VP37_setPositionDemand(pump, 50.0f);
+  processSupplyCapture(pump, 75000U, 75000U, 15.1f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->supply.predictionVolts);
+}
+
+void test_vp37_supply_prediction_bounds_both_polarities_and_keeps_voltage_floor(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPredictionPump(pump);
+  processSupplyCapture(pump, 0U, 0U, 14.0f);
+  processSupplyCapture(pump, 5000U, 3000U, 17.0f);
+  TEST_ASSERT_EQUAL_FLOAT(.5f, pump->supply.predictionVolts);
+  TEST_ASSERT_EQUAL_FLOAT(17.0f, pump->supply.inputVolts);
+  TEST_ASSERT_EQUAL_FLOAT(17.5f, pump->supply.heldVolts);
+  processSupplyCapture(pump, 10000U, 10000U, 7.0f);
+  TEST_ASSERT_EQUAL_FLOAT(-.5f, pump->supply.predictionVolts);
+  TEST_ASSERT_EQUAL_FLOAT(7.0f, pump->supply.inputVolts);
+  TEST_ASSERT_EQUAL_FLOAT(7.0f, pump->supply.heldVolts);
 }
 
 void test_vp37_period_skips_duplicate_updates_and_handles_wrap(void) {
@@ -1259,6 +1647,7 @@ void test_vp37_thermal_scale_ramps_the_handover_to_the_measured_path(void) {
   pump->thermal.driveResistanceReady = true;
   pump->thermal.driveCompensationEnabled = true;
   pump->thermal.driveUpdatedMs = hal_millis();
+  pump->thermal.driveObservedMs = hal_millis();
   hal_mock_set_millis(5);
   injectAdjRegisterData(4500, 144, 29, ADJ_STATUS_OK);
   VP37_process(pump);
@@ -1303,6 +1692,7 @@ void test_vp37_thermal_scale_keeps_its_limit_across_rest(void) {
   pump->thermal.driveResistanceReady = true;
   pump->thermal.driveCompensationEnabled = true;
   pump->thermal.driveUpdatedMs = hal_millis();
+  pump->thermal.driveObservedMs = hal_millis();
   hal_mock_set_millis(4005);
   injectAdjRegisterData(100, 144, 29, ADJ_STATUS_OK);
   VP37_process(pump);
@@ -1849,6 +2239,7 @@ void test_vp37_upper_derivative_waits_for_stationary_target_and_slew(void) {
 void test_vp37_upper_derivative_blend_uses_elapsed_control_time(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
+  pump->pid.topKd = 0.0f;
   VP37_setPositionDemand(pump, 90.0f);
   uint32_t ms = 0U;
   runSupplyCycles(pump, ms, 10U, 8200, 144U, 0.0f);
@@ -2179,6 +2570,167 @@ void test_vp37_measured_drive_rejects_stale_and_mismatched_captures(void) {
   TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
 }
 
+void test_vp37_measured_drive_consumes_each_capture_once(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 30U, 1.32f, false);
+  runDriveCycles(pump, ms, 1U, 1.32f, true);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->thermal.driveSamples);
+  const float resistance = pump->thermal.driveResistance;
+  const uint32_t acceptedMs = pump->thermal.driveUpdatedMs;
+  runDriveCycles(pump, ms, 15U, 1.32f, false);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->thermal.driveSamples);
+  TEST_ASSERT_EQUAL_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+  TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+  TEST_ASSERT_FALSE(pump->thermal.driveResistanceReady);
+  runDriveCycles(pump, ms, 1U, 1.32f, true);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->thermal.driveSamples);
+  TEST_ASSERT_GREATER_THAN_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+}
+
+void test_vp37_measured_drive_holds_through_supply_transients(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  const float resistance = pump->thermal.driveResistance;
+  const uint32_t acceptedMs = pump->thermal.driveUpdatedMs;
+  // The current is still settling after the rail changes. These observations
+  // deliberately look like a hot coil; voltage feedforward must not teach it.
+  for (uint32_t i = 0U; i < 20U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4400, 120U, 29U, ADJ_STATUS_OK);
+    feedDriveObservation(pump, 1.8f, 12.0f);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+    TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+    TEST_ASSERT_EQUAL_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+  }
+  // The last rejected capture remains young after the guard expires, but it
+  // still describes the transient and must never be reconsidered.
+  ms += 5U;
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData(4400, 120U, 29U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+  TEST_ASSERT_EQUAL_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+  // A settled rail and a new observation resume learning without dropping
+  // the retained compensation in between.
+  for (uint32_t i = 0U; i < 100U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4400, 120U, 29U, ADJ_STATUS_OK);
+    feedDriveObservation(pump, 1.32f, 12.0f);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  TEST_ASSERT_GREATER_THAN_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, resistance, pump->thermal.driveResistance);
+}
+
+void test_vp37_measured_drive_detects_accumulated_small_voltage_changes(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveVoltageSettled);
+  for (uint32_t i = 1U; i <= 40U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4400, 144U, 29U, ADJ_STATUS_OK);
+    injectLocalSupplyVoltage(14.4f - .05f * (float)i);
+    feedDriveObservation(pump, 1.32f, 14.4f);
+    VP37_process(pump);
+  }
+  // Every individual 5 ms delta is smaller than the stability threshold,
+  // but a 2 V change over 200 ms is not a settled supply.
+  TEST_ASSERT_FALSE(pump->thermal.driveVoltageSettled);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+}
+
+void test_vp37_measured_drive_retains_estimate_through_a_long_supply_sweep(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  const float resistance = pump->thermal.driveResistance;
+  const uint32_t learnedMs = pump->thermal.driveUpdatedMs;
+  const uint32_t count = (VP37_DRIVE_STALE_MS + 1000U) / 5U;
+  for (uint32_t i = 0U; i < count; ++i) {
+    // Every 50 ms the rail changes, so the learning guard stays engaged for
+    // longer than the stale timeout. Captures remain new and electrically
+    // valid.
+    const float volts = ((i / 10U) % 2U) == 0U ? 12.0f : 14.4f;
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4400, (uint8_t)(volts * 10.0f + .5f), 29U,
+                          ADJ_STATUS_OK);
+    injectLocalSupplyVoltage(volts);
+    feedDriveObservation(pump, 1.8f, volts);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->thermal.driveVoltageSettled);
+    TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+    TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+    TEST_ASSERT_EQUAL_UINT32(learnedMs, pump->thermal.driveUpdatedMs);
+    TEST_ASSERT_EQUAL_UINT32(ms, pump->thermal.driveObservedMs);
+  }
+}
+
+void test_vp37_measured_drive_expires_when_fresh_captures_stop(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  const uint32_t observedMs = pump->thermal.driveObservedMs;
+  const uint32_t learnedMs = pump->thermal.driveUpdatedMs;
+  const float resistance = pump->thermal.driveResistance;
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  // The cached capture is first a duplicate, then stale. Repeated processing
+  // must not renew its health timestamp or hold compensation indefinitely.
+  runDriveCycles(pump, ms, (VP37_DRIVE_STALE_MS / 5U) - 1U, 1.32f, false);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  TEST_ASSERT_EQUAL_UINT32(observedMs, pump->thermal.driveObservedMs);
+  runDriveCycles(pump, ms, 2U, 1.32f, false);
+  TEST_ASSERT_FALSE(pump->thermal.driveCompensationUsed);
+  TEST_ASSERT_EQUAL_UINT32(observedMs, pump->thermal.driveObservedMs);
+  TEST_ASSERT_EQUAL_UINT32(learnedMs, pump->thermal.driveUpdatedMs);
+  TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+}
+
+void test_vp37_measured_drive_does_not_apply_silence_as_heating_time(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemand(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.2f, true);
+  const float resistance = pump->thermal.driveResistance;
+  pump->thermal.cycleValid = false;
+  runDriveCycles(pump, ms, 2200U, 1.2f, false);
+  TEST_ASSERT_FALSE(pump->thermal.driveCompensationUsed);
+  // A single dubious observation after eleven seconds without captures must
+  // remain a small filter update, not stand in for eleven seconds of heating.
+  runDriveCycles(pump, ms, 1U, 1.8f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  TEST_ASSERT_GREATER_THAN_FLOAT(resistance, pump->thermal.driveResistance);
+  TEST_ASSERT_LESS_THAN_FLOAT(.02f, pump->thermal.driveResistance - resistance);
+}
+
 // The taper holds both ends flat, returns a flat segment's value exactly and
 // interpolates linearly inside a slope; the two stroke tables rely on all
 // three, and the dead zone's runtime top rides on the same walk.
@@ -2356,7 +2908,7 @@ void test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump(void) {
   TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->feedforward.mapTrimApplied);
 }
 
-void test_vp37_full_period_supply_scales_the_command_without_a_filter(void) {
+void test_vp37_fresh_supply_scales_the_command_with_bounded_prediction(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
   pump->thermal.observationEnabled = true;
@@ -2374,15 +2926,16 @@ void test_vp37_full_period_supply_scales_the_command_without_a_filter(void) {
   TEST_ASSERT_FLOAT_WITHIN(.01f, 14.5f, pump->supply.heldVolts);
 
   // A cranking-sized drop in the captured mean reaches the scale in the very
-  // next control step; the fallback filter is not in this path.
+  // next control step; the bounded lead acts without the fallback filter.
   pump->supply.cycleVolts = 8.0f;
   pump->supply.cycleUs = 5000U;
   hal_mock_set_micros(5000U);
   injectAdjRegisterData(4500, 145, 49, ADJ_STATUS_OK);
   VP37_process(pump);
   TEST_ASSERT_TRUE(pump->supply.cycleUsed);
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 8.0f, pump->supply.heldVolts);
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 1.5f, pump->supply.correction);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 8.0f, pump->supply.inputVolts);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 7.5f, pump->supply.heldVolts);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 1.6f, pump->supply.correction);
 
   // V2 holds the scale where it is while the input keeps moving.
   pump->supply.frozen = true;
@@ -2392,7 +2945,7 @@ void test_vp37_full_period_supply_scales_the_command_without_a_filter(void) {
   injectAdjRegisterData(4500, 145, 49, ADJ_STATUS_OK);
   VP37_process(pump);
   TEST_ASSERT_FLOAT_WITHIN(.01f, 14.5f, pump->supply.inputVolts);
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 8.0f, pump->supply.heldVolts);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 7.5f, pump->supply.heldVolts);
 }
 
 int main(void) {
@@ -2466,6 +3019,21 @@ int main(void) {
   RUN_TEST(test_vp37_voltage_compensation_uses_safe_dual_fault_fallback);
   RUN_TEST(test_vp37_over_range_supply_keeps_reducing_the_command);
   RUN_TEST(test_vp37_voltage_scale_follows_gradual_supply_changes_closely);
+  RUN_TEST(
+      test_vp37_scanned_supply_preserves_drive_during_fast_bidirectional_ramps);
+  RUN_TEST(test_vp37_scanned_supply_recovers_both_steps_within_30ms);
+  RUN_TEST(test_vp37_scanned_supply_rejects_phase_ripple_with_clipped_current);
+  RUN_TEST(test_vp37_scanned_supply_ramp_handles_microsecond_wrap);
+  RUN_TEST(test_vp37_scanned_supply_expires_and_recovers_without_recalibration);
+  RUN_TEST(test_vp37_supply_ramp_preserves_drive_between_pwm_latches);
+  RUN_TEST(test_vp37_supply_steps_settle_with_latched_pwm);
+  RUN_TEST(test_vp37_supply_ripple_stays_quiet_with_latched_pwm);
+  RUN_TEST(test_vp37_supply_prediction_handles_wrap_with_latched_pwm);
+  RUN_TEST(
+      test_vp37_supply_prediction_stops_reverses_and_uses_each_sample_once);
+  RUN_TEST(test_vp37_supply_prediction_resets_on_freeze_gap_fallback_and_rest);
+  RUN_TEST(
+      test_vp37_supply_prediction_bounds_both_polarities_and_keeps_voltage_floor);
 
   RUN_TEST(test_vp37_period_skips_duplicate_updates_and_handles_wrap);
   RUN_TEST(test_vp37_pwm_floor_is_visible_to_integrator);
@@ -2487,11 +3055,18 @@ int main(void) {
   RUN_TEST(test_vp37_bench_cap_and_stop);
   RUN_TEST(test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier);
   RUN_TEST(test_vp37_measured_drive_rejects_stale_and_mismatched_captures);
+  RUN_TEST(test_vp37_measured_drive_consumes_each_capture_once);
+  RUN_TEST(test_vp37_measured_drive_holds_through_supply_transients);
+  RUN_TEST(test_vp37_measured_drive_detects_accumulated_small_voltage_changes);
+  RUN_TEST(
+      test_vp37_measured_drive_retains_estimate_through_a_long_supply_sweep);
+  RUN_TEST(test_vp37_measured_drive_expires_when_fresh_captures_stop);
+  RUN_TEST(test_vp37_measured_drive_does_not_apply_silence_as_heating_time);
   RUN_TEST(test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots);
   RUN_TEST(test_vp37_integral_deadband_widens_only_in_the_upper_stroke);
   RUN_TEST(
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
   RUN_TEST(test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump);
-  RUN_TEST(test_vp37_full_period_supply_scales_the_command_without_a_filter);
+  RUN_TEST(test_vp37_fresh_supply_scales_the_command_with_bounded_prediction);
   return UNITY_END();
 }

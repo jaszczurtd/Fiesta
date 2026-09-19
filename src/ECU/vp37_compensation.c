@@ -17,6 +17,8 @@
 #define VP37_LOCAL_VOLTAGE_STABLE_DELTA_V 0.1f
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt);
+static float VP37_predictSupplyVoltage(VP37Pump *self, float measuredVolts);
+static void VP37_trackDriveSupply(VP37Pump *self);
 
 hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
   self->scan.running = hal_adc_scan_is_running();
@@ -44,10 +46,11 @@ hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
     return status;
   }
   const bool currentUsable = (status == HAL_OK) && result.waveformValid;
-  self->supply.cycleVolts = result.supplyVolts;
-  self->supply.cycleUs = result.cycleStartUs + result.periodUs;
-  self->supply.cycleValid = result.supplyValid;
-  // The drive command below belongs to the observation, not to its later use.
+  self->supply.cycleVolts = result.supplyLatestVolts;
+  self->supply.cycleUs = result.supplyLatestUs;
+  self->supply.cycleValid = result.supplyLatestValid;
+  // Resistance needs voltage from the current's own period, not the newer
+  // supply window. The delivered command is also checked against measured duty.
   self->thermal.cycleValid = currentUsable;
   self->thermal.cycleAmps = currentUsable ? result.meanAmps : 0.0f;
   self->thermal.cycleVolts = result.supplyValid ? result.supplyVolts : 0.0f;
@@ -63,22 +66,64 @@ void VP37_updateVoltageCorrection(VP37Pump *self, float dt) {
     measuredVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
   self->supply.inputVolts = measuredVolts;
+  const float predictedVolts = VP37_predictSupplyVoltage(self, measuredVolts);
   if (!self->supply.ready) {
     self->supply.heldVolts = measuredVolts;
     self->supply.ready = true;
   } else if (self->supply.frozen) {
     // Diagnostic: keep the scale where it is so the supply loop stays open.
   } else if (self->supply.cycleUsed) {
-    // The full-period mean is already free of the intra-period alias, so the
-    // scale takes it as is: a manual 15-20 V/s sweep left 0.75-1.3 V behind
-    // the 50 ms filter, and cranking edges are faster still.
-    self->supply.heldVolts = measuredVolts;
+    self->supply.heldVolts = predictedVolts;
   } else {
     // The local fallback is a 40 us snapshot; only that path needs smoothing.
     self->supply.heldVolts += (measuredVolts - self->supply.heldVolts) * dt /
                               (VP37_VOLTAGE_FILTER_S + dt);
   }
   self->supply.correction = NOMINAL_VOLTAGE / self->supply.heldVolts;
+}
+
+/* Predict only the command scale. Resistance learning keeps the measured rail.
+   RP2040 PWM latches at wrap; half a period is its average remaining delay. */
+static float VP37_predictSupplyVoltage(VP37Pump *self, float measuredVolts) {
+  self->supply.predictionVolts = 0.0f;
+  self->supply.cycleAgeUs = 0U;
+  if (!self->supply.cycleUsed || self->supply.frozen) {
+    self->supply.predictionReady = false;
+    self->supply.voltageSlope = 0.0f;
+  } else {
+    const uint32_t elapsedUs =
+        self->supply.cycleUs - self->supply.predictionSampleUs;
+    if (!self->supply.predictionReady ||
+        (elapsedUs >= VP37_CYCLE_VOLTAGE_MAX_AGE_US)) {
+      self->supply.voltageSlope = 0.0f;
+    } else if (elapsedUs != 0U) {
+      const float sampleDt = (float)elapsedUs * 0.000001f;
+      const float slope =
+          (measuredVolts - self->supply.predictionSampleVolts) / sampleDt;
+      const float filtered = self->supply.voltageSlope +
+                             (slope - self->supply.voltageSlope) * sampleDt /
+                                 (VP37_VOLTAGE_SLOPE_FILTER_S + sampleDt);
+      // Drop the lead promptly when a ramp stops or reverses. Filtering only
+      // its growth avoids a false pulse after a supply step has finished.
+      self->supply.voltageSlope =
+          hal_constrain(filtered, fminf(0.0f, slope), fmaxf(0.0f, slope));
+    } else {
+      // A repeated window advances the prediction horizon, not the slope.
+    }
+    if (!self->supply.predictionReady || (elapsedUs != 0U)) {
+      self->supply.predictionSampleUs = self->supply.cycleUs;
+      self->supply.predictionSampleVolts = measuredVolts;
+      self->supply.predictionReady = true;
+    }
+    self->supply.cycleAgeUs = hal_micros() - self->supply.cycleUs;
+    const float horizon = ((float)self->supply.cycleAgeUs * 0.000001f) +
+                          (0.5f / (float)VP37_PWM_FREQUENCY_HZ);
+    self->supply.predictionVolts = hal_constrain(
+        self->supply.voltageSlope * horizon, -VP37_VOLTAGE_PREDICTION_LIMIT_V,
+        VP37_VOLTAGE_PREDICTION_LIMIT_V);
+  }
+  return fmaxf(VP37_MIN_COMPENSATION_VOLTAGE,
+               measuredVolts + self->supply.predictionVolts);
 }
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
@@ -174,13 +219,14 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
  * never contributes zero ohms.
  */
 void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
+  VP37_trackDriveSupply(self);
   // A ready estimate keeps scaling the command until it goes stale; motion
   // rejects most captures, and flipping back to the model on every rejected
   // cycle stepped the command by the whole thermal difference.
   self->thermal.driveCompensationUsed =
       self->thermal.driveCompensationEnabled &&
       self->thermal.driveResistanceReady &&
-      !hal_millis_deadline_expired(self->thermal.driveUpdatedMs,
+      !hal_millis_deadline_expired(self->thermal.driveObservedMs,
                                    VP37_DRIVE_STALE_MS);
   if (!self->thermal.driveCompensationEnabled || !self->thermal.cycleValid ||
       !isfinite(self->thermal.cycleAmps) ||
@@ -188,9 +234,18 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
     return;
   }
   if (hal_elapsed_u32(hal_micros(), self->thermal.cycleUs,
-                      VP37_DRIVE_MAX_AGE_US)) {
+                      VP37_DRIVE_MAX_AGE_US) ||
+      (self->thermal.driveCycleSeen &&
+       (self->thermal.cycleUs == self->thermal.driveLastCycleUs))) {
     return;
   }
+  const uint32_t observationUs =
+      self->thermal.cycleUs - self->thermal.driveLastCycleUs;
+  const float observationDt =
+      self->thermal.driveCycleSeen ? ((float)observationUs * 0.000001f) : dt;
+  const float filterDt = fminf(observationDt, VP37_DRIVE_FILTER_MAX_STEP_S);
+  self->thermal.driveLastCycleUs = self->thermal.cycleUs;
+  self->thermal.driveCycleSeen = true;
   const int32_t drive = self->thermal.cycleDrive;
   if ((drive < VP37_DRIVE_MIN_PWM) || (drive > VP37_PWM_MAX) ||
       (self->thermal.cycleAmps < VP37_DRIVE_MIN_CURRENT_A) ||
@@ -214,32 +269,52 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   if (!isfinite(resistance) || (resistance <= 0.0f)) {
     return;
   }
-  // Always filter from the reference. Seeding from the first accepted capture
-  // used to adopt it whole, and a capture taken while the actuator is slamming
-  // through its stroke reconstructs a resistance that is not the coil's.
-  if (!(self->thermal.driveResistance > 0.0f)) {
-    self->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  // Healthy captures keep the retained estimate alive during a long supply
+  // sweep, even while their electrical transient must not train resistance.
+  self->thermal.driveObservedMs = hal_millis();
+  if (self->thermal.driveVoltageSettled) {
+    // Start from the reference: a first capture during motion can reconstruct
+    // a resistance that does not belong to the coil.
+    if (!(self->thermal.driveResistance > 0.0f)) {
+      self->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+    }
+    self->thermal.driveResistance +=
+        (resistance - self->thermal.driveResistance) * filterDt /
+        (VP37_DRIVE_FILTER_S + filterDt);
+    if (self->thermal.driveSamples == 0U) {
+      self->thermal.driveFirstSampleMs = hal_millis();
+    }
+    if (self->thermal.driveSamples < VP37_DRIVE_READY_SAMPLES) {
+      self->thermal.driveSamples++;
+    }
+    self->thermal.driveUpdatedMs = hal_millis();
+    self->thermal.driveResistanceReady =
+        (self->thermal.driveSamples >= VP37_DRIVE_READY_SAMPLES) &&
+        hal_millis_deadline_expired(self->thermal.driveFirstSampleMs,
+                                    VP37_DRIVE_SETTLE_MS);
+    self->thermal.driveCorrection =
+        hal_constrain(self->thermal.driveResistance / VP37_DRIVE_REFERENCE_OHMS,
+                      VP37_TEMPERATURE_FACTOR_MIN, VP37_TEMPERATURE_FACTOR_MAX);
   }
-  self->thermal.driveResistance +=
-      (resistance - self->thermal.driveResistance) * dt /
-      (VP37_DRIVE_FILTER_S + dt);
-  if (self->thermal.driveSamples == 0U) {
-    self->thermal.driveFirstSampleMs = hal_millis();
-  }
-  if (self->thermal.driveSamples < VP37_DRIVE_READY_SAMPLES) {
-    self->thermal.driveSamples++;
-  }
-  self->thermal.driveUpdatedMs = hal_millis();
-  self->thermal.driveResistanceReady =
-      (self->thermal.driveSamples >= VP37_DRIVE_READY_SAMPLES) &&
-      hal_millis_deadline_expired(self->thermal.driveFirstSampleMs,
-                                  VP37_DRIVE_SETTLE_MS);
-  self->thermal.driveCorrection =
-      hal_constrain(self->thermal.driveResistance / VP37_DRIVE_REFERENCE_OHMS,
-                    VP37_TEMPERATURE_FACTOR_MIN, VP37_TEMPERATURE_FACTOR_MAX);
   self->thermal.driveCompensationUsed =
       self->thermal.driveCompensationEnabled &&
       self->thermal.driveResistanceReady;
+}
+
+static void VP37_trackDriveSupply(VP37Pump *self) {
+  const float volts = self->supply.inputVolts;
+  if (!self->thermal.driveVoltageReady ||
+      (fabsf(volts - self->thermal.driveVoltageReference) >
+       VP37_DRIVE_VOLTAGE_CHANGE_V)) {
+    self->thermal.driveVoltageReference = volts;
+    self->thermal.driveVoltageChangedMs = hal_millis();
+    self->thermal.driveVoltageReady = true;
+  }
+  // A changing rail and its current transient must not train the slow thermal
+  // estimate. Keep using the last ready estimate while observations pause.
+  self->thermal.driveVoltageSettled =
+      hal_elapsed_u32(hal_millis(), self->thermal.driveVoltageChangedMs,
+                      VP37_DRIVE_VOLTAGE_SETTLE_MS);
 }
 
 /**

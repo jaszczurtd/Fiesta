@@ -41,7 +41,12 @@ extern "C" {
 #define VP37_DEBUG_UPDATE 250U
 #endif
 #define VP37_TELEMETRY_UPDATE 500U
-#define VP37_CYCLE_VOLTAGE_MAX_AGE_US 100000U
+/** Maximum age of the supply averaging window's midpoint [us]. */
+#define VP37_CYCLE_VOLTAGE_MAX_AGE_US 20000U
+/** Time constant of the supply slope used to predict PWM application [s]. */
+#define VP37_VOLTAGE_SLOPE_FILTER_S 0.02f
+/** Maximum voltage lead added to a fresh supply mean [V]. */
+#define VP37_VOLTAGE_PREDICTION_LIMIT_V 0.5f
 
 #define DEFAULT_INJECTION_PRESSURE 300 // bar
 
@@ -145,6 +150,12 @@ extern "C" {
 #define VP37_DRIVE_COMMAND_MATCH_COUNTS 8
 #define VP37_DRIVE_MAX_AGE_US 100000U
 #define VP37_DRIVE_FILTER_S 2.0f
+/** Bound the estimator's filter step after missing observations [s]. */
+#define VP37_DRIVE_FILTER_MAX_STEP_S 0.05f
+/** Cumulative supply change that pauses resistance learning [V]. */
+#define VP37_DRIVE_VOLTAGE_CHANGE_V 0.1f
+/** Quiet time before resistance learning resumes after a supply change [ms]. */
+#define VP37_DRIVE_VOLTAGE_SETTLE_MS 100U
 #define VP37_DRIVE_READY_SAMPLES 16U
 // The filter starts at the reference and walks toward what the path measures,
 // so the estimate is only worth using once it has had a few time constants to
@@ -153,8 +164,8 @@ extern "C" {
 // the actuator sat against the upper stop for six seconds.
 #define VP37_DRIVE_SETTLE_MS 6000U
 // Resistance moves on a thermal time scale; a ready estimate keeps scaling
-// the command through motion and only gives way once no capture has been
-// accepted for this long.
+// the command through motion and only gives way once no healthy observation
+// has arrived for this long.
 #define VP37_DRIVE_STALE_MS 10000U
 // Ceiling on how fast the thermal multiplier may move, per second. The measured
 // path and the model disagree by whatever the coil has self-heated, so handing
@@ -364,10 +375,17 @@ typedef struct {
   bool cycleUsed;
   bool cycleValid;
   float cycleVolts;
-  uint32_t cycleUs;
+  uint32_t cycleUs; /**< Midpoint of the latest supply window [hal_micros]. */
+  uint32_t cycleAgeUs; /**< Window age when used by the control step [us]. */
+  uint32_t predictionSampleUs; /**< Last supply window consumed by the slope. */
+  float predictionSampleVolts; /**< Calibrated mean of that window [V]. */
+  float voltageSlope; /**< Filtered slope of fresh supply means [V/s]. */
+  float
+      predictionVolts; /**< Bounded lead added only to the voltage scale [V]. */
+  bool predictionReady; /**< A previous supply window is available. */
   float correction;
-  float inputVolts; /**< Fused voltage before hysteresis. */
-  float heldVolts;  /**< Held supply voltage used to scale PWM. */
+  float inputVolts; /**< Measured, calibrated voltage before prediction. */
+  float heldVolts;  /**< Predicted or fallback-filtered voltage used by PWM. */
   bool ready;       /**< Compensation voltage has been initialized. */
   bool frozen;      /**< Bench V2: hold the scale, open the supply loop. */
   float lastVolts;
@@ -388,7 +406,7 @@ typedef struct {
   float cycleAmps;         /**< ON-phase mean of the captured PWM period. */
   float cycleVolts;        /**< Supply that belongs to that same capture. */
   int32_t cyclePwm;        /**< Duty reconstructed from the measured gate. */
-  int32_t cycleDrive;      /**< Command that was live during the capture. */
+  int32_t cycleDrive; /**< Command at capture delivery; compared with duty. */
   uint32_t cycleUs;
   float lastFuelTemp;
   float temperatureCorrection; /**< Filtered multiplier of the complete FF + PID
@@ -402,11 +420,22 @@ typedef struct {
   float driveCorrection;   /**< Measured replacement for the fuel-temperature
                               multiplier; unity until enough samples. */
   uint32_t driveSamples;   /**< Accepted resistance observations. */
-  uint32_t driveUpdatedMs; /**< Last accepted observation. */
+  uint32_t driveUpdatedMs; /**< Last observation that updated resistance. */
+  uint32_t
+      driveObservedMs;         /**< Last healthy new observation, for expiry;
+                                  includes observations paused by a supply change. */
   uint32_t driveFirstSampleMs; /**< First observation of the current estimate;
                                   the filter needs time from here, not just
                                   a count. */
-  bool driveResistanceReady;   /**< Enough observations to drive the output. */
+  uint32_t
+      driveLastCycleUs; /**< Last consumed current observation timestamp. */
+  bool driveCycleSeen;  /**< Timestamp zero is valid at timer wrap. */
+  float driveVoltageReference; /**< Supply anchor for detecting a transition. */
+  uint32_t driveVoltageChangedMs; /**< Last change of the supply anchor. */
+  bool driveVoltageReady;         /**< Supply anchor has been initialized. */
+  bool
+      driveVoltageSettled; /**< Resistance learning may use the current rail. */
+  bool driveResistanceReady; /**< Enough observations to drive the output. */
   bool driveCompensationEnabled; /**< Bench switch for the measured path. */
   bool driveCompensationUsed;    /**< Measured path scaled the last command. */
   float scale;                   /**< Rate-limited multiplier actually applied,

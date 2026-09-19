@@ -94,6 +94,12 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->supply.cycleEnabled = true;
   self->supply.cycleUsed = false;
   self->supply.cycleValid = false;
+  self->supply.cycleAgeUs = 0U;
+  self->supply.predictionSampleUs = 0U;
+  self->supply.predictionSampleVolts = 0.0f;
+  self->supply.voltageSlope = 0.0f;
+  self->supply.predictionVolts = 0.0f;
+  self->supply.predictionReady = false;
   self->thermal.temperatureReady = false;
   self->thermal.cycleValid = false;
   self->thermal.cycleAmps = 0.0f;
@@ -113,7 +119,14 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->thermal.driveCorrection = 1.0f;
   self->thermal.driveSamples = 0U;
   self->thermal.driveUpdatedMs = 0U;
+  self->thermal.driveObservedMs = 0U;
   self->thermal.driveFirstSampleMs = 0U;
+  self->thermal.driveLastCycleUs = 0U;
+  self->thermal.driveCycleSeen = false;
+  self->thermal.driveVoltageReference = 0.0f;
+  self->thermal.driveVoltageChangedMs = 0U;
+  self->thermal.driveVoltageReady = false;
+  self->thermal.driveVoltageSettled = false;
   self->thermal.driveResistanceReady = false;
   self->thermal.driveCompensationEnabled = true;
   self->thermal.driveCompensationUsed = false;
@@ -428,8 +441,8 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
  * @brief Refresh the supply and thermal multipliers of the command.
  * @param self VP37 controller instance to update.
  * @param cycle Step context; receives the product of both multipliers.
- * @note Each path filters its own input; the product scales feedforward and
- * correction alike, so a supply change never reaches the loop as an error.
+ * @note The product scales feedforward and correction alike. Supply latency
+ * still matters: the multiplier can only reject changes already measured.
  */
 static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
   self->supply.lastVolts = getGlobalValue(F_VOLTS);

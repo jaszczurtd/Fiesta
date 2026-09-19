@@ -13,6 +13,8 @@
 #define VP37_CURRENT_PULSE_MIN_GUARDED_SAMPLES 8U
 #define VP37_CURRENT_PULSE_PERIOD_TOLERANCE 0.20f
 #define VP37_CURRENT_SUPPLY_MIN_PER_PHASE 2U
+/* Completion timestamps include interrupt-entry jitter, not sampling gaps. */
+#define VP37_CURRENT_SCAN_TIMESTAMP_TOLERANCE_US 100U
 
 static uint16_t s_currentZeroRaw;
 static bool s_currentZeroValid;
@@ -23,6 +25,10 @@ static uint16_t
     __attribute__((aligned(4)));
 static uint8_t s_scanShuntPosition;
 static uint8_t s_scanSupplyPosition;
+static uint16_t
+    s_scanHistory[VP37_CURRENT_SCAN_HISTORY_FRAMES * VP37_CURRENT_SCAN_PINS];
+static uint32_t s_scanHistoryFrames;
+static uint32_t s_scanHistoryStartUs;
 
 /* The short ON ramp is nearly sorted; also used for the startup median. */
 static void VP37_currentSortRaw(uint16_t *values, uint32_t count) {
@@ -206,13 +212,20 @@ hal_status_t VP37_currentScanStart(void) {
   config.block_frames = VP37_CURRENT_SCAN_BLOCK_FRAMES;
   const hal_status_t status = hal_adc_scan_start(&config);
   if (status == HAL_OK) {
+    s_scanHistoryFrames = 0U;
     s_scanShuntPosition = hal_adc_scan_pin_position(ADC_VP37_CURRENT_PIN);
     s_scanSupplyPosition = hal_adc_scan_pin_position(ADC_VOLT_PIN);
   }
   return status;
 }
 
-hal_status_t VP37_currentScanStop(void) { return hal_adc_scan_stop(); }
+hal_status_t VP37_currentScanStop(void) {
+  const hal_status_t status = hal_adc_scan_stop();
+  if (status == HAL_OK) {
+    s_scanHistoryFrames = 0U;
+  }
+  return status;
+}
 
 uint32_t VP37_currentScanFrameNs(void) {
   return hal_adc_scan_is_running() ? hal_adc_scan_frame_period_ns() : 0U;
@@ -222,8 +235,9 @@ static uint32_t VP37_currentFramesToUs(uint32_t frames, uint32_t frameNs) {
   return (uint32_t)((((uint64_t)frames * (uint64_t)frameNs) + 500U) / 1000U);
 }
 
-hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
-                                    VP37CurrentPulseResult *out) {
+static hal_status_t
+VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
+                             VP37CurrentPulseResult *out) {
   static VP37CurrentPhaseSample s_pulseSamples[VP37_CURRENT_PULSE_SAMPLES];
   if (out == NULL) {
     return HAL_EINVAL;
@@ -374,6 +388,89 @@ hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
   return status;
 }
 
+/* The newest complete time window rejects PWM ripple without waiting for a
+   current edge. Its timestamp describes the mean, not its publication. */
+static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
+                                           VP37CurrentPulseResult *out) {
+  const uint32_t periodNs =
+      VP37_currentPeriodPlausible(out->periodUs)
+          ? (out->periodUs * 1000U)
+          : (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ);
+  const uint32_t frames = (periodNs + (block->frameNs / 2U)) / block->frameNs;
+  if ((frames >= (2U * VP37_CURRENT_SUPPLY_MIN_PER_PHASE)) &&
+      (frames <= block->frames)) {
+    const uint32_t first = block->frames - frames;
+    uint64_t sum = 0U;
+    bool valid = true;
+    for (uint32_t k = first; k < block->frames; k++) {
+      const uint16_t raw = VP37_currentCompensatedRaw(
+          (int)block->samples[(k * block->pinCount) + block->supplyPosition]);
+      if ((raw == 0U) || (raw >= VP37_CURRENT_ADC_MAX_RAW)) {
+        valid = false;
+      }
+      sum += raw;
+    }
+    if (valid) {
+      const uint64_t roundedMean = (sum + ((uint64_t)frames / 2U)) / frames;
+      const int mean = (int)roundedMean;
+      out->supplyLatestValid =
+          fiesta_adc_to_voltage_ex(mean, (float)V_DIVIDER_R1,
+                                   (float)V_DIVIDER_R2,
+                                   &out->supplyLatestVolts) == HAL_OK;
+      out->supplyLatestUs =
+          block->startUs + VP37_currentFramesToUs(first, block->frameNs) +
+          (VP37_currentFramesToUs(frames, block->frameNs) / 2U);
+    }
+  }
+}
+
+hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
+                                    VP37CurrentPulseResult *out) {
+  const hal_status_t status = VP37_currentScanReducePeriod(block, out);
+  if (status != HAL_EINVAL) {
+    VP37_currentReduceLatestSupply(block, out);
+  }
+  return status;
+}
+
+static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
+                                        uint32_t frameNs) {
+  static uint32_t s_scanHistorySequence;
+  static uint32_t s_scanHistoryCompletedUs;
+  static uint32_t s_scanHistoryFrameNs;
+  if (s_scanHistoryFrames != 0U) {
+    const uint32_t interval = block->completed_us - s_scanHistoryCompletedUs;
+    const uint32_t expected = VP37_currentFramesToUs(block->frames, frameNs);
+    const uint32_t difference =
+        (interval >= expected) ? (interval - expected) : (expected - interval);
+    if ((block->sequence != (s_scanHistorySequence + 1U)) ||
+        (frameNs != s_scanHistoryFrameNs) ||
+        (difference > VP37_CURRENT_SCAN_TIMESTAMP_TOLERANCE_US)) {
+      s_scanHistoryFrames = 0U;
+    }
+  }
+  const uint32_t available = VP37_CURRENT_SCAN_HISTORY_FRAMES - block->frames;
+  const uint32_t keep =
+      (s_scanHistoryFrames < available) ? s_scanHistoryFrames : available;
+  if (s_scanHistoryFrames == 0U) {
+    s_scanHistoryStartUs =
+        block->completed_us - VP37_currentFramesToUs(block->frames, frameNs);
+  } else {
+    s_scanHistoryStartUs +=
+        VP37_currentFramesToUs(s_scanHistoryFrames - keep, frameNs);
+  }
+  const uint32_t pins = block->pin_count;
+  (void)memmove(s_scanHistory,
+                &s_scanHistory[(s_scanHistoryFrames - keep) * pins],
+                keep * pins * sizeof(s_scanHistory[0]));
+  (void)memcpy(&s_scanHistory[keep * pins], block->samples,
+               block->frames * pins * sizeof(s_scanHistory[0]));
+  s_scanHistoryFrames = keep + block->frames;
+  s_scanHistorySequence = block->sequence;
+  s_scanHistoryCompletedUs = block->completed_us;
+  s_scanHistoryFrameNs = frameNs;
+}
+
 hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
                                      uint32_t *sequence) {
   if ((out == NULL) || (sequence == NULL)) {
@@ -386,15 +483,22 @@ hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
     return takeStatus;
   }
   const uint32_t frameNs = hal_adc_scan_frame_period_ns();
-  VP37CurrentScanBlock view;
-  view.samples = block.samples;
-  view.frames = block.frames;
-  view.pinCount = block.pin_count;
-  view.shuntPosition = s_scanShuntPosition;
-  view.supplyPosition = s_scanSupplyPosition;
-  view.frameNs = frameNs;
-  view.startUs =
-      block.completed_us - VP37_currentFramesToUs(block.frames, frameNs);
-  *sequence = block.sequence;
-  return VP37_currentScanReduce(&view, out);
+  hal_status_t status = HAL_ESTATE;
+  if ((block.pin_count != VP37_CURRENT_SCAN_PINS) ||
+      (block.frames > VP37_CURRENT_SCAN_HISTORY_FRAMES) || (frameNs == 0U)) {
+    s_scanHistoryFrames = 0U;
+  } else {
+    VP37_currentRetainScanBlock(&block, frameNs);
+    VP37CurrentScanBlock view;
+    view.samples = s_scanHistory;
+    view.frames = s_scanHistoryFrames;
+    view.pinCount = block.pin_count;
+    view.shuntPosition = s_scanShuntPosition;
+    view.supplyPosition = s_scanSupplyPosition;
+    view.frameNs = frameNs;
+    view.startUs = s_scanHistoryStartUs;
+    *sequence = block.sequence;
+    status = VP37_currentScanReduce(&view, out);
+  }
+  return status;
 }
