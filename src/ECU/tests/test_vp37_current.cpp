@@ -11,7 +11,7 @@ void setUp(void) {
   VP37_currentSenseInit();
 }
 
-void tearDown(void) {}
+void tearDown(void) { (void)VP37_currentScanStop(); }
 
 static uint16_t ampsToRaw(float amps) {
   return (uint16_t)((amps * VP37_CURRENT_SHUNT_OHMS *
@@ -114,7 +114,8 @@ static constexpr uint8_t kScanPins = VP37_CURRENT_SCAN_PINS;
 static constexpr uint8_t kShuntPosition = 0U;
 static constexpr uint8_t kSupplyPosition = 2U;
 static constexpr uint32_t kFrameNs = VP37_CURRENT_SCAN_FRAME_NS;
-static constexpr uint32_t kBlockFrames = VP37_CURRENT_SCAN_BLOCK_FRAMES;
+static constexpr uint32_t kBlockFrames = VP37_CURRENT_SCAN_HISTORY_FRAMES;
+static constexpr uint32_t kDmaFrames = VP37_CURRENT_SCAN_BLOCK_FRAMES;
 static constexpr uint32_t kPeriodFrames =
     (1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) * 1000U / kFrameNs;
 static constexpr uint32_t kOnFrames = (kPeriodFrames * 2U) / 5U; // 40 %
@@ -128,14 +129,17 @@ struct Waveform {
   bool edges;
 };
 
-static void fillBlock(const Waveform &w) {
-  for (uint32_t k = 0U; k < kBlockFrames; k++) {
+static void fillFrames(const Waveform &w, uint32_t frames, uint32_t firstFrame,
+                       uint32_t periodFrames = kPeriodFrames) {
+  const uint32_t onFrames = (periodFrames * 2U) / 5U;
+  for (uint32_t k = 0U; k < frames; k++) {
     const uint32_t phase =
-        (k + kPeriodFrames - (w.offsetFrames % kPeriodFrames)) % kPeriodFrames;
-    const bool on = w.edges && (phase < kOnFrames);
+        (k + firstFrame + periodFrames - (w.offsetFrames % periodFrames)) %
+        periodFrames;
+    const bool on = w.edges && (phase < onFrames);
     uint16_t shunt = w.zeroRaw;
     if (on) {
-      const float amps = 3.0f + (2.0f * (float)phase / (float)(kOnFrames - 1U));
+      const float amps = 3.0f + (2.0f * (float)phase / (float)(onFrames - 1U));
       shunt = (uint16_t)(w.zeroRaw + ampsToRaw(amps));
     }
     s_block[(k * kScanPins) + kShuntPosition] = shunt;
@@ -143,6 +147,8 @@ static void fillBlock(const Waveform &w) {
     s_block[(k * kScanPins) + kSupplyPosition] = on ? w.supplyOn : w.supplyOff;
   }
 }
+
+static void fillBlock(const Waveform &w) { fillFrames(w, kBlockFrames, 0U); }
 
 static VP37CurrentScanBlock blockView(uint32_t startUs) {
   VP37CurrentScanBlock view;
@@ -195,8 +201,8 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
   TEST_ASSERT_FALSE(result.zeroValid);
   TEST_ASSERT_EQUAL_UINT16(160U, result.zeroRaw);
 
-  // Without gate edges there is no period, so neither the waveform nor the
-  // supply mean may be presented as usable, and no field may read as amperes.
+  // Without gate edges the current and its paired supply remain unavailable;
+  // the latest supply window is still usable.
   hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
   VP37_currentSenseInit();
   fillBlock({0U, 16U, 3000U, 3100U, false});
@@ -205,6 +211,7 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
   TEST_ASSERT_EQUAL_UINT16(16U, result.zeroRaw);
   TEST_ASSERT_FALSE(result.waveformValid);
   TEST_ASSERT_FALSE(result.supplyValid);
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
   TEST_ASSERT_EQUAL_UINT32(0U, result.periodUs);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, result.meanAmps);
 }
@@ -347,15 +354,24 @@ void test_scan_collect_takes_each_mock_block_once(void) {
                         VP37_currentScanCollect(&result, &sequence));
   TEST_ASSERT_EQUAL_UINT32(0U, sequence);
 
-  fillBlock({3U, 16U, 3000U, 3100U, true});
-  hal_mock_set_micros(500000U);
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        hal_mock_adc_scan_complete(s_block, kBlockFrames));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanCollect(&result, &sequence));
-  TEST_ASSERT_EQUAL_UINT32(1U, sequence);
+  const uint32_t startUs = 500000U;
+  const uint32_t blocks = (kBlockFrames + kDmaFrames - 1U) / kDmaFrames;
+  for (uint32_t i = 0U; i < blocks; i++) {
+    fillFrames({3U, 16U, 3000U, 3100U, true}, kDmaFrames, i * kDmaFrames);
+    hal_mock_set_micros(startUs + framesToUs((i + 1U) * kDmaFrames));
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_mock_adc_scan_complete(s_block, kDmaFrames));
+    const hal_status_t status = VP37_currentScanCollect(&result, &sequence);
+    TEST_ASSERT_TRUE((status == HAL_OK) || (status == HAL_EAGAIN));
+    TEST_ASSERT_EQUAL_UINT32(i + 1U, sequence);
+  }
   TEST_ASSERT_TRUE(result.waveformValid);
-  TEST_ASSERT_EQUAL_UINT32(500000U - framesToUs(kBlockFrames) +
-                               framesToUs(newestPeriodStart(3U)),
+  const uint32_t total = blocks * kDmaFrames;
+  const uint32_t end =
+      ((total - VP37_CURRENT_GATE_CONFIRM_FRAMES - 3U) / kPeriodFrames) *
+          kPeriodFrames +
+      3U;
+  TEST_ASSERT_EQUAL_UINT32(startUs + framesToUs(end - kPeriodFrames),
                            result.cycleStartUs);
   // A block is handed out once.
   TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
@@ -363,6 +379,224 @@ void test_scan_collect_takes_each_mock_block_once(void) {
   TEST_ASSERT_EQUAL_UINT32(0U, sequence);
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStop());
   TEST_ASSERT_EQUAL_UINT32(0U, VP37_currentScanFrameNs());
+}
+
+static float voltsForCompensatedRaw(int raw) {
+  float volts = 0.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        fiesta_adc_to_voltage_ex(raw, (float)V_DIVIDER_R1,
+                                                 (float)V_DIVIDER_R2, &volts));
+  return volts;
+}
+
+static uint32_t nominalPeriodFrames(void) {
+  return ((1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) + (kFrameNs / 2U)) /
+         kFrameNs;
+}
+
+void test_latest_supply_tracks_the_end_of_history_and_its_center_timestamp(
+    void) {
+  // A ramp makes an old rise-aligned mean visibly different from the newest
+  // window. Raw codes stay in one ADC compensation segment (+24).
+  fillBlock({0U, 16U, 3000U, 3000U, true});
+  for (uint32_t k = 0U; k < kBlockFrames; k++) {
+    s_block[(k * kScanPins) + kSupplyPosition] = (uint16_t)(2800U + k / 2U);
+  }
+  const VP37CurrentScanBlock view = blockView(UINT32_MAX - 1000U);
+  VP37CurrentPulseResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+  const uint32_t first = kBlockFrames - kPeriodFrames;
+  const int centerRaw = 2824 + (int)((first + kBlockFrames - 1U) / 4U);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, voltsForCompensatedRaw(centerRaw),
+                           result.supplyLatestVolts);
+  TEST_ASSERT_EQUAL_UINT32(view.startUs + framesToUs(first) +
+                               (framesToUs(kPeriodFrames) / 2U),
+                           result.supplyLatestUs);
+  TEST_ASSERT_GREATER_THAN_FLOAT(result.supplyVolts, result.supplyLatestVolts);
+
+  // Old clipped samples cannot poison a newer, complete supply window.
+  s_block[kSupplyPosition] = VP37_CURRENT_ADC_MAX_RAW;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+  s_block[((kBlockFrames - 1U) * kScanPins) + kSupplyPosition] = 0U;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_FALSE(result.supplyLatestValid);
+}
+
+void test_latest_supply_uses_measured_period_and_rejects_phase_ripple(void) {
+  // Ten percent frequency offset is plausible but makes the nominal window
+  // measurably wrong for a large ON/OFF supply ripple.
+  const uint32_t period = (kPeriodFrames * 11U) / 10U;
+  const uint32_t on = (period * 2U) / 5U;
+  const float meanRaw =
+      (float)(on * 2824U + (period - on) * 3324U) / (float)period;
+  const float expected = voltsForCompensatedRaw((int)(meanRaw + .5f));
+  const VP37CurrentScanBlock view = blockView(1000U);
+  for (uint32_t offset = 0U; offset < period; offset += 7U) {
+    fillFrames({offset, 16U, 2800U, 3300U, true}, kBlockFrames, 0U, period);
+    VP37CurrentPulseResult result;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+    TEST_ASSERT_TRUE(result.supplyLatestValid);
+    TEST_ASSERT_EQUAL_UINT32(framesToUs(period), result.periodUs);
+    TEST_ASSERT_FLOAT_WITHIN(.006f, expected, result.supplyLatestVolts);
+    TEST_ASSERT_EQUAL_UINT32(view.startUs + framesToUs(kBlockFrames - period) +
+                                 (framesToUs(period) / 2U),
+                             result.supplyLatestUs);
+  }
+}
+
+void test_latest_supply_does_not_require_current_edges_or_shunt_zero(void) {
+  fillBlock({0U, 16U, 3000U, 3000U, false});
+  VP37CurrentScanBlock view = blockView(1000U);
+  VP37CurrentPulseResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+  TEST_ASSERT_FLOAT_WITHIN(.006f, voltsForCompensatedRaw(3024),
+                           result.supplyLatestVolts);
+  const uint32_t frames = nominalPeriodFrames();
+  TEST_ASSERT_EQUAL_UINT32(view.startUs + framesToUs(kBlockFrames - frames) +
+                               (framesToUs(frames) / 2U),
+                           result.supplyLatestUs);
+
+  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 160);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_FALSE(result.zeroValid);
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+  view.frames = frames - 1U;
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_FALSE(result.supplyLatestValid);
+}
+
+static hal_status_t completeBlock(uint32_t completedUs,
+                                  VP37CurrentPulseResult *result) {
+  hal_mock_set_micros(completedUs);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_adc_scan_complete(s_block, kDmaFrames));
+  uint32_t sequence = 0U;
+  return VP37_currentScanCollect(result, &sequence);
+}
+
+void test_scan_history_publishes_fresh_supply_each_block_across_time_wrap(
+    void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t start = UINT32_MAX - 15000U;
+  const uint32_t periodFrames = nominalPeriodFrames();
+  for (uint32_t i = 0U; i < 8U; i++) {
+    fillFrames({0U, 0U, 3000U, 3000U, false}, kDmaFrames, i * kDmaFrames);
+    const uint32_t total = (i + 1U) * kDmaFrames;
+    VP37CurrentPulseResult result;
+    TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                          completeBlock(start + framesToUs(total), &result));
+    TEST_ASSERT_EQUAL(total >= periodFrames, result.supplyLatestValid);
+    if (result.supplyLatestValid) {
+      TEST_ASSERT_EQUAL_UINT32(start + framesToUs(total - periodFrames) +
+                                   (framesToUs(periodFrames) / 2U),
+                               result.supplyLatestUs);
+      TEST_ASSERT_FLOAT_WITHIN(.006f, voltsForCompensatedRaw(3024),
+                               result.supplyLatestVolts);
+    }
+  }
+}
+
+static uint32_t primeCurrentHistory(void) {
+  uint32_t completedUs = 0U;
+  const uint32_t blocks = (kBlockFrames + kDmaFrames - 1U) / kDmaFrames;
+  VP37CurrentPulseResult result;
+  for (uint32_t i = 0U; i < blocks; i++) {
+    fillFrames({3U, 0U, 3000U, 3100U, true}, kDmaFrames, i * kDmaFrames);
+    completedUs = framesToUs((i + 1U) * kDmaFrames);
+    const hal_status_t status = completeBlock(completedUs, &result);
+    TEST_ASSERT_TRUE((status == HAL_OK) || (status == HAL_EAGAIN));
+  }
+  TEST_ASSERT_TRUE(result.waveformValid);
+  return completedUs;
+}
+
+static void assertFreshBlockAfterDiscontinuity(uint32_t completedUs) {
+  VP37CurrentPulseResult result;
+  fillFrames({0U, 0U, 3300U, 3300U, false}, kDmaFrames, 0U);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, completeBlock(completedUs, &result));
+  TEST_ASSERT_FALSE(result.waveformValid);
+  TEST_ASSERT_EQUAL(kDmaFrames >= nominalPeriodFrames(),
+                    result.supplyLatestValid);
+  if (result.supplyLatestValid) {
+    TEST_ASSERT_FLOAT_WITHIN(.006f, voltsForCompensatedRaw(3324),
+                             result.supplyLatestVolts);
+  }
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EAGAIN, completeBlock(completedUs + framesToUs(kDmaFrames), &result));
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+  TEST_ASSERT_FLOAT_WITHIN(.006f, voltsForCompensatedRaw(3324),
+                           result.supplyLatestVolts);
+}
+
+void test_scan_history_discards_missing_blocks_and_timestamp_gaps(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  uint32_t completed = primeCurrentHistory();
+  // DMA completes a block without the consumer taking it: sequence skips.
+  completed += framesToUs(kDmaFrames);
+  hal_mock_set_micros(completed);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_adc_scan_complete(s_block, kDmaFrames));
+  assertFreshBlockAfterDiscontinuity(completed + framesToUs(kDmaFrames));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStop());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  completed = primeCurrentHistory();
+  // Consecutive sequence, but a discontinuous time axis cannot be stitched.
+  assertFreshBlockAfterDiscontinuity(completed + framesToUs(kDmaFrames) + 500U);
+}
+
+void test_scan_restart_discards_history_but_small_irq_jitter_preserves_it(
+    void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t completed = primeCurrentHistory();
+  // Completion time carries IRQ-entry jitter; sampling cadence remains fixed.
+  fillFrames({0U, 0U, 3300U, 3300U, false}, kDmaFrames, 0U);
+  VP37CurrentPulseResult result;
+  const hal_status_t status =
+      completeBlock(completed + framesToUs(kDmaFrames) + 20U, &result);
+  TEST_ASSERT_TRUE((status == HAL_OK) || (status == HAL_EAGAIN));
+  TEST_ASSERT_TRUE(result.supplyLatestValid);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStop());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  assertFreshBlockAfterDiscontinuity(completed + (2U * framesToUs(kDmaFrames)));
+}
+
+void test_scan_history_keeps_period_timestamps_stable_despite_irq_jitter(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t start = 100000U;
+  uint32_t previousCycle = 0U;
+  uint32_t repeated = 0U;
+  for (uint32_t i = 0U; i < 12U; i++) {
+    fillFrames({3U, 0U, 3000U, 3100U, true}, kDmaFrames, i * kDmaFrames);
+    const uint32_t total = (i + 1U) * kDmaFrames;
+    const uint32_t idealCompletion = start + framesToUs(total);
+    const uint32_t actualCompletion =
+        (i % 2U) == 0U ? idealCompletion + 20U : idealCompletion - 20U;
+    VP37CurrentPulseResult result;
+    const hal_status_t status = completeBlock(actualCompletion, &result);
+    TEST_ASSERT_TRUE((status == HAL_OK) || (status == HAL_EAGAIN));
+    if (result.waveformValid) {
+      const uint32_t end =
+          ((total - VP37_CURRENT_GATE_CONFIRM_FRAMES - 3U) / kPeriodFrames) *
+              kPeriodFrames +
+          3U;
+      // The first IRQ anchors time once; later jitter cannot retime a cycle.
+      TEST_ASSERT_EQUAL_UINT32(start + 20U + framesToUs(end - kPeriodFrames),
+                               result.cycleStartUs);
+      if (result.cycleStartUs == previousCycle) {
+        repeated++;
+      }
+      previousCycle = result.cycleStartUs;
+    }
+  }
+  if (kDmaFrames < kPeriodFrames) {
+    TEST_ASSERT_GREATER_THAN_UINT32(0U, repeated);
+  }
 }
 
 int main(void) {
@@ -375,5 +609,15 @@ int main(void) {
   RUN_TEST(test_scan_reduce_keeps_supply_and_current_validity_separate);
   RUN_TEST(test_scan_reduce_ignores_single_frame_spikes_and_dropouts);
   RUN_TEST(test_scan_collect_takes_each_mock_block_once);
+  RUN_TEST(
+      test_latest_supply_tracks_the_end_of_history_and_its_center_timestamp);
+  RUN_TEST(test_latest_supply_uses_measured_period_and_rejects_phase_ripple);
+  RUN_TEST(test_latest_supply_does_not_require_current_edges_or_shunt_zero);
+  RUN_TEST(
+      test_scan_history_publishes_fresh_supply_each_block_across_time_wrap);
+  RUN_TEST(test_scan_history_discards_missing_blocks_and_timestamp_gaps);
+  RUN_TEST(
+      test_scan_restart_discards_history_but_small_irq_jitter_preserves_it);
+  RUN_TEST(test_scan_history_keeps_period_timestamps_stable_despite_irq_jitter);
   return UNITY_END();
 }

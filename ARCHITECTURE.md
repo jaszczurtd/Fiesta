@@ -108,8 +108,30 @@ VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
 full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
 after the target settles and fades when movement resumes through a 50 ms
 blend. The holding map and supply/temperature compensation remain shared
-across the stroke. Telemetry revision 78 reports `mode:position` and a separate
+across the stroke. Telemetry reports `mode:position` and a separate
 `test:<name|none>` field; it does not identify a potentiometer controller mode.
+
+Supply compensation scales the complete feedforward and PID command by
+`12 V / compensated voltage`. ADC scan blocks arrive every 6 ms; retained frames
+provide a mean over the latest PWM-period window without waiting for a current
+edge. While the mean is less than 20 ms old, a bounded voltage prediction
+accounts for its midpoint age at the control step and half a PWM period for
+output latching. The voltage slope grows through a 20 ms filter, stays within
+the latest measured slope, and drops promptly when the ramp slows or reverses.
+The predicted offset is limited to ±0.5 V and affects only the command scale.
+The local ADC fallback retains its 50 ms filter without prediction. Current
+and resistance estimation use a separate voltage mean from the same PWM period
+as the current capture.
+
+Each current period can update the slow resistance estimate once. Its filter
+uses observation intervals, capped at 50 ms after gaps. A cumulative supply
+change over 0.1 V pauses estimation for 100 ms. Healthy new current captures
+keep the last ready correction active during long supply changes; losing
+those captures still expires it after 10 s. Supply-change detection uses the
+measured voltage before prediction. Telemetry exposes `vage` (window midpoint
+age at the control step, in microseconds), `vlead` (prediction offset in volts
+before the 7 V floor), `vdot` (voltage slope in V/s), and `rhold` (resistance
+estimation paused by a supply change).
 
 | File | Responsibility |
 |---|---|

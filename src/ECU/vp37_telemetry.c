@@ -19,14 +19,15 @@ void VP37_showDebug(VP37Pump *self) {
     const char *const activeTest = testsActiveName();
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:78 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:80 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
         "tcf:%.4f mode:position test:%s cyclic_ms:%lu slew:%.1f "
         "upper_slew:%.1f "
-        "ien:%u iconfirm:%lu vsync:%u vuse:%u vfrz:%u Vavg:%.3f pwm_hz:%u "
-        "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu "
+        "ien:%u iconfirm:%lu vsync:%u vuse:%u vfrz:%u Vavg:%.3f vage:%lu "
+        "vlead:%.3f vdot:%.2f pwm_hz:%u "
+        "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu rhold:%u "
         "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
         "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu",
         self->pid.kp, self->pid.ki, self->pid.kd, self->pid.topKd,
@@ -44,11 +45,14 @@ void VP37_showDebug(VP37Pump *self) {
         (unsigned long)self->pid.integralHoldConfirmMs,
         self->supply.cycleEnabled ? 1U : 0U, self->supply.cycleUsed ? 1U : 0U,
         self->supply.frozen ? 1U : 0U, self->supply.cycleVolts,
-        (unsigned)VP37_PWM_FREQUENCY_HZ, self->thermal.cycleAmps,
-        self->thermal.driveResistance, self->thermal.driveCorrection,
+        (unsigned long)self->supply.cycleAgeUs, self->supply.predictionVolts,
+        self->supply.voltageSlope, (unsigned)VP37_PWM_FREQUENCY_HZ,
+        self->thermal.cycleAmps, self->thermal.driveResistance,
+        self->thermal.driveCorrection,
         self->thermal.driveCompensationEnabled ? 1U : 0U,
         self->thermal.driveCompensationUsed ? 1U : 0U,
         (unsigned long)self->thermal.driveSamples,
+        self->thermal.driveVoltageSettled ? 0U : 1U,
         self->pid.integralDeadbandTopHz, self->pid.integralDeadbandHz,
         self->feedforward.mapTrimEnabled ? 1U : 0U,
         (unsigned long)self->feedforward.mapTrimTransfers,
