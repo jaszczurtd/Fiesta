@@ -3,21 +3,31 @@ name: Firmware Build Scripts
 on:
   push:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/ECU/**"
       - "src/Clocks/**"
       - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
-      - "src/common/**"
       - ".github/workflows/firmware-build-scripts.yml"
   pull_request:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/ECU/**"
       - "src/Clocks/**"
       - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
-      - "src/common/**"
       - ".github/workflows/firmware-build-scripts.yml"
   workflow_dispatch:
 
@@ -42,21 +52,18 @@ jobs:
     steps:
       - name: Checkout Fiesta
         uses: actions/checkout@v5
-
-      - name: Clone firmware dependencies
-        run: |
-          set -eux
-          mkdir -p ../libraries
-
-          git clone --depth 1 --recurse-submodules --shallow-submodules \
-            https://github.com/jaszczurtd/JaszczurHAL.git \
-            ../libraries/JaszczurHAL
+        with:
+          submodules: recursive
 
       - name: Validate HAL feature configuration
         if: matrix.module == 'ECU'
         run: |
-          python3 ../libraries/JaszczurHAL/scripts/generate_hal_features.py \
-            --lint --effective --input-root "$GITHUB_WORKSPACE" \
+          python3 src/JaszczurHAL/scripts/generate_hal_features.py \
+            --lint --effective \
+            --input-root src/ECU --input-root src/Clocks \
+            --input-root src/OilAndSpeed --input-root src/Adjustometer \
+            --input-root src/Fiesta_clock --input-root src/SerialConfigurator \
+            --input-root src/common \
             --resolution-output "$RUNNER_TEMP/fiesta-effective-feature-resolution.json"
 
       - name: Upload effective feature resolution
@@ -76,23 +83,23 @@ jobs:
             libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
           test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
           ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
-            ../libraries/JaszczurHAL rp
+            src/JaszczurHAL rp
 
       - name: Verify release build
         working-directory: src/${{ matrix.module }}
         run: |
           set -eux
-          ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
-          ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+          ../JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
+          ../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
 
       - name: Verify debug build
         working-directory: src/${{ matrix.module }}
         run: |
           set -eux
-          ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+          ../JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
 
       - name: Verify IntelliSense refresh
         working-directory: src/${{ matrix.module }}
         run: |
           set -eux
-          ../../../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+          ../JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"

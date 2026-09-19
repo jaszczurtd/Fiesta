@@ -13,7 +13,7 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_JH_ROOT = REPO_ROOT.parent / "libraries" / "JaszczurHAL"
+DEFAULT_JH_ROOT = REPO_ROOT / "src" / "JaszczurHAL"
 MODULES = ("ECU", "Clocks", "OilAndSpeed", "Adjustometer", "Fiesta_clock")
 HOOK_TASK_LABEL = "Project: Configure Git hooks"
 LINUX_ONLY_TASK_LABELS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
@@ -120,7 +120,7 @@ def desired_project_files(
     settings.pop("jaszczurhal.uploadPort", None)
     unix_entry = str(
         settings.get("jaszczurhal.vscodeEntry")
-        or "../../../libraries/JaszczurHAL/vscode/entry/jh-vscode"
+        or "../JaszczurHAL/vscode/entry/jh-vscode"
     )
     settings.update(vscode_entry_settings(unix_entry))
 

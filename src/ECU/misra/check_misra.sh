@@ -45,7 +45,7 @@ rule_texts="${MISRA_RULE_TEXTS:-}"
 quiet=0
 fail_on_findings=0
 temp_addon_config=""
-hal_root="$project_root/../../../libraries/JaszczurHAL"
+hal_root="$project_root/../JaszczurHAL"
 hal_src="$hal_root/src"
 hal_cppcheck_config="$hal_root/config/tooling/cppcheck-atomics.cfg"
 

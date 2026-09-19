@@ -37,7 +37,8 @@ missing. There is no local frame-codec fallback.
 
 Default path:
 
-- `SC_JASZCZURHAL_DIR=../../../libraries/JaszczurHAL` (relative to this repo)
+- `SC_JASZCZURHAL_DIR=../JaszczurHAL` (relative to this module; the pinned
+  Fiesta submodule)
 
 Override it when JaszczurHAL is stored elsewhere:
 

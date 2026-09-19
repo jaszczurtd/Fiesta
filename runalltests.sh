@@ -149,7 +149,7 @@ run_module_target() {
 
 header "Gate 1/5: Checking required tools"
 
-REQUIRED_TOOLS=(cmake ctest gcc g++ make)
+REQUIRED_TOOLS=(cmake ctest gcc g++ make python3 git)
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
     REQUIRED_TOOLS+=(cppcheck)
 fi
@@ -176,6 +176,9 @@ if [[ "${missing}" -ne 0 ]]; then
 fi
 
 pass "All required tools present."
+
+run_logged "/tmp/fiesta_tooling_tests.log" \
+    python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 header "Gate 2/5: Host runtime tests for all modules"
 for entry in "${MODULE_MATRIX[@]}"; do

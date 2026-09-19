@@ -3,13 +3,23 @@ name: Adjustometer Tests
 on:
   push:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/Adjustometer/**"
-      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/adjustometer-tests.yml"
   pull_request:
     paths:
+      - ".gitmodules"
+      - "src/JaszczurHAL"
+      - "src/common/**"
+      - "scripts/**"
+      - "tests/**"
+      - "runalltests.sh"
       - "src/Adjustometer/**"
-      - "src/common/scripts/ensure-jaszczurhal-dependencies.sh"
       - ".github/workflows/adjustometer-tests.yml"
   workflow_dispatch:
 
@@ -24,15 +34,11 @@ jobs:
     steps:
       - name: Checkout Fiesta
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
-      - name: Clone Adjustometer dependencies
-        run: |
-          set -eux
-          mkdir -p ../libraries
-
-          git clone --depth 1 https://github.com/jaszczurtd/JaszczurHAL.git ../libraries/JaszczurHAL
-          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
-            ../libraries/JaszczurHAL host
+      - name: Prepare HAL dependencies
+        run: ./src/common/scripts/ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host
 
       - name: Install analysis dependencies
         run: |

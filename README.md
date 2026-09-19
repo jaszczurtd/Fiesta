@@ -44,17 +44,17 @@ and `set-and-commit` over the same core.
 
 ## Dependencies
 
-Required external custom library (shared across all modules):
+JaszczurHAL is pinned as a Git submodule at `src/JaszczurHAL` and shared by
+all modules. Clone Fiesta with its dependency:
 
-- `JaszczurHAL` (HAL and utility layer): https://github.com/jaszczurtd/JaszczurHAL
-
-Expected layout:
-
-```text
-<parent-of-repo-root>/libraries/JaszczurHAL
+```bash
+git clone --recurse-submodules https://github.com/jaszczurtd/Fiesta.git
 ```
-Example: if this repo is cloned at `/home/you/projects/Fiesta`, library goes
-into `/home/you/projects/libraries/`.
+
+For an existing checkout, run `./scripts/init_hal_submodule.sh` after pulling
+Fiesta. It checks out the recorded HAL revision and stops if HAL has local
+changes. Dependency updates and development are described in
+[`DEPENDENCIES.md`](DEPENDENCIES.md).
 
 Required toolchain:
 
@@ -78,13 +78,16 @@ Modules that opt in to the second execution context also implement
 
 ### One-shot setup (Debian-like Linux / WSL)
 
-`runmefirst.sh` performs the full environment setup end-to-end, and is idempotent (safe to re-run). It:
+`runmefirst.sh` first removes the firmware modules' `build_test` and `.build`
+directories and SerialConfigurator's `build`, then prepares the environment.
+Cleanup runs even when build or test steps are skipped. HAL build directories
+and local VS Code settings are preserved. The setup then:
 
 1. installs the firmware, desktop/package, map, and QA packages listed above,
 2. verifies Python 3 is available,
 3. verifies `cppcheck` is available and its MISRA addon is reachable,
 4. verifies the Arm C++ runtime required by native firmware builds,
-5. syncs `JaszczurHAL` into `$LIB_DIR` (default: `<parent-of-repo-root>/libraries`, matching the path expected by module `CMakeLists.txt` files): missing repos are cloned, existing git checkouts are force-reset to their remote default branch and cleaned,
+5. initializes `src/JaszczurHAL` at the revision recorded by Fiesta, stopping if the submodule has local changes,
 6. prepares JaszczurHAL's pinned source dependencies, plus the Pico SDK and
    `picotool` required by native RP firmware builds,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
@@ -107,12 +110,10 @@ Do not run this script under `sudo` - generated build trees and cloned
 libraries would end up owned by `root` and break later non-root builds.
 The script exits early if it detects `EUID=0`. Override with `ALLOW_ROOT=1` only if you know what you are doing.
 
-Useful env overrides: `LIB_DIR`, `ALLOW_ROOT=1`, `SKIP_APT=1`,
+Useful env overrides: `ALLOW_ROOT=1`, `SKIP_APT=1`,
 `APT_NONINTERACTIVE=1`,
 `SKIP_TESTS=1`, `SKIP_BUILD=1`, `SKIP_DESKTOP=1`,
 `SKIP_DESKTOP_PACKAGE=1`.
-
-IMPORTANT: `runmefirst.sh` treats `JaszczurHAL` under `$LIB_DIR` as a disposable build dependency: if that directory already contains a git checkout, the script updates `origin`, fetches the remote state, runs `git reset --hard`, and removes untracked files before continuing.
 
 `runmefirst.sh` exercises all five Fiesta firmware modules and
 SerialConfigurator end-to-end. `Fiesta_clock` currently has firmware-build
@@ -141,9 +142,9 @@ Platform support summary:
 ### Unattended daily build on a Raspberry Pi
 
 `src/ECU/scripts/systemd/` ships a user-scope systemd service + timer that
-once a day (13:00 local) pulls the repo, wipes ECU build artifacts, repairs
-missing apt dependencies through non-interactive `sudo`, runs
-`src/ECU/scripts/bootstrap.sh`, and emails a PASS/FAIL status summary with the
+once a day (13:00 local) pulls the repo and runs `runmefirst.sh` to clear
+module build artifacts, initialize the pinned HAL and repair missing apt
+dependencies through non-interactive `sudo`. It emails a PASS/FAIL summary with the
 HEAD SHA, commit subject, and last 80 lines of the log. The full log is attached
 and capped at 512 KB.
 Setup, sudo requirements, and SMTP notes are documented in
@@ -207,11 +208,11 @@ Useful flags: `-j<N>`, `--skip-cppcheck`, `--skip-valgrind`,
 
 ```bash
 cd src/<ECU|Clocks|OilAndSpeed|Adjustometer|Fiesta_clock>
-../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
-../../../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
-../../../libraries/JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
-../../../libraries/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project "$PWD"
-../../../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
 ```
 
 Notes:
@@ -221,7 +222,7 @@ Notes:
 - `Project: Serial Monitor` / `Ctrl+Shift+3` uses `jh-vscode monitor` with stable
   `/dev/serial/by-id/usb-Jaszczur_Fiesta_*` identity matching.
 - The module-local VS Code wrappers were removed; task behavior now comes from
-  `libraries/JaszczurHAL/vscode/`.
+  `src/JaszczurHAL/vscode/`.
 
 ### Desktop companion build (SerialConfigurator)
 
@@ -274,8 +275,8 @@ Note: `jh-vscode upload` does **not** use the probe for upload - it flashes over
 - **No AEC-Q100 silicon.** RP2040 is consumer-grade, deliberately. Cost,
   dual-core execution, flexible GPIO/PWM peripherals, and flash-backed EEPROM
   were picked over automotive silicon precisely because the vehicle is a
-  personal car, not a production platform. The current engine Hall and
-  Adjustometer resonance inputs use GPIO edge interrupts, not PIO capture.
+  personal car, not a production platform. The engine Hall input uses GPIO
+  edge interrupts; Adjustometer uses PIO/DMA period capture through JaszczurHAL.
 
 Even though the full stack is not yet running in a real car as one integrated
 system, safety is treated as a first-class priority.

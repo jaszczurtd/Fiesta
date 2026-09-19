@@ -65,7 +65,7 @@ option(
 )
 set(
     SC_JASZCZURHAL_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL"
     CACHE PATH
     "Path to JaszczurHAL repository root."
 )

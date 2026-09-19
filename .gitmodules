@@ -1,0 +1,3 @@
+[submodule "src/JaszczurHAL"]
+	path = src/JaszczurHAL
+	url = https://github.com/jaszczurtd/JaszczurHAL.git

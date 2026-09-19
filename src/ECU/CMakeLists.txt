@@ -25,7 +25,7 @@ endif()
 include(CTest)
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-set(HAL_LIB   ${CMAKE_CURRENT_SOURCE_DIR}/../../../libraries/JaszczurHAL)
+set(HAL_LIB   ${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL)
 set(HAL_SRC   ${HAL_LIB}/src)
 set(ECU_SRC   ${CMAKE_CURRENT_SOURCE_DIR})
 set(CANDEFS   ${CMAKE_CURRENT_SOURCE_DIR}/../common/canDefinitions)

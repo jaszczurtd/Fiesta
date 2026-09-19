@@ -1,5 +1,5 @@
 {
-    "$schema": "../../../libraries/JaszczurHAL/vscode/schema/jh_vscode_project.schema.json",
+    "$schema": "../../JaszczurHAL/vscode/schema/jh_vscode_project.schema.json",
     "project": "Fiesta",
     "module": "Fiesta_clock",
     "toolchain": "cmake",
@@ -8,7 +8,7 @@
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
-        "sourceDir": "${project}/../../../libraries/JaszczurHAL/cmake/jh_firmware_project",
+        "sourceDir": "${project}/../JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "Fiesta_clock"
