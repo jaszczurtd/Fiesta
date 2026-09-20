@@ -28,6 +28,7 @@ add_ecu_test(test_engine_maps)
 add_ecu_test(test_adjustometer)
 add_ecu_test(test_vp37)
 add_ecu_test(test_vp37_current)
+add_ecu_test(test_vp37_current_control)
 add_executable(test_vp37_current_fast test_vp37_current.cpp ../vp37_current.c)
 target_compile_definitions(test_vp37_current_fast PRIVATE VP37_PWM_FREQUENCY_HZ=1000)
 target_link_libraries(test_vp37_current_fast PRIVATE ecu_mock)
@@ -43,7 +44,7 @@ add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
 # Every unit of the VP37 module, so the fixture binaries never mix units
 # built with the functional tests with archive members built without.
 set(ECU_VP37_SOURCES ../vp37.c ../vp37_feedback.c ../vp37_compensation.c
-    ../vp37_control.c ../vp37_telemetry.c)
+    ../vp37_control.c ../vp37_telemetry.c ../vp37_current_control.c)
 set(ECU_TEST_FIXTURE_SOURCES ${ECU_VP37_SOURCES} ../tests.c ../test_helpers.c)
 add_executable(test_vp37_bench test_vp37.cpp ${ECU_TEST_FIXTURE_SOURCES})
 target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)

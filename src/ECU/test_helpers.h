@@ -10,8 +10,8 @@ extern "C" {
 
 /**
  * @file test_helpers.h
- * @brief Demand generators, tunable parameters and the console parameter
- * parser used by the tests in tests.c.
+ * @brief Fixtures of the tests registered in tests.c: demand generators,
+ * one-shot actions, their tunable parameters and the console parameter parser.
  *
  * Everything here follows ECU_FUNCTIONAL_TESTS_ENABLED: with tests disabled
  * the translation unit is empty and nothing below is declared.
@@ -65,6 +65,27 @@ extern "C" {
 /** @brief Fixed seed: every run draws the same sequence, so two runs of the
  * random test can be compared directly. */
 #define RANDOM_SEED 0x5EEDBEEFU
+
+/** @brief Time one step of the upper staircase is held, in milliseconds. */
+#ifndef TOP_STEPS_DWELL_MS
+#define TOP_STEPS_DWELL_MS 2000U
+#endif
+/**
+ * @brief Time one half-step of the from-rest staircase is held, in
+ * milliseconds.
+ *
+ * Longer than the ladder's step on purpose: a threshold reached from rest is
+ * a full-travel excursion and the actuator is still arriving two seconds in,
+ * so a shorter hold measures how long the approach takes rather than whether
+ * the position is stable.
+ */
+#ifndef TOP_ZERO_DWELL_MS
+#define TOP_ZERO_DWELL_MS 3000U
+#endif
+/** @brief Series the upper staircase repeats before it finishes. */
+#ifndef TOP_STEPS_SERIES
+#define TOP_STEPS_SERIES 5U
+#endif
 
 /** @brief Auto-zero deadline for command S, in milliseconds; zero holds the
  * demand until the next command. Demands at or above
@@ -155,6 +176,34 @@ void testHelpersManualStart(void);
  * @return Demand in percent; zero once an armed auto-zero deadline expires.
  */
 float testHelpersManualStep(bool *outFinished);
+
+/** @brief Arm the upper staircase at its first setpoint. */
+void testHelpersTopStepsStart(void);
+
+/**
+ * @brief One step of the upper staircase; each setpoint is held for
+ * TOP_STEPS_DWELL_MS.
+ * @param outFinished Non-NULL; true once TOP_STEPS_SERIES series are done.
+ * @return Demand in percent.
+ */
+float testHelpersTopStepsStep(bool *outFinished);
+
+/** @brief Arm the from-rest staircase at its first threshold. */
+void testHelpersTopZeroStart(void);
+
+/**
+ * @brief One half-step of the from-rest staircase: a threshold of the same
+ * ladder as testHelpersTopStepsStep(), then a return to zero, each held for
+ * TOP_ZERO_DWELL_MS.
+ * @param outFinished Non-NULL; true once TOP_STEPS_SERIES series are done.
+ * @return Demand in percent.
+ * @note Every threshold is approached from rest, so its arrival carries
+ * nothing over from the previous one.
+ */
+float testHelpersTopZeroStep(bool *outFinished);
+
+/** @brief Raise one diagnostic trouble code so the storage path can be seen. */
+void testHelpersDtcStart(void);
 
 #endif /* ECU_FUNCTIONAL_TESTS_ENABLED */
 

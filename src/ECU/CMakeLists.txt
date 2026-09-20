@@ -114,6 +114,7 @@ set(ECU_SOURCES
     ${ECU_SRC}/vp37_control.c
     ${ECU_SRC}/vp37_telemetry.c
     ${ECU_SRC}/vp37_current.c
+    ${ECU_SRC}/vp37_current_control.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
     ${SCDEFS}/sc_param_handlers.c

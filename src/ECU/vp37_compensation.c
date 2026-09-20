@@ -11,8 +11,6 @@
 // lower bound of the rail and can only reduce drive. It never trains the
 // scale. The 15 V dual-fault value is for a missing reading, not a high one.
 #define VP37_LOCAL_VOLTAGE_VALID_MAX_V 17.0f
-#define VP37_LOCAL_VOLTAGE_SCALE_MIN 0.8f
-#define VP37_LOCAL_VOLTAGE_SCALE_MAX 1.2f
 #define VP37_LOCAL_VOLTAGE_SCALE_FILTER_S 1.0f
 #define VP37_LOCAL_VOLTAGE_STABLE_DELTA_V 0.1f
 

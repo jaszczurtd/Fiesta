@@ -102,12 +102,12 @@ void test_zero_demand_is_held_at_the_bottom_under_drive(void) {
   setupPumpForProcessTests(pump);
   uint32_t ms = 0U;
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(pump, 50.0f));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
   trackDemand(pump, &ms, 400U);
   TEST_ASSERT_GREATER_THAN_INT32(0, pump->output.finalPWM);
 
   // Descend to zero demand and let the slew finish; the drive stays on.
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(pump, 0.0f));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemandPercentage(pump, 0.0f));
   trackDemand(pump, &ms, 800U);
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMin, pump->demand.desired);
   TEST_ASSERT_FALSE(VP37_demandAtRest(pump));

@@ -31,11 +31,11 @@ extern "C" {
    8U)
 /** Completed DMA blocks arrive slightly slower than the 5 ms control step. */
 #define VP37_CURRENT_SCAN_BLOCK_NS 6000000U
-/** Retained history spans 2.25 PWM periods so a complete rise-to-rise period
-    remains available at any phase. At high PWM rates retain at least one
-    complete DMA block. */
+/** Retain 3.25 PWM periods: the newest complete rise-to-rise observation
+    also needs the preceding falling edge to identify its command latch.
+    At high PWM rates retain at least one complete DMA block. */
 #define VP37_CURRENT_SCAN_PERIODS_NS                                           \
-  ((9U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) / 4U)
+  ((13U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) / 4U)
 #define VP37_CURRENT_SCAN_HISTORY_NS                                           \
   ((VP37_CURRENT_SCAN_PERIODS_NS > VP37_CURRENT_SCAN_BLOCK_NS)                 \
        ? VP37_CURRENT_SCAN_PERIODS_NS                                          \
@@ -77,6 +77,13 @@ typedef struct {
   uint32_t periodUs;
   uint32_t onTimeUs;
   int32_t pwmCommand; /**< Duty reconstructed from measured gate timing. */
+  uint32_t latchUs;   /**< Falling edge before this ON phase: active-low PWM
+                         applies its next compare value at that wrap. */
+  uint32_t
+      latchPeriodUs;  /**< Falling-edge interval containing this ON phase. */
+  int32_t latchedPwm; /**< ON duty reconstructed against latchPeriodUs. */
+  bool latchValid; /**< Both falling edges were observed with plausible timing.
+                    */
   uint16_t zeroRaw;
   bool zeroValid;
   float meanAmps;     /**< P95-winsorized mean inside the guarded ON phase. */
@@ -140,6 +147,9 @@ uint32_t VP37_currentScanFrameNs(void);
  * path bypasses the source shunt, so the ON phase is the only non-zero span.
  * supplyVolts and supplyValid describe the same period and are filled on
  * every return that found a period; read waveformValid before any amperes.
+ * latchUs and latchedPwm use the preceding falling edge and fall-to-fall
+ * interval: with an active-low driver, compare updates precede the ON rise.
+ * latchValid is independent of waveformValid and requires that earlier edge.
  * supplyLatestVolts instead spans one period ending at the history's last
  * frame. It uses the measured period when plausible, otherwise the nominal
  * PWM period, and remains usable without valid current edges or shunt zero.

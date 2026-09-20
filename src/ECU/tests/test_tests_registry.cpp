@@ -138,7 +138,75 @@ void test_sequence_visits_every_sequenced_test_in_registry_order(void) {
   TEST_ASSERT_EQUAL_STRING("random", testsActiveName());
 
   (void)runUntilTestChanges("random", 120000U);
-  // manual is on request only, so the sequence ends after random.
+  // manual is on request only, so the sequence skips it and ends after top.
+  TEST_ASSERT_EQUAL_STRING("top", testsActiveName());
+
+  // The staircases have no console knob, so they always take their full run.
+  (void)runUntilTestChanges("top", 120000U);
+  TEST_ASSERT_EQUAL_STRING("topzero", testsActiveName());
+
+  (void)runUntilTestChanges("topzero", 200000U);
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_FALSE(tickTests());
+}
+
+/** @brief Hold the mock clock at ms, run one tick and report the demand. */
+static float tickAt(uint32_t ms) {
+  hal_mock_set_millis(ms);
+  (void)tickTests();
+  return getECUContext()->injectionPump.demand.requestedPercent;
+}
+
+void test_top_steps_hold_every_setpoint_for_the_dwell(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+
+  // The series the bench expects, written out instead of read back from the
+  // fixture, so a reordered or retuned staircase fails here.
+  static const float setpoints[] = {75.0f, 85.5f, 90.5f, 95.0f, 0.0f};
+  uint32_t ms = 0U;
+  for (uint32_t series = 0U; series < TOP_STEPS_SERIES; series++) {
+    for (size_t i = 0U; i < COUNTOF(setpoints); i++) {
+      TEST_ASSERT_EQUAL_STRING("top", testsActiveName());
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, setpoints[i], tickAt(ms));
+      // Still the same setpoint one millisecond before the dwell is over.
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, setpoints[i],
+                               tickAt(ms + TOP_STEPS_DWELL_MS - 1U));
+      ms += TOP_STEPS_DWELL_MS;
+    }
+  }
+
+  // The last series releases the actuator and hands the demand back.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms));
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_FALSE(tickTests());
+}
+
+void test_top_zero_returns_to_rest_between_thresholds(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
+
+  // Same thresholds as the "top" ladder, but each one is reached from zero.
+  static const float thresholds[] = {75.0f, 85.5f, 90.5f, 95.0f};
+  uint32_t ms = 0U;
+  for (uint32_t series = 0U; series < TOP_STEPS_SERIES; series++) {
+    for (size_t i = 0U; i < COUNTOF(thresholds); i++) {
+      TEST_ASSERT_EQUAL_STRING("topzero", testsActiveName());
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, thresholds[i], tickAt(ms));
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, thresholds[i],
+                               tickAt(ms + TOP_ZERO_DWELL_MS - 1U));
+      ms += TOP_ZERO_DWELL_MS;
+      // The hard descent between thresholds, held just as long.
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms));
+      TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f,
+                               tickAt(ms + TOP_ZERO_DWELL_MS - 1U));
+      ms += TOP_ZERO_DWELL_MS;
+    }
+  }
+
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms));
   TEST_ASSERT_NULL(testsActiveName());
   TEST_ASSERT_FALSE(tickTests());
 }
@@ -308,7 +376,7 @@ void test_stopped_manual_command_hands_over_through_common_demand(void) {
 
   // The normal source resumes through the same entry in the next iteration.
   hal_mock_set_millis(10U);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(pump, 10.25f));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemandPercentage(pump, 10.25f));
   TEST_ASSERT_EQUAL_FLOAT(10.25f, pump->demand.requestedPercent);
   TEST_ASSERT_EQUAL_INT32(1022, pump->demand.target);
   TEST_ASSERT_EQUAL_UINT32(10U, pump->demand.targetChangedMs);
@@ -322,6 +390,8 @@ int main(void) {
   RUN_TEST(test_one_test_owns_the_demand_and_gives_it_back_on_stop);
   RUN_TEST(test_random_draws_a_bounded_and_repeatable_sequence);
   RUN_TEST(test_sequence_visits_every_sequenced_test_in_registry_order);
+  RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
+  RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
   RUN_TEST(test_skip_advances_the_sequence_and_stop_ends_it);
   RUN_TEST(test_console_starts_tests_by_name_and_keeps_parameters_on_letters);
   RUN_TEST(test_upper_derivative_command_is_deferred_bounded_and_resettable);

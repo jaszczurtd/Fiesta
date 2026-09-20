@@ -141,10 +141,24 @@ extern "C" {
 // feedforward below carries the reciprocal of that correction, so the commands
 // stay where the map measured them.
 #define VP37_DRIVE_REFERENCE_OHMS 1.20f
+/** Proportional current-feedback gain in nominal PWM per equivalent PWM. */
+#define VP37_CURRENT_CONTROL_GAIN 0.35f
+/** Maximum current correction in the shared nominal command domain. */
+#define VP37_CURRENT_CONTROL_LIMIT_PWM 40.0f
+/** Maximum correction engagement/release rate [nominal PWM/s]. */
+#define VP37_CURRENT_CONTROL_SLEW_PWM_S 1000.0f
+/** Maximum age of the measured ON-phase midpoint [us]. */
+#define VP37_CURRENT_CONTROL_MAX_AGE_US 25000U
+/** PWM writes near a measured wrap have ambiguous latch ownership. */
+#define VP37_CURRENT_CONTROL_EDGE_GUARD_US 100U
+/** Allow scan quantization when matching observed and delivered duty. */
+#define VP37_CURRENT_CONTROL_DUTY_TOLERANCE 24
+/** Covers delayed observations at the normal 5 ms control period. */
+#define VP37_CURRENT_CONTROL_HISTORY 16U
 // A small command or a small current makes the ratio ill-conditioned.
 #define VP37_DRIVE_MIN_CURRENT_A 1.5f
 #define VP37_DRIVE_MIN_PWM 420
-// Gate timing is polled, so the reconstruction only rejects gross mismatch.
+// The thermal estimate only rejects gross reconstructed duty mismatch.
 #define VP37_DRIVE_PWM_MATCH_COUNTS 150
 // The command must not have moved between the capture and its use.
 #define VP37_DRIVE_COMMAND_MATCH_COUNTS 8
@@ -188,6 +202,10 @@ extern "C" {
 // 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged),
 // carried through the same reference rescale as the map.
 #define VP37_PWM_FF_MOTION_BOOST_DEFAULT 38.7f
+/** Upward motion assistance fades across this demand interval [% of stroke]. */
+#define VP37_PWM_FF_MOTION_TAPER_START 75.0f
+/** At this demand and above, the holding map and PID provide upward drive. */
+#define VP37_PWM_FF_MOTION_TAPER_END 85.0f
 // Downward-motion correction at the reference rate [nominal PWM]: the command
 // drops below the holding map while the target falls, so the return spring
 // is not fighting a holding command that only the integral would unwind.
@@ -456,6 +474,32 @@ typedef struct {
   bool running;
 } VP37Scan;
 
+/** @brief One command before its application at the next PWM wrap. */
+typedef struct {
+  uint32_t writtenUs; /**< Local timestamp immediately before the PWM write. */
+  float nominalPwm;   /**< FF+position PID, excluding current correction. */
+  float voltageScale; /**< Local ADC calibration used by this command. */
+  int32_t pwm; /**< Delivered duty including every correction and clamp. */
+} VP37CurrentCommand;
+
+/** @brief Bounded ON-current feedback and the command history it observes. */
+typedef struct {
+  VP37CurrentCommand history[VP37_CURRENT_CONTROL_HISTORY];
+  uint32_t count;
+  uint32_t next;
+  uint32_t lastCycleUs; /**< Last accepted rising edge; zero is valid. */
+  uint32_t sampleAgeUs; /**< ON midpoint age when the control step used it. */
+  float targetAmps; /**< Newest nominal position command in ON-current units. */
+  float sampleTargetAmps; /**< Target belonging to the measured PWM period. */
+  float measuredAmps;     /**< Guarded ON-phase mean [A]. */
+  float errorAmps;        /**< Historical target minus measured current [A]. */
+  float requestedPwm;     /**< Bounded proportional correction before slew. */
+  float correctionPwm;    /**< Applied correction in nominal PWM counts. */
+  bool enabled; /**< Bench C0/C1; normal control uses the same path. */
+  bool active;  /**< A fresh observation matches a recorded command. */
+  bool seen;    /**< At least one matching PWM period has been consumed. */
+} VP37CurrentControl;
+
 /** @brief The command as written to the actuator. */
 typedef struct {
   float pwmValue;
@@ -486,6 +530,7 @@ typedef struct {
   VP37Supply supply;
   VP37Thermal thermal;
   VP37Scan scan;
+  VP37CurrentControl currentControl;
   VP37Output output;
 } VP37Pump;
 
@@ -642,16 +687,51 @@ void VP37_showDebug(VP37Pump *self);
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 
 /**
- * @brief Set the quantity actuator's position through its only demand API.
+ * @brief Set the quantity actuator's position in percent of the stroke.
  * @param self Controller instance; NULL returns HAL_EINVAL.
  * @param percent Position across the calibrated stroke, clamped to 0..100%.
  * @return HAL_OK on acceptance, HAL_ESTATE before calibration, or HAL_EINVAL
  * for NULL/non-finite input. A non-finite value requests zero when calibrated.
- * @note Every source uses the same ramp, feedforward, PID and limits. Analog
- * sensor conditioning belongs to the sensor layer. Call on the control core
- * under its state mutex. Zero follows the shared descent and release policy.
+ * @note This is the unit engine control works in: the percentage is mapped
+ * onto the calibrated stroke, so the same number means the same position
+ * whatever the calibration produced. Every source then shares one ramp,
+ * feedforward, PID and set of limits. Analog sensor conditioning belongs to
+ * the sensor layer. Call on the control core under its state mutex. Zero
+ * follows the shared descent and release policy.
  */
-hal_status_t VP37_setPositionDemand(VP37Pump *self, float percent);
+hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent);
+
+/**
+ * @brief Set the quantity actuator's position in raw feedback counts.
+ * @param self Controller instance; NULL returns HAL_EINVAL.
+ * @param value Position in feedback counts, clamped to the calibrated range
+ * between VP37_getPositionDemandMinValue() and
+ * VP37_getPositionDemandMaxValue().
+ * @return HAL_OK on acceptance, HAL_EINVAL for NULL, or HAL_ESTATE before
+ * calibration.
+ * @note The unit the position loop itself works in, so a caller addressing a
+ * measured or recorded position hits it exactly instead of through a
+ * percentage that rounds. Everything past the entry point is shared with
+ * VP37_setPositionDemandPercentage(), including the percent the telemetry
+ * reports.
+ */
+hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value);
+
+/**
+ * @brief Lowest position VP37_setPositionDemandValue() accepts.
+ * @param self Controller instance to inspect.
+ * @return Calibrated bottom of the stroke in feedback counts, or -1 for NULL
+ * and before calibration.
+ */
+int32_t VP37_getPositionDemandMinValue(const VP37Pump *self);
+
+/**
+ * @brief Highest position VP37_setPositionDemandValue() accepts.
+ * @param self Controller instance to inspect.
+ * @return Calibrated top of the stroke in feedback counts, or -1 for NULL and
+ * before calibration.
+ */
+int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self);
 
 /**
  * @brief Update VP37 PID gains and optionally reset controller state.

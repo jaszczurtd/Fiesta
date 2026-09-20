@@ -22,6 +22,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   hal_pid_controller_set_kd(self->pid.controller, kd);
 
   if (shouldTriggerReset) {
+    VP37_resetCurrentControl(self);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.topDBlend = 0.0f;
     self->pid.integralHold = false;
@@ -51,6 +52,11 @@ float VP37_feedForward(VP37Pump *self, int32_t position) {
   // The holding map and its motion column are data in engineMaps.c; this is
   // only the interpolation between its knots and the blending of motion.
   const float percent = VP37_strokePercent(self, (float)position);
+  // Extra acceleration excites the upper stroke; preserve lower-stroke drive.
+  const float riseWeight =
+      hal_constrain(hal_math_map_f32(percent, VP37_PWM_FF_MOTION_TAPER_START,
+                                     VP37_PWM_FF_MOTION_TAPER_END, 1.0f, 0.0f),
+                    0.0f, 1.0f);
   for (size_t i = 1U; i < VP37_FF_KNOTS; ++i) {
     const float *lower = VP37_FF_MAP[i - 1U];
     const float *upper = VP37_FF_MAP[i];
@@ -59,7 +65,7 @@ float VP37_feedForward(VP37Pump *self, int32_t position) {
           percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
           lower[VP37_FF_COL_PWM], upper[VP37_FF_COL_PWM]);
       self->feedforward.motion =
-          (self->feedforward.riseBlend *
+          (self->feedforward.riseBlend * riseWeight *
            hal_math_map_f32(
                percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
                lower[VP37_FF_COL_MOTION], upper[VP37_FF_COL_MOTION]) *

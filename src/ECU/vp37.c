@@ -42,6 +42,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   }
 
   self->demand.requestedPercent = -1;
+  self->currentControl.enabled = true;
+  VP37_resetCurrentControl(self);
   self->feedback.calibrationDone = false;
   self->demand.target = -1;
   self->demand.desired = -1;
@@ -188,6 +190,7 @@ void VP37_enableVP37(VP37Pump *self, bool enable) {
 }
 
 void VP37_stop(VP37Pump *self) {
+  VP37_resetCurrentControl(self);
   self->vp37Initialized = false;
   self->output.finalPWM = 0;
   self->output.lastPWMval = 0;
@@ -200,27 +203,78 @@ bool VP37_isVP37Enabled(VP37Pump *self) {
   return pcf8574_read(PCF8574_O_VP37_ENABLE);
 }
 
-hal_status_t VP37_setPositionDemand(VP37Pump *self, float percent) {
-  hal_status_t status = HAL_EINVAL;
-  if (self != NULL) {
-    if (!self->feedback.calibrationDone) {
-      status = HAL_ESTATE;
-    } else {
-      const bool valid = isfinite(percent);
-      const float requested =
-          valid ? hal_constrain(percent, 0.0f, 100.0f) : 0.0f;
-      const int32_t target = (int32_t)hal_math_map_f32(
-          requested, 0.0f, 100.0f, (float)self->feedback.adjustMin,
-          (float)self->feedback.adjustMax);
-      self->demand.requestedPercent = requested;
-      if (target != self->demand.target) {
-        self->demand.targetChangedMs = hal_millis();
-      }
-      self->demand.target = target;
-      status = valid ? HAL_OK : HAL_EINVAL;
-    }
+/**
+ * @brief Whether the instance can take a demand at all.
+ * @param self Controller instance to check.
+ * @return HAL_OK when a demand may be published, HAL_EINVAL for NULL, or
+ * HAL_ESTATE while the stroke has not been calibrated.
+ */
+static hal_status_t VP37_demandAcceptance(const VP37Pump *self) {
+  hal_status_t status = HAL_OK;
+  if (self == NULL) {
+    status = HAL_EINVAL;
+  } else if (!self->feedback.calibrationDone) {
+    status = HAL_ESTATE;
+  } else {
+    // Calibrated and ready to take a demand.
   }
   return status;
+}
+
+/**
+ * @brief Hand one accepted demand to the control loop.
+ * @param self Controller instance, already checked and calibrated.
+ * @param percent Position in percent of the calibrated stroke.
+ * @param target The same position in feedback counts.
+ * @note Both entry points end here, so the loop sees one demand whichever
+ * unit the caller works in, and the settle timer restarts only when the
+ * target really moves.
+ */
+static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target) {
+  self->demand.requestedPercent = percent;
+  if (target != self->demand.target) {
+    self->demand.targetChangedMs = hal_millis();
+  }
+  self->demand.target = target;
+}
+
+hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
+  hal_status_t status = VP37_demandAcceptance(self);
+  if (status == HAL_OK) {
+    const bool valid = isfinite(percent);
+    const float requested = valid ? hal_constrain(percent, 0.0f, 100.0f) : 0.0f;
+    VP37_publishDemand(
+        self, requested,
+        (int32_t)hal_math_map_f32(requested, 0.0f, 100.0f,
+                                  (float)self->feedback.adjustMin,
+                                  (float)self->feedback.adjustMax));
+    status = valid ? HAL_OK : HAL_EINVAL;
+  }
+  return status;
+}
+
+hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value) {
+  hal_status_t status = VP37_demandAcceptance(self);
+  if (status == HAL_OK) {
+    const int32_t target = hal_constrain(value, self->feedback.adjustMin,
+                                         self->feedback.adjustMax);
+    // Percent follows the counts, so telemetry and the rest policy read the
+    // same demand whichever entry point set it.
+    VP37_publishDemand(
+        self,
+        hal_math_map_f32((float)target, (float)self->feedback.adjustMin,
+                         (float)self->feedback.adjustMax, 0.0f, 100.0f),
+        target);
+  }
+  return status;
+}
+
+int32_t VP37_getPositionDemandMinValue(const VP37Pump *self) {
+  return self != NULL ? self->feedback.adjustMin : -1;
+}
+
+int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self) {
+  return self != NULL ? self->feedback.adjustMax : -1;
 }
 
 /**
@@ -321,6 +375,7 @@ static void VP37_positionCycle(VP37Pump *self) {
   if (VP37_releaseAtRest(self)) {
     return;
   }
+  VP37_updateCurrentControl(self, cycle.dt);
   VP37_boundCorrection(self, &cycle);
   if (!VP37_stepCorrection(self, &cycle)) {
     return;
@@ -467,6 +522,7 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
 static bool VP37_releaseAtRest(VP37Pump *self) {
   self->demand.atRest = VP37_demandAtRest(self);
   if (self->demand.atRest) {
+    VP37_resetCurrentControl(self);
     VP37_updateDerivativeGain(self, false);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.terms = (hal_pid_terms_t){0};
@@ -511,9 +567,11 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
     }
   }
   self->pid.negativeLimit = fmaxf(-VP37_PID_CORR_LIMIT_NEGATIVE,
-                                  lowerCommand - self->feedforward.pwm);
+                                  lowerCommand - self->feedforward.pwm) -
+                            self->currentControl.correctionPwm;
   self->pid.upperLimit =
-      fminf(self->pid.positiveLimit, upperCommand - self->feedforward.pwm);
+      fminf(self->pid.positiveLimit, upperCommand - self->feedforward.pwm) -
+      self->currentControl.correctionPwm;
   hal_pid_controller_set_output_limits(
       self->pid.controller, self->pid.negativeLimit, self->pid.upperLimit);
 }
@@ -565,7 +623,9 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   VP37_transferIntegralToMapTrim(self);
   self->pid.saturatedHigh = self->pid.terms.saturated_high;
   self->output.pwmValue = self->feedforward.pwm + self->pid.correction;
-  const float compensatedPWM = self->output.pwmValue * cycle->outputScale;
+  const float compensatedPWM =
+      (self->output.pwmValue + self->currentControl.correctionPwm) *
+      cycle->outputScale;
   self->output.finalPWM = (int32_t)compensatedPWM;
   self->output.pwmLimited = (self->output.finalPWM < VP37_PWM_MIN) ||
                             (self->output.finalPWM > VP37_PWM_MAX);
@@ -574,6 +634,8 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   self->pid.softFloorActive =
       self->pid.softFloorActive && self->pid.terms.saturated_low;
 
+  VP37_recordCurrentCommand(self, self->output.pwmValue, self->output.finalPWM,
+                            hal_micros());
   VP37_writeQuantityPWM(self, self->output.finalPWM);
 }
 
