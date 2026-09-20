@@ -11,7 +11,8 @@
         "sourceDir": "${project}/../JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "ECU"
+            "JH_MODULE_NAME": "ECU",
+            "JH_EXTRA_DEFINES": "ECU_FUNCTIONAL_TESTS_ENABLED=1"
         },
         "targets": {
             "build": "firmware",

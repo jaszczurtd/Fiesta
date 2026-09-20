@@ -450,6 +450,17 @@ static void applyDefaults(VP37Pump *self) {
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   self->pid.tf = VP37_PID_TF;
   self->pid.topKd = VP37_PID_TOP_KD;
+  self->feedback.leadWeight = VP37_FEEDBACK_LEAD_WEIGHT;
+  /* TEMP-VALIDATION begin */
+  {
+    extern float g_vp37Validation[6];
+    g_vp37Validation[0] = 1.0f;
+    g_vp37Validation[1] = 0.0f;
+    g_vp37Validation[2] = 0.0f;
+    g_vp37Validation[4] = 1.0f;
+    g_vp37Validation[5] = VP37_FEEDBACK_LEAD_DEADBAND_HZ;
+  }
+  /* TEMP-VALIDATION end */
   self->pid.integralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
   self->thermal.temperatureCompensationWeight = 1.0f;
   self->currentControl.enabled = true;
@@ -614,6 +625,24 @@ bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,
         (unsigned int)VP37_TRACE_SAMPLES);
     return true;
   }
+  /* TEMP-VALIDATION begin: X0..X2 switches, X3 lead weight. */
+  if ((prefix == 'X') && (cmd[1] >= '0') && (cmd[1] <= '5') &&
+      (cmd[2] == '=')) {
+    extern float g_vp37Validation[6];
+    float parameter = 0.0f;
+    const bool ok = parseValue(&cmd[3], &parameter);
+    if (ok && (cmd[1] == '3')) {
+      self->feedback.leadWeight = parameter;
+    } else if (ok) {
+      g_vp37Validation[cmd[1] - '0'] = parameter;
+    } else {
+      // Reported below.
+    }
+    deb("VP37 experiment %c: %.3f %s", cmd[1], parameter,
+        ok ? "ok" : "rejected");
+    return true;
+  }
+  /* TEMP-VALIDATION end */
   if ((prefix == 'X') && (cmd[1] == '\0')) {
     VP37_stop(self);
     deb("VP37 stopped; restart ECU to initialize");

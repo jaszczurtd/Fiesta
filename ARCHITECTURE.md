@@ -108,12 +108,36 @@ reaches the cache without filter delay. Both direct driver demand and
 send to VP37. Optional engine control is enabled by
 `ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
 
-VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
-full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
-after the target settles and fades when movement resumes through a 50 ms
-blend. The holding map and supply/temperature compensation remain shared
-across the stroke. Telemetry reports `mode:position` and a separate
-`test:<name|none>` field; it does not identify a potentiometer controller mode.
+VP37 uses 130 Hz PWM. The holding map and supply/temperature compensation are
+shared across the stroke; the correction loop changes along it, because the top
+of the stroke behaves differently. Around 90% and 95% of travel the holding
+force drops in two short steps: inside them a higher position asks for less
+command, and only the proportional gain keeps the actuator still. Three rules
+follow. Each is a table in `engineMaps.c`, scheduled on the demanded position,
+and each belongs to a standing target: it comes in through a 50 ms blend once
+the target has stood for 25 ms and fades when the target moves again, so ramps
+and cyclic demand are tracked by the plain loop.
+
+- The proportional gain rises from 91% to 1.6 times its base value at 95%. It
+  stays at the base below that, where the loop has no margin for more.
+- The loop acts on a bounded position error. The bound closes from 75% to
+  300 Hz at 85%, so an approach from rest cannot push the actuator into the
+  end stop with a full stroke's worth of tracking lag, and the swing that
+  follows an arrival is not fed with full gain either.
+- Between 75% and 85% the proportional path moves to the newest Adjustometer
+  sample. The Adjustometer filter trails the position by about 15 ms; the
+  filtered and the unfiltered frequency arrive in one frame, so their
+  difference gives that lag back. A 60 Hz dead zone keeps the PWM ripple of a
+  standing actuator out of it. The integral, its dead zone, the settled hold,
+  and the telemetry keep the filtered position, and so does the whole loop
+  across the lower stroke.
+
+The derivative gain for settled upper targets is off by default: with the
+delay of this loop it turns into proportional gain at the frequency the upper
+stroke rings at. The bench command `H` still sets it. Telemetry reports
+`mode:position` and a separate `test:<name|none>` field; it does not identify a
+potentiometer controller mode. `kpe` is the proportional gain in force and
+`lead` the command the newest sample added.
 
 Supply compensation scales the complete feedforward and PID command by
 `12 V / compensated voltage`. ADC scan blocks arrive every 6 ms; retained frames
@@ -127,7 +151,12 @@ The local ADC fallback retains its 50 ms filter without prediction. Current
 and resistance estimation use a separate voltage mean from the same PWM period
 as the current capture.
 
-Each current period can update the slow resistance estimate once. Its filter
+Each current period can update the slow resistance estimate once, and only
+while the actuator stands still: a position change over 60 Hz pauses learning
+until 150 ms of standstill. A moving armature adds its motional voltage to the
+coil, the current reads low, and the ratio reads several percent too much
+resistance. Learned in motion, that error raised the whole command at the end
+of every approach from rest and let it sag over the following second. Its filter
 uses observation intervals, capped at 50 ms after gaps. A cumulative supply
 change over 0.1 V pauses estimation for 100 ms. Healthy new current captures
 keep the last ready correction active during long supply changes; losing

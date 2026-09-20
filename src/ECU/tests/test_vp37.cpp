@@ -97,6 +97,7 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->demand.requestedPercent = -1.0f;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->pid.topKd = VP37_PID_TOP_KD;
+  pump->feedback.leadWeight = VP37_FEEDBACK_LEAD_WEIGHT;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   pump->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST;
   pump->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
@@ -2903,6 +2904,53 @@ void test_vp37_measured_drive_holds_through_supply_transients(void) {
   TEST_ASSERT_FLOAT_WITHIN(.01f, resistance, pump->thermal.driveResistance);
 }
 
+void test_vp37_measured_drive_ignores_captures_of_the_coil_onset(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveOnsetPassed);
+  TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+
+  // Rest releases the coil.
+  VP37_setPositionDemandPercentage(pump, 0.0f);
+  for (uint32_t i = 0U; i < 200U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(100, 144U, 29U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(0, pump->output.finalPWM);
+  TEST_ASSERT_FALSE(pump->thermal.driveOnsetPassed);
+  const float resistance = pump->thermal.driveResistance;
+  const uint32_t learnedMs = pump->thermal.driveUpdatedMs;
+
+  // The next approach: while the current is still building up, duty times
+  // voltage over current reads far too much resistance. Those captures are
+  // electrically healthy, keep the estimate alive, and teach it nothing.
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  const uint32_t onsetSteps = (VP37_DRIVE_ONSET_MS / 5U) - 1U;
+  for (uint32_t i = 0U; i < onsetSteps; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(100, 144U, 29U, ADJ_STATUS_OK);
+    feedDriveObservation(pump, 2.6f, 14.0f);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->thermal.driveOnsetPassed);
+    TEST_ASSERT_EQUAL_FLOAT(resistance, pump->thermal.driveResistance);
+    TEST_ASSERT_EQUAL_UINT32(learnedMs, pump->thermal.driveUpdatedMs);
+    TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  }
+
+  // Once the onset time has passed, learning resumes.
+  runDriveCycles(pump, ms, 60U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveOnsetPassed);
+  TEST_ASSERT_GREATER_THAN_UINT32(learnedMs, pump->thermal.driveUpdatedMs);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, resistance, pump->thermal.driveResistance);
+}
+
 void test_vp37_measured_drive_detects_accumulated_small_voltage_changes(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -3064,6 +3112,228 @@ void test_vp37_integral_deadband_widens_only_in_the_upper_stroke(void) {
   VP37_process(pump);
   TEST_ASSERT_EQUAL_FLOAT((float)VP37_PID_DEADBAND,
                           pump->pid.integralDeadbandHz);
+}
+
+// ── Proportional path of the upper stroke ────────────────────────────────────
+
+static void placeDemandAt(VP37Pump *pump, float percent) {
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  pump->demand.desiredPosition =
+      (float)pump->feedback.adjustMin + travel * percent * 0.01f;
+}
+
+static const float kTopGain =
+    VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                              [VP37_TAPER_COL_VALUE];
+static const float kTopGainStart =
+    VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS - 2U]
+                              [VP37_TAPER_COL_PERCENT];
+static const float kTopGainEnd =
+    VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                              [VP37_TAPER_COL_PERCENT];
+static const float kTopErrorLimit =
+    VP37_PROPORTIONAL_ERROR_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                     [VP37_TAPER_COL_VALUE];
+
+void test_vp37_proportional_gain_rises_only_at_the_top_of_the_stroke(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->pid.standingBlend = 1.0f;
+
+  placeDemandAt(pump, 50.0f);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, VP37_proportionalGain(pump));
+  placeDemandAt(pump, kTopGainStart);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, VP37_proportionalGain(pump));
+
+  placeDemandAt(pump, 0.5f * (kTopGainStart + kTopGainEnd));
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, VP37_PID_KP * 0.5f * (1.0f + kTopGain),
+                           VP37_proportionalGain(pump));
+
+  placeDemandAt(pump, kTopGainEnd);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, VP37_PID_KP * kTopGain,
+                           VP37_proportionalGain(pump));
+  placeDemandAt(pump, 100.0f);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, VP37_PID_KP * kTopGain,
+                           VP37_proportionalGain(pump));
+
+  // A moving target keeps the base gain; the handover is gradual.
+  pump->pid.standingBlend = 0.0f;
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, VP37_proportionalGain(pump));
+  pump->pid.standingBlend = 0.5f;
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, VP37_PID_KP * 0.5f * (1.0f + kTopGain),
+                           VP37_proportionalGain(pump));
+
+  // A bench gain keeps the same shape.
+  pump->pid.standingBlend = 1.0f;
+  VP37_setVP37PID(pump, 0.04f, VP37_PID_KI, VP37_PID_KD, false);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.04f * kTopGain,
+                           VP37_proportionalGain(pump));
+}
+
+void test_vp37_error_bound_binds_only_in_the_upper_stroke(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->pid.standingBlend = 1.0f;
+
+  placeDemandAt(pump, 50.0f);
+  TEST_ASSERT_EQUAL_FLOAT(1500.0f, VP37_boundedError(pump, 1500.0f));
+  TEST_ASSERT_EQUAL_FLOAT(-1500.0f, VP37_boundedError(pump, -1500.0f));
+
+  placeDemandAt(pump, 95.0f);
+  TEST_ASSERT_EQUAL_FLOAT(kTopErrorLimit, VP37_boundedError(pump, 1500.0f));
+  TEST_ASSERT_EQUAL_FLOAT(-kTopErrorLimit, VP37_boundedError(pump, -1500.0f));
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, VP37_boundedError(pump, 100.0f));
+
+  // A moving target is tracked with the whole error.
+  pump->pid.standingBlend = 0.0f;
+  TEST_ASSERT_EQUAL_FLOAT(1500.0f, VP37_boundedError(pump, 1500.0f));
+}
+
+void test_vp37_feedback_lead_acts_on_the_newest_sample_inside_the_bound(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->pid.standingBlend = 1.0f;
+  pump->pid.effectiveKp = VP37_PID_KP;
+  pump->pid.error = 100;
+  pump->feedback.leadHz = 40;
+
+  // The lower stroke keeps the filtered position, and so does a moving target.
+  placeDemandAt(pump, 50.0f);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, VP37_feedbackLead(pump));
+  placeDemandAt(pump, 88.0f);
+  pump->pid.standingBlend = 0.0f;
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, VP37_feedbackLead(pump));
+  pump->pid.standingBlend = 1.0f;
+
+  // The unfiltered position runs 40 Hz ahead: less command, by Kp times that.
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, -VP37_PID_KP * 40.0f,
+                           VP37_feedbackLead(pump));
+  pump->feedback.leadHz = -40;
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, VP37_PID_KP * 40.0f, VP37_feedbackLead(pump));
+
+  pump->feedback.leadWeight = 0.5f;
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, VP37_PID_KP * 20.0f, VP37_feedbackLead(pump));
+  pump->feedback.leadWeight = 0.0f;
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, VP37_feedbackLead(pump));
+
+  // Upper stroke: a saturated error leaves nothing for the newest sample to
+  // add, and one near the bound is completed up to it, never past it.
+  pump->feedback.leadWeight = 1.0f;
+  placeDemandAt(pump, 95.0f);
+  pump->pid.error = (int32_t)kTopErrorLimit + 700;
+  pump->feedback.leadHz = 50;
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, VP37_feedbackLead(pump));
+  pump->pid.error = (int32_t)kTopErrorLimit - 20;
+  pump->feedback.leadHz = -50;
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, VP37_PID_KP * 20.0f, VP37_feedbackLead(pump));
+}
+
+static void processFastSample(VP37Pump *pump, adjustometer_feedback_t &sample,
+                              uint32_t &us, int16_t position,
+                              int32_t rawAheadHz) {
+  us += 5000U;
+  hal_mock_set_micros(us);
+  hal_mock_set_millis(us / 1000U);
+  sample.number++;
+  sample.measuredUs = us;
+  sample.pulseHz = position;
+  sample.baselineHz = 34000U;
+  sample.filteredHz = 34000U - (uint32_t)position;
+  // The frequency falls as the position rises.
+  sample.rawHz = (uint32_t)((int32_t)sample.filteredHz - rawAheadHz);
+  injectFastAdjustometer(sample);
+  VP37_process(pump);
+}
+
+void test_vp37_process_puts_the_filter_lag_into_the_command_and_its_limits(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  setVP37AdjustometerFastFeedback(true);
+  adjustometer_feedback_t sample = {};
+  sample.voltage = 144;
+  sample.fuelTemp = 50;
+  uint32_t us = 100000U;
+  VP37_setPositionDemandPercentage(pump, 88);
+  for (uint32_t i = 0U; i < 300U; i++) {
+    processFastSample(pump, sample, us, 8000, 0);
+  }
+  TEST_ASSERT_TRUE(pump->vp37Initialized);
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  TEST_ASSERT_EQUAL_INT32(0, pump->feedback.leadHz);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.feedbackLead);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, pump->pid.effectiveKp);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, pump->pid.standingBlend);
+
+  // The ripple of a standing actuator stays inside the dead zone.
+  processFastSample(pump, sample, us, 8000,
+                    (int32_t)VP37_FEEDBACK_LEAD_DEADBAND_HZ - 10);
+  TEST_ASSERT_EQUAL_INT32(0, pump->feedback.leadHz);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.feedbackLead);
+
+  // The newest sample is 60 Hz further ahead than the dead zone reaches.
+  processFastSample(pump, sample, us, 8000,
+                    (int32_t)VP37_FEEDBACK_LEAD_DEADBAND_HZ + 60);
+  TEST_ASSERT_EQUAL_INT32(60, pump->feedback.leadHz);
+  TEST_ASSERT_EQUAL_INT32(8000, pump->feedback.position);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, -VP37_PID_KP * 60.0f, pump->pid.feedbackLead);
+  TEST_ASSERT_FLOAT_WITHIN(1e-3f,
+                           pump->feedforward.pwm + pump->pid.correction +
+                               pump->pid.feedbackLead,
+                           pump->output.pwmValue);
+  // The correction gives up exactly the authority the lead term uses.
+  const float scale = pump->supply.correction * pump->thermal.scale;
+  const float upperCommand = (float)VP37_PWM_MAX / scale;
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-2f,
+      fminf(pump->pid.positiveLimit, upperCommand - pump->feedforward.pwm) -
+          pump->currentControl.correctionPwm - pump->pid.feedbackLead,
+      pump->pid.upperLimit);
+
+  // A zero-held reading carries no lag to act on.
+  VP37_setPositionDemandPercentage(pump, 30);
+  processFastSample(pump, sample, us, 0, 60);
+  TEST_ASSERT_EQUAL_INT32(0, pump->feedback.leadHz);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.feedbackLead);
+}
+
+void test_vp37_loop_acts_on_the_bounded_error_in_the_upper_stroke(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  uint32_t ms = 0U;
+  VP37_setPositionDemandPercentage(pump, 100);
+  // The actuator stays far below while the demand reaches the top.
+  for (uint32_t i = 0U; i < 400U; i++) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(5000, 144, 29, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.desired);
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax - 5000, pump->pid.error);
+  TEST_ASSERT_FLOAT_WITHIN(1e-3f, VP37_PID_KP * kTopGain * kTopErrorLimit,
+                           pump->pid.terms.proportional);
+}
+
+void test_vp37_moving_target_keeps_the_plain_loop_at_the_top(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  uint32_t ms = 0U;
+  // The target changes every other step, as a cyclic or a pedal demand does,
+  // and never stands for VP37_TARGET_STABLE_MS.
+  for (uint32_t i = 0U; i < 400U; i++) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    VP37_setPositionDemandPercentage(pump, ((i / 2U) % 2U) ? 97.0f : 99.0f);
+    injectAdjRegisterData(5000, 144, 29, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.standingBlend);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, pump->pid.effectiveKp);
+  TEST_ASSERT_FLOAT_WITHIN(1e-2f, VP37_PID_KP * (float)pump->pid.error,
+                           pump->pid.terms.proportional);
+  TEST_ASSERT_GREATER_THAN_INT32((int32_t)kTopErrorLimit, pump->pid.error);
 }
 
 static void holdAt(VP37Pump *pump, uint32_t &ms, uint32_t count,
@@ -3332,6 +3602,7 @@ int main(void) {
   RUN_TEST(test_vp37_measured_drive_rejects_stale_and_mismatched_captures);
   RUN_TEST(test_vp37_measured_drive_consumes_each_capture_once);
   RUN_TEST(test_vp37_measured_drive_holds_through_supply_transients);
+  RUN_TEST(test_vp37_measured_drive_ignores_captures_of_the_coil_onset);
   RUN_TEST(test_vp37_measured_drive_detects_accumulated_small_voltage_changes);
   RUN_TEST(
       test_vp37_measured_drive_retains_estimate_through_a_long_supply_sweep);
@@ -3339,6 +3610,13 @@ int main(void) {
   RUN_TEST(test_vp37_measured_drive_does_not_apply_silence_as_heating_time);
   RUN_TEST(test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots);
   RUN_TEST(test_vp37_integral_deadband_widens_only_in_the_upper_stroke);
+  RUN_TEST(test_vp37_proportional_gain_rises_only_at_the_top_of_the_stroke);
+  RUN_TEST(test_vp37_error_bound_binds_only_in_the_upper_stroke);
+  RUN_TEST(test_vp37_feedback_lead_acts_on_the_newest_sample_inside_the_bound);
+  RUN_TEST(
+      test_vp37_process_puts_the_filter_lag_into_the_command_and_its_limits);
+  RUN_TEST(test_vp37_loop_acts_on_the_bounded_error_in_the_upper_stroke);
+  RUN_TEST(test_vp37_moving_target_keeps_the_plain_loop_at_the_top);
   RUN_TEST(
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
   RUN_TEST(test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump);

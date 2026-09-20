@@ -34,7 +34,7 @@ extern const int32_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS];
  * 100; the top motion value is the scale the runtime boost is a ratio to. */
 extern const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS];
 
-// ── VP37 integral authority and dead zone along the stroke ───────────────────
+// ── VP37 stroke tapers: integral authority, gain and dead zone ───────────────
 #define VP37_STROKE_TAPER_KNOTS 3U
 #define VP37_STROKE_TAPER_COLUMNS 2U
 
@@ -43,6 +43,27 @@ extern const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS];
  * the top value at full demand, where the stroke loses position authority. */
 extern const float VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
                                           [VP37_STROKE_TAPER_COLUMNS];
+
+/** @brief Proportional-gain multiplier along the stroke, same layout as the
+ * other stroke tapers: {demand [%], multiplier}. The holding force drops in
+ * two short steps near the top of the stroke; inside them a change of position
+ * asks for less command, not more, and only the proportional gain holds the
+ * actuator still. The base gain equals that slope, so the top needs more. */
+extern const float VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS]
+                                             [VP37_STROKE_TAPER_COLUMNS];
+
+/** @brief Share of the Adjustometer filter lag the proportional path takes
+ * back, same layout: {demand [%], share 0..1}. Zero below the taper start:
+ * there the loop is calm as it is, and the unfiltered sample would only bring
+ * the actuator's PWM ripple into the command. */
+extern const float VP37_FEEDBACK_LEAD_MAP[VP37_STROKE_TAPER_KNOTS]
+                                         [VP37_STROKE_TAPER_COLUMNS];
+
+/** @brief Largest position error the loop acts on, same layout: {demand [%],
+ * limit [Hz]}. Far above any tracking lag below the taper start, then down to
+ * the span the upper stroke can take without reaching its end stop. */
+extern const float VP37_PROPORTIONAL_ERROR_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
+                                                    [VP37_STROKE_TAPER_COLUMNS];
 
 /** @brief Integration dead zone, one row per knot in ascending demand:
  * {demand [%], zone [Hz]}. The base below the taper start, widening to the
