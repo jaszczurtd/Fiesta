@@ -300,6 +300,57 @@ void test_scan_reduce_keeps_supply_and_current_validity_separate(void) {
   TEST_ASSERT_EQUAL_FLOAT(0.0f, result.supplyVolts);
 }
 
+void test_scan_latch_tracks_falling_edges_when_duty_changes(void) {
+  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  VP37_currentSenseInit();
+  const uint32_t previousFall = 10U;
+  const uint32_t firstFall = previousFall + kPeriodFrames;
+  const uint32_t secondFall = firstFall + kPeriodFrames;
+  const uint32_t firstOn = (kPeriodFrames * 3U) / 10U;
+  const uint32_t secondOn = (kPeriodFrames * 4U) / 10U;
+  const uint32_t firstRise = firstFall - firstOn;
+  const uint32_t secondRise = secondFall - secondOn;
+  for (uint32_t k = 0U; k < kBlockFrames; ++k) {
+    // Physical ON is late in each cycle. Raising duty advances the next ON
+    // rise, while hardware wrap and the two falling edges stay one period
+    // apart.
+    const bool on = (k < previousFall) ||
+                    ((k >= firstRise) && (k < firstFall)) ||
+                    ((k >= secondRise) && (k < secondFall));
+    s_block[k * kScanPins] = (uint16_t)(16U + (on ? ampsToRaw(4.0f) : 0U));
+    s_block[k * kScanPins + 1U] = 1234U;
+    s_block[k * kScanPins + 2U] = on ? 3000U : 3100U;
+  }
+  const uint32_t start = UINT32_MAX - 1000U;
+  VP37CurrentScanBlock view = blockView(start);
+  VP37CurrentPulseResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_TRUE(result.waveformValid);
+  TEST_ASSERT_TRUE(result.supplyValid);
+  TEST_ASSERT_TRUE(result.latchValid);
+  TEST_ASSERT_EQUAL_UINT32(start + framesToUs(previousFall), result.latchUs);
+  TEST_ASSERT_EQUAL_UINT32(framesToUs(kPeriodFrames), result.latchPeriodUs);
+  TEST_ASSERT_EQUAL_UINT32(start + framesToUs(firstRise), result.cycleStartUs);
+  TEST_ASSERT_EQUAL_UINT32(framesToUs(secondRise - firstRise), result.periodUs);
+  TEST_ASSERT_TRUE(result.periodUs < result.latchPeriodUs);
+  const int32_t expected =
+      (int32_t)(((uint64_t)firstOn * PWM_RESOLUTION + kPeriodFrames / 2U) /
+                kPeriodFrames);
+  TEST_ASSERT_EQUAL_INT32(expected, result.latchedPwm);
+  TEST_ASSERT_TRUE(result.pwmCommand > result.latchedPwm);
+
+  // A clipped history may still supply the legacy rise-to-rise observation,
+  // but without the preceding fall its command ownership is unknown.
+  const uint32_t removed = previousFall + 1U;
+  view.samples += removed * kScanPins;
+  view.frames -= removed;
+  view.startUs += framesToUs(removed);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &result));
+  TEST_ASSERT_TRUE(result.waveformValid);
+  TEST_ASSERT_TRUE(result.supplyValid);
+  TEST_ASSERT_FALSE(result.latchValid);
+}
+
 void test_scan_reduce_ignores_single_frame_spikes_and_dropouts(void) {
   hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
   VP37_currentSenseInit();
@@ -607,6 +658,7 @@ int main(void) {
   RUN_TEST(test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges);
   RUN_TEST(test_scan_reduce_measures_the_newest_full_period);
   RUN_TEST(test_scan_reduce_keeps_supply_and_current_validity_separate);
+  RUN_TEST(test_scan_latch_tracks_falling_edges_when_duty_changes);
   RUN_TEST(test_scan_reduce_ignores_single_frame_spikes_and_dropouts);
   RUN_TEST(test_scan_collect_takes_each_mock_block_once);
   RUN_TEST(

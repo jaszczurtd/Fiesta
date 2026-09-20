@@ -19,7 +19,7 @@ void VP37_showDebug(VP37Pump *self) {
     const char *const activeTest = testsActiveName();
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:80 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:82 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -29,7 +29,8 @@ void VP37_showDebug(VP37Pump *self) {
         "vlead:%.3f vdot:%.2f pwm_hz:%u "
         "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu rhold:%u "
         "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
-        "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu",
+        "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu "
+        "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu",
         self->pid.kp, self->pid.ki, self->pid.kd, self->pid.topKd,
         self->pid.effectiveKd, self->pid.tf, self->pidTimeUpdate,
         self->feedback.adjustMin, self->feedback.adjustMax,
@@ -60,7 +61,11 @@ void VP37_showDebug(VP37Pump *self) {
         self->feedforward.mapTrim[10], self->feedforward.motionBoostUp,
         self->feedforward.motionBoostDown, self->scan.running ? 1U : 0U,
         (unsigned long)self->scan.frameNs, (unsigned long)self->scan.blocks,
-        (unsigned long)self->scan.gaps);
+        (unsigned long)self->scan.gaps, self->currentControl.enabled ? 1U : 0U,
+        self->currentControl.active ? 1U : 0U, self->currentControl.targetAmps,
+        self->currentControl.sampleTargetAmps, self->currentControl.errorAmps,
+        self->currentControl.correctionPwm,
+        (unsigned long)self->currentControl.sampleAgeUs);
     adjustometer_reading_t telemetry;
     const bool extendedFresh = getVP37AdjustometerExtendedTelemetry(&telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "
@@ -84,6 +89,8 @@ void VP37_showDebug(VP37Pump *self) {
  *             95th percentile; Ipk the raw ON-phase maximum, spike-prone
  *   per, on   measured rise-to-rise period and ON time [us]
  *   duty      PWM command reconstructed from on / per
+ *   latch, lp falling edge before ON and its fall-to-fall period [us]
+ *   lduty, lv duty reconstructed from on / lp and valid latch timing
  *   n, gn     ON-phase samples acquired and left after the 60 us edge guards
  *   clip      samples that hit the ADC end stop
  *   zero, zv  shunt zero [ADC code] and whether it is valid
@@ -93,13 +100,18 @@ void VP37_showDebug(VP37Pump *self) {
  *   blk, gaps blocks reduced since start and blocks the loop never saw
  *   gl        glitches: excursions across the gate hysteresis that ended
  *             before the confirmation time, counted over the whole block;
- *             a gate-detection quality figure, read by nothing else */
+ *             a gate-detection quality figure, read by nothing else
+ *   ctar/cref newest/historical current target [A]; cerr historical error [A]
+ *   cpwm      applied current correction [nominal PWM counts]
+ *   cuse/cage matching current observation usable / ON-midpoint age [us] */
 void VP37_showCurrentPulse(const VP37Pump *self) {
   const VP37CurrentPulseResult *result = &self->scan.cycleResult;
   deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
       "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
       "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
-      "Vavg:%.4f Vok:%u blk:%lu gaps:%lu gl:%lu",
+      "Vavg:%.4f Vok:%u blk:%lu gaps:%lu gl:%lu "
+      "ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cuse:%u cage:%lu "
+      "latch:%lu lp:%lu lduty:%ld lv:%u",
       (unsigned long)result->cycleStartUs, (unsigned long)self->controlSequence,
       (unsigned long)self->controlLastUs, (long)self->output.finalPWM,
       (long)self->feedback.position, (long)self->demand.desired,
@@ -111,7 +123,13 @@ void VP37_showCurrentPulse(const VP37Pump *self) {
       result->zeroValid ? 1U : 0U, result->waveformValid ? 1U : 0U,
       (int)self->scan.cycleResultStatus, result->supplyVolts,
       result->supplyValid ? 1U : 0U, (unsigned long)self->scan.blocks,
-      (unsigned long)self->scan.gaps, (unsigned long)result->glitches);
+      (unsigned long)self->scan.gaps, (unsigned long)result->glitches,
+      self->currentControl.targetAmps, self->currentControl.sampleTargetAmps,
+      self->currentControl.errorAmps, self->currentControl.correctionPwm,
+      self->currentControl.active ? 1U : 0U,
+      (unsigned long)self->currentControl.sampleAgeUs,
+      (unsigned long)result->latchUs, (unsigned long)result->latchPeriodUs,
+      (long)result->latchedPwm, result->latchValid ? 1U : 0U);
 }
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED

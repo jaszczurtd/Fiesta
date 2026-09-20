@@ -89,11 +89,15 @@ engine state) live in one `ecu_context_t` in
 [`ecuContext.h`](src/ECU/ecuContext.h). CAN, sensors, DTC storage, GPS, OBD,
 and the configurator session keep their state in file-local structs.
 
-VP37 accepts every normal position request through one API:
-`hal_status_t VP37_setPositionDemand(VP37Pump *pump, float percent)`, with a
-0-100% position demand. Driver input, engine control, and bench tests all use
-the same position ramp, feedforward, and PID. The controller has no input-source
-mode, source-specific setter, filter-mode flag, or alternate position path.
+VP37 takes a position request in one of two units:
+`hal_status_t VP37_setPositionDemandPercentage(VP37Pump *pump, float percent)`
+for a 0-100% demand across the calibrated stroke, and
+`hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)` for
+raw feedback counts, bounded by `VP37_getPositionDemandMinValue()` and
+`VP37_getPositionDemandMaxValue()`. Both write the same demand, so driver
+input, engine control, and bench tests share one position ramp, feedforward,
+and PID. The unit is the only difference: the controller has no input-source
+mode, source-specific behaviour, filter-mode flag, or alternate position path.
 Emergency stop and calibration remain separate operations.
 
 Analog input conditioning belongs to `sensors.c`. A 10 ms update preserves
@@ -133,6 +137,42 @@ age at the control step, in microseconds), `vlead` (prediction offset in volts
 before the 7 V floor), `vdot` (voltage slope in V/s), and `rhold` (resistance
 estimation paused by a supply change).
 
+A bounded proportional current loop corrects the position command before
+the supply and thermal multipliers. Its target is the nominal feedforward
+plus position-PID output expressed as guarded ON-phase current. The conversion
+preserves the resistance estimator's raw-voltage reference and the local
+divider calibration. The source shunt does not measure recirculation current
+while the MOSFET is off, so this target is not full-period coil current.
+
+The inverted drive conducts at the end of each hardware PWM period. Each
+observation is matched to the command written before the preceding current
+falling edge, where the PWM counter wraps and latches its compare register.
+The ADC history retains 3.25 PWM periods to include that preceding edge at
+every phase of the scan.
+Writes within 100 us of that edge are ambiguous and rejected, as are
+duty mismatches, invalid captures and ON-midpoint ages of 25 ms or more.
+The proportional gain is 0.35 in equivalent nominal-command units; correction
+is limited to ±40 nominal PWM counts and changes at most 1000 counts/s.
+Position-PID limits account for this correction before stepping the PID.
+Repeated observations do not recompute the error; unavailable feedback slews
+the correction to zero, and rest or stop clears it immediately. There is no
+additional current integrator.
+
+Telemetry revision 81 exposes `cen` (enabled), `cuse` (matched fresh capture),
+`ctar` (latest current target, A), `cref` (historical target, A), `cerr`
+(historical target minus measured ON current, A), `cpwm` (applied nominal
+correction), and `cage` (ON-midpoint age, us). The current fields are also
+reported with IPULSE, alongside `latch`, `lp`, `lduty` and `lv` for the
+reconstructed latch time, period, duty and validity. Bench builds accept
+`C0`/`C1` to compare feedback off/on
+through the same position API. Electrical-model tests do not establish
+mechanical stability; upper-position holds and motion need hardware validation.
+
+Upward motion assistance retains its full value through 75% of the calibrated
+stroke, fades linearly to zero at 85%, and remains off above that point.
+This limits acceleration into the sensitive upper region. The holding map,
+downward assistance, demand ramp and position API retain their existing roles.
+
 | File | Responsibility |
 |---|---|
 | [`start.c`](src/ECU/start.c) | start-up order, soft-timer table, watchdog, both core loops |
@@ -143,11 +183,12 @@ estimation paused by a supply change).
 | [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
 | [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
-| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, one position-demand API, and the control cycle that calls the units below |
+| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
 | [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position and the calibration sweep |
 | [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
 | [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
 | [`vp37_current.c`](src/ECU/vp37_current.c) | coil current measured on the shunt |
+| [`vp37_current_control.c`](src/ECU/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
 | [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0 |
 | [`turbo.c`](src/ECU/turbo.c) | boost control from manifold pressure |
 | [`engineMaps.c`](src/ECU/engineMaps.c) | all shaping tables: N75 duty, VP37 holding map, integral and dead-zone tapers |

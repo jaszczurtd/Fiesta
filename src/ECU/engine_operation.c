@@ -251,7 +251,7 @@ void engineOperation_process(engineOperation *self) {
   demand =
       hal_constrain(demand, (float)VP37_PERCENT_MIN, (float)VP37_PERCENT_MAX);
 
-  (void)VP37_setPositionDemand(pump, demand);
+  (void)VP37_setPositionDemandPercentage(pump, demand);
 }
 
 void engineOperation_showDebug(const engineOperation *self) {

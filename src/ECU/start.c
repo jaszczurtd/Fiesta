@@ -532,8 +532,8 @@ static void runCore1(void) {
     engineOperation_process(&s_ctx.engineOp);
     engineOperation_showDebug(&s_ctx.engineOp);
 #else
-    (void)VP37_setPositionDemand(&s_ctx.injectionPump,
-                                 getDriverDemandPercent());
+    (void)VP37_setPositionDemandPercentage(&s_ctx.injectionPump,
+                                           getDriverDemandPercent());
 #endif
   }
   VP37_process(&s_ctx.injectionPump);

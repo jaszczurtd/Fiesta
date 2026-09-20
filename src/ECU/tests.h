@@ -28,6 +28,8 @@ typedef enum {
   START_TEST_CYCLIC,   /**< Deterministic 0-100-0 ramps over four step sizes. */
   START_TEST_RANDOM,   /**< Random positions, each held for a fixed time. */
   START_TEST_MANUAL,   /**< Demand held at the value last set by command S. */
+  START_TEST_TOPSTEPS, /**< Staircase through the upper travel and back to 0. */
+  START_TEST_TOPZERO,  /**< Same thresholds, each approached from rest. */
   START_TEST_COUNT,    /**< Number of registered tests. */
   START_TEST_ALL       /**< Every sequenced test, one after another. */
 } ecu_test_id_t;

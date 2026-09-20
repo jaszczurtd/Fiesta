@@ -127,6 +127,16 @@ static bool VP37_currentPeriodPlausible(uint32_t periodUs) {
   return ((float)periodUs >= lowPeriod) && ((float)periodUs <= highPeriod);
 }
 
+static int32_t VP37_currentDutyFromTime(uint32_t onTimeUs, uint32_t periodUs) {
+  uint64_t pwm = ((uint64_t)onTimeUs * (uint64_t)PWM_RESOLUTION) +
+                 ((uint64_t)periodUs / 2U);
+  pwm /= periodUs;
+  if (pwm > (uint64_t)PWM_RESOLUTION) {
+    pwm = PWM_RESOLUTION;
+  }
+  return (int32_t)pwm;
+}
+
 hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
                                       uint32_t count, uint32_t cycleStartUs,
                                       uint32_t onTimeUs, uint32_t periodUs,
@@ -188,13 +198,7 @@ hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
   out->meanAmps = VP37_currentRawToAmps(meanRaw);
   out->p95Amps = VP37_currentRawToAmps(p95Raw);
 
-  uint64_t pwm = ((uint64_t)onTimeUs * (uint64_t)PWM_RESOLUTION) +
-                 ((uint64_t)periodUs / 2U);
-  pwm /= periodUs;
-  if (pwm > (uint64_t)PWM_RESOLUTION) {
-    pwm = PWM_RESOLUTION;
-  }
-  out->pwmCommand = (int32_t)pwm;
+  out->pwmCommand = VP37_currentDutyFromTime(onTimeUs, periodUs);
   out->waveformValid = out->zeroValid && (out->clippedSamples == 0U) &&
                        VP37_currentPeriodPlausible(periodUs);
   return HAL_OK;
@@ -263,8 +267,14 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   uint32_t glitches = 0U;
   bool haveRise = false;
   bool haveFall = false;
+  bool havePreviousFall = false;
+  bool riseHasLatch = false;
+  bool periodHasLatch = false;
   uint32_t rise = 0U;
   uint32_t fall = 0U;
+  uint32_t previousFall = 0U;
+  uint32_t riseLatch = 0U;
+  uint32_t periodLatch = 0U;
   bool found = false;
   uint32_t periodRise = 0U;
   uint32_t periodFall = 0U;
@@ -297,15 +307,22 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
         periodRise = rise;
         periodFall = fall;
         periodEnd = edge;
+        periodHasLatch = riseHasLatch;
+        periodLatch = riseLatch;
       }
       rise = edge;
       haveRise = true;
       haveFall = false;
-    } else if (haveRise) {
-      fall = edge;
-      haveFall = true;
+      riseHasLatch = havePreviousFall;
+      riseLatch = previousFall;
     } else {
-      // A fall before any rise: the block started inside an ON phase.
+      if (haveRise) {
+        fall = edge;
+        haveFall = true;
+      }
+      // The first fall also anchors a later ON phase when history started ON.
+      previousFall = edge;
+      havePreviousFall = true;
     }
   }
   out->glitches = glitches;
@@ -366,6 +383,20 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
     out->waveformValid = false;
   }
   out->glitches = glitches;
+
+  // With the active-low driver, ON occupies the end of the hardware period.
+  // Rise-to-rise timing varies with duty; only falls identify PWM latches.
+  if (periodHasLatch) {
+    out->latchUs =
+        block->startUs + VP37_currentFramesToUs(periodLatch, block->frameNs);
+    out->latchPeriodUs =
+        VP37_currentFramesToUs(periodFall - periodLatch, block->frameNs);
+    out->latchValid = VP37_currentPeriodPlausible(out->latchPeriodUs) &&
+                      (onTimeUs < out->latchPeriodUs);
+    if (out->latchValid) {
+      out->latchedPwm = VP37_currentDutyFromTime(onTimeUs, out->latchPeriodUs);
+    }
+  }
 
   // The supply mean has its own sample budget and quality rule, so a current
   // result that is rejected must not discard it.

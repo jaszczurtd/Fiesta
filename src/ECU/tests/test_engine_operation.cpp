@@ -99,7 +99,8 @@ void test_fractional_engine_driver_demand_matches_common_position_entry(void) {
   TEST_ASSERT_EQUAL_FLOAT(demand, ctx->injectionPump.demand.requestedPercent);
   VP37Pump direct;
   setupPumpForEngineOperation(&direct);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemand(&direct, demand));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setPositionDemandPercentage(&direct, demand));
   TEST_ASSERT_EQUAL_INT32(direct.demand.target,
                           ctx->injectionPump.demand.target);
 }

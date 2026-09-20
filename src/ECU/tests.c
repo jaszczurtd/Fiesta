@@ -2,7 +2,6 @@
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 
-#include "dtcManager.h"
 #include "ecuContext.h"
 #include "test_helpers.h"
 #include "vp37.h"
@@ -23,17 +22,19 @@ typedef struct {
                                        once, which is how a one-shot ends. */
 } ecu_test_t;
 
-static void startDtcInjection(void);
-
 static const ecu_test_t s_tests[] = {
     {START_TEST_DTC, "dtc", "inject one diagnostic trouble code", false, true,
-     startDtcInjection, NULL},
+     testHelpersDtcStart, NULL},
     {START_TEST_CYCLIC, "cyclic", "0-100-0 ramps over four step sizes", true,
      true, testHelpersCyclicStart, testHelpersCyclicStep},
     {START_TEST_RANDOM, "random", "random positions, each held for a while",
      true, true, testHelpersRandomStart, testHelpersRandomStep},
     {START_TEST_MANUAL, "manual", "hold the demand of command S", true, false,
      testHelpersManualStart, testHelpersManualStep},
+    {START_TEST_TOPSTEPS, "top", "75-85.5-90.5-95-0 % steps, two seconds each",
+     true, true, testHelpersTopStepsStart, testHelpersTopStepsStep},
+    {START_TEST_TOPZERO, "topzero", "the same thresholds, each from rest", true,
+     true, testHelpersTopZeroStart, testHelpersTopZeroStep},
 };
 
 static bool s_initialized = false;
@@ -60,20 +61,6 @@ static const ecu_test_t *findByName(const char *name) {
 }
 
 //=============================================================================
-// One-shot fixtures
-//=============================================================================
-
-/**
- * @brief Raise one diagnostic trouble code so the storage path can be seen.
- */
-static void startDtcInjection(void) {
-  const uint16_t code = (uint16_t)DTC_PCF8574_COMM_FAIL;
-  dtcManagerSetActive(code, true);
-  deb("TEST: DTC injected: 0x%04X (%s)", (unsigned)code,
-      dtcManagerGetName(code));
-}
-
-//=============================================================================
 // Activation
 //=============================================================================
 
@@ -95,7 +82,8 @@ static void deactivate(void) {
     return;
   }
   if (entry->drivesDemand) {
-    (void)VP37_setPositionDemand(&getECUContext()->injectionPump, 0.0f);
+    (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
+                                           0.0f);
   }
   s_active = START_TEST_NONE;
   deb("TEST: %s stopped", entry->name);
@@ -323,7 +311,8 @@ bool tickTests(void) {
   }
   const bool owned = entry->drivesDemand;
   if (owned) {
-    (void)VP37_setPositionDemand(&getECUContext()->injectionPump, demand);
+    (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
+                                           demand);
   }
   if (finished) {
     deactivate();
