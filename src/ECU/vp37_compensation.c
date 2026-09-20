@@ -17,6 +17,7 @@
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt);
 static float VP37_predictSupplyVoltage(VP37Pump *self, float measuredVolts);
 static void VP37_trackDriveSupply(VP37Pump *self);
+static void VP37_trackDriveOnset(VP37Pump *self);
 
 hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
   self->scan.running = hal_adc_scan_is_running();
@@ -214,10 +215,12 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
  * @note Coil self-heating moves the required command by several percent while
  * the fuel temperature barely changes, so the measured ratio replaces the
  * fuel-temperature model. A rejected or stale capture keeps the last value and
- * never contributes zero ohms.
+ * never contributes zero ohms. The estimate learns on a quiet rail and only
+ * once the coil current has built up; earlier captures still keep it alive.
  */
 void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   VP37_trackDriveSupply(self);
+  VP37_trackDriveOnset(self);
   // A ready estimate keeps scaling the command until it goes stale; motion
   // rejects most captures, and flipping back to the model on every rejected
   // cycle stepped the command by the whole thermal difference.
@@ -270,7 +273,15 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   // Healthy captures keep the retained estimate alive during a long supply
   // sweep, even while their electrical transient must not train resistance.
   self->thermal.driveObservedMs = hal_millis();
-  if (self->thermal.driveVoltageSettled) {
+  /* TEMP-VALIDATION begin */
+  {
+    extern float g_vp37Validation[6];
+    if (g_vp37Validation[4] < 0.5f) {
+      self->thermal.driveOnsetPassed = true;
+    }
+  }
+  /* TEMP-VALIDATION end */
+  if (self->thermal.driveVoltageSettled && self->thermal.driveOnsetPassed) {
     // Start from the reference: a first capture during motion can reconstruct
     // a resistance that does not belong to the coil.
     if (!(self->thermal.driveResistance > 0.0f)) {
@@ -313,6 +324,19 @@ static void VP37_trackDriveSupply(VP37Pump *self) {
   self->thermal.driveVoltageSettled =
       hal_elapsed_u32(hal_millis(), self->thermal.driveVoltageChangedMs,
                       VP37_DRIVE_VOLTAGE_SETTLE_MS);
+}
+
+/** @brief Follow how long the coil has been driven inside the capture range.
+ * A release or a command below the range restarts the onset time. */
+static void VP37_trackDriveOnset(VP37Pump *self) {
+  const bool driven = self->output.finalPWM >= VP37_DRIVE_MIN_PWM;
+  if (driven && !self->thermal.driveOn) {
+    self->thermal.driveOnSinceMs = hal_millis();
+  }
+  self->thermal.driveOn = driven;
+  self->thermal.driveOnsetPassed =
+      driven && hal_elapsed_u32(hal_millis(), self->thermal.driveOnSinceMs,
+                                VP37_DRIVE_ONSET_MS);
 }
 
 /**

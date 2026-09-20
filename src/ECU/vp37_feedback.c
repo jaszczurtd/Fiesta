@@ -30,6 +30,20 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
     self->feedback.fresh = !reading.fastFeedback || reading.feedbackFresh;
     self->feedback.rawHz = reading.rawHz;
     self->feedback.filteredHz = reading.signalHz;
+    // The position falls as the frequency rises, so the unfiltered position
+    // leads by filtered minus raw. A zero-held reading is the Adjustometer's
+    // own decision about rest and carries no lag worth acting on.
+    const int32_t leadHz =
+        (reading.fastFeedback && reading.feedbackFresh && (reading.pulseHz > 0))
+            ? ((int32_t)reading.signalHz - (int32_t)reading.rawHz)
+            : 0;
+    // Continuous dead zone: the ripple of a standing actuator stays out, a
+    // swing keeps its size minus the zone and never steps.
+    /* TEMP-VALIDATION begin */
+    extern float g_vp37Validation[6];
+    const int32_t leadZone = (int32_t)g_vp37Validation[5];
+    /* TEMP-VALIDATION end */
+    self->feedback.leadHz = leadHz - hal_constrain(leadHz, -leadZone, leadZone);
     self->feedback.sampleNumber = reading.sampleNumber;
     self->feedback.sampleUs = reading.measuredUs;
     self->feedback.ageUs = reading.ageUs;
@@ -38,6 +52,7 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
     setGlobalValue(F_VOLTS, reading.voltageRaw * 0.1f);
   } else {
     self->feedback.fresh = false;
+    self->feedback.leadHz = 0;
     if (!self->feedback.commFailed) {
       self->feedback.commFailed = true;
       self->feedback.commLostSince = hal_millis();

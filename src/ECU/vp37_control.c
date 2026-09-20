@@ -17,6 +17,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   self->pid.ki = ki;
   self->pid.kd = kd;
   self->pid.effectiveKd = kd;
+  self->pid.effectiveKp = kp;
   hal_pid_controller_set_kp(self->pid.controller, kp);
   hal_pid_controller_set_ki(self->pid.controller, ki);
   hal_pid_controller_set_kd(self->pid.controller, kd);
@@ -25,6 +26,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
     VP37_resetCurrentControl(self);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.topDBlend = 0.0f;
+    self->pid.standingBlend = 0.0f;
     self->pid.integralHold = false;
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
@@ -104,6 +106,73 @@ float VP37_computePositiveCorrectionLimit(float fuelTempC,
 
   return hal_constrain(positiveLimit, VP37_PID_CORR_LIMIT_POSITIVE_COLD,
                        VP37_PID_CORR_LIMIT_POSITIVE_MAX);
+}
+
+/* TEMP-VALIDATION begin: X0=0 rules off, X1=1 one-sided bound, X2 gain scale
+ * override (0 keeps the table), X4=0 resistance learns from the onset too, X5
+ * lead dead zone [Hz]. */
+float g_vp37Validation[6] = {1.0f, 0.0f, 0.0f,
+                             0.0f, 1.0f, VP37_FEEDBACK_LEAD_DEADBAND_HZ};
+/* TEMP-VALIDATION end */
+
+void VP37_updateStandingBlend(VP37Pump *self, bool standingTarget) {
+  const float dt = (float)self->pidDtUs * 0.000001f;
+  const float alpha = dt / (VP37_STANDING_BLEND_S + dt);
+  self->pid.standingBlend = hal_math_low_pass(
+      alpha, standingTarget ? 1.0f : 0.0f, self->pid.standingBlend);
+  /* TEMP-VALIDATION begin */
+  if (g_vp37Validation[0] < 0.5f) {
+    self->pid.standingBlend = 0.0f;
+  }
+  /* TEMP-VALIDATION end */
+}
+
+/** @brief Value of a stroke table at the demand, eased in by the blend from
+ * the table's first row. */
+static float VP37_standingTaper(const VP37Pump *self, const float *knots) {
+  const float base = knots[VP37_TAPER_COL_VALUE];
+  const float scheduled =
+      VP37_strokeTaper(knots, VP37_STROKE_TAPER_KNOTS,
+                       VP37_strokePercent(self, self->demand.desiredPosition));
+  return base + ((scheduled - base) * self->pid.standingBlend);
+}
+
+float VP37_proportionalGain(const VP37Pump *self) {
+  /* TEMP-VALIDATION begin */
+  if (g_vp37Validation[2] > 0.0f) {
+    const float full =
+        VP37_standingTaper(self, &VP37_PROPORTIONAL_GAIN_MAP[0U][0U]);
+    const float top = VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                                [VP37_TAPER_COL_VALUE];
+    return self->pid.kp *
+           (1.0f +
+            ((full - 1.0f) * (g_vp37Validation[2] - 1.0f) / (top - 1.0f)));
+  }
+  /* TEMP-VALIDATION end */
+  return self->pid.kp *
+         VP37_standingTaper(self, &VP37_PROPORTIONAL_GAIN_MAP[0U][0U]);
+}
+
+float VP37_boundedError(const VP37Pump *self, float error) {
+  const float limit =
+      VP37_standingTaper(self, &VP37_PROPORTIONAL_ERROR_LIMIT_MAP[0U][0U]);
+  /* TEMP-VALIDATION begin */
+  if (g_vp37Validation[1] > 0.5f) {
+    return fminf(error, limit);
+  }
+  /* TEMP-VALIDATION end */
+  return hal_constrain(error, -limit, limit);
+}
+
+float VP37_feedbackLead(const VP37Pump *self) {
+  // Bound both errors, then take the difference: once the filtered error
+  // saturates, the newest sample adds nothing until it is back inside.
+  const float error = (float)self->pid.error;
+  const float share = self->feedback.leadWeight *
+                      VP37_standingTaper(self, &VP37_FEEDBACK_LEAD_MAP[0U][0U]);
+  const float newest = error - (share * (float)self->feedback.leadHz);
+  return self->pid.effectiveKp *
+         (VP37_boundedError(self, newest) - VP37_boundedError(self, error));
 }
 
 /**

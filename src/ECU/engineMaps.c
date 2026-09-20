@@ -43,6 +43,42 @@ const float VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
                                        {100.0f, 45.0f}, // full demand
 };
 
+// Proportional-gain multiplier: unity up to the last stable stretch of the
+// stroke, then up to the value that keeps the actuator still inside the
+// holding-force steps around 90 and 95 % of travel. The rise starts above the
+// lower step on purpose: there the loop has no margin left for more gain, and
+// friction alone holds a settled position. Columns: demand [%], multiplier.
+const float VP37_PROPORTIONAL_GAIN_MAP[VP37_STROKE_TAPER_KNOTS]
+                                      [VP37_STROKE_TAPER_COLUMNS] = {
+                                          {0.0f, 1.0f},  // base gain
+                                          {91.0f, 1.0f}, // rise start
+                                          {95.0f, 1.6f}, // upper step and above
+};
+
+// Share of the feedback filter lag given back to the proportional path: none
+// across the lower stroke, all of it where the upper stroke needs the margin.
+// Columns: demand [%], share.
+const float VP37_FEEDBACK_LEAD_MAP[VP37_STROKE_TAPER_KNOTS]
+                                  [VP37_STROKE_TAPER_COLUMNS] = {
+                                      {0.0f, 0.0f},  // filtered position only
+                                      {75.0f, 0.0f}, // taper start
+                                      {85.0f, 1.0f}, // newest sample
+};
+
+// Error limit of the loop [Hz]: the first two rows are wider than the stroke,
+// so they never bind. From the taper start the limit closes to the last row,
+// so an approach from rest cannot lean on the actuator with a full stroke's
+// worth of lag while it crosses the holding-force steps.
+// Columns: demand [%], limit.
+const float VP37_PROPORTIONAL_ERROR_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
+                                             [VP37_STROKE_TAPER_COLUMNS] = {
+                                                 {0.0f, 10000.0f}, // free
+                                                 {75.0f,
+                                                  10000.0f}, // taper start
+                                                 {85.0f,
+                                                  300.0f}, // upper stroke
+};
+
 // Integration dead zone [Hz]: above the taper start the same command settles
 // hundreds of hertz apart and the same current holds very different
 // positions, so the zone widens to a band that covers the insensitive range.

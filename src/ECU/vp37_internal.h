@@ -60,6 +60,47 @@ void VP37_recordCurrentCommand(VP37Pump *self, float nominalPWM,
 
 // ── vp37_control.c ──────────────────────────────────────────────────────────
 float VP37_feedForward(VP37Pump *self, int32_t position);
+/**
+ * @brief Follow the target's standing state with the blend filter.
+ * @param self Non-NULL controller; pidDtUs supplies the elapsed time.
+ * @param standingTarget True once the target has stood for
+ * VP37_TARGET_STABLE_MS, whether or not the ramp has reached it.
+ * @note The upper-stroke rules scale with the result: gain multiplier, error
+ * bound and feedback lead. A moving target fades them out, so ramps and
+ * cyclic demand keep the plain loop.
+ */
+void VP37_updateStandingBlend(VP37Pump *self, bool standingTarget);
+/**
+ * @brief Proportional gain for the demanded position.
+ * @param self Non-NULL controller with a calibrated stroke.
+ * @return Base gain times the stroke multiplier in force [PWM/Hz].
+ */
+float VP37_proportionalGain(const VP37Pump *self);
+/**
+ * @brief Position error as the loop may act on it at the demanded position.
+ * @param self Non-NULL controller with a calibrated stroke.
+ * @param error Position error [Hz].
+ * @return The error, held inside the limit in force: the value of
+ * VP37_PROPORTIONAL_ERROR_LIMIT_MAP for a standing target, its first row for a
+ * moving one.
+ * @note An approach from rest lags by several hundred hertz; with the whole lag
+ * on the proportional term the actuator breaks over the holding-force steps
+ * straight into the end stop. The bound works both ways: the swing that
+ * follows reaches as far below the demand as above it, and a bound on one
+ * side only left more ringing on the bench.
+ */
+float VP37_boundedError(const VP37Pump *self, float error);
+/**
+ * @brief Proportional action on the lag of the Adjustometer filter.
+ * @param self Non-NULL controller; effectiveKp, error and feedback.leadHz are
+ * read.
+ * @return Nominal PWM to add to the correction; negative while the unfiltered
+ * position runs ahead of the filtered one.
+ * @note The PID keeps the filtered position, so the integral, its dead zone,
+ * the settled hold and the telemetry see the quiet signal. Only the
+ * proportional path is moved to the newest sample, inside the same bound.
+ */
+float VP37_feedbackLead(const VP37Pump *self);
 float VP37_integralLimit(const VP37Pump *self);
 float VP37_integralDeadband(const VP37Pump *self);
 /**

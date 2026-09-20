@@ -48,6 +48,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->demand.target = -1;
   self->demand.desired = -1;
   self->feedback.position = -1;
+  self->feedback.leadHz = 0;
+  self->feedback.leadWeight = VP37_FEEDBACK_LEAD_WEIGHT;
   self->feedback.commLostSince = 0;
   self->feedback.commFailed = false;
   self->pid.error = 0;
@@ -56,6 +58,9 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->feedforward.fallBlend = 0.0f;
   self->feedforward.motion = 0.0f;
   self->pid.correction = 0.0f;
+  self->pid.effectiveKp = VP37_PID_KP;
+  self->pid.standingBlend = 0.0f;
+  self->pid.feedbackLead = 0.0f;
   self->pid.positiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
   self->output.pwmValue = VP37_PWM_MIN;
   self->supply.correction = 1.0f;
@@ -129,6 +134,9 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->thermal.driveVoltageChangedMs = 0U;
   self->thermal.driveVoltageReady = false;
   self->thermal.driveVoltageSettled = false;
+  self->thermal.driveOnSinceMs = 0U;
+  self->thermal.driveOn = false;
+  self->thermal.driveOnsetPassed = false;
   self->thermal.driveResistanceReady = false;
   self->thermal.driveCompensationEnabled = true;
   self->thermal.driveCompensationUsed = false;
@@ -476,7 +484,9 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
  * @param cycle Step context; receives the integral gain in force.
  * @note Correction and integral authority stay in the same reference domain
  * as the feedforward. Applying the measured temperature here as well would
- * compensate twice.
+ * compensate twice. The upper-stroke rules follow the demanded position, not
+ * the measured one, so an oscillation cannot modulate its own loop gain, and
+ * they come in only for a standing target, so tracking stays as it was.
  */
 static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
   self->pid.positiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
@@ -486,6 +496,10 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
         self->feedforward.pwm);
   }
   self->pid.integralLimit = VP37_integralLimit(self);
+  VP37_updateStandingBlend(self, cycle->stationaryTarget);
+  self->pid.effectiveKp = VP37_proportionalGain(self);
+  hal_pid_controller_set_kp(self->pid.controller, self->pid.effectiveKp);
+  self->pid.feedbackLead = VP37_feedbackLead(self);
   cycle->ki = hal_pid_controller_get_ki(self->pid.controller);
   const float maxIntegral =
       cycle->ki > 0.0f ? self->pid.integralLimit / cycle->ki : 0.0f;
@@ -531,6 +545,8 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
     self->feedforward.fallBlend = 0.0f;
     self->feedforward.motion = 0.0f;
     self->pid.correction = 0.0f;
+    self->pid.feedbackLead = 0.0f;
+    self->pid.standingBlend = 0.0f;
     self->output.pwmValue = 0.0f;
     self->pid.negativeLimit = 0.0f;
     self->pid.upperLimit = 0.0f;
@@ -566,12 +582,15 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
       self->pid.softFloorActive = true;
     }
   }
+  // Whatever else lands on the command shares the correction's authority.
+  const float outsidePid =
+      self->currentControl.correctionPwm + self->pid.feedbackLead;
   self->pid.negativeLimit = fmaxf(-VP37_PID_CORR_LIMIT_NEGATIVE,
                                   lowerCommand - self->feedforward.pwm) -
-                            self->currentControl.correctionPwm;
+                            outsidePid;
   self->pid.upperLimit =
       fminf(self->pid.positiveLimit, upperCommand - self->feedforward.pwm) -
-      self->currentControl.correctionPwm;
+      outsidePid;
   hal_pid_controller_set_output_limits(
       self->pid.controller, self->pid.negativeLimit, self->pid.upperLimit);
 }
@@ -579,10 +598,12 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
 /**
  * @brief Step the correction loop under this step's integration rules.
  * @return False when the loop failed and the pump has been stopped.
- * @note Ramp tracking lag must not build a new holding trim in either
- * direction; an existing trim may unwind, including a reversal before zero
- * release. Supply changes are scaled out of the command before it reaches
- * the actuator, so they never freeze integration.
+ * @note The loop acts on the bounded error; the hold and the dead zone keep
+ * the whole one, so a large error never looks settled. Ramp tracking lag must
+ * not build a new holding trim in either direction; an existing trim may
+ * unwind, including a reversal before zero release. Supply changes are scaled
+ * out of the command before it reaches the actuator, so they never freeze
+ * integration.
  */
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool rampWindup =
@@ -597,10 +618,10 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool freezeIntegral = rampWindup || self->pid.integralHold;
   const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.error)
                                                 : self->pid.integralDeadbandHz;
-  const hal_status_t pidStatus =
-      hal_pid_controller_step_ex(self->pid.controller, (float)self->pid.error,
-                                 (float)self->feedback.position, cycle->dt,
-                                 integralDeadband, &self->pid.terms);
+  const hal_status_t pidStatus = hal_pid_controller_step_ex(
+      self->pid.controller, VP37_boundedError(self, (float)self->pid.error),
+      (float)self->feedback.position, cycle->dt, integralDeadband,
+      &self->pid.terms);
   bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);
@@ -622,7 +643,8 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   self->pid.correction = self->pid.terms.output;
   VP37_transferIntegralToMapTrim(self);
   self->pid.saturatedHigh = self->pid.terms.saturated_high;
-  self->output.pwmValue = self->feedforward.pwm + self->pid.correction;
+  self->output.pwmValue =
+      self->feedforward.pwm + self->pid.correction + self->pid.feedbackLead;
   const float compensatedPWM =
       (self->output.pwmValue + self->currentControl.correctionPwm) *
       cycle->outputScale;

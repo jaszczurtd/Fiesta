@@ -51,6 +51,20 @@ extern "C" {
 #define DEFAULT_INJECTION_PRESSURE 300 // bar
 
 #define VP37_PID_TIME_UPDATE 5.0f // minimum control period [ms]
+/** Scale of VP37_FEEDBACK_LEAD_MAP, 0..1. The Adjustometer filter trails the
+ * position by about 15 ms, a third of the whole loop delay; both samples
+ * arrive in one frame, so their difference is that lag, measured. Zero keeps
+ * proportional action on the filtered position everywhere. */
+#define VP37_FEEDBACK_LEAD_WEIGHT 1.0f
+/** Time constant the upper-stroke rules come and go with [s]. They belong to a
+ * standing target: a moving one keeps the plain loop, so tracking does not
+ * change, and the filter keeps the handover free of steps. */
+#define VP37_STANDING_BLEND_S 0.05f
+/** Dead zone of the feedback lead [Hz]. At standstill the unfiltered sample
+ * differs from the filtered one by the actuator's PWM ripple, about 25 Hz
+ * rms; acting on that moves the upper stroke by more than it is worth. Ringing
+ * after an arrival is several times larger and passes. */
+#define VP37_FEEDBACK_LEAD_DEADBAND_HZ 60.0f
 // PID + Feedforward (FF) architecture:
 //   pwm = pwm_ff(desired) + pid_correction
 // PID output is now interpreted as PWM correction (units: PWM counts),
@@ -61,8 +75,10 @@ extern "C" {
 // Moving targets fade the upper-target D addition toward the base PI response.
 #define VP37_PID_KD 0.0f
 /** Additional derivative gain at settled upper targets [PWM*s/Hz]; zero
- * disables it. */
-#define VP37_PID_TOP_KD 0.001f
+ * disables it. Off: the loop delay turns a derivative into proportional gain
+ * at the frequency the upper stroke rings at, so it fed the ringing it was
+ * meant to damp. The bench command H still sets it. */
+#define VP37_PID_TOP_KD 0.0f
 /** Time constant for engaging and releasing upper-target damping [s]. */
 #define VP37_PID_TOP_D_BLEND_S 0.05f
 // Derivative filter time constant [s].
@@ -170,6 +186,13 @@ extern "C" {
 #define VP37_DRIVE_VOLTAGE_CHANGE_V 0.1f
 /** Quiet time before resistance learning resumes after a supply change [ms]. */
 #define VP37_DRIVE_VOLTAGE_SETTLE_MS 100U
+/** Time the coil must have been driven before a capture may train the
+ * resistance [ms]. Right after the release at rest the current is still
+ * building up through the inductance, so duty times voltage over current reads
+ * more than twice the resistance. One such capture per approach, taken with the
+ * full filter step a pause allows, raised the whole command by 3 % just before
+ * the arrival and let it sag over the seconds after it. */
+#define VP37_DRIVE_ONSET_MS 100U
 #define VP37_DRIVE_READY_SAMPLES 16U
 // The filter starts at the reference and walks toward what the path measures,
 // so the estimate is only worth using once it has had a few time constants to
@@ -307,6 +330,10 @@ typedef struct {
                              0 while it answers. */
   uint8_t lastStatus;     /**< Status byte of the last adjustometer frame. */
   bool fresh;             /**< A new sample arrived since the previous cycle. */
+  int32_t leadHz;         /**< Unfiltered position minus the filtered one past
+                               VP37_FEEDBACK_LEAD_DEADBAND_HZ, zero while either
+                               is missing or the reading is zero-held. */
+  float leadWeight;       /**< Scale of VP37_FEEDBACK_LEAD_MAP, 0..1. */
   uint32_t rawHz;         /**< Unfiltered position sample. */
   uint32_t filteredHz;    /**< Adjustometer-filtered position sample. */
   uint32_t sampleNumber;  /**< Sequence number of the newest sample. */
@@ -369,6 +396,12 @@ typedef struct {
   float negativeLimit;
   float upperLimit;
   float kp, ki, kd;
+  float standingBlend; /**< Filtered standing-target state, 0..1: how much of
+                            the upper-stroke rules is in force. */
+  float effectiveKp;   /**< Base gain times the stroke multiplier in force, as
+                            sent to the PID, in PWM/Hz. */
+  float feedbackLead;  /**< Proportional action on the filter lag, nominal
+                            PWM; part of the correction and of its limits. */
   float topKd;         /**< Additional settled-target D gain [PWM*s/Hz], blended
                             from zero at 85% to its full value at 90% demand. */
   float effectiveKd;   /**< Base plus scheduled D gain last sent to the PID,
@@ -453,6 +486,9 @@ typedef struct {
   bool driveVoltageReady;         /**< Supply anchor has been initialized. */
   bool
       driveVoltageSettled; /**< Resistance learning may use the current rail. */
+  uint32_t driveOnSinceMs; /**< Start of the present stretch of drive. */
+  bool driveOn;            /**< The command is inside the capture range. */
+  bool driveOnsetPassed;   /**< The coil current has had time to build up. */
   bool driveResistanceReady; /**< Enough observations to drive the output. */
   bool driveCompensationEnabled; /**< Bench switch for the measured path. */
   bool driveCompensationUsed;    /**< Measured path scaled the last command. */
@@ -543,6 +579,7 @@ typedef struct {
   int32_t target, desired, measured,
       pwm;             /**< Target, slewed target, feedback and PWM. */
   float motionFF;      /**< Upward-motion component included in feedforward. */
+  float feedbackLead;  /**< Proportional action on the feedback filter lag. */
   float ff, low, high; /**< Feedforward and effective correction limits. */
   float volts;         /**< Latest measured supply voltage (V). */
   float localVolts;    /**< Simultaneous local ECU ADC supply voltage (V). */
