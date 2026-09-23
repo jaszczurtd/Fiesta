@@ -19,7 +19,7 @@ void VP37_showDebug(VP37Pump *self) {
     const char *const activeTest = testsActiveName();
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:82 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:90 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -30,7 +30,9 @@ void VP37_showDebug(VP37Pump *self) {
         "Imeas:%.4f Rdrv:%.4f rcf:%.4f ren:%u ruse:%u rn:%lu rhold:%u "
         "dbtop:%.0f db:%.0f mten:%u mtn:%lu mt50:%.1f mt90:%.1f mt100:%.1f "
         "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu "
-        "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu",
+        "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu "
+        "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
+        "execus:%lu",
         self->pid.kp, self->pid.ki, self->pid.kd, self->pid.topKd,
         self->pid.effectiveKd, self->pid.tf, self->pidTimeUpdate,
         self->feedback.adjustMin, self->feedback.adjustMax,
@@ -53,7 +55,9 @@ void VP37_showDebug(VP37Pump *self) {
         self->thermal.driveCompensationEnabled ? 1U : 0U,
         self->thermal.driveCompensationUsed ? 1U : 0U,
         (unsigned long)self->thermal.driveSamples,
-        self->thermal.driveVoltageSettled ? 0U : 1U,
+        (self->thermal.driveVoltageSettled && self->currentControl.driveSettled)
+            ? 0U
+            : 1U,
         self->pid.integralDeadbandTopHz, self->pid.integralDeadbandHz,
         self->feedforward.mapTrimEnabled ? 1U : 0U,
         (unsigned long)self->feedforward.mapTrimTransfers,
@@ -65,7 +69,13 @@ void VP37_showDebug(VP37Pump *self) {
         self->currentControl.active ? 1U : 0U, self->currentControl.targetAmps,
         self->currentControl.sampleTargetAmps, self->currentControl.errorAmps,
         self->currentControl.correctionPwm,
-        (unsigned long)self->currentControl.sampleAgeUs);
+        (unsigned long)self->currentControl.sampleAgeUs,
+        self->thermal.driveObservationOhms, self->thermal.cycleValid ? 1U : 0U,
+        self->thermal.cycleSettled ? 1U : 0U,
+        self->thermal.driveLearning ? 1U : 0U,
+        (unsigned long)self->thermal.driveLearnedSamples,
+        (unsigned long)self->scan.collectUs,
+        (unsigned long)self->controlExecUs);
     adjustometer_reading_t telemetry;
     const bool extendedFresh = getVP37AdjustometerExtendedTelemetry(&telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "

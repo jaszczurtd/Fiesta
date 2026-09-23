@@ -158,12 +158,21 @@ extern "C" {
 // A small command or a small current makes the ratio ill-conditioned.
 #define VP37_DRIVE_MIN_CURRENT_A 1.5f
 #define VP37_DRIVE_MIN_PWM 420
-// The thermal estimate only rejects gross reconstructed duty mismatch.
-#define VP37_DRIVE_PWM_MATCH_COUNTS 150
-// The command must not have moved between the capture and its use.
+// Resistance learning requires a quiet command and position before capture.
 #define VP37_DRIVE_COMMAND_MATCH_COUNTS 8
+/** Maximum accumulated position drift inside a learning window [Hz]. */
+#define VP37_DRIVE_POSITION_WINDOW_HZ 60
+/** Continuous quiet-drive interval required before a current capture [us]. */
+#define VP37_DRIVE_STABLE_US 150000U
 #define VP37_DRIVE_MAX_AGE_US 100000U
 #define VP37_DRIVE_FILTER_S 2.0f
+// A ready estimate keeps following matched captures taken in motion at the
+// same rate. Bench 2026-09-23: during a cyclic sweep the observed resistance
+// rides the current lag behind the duty (about +-0.7 % in step with the
+// direction of motion), so a fast estimate doubles as motion feedforward.
+// Freezing it (rev87), slowing it to 10 s (rev88) or capping it at
+// 0.001 ohm/s (rev89) raised the cyclic tracking error in that order.
+#define VP37_DRIVE_FILTER_MOTION_S 2.0f
 /** Bound the estimator's filter step after missing observations [s]. */
 #define VP37_DRIVE_FILTER_MAX_STEP_S 0.05f
 /** Cumulative supply change that pauses resistance learning [V]. */
@@ -275,8 +284,8 @@ extern "C" {
 // fallback cannot increase actuator drive.
 #define VP37_MAX_EXPECTED_SUPPLY_VOLTAGE 15.0f
 
-// Climb floor follows the slewed demand and releases above that demand.
-// It must not inject the final target's feedforward ahead of the ramp.
+// At a settled demand the climb floor includes negative learned integral trim.
+// It follows the slewed demand and releases above that demand.
 #define VP37_PWM_FF_SOFT_FLOOR_MARGIN 80
 
 #define TIMING_PWM_MIN 0
@@ -420,21 +429,27 @@ typedef struct {
  * feeds it. */
 typedef struct {
   bool observationEnabled; /**< Scan publish switch (bench Q0/Q1). */
-  bool cycleValid;         /**< Reduced block passed every waveform rule. */
-  float cycleAmps;         /**< ON-phase mean of the captured PWM period. */
-  float cycleVolts;        /**< Supply that belongs to that same capture. */
-  int32_t cyclePwm;        /**< Duty reconstructed from the measured gate. */
-  int32_t cycleDrive; /**< Command at capture delivery; compared with duty. */
+  bool cycleValid;         /**< Healthy capture matched to a latched command. */
+  bool cycleSettled;  /**< The matched command was settled before capture. */
+  float cycleAmps;    /**< ON-phase mean of the captured PWM period. */
+  float cycleVolts;   /**< Supply that belongs to that same capture. */
+  int32_t cyclePwm;   /**< Duty reconstructed between actual PWM latches. */
+  int32_t cycleDrive; /**< Historical command matched to the PWM latch. */
   uint32_t cycleUs;
   float lastFuelTemp;
   float temperatureCorrection; /**< Filtered multiplier of the complete FF + PID
                                   command. */
   float temperatureCompensationWeight; /**< Bench blend: 0 disables, 1 applies
                                           the model. */
-  bool temperatureReady;   /**< A valid temperature has initialized the
-                              multiplier. */
-  float driveResistance;   /**< Filtered drive-path resistance from the
-                              measured current, in ohms. */
+  bool temperatureReady; /**< A valid temperature has initialized the
+                            multiplier. */
+  float driveResistance; /**< Filtered drive-path resistance from the
+                            measured current, in ohms. */
+  float
+      driveObservationOhms; /**< Last valid matched ratio, including motion. */
+  bool driveLearning;       /**< This step accepted a resistance observation. */
+  uint32_t
+      driveLearnedSamples; /**< Accepted updates, wrapping at UINT32_MAX. */
   float driveCorrection;   /**< Measured replacement for the fuel-temperature
                               multiplier; unity until enough samples. */
   uint32_t driveSamples;   /**< Accepted resistance observations. */
@@ -467,10 +482,12 @@ typedef struct {
                                          the core-0 `VP37 IPULSE` report. */
   hal_status_t cycleResultStatus;
   uint32_t cycleResultSequence; /**< Increments once per reduced block. */
-  uint32_t lastSequence;        /**< Scan block sequence last reduced. */
-  uint32_t blocks;              /**< Blocks reduced since start. */
-  uint32_t gaps;                /**< Blocks the control loop never saw. */
-  uint32_t frameNs;             /**< Frame period reported by the scan. */
+  uint32_t
+      collectUs; /**< Time spent collecting and reducing the latest block. */
+  uint32_t lastSequence; /**< Scan block sequence last reduced. */
+  uint32_t blocks;       /**< Blocks reduced since start. */
+  uint32_t gaps;         /**< Blocks the control loop never saw. */
+  uint32_t frameNs;      /**< Frame period reported by the scan. */
   bool running;
 } VP37Scan;
 
@@ -480,11 +497,19 @@ typedef struct {
   float nominalPwm;   /**< FF+position PID, excluding current correction. */
   float voltageScale; /**< Local ADC calibration used by this command. */
   int32_t pwm; /**< Delivered duty including every correction and clamp. */
+  bool driveSettled; /**< Quiet command, position and rail before this write. */
 } VP37CurrentCommand;
 
 /** @brief Bounded ON-current feedback and the command history it observes. */
 typedef struct {
   VP37CurrentCommand history[VP37_CURRENT_CONTROL_HISTORY];
+  VP37CurrentCommand
+      matchedCommand; /**< Copy shared by this step's consumers. */
+  uint32_t
+      matchedSampleSequence; /**< Reduced-block sequence of the cached match. */
+  bool
+      matchCached; /**< No command was written since this match was resolved. */
+  bool matchFound; /**< The cached observation matched one history command. */
   uint32_t count;
   uint32_t next;
   uint32_t lastCycleUs; /**< Last accepted rising edge; zero is valid. */
@@ -498,6 +523,12 @@ typedef struct {
   bool enabled; /**< Bench C0/C1; normal control uses the same path. */
   bool active;  /**< A fresh observation matches a recorded command. */
   bool seen;    /**< At least one matching PWM period has been consumed. */
+  uint32_t driveStableSinceUs; /**< Start of the present quiet window [us]. */
+  uint32_t driveLastCommandUs; /**< Previous write, for continuity checks. */
+  int32_t drivePositionReference; /**< Position anchor of the quiet window. */
+  int32_t drivePwmReference; /**< Delivered-PWM anchor of the quiet window. */
+  bool driveTracking; /**< The quiet-window anchors have been initialized. */
+  bool driveSettled; /**< Latest command passed the resistance-learning gate. */
 } VP37CurrentControl;
 
 /** @brief The command as written to the actuator. */
@@ -519,6 +550,8 @@ typedef struct {
   float pidTimeUpdate;
   uint32_t controlLastUs;
   uint32_t controlDtUs;
+  uint32_t
+      controlExecUs; /**< Execution time of the latest control step [us]. */
   uint32_t controlSequence;
   bool controlStarted;
   bool pidStarted;

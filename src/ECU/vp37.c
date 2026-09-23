@@ -86,6 +86,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pidDtUs = 0U;
   self->controlSequence = 0U;
   self->controlDtUs = 0U;
+  self->controlExecUs = 0U;
   self->pid.terms = (hal_pid_terms_t){0};
   self->pid.softFloorActive = false;
   self->output.pwmLimited = false;
@@ -104,6 +105,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->supply.predictionReady = false;
   self->thermal.temperatureReady = false;
   self->thermal.cycleValid = false;
+  self->thermal.cycleSettled = false;
   self->thermal.cycleAmps = 0.0f;
   self->thermal.cycleVolts = 0.0f;
   self->thermal.cyclePwm = 0;
@@ -114,10 +116,14 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->scan.cycleResultSequence = 0U;
   self->scan.lastSequence = 0U;
   self->scan.blocks = 0U;
+  self->scan.collectUs = 0U;
   self->scan.gaps = 0U;
   self->scan.frameNs = 0U;
   self->scan.running = false;
   self->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  self->thermal.driveObservationOhms = 0.0f;
+  self->thermal.driveLearning = false;
+  self->thermal.driveLearnedSamples = 0U;
   self->thermal.driveCorrection = 1.0f;
   self->thermal.driveSamples = 0U;
   self->thermal.driveUpdatedMs = 0U;
@@ -324,7 +330,9 @@ void VP37_process(VP37Pump *self) {
   self->controlStarted = true;
   self->controlSequence++;
   self->pidDtUs = 0U;
+  const uint32_t collectStartedUs = hal_micros();
   (void)VP37_serviceCurrentScan(self);
+  self->scan.collectUs = hal_micros() - collectStartedUs;
 
   if (!VP37_updateAdjustometerPosition(self)) {
     if (hal_elapsed_u32(hal_millis(), self->feedback.commLostSince,
@@ -350,6 +358,7 @@ void VP37_process(VP37Pump *self) {
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   VP37_traceRecord(self);
 #endif
+  self->controlExecUs = hal_micros() - nowUs;
 }
 
 /**
@@ -549,8 +558,8 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
  * @brief Express every actuator limit in the correction domain.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @note The soft floor keeps the correction from pulling the command far
- * below the holding map while the actuator is still climbing to the target.
+ * @note At a settled demand the climb floor follows the learned holding trim.
+ * A moving demand retains the acceleration reserve of the original floor.
  */
 static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   float lowerCommand =
@@ -559,8 +568,12 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const float upperCommand = (float)VP37_PWM_MAX / cycle->outputScale;
   self->pid.softFloorActive = false;
   if (self->feedback.position < self->demand.desired) {
-    const float floor =
-        self->feedforward.pwm - (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
+    const bool targetSettled = cycle->stationaryTarget &&
+                               (self->demand.desired == self->demand.target);
+    const float holdingTrim =
+        targetSettled ? fminf(self->pid.terms.integral, 0.0f) : 0.0f;
+    const float floor = self->feedforward.pwm + holdingTrim -
+                        (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
     if (floor > lowerCommand) {
       lowerCommand = floor;
       self->pid.softFloorActive = true;

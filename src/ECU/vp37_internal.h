@@ -50,6 +50,20 @@ void VP37_resetCurrentControl(VP37Pump *self);
  * @note Call before computing position-PID output limits. Invalid observations
  * release correction with a bounded slope; rest clears it immediately. */
 void VP37_updateCurrentControl(VP37Pump *self, float dt);
+/** @brief Match the latest healthy current capture to its latched command.
+ * @param self Non-NULL pump owned by the control core.
+ * @param nowUs Current local microsecond timestamp.
+ * @return Matched command, or NULL for stale, invalid or ambiguous
+ * observations.
+ * @note The pointer remains valid until the next capture or history change. */
+const VP37CurrentCommand *VP37_matchCurrentSample(const VP37Pump *self,
+                                                  uint32_t nowUs);
+/** @brief Check that the present drive still belongs to its quiet window.
+ * @param self Non-NULL pump owned by the control core.
+ * @param nowUs Current local microsecond timestamp.
+ * @return True after a continuous quiet command, position and supply interval.
+ */
+bool VP37_driveIsSettled(const VP37Pump *self, uint32_t nowUs);
 /** @brief Record the position command that the next PWM period may apply.
  * @param self Non-NULL pump owned by the control core.
  * @param nominalPWM FF+position PID in nominal PWM counts, before current trim.

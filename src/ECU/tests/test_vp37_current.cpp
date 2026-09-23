@@ -162,8 +162,8 @@ static VP37CurrentScanBlock blockView(uint32_t startUs) {
   return view;
 }
 
-static uint32_t framesToUs(uint32_t frames) {
-  return (uint32_t)((((uint64_t)frames * kFrameNs) + 500U) / 1000U);
+static uint32_t framesToUs(uint32_t frames, uint32_t frameNs = kFrameNs) {
+  return (uint32_t)((((uint64_t)frames * frameNs) + 500U) / 1000U);
 }
 
 /* Newest rising edge whose following rising edge is confirmed inside the
@@ -445,6 +445,64 @@ static uint32_t nominalPeriodFrames(void) {
          kFrameNs;
 }
 
+void test_scan_reduce_preserves_integer_fractional_and_wrapped_timestamps(
+    void) {
+  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  VP37_currentSenseInit();
+  const uint32_t framePeriods[] = {kFrameNs, kFrameNs + 333U};
+  const uint32_t offsets[] = {0U, 3U, 7U};
+  for (size_t timing = 0U; timing < COUNTOF(framePeriods); ++timing) {
+    const uint32_t frameNs = framePeriods[timing];
+    for (size_t phase = 0U; phase < COUNTOF(offsets); ++phase) {
+      fillBlock({offsets[phase], 16U, 3000U, 3000U, true});
+      const uint32_t newest = newestPeriodStart(offsets[phase]);
+      const uint32_t onUs = framesToUs(kOnFrames, frameNs);
+      const uint32_t starts[] = {
+          123456U, UINT32_MAX - framesToUs(newest, frameNs) - (onUs / 2U)};
+      for (size_t origin = 0U; origin < COUNTOF(starts); ++origin) {
+        VP37CurrentScanBlock view = blockView(starts[origin]);
+        view.frameNs = frameNs;
+        VP37CurrentPhaseSample samples[kOnFrames] = {};
+        for (uint32_t i = 0U; i < kOnFrames; ++i) {
+          const int raw =
+              (int)s_block[((newest + i) * kScanPins) + kShuntPosition];
+          // Reference timestamps keep the original rounded 64-bit formula.
+          samples[i].timestampUs =
+              view.startUs + framesToUs(newest + i, frameNs);
+          samples[i].rawSample =
+              (uint16_t)(hal_adc_compensate_rp2040_12bit(raw) - 16);
+          samples[i].gateOn = 1U;
+        }
+        VP37CurrentPulseResult expected;
+        TEST_ASSERT_EQUAL_INT(
+            HAL_OK,
+            VP37_currentPulseAnalyze(
+                samples, kOnFrames, view.startUs + framesToUs(newest, frameNs),
+                onUs, framesToUs(kPeriodFrames, frameNs), &expected));
+        expected.latchUs =
+            view.startUs +
+            framesToUs(newest - kPeriodFrames + kOnFrames, frameNs);
+        expected.latchPeriodUs = expected.periodUs;
+        expected.latchedPwm = expected.pwmCommand;
+        expected.latchValid = true;
+        expected.supplySamples = kPeriodFrames;
+        expected.supplyVolts = voltsForCompensatedRaw(3024);
+        expected.supplyValid = true;
+        const uint32_t latestFrames =
+            (expected.periodUs * 1000U + frameNs / 2U) / frameNs;
+        expected.supplyLatestVolts = expected.supplyVolts;
+        expected.supplyLatestUs =
+            view.startUs + framesToUs(kBlockFrames - latestFrames, frameNs) +
+            framesToUs(latestFrames, frameNs) / 2U;
+        expected.supplyLatestValid = true;
+        VP37CurrentPulseResult actual;
+        TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &actual));
+        TEST_ASSERT_EQUAL_MEMORY(&expected, &actual, sizeof(expected));
+      }
+    }
+  }
+}
+
 void test_latest_supply_tracks_the_end_of_history_and_its_center_timestamp(
     void) {
   // A ramp makes an old rise-aligned mean visibly different from the newest
@@ -657,6 +715,8 @@ int main(void) {
   RUN_TEST(test_pulse_analyze_handles_wrap_and_rejects_samples_outside_cycle);
   RUN_TEST(test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges);
   RUN_TEST(test_scan_reduce_measures_the_newest_full_period);
+  RUN_TEST(
+      test_scan_reduce_preserves_integer_fractional_and_wrapped_timestamps);
   RUN_TEST(test_scan_reduce_keeps_supply_and_current_validity_separate);
   RUN_TEST(test_scan_latch_tracks_falling_edges_when_duty_changes);
   RUN_TEST(test_scan_reduce_ignores_single_frame_spikes_and_dropouts);

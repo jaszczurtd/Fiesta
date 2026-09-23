@@ -343,13 +343,19 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   uint32_t supplySum[2] = {0U, 0U};
   uint32_t supplyCount[2] = {0U, 0U};
   uint32_t supplyRejected = 0U;
+  const uint32_t frameUs =
+      ((block->frameNs % 1000U) == 0U) ? (block->frameNs / 1000U) : 0U;
   for (uint32_t k = periodRise; k < periodEnd; k++) {
     const uint16_t *frame = &block->samples[k * block->pinCount];
     const bool on = k < periodFall;
     if (on) {
       bool clipped = false;
-      s_pulseSamples[count].timestampUs =
-          block->startUs + VP37_currentFramesToUs(k, block->frameNs);
+      // Whole-microsecond frames need no 64-bit division per ON sample.
+      // The uint32_t product retains the timestamp's modulo wrap.
+      const uint32_t sampleUs = (frameUs != 0U)
+                                    ? (k * frameUs)
+                                    : VP37_currentFramesToUs(k, block->frameNs);
+      s_pulseSamples[count].timestampUs = block->startUs + sampleUs;
       s_pulseSamples[count].rawSample = VP37_currentCorrectedRaw(
           VP37_currentCompensatedRaw((int)frame[block->shuntPosition]),
           &clipped);
