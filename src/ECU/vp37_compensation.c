@@ -43,18 +43,27 @@ hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
       (self->output.finalPWM <= 0)) {
     return status;
   }
-  const bool currentUsable = (status == HAL_OK) && result.waveformValid;
+  const VP37CurrentCommand *command =
+      VP37_matchCurrentSample(self, hal_micros());
+  const bool currentUsable = command != NULL;
+  if (currentUsable) {
+    self->currentControl.matchedCommand = *command;
+  }
+  self->currentControl.matchedSampleSequence = self->scan.cycleResultSequence;
+  self->currentControl.matchFound = currentUsable;
+  self->currentControl.matchCached = true;
   self->supply.cycleVolts = result.supplyLatestVolts;
   self->supply.cycleUs = result.supplyLatestUs;
   self->supply.cycleValid = result.supplyLatestValid;
-  // Resistance needs voltage from the current's own period, not the newer
-  // supply window. The delivered command is also checked against measured duty.
+  // Resistance uses the capture's own voltage and historical PWM latch.
+  // A quiet state reached after the capture cannot qualify that capture.
   self->thermal.cycleValid = currentUsable;
+  self->thermal.cycleSettled = currentUsable && command->driveSettled;
   self->thermal.cycleAmps = currentUsable ? result.meanAmps : 0.0f;
   self->thermal.cycleVolts = result.supplyValid ? result.supplyVolts : 0.0f;
-  self->thermal.cyclePwm = result.pwmCommand;
-  self->thermal.cycleDrive = self->output.finalPWM;
-  self->thermal.cycleUs = result.cycleStartUs + result.periodUs;
+  self->thermal.cyclePwm = result.latchedPwm;
+  self->thermal.cycleDrive = currentUsable ? command->pwm : 0;
+  self->thermal.cycleUs = result.cycleStartUs + (result.onTimeUs / 2U);
   return status;
 }
 
@@ -214,10 +223,15 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
  * @note Coil self-heating moves the required command by several percent while
  * the fuel temperature barely changes, so the measured ratio replaces the
  * fuel-temperature model. A rejected or stale capture keeps the last value and
- * never contributes zero ohms.
+ * never contributes zero ohms. The first estimate comes only from captures
+ * whose historical command and present drive belong to a quiet position,
+ * command and supply window; a ready estimate also follows matched captures
+ * taken in motion, through a slower filter.
  */
 void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
+  self->thermal.driveLearning = false;
   VP37_trackDriveSupply(self);
+  self->currentControl.driveSettled = VP37_driveIsSettled(self, hal_micros());
   // A ready estimate keeps scaling the command until it goes stale; motion
   // rejects most captures, and flipping back to the model on every rejected
   // cycle stepped the command by the whole thermal difference.
@@ -251,13 +265,10 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
       (self->thermal.cycleVolts > VP37_LOCAL_VOLTAGE_VALID_MAX_V)) {
     return;
   }
-  // Reject a capture that belongs to a different command than the live one.
-  const int32_t commandDelta = drive - self->output.finalPWM;
+  // The PWM latch, not the live output, owns this current observation.
   const int32_t gateDelta = self->thermal.cyclePwm - drive;
-  if ((commandDelta > VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
-      (commandDelta < -VP37_DRIVE_COMMAND_MATCH_COUNTS) ||
-      (gateDelta > VP37_DRIVE_PWM_MATCH_COUNTS) ||
-      (gateDelta < -VP37_DRIVE_PWM_MATCH_COUNTS)) {
+  if ((gateDelta > VP37_CURRENT_CONTROL_DUTY_TOLERANCE) ||
+      (gateDelta < -VP37_CURRENT_CONTROL_DUTY_TOLERANCE)) {
     return;
   }
 
@@ -267,10 +278,19 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   if (!isfinite(resistance) || (resistance <= 0.0f)) {
     return;
   }
+  self->thermal.driveObservationOhms = resistance;
   // Healthy captures keep the retained estimate alive during a long supply
   // sweep, even while their electrical transient must not train resistance.
   self->thermal.driveObservedMs = hal_millis();
-  if (self->thermal.driveVoltageSettled) {
+  const bool quiet =
+      self->thermal.cycleSettled && self->currentControl.driveSettled;
+  // Only quiet captures build the estimate; once it is ready, matched captures
+  // in motion keep it following coil self-heating instead of going stale.
+  const bool moving = !quiet && self->thermal.driveResistanceReady &&
+                      self->thermal.driveVoltageSettled;
+  if (quiet || moving) {
+    const float filterS =
+        quiet ? VP37_DRIVE_FILTER_S : VP37_DRIVE_FILTER_MOTION_S;
     // Start from the reference: a first capture during motion can reconstruct
     // a resistance that does not belong to the coil.
     if (!(self->thermal.driveResistance > 0.0f)) {
@@ -278,7 +298,7 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
     }
     self->thermal.driveResistance +=
         (resistance - self->thermal.driveResistance) * filterDt /
-        (VP37_DRIVE_FILTER_S + filterDt);
+        (filterS + filterDt);
     if (self->thermal.driveSamples == 0U) {
       self->thermal.driveFirstSampleMs = hal_millis();
     }
@@ -286,6 +306,8 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
       self->thermal.driveSamples++;
     }
     self->thermal.driveUpdatedMs = hal_millis();
+    self->thermal.driveLearning = true;
+    self->thermal.driveLearnedSamples++;
     self->thermal.driveResistanceReady =
         (self->thermal.driveSamples >= VP37_DRIVE_READY_SAMPLES) &&
         hal_millis_deadline_expired(self->thermal.driveFirstSampleMs,

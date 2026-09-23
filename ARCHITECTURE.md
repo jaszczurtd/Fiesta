@@ -112,7 +112,10 @@ VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
 full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
 after the target settles and fades when movement resumes through a 50 ms
 blend. The holding map and supply/temperature compensation remain shared
-across the stroke. Telemetry reports `mode:position` and a separate
+across the stroke. Once the demand settles, the climb floor follows negative
+learned integral trim, so crossing below the target preserves the reduction
+needed to hold position. Moving demands retain the original climb floor.
+Telemetry reports `mode:position` and a separate
 `test:<name|none>` field; it does not identify a potentiometer controller mode.
 
 Supply compensation scales the complete feedforward and PID command by
@@ -127,15 +130,34 @@ The local ADC fallback retains its 50 ms filter without prediction. Current
 and resistance estimation use a separate voltage mean from the same PWM period
 as the current capture.
 
-Each current period can update the slow resistance estimate once. Its filter
-uses observation intervals, capped at 50 ms after gaps. A cumulative supply
+Resistance estimation uses the same historical PWM-latch matching as the
+current loop. Each command records whether position, delivered PWM and supply
+have remained quiet for 150 ms after the demand ramp finishes. Learning requires
+both that historical qualification and a still-quiet present state, so a delayed
+observation from an approach cannot become eligible just by arriving later.
+Those quiet captures alone build the first estimate. Once it is ready, matched
+captures taken in motion keep updating it at the same 2 s rate: the observed
+resistance rides the current lag behind the duty during a sweep, so the
+estimate follows coil self-heating and at the same time acts as motion
+feedforward. Slowing or capping that update raised the cyclic tracking error
+on the bench.
+The quiet window permits 60 Hz of position movement and 8 PWM counts from its
+anchors; exceeding either restarts it. Each current period can update the
+slow resistance estimate once. Its filter uses observation intervals, capped
+at 50 ms after gaps. A cumulative supply
 change over 0.1 V pauses estimation for 100 ms. Healthy new current captures
 keep the last ready correction active during long supply changes; losing
 those captures still expires it after 10 s. Supply-change detection uses the
 measured voltage before prediction. Telemetry exposes `vage` (window midpoint
 age at the control step, in microseconds), `vlead` (prediction offset in volts
 before the 7 V floor), `vdot` (voltage slope in V/s), and `rhold` (resistance
-estimation paused by a supply change).
+estimation paused by supply or drive movement). `Robs` is the latest matched
+resistance observation in ohms; `rmatch` reports a matched capture, `rquiet` its
+historical qualification, `rlearn` an update in this control step, and `rlcnt`
+the cumulative update count. Unmatched observations keep the last ready
+estimate alive without changing its value. `scanus` measures ADC collection
+and reduction time; `execus` measures execution of the complete control step.
+Both durations are in microseconds and exclude the wait for the next step.
 
 A bounded proportional current loop corrects the position command before
 the supply and thermal multipliers. Its target is the nominal feedforward

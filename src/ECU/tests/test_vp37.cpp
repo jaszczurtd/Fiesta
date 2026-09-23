@@ -102,6 +102,8 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
   pump->thermal.temperatureCorrection = 1.0f;
   pump->thermal.temperatureCompensationWeight = 1.0f;
+  pump->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
+  pump->thermal.driveCorrection = 1.0f;
   pump->supply.heldVolts = NOMINAL_VOLTAGE;
   pump->supply.ready = false;
   pump->feedback.lastStatus = ADJ_STATUS_OK;
@@ -810,6 +812,7 @@ struct SupplyScanFixture {
   bool steps;
   bool ripple;
   bool clippedCurrent;
+  bool constant = false;
 };
 
 static uint16_t supplyScanRaw(float volts) {
@@ -831,6 +834,9 @@ static uint16_t supplyScanRaw(float volts) {
 }
 
 static float scanRailVolts(const SupplyScanFixture &fixture, uint32_t us) {
+  if (fixture.constant) {
+    return 12.0f;
+  }
   if (fixture.ripple) {
     return 14.0f;
   }
@@ -899,11 +905,13 @@ struct CurrentScanCommands {
 };
 
 static CurrentScanCommands runCurrentScan(float measuredAmps,
-                                          bool changeDuringOff = false) {
+                                          bool changeDuringOff = false,
+                                          bool resistanceCompensation = false) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   const SupplyScanFixture fixture = {100000U, false, false, false};
   setupSupplyScan(pump, fixture.startUs);
   pump->currentControl.enabled = true;
+  pump->thermal.driveCompensationEnabled = resistanceCompensation;
   hal_mock_set_micros(fixture.startUs);
   injectAdjRegisterData(4600, 120U, 49U, ADJ_STATUS_OK);
   VP37_process(pump);
@@ -989,6 +997,145 @@ void test_vp37_current_scan_matches_target_before_active_low_latch(void) {
       fabsf((float)(commands.pendingPWM - commands.baselinePWM)));
   TEST_ASSERT_FLOAT_WITHIN(.0001f, commands.oldTarget,
                            pump->currentControl.sampleTargetAmps);
+}
+
+void test_vp37_resistance_scan_uses_the_command_that_produced_the_current(
+    void) {
+  const CurrentScanCommands commands = runCurrentScan(3.5f, true, true);
+  const VP37Pump *pump = &getECUContext()->injectionPump;
+  TEST_ASSERT_TRUE(pump->thermal.cycleValid);
+  TEST_ASSERT_EQUAL_INT32(commands.baselinePWM, pump->thermal.cycleDrive);
+  TEST_ASSERT_NOT_EQUAL(commands.pendingPWM, pump->thermal.cycleDrive);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->thermal.driveSamples);
+}
+
+static void cacheCurrentScan(VP37Pump *pump, uint32_t writtenUs) {
+  const SupplyScanFixture fixture = {100000U, false, false, false, true};
+  setupSupplyScan(pump, fixture.startUs);
+  pump->output.finalPWM = 700;
+  VP37_recordCurrentCommand(pump, 820.0f, 700, writtenUs);
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  for (uint32_t us = blockUs; us <= 24000U; us += blockUs) {
+    completeSupplyScan(fixture, us, 3.5f, 700, true);
+    (void)VP37_serviceCurrentScan(pump);
+  }
+  TEST_ASSERT_TRUE(pump->currentControl.matchCached);
+  TEST_ASSERT_TRUE(pump->currentControl.matchFound);
+  TEST_ASSERT_EQUAL_PTR(&pump->currentControl.matchedCommand,
+                        VP37_matchCurrentSample(pump, hal_micros()));
+  TEST_ASSERT_EQUAL_UINT32(writtenUs,
+                           pump->currentControl.matchedCommand.writtenUs);
+}
+
+void test_vp37_current_scan_cache_rechecks_capture_age_and_quality(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  cacheCurrentScan(pump, 106000U);
+  VP37CurrentPulseResult &sample = pump->scan.cycleResult;
+  const uint32_t expiresUs = sample.cycleStartUs + sample.onTimeUs / 2U +
+                             VP37_CURRENT_CONTROL_MAX_AGE_US;
+  TEST_ASSERT_NOT_NULL(VP37_matchCurrentSample(pump, expiresUs - 1U));
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, expiresUs));
+  sample.waveformValid = false;
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, hal_micros()));
+  sample.waveformValid = true;
+  sample.latchedPwm = pump->currentControl.matchedCommand.pwm +
+                      VP37_CURRENT_CONTROL_DUTY_TOLERANCE + 1;
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, hal_micros()));
+}
+
+void test_vp37_current_scan_cache_rechecks_historical_command_age(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  cacheCurrentScan(pump, 98000U);
+  const VP37CurrentPulseResult &sample = pump->scan.cycleResult;
+  const uint32_t expiresUs = pump->currentControl.matchedCommand.writtenUs +
+                             VP37_CURRENT_CONTROL_MAX_AGE_US +
+                             2U * sample.latchPeriodUs;
+  const uint32_t sampleAge =
+      expiresUs - (sample.cycleStartUs + sample.onTimeUs / 2U);
+  TEST_ASSERT_LESS_THAN_UINT32(VP37_CURRENT_CONTROL_MAX_AGE_US, sampleAge);
+  TEST_ASSERT_NOT_NULL(VP37_matchCurrentSample(pump, expiresUs - 1U));
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, expiresUs));
+}
+
+void test_vp37_current_scan_cache_follows_sequence_command_and_reset(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  cacheCurrentScan(pump, 100000U);
+  const SupplyScanFixture fixture = {100000U, false, false, false, true};
+  const uint32_t oldSequence = pump->scan.cycleResultSequence;
+  VP37_recordCurrentCommand(pump, 900.0f, 700, hal_micros());
+  TEST_ASSERT_FALSE(pump->currentControl.matchCached);
+  const VP37CurrentCommand *matched =
+      VP37_matchCurrentSample(pump, hal_micros());
+  TEST_ASSERT_NOT_NULL(matched);
+  TEST_ASSERT_EQUAL_UINT32(100000U, matched->writtenUs);
+
+  // Publication trails the PWM latch. Later blocks must refresh the cache
+  // even when no new command has been recorded since the previous block.
+  completeSupplyScan(fixture, 30000U, 3.5f, 700, true);
+  (void)VP37_serviceCurrentScan(pump);
+  TEST_ASSERT_TRUE(pump->currentControl.matchCached);
+  TEST_ASSERT_EQUAL_FLOAT(820.0f,
+                          pump->currentControl.matchedCommand.nominalPwm);
+  completeSupplyScan(fixture, 36000U, 3.5f, 700, true);
+  (void)VP37_serviceCurrentScan(pump);
+  TEST_ASSERT_EQUAL_FLOAT(820.0f,
+                          pump->currentControl.matchedCommand.nominalPwm);
+  completeSupplyScan(fixture, 42000U, 3.5f, 700, true);
+  (void)VP37_serviceCurrentScan(pump);
+  TEST_ASSERT_TRUE(pump->currentControl.matchCached);
+  TEST_ASSERT_FALSE(pump->currentControl.matchFound);
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, hal_micros()));
+  // This period belongs to the newer write; the cached miss must expire too.
+  completeSupplyScan(fixture, 48000U, 3.5f, 700, true);
+  (void)VP37_serviceCurrentScan(pump);
+  TEST_ASSERT_GREATER_THAN_UINT32(oldSequence, pump->scan.cycleResultSequence);
+  matched = VP37_matchCurrentSample(pump, hal_micros());
+  TEST_ASSERT_NOT_NULL(matched);
+  TEST_ASSERT_EQUAL_FLOAT(900.0f, matched->nominalPwm);
+  TEST_ASSERT_EQUAL_PTR(&pump->currentControl.matchedCommand, matched);
+  VP37_resetCurrentControl(pump);
+  TEST_ASSERT_FALSE(pump->currentControl.matchCached);
+  TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, hal_micros()));
+}
+
+void test_vp37_resistance_scan_keeps_onset_capture_rejected_after_settling(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  const SupplyScanFixture fixture = {100000U, false, false, false, true};
+  setupSupplyScan(pump, fixture.startUs);
+  pump->thermal.driveCompensationEnabled = true;
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  uint32_t nextBlockUs = blockUs;
+  int32_t pwm = 0;
+  bool becameSettled = false;
+  for (uint32_t us = 0U; us <= 450000U; us += 5000U) {
+    while (nextBlockUs <= us) {
+      const float amps = (float)pwm * 12.0f /
+                         ((float)PWM_RESOLUTION * VP37_DRIVE_REFERENCE_OHMS);
+      completeSupplyScan(fixture, nextBlockUs, amps, pwm, true);
+      nextBlockUs += blockUs;
+    }
+    hal_mock_set_micros(fixture.startUs + us);
+    injectAdjRegisterData(4600, 120U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    pwm = pump->output.finalPWM;
+    if (!becameSettled && pump->currentControl.driveSettled) {
+      becameSettled = true;
+      // This DMA result predates the end of the quiet interval. Processing
+      // it after that interval must not retroactively make it a hold sample.
+      TEST_ASSERT_TRUE(pump->thermal.cycleValid);
+      TEST_ASSERT_FALSE(pump->thermal.cycleSettled);
+      TEST_ASSERT_FALSE(pump->thermal.driveLearning);
+      TEST_ASSERT_EQUAL_UINT32(0U, pump->thermal.driveSamples);
+    }
+  }
+  TEST_ASSERT_TRUE(becameSettled);
+  TEST_ASSERT_TRUE(pump->thermal.cycleSettled);
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, pump->thermal.driveSamples);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, VP37_DRIVE_REFERENCE_OHMS,
+                           pump->thermal.driveResistance);
 }
 
 static void runSupplyScanProfile(const SupplyScanFixture &fixture) {
@@ -2006,6 +2153,70 @@ void test_vp37_climb_floor_does_not_bypass_target_ramp(void) {
   TEST_ASSERT_FALSE(pump->pid.softFloorActive);
 }
 
+static float learnNegativeHoldingTrim(VP37Pump *pump, uint32_t &ms) {
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0.05f, 0.2f, 0.0f, true);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 75.0f));
+  const int16_t target = (int16_t)pump->demand.target;
+  ms = 0U;
+  runSupplyCycles(pump, ms, 585U, target + 200, 144U, 0.0f);
+  const float learned = pump->pid.terms.integral;
+  TEST_ASSERT_LESS_THAN_FLOAT(-100.0f, learned);
+  TEST_ASSERT_GREATER_THAN_FLOAT(-120.0f, learned);
+  return learned;
+}
+
+void test_vp37_climb_floor_preserves_learned_negative_trim_at_target(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  uint32_t ms;
+  const float learned = learnNegativeHoldingTrim(pump, ms);
+  const int16_t target = (int16_t)pump->demand.target;
+
+  const float currentCorrections[] = {0.0f, -35.0f};
+  for (size_t i = 0U; i < COUNTOF(currentCorrections); ++i) {
+    float minimum = 10000.0f;
+    float maximum = -10000.0f;
+    for (int16_t offset = -2; offset <= 2; ++offset) {
+      // The same current trim starts each sample; without a new capture its
+      // normal decay is identical on both sides of the position target.
+      pump->currentControl.correctionPwm = currentCorrections[i];
+      runSupplyCycles(pump, ms, 1U, target + offset, 144U, 0.0f);
+      TEST_ASSERT_FLOAT_WITHIN(0.01f, learned, pump->pid.terms.integral);
+      TEST_ASSERT_FALSE(pump->pid.terms.saturated_low);
+      TEST_ASSERT_FALSE(pump->pid.softFloorActive);
+      TEST_ASSERT_LESS_THAN_FLOAT(-100.0f, pump->pid.correction);
+      const float command =
+          pump->output.pwmValue + pump->currentControl.correctionPwm;
+      minimum = fminf(minimum, command);
+      maximum = fmaxf(maximum, command);
+    }
+    TEST_ASSERT_LESS_THAN_FLOAT(0.3f, maximum - minimum);
+  }
+}
+
+void test_vp37_climb_floor_keeps_acceleration_reserve_for_moving_demand(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  uint32_t ms;
+  (void)learnNegativeHoldingTrim(pump, ms);
+  for (uint32_t step = 0U; step < 6U; ++step) {
+    TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(
+                                  pump, 80.0f + 3.0f * (float)step));
+    const int16_t position = (int16_t)(pump->demand.desired - 2);
+    pump->currentControl.correctionPwm = -35.0f;
+    runSupplyCycles(pump, ms, 1U, position, 144U, 0.0f);
+    TEST_ASSERT_LESS_THAN_INT32(pump->demand.desired, pump->feedback.position);
+    TEST_ASSERT_LESS_THAN_INT32(pump->demand.target, pump->demand.desired);
+    TEST_ASSERT_FALSE(hal_millis_deadline_expired(pump->demand.targetChangedMs,
+                                                  VP37_TARGET_STABLE_MS));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -(float)VP37_PWM_FF_SOFT_FLOOR_MARGIN,
+                             pump->pid.negativeLimit +
+                                 pump->currentControl.correctionPwm);
+    TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(
+        pump->feedforward.pwm - (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN - 0.001f,
+        pump->output.pwmValue + pump->currentControl.correctionPwm);
+  }
+}
+
 void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
     void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
@@ -2700,6 +2911,7 @@ static void feedDriveObservation(VP37Pump *pump, float ohms, float volts) {
       ((float)drive / (float)PWM_RESOLUTION) * volts / ohms;
   pump->thermal.cycleUs = hal_micros();
   pump->thermal.cycleValid = true;
+  pump->thermal.cycleSettled = VP37_driveIsSettled(pump, hal_micros());
 }
 
 static void runDriveCycles(VP37Pump *pump, uint32_t &ms, uint32_t count,
@@ -2772,6 +2984,68 @@ void test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier(void) {
   TEST_ASSERT_GREATER_THAN_INT32(referencePWM, pump->output.finalPWM);
 }
 
+void test_vp37_measured_drive_learns_while_position_moves_once_ready(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
+  uint32_t ms = 0U;
+  runDriveCycles(pump, ms, 1400U, 1.32f, true);
+  TEST_ASSERT_TRUE(pump->thermal.driveResistanceReady);
+  const float learned = pump->thermal.driveResistance;
+  const uint32_t acceptedMs = pump->thermal.driveUpdatedMs;
+  const uint32_t acceptedCount = pump->thermal.driveLearnedSamples;
+  // A ready estimate follows matched captures taken in motion at the motion
+  // filter rate; the feedback read lags the injected position by one step, so
+  // at most the first capture still counts as quiet.
+  const float expected =
+      learned +
+      ((1.8f - learned) * (1.0f - expf(-0.5f / VP37_DRIVE_FILTER_MOTION_S)));
+  for (uint32_t i = 0U; i < 100U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((i % 2U) == 0U ? 4600 : 4200, 144U, 29U,
+                          ADJ_STATUS_OK);
+    feedDriveObservation(pump, 1.8f, 14.0f);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->thermal.driveLearning);
+    TEST_ASSERT_TRUE(pump->thermal.driveCompensationUsed);
+  }
+  TEST_ASSERT_FALSE(pump->thermal.cycleSettled);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, expected, pump->thermal.driveResistance);
+  TEST_ASSERT_GREATER_THAN_UINT32(acceptedMs, pump->thermal.driveUpdatedMs);
+  TEST_ASSERT_EQUAL_UINT32(acceptedCount + 100U,
+                           pump->thermal.driveLearnedSamples);
+  // Quiet captures pull it back to the coil's value at the quiet filter.
+  runDriveCycles(pump, ms, 1600U, 1.32f, true);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.32f, pump->thermal.driveResistance);
+}
+
+void test_vp37_measured_drive_does_not_learn_in_motion_before_ready(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->thermal.driveCompensationEnabled = true;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
+  uint32_t ms = 0U;
+  // A first estimate must come from quiet captures: motion alone never builds
+  // one, however long it lasts and however healthy the matched observations.
+  for (uint32_t i = 0U; i < 1400U; ++i) {
+    ms += 5U;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((i % 2U) == 0U ? 4600 : 4200, 144U, 29U,
+                          ADJ_STATUS_OK);
+    feedDriveObservation(pump, 1.32f, 14.0f);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->thermal.driveLearning);
+  }
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->thermal.driveSamples);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->thermal.driveLearnedSamples);
+  TEST_ASSERT_FALSE(pump->thermal.driveResistanceReady);
+  TEST_ASSERT_FALSE(pump->thermal.driveCompensationUsed);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_DRIVE_REFERENCE_OHMS,
+                          pump->thermal.driveResistance);
+}
+
 void test_vp37_measured_drive_rejects_stale_and_mismatched_captures(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -2841,10 +3115,13 @@ void test_vp37_measured_drive_rejects_stale_and_mismatched_captures(void) {
 void test_vp37_measured_drive_consumes_each_capture_once(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0.0f, 0.0f, 0.0f, false);
   pump->thermal.driveCompensationEnabled = true;
   VP37_setPositionDemandPercentage(pump, 50.0f);
   uint32_t ms = 0U;
-  runDriveCycles(pump, ms, 30U, 1.32f, false);
+  // Qualify the quiet rail and command before testing duplicate handling.
+  runDriveCycles(pump, ms, 80U, 1.32f, false);
+  TEST_ASSERT_TRUE(VP37_driveIsSettled(pump, hal_micros()));
   runDriveCycles(pump, ms, 1U, 1.32f, true);
   TEST_ASSERT_EQUAL_UINT32(1U, pump->thermal.driveSamples);
   const float resistance = pump->thermal.driveResistance;
@@ -3221,6 +3498,13 @@ int main(void) {
   RUN_TEST(test_vp37_current_scan_increases_drive_for_a_current_deficit);
   RUN_TEST(test_vp37_current_scan_reduces_drive_for_a_current_excess);
   RUN_TEST(test_vp37_current_scan_matches_target_before_active_low_latch);
+  RUN_TEST(
+      test_vp37_resistance_scan_uses_the_command_that_produced_the_current);
+  RUN_TEST(test_vp37_current_scan_cache_rechecks_capture_age_and_quality);
+  RUN_TEST(test_vp37_current_scan_cache_rechecks_historical_command_age);
+  RUN_TEST(test_vp37_current_scan_cache_follows_sequence_command_and_reset);
+  RUN_TEST(
+      test_vp37_resistance_scan_keeps_onset_capture_rejected_after_settling);
   RUN_TEST(test_vp37_current_feedback_preserves_both_physical_limits);
   RUN_TEST(test_vp37_current_feedback_clears_at_rest_and_stop);
   RUN_TEST(test_vp37_derivative_opposes_rebound_within_one_control_step);
@@ -3255,6 +3539,8 @@ int main(void) {
   RUN_TEST(test_vp37_integral_limit_tapers_with_ramped_position);
   RUN_TEST(test_vp37_feedforward_is_nonlinear_and_calibration_independent);
   RUN_TEST(test_vp37_climb_floor_does_not_bypass_target_ramp);
+  RUN_TEST(test_vp37_climb_floor_preserves_learned_negative_trim_at_target);
+  RUN_TEST(test_vp37_climb_floor_keeps_acceleration_reserve_for_moving_demand);
   RUN_TEST(test_vp37_temperature_scales_unsaturated_ff_and_pid_together);
   RUN_TEST(test_vp37_temperature_filter_holds_invalid_and_blends_bench_switch);
   RUN_TEST(test_vp37_thermal_scale_ramps_the_handover_to_the_measured_path);
@@ -3329,6 +3615,8 @@ int main(void) {
   RUN_TEST(test_vp37_integral_authority_is_independent_of_ki);
   RUN_TEST(test_vp37_bench_cap_and_stop);
   RUN_TEST(test_vp37_measured_drive_replaces_the_fuel_temperature_multiplier);
+  RUN_TEST(test_vp37_measured_drive_learns_while_position_moves_once_ready);
+  RUN_TEST(test_vp37_measured_drive_does_not_learn_in_motion_before_ready);
   RUN_TEST(test_vp37_measured_drive_rejects_stale_and_mismatched_captures);
   RUN_TEST(test_vp37_measured_drive_consumes_each_capture_once);
   RUN_TEST(test_vp37_measured_drive_holds_through_supply_transients);

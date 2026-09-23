@@ -56,10 +56,10 @@ Pending areas:
 
 ## Latest screening snapshot
 
-The 2026-09-19 screening with cppcheck 2.13.0 reports **934 active findings**.
-The VP37 supply-acquisition and resistance-estimation changes preserve the
-findings from commit `058d0b9`: no additions after comparing source text and
-rule IDs independently of line numbers. No suppressions were added. Licensed
+The 2026-09-22 screening with cppcheck 2.13.0 reports **939 active findings**
+across 31 rule IDs. The VP37 resistance-learning and climb-floor changes
+preserve the findings from commit `a5560a4`: no additions after comparing
+source text and rule IDs independently of line numbers. No suppressions were added. Licensed
 rule texts remain unavailable, so this is a regression check rather than a
 compliance claim.
 
