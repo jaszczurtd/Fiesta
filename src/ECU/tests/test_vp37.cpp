@@ -2637,7 +2637,8 @@ void test_vp37_derivative_opposes_rebound_within_one_control_step(void) {
   TEST_ASSERT_LESS_THAN_FLOAT(0, pump->pid.terms.derivative);
 }
 
-void test_vp37_default_derivative_ignores_large_feedback_step(void) {
+void test_vp37_default_derivative_opposes_a_feedback_step_through_its_filter(
+    void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
   VP37_setPositionDemandPercentage(pump, 73);
@@ -2648,8 +2649,19 @@ void test_vp37_default_derivative_ignores_large_feedback_step(void) {
   injectAdjRegisterData(7600, 144U, 49U, ADJ_STATUS_OK);
   VP37_process(pump);
 
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->pid.kd);
-  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->pid.terms.derivative);
+  // D acts on the measurement: a 1500 Hz jump in one 5 ms step pushes back by
+  // Kd times the filtered rate, and the kick decays with the filter after it.
+  const float dt = .005f;
+  const float firstRate = (-1500.0f / dt) * (dt / (dt + VP37_PID_TF));
+  TEST_ASSERT_FLOAT_WITHIN(1e-7f, VP37_PID_KD, pump->pid.kd);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, VP37_PID_KD * firstRate,
+                           pump->pid.terms.derivative);
+  const float kick = pump->pid.terms.derivative;
+  hal_mock_set_millis(10U);
+  injectAdjRegisterData(7600, 144U, 49U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, kick * (VP37_PID_TF / (dt + VP37_PID_TF)),
+                           pump->pid.terms.derivative);
 }
 
 void test_vp37_upper_derivative_blends_only_above_85_percent(void) {
@@ -2675,6 +2687,65 @@ void test_vp37_upper_derivative_blends_only_above_85_percent(void) {
   }
 }
 
+void test_vp37_settled_upper_derivative_keeps_the_rev90_total(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  uint32_t ms = 0U;
+  runSupplyCycles(pump, ms, 60U, 4600, 144U, 0.0f);
+  TEST_ASSERT_FLOAT_WITHIN(1e-7f, VP37_PID_KD, pump->pid.effectiveKd);
+  // A settled upper target adds up to the 0.001 that rev90 damped it with;
+  // more turned the negative-stiffness step into sustained ringing.
+  VP37_setPositionDemandPercentage(pump, 90.0f);
+  runSupplyCycles(pump, ms, 200U, 8200, 144U, 0.0f);
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  TEST_ASSERT_FLOAT_WITHIN(1e-7f, .001f, pump->pid.effectiveKd);
+}
+
+// Positions at a constant lag behind the ramp, then catching up once it stops.
+static float rampDerivative(bool afterRamp) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  uint32_t ms = 0U;
+  runSupplyCycles(pump, ms, 40U, 1900, 144U, 0.0f);
+  VP37_setPositionDemandPercentage(pump, 70.0f);
+  float derivative = 0.0f;
+  int32_t lagging = 1900;
+  // 20 -> 70 % at the stationary 150 %/s takes about 67 steps.
+  for (uint32_t step = 0U; step < 100U; ++step) {
+    const bool ramping = pump->demand.desired != pump->demand.target;
+    if (afterRamp && !ramping) {
+      // The ramp has ended: the measurement closes the 300 Hz lag.
+      lagging += 60;
+      runSupplyCycles(pump, ms, 1U, (int16_t)lagging, 144U, 0.0f);
+      return pump->pid.terms.derivative;
+    }
+    lagging = pump->demand.desired - 300;
+    runSupplyCycles(pump, ms, 1U, (int16_t)lagging, 144U, 0.0f);
+    if (step == 20U) {
+      TEST_ASSERT_TRUE(pump->demand.desired != pump->demand.target);
+      derivative = pump->pid.terms.derivative;
+      if (!afterRamp) {
+        return derivative;
+      }
+    }
+  }
+  TEST_FAIL_MESSAGE("the ramp did not end");
+  return derivative;
+}
+
+void test_vp37_derivative_does_not_brake_a_followed_ramp(void) {
+  // Followed at a constant lag, the tracking error does not move, so D stays
+  // out of the way; D on the measurement braked the whole ramp by ~5 PWM.
+  TEST_ASSERT_FLOAT_WITHIN(.5f, 0.0f, rampDerivative(false));
+}
+
+void test_vp37_derivative_brakes_the_arrival_after_a_ramp(void) {
+  // Once the demand stops, the closing error brakes the arrival.
+  TEST_ASSERT_LESS_THAN_FLOAT(-1.0f, rampDerivative(true));
+}
+
 void test_vp37_upper_derivative_waits_for_stationary_target_and_slew(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
@@ -2683,12 +2754,13 @@ void test_vp37_upper_derivative_waits_for_stationary_target_and_slew(void) {
   uint32_t ms = 0U;
   runSupplyCycles(pump, ms, 1U, 8200, 144U, 0.0f);
   TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
-  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.effectiveKd);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KD, pump->pid.effectiveKd);
   runSupplyCycles(pump, ms, 6U, 8200, 144U, 0.0f);
-  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->pid.effectiveKd);
-  TEST_ASSERT_LESS_THAN_FLOAT(.001f, pump->pid.effectiveKd);
+  TEST_ASSERT_GREATER_THAN_FLOAT(VP37_PID_KD, pump->pid.effectiveKd);
+  TEST_ASSERT_LESS_THAN_FLOAT(VP37_PID_KD + .001f, pump->pid.effectiveKd);
   runSupplyCycles(pump, ms, 100U, 8200, 144U, 0.0f);
-  TEST_ASSERT_FLOAT_WITHIN(.000001f, .002f, pump->pid.effectiveKd);
+  TEST_ASSERT_FLOAT_WITHIN(.000001f, VP37_PID_KD + .002f,
+                           pump->pid.effectiveKd);
 
   VP37_setPositionDemandPercentage(pump, 100.0f);
   uint32_t stationaryRampSteps = 0U;
@@ -2696,11 +2768,13 @@ void test_vp37_upper_derivative_waits_for_stationary_target_and_slew(void) {
   for (uint32_t step = 0U; step < 40U; ++step) {
     runSupplyCycles(pump, ms, 1U, (int16_t)(8202U + (2U * step)), 144U, 0.0f);
     if (pump->demand.desired != pump->demand.target) {
-      TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->pid.effectiveKd);
+      TEST_ASSERT_GREATER_THAN_FLOAT(VP37_PID_KD, pump->pid.effectiveKd);
       TEST_ASSERT_LESS_THAN_FLOAT(previousGain, pump->pid.effectiveKd);
       TEST_ASSERT_LESS_THAN_FLOAT(.000183f,
                                   previousGain - pump->pid.effectiveKd);
-      TEST_ASSERT_LESS_THAN_FLOAT(0.0f, pump->pid.terms.derivative);
+      // The demand runs ahead of an almost still measurement: D on the
+      // tracking error adds drive while the upper addition fades.
+      TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->pid.terms.derivative);
       if (hal_millis_deadline_expired(pump->demand.targetChangedMs,
                                       VP37_TARGET_STABLE_MS)) {
         stationaryRampSteps++;
@@ -2711,7 +2785,8 @@ void test_vp37_upper_derivative_waits_for_stationary_target_and_slew(void) {
   TEST_ASSERT_GREATER_THAN_UINT32(0U, stationaryRampSteps);
   TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
   runSupplyCycles(pump, ms, 100U, 8280, 144U, 0.0f);
-  TEST_ASSERT_FLOAT_WITHIN(.000001f, .002f, pump->pid.effectiveKd);
+  TEST_ASSERT_FLOAT_WITHIN(.000001f, VP37_PID_KD + .002f,
+                           pump->pid.effectiveKd);
 }
 
 void test_vp37_upper_derivative_blend_uses_elapsed_control_time(void) {
@@ -2729,7 +2804,8 @@ void test_vp37_upper_derivative_blend_uses_elapsed_control_time(void) {
   VP37_process(pump);
   TEST_ASSERT_EQUAL_UINT32(10000U, pump->pidDtUs);
   TEST_ASSERT_FLOAT_WITHIN(.000001f, 1.0f / 6.0f, pump->pid.topDBlend);
-  TEST_ASSERT_FLOAT_WITHIN(.000001f, .002f / 6.0f, pump->pid.effectiveKd);
+  TEST_ASSERT_FLOAT_WITHIN(.000001f, VP37_PID_KD + (.002f / 6.0f),
+                           pump->pid.effectiveKd);
 
   VP37_setVP37PID(pump, VP37_PID_KP, VP37_PID_KI, 0.0f, true);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.topDBlend);
@@ -2747,7 +2823,8 @@ void test_vp37_upper_derivative_survives_62ms_target_updates_without_steps(
   VP37_setPositionDemandPercentage(pump, 90.0f);
   uint32_t ms = 0U;
   runSupplyCycles(pump, ms, 120U, 8200, 144U, 0.0f);
-  TEST_ASSERT_FLOAT_WITHIN(.000001f, .004f, pump->pid.effectiveKd);
+  TEST_ASSERT_FLOAT_WITHIN(.000001f, VP37_PID_KD + .004f,
+                           pump->pid.effectiveKd);
   float previousGain = pump->pid.effectiveKd;
   uint32_t movingSteps = 0U;
   uint32_t settledSteps = 0U;
@@ -2758,7 +2835,6 @@ void test_vp37_upper_derivative_survives_62ms_target_updates_without_steps(
     TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->pid.effectiveKd);
     TEST_ASSERT_LESS_THAN_FLOAT(.000365f,
                                 fabsf(pump->pid.effectiveKd - previousGain));
-    TEST_ASSERT_LESS_THAN_FLOAT(0.0f, pump->pid.terms.derivative);
     if (hal_millis_deadline_expired(pump->demand.targetChangedMs,
                                     VP37_TARGET_STABLE_MS)) {
       settledSteps++;
@@ -2865,7 +2941,7 @@ void test_vp37_upper_derivative_keeps_zero_release_and_fault_shutdown(void) {
   runSupplyCycles(pump, ms, 80U, 1000, 144U, 0.0f);
   TEST_ASSERT_TRUE(pump->demand.atRest);
   TEST_ASSERT_EQUAL_INT32(0, pump->output.finalPWM);
-  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.effectiveKd);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KD, pump->pid.effectiveKd);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.topDBlend);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.terms.output);
 
@@ -3508,8 +3584,12 @@ int main(void) {
   RUN_TEST(test_vp37_current_feedback_preserves_both_physical_limits);
   RUN_TEST(test_vp37_current_feedback_clears_at_rest_and_stop);
   RUN_TEST(test_vp37_derivative_opposes_rebound_within_one_control_step);
-  RUN_TEST(test_vp37_default_derivative_ignores_large_feedback_step);
+  RUN_TEST(
+      test_vp37_default_derivative_opposes_a_feedback_step_through_its_filter);
   RUN_TEST(test_vp37_upper_derivative_blends_only_above_85_percent);
+  RUN_TEST(test_vp37_settled_upper_derivative_keeps_the_rev90_total);
+  RUN_TEST(test_vp37_derivative_does_not_brake_a_followed_ramp);
+  RUN_TEST(test_vp37_derivative_brakes_the_arrival_after_a_ramp);
   RUN_TEST(test_vp37_upper_derivative_waits_for_stationary_target_and_slew);
   RUN_TEST(test_vp37_upper_derivative_blend_uses_elapsed_control_time);
   RUN_TEST(
