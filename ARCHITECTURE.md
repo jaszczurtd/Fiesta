@@ -108,10 +108,16 @@ reaches the cache without filter delay. Both direct driver demand and
 send to VP37. Optional engine control is enabled by
 `ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
 
-VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
-full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
-after the target settles and fades when movement resumes through a 50 ms
-blend. The holding map and supply/temperature compensation remain shared
+VP37 uses 130 Hz PWM. The position loop applies derivative action of
+0.00044 PWM·s/Hz to the tracking error (ramped demand minus measurement) over
+the whole stroke. That is Kp times the coil's electrical time constant (about
+8.7 ms), so it cancels the coil lag in the proportional path. A force loop
+could add no more with one current sample per PWM period. On the error, it
+leaves a followed ramp alone and brakes the arrival once the demand stops. Above 85%, a further 0.00056 PWM·s/Hz reaches its full position
+weight at 90%, so a settled upper target is damped with 0.001 in total. More
+than that drove the negative-stiffness step at 90.5% into sustained ringing.
+The upper addition engages after the target settles and fades when movement
+resumes through a 50 ms blend. The holding map and supply/temperature compensation remain shared
 across the stroke. Once the demand settles, the climb floor follows negative
 learned integral trim, so crossing below the target preserves the reduction
 needed to hold position. Moving demands retain the original climb floor.

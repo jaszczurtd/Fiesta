@@ -610,10 +610,14 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool freezeIntegral = rampWindup || self->pid.integralHold;
   const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.error)
                                                 : self->pid.integralDeadbandHz;
-  const hal_status_t pidStatus =
-      hal_pid_controller_step_ex(self->pid.controller, (float)self->pid.error,
-                                 (float)self->feedback.position, cycle->dt,
-                                 integralDeadband, &self->pid.terms);
+  // D follows the tracking error: a demand the actuator keeps up with is not
+  // braked for moving, while a standing target is damped exactly as by the
+  // measurement, since its demand does not move.
+  const float derivativeInput =
+      (float)self->feedback.position - self->demand.desiredPosition;
+  const hal_status_t pidStatus = hal_pid_controller_step_ex(
+      self->pid.controller, (float)self->pid.error, derivativeInput, cycle->dt,
+      integralDeadband, &self->pid.terms);
   bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);

@@ -58,11 +58,19 @@ extern "C" {
 // PWM*s/Hz (Kd). Position feedback remains in Adjustometer Hz.
 #define VP37_PID_KP 0.05f
 #define VP37_PID_KI 0.2f
-// Moving targets fade the upper-target D addition toward the base PI response.
-#define VP37_PID_KD 0.0f
+// The coil current lags the command by its electrical time constant, about
+// 8.7 ms in the upper stroke (alternating-duty response, bench 2026-09-23).
+// Kp times that constant as D on the tracking error cancels the coil pole in
+// the P path, which is all a model-based force loop can add at one current
+// sample per PWM period. On the error rather than the measurement, D does not
+// brake a demand the actuator keeps up with (bench 2026-09-24: that drag cost
+// 12-15 % of the early arrival error).
+#define VP37_PID_KD 0.00044f
 /** Additional derivative gain at settled upper targets [PWM*s/Hz]; zero
- * disables it. */
-#define VP37_PID_TOP_KD 0.001f
+ * disables it. With the base D the settled upper stroke keeps its total of
+ * 0.001: more drove the negative-stiffness step at 90.5 % into sustained
+ * ringing. Moving targets fade this addition out. */
+#define VP37_PID_TOP_KD 0.00056f
 /** Time constant for engaging and releasing upper-target damping [s]. */
 #define VP37_PID_TOP_D_BLEND_S 0.05f
 // Derivative filter time constant [s].
