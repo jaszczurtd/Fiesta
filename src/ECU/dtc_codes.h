@@ -7,7 +7,8 @@
  *  Values use the two-byte SAE J2012 wire representation.
  *  @{ */
 #define DTC_OBD_CAN_INIT_FAIL UINT16_C(0xD900)
-#define DTC_PCF8574_COMM_FAIL UINT16_C(0xC073)
+#define DTC_PCF8574_COMM_FAIL UINT16_C(0xD90D)
+#define DTC_CAN_BUS_FAULT UINT16_C(0xC073)
 #define DTC_PWM_CHANNEL_NOT_INIT UINT16_C(0x0657)
 #define DTC_DPF_COMM_LOST UINT16_C(0xC100)
 #define DTC_EGT_COMM_LOST UINT16_C(0xD902)
@@ -29,6 +30,24 @@
 #define DTC_ADJ_FUEL_TEMP_BROKEN UINT16_C(0xD90A)
 #define DTC_ADJ_VOLTAGE_BAD UINT16_C(0xD90B)
 #define DTC_RPM_IRQ_INIT_FAIL UINT16_C(0xD90C)
+
+/** @name DTC detail (ISO 14229-1 failure type byte)
+ *  Low byte of the three-byte UDS DTC. 0x88 is the ISO "bus off" type; the
+ *  0xF1..0xF8 values are project specific and name the frame whose transmit
+ *  failed last. */
+/** @{ */
+#define DTC_DETAIL_NONE UINT8_C(0x00)
+#define DTC_DETAIL_CAN_BUS_OFF UINT8_C(0x88)
+#define DTC_DETAIL_CAN_TX_RPM UINT8_C(0xF1)
+#define DTC_DETAIL_CAN_TX_GPS_LAT UINT8_C(0xF2)
+#define DTC_DETAIL_CAN_TX_GPS_LON_TIME UINT8_C(0xF3)
+#define DTC_DETAIL_CAN_TX_ECU_UPDATE_01 UINT8_C(0xF4)
+#define DTC_DETAIL_CAN_TX_ECU_UPDATE_02 UINT8_C(0xF5)
+#define DTC_DETAIL_CAN_TX_ECU_UPDATE_03 UINT8_C(0xF6)
+#define DTC_DETAIL_CAN_TX_TURBO UINT8_C(0xF7)
+#define DTC_DETAIL_CAN_TX_THROTTLE UINT8_C(0xF8)
+#define DTC_DETAIL_CAN_TX_OTHER UINT8_C(0xF0)
+/** @} */
 /** @} */
 
 #endif

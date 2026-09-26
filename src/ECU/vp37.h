@@ -95,7 +95,9 @@ extern "C" {
 // static friction and releasing it as a visible position jump. The bands stay
 // fixed: scaling them with the integration dead zone let standing errors of
 // twice the zone persist on the upper stroke, where the zone alone bounds them.
-#define VP37_INTEGRAL_HOLD_ENTER_HZ 20
+// Entry equals the base dead zone: the braked arrival approaches from one side,
+// and a 20 Hz entry froze it up to 20 Hz short of the target.
+#define VP37_INTEGRAL_HOLD_ENTER_HZ 12
 #define VP37_INTEGRAL_HOLD_CONFIRM_MS 100U
 #define VP37_INTEGRAL_HOLD_EXIT_HZ 40
 #define VP37_INTEGRAL_HOLD_RELEASE_MS 500U
@@ -231,11 +233,28 @@ extern "C" {
 #define VP37_DESIRED_SLEW_PERCENT_PER_SECOND 300.0f
 #define VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND 275.0f
 #define VP37_DESIRED_UPPER_SLEW_START_PERCENT 75.0f
-// An unchanged target uses a softer approach; moving ramps retain their rate.
+// A lone rising step, or a target that has not changed for
+// VP37_TARGET_STABLE_MS, is standing and gets the softer approach; a target
+// that changes again within that time is tracked and keeps the moving rate
+// and motion assist. A lone falling step keeps the full motion assist for
+// that time, as every step did before the standing rule: the descent is not
+// braked, and without that start it lagged its ramp by 20-60 Hz more.
 #define VP37_TARGET_STABLE_MS 25U
-#define VP37_STATIONARY_SLEW_PERCENT_PER_SECOND 150.0f
-#define VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND 125.0f
-#define VP37_STATIONARY_MOTION_WEIGHT 0.3f
+#define VP37_STATIONARY_SLEW_PERCENT_PER_SECOND 225.0f
+#define VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND 187.5f
+// Share of the motion assist a standing ramp gets, rising and falling. The
+// rising share follows the ramp closely enough that the actuator lags it by
+// ~80-110 Hz RMS less than at 0.3 (bench lag-1, 2026-09-25) with the same
+// arrival time; 1.0 adds 30-90 Hz of overshoot. The descent is not braked,
+// so a larger falling share only overshoots below the target.
+#define VP37_STATIONARY_RISE_WEIGHT 0.6f
+#define VP37_STATIONARY_FALL_WEIGHT 0.3f
+// A rising standing ramp brakes before its target at this rate [% of
+// travel/s^2], so the actuator arrives slowly instead of overshooting and
+// ringing at ~6-9 Hz; the undamped mid stroke has no D to stop it. 750 halved
+// the ringing of 1500 on small steps; the faster standing slew above keeps big
+// steps quicker than without the brake.
+#define VP37_ARRIVAL_DECEL_PERCENT_PER_S2 750.0f
 
 // calibration / stabilization values
 #define PERCENTAGE_ERROR 3.0
@@ -264,7 +283,13 @@ extern "C" {
 // define this, to avoid magic numbers in the code
 #define VP37_PERCENT_MIN 0
 #define VP37_PERCENT_MAX 100
-
+/** Physical top of the usable stroke [% of the calibrated travel]. Demand
+ * 0..100 % maps onto 0..this share of the travel, so the upper stroke with its
+ * negative-stiffness steps (from ~90 %, static sweep 2026-09-20) stays out of
+ * reach; the maximum fuel quantity is cut accordingly. 100 restores the full
+ * travel. The stroke maps (holding map, tapers, upper damping) keep the
+ * physical scale. */
+#define VP37_PHYSICAL_LIMIT_PERCENT 86.0f
 // Hold the last PWM briefly on a failed transfer, without integrating stale
 // data.
 #define VP37_ADJ_COMM_CUTOFF_MS 20U
@@ -330,13 +355,18 @@ typedef struct {
 
 /** @brief Source-independent requested position and its shared motion ramp. */
 typedef struct {
-  float requestedPercent; /**< Requested position in 0..100%; -1 before a
-                             demand. */
-  int32_t target;         /**< Calibrated position target [Hz]. */
-  int32_t desired;        /**< Ramped target sent to the PID [Hz]. */
-  float desiredPosition;  /**< Fractional ramp state [Hz]. */
+  float requestedPercent;     /**< Requested position in 0..100%; -1 before a
+                                 demand. */
+  float physicalLimitPercent; /**< Share of the travel that 100 % demand
+                                 reaches; VP37_PHYSICAL_LIMIT_PERCENT at start.
+                                 Outside (0, 100] the full travel applies. */
+  int32_t target;             /**< Calibrated position target [Hz]. */
+  int32_t desired;            /**< Ramped target sent to the PID [Hz]. */
+  float desiredPosition;      /**< Fractional ramp state [Hz]. */
   uint32_t targetChangedMs;
-  bool atRest; /**< Zero demand after slew: PWM off, PID state cleared. */
+  bool targetMoving; /**< The last target change came within
+                        VP37_TARGET_STABLE_MS of the one before it. */
+  bool atRest;       /**< Zero demand after slew: PWM off, PID state cleared. */
 } VP37Demand;
 
 /** @brief Holding command from the map, the motion terms and the learned
@@ -722,14 +752,15 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
 /**
  * @brief Set the quantity actuator's position in percent of the stroke.
  * @param self Controller instance; NULL returns HAL_EINVAL.
- * @param percent Position across the calibrated stroke, clamped to 0..100%.
+ * @param percent Position across the usable stroke, clamped to 0..100%;
+ * 100 % is VP37_PHYSICAL_LIMIT_PERCENT of the calibrated travel.
  * @return HAL_OK on acceptance, HAL_ESTATE before calibration, or HAL_EINVAL
  * for NULL/non-finite input. A non-finite value requests zero when calibrated.
  * @note This is the unit engine control works in: the percentage is mapped
- * onto the calibrated stroke, so the same number means the same position
- * whatever the calibration produced. Every source then shares one ramp,
- * feedforward, PID and set of limits. Analog sensor conditioning belongs to
- * the sensor layer. Call on the control core under its state mutex. Zero
+ * onto the usable part of the calibrated stroke, so the same number means the
+ * same position whatever the calibration produced. Every source then shares one
+ * ramp, feedforward, PID and set of limits. Analog sensor conditioning belongs
+ * to the sensor layer. Call on the control core under its state mutex. Zero
  * follows the shared descent and release policy.
  */
 hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent);
@@ -761,8 +792,9 @@ int32_t VP37_getPositionDemandMinValue(const VP37Pump *self);
 /**
  * @brief Highest position VP37_setPositionDemandValue() accepts.
  * @param self Controller instance to inspect.
- * @return Calibrated top of the stroke in feedback counts, or -1 for NULL and
- * before calibration.
+ * @return The physical limit of the stroke (VP37_PHYSICAL_LIMIT_PERCENT of the
+ * calibrated travel) in feedback counts, or -1 for NULL and before
+ * calibration.
  */
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self);
 

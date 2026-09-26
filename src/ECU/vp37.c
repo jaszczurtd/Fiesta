@@ -10,7 +10,8 @@
 /** @brief What one control step carries between its stages. */
 typedef struct {
   float dt;              /**< Control period [s]. */
-  bool stationaryTarget; /**< The target has stood for VP37_TARGET_STABLE_MS. */
+  bool stationaryTarget; /**< A single step, or a tracked target that has
+                            stood for VP37_TARGET_STABLE_MS. */
   int32_t
       previousDesired; /**< Desired position before this step, -1 at start. */
   float previousPosition; /**< Slewed position before this step. */
@@ -24,6 +25,7 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle);
 static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle);
+static int32_t VP37_demandTop(const VP37Pump *self);
 static bool VP37_releaseAtRest(VP37Pump *self);
 static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle);
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle);
@@ -42,6 +44,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   }
 
   self->demand.requestedPercent = -1;
+  self->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
   self->currentControl.enabled = true;
   VP37_resetCurrentControl(self);
   self->feedback.calibrationDone = false;
@@ -236,9 +239,33 @@ static hal_status_t VP37_demandAcceptance(const VP37Pump *self) {
  * unit the caller works in, and the settle timer restarts only when the
  * target really moves.
  */
+/**
+ * @brief Highest position a demand may reach.
+ * @param self Controller instance with a calibrated stroke.
+ * @return The calibrated position at the physical limit; the full travel when
+ * the limit is outside (0, 100].
+ */
+static int32_t VP37_demandTop(const VP37Pump *self) {
+  const float limit = self->demand.physicalLimitPercent;
+  const float share =
+      ((limit > 0.0f) && (limit <= 100.0f)) ? (limit * 0.01f) : 1.0f;
+  const float travel =
+      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
+  return self->feedback.adjustMin + (int32_t)lroundf(travel * share);
+}
+
 static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target) {
   self->demand.requestedPercent = percent;
   if (target != self->demand.target) {
+    // A target that changes again within the settle time is being tracked;
+    // a lone rising step is a standing target from its first cycle. A lone
+    // falling step keeps the moving assist for the settle time: the descent
+    // is not braked, and it started slower without it.
+    const bool falling = (self->demand.desired >= 0) &&
+                         ((float)target < self->demand.desiredPosition);
+    self->demand.targetMoving =
+        falling || !hal_millis_deadline_expired(self->demand.targetChangedMs,
+                                                VP37_TARGET_STABLE_MS);
     self->demand.targetChangedMs = hal_millis();
   }
   self->demand.target = target;
@@ -253,7 +280,7 @@ hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
         self, requested,
         (int32_t)hal_math_map_f32(requested, 0.0f, 100.0f,
                                   (float)self->feedback.adjustMin,
-                                  (float)self->feedback.adjustMax));
+                                  (float)VP37_demandTop(self)));
     status = valid ? HAL_OK : HAL_EINVAL;
   }
   return status;
@@ -262,15 +289,15 @@ hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
 hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value) {
   hal_status_t status = VP37_demandAcceptance(self);
   if (status == HAL_OK) {
-    const int32_t target = hal_constrain(value, self->feedback.adjustMin,
-                                         self->feedback.adjustMax);
+    const int32_t top = VP37_demandTop(self);
+    const int32_t target = hal_constrain(value, self->feedback.adjustMin, top);
     // Percent follows the counts, so telemetry and the rest policy read the
     // same demand whichever entry point set it.
-    VP37_publishDemand(
-        self,
-        hal_math_map_f32((float)target, (float)self->feedback.adjustMin,
-                         (float)self->feedback.adjustMax, 0.0f, 100.0f),
-        target);
+    VP37_publishDemand(self,
+                       hal_math_map_f32((float)target,
+                                        (float)self->feedback.adjustMin,
+                                        (float)top, 0.0f, 100.0f),
+                       target);
   }
   return status;
 }
@@ -280,7 +307,7 @@ int32_t VP37_getPositionDemandMinValue(const VP37Pump *self) {
 }
 
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self) {
-  return self != NULL ? self->feedback.adjustMax : -1;
+  return self != NULL ? VP37_demandTop(self) : -1;
 }
 
 /**
@@ -403,8 +430,10 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
                                 ? (float)self->demand.target
                                 : self->demand.desiredPosition;
   cycle->dt = (float)self->pidDtUs * 0.000001f;
-  cycle->stationaryTarget = hal_millis_deadline_expired(
-      self->demand.targetChangedMs, VP37_TARGET_STABLE_MS);
+  cycle->stationaryTarget =
+      !self->demand.targetMoving ||
+      hal_millis_deadline_expired(self->demand.targetChangedMs,
+                                  VP37_TARGET_STABLE_MS);
   cycle->ki = 0.0f;
   cycle->outputScale = 1.0f;
 }
@@ -413,9 +442,11 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
  * @brief Slew the demanded position toward the target.
  * @param self VP37 controller instance to update.
  * @param cycle Step context.
- * @note Rising demand slews slower in the upper stroke, and slower still once
- * the target has settled, so a standing target is approached without
- * overshoot. The error to the measured position follows from the result.
+ * @note Rising demand slews slower in the upper stroke. A standing target has
+ * its own rate and brakes before the target at
+ * VP37_ARRIVAL_DECEL_PERCENT_PER_S2, so the actuator arrives without the speed
+ * that overshoots it; descent and tracked targets keep their full rate. The
+ * error to the measured position follows from the result.
  */
 static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
   if (self->demand.desired < 0) {
@@ -428,15 +459,21 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
     const float upperStart =
         (float)self->feedback.adjustMin +
         travel * (VP37_DESIRED_UPPER_SLEW_START_PERCENT * 0.01f);
-    float rate = delta > 0.0f && self->demand.desiredPosition >= upperStart
+    const bool upper = (self->demand.desiredPosition >= upperStart);
+    const bool standingRise = (delta > 0.0f) && cycle->stationaryTarget;
+    float rate = (delta > 0.0f) && upper
                      ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
                      : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
-    if (delta > 0.0f && cycle->stationaryTarget) {
-      rate = self->demand.desiredPosition >= upperStart
-                 ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
-                 : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND;
+    if (standingRise) {
+      rate = upper ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
+                   : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND;
     }
-    const float step = travel * (rate * 0.01f) * cycle->dt;
+    float step = travel * (rate * 0.01f) * cycle->dt;
+    if (standingRise) {
+      // At most the speed that still stops at the target: v = sqrt(2 a d).
+      const float decel = travel * (VP37_ARRIVAL_DECEL_PERCENT_PER_S2 * 0.01f);
+      step = fminf(step, sqrtf(2.0f * decel * delta) * cycle->dt);
+    }
     self->demand.desiredPosition += hal_constrain(delta, -step, step);
   }
   self->demand.desired = (int32_t)self->demand.desiredPosition;
@@ -458,7 +495,7 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
   const float maxRise =
       VP37_DESIRED_SLEW_PERCENT_PER_SECOND / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
-      (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
+      (cycle->stationaryTarget ? VP37_STATIONARY_RISE_WEIGHT : 1.0f) *
       (upwardStep > 0.0f ? hal_constrain((self->demand.desiredPosition -
                                           cycle->previousPosition) /
                                              upwardStep,
@@ -468,7 +505,7 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
                                  cycle->dt /
                                  (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
   const float fall =
-      (cycle->stationaryTarget ? VP37_STATIONARY_MOTION_WEIGHT : 1.0f) *
+      (cycle->stationaryTarget ? VP37_STATIONARY_FALL_WEIGHT : 1.0f) *
       (upwardStep > 0.0f ? hal_constrain((cycle->previousPosition -
                                           self->demand.desiredPosition) /
                                              upwardStep,

@@ -34,6 +34,8 @@ typedef struct {
   float lastTurboHiDesiredSent;
   float lastTurboLoDesiredSent;
   int32_t lastThrottleSent;
+  uint16_t txFailures;  // failed sends since the last connection check
+  uint8_t txFailDetail; // DTC detail of the last failed send
 } can_state_t;
 
 static can_state_t s_canState = {.frameNumberVal = 0u,
@@ -57,7 +59,65 @@ static can_state_t s_canState = {.frameNumberVal = 0u,
                                  .lastTurboLoSent = (float)C_INIT_VAL,
                                  .lastTurboHiDesiredSent = (float)C_INIT_VAL,
                                  .lastTurboLoDesiredSent = (float)C_INIT_VAL,
-                                 .lastThrottleSent = (int32_t)C_INIT_VAL};
+                                 .lastThrottleSent = (int32_t)C_INIT_VAL,
+                                 .txFailures = 0u,
+                                 .txFailDetail = DTC_DETAIL_NONE};
+
+/**
+ * @brief Map a transmitted frame id to the DTC detail naming it.
+ * @param id CAN identifier of the frame.
+ * @return DTC_DETAIL_CAN_TX_* value for that frame.
+ */
+static uint8_t canTxDetailForId(uint32_t id) {
+  uint8_t detail = DTC_DETAIL_CAN_TX_OTHER;
+  switch (id) {
+  case CAN_ID_RPM:
+    detail = DTC_DETAIL_CAN_TX_RPM;
+    break;
+  case CAN_ID_GPS_EXT_LAT:
+    detail = DTC_DETAIL_CAN_TX_GPS_LAT;
+    break;
+  case CAN_ID_GPS_EXT_LON_TIME:
+    detail = DTC_DETAIL_CAN_TX_GPS_LON_TIME;
+    break;
+  case CAN_ID_ECU_UPDATE_01:
+    detail = DTC_DETAIL_CAN_TX_ECU_UPDATE_01;
+    break;
+  case CAN_ID_ECU_UPDATE_02:
+    detail = DTC_DETAIL_CAN_TX_ECU_UPDATE_02;
+    break;
+  case CAN_ID_ECU_UPDATE_03:
+    detail = DTC_DETAIL_CAN_TX_ECU_UPDATE_03;
+    break;
+  case CAN_ID_TURBO_PRESSURE:
+    detail = DTC_DETAIL_CAN_TX_TURBO;
+    break;
+  case CAN_ID_THROTTLE:
+    detail = DTC_DETAIL_CAN_TX_THROTTLE;
+    break;
+  default:
+    break;
+  }
+  return detail;
+}
+
+/**
+ * @brief Send one frame on the ECU bus and account for a failed transmit.
+ * @param id CAN identifier.
+ * @param len Payload length.
+ * @param buf Payload bytes.
+ * @return True when the driver accepted the frame.
+ */
+static bool canSend(uint32_t id, uint8_t len, const uint8_t *buf) {
+  const bool sent = hal_can_send(s_canState.canBusHandle, id, len, buf);
+  if (!sent) {
+    if (s_canState.txFailures < UINT16_MAX) {
+      s_canState.txFailures++;
+    }
+    s_canState.txFailDetail = canTxDetailForId(id);
+  }
+  return sent;
+}
 
 /**
  * @brief Reset the RPM publisher cache and retry state.
@@ -203,13 +263,11 @@ void CAN_sendGpsExtended(void) {
 
   if (CAN_buildGpsLatFrame(s_canState.frameNumberVal++, latBuf,
                            (int)sizeof(latBuf))) {
-    hal_can_send(s_canState.canBusHandle, CAN_ID_GPS_EXT_LAT,
-                 CAN_FRAME_MAX_LENGTH, latBuf);
+    canSend(CAN_ID_GPS_EXT_LAT, CAN_FRAME_MAX_LENGTH, latBuf);
   }
   if (CAN_buildGpsLonTimeFrame(s_canState.frameNumberVal++, lonTimeBuf,
                                (int)sizeof(lonTimeBuf))) {
-    hal_can_send(s_canState.canBusHandle, CAN_ID_GPS_EXT_LON_TIME,
-                 CAN_FRAME_MAX_LENGTH, lonTimeBuf);
+    canSend(CAN_ID_GPS_EXT_LON_TIME, CAN_FRAME_MAX_LENGTH, lonTimeBuf);
   }
 }
 
@@ -243,8 +301,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_OIL] =
         hal_can_encode_temp_i8(getGlobalValue(F_OIL_TEMP));
 
-    hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_01,
-                 CAN_FRAME_MAX_LENGTH, buf);
+    canSend(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] =
@@ -257,8 +314,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
     buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = getGlobalValue(F_GPS_CAR_SPEED);
 
-    hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_02,
-                 CAN_FRAME_MAX_LENGTH, buf);
+    canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] =
@@ -267,8 +323,7 @@ void CAN_updaterecipients_01(void) {
         hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = getGlobalValue(F_FAN_ENABLED);
 
-    hal_can_send(s_canState.canBusHandle, CAN_ID_ECU_UPDATE_03,
-                 CAN_FRAME_MAX_LENGTH, buf);
+    canSend(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
   }
 }
 
@@ -294,8 +349,7 @@ void CAN_updaterecipients_02(void) {
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
 
       s_canState.lastRpmAttemptAtMs = now;
-      const bool rpmSent = hal_can_send(s_canState.canBusHandle, CAN_ID_RPM,
-                                        CAN_FRAME_MAX_LENGTH, buf);
+      const bool rpmSent = canSend(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);
       if (rpmSent) {
         s_canState.rpmHasBeenSent = true;
         s_canState.lastRpmSent = rpm;
@@ -330,8 +384,7 @@ void CAN_sendTurboUpdate(void) {
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (uint8_t)hi_d;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (uint8_t)lo_d;
 
-    hal_can_send(s_canState.canBusHandle, CAN_ID_TURBO_PRESSURE, sizeof(buf),
-                 buf);
+    canSend(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
   }
 }
 
@@ -345,7 +398,7 @@ void CAN_sendThrottleUpdate(void) {
     buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
     buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
-    hal_can_send(s_canState.canBusHandle, CAN_ID_THROTTLE, sizeof(buf), buf);
+    canSend(CAN_ID_THROTTLE, sizeof(buf), buf);
   }
 }
 
@@ -440,8 +493,29 @@ bool isDPFConnected(void) { return s_canState.dpfConnectedFlag; }
 
 bool isEGTConnected(void) { return s_canState.egtConnectedFlag; }
 
+/**
+ * @brief Raise or clear U0073 from the controller state and failed sends.
+ * @note Bus-off from the controller wins; otherwise any send that the driver
+ * refused since the last check names the frame in the DTC detail. One clean
+ * check period clears the active flag again.
+ */
+static void canReportBusFault(void) {
+  hal_can_state_t state = HAL_CAN_STATE_ERROR_ACTIVE;
+  const bool haveState = s_canState.isInitialized &&
+                         hal_can_get_state(s_canState.canBusHandle, &state);
+  if (haveState && (state == HAL_CAN_STATE_BUS_OFF)) {
+    dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_BUS_OFF);
+  } else if (s_canState.txFailures > 0u) {
+    dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, s_canState.txFailDetail);
+  } else {
+    dtcManagerSetActive(DTC_CAN_BUS_FAULT, false);
+  }
+  s_canState.txFailures = 0u;
+}
+
 void canCheckConnection(void) {
   s_canState.lastThrottleSent = C_INIT_VAL;
+  canReportBusFault();
 
   s_canState.egtConnectedFlag =
       (s_canState.egtMessagesCount != s_canState.lastEgtMessagesCount);

@@ -3,8 +3,10 @@
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 
 #include "dtcManager.h"
+#include "ecuPersistence.h"
 
 #include <hal/core/hal_mutex_once.h>
+#include <hal/storage/hal_kv.h>
 
 #include <errno.h>
 #include <math.h>
@@ -377,10 +379,75 @@ float testHelpersTopZeroStep(bool *outFinished) {
 //=============================================================================
 
 void testHelpersDtcStart(void) {
-  const uint16_t code = (uint16_t)DTC_PCF8574_COMM_FAIL;
-  dtcManagerSetActive(code, true);
-  deb("TEST: DTC injected: 0x%04X (%s)", (unsigned)code,
-      dtcManagerGetName(code));
+  const uint16_t code = (uint16_t)DTC_CAN_BUS_FAULT;
+  const uint8_t detail = DTC_DETAIL_CAN_TX_RPM;
+  dtcManagerSetActiveDetail(code, true, detail);
+  deb("TEST: DTC injected: 0x%04X (%s) detail=0x%02X", (unsigned)code,
+      dtcManagerGetName(code), (unsigned)detail);
+}
+
+/** @brief One deferred batch, the way every ECU storage write is made: the
+ * record goes into the RAM image and one commit publishes the bank. */
+static hal_status_t kvCounterOperation(const void *user) {
+  const uint32_t next = *(const uint32_t *)user;
+  hal_status_t status = hal_kv_set_auto_commit(false);
+  if (status == HAL_OK) {
+    status = hal_kv_set_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, next);
+  }
+  const hal_status_t commitStatus = hal_kv_commit_ex();
+  const hal_status_t restoreStatus = hal_kv_set_auto_commit(true);
+  if (status != HAL_OK) {
+    return status;
+  }
+  return commitStatus != HAL_OK ? commitStatus : restoreStatus;
+}
+
+static test_helpers_kv_result_t s_kvResult;
+
+const test_helpers_kv_result_t *testHelpersKvLastResult(void) {
+  return &s_kvResult;
+}
+
+void testHelpersKvStart(void) {
+  uint32_t before = 0U;
+  hal_status_t readStatus =
+      hal_kv_get_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, &before);
+  if (readStatus == HAL_ENOENT) {
+    before = 0U;
+    readStatus = HAL_OK;
+  }
+  const uint32_t next = before + 1U;
+  const hal_status_t writeStatus =
+      ecuPersistenceExecute(kvCounterOperation, &next, NULL);
+  uint32_t after = 0U;
+  const hal_status_t backStatus =
+      hal_kv_get_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, &after);
+  hal_kv_stats_t stats;
+  const bool statsOk = hal_kv_get_stats(&stats);
+  const bool ok = (readStatus == HAL_OK) && (writeStatus == HAL_OK) &&
+                  (backStatus == HAL_OK) && (after == next);
+  s_kvResult.before = before;
+  s_kvResult.after = after;
+  s_kvResult.read = readStatus;
+  s_kvResult.write = writeStatus;
+  s_kvResult.readBack = backStatus;
+  s_kvResult.ok = ok;
+  if (ok) {
+    deb("TEST: KV counter %lu -> %lu write=%s keys=%u/%u gen=%lu",
+        (unsigned long)before, (unsigned long)after,
+        hal_status_to_string(writeStatus),
+        statsOk ? (unsigned)stats.key_count : 0U,
+        statsOk ? (unsigned)stats.key_capacity : 0U,
+        statsOk ? (unsigned long)stats.generation : 0UL);
+  } else {
+    derr("TEST: KV counter %lu -> %lu FAILED read=%s write=%s back=%s "
+         "keys=%u/%u",
+         (unsigned long)before, (unsigned long)after,
+         hal_status_to_string(readStatus), hal_status_to_string(writeStatus),
+         hal_status_to_string(backStatus),
+         statsOk ? (unsigned)stats.key_count : 0U,
+         statsOk ? (unsigned)stats.key_capacity : 0U);
+  }
 }
 
 //=============================================================================

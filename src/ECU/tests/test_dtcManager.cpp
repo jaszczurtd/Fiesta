@@ -41,6 +41,71 @@ void test_dtc_set_active_updates_all_kinds(void) {
   TEST_ASSERT_TRUE(containsCode(codes, n, DTC_OBD_CAN_INIT_FAIL));
 }
 
+void test_dtc_detail_is_recorded_kept_and_persisted(void) {
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_NONE,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_BUS_OFF);
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_BUS_OFF,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  // A plain deactivation keeps the recorded failure type.
+  dtcManagerSetActive(DTC_CAN_BUS_FAULT, false);
+  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_BUS_OFF,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  // The detail survives a reboot together with the stored flag.
+  dtcManagerResetRuntimeStateForTest();
+  dtcManagerInit();
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerCount(DTC_KIND_STORED));
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_BUS_OFF,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  // A new report replaces it, also across a reboot.
+  dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_TX_RPM);
+  dtcManagerResetRuntimeStateForTest();
+  dtcManagerInit();
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_TX_RPM,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  dtcManagerClearAll();
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_NONE,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_NONE, dtcManagerGetDetail(0xFFFFu));
+}
+
+void test_dtc_every_entry_with_timestamp_and_detail_persists(void) {
+  // The KV index holds 32 keys; the whole registry with timestamps, the
+  // schema records and the parameter blob must fit (rev99 bench, 2026-09-25:
+  // a separate detail key per entry overflowed it).
+  static const uint16_t codes[] = {
+      DTC_OBD_CAN_INIT_FAIL, DTC_PCF8574_COMM_FAIL,    DTC_PWM_CHANNEL_NOT_INIT,
+      DTC_DPF_COMM_LOST,     DTC_EGT_COMM_LOST,        DTC_ADJ_COMM_LOST,
+      DTC_ADJ_SIGNAL_LOST,   DTC_ADJ_FUEL_TEMP_BROKEN, DTC_ADJ_VOLTAGE_BAD,
+      DTC_RPM_IRQ_INIT_FAIL, DTC_CAN_BUS_FAULT};
+  hal_mock_gps_reset();
+  hal_mock_gps_set_valid(true);
+  hal_mock_gps_set_age(0);
+  hal_mock_gps_set_date(2026, 1, 1);
+  hal_mock_gps_set_time(12, 0, 0);
+  for (size_t i = 0; i < COUNTOF(codes); i++) {
+    dtcManagerSetActiveDetail(codes[i], true, (uint8_t)(0x80u + i));
+  }
+  hal_mock_advance_millis(1000u);
+  dtcManagerPoll();
+  TEST_ASSERT_EQUAL_UINT8(COUNTOF(codes), dtcManagerCount(DTC_KIND_STORED));
+
+  dtcManagerResetRuntimeStateForTest();
+  dtcManagerInit();
+  TEST_ASSERT_EQUAL_UINT8(COUNTOF(codes), dtcManagerCount(DTC_KIND_STORED));
+  for (size_t i = 0; i < COUNTOF(codes); i++) {
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(0x80u + i),
+                            dtcManagerGetDetail(codes[i]));
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, dtcManagerGetTimestamp(codes[i]));
+  }
+}
+
 void test_dtc_deactivate_clears_only_active_flag(void) {
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
@@ -213,5 +278,7 @@ int main(void) {
   RUN_TEST(test_dtc_manager_set_active_releases_lock_between_calls);
   RUN_TEST(test_dtc_manager_clear_all_releases_lock);
   RUN_TEST(test_dtc_manager_get_timestamp_releases_lock);
+  RUN_TEST(test_dtc_detail_is_recorded_kept_and_persisted);
+  RUN_TEST(test_dtc_every_entry_with_timestamp_and_detail_persists);
   return UNITY_END();
 }

@@ -24,6 +24,12 @@
 #define DTC_KV_LEGACY_MIGRATED_VERSION 1u
 #define DTC_KV_KEY_FLAGS_BASE 0xD800u
 #define DTC_KV_KEY_TIMESTAMP_BASE 0xD900u
+/* The flags record carries the ISO failure type byte in bits 8..15: one KV
+ * key per entry, within the store's 32-key index (schema, migration marker,
+ * flags and timestamp per entry, ECU parameter blob). Older records leave
+ * those bits zero. */
+#define DTC_KV_DETAIL_SHIFT 8u
+#define DTC_KV_FLAGS_MASK 0xFFu
 #define DTC_PERSIST_RETRY_MS 1000u
 
 #if ECU_EEPROM_SIZE_BYTES < 1024u
@@ -41,11 +47,12 @@ typedef struct {
   bool stored;
   bool permanent;
   uint32_t firstOccurrence; // unix epoch from GPS, 0 = unknown
+  uint8_t detail;           // ISO 14229-1 failure type byte, 0 = none
 } dtc_entry_t;
 
 typedef struct {
-  dtc_entry_t dtcs[10];
-  bool persistPending[10];
+  dtc_entry_t dtcs[11];
+  bool persistPending[11];
   bool clearPending;
   bool storageReady;
   bool schemaPending;
@@ -57,16 +64,17 @@ typedef struct {
 } dtc_manager_state_t;
 
 static dtc_manager_state_t s_dtcState = {
-    .dtcs = {{DTC_OBD_CAN_INIT_FAIL, false, false, false, 0},
-             {DTC_PCF8574_COMM_FAIL, false, false, false, 0},
-             {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0},
-             {DTC_DPF_COMM_LOST, false, false, false, 0},
-             {DTC_EGT_COMM_LOST, false, false, false, 0},
-             {DTC_ADJ_COMM_LOST, false, false, false, 0},
-             {DTC_ADJ_SIGNAL_LOST, false, false, false, 0},
-             {DTC_ADJ_FUEL_TEMP_BROKEN, false, false, false, 0},
-             {DTC_ADJ_VOLTAGE_BAD, false, false, false, 0},
-             {DTC_RPM_IRQ_INIT_FAIL, false, false, false, 0}},
+    .dtcs = {{DTC_OBD_CAN_INIT_FAIL, false, false, false, 0, 0u},
+             {DTC_PCF8574_COMM_FAIL, false, false, false, 0, 0u},
+             {DTC_PWM_CHANNEL_NOT_INIT, false, false, false, 0, 0u},
+             {DTC_DPF_COMM_LOST, false, false, false, 0, 0u},
+             {DTC_EGT_COMM_LOST, false, false, false, 0, 0u},
+             {DTC_ADJ_COMM_LOST, false, false, false, 0, 0u},
+             {DTC_ADJ_SIGNAL_LOST, false, false, false, 0, 0u},
+             {DTC_ADJ_FUEL_TEMP_BROKEN, false, false, false, 0, 0u},
+             {DTC_ADJ_VOLTAGE_BAD, false, false, false, 0, 0u},
+             {DTC_RPM_IRQ_INIT_FAIL, false, false, false, 0, 0u},
+             {DTC_CAN_BUS_FAULT, false, false, false, 0, 0u}},
     .persistPending = {false},
     .clearPending = false,
     .storageReady = false,
@@ -80,6 +88,22 @@ static dtc_manager_state_t s_dtcState = {
 m_mutex_def(dtcManagerMutex);
 
 #define DTC_COUNT ((uint8_t)COUNTOF(s_dtcState.dtcs))
+
+/* Keys this module holds at once: schema, migration marker, one flags word
+ * and one timestamp per entry; the ECU parameter blob takes one more. The
+ * store indexes HAL_KV_MAX_KEYS distinct keys (32 in HAL builds without the
+ * define). Growing the registry past the index fails every persist. */
+#define DTC_KV_ENTRY_CAPACITY 11u
+#ifdef HAL_KV_MAX_KEYS
+#define DTC_KV_INDEX_CAPACITY HAL_KV_MAX_KEYS
+#else
+#define DTC_KV_INDEX_CAPACITY 32u
+#endif
+#if (2u + (2u * DTC_KV_ENTRY_CAPACITY) + 1u) > DTC_KV_INDEX_CAPACITY
+#error "DTC key-value records exceed the store's key index"
+#endif
+_Static_assert(COUNTOF(s_dtcState.dtcs) == DTC_KV_ENTRY_CAPACITY,
+               "DTC_KV_ENTRY_CAPACITY must follow the registry size");
 
 /**
  * @brief Initialise dtcManagerMutex once, lazily.
@@ -120,6 +144,36 @@ static uint16_t dtcKvKey(uint8_t idx) {
  */
 static uint16_t dtcKvTimestampKey(uint8_t idx) {
   return (uint16_t)(DTC_KV_KEY_TIMESTAMP_BASE + idx);
+}
+
+/**
+ * @brief Pack the persisted flags and detail of one entry into its KV word.
+ * @param flags Packed flag byte.
+ * @param detail ISO failure type byte.
+ * @return Word stored under the entry's flags key.
+ */
+static uint32_t dtcKvWord(uint8_t flags, uint8_t detail) {
+  return (uint32_t)flags | ((uint32_t)detail << DTC_KV_DETAIL_SHIFT);
+}
+
+/**
+ * @brief Write the flags word and keep or drop the timestamp of one DTC.
+ * @param idx Index of the DTC entry.
+ * @param flags Packed flag byte.
+ * @param detail ISO failure type byte.
+ * @param firstOccurrence Timestamp to keep, 0 removes the key.
+ * @return HAL_OK or the first failing KV status.
+ */
+static hal_status_t saveDtcRecords(uint8_t idx, uint8_t flags, uint8_t detail,
+                                   uint32_t firstOccurrence) {
+  hal_status_t status =
+      hal_kv_set_u32_ex(dtcKvKey(idx), dtcKvWord(flags, detail));
+  if (status == HAL_OK) {
+    status = (firstOccurrence != 0u)
+                 ? hal_kv_set_u32_ex(dtcKvTimestampKey(idx), firstOccurrence)
+                 : hal_kv_delete_ex(dtcKvTimestampKey(idx));
+  }
+  return status;
 }
 
 /**
@@ -190,13 +244,8 @@ static hal_status_t saveAllToKvOperation(const void *user) {
   }
 
   for (uint8_t i = 0; i < DTC_COUNT && status == HAL_OK; i++) {
-    status = hal_kv_set_u32_ex(dtcKvKey(i), (uint32_t)makeFlagsForIndex(i));
-    if (status == HAL_OK && s_dtcState.dtcs[i].firstOccurrence != 0u) {
-      status = hal_kv_set_u32_ex(dtcKvTimestampKey(i),
-                                 s_dtcState.dtcs[i].firstOccurrence);
-    } else if (status == HAL_OK) {
-      status = hal_kv_delete_ex(dtcKvTimestampKey(i));
-    }
+    status = saveDtcRecords(i, makeFlagsForIndex(i), s_dtcState.dtcs[i].detail,
+                            s_dtcState.dtcs[i].firstOccurrence);
   }
   if (status == HAL_OK && includeSchema) {
     /* Keep the migration marker and schema in the same EEPROM commit as the
@@ -218,6 +267,7 @@ static hal_status_t saveAllToKvOperation(const void *user) {
 typedef struct {
   uint8_t idx;
   uint8_t flags;
+  uint8_t detail;
   uint32_t firstOccurrence;
 } dtc_persist_snapshot_t;
 
@@ -231,38 +281,32 @@ static hal_status_t saveDtcSnapshotOperation(const void *user) {
   if (status != HAL_OK) {
     return status;
   }
-  status =
-      hal_kv_set_u32_ex(dtcKvKey(snapshot->idx), (uint32_t)snapshot->flags);
-  if (status == HAL_OK && snapshot->firstOccurrence != 0u) {
-    status = hal_kv_set_u32_ex(dtcKvTimestampKey(snapshot->idx),
-                               snapshot->firstOccurrence);
-  } else if (status == HAL_OK) {
-    status = hal_kv_delete_ex(dtcKvTimestampKey(snapshot->idx));
-  }
+  status = saveDtcRecords(snapshot->idx, snapshot->flags, snapshot->detail,
+                          snapshot->firstOccurrence);
   return completeKvBatch(status);
 }
 
-static bool saveDtcSnapshotToKv(uint8_t idx, uint8_t flags,
-                                uint32_t firstOccurrence) {
+static hal_status_t saveDtcSnapshotToKv(uint8_t idx, uint8_t flags,
+                                        uint8_t detail,
+                                        uint32_t firstOccurrence) {
   dtc_persist_snapshot_t snapshot = {
       .idx = idx,
       .flags = flags,
+      .detail = detail,
       .firstOccurrence = firstOccurrence,
   };
-  return hal_status_to_bool(
-      ecuPersistenceExecute(saveDtcSnapshotOperation, &snapshot, NULL));
+  return ecuPersistenceExecute(saveDtcSnapshotOperation, &snapshot, NULL);
 }
 
 /**
  * @brief Save all DTC entries to key-value storage.
  * @return True when all writes succeed, otherwise false.
  */
-static bool saveAllToKv(void) {
+static hal_status_t saveAllToKv(void) {
   dtc_full_snapshot_context_t context = {
       .includeSchema = false,
   };
-  return hal_status_to_bool(
-      ecuPersistenceExecute(saveAllToKvOperation, &context, NULL));
+  return ecuPersistenceExecute(saveAllToKvOperation, &context, NULL);
 }
 
 static bool saveSchemaSnapshotToKv(void) {
@@ -282,6 +326,7 @@ static void resetAllState(void) {
     s_dtcState.dtcs[i].stored = false;
     s_dtcState.dtcs[i].permanent = false;
     s_dtcState.dtcs[i].firstOccurrence = 0;
+    s_dtcState.dtcs[i].detail = DTC_DETAIL_NONE;
     s_dtcState.persistPending[i] = false;
   }
 }
@@ -359,14 +404,17 @@ static void applyLegacyState(void) {
  * @return True when the load completed.
  */
 static hal_status_t loadDtcFromKv(uint8_t idx) {
-  uint32_t flags = 0u;
-  hal_status_t status = hal_kv_get_u32_ex(dtcKvKey(idx), &flags);
+  uint32_t word = 0u;
+  hal_status_t status = hal_kv_get_u32_ex(dtcKvKey(idx), &word);
   if (status == HAL_ENOENT) {
-    flags = 0u;
+    word = 0u;
   } else if (status != HAL_OK) {
     return status;
   }
+  const uint32_t flags = word & DTC_KV_FLAGS_MASK;
   applyFlagsToIndex(idx, (uint8_t)flags);
+  s_dtcState.dtcs[idx].detail =
+      (uint8_t)((word >> DTC_KV_DETAIL_SHIFT) & DTC_KV_FLAGS_MASK);
   s_dtcState.dtcs[idx].active = false;
 
   /* A timestamp without persisted DTC flags is an incomplete or stale
@@ -374,6 +422,7 @@ static hal_status_t loadDtcFromKv(uint8_t idx) {
    * the orphaned key. */
   if ((flags & (DTC_FLAG_STORED | DTC_FLAG_PERMANENT)) == 0u) {
     s_dtcState.dtcs[idx].firstOccurrence = 0u;
+    s_dtcState.dtcs[idx].detail = DTC_DETAIL_NONE;
     return HAL_OK;
   }
 
@@ -676,7 +725,15 @@ static void ensureInitialized(void) {
   }
 }
 
-void dtcManagerSetActive(uint16_t code, bool active) {
+/**
+ * @brief Shared body of the set-active API.
+ * @param code DTC code to update.
+ * @param active New active state.
+ * @param updateDetail True to store @p detail, false keeps the recorded one.
+ * @param detail Failure type byte applied when @p updateDetail is set.
+ */
+static void setActiveImpl(uint16_t code, bool active, bool updateDetail,
+                          uint8_t detail) {
   ensureInitialized();
 
   m_mutex_enter_blocking(dtcManagerMutex);
@@ -689,10 +746,16 @@ void dtcManagerSetActive(uint16_t code, bool active) {
 
   bool changed = false;
 
+  if (updateDetail && (s_dtcState.dtcs[idx].detail != detail)) {
+    s_dtcState.dtcs[idx].detail = detail;
+    changed = true;
+  }
+
   if (s_dtcState.dtcs[idx].active != active) {
     s_dtcState.dtcs[idx].active = active;
-    deb("DTC 0x%04X (%s) active=%d", code, dtcManagerGetName(code),
-        active ? 1 : 0);
+    deb("DTC 0x%04X (%s) active=%d detail=0x%02X", code,
+        dtcManagerGetName(code), active ? 1 : 0,
+        (unsigned)s_dtcState.dtcs[idx].detail);
   }
 
   if (active) {
@@ -712,6 +775,7 @@ void dtcManagerSetActive(uint16_t code, bool active) {
 
   uint8_t savedIdx = (uint8_t)idx;
   uint8_t savedFlags = changed ? makeFlagsForIndex(savedIdx) : 0u;
+  uint8_t savedDetail = changed ? s_dtcState.dtcs[savedIdx].detail : 0u;
   uint32_t savedTs = changed ? s_dtcState.dtcs[savedIdx].firstOccurrence : 0u;
   if (changed) {
     s_dtcState.persistPending[savedIdx] = true;
@@ -720,15 +784,36 @@ void dtcManagerSetActive(uint16_t code, bool active) {
    * current snapshot, including this transition, in one batch. */
   if (changed && s_dtcState.storageReady && !s_dtcState.schemaPending &&
       !s_dtcState.clearPending) {
-    const bool saved = saveDtcSnapshotToKv(savedIdx, savedFlags, savedTs);
-    if (saved) {
+    const hal_status_t saved =
+        saveDtcSnapshotToKv(savedIdx, savedFlags, savedDetail, savedTs);
+    if (saved == HAL_OK) {
       s_dtcState.persistPending[savedIdx] = false;
     } else {
       s_dtcState.lastRetryMs = hal_millis();
-      derr("DTC: failed to persist key=%u", (unsigned)dtcKvKey(savedIdx));
+      derr("DTC: failed to persist key=%u: %s", (unsigned)dtcKvKey(savedIdx),
+           hal_status_to_string(saved));
     }
   }
   m_mutex_exit(dtcManagerMutex);
+}
+
+void dtcManagerSetActive(uint16_t code, bool active) {
+  setActiveImpl(code, active, false, DTC_DETAIL_NONE);
+}
+
+void dtcManagerSetActiveDetail(uint16_t code, bool active, uint8_t detail) {
+  setActiveImpl(code, active, true, detail);
+}
+
+uint8_t dtcManagerGetDetail(uint16_t code) {
+  ensureInitialized();
+
+  m_mutex_enter_blocking(dtcManagerMutex);
+  const int idx = findDtcIndex(code);
+  const uint8_t detail =
+      (idx < 0) ? DTC_DETAIL_NONE : s_dtcState.dtcs[idx].detail;
+  m_mutex_exit(dtcManagerMutex);
+  return detail;
 }
 
 void dtcManagerPoll(void) {
@@ -788,11 +873,12 @@ void dtcManagerPoll(void) {
   }
 
   if (hasPendingSnapshots()) {
-    if (saveAllToKv()) {
+    const hal_status_t saved = saveAllToKv();
+    if (saved == HAL_OK) {
       clearPendingSnapshots();
     } else {
       m_mutex_exit(dtcManagerMutex);
-      derr("DTC: snapshot retry failed");
+      derr("DTC: snapshot retry failed: %s", hal_status_to_string(saved));
       return;
     }
   }
@@ -924,7 +1010,8 @@ typedef struct {
 const char *dtcManagerGetName(uint16_t code) {
   static const dtc_name_entry_t names[] = {
       {DTC_OBD_CAN_INIT_FAIL, "U1900 Network CAN communication fault"},
-      {DTC_PCF8574_COMM_FAIL, "U0073 Control module communication bus off"},
+      {DTC_PCF8574_COMM_FAIL, "U190D PCF8574 I/O expander communication fault"},
+      {DTC_CAN_BUS_FAULT, "U0073 Control module communication bus off"},
       {DTC_PWM_CHANNEL_NOT_INIT,
        "P0657 Actuator supply voltage A circuit/open"},
       {DTC_DPF_COMM_LOST,

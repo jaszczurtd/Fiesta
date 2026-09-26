@@ -281,6 +281,59 @@ void test_vp37_position_demand_in_counts_matches_the_percentage_entry(void) {
   TEST_ASSERT_EQUAL_INT32(min, pump->demand.target);
 }
 
+// Calibrated position that a share of the travel reaches.
+static int32_t strokeAt(const VP37Pump *pump, float share) {
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  return pump->feedback.adjustMin + (int32_t)lroundf(travel * share);
+}
+
+void test_vp37_percent_demand_ends_at_the_physical_limit(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  const int32_t top = strokeAt(pump, VP37_PHYSICAL_LIMIT_PERCENT * .01f);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 100.0f));
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.requestedPercent);
+  TEST_ASSERT_EQUAL_INT32(top, pump->demand.target);
+  // The demand scale shrinks with the limit; the bottom stays where it was.
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
+  TEST_ASSERT_INT32_WITHIN(1,
+                           strokeAt(pump, VP37_PHYSICAL_LIMIT_PERCENT * .005f),
+                           pump->demand.target);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 0.0f));
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMin, pump->demand.target);
+}
+
+void test_vp37_counts_demand_is_capped_at_the_physical_limit(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  const int32_t top = strokeAt(pump, VP37_PHYSICAL_LIMIT_PERCENT * .01f);
+  TEST_ASSERT_EQUAL_INT32(top, VP37_getPositionDemandMaxValue(pump));
+  TEST_ASSERT_EQUAL(
+      HAL_OK, VP37_setPositionDemandValue(pump, pump->feedback.adjustMax));
+  TEST_ASSERT_EQUAL_INT32(top, pump->demand.target);
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.requestedPercent);
+  const int32_t middle =
+      pump->feedback.adjustMin + ((top - pump->feedback.adjustMin) / 2);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandValue(pump, middle));
+  TEST_ASSERT_FLOAT_WITHIN(0.02f, 50.0f, pump->demand.requestedPercent);
+}
+
+void test_vp37_full_or_invalid_physical_limit_keeps_the_calibrated_top(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  const float limits[] = {100.0f, 0.0f, -5.0f, 150.0f, NAN};
+  for (size_t i = 0U; i < COUNTOF(limits); ++i) {
+    pump->demand.physicalLimitPercent = limits[i];
+    TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 100.0f));
+    TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.target);
+    TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax,
+                            VP37_getPositionDemandMaxValue(pump));
+  }
+}
+
 void test_vp37_pid_time_update_setter(void) {
   ecu_context_t *ctx = getECUContext();
   VP37Pump *pump = &ctx->injectionPump;
@@ -330,6 +383,8 @@ void test_vp37_init_returns_ok_when_baseline_ready(void) {
   TEST_ASSERT_TRUE(pump->vp37Initialized);
   TEST_ASSERT_TRUE(pump->feedback.calibrationDone);
   TEST_ASSERT_EQUAL_FLOAT(VP37_PID_TOP_KD, pump->pid.topKd);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PHYSICAL_LIMIT_PERCENT,
+                          pump->demand.physicalLimitPercent);
   TEST_ASSERT_EQUAL_INT32(100, pump->feedback.adjustMin);
   TEST_ASSERT_EQUAL_INT32(8200, pump->feedback.adjustMax);
   TEST_ASSERT_GREATER_OR_EQUAL_UINT32(2U * VP37_CALIBRATION_MIN_SETTLE_MS,
@@ -2261,9 +2316,11 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
   TEST_ASSERT_FALSE(pump->pid.integralHold);
   TEST_ASSERT_GREATER_THAN_FLOAT(0, pump->pid.terms.integral);
 
+  // Back inside the entry band (10 Hz short) the hold engages again after the
+  // confirmation time and keeps the integral it had.
   for (uint32_t ms = 3110U; ms <= 3210U; ms += 5U) {
     hal_mock_set_millis(ms);
-    injectAdjRegisterData(4585, 144, 49, ADJ_STATUS_OK);
+    injectAdjRegisterData(4590, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
     TEST_ASSERT_EQUAL(ms >= 3210U, pump->pid.integralHold);
   }
@@ -2271,7 +2328,7 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
   const float heldIntegral = pump->pid.terms.integral;
   for (uint32_t ms = 3215U; ms <= 3400U; ms += 5U) {
     hal_mock_set_millis(ms);
-    injectAdjRegisterData(4585, 144, 49, ADJ_STATUS_OK);
+    injectAdjRegisterData(4590, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, heldIntegral, pump->pid.terms.integral);
@@ -2518,6 +2575,279 @@ void test_vp37_motion_taper_preserves_lower_drive_holding_and_descent(void) {
   }
 }
 
+// First control step after a demand step 20 % -> `percent` from a settled
+// 20 %. `tracked` changes the target 5 ms earlier, as a ramp that keeps moving
+// does.
+static void firstStepAfterDemandStep(float percent, bool tracked,
+                                     float *advance, float *riseBlend) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  // Every control step below comes 5 ms after the previous one.
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  if (tracked) {
+    VP37_setPositionDemandPercentage(pump, 21.0f);
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    ms += 5U;
+  }
+  const float before = pump->demand.desiredPosition;
+  VP37_setPositionDemandPercentage(pump, percent);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  *advance = pump->demand.desiredPosition - before;
+  *riseBlend = pump->feedforward.riseBlend;
+}
+
+void test_vp37_single_demand_step_is_a_standing_target_from_its_first_cycle(
+    void) {
+  const float travel = 9000.0f;
+  const float dt = .005f;
+  const float blend = dt / (VP37_PWM_FF_MOTION_FILTER_S + dt);
+  float advance = 0.0f;
+  float rise = 0.0f;
+  // A lone step ramps at the standing rate with the standing share of assist;
+  // rev90 gave its first 25 ms the moving rate and the full assist. The step
+  // is long enough that the arrival brake does not bind yet.
+  firstStepAfterDemandStep(80.0f, false, &advance, &rise);
+  TEST_ASSERT_FLOAT_WITHIN(
+      1.0f, travel * VP37_STATIONARY_SLEW_PERCENT_PER_SECOND * .01f * dt,
+      advance);
+  TEST_ASSERT_FLOAT_WITHIN(.01f,
+                           VP37_STATIONARY_RISE_WEIGHT *
+                               (VP37_STATIONARY_SLEW_PERCENT_PER_SECOND /
+                                VP37_PWM_FF_MOTION_REFERENCE_RATE) *
+                               blend,
+                           rise);
+}
+
+void test_vp37_tracked_demand_keeps_the_moving_rate_and_assist(void) {
+  const float travel = 9000.0f;
+  const float dt = .005f;
+  float advance = 0.0f;
+  float rise = 0.0f;
+  // 10 % from the target the arrival brake would allow less than half of this.
+  firstStepAfterDemandStep(30.0f, true, &advance, &rise);
+  TEST_ASSERT_FLOAT_WITHIN(
+      1.0f, travel * VP37_DESIRED_SLEW_PERCENT_PER_SECOND * .01f * dt, advance);
+  TEST_ASSERT_GREATER_THAN_FLOAT(.5f, rise);
+}
+
+void test_vp37_standing_ramp_brakes_to_rest_at_its_target(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  const float decel = travel * VP37_ARRIVAL_DECEL_PERCENT_PER_S2 * .01f;
+  const float slewStep =
+      travel * VP37_STATIONARY_SLEW_PERCENT_PER_SECOND * .01f * .005f;
+  VP37_setPositionDemandPercentage(pump, 80.0f);
+  uint32_t braked = 0U;
+  float lastAdvance = 0.0f;
+  for (uint32_t i = 0U;
+       (i < 400U) && (pump->demand.desired != pump->demand.target); i++) {
+    const float before = pump->demand.desiredPosition;
+    const float limit =
+        sqrtf(2.0f * decel * ((float)pump->demand.target - before)) * .005f;
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    ms += 5U;
+    lastAdvance = pump->demand.desiredPosition - before;
+    TEST_ASSERT_TRUE(lastAdvance <= slewStep + .01f);
+    if (limit < slewStep) {
+      // The brake binds: exactly the speed that still stops at the target.
+      TEST_ASSERT_FLOAT_WITHIN(
+          .01f, fminf(limit, (float)pump->demand.target - before), lastAdvance);
+      braked++;
+    }
+  }
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  TEST_ASSERT_GREATER_THAN_UINT32(10U, braked);
+  TEST_ASSERT_TRUE(lastAdvance < .1f * slewStep);
+}
+
+// The upper-stroke rules at 80..100 % of the travel under the given limit:
+// upward assist at 80 %, integral authority and dead zone at 100 %, settled D
+// at 90 %. Every site is checked: a rule gated by the limit shows up (rev98
+// gated them at limits below 90 % and a fast ramp then overshot the 86 % cap
+// by a tenth of the stroke).
+static void checkUpperRules(float limit) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  // Called several times per test: release the previous fixture's controller.
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
+  }
+  setupPumpForProcessTests(pump);
+  pump->demand.physicalLimitPercent = limit;
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  pump->feedforward.riseBlend = 1.0f;
+  pump->feedforward.fallBlend = 0.0f;
+  (void)VP37_feedForward(pump,
+                         pump->feedback.adjustMin + (int32_t)(travel * .8f));
+  // The map's motion column at 80 %, halved by the taper when it applies.
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 12.266667f, pump->feedforward.motion);
+  pump->demand.desiredPosition = (float)pump->feedback.adjustMax;
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 45.0f, VP37_integralLimit(pump));
+  pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 120.0f, VP37_integralDeadband(pump));
+  pump->pid.topKd = .002f;
+  pump->pidDtUs = 5000U;
+  pump->demand.atRest = false;
+  pump->demand.desiredPosition =
+      (float)pump->feedback.adjustMin + (travel * .9f);
+  for (uint32_t i = 0U; i < 200U; ++i) {
+    VP37_updateDerivativeGain(pump, true);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .002f, pump->pid.effectiveKd);
+}
+
+void test_vp37_upper_stroke_rules_apply_under_any_physical_limit(void) {
+  checkUpperRules(86.0f);
+  checkUpperRules(89.9f);
+  checkUpperRules(90.0f);
+  checkUpperRules(100.0f);
+  // Outside (0, 100] the full travel applies.
+  checkUpperRules(0.0f);
+  checkUpperRules(150.0f);
+}
+
+// First step of a tracked rise from a settled 80 % of the travel; a demand in
+// counts stays below any limit's top.
+static float firstTrackedStepFrom80Percent(float limit) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
+  }
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  pump->demand.physicalLimitPercent = limit;
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandValue(pump, 7300);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(7300, pump->demand.desired);
+  VP37_setPositionDemandValue(pump, 7400);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  ms += 5U;
+  const float before = pump->demand.desiredPosition;
+  VP37_setPositionDemandValue(pump, 7800);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  return pump->demand.desiredPosition - before;
+}
+
+void test_vp37_upper_slew_applies_under_any_physical_limit(void) {
+  const float travel = 9000.0f;
+  const float dt = .005f;
+  const float upperStep =
+      travel * VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND * .01f * dt;
+  TEST_ASSERT_FLOAT_WITHIN(.5f, upperStep,
+                           firstTrackedStepFrom80Percent(86.0f));
+  TEST_ASSERT_FLOAT_WITHIN(.5f, upperStep,
+                           firstTrackedStepFrom80Percent(90.0f));
+}
+
+void test_vp37_lone_falling_step_keeps_the_moving_assist_for_the_settle_time(
+    void) {
+  const float dt = .005f;
+  const float blend = dt / (VP37_PWM_FF_MOTION_FILTER_S + dt);
+  const float fullFall =
+      VP37_DESIRED_SLEW_PERCENT_PER_SECOND / VP37_PWM_FF_MOTION_REFERENCE_RATE;
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 90.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  // A lone falling step: the full descent assist from its first cycle, as
+  // rev90 gave every step; a standing step would blend only the standing
+  // share (0.3) of it.
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, fullFall * blend, pump->feedforward.fallBlend);
+  // After the settle time the step stands and the assist fades to the
+  // standing share, well before the 233 ms descent ends.
+  for (ms += 5U; ms < 1100U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_NOT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  TEST_ASSERT_FLOAT_WITHIN(.05f, VP37_STATIONARY_FALL_WEIGHT * fullFall,
+                           pump->feedforward.fallBlend);
+}
+
+void test_vp37_falling_standing_ramp_is_not_braked(void) {
+  const float travel = 9000.0f;
+  const float dt = .005f;
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 30.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  const float before = pump->demand.desiredPosition;
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  // A braked descent from 10 % above would allow less than half of this.
+  TEST_ASSERT_FLOAT_WITHIN(
+      1.0f, -travel * VP37_DESIRED_SLEW_PERCENT_PER_SECOND * .01f * dt,
+      pump->demand.desiredPosition - before);
+}
+
 void test_vp37_descent_feedforward_lowers_the_command_while_the_target_falls(
     void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
@@ -2591,9 +2921,16 @@ void test_vp37_stationary_target_uses_soft_approach(void) {
   injectAdjRegisterData(7300, 144, 49, ADJ_STATUS_OK);
   VP37_process(pump);
   VP37_setPositionDemandPercentage(pump, 100);
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  const float decel = travel * VP37_ARRIVAL_DECEL_PERCENT_PER_S2 * .01f;
   for (uint32_t ms = 5; ms <= 250; ms += 5) {
     hal_mock_set_millis(ms);
     const int32_t previous = pump->demand.desired;
+    const float brakedStep =
+        sqrtf(2.0f * decel *
+              ((float)pump->demand.target - pump->demand.desiredPosition)) *
+        .005f;
     injectAdjRegisterData((int16_t)previous, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
     const int32_t step = pump->demand.desired - previous;
@@ -2601,7 +2938,12 @@ void test_vp37_stationary_target_uses_soft_approach(void) {
       TEST_ASSERT_INT32_WITHIN(1, 124, step);
     }
     if (ms == 30) {
-      TEST_ASSERT_INT32_WITHIN(1, 56, step);
+      // Standing now, and close enough that the arrival brake binds.
+      TEST_ASSERT_INT32_WITHIN(1, (int32_t)brakedStep, step);
+      TEST_ASSERT_LESS_THAN_INT32(
+          (int32_t)(travel * VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND *
+                    .01f * .005f),
+          step);
     }
   }
   TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
@@ -3361,7 +3703,7 @@ void test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone(
   uint32_t ms = 0U;
   VP37_setPositionDemandPercentage(pump, 100);
   // Ramp to the top, then sit 100 Hz short of it: inside the widened dead
-  // zone, which already stops integration, but outside the fixed 20 Hz hold
+  // zone, which already stops integration, but outside the fixed hold entry
   // band. A hold here would only let that error stand until twice the zone.
   holdAt(pump, ms, 400U, (int16_t)(pump->feedback.adjustMax - 100));
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.desired);
@@ -3371,11 +3713,11 @@ void test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone(
   holdAt(pump, ms, 60U, (int16_t)(pump->feedback.adjustMax - 10));
   TEST_ASSERT_TRUE(pump->pid.integralHold);
 
-  // Below the taper the same 20 Hz band applies: 30 Hz short never engages
-  // the hold, 10 Hz short does.
+  // Below the taper the same 12 Hz entry applies: 15 Hz short never engages
+  // the hold (a 20 Hz entry did and froze braked arrivals short), 10 Hz does.
   VP37_setPositionDemandPercentage(pump, 50);
   const int32_t target = pump->demand.target;
-  holdAt(pump, ms, 600U, (int16_t)(target - 30));
+  holdAt(pump, ms, 600U, (int16_t)(target - 15));
   TEST_ASSERT_EQUAL_INT32(target, pump->demand.desired);
   TEST_ASSERT_FALSE(pump->pid.integralHold);
   holdAt(pump, ms, 60U, (int16_t)(target - 10));
@@ -3525,6 +3867,15 @@ int main(void) {
   RUN_TEST(test_vp37_motion_feedforward_brakes_when_upper_ramp_stops);
   RUN_TEST(test_vp37_motion_taper_preserves_lower_drive_holding_and_descent);
   RUN_TEST(
+      test_vp37_single_demand_step_is_a_standing_target_from_its_first_cycle);
+  RUN_TEST(test_vp37_tracked_demand_keeps_the_moving_rate_and_assist);
+  RUN_TEST(test_vp37_standing_ramp_brakes_to_rest_at_its_target);
+  RUN_TEST(test_vp37_falling_standing_ramp_is_not_braked);
+  RUN_TEST(
+      test_vp37_lone_falling_step_keeps_the_moving_assist_for_the_settle_time);
+  RUN_TEST(test_vp37_upper_stroke_rules_apply_under_any_physical_limit);
+  RUN_TEST(test_vp37_upper_slew_applies_under_any_physical_limit);
+  RUN_TEST(
       test_vp37_descent_feedforward_lowers_the_command_while_the_target_falls);
   RUN_TEST(test_vp37_downward_ramp_does_not_store_reverse_tracking_lag);
   RUN_TEST(
@@ -3556,6 +3907,9 @@ int main(void) {
   RUN_TEST(test_vp37_position_demand_validates_input_and_calibration);
   RUN_TEST(test_vp37_position_demand_preserves_fractional_targets_and_hold_age);
   RUN_TEST(test_vp37_position_demand_in_counts_matches_the_percentage_entry);
+  RUN_TEST(test_vp37_percent_demand_ends_at_the_physical_limit);
+  RUN_TEST(test_vp37_counts_demand_is_capped_at_the_physical_limit);
+  RUN_TEST(test_vp37_full_or_invalid_physical_limit_keeps_the_calibrated_top);
   RUN_TEST(test_vp37_pid_time_update_setter);
   RUN_TEST(test_vp37_percentage_error_constant);
   RUN_TEST(test_vp37_init_returns_already_initialized);

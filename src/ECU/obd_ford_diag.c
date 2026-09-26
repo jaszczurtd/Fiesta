@@ -778,16 +778,17 @@ static void handleUdsReadDtcInfo(uint8_t mode, uint8_t numofBytes,
       payload[p] = 0x2F; // supported status mask
       p++;
 
-      for (uint8_t i = 0; i < count && (p + 3) < (int)sizeof(payload); i++) {
+      // DTCAndStatusRecord: DTC high, DTC middle, failure type byte, status.
+      for (uint8_t i = 0; i < count && (p + 4) <= (int)sizeof(payload); i++) {
         uint8_t dtcStatus = 0x01; // testFailed
         if ((dtcStatus & statusMask) == 0u) {
           continue;
         }
 
-        payload[p] = 0x00;
-        p++;
         jh_store_be16(&payload[p], activeCodes[i]);
         p += 2;
+        payload[p] = dtcManagerGetDetail(activeCodes[i]);
+        p++;
         payload[p] = dtcStatus;
         p++;
       }

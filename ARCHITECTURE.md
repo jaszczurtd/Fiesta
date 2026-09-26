@@ -91,13 +91,17 @@ and the configurator session keep their state in file-local structs.
 
 VP37 takes a position request in one of two units:
 `hal_status_t VP37_setPositionDemandPercentage(VP37Pump *pump, float percent)`
-for a 0-100% demand across the calibrated stroke, and
+for a 0-100% demand across the usable stroke, and
 `hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)` for
 raw feedback counts, bounded by `VP37_getPositionDemandMinValue()` and
-`VP37_getPositionDemandMaxValue()`. Both write the same demand, so driver
-input, engine control, and bench tests share one position ramp, feedforward,
-and PID. The unit is the only difference: the controller has no input-source
-mode, source-specific behaviour, filter-mode flag, or alternate position path.
+`VP37_getPositionDemandMaxValue()`. The usable stroke ends at
+`VP37_PHYSICAL_LIMIT_PERCENT` (86%) of the calibrated travel. This keeps the
+actuator below the negative-stiffness steps of the upper stroke, at the cost of
+the largest fuel quantities; 100 restores the full travel. Both write the same
+demand, so driver input, engine control, and bench tests share one position
+ramp, feedforward, and PID. The unit is the only difference: the controller
+has no input-source mode, source-specific behaviour, filter-mode flag, or
+alternate position path.
 Emergency stop and calibration remain separate operations.
 
 Analog input conditioning belongs to `sensors.c`. A 10 ms update preserves
@@ -108,15 +112,27 @@ reaches the cache without filter delay. Both direct driver demand and
 send to VP37. Optional engine control is enabled by
 `ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
 
-VP37 uses 130 Hz PWM. Above 85%, additional derivative damping reaches its
-full position weight at 90%, with a default gain of 0.001 PWM·s/Hz. It engages
-after the target settles and fades when movement resumes through a 50 ms
-blend. The holding map and supply/temperature compensation remain shared
-across the stroke. Once the demand settles, the climb floor follows negative
-learned integral trim, so crossing below the target preserves the reduction
-needed to hold position. Moving demands retain the original climb floor.
-Telemetry reports `mode:position` and a separate
-`test:<name|none>` field; it does not identify a potentiometer controller mode.
+VP37 uses 130 Hz PWM. A lone rising demand step is approached as a standing
+target from its first cycle: the ramp rises at 225%/s with 0.6 of the motion
+assist and brakes before the target at 750%/s², so the actuator follows the
+ramp closely and arrives slowly instead of overshooting and ringing. A target
+that changes again within 25 ms is tracked at up to 300%/s with the full
+assist and no brake. Descent always keeps 300%/s; a lone falling step keeps
+the full assist for its first 25 ms and 0.3 of it afterwards. The
+upper-stroke rules follow the physical position whatever the limit: the
+upward-assist taper between 75% and 85%, the integral authority and dead-zone
+tapers from 75%, the slower upper slews (275%/s, standing 187.5%/s) and the
+settled-target damping, which reaches its full position weight between 85%
+and 90% with a default gain of 0.001 PWM·s/Hz, engages after the target
+settles and fades through a 50 ms blend when movement resumes. Without them a
+fast ramp overshoots the 86% limit by a tenth of the stroke and the descent
+oscillates. The holding map and supply/temperature compensation remain shared
+across the stroke. Once the
+demand settles, the climb floor follows negative learned integral trim, so
+crossing below the target preserves the reduction needed to hold position.
+Moving demands retain the original climb floor. Telemetry reports
+`mode:position` and a separate `test:<name|none>` field; it does not identify a
+potentiometer controller mode.
 
 Supply compensation scales the complete feedforward and PID command by
 `12 V / compensated voltage`. ADC scan blocks arrive every 6 ms; retained frames
@@ -375,7 +391,9 @@ The ECU sits on two separate CAN buses:
 On CAN0 the ECU publishes engine state, boost, fuel, DTCs, and GPS time, and
 reads oil pressure, wheel speed, and EGT. Clocks only listens. OilAndSpeed
 and Fiesta_clock mostly transmit. On CAN1 the ECU answers OBD-II and UDS
-requests from whatever tool is connected.
+requests from whatever tool is connected. A bus-off controller or a refused
+transmit raises U0073; its failure type byte (`DTC_DETAIL_*`) names the frame
+that failed, and the UDS DTC record carries it as the third DTC byte.
 
 ### I²C
 

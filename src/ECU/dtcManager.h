@@ -35,6 +35,22 @@ void dtcManagerInit(void);
 void dtcManagerSetActive(uint16_t code, bool active);
 
 /**
+ * @brief Set or clear the active state of one DTC and record its detail.
+ * @param code DTC code to update.
+ * @param active True to mark the code active, false to clear it.
+ * @param detail ISO 14229-1 failure type byte (DTC_DETAIL_*) that identifies
+ *        the specific report behind this code. Persisted with the entry.
+ */
+void dtcManagerSetActiveDetail(uint16_t code, bool active, uint8_t detail);
+
+/**
+ * @brief Get the detail byte recorded for a DTC.
+ * @param code DTC code to query.
+ * @return Failure type byte, or DTC_DETAIL_NONE when unknown or never set.
+ */
+uint8_t dtcManagerGetDetail(uint16_t code);
+
+/**
  * @brief Retry DTC persistence work left pending by a transient storage error.
  *
  * Call from the core-0 service loop. Retries are rate-limited internally.

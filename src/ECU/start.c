@@ -8,6 +8,7 @@
 #include "vp37_current.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/system/hal_system.h>
 #include <hal/timers/hal_soft_timer.h>
 #include <hal/usb/hal_usb.h>
 #include <utils/multicoreWatchdog.h>
@@ -42,6 +43,7 @@ typedef struct {
   bool alertBlinkState;
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
+  bool resetReasonReported;
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
   uint32_t vp37CurrentLastSequence;
@@ -51,6 +53,17 @@ typedef struct {
   int statusVariable0Val;
   int statusVariable1Val;
 } start_persistent_state_t;
+
+#ifdef VP37
+/* Core 0 reporting buffers. Both pump reporters run one after another on
+ * core 0, so they share one snapshot. Kept off the 4 KiB core-0 stack: the
+ * 1 KiB snapshot, the trace samples and the CFG print with its ~70 arguments
+ * exhausted it once the USB IRQ nested on top (rev98, 2026-09-25). */
+static VP37Pump s_vp37Snapshot;
+#if ECU_FUNCTIONAL_TESTS_ENABLED
+static VP37TraceSample s_vp37TraceSamples[4];
+#endif
+#endif
 
 static start_runtime_state_t s_startRuntimeState = {
     .timerEverySecondHandle = NULL,
@@ -66,7 +79,8 @@ static start_runtime_state_t s_startRuntimeState = {
     .wSizeVal = 0,
     .alertBlinkState = false,
     .core1InitStatus = HAL_NONE,
-    .core1InitErrorReported = false};
+    .core1InitErrorReported = false,
+    .resetReasonReported = false};
 
 NOINIT static start_persistent_state_t s_startPersistentState;
 static hal_mutex_t turboStateMutex = NULL;
@@ -197,6 +211,37 @@ static void start_reportWatchdogSnapshot(void) {
 
   s_startRuntimeState.wSizeVal = 0;
   s_startRuntimeState.wValuesPtr = NULL;
+}
+
+/**
+ * @brief Report the HAL reset reason and any retained fault record, once.
+ * @note Waits for a USB host like the watchdog snapshot: the CDC stack drops
+ * output while nobody listens, and a fault reboot is exactly such a moment.
+ */
+static void start_reportResetReason(void) {
+  bool hostAttached = false;
+  const bool pending = !s_startRuntimeState.resetReasonReported &&
+                       (hal_usb_cdc_is_connected(&hostAttached) == HAL_OK) &&
+                       hostAttached;
+  if (pending) {
+    s_startRuntimeState.resetReasonReported = true;
+    const hal_reset_reason_t reason = hal_get_reset_reason();
+    hal_fault_info_t fault = {.valid = false};
+    const bool faulted = hal_get_last_fault(&fault);
+    if (faulted || (reason == HAL_RESET_REASON_WATCHDOG) ||
+        (reason == HAL_RESET_REASON_HARDFAULT) ||
+        (reason == HAL_RESET_REASON_STACK_OVERFLOW)) {
+      derr("Reset reason: %s", hal_reset_reason_str(reason));
+    } else {
+      deb("Reset reason: %s", hal_reset_reason_str(reason));
+    }
+    if (faulted) {
+      derr("Last fault: pc=0x%08lx lr=0x%08lx psr=0x%08lx build:%s",
+           (unsigned long)fault.pc, (unsigned long)fault.lr,
+           (unsigned long)fault.psr, ecu_BuildDateTime);
+      hal_clear_last_fault();
+    }
+  }
 }
 
 static void feedWatchdogDuringPersistence(void *user) {
@@ -353,6 +398,7 @@ void callAtEverySecond(void) {
   hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
   CAN_sendGpsExtended();
   start_reportWatchdogSnapshot();
+  start_reportResetReason();
 
 #if SYSTEM_TEMP
   deb("System temperature: %f", hal_read_chip_temp());
@@ -371,16 +417,16 @@ static void start_reportVP37Current(void) {
     return;
   }
   m_mutex_enter_blocking(vp37StateMutex);
-  const VP37Pump snapshot = s_ctx.injectionPump;
+  s_vp37Snapshot = s_ctx.injectionPump;
   m_mutex_exit(vp37StateMutex);
-  if (!snapshot.vp37Initialized ||
-      (snapshot.scan.cycleResultSequence ==
+  if (!s_vp37Snapshot.vp37Initialized ||
+      (s_vp37Snapshot.scan.cycleResultSequence ==
        s_startRuntimeState.vp37CurrentLastSequence)) {
     return;
   }
   s_startRuntimeState.vp37CurrentLastSequence =
-      snapshot.scan.cycleResultSequence;
-  VP37_showCurrentPulse(&snapshot);
+      s_vp37Snapshot.scan.cycleResultSequence;
+  VP37_showCurrentPulse(&s_vp37Snapshot);
 }
 #endif
 
@@ -429,13 +475,13 @@ static void runCore0(void) {
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);
-    VP37Pump snapshot = s_ctx.injectionPump;
+    s_vp37Snapshot = s_ctx.injectionPump;
 #if ECU_FUNCTIONAL_TESTS_ENABLED
-    VP37TraceSample samples[4];
     size_t sampleCount = 0U;
-    while (!hal_debug_is_muted() && (sampleCount < COUNTOF(samples)) &&
-           (VP37_readTrace(&s_ctx.injectionPump, &samples[sampleCount]) ==
-            HAL_OK)) {
+    while (!hal_debug_is_muted() &&
+           (sampleCount < COUNTOF(s_vp37TraceSamples)) &&
+           (VP37_readTrace(&s_ctx.injectionPump,
+                           &s_vp37TraceSamples[sampleCount]) == HAL_OK)) {
       sampleCount++;
     }
     const bool recording = VP37_traceCapturing();
@@ -443,13 +489,13 @@ static void runCore0(void) {
     m_mutex_exit(vp37StateMutex);
 #if ECU_FUNCTIONAL_TESTS_ENABLED
     if (!recording) {
-      VP37_showDebug(&snapshot);
+      VP37_showDebug(&s_vp37Snapshot);
     }
     for (size_t i = 0U; i < sampleCount; i++) {
-      VP37_showTrace(&samples[i]);
+      VP37_showTrace(&s_vp37TraceSamples[i]);
     }
 #else
-    VP37_showDebug(&snapshot);
+    VP37_showDebug(&s_vp37Snapshot);
 #endif
   }
 #endif

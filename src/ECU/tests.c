@@ -25,6 +25,8 @@ typedef struct {
 static const ecu_test_t s_tests[] = {
     {START_TEST_DTC, "dtc", "inject one diagnostic trouble code", false, true,
      testHelpersDtcStart, NULL},
+    {START_TEST_KV, "kv", "write and read back one key-value counter", false,
+     true, testHelpersKvStart, NULL},
     {START_TEST_CYCLIC, "cyclic", "0-100-0 ramps over four step sizes", true,
      true, testHelpersCyclicStart, testHelpersCyclicStep},
     {START_TEST_RANDOM, "random", "random positions, each held for a while",

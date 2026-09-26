@@ -1,4 +1,5 @@
 #include "can.h"
+#include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "sensors.h"
 #include "unity.h"
@@ -193,6 +194,48 @@ void test_rpm_update_retries_after_failed_send(void) {
   assert_rpm_frame(1300);
 }
 
+static bool bus_fault_active(void) {
+  uint16_t codes[12] = {0};
+  const uint8_t n = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 12);
+  for (uint8_t i = 0; i < n; i++) {
+    if (codes[i] == DTC_CAN_BUS_FAULT) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void test_check_connection_reports_bus_off_with_iso_detail(void) {
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_BUS_OFF);
+  canCheckConnection();
+  TEST_ASSERT_TRUE(bus_fault_active());
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_BUS_OFF,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  // One clean check period clears the active flag; the detail stays.
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  canCheckConnection();
+  TEST_ASSERT_FALSE(bus_fault_active());
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_BUS_OFF,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+}
+
+void test_check_connection_names_the_frame_whose_send_failed(void) {
+  // A stopped controller refuses every send without reporting bus-off.
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_STOPPED);
+  getRPMInstance()->rpmValue = 1234;
+  CAN_updaterecipients_02();
+
+  canCheckConnection();
+  TEST_ASSERT_TRUE(bus_fault_active());
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_TX_RPM,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+
+  hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  canCheckConnection();
+  TEST_ASSERT_FALSE(bus_fault_active());
+}
+
 void test_rpm_update_sends_periodic_heartbeat(void) {
   getRPMInstance()->rpmValue = 2345;
 
@@ -260,6 +303,8 @@ int main(void) {
   RUN_TEST(test_can_init_uses_one_shot_with_software_retry);
   RUN_TEST(test_rpm_update_retries_after_failed_send);
   RUN_TEST(test_rpm_update_sends_periodic_heartbeat);
+  RUN_TEST(test_check_connection_reports_bus_off_with_iso_detail);
+  RUN_TEST(test_check_connection_names_the_frame_whose_send_failed);
 #ifndef VP37
   RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
 #endif
