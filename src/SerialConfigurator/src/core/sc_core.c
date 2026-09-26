@@ -1689,8 +1689,8 @@ ScAuthStatus sc_core_authenticate(const ScTransport *transport,
   }
 
   const char *challenge_hex = begin_reply + (sizeof(k_chal_prefix) - 1u);
-  uint8_t challenge[SC_AUTH_CHALLENGE_BYTES];
-  if (strlen(challenge_hex) != SC_AUTH_CHALLENGE_BYTES * 2u ||
+  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+  if (strlen(challenge_hex) != HAL_SC_AUTH_CHALLENGE_BYTES * 2u ||
       !sc_auth_decode_hex(challenge_hex, challenge, sizeof(challenge))) {
     set_phase5_error(error, error_size, "AUTH_BEGIN bad challenge hex: %s",
                      challenge_hex);
@@ -1698,7 +1698,7 @@ ScAuthStatus sc_core_authenticate(const ScTransport *transport,
   }
 
   /* 4. Compute response and send SC_AUTH_PROVE <hex>. */
-  char response_hex[SC_AUTH_RESPONSE_HEX_BUF_SIZE];
+  char response_hex[HAL_SC_AUTH_RESPONSE_HEX_BUF_SIZE];
   if (!sc_auth_compute_response_hex(uid_bytes, sizeof(uid_bytes), challenge,
                                     sizeof(challenge), session_id, response_hex,
                                     sizeof(response_hex))) {

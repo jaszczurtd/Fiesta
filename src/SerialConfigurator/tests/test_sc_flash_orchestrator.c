@@ -149,7 +149,7 @@ static bool mock_send(void *ctx, const char *path, const char *cmd,
   }
   if (strncmp(cmd, "SC_AUTH_PROVE ", 14u) == 0) {
     const char *provided = cmd + 14u;
-    char expected[SC_AUTH_RESPONSE_HEX_BUF_SIZE];
+    char expected[HAL_SC_AUTH_RESPONSE_HEX_BUF_SIZE];
     if (!sc_auth_compute_response_hex(k_uid, sizeof(k_uid), k_challenge,
                                       sizeof(k_challenge), k_session_id_pre,
                                       expected, sizeof(expected))) {

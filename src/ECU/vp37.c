@@ -120,6 +120,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->scan.lastSequence = 0U;
   self->scan.blocks = 0U;
   self->scan.collectUs = 0U;
+  self->scan.reducedUs = 0U;
   self->scan.gaps = 0U;
   self->scan.frameNs = 0U;
   self->scan.running = false;
@@ -340,6 +341,8 @@ void VP37_process(VP37Pump *self) {
   if (!self->vp37Initialized) {
     return;
   }
+  // DMA ownership is shorter than a position step; retain blocks promptly.
+  (void)VP37_acquireCurrentScan(self);
   if (!isfinite(self->pidTimeUpdate) || self->pidTimeUpdate < 1.0f ||
       self->pidTimeUpdate > 100.0f) {
     VP37_stop(self);
@@ -360,8 +363,11 @@ void VP37_process(VP37Pump *self) {
   const uint32_t collectStartedUs = hal_micros();
   (void)VP37_serviceCurrentScan(self);
   self->scan.collectUs = hal_micros() - collectStartedUs;
+  (void)VP37_acquireCurrentScan(self);
 
-  if (!VP37_updateAdjustometerPosition(self)) {
+  const bool feedbackOk = VP37_updateAdjustometerPosition(self);
+  (void)VP37_acquireCurrentScan(self);
+  if (!feedbackOk) {
     if (hal_elapsed_u32(hal_millis(), self->feedback.commLostSince,
                         VP37_ADJ_COMM_CUTOFF_MS)) {
       VP37_stop(self);
@@ -382,6 +388,7 @@ void VP37_process(VP37Pump *self) {
     self->pidStarted = true;
     VP37_positionCycle(self);
   }
+  (void)VP37_acquireCurrentScan(self);
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   VP37_traceRecord(self);
 #endif

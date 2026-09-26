@@ -29,6 +29,22 @@ static uint16_t
     s_scanHistory[VP37_CURRENT_SCAN_HISTORY_FRAMES * VP37_CURRENT_SCAN_PINS];
 static uint32_t s_scanHistoryFrames;
 static uint32_t s_scanHistoryStartUs;
+static uint32_t s_scanHistorySequence;
+static uint32_t s_scanHistoryCompletedUs;
+static uint32_t s_scanHistoryCollectedUs;
+static uint32_t s_scanHistoryPollUs;
+static uint32_t s_scanHistoryFrameNs;
+static bool s_scanPending;
+typedef struct {
+  uint32_t run, glitches, rise, previousFall;
+  uint32_t periodRise, periodFall, periodLatch;
+  bool initialized, gateOn, haveRise, havePreviousFall, found;
+} VP37CurrentEdges;
+static VP37CurrentEdges s_scanEdges;
+static uint32_t s_scanFirstFrame;
+static VP37CurrentPulseResult s_scanPulse;
+static uint32_t s_scanPulseFall;
+static bool s_scanPulseCached;
 
 /* The short ON ramp is nearly sorted; also used for the startup median. */
 static void VP37_currentSortRaw(uint16_t *values, uint32_t count) {
@@ -162,6 +178,11 @@ hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
   uint16_t guarded[VP37_CURRENT_PULSE_SAMPLES];
   uint32_t guardedCount = 0U;
   uint16_t peakRaw = 0U;
+  uint32_t profileRaw[VP37_CURRENT_PROFILE_BINS] = {0U};
+  uint32_t profileTime[VP37_CURRENT_PROFILE_BINS] = {0U};
+  uint32_t profileCount[VP37_CURRENT_PROFILE_BINS] = {0U};
+  const uint32_t guardedUs =
+      onTimeUs - (2U * VP37_CURRENT_PULSE_EDGE_GUARD_US) + 1U;
   for (uint32_t i = 0U; i < count; i++) {
     if (samples[i].rawSample > VP37_CURRENT_ADC_MAX_RAW) {
       return HAL_EINVAL;
@@ -178,6 +199,12 @@ hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
         (phaseUs <= (onTimeUs - VP37_CURRENT_PULSE_EDGE_GUARD_US))) {
       guarded[guardedCount] = samples[i].rawSample;
       guardedCount++;
+      const uint32_t bin = ((phaseUs - VP37_CURRENT_PULSE_EDGE_GUARD_US) *
+                            VP37_CURRENT_PROFILE_BINS) /
+                           guardedUs;
+      profileRaw[bin] += samples[i].rawSample;
+      profileTime[bin] += phaseUs;
+      profileCount[bin]++;
     }
   }
   out->guardedSamples = guardedCount;
@@ -201,6 +228,17 @@ hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
   out->pwmCommand = VP37_currentDutyFromTime(onTimeUs, periodUs);
   out->waveformValid = out->zeroValid && (out->clippedSamples == 0U) &&
                        VP37_currentPeriodPlausible(periodUs);
+  out->profileValid = out->waveformValid;
+  for (uint32_t bin = 0U; bin < VP37_CURRENT_PROFILE_BINS; ++bin) {
+    const uint32_t n = profileCount[bin];
+    if (n == 0U) {
+      out->profileValid = false;
+    } else {
+      out->profileAmps[bin] =
+          VP37_currentRawToAmps((uint16_t)((profileRaw[bin] + n / 2U) / n));
+      out->profileUs[bin] = (profileTime[bin] + n / 2U) / n;
+    }
+  }
   return HAL_OK;
 }
 
@@ -217,6 +255,7 @@ hal_status_t VP37_currentScanStart(void) {
   const hal_status_t status = hal_adc_scan_start(&config);
   if (status == HAL_OK) {
     s_scanHistoryFrames = 0U;
+    s_scanPending = false;
     s_scanShuntPosition = hal_adc_scan_pin_position(ADC_VP37_CURRENT_PIN);
     s_scanSupplyPosition = hal_adc_scan_pin_position(ADC_VOLT_PIN);
   }
@@ -227,21 +266,75 @@ hal_status_t VP37_currentScanStop(void) {
   const hal_status_t status = hal_adc_scan_stop();
   if (status == HAL_OK) {
     s_scanHistoryFrames = 0U;
+    s_scanPending = false;
   }
   return status;
 }
 
 uint32_t VP37_currentScanFrameNs(void) {
-  return hal_adc_scan_is_running() ? hal_adc_scan_frame_period_ns() : 0U;
+  return hal_adc_scan_frame_period_ns();
 }
 
 static uint32_t VP37_currentFramesToUs(uint32_t frames, uint32_t frameNs) {
   return (uint32_t)((((uint64_t)frames * (uint64_t)frameNs) + 500U) / 1000U);
 }
 
+static uint16_t VP37_currentBlockRaw(const VP37CurrentScanBlock *block,
+                                     uint32_t frame, uint8_t position,
+                                     bool compensated) {
+  const uint16_t raw = block->samples[frame * block->pinCount + position];
+  return compensated ? raw : VP37_currentCompensatedRaw((int)raw);
+}
+
+/* Edges span DMA boundaries. Absolute frame indices wrap by subtraction. */
+static void VP37_currentTrackEdges(const VP37CurrentScanBlock *block,
+                                   uint32_t firstFrame, VP37CurrentEdges *edges,
+                                   bool compensated) {
+  const uint16_t onRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_ON_AMPS);
+  const uint16_t offRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_OFF_AMPS);
+  for (uint32_t k = 0U; k < block->frames; k++) {
+    const uint16_t level = VP37_currentCorrectedRaw(
+        VP37_currentBlockRaw(block, k, block->shuntPosition, compensated),
+        NULL);
+    if (!edges->initialized) {
+      edges->gateOn = level >= onRaw;
+      edges->initialized = true;
+      continue;
+    }
+    const bool crossed = edges->gateOn ? (level <= offRaw) : (level >= onRaw);
+    if (!crossed && (edges->run != 0U)) {
+      edges->glitches++;
+    }
+    edges->run = crossed ? (edges->run + 1U) : 0U;
+    if (edges->run < VP37_CURRENT_GATE_CONFIRM_FRAMES) {
+      continue;
+    }
+    const uint32_t edge =
+        firstFrame + k - (VP37_CURRENT_GATE_CONFIRM_FRAMES - 1U);
+    edges->run = 0U;
+    edges->gateOn = !edges->gateOn;
+    if (edges->gateOn) {
+      edges->rise = edge;
+      edges->haveRise = true;
+    } else {
+      if (edges->haveRise && edges->havePreviousFall) {
+        edges->found = true;
+        edges->periodRise = edges->rise;
+        edges->periodFall = edge;
+        edges->periodLatch = edges->previousFall;
+      }
+      edges->haveRise = false;
+      edges->previousFall = edge;
+      edges->havePreviousFall = true;
+    }
+  }
+}
+
 static hal_status_t
 VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
-                             VP37CurrentPulseResult *out) {
+                             VP37CurrentPulseResult *out,
+                             const VP37CurrentEdges *retainedEdges,
+                             uint32_t firstFrame, bool compensated) {
   static VP37CurrentPhaseSample s_pulseSamples[VP37_CURRENT_PULSE_SAMPLES];
   if (out == NULL) {
     return HAL_EINVAL;
@@ -258,75 +351,19 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
     return HAL_ESTATE;
   }
 
-  // The freewheel path bypasses the source shunt, so the gate is the only
-  // thing that lifts the shunt off zero: recover both edges from the level.
-  const uint16_t onRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_ON_AMPS);
-  const uint16_t offRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_OFF_AMPS);
-  bool gateOn = false;
-  uint32_t run = 0U; /* consecutive frames on the other side of the gate */
-  uint32_t glitches = 0U;
-  bool haveRise = false;
-  bool haveFall = false;
-  bool havePreviousFall = false;
-  bool riseHasLatch = false;
-  bool periodHasLatch = false;
-  uint32_t rise = 0U;
-  uint32_t fall = 0U;
-  uint32_t previousFall = 0U;
-  uint32_t riseLatch = 0U;
-  uint32_t periodLatch = 0U;
-  bool found = false;
-  uint32_t periodRise = 0U;
-  uint32_t periodFall = 0U;
-  uint32_t periodEnd = 0U;
-  for (uint32_t k = 0U; k < block->frames; k++) {
-    const uint16_t level = VP37_currentCorrectedRaw(
-        VP37_currentCompensatedRaw(
-            (int)block->samples[(k * block->pinCount) + block->shuntPosition]),
-        NULL);
-    if (k == 0U) {
-      gateOn = level >= onRaw;
-      continue;
-    }
-    const bool crossed = gateOn ? (level <= offRaw) : (level >= onRaw);
-    if (!crossed && (run != 0U)) {
-      glitches++; // an excursion that ended before it could count as an edge
-    }
-    run = crossed ? (run + 1U) : 0U;
-    if (run < VP37_CURRENT_GATE_CONFIRM_FRAMES) {
-      continue;
-    }
-    // The edge is where the run started; it is only trusted once it lasts.
-    const uint32_t edge = k - (VP37_CURRENT_GATE_CONFIRM_FRAMES - 1U);
-    run = 0U;
-    gateOn = !gateOn;
-    if (gateOn) {
-      if (haveRise && haveFall) {
-        // Rise to rise: the newest complete period wins.
-        found = true;
-        periodRise = rise;
-        periodFall = fall;
-        periodEnd = edge;
-        periodHasLatch = riseHasLatch;
-        periodLatch = riseLatch;
-      }
-      rise = edge;
-      haveRise = true;
-      haveFall = false;
-      riseHasLatch = havePreviousFall;
-      riseLatch = previousFall;
-    } else {
-      if (haveRise) {
-        fall = edge;
-        haveFall = true;
-      }
-      // The first fall also anchors a later ON phase when history started ON.
-      previousFall = edge;
-      havePreviousFall = true;
-    }
+  VP37CurrentEdges localEdges = {0};
+  const VP37CurrentEdges *edges = retainedEdges;
+  if (edges == NULL) {
+    VP37_currentTrackEdges(block, firstFrame, &localEdges, compensated);
+    edges = &localEdges;
   }
+  const uint32_t glitches = edges->glitches;
   out->glitches = glitches;
-  if (!found) {
+  const uint32_t periodRise = edges->periodRise - firstFrame;
+  const uint32_t periodFall = edges->periodFall - firstFrame;
+  const uint32_t periodLatch = edges->periodLatch - firstFrame;
+  if (!edges->found || (periodLatch >= block->frames) ||
+      (periodRise >= block->frames) || (periodFall >= block->frames)) {
     return HAL_EAGAIN;
   }
   const uint32_t onFrames = periodFall - periodRise;
@@ -335,7 +372,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   }
   const uint32_t onTimeUs = VP37_currentFramesToUs(onFrames, block->frameNs);
   const uint32_t periodUs =
-      VP37_currentFramesToUs(periodEnd - periodRise, block->frameNs);
+      VP37_currentFramesToUs(periodFall - periodLatch, block->frameNs);
   const uint32_t cycleStartUs =
       block->startUs + VP37_currentFramesToUs(periodRise, block->frameNs);
 
@@ -345,9 +382,8 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   uint32_t supplyRejected = 0U;
   const uint32_t frameUs =
       ((block->frameNs % 1000U) == 0U) ? (block->frameNs / 1000U) : 0U;
-  for (uint32_t k = periodRise; k < periodEnd; k++) {
-    const uint16_t *frame = &block->samples[k * block->pinCount];
-    const bool on = k < periodFall;
+  for (uint32_t k = periodLatch; k < periodFall; k++) {
+    const bool on = k >= periodRise;
     if (on) {
       bool clipped = false;
       // Whole-microsecond frames need no 64-bit division per ON sample.
@@ -357,7 +393,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
                                     : VP37_currentFramesToUs(k, block->frameNs);
       s_pulseSamples[count].timestampUs = block->startUs + sampleUs;
       s_pulseSamples[count].rawSample = VP37_currentCorrectedRaw(
-          VP37_currentCompensatedRaw((int)frame[block->shuntPosition]),
+          VP37_currentBlockRaw(block, k, block->shuntPosition, compensated),
           &clipped);
       s_pulseSamples[count].gateOn = 1U;
       s_pulseSamples[count].clipped = clipped ? 1U : 0U;
@@ -365,7 +401,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
     }
     // Each phase gets its own mean because the rail sags while the gate drives.
     const int supplyRaw =
-        (int)VP37_currentCompensatedRaw((int)frame[block->supplyPosition]);
+        (int)VP37_currentBlockRaw(block, k, block->supplyPosition, compensated);
     if ((supplyRaw > 0) && (supplyRaw < (int)VP37_CURRENT_ADC_MAX_RAW)) {
       supplySum[on ? 1U : 0U] += (uint32_t)supplyRaw;
       supplyCount[on ? 1U : 0U]++;
@@ -391,17 +427,13 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   out->glitches = glitches;
 
   // With the active-low driver, ON occupies the end of the hardware period.
-  // Rise-to-rise timing varies with duty; only falls identify PWM latches.
-  if (periodHasLatch) {
-    out->latchUs =
-        block->startUs + VP37_currentFramesToUs(periodLatch, block->frameNs);
-    out->latchPeriodUs =
-        VP37_currentFramesToUs(periodFall - periodLatch, block->frameNs);
-    out->latchValid = VP37_currentPeriodPlausible(out->latchPeriodUs) &&
-                      (onTimeUs < out->latchPeriodUs);
-    if (out->latchValid) {
-      out->latchedPwm = VP37_currentDutyFromTime(onTimeUs, out->latchPeriodUs);
-    }
+  out->latchUs =
+      block->startUs + VP37_currentFramesToUs(periodLatch, block->frameNs);
+  out->latchPeriodUs = periodUs;
+  out->latchValid =
+      VP37_currentPeriodPlausible(periodUs) && (onTimeUs < periodUs);
+  if (out->latchValid) {
+    out->latchedPwm = VP37_currentDutyFromTime(onTimeUs, periodUs);
   }
 
   // The supply mean has its own sample budget and quality rule, so a current
@@ -428,7 +460,8 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
 /* The newest complete time window rejects PWM ripple without waiting for a
    current edge. Its timestamp describes the mean, not its publication. */
 static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
-                                           VP37CurrentPulseResult *out) {
+                                           VP37CurrentPulseResult *out,
+                                           bool compensated) {
   const uint32_t periodNs =
       VP37_currentPeriodPlausible(out->periodUs)
           ? (out->periodUs * 1000U)
@@ -440,8 +473,8 @@ static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
     uint64_t sum = 0U;
     bool valid = true;
     for (uint32_t k = first; k < block->frames; k++) {
-      const uint16_t raw = VP37_currentCompensatedRaw(
-          (int)block->samples[(k * block->pinCount) + block->supplyPosition]);
+      const uint16_t raw =
+          VP37_currentBlockRaw(block, k, block->supplyPosition, compensated);
       if ((raw == 0U) || (raw >= VP37_CURRENT_ADC_MAX_RAW)) {
         valid = false;
       }
@@ -463,18 +496,16 @@ static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
 
 hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
                                     VP37CurrentPulseResult *out) {
-  const hal_status_t status = VP37_currentScanReducePeriod(block, out);
+  const hal_status_t status =
+      VP37_currentScanReducePeriod(block, out, NULL, 0U, false);
   if (status != HAL_EINVAL) {
-    VP37_currentReduceLatestSupply(block, out);
+    VP37_currentReduceLatestSupply(block, out, false);
   }
   return status;
 }
 
 static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
                                         uint32_t frameNs) {
-  static uint32_t s_scanHistorySequence;
-  static uint32_t s_scanHistoryCompletedUs;
-  static uint32_t s_scanHistoryFrameNs;
   if (s_scanHistoryFrames != 0U) {
     const uint32_t interval = block->completed_us - s_scanHistoryCompletedUs;
     const uint32_t expected = VP37_currentFramesToUs(block->frames, frameNs);
@@ -490,9 +521,13 @@ static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
   const uint32_t keep =
       (s_scanHistoryFrames < available) ? s_scanHistoryFrames : available;
   if (s_scanHistoryFrames == 0U) {
+    (void)memset(&s_scanEdges, 0, sizeof(s_scanEdges));
+    s_scanPulseCached = false;
+    s_scanFirstFrame = 0U;
     s_scanHistoryStartUs =
         block->completed_us - VP37_currentFramesToUs(block->frames, frameNs);
   } else {
+    s_scanFirstFrame += s_scanHistoryFrames - keep;
     s_scanHistoryStartUs +=
         VP37_currentFramesToUs(s_scanHistoryFrames - keep, frameNs);
   }
@@ -502,10 +537,60 @@ static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
                 keep * pins * sizeof(s_scanHistory[0]));
   (void)memcpy(&s_scanHistory[keep * pins], block->samples,
                block->frames * pins * sizeof(s_scanHistory[0]));
+  // Compensate each arriving conversion once, before any overlapping window.
+  for (uint32_t k = keep; k < keep + block->frames; ++k) {
+    uint16_t *frame = &s_scanHistory[k * pins];
+    frame[s_scanShuntPosition] =
+        VP37_currentCompensatedRaw((int)frame[s_scanShuntPosition]);
+    frame[s_scanSupplyPosition] =
+        VP37_currentCompensatedRaw((int)frame[s_scanSupplyPosition]);
+  }
+  const VP37CurrentScanBlock newFrames = {
+      .samples = &s_scanHistory[keep * pins],
+      .frames = block->frames,
+      .pinCount = block->pin_count,
+      .shuntPosition = s_scanShuntPosition,
+      .supplyPosition = s_scanSupplyPosition,
+      .frameNs = frameNs,
+      .startUs = 0U};
+  VP37_currentTrackEdges(&newFrames, s_scanFirstFrame + keep, &s_scanEdges,
+                         true);
   s_scanHistoryFrames = keep + block->frames;
   s_scanHistorySequence = block->sequence;
   s_scanHistoryCompletedUs = block->completed_us;
   s_scanHistoryFrameNs = frameNs;
+}
+
+hal_status_t VP37_currentScanPoll(uint32_t *sequence) {
+  if (sequence == NULL) {
+    return HAL_EINVAL;
+  }
+  *sequence = 0U;
+  hal_adc_scan_block_t block;
+  const hal_status_t takeStatus = hal_adc_scan_take(&block);
+  if (takeStatus != HAL_OK) {
+    if (takeStatus != HAL_EAGAIN) {
+      s_scanHistoryFrames = 0U;
+      s_scanPending = false;
+    }
+    return takeStatus;
+  }
+  const uint32_t frameNs = hal_adc_scan_frame_period_ns();
+  hal_status_t status = HAL_ESTATE;
+  if ((block.pin_count != VP37_CURRENT_SCAN_PINS) ||
+      (block.frames > VP37_CURRENT_SCAN_HISTORY_FRAMES) || (frameNs == 0U)) {
+    s_scanHistoryFrames = 0U;
+    s_scanPending = false;
+  } else {
+    const uint32_t startedUs = hal_micros();
+    VP37_currentRetainScanBlock(&block, frameNs);
+    s_scanHistoryCollectedUs = hal_micros();
+    s_scanHistoryPollUs = s_scanHistoryCollectedUs - startedUs;
+    s_scanPending = true;
+    *sequence = block.sequence;
+    status = HAL_OK;
+  }
+  return status;
 }
 
 hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
@@ -514,28 +599,42 @@ hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
     return HAL_EINVAL;
   }
   *sequence = 0U;
-  hal_adc_scan_block_t block;
-  const hal_status_t takeStatus = hal_adc_scan_take(&block);
-  if (takeStatus != HAL_OK) {
-    return takeStatus;
+  if (!hal_adc_scan_is_running()) {
+    return HAL_ESTATE;
   }
-  const uint32_t frameNs = hal_adc_scan_frame_period_ns();
-  hal_status_t status = HAL_ESTATE;
-  if ((block.pin_count != VP37_CURRENT_SCAN_PINS) ||
-      (block.frames > VP37_CURRENT_SCAN_HISTORY_FRAMES) || (frameNs == 0U)) {
-    s_scanHistoryFrames = 0U;
+  if (!s_scanPending) {
+    return HAL_EAGAIN;
+  }
+  const VP37CurrentScanBlock view = {.samples = s_scanHistory,
+                                     .frames = s_scanHistoryFrames,
+                                     .pinCount = VP37_CURRENT_SCAN_PINS,
+                                     .shuntPosition = s_scanShuntPosition,
+                                     .supplyPosition = s_scanSupplyPosition,
+                                     .frameNs = s_scanHistoryFrameNs,
+                                     .startUs = s_scanHistoryStartUs};
+  *sequence = s_scanHistorySequence;
+  s_scanPending = false;
+  hal_status_t reduced = HAL_OK;
+  if (s_scanPulseCached && s_scanEdges.found &&
+      (s_scanPulseFall == s_scanEdges.periodFall) &&
+      ((s_scanEdges.periodLatch - s_scanFirstFrame) < s_scanHistoryFrames)) {
+    // A completed pulse is immutable; only the independent supply advances.
+    *out = s_scanPulse;
+    out->glitches = s_scanEdges.glitches;
   } else {
-    VP37_currentRetainScanBlock(&block, frameNs);
-    VP37CurrentScanBlock view;
-    view.samples = s_scanHistory;
-    view.frames = s_scanHistoryFrames;
-    view.pinCount = block.pin_count;
-    view.shuntPosition = s_scanShuntPosition;
-    view.supplyPosition = s_scanSupplyPosition;
-    view.frameNs = frameNs;
-    view.startUs = s_scanHistoryStartUs;
-    *sequence = block.sequence;
-    status = VP37_currentScanReduce(&view, out);
+    reduced = VP37_currentScanReducePeriod(&view, out, &s_scanEdges,
+                                           s_scanFirstFrame, true);
+    s_scanPulseCached = reduced == HAL_OK;
+    if (s_scanPulseCached) {
+      s_scanPulse = *out;
+      s_scanPulseFall = s_scanEdges.periodFall;
+    }
   }
-  return status;
+  if (reduced != HAL_EINVAL) {
+    VP37_currentReduceLatestSupply(&view, out, true);
+  }
+  out->scanCompletedUs = s_scanHistoryCompletedUs;
+  out->scanCollectedUs = s_scanHistoryCollectedUs;
+  out->scanPollUs = s_scanHistoryPollUs;
+  return reduced;
 }

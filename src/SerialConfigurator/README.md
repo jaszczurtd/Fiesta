@@ -47,27 +47,15 @@ cmake -S . -B build \
   -DSC_JASZCZURHAL_DIR=/absolute/path/to/JaszczurHAL
 ```
 
-#### Optional shared crypto backend
+#### Shared crypto and authentication code
 
-`SerialConfigurator` now exposes `src/core/sc_crypto.h` and, when available,
-uses `JaszczurHAL/src/hal/security/hal_crypto.cpp` as the backend (no
-duplicated crypto implementation in this repository).
-
-Defaults:
-
-- `SC_USE_JASZCZURHAL_CRYPTO=ON`
-
-Examples:
-
-```bash
-# explicit path
-cmake -S . -B build \
-  -DSC_JASZCZURHAL_DIR=/absolute/path/to/JaszczurHAL \
-  -DSC_USE_JASZCZURHAL_CRYPTO=ON
-
-# force no-op backend
-cmake -S . -B build -DSC_USE_JASZCZURHAL_CRYPTO=OFF
-```
+`src/core/sc_crypto.h` and `src/core/sc_auth.h` are thin C entry points over
+JaszczurHAL. `hal_crypto.cpp` (Base64, MD5, SHA-256/HMAC-SHA256,
+ChaCha20-Poly1305) and `hal_sc_auth.cpp` (the per-device key derivation and
+challenge response, the same code the firmware runs) are compiled straight
+into `serial_configurator_core`. This repository keeps no crypto
+implementation and no fallback backend; CMake stops when the HAL sources are
+missing.
 
 ## Run
 

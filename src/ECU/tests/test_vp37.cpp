@@ -933,6 +933,9 @@ static void completeSupplyScan(const SupplyScanFixture &fixture,
   hal_mock_set_micros(fixture.startUs + completedUs);
   TEST_ASSERT_EQUAL(HAL_OK, hal_mock_adc_scan_complete(
                                 samples, VP37_CURRENT_SCAN_BLOCK_FRAMES));
+  // The core-1 loop retains DMA blocks between the 5 ms position steps.
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_acquireCurrentScan(&getECUContext()->injectionPump));
 }
 
 static void setupSupplyScan(VP37Pump *pump, uint32_t startUs) {
@@ -959,6 +962,36 @@ struct CurrentScanCommands {
   int32_t pendingPWM;
 };
 
+void test_vp37_acquires_scan_between_position_steps(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  const uint32_t start = 100000U;
+  setupSupplyScan(pump, start);
+  hal_mock_set_micros(start);
+  injectAdjRegisterData(4600, 120U, 49U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  const uint32_t step = pump->controlSequence;
+  static uint16_t
+      frames[VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS];
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  for (uint32_t i = 1U; i <= 2U; ++i) {
+    hal_mock_set_micros(start + i * blockUs);
+    TEST_ASSERT_EQUAL(HAL_OK, hal_mock_adc_scan_complete(
+                                  frames, VP37_CURRENT_SCAN_BLOCK_FRAMES));
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL_UINT32(i, pump->scan.blocks);
+    TEST_ASSERT_EQUAL_UINT32(step, pump->controlSequence);
+    TEST_ASSERT_EQUAL_UINT32(0U, pump->scan.cycleResultSequence);
+  }
+  hal_mock_set_micros(start + 5000U);
+  injectAdjRegisterData(4600, 120U, 49U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_EQUAL_UINT32(step + 1U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->scan.cycleResultSequence);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->scan.blocks);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->scan.gaps);
+}
+
 static CurrentScanCommands runCurrentScan(float measuredAmps,
                                           bool changeDuringOff = false,
                                           bool resistanceCompensation = false) {
@@ -977,7 +1010,10 @@ static CurrentScanCommands runCurrentScan(float measuredAmps,
   const uint32_t blockUs =
       VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
   uint32_t nextBlockUs = blockUs;
-  for (uint32_t us = 5000U; us <= 25000U; us += 5000U) {
+  // Observe the first completed ON after the OFF-phase write. The next ON
+  // already belongs to that newer write with the earlier fall publication.
+  const uint32_t lastStepUs = changeDuringOff ? 20000U : 25000U;
+  for (uint32_t us = 5000U; us <= lastStepUs; us += 5000U) {
     while (nextBlockUs <= us) {
       completeSupplyScan(fixture, nextBlockUs, measuredAmps,
                          commands.baselinePWM, true);
@@ -1064,23 +1100,31 @@ void test_vp37_resistance_scan_uses_the_command_that_produced_the_current(
   TEST_ASSERT_EQUAL_UINT32(0U, pump->thermal.driveSamples);
 }
 
-static void cacheCurrentScan(VP37Pump *pump, uint32_t writtenUs) {
+static void advanceCachedScan(VP37Pump *pump, const SupplyScanFixture &fixture,
+                              uint32_t *completedUs, uint32_t untilUs) {
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  while ((*completedUs + blockUs) <= untilUs) {
+    *completedUs += blockUs;
+    completeSupplyScan(fixture, *completedUs, 3.5f, 700, true);
+    (void)VP37_serviceCurrentScan(pump);
+  }
+}
+
+static uint32_t cacheCurrentScan(VP37Pump *pump, uint32_t writtenUs) {
   const SupplyScanFixture fixture = {100000U, false, false, false, true};
   setupSupplyScan(pump, fixture.startUs);
   pump->output.finalPWM = 700;
   VP37_recordCurrentCommand(pump, 820.0f, 700, writtenUs);
-  const uint32_t blockUs =
-      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
-  for (uint32_t us = blockUs; us <= 24000U; us += blockUs) {
-    completeSupplyScan(fixture, us, 3.5f, 700, true);
-    (void)VP37_serviceCurrentScan(pump);
-  }
+  uint32_t completedUs = 0U;
+  advanceCachedScan(pump, fixture, &completedUs, 24000U);
   TEST_ASSERT_TRUE(pump->currentControl.matchCached);
   TEST_ASSERT_TRUE(pump->currentControl.matchFound);
   TEST_ASSERT_EQUAL_PTR(&pump->currentControl.matchedCommand,
                         VP37_matchCurrentSample(pump, hal_micros()));
   TEST_ASSERT_EQUAL_UINT32(writtenUs,
                            pump->currentControl.matchedCommand.writtenUs);
+  return completedUs;
 }
 
 void test_vp37_current_scan_cache_rechecks_capture_age_and_quality(void) {
@@ -1115,7 +1159,7 @@ void test_vp37_current_scan_cache_rechecks_historical_command_age(void) {
 
 void test_vp37_current_scan_cache_follows_sequence_command_and_reset(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
-  cacheCurrentScan(pump, 100000U);
+  uint32_t completedUs = cacheCurrentScan(pump, 100000U);
   const SupplyScanFixture fixture = {100000U, false, false, false, true};
   const uint32_t oldSequence = pump->scan.cycleResultSequence;
   VP37_recordCurrentCommand(pump, 900.0f, 700, hal_micros());
@@ -1127,23 +1171,22 @@ void test_vp37_current_scan_cache_follows_sequence_command_and_reset(void) {
 
   // Publication trails the PWM latch. Later blocks must refresh the cache
   // even when no new command has been recorded since the previous block.
-  completeSupplyScan(fixture, 30000U, 3.5f, 700, true);
-  (void)VP37_serviceCurrentScan(pump);
+  advanceCachedScan(pump, fixture, &completedUs, 30000U);
   TEST_ASSERT_TRUE(pump->currentControl.matchCached);
   TEST_ASSERT_EQUAL_FLOAT(820.0f,
                           pump->currentControl.matchedCommand.nominalPwm);
-  completeSupplyScan(fixture, 36000U, 3.5f, 700, true);
-  (void)VP37_serviceCurrentScan(pump);
-  TEST_ASSERT_EQUAL_FLOAT(820.0f,
+  advanceCachedScan(pump, fixture, &completedUs, 36000U);
+  TEST_ASSERT_EQUAL_FLOAT(900.0f,
                           pump->currentControl.matchedCommand.nominalPwm);
-  completeSupplyScan(fixture, 42000U, 3.5f, 700, true);
-  (void)VP37_serviceCurrentScan(pump);
+  // A command inconsistent with the observed duty must cache a miss.
+  VP37_recordCurrentCommand(pump, 1000.0f, 1000, hal_micros());
+  advanceCachedScan(pump, fixture, &completedUs, 48000U);
   TEST_ASSERT_TRUE(pump->currentControl.matchCached);
   TEST_ASSERT_FALSE(pump->currentControl.matchFound);
   TEST_ASSERT_NULL(VP37_matchCurrentSample(pump, hal_micros()));
-  // This period belongs to the newer write; the cached miss must expire too.
-  completeSupplyScan(fixture, 48000U, 3.5f, 700, true);
-  (void)VP37_serviceCurrentScan(pump);
+  // A later valid period must replace that cached miss.
+  VP37_recordCurrentCommand(pump, 900.0f, 700, hal_micros());
+  advanceCachedScan(pump, fixture, &completedUs, 64000U);
   TEST_ASSERT_GREATER_THAN_UINT32(oldSequence, pump->scan.cycleResultSequence);
   matched = VP37_matchCurrentSample(pump, hal_micros());
   TEST_ASSERT_NOT_NULL(matched);
@@ -3838,6 +3881,7 @@ void test_vp37_fresh_supply_scales_the_command_with_bounded_prediction(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_vp37_current_scan_increases_drive_for_a_current_deficit);
+  RUN_TEST(test_vp37_acquires_scan_between_position_steps);
   RUN_TEST(test_vp37_current_scan_reduces_drive_for_a_current_excess);
   RUN_TEST(test_vp37_current_scan_matches_target_before_active_low_latch);
   RUN_TEST(

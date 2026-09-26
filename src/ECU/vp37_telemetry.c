@@ -19,7 +19,7 @@ void VP37_showDebug(VP37Pump *self) {
     const char *const activeTest = testsActiveName();
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = testsCyclicDelayMs();
-    deb("VP37 CFG rev:99 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:103 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -102,7 +102,7 @@ void VP37_showDebug(VP37Pump *self) {
  *   V, FT     supply used by the loop [V] and fuel temperature [C]
  *   Ion       P95-winsorized mean of the guarded ON phase [A]; I95 its
  *             95th percentile; Ipk the raw ON-phase maximum, spike-prone
- *   per, on   measured rise-to-rise period and ON time [us]
+ *   per, on   measured fall-to-fall period and ON time [us]
  *   duty      PWM command reconstructed from on / per
  *   latch, lp falling edge before ON and its fall-to-fall period [us]
  *   lduty, lv duty reconstructed from on / lp and valid latch timing
@@ -112,21 +112,31 @@ void VP37_showDebug(VP37Pump *self) {
  *   valid     waveformValid: the ampere fields mean something
  *   status    hal_status_t of the reduction (HAL_EAGAIN: no complete period)
  *   Vavg, Vok full-period supply mean [V] and its own validity
- *   blk, gaps blocks reduced since start and blocks the loop never saw
+ *   blk, gaps blocks retained since start and blocks the loop never saw
+ *   dma, take completion/retention times of the latest DMA block [us]
+ *   reduce    MCU time when this result became available [us]; subtract
+ *             us+on to measure delivery delay after the ON phase
+ *   pollus    CPU time retaining/tracking the latest block [us]
+ *   match     cmd_us/cmd_pwm identify the command owning this observation
  *   gl        glitches: excursions across the gate hysteresis that ended
- *             before the confirmation time, counted over the whole block;
+ *             before confirmation, counted since the last history reset;
  *             a gate-detection quality figure, read by nothing else
  *   ctar/cref newest/historical current target [A]; cerr historical error [A]
  *   cpwm      applied current correction [nominal PWM counts]
  *   cuse/cage matching current observation usable / ON-midpoint age [us] */
 void VP37_showCurrentPulse(const VP37Pump *self) {
   const VP37CurrentPulseResult *result = &self->scan.cycleResult;
+  // A later PWM write invalidates the lookup cache, not the recorded match.
+  const bool matched = self->currentControl.matchFound &&
+                       (self->currentControl.matchedSampleSequence ==
+                        self->scan.cycleResultSequence);
   deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
       "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
       "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
       "Vavg:%.4f Vok:%u blk:%lu gaps:%lu gl:%lu "
       "ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cuse:%u cage:%lu "
-      "latch:%lu lp:%lu lduty:%ld lv:%u",
+      "latch:%lu lp:%lu lduty:%ld lv:%u dma:%lu take:%lu reduce:%lu "
+      "pollus:%lu match:%u cmd_us:%lu cmd_pwm:%ld",
       (unsigned long)result->cycleStartUs, (unsigned long)self->controlSequence,
       (unsigned long)self->controlLastUs, (long)self->output.finalPWM,
       (long)self->feedback.position, (long)self->demand.desired,
@@ -144,7 +154,33 @@ void VP37_showCurrentPulse(const VP37Pump *self) {
       self->currentControl.active ? 1U : 0U,
       (unsigned long)self->currentControl.sampleAgeUs,
       (unsigned long)result->latchUs, (unsigned long)result->latchPeriodUs,
-      (long)result->latchedPwm, result->latchValid ? 1U : 0U);
+      (long)result->latchedPwm, result->latchValid ? 1U : 0U,
+      (unsigned long)result->scanCompletedUs,
+      (unsigned long)result->scanCollectedUs,
+      (unsigned long)self->scan.reducedUs, (unsigned long)result->scanPollUs,
+      matched ? 1U : 0U,
+      (unsigned long)(matched ? self->currentControl.matchedCommand.writtenUs
+                              : 0U),
+      (long)(matched ? self->currentControl.matchedCommand.pwm : 0));
+#if ECU_FUNCTIONAL_TESTS_ENABLED
+  // Time bins preserve the ON ramp; the freewheel current is not measured.
+  static uint32_t s_lastWaveMs;
+  if (result->profileValid && hal_millis_interval_elapsed_now(
+                                  &s_lastWaveMs, VP37_CURRENT_WAVE_REPORT_MS)) {
+    deb("VP37 IWAVE us:%lu t0:%lu i0:%.4f t1:%lu i1:%.4f "
+        "t2:%lu i2:%.4f t3:%lu i3:%.4f t4:%lu i4:%.4f "
+        "t5:%lu i5:%.4f t6:%lu i6:%.4f t7:%lu i7:%.4f",
+        (unsigned long)result->cycleStartUs,
+        (unsigned long)result->profileUs[0], result->profileAmps[0],
+        (unsigned long)result->profileUs[1], result->profileAmps[1],
+        (unsigned long)result->profileUs[2], result->profileAmps[2],
+        (unsigned long)result->profileUs[3], result->profileAmps[3],
+        (unsigned long)result->profileUs[4], result->profileAmps[4],
+        (unsigned long)result->profileUs[5], result->profileAmps[5],
+        (unsigned long)result->profileUs[6], result->profileAmps[6],
+        (unsigned long)result->profileUs[7], result->profileAmps[7]);
+  }
+#endif
 }
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED

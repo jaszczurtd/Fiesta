@@ -41,7 +41,7 @@
 static const uint8_t k_uid[8] = {0xE6u, 0x61u, 0xA4u, 0xD1u,
                                  0x23u, 0x45u, 0x67u, 0xABu};
 static const uint32_t k_session_id = 0x12345678u;
-static const uint8_t k_challenge[SC_AUTH_CHALLENGE_BYTES] = {
+static const uint8_t k_challenge[HAL_SC_AUTH_CHALLENGE_BYTES] = {
     0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u,
     0x18u, 0x19u, 0x1Au, 0x1Bu, 0x1Cu, 0x1Du, 0x1Eu, 0x1Fu};
 
@@ -68,13 +68,13 @@ static void mock_state_init(MockState *st) {
            "uid=E661A4D1234567AB",
            (unsigned long)k_session_id);
   /* Default AUTH_BEGIN reply: hex of k_challenge. */
-  char hex[SC_AUTH_CHALLENGE_BYTES * 2u + 1u];
+  char hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u + 1u];
   static const char k_hex_table[] = "0123456789abcdef";
-  for (size_t i = 0u; i < SC_AUTH_CHALLENGE_BYTES; ++i) {
+  for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
     hex[i * 2u] = k_hex_table[(k_challenge[i] >> 4) & 0x0Fu];
     hex[i * 2u + 1u] = k_hex_table[k_challenge[i] & 0x0Fu];
   }
-  hex[SC_AUTH_CHALLENGE_BYTES * 2u] = '\0';
+  hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u] = '\0';
   snprintf(st->auth_begin_reply, sizeof(st->auth_begin_reply),
            "SC_OK AUTH_CHALLENGE %s", hex);
 }
@@ -127,7 +127,7 @@ static bool mock_send(void *ctx, const char *path, const char *cmd,
 
   if (strncmp(cmd, "SC_AUTH_PROVE ", 14u) == 0) {
     const char *provided_hex = cmd + 14u;
-    char expected_hex[SC_AUTH_RESPONSE_HEX_BUF_SIZE];
+    char expected_hex[HAL_SC_AUTH_RESPONSE_HEX_BUF_SIZE];
     if (!sc_auth_compute_response_hex(k_uid, sizeof(k_uid), k_challenge,
                                       sizeof(k_challenge), k_session_id,
                                       expected_hex, sizeof(expected_hex))) {
