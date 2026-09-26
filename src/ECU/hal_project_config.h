@@ -37,6 +37,10 @@
 #define ECU_KV_BASE 4096u
 #define ECU_KV_SIZE (HAL_RP_FLASH_EEPROM_SIZE / 2u)
 #define HAL_KV_MAX_BANK_SIZE (ECU_KV_SIZE / 2u)
+/* Keys in use: DTC schema and marker, one flags word and one timestamp per
+ * registry entry, the parameter blob and the bench counter; the index has
+ * room for the registry to grow. */
+#define HAL_KV_MAX_KEYS 64u
 
 #if (ECU_KV_SIZE % 8192u) != 0u ||                                             \
     (ECU_KV_BASE + ECU_KV_SIZE) > HAL_RP_FLASH_EEPROM_SIZE

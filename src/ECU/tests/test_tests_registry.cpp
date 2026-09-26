@@ -1,5 +1,10 @@
+#include "dtcManager.h"
 #include "ecuContext.h"
+#include "ecuPersistence.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_kv.h"
+#include "hardwareConfig.h"
 #include "test_helpers.h"
 #include "tests.h"
 #include "unity.h"
@@ -128,8 +133,10 @@ void test_sequence_visits_every_sequenced_test_in_registry_order(void) {
   console("A1");
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_ALL));
-  // The one-shot injection runs first and never owns the demand.
+  // The one-shot storage checks run first and never own the demand.
   TEST_ASSERT_EQUAL_STRING("dtc", testsActiveName());
+  TEST_ASSERT_FALSE(tickTests());
+  TEST_ASSERT_EQUAL_STRING("kv", testsActiveName());
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("cyclic", testsActiveName());
 
@@ -148,6 +155,75 @@ void test_sequence_visits_every_sequenced_test_in_registry_order(void) {
   (void)runUntilTestChanges("topzero", 200000U);
   TEST_ASSERT_NULL(testsActiveName());
   TEST_ASSERT_FALSE(tickTests());
+}
+
+/** @brief Bring up an empty key-value store the way the ECU lays it out. */
+static void prepareStorage(void) {
+  hal_mock_eeprom_reset();
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  hal_mock_eeprom_set_replace_fail_phase(HAL_MOCK_EEPROM_REPLACE_FAIL_NONE);
+  hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(ECU_KV_BASE, ECU_KV_SIZE));
+  // The state the ECU's own initialisation leaves behind.
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(true));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(true));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceInit());
+  dtcManagerInit();
+}
+
+void test_kv_one_shot_counts_up_and_reports_the_store(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  prepareStorage();
+  uint32_t counter = 0U;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ENOENT, hal_kv_get_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, &counter));
+
+  // From the console, as on the bench: a one-shot that never owns the demand.
+  console("run kv");
+  TEST_ASSERT_NULL(testsActiveName());
+  const test_helpers_kv_result_t *result = testHelpersKvLastResult();
+  TEST_ASSERT_TRUE(result->ok);
+  TEST_ASSERT_EQUAL_UINT32(0U, result->before);
+  TEST_ASSERT_EQUAL_UINT32(1U, result->after);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, result->write);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_kv_get_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(1U, counter);
+
+  // The counter is what the next run reads back: two runs across a reset or
+  // a power cycle prove the store persists. The report names the numbers.
+  hal_mock_serial_reset();
+  testHelpersKvStart();
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(),
+                              "TEST: KV counter 1 -> 2 write=HAL_OK keys="));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_kv_get_u32_ex(TEST_HELPERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(2U, counter);
+}
+
+void test_kv_one_shot_names_a_refused_publication(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  prepareStorage();
+  console("run kv");
+  TEST_ASSERT_TRUE(testHelpersKvLastResult()->ok);
+
+  // The bank publication fails, as the flash coordinator refused it on the
+  // bench for ten days: the report must say so instead of looking fine.
+  hal_mock_eeprom_set_replace_fail_phase(
+      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_BODY);
+  hal_mock_serial_reset();
+  testHelpersKvStart();
+  const test_helpers_kv_result_t *result = testHelpersKvLastResult();
+  TEST_ASSERT_FALSE(result->ok);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, result->write);
+  // Errors leave through the serial channel, as derr() does on the ECU.
+  const char *line = hal_mock_serial_last_line();
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "TEST: KV counter"), line);
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "FAILED"), line);
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "write=HAL_EIO"), line);
+  hal_mock_eeprom_set_replace_fail_phase(HAL_MOCK_EEPROM_REPLACE_FAIL_NONE);
 }
 
 /** @brief Hold the mock clock at ms, run one tick and report the demand. */
@@ -216,6 +292,9 @@ void test_skip_advances_the_sequence_and_stop_ends_it(void) {
   TEST_ASSERT_TRUE(initTests());
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_ALL));
+  // The two storage one-shots pass by themselves before the first profile.
+  TEST_ASSERT_FALSE(tickTests());
+  TEST_ASSERT_EQUAL_STRING("kv", testsActiveName());
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("cyclic", testsActiveName());
 
@@ -390,6 +469,8 @@ int main(void) {
   RUN_TEST(test_one_test_owns_the_demand_and_gives_it_back_on_stop);
   RUN_TEST(test_random_draws_a_bounded_and_repeatable_sequence);
   RUN_TEST(test_sequence_visits_every_sequenced_test_in_registry_order);
+  RUN_TEST(test_kv_one_shot_counts_up_and_reports_the_store);
+  RUN_TEST(test_kv_one_shot_names_a_refused_publication);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
   RUN_TEST(test_skip_advances_the_sequence_and_stop_ends_it);

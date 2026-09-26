@@ -205,6 +205,32 @@ float testHelpersTopZeroStep(bool *outFinished);
 /** @brief Raise one diagnostic trouble code so the storage path can be seen. */
 void testHelpersDtcStart(void);
 
+/** @brief Key the counter of testHelpersKvStart() lives under. */
+#define TEST_HELPERS_KV_COUNTER_KEY 0xDF00u
+
+/** @brief Outcome of the last testHelpersKvStart(), for host tests. */
+typedef struct {
+  uint32_t before;       /**< Counter read before the write, 0 when absent. */
+  uint32_t after;        /**< Counter read back after the write. */
+  hal_status_t read;     /**< Status of the read before the write. */
+  hal_status_t write;    /**< Status of the publication. */
+  hal_status_t readBack; /**< Status of the read after the write. */
+  bool ok;               /**< Every step succeeded and after == before + 1. */
+} test_helpers_kv_result_t;
+
+/** @brief Outcome of the last testHelpersKvStart(). */
+const test_helpers_kv_result_t *testHelpersKvLastResult(void);
+
+/**
+ * @brief Increment a counter in the key-value store and read it back.
+ * @note Every write publishes a whole bank through the flash coordinator,
+ * with the ADC scan and the other core running as in normal operation, so a
+ * refused or broken write shows here as a status, not as a metric drift
+ * weeks later. The counter survives resets and power cycles: two runs across
+ * one prove persistence.
+ */
+void testHelpersKvStart(void);
+
 #endif /* ECU_FUNCTIONAL_TESTS_ENABLED */
 
 #ifdef __cplusplus

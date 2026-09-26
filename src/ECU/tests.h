@@ -25,6 +25,7 @@ extern "C" {
 typedef enum {
   START_TEST_NONE = 0, /**< No test runs; the normal demand source drives. */
   START_TEST_DTC,      /**< One-shot diagnostic trouble code injection. */
+  START_TEST_KV,       /**< One-shot key-value write and read-back. */
   START_TEST_CYCLIC,   /**< Deterministic 0-100-0 ramps over four step sizes. */
   START_TEST_RANDOM,   /**< Random positions, each held for a fixed time. */
   START_TEST_MANUAL,   /**< Demand held at the value last set by command S. */
