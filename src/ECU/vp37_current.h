@@ -11,6 +11,10 @@ extern "C" {
 #define VP37_CURRENT_ADC_MAX_RAW 4095U
 /** Interval between `VP37 IPULSE` reports on core 0, in milliseconds. */
 #define VP37_CURRENT_REPORT_MS 20U
+/** Interval between bench ON-profile reports on core 0, in milliseconds. */
+#define VP37_CURRENT_WAVE_REPORT_MS 100U
+/** Equal time bins within the guarded ON phase, for electrical diagnostics. */
+#define VP37_CURRENT_PROFILE_BINS 8U
 
 /* The shunt, the sensor multiplexer and the supply divider share one
    hardware-paced scan; every sample then has a known position in time. */
@@ -29,10 +33,10 @@ extern "C" {
   ((((1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ) * 1000U) /                   \
     VP37_CURRENT_SCAN_FRAME_NS) +                                              \
    8U)
-/** Completed DMA blocks arrive slightly slower than the 5 ms control step. */
-#define VP37_CURRENT_SCAN_BLOCK_NS 6000000U
-/** Retain 3.25 PWM periods: the newest complete rise-to-rise observation
-    also needs the preceding falling edge to identify its command latch.
+/** DMA blocks are copied between position-control steps, without reduction. */
+#define VP37_CURRENT_SCAN_BLOCK_NS 2000000U
+/** Retain 3.25 PWM periods to include the newest complete fall-to-fall period
+    and its ON phase at any block alignment.
     At high PWM rates retain at least one complete DMA block. */
 #define VP37_CURRENT_SCAN_PERIODS_NS                                           \
   ((13U * (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) / 4U)
@@ -71,10 +75,10 @@ typedef struct {
   uint32_t samples;        /**< ON-phase samples acquired. */
   uint32_t guardedSamples; /**< Samples left after both edge guards. */
   uint32_t clippedSamples;
-  uint32_t glitches; /**< Level excursions shorter than the edge confirmation
-                        anywhere in the block; not gates, but counted. */
+  uint32_t glitches; /**< Rejected level excursions: in the supplied view for
+                        Reduce, since history reset for streaming Collect. */
   uint32_t cycleStartUs;
-  uint32_t periodUs;
+  uint32_t periodUs; /**< Falling-edge interval, unaffected by changing duty. */
   uint32_t onTimeUs;
   int32_t pwmCommand; /**< Duty reconstructed from measured gate timing. */
   uint32_t latchUs;   /**< Falling edge before this ON phase: active-low PWM
@@ -101,6 +105,14 @@ typedef struct {
   uint32_t supplyLatestUs; /**< Center of that window in hal_micros() time;
                               uint32_t wrap is supported. */
   bool supplyLatestValid;  /**< A complete window with valid supply samples. */
+  uint32_t
+      scanCompletedUs; /**< Completion time of the newest retained block. */
+  uint32_t scanCollectedUs; /**< Retention and edge tracking completed [us]. */
+  uint32_t scanPollUs; /**< CPU time retaining and tracking that block [us]. */
+  float profileAmps[VP37_CURRENT_PROFILE_BINS]; /**< Unsorted bin means [A]. */
+  uint32_t
+      profileUs[VP37_CURRENT_PROFILE_BINS]; /**< Bin time from ON rise [us]. */
+  bool profileValid; /**< Every bin populated and waveformValid; ON only. */
 } VP37CurrentPulseResult;
 
 /** Contiguous completed scan frames as seen by the reducer. */
@@ -141,7 +153,7 @@ uint32_t VP37_currentScanFrameNs(void);
  * @param block Non-NULL block view with valid positions and frame period.
  * @param out Non-NULL result, cleared first; zero state always filled.
  * @return HAL_OK, HAL_EINVAL (bad view), HAL_ESTATE (invalid zero),
- * HAL_EAGAIN (no complete rise-to-rise period or too few guarded samples),
+ * HAL_EAGAIN (no complete fall-to-fall period or too few guarded samples),
  * or HAL_EOVERFLOW (ON phase longer than the sample budget).
  * @note The gate is recovered from the shunt waveform itself: the freewheel
  * path bypasses the source shunt, so the ON phase is the only non-zero span.
@@ -149,7 +161,9 @@ uint32_t VP37_currentScanFrameNs(void);
  * every return that found a period; read waveformValid before any amperes.
  * latchUs and latchedPwm use the preceding falling edge and fall-to-fall
  * interval: with an active-low driver, compare updates precede the ON rise.
- * latchValid is independent of waveformValid and requires that earlier edge.
+ * The result is available once the closing falling edge is confirmed; the
+ * following rising edge is not needed. latchValid is independent of
+ * waveformValid.
  * supplyLatestVolts instead spans one period ending at the history's last
  * frame. It uses the measured period when plausible, otherwise the nominal
  * PWM period, and remains usable without valid current edges or shunt zero.
@@ -159,14 +173,26 @@ hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
                                     VP37CurrentPulseResult *out);
 
 /**
- * @brief Take the newest block, retain continuous history and reduce it.
- * @param out Non-NULL result; untouched when no block was available.
+ * @brief Copy the newest completed DMA block into continuous history.
  * @param sequence Non-NULL; block sequence when one was taken, else 0.
- * @return The take status (HAL_EAGAIN, HAL_ESTATE) when no block was taken,
- * otherwise the reduce status.
- * @note Core 1 only; a block is held for one block period, so call at least
- * once per block period to see every block. Start, stop, missed blocks or
- * discontinuous completion timestamps discard the retained history.
+ * @return HAL_OK, HAL_EINVAL (NULL), HAL_EAGAIN (no new block), or HAL_ESTATE.
+ * @note Core 1 only, at least once per block period, including between
+ * position steps. Tracks gate edges once per new sample, without pulse
+ * analysis, supply averaging or control work.
+ * Start, stop, missed blocks and timestamp gaps discard retained history.
+ */
+hal_status_t VP37_currentScanPoll(uint32_t *sequence);
+
+/**
+ * @brief Reduce history updated by poll since the last collect.
+ * @param out Non-NULL result; untouched when no block was available.
+ * @param sequence Non-NULL; newest retained block sequence, or 0 if unchanged.
+ * @return HAL_EAGAIN when unchanged, HAL_ESTATE when stopped, otherwise the
+ * reduce status. Call VP37_currentScanPoll before collecting.
+ * @note Core 1 only. Frequent poll calls retain blocks while this more costly
+ * reduction follows the position-control cadence. An unchanged completed
+ * pulse is reused while its frames remain in history; latest supply is
+ * always reduced from the newest window.
  */
 hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
                                      uint32_t *sequence);
@@ -177,7 +203,7 @@ hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
  * @param count Number of samples, 1..VP37_CURRENT_PULSE_SAMPLES.
  * @param cycleStartUs Turn-on timestamp; uint32_t wrap is supported.
  * @param onTimeUs ON duration, at least 120 us and less than periodUs.
- * @param periodUs Measured turn-on to turn-on period in microseconds.
+ * @param periodUs Measured PWM period in microseconds.
  * @param out Non-NULL result, including the startup zero state.
  * @return HAL_OK, HAL_EINVAL (invalid input), HAL_EOVERFLOW (count too large),
  * or HAL_EAGAIN (too few samples after the 60 us edge guards).

@@ -58,11 +58,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
     CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
 endif()
 
-option(
-    SC_USE_JASZCZURHAL_CRYPTO
-    "Use JaszczurHAL hal_crypto backend for shared crypto helpers."
-    ON
-)
 set(
     SC_JASZCZURHAL_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../JaszczurHAL"
@@ -84,57 +79,52 @@ if(NOT EXISTS "${SC_JASZCZURHAL_SERIAL_FRAME_HEADER}")
     )
 endif()
 
-# SerialConfigurator consumes the shared header directly. Keep this guard so
-# the removed host-side codec cannot silently return as a second implementation.
-foreach(_SC_LOCAL_FRAME_COPY IN ITEMS
+# SerialConfigurator consumes the shared JaszczurHAL headers and sources
+# directly. Keep this guard so none of the removed host-side copies (frame
+# codec, SHA-256/HMAC, no-op crypto backend) can silently return as a second
+# implementation.
+foreach(_SC_LOCAL_COPY IN ITEMS
         "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_frame.c"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_frame.h")
-    if(EXISTS "${_SC_LOCAL_FRAME_COPY}")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_frame.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_sha256.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/core/sc_crypto_none.c")
+    if(EXISTS "${_SC_LOCAL_COPY}")
         message(FATAL_ERROR
-            "Local serial framing implementation '${_SC_LOCAL_FRAME_COPY}' "
-            "must not exist. Include hal/serial/hal_serial_frame.h from "
+            "Local implementation '${_SC_LOCAL_COPY}' must not exist. "
+            "SerialConfigurator uses the JaszczurHAL sources from "
             "SC_JASZCZURHAL_DIR directly."
         )
     endif()
 endforeach()
-unset(_SC_LOCAL_FRAME_COPY)
+unset(_SC_LOCAL_COPY)
 
-set(SC_JASZCZURHAL_CRYPTO_HEADER "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.h")
-set(SC_JASZCZURHAL_CRYPTO_SOURCE "${SC_JASZCZURHAL_DIR}/src/hal/security/hal_crypto.cpp")
-set(SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES
+# JaszczurHAL is the only crypto backend. Base64, MD5, SHA-256/HMAC-SHA256,
+# ChaCha20-Poly1305, the authentication key derivation shared with the
+# firmware and the hex field decoder come from the HAL sources below,
+# compiled into serial_configurator_core. hal_crypto is opt-in via
+# HAL_ENABLE_CRYPTO, so the flag is a PUBLIC definition of the core library.
+set(SC_JASZCZURHAL_SECURITY_DIR "${SC_JASZCZURHAL_DIR}/src/hal/security")
+set(SC_JASZCZURHAL_SOURCES
+    "${SC_JASZCZURHAL_DIR}/src/hal/core/hal_text.cpp"
+    "${SC_JASZCZURHAL_SECURITY_DIR}/hal_crypto.cpp"
+    "${SC_JASZCZURHAL_SECURITY_DIR}/hal_sc_auth.cpp"
+    "${SC_JASZCZURHAL_SECURITY_DIR}/jh_secure_random.cpp"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20.c"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20poly1305.c"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/crypto.c"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/poly1305-donna.c"
 )
-
-set(SC_CRYPTO_SOURCES src/core/sc_crypto_none.c)
-set(SC_CRYPTO_INCLUDE_DIRS "")
-set(SC_CRYPTO_BACKEND_NAME "none")
-
-set(SC_CRYPTO_DEFINITIONS "")
-
-if(SC_USE_JASZCZURHAL_CRYPTO
-   AND EXISTS "${SC_JASZCZURHAL_CRYPTO_HEADER}"
-   AND EXISTS "${SC_JASZCZURHAL_CRYPTO_SOURCE}")
-    set(
-        SC_CRYPTO_SOURCES
-        src/core/sc_crypto_jaszczurhal.cpp
-        "${SC_JASZCZURHAL_CRYPTO_SOURCE}"
-        ${SC_JASZCZURHAL_WIREGUARD_CRYPTO_SOURCES}
-    )
-    set(SC_CRYPTO_INCLUDE_DIRS "${SC_JASZCZURHAL_DIR}/src")
-    set(SC_CRYPTO_BACKEND_NAME "jaszczurhal")
-    # JaszczurHAL hal_crypto is opt-in via HAL_ENABLE_CRYPTO; the SC backend
-    # binding pulls the implementation TU directly so we must define the
-    # flag here as well, otherwise the header expands to nothing.
-    list(APPEND SC_CRYPTO_DEFINITIONS HAL_ENABLE_CRYPTO)
-elseif(SC_USE_JASZCZURHAL_CRYPTO)
-    message(WARNING
-        "SC_USE_JASZCZURHAL_CRYPTO=ON, but hal_crypto was not found under "
-        "'${SC_JASZCZURHAL_DIR}'. Falling back to no-op crypto backend."
-    )
-endif()
+foreach(_SC_HAL_FILE IN LISTS SC_JASZCZURHAL_SOURCES
+        ITEMS "${SC_JASZCZURHAL_SECURITY_DIR}/hal_crypto.h"
+              "${SC_JASZCZURHAL_SECURITY_DIR}/hal_sc_auth.h")
+    if(NOT EXISTS "${_SC_HAL_FILE}")
+        message(FATAL_ERROR
+            "JaszczurHAL crypto source '${_SC_HAL_FILE}' was not found. "
+            "Set SC_JASZCZURHAL_DIR to the JaszczurHAL repository root."
+        )
+    endif()
+endforeach()
+unset(_SC_HAL_FILE)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK4 IMPORTED_TARGET gtk4)
@@ -182,20 +172,18 @@ target_include_directories(fiesta_sc_definitions
 add_library(serial_configurator_core STATIC
     src/core/sc_auth.c
     src/core/sc_core.c
+    src/core/sc_crypto_jaszczurhal.cpp
     src/core/sc_flash.c
     src/core/sc_gps.c
     src/core/sc_manifest.c
-    src/core/sc_sha256.c
     src/core/sc_transport.c
-    ${SC_CRYPTO_SOURCES}
+    ${SC_JASZCZURHAL_SOURCES}
 )
 
 target_include_directories(serial_configurator_core
     PUBLIC
         ${SC_JASZCZURHAL_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
-    PRIVATE
-        ${SC_CRYPTO_INCLUDE_DIRS}
 )
 
 # R1.3: SC core / CLI / transport adopt SSOT defines from sc_protocol.h
@@ -210,8 +198,7 @@ target_link_libraries(serial_configurator_core
 
 target_compile_definitions(serial_configurator_core
     PUBLIC
-        SC_CRYPTO_BACKEND_NAME=\"${SC_CRYPTO_BACKEND_NAME}\"
-        ${SC_CRYPTO_DEFINITIONS}
+        HAL_ENABLE_CRYPTO
 )
 
 if(GTK4_FOUND)

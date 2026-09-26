@@ -333,6 +333,7 @@ static SimulationResult simulateCurrentLoop(bool enabled,
       TEST_ASSERT_EQUAL_INT(
           HAL_OK,
           hal_mock_adc_scan_complete(frames, VP37_CURRENT_SCAN_BLOCK_FRAMES));
+      TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_acquireCurrentScan(&s_pump));
       frame = 0U;
     }
     if ((us % 5000U) == 0U) {

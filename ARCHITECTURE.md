@@ -135,7 +135,11 @@ Moving demands retain the original climb floor. Telemetry reports
 potentiometer controller mode.
 
 Supply compensation scales the complete feedforward and PID command by
-`12 V / compensated voltage`. ADC scan blocks arrive every 6 ms; retained frames
+`12 V / compensated voltage`. ADC scan blocks arrive every 2.016 ms at 130 Hz
+PWM. Core 1 copies them between position steps and tracks gate edges across
+block boundaries. Each ADC code is compensated once on arrival; the 5 ms
+control step reduces each completed pulse once
+and refreshes the latest supply window at every step. The frames
 provide a mean over the latest PWM-period window without waiting for a current
 edge. While the mean is less than 20 ms old, a bounded voltage prediction
 accounts for its midpoint age at the control step and half a PWM period for
@@ -185,8 +189,10 @@ while the MOSFET is off, so this target is not full-period coil current.
 The inverted drive conducts at the end of each hardware PWM period. Each
 observation is matched to the command written before the preceding current
 falling edge, where the PWM counter wraps and latches its compare register.
-The ADC history retains 3.25 PWM periods to include that preceding edge at
-every phase of the scan.
+The ADC history retains 3.25 PWM periods. A current capture closes when its
+falling edge is confirmed, without waiting for the next ON phase. Current,
+duty and paired supply use the same fall-to-fall interval, whose duration does
+not change when the duty changes.
 Writes within 100 us of that edge are ambiguous and rejected, as are
 duty mismatches, invalid captures and ON-midpoint ages of 25 ms or more.
 The proportional gain is 0.35 in equivalent nominal-command units; correction
@@ -201,7 +207,14 @@ Telemetry revision 81 exposes `cen` (enabled), `cuse` (matched fresh capture),
 (historical target minus measured ON current, A), `cpwm` (applied nominal
 correction), and `cage` (ON-midpoint age, us). The current fields are also
 reported with IPULSE, alongside `latch`, `lp`, `lduty` and `lv` for the
-reconstructed latch time, period, duty and validity. Bench builds accept
+reconstructed latch time, period, duty and validity. `dma`, `take` and `reduce`
+are MCU timestamps for DMA completion, retention and reduction; `reduce -
+(us + on)` measures delivery delay after ON ends. Bench `IWAVE` lines, emitted
+at most every 100 ms, share the IPULSE `us` identifier and report eight
+time-ordered ON-phase means with their sample times. They exclude the edge
+guards and cannot measure freewheel
+decay. `gl` counts rejected gate excursions since the last history reset.
+Bench builds accept
 `C0`/`C1` to compare feedback off/on
 through the same position API. Electrical-model tests do not establish
 mechanical stability; upper-position holds and motion need hardware validation.

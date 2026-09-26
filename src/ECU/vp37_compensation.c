@@ -18,27 +18,39 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt);
 static float VP37_predictSupplyVoltage(VP37Pump *self, float measuredVolts);
 static void VP37_trackDriveSupply(VP37Pump *self);
 
-hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
-  self->scan.running = hal_adc_scan_is_running();
+hal_status_t VP37_acquireCurrentScan(VP37Pump *self) {
   self->scan.frameNs = VP37_currentScanFrameNs();
+  self->scan.running = self->scan.frameNs != 0U;
   if (!self->scan.running) {
     return HAL_ESTATE;
   }
+  uint32_t sequence = 0U;
+  const hal_status_t status = VP37_currentScanPoll(&sequence);
+  if (sequence == 0U) {
+    return status;
+  }
+  const uint32_t advanced = sequence - self->scan.lastSequence;
+  if ((self->scan.lastSequence != 0U) && (advanced > 1U) &&
+      (advanced < (UINT32_MAX / 2U))) {
+    self->scan.gaps += advanced - 1U;
+  }
+  self->scan.lastSequence = sequence;
+  self->scan.blocks++;
+  return status;
+}
+
+hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
+  (void)VP37_acquireCurrentScan(self);
   VP37CurrentPulseResult result;
   uint32_t sequence = 0U;
   const hal_status_t status = VP37_currentScanCollect(&result, &sequence);
   if (sequence == 0U) {
     return status;
   }
-  if ((self->scan.lastSequence != 0U) &&
-      (sequence > (self->scan.lastSequence + 1U))) {
-    self->scan.gaps += sequence - self->scan.lastSequence - 1U;
-  }
-  self->scan.lastSequence = sequence;
-  self->scan.blocks++;
   self->scan.cycleResult = result;
   self->scan.cycleResultStatus = status;
   self->scan.cycleResultSequence++;
+  self->scan.reducedUs = hal_micros();
   if (!self->thermal.observationEnabled || self->demand.atRest ||
       (self->output.finalPWM <= 0)) {
     return status;

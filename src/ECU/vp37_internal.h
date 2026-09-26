@@ -35,6 +35,10 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self);
 bool VP37_makeCalibration(VP37Pump *self);
 
 // ── vp37_compensation.c ─────────────────────────────────────────────────────
+/** @brief Copy a completed ADC block, even between position steps.
+ * @param self Non-NULL pump owned by core 1.
+ * @return Scan poll status; updates acquisition counters without reduction. */
+hal_status_t VP37_acquireCurrentScan(VP37Pump *self);
 void VP37_updateVoltageCorrection(VP37Pump *self, float dt);
 void VP37_updateTemperatureCorrection(VP37Pump *self, float dt);
 void VP37_updateDriveCorrection(VP37Pump *self, float dt);

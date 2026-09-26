@@ -514,8 +514,9 @@ typedef struct {
   uint32_t cycleResultSequence; /**< Increments once per reduced block. */
   uint32_t
       collectUs; /**< Time spent collecting and reducing the latest block. */
-  uint32_t lastSequence; /**< Scan block sequence last reduced. */
-  uint32_t blocks;       /**< Blocks reduced since start. */
+  uint32_t reducedUs;    /**< MCU time when the latest reduction completed. */
+  uint32_t lastSequence; /**< Scan block sequence last retained. */
+  uint32_t blocks;       /**< Blocks retained since start. */
   uint32_t gaps;         /**< Blocks the control loop never saw. */
   uint32_t frameNs;      /**< Frame period reported by the scan. */
   bool running;
