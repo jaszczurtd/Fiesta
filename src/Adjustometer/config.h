@@ -1,11 +1,19 @@
 #pragma once
 
 #include "../common/adjustometer_protocol.h"
+#include "../common/vp37_drive_config.h"
 #include "hardwareConfig.h"
 
 #define WATCHDOG_TIME 4000
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
+#ifndef ADJUSTOMETER_PWM_FILTER_US
+#define ADJUSTOMETER_PWM_FILTER_US (1000000U / VP37_PWM_FREQUENCY_HZ)
+#endif
+#if ADJUSTOMETER_PWM_FILTER_US != 0 &&                                         \
+    (ADJUSTOMETER_PWM_FILTER_US < 1000 || ADJUSTOMETER_PWM_FILTER_US > 20000)
+#error "ADJUSTOMETER_PWM_FILTER_US must be zero or 1000..20000 us"
+#endif
 #define ADJUSTOMETER_EXT_UPDATE_MS 10U
 
 // Minimum spacing of fast I2C publications; status changes bypass this limit.
@@ -17,12 +25,16 @@
 #error "ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS must be in 0..5 ms"
 #endif
 
-// Experimental feedback: retain 128 periods, update every 32 after baseline.
+// Retain 128 periods, update every 32 after baseline; the drive-period
+// filter needs the overlap.
 #ifndef ADJUSTOMETER_SLIDING_WINDOW
-#define ADJUSTOMETER_SLIDING_WINDOW 0
+#define ADJUSTOMETER_SLIDING_WINDOW 1
 #endif
 #if ADJUSTOMETER_SLIDING_WINDOW != 0 && ADJUSTOMETER_SLIDING_WINDOW != 1
 #error "ADJUSTOMETER_SLIDING_WINDOW must be 0 or 1"
+#endif
+#if ADJUSTOMETER_PWM_FILTER_US && !ADJUSTOMETER_SLIDING_WINDOW
+#error "The PWM-period filter requires overlapping capture windows"
 #endif
 
 #define DEBUG_DEEP 1

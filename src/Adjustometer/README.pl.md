@@ -8,17 +8,24 @@ na częstotliwości przez I2C.
 Cewki czujnika pompy są elementem rezonansowym zmodyfikowanego generatora
 Hartleya. Częstotliwość zmienia się w przybliżeniu w zakresie 22-37 kHz wraz
 z położeniem nastawnika. Sprzętowy pomiar okresów w JaszczurHAL dostarcza bloki
-32 pełnych okresów. Adjustometer składa cztery bloki w okno 128 okresów i stosuje
-całkowitoliczbowy filtr EMA. RP2040 zapisuje znaczniki czasu przez PIO i DMA,
-bez przerwania GPIO na każde zbocze. Wartość `PULSE` jest
-modułem odchylenia filtrowanej częstotliwości od ustalonego zera, z histerezą
-w pobliżu zera. Kalibracja położenia i kompensacja sterowania należą do ECU.
+32 pełnych okresów. Adjustometer składa cztery bloki w okno 128 okresów. RP2040 zapisuje
+znaczniki czasu przez PIO i DMA, bez przerwania GPIO na każde zbocze. Wartość
+`PULSE` jest modułem odchylenia filtrowanej częstotliwości od ustalonego zera,
+z histerezą w pobliżu zera. Kalibracja położenia i kompensacja sterowania
+należą do ECU.
 
-Eksperymentalna definicja kompilacji `ADJUSTOMETER_SLIDING_WINDOW=1` zachowuje
-128 okresów w pomiarze i odświeża wynik co 32 okresy po ustaleniu baseline.
-EMA przechowuje ułamki herca i używa wagi 71/1024, aby przybliżyć dotychczasową
-stałą czasową; wyjście z zera wymaga ośmiu krótkich aktualizacji. Ustalanie
-baseline zachowuje pierwotne tempo. Domyślnie okna nadal są rozłączne.
+Po ustaleniu baseline okno przesuwa się co 32 okresy
+(`ADJUSTOMETER_SLIDING_WINDOW`, domyślnie 1), a publikowana częstotliwość to
+średnia ważona czasem z surowych okien z dokładnie jednego okresu PWM
+nastawnika (`ADJUSTOMETER_PWM_FILTER_US`, domyślnie okres
+`VP37_PWM_FREQUENCY_HZ` z `src/common/vp37_drive_config.h`, wspólnego z ECU).
+Uśrednienie po jednym okresie PWM znosi tętnienie, które napęd PWM odciska na
+nastawniku, bez opóźnienia filtru rekurencyjnego: skok ustala się w jednym
+okresie, a rampa spóźnia się o pół okresu, około 4 ms przy 130 Hz. Zmianę
+częstotliwości PWM trzeba podać obu firmware'om. `ADJUSTOMETER_PWM_FILTER_US=0`
+przywraca ułamkowy EMA przesuwanego okna (waga 71/1024, wyjście z zera po ośmiu
+krótkich aktualizacjach). Ustalanie baseline zachowuje pierwotne tempo
+i całkowitoliczbowy EMA.
 `ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` pozwala ustalić minimalny odstęp
 publikacji I2C; domyślnie wynosi zero, a zmiany statusu są publikowane od razu.
 Snapshot w HAL zapewnia spójność odczytu I2C podczas publikacji nowych pomiarów.

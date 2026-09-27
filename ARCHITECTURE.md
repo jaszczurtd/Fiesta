@@ -116,8 +116,9 @@ VP37 uses 130 Hz PWM. A lone rising demand step is approached as a standing
 target from its first cycle: the ramp rises at 225%/s with 0.6 of the motion
 assist and brakes before the target at 750%/s², so the actuator follows the
 ramp closely and arrives slowly instead of overshooting and ringing. A target
-that changes again within 25 ms is tracked at up to 300%/s with the full
-assist and no brake. Descent always keeps 300%/s; a lone falling step keeps
+that changes again within 25 ms is tracked at up to 300%/s without a brake;
+its upward assist grows with the ramp rate up to 250%/s and stays there.
+Descent always keeps 300%/s; a lone falling step keeps
 the full assist for its first 25 ms and 0.3 of it afterwards. The
 upper-stroke rules follow the physical position whatever the limit: the
 upward-assist taper between 75% and 85%, the integral authority and dead-zone
@@ -189,6 +190,19 @@ while the MOSFET is off, so this target is not full-period coil current.
 The inverted drive conducts at the end of each hardware PWM period. Each
 observation is matched to the command written before the preceding current
 falling edge, where the PWM counter wraps and latches its compare register.
+A tracked demand that stops at the top of the range (pedal on the floor)
+arrives at the full rate. The upward motion assist follows the ramp rate up
+to `VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S` (250 %/s, bench knob `X5`)
+and stays there for faster ramps: with the assist of the 300 %/s slew the
+actuator led the ramp by 260-500 Hz into the top and rang when hot, while a
+250 %/s ramp led by about 150 Hz and settled. With the Adjustometer's
+drive-period filter the arrival overshoots by 100-200 Hz and stays below the
+negative-stiffness steps. The optional brake into the top
+(`VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2`, bench knob `X2`) is off: at 750 %/s²
+it slowed the last 70 % of the range and at 3000 %/s² it still delayed the
+arrival by 100 ms and deepened the sag after it; slowing only the ramp widens
+the actuator's lead instead of removing it. The first demand after start
+ramps from the calibrated bottom, where calibration leaves the actuator.
 The ADC history retains 3.25 PWM periods. A current capture closes when its
 falling edge is confirmed, without waiting for the next ON phase. Current,
 duty and paired supply use the same fall-to-fall interval, whose duration does
@@ -301,9 +315,10 @@ own I²C bus. It sends the results on CAN for the ECU and Clocks.
 Adjustometer measures the VP37 actuator position through the frequency of a
 Hartley oscillator connected to the pump sensor coils, roughly 22-37 kHz.
 JaszczurHAL captures blocks of 32 periods through RP2040 PIO and DMA.
-The default measurement combines four blocks into a 128-period window and
-filters the result. The exported deviation from a calibrated baseline is
-measured in Hz; ECU calibration maps it to actuator position.
+The measurement combines four blocks into a 128-period window that slides by
+32 periods and averages the raw windows over one VP37 drive period, so the PWM
+ripple cancels without a filter lag. The exported deviation from a calibrated
+baseline is measured in Hz; ECU calibration maps it to actuator position.
 
 Core 0 drains capture data and publishes feedback. Core 1 handles auxiliary
 ADC readings, diagnostics, LED and USB logging. Adjustometer has its own

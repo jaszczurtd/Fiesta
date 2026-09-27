@@ -18,5 +18,11 @@ add_adj_test(test_sensors)
 add_adj_test(test_led)
 add_adj_test(test_telemetry)
 add_adj_internal_test(test_sensors_internal)
+target_compile_definitions(test_sensors_internal PRIVATE
+    ADJUSTOMETER_SLIDING_WINDOW=0 ADJUSTOMETER_PWM_FILTER_US=0)
 add_adj_internal_test(test_sensors_sliding)
-target_compile_definitions(test_sensors_sliding PRIVATE ADJUSTOMETER_SLIDING_WINDOW=1)
+target_compile_definitions(test_sensors_sliding PRIVATE
+    ADJUSTOMETER_SLIDING_WINDOW=1 ADJUSTOMETER_PWM_FILTER_US=0)
+add_adj_internal_test(test_sensors_pwm_filter)
+target_compile_definitions(test_sensors_pwm_filter PRIVATE
+    ADJUSTOMETER_SLIDING_WINDOW=1 ADJUSTOMETER_PWM_FILTER_US=7692)

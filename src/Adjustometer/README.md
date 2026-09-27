@@ -8,17 +8,24 @@ frequency-derived feedback to the ECU over I2C.
 The pump sensor coils form the resonant element of a modified Hartley oscillator.
 Frequency varies roughly within 22-37 kHz with actuator position. Hardware
 period capture in JaszczurHAL supplies blocks of 32 complete periods; the
-Adjustometer combines four blocks into a 128-period window and applies an
-integer EMA. RP2040 captures timestamps through PIO and DMA, without a GPIO
-interrupt for each edge. The exported `PULSE` is the absolute filtered deviation from the
-locked baseline, with near-zero hysteresis. It is a position observable in Hz;
-calibration and actuator-drive compensation belong to the ECU.
+Adjustometer combines four blocks into a 128-period window. RP2040 captures
+timestamps through PIO and DMA, without a GPIO interrupt for each edge. The
+exported `PULSE` is the absolute filtered deviation from the locked baseline,
+with near-zero hysteresis. It is a position observable in Hz; calibration and
+actuator-drive compensation belong to the ECU.
 
-The experimental build definition `ADJUSTOMETER_SLIDING_WINDOW=1` keeps
-128 periods in each measurement and updates it every 32 periods after baseline
-acquisition. Its fractional EMA uses weight 71/1024 to approximate the original
-filter time constant; zero release requires eight short updates. Baseline
-acquisition keeps the original cadence. The default remains disjoint windows.
+After baseline acquisition the window slides by 32 periods
+(`ADJUSTOMETER_SLIDING_WINDOW`, default 1) and the published frequency is the
+time-weighted mean of the raw windows over exactly one VP37 drive period
+(`ADJUSTOMETER_PWM_FILTER_US`, by default one period of `VP37_PWM_FREQUENCY_HZ`
+from `src/common/vp37_drive_config.h`, shared with the ECU). Averaging over one
+drive period cancels the ripple the PWM drive imprints on the actuator without
+the lag of a recursive filter: a step settles within one period and a ramp lags
+by half a period, about 4 ms at 130 Hz. A drive-frequency override has to be
+given to both firmware builds. `ADJUSTOMETER_PWM_FILTER_US=0` restores the
+fractional EMA of the sliding window (weight 71/1024, zero release after eight
+short updates). Baseline acquisition keeps the original cadence and integer
+EMA.
 `ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` optionally spaces fast I2C publications;
 its default is zero, and status changes are published immediately. The HAL snapshot
 keeps each I2C read coherent while new measurements are published.
