@@ -151,7 +151,7 @@ void initI2C(void) {
     i2cMutexInited = true;
   }
   hal_i2c_bus_clear(PIN_SDA, PIN_SCL);
-  hal_i2c_init(PIN_SDA, PIN_SCL, I2C_SPEED_HZ);
+  hal_i2c_init(PIN_SDA, PIN_SCL, HAL_I2C_CLOCK_FAST_HZ);
 }
 
 void initSPI(void) {

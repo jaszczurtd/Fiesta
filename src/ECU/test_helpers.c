@@ -78,6 +78,18 @@ static struct {
   size_t step;
 } s_topZero;
 
+/* Hand-turned pot: turn up, hold, turn down, rest. */
+typedef enum { POT_RISE, POT_HOLD, POT_FALL, POT_REST } pot_phase_t;
+
+static struct {
+  pot_phase_t phase;
+  uint32_t previousMs;
+  uint32_t phaseStartedMs;
+  uint32_t passes;
+  float ratePercentPerS;
+  float demand;
+} s_pot;
+
 //=============================================================================
 // Lifecycle
 //=============================================================================
@@ -94,6 +106,15 @@ static void armTopZero(void) {
   s_topZero.stepStartedMs = hal_millis();
   s_topZero.series = 0U;
   s_topZero.step = 0U;
+}
+
+/** @brief Put the pot test at zero demand, first pass, rate untouched. */
+static void armPot(void) {
+  s_pot.phase = POT_RISE;
+  s_pot.previousMs = hal_millis();
+  s_pot.phaseStartedMs = s_pot.previousMs;
+  s_pot.passes = 0U;
+  s_pot.demand = 0.0f;
 }
 
 /**
@@ -149,6 +170,8 @@ bool testHelpersReset(void) {
 
   armTopSteps();
   armTopZero();
+  s_pot.ratePercentPerS = POT_RATE_PERCENT_PER_S_DEFAULT;
+  armPot();
 
   return jh_hal_mutex_try_create_once(&s_commandMutex) != NULL;
 }
@@ -375,6 +398,69 @@ float testHelpersTopZeroStep(bool *outFinished) {
 }
 
 //=============================================================================
+// Hand-turned pot
+//=============================================================================
+
+/** @brief Report the phase in progress, so a bench log can be cut into it. */
+static void announcePotPhase(void) {
+  static const char *const names[] = {"rise", "hold", "fall", "rest"};
+  deb("TEST: pot %s %.0f %%/s (pass %lu/%lu)", names[s_pot.phase],
+      s_pot.ratePercentPerS, (unsigned long)s_pot.passes + 1UL,
+      (unsigned long)POT_PASSES);
+}
+
+static void enterPotPhase(pot_phase_t phase, uint32_t nowMs) {
+  s_pot.phase = phase;
+  s_pot.phaseStartedMs = nowMs;
+  announcePotPhase();
+}
+
+void testHelpersPotStart(void) {
+  armPot();
+  announcePotPhase();
+}
+
+float testHelpersPotStep(bool *outFinished) {
+  const uint32_t nowMs = hal_millis();
+  const float step =
+      s_pot.ratePercentPerS * 0.001f * (float)(nowMs - s_pot.previousMs);
+  s_pot.previousMs = nowMs;
+  *outFinished = false;
+  switch (s_pot.phase) {
+  case POT_RISE:
+    s_pot.demand += step;
+    if (s_pot.demand >= 100.0f) {
+      s_pot.demand = 100.0f;
+      enterPotPhase(POT_HOLD, nowMs);
+    }
+    break;
+  case POT_HOLD:
+    if (hal_elapsed_u32(nowMs, s_pot.phaseStartedMs, POT_HOLD_MS)) {
+      enterPotPhase(POT_FALL, nowMs);
+    }
+    break;
+  case POT_FALL:
+    s_pot.demand -= step;
+    if (s_pot.demand <= 0.0f) {
+      s_pot.demand = 0.0f;
+      enterPotPhase(POT_REST, nowMs);
+    }
+    break;
+  default:
+    if (hal_elapsed_u32(nowMs, s_pot.phaseStartedMs, POT_REST_MS)) {
+      s_pot.passes++;
+      if (s_pot.passes >= POT_PASSES) {
+        *outFinished = true;
+      } else {
+        enterPotPhase(POT_RISE, nowMs);
+      }
+    }
+    break;
+  }
+  return s_pot.demand;
+}
+
+//=============================================================================
 // One-shot fixtures
 //=============================================================================
 
@@ -466,7 +552,9 @@ void testHelpersPrintParameters(void) {
       "Parameters: N<integral deadband top Hz> U<motion boost up> "
       "J<motion boost down> E<hold confirmation ms> S<demand 0..100> "
       "G<demand auto-zero ms;0=hold> Z<cyclic passes> Y<random seconds> "
-      "A<random hold seconds> X(stop actuator)" TEST_HIGHLIGHT_OFF);
+      "A<random hold seconds> X1=<pot rate %/s> X2=<top decel %/s2;0=off> "
+      "X5=<assist rate cap %/s;0=slew> "
+      "X(stop actuator)" TEST_HIGHLIGHT_OFF);
 }
 
 char testHelpersUpper(char value) {
@@ -533,6 +621,9 @@ static void applyDefaults(VP37Pump *self) {
   s_random.durationS = RANDOM_DURATION_S_DEFAULT;
   s_random.holdS = RANDOM_HOLD_S_DEFAULT;
   s_manual.holdMs = VP37_BENCH_HOLD_MS_DEFAULT;
+  s_pot.ratePercentPerS = POT_RATE_PERCENT_PER_S_DEFAULT;
+  self->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
+  self->feedforward.motionRateCap = VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S;
   deb(TEST_HIGHLIGHT_ON
       "PID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
       "TF=%.4f" TEST_HIGHLIGHT_OFF,
@@ -684,6 +775,34 @@ bool testHelpersApplyCommand(VP37Pump *self, const char *cmd,
   if ((prefix == 'X') && (cmd[1] == '\0')) {
     VP37_stop(self);
     deb("VP37 stopped; restart ECU to initialize");
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '1') && (cmd[2] == '=')) {
+    float rate = 0.0f;
+    if (!parseValue(&cmd[3], &rate) || (rate < POT_RATE_PERCENT_PER_S_MIN) ||
+        (rate > POT_RATE_PERCENT_PER_S_MAX)) {
+      return false;
+    }
+    s_pot.ratePercentPerS = rate;
+    deb("VP37 pot rate X1: %.0f ok", rate);
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '2') && (cmd[2] == '=')) {
+    float decel = 0.0f;
+    if (!parseValue(&cmd[3], &decel) || (decel > 20000.0f)) {
+      return false;
+    }
+    self->demand.topArrivalDecel = decel;
+    deb("VP37 top arrival decel X2: %.0f ok", decel);
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '5') && (cmd[2] == '=')) {
+    float cap = 0.0f;
+    if (!parseValue(&cmd[3], &cap) || (cap > 2000.0f)) {
+      return false;
+    }
+    self->feedforward.motionRateCap = cap;
+    deb("VP37 assist rate cap X5: %.0f ok", cap);
     return true;
   }
   if ((prefix == 'R') && (cmd[1] == '\0')) {

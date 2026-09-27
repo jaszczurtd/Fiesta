@@ -95,6 +95,8 @@ static void setupPumpForProcessTests(VP37Pump *pump) {
   pump->demand.target = -1;
   pump->demand.desired = -1;
   pump->demand.requestedPercent = -1.0f;
+  pump->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
+  pump->feedforward.motionRateCap = VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->pid.topKd = VP37_PID_TOP_KD;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
@@ -2493,6 +2495,8 @@ void test_vp37_upward_ramp_keeps_integral_for_holding_error(void) {
 void test_vp37_upper_slew_brakes_ascent_without_delaying_release(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
+  // The top wall has its own tests; here only the upper slew is measured.
+  pump->demand.topArrivalDecel = 0.0f;
   VP37_setPositionDemandPercentage(pump, 80);
   injectAdjRegisterData(7300, 144, 49, ADJ_STATUS_OK);
   VP37_process(pump);
@@ -2676,6 +2680,53 @@ void test_vp37_single_demand_step_is_a_standing_target_from_its_first_cycle(
                            rise);
 }
 
+// Calibration as the init test scripts it: baseline, stable MIN, stable MAX.
+static void initCalibratedPump(VP37Pump *pump) {
+  memset(pump, 0, sizeof(*pump));
+  AdjustometerScript script = {};
+  appendAdjRegisterData(&script, 100, 132, 40, ADJ_STATUS_OK);
+  appendAdjRegisterDataRepeated(&script, 10, 100, 132, 40, ADJ_STATUS_OK);
+  appendAdjRegisterDataRepeated(&script, 10, 8200, 132, 40, ADJ_STATUS_OK);
+  appendAdjRegisterData(&script, 8200, 132, 40, ADJ_STATUS_OK);
+  injectAdjustometerScript(&script);
+  TEST_ASSERT_EQUAL_INT(VP37_INIT_OK, VP37_init(pump));
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+}
+
+void test_vp37_first_demand_after_init_ramps_from_the_bottom(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  initCalibratedPump(pump);
+  const float travel = 8100.0f;
+  const float standingStep =
+      travel * VP37_STATIONARY_SLEW_PERCENT_PER_SECOND * .01f * .005f;
+  // A pedal already pressed at start: the first demand is a lone step from
+  // the calibrated bottom, where calibration left the actuator, not a jump
+  // to its target.
+  VP37_setPositionDemandPercentage(pump, 40.0f);
+  injectAdjRegisterData(100, 132, 40, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->demand.targetMoving);
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 100.0f + standingStep,
+                           pump->demand.desiredPosition);
+  TEST_ASSERT_INT32_WITHIN(1, (int32_t)standingStep, pump->pid.error);
+  TEST_ASSERT_TRUE(pump->demand.desired < pump->demand.target);
+  TEST_ASSERT_FLOAT_WITHIN(1.0f,
+                           expectedHoldingFF(standingStep / travel * 100.0f),
+                           pump->feedforward.pwm - pump->feedforward.motion);
+}
+
+void test_vp37_zero_first_demand_after_init_rests_at_once(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  initCalibratedPump(pump);
+  // Zero demand at start releases the drive in its first cycle even while
+  // the feedback still shows the actuator settling above the bottom.
+  VP37_setPositionDemandPercentage(pump, 0.0f);
+  injectAdjRegisterData(700, 132, 40, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_TRUE(pump->demand.atRest);
+  TEST_ASSERT_EQUAL_INT32(0, pump->output.finalPWM);
+}
+
 void test_vp37_tracked_demand_keeps_the_moving_rate_and_assist(void) {
   const float travel = 9000.0f;
   const float dt = .005f;
@@ -2686,6 +2737,58 @@ void test_vp37_tracked_demand_keeps_the_moving_rate_and_assist(void) {
   TEST_ASSERT_FLOAT_WITHIN(
       1.0f, travel * VP37_DESIRED_SLEW_PERCENT_PER_SECOND * .01f * dt, advance);
   TEST_ASSERT_GREATER_THAN_FLOAT(.5f, rise);
+}
+
+/** @brief Settled rise blend of a tracked ramp running at the full slew,
+ * after 200 ms of a target that keeps moving. */
+static float trackedRiseBlendAtFullSlew(VP37Pump *pump) {
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 10.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  // A demand far above the ramp, refreshed every cycle: the ramp runs at
+  // 300 %/s below the upper stroke and the target counts as tracked.
+  for (uint32_t i = 0U; i < 40U; i++) {
+    VP37_setPositionDemandPercentage(pump, ((i % 2U) == 0U) ? 70.0f : 69.9f);
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    ms += 5U;
+  }
+  TEST_ASSERT_TRUE(pump->demand.targetMoving);
+  return pump->feedforward.riseBlend;
+}
+
+void test_vp37_upward_assist_saturates_above_the_rate_cap(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  // At the 300 %/s slew the assist stops at the 250 %/s level, below the
+  // slew's own share.
+  const float capped = trackedRiseBlendAtFullSlew(pump);
+  TEST_ASSERT_FLOAT_WITHIN(.02f,
+                           VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S /
+                               VP37_PWM_FF_MOTION_REFERENCE_RATE,
+                           capped);
+  TEST_ASSERT_TRUE(capped < VP37_DESIRED_SLEW_PERCENT_PER_SECOND /
+                                    VP37_PWM_FF_MOTION_REFERENCE_RATE -
+                                .1f);
+  // Off: the assist follows the full slew, as before the cap.
+  hal_pid_controller_destroy(pump->pid.controller);
+  pump->pid.controller = NULL;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  pump->feedforward.motionRateCap = 0.0f;
+  TEST_ASSERT_FLOAT_WITHIN(.02f,
+                           VP37_DESIRED_SLEW_PERCENT_PER_SECOND /
+                               VP37_PWM_FF_MOTION_REFERENCE_RATE,
+                           trackedRiseBlendAtFullSlew(pump));
 }
 
 void test_vp37_standing_ramp_brakes_to_rest_at_its_target(void) {
@@ -2731,6 +2834,104 @@ void test_vp37_standing_ramp_brakes_to_rest_at_its_target(void) {
   TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
   TEST_ASSERT_GREATER_THAN_UINT32(10U, braked);
   TEST_ASSERT_TRUE(lastAdvance < .1f * slewStep);
+}
+
+/** @brief Drive a tracked target at the top of the range: it changes by one
+ * count every cycle, so the ramp never sees a standing target. Returns the
+ * number of cycles in which the top brake bound. */
+static uint32_t trackedRampToTop(VP37Pump *pump, uint32_t *ms,
+                                 float *lastAdvance) {
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  const int32_t top = VP37_getPositionDemandMaxValue(pump);
+  const float decel = travel * pump->demand.topArrivalDecel * .01f;
+  uint32_t braked = 0U;
+  // The first change after a long hold is a lone step; a second change
+  // within the settle time makes the target tracked for the loop below.
+  (void)VP37_setPositionDemandValue(pump, top - 1);
+  hal_mock_set_millis(*ms);
+  injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49, ADJ_STATUS_OK);
+  VP37_process(pump);
+  *ms += 5U;
+  for (uint32_t i = 0U; (i < 400U) && (pump->demand.desired < top - 1); i++) {
+    // Alternate between the top and one count below it: a moving target.
+    (void)VP37_setPositionDemandValue(pump, ((i % 2U) == 0U) ? top : top - 1);
+    const float before = pump->demand.desiredPosition;
+    const float upperStart =
+        (float)pump->feedback.adjustMin +
+        travel * (VP37_DESIRED_UPPER_SLEW_START_PERCENT * .01f);
+    const float rate = (before >= upperStart)
+                           ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
+                           : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
+    const float slewStep = travel * rate * .01f * .005f;
+    const float limit =
+        (decel > 0.0f) ? sqrtf(2.0f * decel * ((float)top - before)) * .005f
+                       : slewStep;
+    hal_mock_set_millis(*ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+    *ms += 5U;
+    TEST_ASSERT_TRUE(pump->demand.targetMoving);
+    *lastAdvance = pump->demand.desiredPosition - before;
+    TEST_ASSERT_TRUE(*lastAdvance <= slewStep + .01f);
+    if (limit < slewStep) {
+      // Exactly the speed that still stops at the top, target or not.
+      TEST_ASSERT_FLOAT_WITHIN(
+          .01f, fminf(limit, (float)pump->demand.target - before),
+          *lastAdvance);
+      braked++;
+    } else {
+      TEST_ASSERT_FLOAT_WITHIN(
+          .01f, fminf(slewStep, (float)pump->demand.target - before),
+          *lastAdvance);
+    }
+  }
+  return braked;
+}
+
+void test_vp37_tracked_ramp_brakes_into_the_top_of_the_range(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->demand.topArrivalDecel = 750.0f;
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  float lastAdvance = 0.0f;
+  const uint32_t braked = trackedRampToTop(pump, &ms, &lastAdvance);
+  // The wall binds over the upper part of the travel and the ramp creeps in.
+  TEST_ASSERT_GREATER_THAN_UINT32(20U, braked);
+  TEST_ASSERT_TRUE(lastAdvance < 10.0f);
+  TEST_ASSERT_TRUE(pump->demand.desired >=
+                   VP37_getPositionDemandMaxValue(pump) - 1);
+}
+
+void test_vp37_top_brake_off_keeps_the_moving_rate_to_the_top(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  VP37_setVP37PID(pump, 0, 0, 0, true);
+  pump->demand.topArrivalDecel = 0.0f;
+  uint32_t ms = 0U;
+  hal_mock_set_millis(ms);
+  VP37_setPositionDemandPercentage(pump, 20.0f);
+  for (; ms < 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)pump->demand.desired, 144, 49,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  float lastAdvance = 0.0f;
+  const uint32_t braked = trackedRampToTop(pump, &ms, &lastAdvance);
+  TEST_ASSERT_EQUAL_UINT32(0U, braked);
+  TEST_ASSERT_TRUE(pump->demand.desired >=
+                   VP37_getPositionDemandMaxValue(pump) - 1);
 }
 
 // The upper-stroke rules at 80..100 % of the travel under the given limit:
@@ -2789,6 +2990,8 @@ static float firstTrackedStepFrom80Percent(float limit) {
     pump->pid.controller = NULL;
   }
   setupPumpForProcessTests(pump);
+  // The top wall has its own tests; here only the upper slew is measured.
+  pump->demand.topArrivalDecel = 0.0f;
   VP37_setVP37PID(pump, 0, 0, 0, true);
   pump->demand.physicalLimitPercent = limit;
   uint32_t ms = 0U;
@@ -2978,7 +3181,12 @@ void test_vp37_stationary_target_uses_soft_approach(void) {
     VP37_process(pump);
     const int32_t step = pump->demand.desired - previous;
     if (ms == 5) {
-      TEST_ASSERT_INT32_WITHIN(1, 124, step);
+      // A moving target keeps the upper slew rate until it becomes stationary.
+      TEST_ASSERT_INT32_WITHIN(
+          1,
+          (int32_t)(travel * VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND * .01f *
+                    .005f),
+          step);
     }
     if (ms == 30) {
       // Standing now, and close enough that the arrival brake binds.
@@ -3271,7 +3479,9 @@ void test_vp37_upper_derivative_keeps_zero_release_and_fault_shutdown(void) {
 void test_vp37_slew_tracks_a_250_percent_per_second_input(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
-  for (uint32_t ms = 0; ms <= 405; ++ms) {
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->demand.topArrivalDecel);
+  uint32_t reachedMs = 0U;
+  for (uint32_t ms = 0; ms <= 900; ++ms) {
     hal_mock_set_millis(ms);
     // A separately specified input ramp, sampled by the 5 ms controller.
     const float target = ms < 400U ? (float)(ms / 4U) : 100.0f;
@@ -3279,10 +3489,16 @@ void test_vp37_slew_tracks_a_250_percent_per_second_input(void) {
     injectAdjRegisterData((int16_t)pump->demand.target, 144, 49, ADJ_STATUS_OK);
     VP37_process(pump);
     if (ms % 5U == 0U) {
+      TEST_ASSERT_TRUE(pump->demand.desired <= pump->demand.target + 1);
       TEST_ASSERT_INT32_WITHIN(90, pump->demand.target, pump->demand.desired);
+    }
+    if ((reachedMs == 0U) &&
+        (pump->demand.desired == pump->feedback.adjustMax)) {
+      reachedMs = ms;
     }
   }
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.desired);
+  TEST_ASSERT_UINT32_WITHIN(5U, 400U, reachedMs);
 }
 
 // ── Measured drive-path compensation ─────────────────────────────────────────
@@ -3912,8 +4128,13 @@ int main(void) {
   RUN_TEST(test_vp37_motion_taper_preserves_lower_drive_holding_and_descent);
   RUN_TEST(
       test_vp37_single_demand_step_is_a_standing_target_from_its_first_cycle);
+  RUN_TEST(test_vp37_first_demand_after_init_ramps_from_the_bottom);
+  RUN_TEST(test_vp37_zero_first_demand_after_init_rests_at_once);
   RUN_TEST(test_vp37_tracked_demand_keeps_the_moving_rate_and_assist);
+  RUN_TEST(test_vp37_upward_assist_saturates_above_the_rate_cap);
   RUN_TEST(test_vp37_standing_ramp_brakes_to_rest_at_its_target);
+  RUN_TEST(test_vp37_tracked_ramp_brakes_into_the_top_of_the_range);
+  RUN_TEST(test_vp37_top_brake_off_keeps_the_moving_rate_to_the_top);
   RUN_TEST(test_vp37_falling_standing_ramp_is_not_braked);
   RUN_TEST(
       test_vp37_lone_falling_step_keeps_the_moving_assist_for_the_settle_time);

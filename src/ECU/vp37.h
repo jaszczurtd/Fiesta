@@ -228,6 +228,13 @@ extern "C" {
 // Bench ceiling for either motion boost [nominal PWM].
 #define VP37_PWM_FF_MOTION_BOOST_MAX 193.0f
 #define VP37_PWM_FF_MOTION_FILTER_S 0.01f
+// The upward assist follows the ramp rate up to this rate [% of travel/s] and
+// stays there above it; bench knob X5, zero follows the full slew. A tracked
+// pot turn faster than the slew runs the ramp at 300/275 %/s, and the assist
+// for that rate makes the actuator lead the ramp by 260-500 Hz into the top,
+// where it rang hot (FT 43-50 C, bench 2026-09-27); a 250 %/s ramp led by
+// 150 Hz and settled. Capping the ramp itself only widened the lead.
+#define VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S 250.0f
 #define VP37_PWM_FF_MOTION_REFERENCE_RATE 125.0f
 // Percent of calibrated travel per second; permits the existing cyclic ramp.
 #define VP37_DESIRED_SLEW_PERCENT_PER_SECOND 300.0f
@@ -290,6 +297,14 @@ extern "C" {
  * travel. The stroke maps (holding map, tapers, upper damping) keep the
  * physical scale. */
 #define VP37_PHYSICAL_LIMIT_PERCENT 86.0f
+/** Optional deceleration of every rising ramp into the top of the demand
+ * range [% of travel/s^2]; bench knob X2. Zero disables it and a standing
+ * target keeps its own arrival brake. Off since the Adjustometer averages one
+ * drive period instead of an EMA: the tracked arrival then overshoots about
+ * 200 Hz below the negative-stiffness steps and settles without ringing, while
+ * 750 braked from 30 % of the range and 3000 still delayed the arrival by
+ * 100 ms and deepened the sag after it (bench 2026-09-27). */
+#define VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2 0.0f
 // Hold the last PWM briefly on a failed transfer, without integrating stale
 // data.
 #define VP37_ADJ_COMM_CUTOFF_MS 20U
@@ -360,6 +375,8 @@ typedef struct {
   float physicalLimitPercent; /**< Share of the travel that 100 % demand
                                  reaches; VP37_PHYSICAL_LIMIT_PERCENT at start.
                                  Outside (0, 100] the full travel applies. */
+  float topArrivalDecel;      /**< Brake of every rising ramp into the top of
+                                 the range [% of travel/s^2]; 0 = off. */
   int32_t target;             /**< Calibrated position target [Hz]. */
   int32_t desired;            /**< Ramped target sent to the PID [Hz]. */
   float desiredPosition;      /**< Fractional ramp state [Hz]. */
@@ -382,6 +399,8 @@ typedef struct {
                             rate, nominal PWM, subtracted while the target
                             falls. */
   float fallBlend;       /**< Filtered downward rate, reference units. */
+  float motionRateCap;   /**< Ramp rate the upward assist saturates at
+                            [% of travel/s]; 0 = the full slew. */
   float mapTrim[VP37_MAP_TRIM_KNOTS]; /**< Learned holding-map residual per
                                          position knot, nominal PWM. */
   float mapTrimApplied;      /**< Trim added to the feedforward this step. */

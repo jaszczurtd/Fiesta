@@ -23,6 +23,18 @@ static uint32_t captureRetryUs;
 static bool captureHealthy;
 static uint32_t captureTicks[4];
 static uint8_t captureIndex, captureFilled;
+#if ADJUSTOMETER_PWM_FILTER_US
+typedef struct {
+  uint32_t durationUs;
+  float firstHz, lastHz;
+} frequency_interval_t;
+static struct {
+  frequency_interval_t intervals[32];
+  size_t head, count;
+  uint32_t previousUs, previousHz;
+  bool ready;
+} frequencyWindow;
+#endif
 static const hal_pulse_capture_config_t captureConfig = {
     PIO_INTERRUPT_HALL, true, ADJUSTOMETER_SIGNAL_LOSS_MIN_US};
 static void resetSensorsState(void);
@@ -163,6 +175,52 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
   return (a >= b) ? (a - b) : (b - a);
 }
 
+#if ADJUSTOMETER_PWM_FILTER_US
+/** Average one drive period using capture time, including a partial oldest
+ * interval. Linear interpolation avoids a sample-count-dependent PWM notch. */
+static uint32_t averageDrivePeriod(uint32_t rawHz, uint32_t nowUs) {
+  const uint32_t dt = nowUs - frequencyWindow.previousUs;
+  if (!frequencyWindow.ready || dt > ADJUSTOMETER_PWM_FILTER_US) {
+    frequencyWindow.head = 0U;
+    frequencyWindow.count = 0U;
+    frequencyWindow.previousHz = rawHz;
+    frequencyWindow.ready = true;
+  } else if (dt == 0U) {
+    return adjustometerFilteredHz;
+  } else {
+    frequencyWindow.intervals[frequencyWindow.head] = (frequency_interval_t){
+        dt, (float)frequencyWindow.previousHz, (float)rawHz};
+    frequencyWindow.head =
+        (frequencyWindow.head + 1U) % COUNTOF(frequencyWindow.intervals);
+    if (frequencyWindow.count < COUNTOF(frequencyWindow.intervals)) {
+      frequencyWindow.count++;
+    }
+  }
+  frequencyWindow.previousUs = nowUs;
+  frequencyWindow.previousHz = rawHz;
+  uint32_t remainingUs = ADJUSTOMETER_PWM_FILTER_US;
+  float area = 0.0f;
+  float oldestHz = (float)rawHz;
+  size_t index = frequencyWindow.head;
+  for (size_t i = 0U; i < frequencyWindow.count && remainingUs > 0U; ++i) {
+    index = (index + COUNTOF(frequencyWindow.intervals) - 1U) %
+            COUNTOF(frequencyWindow.intervals);
+    const frequency_interval_t *interval = &frequencyWindow.intervals[index];
+    const uint32_t takeUs =
+        remainingUs < interval->durationUs ? remainingUs : interval->durationUs;
+    const float fraction = (float)takeUs / (float)interval->durationUs;
+    area += (float)takeUs *
+            (interval->lastHz +
+             0.5f * fraction * (interval->firstHz - interval->lastHz));
+    oldestHz = interval->firstHz;
+    remainingUs -= takeUs;
+  }
+  area += (float)remainingUs * oldestHz;
+  const float average = area / (float)ADJUSTOMETER_PWM_FILTER_US;
+  return average >= (float)UINT32_MAX ? UINT32_MAX : (uint32_t)(average + 0.5f);
+}
+#endif
+
 /** @brief Update filtering, baseline and zero hysteresis from a complete
  * window. */
 static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
@@ -170,7 +228,15 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
   HAL_ATOMIC_STORE(&captureHealthy, true, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&adjustometerRawHz, rawHz, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&adjustometerMeasuredUs, nowUs, HAL_ATOMIC_RELAXED);
-  uint32_t filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
+  uint32_t filtered;
+#if ADJUSTOMETER_PWM_FILTER_US
+  if (HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE)) {
+    filtered = averageDrivePeriod(rawHz, nowUs);
+  } else
+#endif
+  {
+    filtered = applyAdjustometerEma(rawHz, adjustometerFilteredHz);
+  }
   adjustometerFilteredHz = filtered;
   HAL_ATOMIC_STORE(&adjustometerSignalHz, filtered, HAL_ATOMIC_RELEASE);
 
@@ -297,6 +363,9 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
 
 /** @brief Discard an incomplete window after capture loss. */
 static void discardCaptureWindow(void) {
+#if ADJUSTOMETER_PWM_FILTER_US
+  frequencyWindow.ready = false;
+#endif
   captureIndex = 0U;
   captureFilled = 0U;
   HAL_ATOMIC_STORE(&captureHealthy, false, HAL_ATOMIC_RELEASE);
@@ -458,6 +527,9 @@ uint32_t getBaseline(void) {
  * @brief Reset all runtime sensor, baseline and filter state.
  */
 static void resetSensorsState(void) {
+#if ADJUSTOMETER_PWM_FILTER_US
+  frequencyWindow.ready = false;
+#endif
   adjustometerRawHz = 0;
   adjustometerMeasuredUs = 0;
   adjustometerSampleSequence = 0;

@@ -323,7 +323,7 @@ void test_feedback_exposes_raw_window_and_status_does_not_sample_adc(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&before));
   adj_test_capture_pulses(128, 8000);
   TEST_ASSERT_EQUAL_INT(HAL_OK, getAdjustometerFeedback(&after));
-  TEST_ASSERT_EQUAL_UINT32(before.number + 1U, after.number);
+  TEST_ASSERT_EQUAL_UINT32(before.number + 4U, after.number);
   TEST_ASSERT_EQUAL_UINT32(8000U, after.rawHz);
   TEST_ASSERT_GREATER_THAN_UINT32(after.rawHz, after.filteredHz);
   TEST_ASSERT_EQUAL_UINT32(before.baselineHz, after.baselineHz);

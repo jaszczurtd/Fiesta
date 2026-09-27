@@ -37,6 +37,8 @@ static const ecu_test_t s_tests[] = {
      true, true, testHelpersTopStepsStart, testHelpersTopStepsStep},
     {START_TEST_TOPZERO, "topzero", "the same thresholds, each from rest", true,
      true, testHelpersTopZeroStart, testHelpersTopZeroStep},
+    {START_TEST_POT, "pot", "pot turn: tracked ramp to 100 %, hold, back", true,
+     false, testHelpersPotStart, testHelpersPotStep},
 };
 
 static bool s_initialized = false;

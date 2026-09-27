@@ -87,6 +87,32 @@ extern "C" {
 #define TOP_STEPS_SERIES 5U
 #endif
 
+/**
+ * @brief Demand rate of the pot test, in percent per second.
+ *
+ * A hand turns the driver's pot to its stop in under half a second and the
+ * application publishes that demand every control loop, so the target keeps
+ * changing and the position ramp tracks it: full rate, full motion assist
+ * and no arrival brake, unlike the lone step of command S. The default stays
+ * below the demand slew on purpose, so the ramp follows the pot to the top.
+ */
+#define POT_RATE_PERCENT_PER_S_DEFAULT 250.0f
+/** @brief Bench bounds for X1, the pot rate. */
+#define POT_RATE_PERCENT_PER_S_MIN 10.0f
+#define POT_RATE_PERCENT_PER_S_MAX 2000.0f
+/** @brief Time the pot test holds full demand, in milliseconds. */
+#ifndef POT_HOLD_MS
+#define POT_HOLD_MS 12000U
+#endif
+/** @brief Rest at zero between passes of the pot test, in milliseconds. */
+#ifndef POT_REST_MS
+#define POT_REST_MS 5000U
+#endif
+/** @brief Passes (turn up, hold, turn down, rest) before the pot test ends. */
+#ifndef POT_PASSES
+#define POT_PASSES 3U
+#endif
+
 /** @brief Auto-zero deadline for command S, in milliseconds; zero holds the
  * demand until the next command. Demands at or above
  * VP37_BENCH_HIGH_HOLD_PERCENT use half of it. */
@@ -201,6 +227,20 @@ void testHelpersTopZeroStart(void);
  * nothing over from the previous one.
  */
 float testHelpersTopZeroStep(bool *outFinished);
+
+/** @brief Arm the pot test at zero demand, first pass. */
+void testHelpersPotStart(void);
+
+/**
+ * @brief One step of the pot test: the demand climbs at the pot rate to
+ * 100 %, holds for POT_HOLD_MS, falls at the same rate and rests for
+ * POT_REST_MS.
+ * @param outFinished Non-NULL; true once POT_PASSES passes are done.
+ * @return Demand in percent, advanced by the milliseconds since the last call.
+ * @note The demand changes on every millisecond of a turn, so the controller
+ * sees a tracked target, as it does from the driver's pot.
+ */
+float testHelpersPotStep(bool *outFinished);
 
 /** @brief Raise one diagnostic trouble code so the storage path can be seen. */
 void testHelpersDtcStart(void);

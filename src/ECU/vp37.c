@@ -45,6 +45,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
 
   self->demand.requestedPercent = -1;
   self->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  self->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
   self->currentControl.enabled = true;
   VP37_resetCurrentControl(self);
   self->feedback.calibrationDone = false;
@@ -148,6 +149,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pid.integralDeadbandHz = (float)VP37_PID_DEADBAND;
   self->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
   self->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
+  self->feedforward.motionRateCap = VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S;
   for (uint32_t i = 0U; i < COUNTOF(self->feedforward.mapTrim); i++) {
     self->feedforward.mapTrim[i] = 0.0f;
   }
@@ -185,7 +187,12 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   }
   VP37_updateAdjustometerPosition(self);
   self->demand.target = -1;
-  self->demand.desired = -1;
+  // Calibration leaves the actuator at the bottom, so the first demand ramps
+  // from there. It used to jump straight to its target: a pedal already
+  // pressed at start threw the actuator across the stroke with no ramp and
+  // no arrival brake.
+  self->demand.desired = self->feedback.adjustMin;
+  self->demand.desiredPosition = (float)self->feedback.adjustMin;
 
   VP37_enableVP37(self, self->feedback.calibrationDone);
 
@@ -481,6 +488,15 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
       const float decel = travel * (VP37_ARRIVAL_DECEL_PERCENT_PER_S2 * 0.01f);
       step = fminf(step, sqrtf(2.0f * decel * delta) * cycle->dt);
     }
+    if ((delta > 0.0f) && (self->demand.topArrivalDecel > 0.0f)) {
+      // The top of the range is a wall: every rising ramp, tracked or not,
+      // slows into it from the remaining travel, so a pedal on the floor
+      // does not throw the actuator into the upper stroke.
+      const float remaining = fmaxf(0.0f, (float)VP37_demandTop(self) -
+                                              self->demand.desiredPosition);
+      const float decel = travel * (self->demand.topArrivalDecel * 0.01f);
+      step = fminf(step, sqrtf(2.0f * decel * remaining) * cycle->dt);
+    }
     self->demand.desiredPosition += hal_constrain(delta, -step, step);
   }
   self->demand.desired = (int32_t)self->demand.desiredPosition;
@@ -499,8 +515,15 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
       (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
   const float upwardStep =
       travel * (VP37_PWM_FF_MOTION_REFERENCE_RATE * 0.01f) * cycle->dt;
-  const float maxRise =
+  const float maxFall =
       VP37_DESIRED_SLEW_PERCENT_PER_SECOND / VP37_PWM_FF_MOTION_REFERENCE_RATE;
+  // Above the cap the assist no longer grows with the ramp: at the full slew
+  // it made the actuator lead the ramp into the top of the stroke.
+  const float assistRate = (self->feedforward.motionRateCap > 0.0f)
+                               ? fminf(self->feedforward.motionRateCap,
+                                       VP37_DESIRED_SLEW_PERCENT_PER_SECOND)
+                               : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
+  const float maxRise = assistRate / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
       (cycle->stationaryTarget ? VP37_STATIONARY_RISE_WEIGHT : 1.0f) *
       (upwardStep > 0.0f ? hal_constrain((self->demand.desiredPosition -
@@ -516,7 +539,7 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
       (upwardStep > 0.0f ? hal_constrain((cycle->previousPosition -
                                           self->demand.desiredPosition) /
                                              upwardStep,
-                                         0.0f, maxRise)
+                                         0.0f, maxFall)
                          : 0.0f);
   self->feedforward.fallBlend += (fall - self->feedforward.fallBlend) *
                                  cycle->dt /

@@ -7,10 +7,7 @@
 #ifdef VP37
 // 130 Hz: the current ripple at this frequency keeps the actuator free of
 // the upper end stop and static friction on descents (bench, 2026-09-16);
-// 1 kHz measured cleaner but latched at the top with the same tuning.
-#ifndef VP37_PWM_FREQUENCY_HZ
-#define VP37_PWM_FREQUENCY_HZ 130
-#endif
+#include "../common/vp37_drive_config.h"
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 200
 #else
@@ -20,8 +17,6 @@
 #define TURBO_PWM_FREQUENCY_HZ 300
 #define ANGLE_PWM_FREQUENCY_HZ 300
 #endif
-
-#define I2C_SPEED_HZ 400000
 
 // RP2040 flash-backed EEPROM emulation size used by ECU module.
 #define ECU_EEPROM_SIZE_BYTES HAL_RP_FLASH_EEPROM_SIZE

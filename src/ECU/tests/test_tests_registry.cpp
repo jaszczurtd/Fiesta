@@ -287,6 +287,74 @@ void test_top_zero_returns_to_rest_between_thresholds(void) {
   TEST_ASSERT_FALSE(tickTests());
 }
 
+void test_pot_turns_to_full_demand_as_a_tracked_target_then_holds_and_returns(
+    void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
+
+  // A quarter of a percent every millisecond at the default rate: the target
+  // moves on every tick of the turn, so the controller tracks it instead of
+  // treating it as a lone step.
+  const float perMs = POT_RATE_PERCENT_PER_S_DEFAULT * 0.001f;
+  const uint32_t turnMs = (uint32_t)(100.0f / perMs);
+  uint32_t ms = 0U;
+  for (uint32_t pass = 0U; pass < POT_PASSES; pass++) {
+    TEST_ASSERT_EQUAL_STRING("pot", testsActiveName());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms));
+    for (uint32_t t = 1U; t < turnMs; t++) {
+      TEST_ASSERT_FLOAT_WITHIN(0.01f, perMs * (float)t, tickAt(ms + t));
+      if (t > 1U) {
+        TEST_ASSERT_TRUE(pump->demand.targetMoving);
+      }
+    }
+    ms += turnMs;
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 100.0f, tickAt(ms));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 100.0f, tickAt(ms + POT_HOLD_MS - 1U));
+    ms += POT_HOLD_MS;
+    // The turn back runs at the same rate and ends at rest.
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 100.0f, tickAt(ms));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f - perMs * 100.0f, tickAt(ms + 100U));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms + turnMs));
+    ms += turnMs;
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms + POT_REST_MS - 1U));
+    ms += POT_REST_MS;
+  }
+
+  // The last rest ends the test and hands the demand back at zero.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(ms));
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_FALSE(tickTests());
+}
+
+void test_pot_rate_command_is_bounded_and_reset_restores_the_default(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+
+  console("X1=500");
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
+  (void)tickAt(0U);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, tickAt(100U));
+
+  // Out-of-range rates are refused and leave the rate alone. A restart
+  // re-arms the turn at the clock it sees.
+  console("X1=5");
+  console("X1=5000");
+  hal_mock_set_millis(200U);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(200U));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, tickAt(300U));
+
+  // R restores the default rate.
+  console("R");
+  hal_mock_set_millis(400U);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, tickAt(400U));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, tickAt(500U));
+  console("stop");
+  TEST_ASSERT_NULL(testsActiveName());
+}
+
 void test_skip_advances_the_sequence_and_stop_ends_it(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
@@ -473,6 +541,9 @@ int main(void) {
   RUN_TEST(test_kv_one_shot_names_a_refused_publication);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
+  RUN_TEST(
+      test_pot_turns_to_full_demand_as_a_tracked_target_then_holds_and_returns);
+  RUN_TEST(test_pot_rate_command_is_bounded_and_reset_restores_the_default);
   RUN_TEST(test_skip_advances_the_sequence_and_stop_ends_it);
   RUN_TEST(test_console_starts_tests_by_name_and_keeps_parameters_on_letters);
   RUN_TEST(test_upper_derivative_command_is_deferred_bounded_and_resettable);
