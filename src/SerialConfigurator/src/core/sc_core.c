@@ -1,4 +1,6 @@
 #include "sc_core.h"
+#include "sc_text.h"
+#include "sc_time.h"
 
 #include <hal/core/hal_array.h>
 
@@ -30,45 +32,6 @@ static const ScModuleDef k_module_defs[SC_MODULE_COUNT] = {
     {SC_MODULE_TOKEN_OIL_AND_SPEED, SC_MODULE_OIL_AND_SPEED},
     {SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK},
 };
-
-static void copy_string(char *dst, size_t dst_size, const char *src) {
-  if (dst == 0 || dst_size == 0u) {
-    return;
-  }
-
-  if (src == 0) {
-    dst[0] = '\0';
-    return;
-  }
-
-  /* Bounded copy without snprintf("%s", ...) which trips
-   * -Werror=format-truncation when GCC cannot prove src fits. */
-  const size_t src_len = strlen(src);
-  const size_t copy_len =
-      (src_len < (dst_size - 1u)) ? src_len : (dst_size - 1u);
-  memcpy(dst, src, copy_len);
-  dst[copy_len] = '\0';
-}
-
-static void copy_span(char *dst, size_t dst_size, const char *start,
-                      const char *end) {
-  if (dst == 0 || dst_size == 0u) {
-    return;
-  }
-
-  if (start == 0 || end == 0 || end <= start) {
-    dst[0] = '\0';
-    return;
-  }
-
-  size_t len = (size_t)(end - start);
-  if (len >= dst_size) {
-    len = dst_size - 1u;
-  }
-
-  (void)memcpy(dst, start, len);
-  dst[len] = '\0';
-}
 
 static void log_append(char *log_output, size_t log_output_size,
                        const char *format, ...) {
@@ -211,7 +174,7 @@ static bool decode_build_base64_relaxed(const char *value, char *decoded,
   }
 
   char normalized[SC_IDENTITY_FIELD_MAX];
-  copy_string(normalized, sizeof(normalized), value);
+  sc_text_copy(normalized, sizeof(normalized), value);
 
   size_t trailing_padding = 0u;
   while (trailing_padding < value_len &&
@@ -263,7 +226,7 @@ static void identity_set_field(ScIdentityData *identity, const char *key,
   }
 
   if (strcmp(key, "module") == 0) {
-    copy_string(identity->module_name, sizeof(identity->module_name), value);
+    sc_text_copy(identity->module_name, sizeof(identity->module_name), value);
     return;
   }
 
@@ -286,14 +249,14 @@ static void identity_set_field(ScIdentityData *identity, const char *key,
   }
 
   if (strcmp(key, "fw") == 0) {
-    copy_string(identity->fw_version, sizeof(identity->fw_version), value);
+    sc_text_copy(identity->fw_version, sizeof(identity->fw_version), value);
     return;
   }
 
   if (strcmp(key, "build") == 0) {
     char decoded[SC_IDENTITY_FIELD_MAX];
     if (decode_build_base64_relaxed(value, decoded, sizeof(decoded))) {
-      copy_string(identity->build_id, sizeof(identity->build_id), decoded);
+      sc_text_copy(identity->build_id, sizeof(identity->build_id), decoded);
     } else if (value_looks_like_base64_payload(value)) {
       /*
        * Encoded build payload appears corrupted/truncated.
@@ -302,13 +265,13 @@ static void identity_set_field(ScIdentityData *identity, const char *key,
       identity->build_id[0] = '\0';
     } else {
       /* Compatibility fallback: some firmware may send raw build text. */
-      copy_string(identity->build_id, sizeof(identity->build_id), value);
+      sc_text_copy(identity->build_id, sizeof(identity->build_id), value);
     }
     return;
   }
 
   if (strcmp(key, "uid") == 0) {
-    copy_string(identity->uid, sizeof(identity->uid), value);
+    sc_text_copy(identity->uid, sizeof(identity->uid), value);
   }
 }
 
@@ -405,7 +368,7 @@ static void parse_identity_fields(const char *response,
     }
 
     char value[SC_IDENTITY_FIELD_MAX];
-    copy_span(value, sizeof(value), value_start, value_end);
+    sc_text_copy_span(value, sizeof(value), value_start, value_end);
     identity_set_field(identity, key, value);
   }
 
@@ -470,30 +433,6 @@ static void command_result_reset(ScCommandResult *result) {
   result->response[0] = '\0';
 }
 
-static const char *skip_spaces(const char *cursor) {
-  if (cursor == 0) {
-    return 0;
-  }
-
-  while (cursor[0] == ' ') {
-    cursor++;
-  }
-
-  return cursor;
-}
-
-static const char *token_end(const char *cursor) {
-  if (cursor == 0) {
-    return 0;
-  }
-
-  while (cursor[0] != '\0' && cursor[0] != ' ') {
-    cursor++;
-  }
-
-  return cursor;
-}
-
 static ScCommandStatus command_status_from_token(const char *token) {
   if (token == 0 || token[0] == '\0') {
     return SC_COMMAND_STATUS_UNPARSEABLE;
@@ -525,14 +464,6 @@ static ScCommandStatus command_status_from_token(const char *token) {
   }
 
   return SC_COMMAND_STATUS_UNPARSEABLE;
-}
-
-static void set_error(char *error, size_t error_size, const char *message) {
-  if (error == 0 || error_size == 0u) {
-    return;
-  }
-
-  copy_string(error, error_size, message != 0 ? message : "");
 }
 
 static bool param_id_char_is_valid(char c) {
@@ -576,22 +507,6 @@ static bool strings_equal_case_insensitive(const char *a, const char *b) {
   }
 
   return a[i] == '\0' && b[i] == '\0';
-}
-
-static bool parse_i64_strict(const char *text, int64_t *value) {
-  if (text == 0 || value == 0 || text[0] == '\0') {
-    return false;
-  }
-
-  errno = 0;
-  char *end = 0;
-  const long long parsed = strtoll(text, &end, 10);
-  if (errno != 0 || end == text || *end != '\0') {
-    return false;
-  }
-
-  *value = (int64_t)parsed;
-  return true;
 }
 
 static bool parse_u64_strict(const char *text, uint64_t *value) {
@@ -694,7 +609,7 @@ static void typed_value_from_text(const char *text, ScTypedValue *value) {
     return;
   }
 
-  copy_string(value->raw, sizeof(value->raw), text);
+  sc_text_copy(value->raw, sizeof(value->raw), text);
 
   if (strings_equal_case_insensitive(text, "true") ||
       strings_equal_case_insensitive(text, "on")) {
@@ -720,7 +635,7 @@ static void typed_value_from_text(const char *text, ScTypedValue *value) {
   }
 
   int64_t signed_value = 0;
-  if (parse_i64_strict(text, &signed_value)) {
+  if (sc_text_parse_i64(text, &signed_value)) {
     if (text[0] != '-' && text[0] != '+') {
       uint64_t unsigned_value = 0u;
       if (parse_u64_strict(text, &unsigned_value)) {
@@ -788,25 +703,6 @@ static void param_detail_reset(ScParamDetailData *parsed) {
   parsed->group[0] = '\0';
 }
 
-static bool parse_next_token(const char **cursor, char *token,
-                             size_t token_size) {
-  if (cursor == 0 || token == 0 || token_size == 0u || *cursor == 0) {
-    return false;
-  }
-
-  const char *start = skip_spaces(*cursor);
-  if (start == 0 || start[0] == '\0') {
-    token[0] = '\0';
-    *cursor = start;
-    return false;
-  }
-
-  const char *end = token_end(start);
-  copy_span(token, token_size, start, end);
-  *cursor = end;
-  return token[0] != '\0';
-}
-
 static void parse_sc_command_result(const char *response,
                                     ScCommandResult *result) {
   if (result == 0) {
@@ -814,47 +710,48 @@ static void parse_sc_command_result(const char *response,
   }
 
   command_result_reset(result);
-  copy_string(result->response, sizeof(result->response), response);
+  sc_text_copy(result->response, sizeof(result->response), response);
 
   if (response == 0 || response[0] == '\0') {
     return;
   }
 
-  const char *cursor = skip_spaces(response);
+  const char *cursor = sc_text_skip_spaces(response);
   if (cursor == 0 || cursor[0] == '\0') {
     return;
   }
 
   const char *status_start = cursor;
-  const char *status_end = token_end(status_start);
-  copy_span(result->status_token, sizeof(result->status_token), status_start,
-            status_end);
+  const char *status_end = sc_text_token_end(status_start);
+  sc_text_copy_span(result->status_token, sizeof(result->status_token),
+                    status_start, status_end);
   result->status = command_status_from_token(result->status_token);
 
-  cursor = skip_spaces(status_end);
+  cursor = sc_text_skip_spaces(status_end);
   if (cursor == 0 || cursor[0] == '\0') {
     return;
   }
 
   const char *topic_start = cursor;
-  const char *topic_end_ptr = token_end(topic_start);
+  const char *topic_end_ptr = sc_text_token_end(topic_start);
   const bool has_equals =
       memchr(topic_start, '=', (size_t)(topic_end_ptr - topic_start)) != 0;
   if (!has_equals) {
-    copy_span(result->topic, sizeof(result->topic), topic_start, topic_end_ptr);
-    cursor = skip_spaces(topic_end_ptr);
+    sc_text_copy_span(result->topic, sizeof(result->topic), topic_start,
+                      topic_end_ptr);
+    cursor = sc_text_skip_spaces(topic_end_ptr);
   }
 
   if (strcmp(result->status_token, "ERR") == 0 &&
       strcmp(result->topic, "UNKNOWN") == 0) {
     result->status = SC_COMMAND_STATUS_UNKNOWN_CMD;
-    copy_string(result->status_token, sizeof(result->status_token),
-                SC_STATUS_UNKNOWN_CMD);
+    sc_text_copy(result->status_token, sizeof(result->status_token),
+                 SC_STATUS_UNKNOWN_CMD);
     result->topic[0] = '\0';
   }
 
-  copy_string(result->details, sizeof(result->details),
-              cursor != 0 ? cursor : "");
+  sc_text_copy(result->details, sizeof(result->details),
+               cursor != 0 ? cursor : "");
 }
 
 static bool sc_core_send_sc_command_internal(ScCore *core, size_t module_index,
@@ -1073,9 +970,9 @@ void sc_core_detect_modules(ScCore *core, char *log_output,
     }
 
     status->detected = true;
-    copy_string(status->port_path, sizeof(status->port_path), device_path);
-    copy_string(status->hello_response, sizeof(status->hello_response),
-                response);
+    sc_text_copy(status->port_path, sizeof(status->port_path), device_path);
+    sc_text_copy(status->hello_response, sizeof(status->hello_response),
+                 response);
     status->hello_identity = parsed_identity;
 
     log_append(log_output, log_output_size, "Detected module '%s' on %s\n",
@@ -1150,18 +1047,20 @@ const char *sc_value_type_name(ScValueType type) {
 bool sc_core_parse_param_list_result(const ScCommandResult *result,
                                      ScParamListData *parsed, char *error,
                                      size_t error_size) {
-  set_error(error, error_size, "");
+  sc_text_set_error(error, error_size, "");
   param_list_reset(parsed);
 
   if (result == 0 || parsed == 0) {
-    set_error(error, error_size, "param-list parse failed: invalid arguments");
+    sc_text_set_error(error, error_size,
+                      "param-list parse failed: invalid arguments");
     return false;
   }
 
   if (result->status != SC_COMMAND_STATUS_OK ||
       strcmp(result->topic, "PARAM_LIST") != 0) {
-    set_error(error, error_size,
-              "param-list parse failed: response is not SC_OK PARAM_LIST");
+    sc_text_set_error(
+        error, error_size,
+        "param-list parse failed: response is not SC_OK PARAM_LIST");
     return false;
   }
 
@@ -1187,7 +1086,7 @@ bool sc_core_parse_param_list_result(const ScCommandResult *result,
     }
 
     char token[SC_PARAM_ID_MAX];
-    copy_span(token, sizeof(token), token_start, cursor);
+    sc_text_copy_span(token, sizeof(token), token_start, cursor);
     saw_any_token = true;
     if (!param_id_is_valid(token)) {
       parsed->truncated = true;
@@ -1211,14 +1110,15 @@ bool sc_core_parse_param_list_result(const ScCommandResult *result,
       continue;
     }
 
-    copy_string(parsed->ids[parsed->count], sizeof(parsed->ids[parsed->count]),
-                token);
+    sc_text_copy(parsed->ids[parsed->count], sizeof(parsed->ids[parsed->count]),
+                 token);
     parsed->count++;
   }
 
   if (parsed->count == 0u && saw_any_token) {
-    set_error(error, error_size,
-              "param-list parse failed: no valid parameter ids in payload");
+    sc_text_set_error(
+        error, error_size,
+        "param-list parse failed: no valid parameter ids in payload");
     return false;
   }
 
@@ -1228,26 +1128,27 @@ bool sc_core_parse_param_list_result(const ScCommandResult *result,
 bool sc_core_parse_param_values_result(const ScCommandResult *result,
                                        ScParamValuesData *parsed, char *error,
                                        size_t error_size) {
-  set_error(error, error_size, "");
+  sc_text_set_error(error, error_size, "");
   param_values_reset(parsed);
 
   if (result == 0 || parsed == 0) {
-    set_error(error, error_size,
-              "param-values parse failed: invalid arguments");
+    sc_text_set_error(error, error_size,
+                      "param-values parse failed: invalid arguments");
     return false;
   }
 
   if (result->status != SC_COMMAND_STATUS_OK ||
       strcmp(result->topic, "PARAM_VALUES") != 0) {
-    set_error(error, error_size,
-              "param-values parse failed: response is not SC_OK PARAM_VALUES");
+    sc_text_set_error(
+        error, error_size,
+        "param-values parse failed: response is not SC_OK PARAM_VALUES");
     return false;
   }
 
   const char *cursor = result->details;
   char token[SC_HELLO_RESPONSE_MAX];
   bool saw_any_token = false;
-  while (parse_next_token(&cursor, token, sizeof(token))) {
+  while (sc_text_next_token(&cursor, token, sizeof(token))) {
     saw_any_token = true;
     char *equals = strchr(token, '=');
     if (equals == 0) {
@@ -1285,15 +1186,15 @@ bool sc_core_parse_param_values_result(const ScCommandResult *result,
       continue;
     }
 
-    copy_string(parsed->entries[parsed->count].id,
-                sizeof(parsed->entries[parsed->count].id), id);
+    sc_text_copy(parsed->entries[parsed->count].id,
+                 sizeof(parsed->entries[parsed->count].id), id);
     typed_value_from_text(raw_value, &parsed->entries[parsed->count].value);
     parsed->count++;
   }
 
   if (parsed->count == 0u && saw_any_token) {
-    set_error(error, error_size,
-              "param-values parse failed: no valid id=value tokens");
+    sc_text_set_error(error, error_size,
+                      "param-values parse failed: no valid id=value tokens");
     return false;
   }
 
@@ -1303,27 +1204,29 @@ bool sc_core_parse_param_values_result(const ScCommandResult *result,
 bool sc_core_parse_param_result(const ScCommandResult *result,
                                 ScParamDetailData *parsed, char *error,
                                 size_t error_size) {
-  set_error(error, error_size, "");
+  sc_text_set_error(error, error_size, "");
   param_detail_reset(parsed);
 
   if (result == 0 || parsed == 0) {
-    set_error(error, error_size, "param parse failed: invalid arguments");
+    sc_text_set_error(error, error_size,
+                      "param parse failed: invalid arguments");
     return false;
   }
 
   if (result->status != SC_COMMAND_STATUS_OK ||
       strcmp(result->topic, "PARAM") != 0) {
-    set_error(error, error_size,
-              "param parse failed: response is not SC_OK PARAM");
+    sc_text_set_error(error, error_size,
+                      "param parse failed: response is not SC_OK PARAM");
     return false;
   }
 
   const char *cursor = result->details;
   char token[SC_HELLO_RESPONSE_MAX];
-  while (parse_next_token(&cursor, token, sizeof(token))) {
+  while (sc_text_next_token(&cursor, token, sizeof(token))) {
     char *equals = strchr(token, '=');
     if (equals == 0) {
-      set_error(error, error_size, "param parse failed: token without '='");
+      sc_text_set_error(error, error_size,
+                        "param parse failed: token without '='");
       return false;
     }
 
@@ -1331,16 +1234,17 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
     const char *key = token;
     const char *raw_value = equals + 1u;
     if (raw_value[0] == '\0') {
-      set_error(error, error_size, "param parse failed: empty value token");
+      sc_text_set_error(error, error_size,
+                        "param parse failed: empty value token");
       return false;
     }
 
     if (strcmp(key, "id") == 0) {
       if (!param_id_is_valid(raw_value)) {
-        set_error(error, error_size, "param parse failed: invalid id");
+        sc_text_set_error(error, error_size, "param parse failed: invalid id");
         return false;
       }
-      copy_string(parsed->id, sizeof(parsed->id), raw_value);
+      sc_text_copy(parsed->id, sizeof(parsed->id), raw_value);
       continue;
     }
 
@@ -1369,18 +1273,18 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
     }
 
     if (strcmp(key, "group") == 0) {
-      copy_string(parsed->group, sizeof(parsed->group), raw_value);
+      sc_text_copy(parsed->group, sizeof(parsed->group), raw_value);
       continue;
     }
   }
 
   if (parsed->id[0] == '\0') {
-    set_error(error, error_size, "param parse failed: missing id");
+    sc_text_set_error(error, error_size, "param parse failed: missing id");
     return false;
   }
 
   if (!parsed->has_value) {
-    set_error(error, error_size, "param parse failed: missing value");
+    sc_text_set_error(error, error_size, "param parse failed: missing value");
     return false;
   }
 
@@ -1389,7 +1293,7 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
       typed_value_is_numeric(&parsed->max)) {
     if (typed_value_as_double(&parsed->min) >
         typed_value_as_double(&parsed->max)) {
-      set_error(error, error_size, "param parse failed: min > max");
+      sc_text_set_error(error, error_size, "param parse failed: min > max");
       return false;
     }
   }
@@ -1399,7 +1303,7 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
       typed_value_is_numeric(&parsed->min)) {
     if (typed_value_as_double(&parsed->value) <
         typed_value_as_double(&parsed->min)) {
-      set_error(error, error_size, "param parse failed: value < min");
+      sc_text_set_error(error, error_size, "param parse failed: value < min");
       return false;
     }
   }
@@ -1409,7 +1313,7 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
       typed_value_is_numeric(&parsed->max)) {
     if (typed_value_as_double(&parsed->value) >
         typed_value_as_double(&parsed->max)) {
-      set_error(error, error_size, "param parse failed: value > max");
+      sc_text_set_error(error, error_size, "param parse failed: value > max");
       return false;
     }
   }
@@ -1419,7 +1323,7 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
       typed_value_is_numeric(&parsed->min)) {
     if (typed_value_as_double(&parsed->default_value) <
         typed_value_as_double(&parsed->min)) {
-      set_error(error, error_size, "param parse failed: default < min");
+      sc_text_set_error(error, error_size, "param parse failed: default < min");
       return false;
     }
   }
@@ -1429,7 +1333,7 @@ bool sc_core_parse_param_result(const ScCommandResult *result,
       typed_value_is_numeric(&parsed->max)) {
     if (typed_value_as_double(&parsed->default_value) >
         typed_value_as_double(&parsed->max)) {
-      set_error(error, error_size, "param parse failed: default > max");
+      sc_text_set_error(error, error_size, "param parse failed: default > max");
       return false;
     }
   }
@@ -1874,13 +1778,11 @@ ScSetParamStatus sc_core_set_param(const ScTransport *transport,
   static const char k_bad_prefix[] = SC_STATUS_BAD_REQUEST " ";
   if (strncmp(reply, k_bad_prefix, sizeof(k_bad_prefix) - 1u) == 0) {
     const char *tail = reply + (sizeof(k_bad_prefix) - 1u);
-    if (strncmp(tail, "read_only", 9u) == 0 &&
-        (tail[9] == ' ' || tail[9] == '\0')) {
+    if (sc_text_starts_with_token(tail, SC_REPLY_REASON_READ_ONLY)) {
       set_phase5_error(error, error_size, "firmware: %s", reply);
       return SC_SET_PARAM_ERR_READ_ONLY;
     }
-    if (strncmp(tail, "out_of_range", 12u) == 0 &&
-        (tail[12] == ' ' || tail[12] == '\0')) {
+    if (sc_text_starts_with_token(tail, SC_REPLY_REASON_OUT_OF_RANGE)) {
       set_phase5_error(error, error_size, "firmware: %s", reply);
       return SC_SET_PARAM_ERR_OUT_OF_RANGE;
     }
@@ -2056,16 +1958,6 @@ static void flash_copy_progress_adapter(uint64_t bytes_written,
   }
 }
 
-static void flash_sleep_ms(uint32_t ms) {
-  if (ms == 0u) {
-    return;
-  }
-  struct timespec req;
-  req.tv_sec = (time_t)(ms / 1000u);
-  req.tv_nsec = (long)((ms % 1000u) * 1000000L);
-  (void)nanosleep(&req, NULL);
-}
-
 ScFlashStatus sc_core_flash(const ScTransport *transport, size_t module_index,
                             const char *device_path, const char *uid_hex,
                             const char *uf2_path,
@@ -2234,7 +2126,7 @@ ScFlashStatus sc_core_flash(const ScTransport *transport, size_t module_index,
   }
 
   /* 8. Grace pause. */
-  flash_sleep_ms(grace_ms);
+  sc_time_sleep_ms(grace_ms);
 
   /* 9. Post-flash HELLO. */
   flash_pulse(progress_cb, progress_user, SC_FLASH_PHASE_POST_FLASH_HELLO);

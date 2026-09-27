@@ -41,145 +41,226 @@ extern "C" {
 #endif
 
 typedef enum ScLocale {
-    SC_LOCALE_EN = 0,
-    SC_LOCALE_PL,
-    SC_LOCALE_COUNT
+  SC_LOCALE_EN = 0,
+  SC_LOCALE_PL,
+  SC_LOCALE_COUNT
 } ScLocale;
 
 typedef enum ScI18nKey {
-    /* ── Window / tab structure ────────────────────────────────────── */
-    SC_I18N_APP_TITLE,
-    SC_I18N_TAB_MODULES,
-    SC_I18N_TAB_FLASH,
-    SC_I18N_FRAME_MODULES,
+  /* ── Window / tab structure ────────────────────────────────────── */
+  SC_I18N_APP_TITLE,
+  SC_I18N_TAB_MODULES,
+  SC_I18N_TAB_FLASH,
+  SC_I18N_FRAME_MODULES,
 
-    /* ── Detect button (three states) ──────────────────────────────── */
-    SC_I18N_BTN_DETECT,
-    SC_I18N_BTN_DISCONNECT,
-    SC_I18N_BTN_DETECTING,
+  /* ── Detect button (three states) ──────────────────────────────── */
+  SC_I18N_BTN_DETECT,
+  SC_I18N_BTN_DISCONNECT,
+  SC_I18N_BTN_DETECTING,
 
-    /* ── Log view messages ─────────────────────────────────────────── */
-    SC_I18N_LOG_IDLE,
-    SC_I18N_LOG_DETECTING,
-    SC_I18N_LOG_DISCONNECTED,
-    SC_I18N_LOG_DETECTION_FAILED,
-    SC_I18N_LOG_AUTO_REFRESH_HEADER,    /* "[INFO] Starting automatic..." */
-    SC_I18N_LOG_AUTO_REFRESH_FOR_FMT,   /* "[INFO] Automatic refresh for %s..." */
-    SC_I18N_LOG_NO_TARGETS,             /* "[INFO] No detected module..." */
-    SC_I18N_LOG_WARN_PREFIX,            /* "[WARN] " */
+  /* ── Log view messages ─────────────────────────────────────────── */
+  SC_I18N_LOG_IDLE,
+  SC_I18N_LOG_DETECTING,
+  SC_I18N_LOG_DISCONNECTED,
+  SC_I18N_LOG_DETECTION_FAILED,
+  SC_I18N_LOG_AUTO_REFRESH_HEADER,  /* "[INFO] Starting automatic..." */
+  SC_I18N_LOG_AUTO_REFRESH_FOR_FMT, /* "[INFO] Automatic refresh for %s..." */
+  SC_I18N_LOG_NO_TARGETS,           /* "[INFO] No detected module..." */
+  SC_I18N_LOG_WARN_PREFIX,          /* "[WARN] " */
 
-    /* ── Module-details placeholders ───────────────────────────────── */
-    SC_I18N_PLACEHOLDER_INITIAL,
-    SC_I18N_PLACEHOLDER_DETECTING,
-    SC_I18N_PLACEHOLDER_FINISHED,
-    SC_I18N_PLACEHOLDER_FAILED,
-    SC_I18N_PLACEHOLDER_SELECT_MODULE,
-    SC_I18N_PLACEHOLDER_UNKNOWN_ROW,
+  /* ── Module-details placeholders ───────────────────────────────── */
+  SC_I18N_PLACEHOLDER_INITIAL,
+  SC_I18N_PLACEHOLDER_DETECTING,
+  SC_I18N_PLACEHOLDER_FINISHED,
+  SC_I18N_PLACEHOLDER_FAILED,
+  SC_I18N_PLACEHOLDER_SELECT_MODULE,
+  SC_I18N_PLACEHOLDER_UNKNOWN_ROW,
 
-    /* ── Module-row label suffixes ─────────────────────────────────── */
-    SC_I18N_LABEL_DETECTED_SUFFIX,      /* " (detected)" */
-    SC_I18N_LABEL_AMBIGUOUS_FMT,        /* " (x%zu, ambiguous)" */
+  /* ── Module-row label suffixes ─────────────────────────────────── */
+  SC_I18N_LABEL_DETECTED_SUFFIX, /* " (detected)" */
+  SC_I18N_LABEL_AMBIGUOUS_FMT,   /* " (x%zu, ambiguous)" */
 
-    /* ── Flash tab ─────────────────────────────────────────────────── */
-    SC_I18N_FLASH_PLACEHOLDER,
-    /* Phase 6.2 - per-module section widgets */
-    SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash - %s" */
-    SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact (auto):" */
-    SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest:" */
-    SC_I18N_FLASH_BTN_PICK_MANIFEST,     /* "Choose manifest..." */
-    SC_I18N_FLASH_BTN_CLEAR_MANIFEST,    /* "Clear" (manifest picker reset) */
-    SC_I18N_FLASH_BTN_FLASH,             /* "Flash" */
-    SC_I18N_FLASH_NO_PATH,               /* "(none)" */
-    SC_I18N_FLASH_DIALOG_MANIFEST_TITLE, /* "Select manifest JSON" */
-    SC_I18N_FLASH_FILTER_MANIFEST,       /* "Manifest JSON" */
-    SC_I18N_FLASH_STATUS_INITIAL,        /* "Pick a manifest to start." */
-    SC_I18N_FLASH_STATUS_UF2_FAIL_FMT,   /* "UF2 format check failed (%s): %s" */
-    SC_I18N_FLASH_STATUS_MANIFEST_OK,    /* "Manifest parsed; sha256 matches the chosen UF2." */
-    SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT, /* "Manifest parse failed: %s" */
-    SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT, /* "Manifest verification failed: %s" */
-    SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2, /* "Manifest parsed; pick a UF2 to verify the hash." */
-    SC_I18N_FLASH_STATUS_FLASH_TODO,     /* "Flash flow not implemented yet (Phase 6.5)." */
-    SC_I18N_FLASH_STATUS_LOCK_RELEASED,  /* "Lock released. (Stub run finished.)" */
-    SC_I18N_FLASH_STATUS_NEED_DETECTION, /* "Detect the module before flashing." */
-    SC_I18N_FLASH_STATUS_NEED_UF2,       /* "Pick a UF2 file before flashing." */
-    SC_I18N_FLASH_STATUS_RUNNING_FMT,    /* "Flashing: %s" */
-    SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT, /* "Flashing: COPY (%u%%)" */
-    SC_I18N_FLASH_STATUS_DONE_FMT,       /* "Flash OK: %s" */
-    SC_I18N_FLASH_STATUS_FAILED_FMT,     /* "Flash failed: %s - %s" */
-    SC_I18N_FLASH_RESULT_OK,             /* "OK" - short marker shown in
-                                             the progress slot after a
-                                             successful flash. */
-    SC_I18N_FLASH_RESULT_FAIL,           /* short marker shown in the
-                                             progress slot after a failed
-                                             flash (EN: "FAIL", PL:
-                                             "BŁĄD"). */
+  /* ── Flash tab ─────────────────────────────────────────────────── */
+  SC_I18N_FLASH_PLACEHOLDER,
+  /* Phase 6.2 - per-module section widgets */
+  SC_I18N_FLASH_SECTION_HEADER_FMT,    /* "Flash - %s" */
+  SC_I18N_FLASH_LBL_UF2,               /* "UF2 artifact (auto):" */
+  SC_I18N_FLASH_LBL_MANIFEST,          /* "Manifest:" */
+  SC_I18N_FLASH_BTN_PICK_MANIFEST,     /* "Choose manifest..." */
+  SC_I18N_FLASH_BTN_CLEAR_MANIFEST,    /* "Clear" (manifest picker reset) */
+  SC_I18N_FLASH_BTN_FLASH,             /* "Flash" */
+  SC_I18N_FLASH_NO_PATH,               /* "(none)" */
+  SC_I18N_FLASH_DIALOG_MANIFEST_TITLE, /* "Select manifest JSON" */
+  SC_I18N_FLASH_FILTER_MANIFEST,       /* "Manifest JSON" */
+  SC_I18N_FLASH_STATUS_INITIAL,        /* "Pick a manifest to start." */
+  SC_I18N_FLASH_STATUS_UF2_FAIL_FMT,   /* "UF2 format check failed (%s): %s" */
+  SC_I18N_FLASH_STATUS_MANIFEST_OK,    /* "Manifest parsed; sha256 matches the
+                                          chosen UF2." */
+  SC_I18N_FLASH_STATUS_MANIFEST_PARSE_FAIL_FMT,  /* "Manifest parse failed: %s"
+                                                  */
+  SC_I18N_FLASH_STATUS_MANIFEST_VERIFY_FAIL_FMT, /* "Manifest verification
+                                                    failed: %s" */
+  SC_I18N_FLASH_STATUS_MANIFEST_NEEDS_UF2, /* "Manifest parsed; pick a UF2 to
+                                              verify the hash." */
+  SC_I18N_FLASH_STATUS_FLASH_TODO,         /* "Flash flow not implemented yet
+                                              (Phase 6.5)." */
+  SC_I18N_FLASH_STATUS_LOCK_RELEASED,  /* "Lock released. (Stub run finished.)"
+                                        */
+  SC_I18N_FLASH_STATUS_NEED_DETECTION, /* "Detect the module before flashing."
+                                        */
+  SC_I18N_FLASH_STATUS_NEED_UF2,       /* "Pick a UF2 file before flashing." */
+  SC_I18N_FLASH_STATUS_RUNNING_FMT,    /* "Flashing: %s" */
+  SC_I18N_FLASH_STATUS_COPY_FRACTION_FMT, /* "Flashing: COPY (%u%%)" */
+  SC_I18N_FLASH_STATUS_DONE_FMT,          /* "Flash OK: %s" */
+  SC_I18N_FLASH_STATUS_FAILED_FMT,        /* "Flash failed: %s - %s" */
+  SC_I18N_FLASH_RESULT_OK,                /* "OK" - short marker shown in
+                                              the progress slot after a
+                                              successful flash. */
+  SC_I18N_FLASH_RESULT_FAIL,              /* short marker shown in the
+                                              progress slot after a failed
+                                              flash (EN: "FAIL", PL:
+                                              "BŁĄD"). */
 
-    /* ── Default per-module status strings (idle) ──────────────────── */
-    SC_I18N_STATUS_NO_META,
-    SC_I18N_STATUS_NO_CATALOG,
-    SC_I18N_STATUS_NO_VALUES,
-    SC_I18N_STATUS_NO_PROBE,
-    SC_I18N_STATUS_WAITING,
+  /* ── Default per-module status strings (idle) ──────────────────── */
+  SC_I18N_STATUS_NO_META,
+  SC_I18N_STATUS_NO_CATALOG,
+  SC_I18N_STATUS_NO_VALUES,
+  SC_I18N_STATUS_NO_PROBE,
+  SC_I18N_STATUS_WAITING,
 
-    /* ── Worker-produced status strings ────────────────────────────── */
-    SC_I18N_STATUS_MODULE_UNAVAILABLE,
-    SC_I18N_STATUS_NOT_DETECTED,
-    SC_I18N_STATUS_AMBIGUOUS_META,
-    SC_I18N_STATUS_AMBIGUOUS_CATALOG,
-    SC_I18N_STATUS_AMBIGUOUS_VALUES,
-    SC_I18N_STATUS_AMBIGUOUS_PROBE,
-    SC_I18N_STATUS_META_TRANSPORT_ERR,
-    SC_I18N_STATUS_PROTOCOL_UNSUPPORTED,
-    SC_I18N_STATUS_PROTOCOL_UNSUPPORTED_SHORT,
-    SC_I18N_STATUS_META_FAILED_FMT,         /* "SC_GET_META failed: %s" */
-    SC_I18N_STATUS_SKIP_META_TRANSPORT,
-    SC_I18N_STATUS_SKIP_META_FAILED,
-    SC_I18N_STATUS_META_REFRESHED,
-    SC_I18N_STATUS_CATALOG_TRANSPORT_ERR,
-    SC_I18N_STATUS_SKIP_CATALOG_TRANSPORT,
-    SC_I18N_STATUS_CATALOG_PARSE_FAILED,
-    SC_I18N_STATUS_SKIP_CATALOG_PARSE,
-    SC_I18N_STATUS_CATALOG_READ_FMT,        /* "Catalog read: %zu id(s)%s" */
-    SC_I18N_STATUS_TRUNCATED_SUFFIX,        /* " (truncated)" */
-    SC_I18N_STATUS_VALUES_TRANSPORT_ERR,
-    SC_I18N_STATUS_SKIP_VALUES_TRANSPORT,
-    SC_I18N_STATUS_VALUES_PARSE_FAILED,
-    SC_I18N_STATUS_SKIP_VALUES_PARSE,
-    SC_I18N_STATUS_VALUES_READ_FMT,         /* "Values read: %zu entry(ies)%s" */
-    SC_I18N_STATUS_NO_IDS_TO_PROBE,
-    SC_I18N_STATUS_PROBE_PARTIAL_FMT,       /* "Probe partial: ok=%zu fail=%zu mismatch=%zu" */
-    SC_I18N_STATUS_PROBE_OK_FMT,            /* "Probe ok: %zu id(s), mismatch=%zu" */
-    SC_I18N_STATUS_PROBE_SKIPPED,
+  /* ── Worker-produced status strings ────────────────────────────── */
+  SC_I18N_STATUS_MODULE_UNAVAILABLE,
+  SC_I18N_STATUS_NOT_DETECTED,
+  SC_I18N_STATUS_AMBIGUOUS_META,
+  SC_I18N_STATUS_AMBIGUOUS_CATALOG,
+  SC_I18N_STATUS_AMBIGUOUS_VALUES,
+  SC_I18N_STATUS_AMBIGUOUS_PROBE,
+  SC_I18N_STATUS_META_TRANSPORT_ERR,
+  SC_I18N_STATUS_PROTOCOL_UNSUPPORTED,
+  SC_I18N_STATUS_PROTOCOL_UNSUPPORTED_SHORT,
+  SC_I18N_STATUS_META_FAILED_FMT, /* "SC_GET_META failed: %s" */
+  SC_I18N_STATUS_SKIP_META_TRANSPORT,
+  SC_I18N_STATUS_SKIP_META_FAILED,
+  SC_I18N_STATUS_META_REFRESHED,
+  SC_I18N_STATUS_CATALOG_TRANSPORT_ERR,
+  SC_I18N_STATUS_SKIP_CATALOG_TRANSPORT,
+  SC_I18N_STATUS_CATALOG_PARSE_FAILED,
+  SC_I18N_STATUS_SKIP_CATALOG_PARSE,
+  SC_I18N_STATUS_CATALOG_READ_FMT, /* "Catalog read: %zu id(s)%s" */
+  SC_I18N_STATUS_TRUNCATED_SUFFIX, /* " (truncated)" */
+  SC_I18N_STATUS_VALUES_TRANSPORT_ERR,
+  SC_I18N_STATUS_SKIP_VALUES_TRANSPORT,
+  SC_I18N_STATUS_VALUES_PARSE_FAILED,
+  SC_I18N_STATUS_SKIP_VALUES_PARSE,
+  SC_I18N_STATUS_VALUES_READ_FMT, /* "Values read: %zu entry(ies)%s" */
+  SC_I18N_STATUS_NO_IDS_TO_PROBE,
+  SC_I18N_STATUS_PROBE_PARTIAL_FMT, /* "Probe partial: ok=%zu fail=%zu
+                                       mismatch=%zu" */
+  SC_I18N_STATUS_PROBE_OK_FMT,      /* "Probe ok: %zu id(s), mismatch=%zu" */
+  SC_I18N_STATUS_PROBE_SKIPPED,
 
-    /* ── Phase 8.6: Values tab ─────────────────────────────────────── */
-    SC_I18N_TAB_VALUES,
-    SC_I18N_VALUES_PLACEHOLDER,
-    SC_I18N_VALUES_NO_DETECTED_MODULES,
-    SC_I18N_VALUES_NO_PARAMS,
-    SC_I18N_VALUES_LOADING,
-    SC_I18N_VALUES_LOAD_FAILED_FMT,         /* "Failed to load %s: %s" */
-    SC_I18N_VALUES_BTN_APPLY_STAGED,
-    SC_I18N_VALUES_BTN_COMMIT,
-    SC_I18N_VALUES_BTN_REVERT,
-    SC_I18N_VALUES_AUTH_FAILED_FMT,         /* "Auth failed: %s" */
-    SC_I18N_VALUES_APPLY_OK_FMT,            /* "Applied %u parameter(s)." */
-    SC_I18N_VALUES_APPLY_FAILED_FMT,        /* "Apply failed for %s: %s" */
-    SC_I18N_VALUES_NOTHING_TO_APPLY,
-    SC_I18N_VALUES_COMMIT_OK,
-    SC_I18N_VALUES_COMMIT_FAILED_FMT,       /* "Commit failed: %s" */
-    SC_I18N_VALUES_REVERT_OK,
-    SC_I18N_VALUES_REVERT_FAILED_FMT,       /* "Revert failed: %s" */
+  /* ── Phase 8.6: Values tab ─────────────────────────────────────── */
+  SC_I18N_TAB_VALUES,
+  SC_I18N_VALUES_PLACEHOLDER,
+  SC_I18N_VALUES_NO_DETECTED_MODULES,
+  SC_I18N_VALUES_NO_PARAMS,
+  SC_I18N_VALUES_LOADING,
+  SC_I18N_VALUES_LOAD_FAILED_FMT, /* "Failed to load %s: %s" */
+  SC_I18N_VALUES_BTN_APPLY_STAGED,
+  SC_I18N_VALUES_BTN_COMMIT,
+  SC_I18N_VALUES_BTN_REVERT,
+  SC_I18N_VALUES_AUTH_FAILED_FMT,  /* "Auth failed: %s" */
+  SC_I18N_VALUES_APPLY_OK_FMT,     /* "Applied %u parameter(s)." */
+  SC_I18N_VALUES_APPLY_FAILED_FMT, /* "Apply failed for %s: %s" */
+  SC_I18N_VALUES_NOTHING_TO_APPLY,
+  SC_I18N_VALUES_COMMIT_OK,
+  SC_I18N_VALUES_COMMIT_FAILED_FMT, /* "Commit failed: %s" */
+  SC_I18N_VALUES_REVERT_OK,
+  SC_I18N_VALUES_REVERT_FAILED_FMT, /* "Revert failed: %s" */
 
-    /* ── Phase 8.7: Map tab (libshumate GPS view) ──────────────────── */
-    SC_I18N_TAB_MAP,
-    SC_I18N_MAP_PLACEHOLDER,                /* shown before any GPS fix */
-    SC_I18N_MAP_UNAVAILABLE,                /* shumate not compiled in */
-    SC_I18N_MAP_WAITING_FIX,                /* connected but available=0 */
-    SC_I18N_MAP_STATUS_FMT,                 /* "Lat %.6f  Lon %.6f  %.1f km/h" */
-    SC_I18N_MAP_BTN_RECENTER,
-    SC_I18N_MAP_DISCONNECTED,
+  /* ── Phase 8.7: Map tab (libshumate GPS view) ──────────────────── */
+  SC_I18N_TAB_MAP,
+  SC_I18N_MAP_PLACEHOLDER, /* shown before any GPS fix */
+  SC_I18N_MAP_UNAVAILABLE, /* shumate not compiled in */
+  SC_I18N_MAP_WAITING_FIX, /* connected but available=0 */
+  SC_I18N_MAP_STATUS_FMT,  /* "Lat %.6f  Lon %.6f  %.1f km/h" */
+  SC_I18N_MAP_BTN_RECENTER,
+  SC_I18N_MAP_DISCONNECTED,
 
-    SC_I18N_KEY_COUNT
+  /* ── Values tab: ECU sub-tabs and functional tests ─────────────── */
+  SC_I18N_VALUES_SUBTAB_SETTINGS,
+  SC_I18N_VALUES_SUBTAB_TESTS,
+  SC_I18N_TESTS_NONE,
+  SC_I18N_TESTS_LOAD_FAILED_FMT, /* "Failed to load the tests: %s" */
+  SC_I18N_TESTS_BTN_RUN_SEQUENCE,
+  SC_I18N_TESTS_BTN_RUN,
+  SC_I18N_TESTS_BTN_SKIP,
+  SC_I18N_TESTS_BTN_STOP,
+  SC_I18N_TESTS_BTN_DEFAULTS,
+  SC_I18N_TESTS_SEQUENCE_LIST_FMT, /* "Sequence: %s" - comma list of test names
+                                    */
+  SC_I18N_TESTS_IN_SEQUENCE,
+  SC_I18N_TESTS_ON_REQUEST,
+  SC_I18N_TESTS_NOTE,
+  SC_I18N_TESTS_IDLE,
+  SC_I18N_TESTS_RUNNING_FMT, /* "Running: %s (%s)" - test, who started it */
+  SC_I18N_TESTS_SOURCE_SC,
+  SC_I18N_TESTS_SOURCE_CONSOLE,
+  SC_I18N_TESTS_SEQUENCE_STEP_FMT, /* "Sequence: test %u of %u" */
+  SC_I18N_TESTS_ELAPSED_FMT,       /* "Elapsed: %.1f s" */
+  SC_I18N_TESTS_DEMAND_FMT,        /* "Demand: %.1f %%" */
+  SC_I18N_TESTS_POSITION_FMT,      /* "Position: %.1f %%" */
+  SC_I18N_TESTS_DRIVE_UNKNOWN,
+  SC_I18N_TESTS_LAST_FMT,    /* "Last: %s - %s" - test, result */
+  SC_I18N_TESTS_STARTED_FMT, /* "Started: %s" */
+  SC_I18N_TESTS_STOP_REQUESTED,
+  SC_I18N_TESTS_SKIP_REQUESTED,
+  SC_I18N_TESTS_REFUSED_FMT, /* "Refused: %s" */
+  SC_I18N_TESTS_ENGINE_RUNNING,
+  SC_I18N_TESTS_BUSY,
+  SC_I18N_TESTS_PARAM_FAILED_FMT,  /* "Parameter %s refused: %s" */
+  SC_I18N_TESTS_STATUS_FAILED_FMT, /* "Status read failed: %s" */
+  SC_I18N_TEST_NAME_CYCLIC,
+  SC_I18N_TEST_DESC_CYCLIC,
+  SC_I18N_TEST_NAME_RANDOM,
+  SC_I18N_TEST_DESC_RANDOM,
+  SC_I18N_TEST_NAME_TOP,
+  SC_I18N_TEST_DESC_TOP,
+  SC_I18N_TEST_NAME_TOPZERO,
+  SC_I18N_TEST_DESC_TOPZERO,
+  SC_I18N_TEST_NAME_POT,
+  SC_I18N_TEST_DESC_POT,
+  SC_I18N_TEST_PARAM_PASSES,
+  SC_I18N_TEST_PARAM_CYCLES,
+  SC_I18N_TEST_PARAM_DURATION,
+  SC_I18N_TEST_PARAM_HOLD,
+  SC_I18N_TEST_PARAM_DWELL,
+  SC_I18N_TEST_PARAM_SERIES,
+  SC_I18N_TEST_PARAM_RATE,
+  SC_I18N_TEST_PARAM_HOLD_TOP,
+  SC_I18N_TEST_PARAM_REST,
+  SC_I18N_TEST_PROGRESS_PROFILE_FMT,  /* "profile %d" */
+  SC_I18N_TEST_PROGRESS_RATE_FMT,     /* "%d %%/s" */
+  SC_I18N_TEST_PROGRESS_CYCLE_FMT,    /* "cycle %d/%d" */
+  SC_I18N_TEST_PROGRESS_PASS_FMT,     /* "pass %d/%d" */
+  SC_I18N_TEST_PROGRESS_TARGET_FMT,   /* "target %d %%" */
+  SC_I18N_TEST_PROGRESS_NEXT_FMT,     /* "next in %.1f s" */
+  SC_I18N_TEST_PROGRESS_LEFT_FMT,     /* "%d s left" */
+  SC_I18N_TEST_PROGRESS_SETPOINT_FMT, /* "setpoint %.1f %%" */
+  SC_I18N_TEST_PROGRESS_SERIES_FMT,   /* "series %d/%d" */
+  SC_I18N_TEST_PROGRESS_PHASE_FMT,    /* "phase: %s" */
+  SC_I18N_TEST_PHASE_RISE,
+  SC_I18N_TEST_PHASE_HOLD,
+  SC_I18N_TEST_PHASE_FALL,
+  SC_I18N_TEST_PHASE_REST,
+  SC_I18N_TEST_RESULT_DONE,
+  SC_I18N_TEST_RESULT_OK,
+  SC_I18N_TEST_RESULT_FAILED,
+  SC_I18N_TEST_RESULT_STOPPED,
+  SC_I18N_TEST_RESULT_HOST_LOST,
+  SC_I18N_TEST_RESULT_SESSION_END,
+  SC_I18N_TEST_RESULT_ENGINE_RUNNING,
+  SC_I18N_KEY_COUNT
 } ScI18nKey;
 
 /**

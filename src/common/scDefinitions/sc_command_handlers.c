@@ -3,6 +3,7 @@
 #include "sc_param_handlers.h"
 #include "sc_protocol.h"
 
+#include <hal/core/hal_array.h>
 #include <hal/security/hal_crypto.h>
 #include <hal/serial/hal_serial_session.h>
 #include <hal/system/hal_system.h>
@@ -16,15 +17,25 @@
 #define SC_COMMAND_SMALL_RESPONSE_SIZE 96u
 #define SC_COMMAND_REBOOT_DELAY_MS 50u
 
-#define SC_COMMAND_REGISTERED_META UINT16_C(0x0001)
-#define SC_COMMAND_REGISTERED_PARAM_LIST UINT16_C(0x0002)
-#define SC_COMMAND_REGISTERED_VALUES UINT16_C(0x0004)
-#define SC_COMMAND_REGISTERED_GET_PARAM UINT16_C(0x0008)
-#define SC_COMMAND_REGISTERED_GPS UINT16_C(0x0010)
-#define SC_COMMAND_REGISTERED_SET_PARAM UINT16_C(0x0020)
-#define SC_COMMAND_REGISTERED_COMMIT UINT16_C(0x0040)
-#define SC_COMMAND_REGISTERED_REVERT UINT16_C(0x0080)
-#define SC_COMMAND_REGISTERED_REBOOT UINT16_C(0x0100)
+#define SC_COMMAND_TEST_RESPONSE_SIZE 250u
+
+#define SC_COMMAND_REGISTERED_META UINT32_C(0x0001)
+#define SC_COMMAND_REGISTERED_PARAM_LIST UINT32_C(0x0002)
+#define SC_COMMAND_REGISTERED_VALUES UINT32_C(0x0004)
+#define SC_COMMAND_REGISTERED_GET_PARAM UINT32_C(0x0008)
+#define SC_COMMAND_REGISTERED_GPS UINT32_C(0x0010)
+#define SC_COMMAND_REGISTERED_SET_PARAM UINT32_C(0x0020)
+#define SC_COMMAND_REGISTERED_COMMIT UINT32_C(0x0040)
+#define SC_COMMAND_REGISTERED_REVERT UINT32_C(0x0080)
+#define SC_COMMAND_REGISTERED_REBOOT UINT32_C(0x0100)
+#define SC_COMMAND_REGISTERED_TEST_LIST UINT32_C(0x0200)
+#define SC_COMMAND_REGISTERED_TEST_INFO UINT32_C(0x0400)
+#define SC_COMMAND_REGISTERED_TEST_PARAM UINT32_C(0x0800)
+#define SC_COMMAND_REGISTERED_TEST_SET UINT32_C(0x1000)
+#define SC_COMMAND_REGISTERED_TEST_RUN UINT32_C(0x2000)
+#define SC_COMMAND_REGISTERED_TEST_STOP UINT32_C(0x4000)
+#define SC_COMMAND_REGISTERED_TEST_SKIP UINT32_C(0x8000)
+#define SC_COMMAND_REGISTERED_TEST_STATUS UINT32_C(0x10000)
 
 typedef struct {
   hal_command_response_t *response;
@@ -147,7 +158,9 @@ static bool arguments_finished(sc_command_argument_cursor_t *cursor) {
   return cursor->offset == cursor->length;
 }
 
-static bool parse_i16(const char *text, int16_t *out_value) {
+/** @brief Parse a whole decimal token inside [@p min_value, @p max_value]. */
+static bool parse_int_in(const char *text, int64_t min_value, int64_t max_value,
+                         int64_t *out_value) {
   if (text == NULL || out_value == NULL || text[0] == '\0') {
     return false;
   }
@@ -162,14 +175,14 @@ static bool parse_i16(const char *text, int16_t *out_value) {
     return false;
   }
 
-  const int32_t limit = negative ? -(int32_t)INT16_MIN : (int32_t)INT16_MAX;
-  int32_t value = 0;
+  const int64_t limit = negative ? -min_value : max_value;
+  int64_t value = 0;
   while (text[offset] != '\0') {
     const char digit = text[offset];
     if (digit < '0' || digit > '9') {
       return false;
     }
-    const int32_t digit_value = (int32_t)(digit - '0');
+    const int64_t digit_value = (int64_t)(digit - '0');
     if (value > ((limit - digit_value) / 10)) {
       return false;
     }
@@ -177,7 +190,27 @@ static bool parse_i16(const char *text, int16_t *out_value) {
     ++offset;
   }
 
-  *out_value = negative ? (int16_t)-value : (int16_t)value;
+  *out_value = negative ? -value : value;
+  return true;
+}
+
+static bool parse_i16(const char *text, int16_t *out_value) {
+  int64_t value = 0;
+  if ((out_value == NULL) ||
+      !parse_int_in(text, INT16_MIN, INT16_MAX, &value)) {
+    return false;
+  }
+  *out_value = (int16_t)value;
+  return true;
+}
+
+static bool parse_i32(const char *text, int32_t *out_value) {
+  int64_t value = 0;
+  if ((out_value == NULL) ||
+      !parse_int_in(text, INT32_MIN, INT32_MAX, &value)) {
+    return false;
+  }
+  *out_value = (int32_t)value;
   return true;
 }
 
@@ -198,7 +231,11 @@ request_has_malformed_no_arg_command(const hal_command_request_t *request) {
          strcmp(request->command, SC_CMD_GET_GPS) == 0 ||
          strcmp(request->command, SC_CMD_COMMIT_PARAMS) == 0 ||
          strcmp(request->command, SC_CMD_REVERT_PARAMS) == 0 ||
-         strcmp(request->command, SC_CMD_REBOOT_BOOTLOADER) == 0;
+         strcmp(request->command, SC_CMD_REBOOT_BOOTLOADER) == 0 ||
+         strcmp(request->command, SC_CMD_TEST_LIST) == 0 ||
+         strcmp(request->command, SC_CMD_TEST_STOP) == 0 ||
+         strcmp(request->command, SC_CMD_TEST_SKIP) == 0 ||
+         strcmp(request->command, SC_CMD_TEST_STATUS) == 0;
 }
 
 static hal_status_t handle_meta(const hal_command_request_t *request,
@@ -490,11 +527,423 @@ static hal_status_t handle_reboot(const hal_command_request_t *request,
   return response_write(response, SC_REPLY_REBOOT_OK);
 }
 
+/* ── Functional tests ──────────────────────────────────────────────── */
+
+/** @brief Append @p text; false once the payload no longer fits. */
+static bool payload_append(char *payload, size_t capacity, size_t *length,
+                           const char *text) {
+  const size_t text_length = strlen(text);
+  if ((*length >= capacity) || (text_length >= (capacity - *length))) {
+    return false;
+  }
+  (void)memcpy(&payload[*length], text, text_length + 1u);
+  *length += text_length;
+  return true;
+}
+
+/** @brief Append " <key>=<value>". */
+static bool payload_append_pair(char *payload, size_t capacity, size_t *length,
+                                const char *key, const char *value) {
+  return payload_append(payload, capacity, length, " ") &&
+         payload_append(payload, capacity, length, key) &&
+         payload_append(payload, capacity, length, "=") &&
+         payload_append(payload, capacity, length, value);
+}
+
+/** @brief Append " <key>=<signed number>". */
+static bool payload_append_signed(char *payload, size_t capacity,
+                                  size_t *length, const char *key, long value) {
+  char text[24] = {0};
+  const int written = snprintf(text, sizeof(text), "%ld", value);
+  return format_fits(written, sizeof(text)) &&
+         payload_append_pair(payload, capacity, length, key, text);
+}
+
+/** @brief Append " <key>=<unsigned number>". */
+static bool payload_append_unsigned(char *payload, size_t capacity,
+                                    size_t *length, const char *key,
+                                    unsigned long value) {
+  char text[24] = {0};
+  const int written = snprintf(text, sizeof(text), "%lu", value);
+  return format_fits(written, sizeof(text)) &&
+         payload_append_pair(payload, capacity, length, key, text);
+}
+
+/** @brief Append @p item to a comma-separated list. */
+static bool payload_append_item(char *payload, size_t capacity, size_t *length,
+                                const char *item) {
+  return ((*length == 0u) || payload_append(payload, capacity, length, ",")) &&
+         payload_append(payload, capacity, length, item);
+}
+
+/** @brief Read exactly one argument token, answering the expected form when
+ * it is missing, too long or followed by more. */
+static bool test_single_argument(const hal_command_request_t *request,
+                                 hal_command_response_t *response,
+                                 const char *expected, char *out,
+                                 size_t out_size, hal_status_t *out_status) {
+  sc_command_argument_cursor_t cursor = {0};
+  bool too_long = false;
+  if (arguments_begin(request, &cursor) &&
+      arguments_next_token(&cursor, out, out_size, &too_long) &&
+      arguments_finished(&cursor)) {
+    return true;
+  }
+  char payload[SC_COMMAND_SMALL_RESPONSE_SIZE] = {0};
+  const int written = snprintf(payload, sizeof(payload),
+                               SC_REPLY_BAD_REQUEST_EXPECTED_FMT, expected);
+  *out_status = format_fits(written, sizeof(payload))
+                    ? response_write_with_status(response, payload, HAL_EINVAL)
+                    : HAL_EOVERFLOW;
+  return false;
+}
+
+/** @brief Index of the named test, or the test count when there is none. */
+static size_t test_find(const sc_command_service_t *service, const char *name,
+                        sc_command_test_info_t *out_info) {
+  const sc_command_test_ops_t *ops = service->config.tests;
+  const size_t count = ops->count(service->config.user);
+  for (size_t index = 0u; index < count; ++index) {
+    if (ops->info(service->config.user, index, out_info) &&
+        (out_info->name != NULL) && (strcmp(out_info->name, name) == 0)) {
+      return index;
+    }
+  }
+  return count;
+}
+
+static hal_status_t write_unknown_test(hal_command_response_t *response,
+                                       const char *name) {
+  char payload[SC_COMMAND_SMALL_RESPONSE_SIZE] = {0};
+  const int written =
+      snprintf(payload, sizeof(payload), SC_REPLY_TEST_UNKNOWN_FMT, name);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write_with_status(response, payload, HAL_ENOENT);
+}
+
+static hal_status_t write_invalid_test_param(hal_command_response_t *response,
+                                             const char *id) {
+  char payload[SC_COMMAND_SMALL_RESPONSE_SIZE] = {0};
+  const int written =
+      snprintf(payload, sizeof(payload), SC_REPLY_INVALID_PARAM_ID_FMT, id);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write_with_status(response, payload, HAL_ENOENT);
+}
+
+/** @brief Reply to a queued test request: its own payload, or the reason the
+ * module refused it. */
+static hal_status_t write_test_request_result(hal_command_response_t *response,
+                                              hal_status_t status,
+                                              const char *ok_payload,
+                                              const char *name) {
+  if (status == HAL_OK) {
+    return response_write(response, ok_payload);
+  }
+  if (status == HAL_ENOENT) {
+    return write_unknown_test(response, name);
+  }
+  if (status == HAL_EPERM) {
+    return response_write_with_status(
+        response, SC_REPLY_NOT_READY_ENGINE_RUNNING, HAL_EPERM);
+  }
+  if (status == HAL_EBUSY) {
+    return response_write_with_status(response, SC_REPLY_NOT_READY_BUSY,
+                                      HAL_EBUSY);
+  }
+  return status;
+}
+
+static hal_status_t handle_test_list(const hal_command_request_t *request,
+                                     hal_command_response_t *response,
+                                     void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  if (!request_has_no_arguments(request)) {
+    return response_write_with_status(response, SC_STATUS_UNKNOWN_CMD,
+                                      HAL_EINVAL);
+  }
+  const sc_command_test_ops_t *ops = service->config.tests;
+  const size_t count = ops->count(service->config.user);
+  char names[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  size_t length = 0u;
+  for (size_t index = 0u; index < count; ++index) {
+    sc_command_test_info_t info = {0};
+    if (!ops->info(service->config.user, index, &info) || (info.name == NULL) ||
+        !payload_append_item(names, sizeof(names), &length, info.name)) {
+      return HAL_EOVERFLOW;
+    }
+  }
+  char payload[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  const int written = snprintf(payload, sizeof(payload), SC_REPLY_TEST_LIST_FMT,
+                               (unsigned)count, names);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write(response, payload);
+}
+
+static hal_status_t handle_test_info(const hal_command_request_t *request,
+                                     hal_command_response_t *response,
+                                     void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  char name[SC_TEST_ID_MAX] = {0};
+  hal_status_t status = HAL_OK;
+  if (!test_single_argument(request, response, SC_CMD_TEST_INFO " <test>", name,
+                            sizeof(name), &status)) {
+    return status;
+  }
+  sc_command_test_info_t info = {0};
+  const size_t index = test_find(service, name, &info);
+  if (index >= service->config.tests->count(service->config.user)) {
+    return write_unknown_test(response, name);
+  }
+  char params[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  size_t length = 0u;
+  for (size_t param = 0u; param < info.param_count; ++param) {
+    sc_command_test_param_t detail = {0};
+    if (!service->config.tests->param_at(service->config.user, index, param,
+                                         &detail) ||
+        (detail.id == NULL) ||
+        !payload_append_item(params, sizeof(params), &length, detail.id)) {
+      return HAL_EOVERFLOW;
+    }
+  }
+  char payload[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  const int written = snprintf(payload, sizeof(payload), SC_REPLY_TEST_INFO_FMT,
+                               info.name, info.in_sequence ? 1u : 0u, params);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write(response, payload);
+}
+
+static hal_status_t handle_test_param(const hal_command_request_t *request,
+                                      hal_command_response_t *response,
+                                      void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  char id[SC_TEST_ID_MAX] = {0};
+  hal_status_t status = HAL_OK;
+  if (!test_single_argument(request, response, SC_CMD_TEST_PARAM " <id>", id,
+                            sizeof(id), &status)) {
+    return status;
+  }
+  sc_command_test_param_t detail = {0};
+  if (!service->config.tests->param(service->config.user, id, &detail)) {
+    return write_invalid_test_param(response, id);
+  }
+  char payload[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  const int written =
+      snprintf(payload, sizeof(payload), SC_REPLY_TEST_PARAM_FMT, detail.id,
+               detail.test, (long)detail.value, (long)detail.min,
+               (long)detail.max, (long)detail.default_value, detail.unit);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write(response, payload);
+}
+
+static hal_status_t handle_test_set(const hal_command_request_t *request,
+                                    hal_command_response_t *response,
+                                    void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  static const char k_expected[] =
+      SC_STATUS_BAD_REQUEST " expected=" SC_CMD_TEST_SET " <id> <value>";
+  sc_command_argument_cursor_t cursor = {0};
+  char id[SC_TEST_ID_MAX] = {0};
+  char value_text[16] = {0};
+  bool too_long = false;
+  if (!arguments_begin(request, &cursor) ||
+      !arguments_next_token(&cursor, id, sizeof(id), &too_long) ||
+      !arguments_next_token(&cursor, value_text, sizeof(value_text),
+                            &too_long) ||
+      !arguments_finished(&cursor)) {
+    return response_write_with_status(response, k_expected, HAL_EINVAL);
+  }
+  int32_t value = 0;
+  if (!parse_i32(value_text, &value)) {
+    return response_write_with_status(
+        response, SC_STATUS_BAD_REQUEST " value_not_int32", HAL_EINVAL);
+  }
+  sc_command_test_param_t detail = {0};
+  if (!service->config.tests->param(service->config.user, id, &detail)) {
+    return write_invalid_test_param(response, id);
+  }
+  const hal_status_t status =
+      service->config.tests->set_param(service->config.user, id, value);
+  char payload[SC_COMMAND_SMALL_RESPONSE_SIZE] = {0};
+  int written = 0;
+  if (status == HAL_OK) {
+    written = snprintf(payload, sizeof(payload), SC_REPLY_TEST_SET_FMT, id,
+                       (long)value);
+  } else if (status == HAL_EINVAL) {
+    written = snprintf(payload, sizeof(payload),
+                       SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT, id,
+                       (int)detail.min, (int)detail.max);
+  } else {
+    return status;
+  }
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write_with_status(response, payload, status);
+}
+
+static hal_status_t handle_test_run(const hal_command_request_t *request,
+                                    hal_command_response_t *response,
+                                    void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  char name[SC_TEST_ID_MAX] = {0};
+  hal_status_t status = HAL_OK;
+  if (!test_single_argument(request, response,
+                            SC_CMD_TEST_RUN " <test|" SC_TEST_SEQUENCE ">",
+                            name, sizeof(name), &status)) {
+    return status;
+  }
+  char payload[SC_COMMAND_SMALL_RESPONSE_SIZE] = {0};
+  const int written =
+      snprintf(payload, sizeof(payload), SC_REPLY_TEST_RUN_FMT, name);
+  if (!format_fits(written, sizeof(payload))) {
+    return HAL_EOVERFLOW;
+  }
+  return write_test_request_result(
+      response, service->config.tests->run(service->config.user, name), payload,
+      name);
+}
+
+static hal_status_t handle_test_stop(const hal_command_request_t *request,
+                                     hal_command_response_t *response,
+                                     void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  if (!request_has_no_arguments(request)) {
+    return response_write_with_status(response, SC_STATUS_UNKNOWN_CMD,
+                                      HAL_EINVAL);
+  }
+  return write_test_request_result(
+      response, service->config.tests->stop(service->config.user),
+      SC_REPLY_TEST_STOP, "");
+}
+
+static hal_status_t handle_test_skip(const hal_command_request_t *request,
+                                     hal_command_response_t *response,
+                                     void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  if (!request_has_no_arguments(request)) {
+    return response_write_with_status(response, SC_STATUS_UNKNOWN_CMD,
+                                      HAL_EINVAL);
+  }
+  return write_test_request_result(
+      response, service->config.tests->skip(service->config.user),
+      SC_REPLY_TEST_SKIP, "");
+}
+
+static hal_status_t handle_test_status(const hal_command_request_t *request,
+                                       hal_command_response_t *response,
+                                       void *user) {
+  const sc_command_service_t *service = (const sc_command_service_t *)user;
+  if (!request_has_no_arguments(request)) {
+    return response_write_with_status(response, SC_STATUS_UNKNOWN_CMD,
+                                      HAL_EINVAL);
+  }
+  sc_command_test_status_t snapshot = {0};
+  service->config.tests->status(service->config.user, &snapshot);
+
+  char payload[SC_COMMAND_TEST_RESPONSE_SIZE] = {0};
+  size_t length = 0u;
+  const bool running = snapshot.active != NULL;
+  bool fits =
+      payload_append(payload, sizeof(payload), &length,
+                     SC_REPLY_TEST_STATUS_HEAD) &&
+      payload_append_pair(payload, sizeof(payload), &length, SC_TEST_KEY_STATE,
+                          running ? SC_TEST_STATE_RUNNING
+                                  : SC_TEST_STATE_IDLE) &&
+      payload_append_unsigned(payload, sizeof(payload), &length,
+                              SC_TEST_KEY_RUNS, (unsigned long)snapshot.runs);
+  if (fits && running) {
+    fits = payload_append_pair(payload, sizeof(payload), &length,
+                               SC_TEST_KEY_TEST, snapshot.active) &&
+           payload_append_pair(
+               payload, sizeof(payload), &length, SC_TEST_KEY_SOURCE,
+               (snapshot.source != NULL) ? snapshot.source
+                                         : SC_TEST_SOURCE_CONSOLE) &&
+           payload_append_unsigned(payload, sizeof(payload), &length,
+                                   SC_TEST_KEY_ELAPSED_MS,
+                                   (unsigned long)snapshot.elapsed_ms);
+  }
+  if (fits && running && (snapshot.seq_count != 0u)) {
+    char step[16] = {0};
+    const int written =
+        snprintf(step, sizeof(step), "%u/%u", (unsigned)snapshot.seq_index,
+                 (unsigned)snapshot.seq_count);
+    fits = format_fits(written, sizeof(step)) &&
+           payload_append_pair(payload, sizeof(payload), &length,
+                               SC_TEST_KEY_SEQ, step);
+  }
+  if (fits && snapshot.drive_valid) {
+    fits = payload_append_signed(payload, sizeof(payload), &length,
+                                 SC_TEST_KEY_DEMAND_X10,
+                                 (long)snapshot.demand_x10) &&
+           payload_append_signed(payload, sizeof(payload), &length,
+                                 SC_TEST_KEY_POSITION_X10,
+                                 (long)snapshot.position_x10);
+  }
+  for (size_t index = 0u; fits && (index < snapshot.field_count) &&
+                          (index < SC_COMMAND_TEST_FIELDS_MAX);
+       ++index) {
+    const sc_command_test_field_t *field = &snapshot.fields[index];
+    fits = (field->text != NULL)
+               ? payload_append_pair(payload, sizeof(payload), &length,
+                                     field->key, field->text)
+               : payload_append_signed(payload, sizeof(payload), &length,
+                                       field->key, (long)field->value);
+  }
+  if (fits && (snapshot.last != NULL)) {
+    fits = payload_append_pair(payload, sizeof(payload), &length,
+                               SC_TEST_KEY_LAST, snapshot.last) &&
+           payload_append_pair(payload, sizeof(payload), &length,
+                               SC_TEST_KEY_RESULT,
+                               (snapshot.result != NULL) ? snapshot.result
+                                                         : SC_TEST_RESULT_DONE);
+  }
+  if (!fits) {
+    return HAL_EOVERFLOW;
+  }
+  return response_write(response, payload);
+}
+
+/** @brief The SC_TEST_* commands: reads need no authentication, everything
+ * that changes a test or moves the actuator does. */
+typedef struct {
+  const char *name;
+  hal_command_handler_t handler;
+  hal_command_security_flags_t security;
+  uint32_t registered_bit;
+} sc_test_command_t;
+
+static const sc_test_command_t k_test_commands[] = {
+    {SC_CMD_TEST_LIST, handle_test_list, 0u, SC_COMMAND_REGISTERED_TEST_LIST},
+    {SC_CMD_TEST_INFO, handle_test_info, 0u, SC_COMMAND_REGISTERED_TEST_INFO},
+    {SC_CMD_TEST_PARAM, handle_test_param, 0u,
+     SC_COMMAND_REGISTERED_TEST_PARAM},
+    {SC_CMD_TEST_STATUS, handle_test_status, 0u,
+     SC_COMMAND_REGISTERED_TEST_STATUS},
+    {SC_CMD_TEST_SET, handle_test_set, HAL_COMMAND_SECURITY_AUTHENTICATED,
+     SC_COMMAND_REGISTERED_TEST_SET},
+    {SC_CMD_TEST_RUN, handle_test_run, HAL_COMMAND_SECURITY_AUTHENTICATED,
+     SC_COMMAND_REGISTERED_TEST_RUN},
+    {SC_CMD_TEST_STOP, handle_test_stop, HAL_COMMAND_SECURITY_AUTHENTICATED,
+     SC_COMMAND_REGISTERED_TEST_STOP},
+    {SC_CMD_TEST_SKIP, handle_test_skip, HAL_COMMAND_SECURITY_AUTHENTICATED,
+     SC_COMMAND_REGISTERED_TEST_SKIP},
+};
+
 static hal_status_t register_command(sc_command_service_t *service,
                                      const char *name,
                                      hal_command_security_flags_t security,
                                      hal_command_handler_t handler,
-                                     uint16_t registered_bit) {
+                                     uint32_t registered_bit) {
   const hal_command_definition_t definition = {
       .name = name,
       .allowed_sources = service->config.allowed_sources,
@@ -513,14 +962,14 @@ static hal_status_t register_command(sc_command_service_t *service,
 static hal_status_t unregister_command(sc_command_service_t *service,
                                        const char *name,
                                        hal_command_handler_t handler,
-                                       uint16_t registered_bit) {
+                                       uint32_t registered_bit) {
   if ((service->registered_commands & registered_bit) == 0u) {
     return HAL_OK;
   }
   const hal_status_t status = hal_command_router_unregister_if_matches(
       service->router, name, handler, service);
   if (status == HAL_OK || status == HAL_ENOENT) {
-    service->registered_commands &= (uint16_t)~registered_bit;
+    service->registered_commands &= ~registered_bit;
     return HAL_OK;
   }
   return status;
@@ -529,7 +978,7 @@ static hal_status_t unregister_command(sc_command_service_t *service,
 static void unregister_and_record(sc_command_service_t *service,
                                   const char *name,
                                   hal_command_handler_t handler,
-                                  uint16_t registered_bit,
+                                  uint32_t registered_bit,
                                   hal_status_t *first_error) {
   const hal_status_t status =
       unregister_command(service, name, handler, registered_bit);
@@ -558,7 +1007,22 @@ static hal_status_t unregister_commands(sc_command_service_t *service) {
                         SC_COMMAND_REGISTERED_REVERT, &first_error);
   unregister_and_record(service, SC_CMD_REBOOT_BOOTLOADER, handle_reboot,
                         SC_COMMAND_REGISTERED_REBOOT, &first_error);
+  for (size_t index = 0u; index < COUNTOF(k_test_commands); ++index) {
+    /* A plain copy: the table row is const, the arguments need not be. */
+    sc_test_command_t command = k_test_commands[index];
+    unregister_and_record(service, command.name, command.handler,
+                          command.registered_bit, &first_error);
+  }
   return first_error;
+}
+
+static bool test_config_valid(const sc_command_service_config_t *config) {
+  const sc_command_test_ops_t *ops = config->tests;
+  return (ops == NULL) ||
+         ((ops->count != NULL) && (ops->info != NULL) &&
+          (ops->param_at != NULL) && (ops->param != NULL) &&
+          (ops->set_param != NULL) && (ops->run != NULL) &&
+          (ops->stop != NULL) && (ops->skip != NULL) && (ops->status != NULL));
 }
 
 static bool write_config_valid(const sc_command_service_config_t *config) {
@@ -582,7 +1046,7 @@ sc_command_service_init(sc_command_service_t *service,
       config->param_count == 0u ||
       config->allowed_sources !=
           HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION) ||
-      !write_config_valid(config)) {
+      !write_config_valid(config) || !test_config_valid(config)) {
     return HAL_EINVAL;
   }
   if (service->initialized) {
@@ -643,6 +1107,14 @@ sc_command_service_init(sc_command_service_t *service,
     status = register_command(service, SC_CMD_REBOOT_BOOTLOADER,
                               HAL_COMMAND_SECURITY_AUTHENTICATED, handle_reboot,
                               SC_COMMAND_REGISTERED_REBOOT);
+  }
+  for (size_t index = 0u;
+       (status == HAL_OK) && (service->config.tests != NULL) &&
+       (index < COUNTOF(k_test_commands));
+       ++index) {
+    sc_test_command_t command = k_test_commands[index];
+    status = register_command(service, command.name, command.security,
+                              command.handler, command.registered_bit);
   }
   if (status != HAL_OK) {
     (void)unregister_commands(service);

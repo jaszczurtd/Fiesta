@@ -176,6 +176,9 @@ add_library(serial_configurator_core STATIC
     src/core/sc_flash.c
     src/core/sc_gps.c
     src/core/sc_manifest.c
+    src/core/sc_tests.c
+    src/core/sc_text.c
+    src/core/sc_time.c
     src/core/sc_transport.c
     ${SC_JASZCZURHAL_SOURCES}
 )
@@ -213,6 +216,7 @@ if(GTK4_FOUND)
         src/ui/sc_module_details.c
         src/ui/sc_modules_view.c
         src/ui/sc_progressbar.c
+        src/ui/sc_tests_tab.c
         src/ui/sc_values_tab.c
         src/ui/main.c
     )
@@ -348,6 +352,19 @@ if(BUILD_TESTING)
         tests/test_sc_gps.c
     )
     target_link_libraries(serial-configurator-sc-gps-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    add_executable(serial-configurator-sc-tests-tests
+        tests/test_sc_tests.c
+        tests/sc_mock_ecu.c
+    )
+    target_include_directories(serial-configurator-sc-tests-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests
+    )
+    target_link_libraries(serial-configurator-sc-tests-tests
         PRIVATE
             serial_configurator_core
     )
@@ -492,6 +509,28 @@ if(BUILD_TESTING)
             NAME serial-configurator-progressbar-tests
             COMMAND serial-configurator-progressbar-tests
         )
+
+        # Tests sub-tab of the ECU page against the mock ECU; embeds
+        # src/ui/sc_tests_tab.c by #include and skips without a display.
+        add_executable(serial-configurator-tests-tab-tests
+            tests/test_sc_tests_tab.c
+            tests/sc_mock_ecu.c
+            src/ui/sc_i18n.c
+        )
+        target_link_libraries(serial-configurator-tests-tab-tests
+            PRIVATE
+                serial_configurator_core
+                PkgConfig::GTK4
+        )
+        target_include_directories(serial-configurator-tests-tab-tests
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        )
+        add_test(
+            NAME serial-configurator-tests-tab-tests
+            COMMAND serial-configurator-tests-tab-tests
+        )
     endif()
 
     add_test(
@@ -567,6 +606,11 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-sc-gps-tests
         COMMAND serial-configurator-sc-gps-tests
+    )
+
+    add_test(
+        NAME serial-configurator-sc-tests-tests
+        COMMAND serial-configurator-sc-tests-tests
     )
 
     add_test(

@@ -24,6 +24,10 @@
  * Footer per sub-tab: [Apply staged] [Commit] [Revert]. One COMMIT
  * for the whole module is the firmware-natural granularity (cross-
  * field validation runs over the whole staging mirror at once).
+ *
+ * The ECU sub-tab holds two pages of its own: "Settings" (the form
+ * above) and "Tests" (sc_tests_tab.h), the functional tests the
+ * firmware reports.
  */
 
 #include <gtk/gtk.h>

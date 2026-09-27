@@ -1,5 +1,6 @@
 #include "sc_flash.h"
 #include "../config.h"
+#include "sc_time.h"
 
 #include <hal/core/hal_array.h>
 
@@ -419,21 +420,6 @@ static bool bootsel_scan_dir_once(const char *parent, char *out_path,
   return matched;
 }
 
-static uint64_t monotonic_ms(void) {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-    return 0u;
-  }
-  return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000);
-}
-
-static void sleep_ms(uint32_t ms) {
-  struct timespec req;
-  req.tv_sec = (time_t)(ms / 1000u);
-  req.tv_nsec = (long)((ms % 1000u) * 1000000L);
-  (void)nanosleep(&req, NULL);
-}
-
 /* Scan /dev/disk/by-label for BOOTSEL block devices.
  *
  * On a healthy desktop session udisks2 picks the device up and mounts
@@ -805,7 +791,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
               (parent_dirs[i] != NULL) ? parent_dirs[i] : "(null)");
   }
 
-  const uint64_t start_ms = monotonic_ms();
+  const uint64_t start_ms = sc_time_monotonic_ms();
   const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
   uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
   uint64_t iters = 0u;
@@ -855,7 +841,7 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
       }
     }
 
-    const uint64_t now_ms = monotonic_ms();
+    const uint64_t now_ms = sc_time_monotonic_ms();
     if (now_ms >= next_heartbeat_ms) {
       flash_log("watch_for_bootsel: still polling, elapsed=%llu ms iter=%llu",
                 (unsigned long long)(now_ms - start_ms),
@@ -886,9 +872,9 @@ sc_flash_status_t sc_flash__watch_for_bootsel_in(
       return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
     }
     const uint64_t remaining = deadline_ms - now_ms;
-    sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
-                            ? remaining
-                            : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
+    sc_time_sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                    ? remaining
+                                    : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
   }
 #else
   (void)timeout_ms;
@@ -980,7 +966,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
   unmount_err[0] = '\0';
   uint64_t block_dev_first_seen_ms = 0u;
 
-  const uint64_t start_ms = monotonic_ms();
+  const uint64_t start_ms = sc_time_monotonic_ms();
   const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
   uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
   uint64_t iters = 0u;
@@ -1066,13 +1052,13 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
            * remount the device under our session. */
           automount_attempted = false;
           automount_succeeded = false;
-          block_dev_first_seen_ms = monotonic_ms();
+          block_dev_first_seen_ms = sc_time_monotonic_ms();
           flash_log("unmount succeeded - re-arming automount; "
                     "next iteration will mount as uid=%u",
                     (unsigned)getuid());
           /* Sleep briefly so udev / udisks2 settles on the
            * new state before we look again. */
-          sleep_ms(200u);
+          sc_time_sleep_ms(200u);
           continue;
         }
         flash_log("unmount failed - surfacing remediation: %s", unmount_err);
@@ -1116,7 +1102,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
                                 sizeof(tmp_dev))) {
       if (!block_dev_seen) {
         block_dev_seen = true;
-        block_dev_first_seen_ms = monotonic_ms();
+        block_dev_first_seen_ms = sc_time_monotonic_ms();
         (void)snprintf(block_label, sizeof(block_label), "%.*s",
                        (int)(sizeof(block_label) - 1u), tmp_label);
         (void)snprintf(block_dev_path, sizeof(block_dev_path), "%.*s",
@@ -1132,7 +1118,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
 
       if (automount_enabled && !automount_attempted) {
         const uint64_t elapsed_since_seen =
-            monotonic_ms() - block_dev_first_seen_ms;
+            sc_time_monotonic_ms() - block_dev_first_seen_ms;
         if (elapsed_since_seen >= SC_FLASH_AUTOMOUNT_GRACE_MS) {
           flash_log("automount: %u ms grace expired with no "
                     "auto-mount; invoking udisksctl on '%s'",
@@ -1152,7 +1138,7 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
       }
     }
 
-    const uint64_t now_ms = monotonic_ms();
+    const uint64_t now_ms = sc_time_monotonic_ms();
     if (now_ms >= next_heartbeat_ms) {
       flash_log("watch_for_bootsel: still polling, elapsed=%llu ms "
                 "iter=%llu%s%s",
@@ -1198,9 +1184,9 @@ sc_flash_status_t sc_flash_watch_for_bootsel(uint32_t timeout_ms,
       return SC_FLASH_ERR_BOOTSEL_TIMEOUT;
     }
     const uint64_t remaining = deadline_ms - now_ms;
-    sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
-                            ? remaining
-                            : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
+    sc_time_sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                    ? remaining
+                                    : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
   }
 #else
   (void)timeout_ms;
@@ -1356,7 +1342,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
   bool prev_existed = false;
   size_t prev_entries = 0u;
   bool logged_open_err = false;
-  const uint64_t start_ms = monotonic_ms();
+  const uint64_t start_ms = sc_time_monotonic_ms();
   const uint64_t deadline_ms = start_ms + (uint64_t)timeout_ms;
   uint64_t next_heartbeat_ms = start_ms + SC_FLASH_BOOTSEL_HEARTBEAT_MS;
   uint64_t iters = 0u;
@@ -1429,7 +1415,7 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
       prev_entries = obs.entry_count;
     }
 
-    const uint64_t now_ms = monotonic_ms();
+    const uint64_t now_ms = sc_time_monotonic_ms();
     if (now_ms >= next_heartbeat_ms) {
       flash_log("wait_reenumeration: still polling, elapsed=%llu ms iter=%llu",
                 (unsigned long long)(now_ms - start_ms),
@@ -1448,9 +1434,9 @@ sc_flash_status_t sc_flash__wait_reenumeration_in(
       return SC_FLASH_ERR_REENUM_TIMEOUT;
     }
     const uint64_t remaining = deadline_ms - now_ms;
-    sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
-                            ? remaining
-                            : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
+    sc_time_sleep_ms((uint32_t)((remaining < SC_FLASH_BOOTSEL_POLL_INTERVAL_MS)
+                                    ? remaining
+                                    : SC_FLASH_BOOTSEL_POLL_INTERVAL_MS));
   }
 #else
   (void)timeout_ms;

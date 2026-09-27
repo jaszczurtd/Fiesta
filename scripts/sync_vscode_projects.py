@@ -90,12 +90,14 @@ def desired_project_files(
         else {}
     )
     usb_product = str(identity.get("usbProduct") or "")
+    variants = manifest.get("variants")
     desired_tasks = project_tasks_document(
         registry,
         target,
         board,
         module=module,
         usb_product=usb_product,
+        variants=variants if isinstance(variants, list) else None,
     )
     shared_labels = {
         str(task.get("label"))

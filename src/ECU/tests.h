@@ -9,7 +9,11 @@ extern "C" {
 
 /**
  * @file tests.h
- * @brief Built-in functional tests: identifiers, lifecycle and console entry.
+ * @brief Built-in functional tests: identifiers, lifecycle, the console entry
+ * and the SerialConfigurator operations.
+ *
+ * The suite itself is the table in tests.c; the functions below are the
+ * runner in tests_helpers.c.
  *
  * One build flag covers every test, its parameters, the console parser and the
  * VP37 RAM trace. With ECU_FUNCTIONAL_TESTS_ENABLED set to 0 the ECU compiles
@@ -48,7 +52,7 @@ typedef enum {
 #endif
 
 /**
- * @brief Prepare the test registry and its fixtures.
+ * @brief Prepare the runner, the suite's fixtures and their parameters.
  * @return True when initialization finished; false when a resource is missing.
  * @note Call once on core 0 before the control loop runs.
  */
@@ -118,6 +122,27 @@ const char *testsActiveName(void);
  * @return Delay in milliseconds, or zero when the cyclic test is not running.
  */
 uint32_t testsCyclicDelayMs(void);
+
+struct sc_command_test_ops_s;
+
+/**
+ * @brief Functional tests as the SerialConfigurator service sees them.
+ * @return Operations for sc_command_service_config_t::tests; a build without
+ * tests returns operations with an empty catalog.
+ * @note The operations run on the core that polls the serial session. Runs,
+ * stops and skips are queued for the controller core; a test started this
+ * way stops when the session ends, when SC_TEST_STATUS stays silent for
+ * ECU_SC_TESTS_KEEPALIVE_MS, or, with ECU_SC_TESTS_RPM_INTERLOCK, once the
+ * engine speed exceeds ECU_SC_TESTS_RPM_LIMIT.
+ */
+const struct sc_command_test_ops_s *testsScOps(void);
+
+/**
+ * @brief Report that the SerialConfigurator session ended.
+ * @note Safe from either core. The controller core stops a test the
+ * configurator started; console tests keep running.
+ */
+void testsScSessionEnded(void);
 
 #ifdef __cplusplus
 }

@@ -30,6 +30,77 @@ typedef struct {
   uint32_t epoch;
 } sc_command_gps_snapshot_t;
 
+/** @brief One functional test offered to the configurator. */
+typedef struct {
+  const char *name;   /**< Wire name, at most SC_TEST_ID_MAX - 1 chars. */
+  bool in_sequence;   /**< Part of the sequence started by "all". */
+  size_t param_count; /**< Runtime parameters of this test. */
+} sc_command_test_info_t;
+
+/** @brief One runtime parameter of a functional test. */
+typedef struct {
+  const char *id;   /**< Wire id, unique across all tests. */
+  const char *test; /**< Wire name of the owning test. */
+  const char *unit; /**< Unit token: count, s, ms or pct_per_s. */
+  int32_t value;    /**< Value in force; the default after a restart. */
+  int32_t min;
+  int32_t max;
+  int32_t default_value;
+} sc_command_test_param_t;
+
+/** @brief One progress value of the running test: a number, or a text token
+ * when @c text is non-NULL. */
+typedef struct sc_command_test_field_s {
+  const char *key; /**< Wire key; static storage. */
+  const char *text;
+  int32_t value;
+} sc_command_test_field_t;
+
+/** @brief Most progress keys a single test reports. */
+#define SC_COMMAND_TEST_FIELDS_MAX 6u
+
+/** @brief Snapshot behind the SC_TEST_STATUS reply. */
+typedef struct {
+  const char *active;   /**< Running test, NULL when idle. */
+  const char *source;   /**< "sc" or "console" while a test runs. */
+  uint32_t runs;        /**< Tests started since boot, one-shots included. */
+  uint8_t seq_index;    /**< 1-based position in a running sequence, else 0. */
+  uint8_t seq_count;    /**< Tests in that sequence. */
+  uint32_t elapsed_ms;  /**< Time since the running test started. */
+  bool drive_valid;     /**< Demand and position below are meaningful. */
+  int32_t demand_x10;   /**< Demanded position, percent of stroke x10. */
+  int32_t position_x10; /**< Measured position, percent of stroke x10. */
+  sc_command_test_field_t fields[SC_COMMAND_TEST_FIELDS_MAX];
+  size_t field_count;
+  const char *last;   /**< Most recent finished test, NULL before the first. */
+  const char *result; /**< Its result token, e.g. done, ok, failed, stopped. */
+} sc_command_test_status_t;
+
+/**
+ * @brief Functional tests a module exposes. Every callback is required and
+ * runs on the core that polls the serial session; the module hands state
+ * changes to the core that owns the actuator.
+ */
+typedef struct sc_command_test_ops_s {
+  size_t (*count)(void *user);
+  bool (*info)(void *user, size_t index, sc_command_test_info_t *out);
+  bool (*param_at)(void *user, size_t test_index, size_t param_index,
+                   sc_command_test_param_t *out);
+  /** @return true when @p id names a parameter; fills @p out. */
+  bool (*param)(void *user, const char *id, sc_command_test_param_t *out);
+  /** @return HAL_OK, HAL_ENOENT for an unknown id, HAL_EINVAL out of range. */
+  hal_status_t (*set_param)(void *user, const char *id, int32_t value);
+  /** @param name Test name or SC_TEST_SEQUENCE.
+   *  @return HAL_OK when queued, HAL_ENOENT for an unknown test, HAL_EPERM
+   *  when the engine-speed interlock refuses, HAL_EBUSY while an earlier
+   *  request waits. */
+  hal_status_t (*run)(void *user, const char *name);
+  /** @return HAL_OK when queued, HAL_EBUSY while an earlier request waits. */
+  hal_status_t (*stop)(void *user);
+  hal_status_t (*skip)(void *user);
+  void (*status)(void *user, sc_command_test_status_t *out);
+} sc_command_test_ops_t;
+
 typedef void (*sc_command_refresh_fn)(void *user);
 typedef void (*sc_command_set_applied_fn)(void *user);
 typedef bool (*sc_command_writes_ready_fn)(void *user);
@@ -55,6 +126,8 @@ typedef struct {
   sc_command_commit_fn commit;
   sc_command_revert_fn revert;
   sc_command_gps_fn read_gps;
+  /** Optional functional tests; NULL leaves the SC_TEST_* commands out. */
+  const sc_command_test_ops_t *tests;
   void *user;
   /** Must be exactly the Serial Session source mask. */
   hal_command_source_mask_t allowed_sources;
@@ -63,7 +136,7 @@ typedef struct {
 typedef struct {
   sc_command_service_config_t config;
   hal_command_router_t router;
-  uint16_t registered_commands;
+  uint32_t registered_commands;
   bool reboot_pending;
   bool initialized;
 } sc_command_service_t;
@@ -73,8 +146,10 @@ typedef struct {
  *
  * Read commands are always installed. SET/COMMIT/REVERT are installed when
  * staging storage and both write callbacks are present. GPS is installed when
- * @c read_gps is present. Bootloader reboot is always installed and requires
- * an authenticated request. The current service accepts only
+ * @c read_gps is present. The SC_TEST_* commands are installed when @c tests
+ * is present: list, info, param and status are reads, set, run, stop and skip
+ * require an authenticated request. Bootloader reboot is always installed and
+ * requires an authenticated request. The current service accepts only
  * @c HAL_COMMAND_SOURCE_SERIAL_SESSION because its mutable state and deferred
  * reboot sequencing are tied to the synchronous serial path. Zero-initialize
  * @p service before its first use.

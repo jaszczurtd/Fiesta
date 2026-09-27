@@ -332,6 +332,41 @@
       "problemMatcher": []
     },
     {
+      "label": "Project: Build variant: bench",
+      "detail": "Build the ECU variant bench.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "bench"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Upload variant: bench",
+      "detail": "Build and upload the ECU variant bench.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "bench"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Quality: Cppcheck baseline",
       "detail": "Ctrl+Shift+Y - run cppcheck and refresh cppcheck-baseline.log",
       "type": "shell",

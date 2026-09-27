@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../common/canDefinitions/canDefinitions.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -59,6 +60,30 @@ extern "C" {
  */
 #ifndef ECU_ENGINE_CONTROL_ENABLED
 #define ECU_ENGINE_CONTROL_ENABLED 0
+#endif
+
+/**
+ * @brief Refuse functional tests from the configurator while the engine runs.
+ * @note With 1, SerialConfigurator cannot start a test above
+ * ECU_SC_TESTS_RPM_LIMIT, and a test it started stops once the engine speed
+ * rises above it. 0 turns the interlock off for a bench whose RPM input is
+ * driven by a signal generator. Console tests are never interlocked.
+ */
+#ifndef ECU_SC_TESTS_RPM_INTERLOCK
+#define ECU_SC_TESTS_RPM_INTERLOCK 0
+#endif
+/** Engine speed above which the configurator test interlock applies [rpm]. */
+#ifndef ECU_SC_TESTS_RPM_LIMIT
+#define ECU_SC_TESTS_RPM_LIMIT RPM_MIN
+#endif
+/**
+ * @brief Longest silence from the configurator during a test it started [ms].
+ * @note The host polls SC_TEST_STATUS while such a test runs. The session has
+ * no timeout of its own, so without this a crashed host or a pulled cable
+ * would leave the actuator driven by a test nobody watches.
+ */
+#ifndef ECU_SC_TESTS_KEEPALIVE_MS
+#define ECU_SC_TESTS_KEEPALIVE_MS 3000U
 #endif
 
 /** Supervisor demand descent step [percentage points] per update interval. */

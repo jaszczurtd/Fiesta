@@ -80,6 +80,11 @@ missing.
 ./build/serial-configurator-cli revert-params --module ECU
 ./build/serial-configurator-cli set-and-commit \
   --id nominal_rpm --value 900 --module ECU
+./build/serial-configurator-cli test-list --module ECU
+./build/serial-configurator-cli test-set --id cyclic_passes --value 2 --module ECU
+./build/serial-configurator-cli test-run all --module ECU
+./build/serial-configurator-cli test-status --module ECU
+./build/serial-configurator-cli test-stop --module ECU
 ```
 
 ## Test
@@ -162,7 +167,9 @@ CLI:
 
 - CLI supports `detect`, `list`, `meta`, `param-list`, `get-values`,
   `get-param <id>`, `get-gps`, `reboot-bootloader`, `set-param`,
-  `commit-params`, `revert-params`, and `set-and-commit`.
+  `commit-params`, `revert-params`, `set-and-commit`, and the functional
+  test commands `test-list`, `test-status`, `test-set`, `test-run`,
+  `test-stop`, and `test-skip`.
 - CLI prints parsed payloads with inferred value types
   (`BOOL`/`INT`/`UINT`/`FLOAT`/`TEXT`) for parameter responses.
 - CLI target selection is fail-closed: ambiguous target resolution is rejected
@@ -188,6 +195,32 @@ GPS view:
   libshumate it builds a placeholder instead.
 - `get-gps` exposes the same snapshot in the CLI.
 
+ECU functional tests:
+
+- On the Values tab the ECU page has two sub-tabs: Settings (the parameter
+  form) and Tests. The Tests sub-tab lists the tests the ECU reports
+  (`SC_TEST_LIST`), each with its description, runtime parameters, Defaults
+  and Run. Run sequence starts every test marked for the sequence; Skip and
+  Stop act on the running test. An ECU built without tests, or firmware
+  without the commands, shows "No tests available".
+- The status panel shows the running test, who started it, its step in a
+  sequence, the elapsed time, the demanded and measured actuator position,
+  the test's own progress (cyclic profile and rate, random target, staircase
+  setpoint, pot phase, cycles and passes), and the last result.
+- Run authenticates, sends the parameters edited in the form, then starts
+  the test. Values set this way hold until the ECU resets.
+- The ECU stops a test started here when the session ends or when status
+  polls stop for 3 seconds, so the tab keeps polling (every 250 ms) while its
+  test runs, even when another tab is shown. Closing the window, Disconnect,
+  or a new detection therefore stops the test. With the engine-speed
+  interlock built in, the ECU refuses to start and stops a test once the
+  engine turns; the tab says so.
+- `test-run` in the CLI follows the test the same way and prints its
+  progress once a second; Ctrl-C asks the ECU to stop it. It exits 0 when
+  every finished test reports `done` or `ok`, and 6 otherwise.
+- The protocol is described in
+  [`PROTOCOL.md`](../common/scDefinitions/PROTOCOL.md#functional-tests).
+
 Module-specific behaviour above the common baseline:
 
 - `ECU` exposes a richer parameter catalogue (six writable thresholds,
@@ -210,25 +243,31 @@ the protocol is described in
 - `src/ui/sc_detection.c` owns the asynchronous detection workflow.
 - `src/ui/sc_module_details.c` contains module details rendering helpers.
 - `src/ui/sc_flash_tab.c`, `sc_values_tab.c`, and `sc_map_tab.c` own the
-  Flash, Values, and GPS View tabs respectively.
+  Flash, Values, and GPS View tabs respectively; `sc_tests_tab.c` owns the
+  Tests sub-tab of the ECU page.
 - `src/core/sc_core.c` contains discovery/session/protocol orchestration.
 - `src/core/sc_transport.c` contains Linux/POSIX serial transport operations.
 - `JaszczurHAL/src/hal/serial/hal_serial_frame.h` provides the shared serial
   frame codec used by transport and host tests.
-- `src/core/sc_flash.c`, `sc_manifest.c`, and `sc_gps.c` own UF2/BOOTSEL,
-  manifest, and GPS-specific logic.
+- `src/core/sc_flash.c`, `sc_manifest.c`, `sc_gps.c`, and `sc_tests.c` own
+  UF2/BOOTSEL, manifest, GPS, and functional test logic.
+- `src/core/sc_text.c` and `sc_time.c` hold the token, string, clock, and
+  sleep helpers the core modules share.
 - `src/core/sc_crypto.h` contains shared crypto bridge API (backend-selected).
 - `src/cli/sc_cli_main.c` dispatches CLI commands; command, selector, and
   output logic live in the adjacent `sc_cli_*` files.
 
 ## CI / Test Baseline
 
-The project registers 17 non-GTK host CTest targets. When GTK4 is available,
-the progress-bar target is registered as well, making 18 targets in the full
-documented desktop environment. They cover core / protocol / crypto / flash /
-manifest / parameter-write / GPS / orchestrator surfaces:
+The project registers 19 non-GTK host CTest targets. When GTK4 is available,
+the progress-bar and Tests sub-tab targets are registered as well, making 21
+targets in the full documented desktop environment. They cover core /
+protocol / crypto / flash / manifest / parameter-write / GPS / functional
+test / orchestrator surfaces:
 
 - `serial-configurator-progressbar-tests` (custom flash progress bar widget)
+- `serial-configurator-tests-tab-tests` (Tests sub-tab against a mock ECU;
+  skips without a display)
 - `serial-configurator-core-tests` (smoke checks)
 - `serial-configurator-core-api-tests` (API surface checks)
 - `serial-configurator-core-protocol-tests` (read-only protocol parsing + flow)
@@ -244,7 +283,11 @@ manifest / parameter-write / GPS / orchestrator surfaces:
 - `serial-configurator-sc-param-tests` (descriptor framework - find /
   validate / get / set / load_defaults / 3 reply emitters /
   schema-versioned blob codec)
+- `serial-configurator-transport-timeout-tests` (command deadlines and the
+  `HELLO_REQUIRED` re-handshake rule)
 - `serial-configurator-sc-gps-tests` (`SC_GET_GPS` parsing and validation)
+- `serial-configurator-sc-tests-tests` (`SC_TEST_*` catalog, status, and
+  actions against a mock ECU)
 - `serial-configurator-flash-bootsel-tests` (Phase 6.3 BOOTSEL drive watcher)
 - `serial-configurator-flash-copy-reenum-tests` (Phase 6.4 UF2 copy +
   re-enumeration waiter)

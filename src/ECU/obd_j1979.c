@@ -855,8 +855,8 @@ const char *obdJ1979GetPidName(uint8_t pid) {
       "Commanded throttle actuator",
       "Time run with MIL on",
       "Time since trouble codes cleared",
-      "Maximum value for Fuel-Air equivalence ratio, oxygen sensor voltage, "
-      "oxygen sensor current, and intake manifold absolute pressure",
+      ("Maximum value for Fuel-Air equivalence ratio, oxygen sensor voltage, "
+       "oxygen sensor current, and intake manifold absolute pressure"),
       "Maximum value for air flow rate from mass air flow sensor",
       "Fuel Type",
       "Ethanol fuel percentage",
