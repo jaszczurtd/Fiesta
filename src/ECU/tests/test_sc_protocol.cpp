@@ -18,6 +18,7 @@
 extern "C" const char *test_stubs_last_forwarded_serial_line(void);
 extern "C" unsigned test_stubs_forwarded_serial_count(void);
 extern "C" void test_stubs_reset_forwarded_serial(void);
+extern "C" unsigned test_stubs_session_ended_count(void);
 
 /* Independent reference CRC-8/CCITT (poly 0x07, init 0x00) used both by
  * the wire-format tests and by the auto-framing helper. Kept separate from
@@ -522,6 +523,34 @@ void test_sc_writes_wait_for_parameter_storage_recovery(void) {
   TEST_ASSERT_NOT_NULL(strstr(accepted, "SC_OK PARAM_SET"));
 }
 
+void test_session_end_is_reported_to_the_test_registry(void) {
+  performHello();
+  const unsigned before = test_stubs_session_ended_count();
+
+  // A second HELLO keeps the session open: a configurator test goes on.
+  performHello();
+  TEST_ASSERT_EQUAL_UINT(before, test_stubs_session_ended_count());
+
+  const char *response = sendSerialLine("SC_BYE\n");
+  TEST_ASSERT_NOT_NULL(response);
+  TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK BYE"));
+  TEST_ASSERT_FALSE(configSessionActive());
+  TEST_ASSERT_EQUAL_UINT(before + 1u, test_stubs_session_ended_count());
+
+  // Reported once per session, not on every idle poll.
+  configSessionTick();
+  TEST_ASSERT_EQUAL_UINT(before + 1u, test_stubs_session_ended_count());
+}
+
+void test_test_commands_are_absent_without_the_test_registry(void) {
+  // This build links no functional tests, like a production image with no
+  // test operations: the configurator reads the command as unsupported.
+  performHello();
+  const char *response = sendSerialLine("SC_TEST_LIST\n");
+  TEST_ASSERT_NOT_NULL(response);
+  TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", response);
+}
+
 int main(void) {
   /* Phase 8.3 brought a production caller of ecuParamsPersist (the
    * SC_COMMIT_PARAMS branch), so KV-backed persistence has to work
@@ -567,6 +596,8 @@ int main(void) {
   RUN_TEST(test_sc_revert_restores_staging_from_active);
   RUN_TEST(test_sc_set_param_rejects_malformed_payload);
   RUN_TEST(test_sc_writes_wait_for_parameter_storage_recovery);
+  RUN_TEST(test_session_end_is_reported_to_the_test_registry);
+  RUN_TEST(test_test_commands_are_absent_without_the_test_registry);
 
   return UNITY_END();
 }

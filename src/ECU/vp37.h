@@ -34,13 +34,12 @@ extern "C" {
 #define VP37_PWM_DISABLE_AT_MIN_POSITION 1
 #endif
 
-/* Bench telemetry is dense enough to follow single control steps. */
+/* Telemetry exists only in the bench image, dense enough to follow single
+ * control steps. */
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 #define VP37_DEBUG_UPDATE 20U
-#else
-#define VP37_DEBUG_UPDATE 250U
-#endif
 #define VP37_TELEMETRY_UPDATE 500U
+#endif
 /** Maximum age of the supply averaging window's midpoint [us]. */
 #define VP37_CYCLE_VOLTAGE_MAX_AGE_US 20000U
 /** Time constant of the supply slope used to predict PWM application [s]. */
@@ -717,11 +716,14 @@ VP37InitStatus VP37_init(VP37Pump *self);
  */
 hal_status_t VP37_serviceCurrentScan(VP37Pump *self);
 
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 /**
  * @brief Print the `VP37 IPULSE` report for the newest reduced block.
  * @param self Non-NULL snapshot taken under the pump mutex.
+ * @note Bench telemetry; absent without ECU_FUNCTIONAL_TESTS_ENABLED.
  */
 void VP37_showCurrentPulse(const VP37Pump *self);
+#endif
 
 /**
  * @brief Process one cycle of the VP37 inner quantity-actuator loop.
@@ -752,12 +754,15 @@ void VP37_stop(VP37Pump *self);
  */
 bool VP37_isVP37Enabled(VP37Pump *self);
 
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 /**
  * @brief Print VP37 controller state for diagnostics.
  * @param self Snapshot copied while holding the controller owner mutex.
  * @note Call outside that mutex; this function performs serial and I2C I/O.
+ * Bench telemetry; absent without ECU_FUNCTIONAL_TESTS_ENABLED.
  */
 void VP37_showDebug(VP37Pump *self);
+#endif
 
 /**
  * @brief Set the VP37 timing-actuator output as a normalized angle command.

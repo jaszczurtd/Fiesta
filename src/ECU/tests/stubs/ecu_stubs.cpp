@@ -66,3 +66,20 @@ extern "C" __attribute__((weak)) const char *testsActiveName(void) {
 extern "C" __attribute__((weak)) uint32_t testsCyclicDelayMs(void) {
   return 0u;
 }
+
+// Without tests.c the configurator service gets no test operations, the same
+// surface as a module that has no functional tests.
+extern "C" __attribute__((weak)) const struct sc_command_test_ops_s *
+testsScOps(void) {
+  return nullptr;
+}
+
+static unsigned s_sessionEndedCount = 0;
+
+extern "C" __attribute__((weak)) void testsScSessionEnded(void) {
+  s_sessionEndedCount++;
+}
+
+extern "C" unsigned test_stubs_session_ended_count(void) {
+  return s_sessionEndedCount;
+}

@@ -21,9 +21,9 @@ extern "C" {
 #endif
 
 typedef struct CliSelectors {
-    const char *module;
-    const char *uid;
-    const char *port;
+  const char *module;
+  const char *uid;
+  const char *port;
 } CliSelectors;
 
 /**
@@ -32,29 +32,41 @@ typedef struct CliSelectors {
  *
  * Writes errors to stderr and returns false on bad/missing args.
  */
-bool sc_cli_parse_selectors(int argc,
-                            char *argv[],
-                            int start_index,
+bool sc_cli_parse_selectors(int argc, char *argv[], int start_index,
                             CliSelectors *out);
+
+/**
+ * @brief Parse one positional argument plus selectors. The first
+ *        non-`--*` argv slot becomes @p value; @p label names it in the
+ *        error printed when it is missing (e.g. "<param-id>").
+ */
+bool sc_cli_parse_positional_args(int argc, char *argv[], const char *label,
+                                  const char **value, CliSelectors *out);
 
 /**
  * @brief Parse `<param-id>` plus selectors for the get-param command.
  *        The first non-`--*` argv slot becomes @p param_id.
  */
-bool sc_cli_parse_get_param_args(int argc,
-                                 char *argv[],
-                                 const char **param_id,
+bool sc_cli_parse_get_param_args(int argc, char *argv[], const char **param_id,
                                  CliSelectors *out);
 
 /**
  * @brief Parse selectors plus optional `--manifest <path>` and
  *        `--artifact <path>` for the reboot-bootloader command.
  */
-bool sc_cli_parse_reboot_args(int argc,
-                              char *argv[],
-                              CliSelectors *out,
+bool sc_cli_parse_reboot_args(int argc, char *argv[], CliSelectors *out,
                               const char **manifest_path,
                               const char **artifact_path);
+
+/**
+ * @brief Parse `--id <id> --value <n>` plus selectors, with @p value
+ *        inside [@p min_value, @p max_value]. @p value_label names the
+ *        type in error messages (e.g. "int32_t").
+ */
+bool sc_cli_parse_id_value_args(int argc, char *argv[], long min_value,
+                                long max_value, const char *value_label,
+                                const char **param_id, long *value,
+                                CliSelectors *out);
 
 /**
  * @brief Parse `--id <param_id> --value <i16>` plus selectors for the
@@ -64,11 +76,8 @@ bool sc_cli_parse_reboot_args(int argc,
  * out-of-range numerics, missing flags, or extra positional args
  * cause this to return false (and write a reason to stderr).
  */
-bool sc_cli_parse_set_param_args(int argc,
-                                 char *argv[],
-                                 const char **param_id,
-                                 int *value,
-                                 CliSelectors *out);
+bool sc_cli_parse_set_param_args(int argc, char *argv[], const char **param_id,
+                                 int *value, CliSelectors *out);
 
 /**
  * @brief Return true when @p status matches every non-NULL selector
@@ -88,8 +97,7 @@ bool sc_cli_module_matches_selectors(const ScModuleStatus *status,
  * @return module index >= 0 on success, -1 on failure.
  */
 int sc_cli_select_target_module(const ScCore *core,
-                                const CliSelectors *selectors,
-                                char *error,
+                                const CliSelectors *selectors, char *error,
                                 size_t error_size);
 
 #ifdef __cplusplus

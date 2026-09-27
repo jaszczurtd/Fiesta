@@ -70,6 +70,98 @@ extern "C" {
  * availability flag). Not auth-gated, not persisted, never staged. */
 #define SC_CMD_GET_GPS "SC_GET_GPS"
 
+/* Functional tests of a bench build. Reads describe the catalog and the
+ * running test; SET/RUN/STOP/SKIP need an authenticated session. A test
+ * started over this path belongs to the session: the module stops it when
+ * the session ends or the host stops polling SC_TEST_STATUS. */
+#define SC_CMD_TEST_LIST "SC_TEST_LIST"
+#define SC_CMD_TEST_INFO "SC_TEST_INFO"   /**< prefix; followed by " <test>". */
+#define SC_CMD_TEST_PARAM "SC_TEST_PARAM" /**< prefix; followed by " <id>". */
+#define SC_CMD_TEST_SET                                                        \
+  "SC_TEST_SET" /**< prefix; followed by " <param_id> <value>". */
+#define SC_CMD_TEST_RUN                                                        \
+  "SC_TEST_RUN" /**< prefix; followed by " <test>" or " all". */
+#define SC_CMD_TEST_STOP "SC_TEST_STOP"
+#define SC_CMD_TEST_SKIP "SC_TEST_SKIP"
+#define SC_CMD_TEST_STATUS "SC_TEST_STATUS"
+/** @brief Argument of SC_TEST_RUN that starts the sequence of listed tests. */
+#define SC_TEST_SEQUENCE "all"
+/** @brief Longest test name or test parameter id on the wire, with NUL. */
+#define SC_TEST_ID_MAX 24u
+
+/* Names the firmware registry gives its configurator tests and the host
+ * translates. */
+#define SC_TEST_NAME_CYCLIC "cyclic"
+#define SC_TEST_NAME_RANDOM "random"
+#define SC_TEST_NAME_TOP "top"
+#define SC_TEST_NAME_TOPZERO "topzero"
+#define SC_TEST_NAME_POT "pot"
+
+/* Runtime parameter ids; unique across tests. */
+#define SC_TEST_PARAM_CYCLIC_PASSES "cyclic_passes"
+#define SC_TEST_PARAM_CYCLIC_CYCLES "cyclic_cycles"
+#define SC_TEST_PARAM_RANDOM_DURATION "random_duration"
+#define SC_TEST_PARAM_RANDOM_HOLD "random_hold"
+#define SC_TEST_PARAM_TOP_DWELL "top_dwell"
+#define SC_TEST_PARAM_TOP_SERIES "top_series"
+#define SC_TEST_PARAM_TOPZERO_DWELL "topzero_dwell"
+#define SC_TEST_PARAM_TOPZERO_SERIES "topzero_series"
+#define SC_TEST_PARAM_POT_RATE "pot_rate"
+#define SC_TEST_PARAM_POT_HOLD "pot_hold"
+#define SC_TEST_PARAM_POT_REST "pot_rest"
+#define SC_TEST_PARAM_POT_PASSES "pot_passes"
+
+/* Parameter unit tokens. */
+#define SC_TEST_UNIT_COUNT "count"
+#define SC_TEST_UNIT_S "s"
+#define SC_TEST_UNIT_MS "ms"
+#define SC_TEST_UNIT_PCT_PER_S "pct_per_s"
+
+/* SC_TEST_STATUS keys and their fixed values. */
+#define SC_TEST_KEY_STATE "state"
+#define SC_TEST_KEY_RUNS "runs" /**< Tests started since boot. */
+#define SC_TEST_KEY_TEST "test"
+#define SC_TEST_KEY_SOURCE "src"
+#define SC_TEST_KEY_SEQ "seq"
+#define SC_TEST_KEY_ELAPSED_MS "elapsed_ms"
+#define SC_TEST_KEY_DEMAND_X10 "demand_x10"
+#define SC_TEST_KEY_POSITION_X10 "position_x10"
+#define SC_TEST_KEY_LAST "last"
+#define SC_TEST_KEY_RESULT "result"
+#define SC_TEST_STATE_IDLE "idle"
+#define SC_TEST_STATE_RUNNING "running"
+#define SC_TEST_SOURCE_SC "sc"
+#define SC_TEST_SOURCE_CONSOLE "console"
+
+/* Progress keys of the running test. */
+#define SC_TEST_FIELD_PROFILE "profile" /**< cyclic: speed profile, 1..4. */
+#define SC_TEST_FIELD_RATE "rate"       /**< demand rate [%/s]. */
+#define SC_TEST_FIELD_CYCLE "cycle"     /**< cyclic: cycle in the profile. */
+#define SC_TEST_FIELD_CYCLES "cycles"   /**< cyclic: cycles per profile. */
+#define SC_TEST_FIELD_PASS "pass"       /**< pass in progress, 1-based. */
+#define SC_TEST_FIELD_PASSES "passes"   /**< passes in the test. */
+#define SC_TEST_FIELD_TARGET "target"   /**< random: drawn position [%]. */
+#define SC_TEST_FIELD_HOLD_LEFT_MS                                             \
+  "hold_left_ms"                      /**< random: time to redraw. */
+#define SC_TEST_FIELD_LEFT_S "left_s" /**< random: time to the end [s]. */
+#define SC_TEST_FIELD_SETPOINT_X10 "setpoint_x10" /**< top: step [% x10]. */
+#define SC_TEST_FIELD_SERIES "series" /**< top: series in progress. */
+#define SC_TEST_FIELD_SERIES_COUNT "series_count"
+#define SC_TEST_FIELD_PHASE "phase" /**< pot: one of SC_TEST_PHASE_*. */
+#define SC_TEST_PHASE_RISE "rise"
+#define SC_TEST_PHASE_HOLD "hold"
+#define SC_TEST_PHASE_FALL "fall"
+#define SC_TEST_PHASE_REST "rest"
+
+/* Result of the most recent finished test. */
+#define SC_TEST_RESULT_DONE "done"
+#define SC_TEST_RESULT_OK "ok"
+#define SC_TEST_RESULT_FAILED "failed"
+#define SC_TEST_RESULT_STOPPED "stopped"
+#define SC_TEST_RESULT_HOST_LOST "host_lost"
+#define SC_TEST_RESULT_SESSION_END "session_end"
+#define SC_TEST_RESULT_ENGINE_RUNNING "engine_running"
+
 /* ── Outbound reply status tokens (device -> host) ──────────────────── */
 
 #define SC_STATUS_OK "SC_OK"
@@ -101,6 +193,21 @@ extern "C" {
 #define SC_REPLY_TAG_PARAMS_REVERTED "PARAMS_REVERTED"
 
 #define SC_REPLY_TAG_GPS "GPS"
+
+#define SC_REPLY_TAG_TEST_LIST "TEST_LIST"
+#define SC_REPLY_TAG_TEST_INFO "TEST_INFO"
+#define SC_REPLY_TAG_TEST_PARAM "TEST_PARAM"
+#define SC_REPLY_TAG_TEST_SET "TEST_SET"
+#define SC_REPLY_TAG_TEST_RUN "TEST_RUN"
+#define SC_REPLY_TAG_TEST_STOP "TEST_STOP"
+#define SC_REPLY_TAG_TEST_SKIP "TEST_SKIP"
+#define SC_REPLY_TAG_TEST_STATUS "TEST_STATUS"
+#define SC_REPLY_TAG_ENGINE_RUNNING "ENGINE_RUNNING"
+#define SC_REPLY_TAG_BUSY "BUSY"
+/* Reasons after SC_BAD_REQUEST that a host tells apart. */
+#define SC_REPLY_REASON_READ_ONLY "read_only"
+#define SC_REPLY_REASON_OUT_OF_RANGE "out_of_range"
+#define SC_REPLY_REASON_UNKNOWN_TEST "unknown_test"
 
 /* Structural HELLO reply head - emitted by the HAL session helper as
  * "OK HELLO module=... proto=... session=... fw=... build=... uid=..."
@@ -199,12 +306,13 @@ extern "C" {
 /* "SC_BAD_REQUEST read_only id=<id>" - SET_PARAM on a descriptor
  * carrying SC_PARAM_FLAG_READ_ONLY. */
 #define SC_REPLY_BAD_REQUEST_READ_ONLY_FMT                                     \
-  SC_STATUS_BAD_REQUEST " read_only id=%s"
+  SC_STATUS_BAD_REQUEST " " SC_REPLY_REASON_READ_ONLY " id=%s"
 
 /* "SC_BAD_REQUEST out_of_range id=<id> min=<n> max=<n>" - SET_PARAM
  * value outside the descriptor's declared [min, max]. */
 #define SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT                                  \
-  SC_STATUS_BAD_REQUEST " out_of_range id=%s min=%d max=%d"
+  SC_STATUS_BAD_REQUEST " " SC_REPLY_REASON_OUT_OF_RANGE " id=%s min=%d "      \
+                                                         "max=%d"
 
 /* ── GPS telemetry snapshot reply ──────────────────────────────────── */
 
@@ -225,6 +333,57 @@ extern "C" {
   SC_STATUS_OK                                                                 \
   " " SC_REPLY_TAG_GPS                                                         \
   " available=%u lat_e6=%ld lon_e6=%ld speed_kmh_x10=%d epoch=%lu"
+
+/* ── Functional tests ──────────────────────────────────────────────── */
+
+/* "SC_OK TEST_LIST count=<n> names=<name>,<name>,..." - the tests this
+ * build offers to the configurator, in registry order. A build without
+ * functional tests answers count=0 and an empty names value. */
+#define SC_REPLY_TEST_LIST_FMT                                                 \
+  SC_STATUS_OK " " SC_REPLY_TAG_TEST_LIST " count=%u names=%s"
+
+/* "SC_OK TEST_INFO name=<test> seq=<0|1> params=<id>,<id>,..." - seq=1 when
+ * the test belongs to the sequence started by SC_TEST_RUN all. */
+#define SC_REPLY_TEST_INFO_FMT                                                 \
+  SC_STATUS_OK " " SC_REPLY_TAG_TEST_INFO " name=%s seq=%u params=%s"
+
+/* "SC_OK TEST_PARAM id=<id> test=<test> value=<n> min=<n> max=<n>
+ *  default=<n> unit=<token>" - one runtime parameter of a test. Values are
+ * integers in the unit named by the token (count, s, ms, pct_per_s). The
+ * value returns to its default after a restart. */
+#define SC_REPLY_TEST_PARAM_FMT                                                \
+  SC_STATUS_OK " " SC_REPLY_TAG_TEST_PARAM                                     \
+               " id=%s test=%s value=%ld min=%ld max=%ld default=%ld unit=%s"
+
+/* "SC_OK TEST_SET id=<id> value=<n>" */
+#define SC_REPLY_TEST_SET_FMT                                                  \
+  SC_STATUS_OK " " SC_REPLY_TAG_TEST_SET " id=%s value=%ld"
+
+/* "SC_OK TEST_RUN name=<test|all>" - the request is queued for the core
+ * that owns the actuator; SC_TEST_STATUS shows when it starts. */
+#define SC_REPLY_TEST_RUN_FMT SC_STATUS_OK " " SC_REPLY_TAG_TEST_RUN " name=%s"
+
+#define SC_REPLY_TEST_STOP SC_STATUS_OK " " SC_REPLY_TAG_TEST_STOP
+#define SC_REPLY_TEST_SKIP SC_STATUS_OK " " SC_REPLY_TAG_TEST_SKIP
+
+/* "SC_OK TEST_STATUS state=<idle|running> ..." followed by key=value
+ * tokens: test, src (sc|console), seq (<i>/<n>, only in a sequence),
+ * elapsed_ms, demand_x10 and position_x10 (percent of the usable stroke
+ * times ten), the running test's own progress keys, and last/result for
+ * the most recent finished test. Unknown keys are ignored by the host. */
+#define SC_REPLY_TEST_STATUS_HEAD SC_STATUS_OK " " SC_REPLY_TAG_TEST_STATUS
+
+/* "SC_BAD_REQUEST unknown_test name=<test>" */
+#define SC_REPLY_TEST_UNKNOWN_FMT                                              \
+  SC_STATUS_BAD_REQUEST " " SC_REPLY_REASON_UNKNOWN_TEST " name=%s"
+
+/* "SC_NOT_READY ENGINE_RUNNING" - the engine-speed interlock refused a
+ * test start. */
+#define SC_REPLY_NOT_READY_ENGINE_RUNNING                                      \
+  SC_STATUS_NOT_READY " " SC_REPLY_TAG_ENGINE_RUNNING
+
+/* "SC_NOT_READY BUSY" - an earlier test request is still queued. */
+#define SC_REPLY_NOT_READY_BUSY SC_STATUS_NOT_READY " " SC_REPLY_TAG_BUSY
 
 #ifdef __cplusplus
 }

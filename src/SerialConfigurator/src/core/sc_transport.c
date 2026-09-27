@@ -1,5 +1,6 @@
 #include "sc_transport.h"
 #include "../config.h"
+#include "sc_text.h"
 #include "sc_transport_timeout.h"
 
 #include "sc_protocol.h"
@@ -59,27 +60,6 @@ typedef struct ScCachedPortEntry {
 
 static ScCachedPortEntry s_cached_ports[SC_TRANSPORT_MAX_CACHED_PORTS];
 
-static void copy_string(char *dst, size_t dst_size, const char *src) {
-  if (dst == 0 || dst_size == 0u) {
-    return;
-  }
-
-  if (src == 0) {
-    dst[0] = '\0';
-    return;
-  }
-
-  (void)snprintf(dst, dst_size, "%s", src);
-}
-
-static void set_error(char *error, size_t error_size, const char *message) {
-  if (error == 0 || error_size == 0u) {
-    return;
-  }
-
-  copy_string(error, error_size, message);
-}
-
 static bool configure_serial_port(int fd, char *error, size_t error_size) {
   struct termios tty;
   if (tcgetattr(fd, &tty) != 0) {
@@ -123,7 +103,8 @@ static bool configure_serial_port(int fd, char *error, size_t error_size) {
 static bool write_all(int fd, const char *data, size_t len, char *error,
                       size_t error_size) {
   if (data == 0) {
-    set_error(error, error_size, "internal error: write buffer is NULL");
+    sc_text_set_error(error, error_size,
+                      "internal error: write buffer is NULL");
     return false;
   }
 
@@ -140,7 +121,7 @@ static bool write_all(int fd, const char *data, size_t len, char *error,
     }
 
     if (rc == 0) {
-      set_error(error, error_size, "write failed: no bytes written");
+      sc_text_set_error(error, error_size, "write failed: no bytes written");
       return false;
     }
 
@@ -187,7 +168,8 @@ static bool read_framed_response_with_deadline(int fd, uint16_t expected_seq,
                                                size_t payload_out_size,
                                                char *error, size_t error_size) {
   if (payload_out == NULL || payload_out_size == 0u) {
-    set_error(error, error_size, "internal error: invalid response buffer");
+    sc_text_set_error(error, error_size,
+                      "internal error: invalid response buffer");
     return false;
   }
 
@@ -422,7 +404,7 @@ static bool read_framed_response_with_deadline(int fd, uint16_t expected_seq,
 static bool open_and_configure_port(const char *device_path, int *fd,
                                     char *error, size_t error_size) {
   if (device_path == 0 || fd == 0) {
-    set_error(error, error_size, "internal error: invalid arguments");
+    sc_text_set_error(error, error_size, "internal error: invalid arguments");
     transport_log("open: rejected - null device_path or fd pointer");
     return false;
   }
@@ -553,8 +535,8 @@ static bool acquire_cached_port(const char *device_path, int *fd,
                                 size_t *slot_out, char *error,
                                 size_t error_size) {
   if (device_path == NULL || fd == NULL) {
-    set_error(error, error_size,
-              "internal error: invalid cached-port arguments");
+    sc_text_set_error(error, error_size,
+                      "internal error: invalid cached-port arguments");
     return false;
   }
 
@@ -591,8 +573,8 @@ static bool acquire_cached_port(const char *device_path, int *fd,
   s_cached_ports[slot].in_use = true;
   s_cached_ports[slot].fd = opened_fd;
   s_cached_ports[slot].next_seq = 1u;
-  copy_string(s_cached_ports[slot].device_path,
-              sizeof(s_cached_ports[slot].device_path), device_path);
+  sc_text_copy(s_cached_ports[slot].device_path,
+               sizeof(s_cached_ports[slot].device_path), device_path);
   transport_log("cache install slot=%d fd=%d path='%s'", slot, opened_fd,
                 device_path);
   *fd = opened_fd;
@@ -627,7 +609,7 @@ static bool framed_exchange_on_fd(int fd, uint16_t seq, const char *inner,
   size_t framed_len = 0u;
   if (!hal_serial_frame_encode(seq, inner, framed_line,
                                sizeof(framed_line) - 1u, &framed_len)) {
-    set_error(error, error_size, "failed to encode SC frame");
+    sc_text_set_error(error, error_size, "failed to encode SC frame");
     return false;
   }
   framed_line[framed_len] = '\n';
@@ -678,7 +660,8 @@ static bool default_list_candidates(void *context,
                                     size_t error_size) {
   (void)context;
   if (list == 0) {
-    set_error(error, error_size, "internal error: candidate list is NULL");
+    sc_text_set_error(error, error_size,
+                      "internal error: candidate list is NULL");
     return false;
   }
 
@@ -721,8 +704,8 @@ static bool default_list_candidates(void *context,
       break;
     }
 
-    copy_string(list->paths[list->count], sizeof(list->paths[list->count]),
-                devices.gl_pathv[i]);
+    sc_text_copy(list->paths[list->count], sizeof(list->paths[list->count]),
+                 devices.gl_pathv[i]);
     list->count++;
   }
 
@@ -741,11 +724,12 @@ static bool default_resolve_device_path(void *context,
   (void)error_size;
 
   if (candidate_path == 0 || device_path == 0 || device_path_size == 0u) {
-    set_error(error, error_size, "internal error: invalid path arguments");
+    sc_text_set_error(error, error_size,
+                      "internal error: invalid path arguments");
     return false;
   }
 
-  copy_string(device_path, device_path_size, candidate_path);
+  sc_text_copy(device_path, device_path_size, candidate_path);
   return true;
 }
 
@@ -754,7 +738,8 @@ static bool default_send_hello(void *context, const char *device_path,
                                char *error, size_t error_size) {
   (void)context;
   if (device_path == NULL || response == NULL || response_size == 0u) {
-    set_error(error, error_size, "internal error: invalid HELLO arguments");
+    sc_text_set_error(error, error_size,
+                      "internal error: invalid HELLO arguments");
     return false;
   }
 
@@ -804,7 +789,7 @@ static bool default_send_hello(void *context, const char *device_path,
   }
 
   transport_log("HELLO exhausted path='%s': %s", device_path, last_error);
-  copy_string(error, error_size, last_error);
+  sc_text_copy(error, error_size, last_error);
   return false;
 }
 
@@ -815,8 +800,8 @@ static bool default_send_sc_command(void *context, const char *device_path,
   (void)context;
   if (device_path == NULL || command == NULL || response == NULL ||
       response_size == 0u) {
-    set_error(error, error_size,
-              "internal error: invalid SC command arguments");
+    sc_text_set_error(error, error_size,
+                      "internal error: invalid SC command arguments");
     return false;
   }
 
@@ -829,11 +814,11 @@ static bool default_send_sc_command(void *context, const char *device_path,
     --cmd_len;
   }
   if (cmd_len == 0u) {
-    set_error(error, error_size, "SC command cannot be empty");
+    sc_text_set_error(error, error_size, "SC command cannot be empty");
     return false;
   }
   if (cmd_len + 1u > sizeof(inner)) {
-    set_error(error, error_size, "SC command is too long");
+    sc_text_set_error(error, error_size, "SC command is too long");
     return false;
   }
   memcpy(inner, command, cmd_len);
@@ -861,13 +846,13 @@ static bool default_send_sc_command(void *context, const char *device_path,
         break;
       }
 
-      if (!response_has_prefix(response, SC_STATUS_NOT_READY)) {
+      if (!sc_transport_reply_requires_hello(response)) {
         success = true;
         break;
       }
 
-      transport_log("SC '%s' got NOT_READY - re-handshaking on fd=%d", inner,
-                    fd);
+      transport_log("SC '%s' got HELLO_REQUIRED - re-handshaking on fd=%d",
+                    inner, fd);
       /* Module forgot HELLO (re-enumeration / reset) - re-handshake
        * and retry the same command on the same fd. */
       if (!send_hello_bootstrap_on_fd(fd, slot, timeout_ms, last_error,
@@ -909,7 +894,7 @@ static bool default_send_sc_command(void *context, const char *device_path,
 
   transport_log("SC '%s' exhausted path='%s': %s", inner, device_path,
                 last_error);
-  copy_string(error, error_size, last_error);
+  sc_text_copy(error, error_size, last_error);
   return false;
 }
 
@@ -949,8 +934,8 @@ bool sc_transport_list_candidates(const ScTransport *transport,
                                   size_t error_size) {
   if (transport == 0 || transport->ops == 0 ||
       transport->ops->list_candidates == 0) {
-    set_error(error, error_size,
-              "transport list_candidates operation is unavailable");
+    sc_text_set_error(error, error_size,
+                      "transport list_candidates operation is unavailable");
     return false;
   }
 
@@ -965,8 +950,8 @@ bool sc_transport_resolve_device_path(const ScTransport *transport,
                                       size_t error_size) {
   if (transport == 0 || transport->ops == 0 ||
       transport->ops->resolve_device_path == 0) {
-    set_error(error, error_size,
-              "transport resolve_device_path operation is unavailable");
+    sc_text_set_error(error, error_size,
+                      "transport resolve_device_path operation is unavailable");
     return false;
   }
 
@@ -981,8 +966,8 @@ bool sc_transport_send_hello(const ScTransport *transport,
                              size_t error_size) {
   if (transport == 0 || transport->ops == 0 ||
       transport->ops->send_hello == 0) {
-    set_error(error, error_size,
-              "transport send_hello operation is unavailable");
+    sc_text_set_error(error, error_size,
+                      "transport send_hello operation is unavailable");
     return false;
   }
 
@@ -996,8 +981,8 @@ bool sc_transport_send_sc_command(const ScTransport *transport,
                                   char *error, size_t error_size) {
   if (transport == 0 || transport->ops == 0 ||
       transport->ops->send_sc_command == 0) {
-    set_error(error, error_size,
-              "transport send_sc_command operation is unavailable");
+    sc_text_set_error(error, error_size,
+                      "transport send_sc_command operation is unavailable");
     return false;
   }
 

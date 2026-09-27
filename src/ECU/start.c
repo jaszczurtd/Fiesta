@@ -44,9 +44,11 @@ typedef struct {
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
   bool resetReasonReported;
+#if ECU_FUNCTIONAL_TESTS_ENABLED
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
   uint32_t vp37CurrentLastSequence;
+#endif
 } start_runtime_state_t;
 
 typedef struct {
@@ -54,15 +56,14 @@ typedef struct {
   int statusVariable1Val;
 } start_persistent_state_t;
 
-#ifdef VP37
-/* Core 0 reporting buffers. Both pump reporters run one after another on
- * core 0, so they share one snapshot. Kept off the 4 KiB core-0 stack: the
- * 1 KiB snapshot, the trace samples and the CFG print with its ~70 arguments
- * exhausted it once the USB IRQ nested on top (rev98, 2026-09-25). */
+#if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
+/* Core 0 reporting buffers of the bench telemetry. Both pump reporters run
+ * one after another on core 0, so they share one snapshot. Kept off the 4 KiB
+ * core-0 stack: the 1 KiB snapshot, the trace samples and the CFG print with
+ * its ~70 arguments exhausted it once the USB IRQ nested on top (rev98,
+ * 2026-09-25). */
 static VP37Pump s_vp37Snapshot;
-#if ECU_FUNCTIONAL_TESTS_ENABLED
 static VP37TraceSample s_vp37TraceSamples[4];
-#endif
 #endif
 
 static start_runtime_state_t s_startRuntimeState = {
@@ -405,7 +406,7 @@ void callAtEverySecond(void) {
 #endif
 }
 
-#ifdef VP37
+#if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
 /**
  * @brief Report the newest reduced scan block from a pump snapshot.
  * @note Reduction and publishing run on core 1 inside the control
@@ -470,13 +471,13 @@ static void runCore0(void) {
   configSessionTick();
   s_startPersistentState.statusVariable0Val = 9;
 
-#ifdef VP37
+#if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
+  // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
     m_mutex_enter_blocking(vp37StateMutex);
     s_vp37Snapshot = s_ctx.injectionPump;
-#if ECU_FUNCTIONAL_TESTS_ENABLED
     size_t sampleCount = 0U;
     while (!hal_debug_is_muted() &&
            (sampleCount < COUNTOF(s_vp37TraceSamples)) &&
@@ -485,18 +486,13 @@ static void runCore0(void) {
       sampleCount++;
     }
     const bool recording = VP37_traceCapturing();
-#endif
     m_mutex_exit(vp37StateMutex);
-#if ECU_FUNCTIONAL_TESTS_ENABLED
     if (!recording) {
       VP37_showDebug(&s_vp37Snapshot);
     }
     for (size_t i = 0U; i < sampleCount; i++) {
       VP37_showTrace(&s_vp37TraceSamples[i]);
     }
-#else
-    VP37_showDebug(&s_vp37Snapshot);
-#endif
   }
 #endif
   m_mutex_enter_blocking(turboStateMutex);

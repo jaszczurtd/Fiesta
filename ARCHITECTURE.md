@@ -254,13 +254,20 @@ downward assistance, demand ramp and position API retain their existing roles.
 | [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
 | [`vp37_current.c`](src/ECU/vp37_current.c) | coil current measured on the shunt |
 | [`vp37_current_control.c`](src/ECU/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
-| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0 |
+| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0; bench image only |
 | [`turbo.c`](src/ECU/turbo.c) | boost control from manifold pressure |
 | [`engineMaps.c`](src/ECU/engineMaps.c) | all shaping tables: N75 duty, VP37 holding map, integral and dead-zone tapers |
 | [`engineFan.c`](src/ECU/engineFan.c), [`engineHeater.c`](src/ECU/engineHeater.c), [`glowPlugs.c`](src/ECU/glowPlugs.c), [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | relay outputs |
 | [`engineFuel.c`](src/ECU/engineFuel.c) | fuel level |
 | [`gps.c`](src/ECU/gps.c) | NMEA time and date |
 | [`config.c`](src/ECU/config.c) | stored settings and the configurator session |
+| [`tests.c`](src/ECU/tests.c) | the functional test suite: each bench test, what it drives, and whether the sequence and the configurator include it |
+| [`tests_workers.c`](src/ECU/tests_workers.c) | what each test does: demand generators, one-shot actions and the progress they report |
+| [`tests_helpers.c`](src/ECU/tests_helpers.c) | test parameters and the runner behind the bench console and the configurator's test commands, with its engine-speed interlock and keepalive; idle stubs without `ECU_FUNCTIONAL_TESTS_ENABLED` |
+
+The tests exist only in the bench image. `Project: Build variant: bench` and
+`Project: Upload variant: bench` build it into `src/ECU/.build/variants/bench`;
+`Project: Build` and `Project: Upload` give the image for the car.
 
 [`hardwareConfig.h`](src/ECU/hardwareConfig.h) assigns every pin and address.
 In short:
@@ -358,7 +365,8 @@ on its own display.
 
 The configurator is a desktop application for Linux, written in C with GTK-4.
 It finds Fiesta modules on USB, shows their identity, reads and writes their
-parameters, and flashes firmware after checking the build manifest. A CLI
+parameters, runs the functional tests of an ECU test build, and flashes
+firmware after checking the build manifest. A CLI
 exposes the same functions.
 
 It has two layers. The core library handles serial ports, the protocol,

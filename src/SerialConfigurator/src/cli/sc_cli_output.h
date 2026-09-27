@@ -14,6 +14,7 @@
  * the i18n layer is GUI-only by design).
  */
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "sc_core.h"
@@ -30,8 +31,7 @@ const char *sc_cli_value_or_dash(const char *value);
  *        `true`/`false` for bools, decimal for integers, `%.6g` for
  *        floats, raw text otherwise. Always writes a NUL terminator.
  */
-void sc_cli_typed_value_to_text(const ScTypedValue *value,
-                                char *buffer,
+void sc_cli_typed_value_to_text(const ScTypedValue *value, char *buffer,
                                 size_t buffer_size);
 
 /** @brief Print the module-detection table (used by `list`). */
@@ -49,6 +49,20 @@ void sc_cli_print_parsed_param_detail(const ScParamDetailData *detail);
 /** @brief Print decoded `SC_GET_GPS` snapshot (used by `get-gps`). */
 struct ScGpsSnapshot;
 void sc_cli_print_gps_snapshot(const struct ScGpsSnapshot *snapshot);
+
+/** @brief Print the functional test catalog (used by `test-list`). */
+struct ScTestCatalog;
+void sc_cli_print_test_catalog(const struct ScTestCatalog *catalog);
+
+/**
+ * @brief One-line summary of a test status: the running test with its
+ *        sequence position, drive and progress values, or the last result.
+ *        @p with_time adds the elapsed time of a running test.
+ */
+struct ScTestStatus;
+void sc_cli_format_test_status(const struct ScTestStatus *status,
+                               bool with_time, char *buffer,
+                               size_t buffer_size);
 
 #ifdef __cplusplus
 }

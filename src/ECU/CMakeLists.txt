@@ -87,7 +87,10 @@ set(HAL_UTIL_SOURCES
 # ── ECU sources compilable without the multicoreWatchdog runtime ───────────────
 #
 # start.c - excluded: uses the multicoreWatchdog runtime dependency
-# tests.c - excluded: placeholder only (empty initTests / startTests)
+# tests.c, tests_workers.c, tests_helpers.c - excluded: the functional test
+#   suite, what its tests do and their runner;
+#   the fixture binaries in tests/ compile them with ECU_FUNCTIONAL_TESTS_ENABLED,
+#   every other binary links the weak stubs in tests/stubs/ecu_stubs.cpp
 #
 set(ECU_SOURCES
     ${ECU_SRC}/rpm.c

@@ -117,6 +117,20 @@ extern "C" {
 /* Generic progressbar fallback/default visual height. */
 #define SC_UI_PROGRESSBAR_DEFAULT_HEIGHT_PX 18
 
+/* ── Functional tests ─────────────────────────────────────────────── */
+
+/* Status poll cadence while a test runs. It also keeps a configurator test
+ * alive: the ECU stops one after ECU_SC_TESTS_KEEPALIVE_MS (3 s) without
+ * test traffic, so this must stay well below that. */
+#define SC_TESTS_POLL_INTERVAL_MS 250u
+/* The ECU takes one test request at a time and answers BUSY while an
+ * earlier one waits for its controller core; retry this often. */
+#define SC_TESTS_BUSY_RETRIES 10u
+/* Pause between those retries; the controller core ticks every millisecond. */
+#define SC_TESTS_BUSY_RETRY_DELAY_MS 20u
+/* How long a started test may take to show up in the status reply. */
+#define SC_TESTS_START_TIMEOUT_MS 2000u
+
 /* ── Flash-tab progress tuning ────────────────────────────────────── */
 
 /* UI timer step for synthetic progress creep during long non-copy phases. */

@@ -1,7 +1,10 @@
 // VP37 telemetry: the control sample, the console lines and the bench trace.
-// Runs on core 0 from a snapshot of the pump; nothing here drives it.
+// Runs on core 0 from a snapshot of the pump; nothing here drives it. Bench
+// output only: without ECU_FUNCTIONAL_TESTS_ENABLED the unit is empty.
 
 #include "vp37_internal.h"
+
+#if ECU_FUNCTIONAL_TESTS_ENABLED
 
 static VP37TraceSample VP37_controlSample(const VP37Pump *self);
 static void VP37_showControlSample(const VP37TraceSample *sample,
@@ -163,7 +166,6 @@ void VP37_showCurrentPulse(const VP37Pump *self) {
       (unsigned long)(matched ? self->currentControl.matchedCommand.writtenUs
                               : 0U),
       (long)(matched ? self->currentControl.matchedCommand.pwm : 0));
-#if ECU_FUNCTIONAL_TESTS_ENABLED
   // Time bins preserve the ON ramp; the freewheel current is not measured.
   static uint32_t s_lastWaveMs;
   if (result->profileValid && hal_millis_interval_elapsed_now(
@@ -181,14 +183,11 @@ void VP37_showCurrentPulse(const VP37Pump *self) {
         (unsigned long)result->profileUs[6], result->profileAmps[6],
         (unsigned long)result->profileUs[7], result->profileAmps[7]);
   }
-#endif
 }
 
-#if ECU_FUNCTIONAL_TESTS_ENABLED
 void VP37_showTrace(const VP37TraceSample *sample) {
   VP37_showControlSample(sample, "T");
 }
-#endif
 
 static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
   const VP37TraceSample sample = {
@@ -265,7 +264,6 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
-#if ECU_FUNCTIONAL_TESTS_ENABLED
 static struct {
   VP37TraceSample samples[VP37_TRACE_SAMPLES];
   uint32_t count, next;
@@ -323,4 +321,5 @@ void VP37_traceRecord(const VP37Pump *self) {
     }
   }
 }
-#endif
+
+#endif /* ECU_FUNCTIONAL_TESTS_ENABLED */

@@ -11,7 +11,8 @@
         "sourceDir": "${project}/../JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "ECU"
+            "JH_MODULE_NAME": "ECU",
+            "JH_EXTRA_DEFINES": "ECU_FUNCTIONAL_TESTS_ENABLED=0"
         },
         "targets": {
             "build": "firmware",
@@ -20,6 +21,13 @@
             "compileDb": "firmware_compile_db"
         }
     },
+    "variants": [
+        {
+            "id": "bench",
+            "module": "ECU",
+            "extraDefines": ["ECU_FUNCTIONAL_TESTS_ENABLED=1"]
+        }
+    ],
     "identity": {
         "enabled": true,
         "usbManufacturer": "Jaszczur",

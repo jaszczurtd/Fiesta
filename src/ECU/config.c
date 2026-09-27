@@ -445,6 +445,7 @@ void configSessionInit(void) {
   serviceConfig.revert = configSessionRevert;
   serviceConfig.writes_ready = configSessionWritesReady;
   serviceConfig.read_gps = configSessionReadGps;
+  serviceConfig.tests = testsScOps();
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
 
@@ -469,12 +470,18 @@ void configSessionInit(void) {
 }
 
 void configSessionTick(void) {
+  static bool s_sessionWasActive = false;
   hal_serial_session_poll(&s_configSession);
   sc_command_service_process_deferred(&s_commandService);
+  const bool sessionActive = hal_serial_session_is_active(&s_configSession);
+  if (s_sessionWasActive && !sessionActive) {
+    testsScSessionEnded();
+  }
+  s_sessionWasActive = sessionActive;
   /* Keep debug chatter off the same CDC channel while SC session is active.
    * Without this, async deb()/derr() logs can interleave with framed replies
    * from another core and corrupt host parsing. */
-  hal_debug_set_muted(hal_serial_session_is_active(&s_configSession));
+  hal_debug_set_muted(sessionActive);
 }
 
 bool configSessionActive(void) {

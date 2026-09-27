@@ -26,7 +26,7 @@
 #define HAL_ENABLE_ADC_SCAN /* Hardware-paced shunt/supply scan   */
 #define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
 #define HAL_ENABLE_SERIAL_COMMANDS
-#define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 24u /* SC surface (17) + headroom */
 #define HAL_ENABLE_APP_TASK1
 
 /* One storage layout for firmware and host tests. CMake reads the reservation

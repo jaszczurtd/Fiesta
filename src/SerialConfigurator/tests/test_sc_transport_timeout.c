@@ -36,8 +36,26 @@ static void test_other_payloads_keep_generic_deadlines(void) {
               "null command timeout");
 }
 
+static void test_only_a_lost_session_triggers_a_new_hello(void) {
+  TEST_ASSERT(sc_transport_reply_requires_hello("SC_NOT_READY HELLO_REQUIRED"),
+              "hello required");
+  TEST_ASSERT(
+      !sc_transport_reply_requires_hello("SC_NOT_READY STORAGE_RECOVERY"),
+      "storage recovery keeps the session");
+  TEST_ASSERT(!sc_transport_reply_requires_hello("SC_NOT_READY BUSY"),
+              "busy keeps the session");
+  TEST_ASSERT(!sc_transport_reply_requires_hello("SC_NOT_READY ENGINE_RUNNING"),
+              "engine running keeps the session");
+  TEST_ASSERT(
+      !sc_transport_reply_requires_hello("SC_NOT_READY HELLO_REQUIREDX"),
+      "longer tag");
+  TEST_ASSERT(!sc_transport_reply_requires_hello("SC_OK HELLO"), "ok reply");
+  TEST_ASSERT(!sc_transport_reply_requires_hello(NULL), "null reply");
+}
+
 int main(void) {
   test_commit_uses_extended_deadlines();
+  test_only_a_lost_session_triggers_a_new_hello();
   test_other_payloads_keep_generic_deadlines();
   if (s_failures != 0) {
     return 1;

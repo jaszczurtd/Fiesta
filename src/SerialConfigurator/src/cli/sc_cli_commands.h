@@ -16,11 +16,12 @@
  *   4  - target selection failure
  *   5  - auth or transport failure (reboot-bootloader: auth;
  *        meta_values_or_catalog: device returned non-OK status)
- *   6  - reboot ACK failure (reboot-bootloader only)
+ *   6  - the device refused the operation (reboot ACK, parameter
+ *        staging, functional tests)
  */
 
-#include "sc_cli_selectors.h"
 #include "../config.h"
+#include "sc_cli_selectors.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,7 +45,7 @@ int sc_cli_command_meta_values_or_catalog(const char *command,
 
 int sc_cli_command_reboot_bootloader(int argc, char *argv[]);
 
-/* Phase 8.5 — auth-gated parameter staging subcommands. Each does its
+/* Phase 8.5 - auth-gated parameter staging subcommands. Each does its
  * own detection + selection + sc_core_authenticate + the operation.
  * `set-and-commit` chains SET + COMMIT under one auth and on
  * COMMIT failure issues an automatic REVERT so staging is never left
@@ -63,6 +64,23 @@ int sc_cli_command_set_and_commit(int argc, char *argv[]);
  * the request still counts as OK with `available=0`).
  */
 int sc_cli_command_get_gps(int argc, char *argv[]);
+
+/*
+ * Functional tests of the ECU (SC_TEST_* commands). test-list and
+ * test-status only read. test-set, test-run, test-stop and test-skip
+ * authenticate first. test-run follows the test until the ECU reports it
+ * finished, printing progress; the ECU stops a configurator test whose
+ * host goes quiet, so the command keeps polling until the end and Ctrl-C
+ * asks the ECU to stop instead of leaving the test behind. Exit codes:
+ *   5 - status read failed, 6 - the ECU refused the request, the test did
+ *   not start, or a test ended with a result other than done/ok.
+ */
+int sc_cli_command_test_list(int argc, char *argv[]);
+int sc_cli_command_test_status(int argc, char *argv[]);
+int sc_cli_command_test_set(int argc, char *argv[]);
+int sc_cli_command_test_run(int argc, char *argv[]);
+int sc_cli_command_test_stop(int argc, char *argv[]);
+int sc_cli_command_test_skip(int argc, char *argv[]);
 
 #ifdef __cplusplus
 }
