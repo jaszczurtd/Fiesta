@@ -54,7 +54,7 @@ add_test(NAME test_vp37_bench COMMAND test_vp37_bench)
 add_executable(test_tests_registry test_tests_registry.cpp
     ${ECU_TEST_FIXTURE_SOURCES})
 target_compile_definitions(test_tests_registry
-    PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+    PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1 ECU_SC_TESTS_RPM_INTERLOCK=1)
 target_link_libraries(test_tests_registry PRIVATE ecu_mock)
 # The configurator's engine-speed interlock is a build option; the bench turns
 # it off because a generator feeds RPM with no engine turning.
@@ -63,6 +63,13 @@ add_executable(test_tests_registry_no_interlock test_tests_registry.cpp
 target_compile_definitions(test_tests_registry_no_interlock
     PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1 ECU_SC_TESTS_RPM_INTERLOCK=0)
 target_link_libraries(test_tests_registry_no_interlock PRIVATE ecu_mock)
+if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    foreach(runner test_tests_registry test_tests_registry_no_interlock)
+        target_compile_definitions(${runner} PRIVATE ECU_TEST_CLOCK_INTERLEAVING=1)
+        target_link_options(${runner} PRIVATE
+            "-Wl,--wrap=hal_millis" "-Wl,--wrap=testsWorkersManualStep")
+    endforeach()
+endif()
 # The release at zero demand is a build option; this binary compiles the VP37
 # units with it off and checks that the bottom is held under drive instead.
 add_executable(test_vp37_hold_at_min test_vp37_hold_at_min.cpp

@@ -522,3 +522,12 @@ Fiesta/
 - MISRA rule status: the `ecu-misra.yml` report and
   [`src/ECU/misra/`](src/ECU/misra/).
 - JaszczurHAL internals: the JaszczurHAL repository.
+
+### Control-loop RAM budget
+
+The ECU retains current and supply samples in a two-channel ring; the sensor
+multiplexer remains part of the three-channel DMA scan. Current reduction
+and edge tracking use `HAL_RAM_FUNC` to limit instruction fetches from flash.
+The bench trace retains 1024 complete control samples, with its boolean flags
+stored as bits. `VP37_TRACE_SAMPLES` controls capture length. Inspect both
+firmware variants' ELF memory maps when changing these buffers or RAM code.

@@ -631,27 +631,29 @@ typedef struct {
   float compensationInputVolts; /**< Fused voltage before hysteresis (V). */
   float compensationVolts;      /**< Supply voltage used for PWM scaling (V). */
   float voltageCorrection;      /**< Effective supply-voltage multiplier. */
-  bool cycleVoltageUsed; /**< Selected a fresh complete PWM-period supply mean.
-                          */
-  bool voltageOverRange; /**< Supply reading above the calibrated range. */
-  float mapTrim;     /**< Learned holding-map residual in the feedforward. */
-  bool integralHold; /**< Settled-position integral hold is active. */
-  float fuelTemp;    /**< Fuel temperature (C) used by control. */
+  float mapTrim;  /**< Learned holding-map residual in the feedforward. */
+  float fuelTemp; /**< Fuel temperature (C) used by control. */
   float temperatureCorrection; /**< Temperature multiplier used by this step. */
   float thermalScale;          /**< Multiplier after the rate limit. */
   hal_pid_terms_t terms; /**< Contributions and limits from the same step. */
-  bool softFloor, hardwareClamp; /**< Active downstream bounds. */
-  bool quantityAtRest;           /**< Quantity drive released at zero demand. */
-  uint8_t status; /**< Adjustometer status from this control step. */
   uint32_t rawHz, filteredHz, sampleNumber, measuredUs;
-  uint16_t ageUs;
-  hal_status_t readStatus;
   uint32_t readUs;
-  uint8_t retries;
-  bool fresh;
   uint32_t cyclicDelayMs; /**< Active cyclic step delay, or zero otherwise. */
   uint32_t
       pidDtUs; /**< Elapsed time for a successful PID step; zero when held. */
+  /* Keep narrow fields together: every padding byte repeats in the trace. */
+  hal_status_t readStatus;
+  uint16_t ageUs;
+  uint8_t status; /**< Adjustometer status from this control step. */
+  uint8_t retries;
+  bool cycleVoltageUsed : 1; /**< Uses a fresh complete PWM-period supply mean.
+                              */
+  bool voltageOverRange : 1; /**< Supply reading above the calibrated range. */
+  bool integralHold : 1;     /**< Settled-position integral hold is active. */
+  bool softFloor : 1;
+  bool hardwareClamp : 1;  /**< Active downstream bounds. */
+  bool quantityAtRest : 1; /**< Quantity drive released at zero demand. */
+  bool fresh : 1;
 } VP37TraceSample;
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED

@@ -875,8 +875,46 @@ void test_scan_history_keeps_period_timestamps_stable_despite_irq_jitter(void) {
   TEST_ASSERT_TRUE(expired.supplyLatestValid);
 }
 
+// Compare the retained two-channel ring with an independent contiguous
+// three-channel window while the DMA writer repeatedly crosses its boundary.
+void test_scan_ring_matches_contiguous_windows_through_many_wraps(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t start = UINT32_MAX - 17000U;
+  const Waveform waveform = {3U, 0U, 2850U, 3150U, true};
+  for (uint32_t i = 0U; i < 100U; ++i) {
+    fillFrames(waveform, kDmaFrames, i * kDmaFrames);
+    const uint32_t total = (i + 1U) * kDmaFrames;
+    VP37CurrentPulseResult actual;
+    const hal_status_t status =
+        completeBlock(start + framesToUs(total), &actual);
+    const uint32_t frames = total < kBlockFrames ? total : kBlockFrames;
+    fillFrames(waveform, frames, total - frames);
+    VP37CurrentScanBlock view = blockView(start + framesToUs(total - frames));
+    view.frames = frames;
+    VP37CurrentPulseResult expected;
+    const hal_status_t reference = VP37_currentScanReduce(&view, &expected);
+    TEST_ASSERT_EQUAL_INT(reference, status);
+    TEST_ASSERT_EQUAL(expected.waveformValid, actual.waveformValid);
+    TEST_ASSERT_EQUAL(expected.supplyLatestValid, actual.supplyLatestValid);
+    TEST_ASSERT_EQUAL_FLOAT(expected.supplyLatestVolts,
+                            actual.supplyLatestVolts);
+    TEST_ASSERT_EQUAL_UINT32(expected.supplyLatestUs, actual.supplyLatestUs);
+    if (status == HAL_OK) {
+      TEST_ASSERT_EQUAL_UINT32(expected.cycleStartUs, actual.cycleStartUs);
+      TEST_ASSERT_EQUAL_UINT32(expected.periodUs, actual.periodUs);
+      TEST_ASSERT_EQUAL_UINT32(expected.latchUs, actual.latchUs);
+      TEST_ASSERT_EQUAL_FLOAT(expected.meanAmps, actual.meanAmps);
+      TEST_ASSERT_EQUAL_FLOAT(expected.p95Amps, actual.p95Amps);
+      TEST_ASSERT_EQUAL_FLOAT(expected.supplyVolts, actual.supplyVolts);
+      TEST_ASSERT_EQUAL_FLOAT_ARRAY(expected.profileAmps, actual.profileAmps,
+                                    VP37_CURRENT_PROFILE_BINS);
+    }
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_scan_ring_matches_contiguous_windows_through_many_wraps);
   RUN_TEST(test_pulse_analyze_guards_edges_and_winsorizes_a_switching_spike);
   RUN_TEST(test_pulse_analyze_rejects_bad_timing_and_clipping);
   RUN_TEST(test_pulse_analyze_handles_wrap_and_rejects_samples_outside_cycle);
