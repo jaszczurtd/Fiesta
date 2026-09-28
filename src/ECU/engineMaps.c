@@ -35,23 +35,32 @@ const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS] = {
 
 // Integral authority above the holding map [nominal PWM]: full below the taper
 // start, tapered near the upper endpoint where the stroke loses position
-// authority. Columns: demand [%], limit.
+// authority. The 82 % knot lies on the straight taper; it only gives the dead
+// zone its bend on the shared axis. Columns: demand [%], limit.
 const float VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
                                    [VP37_STROKE_TAPER_COLUMNS] = {
                                        {0.0f, 120.0f},  // full authority
                                        {75.0f, 120.0f}, // taper start
+                                       {82.0f, 99.0f},  // on the taper
                                        {100.0f, 45.0f}, // full demand
 };
 
 // Integration dead zone [Hz]: above the taper start the same command settles
 // hundreds of hertz apart and the same current holds very different
 // positions, so the zone widens to a band that covers the insensitive range.
+// Above 82 % it widens steeply, to about 98 Hz at the 85 % physical limit. In
+// cold fuel the actuator held just under 86 % hops 100-300 Hz up: there it
+// hopped in every 12 s full-demand hold with a 60 Hz zone, in 17 of 18 with
+// 95 Hz and in one of 18 with 117 Hz (bench 2026-09-28, FT 33 C). The zone
+// keeps the full-demand hold off the target, where the soft band starts; the
+// 95 % target (80.75 % of the travel) keeps the zone it had.
 // Columns: demand [%], zone.
 const float
     VP37_INTEGRAL_DEADBAND_MAP[VP37_STROKE_TAPER_KNOTS]
                               [VP37_STROKE_TAPER_COLUMNS] = {
                                   {0.0f, 12.0f},  // base
                                   {75.0f, 12.0f}, // taper start
+                                  {82.0f, 42.0f}, // bend
                                   {100.0f,
-                                   120.0f}, // full demand, the default top
+                                   380.0f}, // full demand, the default top
 };
