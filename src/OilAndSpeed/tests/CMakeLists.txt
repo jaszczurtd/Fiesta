@@ -26,6 +26,8 @@ add_executable(test_can
     ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
     ${HAL_SRC}/hal/time/hal_time.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
+    ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
+    ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
 )
 target_link_libraries(test_can PRIVATE oilspeed_mock)
 target_include_directories(test_can BEFORE PRIVATE

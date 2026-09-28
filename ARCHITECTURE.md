@@ -311,7 +311,9 @@ The CAN controller and the TFT share one SPI bus.
 OilAndSpeed measures what the ECU does not read itself: oil pressure from a
 resistive sender, vehicle speed from the ABS pulse line, and exhaust gas
 temperature before and inside the DPF through two MCP9600 amplifiers on its
-own I²C bus. It sends the results on CAN for the ECU and Clocks.
+own I²C bus. It sends the results on CAN for the ECU and Clocks: oil pressure
+and speed every 50 ms, exhaust temperatures every 250 ms and after each
+thermocouple reading. The same frames tell the receivers the module is present.
 
 | File | Responsibility |
 |---|---|

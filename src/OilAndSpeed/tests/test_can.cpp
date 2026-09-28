@@ -112,11 +112,99 @@ void test_unknown_can_id_does_not_update_state(void) {
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, getGlobalValue(F_FUEL));
 }
 
+// ── TX schedule ──────────────────────────────────────────────────────────────
+// The periodic frames run on timers. The loop hook sends nothing: sending
+// both frames every loop pass (~2000 frames/s) took about half of the
+// 500 kbit/s bus and overran the ECU's two receive buffers.
+
+typedef struct {
+  uint32_t oilSpeed;
+  uint32_t egt;
+  uint32_t other;
+} sent_counts_t;
+
+static void drainSent(sent_counts_t *counts) {
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  while (hal_mock_can_get_sent(oilspeedTestGetCanHandle(), &id, &len, data)) {
+    if (id == CAN_ID_OIL_AND_SPEED_MODULE_UPDATE) {
+      counts->oilSpeed++;
+    } else if (id == CAN_ID_EGT_UPDATE) {
+      counts->egt++;
+    } else {
+      counts->other++;
+    }
+  }
+}
+
+void test_send_loop_sends_no_periodic_frames(void) {
+  sent_counts_t counts = {};
+  for (uint32_t pass = 0u; pass < 1000u; pass++) {
+    (void)canSendLoop();
+    drainSent(&counts);
+  }
+  TEST_ASSERT_EQUAL_UINT32(0u, counts.oilSpeed);
+  TEST_ASSERT_EQUAL_UINT32(0u, counts.egt);
+  TEST_ASSERT_EQUAL_UINT32(0u, counts.other);
+}
+
+void test_broadcast_timers_pace_oil_speed_and_egt_frames(void) {
+  hal_mock_set_millis(1000u);
+  TEST_ASSERT_TRUE(canSetupBroadcastTimers());
+  sent_counts_t counts = {};
+  drainSent(&counts);
+  counts = (sent_counts_t){};
+  const uint32_t start = hal_millis();
+  const uint32_t durationMs = 10000u;
+
+  // Ten seconds of the core-0 loop, one pass per millisecond.
+  for (uint32_t ms = 1u; ms <= durationMs; ms++) {
+    hal_mock_set_millis(start + ms);
+    canTickBroadcastTimers();
+    (void)canSendLoop();
+    drainSent(&counts);
+  }
+
+  TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_UPDATE_RECIPIENTS,
+                            counts.oilSpeed);
+  TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_EGT_UPDATE_INTERVAL,
+                            counts.egt);
+  TEST_ASSERT_EQUAL_UINT32(0u, counts.other);
+  // Both frames stay the module heartbeat: several arrive inside each
+  // connection-check window of the receivers.
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(2u * CAN_EGT_UPDATE_INTERVAL,
+                                      (uint32_t)CAN_CHECK_CONNECTION);
+}
+
+void test_egt_frame_carries_both_temperatures(void) {
+  setGlobalValue(F_EGT, 612.0f);
+  setGlobalValue(F_DPF_TEMP, 455.0f);
+  updateEGTrecipients();
+
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_TRUE(
+      hal_mock_can_get_sent(oilspeedTestGetCanHandle(), &id, &len, data));
+  TEST_ASSERT_EQUAL_UINT32(CAN_ID_EGT_UPDATE, id);
+  TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
+  TEST_ASSERT_EQUAL_UINT16(
+      612u, jh_u16_from_bytes(data[CAN_FRAME_EGT_UPDATE_EGT_HI],
+                              data[CAN_FRAME_EGT_UPDATE_EGT_LO]));
+  TEST_ASSERT_EQUAL_UINT16(
+      455u, jh_u16_from_bytes(data[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                              data[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_truncated_ecu_update_02_frame_is_ignored);
   RUN_TEST(test_full_ecu_update_02_frame_updates_state);
   RUN_TEST(test_clock_brightness_frame_marks_cluster_connected);
   RUN_TEST(test_unknown_can_id_does_not_update_state);
+  RUN_TEST(test_send_loop_sends_no_periodic_frames);
+  RUN_TEST(test_broadcast_timers_pace_oil_speed_and_egt_frames);
+  RUN_TEST(test_egt_frame_carries_both_temperatures);
   return UNITY_END();
 }
