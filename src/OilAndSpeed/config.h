@@ -16,26 +16,28 @@
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
 
-#define CAN_MAIN_LOOP_SEND_INTERVAL 1
+// EGT/DPF temperature frame period [ms]; the thermocouples are read every
+// THERMOCOUPLE_READ_INTERVAL and each reading is also sent at once.
+#define CAN_EGT_UPDATE_INTERVAL 250
 
 #define MAX_RETRIES 15
 
-//in miliseconds, print values into serial
+// in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * SECOND
 
-//#define ABS_CAR_SPEED_PACKET_TEST true
+// #define ABS_CAR_SPEED_PACKET_TEST true
 #define ABS_CAR_SPEED_SEQUENCE_DELAY 5000
-//#define OIL_PRESSURE_PACKET_TEST true
-//#define ABS_CAR_SPEED_PACKET_LINEAR_TEST true
+// #define OIL_PRESSURE_PACKET_TEST true
+// #define ABS_CAR_SPEED_PACKET_LINEAR_TEST true
 
-//tire dimensions:
+// tire dimensions:
 #define TIRE_DIMENSIONS "185/55 R15"
 #define TIRE_CORRECTION_FACTOR 0.98
 
-//oil pressure readings
+// oil pressure readings
 #define OIL_PRESSURE_READ_INTERVAL 100
 
-//thermocouples readings
+// thermocouples readings
 #define THERMOCOUPLE_READ_INTERVAL 1000
 
 /**

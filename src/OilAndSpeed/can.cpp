@@ -13,6 +13,8 @@ hal_can_t oilspeedTestGetCanHandle(void) { return canHandle; }
 #endif
 
 static unsigned char frameNumber = 0;
+static hal_soft_timer_t timerCANUpdate = NULL;
+static hal_soft_timer_t timerEGTUpdate = NULL;
 static unsigned long ecuMessages = 0, lastEcuMessages = 0;
 static bool ecuConnected = false;
 static unsigned long dpfMessages = 0, lastDPFMessages = 0;
@@ -154,14 +156,27 @@ void canCheckConnection(void) {
   }
 }
 
-bool canSendLoop(void) {
-  // Broadcast the Oil/Speed and EGT frames unconditionally every tick.
-  // These frames double as a heartbeat for the receivers (Clocks tracks
-  // `oilSpeedModuleConnected` off the arrival count), so we match the ECU
-  // CAN_updaterecipients_0x pattern and skip any change-detection cache.
-  updateCANrecipients();
-  updateEGTrecipients();
+// Both frames double as the module heartbeat: Clocks and the ECU count them
+// once per CAN_CHECK_CONNECTION. Sending them every loop pass took about half
+// of the 500 kbit/s bus for values that change at 1-10 Hz.
+static const hal_soft_timer_table_entry_t canBroadcastTimerTable[] = {
+    {&timerCANUpdate, updateCANrecipients, (uint32_t)CAN_UPDATE_RECIPIENTS},
+    {&timerEGTUpdate, updateEGTrecipients, (uint32_t)CAN_EGT_UPDATE_INTERVAL}};
 
+bool canSetupBroadcastTimers(void) {
+  return hal_soft_timer_setup_table(canBroadcastTimerTable,
+                                    COUNTOF(canBroadcastTimerTable),
+                                    watchdog_feed, CORE_OPERATION_DELAY);
+}
+
+void canTickBroadcastTimers(void) {
+  (void)hal_soft_timer_tick_table(canBroadcastTimerTable,
+                                  COUNTOF(canBroadcastTimerTable));
+}
+
+bool canSendLoop(void) {
+  // Bench packet generators only; the periodic frames run on the broadcast
+  // timers.
 #ifdef ABS_CAR_SPEED_PACKET_TEST
   static int amountCounter = 0;
   static int lastSpeed = 0;
