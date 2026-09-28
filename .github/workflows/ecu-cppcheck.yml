@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           cppcheck --enable=all --std=c99 -I. \
+            --library=../JaszczurHAL/config/tooling/cppcheck-atomics.cfg \
             --suppress=missingInclude \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \

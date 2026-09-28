@@ -17,10 +17,38 @@
 #include <math.h>
 #include <string.h>
 
+#ifdef ECU_TEST_CLOCK_INTERLEAVING
+static void (*s_clockHook)(void);
+static bool s_finishManual;
+extern "C" uint32_t __real_hal_millis(void);
+extern "C" uint32_t __wrap_hal_millis(void) {
+  const uint32_t now = __real_hal_millis();
+  if (s_clockHook != nullptr) {
+    void (*hook)(void) = s_clockHook;
+    s_clockHook = nullptr;
+    hook();
+  }
+  return now;
+}
+extern "C" float __real_testsWorkersManualStep(bool *finished);
+extern "C" float __wrap_testsWorkersManualStep(bool *finished) {
+  if (s_finishManual) {
+    hal_mock_advance_millis(1U);
+    *finished = true;
+    return 0.0f;
+  }
+  return __real_testsWorkersManualStep(finished);
+}
+#endif
+
 void setUp(void) {}
 
 /** @brief Release the controller each fixture allocates, so runs stay clean. */
 void tearDown(void) {
+#ifdef ECU_TEST_CLOCK_INTERLEAVING
+  s_clockHook = nullptr;
+  s_finishManual = false;
+#endif
   VP37Pump *pump = &getECUContext()->injectionPump;
   if (pump->pid.controller != NULL) {
     hal_pid_controller_destroy(pump->pid.controller);
@@ -718,6 +746,78 @@ void test_configurator_run_is_queued_and_reports_progress(void) {
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->demand.requestedPercent);
 }
 
+// The periodic status refresh shares the loop that releases every control
+// step, so it runs only while the configurator polls; starts and stops always
+// publish.
+void test_configurator_status_refreshes_only_while_polled(void) {
+  VP37Pump *pump = preparePump();
+  hal_mock_set_millis(1000U);
+  TEST_ASSERT_TRUE(initTests());
+  engineAtRest();
+  pump->feedback.position = VP37_getPositionDemandMinValue(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_MANUAL));
+
+  // Nobody polls: the drive moves, the published status stays as started.
+  pump->feedback.position = VP37_getPositionDemandMaxValue(pump);
+  hal_mock_set_millis(1100U);
+  (void)tickTests();
+  // The first poll reads that snapshot and counts as contact.
+  TEST_ASSERT_EQUAL_INT32(0, scStatus().position_x10);
+  // One refresh interval later the poll sees the drive as it is.
+  hal_mock_set_millis(1120U);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_INT32(1000, scStatus().position_x10);
+
+  // Once the host is quiet for the keepalive time, the refresh stops again.
+  pump->feedback.position = VP37_getPositionDemandMinValue(pump);
+  hal_mock_set_millis(1120U + ECU_SC_TESTS_KEEPALIVE_MS);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_INT32(1000, scStatus().position_x10);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, stopTests());
+  TEST_ASSERT_NULL(scStatus().active);
+}
+
+#ifdef ECU_TEST_CLOCK_INTERLEAVING
+static void pollFromOtherCore(void) {
+  hal_mock_advance_millis(1U);
+  (void)scStatus();
+}
+
+void test_configurator_contact_newer_than_clock_does_not_stop_test(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  engineAtRest();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, scOps()->run(nullptr, SC_TEST_NAME_CYCLIC));
+  (void)tickTests();
+  hal_mock_set_millis(1000U);
+  (void)scStatus();
+  s_clockHook = pollFromOtherCore;
+  TEST_ASSERT_TRUE(tickTests());
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_NAME_CYCLIC, testsActiveName());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, stopTests());
+}
+
+void test_finished_test_keeps_status_refresh_interval(void) {
+  VP37Pump *pump = preparePump();
+  hal_mock_set_millis(1000U);
+  TEST_ASSERT_TRUE(initTests());
+  engineAtRest();
+  pump->feedback.position = VP37_getPositionDemandMinValue(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_MANUAL));
+  (void)scStatus();
+  s_finishManual = true;
+  (void)tickTests(); // The worker crosses a millisecond before it finishes.
+  TEST_ASSERT_NULL(testsActiveName());
+  pump->feedback.position = VP37_getPositionDemandMaxValue(pump);
+  hal_mock_set_millis(1020U); // Only 19 ms since the stop publication.
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_INT32(0, scStatus().position_x10);
+  hal_mock_set_millis(1021U);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_INT32(1000, scStatus().position_x10);
+}
+#endif
+
 // Each entry binds its own progress: the staircases share keys, so their
 // series counts are set apart to tell a swapped binding.
 void test_configurator_tests_report_their_own_progress(void) {
@@ -914,6 +1014,11 @@ int main(void) {
   RUN_TEST(test_runtime_params_are_bounded_shared_with_the_console_and_reset);
   RUN_TEST(test_runtime_params_shape_the_staircase);
   RUN_TEST(test_configurator_run_is_queued_and_reports_progress);
+  RUN_TEST(test_configurator_status_refreshes_only_while_polled);
+#ifdef ECU_TEST_CLOCK_INTERLEAVING
+  RUN_TEST(test_configurator_contact_newer_than_clock_does_not_stop_test);
+  RUN_TEST(test_finished_test_keeps_status_refresh_interval);
+#endif
   RUN_TEST(test_configurator_tests_report_their_own_progress);
   RUN_TEST(test_configurator_sequence_runs_only_its_own_tests);
   RUN_TEST(test_configurator_test_stops_when_the_host_goes_quiet);

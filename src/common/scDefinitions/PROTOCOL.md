@@ -161,6 +161,10 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   the most recent finished test. Every other key is a progress value of the
   running test, such as the cyclic profile and rate, the random target, the
   staircase setpoint, or the pot phase. A host shows unknown keys as they are.
+  The ECU refreshes the position and progress values only while a host polls,
+  because the refresh shares the loop that releases every control step. The
+  first `SC_TEST_STATUS` after a pause can return the last published values; a later poll sees
+  updates once the controller has performed its next refresh (20 ms interval). Starts and stops show at once.
 - **Results.** `done`, `ok`, `failed`, `stopped`, `host_lost`,
   `session_end`, `engine_running`.
 - **Refusals.** `SC_BAD_REQUEST unknown_test` for a test the configurator

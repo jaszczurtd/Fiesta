@@ -33,6 +33,9 @@
 
 static hal_mutex_t s_commandMutex = NULL;
 static char s_command[VP37_CMD_BUF_SIZE];
+/* Written under the mutex, read without it by the controller core's poll: the
+ * loop that releases every control step must not take a lock to learn that
+ * nothing waits. */
 static uint8_t s_commandLength;
 
 //=============================================================================
@@ -147,7 +150,7 @@ static void testsHelpersParamsReset(void) {
  * @return True when the command queue is ready.
  */
 static bool testsHelpersReset(void) {
-  s_commandLength = 0U;
+  HAL_ATOMIC_STORE(&s_commandLength, 0U, HAL_ATOMIC_RELEASE);
   s_command[0] = '\0';
 
   testsHelpersParamsReset();
@@ -177,7 +180,7 @@ static hal_status_t testsHelpersQueueCommand(const char *line) {
   const bool busy = s_commandLength != 0U;
   if (!busy) {
     (void)memcpy(s_command, line, length + 1U);
-    s_commandLength = (uint8_t)length;
+    HAL_ATOMIC_STORE(&s_commandLength, (uint8_t)length, HAL_ATOMIC_RELEASE);
   }
   hal_mutex_unlock(s_commandMutex);
   return busy ? HAL_EBUSY : HAL_OK;
@@ -190,6 +193,7 @@ static hal_status_t testsHelpersQueueCommand(const char *line) {
  */
 static bool testsHelpersTakeCommand(char *out) {
   if ((out == NULL) ||
+      (HAL_ATOMIC_LOAD(&s_commandLength, HAL_ATOMIC_ACQUIRE) == 0U) ||
       (jh_hal_mutex_try_create_once(&s_commandMutex) == NULL)) {
     return false;
   }
@@ -197,7 +201,7 @@ static bool testsHelpersTakeCommand(char *out) {
   const uint8_t length = s_commandLength;
   if (length != 0U) {
     (void)memcpy(out, s_command, (size_t)length + 1U);
-    s_commandLength = 0U;
+    HAL_ATOMIC_STORE(&s_commandLength, 0U, HAL_ATOMIC_RELEASE);
   }
   hal_mutex_unlock(s_commandMutex);
   return length != 0U;
@@ -624,6 +628,7 @@ typedef struct {
 } tests_published_t;
 
 static hal_mutex_t s_scMutex = NULL;
+/* Written under the mutex, polled without it like the console queue. */
 static sc_request_kind_t s_scRequest = SC_REQUEST_NONE;
 static ecu_test_id_t s_scRequestTest = START_TEST_NONE;
 static tests_published_t s_published;
@@ -650,22 +655,32 @@ static hal_status_t scQueue(sc_request_kind_t kind, ecu_test_id_t test) {
   }
   const bool busy = s_scRequest != SC_REQUEST_NONE;
   if (!busy) {
-    s_scRequest = kind;
     s_scRequestTest = test;
+    HAL_ATOMIC_STORE(&s_scRequest, kind, HAL_ATOMIC_RELEASE);
   }
   hal_mutex_unlock(s_scMutex);
   return busy ? HAL_EBUSY : HAL_OK;
 }
 
 static sc_request_kind_t scTake(ecu_test_id_t *outTest) {
-  if (!scLock()) {
+  if ((HAL_ATOMIC_LOAD(&s_scRequest, HAL_ATOMIC_ACQUIRE) == SC_REQUEST_NONE) ||
+      !scLock()) {
     return SC_REQUEST_NONE;
   }
   const sc_request_kind_t kind = s_scRequest;
   *outTest = s_scRequestTest;
-  s_scRequest = SC_REQUEST_NONE;
+  HAL_ATOMIC_STORE(&s_scRequest, SC_REQUEST_NONE, HAL_ATOMIC_RELEASE);
   hal_mutex_unlock(s_scMutex);
   return kind;
+}
+
+/** @brief Whether the configurator polled within the keepalive window. */
+static bool scPolled(uint32_t *nowMs) {
+  /* Read contact first: the other core may publish a newer millisecond. */
+  const uint32_t contactMs =
+      HAL_ATOMIC_LOAD(&s_scContactMs, HAL_ATOMIC_ACQUIRE);
+  *nowMs = hal_millis();
+  return !hal_elapsed_u32(*nowMs, contactMs, ECU_SC_TESTS_KEEPALIVE_MS);
 }
 
 /** @brief Demand and measured position in percent of the usable stroke. */
@@ -684,11 +699,18 @@ static void readDrive(tests_published_t *out) {
   }
 }
 
-/** @brief Publish the status; @p force skips the refresh interval. */
+/**
+ * @brief Publish the status; @p force skips the refresh interval.
+ * @note Starts and stops always publish. The periodic refresh of drive and
+ * progress runs only while the configurator polls: nobody else reads it, and
+ * it shares the loop that releases every control step.
+ */
 static void publishStatus(bool force) {
+  uint32_t nowMs;
+  const bool polled = scPolled(&nowMs);
   const uint32_t intervalMs = 20U; /* Refresh while nothing changes. */
-  const uint32_t nowMs = hal_millis();
-  if (!force && !hal_elapsed_u32(nowMs, s_publishedMs, intervalMs)) {
+  if (!force &&
+      (!hal_elapsed_u32(nowMs, s_publishedMs, intervalMs) || !polled)) {
     return;
   }
   s_publishedMs = nowMs;
@@ -831,8 +853,11 @@ bool initTests(void) {
   s_sequenceIndex = 0U;
   s_lastTest = START_TEST_NONE;
   s_lastResult = NULL;
-  s_scRequest = SC_REQUEST_NONE;
+  HAL_ATOMIC_STORE(&s_scRequest, SC_REQUEST_NONE, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&s_scSessionEnded, false, HAL_ATOMIC_RELEASE);
+  /* No configurator is in contact until it calls in. */
+  HAL_ATOMIC_STORE(&s_scContactMs, hal_millis() - ECU_SC_TESTS_KEEPALIVE_MS,
+                   HAL_ATOMIC_RELEASE);
   s_initialized =
       testsHelpersReset() && (jh_hal_mutex_try_create_once(&s_scMutex) != NULL);
   if (s_initialized) {
@@ -1072,21 +1097,21 @@ static void applyScRequest(void) {
  * @brief Stop a configurator test nobody supervises any more.
  * @note The session ended, the host went quiet for ECU_SC_TESTS_KEEPALIVE_MS,
  * or, with the interlock on, the engine started. Console tests are the
- * bench operator's and are left alone.
+ * bench operator's and are left alone, and so is a session end seen while no
+ * configurator test runs: scRun() clears it before queuing the next one.
  */
 static void superviseScTest(void) {
-  const bool ended =
-      HAL_ATOMIC_EXCHANGE(&s_scSessionEnded, false, HAL_ATOMIC_ACQ_REL);
   if ((s_active == START_TEST_NONE) || (s_activeSource != TESTS_SOURCE_SC)) {
     return;
   }
+  const bool ended =
+      HAL_ATOMIC_LOAD(&s_scSessionEnded, HAL_ATOMIC_ACQUIRE) &&
+      HAL_ATOMIC_EXCHANGE(&s_scSessionEnded, false, HAL_ATOMIC_ACQ_REL);
+  uint32_t nowMs;
   const char *reason = NULL;
   if (ended) {
     reason = SC_TEST_RESULT_SESSION_END;
-  } else if (hal_elapsed_u32(
-                 hal_millis(),
-                 HAL_ATOMIC_LOAD(&s_scContactMs, HAL_ATOMIC_ACQUIRE),
-                 ECU_SC_TESTS_KEEPALIVE_MS)) {
+  } else if (!scPolled(&nowMs)) {
     reason = SC_TEST_RESULT_HOST_LOST;
 #if ECU_SC_TESTS_RPM_INTERLOCK
   } else if (getGlobalValue(F_RPM) > (float)ECU_SC_TESTS_RPM_LIMIT) {

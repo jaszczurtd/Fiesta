@@ -47,7 +47,7 @@ extern "C" {
 #define VP37_CURRENT_SCAN_BLOCK_FRAMES                                         \
   ((VP37_CURRENT_SCAN_BLOCK_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /            \
    VP37_CURRENT_SCAN_FRAME_NS)
-/** Capacity of the contiguous history consumed by the reducer. */
+/** Capacity of the current/supply ring consumed by the reducer. */
 #define VP37_CURRENT_SCAN_HISTORY_FRAMES                                       \
   ((VP37_CURRENT_SCAN_HISTORY_NS + VP37_CURRENT_SCAN_FRAME_NS - 1U) /          \
    VP37_CURRENT_SCAN_FRAME_NS)
@@ -173,7 +173,7 @@ hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
                                     VP37CurrentPulseResult *out);
 
 /**
- * @brief Copy the newest completed DMA block into continuous history.
+ * @brief Retain the newest completed DMA block in the current/supply ring.
  * @param sequence Non-NULL; block sequence when one was taken, else 0.
  * @return HAL_OK, HAL_EINVAL (NULL), HAL_EAGAIN (no new block), or HAL_ESTATE.
  * @note Core 1 only, at least once per block period, including between

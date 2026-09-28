@@ -176,6 +176,7 @@ if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
     set(ECU_CPPCHECK_ARGS
         --enable=all
         --std=c99
+        --library=${HAL_LIB}/config/tooling/cppcheck-atomics.cfg
         -I.
         --include=hal_project_config.h
         --suppress=missingInclude

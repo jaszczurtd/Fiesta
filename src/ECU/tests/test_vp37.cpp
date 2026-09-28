@@ -1792,6 +1792,8 @@ void test_vp37_invalid_timing_or_pid_step_disables_output(void) {
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 void test_vp37_trace_preserves_consecutive_steps_until_drained(void) {
+  static_assert(sizeof(VP37TraceSample) <= 148U,
+                "Trace padding must not consume the RAM function budget");
   VP37Pump *pump = &getECUContext()->injectionPump;
   setupPumpForProcessTests(pump);
   VP37_setPositionDemandPercentage(pump, 50);

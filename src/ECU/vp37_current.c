@@ -25,8 +25,17 @@ static uint16_t
     __attribute__((aligned(4)));
 static uint8_t s_scanShuntPosition;
 static uint8_t s_scanSupplyPosition;
+/* Only the reducer's two channels need history; the mux stays in DMA. */
+#define VP37_CURRENT_HISTORY_PINS 2U
 static uint16_t
-    s_scanHistory[VP37_CURRENT_SCAN_HISTORY_FRAMES * VP37_CURRENT_SCAN_PINS];
+    s_scanHistory[VP37_CURRENT_SCAN_HISTORY_FRAMES * VP37_CURRENT_HISTORY_PINS];
+static uint32_t s_scanHistoryFirst;
+
+typedef struct {
+  VP37CurrentScanBlock block;
+  uint32_t first;
+  uint32_t capacity;
+} VP37CurrentScanView;
 static uint32_t s_scanHistoryFrames;
 static uint32_t s_scanHistoryStartUs;
 static uint32_t s_scanHistorySequence;
@@ -47,7 +56,8 @@ static uint32_t s_scanPulseFall;
 static bool s_scanPulseCached;
 
 /* The short ON ramp is nearly sorted; also used for the startup median. */
-static void VP37_currentSortRaw(uint16_t *values, uint32_t count) {
+static void HAL_RAM_FUNC(VP37_currentSortRaw)(uint16_t *values,
+                                              uint32_t count) {
   for (uint32_t i = 1U; i < count; i++) {
     const uint16_t key = values[i];
     uint32_t j = i;
@@ -153,10 +163,11 @@ static int32_t VP37_currentDutyFromTime(uint32_t onTimeUs, uint32_t periodUs) {
   return (int32_t)pwm;
 }
 
-hal_status_t VP37_currentPulseAnalyze(const VP37CurrentPhaseSample *samples,
-                                      uint32_t count, uint32_t cycleStartUs,
-                                      uint32_t onTimeUs, uint32_t periodUs,
-                                      VP37CurrentPulseResult *out) {
+hal_status_t
+HAL_RAM_FUNC(VP37_currentPulseAnalyze)(const VP37CurrentPhaseSample *samples,
+                                       uint32_t count, uint32_t cycleStartUs,
+                                       uint32_t onTimeUs, uint32_t periodUs,
+                                       VP37CurrentPulseResult *out) {
   if ((samples == NULL) || (out == NULL) || (count == 0U) ||
       (onTimeUs < (2U * VP37_CURRENT_PULSE_EDGE_GUARD_US)) ||
       (periodUs <= onTimeUs)) {
@@ -279,23 +290,28 @@ static uint32_t VP37_currentFramesToUs(uint32_t frames, uint32_t frameNs) {
   return (uint32_t)((((uint64_t)frames * (uint64_t)frameNs) + 500U) / 1000U);
 }
 
-static uint16_t VP37_currentBlockRaw(const VP37CurrentScanBlock *block,
+static uint16_t VP37_currentBlockRaw(const VP37CurrentScanView *view,
                                      uint32_t frame, uint8_t position,
                                      bool compensated) {
-  const uint16_t raw = block->samples[frame * block->pinCount + position];
+  const VP37CurrentScanBlock *block = &view->block;
+  uint32_t index = view->first + frame;
+  if (index >= view->capacity) {
+    index -= view->capacity;
+  }
+  const uint16_t raw = block->samples[(index * block->pinCount) + position];
   return compensated ? raw : VP37_currentCompensatedRaw((int)raw);
 }
 
 /* Edges span DMA boundaries. Absolute frame indices wrap by subtraction. */
-static void VP37_currentTrackEdges(const VP37CurrentScanBlock *block,
-                                   uint32_t firstFrame, VP37CurrentEdges *edges,
-                                   bool compensated) {
+static void HAL_RAM_FUNC(VP37_currentTrackEdges)(
+    const VP37CurrentScanView *view, uint32_t firstFrame,
+    VP37CurrentEdges *edges, bool compensated) {
+  const VP37CurrentScanBlock *block = &view->block;
   const uint16_t onRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_ON_AMPS);
   const uint16_t offRaw = VP37_currentAmpsToRaw(VP37_CURRENT_GATE_OFF_AMPS);
   for (uint32_t k = 0U; k < block->frames; k++) {
     const uint16_t level = VP37_currentCorrectedRaw(
-        VP37_currentBlockRaw(block, k, block->shuntPosition, compensated),
-        NULL);
+        VP37_currentBlockRaw(view, k, block->shuntPosition, compensated), NULL);
     if (!edges->initialized) {
       edges->gateOn = level >= onRaw;
       edges->initialized = true;
@@ -330,11 +346,11 @@ static void VP37_currentTrackEdges(const VP37CurrentScanBlock *block,
   }
 }
 
-static hal_status_t
-VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
-                             VP37CurrentPulseResult *out,
-                             const VP37CurrentEdges *retainedEdges,
-                             uint32_t firstFrame, bool compensated) {
+static hal_status_t HAL_RAM_FUNC(VP37_currentScanReducePeriod)(
+    const VP37CurrentScanView *view, VP37CurrentPulseResult *out,
+    const VP37CurrentEdges *retainedEdges, uint32_t firstFrame,
+    bool compensated) {
+  const VP37CurrentScanBlock *block = &view->block;
   static VP37CurrentPhaseSample s_pulseSamples[VP37_CURRENT_PULSE_SAMPLES];
   if (out == NULL) {
     return HAL_EINVAL;
@@ -342,7 +358,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   (void)memset(out, 0, sizeof(*out));
   out->zeroRaw = s_currentZeroRaw;
   out->zeroValid = s_currentZeroValid;
-  if ((block == NULL) || (block->samples == NULL) || (block->frames < 2U) ||
+  if ((block->samples == NULL) || (block->frames < 2U) ||
       (block->pinCount == 0U) || (block->shuntPosition >= block->pinCount) ||
       (block->supplyPosition >= block->pinCount) || (block->frameNs == 0U)) {
     return HAL_EINVAL;
@@ -354,7 +370,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
   VP37CurrentEdges localEdges = {0};
   const VP37CurrentEdges *edges = retainedEdges;
   if (edges == NULL) {
-    VP37_currentTrackEdges(block, firstFrame, &localEdges, compensated);
+    VP37_currentTrackEdges(view, firstFrame, &localEdges, compensated);
     edges = &localEdges;
   }
   const uint32_t glitches = edges->glitches;
@@ -393,7 +409,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
                                     : VP37_currentFramesToUs(k, block->frameNs);
       s_pulseSamples[count].timestampUs = block->startUs + sampleUs;
       s_pulseSamples[count].rawSample = VP37_currentCorrectedRaw(
-          VP37_currentBlockRaw(block, k, block->shuntPosition, compensated),
+          VP37_currentBlockRaw(view, k, block->shuntPosition, compensated),
           &clipped);
       s_pulseSamples[count].gateOn = 1U;
       s_pulseSamples[count].clipped = clipped ? 1U : 0U;
@@ -401,7 +417,7 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
     }
     // Each phase gets its own mean because the rail sags while the gate drives.
     const int supplyRaw =
-        (int)VP37_currentBlockRaw(block, k, block->supplyPosition, compensated);
+        (int)VP37_currentBlockRaw(view, k, block->supplyPosition, compensated);
     if ((supplyRaw > 0) && (supplyRaw < (int)VP37_CURRENT_ADC_MAX_RAW)) {
       supplySum[on ? 1U : 0U] += (uint32_t)supplyRaw;
       supplyCount[on ? 1U : 0U]++;
@@ -459,9 +475,11 @@ VP37_currentScanReducePeriod(const VP37CurrentScanBlock *block,
 
 /* The newest complete time window rejects PWM ripple without waiting for a
    current edge. Its timestamp describes the mean, not its publication. */
-static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
-                                           VP37CurrentPulseResult *out,
-                                           bool compensated) {
+static void
+HAL_RAM_FUNC(VP37_currentReduceLatestSupply)(const VP37CurrentScanView *view,
+                                             VP37CurrentPulseResult *out,
+                                             bool compensated) {
+  const VP37CurrentScanBlock *block = &view->block;
   const uint32_t periodNs =
       VP37_currentPeriodPlausible(out->periodUs)
           ? (out->periodUs * 1000U)
@@ -474,7 +492,7 @@ static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
     bool valid = true;
     for (uint32_t k = first; k < block->frames; k++) {
       const uint16_t raw =
-          VP37_currentBlockRaw(block, k, block->supplyPosition, compensated);
+          VP37_currentBlockRaw(view, k, block->supplyPosition, compensated);
       if ((raw == 0U) || (raw >= VP37_CURRENT_ADC_MAX_RAW)) {
         valid = false;
       }
@@ -496,16 +514,22 @@ static void VP37_currentReduceLatestSupply(const VP37CurrentScanBlock *block,
 
 hal_status_t VP37_currentScanReduce(const VP37CurrentScanBlock *block,
                                     VP37CurrentPulseResult *out) {
+  VP37CurrentScanView view = {0};
+  if (block != NULL) {
+    view.block = *block;
+    view.capacity = block->frames;
+  }
   const hal_status_t status =
-      VP37_currentScanReducePeriod(block, out, NULL, 0U, false);
+      VP37_currentScanReducePeriod(&view, out, NULL, 0U, false);
   if (status != HAL_EINVAL) {
-    VP37_currentReduceLatestSupply(block, out, false);
+    VP37_currentReduceLatestSupply(&view, out, false);
   }
   return status;
 }
 
-static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
-                                        uint32_t frameNs) {
+static void
+HAL_RAM_FUNC(VP37_currentRetainScanBlock)(const hal_adc_scan_block_t *block,
+                                          uint32_t frameNs) {
   if (s_scanHistoryFrames != 0U) {
     const uint32_t interval = block->completed_us - s_scanHistoryCompletedUs;
     const uint32_t expected = VP37_currentFramesToUs(block->frames, frameNs);
@@ -520,39 +544,48 @@ static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
   const uint32_t available = VP37_CURRENT_SCAN_HISTORY_FRAMES - block->frames;
   const uint32_t keep =
       (s_scanHistoryFrames < available) ? s_scanHistoryFrames : available;
+  const uint32_t capacity = VP37_CURRENT_SCAN_HISTORY_FRAMES;
   if (s_scanHistoryFrames == 0U) {
     (void)memset(&s_scanEdges, 0, sizeof(s_scanEdges));
     s_scanPulseCached = false;
     s_scanFirstFrame = 0U;
+    s_scanHistoryFirst = 0U;
     s_scanHistoryStartUs =
         block->completed_us - VP37_currentFramesToUs(block->frames, frameNs);
   } else {
     s_scanFirstFrame += s_scanHistoryFrames - keep;
     s_scanHistoryStartUs +=
         VP37_currentFramesToUs(s_scanHistoryFrames - keep, frameNs);
+    s_scanHistoryFirst += s_scanHistoryFrames - keep;
+    if (s_scanHistoryFirst >= capacity) {
+      s_scanHistoryFirst -= capacity;
+    }
   }
-  const uint32_t pins = block->pin_count;
-  (void)memmove(s_scanHistory,
-                &s_scanHistory[(s_scanHistoryFrames - keep) * pins],
-                keep * pins * sizeof(s_scanHistory[0]));
-  (void)memcpy(&s_scanHistory[keep * pins], block->samples,
-               block->frames * pins * sizeof(s_scanHistory[0]));
-  // Compensate each arriving conversion once, before any overlapping window.
-  for (uint32_t k = keep; k < keep + block->frames; ++k) {
-    uint16_t *frame = &s_scanHistory[k * pins];
-    frame[s_scanShuntPosition] =
-        VP37_currentCompensatedRaw((int)frame[s_scanShuntPosition]);
-    frame[s_scanSupplyPosition] =
-        VP37_currentCompensatedRaw((int)frame[s_scanSupplyPosition]);
+  uint32_t write = s_scanHistoryFirst + keep;
+  if (write >= capacity) {
+    write -= capacity;
   }
-  const VP37CurrentScanBlock newFrames = {
-      .samples = &s_scanHistory[keep * pins],
-      .frames = block->frames,
-      .pinCount = block->pin_count,
-      .shuntPosition = s_scanShuntPosition,
-      .supplyPosition = s_scanSupplyPosition,
-      .frameNs = frameNs,
-      .startUs = 0U};
+  const uint32_t appendedFirst = write;
+  for (uint32_t k = 0U; k < block->frames; ++k) {
+    const uint16_t *source = &block->samples[k * block->pin_count];
+    uint16_t *frame = &s_scanHistory[write * VP37_CURRENT_HISTORY_PINS];
+    frame[0] = VP37_currentCompensatedRaw((int)source[s_scanShuntPosition]);
+    frame[1] = VP37_currentCompensatedRaw((int)source[s_scanSupplyPosition]);
+    write++;
+    if (write == capacity) {
+      write = 0U;
+    }
+  }
+  const VP37CurrentScanView newFrames = {
+      .block = {.samples = s_scanHistory,
+                .frames = block->frames,
+                .pinCount = VP37_CURRENT_HISTORY_PINS,
+                .shuntPosition = 0U,
+                .supplyPosition = 1U,
+                .frameNs = frameNs,
+                .startUs = 0U},
+      .first = appendedFirst,
+      .capacity = capacity};
   VP37_currentTrackEdges(&newFrames, s_scanFirstFrame + keep, &s_scanEdges,
                          true);
   s_scanHistoryFrames = keep + block->frames;
@@ -561,7 +594,7 @@ static void VP37_currentRetainScanBlock(const hal_adc_scan_block_t *block,
   s_scanHistoryFrameNs = frameNs;
 }
 
-hal_status_t VP37_currentScanPoll(uint32_t *sequence) {
+hal_status_t HAL_RAM_FUNC(VP37_currentScanPoll)(uint32_t *sequence) {
   if (sequence == NULL) {
     return HAL_EINVAL;
   }
@@ -593,8 +626,8 @@ hal_status_t VP37_currentScanPoll(uint32_t *sequence) {
   return status;
 }
 
-hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
-                                     uint32_t *sequence) {
+hal_status_t HAL_RAM_FUNC(VP37_currentScanCollect)(VP37CurrentPulseResult *out,
+                                                   uint32_t *sequence) {
   if ((out == NULL) || (sequence == NULL)) {
     return HAL_EINVAL;
   }
@@ -605,13 +638,16 @@ hal_status_t VP37_currentScanCollect(VP37CurrentPulseResult *out,
   if (!s_scanPending) {
     return HAL_EAGAIN;
   }
-  const VP37CurrentScanBlock view = {.samples = s_scanHistory,
-                                     .frames = s_scanHistoryFrames,
-                                     .pinCount = VP37_CURRENT_SCAN_PINS,
-                                     .shuntPosition = s_scanShuntPosition,
-                                     .supplyPosition = s_scanSupplyPosition,
-                                     .frameNs = s_scanHistoryFrameNs,
-                                     .startUs = s_scanHistoryStartUs};
+  const VP37CurrentScanView view = {
+      .block = {.samples = s_scanHistory,
+                .frames = s_scanHistoryFrames,
+                .pinCount = VP37_CURRENT_HISTORY_PINS,
+                .shuntPosition = 0U,
+                .supplyPosition = 1U,
+                .frameNs = s_scanHistoryFrameNs,
+                .startUs = s_scanHistoryStartUs},
+      .first = s_scanHistoryFirst,
+      .capacity = VP37_CURRENT_SCAN_HISTORY_FRAMES};
   *sequence = s_scanHistorySequence;
   s_scanPending = false;
   hal_status_t reduced = HAL_OK;
