@@ -2961,7 +2961,7 @@ static void checkUpperRules(float limit) {
   pump->demand.desiredPosition = (float)pump->feedback.adjustMax;
   TEST_ASSERT_FLOAT_WITHIN(.01f, 45.0f, VP37_integralLimit(pump));
   pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 120.0f, VP37_integralDeadband(pump));
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 380.0f, VP37_integralDeadband(pump));
   pump->pid.topKd = .002f;
   pump->pidDtUs = 5000U;
   pump->demand.atRest = false;
@@ -2974,6 +2974,7 @@ static void checkUpperRules(float limit) {
 }
 
 void test_vp37_upper_stroke_rules_apply_under_any_physical_limit(void) {
+  checkUpperRules(85.0f);
   checkUpperRules(86.0f);
   checkUpperRules(89.9f);
   checkUpperRules(90.0f);
@@ -3946,6 +3947,46 @@ void test_vp37_integral_deadband_widens_only_in_the_upper_stroke(void) {
                           pump->pid.integralDeadbandHz);
 }
 
+// The dead zone bends at 82 % of the travel. Below the bend it follows the
+// straight 12 -> 120 Hz taper it had, so the 95 % target of the upper
+// staircases keeps its zone; above it the zone widens steeply, holding the
+// full-demand target at the physical limit about 100 Hz short of it, where a
+// cold pump does not hop (bench 2026-09-28: 30 s holds at the 85 % limit
+// stayed put, at 86 % two of three hopped). The extra knot must not move the
+// integral authority off its straight taper.
+void test_vp37_dead_zone_bends_to_hold_full_demand_below_the_unstable_band(
+    void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  setupPumpForProcessTests(pump);
+  pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  const float travel =
+      (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  const auto at = [&](float percent) {
+    pump->demand.desiredPosition =
+        (float)pump->feedback.adjustMin + (travel * percent / 100.0f);
+  };
+  const auto straightTaper = [](float percent) {
+    return 12.0f + ((percent - 75.0f) * 108.0f / 25.0f);
+  };
+
+  at(75.0f);
+  TEST_ASSERT_EQUAL_FLOAT((float)VP37_PID_DEADBAND,
+                          VP37_integralDeadband(pump));
+  const float top95 = 95.0f * VP37_PHYSICAL_LIMIT_PERCENT / 100.0f;
+  at(top95);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, straightTaper(top95),
+                           VP37_integralDeadband(pump));
+  at(VP37_PHYSICAL_LIMIT_PERCENT);
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 98.3f, VP37_integralDeadband(pump));
+
+  // Integral authority: 120 to the taper start, then 3 PWM per percent.
+  for (uint32_t step = 0U; step <= 25U; step++) {
+    at(75.0f + (float)step);
+    TEST_ASSERT_FLOAT_WITHIN(.01f, 120.0f - (3.0f * (float)step),
+                             VP37_integralLimit(pump));
+  }
+}
+
 static void holdAt(VP37Pump *pump, uint32_t &ms, uint32_t count,
                    int16_t position) {
   for (uint32_t i = 0U; i < count; i++) {
@@ -4248,6 +4289,8 @@ int main(void) {
   RUN_TEST(test_vp37_measured_drive_does_not_apply_silence_as_heating_time);
   RUN_TEST(test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots);
   RUN_TEST(test_vp37_integral_deadband_widens_only_in_the_upper_stroke);
+  RUN_TEST(
+      test_vp37_dead_zone_bends_to_hold_full_demand_below_the_unstable_band);
   RUN_TEST(
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
   RUN_TEST(test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump);

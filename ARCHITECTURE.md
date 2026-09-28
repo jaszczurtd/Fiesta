@@ -95,9 +95,12 @@ for a 0-100% demand across the usable stroke, and
 `hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)` for
 raw feedback counts, bounded by `VP37_getPositionDemandMinValue()` and
 `VP37_getPositionDemandMaxValue()`. The usable stroke ends at
-`VP37_PHYSICAL_LIMIT_PERCENT` (86%) of the calibrated travel. This keeps the
-actuator below the negative-stiffness steps of the upper stroke, at the cost of
-the largest fuel quantities; 100 restores the full travel. Both write the same
+`VP37_PHYSICAL_LIMIT_PERCENT` (85%) of the calibrated travel. This keeps the
+actuator below the negative-stiffness steps of the upper stroke and below the
+band under 86% that turns soft in cold fuel, at the cost of the largest fuel
+quantities; 100 restores the full travel. The integration dead zone widens
+steeply above 82% of the travel, so a full-demand hold settles about 100 Hz
+short of the limit instead of creeping up to it. Both write the same
 demand, so driver input, engine control, and bench tests share one position
 ramp, feedforward, and PID. The unit is the only difference: the controller
 has no input-source mode, source-specific behaviour, filter-mode flag, or
@@ -126,7 +129,7 @@ tapers from 75%, the slower upper slews (275%/s, standing 187.5%/s) and the
 settled-target damping, which reaches its full position weight between 85%
 and 90% with a default gain of 0.001 PWM·s/Hz, engages after the target
 settles and fades through a 50 ms blend when movement resumes. Without them a
-fast ramp overshoots the 86% limit by a tenth of the stroke and the descent
+fast ramp overshoots the physical limit by a tenth of the stroke and the descent
 oscillates. The holding map and supply/temperature compensation remain shared
 across the stroke. Once the
 demand settles, the climb floor follows negative learned integral trim, so

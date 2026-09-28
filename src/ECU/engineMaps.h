@@ -35,7 +35,7 @@ extern const int32_t RPM_table[RPM_PRESCALERS][N75_PERCENT_VALS];
 extern const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS];
 
 // ── VP37 integral authority and dead zone along the stroke ───────────────────
-#define VP37_STROKE_TAPER_KNOTS 3U
+#define VP37_STROKE_TAPER_KNOTS 4U
 #define VP37_STROKE_TAPER_COLUMNS 2U
 
 /** @brief Integral authority, one row per knot in ascending demand:
@@ -45,9 +45,9 @@ extern const float VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS]
                                           [VP37_STROKE_TAPER_COLUMNS];
 
 /** @brief Integration dead zone, one row per knot in ascending demand:
- * {demand [%], zone [Hz]}. The base below the taper start, widening to the
- * top value at full demand. The table holds the default top; the bench may
- * move it at runtime. */
+ * {demand [%], zone [Hz]}. The base below the taper start, widening gently
+ * to the bend and steeply from there to the top value at full demand. The
+ * table holds the default top; the bench may move it at runtime. */
 extern const float VP37_INTEGRAL_DEADBAND_MAP[VP37_STROKE_TAPER_KNOTS]
                                              [VP37_STROKE_TAPER_COLUMNS];
 

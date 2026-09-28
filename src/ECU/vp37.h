@@ -292,10 +292,12 @@ extern "C" {
 /** Physical top of the usable stroke [% of the calibrated travel]. Demand
  * 0..100 % maps onto 0..this share of the travel, so the upper stroke with its
  * negative-stiffness steps (from ~90 %, static sweep 2026-09-20) stays out of
- * reach; the maximum fuel quantity is cut accordingly. 100 restores the full
- * travel. The stroke maps (holding map, tapers, upper damping) keep the
- * physical scale. */
-#define VP37_PHYSICAL_LIMIT_PERCENT 86.0f
+ * reach; the maximum fuel quantity is cut accordingly. In cold fuel the band
+ * just under 86 % is soft as well: a 30 s full-demand hold there hopped up to
+ * the target in two of three tries, at 85 % in none (bench 2026-09-28, FT
+ * 34 C). 100 restores the full travel. The stroke maps (holding map, tapers,
+ * upper damping) keep the physical scale. */
+#define VP37_PHYSICAL_LIMIT_PERCENT 85.0f
 /** Optional deceleration of every rising ramp into the top of the demand
  * range [% of travel/s^2]; bench knob X2. Zero disables it and a standing
  * target keeps its own arrival brake. Off since the Adjustometer averages one
