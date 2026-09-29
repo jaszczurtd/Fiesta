@@ -122,7 +122,8 @@ Detection (read-only, no auth):
   be flagged as ambiguous targets.
 - A scrollable log view shows HELLO responses and detection details.
 - Core and CLI support read-only `SC_*` requests across all
-  in-scope firmware modules (`ECU`, `Clocks`, `OilAndSpeed`, `RTC_Clock`):
+  in-scope firmware modules, the ones with a `serialConfigurator` entry in
+  the repository's `modules.json` (`ECU`, `Clocks`, `OilAndSpeed`, `RTC_Clock`):
   `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`.
 
 Authenticated bootloader entry (Phase 3 + 5):

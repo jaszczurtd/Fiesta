@@ -11,10 +11,11 @@ import subprocess
 import sys
 from typing import Any
 
+from fiesta_modules import load as load_module_registry
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_JH_ROOT = REPO_ROOT / "src" / "JaszczurHAL"
-MODULES = ("ECU", "Clocks", "OilAndSpeed", "Adjustometer", "Fiesta_clock")
 HOOK_TASK_LABEL = "Project: Configure Git hooks"
 LINUX_ONLY_TASK_LABELS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
 
@@ -172,8 +173,8 @@ def main(argv: list[str]) -> int:
 
     registry = tooling_target_registry(jh_root)
     expected: dict[Path, str] = {}
-    for module in MODULES:
-        expected.update(desired_project_files(module, registry))
+    for module in load_module_registry().firmware():
+        expected.update(desired_project_files(module.name, registry))
     expected[REPO_ROOT / ".vscode" / "tasks.json"] = json_text(desired_root_tasks())
 
     mismatches = [

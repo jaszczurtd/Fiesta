@@ -679,9 +679,9 @@ void sc_values_tab_rebuild(AppState *state, bool detected_any) {
       continue;
     }
     GtkWidget *page = build_module_subtab(state, i);
-    if (strcmp(st->display_name, SC_MODULE_ECU) == 0) {
-      /* The ECU also runs functional tests: its page splits into
-       * the parameter form and the tests the firmware reports. */
+    if (sc_core_module_has_tests(i)) {
+      /* A module that runs functional tests (the ECU) gets a page split
+       * into the parameter form and the tests the firmware reports. */
       GtkWidget *inner = gtk_notebook_new();
       gtk_notebook_append_page(
           GTK_NOTEBOOK(inner), page,

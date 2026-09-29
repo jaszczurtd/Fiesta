@@ -1,5 +1,6 @@
 #include "sc_transport.h"
 #include "../config.h"
+#include "sc_module_table.h"
 #include "sc_text.h"
 #include "sc_transport_timeout.h"
 
@@ -141,14 +142,20 @@ static const char *trim_leading_spaces(const char *line) {
   return line;
 }
 
-static bool candidate_is_out_of_scope(const char *path) {
+bool sc_transport_candidate_out_of_scope(const char *path) {
   if (path == NULL) {
     return false;
   }
-  /* Adjustometer is permanently out of scope for SerialConfigurator's
-   * framed protocol by project policy. Skip it at candidate enumeration
-   * time so we don't emit expected HELLO timeouts for that device. */
-  return strstr(path, "Fiesta_Adjustometer") != NULL;
+  /* Boards without a SerialConfigurator entry in modules.json (the
+   * Adjustometer) do not speak the framed protocol. Skip them at candidate
+   * enumeration time so we don't emit expected HELLO timeouts for them. */
+  static const char *const k_hints[] = SC_OUT_OF_SCOPE_BY_ID_HINTS;
+  for (const char *const *hint = k_hints; *hint != NULL; ++hint) {
+    if (strstr(path, *hint) != NULL) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -694,8 +701,8 @@ static bool default_list_candidates(void *context,
   }
 
   for (size_t i = 0u; i < devices.gl_pathc; ++i) {
-    if (candidate_is_out_of_scope(devices.gl_pathv[i])) {
-      transport_log("candidate skip path='%s': Adjustometer is out-of-scope",
+    if (sc_transport_candidate_out_of_scope(devices.gl_pathv[i])) {
+      transport_log("candidate skip path='%s': board is out of scope",
                     devices.gl_pathv[i]);
       continue;
     }

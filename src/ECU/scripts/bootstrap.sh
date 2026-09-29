@@ -3,16 +3,10 @@
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
 # Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
-# native RP toolchain, syncs JaszczurHAL, runs host tests, compiles firmware
-# for every Fiesta
-# module, and finally builds + tests + packages the SerialConfigurator
-# desktop tool:
-#   - ECU                (host tests + firmware, -Werror)
-#   - Clocks             (host tests + firmware)
-#   - OilAndSpeed        (host tests + firmware)
-#   - Fiesta_clock       (firmware)
-#   - Adjustometer       (host tests + firmware, -Werror)
-#   - SerialConfigurator (CMake desktop build + tests + .deb package)
+# native RP toolchain, syncs JaszczurHAL, runs host tests (runalltests.sh),
+# compiles firmware with -Werror for every firmware module listed in
+# modules.json, and finally builds + tests + packages the SerialConfigurator
+# desktop tool (CMake desktop build + tests + .deb package).
 # Idempotent - safe to re-run. Also covers the deps used by
 # misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
 # cppcheck package).
@@ -37,15 +31,9 @@ SYSTEM_DEPENDENCY_SCRIPT="$SCRIPT_DIR/ensure-system-dependencies.sh"
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"
 
-# Per-module build matrix.
+# Per-module build matrix from modules.json (via fiesta-firmware-common.sh).
 # Native JaszczurHAL builds use -Werror for every module.
-FW_MODULES=(
-    "ECU"
-    "Clocks"
-    "OilAndSpeed"
-    "Fiesta_clock"
-    "Adjustometer"
-)
+FW_MODULES=("${FIESTA_FIRMWARE_MODULES[@]}")
 
 HAL_DIR="$SRC_ROOT/JaszczurHAL"
 

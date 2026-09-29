@@ -8,16 +8,11 @@
 # Gates (in order):
 #   1. Tool presence check
 #   2. Host runtime tests for all modules (cmake + ctest)
-#   3. Static analysis: cppcheck (ECU)
+#   3. Static analysis: cppcheck (modules with "analysis": ["cppcheck"])
 #   4. Valgrind memcheck targets for all modules
 #   5. clang-tidy targets for all modules
 #
-# Covered modules:
-#   - ECU
-#   - Adjustometer
-#   - Clocks
-#   - OilAndSpeed
-#   - SerialConfigurator
+# Covered modules: every module with "hostTests" in modules.json.
 #
 # Usage:
 #   ./runalltests.sh
@@ -101,14 +96,24 @@ done
 
 SECONDS=0
 
+# shellcheck source=src/common/scripts/fiesta-modules.sh
+source "${SCRIPT_DIR}/src/common/scripts/fiesta-modules.sh"
+
 # name:source_dir:build_dir
-MODULE_MATRIX=(
-    "ECU:src/ECU:src/ECU/build_test"
-    "Adjustometer:src/Adjustometer:src/Adjustometer/build_test"
-    "Clocks:src/Clocks:src/Clocks/build_test"
-    "OilAndSpeed:src/OilAndSpeed:src/OilAndSpeed/build_test"
-    "SerialConfigurator:src/SerialConfigurator:src/SerialConfigurator/build"
-)
+MODULE_MATRIX=("${FIESTA_HOST_TEST_MODULES[@]}")
+
+# Prints the build directory of a host-tested module.
+module_build_dir() {
+    local entry name build_rel
+    for entry in "${MODULE_MATRIX[@]}"; do
+        IFS=':' read -r name _ build_rel <<< "${entry}"
+        if [[ "${name}" == "$1" ]]; then
+            printf '%s\n' "${build_rel}"
+            return 0
+        fi
+    done
+    return 1
+}
 
 configure_build_and_test_module() {
     local name="$1"
@@ -188,8 +193,10 @@ done
 pass "All module host tests passed."
 
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
-    header "Gate 3/5: Static analysis - cppcheck (ECU)"
-    run_module_target "ECU" "src/ECU/build_test" "check-cppcheck"
+    header "Gate 3/5: Static analysis - cppcheck (${FIESTA_CPPCHECK_MODULES[*]})"
+    for name in "${FIESTA_CPPCHECK_MODULES[@]}"; do
+        run_module_target "${name}" "$(module_build_dir "${name}")" "check-cppcheck"
+    done
     pass "cppcheck gate passed."
 else
     info "Gate 3/5 skipped (--skip-cppcheck)."
@@ -222,6 +229,10 @@ echo -e "${BOLD}═════════════════════�
 echo -e "${GREEN}${BOLD}  ALL REQUESTED GATES PASSED ✓${NC}"
 echo -e "${BOLD}══════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "  Modules tested: ECU, Adjustometer, Clocks, OilAndSpeed, SerialConfigurator"
+tested_modules=()
+for entry in "${MODULE_MATRIX[@]}"; do
+    tested_modules+=("${entry%%:*}")
+done
+echo "  Modules tested: ${tested_modules[*]}"
 echo "  Total time: ${SECONDS}s"
 echo ""

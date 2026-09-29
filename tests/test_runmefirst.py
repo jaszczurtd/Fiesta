@@ -2,10 +2,16 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import fiesta_modules  # noqa: E402
+
+MODULE_FRAGMENT = "src/common/scripts/fiesta-modules.sh"
 
 
 @unittest.skipUnless(shutil.which("bash"), "runmefirst requires Bash")
@@ -16,11 +22,16 @@ class RunmefirstTests(unittest.TestCase):
             repo = base / "Fiesta checkout"
             repo.mkdir()
             shutil.copy2(ROOT / "runmefirst.sh", repo)
-            removed = [
-                f"src/{module}/{directory}"
-                for module in ("ECU", "Clocks", "OilAndSpeed", "Adjustometer")
-                for directory in ("build_test", ".build")
-            ] + ["src/Fiesta_clock/.build", "src/SerialConfigurator/build"]
+            (repo / MODULE_FRAGMENT).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / MODULE_FRAGMENT, repo / MODULE_FRAGMENT)
+            registry = fiesta_modules.load(ROOT)
+            removed = [f"src/{module.name}/{module.host_tests}"
+                       for module in registry.host_tests()]
+            removed += [f"src/{module.name}/.build" for module in registry.firmware()]
+            # The cases below rely on these directories being in the registry.
+            for relative in ("src/ECU/build_test", "src/SerialConfigurator/build",
+                             "src/Fiesta_clock/.build"):
+                self.assertIn(relative, removed)
             kept = ["src/JaszczurHAL/.build/cache", "src/ECU/start.c",
                     "src/ECU/.vscode/jaszczurhal.local.json", "build/user-file"]
             for relative in removed:
