@@ -56,10 +56,20 @@ Pending areas:
 
 ## Latest screening snapshot
 
-The 2026-09-22 screening with cppcheck 2.13.0 reports **939 active findings**
-across 31 rule IDs. The VP37 resistance-learning and climb-floor changes
-preserve the findings from commit `a5560a4`: no additions after comparing
-source text and rule IDs independently of line numbers. No suppressions were added. Licensed
+The 2026-09-29 screening with cppcheck 2.13.0 reports **1044 active findings**
+across 31 rule IDs: 731 in `src/ECU`, 313 in shared `src/common` sources.
+
+At commit `8cc5d2f` the same run gave 1046. The shared configurator session
+(`sc_config_session_t` in `sc_command_handlers.c`, used by every firmware
+module) removed one rule 15.5 and one rule 8.9 finding from `config.c`. It also
+left six advisory rule 8.7 findings on the SC command service API, which the
+host tests call directly; DR-006 in the deviation register records them as an
+accepted deviation, like DR-005. Compared by file and rule ID, independently of
+line numbers, nothing was added.
+
+The previous snapshot (939 findings, 2026-09-22, commit `a5560a4`) was not
+refreshed by the changes between `a5560a4` and `8cc5d2f`; the difference to
+1046 comes from those changes, which were not screened one by one. Licensed
 rule texts remain unavailable, so this is a regression check rather than a
 compliance claim.
 

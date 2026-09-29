@@ -6,7 +6,6 @@
 #include "tests.h"
 
 #include <hal/serial/hal_serial.h>
-#include <hal/serial/hal_serial_commands.h>
 #include <hal/serial/hal_serial_session.h>
 #include <hal/storage/hal_kv.h>
 #include <hal/system/hal_system.h>
@@ -18,7 +17,6 @@
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
-#include "../common/scDefinitions/sc_session_vocabulary.h"
 
 const char *err = "ERR";
 
@@ -56,10 +54,8 @@ static const sc_param_descriptor_t k_ecu_params[] = {
 };
 static const size_t k_ecu_params_count = COUNTOF(k_ecu_params);
 
-/* The adapter attaches the shared SC router service to this serial session. */
-static hal_serial_session_t s_configSession;
-static hal_serial_commands_t s_serialCommands;
-static sc_command_service_t s_commandService;
+/* SerialConfigurator session: serial session, SC service and their adapter. */
+static sc_config_session_t s_sc;
 
 static ecu_params_values_t s_active = {.fanCoolantStartC = TEMP_FAN_START,
                                        .fanCoolantStopC = TEMP_FAN_STOP,
@@ -410,28 +406,9 @@ static void configSessionForwardNonSc(const char *line, void *user) {
 }
 
 void configSessionInit(void) {
-  if (s_serialCommands.initialized) {
-    const hal_status_t detachStatus =
-        hal_serial_commands_deinit(&s_serialCommands);
-    if (detachStatus != HAL_OK) {
-      hal_derr("ECU SC adapter detach failed: %s",
-               hal_status_to_string(detachStatus));
-      return;
-    }
+  if (sc_config_session_stop(&s_sc, "ECU") != HAL_OK) {
+    return;
   }
-  if (s_commandService.initialized) {
-    const hal_status_t serviceStatus =
-        sc_command_service_deinit(&s_commandService);
-    if (serviceStatus != HAL_OK) {
-      hal_derr("ECU SC service detach failed: %s",
-               hal_status_to_string(serviceStatus));
-      return;
-    }
-  }
-
-  hal_serial_session_init_with_vocabulary(&s_configSession, SC_MODULE_TOKEN_ECU,
-                                          FW_VERSION, BUILD_ID,
-                                          &fiesta_default_vocabulary);
 
   sc_command_service_config_t serviceConfig = {0};
   serviceConfig.module_token = SC_MODULE_TOKEN_ECU;
@@ -448,32 +425,13 @@ void configSessionInit(void) {
   serviceConfig.tests = testsScOps();
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
-
-  hal_status_t status =
-      sc_command_service_init(&s_commandService, NULL, &serviceConfig);
-  if (status == HAL_OK) {
-    hal_serial_commands_config_t adapterConfig =
-        hal_serial_commands_config_defaults(&s_configSession);
-    adapterConfig.router = sc_command_service_router(&s_commandService);
-    adapterConfig.command_prefix = SC_COMMAND_PREFIX;
-    adapterConfig.formatter = sc_command_format_serial_response;
-    adapterConfig.allow_inactive = sc_command_allow_inactive_reboot;
-    adapterConfig.fallback = configSessionForwardNonSc;
-    status = hal_serial_commands_init(&s_serialCommands, &adapterConfig);
-  }
-  if (status != HAL_OK) {
-    if (s_commandService.initialized) {
-      (void)sc_command_service_deinit(&s_commandService);
-    }
-    hal_derr("ECU SC adapter init failed: %s", hal_status_to_string(status));
-  }
+  (void)sc_config_session_start(&s_sc, &serviceConfig,
+                                configSessionForwardNonSc, NULL, "ECU");
 }
 
 void configSessionTick(void) {
   static bool s_sessionWasActive = false;
-  hal_serial_session_poll(&s_configSession);
-  sc_command_service_process_deferred(&s_commandService);
-  const bool sessionActive = hal_serial_session_is_active(&s_configSession);
+  const bool sessionActive = sc_config_session_poll(&s_sc);
   if (s_sessionWasActive && !sessionActive) {
     testsScSessionEnded();
   }
@@ -485,9 +443,7 @@ void configSessionTick(void) {
 }
 
 bool configSessionActive(void) {
-  return hal_serial_session_is_active(&s_configSession);
+  return hal_serial_session_is_active(&s_sc.session);
 }
 
-uint32_t configSessionId(void) {
-  return hal_serial_session_id(&s_configSession);
-}
+uint32_t configSessionId(void) { return hal_serial_session_id(&s_sc.session); }

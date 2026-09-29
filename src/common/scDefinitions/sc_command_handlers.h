@@ -142,6 +142,19 @@ typedef struct {
 } sc_command_service_t;
 
 /**
+ * @brief SerialConfigurator session of one firmware module.
+ *
+ * Holds the serial session, the SC command service and the adapter that
+ * routes framed SC commands from the session to the service. Zero-initialize
+ * before the first sc_config_session_start().
+ */
+typedef struct {
+  hal_serial_session_t session;
+  sc_command_service_t service;
+  hal_serial_commands_t commands;
+} sc_config_session_t;
+
+/**
  * @brief Register the SerialConfigurator commands supported by one module.
  *
  * Read commands are always installed. SET/COMMIT/REVERT are installed when
@@ -186,6 +199,48 @@ void sc_command_reply_legacy_unknown(const char *line, void *session_user);
  * pending flag is consumed before entering the bootloader.
  */
 void sc_command_service_process_deferred(sc_command_service_t *service);
+
+/**
+ * @brief Detach the adapter and the service left by a previous start.
+ *
+ * Call before sc_config_session_start() when the session is started again.
+ * A failure is logged as "<log_name> SC adapter/service detach failed" and
+ * leaves the session untouched.
+ *
+ * @param session Session to stop; parts that were never started are skipped.
+ * @param log_name Module name used in the log, e.g. "ECU".
+ * @return HAL_OK, HAL_EINVAL for NULL arguments, or the detach error.
+ */
+hal_status_t sc_config_session_stop(sc_config_session_t *session,
+                                    const char *log_name);
+
+/**
+ * @brief Start the serial session, the SC command service and the adapter.
+ *
+ * The HELLO identity (module token, firmware version, build id) comes from
+ * @p config, so a module states it once. The adapter selects "SC_" commands,
+ * formats router failures with Fiesta tokens and admits only the pre-HELLO
+ * reboot request. On failure the service is detached again and the error is
+ * logged as "<log_name> SC adapter init failed".
+ *
+ * @param session Stopped or zero-initialized session.
+ * @param config Service configuration; its strings must outlive the session.
+ * @param fallback Handler for payloads that are not SC commands; NULL keeps
+ *        the historical `ERR UNKNOWN` reply.
+ * @param fallback_user Argument for @p fallback; ignored when it is NULL.
+ * @param log_name Module name used in the log, e.g. "ECU".
+ * @return HAL_OK, HAL_EINVAL for NULL arguments, or the init error.
+ */
+hal_status_t sc_config_session_start(sc_config_session_t *session,
+                                     const sc_command_service_config_t *config,
+                                     hal_serial_session_unknown_cb_t fallback,
+                                     void *fallback_user, const char *log_name);
+
+/**
+ * @brief Poll the serial session and run a reboot deferred by a command.
+ * @return Whether a host session is active after the poll; false for NULL.
+ */
+bool sc_config_session_poll(sc_config_session_t *session);
 
 #ifdef __cplusplus
 }
