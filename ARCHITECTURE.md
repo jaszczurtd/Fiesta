@@ -410,7 +410,12 @@ Commands, authentication, and signature status are described in the
 - **[`scDefinitions`](src/common/scDefinitions/)** holds the configurator
   protocol shared by the firmware modules and the desktop application. The
   protocol is described in
-  [`PROTOCOL.md`](src/common/scDefinitions/PROTOCOL.md).
+  [`PROTOCOL.md`](src/common/scDefinitions/PROTOCOL.md). Firmware modules run
+  their configurator session through `sc_config_session_t`
+  ([`sc_command_handlers.h`](src/common/scDefinitions/sc_command_handlers.h)):
+  it starts the serial session, the SC command service and the adapter
+  between them, so a module's `config` only lists its parameters, values and
+  callbacks.
 
 Most modules use the same layout. `Fiesta_clock` keeps older file names
 (`main.c`, `RTC.c`) but the same shared pieces.

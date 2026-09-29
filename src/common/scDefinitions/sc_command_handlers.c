@@ -2,9 +2,11 @@
 
 #include "sc_param_handlers.h"
 #include "sc_protocol.h"
+#include "sc_session_vocabulary.h"
 
 #include <hal/core/hal_array.h>
 #include <hal/security/hal_crypto.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_serial_session.h>
 #include <hal/system/hal_system.h>
 
@@ -1195,4 +1197,75 @@ void sc_command_service_process_deferred(sc_command_service_t *service) {
   service->reboot_pending = false;
   hal_delay_ms(SC_COMMAND_REBOOT_DELAY_MS);
   (void)hal_enter_bootloader();
+}
+
+hal_status_t sc_config_session_stop(sc_config_session_t *session,
+                                    const char *log_name) {
+  hal_status_t status = HAL_EINVAL;
+  if ((session != NULL) && (log_name != NULL)) {
+    status = HAL_OK;
+    if (session->commands.initialized) {
+      status = hal_serial_commands_deinit(&session->commands);
+      if (status != HAL_OK) {
+        hal_derr("%s SC adapter detach failed: %s", log_name,
+                 hal_status_to_string(status));
+      }
+    }
+    if ((status == HAL_OK) && session->service.initialized) {
+      status = sc_command_service_deinit(&session->service);
+      if (status != HAL_OK) {
+        hal_derr("%s SC service detach failed: %s", log_name,
+                 hal_status_to_string(status));
+      }
+    }
+  }
+  return status;
+}
+
+hal_status_t sc_config_session_start(sc_config_session_t *session,
+                                     const sc_command_service_config_t *config,
+                                     hal_serial_session_unknown_cb_t fallback,
+                                     void *fallback_user,
+                                     const char *log_name) {
+  hal_status_t status = HAL_EINVAL;
+  if ((session != NULL) && (config != NULL) && (log_name != NULL)) {
+    hal_serial_session_init_with_vocabulary(
+        &session->session, config->module_token, config->firmware_version,
+        config->build_id, &fiesta_default_vocabulary);
+    status = sc_command_service_init(&session->service, NULL, config);
+    if (status == HAL_OK) {
+      hal_serial_commands_config_t adapter =
+          hal_serial_commands_config_defaults(&session->session);
+      adapter.router = sc_command_service_router(&session->service);
+      adapter.command_prefix = SC_COMMAND_PREFIX;
+      adapter.formatter = sc_command_format_serial_response;
+      adapter.allow_inactive = sc_command_allow_inactive_reboot;
+      if (fallback != NULL) {
+        adapter.fallback = fallback;
+        adapter.fallback_user = fallback_user;
+      } else {
+        adapter.fallback = sc_command_reply_legacy_unknown;
+        adapter.fallback_user = &session->session;
+      }
+      status = hal_serial_commands_init(&session->commands, &adapter);
+    }
+    if (status != HAL_OK) {
+      if (session->service.initialized) {
+        (void)sc_command_service_deinit(&session->service);
+      }
+      hal_derr("%s SC adapter init failed: %s", log_name,
+               hal_status_to_string(status));
+    }
+  }
+  return status;
+}
+
+bool sc_config_session_poll(sc_config_session_t *session) {
+  bool active = false;
+  if (session != NULL) {
+    hal_serial_session_poll(&session->session);
+    sc_command_service_process_deferred(&session->service);
+    active = hal_serial_session_is_active(&session->session);
+  }
+  return active;
 }
