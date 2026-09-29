@@ -339,30 +339,44 @@ static int detect_select_authenticate(const CliSelectors *selectors,
   return 0;
 }
 
-int sc_cli_command_set_param(int argc, char *argv[]) {
+/* Parses `--id/--value` plus selectors, authenticates the selected module
+ * and stages the value with SET. Returns 0 or the command's exit code. */
+static int stage_param(int argc, char *argv[], ScCore *core, char *port_path,
+                       size_t port_path_size, const char **param_id,
+                       int *value) {
   CliSelectors selectors;
-  const char *param_id = NULL;
-  int value = 0;
-  if (!sc_cli_parse_set_param_args(argc, argv, &param_id, &value, &selectors)) {
+  if (!sc_cli_parse_set_param_args(argc, argv, param_id, value, &selectors)) {
     return 1;
   }
 
-  ScCore core;
-  char port_path[SC_PORT_PATH_MAX];
-  const int rc = detect_select_authenticate(&selectors, &core, NULL, port_path,
-                                            sizeof(port_path));
+  const int rc = detect_select_authenticate(&selectors, core, NULL, port_path,
+                                            port_path_size);
   if (rc != 0) {
     return rc;
   }
 
   char err[512];
   err[0] = '\0';
-  const ScSetParamStatus st = sc_core_set_param(
-      &core.transport, port_path, param_id, (int16_t)value, err, sizeof(err));
+  const ScSetParamStatus st =
+      sc_core_set_param(&core->transport, port_path, *param_id, (int16_t)*value,
+                        err, sizeof(err));
   if (st != SC_SET_PARAM_OK) {
     fprintf(stderr, "[ERROR] set-param: %s - %s\n",
             sc_set_param_status_name(st), err);
     return 6;
+  }
+  return 0;
+}
+
+int sc_cli_command_set_param(int argc, char *argv[]) {
+  ScCore core;
+  char port_path[SC_PORT_PATH_MAX];
+  const char *param_id = NULL;
+  int value = 0;
+  const int rc = stage_param(argc, argv, &core, port_path, sizeof(port_path),
+                             &param_id, &value);
+  if (rc != 0) {
+    return rc;
   }
 
   printf("[OK] %s staged %s=%d on %s. Run `commit-params` to apply.\n",
@@ -429,34 +443,19 @@ int sc_cli_command_revert_params(int argc, char *argv[]) {
 }
 
 int sc_cli_command_set_and_commit(int argc, char *argv[]) {
-  CliSelectors selectors;
-  const char *param_id = NULL;
-  int value = 0;
-  if (!sc_cli_parse_set_param_args(argc, argv, &param_id, &value, &selectors)) {
-    return 1;
-  }
-
   ScCore core;
   char port_path[SC_PORT_PATH_MAX];
-  const int rc = detect_select_authenticate(&selectors, &core, NULL, port_path,
-                                            sizeof(port_path));
+  const char *param_id = NULL;
+  int value = 0;
+  const int rc = stage_param(argc, argv, &core, port_path, sizeof(port_path),
+                             &param_id, &value);
   if (rc != 0) {
     return rc;
   }
 
-  /* SET. */
-  char err[512];
-  err[0] = '\0';
-  const ScSetParamStatus set_st = sc_core_set_param(
-      &core.transport, port_path, param_id, (int16_t)value, err, sizeof(err));
-  if (set_st != SC_SET_PARAM_OK) {
-    fprintf(stderr, "[ERROR] set-param: %s - %s\n",
-            sc_set_param_status_name(set_st), err);
-    return 6;
-  }
-
   /* COMMIT. On failure roll the staging mirror back via REVERT so
    * the firmware never stays half-mutated. */
+  char err[512];
   err[0] = '\0';
   const ScCommitParamsStatus commit_st =
       sc_core_commit_params(&core.transport, port_path, err, sizeof(err));

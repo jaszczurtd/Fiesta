@@ -318,14 +318,21 @@ if(BUILD_TESTING)
 
     add_executable(serial-configurator-phase5-tests
         tests/test_sc_phase5.c
+        tests/sc_test_transport.c
     )
 
     add_executable(serial-configurator-phase8-host-tests
         tests/test_sc_phase8_host.c
+        tests/sc_test_transport.c
     )
 
     add_executable(serial-configurator-transport-timeout-tests
         tests/test_sc_transport_timeout.c
+    )
+
+    add_executable(serial-configurator-cli-selectors-tests
+        tests/test_sc_cli_selectors.c
+        src/cli/sc_cli_selectors.c
     )
 
     add_executable(serial-configurator-i18n-tests
@@ -399,6 +406,7 @@ if(BUILD_TESTING)
     # by-id fixtures so every branch is hermetic.
     add_executable(serial-configurator-flash-orchestrator-tests
         tests/test_sc_flash_orchestrator.c
+        tests/sc_test_transport.c
     )
     target_link_libraries(serial-configurator-flash-orchestrator-tests
         PRIVATE
@@ -451,6 +459,11 @@ if(BUILD_TESTING)
     )
 
     target_link_libraries(serial-configurator-transport-timeout-tests
+        PRIVATE
+            serial_configurator_core
+    )
+
+    target_link_libraries(serial-configurator-cli-selectors-tests
         PRIVATE
             serial_configurator_core
     )
@@ -581,6 +594,11 @@ if(BUILD_TESTING)
     add_test(
         NAME serial-configurator-transport-timeout-tests
         COMMAND serial-configurator-transport-timeout-tests
+    )
+
+    add_test(
+        NAME serial-configurator-cli-selectors-tests
+        COMMAND serial-configurator-cli-selectors-tests
     )
 
     add_test(

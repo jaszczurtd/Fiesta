@@ -482,7 +482,11 @@ its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
 
 - **Host tests.** Each module builds a Unity test binary with the HAL mock.
   [`runalltests.sh`](runalltests.sh) runs them together with cppcheck,
-  Valgrind, and clang-tidy. No hardware is needed.
+  Valgrind, clang-tidy and the PMD CPD duplicate gate
+  ([`scripts/fiesta_cpd.py`](scripts/fiesta_cpd.py): production code within
+  each module, host tests and Python across the repository). Test helpers
+  shared by modules live in [`src/common/tests/`](src/common/tests/). No
+  hardware is needed.
 - **Firmware.** `jh-vscode` from JaszczurHAL builds each module with the Pico
   SDK and writes `.build/firmware.uf2` with a checked
   `.build/firmware.manifest.json`. Each build also sets the module's USB
@@ -512,7 +516,7 @@ Fiesta/
 ├── ARCHITECTURE.md              # this file
 ├── MISRA.md                     # MISRA-C status and policy
 ├── modules.json                 # module registry
-├── scripts/                     # registry and VS Code generators, git hooks
+├── scripts/                     # registry, VS Code and duplicate-gate tools, git hooks
 ├── .github/workflows/           # CI
 ├── src/
 │   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/
@@ -520,8 +524,10 @@ Fiesta/
 │   ├── SerialConfigurator/      # desktop application and CLI
 │   └── common/
 │       ├── canDefinitions/      # CAN IDs and frame layouts
+│       ├── cmake/               # CMake helpers shared by module builds
 │       ├── scDefinitions/       # configurator protocol
-│       └── scripts/             # manifest, UF2, and module-name helpers
+│       ├── scripts/             # manifest, UF2, and module-name helpers
+│       └── tests/               # host-test helpers shared by modules
 ├── Fiesta_pcbs/                 # schematics, layouts, connector maps
 ├── materials/                   # datasheets, reference documents, photos
 └── legacy/                      # retired modules

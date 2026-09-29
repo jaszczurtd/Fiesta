@@ -42,6 +42,10 @@ bool sc_text_next_token(const char **cursor, char *token, size_t token_size);
  *         followed by a space or the end of the text. */
 bool sc_text_starts_with_token(const char *text, const char *word);
 
+/** @brief Whether @p a and @p b are equal ignoring ASCII case; false when
+ *         either is NULL. */
+bool sc_text_equals_ignore_case(const char *a, const char *b);
+
 /** @brief Strict base-10 parse: the whole text must be one number. */
 bool sc_text_parse_i64(const char *text, int64_t *value);
 

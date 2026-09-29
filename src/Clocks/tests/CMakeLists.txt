@@ -6,6 +6,7 @@ endfunction()
 
 add_clocks_test(test_buzzerStrategy)
 add_clocks_test(test_config_session)
+fiesta_add_sc_session_test_support(test_config_session)
 
 add_executable(test_can
     test_can.cpp

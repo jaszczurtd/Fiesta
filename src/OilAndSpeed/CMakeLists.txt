@@ -29,6 +29,7 @@ set(SCDEFS  ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 include(${HAL_LIB_EXTERNAL}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -123,7 +124,7 @@ if(OILANDSPEED_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
             -p ${CMAKE_BINARY_DIR}
             -quiet
             -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
-            "^.*/src/(OilAndSpeed|common/scDefinitions)/.*\\.(c|cpp)$"
+            "^.*/src/(OilAndSpeed|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
         COMMENT "Running clang-tidy for OilAndSpeed host-compilable sources"
         VERBATIM
     )

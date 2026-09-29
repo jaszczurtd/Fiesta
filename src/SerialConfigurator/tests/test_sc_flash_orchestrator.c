@@ -31,6 +31,7 @@
 #include "sc_fiesta_module_tokens.h"
 #include "sc_flash.h"
 #include "sc_manifest.h"
+#include "sc_test_transport.h"
 #include "sc_transport.h"
 
 #include <stdio.h>
@@ -53,7 +54,7 @@
 
 static const uint8_t k_uid[8] = {0xE6u, 0x61u, 0xA4u, 0xD1u,
                                  0x23u, 0x45u, 0x67u, 0xABu};
-static const char *const k_uid_hex = "E661A4D1234567AB";
+static const char *const k_uid_hex = SC_TEST_UID_HEX;
 static const uint32_t k_session_id_pre = 0x12345678u;
 static const uint32_t k_session_id_post = 0x12345679u;
 static const uint8_t k_challenge[16] = {
@@ -70,52 +71,15 @@ typedef struct {
   int sc_command_call_count;
 } MockState;
 
-static void challenge_hex(char *out, size_t out_size) {
-  static const char k_hex_table[] = "0123456789abcdef";
-  if (out_size < sizeof(k_challenge) * 2u + 1u)
-    return;
-  for (size_t i = 0u; i < sizeof(k_challenge); ++i) {
-    out[i * 2u] = k_hex_table[(k_challenge[i] >> 4) & 0x0Fu];
-    out[i * 2u + 1u] = k_hex_table[k_challenge[i] & 0x0Fu];
-  }
-  out[sizeof(k_challenge) * 2u] = '\0';
-}
-
 static void mock_state_init(MockState *st, const char *fw_version_post) {
   memset(st, 0, sizeof(*st));
-  snprintf(st->hello_pre_reply, sizeof(st->hello_pre_reply),
-           "OK HELLO module=" SC_MODULE_TOKEN_ECU
-           " proto=1 session=%lu fw=1.0.0 build=dev "
-           "uid=%s",
-           (unsigned long)k_session_id_pre, k_uid_hex);
-  snprintf(st->hello_post_reply, sizeof(st->hello_post_reply),
-           "OK HELLO module=" SC_MODULE_TOKEN_ECU
-           " proto=1 session=%lu fw=%s build=dev "
-           "uid=%s",
-           (unsigned long)k_session_id_post,
-           (fw_version_post != NULL) ? fw_version_post : "1.0.0", k_uid_hex);
-  char hex[33];
-  challenge_hex(hex, sizeof(hex));
-  snprintf(st->auth_begin_reply, sizeof(st->auth_begin_reply),
-           "SC_OK AUTH_CHALLENGE %s", hex);
-}
-
-static bool mock_list(void *ctx, ScTransportCandidateList *list, char *err,
-                      size_t err_size) {
-  (void)ctx;
-  (void)err;
-  (void)err_size;
-  list->count = 0u;
-  list->truncated = false;
-  return true;
-}
-static bool mock_resolve(void *ctx, const char *candidate, char *out,
-                         size_t out_size, char *err, size_t err_size) {
-  (void)ctx;
-  (void)err;
-  (void)err_size;
-  snprintf(out, out_size, "%s", candidate);
-  return true;
+  sc_test_hello_reply(st->hello_pre_reply, sizeof(st->hello_pre_reply),
+                      k_session_id_pre, "1.0.0");
+  sc_test_hello_reply(st->hello_post_reply, sizeof(st->hello_post_reply),
+                      k_session_id_post,
+                      (fw_version_post != NULL) ? fw_version_post : "1.0.0");
+  sc_test_challenge_reply(st->auth_begin_reply, sizeof(st->auth_begin_reply),
+                          k_challenge);
 }
 
 static bool mock_hello(void *ctx, const char *path, char *response,
@@ -178,8 +142,8 @@ static bool mock_send(void *ctx, const char *path, const char *cmd,
 
 static ScTransport make_transport(MockState *st) {
   static const ScTransportOps ops = {
-      .list_candidates = mock_list,
-      .resolve_device_path = mock_resolve,
+      .list_candidates = sc_test_list_no_candidates,
+      .resolve_device_path = sc_test_resolve_same_path,
       .send_hello = mock_hello,
       .send_sc_command = mock_send,
   };

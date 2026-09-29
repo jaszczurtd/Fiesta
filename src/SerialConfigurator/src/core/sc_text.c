@@ -5,6 +5,7 @@
 
 #include "sc_text.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,6 +78,22 @@ bool sc_text_next_token(const char **cursor, char *token, size_t token_size) {
   sc_text_copy_span(token, token_size, start, end);
   *cursor = end;
   return token[0] != '\0';
+}
+
+bool sc_text_equals_ignore_case(const char *a, const char *b) {
+  if (a == NULL || b == NULL) {
+    return false;
+  }
+
+  size_t i = 0u;
+  while (a[i] != '\0' && b[i] != '\0') {
+    if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) {
+      return false;
+    }
+    i++;
+  }
+
+  return a[i] == '\0' && b[i] == '\0';
 }
 
 bool sc_text_starts_with_token(const char *text, const char *word) {

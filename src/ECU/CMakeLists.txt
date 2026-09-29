@@ -35,6 +35,7 @@ set(ECU_STUBS ${ECU_SRC}/tests/stubs)
 include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -226,7 +227,7 @@ if(ECU_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
             -p ${CMAKE_BINARY_DIR}
             -quiet
             -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
-            "^.*/src/(ECU|common/scDefinitions)/.*\\.(c|cpp)$"
+            "^.*/src/(ECU|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
         COMMENT "Running clang-tidy for ECU host-compilable sources"
         VERBATIM
     )

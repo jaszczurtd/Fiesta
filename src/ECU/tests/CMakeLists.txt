@@ -11,6 +11,7 @@ set_tests_properties(test_ecu_params PROPERTIES
     FAIL_REGULAR_EXPRESSION "GPS resume queued: HAL_NONE")
 add_ecu_test(test_ecuPersistence)
 add_ecu_test(test_sc_protocol)
+fiesta_add_sc_session_test_support(test_sc_protocol)
 add_ecu_test(test_sc_command_handlers)
 add_ecu_test(test_engineFan)
 add_ecu_test(test_engineHeater)
