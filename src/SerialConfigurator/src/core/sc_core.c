@@ -495,22 +495,6 @@ static bool param_list_separator_char(char c) {
          c == '\n';
 }
 
-static bool strings_equal_case_insensitive(const char *a, const char *b) {
-  if (a == 0 || b == 0) {
-    return false;
-  }
-
-  size_t i = 0u;
-  while (a[i] != '\0' && b[i] != '\0') {
-    if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) {
-      return false;
-    }
-    i++;
-  }
-
-  return a[i] == '\0' && b[i] == '\0';
-}
-
 static bool parse_u64_strict(const char *text, uint64_t *value) {
   if (text == 0 || value == 0 || text[0] == '\0') {
     return false;
@@ -613,15 +597,15 @@ static void typed_value_from_text(const char *text, ScTypedValue *value) {
 
   sc_text_copy(value->raw, sizeof(value->raw), text);
 
-  if (strings_equal_case_insensitive(text, "true") ||
-      strings_equal_case_insensitive(text, "on")) {
+  if (sc_text_equals_ignore_case(text, "true") ||
+      sc_text_equals_ignore_case(text, "on")) {
     value->type = SC_VALUE_TYPE_BOOL;
     value->bool_value = true;
     return;
   }
 
-  if (strings_equal_case_insensitive(text, "false") ||
-      strings_equal_case_insensitive(text, "off")) {
+  if (sc_text_equals_ignore_case(text, "false") ||
+      sc_text_equals_ignore_case(text, "off")) {
     value->type = SC_VALUE_TYPE_BOOL;
     value->bool_value = false;
     return;

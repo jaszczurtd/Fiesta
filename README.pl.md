@@ -51,7 +51,8 @@ Narzędzia potrzebne w Linux:
 - aplikacja desktopowa: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`;
   opcjonalne `libshumate-dev` włącza mapę GPS zamiast pola zastępczego;
 - kontrola jakości: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`,
-  `clang-format`; pakiet cppcheck dostarcza również dodatek MISRA;
+  `clang-format`, `default-jre-headless`; pakiet cppcheck dostarcza również
+  dodatek MISRA, a Java uruchamia PMD w bramce duplikacji;
 - firmware RP: `gcc-arm-none-eabi`, `libstdc++-arm-none-eabi-newlib`,
   `libusb-1.0-0-dev` i `pkg-config`. HAL przygotowuje przypięte Pico SDK
   oraz `picotool`.
@@ -69,7 +70,7 @@ Skrypt najpierw usuwa katalogi `build_test` i `.build` modułów firmware oraz
 Zachowuje katalogi kompilacji HAL i lokalne ustawienia VS Code.
 Następnie instaluje pakiety, sprawdza Pythona, cppcheck z dodatkiem MISRA oraz
 bibliotekę C++ toolchaina Arm. Następnie inicjalizuje przypięty submoduł HAL,
-przygotowuje jego zależności, uruchamia testy hostowe i analizatory, kompiluje
+przygotowuje jego zależności razem z PMD, uruchamia testy hostowe i analizatory, kompiluje
 pięć modułów firmware, przygotowuje artefakty UF2 z manifestami oraz buduje,
 testuje i pakuje SerialConfigurator do pakietu Debian.
 
@@ -111,7 +112,8 @@ kompilacji. Weryfikacja uploadu na fizycznym urządzeniu pozostaje ręczna.
 Aplikacje używają punktów wejścia `app_start()` oraz `app_task0()` z HAL,
 a przy drugim kontekście wykonania również `app_task1()`.
 
-Zestaw testów hostowych, cppcheck, Valgrind i clang-tidy uruchomisz przez:
+Zestaw testów hostowych, cppcheck, wykrywanie duplikacji, Valgrind i
+clang-tidy uruchomisz przez:
 
 ```bash
 ./runalltests.sh -j8
@@ -120,6 +122,12 @@ Zestaw testów hostowych, cppcheck, Valgrind i clang-tidy uruchomisz przez:
 Obsługiwane opcje pomijania analizatorów to `--skip-cppcheck`,
 `--skip-valgrind` i `--skip-clang-tidy`. CTest uruchamia testy wykonania
 z wyłączeniem etykiety `static-analysis`; analizatory mają osobne etapy.
+
+Bramka duplikacji (`scripts/fiesta_cpd.py`) używa PMD CPD przypiętego w
+JaszczurHAL, z jego progami: 100 tokenów dla C/C++ i 50 dla Pythona. Kod
+produkcyjny porównuje tylko w obrębie jednego modułu, a testy hostowe i skrypty
+Pythona w całym repozytorium. Wspólne helpery testów leżą w `src/common/tests/`.
+Każdy znaleziony duplikat zatrzymuje bramkę.
 
 Dla ECU, Clocks, OilAndSpeed i Adjustometera można uruchomić testy osobno:
 

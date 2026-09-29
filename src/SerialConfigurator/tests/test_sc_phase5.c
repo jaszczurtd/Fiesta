@@ -13,6 +13,7 @@
 #include "sc_auth.h"
 #include "sc_core.h"
 #include "sc_fiesta_module_tokens.h"
+#include "sc_test_transport.h"
 #include "sc_transport.h"
 
 #include <stdio.h>
@@ -61,41 +62,11 @@ typedef struct {
 static void mock_state_init(MockState *st) {
   memset(st, 0, sizeof(*st));
   /* Default HELLO carries the reference UID + session id used by the
-   * tests below. */
-  snprintf(st->hello_reply, sizeof(st->hello_reply),
-           "OK HELLO module=" SC_MODULE_TOKEN_ECU
-           " proto=1 session=%lu fw=1.0.0 build=dev "
-           "uid=E661A4D1234567AB",
-           (unsigned long)k_session_id);
-  /* Default AUTH_BEGIN reply: hex of k_challenge. */
-  char hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u + 1u];
-  static const char k_hex_table[] = "0123456789abcdef";
-  for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
-    hex[i * 2u] = k_hex_table[(k_challenge[i] >> 4) & 0x0Fu];
-    hex[i * 2u + 1u] = k_hex_table[k_challenge[i] & 0x0Fu];
-  }
-  hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u] = '\0';
-  snprintf(st->auth_begin_reply, sizeof(st->auth_begin_reply),
-           "SC_OK AUTH_CHALLENGE %s", hex);
-}
-
-static bool mock_list(void *ctx, ScTransportCandidateList *list, char *err,
-                      size_t err_size) {
-  (void)ctx;
-  (void)err;
-  (void)err_size;
-  list->count = 0u;
-  list->truncated = false;
-  return true;
-}
-
-static bool mock_resolve(void *ctx, const char *candidate, char *out,
-                         size_t out_size, char *err, size_t err_size) {
-  (void)ctx;
-  (void)err;
-  (void)err_size;
-  snprintf(out, out_size, "%s", candidate);
-  return true;
+   * tests below; the default AUTH_BEGIN reply carries k_challenge. */
+  sc_test_hello_reply(st->hello_reply, sizeof(st->hello_reply), k_session_id,
+                      "1.0.0");
+  sc_test_challenge_reply(st->auth_begin_reply, sizeof(st->auth_begin_reply),
+                          k_challenge);
 }
 
 static bool mock_hello(void *ctx, const char *path, char *response,
@@ -164,8 +135,8 @@ static bool mock_send(void *ctx, const char *path, const char *cmd,
 
 static ScTransport make_transport(MockState *st) {
   static const ScTransportOps ops = {
-      .list_candidates = mock_list,
-      .resolve_device_path = mock_resolve,
+      .list_candidates = sc_test_list_no_candidates,
+      .resolve_device_path = sc_test_resolve_same_path,
       .send_hello = mock_hello,
       .send_sc_command = mock_send,
   };

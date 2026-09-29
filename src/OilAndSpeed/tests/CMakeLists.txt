@@ -5,6 +5,7 @@ function(add_oilspeed_test NAME)
 endfunction()
 
 add_oilspeed_test(test_config_session)
+fiesta_add_sc_session_test_support(test_config_session)
 
 add_executable(test_speed
     test_speed.cpp

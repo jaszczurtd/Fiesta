@@ -179,6 +179,19 @@ static ScTransport make_mock_transport(MockTransportContext *context) {
   return transport;
 }
 
+/* Detects modules through the mock transport over @p devices. The core keeps
+ * a pointer to @p context, which must outlive it. */
+static void detect_mock_devices(ScCore *core, MockTransportContext *context,
+                                const MockDevice *devices, size_t count,
+                                char *log, size_t log_size) {
+  context->devices = devices;
+  context->device_count = count;
+  sc_core_init(core);
+  const ScTransport transport = make_mock_transport(context);
+  sc_core_set_transport(core, &transport);
+  sc_core_detect_modules(core, log, log_size);
+}
+
 static int test_detect_parses_structured_hello_fields(void) {
   const MockDevice devices[] = {{
       .candidate_path = "/dev/mock/by-id/ecu",
@@ -193,18 +206,11 @@ static int test_detect_parses_structured_hello_fields(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char log[2048] = {0};
-  sc_core_detect_modules(&core, log, sizeof(log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), log,
+                      sizeof(log));
 
   const ScModuleStatus *ecu = sc_core_module_status(&core, 0u);
   TEST_ASSERT(ecu != 0, "ECU status missing");
@@ -259,18 +265,11 @@ static int test_duplicate_detection_sets_ambiguous_flag(void) {
                                     "min=700 max=1200 default=890",
           .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
       }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char log[2048] = {0};
-  sc_core_detect_modules(&core, log, sizeof(log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), log,
+                      sizeof(log));
 
   const ScModuleStatus *ecu = sc_core_module_status(&core, 0u);
   TEST_ASSERT(ecu != 0, "ECU status missing");
@@ -294,18 +293,11 @@ static int test_sc_commands_parse_status_and_meta(void) {
                                 "max=1200 default=890 group=idle",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char log[2048] = {0};
-  sc_core_detect_modules(&core, log, sizeof(log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), log,
+                      sizeof(log));
 
   ScCommandResult result;
   char cmd_log[1024] = {0};
@@ -404,19 +396,12 @@ static int test_sc_get_param_reports_invalid_param_id(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown_param",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(sc_core_sc_get_param(&core, 0u, "unknown_param", &result,
@@ -443,19 +428,12 @@ static int test_sc_get_param_parser_rejects_invalid_min_max_range(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=1200 max=700 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown_param",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(sc_core_sc_get_param(&core, 0u, "nominal_rpm", &result,
@@ -484,19 +462,12 @@ static int test_sc_err_unknown_is_mapped_to_unknown_cmd_status(void) {
       .param_nominal_response = "ERR UNKNOWN",
       .param_unknown_response = "ERR UNKNOWN",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(
@@ -525,18 +496,11 @@ static int test_detect_accepts_plain_build_with_spaces(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char log[2048] = {0};
-  sc_core_detect_modules(&core, log, sizeof(log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), log,
+                      sizeof(log));
 
   const ScModuleStatus *ecu = sc_core_module_status(&core, 0u);
   TEST_ASSERT(ecu != 0, "ECU status missing");
@@ -559,19 +523,12 @@ static int test_meta_accepts_build_without_equals(void) {
       .param_nominal_response = "SC_INVALID_PARAM_ID id=nominal_rpm",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(
@@ -604,19 +561,12 @@ static int test_meta_base64_build_without_padding_is_decoded(void) {
       .param_nominal_response = "SC_INVALID_PARAM_ID id=nominal_rpm",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(
@@ -651,19 +601,12 @@ test_meta_corrupted_base64_build_falls_back_to_empty_meta_build(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(
@@ -699,19 +642,12 @@ static int test_param_list_parser_tolerates_noise_tokens(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(sc_core_sc_get_param_list(&core, 0u, &result, command_log,
@@ -755,19 +691,12 @@ static int test_param_values_parser_tolerates_noise_tokens(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(sc_core_sc_get_values(&core, 0u, &result, command_log,
@@ -810,19 +739,12 @@ static int test_sc_bye_command_is_sent_and_parsed(void) {
           "SC_OK PARAM id=nominal_rpm value=890 min=700 max=1200 default=890",
       .param_unknown_response = "SC_INVALID_PARAM_ID id=unknown",
   }};
-  MockTransportContext context = {
-      .devices = devices,
-      .device_count = COUNTOF(devices),
-  };
-
+  MockTransportContext context;
   ScCore core;
-  sc_core_init(&core);
-  const ScTransport transport = make_mock_transport(&context);
-  sc_core_set_transport(&core, &transport);
-
   char detect_log[2048] = {0};
   char command_log[1024] = {0};
-  sc_core_detect_modules(&core, detect_log, sizeof(detect_log));
+  detect_mock_devices(&core, &context, devices, COUNTOF(devices), detect_log,
+                      sizeof(detect_log));
 
   ScCommandResult result;
   TEST_ASSERT(

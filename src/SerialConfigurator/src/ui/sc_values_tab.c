@@ -261,16 +261,26 @@ static GtkWidget *build_param_row(ModuleSubtab *m,
 
 /* ── Footer actions: re-auth then SET / COMMIT / REVERT ──────────── */
 
-static bool authenticate_for_subtab(ModuleSubtab *m, char *err,
-                                    size_t err_size) {
+/* Shows the i18n format @p key filled with @p err in the footer. */
+static void footer_set_error(ModuleSubtab *m, ScI18nKey key, const char *err) {
+  char buf[640];
+  snprintf(buf, sizeof(buf), sc_i18n_string_get(key), err);
+  footer_set_status(m, buf);
+}
+
+/* Re-authenticates the subtab's module before SET / COMMIT / REVERT.
+ * Returns its status, or NULL after the footer shows why it failed. */
+static const ScModuleStatus *authenticate_for_subtab(ModuleSubtab *m) {
+  char err[512] = {0};
   const ScModuleStatus *st = module_status_for(m->state, m->module_index);
   if (st == NULL || !st->detected || st->port_path[0] == '\0') {
-    snprintf(err, err_size, "module not detected");
-    return false;
+    snprintf(err, sizeof(err), "module not detected");
+  } else if (sc_core_authenticate(&m->state->core.transport, st->port_path, err,
+                                  sizeof(err)) == SC_AUTH_OK) {
+    return st;
   }
-  const ScAuthStatus rc = sc_core_authenticate(&m->state->core.transport,
-                                               st->port_path, err, err_size);
-  return (rc == SC_AUTH_OK);
+  footer_set_error(m, SC_I18N_VALUES_AUTH_FAILED_FMT, err);
+  return NULL;
 }
 
 static void on_apply_clicked(GtkButton *btn, gpointer user_data) {
@@ -292,16 +302,11 @@ static void on_apply_clicked(GtkButton *btn, gpointer user_data) {
     return;
   }
 
-  char err[512] = {0};
-  if (!authenticate_for_subtab(m, err, sizeof(err))) {
-    char buf[640];
-    snprintf(buf, sizeof(buf),
-             sc_i18n_string_get(SC_I18N_VALUES_AUTH_FAILED_FMT), err);
-    footer_set_status(m, buf);
+  const ScModuleStatus *st = authenticate_for_subtab(m);
+  if (st == NULL) {
     return;
   }
 
-  const ScModuleStatus *st = module_status_for(m->state, m->module_index);
   size_t applied = 0u;
   for (size_t i = 0u; i < m->rows->len; ++i) {
     ParamRow *row = (ParamRow *)g_ptr_array_index(m->rows, i);
@@ -346,16 +351,11 @@ static void on_commit_clicked(GtkButton *btn, gpointer user_data) {
   if (m == NULL) {
     return;
   }
-  char err[512] = {0};
-  if (!authenticate_for_subtab(m, err, sizeof(err))) {
-    char buf[640];
-    snprintf(buf, sizeof(buf),
-             sc_i18n_string_get(SC_I18N_VALUES_AUTH_FAILED_FMT), err);
-    footer_set_status(m, buf);
+  const ScModuleStatus *st = authenticate_for_subtab(m);
+  if (st == NULL) {
     return;
   }
-  const ScModuleStatus *st = module_status_for(m->state, m->module_index);
-  err[0] = '\0';
+  char err[512] = {0};
   const ScCommitParamsStatus rc = sc_core_commit_params(
       &m->state->core.transport, st->port_path, err, sizeof(err));
   if (rc == SC_COMMIT_PARAMS_OK) {
@@ -368,10 +368,7 @@ static void on_commit_clicked(GtkButton *btn, gpointer user_data) {
     footer_set_status(m, sc_i18n_string_get(SC_I18N_VALUES_COMMIT_OK));
     return;
   }
-  char buf[640];
-  snprintf(buf, sizeof(buf),
-           sc_i18n_string_get(SC_I18N_VALUES_COMMIT_FAILED_FMT), err);
-  footer_set_status(m, buf);
+  footer_set_error(m, SC_I18N_VALUES_COMMIT_FAILED_FMT, err);
 }
 
 static void on_revert_clicked(GtkButton *btn, gpointer user_data) {
@@ -380,16 +377,11 @@ static void on_revert_clicked(GtkButton *btn, gpointer user_data) {
   if (m == NULL) {
     return;
   }
-  char err[512] = {0};
-  if (!authenticate_for_subtab(m, err, sizeof(err))) {
-    char buf[640];
-    snprintf(buf, sizeof(buf),
-             sc_i18n_string_get(SC_I18N_VALUES_AUTH_FAILED_FMT), err);
-    footer_set_status(m, buf);
+  const ScModuleStatus *st = authenticate_for_subtab(m);
+  if (st == NULL) {
     return;
   }
-  const ScModuleStatus *st = module_status_for(m->state, m->module_index);
-  err[0] = '\0';
+  char err[512] = {0};
   const ScRevertParamsStatus rc = sc_core_revert_params(
       &m->state->core.transport, st->port_path, err, sizeof(err));
   if (rc == SC_REVERT_PARAMS_OK) {
@@ -410,10 +402,7 @@ static void on_revert_clicked(GtkButton *btn, gpointer user_data) {
     footer_set_status(m, sc_i18n_string_get(SC_I18N_VALUES_REVERT_OK));
     return;
   }
-  char buf[640];
-  snprintf(buf, sizeof(buf),
-           sc_i18n_string_get(SC_I18N_VALUES_REVERT_FAILED_FMT), err);
-  footer_set_status(m, buf);
+  footer_set_error(m, SC_I18N_VALUES_REVERT_FAILED_FMT, err);
 }
 
 /* ── Build a per-module sub-tab ──────────────────────────────────── */

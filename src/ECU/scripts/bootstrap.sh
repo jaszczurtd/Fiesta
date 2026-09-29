@@ -199,6 +199,10 @@ fetch_libraries() {
     info "Ensuring pinned JaszczurHAL and native RP dependencies"
     "$DEPENDENCY_SCRIPT" "$hal_dir" rp
     ok "Native RP dependencies are ready"
+
+    # PMD for the runalltests.sh duplicate gate; CI does not run that gate.
+    info "Ensuring pinned PMD for duplicate detection"
+    "$hal_dir/scripts/ensure_pmd.sh" --force
 }
 
 # -----------------------------------------------------------------------------

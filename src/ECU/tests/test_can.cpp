@@ -68,6 +68,22 @@ void test_pack_gps_datetime_invalid_returns_zero(void) {
                            CAN_packGpsDateTime(260403, 2460)); // invalid time
 }
 
+/* Latitude in 1e-6 degrees, decoded independently from the frame bytes. */
+static int32_t gpsFrameLatitude(const uint8_t *latBuf) {
+  return (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
+                   ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
+                   ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
+                   (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
+}
+
+/* Longitude in 1e-6 degrees, decoded independently from the frame bytes. */
+static int32_t gpsFrameLongitude(const uint8_t *lonBuf) {
+  return (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
+                   ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
+                   ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
+                   (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+}
+
 void test_build_gps_lat_lon_frames_encode_high_precision_values(void) {
   setGlobalValue(F_LATITUDE, 52.2297f);
   setGlobalValue(F_LONGITUDE, 21.0122f);
@@ -84,14 +100,8 @@ void test_build_gps_lat_lon_frames_encode_high_precision_values(void) {
   TEST_ASSERT_EQUAL_UINT8(0x34, lonBuf[CAN_FRAME_NUMBER]);
   TEST_ASSERT_EQUAL_UINT8(1, latBuf[CAN_FRAME_GPS_EXT_STATUS]);
 
-  int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
-                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
-                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
-                          (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
-  int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
-                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
-                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
-                          (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+  const int32_t lat = gpsFrameLatitude(latBuf);
+  const int32_t lon = gpsFrameLongitude(lonBuf);
 
   TEST_ASSERT_EQUAL_INT(52229700, lat); // 52.229700 * 1e6
   TEST_ASSERT_EQUAL_INT(21012200, lon); // 21.012200 * 1e6
@@ -114,14 +124,8 @@ void test_build_gps_lat_lon_frames_clamp_coordinates(void) {
   TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
   TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
 
-  int32_t lat = (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
-                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
-                          ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
-                          (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
-  int32_t lon = (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
-                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
-                          ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
-                          (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+  const int32_t lat = gpsFrameLatitude(latBuf);
+  const int32_t lon = gpsFrameLongitude(lonBuf);
 
   TEST_ASSERT_EQUAL_INT(90000000, lat);
   TEST_ASSERT_EQUAL_INT(-180000000, lon);

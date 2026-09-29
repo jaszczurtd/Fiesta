@@ -84,7 +84,7 @@ const uint8_t init_sequence[] = {
     0xA6,       // Set display mode. A6=Normal; A7=Inverse
     0xA8, DISPLAY_HEIGHT - 1, // Set multiplex ratio(1 to 64)
     0xA4,                     // Output RAM to Display
-          // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
+    // 0xA4=Output follows RAM content; 0xA5,Output ignores RAM content
     0xD3, 0x00, // Set display offset. 00 = no offset
     0xD5,       // --set display clock divide ratio/oscillator frequency
     0xF0,       // --set divide ratio
@@ -225,6 +225,20 @@ void lcd_set_contrast(uint8_t contrast) {
   uint8_t commandSequence[2] = {0x81, contrast};
   lcd_command(commandSequence, sizeof(commandSequence));
 }
+// Doubles every pixel row bit of a glyph for DOUBLESIZE output: bit j of a
+// font column becomes bits 2j and 2j+1 of the 16-bit column.
+static void lcd_double_glyph(uint8_t glyph, uint16_t *doubled) {
+  for (uint8_t i = 0; i < sizeof(FONT[0]); i++) {
+    const uint8_t column = FONT[glyph][i];
+    doubled[i] = 0;
+    for (uint8_t j = 0; j < 8; j++) {
+      if ((column & (1 << j))) {
+        doubled[i] |= (1 << (j * 2));
+        doubled[i] |= (1 << ((j * 2) + 1));
+      }
+    }
+  }
+}
 void lcd_putc(char c) {
   switch (c) {
   case '\b':
@@ -290,20 +304,10 @@ void lcd_putc(char c) {
 #ifdef GRAPHICMODE
     if (charMode == DOUBLESIZE) {
       uint16_t doubleChar[sizeof(FONT[0])];
-      uint8_t dChar;
       if ((cursorPosition.x + 2 * sizeof(FONT[0])) > DISPLAY_WIDTH)
         break;
 
-      for (uint8_t i = 0; i < sizeof(FONT[0]); i++) {
-        doubleChar[i] = 0;
-        dChar = FONT[(uint8_t)c][i];
-        for (uint8_t j = 0; j < 8; j++) {
-          if ((dChar & (1 << j))) {
-            doubleChar[i] |= (1 << (j * 2));
-            doubleChar[i] |= (1 << ((j * 2) + 1));
-          }
-        }
-      }
+      lcd_double_glyph((uint8_t)c, doubleChar);
       for (uint8_t i = 0; i < sizeof(FONT[0]); i++) {
         // load bit-pattern from flash
         displayBuffer[cursorPosition.y + 1][cursorPosition.x + (2 * i)] =
@@ -330,20 +334,10 @@ void lcd_putc(char c) {
 #elif defined TEXTMODE
     if (charMode == DOUBLESIZE) {
       uint16_t doubleChar[sizeof(FONT[0])];
-      uint8_t dChar;
       if ((cursorPosition.x + 2 * sizeof(FONT[0])) > DISPLAY_WIDTH)
         break;
 
-      for (uint8_t i = 0; i < sizeof(FONT[0]); i++) {
-        doubleChar[i] = 0;
-        dChar = FONT[(uint8_t)c][i];
-        for (uint8_t j = 0; j < 8; j++) {
-          if ((dChar & (1 << j))) {
-            doubleChar[i] |= (1 << (j * 2));
-            doubleChar[i] |= (1 << ((j * 2) + 1));
-          }
-        }
-      }
+      lcd_double_glyph((uint8_t)c, doubleChar);
       uint8_t data[sizeof(FONT[0]) * 2];
       for (uint8_t i = 0; i < sizeof(FONT[0]); i++) {
         // print font to ram, print 6 columns

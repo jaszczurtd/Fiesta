@@ -31,6 +31,20 @@ static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
   return hal_mock_can_get_sent(obdTestGetCanHandle(), id, len, data);
 }
 
+/* Pops the next frame and checks it is a single-frame negative response to
+ * @p service with code @p nrc. */
+static void assert_negative_reply(uint8_t service, uint8_t nrc) {
+  uint32_t id = 0;
+  uint8_t len = 0;
+  uint8_t tx[8] = {0};
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
+  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
+  TEST_ASSERT_EQUAL_UINT8(service, tx[2]);
+  TEST_ASSERT_EQUAL_UINT8(nrc, tx[3]);
+}
+
 static void request_mode09_vin(void) {
   const uint8_t request[8] = {
       0x02u, OBD_MODE_VEHICLE_INFO, MODE09_PID_VIN, 0u, 0u, 0u, 0u, 0u};
@@ -571,30 +585,15 @@ void test_kwp_read_data_by_local_id_unknown_returns_nrc31(void) {
   uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_LOCAL_ID, 0x55, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_LOCAL_ID, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_LOCAL_ID,
+                        NRC_REQUEST_OUT_OF_RANGE);
 }
 
 void test_uds_comm_control_invalid_subfunction_returns_nrc22(void) {
   uint8_t req[8] = {0x02, UDS_SVC_COMM_CONTROL, 0x03, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_COMM_CONTROL, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_CONDITIONS_NOT_CORRECT, tx[3]);
+  assert_negative_reply(UDS_SVC_COMM_CONTROL, NRC_CONDITIONS_NOT_CORRECT);
 }
 
 void test_uds_control_dtc_setting_on_positive_response(void) {
@@ -615,15 +614,8 @@ void test_uds_control_dtc_setting_invalid_subfunction_returns_nrc12(void) {
   uint8_t req[8] = {0x02, UDS_SVC_CONTROL_DTC_SETTING, 0x03, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_CONTROL_DTC_SETTING, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_SUBFUNCTION_NOT_SUPPORTED, tx[3]);
+  assert_negative_reply(UDS_SVC_CONTROL_DTC_SETTING,
+                        NRC_SUBFUNCTION_NOT_SUPPORTED);
 }
 
 void test_uds_ecu_reset_echoes_subfunction(void) {
@@ -644,30 +636,14 @@ void test_uds_security_access_returns_nrc22(void) {
   uint8_t req[8] = {0x02, UDS_SVC_SECURITY_ACCESS, 0x01, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_SECURITY_ACCESS, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_CONDITIONS_NOT_CORRECT, tx[3]);
+  assert_negative_reply(UDS_SVC_SECURITY_ACCESS, NRC_CONDITIONS_NOT_CORRECT);
 }
 
 void test_uds_routine_control_returns_nrc31(void) {
   uint8_t req[8] = {0x02, UDS_SVC_ROUTINE_CONTROL, 0x01, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_ROUTINE_CONTROL, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+  assert_negative_reply(UDS_SVC_ROUTINE_CONTROL, NRC_REQUEST_OUT_OF_RANGE);
 }
 
 void test_uds_read_dtc_info_returns_service_not_supported_in_fordiag_mode(
@@ -675,59 +651,40 @@ void test_uds_read_dtc_info_returns_service_not_supported_in_fordiag_mode(
   uint8_t req[8] = {0x01, UDS_SVC_READ_DTC_INFO, 0, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
+  assert_negative_reply(UDS_SVC_READ_DTC_INFO, NRC_SERVICE_NOT_SUPPORTED);
+}
+
+/* Raises one DTC, sends KWP ReadDTCByStatus for @p group and checks that the
+ * reply lists the code of @p kind with status byte @p status. */
+static void assert_kwp_dtc_by_status(uint8_t group, dtc_kind_t kind,
+                                     uint8_t status) {
+  uint16_t codes[1] = {0};
+  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
+  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerGetCodes(kind, codes, 1));
+
+  uint8_t req[8] = {0x04, KWP_SVC_READ_DTC_BY_STATUS, group, 0xFF, 0xFF, 0, 0,
+                    0};
+  obdReq(LISTEN_ID, req);
+
   uint32_t id = 0;
   uint8_t len = 0;
   uint8_t tx[8] = {0};
   TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
   TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DTC_INFO, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_SERVICE_NOT_SUPPORTED, tx[3]);
+  TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
+  TEST_ASSERT_EQUAL_UINT8(KWP_RSP_READ_DTC_BY_STATUS, tx[1]);
+  TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
+  TEST_ASSERT_EQUAL_UINT8(MSB(codes[0]), tx[3]);
+  TEST_ASSERT_EQUAL_UINT8(LSB(codes[0]), tx[4]);
+  TEST_ASSERT_EQUAL_UINT8(status, tx[5]);
 }
 
 void test_kwp_read_dtc_by_status_reports_stored_code(void) {
-  uint16_t codes[1] = {0};
-  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerGetCodes(DTC_KIND_STORED, codes, 1));
-
-  uint8_t req[8] = {0x04, KWP_SVC_READ_DTC_BY_STATUS, 0x00, 0xFF, 0xFF, 0, 0,
-                    0};
-  obdReq(LISTEN_ID, req);
-
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(KWP_RSP_READ_DTC_BY_STATUS, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(MSB(codes[0]), tx[3]);
-  TEST_ASSERT_EQUAL_UINT8(LSB(codes[0]), tx[4]);
-  TEST_ASSERT_EQUAL_UINT8(0x08, tx[5]);
+  assert_kwp_dtc_by_status(0x00, DTC_KIND_STORED, 0x08);
 }
 
 void test_kwp_read_dtc_by_status_reports_active_code(void) {
-  uint16_t codes[1] = {0};
-  dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-  TEST_ASSERT_EQUAL_UINT8(1, dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 1));
-
-  uint8_t req[8] = {0x04, KWP_SVC_READ_DTC_BY_STATUS, 0x01, 0xFF, 0xFF, 0, 0,
-                    0};
-  obdReq(LISTEN_ID, req);
-
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x05, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(KWP_RSP_READ_DTC_BY_STATUS, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(0x01, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(MSB(codes[0]), tx[3]);
-  TEST_ASSERT_EQUAL_UINT8(LSB(codes[0]), tx[4]);
-  TEST_ASSERT_EQUAL_UINT8(0x01, tx[5]);
+  assert_kwp_dtc_by_status(0x01, DTC_KIND_ACTIVE, 0x01);
 }
 
 void test_uds_read_memory_by_addr_unmapped_returns_zero_filled_block(void) {
@@ -805,30 +762,14 @@ void test_uds_read_ecu_capabilities_returns_nrc31(void) {
                     0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_REQUEST_OUT_OF_RANGE);
 }
 
 void test_uds_read_unknown_did_returns_nrc31(void) {
   uint8_t req[8] = {0x03, UDS_SVC_READ_DATA_BY_ID, 0xFE, 0xEE, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_REQUEST_OUT_OF_RANGE);
 }
 
 void test_uds_read_scp_load_returns_scaled_word(void) {
@@ -938,15 +879,7 @@ void test_uds_read_scp_maf_pid_returns_nrc31(void) {
                       0};
     obdReq(LISTEN_ID, req);
 
-    uint32_t id = 0;
-    uint8_t len = 0;
-    uint8_t tx[8] = {0};
-    TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-    TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-    TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-    TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-    TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
-    TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+    assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_REQUEST_OUT_OF_RANGE);
   }
 }
 
@@ -975,15 +908,8 @@ void test_kwp_read_local_id_compact_ident_returns_nrc31(void) {
       0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_LOCAL_ID, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_REQUEST_OUT_OF_RANGE, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_LOCAL_ID,
+                        NRC_REQUEST_OUT_OF_RANGE);
 }
 
 // ── UDS short-frame negative-response regression guards (NRC 0x13) ───────────
@@ -998,15 +924,7 @@ void test_uds_diag_session_short_frame_returns_nrc13(void) {
   uint8_t req[8] = {0x01, UDS_SVC_DIAGNOSTIC_SESSION, 0, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_DIAGNOSTIC_SESSION, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+  assert_negative_reply(UDS_SVC_DIAGNOSTIC_SESSION, NRC_INCORRECT_LENGTH);
 }
 
 void test_uds_read_data_by_id_short_frame_returns_nrc13(void) {
@@ -1016,15 +934,7 @@ void test_uds_read_data_by_id_short_frame_returns_nrc13(void) {
   uint8_t req[8] = {0x02, UDS_SVC_READ_DATA_BY_ID, 0xF1, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_DATA_BY_ID, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_INCORRECT_LENGTH);
 }
 
 void test_uds_read_memory_by_addr_short_frame_returns_nrc13(void) {
@@ -1034,15 +944,7 @@ void test_uds_read_memory_by_addr_short_frame_returns_nrc13(void) {
   uint8_t req[8] = {0x03, UDS_SVC_READ_MEMORY_BY_ADDR, 0x00, 0x10, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_READ_MEMORY_BY_ADDR, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+  assert_negative_reply(UDS_SVC_READ_MEMORY_BY_ADDR, NRC_INCORRECT_LENGTH);
 }
 
 void test_uds_control_dtc_setting_short_frame_returns_nrc13(void) {
@@ -1052,15 +954,7 @@ void test_uds_control_dtc_setting_short_frame_returns_nrc13(void) {
   uint8_t req[8] = {0x01, UDS_SVC_CONTROL_DTC_SETTING, 0, 0, 0, 0, 0, 0};
   obdReq(LISTEN_ID, req);
 
-  uint32_t id = 0;
-  uint8_t len = 0;
-  uint8_t tx[8] = {0};
-  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
-  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
-  TEST_ASSERT_EQUAL_UINT8(0x03, tx[0]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_NEGATIVE, tx[1]);
-  TEST_ASSERT_EQUAL_UINT8(UDS_SVC_CONTROL_DTC_SETTING, tx[2]);
-  TEST_ASSERT_EQUAL_UINT8(NRC_INCORRECT_LENGTH, tx[3]);
+  assert_negative_reply(UDS_SVC_CONTROL_DTC_SETTING, NRC_INCORRECT_LENGTH);
 }
 
 void test_isotp_vin_response_completes_after_flow_control(void) {

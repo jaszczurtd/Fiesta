@@ -62,8 +62,9 @@ Required toolchain:
   `curl`, `ca-certificates`, `perl`
 - desktop/package: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`; `libshumate-dev`
   enables the live map instead of its fallback placeholder
-- QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`
-  (`cppcheck` ships the MISRA addon used by `src/ECU/misra/check_misra.sh`)
+- QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`,
+  `default-jre-headless` (`cppcheck` ships the MISRA addon used by
+  `src/ECU/misra/check_misra.sh`; Java runs PMD for the duplicate gate)
 - native RP firmware: `gcc-arm-none-eabi`,
   `libstdc++-arm-none-eabi-newlib`, `libusb-1.0-0-dev`, and `pkg-config`;
   the setup flow prepares the pinned Pico SDK and `picotool` through
@@ -89,10 +90,12 @@ and local VS Code settings are preserved. The setup then:
 4. verifies the Arm C++ runtime required by native firmware builds,
 5. initializes `src/JaszczurHAL` at the revision recorded by Fiesta, stopping if the submodule has local changes,
 6. prepares JaszczurHAL's pinned source dependencies, plus the Pico SDK and
-   `picotool` required by native RP firmware builds,
+   `picotool` required by native RP firmware builds and PMD for the duplicate
+   gate,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
    `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime
-   CTest plus cppcheck/Valgrind/clang-tidy gates),
+   CTest plus cppcheck, PMD CPD duplicate detection, Valgrind and clang-tidy
+   gates),
 8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
 9. builds and tests `SerialConfigurator` and, unless disabled, creates its
    Debian package.
@@ -196,8 +199,8 @@ projects. `Fiesta_clock` does not currently have host tests and is covered by
 firmware compilation in the bootstrap/build workflow.
 
 For a single command that runs host tests across all primary modules (ECU,
-Adjustometer, Clocks, OilAndSpeed, SerialConfigurator) and then executes
-module-level `check-valgrind` / `check-clang-tidy` targets, use:
+Adjustometer, Clocks, OilAndSpeed, SerialConfigurator), the duplicate gate and
+then module-level `check-valgrind` / `check-clang-tidy` targets, use:
 
 ```bash
 ./runalltests.sh
@@ -205,6 +208,12 @@ module-level `check-valgrind` / `check-clang-tidy` targets, use:
 
 The host-test gate runs runtime tests only (`ctest -LE static-analysis`) so
 static analyzers do not look like a stuck test run.
+
+The duplicate gate (`scripts/fiesta_cpd.py`) runs the PMD CPD pinned by
+JaszczurHAL with its thresholds: 100 tokens for C/C++, 50 for Python. Production
+code is compared within each module only; host tests and Python scripts are
+compared across the whole repository. Shared test helpers live in
+`src/common/tests/`. Any duplicate fails the gate.
 
 Useful flags: `-j<N>`, `--skip-cppcheck`, `--skip-valgrind`,
 `--skip-clang-tidy`.

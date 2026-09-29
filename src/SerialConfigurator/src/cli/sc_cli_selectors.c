@@ -1,26 +1,46 @@
 #include "sc_cli_selectors.h"
+#include "sc_text.h"
 
-#include <ctype.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static bool strings_equal_case_insensitive(const char *a, const char *b) {
-  if (a == 0 || b == 0) {
-    return false;
+/* When argv[*index] is option @p name, stores the argument after it in
+ * *value and moves *index past both. Returns 1 when consumed, 0 when
+ * argv[*index] is another argument, -1 when the value is missing. */
+static int take_option(int argc, char *argv[], int *index, const char *name,
+                       const char **value) {
+  if (strcmp(argv[*index], name) != 0) {
+    return 0;
   }
-
-  size_t i = 0u;
-  while (a[i] != '\0' && b[i] != '\0') {
-    if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) {
-      return false;
-    }
-    i++;
+  if (*index + 1 >= argc) {
+    fprintf(stderr, "[ERROR] Missing value for %s\n", name);
+    return -1;
   }
+  *value = argv[*index + 1];
+  *index += 2;
+  return 1;
+}
 
-  return a[i] == '\0' && b[i] == '\0';
+/* take_option() for `--module`, `--uid` and `--port`. */
+static int take_selector(int argc, char *argv[], int *index,
+                         CliSelectors *selectors) {
+  int taken = take_option(argc, argv, index, "--module", &selectors->module);
+  if (taken == 0) {
+    taken = take_option(argc, argv, index, "--uid", &selectors->uid);
+  }
+  if (taken == 0) {
+    taken = take_option(argc, argv, index, "--port", &selectors->port);
+  }
+  return taken;
+}
+
+static void clear_selectors(CliSelectors *selectors) {
+  selectors->module = NULL;
+  selectors->uid = NULL;
+  selectors->port = NULL;
 }
 
 bool sc_cli_parse_selectors(int argc, char *argv[], int start_index,
@@ -29,45 +49,17 @@ bool sc_cli_parse_selectors(int argc, char *argv[], int start_index,
     return false;
   }
 
-  selectors->module = 0;
-  selectors->uid = 0;
-  selectors->port = 0;
-
+  clear_selectors(selectors);
   int i = start_index;
   while (i < argc) {
-    const char *arg = argv[i];
-    if (strcmp(arg, "--module") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --module\n");
-        return false;
-      }
-      selectors->module = argv[i + 1];
-      i += 2;
-      continue;
+    const int taken = take_selector(argc, argv, &i, selectors);
+    if (taken < 0) {
+      return false;
     }
-
-    if (strcmp(arg, "--uid") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --uid\n");
-        return false;
-      }
-      selectors->uid = argv[i + 1];
-      i += 2;
-      continue;
+    if (taken == 0) {
+      fprintf(stderr, "[ERROR] Unknown option: %s\n", argv[i]);
+      return false;
     }
-
-    if (strcmp(arg, "--port") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --port\n");
-        return false;
-      }
-      selectors->port = argv[i + 1];
-      i += 2;
-      continue;
-    }
-
-    fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
-    return false;
   }
 
   return true;
@@ -81,51 +73,23 @@ bool sc_cli_parse_positional_args(int argc, char *argv[], const char *label,
   }
 
   *param_id = 0;
-  selectors->module = 0;
-  selectors->uid = 0;
-  selectors->port = 0;
-
+  clear_selectors(selectors);
   int i = 2;
   while (i < argc) {
-    const char *arg = argv[i];
-    if (strcmp(arg, "--module") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --module\n");
-        return false;
-      }
-      selectors->module = argv[i + 1];
-      i += 2;
+    const int taken = take_selector(argc, argv, &i, selectors);
+    if (taken < 0) {
+      return false;
+    }
+    if (taken > 0) {
       continue;
     }
-
-    if (strcmp(arg, "--uid") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --uid\n");
-        return false;
-      }
-      selectors->uid = argv[i + 1];
-      i += 2;
-      continue;
+    if (*param_id != 0) {
+      fprintf(stderr, "[ERROR] Unknown option or extra argument: %s\n",
+              argv[i]);
+      return false;
     }
-
-    if (strcmp(arg, "--port") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --port\n");
-        return false;
-      }
-      selectors->port = argv[i + 1];
-      i += 2;
-      continue;
-    }
-
-    if (*param_id == 0) {
-      *param_id = arg;
-      i++;
-      continue;
-    }
-
-    fprintf(stderr, "[ERROR] Unknown option or extra argument: %s\n", arg);
-    return false;
+    *param_id = argv[i];
+    i++;
   }
 
   if (*param_id == 0 || (*param_id)[0] == '\0') {
@@ -151,47 +115,38 @@ bool sc_cli_parse_reboot_args(int argc, char *argv[], CliSelectors *selectors,
 
   *manifest_path = NULL;
   *artifact_path = NULL;
-  selectors->module = NULL;
-  selectors->uid = NULL;
-  selectors->port = NULL;
-
-  for (int i = 2; i < argc; ++i) {
-    const char *arg = argv[i];
-    if (strcmp(arg, "--module") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --module\n");
-        return false;
-      }
-      selectors->module = argv[++i];
-    } else if (strcmp(arg, "--uid") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --uid\n");
-        return false;
-      }
-      selectors->uid = argv[++i];
-    } else if (strcmp(arg, "--port") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --port\n");
-        return false;
-      }
-      selectors->port = argv[++i];
-    } else if (strcmp(arg, "--manifest") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --manifest\n");
-        return false;
-      }
-      *manifest_path = argv[++i];
-    } else if (strcmp(arg, "--artifact") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --artifact\n");
-        return false;
-      }
-      *artifact_path = argv[++i];
-    } else {
-      fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
+  clear_selectors(selectors);
+  int i = 2;
+  while (i < argc) {
+    int taken = take_selector(argc, argv, &i, selectors);
+    if (taken == 0) {
+      taken = take_option(argc, argv, &i, "--manifest", manifest_path);
+    }
+    if (taken == 0) {
+      taken = take_option(argc, argv, &i, "--artifact", artifact_path);
+    }
+    if (taken < 0) {
+      return false;
+    }
+    if (taken == 0) {
+      fprintf(stderr, "[ERROR] Unknown option: %s\n", argv[i]);
       return false;
     }
   }
+  return true;
+}
+
+/* Strict base-10 parse of @p raw into [@p min_value, @p max_value]. */
+static bool parse_ranged_long(const char *raw, long min_value, long max_value,
+                              long *value) {
+  char *end = NULL;
+  errno = 0;
+  const long parsed = strtol(raw, &end, 10);
+  if (errno != 0 || end == raw || *end != '\0' || parsed < min_value ||
+      parsed > max_value) {
+    return false;
+  }
+  *value = parsed;
   return true;
 }
 
@@ -207,55 +162,31 @@ bool sc_cli_parse_id_value_args(int argc, char *argv[], long min_value,
   *param_id = NULL;
   *value = 0;
   bool value_set = false;
-  selectors->module = NULL;
-  selectors->uid = NULL;
-  selectors->port = NULL;
-
-  for (int i = 2; i < argc; ++i) {
-    const char *arg = argv[i];
-    if (strcmp(arg, "--id") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --id\n");
-        return false;
+  clear_selectors(selectors);
+  int i = 2;
+  while (i < argc) {
+    const char *raw = NULL;
+    int taken = take_option(argc, argv, &i, "--id", param_id);
+    if (taken == 0) {
+      taken = take_option(argc, argv, &i, "--value", &raw);
+      if (taken > 0) {
+        if (!parse_ranged_long(raw, min_value, max_value, value)) {
+          fprintf(stderr,
+                  "[ERROR] --value must be an %s (%ld..%ld), got '%s'\n",
+                  value_label, min_value, max_value, raw);
+          return false;
+        }
+        value_set = true;
       }
-      *param_id = argv[++i];
-    } else if (strcmp(arg, "--value") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --value\n");
-        return false;
-      }
-      const char *raw = argv[++i];
-      char *end = NULL;
-      errno = 0;
-      const long parsed = strtol(raw, &end, 10);
-      if (errno != 0 || end == raw || *end != '\0' || parsed < min_value ||
-          parsed > max_value) {
-        fprintf(stderr, "[ERROR] --value must be an %s (%ld..%ld), got '%s'\n",
-                value_label, min_value, max_value, raw);
-        return false;
-      }
-      *value = parsed;
-      value_set = true;
-    } else if (strcmp(arg, "--module") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --module\n");
-        return false;
-      }
-      selectors->module = argv[++i];
-    } else if (strcmp(arg, "--uid") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --uid\n");
-        return false;
-      }
-      selectors->uid = argv[++i];
-    } else if (strcmp(arg, "--port") == 0) {
-      if (i + 1 >= argc) {
-        fprintf(stderr, "[ERROR] Missing value for --port\n");
-        return false;
-      }
-      selectors->port = argv[++i];
-    } else {
-      fprintf(stderr, "[ERROR] Unknown option: %s\n", arg);
+    }
+    if (taken == 0) {
+      taken = take_selector(argc, argv, &i, selectors);
+    }
+    if (taken < 0) {
+      return false;
+    }
+    if (taken == 0) {
+      fprintf(stderr, "[ERROR] Unknown option: %s\n", argv[i]);
       return false;
     }
   }
@@ -291,18 +222,17 @@ bool sc_cli_module_matches_selectors(const ScModuleStatus *status,
 
   if (selectors->module != 0) {
     const bool module_match =
-        strings_equal_case_insensitive(status->display_name,
-                                       selectors->module) ||
-        strings_equal_case_insensitive(status->hello_identity.module_name,
-                                       selectors->module);
+        sc_text_equals_ignore_case(status->display_name, selectors->module) ||
+        sc_text_equals_ignore_case(status->hello_identity.module_name,
+                                   selectors->module);
     if (!module_match) {
       return false;
     }
   }
 
   if (selectors->uid != 0) {
-    if (!strings_equal_case_insensitive(status->hello_identity.uid,
-                                        selectors->uid)) {
+    if (!sc_text_equals_ignore_case(status->hello_identity.uid,
+                                    selectors->uid)) {
       return false;
     }
   }

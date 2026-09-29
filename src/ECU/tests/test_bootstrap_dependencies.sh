@@ -19,6 +19,8 @@ grep -qx 'gcc-arm-none-eabi' <<<"$packages" || fail 'GNU Arm package missing'
 grep -qx 'libstdc++-arm-none-eabi-newlib' <<<"$packages" || \
     fail 'Arm C++ runtime package missing'
 grep -qx 'ninja-build' <<<"$packages" || fail 'Ninja package missing'
+grep -qx 'default-jre-headless' <<<"$packages" || \
+    fail 'Java runtime for PMD CPD missing'
 grep -Fq '"$SYSTEM_DEPENDENCY_SCRIPT" "${arguments[@]}"' "$BOOTSTRAP_SCRIPT" || \
     fail 'bootstrap does not invoke the system dependency helper'
 grep -Fq 'SKIP_APT=0 APT_NONINTERACTIVE=1' "$DAILY_RUNNER" || \

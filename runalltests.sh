@@ -9,8 +9,10 @@
 #   1. Tool presence check
 #   2. Host runtime tests for all modules (cmake + ctest)
 #   3. Static analysis: cppcheck (modules with "analysis": ["cppcheck"])
-#   4. Valgrind memcheck targets for all modules
-#   5. clang-tidy targets for all modules
+#   4. Duplicate detection: PMD CPD (production code per module, host tests
+#      and Python together; scripts/fiesta_cpd.py)
+#   5. Valgrind memcheck targets for all modules
+#   6. clang-tidy targets for all modules
 #
 # Covered modules: every module with "hostTests" in modules.json.
 #
@@ -152,9 +154,9 @@ run_module_target() {
     pass "[${name}] ${target} passed"
 }
 
-header "Gate 1/5: Checking required tools"
+header "Gate 1/6: Checking required tools"
 
-REQUIRED_TOOLS=(cmake ctest gcc g++ make python3 git)
+REQUIRED_TOOLS=(cmake ctest gcc g++ make python3 git java)
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
     REQUIRED_TOOLS+=(cppcheck)
 fi
@@ -185,7 +187,7 @@ pass "All required tools present."
 run_logged "/tmp/fiesta_tooling_tests.log" \
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-header "Gate 2/5: Host runtime tests for all modules"
+header "Gate 2/6: Host runtime tests for all modules"
 for entry in "${MODULE_MATRIX[@]}"; do
     IFS=':' read -r name src_rel build_rel <<< "${entry}"
     configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}"
@@ -193,35 +195,39 @@ done
 pass "All module host tests passed."
 
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
-    header "Gate 3/5: Static analysis - cppcheck (${FIESTA_CPPCHECK_MODULES[*]})"
+    header "Gate 3/6: Static analysis - cppcheck (${FIESTA_CPPCHECK_MODULES[*]})"
     for name in "${FIESTA_CPPCHECK_MODULES[@]}"; do
         run_module_target "${name}" "$(module_build_dir "${name}")" "check-cppcheck"
     done
     pass "cppcheck gate passed."
 else
-    info "Gate 3/5 skipped (--skip-cppcheck)."
+    info "Gate 3/6 skipped (--skip-cppcheck)."
 fi
 
+header "Gate 4/6: Duplicate detection - PMD CPD"
+run_logged "/tmp/fiesta_cpd.log" python3 scripts/fiesta_cpd.py
+pass "PMD CPD found no duplicate groups."
+
 if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
-    header "Gate 4/5: Valgrind memcheck targets"
+    header "Gate 5/6: Valgrind memcheck targets"
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-valgrind"
     done
     pass "Valgrind gate passed for all modules."
 else
-    info "Gate 4/5 skipped (--skip-valgrind)."
+    info "Gate 5/6 skipped (--skip-valgrind)."
 fi
 
 if [[ "${SKIP_CLANG_TIDY}" -eq 0 ]]; then
-    header "Gate 5/5: clang-tidy targets"
+    header "Gate 6/6: clang-tidy targets"
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-clang-tidy"
     done
     pass "clang-tidy gate passed for all modules."
 else
-    info "Gate 5/5 skipped (--skip-clang-tidy)."
+    info "Gate 6/6 skipped (--skip-clang-tidy)."
 fi
 
 echo ""

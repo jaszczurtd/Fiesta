@@ -596,17 +596,13 @@ static bool bootsel_find_mountpoint_in_mountinfo(char *out_path,
   return found;
 }
 
-/* Invoke `udisksctl unmount -b <device>` and capture output. Mirrors
- * @c bootsel_attempt_udisks_mount but for the inverse operation -
- * used to forcibly unmount a /media/root/... mount that the system
- * udisks2 created when the user's session wasn't seat-active. The
- * polkit action is `org.freedesktop.UDisks2.filesystem-unmount-others`
- * which on standard Mint / Ubuntu is allowed for active sessions
- * without password and prompted for admin password otherwise - so
- * this call may fail visibly with a polkit auth error, which the
- * trace captures so the operator can see it. */
-static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
-                                           size_t err_size) {
+/* Run `udisksctl <verb> -b <device>` and capture its result. Every line of
+ * output is logged under @p tag (polkit auth failures, missing-device and
+ * busy-mount errors end up in the trace) and the joined output tail goes to
+ * @p err_buf together with the exit code. */
+static bool bootsel_run_udisksctl(const char *verb, const char *tag,
+                                  const char *device, char *err_buf,
+                                  size_t err_size) {
   if (device == NULL || device[0] == '\0') {
     if (err_buf != NULL && err_size > 0u) {
       (void)snprintf(err_buf, err_size, "no device path");
@@ -615,8 +611,12 @@ static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
   }
 
   char cmd[1024];
+  /* The realpath() output is a normalized /dev/sdXN form with no shell
+   * metacharacters. Wrap in single quotes anyway as defense-in-depth
+   * - never embed an unquoted user-supplied path into a shell
+   * command line. */
   const int n =
-      snprintf(cmd, sizeof(cmd), "udisksctl unmount -b '%s' 2>&1", device);
+      snprintf(cmd, sizeof(cmd), "udisksctl %s -b '%s' 2>&1", verb, device);
   if (n < 0 || (size_t)n >= sizeof(cmd)) {
     if (err_buf != NULL && err_size > 0u) {
       (void)snprintf(err_buf, err_size, "command too long");
@@ -624,16 +624,17 @@ static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
     return false;
   }
 
-  flash_log("unmount: spawning '%s'", cmd);
+  flash_log("%s: spawning '%s'", tag, cmd);
   FILE *fp = popen(cmd, "r");
   if (fp == NULL) {
     const int e = errno;
     if (err_buf != NULL && err_size > 0u) {
       (void)snprintf(err_buf, err_size, "popen failed: %s", strerror(e));
     }
-    flash_log("unmount: popen failed errno=%d (%s)", e, strerror(e));
+    flash_log("%s: popen failed errno=%d (%s)", tag, e, strerror(e));
     return false;
   }
+
   char line[256];
   char tail[512];
   tail[0] = '\0';
@@ -643,7 +644,7 @@ static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
     while (len > 0u && (line[len - 1u] == '\n' || line[len - 1u] == '\r')) {
       line[--len] = '\0';
     }
-    flash_log("unmount: udisksctl: %s", line);
+    flash_log("%s: udisksctl: %s", tag, line);
     if (tail_off < sizeof(tail) - 1u) {
       const int t = snprintf(tail + tail_off, sizeof(tail) - tail_off, "%s%s",
                              (tail_off > 0u) ? " | " : "", line);
@@ -660,14 +661,28 @@ static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
     if (err_buf != NULL && err_size > 0u) {
       (void)snprintf(err_buf, err_size, "rc=%d output='%s'", rc, tail);
     }
-    flash_log("unmount: udisksctl rc=%d", rc);
+    flash_log("%s: udisksctl rc=%d", tag, rc);
     return false;
   }
   if (err_buf != NULL && err_size > 0u) {
     (void)snprintf(err_buf, err_size, "ok: %s", tail);
   }
-  flash_log("unmount: udisksctl ok");
+  flash_log("%s: udisksctl ok", tag);
   return true;
+}
+
+/* Invoke `udisksctl unmount -b <device>` and capture output. Mirrors
+ * @c bootsel_attempt_udisks_mount but for the inverse operation -
+ * used to forcibly unmount a /media/root/... mount that the system
+ * udisks2 created when the user's session wasn't seat-active. The
+ * polkit action is `org.freedesktop.UDisks2.filesystem-unmount-others`
+ * which on standard Mint / Ubuntu is allowed for active sessions
+ * without password and prompted for admin password otherwise - so
+ * this call may fail visibly with a polkit auth error, which the
+ * trace captures so the operator can see it. */
+static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
+                                           size_t err_size) {
+  return bootsel_run_udisksctl("unmount", "unmount", device, err_buf, err_size);
 }
 
 /* Invoke `udisksctl mount -b <device>` and capture the result. udisks2
@@ -683,77 +698,12 @@ static bool bootsel_attempt_udisks_unmount(const char *device, char *err_buf,
  * dir scan should now find the new mount point on its next poll". */
 static bool bootsel_attempt_udisks_mount(const char *device, char *err_buf,
                                          size_t err_size) {
-  if (device == NULL || device[0] == '\0') {
-    if (err_buf != NULL && err_size > 0u) {
-      (void)snprintf(err_buf, err_size, "no device path");
-    }
-    return false;
-  }
-
-  char cmd[1024];
-  /* The realpath() output is a normalized /dev/sdXN form with no shell
-   * metacharacters. Wrap in single quotes anyway as defense-in-depth
-   * - never embed an unquoted user-supplied path into a shell
-   * command line. */
-  const int n =
-      snprintf(cmd, sizeof(cmd), "udisksctl mount -b '%s' 2>&1", device);
-  if (n < 0 || (size_t)n >= sizeof(cmd)) {
-    if (err_buf != NULL && err_size > 0u) {
-      (void)snprintf(err_buf, err_size, "command too long");
-    }
-    return false;
-  }
-
-  flash_log("automount: spawning '%s'", cmd);
-  FILE *fp = popen(cmd, "r");
-  if (fp == NULL) {
-    const int e = errno;
-    if (err_buf != NULL && err_size > 0u) {
-      (void)snprintf(err_buf, err_size, "popen failed: %s", strerror(e));
-    }
-    flash_log("automount: popen failed errno=%d (%s)", e, strerror(e));
-    return false;
-  }
-
-  char line[256];
-  char tail[512];
-  tail[0] = '\0';
-  size_t tail_off = 0u;
-  while (fgets(line, sizeof(line), fp) != NULL) {
-    size_t len = strlen(line);
-    while (len > 0u && (line[len - 1u] == '\n' || line[len - 1u] == '\r')) {
-      line[--len] = '\0';
-    }
-    flash_log("automount: udisksctl: %s", line);
-    if (tail_off < sizeof(tail) - 1u) {
-      const int t = snprintf(tail + tail_off, sizeof(tail) - tail_off, "%s%s",
-                             (tail_off > 0u) ? " | " : "", line);
-      if (t > 0) {
-        tail_off += (size_t)t;
-        if (tail_off > sizeof(tail) - 1u) {
-          tail_off = sizeof(tail) - 1u;
-        }
-      }
-    }
-  }
-  const int rc = pclose(fp);
   /* `udisksctl mount` returns 0 on success and prints the mount point.
    * Failure modes include polkit auth refused (rc=1), device already
    * mounted (still rc=1 but harmless - we'll find it on next scan),
    * and "object not in registry" (rc=1, indicates udisks2 daemon is
-   * not running). The tail string carries the precise reason. */
-  if (rc != 0) {
-    if (err_buf != NULL && err_size > 0u) {
-      (void)snprintf(err_buf, err_size, "rc=%d output='%s'", rc, tail);
-    }
-    flash_log("automount: udisksctl rc=%d", rc);
-    return false;
-  }
-  if (err_buf != NULL && err_size > 0u) {
-    (void)snprintf(err_buf, err_size, "ok: %s", tail);
-  }
-  flash_log("automount: udisksctl ok");
-  return true;
+   * not running). The error tail carries the precise reason. */
+  return bootsel_run_udisksctl("mount", "automount", device, err_buf, err_size);
 }
 
 #endif /* SC_FLASH_HAVE_POSIX_WATCHER */
