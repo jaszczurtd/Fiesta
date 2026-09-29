@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {"name": "ECU", "kind": "firmware", "token": "ECU", "macro": "ECU",
+     "serialConfigurator": {"index": 0, "displayName": "ECU", "tests": true},
+     "hostTests": "build_test", "analysis": ["cppcheck"]},
+    {"name": "Clocks", "kind": "firmware", "token": "CLOCKS", "macro": "CLOCKS",
+     "serialConfigurator": {"index": 1, "displayName": "Clocks"},
+     "hostTests": "build_test"},
+    {"name": "OilAndSpeed", "kind": "firmware", "token": "OIL&SPD", "macro": "OIL_AND_SPEED",
+     "serialConfigurator": {"index": 2, "displayName": "OilAndSpeed"},
+     "hostTests": "build_test"},
+    {"name": "Fiesta_clock", "kind": "firmware", "token": "RTC_CLK", "macro": "CLOCK",
+     "serialConfigurator": {"index": 3, "displayName": "RTC_Clock"}},
+    {"name": "Adjustometer", "kind": "firmware", "token": "ADJ", "macro": "ADJUSTOMETER",
+     "hostTests": "build_test"},
+    {"name": "SerialConfigurator", "kind": "host-app", "hostTests": "build"}
+  ]
+}

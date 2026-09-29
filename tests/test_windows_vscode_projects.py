@@ -11,7 +11,11 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MODULES = ("ECU", "Clocks", "OilAndSpeed", "Adjustometer", "Fiesta_clock")
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import fiesta_modules  # noqa: E402
+
+MODULES = tuple(module.name for module in fiesta_modules.load().firmware())
 LINUX_ONLY_TASKS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
 MANAGED_DEBUG_PROFILES = {
     "Project: Debug Firmware",

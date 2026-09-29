@@ -1,35 +1,11 @@
 #!/usr/bin/env bash
 
+# Module lists and fiesta_module_token_for() come from modules.json.
+# shellcheck source=src/common/scripts/fiesta-modules.sh
+source "$(dirname "${BASH_SOURCE[0]}")/fiesta-modules.sh"
+
 fiesta_module_name() {
     basename "$1"
-}
-
-fiesta_module_token_for() {
-    case "$1" in
-        ECU)           printf '%s\n' "ECU" ;;
-        Clocks)        printf '%s\n' "CLOCKS" ;;
-        OilAndSpeed)   printf '%s\n' "OIL&SPD" ;;
-        Fiesta_clock)  printf '%s\n' "RTC_CLK" ;;
-        Adjustometer)  printf '%s\n' "ADJ" ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-fiesta_usb_manufacturer() {
-    printf '%s\n' "Jaszczur"
-}
-
-fiesta_usb_product_for() {
-    case "$1" in
-        ECU)           printf '%s\n' "Fiesta ECU" ;;
-        Clocks)        printf '%s\n' "Fiesta Clocks" ;;
-        OilAndSpeed)   printf '%s\n' "Fiesta OilAndSpeed" ;;
-        Fiesta_clock)  printf '%s\n' "Fiesta RTC Clock" ;;
-        Adjustometer)  printf '%s\n' "Fiesta Adjustometer" ;;
-        *)             printf 'Fiesta %s\n' "$1" ;;
-    esac
 }
 
 fiesta_truthy() {

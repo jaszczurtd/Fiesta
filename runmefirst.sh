@@ -4,19 +4,18 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
-# Discard module build caches before bootstrap resolves the pinned HAL.
-BUILD_DIRS=(
-    src/ECU/build_test
-    src/Clocks/build_test
-    src/OilAndSpeed/build_test
-    src/Adjustometer/build_test
-    src/SerialConfigurator/build
-    src/ECU/.build
-    src/Clocks/.build
-    src/OilAndSpeed/.build
-    src/Adjustometer/.build
-    src/Fiesta_clock/.build
-)
+# shellcheck source=src/common/scripts/fiesta-modules.sh
+source src/common/scripts/fiesta-modules.sh
+
+# Discard module build caches before bootstrap resolves the pinned HAL:
+# every host test build and every firmware build listed in modules.json.
+BUILD_DIRS=()
+for entry in "${FIESTA_HOST_TEST_MODULES[@]}"; do
+    BUILD_DIRS+=("${entry##*:}")
+done
+for module in "${FIESTA_FIRMWARE_MODULES[@]}"; do
+    BUILD_DIRS+=("src/${module}/.build")
+done
 for build_dir in "${BUILD_DIRS[@]}"; do
     if [[ -e "$build_dir" || -L "$build_dir" ]]; then
         printf 'Removing build artifacts: %s\n' "$build_dir"

@@ -19,6 +19,9 @@ class DailyRunnerTests(unittest.TestCase):
             runner.parent.mkdir(parents=True)
             shutil.copy2(ROOT / "src/ECU/scripts/systemd/fiesta-bootstrap-run.sh", runner)
             shutil.copy2(ROOT / "runmefirst.sh", repo)
+            fragment = "src/common/scripts/fiesta-modules.sh"
+            (repo / fragment).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / fragment, repo / fragment)
             (repo / ".git").mkdir()
             artifact = repo / "src/SerialConfigurator/build/artifact"
             artifact.parent.mkdir(parents=True)

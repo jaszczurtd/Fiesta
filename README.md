@@ -153,9 +153,13 @@ Setup, sudo requirements, and SMTP notes are documented in
 Firmware modules use the shared JaszczurHAL VS Code entry instead of
 module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
+- `modules.json` with `scripts/fiesta_modules.py` - the list of Fiesta
+  modules. The script checks it and generates the module token header, the
+  SerialConfigurator module table and the module lists used by the shell
+  scripts; `--check` fails when a generated file is out of date.
 - `scripts/sync_vscode_projects.py` - regenerates cross-platform settings,
-  tasks and keybinding references for all five modules from JaszczurHAL's
-  board/task registry. The repository pre-commit hook runs it with `--stage`
+  tasks and keybinding references for every firmware module in `modules.json`
+  from JaszczurHAL's board/task registry. The repository pre-commit hook runs it with `--stage`
   and stages changed managed outputs. Run it with `--check` in review or CI.
 - `scripts/configure_git_hooks.py` - configures the repository-local hook path
   from Linux, macOS or Windows without requiring Bash.
@@ -163,8 +167,9 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 - `src/ECU/scripts/bootstrap.sh` - one-shot dev-env setup + tests + firmware
   build for all Fiesta modules. You can start immediately by invoking this
   script right after clone. See `One-shot setup` section below.
-- `src/common/scripts/fiesta-firmware-common.sh` - Fiesta-only module token,
-  manifest, UF2, and bootstrap helpers. The firmware build routes through the
+- `src/common/scripts/fiesta-firmware-common.sh` - Fiesta-only manifest, UF2,
+  and bootstrap helpers; module tokens come from the generated
+  `fiesta-modules.sh`. The firmware build routes through the
   JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
 
 Tracked module settings contain no COM port. Board and port selections are

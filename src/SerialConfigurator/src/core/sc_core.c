@@ -7,6 +7,7 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "sc_flash.h"
 #include "sc_manifest.h"
+#include "sc_module_table.h"
 #include "sc_protocol.h"
 #include "sc_transport.h"
 #include <ctype.h>
@@ -24,14 +25,15 @@
 typedef struct ScModuleDef {
   const char *token;
   const char *display_name;
+  const char *source_dir;
+  bool tests;
 } ScModuleDef;
 
+#define SC_MODULE_DEF_ROW(token, display_name, source_dir, tests)              \
+  {(token), (display_name), (source_dir), (tests)},
 static const ScModuleDef k_module_defs[SC_MODULE_COUNT] = {
-    {SC_MODULE_TOKEN_ECU, SC_MODULE_ECU},
-    {SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS},
-    {SC_MODULE_TOKEN_OIL_AND_SPEED, SC_MODULE_OIL_AND_SPEED},
-    {SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK},
-};
+    SC_MODULE_TABLE(SC_MODULE_DEF_ROW)};
+#undef SC_MODULE_DEF_ROW
 
 static void log_append(char *log_output, size_t log_output_size,
                        const char *format, ...) {
@@ -995,6 +997,14 @@ void sc_core_detect_modules(ScCore *core, char *log_output,
 }
 
 size_t sc_core_module_count(void) { return SC_MODULE_COUNT; }
+
+const char *sc_core_module_source_dir(size_t index) {
+  return (index < SC_MODULE_COUNT) ? k_module_defs[index].source_dir : 0;
+}
+
+bool sc_core_module_has_tests(size_t index) {
+  return (index < SC_MODULE_COUNT) && k_module_defs[index].tests;
+}
 
 const ScModuleStatus *sc_core_module_status(const ScCore *core, size_t index) {
   if (core == 0 || index >= SC_MODULE_COUNT) {

@@ -1,4 +1,5 @@
 #include "sc_core.h"
+#include "sc_transport.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -56,6 +57,49 @@ static int test_status_contract(void) {
   return 0;
 }
 
+static int test_module_table(void) {
+  TEST_ASSERT(sc_core_module_source_dir(SC_MODULE_COUNT) == 0,
+              "source dir should be NULL for out-of-range index");
+  TEST_ASSERT(!sc_core_module_has_tests(SC_MODULE_COUNT),
+              "out-of-range index has no tests");
+
+  ScCore core;
+  sc_core_init(&core);
+  size_t with_tests = 0u;
+  for (size_t i = 0u; i < sc_core_module_count(); ++i) {
+    const char *name = sc_core_module_status(&core, i)->display_name;
+    const char *dir = sc_core_module_source_dir(i);
+    TEST_ASSERT(dir != 0 && dir[0] != '\0', "source dir should not be empty");
+    if (strcmp(name, SC_MODULE_ECU) == 0) {
+      TEST_ASSERT(strcmp(dir, "ECU") == 0, "ECU source dir");
+      TEST_ASSERT(sc_core_module_has_tests(i), "ECU reports tests");
+    }
+    if (strcmp(name, SC_MODULE_CLOCK) == 0) {
+      TEST_ASSERT(strcmp(dir, "Fiesta_clock") == 0,
+                  "RTC_Clock builds from src/Fiesta_clock");
+    }
+    if (sc_core_module_has_tests(i)) {
+      ++with_tests;
+    }
+  }
+  TEST_ASSERT(with_tests == 1u, "only the ECU has a Tests tab");
+  return 0;
+}
+
+static int test_out_of_scope_candidates(void) {
+  TEST_ASSERT(sc_transport_candidate_out_of_scope(
+                  "/dev/serial/by-id/usb-Jaszczur_Fiesta_Adjustometer_E6-if00"),
+              "Adjustometer is never probed");
+  TEST_ASSERT(!sc_transport_candidate_out_of_scope(
+                  "/dev/serial/by-id/usb-Jaszczur_Fiesta_ECU_E6-if00"),
+              "ECU is probed");
+  TEST_ASSERT(!sc_transport_candidate_out_of_scope(
+                  "/dev/serial/by-id/usb-Jaszczur_Fiesta_RTC_Clock_E6-if00"),
+              "RTC clock is probed");
+  TEST_ASSERT(!sc_transport_candidate_out_of_scope(0), "NULL path is kept");
+  return 0;
+}
+
 static bool mock_list_candidates(void *context, ScTransportCandidateList *list,
                                  char *error, size_t error_size) {
   (void)error;
@@ -102,6 +146,10 @@ int main(void) {
   }
 
   if (test_detect_modules_preserves_status_layout() != 0) {
+    return 1;
+  }
+
+  if (test_module_table() != 0 || test_out_of_scope_candidates() != 0) {
     return 1;
   }
 

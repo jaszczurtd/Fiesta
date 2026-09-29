@@ -457,32 +457,13 @@ static GFile *dialog_initial_folder_from_path(const char *path) {
   return folder;
 }
 
-static const char *module_source_dir_name(const char *module_display_name) {
-  if (module_display_name == NULL) {
-    return NULL;
-  }
-  if (strcmp(module_display_name, SC_MODULE_ECU) == 0) {
-    return SC_MODULE_ECU;
-  }
-  if (strcmp(module_display_name, SC_MODULE_CLOCKS) == 0) {
-    return SC_MODULE_CLOCKS;
-  }
-  if (strcmp(module_display_name, SC_MODULE_OIL_AND_SPEED) == 0) {
-    return SC_MODULE_OIL_AND_SPEED;
-  }
-  if (strcmp(module_display_name, SC_MODULE_CLOCK) == 0) {
-    return "Fiesta_clock";
-  }
-  return NULL;
-}
-
 static GFile *
 dialog_initial_folder_from_module_build(const ScFlashSection *section) {
   if (section == NULL) {
     return NULL;
   }
 
-  const char *module_dir = module_source_dir_name(section->module_name);
+  const char *module_dir = sc_core_module_source_dir(section->module_index);
   if (module_dir == NULL) {
     return NULL;
   }

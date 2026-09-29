@@ -60,6 +60,16 @@ the loom colours.
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | no |
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
 
+The list itself lives in [`modules.json`](modules.json): each module's
+kind, token, SerialConfigurator slot and host-test build. Adding a module
+starts there. [`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks
+the list and generates the token header in `src/common/scDefinitions`, the
+SerialConfigurator module table and a shell fragment; the VS Code generator,
+`runalltests.sh`, `runmefirst.sh`, the bootstrap and SerialConfigurator read
+those instead of keeping their own lists. The SerialConfigurator slot index is
+explicit because the saved flash paths are keyed by it. CI workflow lists stay
+literal, and a test checks them against the registry.
+
 [`legacy/`](legacy/) keeps the retired `DPF_main`, `AdaptiveLights`, and
 `Fading` sources for reference. They are not built or tested.
 
@@ -501,6 +511,8 @@ Fiesta/
 ├── README.md                    # overview, setup, builds
 ├── ARCHITECTURE.md              # this file
 ├── MISRA.md                     # MISRA-C status and policy
+├── modules.json                 # module registry
+├── scripts/                     # registry and VS Code generators, git hooks
 ├── .github/workflows/           # CI
 ├── src/
 │   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/
