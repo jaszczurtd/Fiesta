@@ -1,0 +1,39 @@
+{
+    "$schema": "../../JaszczurHAL/vscode/schema/jh_vscode_project.schema.json",
+    "project": "Fiesta",
+    "module": "VP37TestBench",
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../JaszczurHAL/cmake/jh_firmware_project",
+        "cache": {
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "VP37TestBench",
+            "JH_EXTRA_SOURCES": "../common/vp37/vp37.c;../common/vp37/vp37_adjustometer.c;../common/vp37/vp37_snapshot.c;../common/vp37/vp37_tuning.c;../common/vp37/vp37_feedback.c;../common/vp37/vp37_compensation.c;../common/vp37/vp37_control.c;../common/vp37/vp37_telemetry.c;../common/vp37/vp37_current.c;../common/vp37/vp37_current_control.c;../common/vp37/vp37_maps.c"
+        },
+        "targets": {
+            "build": "firmware",
+            "buildDebug": "firmware_debug",
+            "upload": "firmware_upload",
+            "compileDb": "firmware_compile_db"
+        }
+    },
+    "identity": {
+        "enabled": true,
+        "usbManufacturer": "Jaszczur",
+        "usbProduct": "Fiesta VP37TestBench",
+        "usbVid": "0x2e8a",
+        "usbPid": "0x000a",
+        "byIdHint": "Fiesta_VP37TestBench"
+    },
+    "upload": {
+        "strategy": "serial"
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2"
+    }
+}

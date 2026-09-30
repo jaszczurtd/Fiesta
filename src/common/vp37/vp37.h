@@ -487,6 +487,12 @@ typedef enum {
 } VP37InitStatus;
 
 /**
+ * @brief Short human-readable name of one VP37_init() result.
+ * @return Static string; "unknown" for a value outside the enum.
+ */
+const char *VP37_initStatusName(VP37InitStatus status);
+
+/**
  * @brief Install the board services of one pump.
  * @param self Pump that is not running.
  * @param callbacks Table with at least the two PWM writes, both enable

@@ -4093,6 +4093,24 @@ void test_vp37_fresh_supply_scales_the_command_with_bounded_prediction(void) {
   TEST_ASSERT_FLOAT_WITHIN(.01f, 7.5f, pump->supply.heldVolts);
 }
 
+void test_vp37_init_status_names_every_result(void) {
+  // The names go on the bench screen; each result reads as itself.
+  TEST_ASSERT_EQUAL_STRING("ok", VP37_initStatusName(VP37_INIT_OK));
+  TEST_ASSERT_EQUAL_STRING("already running",
+                           VP37_initStatusName(VP37_INIT_ALREADY_INITIALIZED));
+  TEST_ASSERT_EQUAL_STRING("no baseline",
+                           VP37_initStatusName(VP37_INIT_BASELINE_NOT_READY));
+  TEST_ASSERT_EQUAL_STRING("pid failed",
+                           VP37_initStatusName(VP37_INIT_PID_CREATE_FAILED));
+  TEST_ASSERT_EQUAL_STRING("cal failed",
+                           VP37_initStatusName(VP37_INIT_CALIBRATION_FAILED));
+  TEST_ASSERT_EQUAL_STRING("no output",
+                           VP37_initStatusName(VP37_INIT_OUTPUT_UNAVAILABLE));
+  TEST_ASSERT_EQUAL_STRING(
+      "unknown",
+      VP37_initStatusName((VP37InitStatus)(VP37_INIT_OUTPUT_UNAVAILABLE + 1)));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_vp37_current_scan_increases_drive_for_a_current_deficit);
@@ -4249,5 +4267,6 @@ int main(void) {
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
   RUN_TEST(test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump);
   RUN_TEST(test_vp37_fresh_supply_scales_the_command_with_bounded_prediction);
+  RUN_TEST(test_vp37_init_status_names_every_result);
   return UNITY_END();
 }

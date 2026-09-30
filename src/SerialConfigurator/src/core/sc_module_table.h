@@ -17,5 +17,5 @@
 
 /* NULL-terminated by-id name fragments of Fiesta boards that
  * SerialConfigurator does not talk to. */
-#define SC_OUT_OF_SCOPE_BY_ID_HINTS {"Fiesta_Adjustometer", NULL}
+#define SC_OUT_OF_SCOPE_BY_ID_HINTS {"Fiesta_Adjustometer", "Fiesta_VP37TestBench", NULL}
 /* clang-format on */

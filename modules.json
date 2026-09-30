@@ -14,6 +14,8 @@
      "serialConfigurator": {"index": 3, "displayName": "RTC_Clock"}},
     {"name": "Adjustometer", "kind": "firmware", "token": "ADJ", "macro": "ADJUSTOMETER",
      "hostTests": "build_test"},
+    {"name": "VP37TestBench", "kind": "firmware", "token": "VP37TB", "macro": "VP37_TESTBENCH",
+     "hostTests": "build_test", "ci": false, "sharedSources": ["vp37"]},
     {"name": "SerialConfigurator", "kind": "host-app", "hostTests": "build"}
   ]
 }

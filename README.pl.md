@@ -21,6 +21,9 @@ zapewnia [JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL).
 - `OilAndSpeed`: pomiar ciśnienia oleju, prędkości i temperatur spalin.
 - `Adjustometer`: pomiar położenia nastawnika VP37 przez częstotliwość
   oscylatora, przekazywany do ECU przez I²C.
+- `VP37TestBench`: stanowisko testowe pompy VP37 - wspólny moduł napędu
+  (`src/common/vp37`) na sprzęcie stanowiska, z wyświetlaczem i zadawaniem
+  położenia potencjometrem.
 - `Fiesta_clock`: zegar RTC, publikacja czasu przez CAN i lokalny wyświetlacz.
 - `SerialConfigurator`: aplikacja C/GTK4 oraz CLI do wykrywania modułów,
   odczytu i zmiany ustawień, aktualizacji firmware oraz podglądu GPS ECU.

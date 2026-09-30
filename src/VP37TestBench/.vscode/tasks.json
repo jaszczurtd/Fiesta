@@ -1,0 +1,335 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "boardSelection",
+      "description": "Select a target architecture and board",
+      "type": "pickString",
+      "options": [
+        "esp32:esp32-devkitc-v4 - Espressif ESP32-DevKitC V4",
+        "esp32s3:waveshare-esp32-s3-zero - Waveshare ESP32-S3-Zero SKU 25081",
+        "rp2040:pico - Raspberry Pi Pico",
+        "rp2040:pico-core1262-hf - Raspberry Pi Pico with Core1262-HF",
+        "rp2040:pico-rm2 - Raspberry Pi Pico with PIM730/RM2",
+        "rp2040:picow - Raspberry Pi Pico W",
+        "rp2040:rp2040-lora-lf - Waveshare RP2040-LoRa-LF",
+        "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB",
+        "rp2040:rp2040-zero - Waveshare RP2040-Zero compatible",
+        "rp2350-arm:pico2 - Raspberry Pi Pico 2",
+        "rp2350-arm:pico2w - Raspberry Pi Pico 2 W",
+        "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
+        "stm32g474:nucleo-g474re - ST NUCLEO-G474RE",
+        "stm32g474:nucleo-g474re-core1262-hf - ST NUCLEO-G474RE with Core1262-HF",
+        "stm32g474:nucleo-g474re-pim730 - ST NUCLEO-G474RE with PIM730/RM2"
+      ],
+      "default": "rp2040:pico - Raspberry Pi Pico"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "Project: Build",
+      "detail": "Build the VP37TestBench firmware for the selected board.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Build (Debug)",
+      "detail": "Build the VP37TestBench firmware with debug settings.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build-debug",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Upload",
+      "detail": "Upload the VP37TestBench firmware to the selected board.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Upload (UF2 / BOOTSEL)",
+      "detail": "RP2040 only: build the VP37TestBench firmware and copy its UF2 file to the only detected BOOTSEL drive.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload-uf2",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Upload (OTA)",
+      "detail": "Build the VP37TestBench firmware, authenticate, and upload it to one RP device discovered on the network.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload-ota",
+        "--project",
+        "${workspaceFolder}",
+        "--interactive"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Discover OTA devices",
+      "detail": "List JaszczurHAL devices available for native OTA updates.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "ota-discover",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: List ports",
+      "detail": "List serial ports, matching device identities, and possible BOOTSEL drives.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "list-ports",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Change port",
+      "detail": "Select and save the serial port used for uploads and monitoring.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "change-port",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Serial Monitor",
+      "detail": "Open the project's persistent serial monitor.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "monitor",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "replace-own"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Debug Probe Monitor",
+      "detail": "Monitor serial output through the Debug Probe.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "monitor-probe",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "replace-own"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Serial Monitor (Any)",
+      "detail": "Monitor output from any serial port.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "monitor-any",
+        "--project",
+        "${workspaceFolder}",
+        "--lock-policy",
+        "wait"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Refresh IntelliSense",
+      "detail": "Update IntelliSense data for this project's sources.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "refresh-intellisense",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Clean",
+      "detail": "Remove the project's build files.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "clean",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Clear USB Identity",
+      "detail": "Replace the installed application with neutral firmware after verifying the Fiesta VP37TestBench USB device identity.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "clear-identity",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Config Dump",
+      "detail": "Show the effective project configuration.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "config-dump",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Select board",
+      "detail": "Choose a target architecture and board in the interactive selector.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "select-board",
+        "--project",
+        "${workspaceFolder}",
+        "--interactive"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared",
+        "showReuseMessage": false,
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Select board (GUI)",
+      "detail": "Choose a target architecture and board from the VS Code menu.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "select-board",
+        "--project",
+        "${workspaceFolder}",
+        "--selection",
+        "${input:boardSelection}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Project: Sync board picker",
+      "detail": "Update the board-selection list and managed debug configurations.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "sync-board-picker",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen",
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

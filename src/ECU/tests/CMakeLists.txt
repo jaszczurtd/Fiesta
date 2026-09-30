@@ -87,7 +87,28 @@ if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     # GCC's TSan runtime needs a fixed address layout on kernels with wide
     # mmap randomization, hence setarch -R. Valgrind skips the label.
     find_program(ECU_SETARCH setarch)
+    # The GCC TSan runtime supports 39-, 42- and 48-bit address spaces and
+    # aborts elsewhere ("unsupported VMA range" on a 47-bit kernel, as on the
+    # daily bootstrap host). Probe it at configure time and register the
+    # binary only where it can run.
+    set(ECU_TSAN_RUNS 1)
     if(ECU_SETARCH)
+        set(_tsan_probe_src ${CMAKE_CURRENT_BINARY_DIR}/tsan_probe.c)
+        file(WRITE ${_tsan_probe_src} "int main(void) { return 0; }\n")
+        execute_process(COMMAND ${CMAKE_C_COMPILER} -fsanitize=thread
+                ${_tsan_probe_src} -o ${CMAKE_CURRENT_BINARY_DIR}/tsan_probe
+            RESULT_VARIABLE _tsan_compiles OUTPUT_QUIET ERROR_QUIET)
+        if(_tsan_compiles EQUAL 0)
+            execute_process(COMMAND ${ECU_SETARCH} ${CMAKE_SYSTEM_PROCESSOR} -R
+                    ${CMAKE_CURRENT_BINARY_DIR}/tsan_probe
+                RESULT_VARIABLE ECU_TSAN_RUNS OUTPUT_QUIET ERROR_QUIET)
+        endif()
+        if(NOT ECU_TSAN_RUNS EQUAL 0)
+            message(STATUS
+                "ThreadSanitizer runtime unavailable; skipping test_vp37_snapshot_tsan")
+        endif()
+    endif()
+    if(ECU_SETARCH AND ECU_TSAN_RUNS EQUAL 0)
         add_executable(test_vp37_snapshot_tsan
             ${VP37_SOURCE_DIR}/tests/test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
         target_compile_definitions(test_vp37_snapshot_tsan PRIVATE
