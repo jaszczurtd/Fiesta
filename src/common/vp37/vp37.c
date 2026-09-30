@@ -75,6 +75,34 @@ static bool VP37_hasCallbacks(const VP37Pump *self) {
   return self->callbacks.writeQuantityPwm != NULL;
 }
 
+const char *VP37_initStatusName(VP37InitStatus status) {
+  const char *name;
+  switch (status) {
+  case VP37_INIT_OK:
+    name = "ok";
+    break;
+  case VP37_INIT_ALREADY_INITIALIZED:
+    name = "already running";
+    break;
+  case VP37_INIT_BASELINE_NOT_READY:
+    name = "no baseline";
+    break;
+  case VP37_INIT_PID_CREATE_FAILED:
+    name = "pid failed";
+    break;
+  case VP37_INIT_CALIBRATION_FAILED:
+    name = "cal failed";
+    break;
+  case VP37_INIT_OUTPUT_UNAVAILABLE:
+    name = "no output";
+    break;
+  default:
+    name = "unknown";
+    break;
+  }
+  return name;
+}
+
 VP37InitStatus VP37_init(VP37Pump *self) {
   if (self->vp37Initialized) {
     return VP37_INIT_ALREADY_INITIALIZED;

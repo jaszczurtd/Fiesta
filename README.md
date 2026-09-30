@@ -93,10 +93,11 @@ and local VS Code settings are preserved. The setup then:
    `picotool` required by native RP firmware builds and PMD for the duplicate
    gate,
 7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
-   `Clocks`, `OilAndSpeed`, `Adjustometer`, and `SerialConfigurator` (runtime
+   `Clocks`, `OilAndSpeed`, `Adjustometer`, `VP37TestBench`, and
+   `SerialConfigurator` (runtime
    CTest plus cppcheck, PMD CPD duplicate detection, Valgrind and clang-tidy
    gates),
-8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
+8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
 9. builds and tests `SerialConfigurator` and, unless disabled, creates its
    Debian package.
 
@@ -118,14 +119,14 @@ Useful env overrides: `ALLOW_ROOT=1`, `SKIP_APT=1`,
 `SKIP_TESTS=1`, `SKIP_BUILD=1`, `SKIP_DESKTOP=1`,
 `SKIP_DESKTOP_PACKAGE=1`.
 
-`runmefirst.sh` exercises all five Fiesta firmware modules and
+`runmefirst.sh` exercises all six Fiesta firmware modules and
 SerialConfigurator end-to-end. `Fiesta_clock` currently has firmware-build
-validation only; the other four firmware modules and SerialConfigurator also
+validation only; the other five firmware modules and SerialConfigurator also
 have host-test projects.
 
 ### Development environment
 
-The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`) ship ready-to-use `.vscode/` setups (`tasks.json`, `launch.json`, `extensions.json`, `settings.json`, and
+The project is developed primarily on **Linux** (Debian-compatible/Raspberry Pi OS). **Visual Studio Code** is the main editor. Firmware modules (`ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`) ship ready-to-use `.vscode/` setups (`tasks.json`, `launch.json`, `extensions.json`, `settings.json`, and
 `jaszczurhal.project.json`), so compile, upload, serial monitor, host tests, and debugger flows are wired out of the box, and fully controlled by JaszczurHAL scripts.
 `src/SerialConfigurator` ships its own CMake-oriented VS Code task setup, with compatible keybindings.
 
@@ -194,12 +195,13 @@ cmake --build src/<Module>/build_test --parallel
 ctest --test-dir src/<Module>/build_test --output-on-failure
 ```
 
-`ECU`, `Clocks`, `OilAndSpeed`, and `Adjustometer` have separate host-test
-projects. `Fiesta_clock` does not currently have host tests and is covered by
+`ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, and `VP37TestBench` have
+separate host-test projects. `Fiesta_clock` does not currently have host tests and is covered by
 firmware compilation in the bootstrap/build workflow.
 
 For a single command that runs host tests across all primary modules (ECU,
-Adjustometer, Clocks, OilAndSpeed, SerialConfigurator), the duplicate gate and
+Adjustometer, Clocks, OilAndSpeed, VP37TestBench, SerialConfigurator), the
+duplicate gate and
 then module-level `check-valgrind` / `check-clang-tidy` targets, use:
 
 ```bash
@@ -221,7 +223,7 @@ Useful flags: `-j<N>`, `--skip-cppcheck`, `--skip-valgrind`,
 ### Firmware build - per module
 
 ```bash
-cd src/<ECU|Clocks|OilAndSpeed|Adjustometer|Fiesta_clock>
+cd src/<ECU|Clocks|OilAndSpeed|Adjustometer|Fiesta_clock|VP37TestBench>
 ../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
 ../JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
 ../JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"

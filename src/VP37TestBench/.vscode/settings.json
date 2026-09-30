@@ -1,0 +1,22 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
+    "C_Cpp.errorSquiggles": "enabled",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "files.exclude": {
+        "**/.build": true
+    },
+    "search.exclude": {
+        "**/.build": true
+    },
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 500,
+    "task.allowAutomaticTasks": "on",
+    "jaszczurhal.root": "../JaszczurHAL",
+    "jaszczurhal.vscodeEntry": "../JaszczurHAL/vscode/entry/jh-vscode",
+    "jaszczurhal.verbose": true,
+    "jaszczurhal.vscodeEntryWindows": "../JaszczurHAL/vscode/entry/jh-vscode.cmd",
+    "cortex-debug.gdbPath.linux": "gdb-multiarch"
+}

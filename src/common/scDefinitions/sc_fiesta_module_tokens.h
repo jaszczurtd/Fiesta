@@ -17,6 +17,7 @@ extern "C" {
 #define SC_MODULE_TOKEN_OIL_AND_SPEED "OIL&SPD"
 #define SC_MODULE_TOKEN_CLOCK "RTC_CLK"
 #define SC_MODULE_TOKEN_ADJUSTOMETER "ADJ"
+#define SC_MODULE_TOKEN_VP37_TESTBENCH "VP37TB"
 
 /* Names shown by SerialConfigurator. */
 #define SC_MODULE_ECU "ECU"

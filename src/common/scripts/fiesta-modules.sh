@@ -8,6 +8,7 @@ FIESTA_FIRMWARE_MODULES=(
     OilAndSpeed
     Fiesta_clock
     Adjustometer
+    VP37TestBench
 )
 
 # Host test builds as name:source_dir:build_dir.
@@ -16,6 +17,7 @@ FIESTA_HOST_TEST_MODULES=(
     Clocks:src/Clocks:src/Clocks/build_test
     OilAndSpeed:src/OilAndSpeed:src/OilAndSpeed/build_test
     Adjustometer:src/Adjustometer:src/Adjustometer/build_test
+    VP37TestBench:src/VP37TestBench:src/VP37TestBench/build_test
     SerialConfigurator:src/SerialConfigurator:src/SerialConfigurator/build
 )
 
@@ -31,6 +33,7 @@ fiesta_module_token_for() {
         OilAndSpeed) printf '%s\n' 'OIL&SPD' ;;
         Fiesta_clock) printf '%s\n' RTC_CLK ;;
         Adjustometer) printf '%s\n' ADJ ;;
+        VP37TestBench) printf '%s\n' VP37TB ;;
         *) return 1 ;;
     esac
 }

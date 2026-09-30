@@ -58,6 +58,7 @@ the loom colours.
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure, wheel speed, exhaust gas temperature | no |
 | [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | no |
+| [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | required (shared VP37 code) |
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
 
 The list itself lives in [`modules.json`](modules.json): each module's
@@ -380,6 +381,26 @@ Startup includes 500 ms of warm-up, baseline convergence (80 ms minimum,
 startup and reset details are in the
 [Adjustometer README](src/Adjustometer/README.md).
 Adjustometer does not take part in the configurator protocol.
+
+### VP37TestBench
+
+VP37TestBench runs the shared VP37 drive module (`src/common/vp37`) on the
+pump test stand: its own RP2040 with an ST7796S display, a power stage that
+is the twin of the ECU one (same pins, parts and values, see
+[`vp37_power_stage.h`](src/common/vp37/vp37_power_stage.h)) and the
+Adjustometer on the same I²C protocol. The bench adapter
+([`vp37_bench_adapter.c`](src/VP37TestBench/vp37_bench_adapter.c)) provides
+the board services: the two PWM channels written active low like on the ECU,
+the drive enable on a plain GPIO instead of the ECU's PCF8574, and the
+Adjustometer transfer without a bus mutex, because the bench I²C has one
+user. The demand comes from a potentiometer on the auxiliary scan input.
+Core 0 runs the timers, the display and debug output; core 1 starts the pump
+and runs `VP37_process()`. The screen redraws a value only when it changes,
+and a corner dot shows the Adjustometer connection the way Clocks shows its
+CAN devices: steady green while frames flow, blinking red while they do not
+(with the pump stopped, core 1 probes the status register once a second). Without a pump attached the start ends after the
+baseline timeout and the bench keeps running, which is also its bring-up
+smoke test. VP37TestBench does not take part in the configurator protocol.
 
 ### Fiesta_clock
 
