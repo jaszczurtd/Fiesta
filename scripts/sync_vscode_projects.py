@@ -11,7 +11,8 @@ import subprocess
 import sys
 from typing import Any
 
-from fiesta_modules import load as load_module_registry
+from fiesta_modules import Module, load as load_module_registry
+from fiesta_modules import apply_shared_sources
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -69,10 +70,10 @@ def mark_linux_only(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def desired_project_files(
-    module: str,
+    module: Module,
     registry: dict[str, dict[str, Any]],
 ) -> dict[Path, str]:
-    vscode_dir = REPO_ROOT / "src" / module / ".vscode"
+    vscode_dir = REPO_ROOT / "src" / module.name / ".vscode"
     manifest = load_json(vscode_dir / "jaszczurhal.project.json")
     settings = load_json(vscode_dir / "settings.json")
     current_tasks = load_json(vscode_dir / "tasks.json")
@@ -96,7 +97,7 @@ def desired_project_files(
         registry,
         target,
         board,
-        module=module,
+        module=module.name,
         usb_product=usb_product,
         variants=variants if isinstance(variants, list) else None,
     )
@@ -127,7 +128,13 @@ def desired_project_files(
     )
     settings.update(vscode_entry_settings(unix_entry))
 
-    return {
+    # The firmware compiles the shared source sets through JH_EXTRA_SOURCES;
+    # every firmware manifest is managed, so a module dropped from
+    # "sharedSources" loses the stale value on the next sync.
+    apply_shared_sources(manifest, module, REPO_ROOT)
+    outputs = {vscode_dir / "jaszczurhal.project.json": json_text(manifest)}
+
+    return outputs | {
         vscode_dir / "settings.json": json_text(settings),
         vscode_dir / "tasks.json": json_text(desired_tasks, indent=2),
         vscode_dir / "keybindings.reference.json": json_text(keybindings_reference()),
@@ -174,7 +181,7 @@ def main(argv: list[str]) -> int:
     registry = tooling_target_registry(jh_root)
     expected: dict[Path, str] = {}
     for module in load_module_registry().firmware():
-        expected.update(desired_project_files(module.name, registry))
+        expected.update(desired_project_files(module, registry))
     expected[REPO_ROOT / ".vscode" / "tasks.json"] = json_text(desired_root_tasks())
 
     mismatches = [

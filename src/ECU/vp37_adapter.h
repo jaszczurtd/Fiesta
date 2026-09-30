@@ -7,7 +7,7 @@
  * through, its start and what the ECU takes from its published status.
  */
 
-#include "vp37.h"
+#include "../common/vp37/vp37.h"
 
 #ifdef __cplusplus
 extern "C" {

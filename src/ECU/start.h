@@ -7,6 +7,7 @@
 
 #include <JaszczurHAL.h>
 
+#include "../common/vp37/vp37.h"
 #include "can.h"
 #include "dtcManager.h"
 #include "engineFan.h"
@@ -21,7 +22,6 @@
 #include "sensors.h"
 #include "tests.h"
 #include "turbo.h"
-#include "vp37.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -3,7 +3,7 @@
   "modules": [
     {"name": "ECU", "kind": "firmware", "token": "ECU", "macro": "ECU",
      "serialConfigurator": {"index": 0, "displayName": "ECU", "tests": true},
-     "hostTests": "build_test", "analysis": ["cppcheck"]},
+     "hostTests": "build_test", "analysis": ["cppcheck"], "sharedSources": ["vp37"]},
     {"name": "Clocks", "kind": "firmware", "token": "CLOCKS", "macro": "CLOCKS",
      "serialConfigurator": {"index": 1, "displayName": "Clocks"},
      "hostTests": "build_test"},

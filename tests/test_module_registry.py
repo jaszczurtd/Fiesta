@@ -128,6 +128,55 @@ class RegistryRulesTests(unittest.TestCase):
                              modules=modified(0, hostTests=None))
         self.assert_rejected("allowed values", modules=modified(0, analysis=["lint"]))
 
+    def test_shared_sources_rules(self) -> None:
+        self.assert_rejected("sharedSources",
+                             modules=modified(0, sharedSources=["engine"]))
+        self.assert_rejected("only firmware",
+                             modules=modified(-1, sharedSources=["vp37"]))
+
+    def shared_vp37_repo(self, listing: str) -> tuple:
+        """A repository whose ECU compiles the vp37 set with this listing."""
+        repo = FixtureRepo(modules=modified(0, sharedSources=["vp37"]))
+        self.addCleanup(repo.close)
+        directory = repo.root / "src" / "common" / "vp37"
+        directory.mkdir(parents=True)
+        (directory / "vp37_sources.txt").write_text(listing, encoding="utf-8")
+        return repo, directory
+
+    def test_shared_source_list_checks_the_directory(self) -> None:
+        repo, directory = self.shared_vp37_repo("# comment\nvp37.c\n")
+        with self.assertRaisesRegex(RegistryError, "missing"):
+            fiesta_modules.shared_source_files("vp37", repo.root)
+        (directory / "vp37.c").write_text("int a;\n", encoding="utf-8")
+        module = [m for m in repo.load().firmware() if m.name == "ECU"][0]
+        self.assertEqual(
+            fiesta_modules.shared_extra_sources(module, repo.root),
+            "../common/vp37/vp37.c")
+        (directory / "vp37_extra.c").write_text("int b;\n", encoding="utf-8")
+        with self.assertRaisesRegex(RegistryError, "unlisted"):
+            fiesta_modules.shared_source_files("vp37", repo.root)
+
+    def test_manifests_follow_the_shared_sources_field(self) -> None:
+        repo, directory = self.shared_vp37_repo("vp37.c\n")
+        (directory / "vp37.c").write_text("int a;\n", encoding="utf-8")
+        modules = {m.name: m for m in repo.load().firmware()}
+
+        manifest = {"cmake": {"cache": {"JH_MODULE_NAME": "ECU"}}}
+        fiesta_modules.apply_shared_sources(manifest, modules["ECU"], repo.root)
+        self.assertEqual(manifest["cmake"]["cache"]["JH_EXTRA_SOURCES"],
+                         "../common/vp37/vp37.c")
+
+        # A module dropped from sharedSources loses the stale value.
+        stale = {"cmake": {"cache": {"JH_EXTRA_SOURCES": "../common/vp37/x.c"}}}
+        fiesta_modules.apply_shared_sources(stale, modules["Fiesta_clock"],
+                                            repo.root)
+        self.assertNotIn("JH_EXTRA_SOURCES", stale["cmake"]["cache"])
+        fiesta_modules.apply_shared_sources({}, modules["Fiesta_clock"],
+                                            repo.root)
+
+        with self.assertRaisesRegex(RegistryError, "cmake.cache"):
+            fiesta_modules.apply_shared_sources({}, modules["ECU"], repo.root)
+
     def test_usb_identity_rules(self) -> None:
         for field, value, pattern in (
             ("usbVid", "0x1234", "VID/PID"),

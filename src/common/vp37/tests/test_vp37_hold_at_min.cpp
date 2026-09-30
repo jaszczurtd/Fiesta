@@ -2,13 +2,8 @@
 // compiles the VP37 units with VP37_PWM_DISABLE_AT_MIN_POSITION at 0 and
 // checks that zero demand is then held at the calibrated bottom under drive
 // instead of being released.
-#include "dtcManager.h"
-#include "ecuContext.h"
-#include "hal/impl/.mock/hal_mock.h"
-#include "sensors.h"
-#include "testable/vp37_test_fixture.h"
 #include "unity.h"
-#include "vp37_internal.h"
+#include "vp37_module_fixture.h"
 #include <string.h>
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
@@ -16,9 +11,8 @@
 void setUp(void) { setUpVp37Fixture(); }
 
 void tearDown(void) {
-  hal_mock_i2c_set_busy(false);
-  ecu_context_t *ctx = getECUContext();
-  VP37Pump *pump = &ctx->injectionPump;
+  vp37AdjustometerTransferBusy(false);
+  VP37Pump *pump = vp37TestPump();
   if (pump->pid.controller != NULL) {
     hal_pid_controller_destroy(pump->pid.controller);
     pump->pid.controller = NULL;
@@ -40,7 +34,7 @@ static void trackDemand(VP37Pump *pump, uint32_t *ms, uint32_t steps) {
 }
 
 void test_zero_demand_is_held_at_the_bottom_under_drive(void) {
-  VP37Pump *pump = &getECUContext()->injectionPump;
+  VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
   uint32_t ms = 0U;
 

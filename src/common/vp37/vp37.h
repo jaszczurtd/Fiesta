@@ -5,7 +5,7 @@
 #include <hal/control/hal_pid_controller.h>
 #include <hal/serial/hal_serial.h>
 
-#include "../common/adjustometer_protocol.h"
+#include "../adjustometer_protocol.h"
 #include "vp37_adjustometer.h"
 #include "vp37_config.h"
 #include "vp37_current.h"

@@ -8,7 +8,7 @@
  * adjustometer_feedback.h; the bus transfer is a board service.
  */
 
-#include "../common/adjustometer_feedback.h"
+#include "../adjustometer_feedback.h"
 
 #include <stdbool.h>
 #include <stdint.h>

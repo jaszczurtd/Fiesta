@@ -201,6 +201,7 @@ set +e
     --suppress=checkersReport \
     "${quiet_args[@]}" \
     *.c \
+    ../common/vp37/*.c \
     2>&1 | tee "$results_file"
 cppcheck_status=${PIPESTATUS[0]}
 set -e

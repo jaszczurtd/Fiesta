@@ -1,7 +1,7 @@
 #ifndef ECU_TESTABLE_VP37_H
 #define ECU_TESTABLE_VP37_H
 
-#include "vp37.h"
+#include "../vp37.h"
 
 #include <stddef.h>
 

@@ -1,7 +1,7 @@
 #ifndef T_VP37_INTERNAL
 #define T_VP37_INTERNAL
 
-#include "../common/fiesta_unit_testing.h"
+#include "../fiesta_unit_testing.h"
 #include "vp37.h"
 #include "vp37_tuning.h"
 

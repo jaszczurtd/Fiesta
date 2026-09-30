@@ -77,6 +77,12 @@ relaxed, acquire and release memory orders, and those of the trace hand-over
 and the test layer, are recorded against Amendment 4 rule 21.25 as DR-008;
 cppcheck 2.13 does not check Amendment 4.
 
+The 2026-09-30 move of the VP37 module to `src/common/vp37` left the count at
+**1023**: the screening runner, the cppcheck target and clang-tidy now cover
+that directory, and compared by file and rule ID only the path prefix of the
+module's findings changed. The rule 8.7 suppressions of DR-005 follow the new
+paths.
+
 At commit `8cc5d2f` the same run gave 1046. The shared configurator session
 (`sc_config_session_t` in `sc_command_handlers.c`, used by every firmware
 module) removed one rule 15.5 and one rule 8.9 finding from `config.c`. It also

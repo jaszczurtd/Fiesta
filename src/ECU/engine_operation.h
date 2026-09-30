@@ -3,10 +3,10 @@
 
 #include <JaszczurHAL.h>
 
+#include "../common/vp37/vp37.h"
 #include "config.h"
 #include "rpm.h"
 #include "sensors.h"
-#include "vp37.h"
 
 #ifdef __cplusplus
 extern "C" {

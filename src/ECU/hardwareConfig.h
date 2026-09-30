@@ -2,7 +2,7 @@
 #define T_HARDWARECONFIG
 
 #include "../common/adjustometer_protocol.h"
-#include "vp37_power_stage.h"
+#include "../common/vp37/vp37_power_stage.h"
 #include <libConfig.h>
 
 #ifdef VP37

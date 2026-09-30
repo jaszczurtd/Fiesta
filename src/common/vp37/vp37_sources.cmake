@@ -1,0 +1,20 @@
+# Reads vp37_sources.txt, the single list of VP37 translation units, and sets
+#   VP37_SOURCE_DIR - this directory
+#   VP37_SOURCES    - the absolute paths of the module's .c files
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/vp37_sources.txt" _vp37_source_names)
+set(VP37_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+set(VP37_SOURCES "")
+foreach(_vp37_name IN LISTS _vp37_source_names)
+    string(STRIP "${_vp37_name}" _vp37_name)
+    if(_vp37_name STREQUAL "" OR _vp37_name MATCHES "^#")
+        continue()
+    endif()
+    set(_vp37_path "${CMAKE_CURRENT_LIST_DIR}/${_vp37_name}")
+    if(NOT EXISTS "${_vp37_path}")
+        message(FATAL_ERROR "vp37_sources.txt names a missing file: ${_vp37_path}")
+    endif()
+    list(APPEND VP37_SOURCES "${_vp37_path}")
+endforeach()
+unset(_vp37_source_names)
+unset(_vp37_name)
+unset(_vp37_path)

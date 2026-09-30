@@ -1,13 +1,13 @@
-#include "../../common/fiesta_sensor_helpers.h"
-#include "config.h"
+#include "../../fiesta_sensor_helpers.h"
+#include "../../vp37_drive_config.h"
+#include "../vp37_current.h"
+#include "../vp37_power_stage.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hardwareConfig.h"
 #include "unity.h"
-#include "vp37_current.h"
 
 void setUp(void) {
   hal_mock_set_micros(0U);
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 0);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 0);
   VP37_currentSenseInit();
 }
 
@@ -46,7 +46,7 @@ void test_pulse_analyze_guards_edges_and_winsorizes_a_switching_spike(void) {
   TEST_ASSERT_LESS_THAN_FLOAT(5.2f, result.p95Amps);
   TEST_ASSERT_FLOAT_WITHIN(0.25f, 4.0f, result.meanAmps);
   const int32_t expectedPwm =
-      (int32_t)(((uint64_t)onTimeUs * PWM_RESOLUTION) / periodUs);
+      (int32_t)(((uint64_t)onTimeUs * VP37_PWM_RESOLUTION) / periodUs);
   TEST_ASSERT_INT32_WITHIN(2, expectedPwm, result.pwmCommand);
 }
 
@@ -229,7 +229,7 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
   view.frameNs = 0U;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, VP37_currentScanReduce(&view, &result));
 
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 160);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 160);
   VP37_currentSenseInit();
   view = blockView(1000U);
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_currentScanReduce(&view, &result));
@@ -238,7 +238,7 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
 
   // Without gate edges the current and its paired supply remain unavailable;
   // the latest supply window is still usable.
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   fillBlock({0U, 16U, 3000U, 3100U, false});
   TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, VP37_currentScanReduce(&view, &result));
@@ -252,7 +252,7 @@ void test_scan_reduce_rejects_bad_view_zero_and_blocks_without_edges(void) {
 }
 
 void test_scan_reduce_measures_the_newest_full_period(void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   // Rising edges every period from frame 0: the block starts inside an ON
   // phase, and the newest period whose closing edge is confirmed inside the
@@ -275,7 +275,7 @@ void test_scan_reduce_measures_the_newest_full_period(void) {
   TEST_ASSERT_EQUAL_UINT32(kOnFrames, result.samples);
   TEST_ASSERT_EQUAL_UINT32(0U, result.clippedSamples);
   const int32_t expectedPwm =
-      (int32_t)(((uint64_t)result.onTimeUs * PWM_RESOLUTION +
+      (int32_t)(((uint64_t)result.onTimeUs * VP37_PWM_RESOLUTION +
                  (result.periodUs / 2U)) /
                 result.periodUs);
   TEST_ASSERT_EQUAL_INT32(expectedPwm, result.pwmCommand);
@@ -289,8 +289,9 @@ void test_scan_reduce_measures_the_newest_full_period(void) {
   TEST_ASSERT_EQUAL_UINT32(kPeriodFrames, result.supplySamples);
   float expectedVolts = 0.0f;
   TEST_ASSERT_EQUAL_INT(
-      HAL_OK, fiesta_adc_to_voltage_ex(3060, (float)V_DIVIDER_R1,
-                                       (float)V_DIVIDER_R2, &expectedVolts));
+      HAL_OK,
+      fiesta_adc_to_voltage_ex(3060, (float)VP37_SUPPLY_DIVIDER_R1,
+                               (float)VP37_SUPPLY_DIVIDER_R2, &expectedVolts));
   TEST_ASSERT_FLOAT_WITHIN(0.15f, expectedVolts, result.supplyVolts);
 
   // Any phase of the same waveform leaves a complete period in the block and
@@ -307,7 +308,7 @@ void test_scan_reduce_measures_the_newest_full_period(void) {
 }
 
 void test_scan_reduce_keeps_supply_and_current_validity_separate(void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   VP37CurrentPulseResult result;
   const VP37CurrentScanBlock view = blockView(UINT32_MAX - 1000U);
@@ -336,7 +337,7 @@ void test_scan_reduce_keeps_supply_and_current_validity_separate(void) {
 }
 
 void test_scan_latch_tracks_falling_edges_when_duty_changes(void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   const uint32_t previousFall = 10U;
   const uint32_t firstFall = previousFall + kPeriodFrames;
@@ -373,7 +374,7 @@ void test_scan_latch_tracks_falling_edges_when_duty_changes(void) {
   TEST_ASSERT_EQUAL_UINT32(start + framesToUs(firstRise), result.cycleStartUs);
   TEST_ASSERT_EQUAL_UINT32(result.latchPeriodUs, result.periodUs);
   const int32_t expected =
-      (int32_t)(((uint64_t)firstOn * PWM_RESOLUTION + kPeriodFrames / 2U) /
+      (int32_t)(((uint64_t)firstOn * VP37_PWM_RESOLUTION + kPeriodFrames / 2U) /
                 kPeriodFrames);
   TEST_ASSERT_EQUAL_INT32(expected, result.latchedPwm);
   TEST_ASSERT_EQUAL_INT32(result.latchedPwm, result.pwmCommand);
@@ -399,13 +400,13 @@ void test_scan_latch_tracks_falling_edges_when_duty_changes(void) {
   const uint32_t secondOnUs = framesToUs(secondOn);
   const uint32_t periodUs = framesToUs(kPeriodFrames);
   TEST_ASSERT_EQUAL_INT32(
-      (int32_t)(((uint64_t)secondOnUs * PWM_RESOLUTION + periodUs / 2U) /
+      (int32_t)(((uint64_t)secondOnUs * VP37_PWM_RESOLUTION + periodUs / 2U) /
                 periodUs),
       result.latchedPwm);
 }
 
 void test_scan_reduce_ignores_single_frame_spikes_and_dropouts(void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   VP37CurrentPulseResult result;
   const uint32_t startUs = 5000U;
@@ -461,7 +462,7 @@ void test_streaming_compensation_matches_raw_reduction_at_transfer_gaps(void) {
   const uint16_t levels[] = {0U,    509U,  510U,  511U,  512U,  513U,  1534U,
                              1535U, 1536U, 1537U, 2558U, 2559U, 2560U, 2561U,
                              3582U, 3583U, 3584U, 3585U, 4095U};
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   const uint32_t start = UINT32_MAX - 12000U;
   const uint32_t blocks = (kBlockFrames + kDmaFrames - 1U) / kDmaFrames + 3U;
@@ -494,7 +495,7 @@ void test_streaming_compensation_matches_raw_reduction_at_transfer_gaps(void) {
 }
 
 void test_scan_collect_takes_each_mock_block_once(void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   VP37CurrentPulseResult result;
   uint32_t sequence = 99U;
@@ -537,9 +538,9 @@ void test_scan_collect_takes_each_mock_block_once(void) {
 
 static float voltsForCompensatedRaw(int raw) {
   float volts = 0.0f;
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        fiesta_adc_to_voltage_ex(raw, (float)V_DIVIDER_R1,
-                                                 (float)V_DIVIDER_R2, &volts));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, fiesta_adc_to_voltage_ex(raw, (float)VP37_SUPPLY_DIVIDER_R1,
+                                       (float)VP37_SUPPLY_DIVIDER_R2, &volts));
   return volts;
 }
 
@@ -587,7 +588,7 @@ static uint32_t nominalPeriodFrames(void) {
 
 void test_scan_reduce_preserves_integer_fractional_and_wrapped_timestamps(
     void) {
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 16);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 16);
   VP37_currentSenseInit();
   const uint32_t framePeriods[] = {kFrameNs, kFrameNs + 333U};
   const uint32_t offsets[] = {0U, 3U, 7U};
@@ -708,7 +709,7 @@ void test_latest_supply_does_not_require_current_edges_or_shunt_zero(void) {
                                (framesToUs(frames) / 2U),
                            result.supplyLatestUs);
 
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 160);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 160);
   VP37_currentSenseInit();
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_currentScanReduce(&view, &result));
   TEST_ASSERT_FALSE(result.zeroValid);

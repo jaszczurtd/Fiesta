@@ -17,10 +17,10 @@
 #include <hal/core/hal_mutex_once.h>
 
 #include "../common/scDefinitions/sc_protocol.h"
+#include "../common/vp37/vp37_tuning.h"
 #include "config.h"
 #include "ecuContext.h"
 #include "sensors.h"
-#include "vp37_tuning.h"
 
 #include <errno.h>
 #include <math.h>

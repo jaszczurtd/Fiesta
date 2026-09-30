@@ -2,11 +2,11 @@
 #include "start.h"
 
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include "../common/vp37/vp37_current.h"
 #include "ecuContext.h"
 #include "ecuPersistence.h"
 #include "obd-2.h"
 #include "vp37_adapter.h"
-#include "vp37_current.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/system/hal_system.h>

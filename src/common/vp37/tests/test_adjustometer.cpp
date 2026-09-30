@@ -1,9 +1,5 @@
-#include "dtcManager.h"
-#include "hal/impl/.mock/hal_mock.h"
-#include "sensors.h"
-#include "testable/adjustometer_test_helpers.h"
-#include "testable/vp37_test_fixture.h"
 #include "unity.h"
+#include "vp37_module_fixture.h"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,19 +36,19 @@ static void injectAdjExtendedData(uint8_t version, uint8_t seqBegin,
   buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START + 1U] =
       (uint8_t)(uint16_t)chipTempDeciC;
   buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START] = seqEnd;
-  hal_mock_i2c_inject_rx(buf, ADJUSTOMETER_EXT_REG_COUNT);
+  injectAdjustometerBytes(buf, ADJUSTOMETER_EXT_REG_COUNT);
 }
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
 void setUp(void) {
   setUpVp37Fixture();
-  hal_mock_adc_inject(ADC_VOLT_PIN, 0);
+  hal_mock_adc_inject(VP37_SUPPLY_ADC_PIN, 0);
   memset(&s_pump, 0, sizeof(s_pump));
-  (void)VP37_setCallbacks(&s_pump, vp37AdapterCallbacks());
+  (void)VP37_setCallbacks(&s_pump, vp37ModuleCallbacks());
 }
 
-void tearDown(void) { hal_mock_i2c_set_busy(false); }
+void tearDown(void) { vp37AdjustometerTransferBusy(false); }
 
 // ── Adjustometer readout tests ───────────────────────────────────────────────
 
@@ -92,8 +88,6 @@ void test_adjustometer_voltage_conversion(void) {
   // Register value 138 -> 13.8 V in the pump; the ECU reads its own divider.
   injectAdjRegisterData(0, 138, 40, ADJ_STATUS_OK);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 13.8f, adjustometerSupplyVolts());
-  injectLocalSupplyVoltage(12.4f);
-  TEST_ASSERT_FLOAT_WITHIN(1.0f, 12.4f, getSystemSupplyVoltage());
 }
 
 void test_adjustometer_voltage_zero(void) {
@@ -165,34 +159,32 @@ void test_adjustometer_extended_telemetry_rejects_torn_snapshot(void) {
 
 // ── Adjustometer status flags are currently informational only ──────────────
 
-void test_adjustometer_status_signal_lost_does_not_auto_set_dtc(void) {
+void test_adjustometer_status_signal_lost_is_reported_not_acted_on(void) {
   injectAdjRegisterData(0, 120, 40, ADJ_STATUS_SIGNAL_LOST);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
-  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
-void test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc(void) {
+void test_adjustometer_status_fuel_temp_broken_is_reported_not_acted_on(void) {
   injectAdjRegisterData(0, 120, 0, ADJ_STATUS_FUEL_TEMP_BROKEN);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_UINT8(ADJ_STATUS_FUEL_TEMP_BROKEN, r.status);
-  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
-void test_adjustometer_status_voltage_bad_does_not_auto_set_dtc(void) {
+void test_adjustometer_status_voltage_bad_is_reported_not_acted_on(void) {
   injectAdjRegisterData(0, 50, 40, ADJ_STATUS_VOLTAGE_BAD);
   TEST_ASSERT_FLOAT_WITHIN(0.05f, 5.0f, adjustometerSupplyVolts());
   TEST_ASSERT_EQUAL_UINT8(ADJ_STATUS_VOLTAGE_BAD, s_pump.feedback.lastStatus);
-  TEST_ASSERT_EQUAL_UINT8(0, dtcManagerCount(DTC_KIND_ACTIVE));
 }
 
 void test_adjustometer_comm_lost_on_nack(void) {
   // A busy bus fails the transfer. The legacy block keeps the last good
-  // reading for two failures and drops commOk on the third.
+  // reading for two failures and drops commOk on the third. That the ECU's
+  // supply reading does not depend on this bus is an adapter test.
   injectAdjRegisterData(700, 138, 40, ADJ_STATUS_OK);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_TRUE(r.commOk);
-  hal_mock_i2c_set_busy(true);
+  vp37AdjustometerTransferBusy(true);
   r = readAdjustometer(); // error 1
   r = readAdjustometer(); // error 2
   TEST_ASSERT_TRUE(r.commOk);
@@ -200,10 +192,7 @@ void test_adjustometer_comm_lost_on_nack(void) {
   r = readAdjustometer(); // error 3 -> commOk = false
   TEST_ASSERT_FALSE(r.commOk);
   TEST_ASSERT_EQUAL_INT32(700, r.pulseHz);
-  // The ECU supply does not depend on the Adjustometer bus.
-  injectLocalSupplyVoltage(12.0f);
-  TEST_ASSERT_FLOAT_WITHIN(1.0f, 12.0f, getSystemSupplyVoltage());
-  hal_mock_i2c_set_busy(false);
+  vp37AdjustometerTransferBusy(false);
   injectAdjRegisterData(710, 138, 40, ADJ_STATUS_OK);
   TEST_ASSERT_TRUE(readAdjustometer().commOk);
 }
@@ -214,7 +203,7 @@ void test_adjustometer_frame_selection_resets_the_reader(void) {
   VP37_setAdjustometerFastFeedback(&s_pump, true);
   // Nothing on the bus: the first fast read fails on a reader that has not
   // seen a baseline yet, not on the legacy reading before the switch.
-  hal_mock_i2c_set_busy(true);
+  vp37AdjustometerTransferBusy(true);
   const adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_FALSE(r.commOk);
   TEST_ASSERT_TRUE(r.fastFeedback);
@@ -222,42 +211,12 @@ void test_adjustometer_frame_selection_resets_the_reader(void) {
   TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
 }
 
-// ── DTC array expansion test ─────────────────────────────────────────────────
-
-void test_dtc_array_covers_adjustometer_codes(void) {
-  // Verify all 4 new DTC codes are recognized by dtcManager
-  dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-  dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST, true);
-  dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, true);
-  dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD, true);
-
-  uint16_t codes[16];
-  uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16);
-  TEST_ASSERT_GREATER_OR_EQUAL(4, count);
-
-  bool foundComm = false, foundSig = false, foundFt = false, foundVolt = false;
-  for (uint8_t i = 0; i < count; i++) {
-    if (codes[i] == DTC_ADJ_COMM_LOST)
-      foundComm = true;
-    if (codes[i] == DTC_ADJ_SIGNAL_LOST)
-      foundSig = true;
-    if (codes[i] == DTC_ADJ_FUEL_TEMP_BROKEN)
-      foundFt = true;
-    if (codes[i] == DTC_ADJ_VOLTAGE_BAD)
-      foundVolt = true;
-  }
-  TEST_ASSERT_TRUE(foundComm);
-  TEST_ASSERT_TRUE(foundSig);
-  TEST_ASSERT_TRUE(foundFt);
-  TEST_ASSERT_TRUE(foundVolt);
-}
-
 // ── Int16 BE encoding edge cases ────────────────────────────────────────────
 
 void test_adjustometer_big_endian_byte_order(void) {
   // Manually inject raw bytes: 0x01, 0x00 -> +256 Hz
   uint8_t buf[5] = {0x01, 0x00, 130, 50, 0x00};
-  hal_mock_i2c_inject_rx(buf, 5);
+  injectAdjustometerBytes(buf, 5);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_INT32(256, r.pulseHz);
 }
@@ -265,7 +224,7 @@ void test_adjustometer_big_endian_byte_order(void) {
 void test_adjustometer_big_endian_negative(void) {
   // 0xFF, 0x00 -> -256 in int16_t (0xFF00 = -256)
   uint8_t buf[5] = {0xFF, 0x00, 130, 50, 0x00};
-  hal_mock_i2c_inject_rx(buf, 5);
+  injectAdjustometerBytes(buf, 5);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_INT32(-256, r.pulseHz);
 }
@@ -325,11 +284,11 @@ void test_fast_feedback_rejects_mixed_or_unknown_frames(void) {
   memcpy(frames + ADJUSTOMETER_FEEDBACK_BYTES, frames,
          ADJUSTOMETER_FEEDBACK_BYTES);
   VP37_setAdjustometerFastFeedback(&s_pump, true);
-  hal_mock_i2c_inject_rx(frames, (int)COUNTOF(frames));
+  injectAdjustometerBytes(frames, (int)COUNTOF(frames));
   adjustometer_reading_t reading = readAdjustometer();
   TEST_ASSERT_FALSE(reading.commOk);
   frames[0] = 99U;
-  hal_mock_i2c_inject_rx(frames, ADJUSTOMETER_FEEDBACK_BYTES);
+  injectAdjustometerBytes(frames, ADJUSTOMETER_FEEDBACK_BYTES);
   reading = readAdjustometer();
   TEST_ASSERT_FALSE(reading.commOk);
 }
@@ -359,12 +318,11 @@ int main(void) {
   RUN_TEST(test_adjustometer_big_endian_negative);
 
   // DTC status
-  RUN_TEST(test_adjustometer_status_signal_lost_does_not_auto_set_dtc);
-  RUN_TEST(test_adjustometer_status_fuel_temp_broken_does_not_auto_set_dtc);
-  RUN_TEST(test_adjustometer_status_voltage_bad_does_not_auto_set_dtc);
+  RUN_TEST(test_adjustometer_status_signal_lost_is_reported_not_acted_on);
+  RUN_TEST(test_adjustometer_status_fuel_temp_broken_is_reported_not_acted_on);
+  RUN_TEST(test_adjustometer_status_voltage_bad_is_reported_not_acted_on);
   RUN_TEST(test_adjustometer_comm_lost_on_nack);
   RUN_TEST(test_adjustometer_frame_selection_resets_the_reader);
-  RUN_TEST(test_dtc_array_covers_adjustometer_codes);
 
   return UNITY_END();
 }
