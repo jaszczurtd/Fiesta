@@ -2,7 +2,6 @@
 // that fixes the quantity range the rest of the module works in.
 
 #include "vp37_internal.h"
-#include <utils/multicoreWatchdog.h>
 
 static bool VP37_waitForCalibrationSettle(VP37Pump *self,
                                           int32_t *settledValue);
@@ -15,8 +14,7 @@ static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
  * plus G81-like fuel temperature and supply-voltage telemetry.
  */
 bool VP37_updateAdjustometerPosition(VP37Pump *self) {
-  adjustometer_reading_t reading;
-  getVP37Adjustometer(&reading);
+  const adjustometer_reading_t reading = VP37_readAdjustometer(self);
   self->feedback.readStatus = reading.fastFeedback
                                   ? reading.readStatus
                                   : (reading.commOk ? HAL_OK : HAL_EBUS);
@@ -34,8 +32,9 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
     self->feedback.sampleUs = reading.measuredUs;
     self->feedback.ageUs = reading.ageUs;
 
-    setGlobalValue(F_FUEL_TEMP, reading.fuelTempC);
-    setGlobalValue(F_VOLTS, reading.voltageRaw * 0.1f);
+    self->feedback.fuelTempC = reading.fuelTempC;
+    self->feedback.supplyVolts = reading.voltageRaw * 0.1f;
+    self->feedback.readCount++;
   } else {
     self->feedback.fresh = false;
     if (!self->feedback.commFailed) {
@@ -58,16 +57,16 @@ bool VP37_makeCalibration(VP37Pump *self) {
 
   // Capture the natural/resting endpoint first.  Measuring MIN after a strong
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
-  valToPWM(PIO_VP37_RPM, 0);
+  self->callbacks.writeQuantityPwm(0);
   bool minSettled =
       VP37_waitForCalibrationSettle(self, &self->feedback.adjustMin);
 
   bool maxSettled = false;
   if (minSettled) {
-    valToPWM(PIO_VP37_RPM, VP37_getMaxAdjustometerPWMVal(self));
+    self->callbacks.writeQuantityPwm(VP37_getMaxAdjustometerPWMVal(self));
     maxSettled = VP37_waitForCalibrationSettle(self, &self->feedback.adjustMax);
   }
-  valToPWM(PIO_VP37_RPM, 0);
+  self->callbacks.writeQuantityPwm(0);
 
   if (!maxSettled || !minSettled) {
     self->feedback.calibrationDone = false;
@@ -117,10 +116,9 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
 
   while ((hal_millis() - startMs) < VP37_CALIBRATION_TIMEOUT_MS) {
     hal_delay_ms(VP37_CALIBRATION_SAMPLE_INTERVAL_MS);
-    watchdog_feed();
+    self->callbacks.feedWatchdog();
 
-    adjustometer_reading_t reading;
-    getVP37Adjustometer(&reading);
+    const adjustometer_reading_t reading = VP37_readAdjustometer(self);
     if (!reading.commOk || (reading.fastFeedback && !reading.feedbackFresh) ||
         (reading.status &
          (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) != 0U) {
@@ -176,5 +174,6 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
  */
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self) {
   (void)self;
-  return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0, PWM_RESOLUTION);
+  return hal_map(VP37_CALIBRATION_MAX_PERCENTAGE, 0, 100, 0,
+                 VP37_PWM_RESOLUTION);
 }

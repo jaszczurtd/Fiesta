@@ -1,23 +1,27 @@
 #ifndef T_VP37_INTERNAL
 #define T_VP37_INTERNAL
 
-#include "ecu_unit_testing.h"
+#include "../common/fiesta_unit_testing.h"
 #include "vp37.h"
+#include "vp37_tuning.h"
 
 /* Shared calibration bounds for the supply scale and current reference. */
 #define VP37_LOCAL_VOLTAGE_SCALE_MIN 0.8f
 #define VP37_LOCAL_VOLTAGE_SCALE_MAX 1.2f
 
 /* Shared between the translation units of the VP37 module and nothing else.
- * They all act on one VP37Pump: the control path runs on core 1 under
- * vp37StateMutex, the telemetry path on core 0 from a snapshot of the pump.
- * Nothing declared here crosses that boundary; a file split is not a thread
- * split.
+ * They all act on one VP37Pump: the control path runs on the control core and
+ * owns the pump, the telemetry path on another core reads only the published
+ * snapshot and the trace buffer. Nothing declared here crosses that boundary
+ * except through vp37_snapshot.c; a file split is not a thread split.
  *
  *   vp37.c              lifecycle, demand, the control cycle
+ *   vp37_snapshot.c     publication and lock-free copies of the pump
+ *   vp37_adjustometer.c Adjustometer frames and the baseline wait
  *   vp37_feedback.c     Adjustometer position and calibration
  *   vp37_compensation.c supply and thermal multipliers, the shunt scan bridge
  *   vp37_control.c      feedforward, map trim, PID authority and hold
+ *   vp37_tuning.c       bench-tunable gains, limits and switches
  *   vp37_telemetry.c    control sample, console lines, bench trace
  *   vp37_current.c      shunt capture and pulse analysis, no pump state
  *   vp37_current_control.c bounded current feedback and PWM command history
@@ -33,6 +37,11 @@ bool VP37_demandAtRest(const VP37Pump *self);
 // ── vp37_feedback.c ─────────────────────────────────────────────────────────
 bool VP37_updateAdjustometerPosition(VP37Pump *self);
 bool VP37_makeCalibration(VP37Pump *self);
+
+// ── vp37_adjustometer.c ─────────────────────────────────────────────────────
+/** @brief Poll the Adjustometer until its baseline is ready, feeding the
+ * watchdog; false after VP37_ADJUSTOMETER_BASELINE_WAIT_MS. */
+bool VP37_waitForAdjustometerBaseline(VP37Pump *self);
 
 // ── vp37_compensation.c ─────────────────────────────────────────────────────
 /** @brief Copy a completed ADC block, even between position steps.
@@ -97,9 +106,23 @@ void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled);
 void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled);
 void VP37_transferIntegralToMapTrim(VP37Pump *self);
 
+// ── vp37_snapshot.c ─────────────────────────────────────────────────────────
+/** @brief Publish the pump; control core only, at the end of a step. */
+void VP37_publish(VP37Pump *self);
+/** @brief Publish a stop made outside the step, once; control core only. */
+void VP37_publishStop(VP37Pump *self);
+#if VP37_TELEMETRY_ENABLED
+/** @brief The telemetry of the last publication as the control core built
+ * it; control core only. */
+const VP37Telemetry *VP37_publishedTelemetry(void);
+#endif
+
 // ── vp37_telemetry.c ────────────────────────────────────────────────────────
-#if ECU_FUNCTIONAL_TESTS_ENABLED
+#if VP37_TELEMETRY_ENABLED
+/** @brief Append the published step to a running trace; control core. */
 void VP37_traceRecord(const VP37Pump *self);
+/** @brief Complete a running trace without a sample; control core. */
+void VP37_traceStop(void);
 #endif
 
 #ifdef __cplusplus

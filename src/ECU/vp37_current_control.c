@@ -7,8 +7,9 @@
 static float VP37_currentCountsPerAmp(float voltageScale) {
   // R is learned from the raw divider, while output uses its calibrated
   // voltage. Keep that reference convention when translating the map to amps.
-  return ((float)PWM_RESOLUTION * VP37_DRIVE_REFERENCE_OHMS * voltageScale) /
-         NOMINAL_VOLTAGE;
+  return ((float)VP37_PWM_RESOLUTION * VP37_DRIVE_REFERENCE_OHMS *
+          voltageScale) /
+         VP37_NOMINAL_VOLTAGE;
 }
 
 static bool VP37_driveCanSettle(const VP37Pump *self, int32_t pwm) {

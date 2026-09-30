@@ -98,7 +98,7 @@ void VP37_updateVoltageCorrection(VP37Pump *self, float dt) {
     self->supply.heldVolts += (measuredVolts - self->supply.heldVolts) * dt /
                               (VP37_VOLTAGE_FILTER_S + dt);
   }
-  self->supply.correction = NOMINAL_VOLTAGE / self->supply.heldVolts;
+  self->supply.correction = VP37_NOMINAL_VOLTAGE / self->supply.heldVolts;
 }
 
 /* Predict only the command scale. Resistance learning keeps the measured rail.
@@ -284,7 +284,7 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
     return;
   }
 
-  const float duty = (float)drive / (float)PWM_RESOLUTION;
+  const float duty = (float)drive / (float)VP37_PWM_RESOLUTION;
   const float resistance =
       (duty * self->thermal.cycleVolts) / self->thermal.cycleAmps;
   if (!isfinite(resistance) || (resistance <= 0.0f)) {

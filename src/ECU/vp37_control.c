@@ -11,45 +11,8 @@ TESTABLE_STATIC float VP37_strokeTaper(const float *knots, size_t count,
 static float VP37_mapTrimAt(const VP37Pump *self, float percent);
 static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight);
 
-void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
-                     bool shouldTriggerReset) {
-  self->pid.kp = kp;
-  self->pid.ki = ki;
-  self->pid.kd = kd;
-  self->pid.effectiveKd = kd;
-  hal_pid_controller_set_kp(self->pid.controller, kp);
-  hal_pid_controller_set_ki(self->pid.controller, ki);
-  hal_pid_controller_set_kd(self->pid.controller, kd);
-
-  if (shouldTriggerReset) {
-    VP37_resetCurrentControl(self);
-    hal_pid_controller_reset(self->pid.controller);
-    self->pid.topDBlend = 0.0f;
-    self->pid.integralHold = false;
-    self->pid.integralHoldEnterPending = false;
-    self->pid.integralHoldReleasePending = false;
-    self->pid.integralHoldReleaseStartedMs = 0U;
-    self->output.lastPWMval = -1;
-    self->output.finalPWM = VP37_PWM_MIN;
-  }
-}
-
-void VP37_getVP37PIDValues(VP37Pump *self, float *kp, float *ki, float *kd) {
-  if (kp != NULL) {
-    *kp = self->pid.kp;
-  }
-  if (ki != NULL) {
-    *ki = self->pid.ki;
-  }
-  if (kd != NULL) {
-    *kd = self->pid.kd;
-  }
-}
-
-float VP37_getVP37PIDTimeUpdate(VP37Pump *self) { return self->pidTimeUpdate; }
-
 float VP37_feedForward(VP37Pump *self, int32_t position) {
-  // The holding map and its motion column are data in engineMaps.c; this is
+  // The holding map and its motion column are data in vp37_maps.c; this is
   // only the interpolation between its knots and the blending of motion.
   const float percent = VP37_strokePercent(self, (float)position);
   // Extra acceleration excites the upper stroke; preserve lower-stroke drive.
@@ -265,7 +228,7 @@ static float VP37_strokePercent(const VP37Pump *self, float position) {
 /**
  * @brief Value of a stroke taper at a demand, both ends held flat.
  * @param knots Rows of {demand [%], value} in ascending demand, laid out
- * row-major as in engineMaps.h.
+ * row-major as in vp37_maps.h.
  * @param count Rows in the table, at least one.
  * @param percent Demand along the stroke.
  * @return The interpolated value, or the first or last one beyond the ends.

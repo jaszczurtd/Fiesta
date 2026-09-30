@@ -4,6 +4,7 @@
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "sensors.h"
+#include "vp37_adapter.h"
 #include "vp37_internal.h"
 #include <string.h>
 
@@ -27,8 +28,13 @@ static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
   injectLocalSupplyVoltage((float)voltage * 0.1f);
 }
 
-static inline void setupPumpForProcessTests(VP37Pump *pump) {
+static inline void setupPumpForProcessTests(VP37Pump *pump,
+                                            bool fastFrame = false) {
   memset(pump, 0, sizeof(*pump));
+  (void)VP37_setCallbacks(pump, vp37AdapterCallbacks());
+  if (fastFrame) {
+    (void)VP37_setAdjustometerFastFeedback(pump, true);
+  }
   pump->pid.controller = hal_pid_controller_create();
   pump->vp37Initialized = true;
   pump->feedback.calibrationDone = true;
@@ -50,7 +56,7 @@ static inline void setupPumpForProcessTests(VP37Pump *pump) {
   pump->thermal.temperatureCompensationWeight = 1.0f;
   pump->thermal.driveResistance = VP37_DRIVE_REFERENCE_OHMS;
   pump->thermal.driveCorrection = 1.0f;
-  pump->supply.heldVolts = NOMINAL_VOLTAGE;
+  pump->supply.heldVolts = VP37_NOMINAL_VOLTAGE;
   pump->supply.ready = false;
   pump->feedback.lastStatus = ADJ_STATUS_OK;
   VP37_setVP37PID(pump, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, false);

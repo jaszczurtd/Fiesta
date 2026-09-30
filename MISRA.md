@@ -31,8 +31,9 @@ Completed areas include:
 - explicit `HAL_TOOLS_*` config migration (legacy aliases retained in HAL),
 - targeted runtime hardening (bounds checks, watchdog snapshot guard, mutex guards, regression tests).
 - VP37 control uses explicit elapsed time and checked PID status; invalid steps
-  disable the output stage. Bench tuning is applied on the controller core,
-  while periodic logging formats a snapshot after releasing the control mutex.
+  disable the output stage. Bench tuning is applied on the controller core
+  through range-checked setters, while periodic logging formats a snapshot
+  that the control step publishes and core 0 copies without a lock.
 - dual-core state synchronization pass in `src/ECU`: dedicated mutex for adjustometer snapshot, PCF8574 shadow-latch race fix, `dtcManager` state and KV persistence under a dedicated mutex; adjustometer reader API migrated from shared-pointer to out-parameter snapshot; `readHighValues()` change-detection cache removed (CAN helpers self-dedupe).
 - warning quality gate for ECU host tests and native ECU firmware builds
   (`-Werror`).
@@ -56,8 +57,25 @@ Pending areas:
 
 ## Latest screening snapshot
 
-The 2026-09-29 screening with cppcheck 2.13.0 reports **1044 active findings**
-across 31 rule IDs: 731 in `src/ECU`, 313 in shared `src/common` sources.
+The 2026-09-30 screening with cppcheck 2.13.0 reports **1023 active findings**
+across 31 rule IDs: 709 in `src/ECU`, 314 in shared `src/common` sources.
+
+The previous snapshot, 1044 at commit `0b3e84f`, dropped by 21 when the VP37
+code was separated from the rest of the ECU (callbacks, Adjustometer reader
+inside VP37, lock-free snapshot, tuning setters). Compared by file and rule ID,
+the findings of the Adjustometer reader moved with it from `sensors.c` to
+`vp37_adjustometer.c`, the VP37 constants from `vp37.h` to `vp37_config.h`.
+The new code adds two advisory rule 8.7 findings on
+`VP37_snapshotBegin/End`, which are `TESTABLE_STATIC` like the eight in
+`sensors.c` (the runner defines `UNIT_TEST`), one rule 15.5 finding for the
+new early return in `VP37_init`, and two advisory rule 2.5 findings for macros
+that only the bench telemetry uses (`VP37_PUBLICATION_POLL_US`,
+`START_VP37_REPORT_WAIT_US`). The snapshot is shared between the cores only as
+words accessed with atomics; turning its floats and the telemetry struct into
+words uses unions, recorded as the advisory rule 19.2 deviation DR-007. Its
+relaxed, acquire and release memory orders, and those of the trace hand-over
+and the test layer, are recorded against Amendment 4 rule 21.25 as DR-008;
+cppcheck 2.13 does not check Amendment 4.
 
 At commit `8cc5d2f` the same run gave 1046. The shared configurator session
 (`sc_config_session_t` in `sc_command_handlers.c`, used by every firmware

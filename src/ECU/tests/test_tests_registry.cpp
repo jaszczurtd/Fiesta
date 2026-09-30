@@ -9,7 +9,7 @@
 #include "tests.h"
 #include "tests_workers.h"
 #include "unity.h"
-#include "vp37.h"
+#include "vp37_tuning.h"
 
 #include "../../common/scDefinitions/sc_command_handlers.h"
 #include "../../common/scDefinitions/sc_protocol.h"

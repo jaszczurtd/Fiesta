@@ -1,27 +1,27 @@
 // VP37 telemetry: the control sample, the console lines and the bench trace.
-// Runs on core 0 from a snapshot of the pump; nothing here drives it. Bench
-// output only: without ECU_FUNCTIONAL_TESTS_ENABLED the unit is empty.
+// The lines are printed on another core from a published snapshot; the trace
+// is recorded on the control core. Nothing here drives the pump. Bench output
+// only: without VP37_TELEMETRY_ENABLED the unit is empty.
 
 #include "vp37_internal.h"
 
-#if ECU_FUNCTIONAL_TESTS_ENABLED
+#if VP37_TELEMETRY_ENABLED
 
-static VP37TraceSample VP37_controlSample(const VP37Pump *self);
+static VP37TraceSample VP37_controlSample(const VP37Telemetry *view);
 static void VP37_showControlSample(const VP37TraceSample *sample,
                                    const char *kind);
 
-void VP37_showDebug(VP37Pump *self) {
-  // Caller passes a snapshot; serial formatting and I2C run outside the control
-  // lock.
-  const VP37TraceSample sample = VP37_controlSample(self);
+void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
+  const VP37Telemetry *const view = &snapshot->telemetry;
+  const VP37TraceSample sample = VP37_controlSample(view);
   VP37_showControlSample(&sample, "C");
 
   static uint32_t lastTelemetryMs = 0U;
   if (hal_millis_interval_elapsed_now(&lastTelemetryMs,
                                       VP37_TELEMETRY_UPDATE)) {
-    const char *const activeTest = testsActiveName();
+    const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
-    const uint32_t cycleDelayMs = testsCyclicDelayMs();
+    const uint32_t cycleDelayMs = view->cyclicDelayMs;
     deb("VP37 CFG rev:113 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
@@ -37,56 +37,56 @@ void VP37_showDebug(VP37Pump *self) {
         "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
         "execus:%lu plim:%.1f stand_slew:%.1f stand_upper:%.1f adec:%.0f "
         "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f",
-        self->pid.kp, self->pid.ki, self->pid.kd, self->pid.topKd,
-        self->pid.effectiveKd, self->pid.tf, self->pidTimeUpdate,
-        self->feedback.adjustMin, self->feedback.adjustMax,
-        self->supply.lastVolts, self->supply.localVolts,
-        self->supply.inputVolts, self->supply.heldVolts,
-        self->supply.localScale, VP37_VOLTAGE_FILTER_S, self->supply.correction,
-        self->thermal.lastFuelTemp, self->pid.integralLimit,
-        self->thermal.temperatureCompensationWeight,
-        self->thermal.temperatureCorrection, testName,
+        view->pid.kp, view->pid.ki, view->pid.kd, view->pid.topKd,
+        view->pid.effectiveKd, view->pid.tf, view->pidTimeUpdate,
+        view->feedback.adjustMin, view->feedback.adjustMax,
+        view->supply.lastVolts, view->supply.localVolts,
+        view->supply.inputVolts, view->supply.heldVolts,
+        view->supply.localScale, VP37_VOLTAGE_FILTER_S, view->supply.correction,
+        view->thermal.lastFuelTemp, view->pid.integralLimit,
+        view->thermal.temperatureCompensationWeight,
+        view->thermal.temperatureCorrection, testName,
         (unsigned long)cycleDelayMs, VP37_DESIRED_SLEW_PERCENT_PER_SECOND,
         VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND,
-        self->thermal.observationEnabled ? 1U : 0U,
-        (unsigned long)self->pid.integralHoldConfirmMs,
-        self->supply.cycleEnabled ? 1U : 0U, self->supply.cycleUsed ? 1U : 0U,
-        self->supply.frozen ? 1U : 0U, self->supply.cycleVolts,
-        (unsigned long)self->supply.cycleAgeUs, self->supply.predictionVolts,
-        self->supply.voltageSlope, (unsigned)VP37_PWM_FREQUENCY_HZ,
-        self->thermal.cycleAmps, self->thermal.driveResistance,
-        self->thermal.driveCorrection,
-        self->thermal.driveCompensationEnabled ? 1U : 0U,
-        self->thermal.driveCompensationUsed ? 1U : 0U,
-        (unsigned long)self->thermal.driveSamples,
-        (self->thermal.driveVoltageSettled && self->currentControl.driveSettled)
+        view->thermal.observationEnabled ? 1U : 0U,
+        (unsigned long)view->pid.integralHoldConfirmMs,
+        view->supply.cycleEnabled ? 1U : 0U, view->supply.cycleUsed ? 1U : 0U,
+        view->supply.frozen ? 1U : 0U, view->supply.cycleVolts,
+        (unsigned long)view->supply.cycleAgeUs, view->supply.predictionVolts,
+        view->supply.voltageSlope, (unsigned)VP37_PWM_FREQUENCY_HZ,
+        view->thermal.cycleAmps, view->thermal.driveResistance,
+        view->thermal.driveCorrection,
+        view->thermal.driveCompensationEnabled ? 1U : 0U,
+        view->thermal.driveCompensationUsed ? 1U : 0U,
+        (unsigned long)view->thermal.driveSamples,
+        (view->thermal.driveVoltageSettled && view->currentControl.driveSettled)
             ? 0U
             : 1U,
-        self->pid.integralDeadbandTopHz, self->pid.integralDeadbandHz,
-        self->feedforward.mapTrimEnabled ? 1U : 0U,
-        (unsigned long)self->feedforward.mapTrimTransfers,
-        self->feedforward.mapTrim[5], self->feedforward.mapTrim[9],
-        self->feedforward.mapTrim[10], self->feedforward.motionBoostUp,
-        self->feedforward.motionBoostDown, self->scan.running ? 1U : 0U,
-        (unsigned long)self->scan.frameNs, (unsigned long)self->scan.blocks,
-        (unsigned long)self->scan.gaps, self->currentControl.enabled ? 1U : 0U,
-        self->currentControl.active ? 1U : 0U, self->currentControl.targetAmps,
-        self->currentControl.sampleTargetAmps, self->currentControl.errorAmps,
-        self->currentControl.correctionPwm,
-        (unsigned long)self->currentControl.sampleAgeUs,
-        self->thermal.driveObservationOhms, self->thermal.cycleValid ? 1U : 0U,
-        self->thermal.cycleSettled ? 1U : 0U,
-        self->thermal.driveLearning ? 1U : 0U,
-        (unsigned long)self->thermal.driveLearnedSamples,
-        (unsigned long)self->scan.collectUs, (unsigned long)self->controlExecUs,
-        self->demand.physicalLimitPercent,
+        view->pid.integralDeadbandTopHz, view->pid.integralDeadbandHz,
+        view->feedforward.mapTrimEnabled ? 1U : 0U,
+        (unsigned long)view->feedforward.mapTrimTransfers,
+        view->feedforward.mapTrim[5], view->feedforward.mapTrim[9],
+        view->feedforward.mapTrim[10], view->feedforward.motionBoostUp,
+        view->feedforward.motionBoostDown, view->scan.running ? 1U : 0U,
+        (unsigned long)view->scan.frameNs, (unsigned long)view->scan.blocks,
+        (unsigned long)view->scan.gaps, view->currentControl.enabled ? 1U : 0U,
+        view->currentControl.active ? 1U : 0U, view->currentControl.targetAmps,
+        view->currentControl.sampleTargetAmps, view->currentControl.errorAmps,
+        view->currentControl.correctionPwm,
+        (unsigned long)view->currentControl.sampleAgeUs,
+        view->thermal.driveObservationOhms, view->thermal.cycleValid ? 1U : 0U,
+        view->thermal.cycleSettled ? 1U : 0U,
+        view->thermal.driveLearning ? 1U : 0U,
+        (unsigned long)view->thermal.driveLearnedSamples,
+        (unsigned long)view->scan.collectUs, (unsigned long)view->controlExecUs,
+        view->demand.physicalLimitPercent,
         VP37_STATIONARY_SLEW_PERCENT_PER_SECOND,
         VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND,
         VP37_ARRIVAL_DECEL_PERCENT_PER_S2, VP37_INTEGRAL_HOLD_ENTER_HZ,
         VP37_STATIONARY_RISE_WEIGHT, VP37_STATIONARY_FALL_WEIGHT,
-        self->demand.topArrivalDecel, self->feedforward.motionRateCap);
-    adjustometer_reading_t telemetry;
-    const bool extendedFresh = getVP37AdjustometerExtendedTelemetry(&telemetry);
+        view->demand.topArrivalDecel, view->feedforward.motionRateCap);
+    adjustometer_reading_t telemetry = view->adjustometer;
+    const bool extendedFresh = VP37_readAdjustometerExtended(self, &telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "
         "fl:0x%02x",
         telemetry.pulseHz, (unsigned long)telemetry.signalHz,
@@ -128,12 +128,13 @@ void VP37_showDebug(VP37Pump *self) {
  *   ctar/cref newest/historical current target [A]; cerr historical error [A]
  *   cpwm      applied current correction [nominal PWM counts]
  *   cuse/cage matching current observation usable / ON-midpoint age [us] */
-void VP37_showCurrentPulse(const VP37Pump *self) {
-  const VP37CurrentPulseResult *result = &self->scan.cycleResult;
+void VP37_showCurrentPulse(const VP37Snapshot *snapshot) {
+  const VP37Telemetry *const view = &snapshot->telemetry;
+  const VP37CurrentPulseResult *result = &view->scan.cycleResult;
   // A later PWM write invalidates the lookup cache, not the recorded match.
-  const bool matched = self->currentControl.matchFound &&
-                       (self->currentControl.matchedSampleSequence ==
-                        self->scan.cycleResultSequence);
+  const bool matched = view->currentControl.matchFound &&
+                       (view->currentControl.matchedSampleSequence ==
+                        view->scan.cycleResultSequence);
   deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
       "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
       "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
@@ -141,31 +142,31 @@ void VP37_showCurrentPulse(const VP37Pump *self) {
       "ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cuse:%u cage:%lu "
       "latch:%lu lp:%lu lduty:%ld lv:%u dma:%lu take:%lu reduce:%lu "
       "pollus:%lu match:%u cmd_us:%lu cmd_pwm:%ld",
-      (unsigned long)result->cycleStartUs, (unsigned long)self->controlSequence,
-      (unsigned long)self->controlLastUs, (long)self->output.finalPWM,
-      (long)self->feedback.position, (long)self->demand.desired,
-      self->supply.heldVolts, self->thermal.lastFuelTemp, result->meanAmps,
+      (unsigned long)result->cycleStartUs, (unsigned long)view->controlSequence,
+      (unsigned long)view->controlLastUs, (long)view->output.finalPWM,
+      (long)view->feedback.position, (long)view->demand.desired,
+      view->supply.heldVolts, view->thermal.lastFuelTemp, result->meanAmps,
       result->p95Amps, result->peakAmps, (unsigned long)result->periodUs,
       (unsigned long)result->onTimeUs, (long)result->pwmCommand,
       (unsigned long)result->samples, (unsigned long)result->guardedSamples,
       (unsigned long)result->clippedSamples, (unsigned)result->zeroRaw,
       result->zeroValid ? 1U : 0U, result->waveformValid ? 1U : 0U,
-      (int)self->scan.cycleResultStatus, result->supplyVolts,
-      result->supplyValid ? 1U : 0U, (unsigned long)self->scan.blocks,
-      (unsigned long)self->scan.gaps, (unsigned long)result->glitches,
-      self->currentControl.targetAmps, self->currentControl.sampleTargetAmps,
-      self->currentControl.errorAmps, self->currentControl.correctionPwm,
-      self->currentControl.active ? 1U : 0U,
-      (unsigned long)self->currentControl.sampleAgeUs,
+      (int)view->scan.cycleResultStatus, result->supplyVolts,
+      result->supplyValid ? 1U : 0U, (unsigned long)view->scan.blocks,
+      (unsigned long)view->scan.gaps, (unsigned long)result->glitches,
+      view->currentControl.targetAmps, view->currentControl.sampleTargetAmps,
+      view->currentControl.errorAmps, view->currentControl.correctionPwm,
+      view->currentControl.active ? 1U : 0U,
+      (unsigned long)view->currentControl.sampleAgeUs,
       (unsigned long)result->latchUs, (unsigned long)result->latchPeriodUs,
       (long)result->latchedPwm, result->latchValid ? 1U : 0U,
       (unsigned long)result->scanCompletedUs,
       (unsigned long)result->scanCollectedUs,
-      (unsigned long)self->scan.reducedUs, (unsigned long)result->scanPollUs,
+      (unsigned long)view->scan.reducedUs, (unsigned long)result->scanPollUs,
       matched ? 1U : 0U,
-      (unsigned long)(matched ? self->currentControl.matchedCommand.writtenUs
+      (unsigned long)(matched ? view->currentControl.matchedCommand.writtenUs
                               : 0U),
-      (long)(matched ? self->currentControl.matchedCommand.pwm : 0));
+      (long)(matched ? view->currentControl.matchedCommand.pwm : 0));
   // Time bins preserve the ON ramp; the freewheel current is not measured.
   static uint32_t s_lastWaveMs;
   if (result->profileValid && hal_millis_interval_elapsed_now(
@@ -189,48 +190,48 @@ void VP37_showTrace(const VP37TraceSample *sample) {
   VP37_showControlSample(sample, "T");
 }
 
-static VP37TraceSample VP37_controlSample(const VP37Pump *self) {
+static VP37TraceSample VP37_controlSample(const VP37Telemetry *view) {
   const VP37TraceSample sample = {
-      .us = self->controlLastUs,
-      .dt = self->controlDtUs,
-      .sequence = self->controlSequence,
-      .requestedPercent = self->demand.requestedPercent,
-      .target = self->demand.target,
-      .desired = self->demand.desired,
-      .measured = self->feedback.position,
-      .pwm = self->output.finalPWM,
-      .ff = self->feedforward.pwm,
-      .low = self->pid.negativeLimit,
-      .motionFF = self->feedforward.motion,
-      .high = self->pid.upperLimit,
-      .volts = self->supply.lastVolts,
-      .localVolts = self->supply.localVolts,
-      .compensationInputVolts = self->supply.inputVolts,
-      .compensationVolts = self->supply.heldVolts,
-      .voltageCorrection = self->supply.correction,
-      .cycleVoltageUsed = self->supply.cycleUsed,
-      .voltageOverRange = self->supply.overRange,
-      .mapTrim = self->feedforward.mapTrimApplied,
-      .thermalScale = self->thermal.scale,
-      .integralHold = self->pid.integralHold,
-      .fuelTemp = self->thermal.lastFuelTemp,
-      .temperatureCorrection = self->thermal.temperatureCorrection,
-      .terms = self->pid.terms,
-      .softFloor = self->pid.softFloorActive,
-      .hardwareClamp = self->output.pwmLimited,
-      .quantityAtRest = self->demand.atRest,
-      .status = self->feedback.lastStatus,
-      .rawHz = self->feedback.rawHz,
-      .filteredHz = self->feedback.filteredHz,
-      .sampleNumber = self->feedback.sampleNumber,
-      .measuredUs = self->feedback.sampleUs,
-      .ageUs = self->feedback.ageUs,
-      .readStatus = self->feedback.readStatus,
-      .readUs = self->feedback.readUs,
-      .retries = self->feedback.retries,
-      .fresh = self->feedback.fresh,
-      .cyclicDelayMs = testsCyclicDelayMs(),
-      .pidDtUs = self->pidDtUs};
+      .us = view->controlLastUs,
+      .dt = view->controlDtUs,
+      .sequence = view->controlSequence,
+      .requestedPercent = view->demand.requestedPercent,
+      .target = view->demand.target,
+      .desired = view->demand.desired,
+      .measured = view->feedback.position,
+      .pwm = view->output.finalPWM,
+      .ff = view->feedforward.pwm,
+      .low = view->pid.negativeLimit,
+      .motionFF = view->feedforward.motion,
+      .high = view->pid.upperLimit,
+      .volts = view->supply.lastVolts,
+      .localVolts = view->supply.localVolts,
+      .compensationInputVolts = view->supply.inputVolts,
+      .compensationVolts = view->supply.heldVolts,
+      .voltageCorrection = view->supply.correction,
+      .cycleVoltageUsed = view->supply.cycleUsed,
+      .voltageOverRange = view->supply.overRange,
+      .mapTrim = view->feedforward.mapTrimApplied,
+      .thermalScale = view->thermal.scale,
+      .integralHold = view->pid.integralHold,
+      .fuelTemp = view->thermal.lastFuelTemp,
+      .temperatureCorrection = view->thermal.temperatureCorrection,
+      .terms = view->pid.terms,
+      .softFloor = view->pid.softFloorActive,
+      .hardwareClamp = view->output.pwmLimited,
+      .quantityAtRest = view->demand.atRest,
+      .status = view->feedback.lastStatus,
+      .rawHz = view->feedback.rawHz,
+      .filteredHz = view->feedback.filteredHz,
+      .sampleNumber = view->feedback.sampleNumber,
+      .measuredUs = view->feedback.sampleUs,
+      .ageUs = view->feedback.ageUs,
+      .readStatus = view->feedback.readStatus,
+      .readUs = view->feedback.readUs,
+      .retries = view->feedback.retries,
+      .fresh = view->feedback.fresh,
+      .cyclicDelayMs = view->cyclicDelayMs,
+      .pidDtUs = view->pidDtUs};
   return sample;
 }
 
@@ -264,48 +265,72 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
+/* Who holds the trace buffer. Only the control core moves IDLE -> RECORDING
+ * -> READY and only the reading core moves READY -> IDLE, so each side acts on
+ * the buffer alone between two release/acquire hand-overs. */
+enum { VP37_TRACE_IDLE = 0U, VP37_TRACE_RECORDING, VP37_TRACE_READY };
+
 static struct {
   VP37TraceSample samples[VP37_TRACE_SAMPLES];
-  uint32_t count, next;
-  bool recording;
+  uint32_t count; /**< Samples recorded; the control core's while recording. */
+  uint32_t next;  /**< Next sample to read; the reading core's. */
+  uint8_t state;  /**< VP37_TRACE_*, changed atomically. */
 } s_trace;
 
-hal_status_t VP37_startTrace(VP37Pump *self) {
+static uint8_t VP37_traceState(void) {
+  return HAL_ATOMIC_LOAD(&s_trace.state, HAL_ATOMIC_ACQUIRE);
+}
+
+hal_status_t VP37_startTrace(const VP37Pump *self) {
   if (self == NULL) {
     return HAL_EINVAL;
   }
-  if (s_trace.recording || (s_trace.count != 0U)) {
+  if (VP37_traceState() != VP37_TRACE_IDLE) {
     return HAL_EBUSY;
   }
   if (!self->vp37Initialized) {
     return HAL_EAGAIN;
   }
-  s_trace.next = 0U;
-  s_trace.recording = true;
+  s_trace.count = 0U;
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_RECORDING,
+                   HAL_ATOMIC_RELEASE);
   return HAL_OK;
 }
 
-bool VP37_traceCapturing(void) { return s_trace.recording; }
+bool VP37_traceCapturing(void) {
+  return VP37_traceState() == VP37_TRACE_RECORDING;
+}
 
-hal_status_t VP37_readTrace(VP37Pump *self, VP37TraceSample *sample) {
-  if ((self == NULL) || (sample == NULL)) {
+hal_status_t VP37_readTrace(VP37TraceSample *sample) {
+  if (sample == NULL) {
     return HAL_EINVAL;
   }
-  if (!self->vp37Initialized) {
-    s_trace.recording = false;
-  }
-  if (s_trace.recording) {
+  const uint8_t state = VP37_traceState();
+  if (state == VP37_TRACE_RECORDING) {
     return HAL_EAGAIN;
   }
-  if (s_trace.next >= s_trace.count) {
-    return HAL_ENOENT;
+  hal_status_t status = HAL_ENOENT;
+  if (state == VP37_TRACE_READY) {
+    if (s_trace.next < s_trace.count) {
+      *sample = s_trace.samples[s_trace.next];
+      s_trace.next++;
+      status = HAL_OK;
+    }
+    // Hand the buffer back after the last sample, or at once when empty.
+    if (s_trace.next >= s_trace.count) {
+      s_trace.next = 0U;
+      HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_IDLE,
+                       HAL_ATOMIC_RELEASE);
+    }
   }
-  *sample = s_trace.samples[s_trace.next++];
-  if (s_trace.next == s_trace.count) {
-    s_trace.count = 0U;
-    s_trace.next = 0U;
+  return status;
+}
+
+void VP37_traceStop(void) {
+  if (VP37_traceState() == VP37_TRACE_RECORDING) {
+    HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_READY,
+                     HAL_ATOMIC_RELEASE);
   }
-  return HAL_OK;
 }
 
 /**
@@ -314,12 +339,14 @@ hal_status_t VP37_readTrace(VP37Pump *self, VP37TraceSample *sample) {
  * been stopped, so a reader never waits on a recording that cannot end.
  */
 void VP37_traceRecord(const VP37Pump *self) {
-  if (s_trace.recording) {
-    s_trace.samples[s_trace.count++] = VP37_controlSample(self);
+  if (VP37_traceState() == VP37_TRACE_RECORDING) {
+    s_trace.samples[s_trace.count] =
+        VP37_controlSample(VP37_publishedTelemetry());
+    s_trace.count++;
     if ((s_trace.count == COUNTOF(s_trace.samples)) || !self->vp37Initialized) {
-      s_trace.recording = false;
+      VP37_traceStop();
     }
   }
 }
 
-#endif /* ECU_FUNCTIONAL_TESTS_ENABLED */
+#endif /* VP37_TELEMETRY_ENABLED */

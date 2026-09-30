@@ -108,17 +108,22 @@ set(ECU_SOURCES
     ${ECU_SRC}/dtcManager.c
     ${ECU_SRC}/ecuPersistence.c
     ${ECU_SRC}/engineMaps.c
+    ${ECU_SRC}/vp37_maps.c
     ${ECU_SRC}/config.c
     ${ECU_SRC}/gps.c
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
     ${ECU_SRC}/vp37.c
     ${ECU_SRC}/vp37_feedback.c
+    ${ECU_SRC}/vp37_adjustometer.c
+    ${ECU_SRC}/vp37_snapshot.c
+    ${ECU_SRC}/vp37_tuning.c
     ${ECU_SRC}/vp37_compensation.c
     ${ECU_SRC}/vp37_control.c
     ${ECU_SRC}/vp37_telemetry.c
     ${ECU_SRC}/vp37_current.c
     ${ECU_SRC}/vp37_current_control.c
+    ${ECU_SRC}/vp37_adapter.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
     ${SCDEFS}/sc_param_handlers.c
@@ -213,7 +218,7 @@ add_subdirectory(tests)
 option(ECU_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
 if(ECU_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
     add_custom_target(check-valgrind
-        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure -LE static-analysis
+        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure -LE "static-analysis|sanitizer"
         COMMENT "Running CTest memcheck (Valgrind) for ECU"
         VERBATIM
     )

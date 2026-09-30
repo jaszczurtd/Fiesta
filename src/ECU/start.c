@@ -5,6 +5,7 @@
 #include "ecuContext.h"
 #include "ecuPersistence.h"
 #include "obd-2.h"
+#include "vp37_adapter.h"
 #include "vp37_current.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
@@ -62,8 +63,11 @@ typedef struct {
  * core-0 stack: the 1 KiB snapshot, the trace samples and the CFG print with
  * its ~70 arguments exhausted it once the USB IRQ nested on top (rev98,
  * 2026-09-25). */
-static VP37Pump s_vp37Snapshot;
+static VP37Snapshot s_vp37Snapshot;
 static VP37TraceSample s_vp37TraceSamples[4];
+/* Longest wait of a reporter for the end of a control step: two 5 ms periods,
+ * after which a stopped pump is reported as it is. */
+#define START_VP37_REPORT_WAIT_US 10000U
 #endif
 
 static start_runtime_state_t s_startRuntimeState = {
@@ -330,8 +334,7 @@ static void initializeCore0(void) {
 
 #ifdef VP37
   m_mutex_enter_blocking(vp37StateMutex);
-  setVP37AdjustometerFastFeedback(true);
-  VP37InitStatus vp37InitStatus = VP37_init(&s_ctx.injectionPump);
+  VP37InitStatus vp37InitStatus = vp37AdapterStart(&s_ctx.injectionPump);
   m_mutex_exit(vp37StateMutex);
 
   switch (vp37InitStatus) {
@@ -349,6 +352,9 @@ static void initializeCore0(void) {
     break;
   case VP37_INIT_CALIBRATION_FAILED:
     derr("VP37 init failed: actuator calibration did not settle");
+    break;
+  case VP37_INIT_OUTPUT_UNAVAILABLE:
+    derr("VP37 init failed: drive outputs unavailable");
     break;
   default:
     derr("VP37 init failed: unknown status=%d", (int)vp37InitStatus);
@@ -410,23 +416,24 @@ void callAtEverySecond(void) {
 /**
  * @brief Report the newest reduced scan block from a pump snapshot.
  * @note Reduction and publishing run on core 1 inside the control
- * step; this only prints, at most every VP37_CURRENT_REPORT_MS.
+ * step; this only prints, at most every VP37_CURRENT_REPORT_MS, right after a
+ * step ends.
  */
 static void start_reportVP37Current(void) {
   if (!hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37CurrentLastMs,
                                        VP37_CURRENT_REPORT_MS)) {
     return;
   }
-  m_mutex_enter_blocking(vp37StateMutex);
-  s_vp37Snapshot = s_ctx.injectionPump;
-  m_mutex_exit(vp37StateMutex);
-  if (!s_vp37Snapshot.vp37Initialized ||
-      (s_vp37Snapshot.scan.cycleResultSequence ==
+  (void)VP37_waitForPublication(&s_ctx.injectionPump,
+                                START_VP37_REPORT_WAIT_US);
+  if ((VP37_readSnapshot(&s_ctx.injectionPump, &s_vp37Snapshot) != HAL_OK) ||
+      !s_vp37Snapshot.status.initialized ||
+      (s_vp37Snapshot.telemetry.scan.cycleResultSequence ==
        s_startRuntimeState.vp37CurrentLastSequence)) {
     return;
   }
   s_startRuntimeState.vp37CurrentLastSequence =
-      s_vp37Snapshot.scan.cycleResultSequence;
+      s_vp37Snapshot.telemetry.scan.cycleResultSequence;
   VP37_showCurrentPulse(&s_vp37Snapshot);
 }
 #endif
@@ -470,25 +477,28 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 8;
   configSessionTick();
   s_startPersistentState.statusVariable0Val = 9;
+#ifdef VP37
+  vp37AdapterPublish(&s_ctx.injectionPump);
+#endif
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
   // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
-    m_mutex_enter_blocking(vp37StateMutex);
-    s_vp37Snapshot = s_ctx.injectionPump;
+    // Format right after a step, never during one (see
+    // VP37_waitForPublication()).
+    (void)VP37_waitForPublication(&s_ctx.injectionPump,
+                                  START_VP37_REPORT_WAIT_US);
     size_t sampleCount = 0U;
     while (!hal_debug_is_muted() &&
            (sampleCount < COUNTOF(s_vp37TraceSamples)) &&
-           (VP37_readTrace(&s_ctx.injectionPump,
-                           &s_vp37TraceSamples[sampleCount]) == HAL_OK)) {
+           (VP37_readTrace(&s_vp37TraceSamples[sampleCount]) == HAL_OK)) {
       sampleCount++;
     }
-    const bool recording = VP37_traceCapturing();
-    m_mutex_exit(vp37StateMutex);
-    if (!recording) {
-      VP37_showDebug(&s_vp37Snapshot);
+    if (!VP37_traceCapturing() &&
+        (VP37_readSnapshot(&s_ctx.injectionPump, &s_vp37Snapshot) == HAL_OK)) {
+      VP37_showDebug(&s_ctx.injectionPump, &s_vp37Snapshot);
     }
     for (size_t i = 0U; i < sampleCount; i++) {
       VP37_showTrace(&s_vp37TraceSamples[i]);
@@ -539,6 +549,23 @@ static void initializeCore1(void) {
 // main logic
 //-----------------------------------------------------------------------------
 
+#ifdef VP37
+/**
+ * @brief Take the pump over from core 0 before the first control step.
+ * @note Core 0 starts the pump under vp37StateMutex; taking the mutex once
+ * makes everything the start-up wrote visible here. From then on the pump
+ * belongs to core 1 and core 0 reads only its published snapshot.
+ */
+static void start_takeOverVP37(void) {
+  static bool s_vp37TakenOver = false;
+  if (!s_vp37TakenOver) {
+    hal_mutex_lock(vp37StateMutex);
+    hal_mutex_unlock(vp37StateMutex);
+    s_vp37TakenOver = true;
+  }
+}
+#endif
+
 /**
  * @brief Run one core-1 control-loop iteration.
  */
@@ -566,7 +593,7 @@ static void runCore1(void) {
   s_startPersistentState.statusVariable1Val = 2;
   RPM_process(getRPMInstance());
 #ifdef VP37
-  hal_mutex_lock(vp37StateMutex);
+  start_takeOverVP37();
   // A running functional test owns the demand; the application produces it
   // otherwise, including every build without tests.
   if (!tickTests()) {
@@ -579,7 +606,6 @@ static void runCore1(void) {
 #endif
   }
   VP37_process(&s_ctx.injectionPump);
-  hal_mutex_unlock(vp37StateMutex);
 #else
   RPM_showDebug(&s_ctx.rpm);
 #endif

@@ -90,9 +90,17 @@ The work is split between the cores:
 
 There is no RTOS. `start.c` installs a table of `(period, callback)` pairs
 that the core-0 loop calls when due, from about 10 ms for fast sensor reads to
-one second for housekeeping. Data shared between the cores sits behind
-dedicated mutexes: the Adjustometer snapshot, the PCF8574 output latch, and
-the DTC manager with its storage. Flash writes stay on core 0.
+one second for housekeeping. The VP37 pump belongs to core 1: every control
+step ends by publishing its state behind a sequence counter, and core 0 copies
+that snapshot without a lock. The published words are written and read only
+with relaxed atomic accesses, so an overlapping copy is discarded, never a
+data race, and the control loop never waits for the
+telemetry or for the global values it feeds. The bench telemetry waits on core
+0 for the end of a step before it formats a report: code fetched from flash
+by core 0 during a step made the step about 300 µs longer on average. The
+bench trace buffer changes hands through one atomic state. The I²C bus with the PCF8574 output latch and
+the DTC manager with its storage sit behind mutexes. Flash writes stay on
+core 0.
 
 The main controllers (VP37, turbo, RPM, fan, heater, glow plugs, windows, and
 engine state) live in one `ecu_context_t` in
@@ -254,7 +262,7 @@ downward assistance, demand ramp and position API retain their existing roles.
 | File | Responsibility |
 |---|---|
 | [`start.c`](src/ECU/start.c) | start-up order, soft-timer table, watchdog, both core loops |
-| [`sensors.c`](src/ECU/sensors.c) | analog inputs and filtered driver-demand cache, PCF8574 outputs, Adjustometer reads |
+| [`sensors.c`](src/ECU/sensors.c) | analog inputs and filtered driver-demand cache, PCF8574 outputs, I²C register reads |
 | [`can.c`](src/ECU/can.c) | main CAN frames, including the RPM publisher |
 | [`obd-2.c`](src/ECU/obd-2.c) | OBD CAN input and ISO-TP responses |
 | [`obd_j1979.c`](src/ECU/obd_j1979.c) | SAE J1979 services and Mode 01 PIDs |
@@ -262,14 +270,19 @@ downward assistance, demand ramp and position API retain their existing roles.
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
 | [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
 | [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
+| [`vp37_adapter.c`](src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, and `F_FUEL_TEMP`/`F_VOLTS` from the published status |
+| [`vp37_adjustometer.c`](src/ECU/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
+| [`vp37_snapshot.c`](src/ECU/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
 | [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position and the calibration sweep |
 | [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
 | [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
 | [`vp37_current.c`](src/ECU/vp37_current.c) | coil current measured on the shunt |
 | [`vp37_current_control.c`](src/ECU/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
+| [`vp37_tuning.c`](src/ECU/vp37_tuning.c) | gains, limits, and switches the bench may change, each checked against its range |
 | [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0; bench image only |
 | [`turbo.c`](src/ECU/turbo.c) | boost control from manifold pressure |
-| [`engineMaps.c`](src/ECU/engineMaps.c) | all shaping tables: N75 duty, VP37 holding map, integral and dead-zone tapers |
+| [`engineMaps.c`](src/ECU/engineMaps.c) | N75 duty table |
+| [`vp37_maps.c`](src/ECU/vp37_maps.c) | VP37 holding map, integral and dead-zone tapers |
 | [`engineFan.c`](src/ECU/engineFan.c), [`engineHeater.c`](src/ECU/engineHeater.c), [`glowPlugs.c`](src/ECU/glowPlugs.c), [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | relay outputs |
 | [`engineFuel.c`](src/ECU/engineFuel.c) | fuel level |
 | [`gps.c`](src/ECU/gps.c) | NMEA time and date |
@@ -362,7 +375,7 @@ baseline (`0x04`) and supply outside its valid range (`0x08`).
 
 Startup includes 500 ms of warm-up, baseline convergence (80 ms minimum,
 250 ms force-lock), and 1000 ms of drift verification. ECU waits up to
-`ADJUSTOMETER_BASELINE_WAIT_MS` (8 s) before calibrating travel. Measurement,
+`VP37_ADJUSTOMETER_BASELINE_WAIT_MS` (8 s) before calibrating travel. Measurement,
 startup and reset details are in the
 [Adjustometer README](src/Adjustometer/README.md).
 Adjustometer does not take part in the configurator protocol.

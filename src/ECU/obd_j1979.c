@@ -6,9 +6,9 @@
 #include <JaszczurHAL.h>
 #include <hal/core/jh_endian.h>
 
+#include "../common/fiesta_unit_testing.h"
 #include "config.h"
 #include "dtcManager.h"
-#include "ecu_unit_testing.h"
 #include "hardwareConfig.h"
 #include "rpm.h"
 #include "sensors.h"

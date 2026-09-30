@@ -110,7 +110,7 @@ static uint16_t VP37_currentCompensatedRaw(int reading) {
 }
 
 static uint16_t VP37_currentReadRaw(void) {
-  return VP37_currentCompensatedRaw(hal_adc_read(ADC_VP37_CURRENT_PIN));
+  return VP37_currentCompensatedRaw(hal_adc_read(VP37_SHUNT_ADC_PIN));
 }
 
 /** Subtract the calibrated zero and report whether the code hit the end stop.
@@ -154,11 +154,11 @@ static bool VP37_currentPeriodPlausible(uint32_t periodUs) {
 }
 
 static int32_t VP37_currentDutyFromTime(uint32_t onTimeUs, uint32_t periodUs) {
-  uint64_t pwm = ((uint64_t)onTimeUs * (uint64_t)PWM_RESOLUTION) +
+  uint64_t pwm = ((uint64_t)onTimeUs * (uint64_t)VP37_PWM_RESOLUTION) +
                  ((uint64_t)periodUs / 2U);
   pwm /= periodUs;
-  if (pwm > (uint64_t)PWM_RESOLUTION) {
-    pwm = PWM_RESOLUTION;
+  if (pwm > (uint64_t)VP37_PWM_RESOLUTION) {
+    pwm = VP37_PWM_RESOLUTION;
   }
   return (int32_t)pwm;
 }
@@ -256,9 +256,9 @@ HAL_RAM_FUNC(VP37_currentPulseAnalyze)(const VP37CurrentPhaseSample *samples,
 hal_status_t VP37_currentScanStart(void) {
   hal_adc_scan_config_t config;
   (void)memset(&config, 0, sizeof(config));
-  config.pins[0] = ADC_VP37_CURRENT_PIN;
-  config.pins[1] = ADC_SENSORS_PIN;
-  config.pins[2] = ADC_VOLT_PIN;
+  config.pins[0] = VP37_SHUNT_ADC_PIN;
+  config.pins[1] = VP37_SCAN_AUX_ADC_PIN;
+  config.pins[2] = VP37_SUPPLY_ADC_PIN;
   config.pin_count = VP37_CURRENT_SCAN_PINS;
   config.conversion_period_ns = VP37_CURRENT_SCAN_CONVERSION_NS;
   config.buffer = s_scanBuffer;
@@ -267,8 +267,8 @@ hal_status_t VP37_currentScanStart(void) {
   if (status == HAL_OK) {
     s_scanHistoryFrames = 0U;
     s_scanPending = false;
-    s_scanShuntPosition = hal_adc_scan_pin_position(ADC_VP37_CURRENT_PIN);
-    s_scanSupplyPosition = hal_adc_scan_pin_position(ADC_VOLT_PIN);
+    s_scanShuntPosition = hal_adc_scan_pin_position(VP37_SHUNT_ADC_PIN);
+    s_scanSupplyPosition = hal_adc_scan_pin_position(VP37_SUPPLY_ADC_PIN);
   }
   return status;
 }
@@ -463,9 +463,9 @@ static hal_status_t HAL_RAM_FUNC(VP37_currentScanReducePeriod)(
     const float rawMean =
         ((float)supplySum[1] / (float)supplyCount[1]) * onFraction +
         ((float)supplySum[0] / (float)supplyCount[0]) * (1.0f - onFraction);
-    supplyValid =
-        fiesta_adc_to_voltage_ex((int)(rawMean + 0.5f), (float)V_DIVIDER_R1,
-                                 (float)V_DIVIDER_R2, &supplyVolts) == HAL_OK;
+    supplyValid = fiesta_adc_to_voltage_ex(
+                      (int)(rawMean + 0.5f), (float)VP37_SUPPLY_DIVIDER_R1,
+                      (float)VP37_SUPPLY_DIVIDER_R2, &supplyVolts) == HAL_OK;
   }
   out->supplySamples = supplyCount[0] + supplyCount[1];
   out->supplyVolts = supplyVolts;
@@ -502,8 +502,8 @@ HAL_RAM_FUNC(VP37_currentReduceLatestSupply)(const VP37CurrentScanView *view,
       const uint64_t roundedMean = (sum + ((uint64_t)frames / 2U)) / frames;
       const int mean = (int)roundedMean;
       out->supplyLatestValid =
-          fiesta_adc_to_voltage_ex(mean, (float)V_DIVIDER_R1,
-                                   (float)V_DIVIDER_R2,
+          fiesta_adc_to_voltage_ex(mean, (float)VP37_SUPPLY_DIVIDER_R1,
+                                   (float)VP37_SUPPLY_DIVIDER_R2,
                                    &out->supplyLatestVolts) == HAL_OK;
       out->supplyLatestUs =
           block->startUs + VP37_currentFramesToUs(first, block->frameNs) +

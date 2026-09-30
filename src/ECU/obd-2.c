@@ -13,9 +13,9 @@
 #include <JaszczurHAL.h>
 #include <hal/system/hal_system.h>
 
+#include "../common/fiesta_unit_testing.h"
 #include "config.h"
 #include "dtcManager.h"
-#include "ecu_unit_testing.h"
 #include "hardwareConfig.h"
 #include "obd_internal.h"
 #include "obd_protocol.h"
