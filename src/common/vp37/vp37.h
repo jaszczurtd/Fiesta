@@ -102,7 +102,9 @@ typedef struct {
   uint32_t integralHoldReleaseStartedMs;
   float negativeLimit;
   float upperLimit;
-  float kp, ki, kd;
+  float kp;
+  float ki;
+  float kd;
   float topKd;         /**< Additional settled-target D gain [PWM*s/Hz], blended
                             from zero at 85% to its full value at 90% demand. */
   float effectiveKd;   /**< Base plus scheduled D gain last sent to the PID,
@@ -368,7 +370,8 @@ typedef struct {
   uint32_t controlSequence;
   bool controlStarted;
   bool pidStarted;
-  uint32_t pidLastUs, pidDtUs;
+  uint32_t pidLastUs;
+  uint32_t pidDtUs;
   VP37Feedback feedback;
   VP37Demand demand;
   VP37Feedforward feedforward;

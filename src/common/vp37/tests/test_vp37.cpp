@@ -241,10 +241,6 @@ void test_vp37_pid_time_update_setter(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 60.0f, VP37_getVP37PIDTimeUpdate(pump));
 }
 
-void test_vp37_percentage_error_constant(void) {
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, PERCENTAGE_ERROR);
-}
-
 void test_vp37_init_returns_already_initialized(void) {
   VP37Pump *pump = vp37TestPump();
   memset(pump, 0, sizeof(*pump));
@@ -4177,7 +4173,6 @@ int main(void) {
   RUN_TEST(test_vp37_counts_demand_is_capped_at_the_physical_limit);
   RUN_TEST(test_vp37_full_or_invalid_physical_limit_keeps_the_calibrated_top);
   RUN_TEST(test_vp37_pid_time_update_setter);
-  RUN_TEST(test_vp37_percentage_error_constant);
   RUN_TEST(test_vp37_init_returns_already_initialized);
   RUN_TEST(test_vp37_init_returns_ok_when_baseline_ready);
   RUN_TEST(test_vp37_init_rejects_insufficient_calibration_travel);

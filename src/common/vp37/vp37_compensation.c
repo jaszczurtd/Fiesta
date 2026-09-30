@@ -202,22 +202,22 @@ void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
   const uint8_t invalid = ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_FUEL_TEMP_BROKEN |
                           ADJ_STATUS_BASELINE_PENDING;
   if (!isfinite(self->thermal.lastFuelTemp) ||
-      self->thermal.lastFuelTemp < 0.0f ||
-      self->thermal.lastFuelTemp > VP37_THERMAL_TEMP_VALID_MAX_C ||
-      (self->feedback.lastStatus & invalid) != 0U) {
+      (self->thermal.lastFuelTemp < 0.0f) ||
+      (self->thermal.lastFuelTemp > VP37_THERMAL_TEMP_VALID_MAX_C) ||
+      ((self->feedback.lastStatus & invalid) != 0U)) {
     return; // Keep the last valid factor; initialization uses unity.
   }
   const float reference =
-      1.0f + VP37_COPPER_TEMP_COEFFICIENT *
-                 (VP37_PWM_REFERENCE_TEMP_C - VP37_THERMAL_REFERENCE_TEMP_C);
+      1.0f + (VP37_COPPER_TEMP_COEFFICIENT *
+              (VP37_PWM_REFERENCE_TEMP_C - VP37_THERMAL_REFERENCE_TEMP_C));
   const float resistance =
-      1.0f + VP37_COPPER_TEMP_COEFFICIENT *
-                 (self->thermal.lastFuelTemp - VP37_THERMAL_REFERENCE_TEMP_C);
+      1.0f + (VP37_COPPER_TEMP_COEFFICIENT *
+              (self->thermal.lastFuelTemp - VP37_THERMAL_REFERENCE_TEMP_C));
   const float factor =
       hal_constrain(resistance / reference, VP37_TEMPERATURE_FACTOR_MIN,
                     VP37_TEMPERATURE_FACTOR_MAX);
   const float target =
-      1.0f + self->thermal.temperatureCompensationWeight * (factor - 1.0f);
+      1.0f + (self->thermal.temperatureCompensationWeight * (factor - 1.0f));
   if (!self->thermal.temperatureReady) {
     self->thermal.temperatureCorrection = target;
     self->thermal.temperatureReady = true;

@@ -43,12 +43,16 @@
  * control steps. */
 #if VP37_TELEMETRY_ENABLED
 /** Poll period of VP37_waitForPublication() [us]. */
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_PUBLICATION_POLL_US 20U
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_DEBUG_UPDATE 20U
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_TELEMETRY_UPDATE 500U
 /** @brief Steps in a bench RAM capture. Each step costs one VP37TraceSample
  * of static RAM, so this is the knob to turn when a build runs out. */
 #ifndef VP37_TRACE_SAMPLES
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_TRACE_SAMPLES 1024U
 #endif
 #endif
@@ -284,15 +288,10 @@
 #define VP37_ARRIVAL_DECEL_PERCENT_PER_S2 750.0f
 
 // calibration / stabilization values
-#define PERCENTAGE_ERROR 3.0
 
-#define VP37_OPERATION_DELAY 5 // microseconds
-
-#define STABILITY_ADJUSTOMETER_TAB_SIZE 4
-#define MIN_ADJUSTOMETER_VAL 10
+#define STABILITY_ADJUSTOMETER_TAB_SIZE 4U
 
 #define VP37_CALIBRATION_MAX_PERCENTAGE 80
-#define VP37_AVERAGE_VALUES_AMOUNT 5
 
 #define VP37_PWM_MIN 378
 #define VP37_PWM_MAX VP37_PWM_RESOLUTION
@@ -300,10 +299,10 @@
 // Calibration samples are spaced in time and accepted only after a complete
 // window is stable.  This lets a warm actuator take longer than the old fixed
 // 200 ms delay without slowing a normally settling actuator unnecessarily.
-#define VP37_CALIBRATION_SAMPLE_INTERVAL_MS 20
-#define VP37_CALIBRATION_MIN_SETTLE_MS 200
-#define VP37_CALIBRATION_TIMEOUT_MS 1000
-#define VP37_CALIBRATION_STABLE_SAMPLES 6
+#define VP37_CALIBRATION_SAMPLE_INTERVAL_MS 20U
+#define VP37_CALIBRATION_MIN_SETTLE_MS 200U
+#define VP37_CALIBRATION_TIMEOUT_MS 1000U
+#define VP37_CALIBRATION_STABLE_SAMPLES 6U
 #define VP37_CALIBRATION_STABLE_SPAN_HZ 40
 #define VP37_CALIBRATION_MIN_TRAVEL_HZ 6000
 
@@ -312,7 +311,7 @@
 // on the Adjustometer side) plus convergence (250 ms) plus post-convergence
 // verification (1000 ms).  Extra margin handles repeated convergence restarts
 // caused by slow oscillator drift on cold power-on.
-#define VP37_ADJUSTOMETER_BASELINE_WAIT_MS 8000
+#define VP37_ADJUSTOMETER_BASELINE_WAIT_MS 8000U
 
 // define this, to avoid magic numbers in the code
 #define VP37_PERCENT_MIN 0

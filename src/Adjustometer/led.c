@@ -4,8 +4,8 @@
 #include <hal/i2c/hal_i2c_slave.h>
 
 #define LED_BLINK_NO_OSCILLATION_MS                                            \
-  (SECOND / 8)                           // 4x per second = toggle every 125 ms
-#define LED_BLINK_STATUS_MS (SECOND / 2) // status cycle step every 500 ms
+  ((uint32_t)SECOND / 8U) // 4x per second = toggle every 125 ms
+#define LED_BLINK_STATUS_MS ((uint32_t)SECOND / 2U) // status step every 500 ms
 #define LED_BRIGHTNESS_FULL 30
 #define LED_BRIGHTNESS_HALF 15
 
@@ -16,8 +16,6 @@ static uint32_t ledLastToggleMs = 0;
 static uint32_t lastI2CTransactionCount = 0;
 static uint32_t lastI2CSeenMs = 0;
 
-// Color sequence built each cycle from active conditions
-static hal_rgb_led_color_t ledSeq[LED_SEQ_MAX];
 static uint8_t ledSeqLen = 0;
 static uint8_t ledSeqIdx = 0;
 
@@ -28,9 +26,9 @@ void initLed(void) {
   ledLastToggleMs = 0;
   ledSeqLen = 0;
   ledSeqIdx = 0;
-  hal_rgb_led_init_ex(PIN_RGB, NUMPIXELS, HAL_RGB_LED_PIXEL_RGB_KHZ800);
+  (void)hal_rgb_led_init_ex(PIN_RGB, NUMPIXELS, HAL_RGB_LED_PIXEL_RGB_KHZ800);
   hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
-  hal_rgb_led_off();
+  (void)hal_rgb_led_off();
   lastI2CTransactionCount = hal_i2c_slave_get_transaction_count();
   lastI2CSeenMs = hal_millis();
 }
@@ -39,19 +37,21 @@ void initLed(void) {
  * @brief Refresh the LED pattern according to signal, sensor and I2C health.
  */
 void updateLed(void) {
+  // Color sequence built each cycle from active conditions
+  static hal_rgb_led_color_t ledSeq[LED_SEQ_MAX];
   uint32_t now = hal_millis();
   uint8_t status = getAdjustometerStatus();
 
   // Signal lost - red blink 4x/s, overrides everything
-  if (status & ADJ_STATUS_SIGNAL_LOST) {
+  if ((status & ADJ_STATUS_SIGNAL_LOST) != 0U) {
     if ((now - ledLastToggleMs) >= LED_BLINK_NO_OSCILLATION_MS) {
       ledLastToggleMs = now;
-      ledSeqIdx = !ledSeqIdx;
+      ledSeqIdx = (ledSeqIdx == 0U) ? 1U : 0U;
       hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
-      if (ledSeqIdx) {
-        hal_rgb_led_set_color(HAL_RGB_LED_RED);
+      if (ledSeqIdx != 0U) {
+        (void)hal_rgb_led_set_color(HAL_RGB_LED_RED);
       } else {
-        hal_rgb_led_off();
+        (void)hal_rgb_led_off();
       }
     }
     return;
@@ -67,29 +67,33 @@ void updateLed(void) {
     lastI2CSeenMs = now;
   }
   bool noI2C = (now - lastI2CSeenMs) >= LED_I2C_TIMEOUT_MS;
-  bool fuelBroken = (status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0;
-  bool voltageBad = (status & ADJ_STATUS_VOLTAGE_BAD) != 0;
+  const bool fuelBroken = (status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0U;
+  const bool voltageBad = (status & ADJ_STATUS_VOLTAGE_BAD) != 0U;
 
   if (!noI2C && !fuelBroken && !voltageBad) {
     // All OK: steady green at 50% brightness
     ledSeqLen = 0;
     hal_rgb_led_set_brightness(LED_BRIGHTNESS_HALF);
-    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+    (void)hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
     return;
   }
 
   // Build cycling sequence: [purple] [yellow] [red] green
   uint8_t len = 0;
   if (fuelBroken) {
-    ledSeq[len++] = HAL_RGB_LED_PURPLE;
+    ledSeq[len] = HAL_RGB_LED_PURPLE;
+    len++;
   }
   if (voltageBad) {
-    ledSeq[len++] = HAL_RGB_LED_YELLOW;
+    ledSeq[len] = HAL_RGB_LED_YELLOW;
+    len++;
   }
   if (noI2C) {
-    ledSeq[len++] = HAL_RGB_LED_RED;
+    ledSeq[len] = HAL_RGB_LED_RED;
+    len++;
   }
-  ledSeq[len++] = HAL_RGB_LED_GREEN;
+  ledSeq[len] = HAL_RGB_LED_GREEN;
+  len++;
 
   // Reset index if sequence changed length
   if (len != ledSeqLen) {
@@ -97,7 +101,7 @@ void updateLed(void) {
     ledSeqIdx = 0;
     ledLastToggleMs = now;
     hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
-    hal_rgb_led_set_color(ledSeq[0]);
+    (void)hal_rgb_led_set_color(ledSeq[0]);
     return;
   }
 
@@ -108,6 +112,6 @@ void updateLed(void) {
       ledSeqIdx = 0;
     }
     hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
-    hal_rgb_led_set_color(ledSeq[ledSeqIdx]);
+    (void)hal_rgb_led_set_color(ledSeq[ledSeqIdx]);
   }
 }

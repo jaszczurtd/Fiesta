@@ -12,13 +12,6 @@
 
 #include "telemetry.h"
 
-#if DEBUG_DEEP
-static uint32_t lastPeriodicLogMs = 0U;
-#endif
-static uint32_t lastAuxiliaryMs = 0U;
-static uint32_t lastChipTempReadMs = 0U;
-static int16_t chipTempDeciC = INT16_MIN;
-
 /**
  * @brief Initialize core-0 services, sensors and status reporting.
  */
@@ -27,7 +20,7 @@ static void initializeCore0(void) {
   hal_debug_init_default();
   hal_debug_set_module_prefix(SC_MODULE_TOKEN_ADJUSTOMETER);
 
-  setupWatchdog(NULL, WATCHDOG_TIME);
+  (void)setupWatchdog(NULL, WATCHDOG_TIME);
 
   initI2C();
 
@@ -59,9 +52,9 @@ static void runCore0(void) {
   static uint8_t lastStatus = UINT8_MAX;
   adjustometer_feedback_t sample;
   const uint32_t nowMs = hal_millis();
-  if (getAdjustometerFeedback(&sample) == HAL_OK &&
-      (sample.status != lastStatus ||
-       ((sample.number != lastNumber ||
+  if ((getAdjustometerFeedback(&sample) == HAL_OK) &&
+      ((sample.status != lastStatus) ||
+       (((sample.number != lastNumber) ||
          hal_elapsed_u32(nowMs, lastPublishMs, 5U)) &&
         hal_elapsed_u32(nowMs, lastPublishMs,
                         ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS)))) {
@@ -99,13 +92,19 @@ static void runCore1(void) {
     return;
   }
 
+#if DEBUG_DEEP
+  static uint32_t lastPeriodicLogMs = 0U;
+#endif
+  static uint32_t lastAuxiliaryMs = 0U;
+  static uint32_t lastChipTempReadMs = 0U;
+  static int16_t chipTempDeciC = INT16_MIN;
   if (hal_millis_interval_elapsed_now(&lastAuxiliaryMs,
                                       ADJUSTOMETER_EXT_UPDATE_MS)) {
     updateAuxiliarySensors();
-    if (chipTempDeciC == INT16_MIN ||
+    if ((chipTempDeciC == INT16_MIN) ||
         hal_millis_interval_elapsed_now(&lastChipTempReadMs, 250U)) {
       const float chipTemp = hal_read_chip_temp();
-      chipTempDeciC = chipTemp >= -50.0f && chipTemp <= 150.0f
+      chipTempDeciC = ((chipTemp >= -50.0f) && (chipTemp <= 150.0f))
                           ? (int16_t)(chipTemp * 10.0f)
                           : INT16_MIN;
     }

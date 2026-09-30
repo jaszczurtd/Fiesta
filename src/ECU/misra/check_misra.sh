@@ -6,10 +6,15 @@ usage() {
     cat <<'EOF'
 Usage: check_misra.sh [options]
 
-Run a project-local MISRA screening pass for src/ECU using cppcheck's MISRA addon.
+Run a project-local MISRA screening pass using cppcheck's MISRA addon.
+The default project is src/ECU, whose scan also covers src/common/vp37.
 
 Options:
   -c, --cppcheck <path>       cppcheck executable or absolute path
+      --project <dir>         module directory to scan instead of src/ECU;
+                              its misra/suppressions.txt applies when present
+      --fail-paths <ere>      return non-zero when an active finding's path
+                              matches this extended regular expression
   -o, --out <dir>             output directory for generated artifacts
   -q, --quiet                 suppress cppcheck "Checking ..." progress lines
       --rule-texts <file>     licensed local MISRA Appendix A text extract
@@ -38,6 +43,9 @@ json_escape() {
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project_root=$(cd "$script_dir/.." && pwd)
+suppressions_file="$script_dir/suppressions.txt"
+extra_source_globs=("../common/vp37/*.c")
+fail_paths=""
 out_dir="$script_dir/.results"
 cppcheck_bin="${CPPCHECK_BIN:-cppcheck}"
 addon_python="${CPPCHECK_ADDON_PYTHON:-python3}"
@@ -74,6 +82,18 @@ while [[ $# -gt 0 ]]; do
         --fail-on-findings)
             fail_on_findings=1
             shift
+            ;;
+        --project)
+            project_root=$(cd "$2" && pwd)
+            extra_source_globs=()
+            if [[ -f "$project_root/misra/suppressions.txt" ]]; then
+                suppressions_file="$project_root/misra/suppressions.txt"
+            fi
+            shift 2
+            ;;
+        --fail-paths)
+            fail_paths="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -137,8 +157,8 @@ if [[ -n "$temp_addon_config" ]]; then
     addon_arg="$temp_addon_config"
 fi
 
-if grep -Eq '^[[:space:]]*[^#[:space:]]' "$script_dir/suppressions.txt"; then
-    suppressions_args=(--suppressions-list="$script_dir/suppressions.txt")
+if grep -Eq '^[[:space:]]*[^#[:space:]]' "$suppressions_file"; then
+    suppressions_args=(--suppressions-list="$suppressions_file")
 fi
 
 quiet_args=()
@@ -201,7 +221,7 @@ set +e
     --suppress=checkersReport \
     "${quiet_args[@]}" \
     *.c \
-    ../common/vp37/*.c \
+    "${extra_source_globs[@]}" \
     2>&1 | tee "$results_file"
 cppcheck_status=${PIPESTATUS[0]}
 set -e
@@ -290,5 +310,11 @@ echo "Active MISRA findings: $active_count"
 echo "Artifacts written to: $out_dir"
 
 if [[ $fail_on_findings -eq 1 && $active_count -gt 0 ]]; then
+    exit 1
+fi
+
+if [[ -n "$fail_paths" ]] && grep -Eq "$fail_paths" "$active_file"; then
+    echo "Active findings inside the gated paths ($fail_paths):" >&2
+    grep -E "$fail_paths" "$active_file" >&2
     exit 1
 fi

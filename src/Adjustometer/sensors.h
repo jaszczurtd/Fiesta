@@ -26,12 +26,12 @@ extern "C" {
 #define ADJUSTOMETER_SIGNAL_LOSS_MAX_US 200000U
 
 // Supply voltage thresholds (tenths of a volt).
-#define ADJ_VOLTAGE_MIN_TV 80  // 8.0 V
-#define ADJ_VOLTAGE_MAX_TV 150 // 15.0 V
+#define ADJ_VOLTAGE_MIN_TV 80U  // 8.0 V
+#define ADJ_VOLTAGE_MAX_TV 150U // 15.0 V
 
 // Fuel temp raw == 0 means the sensor conversion failed or returned a
 // negative value.
-#define ADJ_FUEL_TEMP_SENSOR_BROKEN 0
+#define ADJ_FUEL_TEMP_SENSOR_BROKEN 0U
 
 /**
  * @brief Initialize the I2C slave interface and default registers.
@@ -41,7 +41,6 @@ void initI2C(void);
 /**
  * @brief Initialize basic GPIO and ADC resources used by the module.
  */
-void initBasicPIO(void);
 
 /**
  * @brief Initialize runtime sensor state and hardware period capture.
@@ -91,6 +90,9 @@ int32_t getAdjustometerSignedDeltaHz(void);
  */
 uint8_t getAdjustometerStatus(void);
 
+/* The two raw readers are static in firmware; the host tests drive their
+ * filters directly (TESTABLE_STATIC). */
+#ifdef UNIT_TEST
 /**
  * @brief Read the filtered supply voltage in tenths of a volt.
  * @return Raw voltage register value.
@@ -103,6 +105,7 @@ uint8_t getSupplyVoltageRaw(void);
  * @note This is the module's G81-like fuel-temperature input.
  */
 uint8_t getFuelTemperatureRaw(void);
+#endif
 
 /**
  * @brief Return the locked baseline frequency used as the pulse zero point.

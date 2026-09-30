@@ -52,18 +52,18 @@ float VP37_computePositiveCorrectionLimit(float fuelTempC,
                                            ADJ_STATUS_FUEL_TEMP_BROKEN |
                                            ADJ_STATUS_BASELINE_PENDING;
 
-  if ((adjustometerStatus & invalidTemperatureStatus) != 0U ||
-      fuelTempC != fuelTempC || fuelTempC > VP37_THERMAL_TEMP_VALID_MAX_C ||
-      fuelTempC <= VP37_THERMAL_REFERENCE_TEMP_C) {
+  if (((adjustometerStatus & invalidTemperatureStatus) != 0U) ||
+      (fuelTempC != fuelTempC) || (fuelTempC > VP37_THERMAL_TEMP_VALID_MAX_C) ||
+      (fuelTempC <= VP37_THERMAL_REFERENCE_TEMP_C)) {
     return VP37_PID_CORR_LIMIT_POSITIVE_COLD;
   }
 
   const float coldMaximumCommand =
       pwmFeedForward + VP37_PID_CORR_LIMIT_POSITIVE_COLD;
   const float thermalFactor =
-      1.0f + VP37_COPPER_TEMP_COEFFICIENT *
-                 (fuelTempC - VP37_THERMAL_REFERENCE_TEMP_C);
-  float positiveLimit = coldMaximumCommand * thermalFactor - pwmFeedForward;
+      1.0f + (VP37_COPPER_TEMP_COEFFICIENT *
+              (fuelTempC - VP37_THERMAL_REFERENCE_TEMP_C));
+  float positiveLimit = (coldMaximumCommand * thermalFactor) - pwmFeedForward;
 
   return hal_constrain(positiveLimit, VP37_PID_CORR_LIMIT_POSITIVE_COLD,
                        VP37_PID_CORR_LIMIT_POSITIVE_MAX);
@@ -192,7 +192,7 @@ void VP37_transferIntegralToMapTrim(VP37Pump *self) {
   float weight = 0.0f;
   VP37_mapTrimKnots(percent, &lower, &weight);
   const uint32_t upper =
-      (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
+      ((lower + 1U) < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
   const float integral = self->pid.terms.integral;
   // Both knots take the whole integral: the interpolated value then rises by
   // exactly that amount at this position, and neighbouring holds average
@@ -267,7 +267,7 @@ static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
   float weight = 0.0f;
   VP37_mapTrimKnots(percent, &lower, &weight);
   const uint32_t upper =
-      (lower + 1U < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
+      ((lower + 1U) < VP37_MAP_TRIM_KNOTS) ? (lower + 1U) : lower;
   return (self->feedforward.mapTrim[lower] * (1.0f - weight)) +
          (self->feedforward.mapTrim[upper] * weight);
 }
@@ -280,7 +280,8 @@ static float VP37_mapTrimAt(const VP37Pump *self, float percent) {
  * @note The last knot pairs with itself.
  */
 static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight) {
-  const float step = 100.0f / (float)(VP37_MAP_TRIM_KNOTS - 1U);
+  const uint32_t spans = VP37_MAP_TRIM_KNOTS - 1U;
+  const float step = 100.0f / (float)spans;
   const float scaled = hal_constrain(percent, 0.0f, 100.0f) / step;
   uint32_t index = (uint32_t)scaled;
   if (index >= (VP37_MAP_TRIM_KNOTS - 1U)) {

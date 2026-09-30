@@ -32,7 +32,9 @@ typedef struct {
   bool extendedTelemetryValid; /**< The versioned extension was coherent. */
   bool fastFeedback;           /**< Read from the versioned fast frame. */
   bool feedbackFresh;          /**< The fast frame advanced in time. */
-  uint32_t rawHz, sampleNumber, measuredUs;
+  uint32_t rawHz;
+  uint32_t sampleNumber;
+  uint32_t measuredUs;
   uint16_t ageUs;
   hal_status_t readStatus; /**< Result of the last transfer and decode. */
   uint32_t readUs;         /**< Duration of the last read [us]. */

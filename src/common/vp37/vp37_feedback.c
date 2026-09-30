@@ -52,8 +52,10 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
  * range, not an OEM mg/stroke model.
  */
 bool VP37_makeCalibration(VP37Pump *self) {
-  self->feedback.adjustMax = self->feedback.adjustMiddle =
-      self->feedback.adjustMin = self->feedback.operateMax = -1;
+  self->feedback.adjustMax = -1;
+  self->feedback.adjustMiddle = -1;
+  self->feedback.adjustMin = -1;
+  self->feedback.operateMax = -1;
 
   // Capture the natural/resting endpoint first.  Measuring MIN after a strong
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
@@ -82,8 +84,8 @@ bool VP37_makeCalibration(VP37Pump *self) {
   const int32_t calibrationTravel =
       self->feedback.adjustMax - self->feedback.adjustMin;
   self->feedback.calibrationDone =
-      calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ &&
-      self->feedback.adjustMiddle > 0;
+      (calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ) &&
+      (self->feedback.adjustMiddle > 0);
   if (!self->feedback.calibrationDone) {
     derr(
         "VP37 calibration range invalid: MIN=%d MAX=%d travel=%d (required=%d)",
@@ -133,8 +135,8 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
       sampleCount++;
     }
 
-    if ((hal_millis() - startMs) < VP37_CALIBRATION_MIN_SETTLE_MS ||
-        sampleCount < VP37_CALIBRATION_STABLE_SAMPLES) {
+    if (((hal_millis() - startMs) < VP37_CALIBRATION_MIN_SETTLE_MS) ||
+        (sampleCount < VP37_CALIBRATION_STABLE_SAMPLES)) {
       continue;
     }
 
@@ -154,10 +156,11 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self,
     if ((maxValue - minValue) <= VP37_CALIBRATION_STABLE_SPAN_HZ) {
       sum -= minValue;
       sum -= maxValue;
-      *settledValue = sum / (int32_t)(VP37_CALIBRATION_STABLE_SAMPLES - 2U);
+      const uint32_t kept = VP37_CALIBRATION_STABLE_SAMPLES - 2U;
+      *settledValue = sum / (int32_t)kept;
 
-      for (uint32_t i = 0U; i < STABILITY_ADJUSTOMETER_TAB_SIZE &&
-                            i < VP37_CALIBRATION_STABLE_SAMPLES;
+      for (uint32_t i = 0U; (i < STABILITY_ADJUSTOMETER_TAB_SIZE) &&
+                            (i < VP37_CALIBRATION_STABLE_SAMPLES);
            i++) {
         self->feedback.stabilityTable[i] = samples[i];
       }
