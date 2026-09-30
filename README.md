@@ -134,7 +134,7 @@ Platform support summary:
 
 - **Linux (Debian-like)** - primary target. `runmefirst.sh`, JaszczurHAL `jh-vscode` firmware tasks, host tests, MISRA screening, and the daily Pi runner all work.
 - **WSL2 on Windows** - works the same as native Linux for everything except direct USB access; `jh-vscode upload` and BOOTSEL upload still require access to the real USB device / BOOTSEL drive from the Windows side or a native shell.
-- **Native Windows** - supported for firmware development in all five modules.
+- **Native Windows** - supported for firmware development in all six modules.
   Run JaszczurHAL's `runmefirst.ps1`, then use the generated VS Code tasks or
   `jh-vscode.cmd` for release/debug builds, IntelliSense, identity-guarded
   upload, BOOTSEL/UF2 upload and serial monitoring. Host test, cppcheck, MISRA,
@@ -178,14 +178,15 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
 
 Tracked module settings contain no COM port. Board and port selections are
 written to ignored `.vscode/jaszczurhal.local.json` files. The `Windows
-firmware` workflow repeats generation checks, builds every module and refreshes
-all five compile databases on a native `windows-2025` runner; physical upload
-remains a manual identity-guarded smoke test.
+firmware` workflow repeats generation checks, builds the five CI modules
+(`VP37TestBench` opts out through `"ci": false` in `modules.json`) and
+refreshes their compile databases on a native `windows-2025` runner; physical
+upload remains a manual identity-guarded smoke test.
 
 ### Host tests (CMake) - per module
 
 CMake in this repository is used for SerialConfigurator compilation and host
-test configuration/build. The four host-tested firmware modules compile their
+test configuration/build. The five host-tested firmware modules compile their
 test targets as C++ (`.cpp`); SerialConfigurator has its own C project. The
 firmware-module pattern is:
 

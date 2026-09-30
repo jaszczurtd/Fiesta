@@ -90,10 +90,14 @@ there by gate 4 of `runalltests.sh` (`check_misra.sh --fail-paths`, and a
 second run with `--project src/Adjustometer`). Mandatory: none were present.
 Required and Advisory were fixed in code, with these recorded exceptions:
 rule 15.5 (single exit) stays as deviation DR-009, the TESTABLE_STATIC scan
-context as DR-010, the shared protocol register map as DR-011, and the
-configuration-dependent header macros as DR-012; rule 21.25 remains DR-008.
-The ECU-wide count is **870** (590 in `src/ECU`, 280 in shared
-`src/common` sources); the drop from 1023 is the VP37 share of the cleanup.
+context as DR-010, the shared protocol register map as DR-011, the
+configuration-dependent header macros as DR-012, the build-system macros in
+module `hal_project_config.h` files as DR-013 and the generated module token
+registry as DR-014; rule 21.25 remains DR-008.
+The ECU-wide count is **861** (590 in `src/ECU`, 271 in shared
+`src/common` sources); the drop from 1023 is the VP37 share of the cleanup,
+and DR-014 later took the generated token registry (10 findings, one per
+other module's token) out of the screening.
 The rest of `src/ECU` remains a screening snapshot outside the gate.
 
 At commit `8cc5d2f` the same run gave 1046. The shared configurator session
