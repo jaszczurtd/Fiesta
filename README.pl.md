@@ -74,7 +74,7 @@ Zachowuje katalogi kompilacji HAL i lokalne ustawienia VS Code.
 Następnie instaluje pakiety, sprawdza Pythona, cppcheck z dodatkiem MISRA oraz
 bibliotekę C++ toolchaina Arm. Następnie inicjalizuje przypięty submoduł HAL,
 przygotowuje jego zależności razem z PMD, uruchamia testy hostowe i analizatory, kompiluje
-pięć modułów firmware, przygotowuje artefakty UF2 z manifestami oraz buduje,
+sześć modułów firmware, przygotowuje artefakty UF2 z manifestami oraz buduje,
 testuje i pakuje SerialConfigurator do pakietu Debian.
 
 Uruchamiaj go jako zwykły użytkownik. `sudo` jest używane tylko do instalacji
@@ -91,7 +91,8 @@ Linux, w tym Raspberry Pi OS i systemy zgodne z Debianem, jest głównym
 środowiskiem rozwoju. WSL2 obsługuje te same skrypty, lecz upload wymaga
 udostępnienia rzeczywistego urządzenia USB lub dysku BOOTSEL.
 
-Windows obsługuje rozwój wszystkich pięciu firmware. Po uruchomieniu
+Windows obsługuje rozwój wszystkich sześciu firmware (workflow CI buduje
+pięć - `VP37TestBench` wyłącza się wpisem `"ci": false` w `modules.json`). Po uruchomieniu
 `src/JaszczurHAL/runmefirst.ps1` zadania VS Code pozwalają kompilować release
 i debug, odświeżać IntelliSense, wgrywać firmware i otwierać monitor portu.
 Testy hostowe, cppcheck, MISRA, Valgrind i SerialConfigurator pozostają
@@ -132,7 +133,8 @@ produkcyjny porównuje tylko w obrębie jednego modułu, a testy hostowe i skryp
 Pythona w całym repozytorium. Wspólne helpery testów leżą w `src/common/tests/`.
 Każdy znaleziony duplikat zatrzymuje bramkę.
 
-Dla ECU, Clocks, OilAndSpeed i Adjustometera można uruchomić testy osobno:
+Dla ECU, Clocks, OilAndSpeed, Adjustometera i VP37TestBench można uruchomić
+testy osobno:
 
 ```bash
 cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
@@ -195,7 +197,9 @@ Fiesty i przypiętej wersji HAL.
 ## Zakres walidacji
 
 Projekt nie deklaruje zgodności z ISO 26262, AUTOSAR ani pełnej zgodności
-MISRA. ECU jest objęte migracją MISRA-C; jej stan i odchylenia opisuje
+MISRA. Migracją MISRA-C objęte są ECU, wspólny moduł VP37
+(`src/common/vp37`, zero aktywnych znalezisk, bramka w `runalltests.sh`)
+oraz Adjustometer (również zero, ta sama bramka); stan i odstępstwa opisuje
 anglojęzyczny [MISRA.md](MISRA.md). Pozostałe moduły nie są objęte tym
 zakresem. Testy hostowe używają mocków HAL; projekt nie ma stanowiska HIL.
 Rozwój prowadzi jedna osoba, z kontrolą przez testy i CI.

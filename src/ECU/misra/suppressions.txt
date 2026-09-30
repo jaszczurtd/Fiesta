@@ -31,3 +31,5 @@ misra-c2012-2.5:*vp37/*.h
 # DR-009 also covers the module's shared inline headers.
 misra-c2012-15.5:*adjustometer_feedback.h
 misra-c2012-15.5:*fiesta_sensor_helpers.h
+# DR-014: the generated module token registry.
+misra-c2012-2.5:*sc_fiesta_module_tokens.h

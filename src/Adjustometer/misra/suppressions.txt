@@ -9,6 +9,7 @@ misra-c2012-2.5:*adjustometer_protocol.h
 # DR-012: shared module headers report other builds' macros as unused.
 misra-c2012-2.5:*vp37/*.h
 misra-c2012-2.5:*vp37_drive_config.h
-# Out of this module's scope: the repo-wide CAN and configurator definitions.
+# Out of this module's scope: the repo-wide CAN definitions.
 misra-c2012-2.5:*canDefinitions.h
+# DR-014: the generated module token registry.
 misra-c2012-2.5:*sc_fiesta_module_tokens.h

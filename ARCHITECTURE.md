@@ -30,9 +30,9 @@ This document explains how the pieces fit together. Setup and builds are in
      also connects to Clocks, OilAndSpeed and Fiesta_clock
 ```
 
-The ECU is the hub. It is the only module that controls the engine and the
-only one held to MISRA-C. The others either feed it data or display what it
-publishes.
+The ECU is the hub. It is the only module that controls the engine. The
+MISRA-C requirements cover it, the shared VP37 module and the Adjustometer;
+the other modules either feed the ECU data or display what it publishes.
 
 ## Hardware platform
 
@@ -53,12 +53,12 @@ the loom colours.
 
 | Module | Language | Role | MISRA |
 |---|---|---|---|
-| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required |
+| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
 | [`Clocks`](src/Clocks/) | C++ | instrument cluster | no |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure, wheel speed, exhaust gas temperature | no |
 | [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
-| [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | no |
-| [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | required (shared VP37 code) |
+| [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
+| [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
 
 The list itself lives in [`modules.json`](modules.json): each module's
@@ -79,7 +79,8 @@ literal, and a test checks them against the registry.
 The ECU controls fuel injection through the VP37 pump, boost through the N75
 solenoid, glow plugs, the fan, the block heater, and the heated windshield. It
 also stores DTCs and answers OBD-II requests, presenting itself as a Ford
-Fiesta 1.8 DI EEC-V ECU. It is the MISRA-C target; [`MISRA.md`](MISRA.md)
+Fiesta 1.8 DI EEC-V ECU. It is the MISRA-C migration target, together with the shared VP37 module
+and the Adjustometer, both gated at zero findings; [`MISRA.md`](MISRA.md)
 describes the current state.
 
 The work is split between the cores:
@@ -270,7 +271,7 @@ downward assistance, demand ramp and position API retain their existing roles.
 | [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
 | [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
-| [`src/common/vp37/`](src/common/vp37/) | the VP37 module, shared with the coming test bench; its translation units are the list in [`vp37_sources.txt`](src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
+| [`src/common/vp37/`](src/common/vp37/) | the VP37 module, shared by the ECU and VP37TestBench; its translation units are the list in [`vp37_sources.txt`](src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
 | [`vp37.c`](src/common/vp37/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
 | [`vp37_adapter.c`](src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, and `F_FUEL_TEMP`/`F_VOLTS` from the published status |
 | [`vp37_adjustometer.c`](src/common/vp37/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
@@ -453,7 +454,9 @@ Commands, authentication, and signature status are described in the
   callbacks.
 
 Most modules use the same layout. `Fiesta_clock` keeps older file names
-(`main.c`, `RTC.c`) but the same shared pieces.
+(`main.c`, `RTC.c`) but the same shared pieces. `VP37TestBench` enters
+through the HAL app-entry hooks in `logic.cpp` instead of `start.c` and has
+no CAN or configurator session.
 
 ```text
 src/<Module>/
@@ -538,7 +541,7 @@ its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
 |---|---|---|
 | [`ecu-tests.yml`](.github/workflows/ecu-tests.yml) | changes in ECU, shared code or HAL pin | ECU build, tests, cppcheck, Valgrind, clang-tidy |
 | [`clocks-tests.yml`](.github/workflows/clocks-tests.yml), [`oilandspeed-tests.yml`](.github/workflows/oilandspeed-tests.yml), [`adjustometer-tests.yml`](.github/workflows/adjustometer-tests.yml) | changes in the module, shared code or HAL pin | build, tests, Valgrind, clang-tidy |
-| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | firmware, shared code or HAL pin changes | release and debug firmware for all five modules |
+| [`firmware-build-scripts.yml`](.github/workflows/firmware-build-scripts.yml) | firmware, shared code or HAL pin changes | release and debug firmware for the five CI modules (`VP37TestBench` opts out through `"ci": false`) |
 | [`serial-configurator-tests.yml`](.github/workflows/serial-configurator-tests.yml) | changes in SerialConfigurator, shared code or HAL pin | GUI and CLI build, tests, Valgrind, clang-tidy |
 | [`ecu-cppcheck.yml`](.github/workflows/ecu-cppcheck.yml) | manual | cppcheck against [`cppcheck-baseline.log`](src/ECU/cppcheck-baseline.log) |
 | [`ecu-misra.yml`](.github/workflows/ecu-misra.yml) | manual | MISRA screening report |
@@ -559,7 +562,7 @@ Fiesta/
 ├── scripts/                     # registry, VS Code and duplicate-gate tools, git hooks
 ├── .github/workflows/           # CI
 ├── src/
-│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/
+│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/ VP37TestBench/
 │   ├── JaszczurHAL/             # pinned HAL submodule
 │   ├── SerialConfigurator/      # desktop application and CLI
 │   └── common/
@@ -567,7 +570,8 @@ Fiesta/
 │       ├── cmake/               # CMake helpers shared by module builds
 │       ├── scDefinitions/       # configurator protocol
 │       ├── scripts/             # manifest, UF2, and module-name helpers
-│       └── tests/               # host-test helpers shared by modules
+│       ├── tests/               # host-test helpers shared by modules
+│       └── vp37/                # the VP37 drive module and its tests
 ├── Fiesta_pcbs/                 # schematics, layouts, connector maps
 ├── materials/                   # datasheets, reference documents, photos
 └── legacy/                      # retired modules
