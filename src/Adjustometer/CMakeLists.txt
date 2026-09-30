@@ -96,6 +96,7 @@ target_include_directories(adj_mock PUBLIC
 )
 
 target_compile_definitions(adj_mock PUBLIC
+    UNIT_TEST
     UNITY_INCLUDE_CONFIG_H
 )
 
@@ -121,6 +122,7 @@ target_include_directories(adj_mock_common PUBLIC
 )
 
 target_compile_definitions(adj_mock_common PUBLIC
+    UNIT_TEST
     UNITY_INCLUDE_CONFIG_H
 )
 

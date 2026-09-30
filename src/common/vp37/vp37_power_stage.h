@@ -12,6 +12,16 @@
 /** PWM counter resolution of both actuator channels [bits] and full scale. */
 #define VP37_PWM_WRITE_RESOLUTION 11
 #define VP37_PWM_RESOLUTION 2047
+/* The full scale is what the write resolution addresses. */
+#ifdef __cplusplus
+static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
+                  (1UL << VP37_PWM_WRITE_RESOLUTION),
+              "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
+#else
+_Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
+                   (1UL << VP37_PWM_WRITE_RESOLUTION),
+               "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
+#endif
 
 /** Quantity actuator (N146-like) drive and timing actuator (N108-like) drive.
  * Both are active low: a command is written as VP37_PWM_RESOLUTION minus the

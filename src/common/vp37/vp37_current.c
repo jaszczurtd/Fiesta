@@ -19,10 +19,6 @@
 static uint16_t s_currentZeroRaw;
 static bool s_currentZeroValid;
 
-/* Both halves of the scan block live here; the scan owns them while it runs. */
-static uint16_t
-    s_scanBuffer[2U * VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS]
-    __attribute__((aligned(4)));
 static uint8_t s_scanShuntPosition;
 static uint8_t s_scanSupplyPosition;
 /* Only the reducer's two channels need history; the mux stays in DMA. */
@@ -45,14 +41,21 @@ static uint32_t s_scanHistoryPollUs;
 static uint32_t s_scanHistoryFrameNs;
 static bool s_scanPending;
 typedef struct {
-  uint32_t run, glitches, rise, previousFall;
-  uint32_t periodRise, periodFall, periodLatch;
-  bool initialized, gateOn, haveRise, havePreviousFall, found;
+  uint32_t run;
+  uint32_t glitches;
+  uint32_t rise;
+  uint32_t previousFall;
+  uint32_t periodRise;
+  uint32_t periodFall;
+  uint32_t periodLatch;
+  bool initialized;
+  bool gateOn;
+  bool haveRise;
+  bool havePreviousFall;
+  bool found;
 } VP37CurrentEdges;
 static VP37CurrentEdges s_scanEdges;
 static uint32_t s_scanFirstFrame;
-static VP37CurrentPulseResult s_scanPulse;
-static uint32_t s_scanPulseFall;
 static bool s_scanPulseCached;
 
 /* The short ON ramp is nearly sorted; also used for the startup median. */
@@ -189,9 +192,9 @@ HAL_RAM_FUNC(VP37_currentPulseAnalyze)(const VP37CurrentPhaseSample *samples,
   uint16_t guarded[VP37_CURRENT_PULSE_SAMPLES];
   uint32_t guardedCount = 0U;
   uint16_t peakRaw = 0U;
-  uint32_t profileRaw[VP37_CURRENT_PROFILE_BINS] = {0U};
-  uint32_t profileTime[VP37_CURRENT_PROFILE_BINS] = {0U};
-  uint32_t profileCount[VP37_CURRENT_PROFILE_BINS] = {0U};
+  uint32_t profileRaw[VP37_CURRENT_PROFILE_BINS] = {0};
+  uint32_t profileTime[VP37_CURRENT_PROFILE_BINS] = {0};
+  uint32_t profileCount[VP37_CURRENT_PROFILE_BINS] = {0};
   const uint32_t guardedUs =
       onTimeUs - (2U * VP37_CURRENT_PULSE_EDGE_GUARD_US) + 1U;
   for (uint32_t i = 0U; i < count; i++) {
@@ -246,8 +249,8 @@ HAL_RAM_FUNC(VP37_currentPulseAnalyze)(const VP37CurrentPhaseSample *samples,
       out->profileValid = false;
     } else {
       out->profileAmps[bin] =
-          VP37_currentRawToAmps((uint16_t)((profileRaw[bin] + n / 2U) / n));
-      out->profileUs[bin] = (profileTime[bin] + n / 2U) / n;
+          VP37_currentRawToAmps((uint16_t)((profileRaw[bin] + (n / 2U)) / n));
+      out->profileUs[bin] = (profileTime[bin] + (n / 2U)) / n;
     }
   }
   return HAL_OK;
@@ -261,6 +264,10 @@ hal_status_t VP37_currentScanStart(void) {
   config.pins[2] = VP37_SUPPLY_ADC_PIN;
   config.pin_count = VP37_CURRENT_SCAN_PINS;
   config.conversion_period_ns = VP37_CURRENT_SCAN_CONVERSION_NS;
+  /* Both halves of the scan block; the scan owns them while it runs. */
+  static uint16_t
+      s_scanBuffer[2U * VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS]
+      __attribute__((aligned(4)));
   config.buffer = s_scanBuffer;
   config.block_frames = VP37_CURRENT_SCAN_BLOCK_FRAMES;
   const hal_status_t status = hal_adc_scan_start(&config);
@@ -461,8 +468,8 @@ static hal_status_t HAL_RAM_FUNC(VP37_currentScanReducePeriod)(
       (supplyCount[1] >= VP37_CURRENT_SUPPLY_MIN_PER_PHASE)) {
     const float onFraction = (float)onTimeUs / (float)periodUs;
     const float rawMean =
-        ((float)supplySum[1] / (float)supplyCount[1]) * onFraction +
-        ((float)supplySum[0] / (float)supplyCount[0]) * (1.0f - onFraction);
+        (((float)supplySum[1] / (float)supplyCount[1]) * onFraction) +
+        (((float)supplySum[0] / (float)supplyCount[0]) * (1.0f - onFraction));
     supplyValid = fiesta_adc_to_voltage_ex(
                       (int)(rawMean + 0.5f), (float)VP37_SUPPLY_DIVIDER_R1,
                       (float)VP37_SUPPLY_DIVIDER_R2, &supplyVolts) == HAL_OK;
@@ -651,6 +658,9 @@ hal_status_t HAL_RAM_FUNC(VP37_currentScanCollect)(VP37CurrentPulseResult *out,
   *sequence = s_scanHistorySequence;
   s_scanPending = false;
   hal_status_t reduced = HAL_OK;
+  /* The completed pulse survives between collects of the same period. */
+  static VP37CurrentPulseResult s_scanPulse;
+  static uint32_t s_scanPulseFall;
   if (s_scanPulseCached && s_scanEdges.found &&
       (s_scanPulseFall == s_scanEdges.periodFall) &&
       ((s_scanEdges.periodLatch - s_scanFirstFrame) < s_scanHistoryFrames)) {

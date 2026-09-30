@@ -228,11 +228,11 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->callbacks.writeTimingPwm(0);
 
   if (!VP37_makeCalibration(self)) {
-    VP37_updateAdjustometerPosition(self);
+    (void)VP37_updateAdjustometerPosition(self);
     VP37_enableVP37(self, false);
     return VP37_INIT_CALIBRATION_FAILED;
   }
-  VP37_updateAdjustometerPosition(self);
+  (void)VP37_updateAdjustometerPosition(self);
   self->demand.target = -1;
   // Calibration leaves the actuator at the bottom, so the first demand ramps
   // from there. It used to jump straight to its target: a pedal already
@@ -365,11 +365,11 @@ hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value) {
 }
 
 int32_t VP37_getPositionDemandMinValue(const VP37Pump *self) {
-  return self != NULL ? self->feedback.adjustMin : -1;
+  return (self != NULL) ? self->feedback.adjustMin : -1;
 }
 
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self) {
-  return self != NULL ? VP37_demandTop(self) : -1;
+  return (self != NULL) ? VP37_demandTop(self) : -1;
 }
 
 /**
@@ -393,9 +393,9 @@ bool VP37_demandAtRest(const VP37Pump *self) {
 
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
   if (VP37_hasCallbacks(self)) {
-    angle = hal_constrain(angle, 0, 100);
+    const int32_t clamped = hal_constrain(angle, 0, 100);
     self->callbacks.writeTimingPwm(
-        hal_map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
+        hal_map(clamped, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
   }
 }
 
@@ -423,7 +423,7 @@ void VP37_process(VP37Pump *self) {
     return;
   }
   self->controlDtUs =
-      self->controlStarted ? nowUs - self->controlLastUs : periodUs;
+      self->controlStarted ? (nowUs - self->controlLastUs) : periodUs;
   self->controlLastUs = nowUs;
   self->controlStarted = true;
   self->controlSequence++;
@@ -451,7 +451,7 @@ void VP37_process(VP37Pump *self) {
     VP37_stop(self);
     derr("VP37 disabled: drive not allowed");
   } else {
-    self->pidDtUs = self->pidStarted ? nowUs - self->pidLastUs : periodUs;
+    self->pidDtUs = self->pidStarted ? (nowUs - self->pidLastUs) : periodUs;
     self->pidLastUs = nowUs;
     self->pidStarted = true;
     VP37_positionCycle(self);
@@ -503,7 +503,7 @@ static void VP37_positionCycle(VP37Pump *self) {
  */
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
   cycle->previousDesired = self->demand.desired;
-  cycle->previousPosition = cycle->previousDesired < 0
+  cycle->previousPosition = (cycle->previousDesired < 0)
                                 ? (float)self->demand.target
                                 : self->demand.desiredPosition;
   cycle->dt = (float)self->pidDtUs * 0.000001f;
@@ -535,10 +535,10 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
         (float)self->demand.target - self->demand.desiredPosition;
     const float upperStart =
         (float)self->feedback.adjustMin +
-        travel * (VP37_DESIRED_UPPER_SLEW_START_PERCENT * 0.01f);
+        (travel * (VP37_DESIRED_UPPER_SLEW_START_PERCENT * 0.01f));
     const bool upper = (self->demand.desiredPosition >= upperStart);
     const bool standingRise = (delta > 0.0f) && cycle->stationaryTarget;
-    float rate = (delta > 0.0f) && upper
+    float rate = ((delta > 0.0f) && upper)
                      ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
                      : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
     if (standingRise) {
@@ -589,21 +589,21 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
   const float maxRise = assistRate / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
       (cycle->stationaryTarget ? VP37_STATIONARY_RISE_WEIGHT : 1.0f) *
-      (upwardStep > 0.0f ? hal_constrain((self->demand.desiredPosition -
-                                          cycle->previousPosition) /
-                                             upwardStep,
-                                         0.0f, maxRise)
-                         : 0.0f);
+      ((upwardStep > 0.0f) ? hal_constrain((self->demand.desiredPosition -
+                                            cycle->previousPosition) /
+                                               upwardStep,
+                                           0.0f, maxRise)
+                           : 0.0f);
   self->feedforward.riseBlend += (rise - self->feedforward.riseBlend) *
                                  cycle->dt /
                                  (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
   const float fall =
       (cycle->stationaryTarget ? VP37_STATIONARY_FALL_WEIGHT : 1.0f) *
-      (upwardStep > 0.0f ? hal_constrain((cycle->previousPosition -
-                                          self->demand.desiredPosition) /
-                                             upwardStep,
-                                         0.0f, maxFall)
-                         : 0.0f);
+      ((upwardStep > 0.0f) ? hal_constrain((cycle->previousPosition -
+                                            self->demand.desiredPosition) /
+                                               upwardStep,
+                                           0.0f, maxFall)
+                           : 0.0f);
   self->feedforward.fallBlend += (fall - self->feedforward.fallBlend) *
                                  cycle->dt /
                                  (VP37_PWM_FF_MOTION_FILTER_S + cycle->dt);
@@ -627,7 +627,7 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
   self->pid.integralLimit = VP37_integralLimit(self);
   cycle->ki = hal_pid_controller_get_ki(self->pid.controller);
   const float maxIntegral =
-      cycle->ki > 0.0f ? self->pid.integralLimit / cycle->ki : 0.0f;
+      (cycle->ki > 0.0f) ? (self->pid.integralLimit / cycle->ki) : 0.0f;
   hal_pid_controller_set_max_integral(self->pid.controller, maxIntegral);
 }
 
@@ -731,9 +731,9 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
  */
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool rampWindup =
-      cycle->previousDesired >= 0 &&
-      self->demand.desired != cycle->previousDesired &&
-      self->pid.terms.integral * cycle->ki * (float)self->pid.error >= 0.0f;
+      (cycle->previousDesired >= 0) &&
+      (self->demand.desired != cycle->previousDesired) &&
+      ((self->pid.terms.integral * cycle->ki * (float)self->pid.error) >= 0.0f);
   const bool targetSettled =
       cycle->stationaryTarget && (self->demand.desired == self->demand.target);
   VP37_updateDerivativeGain(self, targetSettled);

@@ -1,6 +1,7 @@
 #ifndef T_VP37_CURRENT
 #define T_VP37_CURRENT
 
+#include "../vp37_drive_config.h"
 #include <JaszczurHAL.h>
 
 #ifdef __cplusplus
@@ -10,8 +11,10 @@ extern "C" {
 /** Highest 12-bit ADC code; reaching it marks a clipped observation. */
 #define VP37_CURRENT_ADC_MAX_RAW 4095U
 /** Interval between `VP37 IPULSE` reports on core 0, in milliseconds. */
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_CURRENT_REPORT_MS 20U
 /** Interval between bench ON-profile reports on core 0, in milliseconds. */
+// cppcheck-suppress misra-c2012-2.5 ; DR-012: bench-build macro
 #define VP37_CURRENT_WAVE_REPORT_MS 100U
 /** Equal time bins within the guarded ON phase, for electrical diagnostics. */
 #define VP37_CURRENT_PROFILE_BINS 8U

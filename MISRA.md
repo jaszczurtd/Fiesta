@@ -83,6 +83,19 @@ that directory, and compared by file and rule ID only the path prefix of the
 module's findings changed. The rule 8.7 suppressions of DR-005 follow the new
 paths.
 
+Later on 2026-09-30 the VP37 module and the Adjustometer came under MISRA
+requirements (step 4 of the module extraction): **zero active findings** in
+`src/common/vp37`, the shared protocol headers and `src/Adjustometer`, held
+there by gate 4 of `runalltests.sh` (`check_misra.sh --fail-paths`, and a
+second run with `--project src/Adjustometer`). Mandatory: none were present.
+Required and Advisory were fixed in code, with these recorded exceptions:
+rule 15.5 (single exit) stays as deviation DR-009, the TESTABLE_STATIC scan
+context as DR-010, the shared protocol register map as DR-011, and the
+configuration-dependent header macros as DR-012; rule 21.25 remains DR-008.
+The ECU-wide count is **870** (590 in `src/ECU`, 280 in shared
+`src/common` sources); the drop from 1023 is the VP37 share of the cleanup.
+The rest of `src/ECU` remains a screening snapshot outside the gate.
+
 At commit `8cc5d2f` the same run gave 1046. The shared configurator session
 (`sc_config_session_t` in `sc_command_handlers.c`, used by every firmware
 module) removed one rule 15.5 and one rule 8.9 finding from `config.c`. It also

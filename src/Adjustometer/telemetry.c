@@ -6,7 +6,7 @@ static_assert(ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES <=
                   HAL_I2C_SLAVE_REG_MAP_SIZE,
               "Adjustometer feedback exceeds register map");
 #else
-_Static_assert(ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES <=
+_Static_assert((ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES) <=
                    HAL_I2C_SLAVE_REG_MAP_SIZE,
                "Adjustometer feedback exceeds register map");
 #endif
@@ -52,11 +52,12 @@ void publishAdjustometerExtension(const adjustometer_feedback_t *sample,
   if (chipTemp != INT16_MIN) {
     frame[2] |= ADJUSTOMETER_EXT_FLAG_CHIP_TEMP_VALID;
   }
-  jh_store_be32(frame + 3, sample->filteredHz);
-  jh_store_be32(frame + 7, sample->baselineHz);
-  jh_store_be32(frame + 11, (uint32_t)((int32_t)sample->filteredHz -
-                                       (int32_t)sample->baselineHz));
-  jh_store_be16(frame + 15, (uint16_t)chipTemp);
+  jh_store_be32(&frame[3], sample->filteredHz);
+  jh_store_be32(&frame[7], sample->baselineHz);
+  const int32_t deltaHz =
+      (int32_t)sample->filteredHz - (int32_t)sample->baselineHz;
+  jh_store_be32(&frame[11], (uint32_t)deltaHz);
+  jh_store_be16(&frame[15], (uint16_t)chipTemp);
   publishSequencedRegisters(ADJUSTOMETER_EXT_REG_START, frame,
                             (uint8_t)COUNTOF(frame), &sequence);
 }

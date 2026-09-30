@@ -12,15 +12,19 @@
 /* ── Modules used by Adjustometer ────────────────────────────────────── */
 
 #define HAL_ENABLE_I2C_SLAVE /* I2C slave register map - ECU link  */
+// cppcheck-suppress misra-c2012-2.5 ; DR-013: build-system macro
 #define HAL_ENABLE_I2C_SLAVE_SNAPSHOT
 #define HAL_ENABLE_RGB_LED /* NeoPixel status LED                */
+// cppcheck-suppress misra-c2012-2.5 ; DR-013: build-system macro
 #define HAL_ENABLE_APP_TASK1
 #define HAL_I2C_SLAVE_REG_MAP_SIZE 64U
 /* Debug may drop output instead of delaying the auxiliary core. */
 #define HAL_USB_CDC_WRITE_TIMEOUT_MS 0U
 
 /* Native RP system stacks, in bytes. */
+// cppcheck-suppress misra-c2012-2.5 ; DR-013: build-system macro
 #define HAL_RP_CORE0_STACK_SIZE 4096u
+// cppcheck-suppress misra-c2012-2.5 ; DR-013: build-system macro
 #define HAL_RP_CORE1_STACK_SIZE 4096u
 
 #define HAL_ENABLE_PULSE_CAPTURE

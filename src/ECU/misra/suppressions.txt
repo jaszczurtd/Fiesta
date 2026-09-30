@@ -19,3 +19,15 @@ misra-c2012-8.7:*vp37/vp37_current.c
 # DR-006: SerialConfigurator command service API (see deviation-register.md).
 misra-c2012-8.7:*sc_command_handlers.c
 misra-c2012-19.2:*vp37_snapshot.c
+# DR-009: single-exit rule in the VP37 module (see deviation-register.md).
+misra-c2012-15.5:*vp37/*.c
+# DR-010: TESTABLE_STATIC symbols scanned with UNIT_TEST defined.
+misra-c2012-8.7:*vp37/vp37_snapshot.c
+# DR-011: the shared Adjustometer protocol register map.
+misra-c2012-2.5:*adjustometer_protocol.h
+# DR-012: module headers hold macros of the bench build and of other
+# translation units; the tool reports them unused per explored configuration.
+misra-c2012-2.5:*vp37/*.h
+# DR-009 also covers the module's shared inline headers.
+misra-c2012-15.5:*adjustometer_feedback.h
+misra-c2012-15.5:*fiesta_sensor_helpers.h

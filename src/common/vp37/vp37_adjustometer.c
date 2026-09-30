@@ -46,16 +46,16 @@ static adjustometer_reading_t VP37_readFastFeedback(VP37Pump *self) {
   uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
   adjustometer_feedback_t decoded = {0};
   hal_status_t status = HAL_EBUS;
-  for (uint8_t attempt = 0U; attempt < VP37_ADJ_FEEDBACK_ATTEMPTS; attempt++) {
+  bool tornFrame = true;
+  for (uint8_t attempt = 0U;
+       (attempt < VP37_ADJ_FEEDBACK_ATTEMPTS) && tornFrame; attempt++) {
     retries = attempt;
     status = self->callbacks.adjustometerTransfer(ADJUSTOMETER_FEEDBACK_START,
                                                   frame, COUNTOF(frame));
-    if (status != HAL_OK) {
-      break;
-    }
-    status = adjustometer_feedback_decode(frame, &decoded);
-    if (status != HAL_EAGAIN) {
-      break;
+    tornFrame = false;
+    if (status == HAL_OK) {
+      status = adjustometer_feedback_decode(frame, &decoded);
+      tornFrame = (status == HAL_EAGAIN);
     }
   }
   const uint32_t nowUs = hal_micros();
@@ -68,15 +68,15 @@ static adjustometer_reading_t VP37_readFastFeedback(VP37Pump *self) {
   snapshot.commOk = status == HAL_OK;
   if (status == HAL_OK) {
     const bool tracked = self->adjustometer.sampleTracked;
-    const bool advanced = !tracked || decoded.number != snapshot.sampleNumber;
+    const bool advanced = !tracked || (decoded.number != snapshot.sampleNumber);
     const bool clockBackwards =
-        tracked && (uint32_t)(decoded.measuredUs - snapshot.measuredUs) >=
-                       UINT32_C(0x80000000);
+        tracked && ((decoded.measuredUs - snapshot.measuredUs) >= 0x80000000U);
     if (advanced) {
       self->adjustometer.sampleChangedUs = nowUs;
     }
     snapshot.feedbackFresh =
-        !clockBackwards && decoded.ageUs <= ADJUSTOMETER_FEEDBACK_MAX_AGE_US &&
+        !clockBackwards &&
+        (decoded.ageUs <= ADJUSTOMETER_FEEDBACK_MAX_AGE_US) &&
         !hal_elapsed_u32(nowUs, self->adjustometer.sampleChangedUs,
                          ADJUSTOMETER_FEEDBACK_MAX_AGE_US);
     self->adjustometer.sampleTracked = true;
@@ -135,8 +135,8 @@ static bool VP37_readExtendedOnce(const VP37Pump *self,
       buf[ADJUSTOMETER_REG_EXT_SEQ_BEGIN - ADJUSTOMETER_EXT_REG_START];
   const uint8_t seqEnd =
       buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START];
-  if (version != ADJUSTOMETER_EXT_VERSION || seqBegin != seqEnd ||
-      (seqBegin & 1U) != 0U) {
+  if ((version != ADJUSTOMETER_EXT_VERSION) || (seqBegin != seqEnd) ||
+      ((seqBegin & 1U) != 0U)) {
     return false;
   }
   out->extendedFlags =

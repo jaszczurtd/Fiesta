@@ -1,0 +1,14 @@
+# Adjustometer MISRA suppressions; every entry has a row in
+# src/ECU/misra/deviation-register.md.
+# DR-009: guard clauses stay; single point of exit is not adopted.
+misra-c2012-15.5
+# DR-010: TESTABLE_STATIC readers scanned with UNIT_TEST defined.
+misra-c2012-8.7:sensors.c
+# DR-011: the shared protocol register map.
+misra-c2012-2.5:*adjustometer_protocol.h
+# DR-012: shared module headers report other builds' macros as unused.
+misra-c2012-2.5:*vp37/*.h
+misra-c2012-2.5:*vp37_drive_config.h
+# Out of this module's scope: the repo-wide CAN and configurator definitions.
+misra-c2012-2.5:*canDefinitions.h
+misra-c2012-2.5:*sc_fiesta_module_tokens.h

@@ -154,7 +154,7 @@ run_module_target() {
     pass "[${name}] ${target} passed"
 }
 
-header "Gate 1/6: Checking required tools"
+header "Gate 1/7: Checking required tools"
 
 REQUIRED_TOOLS=(cmake ctest gcc g++ make python3 git java)
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
@@ -187,7 +187,7 @@ pass "All required tools present."
 run_logged "/tmp/fiesta_tooling_tests.log" \
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-header "Gate 2/6: Host runtime tests for all modules"
+header "Gate 2/7: Host runtime tests for all modules"
 for entry in "${MODULE_MATRIX[@]}"; do
     IFS=':' read -r name src_rel build_rel <<< "${entry}"
     configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}"
@@ -195,39 +195,51 @@ done
 pass "All module host tests passed."
 
 if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
-    header "Gate 3/6: Static analysis - cppcheck (${FIESTA_CPPCHECK_MODULES[*]})"
+    header "Gate 3/7: Static analysis - cppcheck (${FIESTA_CPPCHECK_MODULES[*]})"
     for name in "${FIESTA_CPPCHECK_MODULES[@]}"; do
         run_module_target "${name}" "$(module_build_dir "${name}")" "check-cppcheck"
     done
     pass "cppcheck gate passed."
 else
-    info "Gate 3/6 skipped (--skip-cppcheck)."
+    info "Gate 3/7 skipped (--skip-cppcheck)."
 fi
 
-header "Gate 4/6: Duplicate detection - PMD CPD"
+# The VP37 module and the Adjustometer are kept at zero active MISRA
+# findings; anything outside the deviation register stops the gate. The rest
+# of src/ECU stays a screening snapshot (MISRA.md).
+header "Gate 4/7: MISRA - src/common/vp37 and src/Adjustometer"
+run_logged "/tmp/fiesta_misra_vp37.log" \
+    bash src/ECU/misra/check_misra.sh -q \
+    --fail-paths '^\.\./common/(vp37/|adjustometer_|fiesta_|vp37_drive_config)'
+run_logged "/tmp/fiesta_misra_adjustometer.log" \
+    bash src/ECU/misra/check_misra.sh -q --project src/Adjustometer \
+    --fail-paths '^[^.]|^/|^\.\./common/(vp37/|adjustometer_|fiesta_|vp37_drive_config)'
+pass "MISRA gate passed: no findings outside the deviation register."
+
+header "Gate 5/7: Duplicate detection - PMD CPD"
 run_logged "/tmp/fiesta_cpd.log" python3 scripts/fiesta_cpd.py
 pass "PMD CPD found no duplicate groups."
 
 if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
-    header "Gate 5/6: Valgrind memcheck targets"
+    header "Gate 6/7: Valgrind memcheck targets"
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-valgrind"
     done
     pass "Valgrind gate passed for all modules."
 else
-    info "Gate 5/6 skipped (--skip-valgrind)."
+    info "Gate 6/7 skipped (--skip-valgrind)."
 fi
 
 if [[ "${SKIP_CLANG_TIDY}" -eq 0 ]]; then
-    header "Gate 6/6: clang-tidy targets"
+    header "Gate 7/7: clang-tidy targets"
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-clang-tidy"
     done
     pass "clang-tidy gate passed for all modules."
 else
-    info "Gate 6/6 skipped (--skip-clang-tidy)."
+    info "Gate 7/7 skipped (--skip-clang-tidy)."
 fi
 
 echo ""

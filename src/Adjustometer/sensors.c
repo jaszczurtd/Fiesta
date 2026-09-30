@@ -1,6 +1,7 @@
 
 #include "sensors.h"
 #include "../common/fiesta_sensor_helpers.h"
+#include "../common/fiesta_unit_testing.h"
 #include "hal/core/hal_compiler.h"
 #include <hal/i2c/hal_i2c_slave.h>
 #include <math.h>
@@ -9,29 +10,36 @@
 // Signed right-shift must be arithmetic (sign-extending) for EMA filters to
 // work correctly. GCC guarantees this; the assertion guards against
 // non-conforming toolchains.
-#ifdef __cplusplus
-static_assert((-1 >> 1) == -1,
-              "Arithmetic right-shift required for signed integers");
-#else
-_Static_assert((-1 >> 1) == -1,
-               "Arithmetic right-shift required for signed integers");
-#endif
+/** @brief Floor division by a power of two: what an arithmetic right shift
+ * of a negative value computes, spelled without one. */
+static int32_t floorShift(int32_t value, uint32_t shift) {
+  const uint32_t width = (uint32_t)1U << shift;
+  const int32_t divisor = (int32_t)width;
+  int32_t quotient = value / divisor;
+  if ((value < 0) && ((value % divisor) != 0)) {
+    quotient--;
+  }
+  return quotient;
+}
 
 static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs);
 static bool captureStarted;
 static uint32_t captureRetryUs;
 static bool captureHealthy;
-static uint32_t captureTicks[4];
-static uint8_t captureIndex, captureFilled;
-#if ADJUSTOMETER_PWM_FILTER_US
+static uint8_t captureIndex;
+static uint8_t captureFilled;
+#if (ADJUSTOMETER_PWM_FILTER_US) != 0U
 typedef struct {
   uint32_t durationUs;
-  float firstHz, lastHz;
+  float firstHz;
+  float lastHz;
 } frequency_interval_t;
 static struct {
   frequency_interval_t intervals[32];
-  size_t head, count;
-  uint32_t previousUs, previousHz;
+  size_t head;
+  size_t count;
+  uint32_t previousUs;
+  uint32_t previousHz;
   bool ready;
 } frequencyWindow;
 #endif
@@ -55,16 +63,14 @@ void initI2C(void) {
 }
 
 /**
- * @brief Configure GPIO and ADC resources required by the Adjustometer.
+ * @brief Reset sensor state and start hardware period capture.
  */
-void initBasicPIO(void) {
+/** @brief Configure the GPIO and ADC resources of the module. */
+static void initBasicPIO(void) {
   hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
   hal_adc_set_resolution(HAL_ADC_UTIL_DEFAULT_BITS);
 }
 
-/**
- * @brief Reset sensor state and start hardware period capture.
- */
 void initSensors(void) {
   resetSensorsState();
   initBasicPIO();
@@ -145,11 +151,12 @@ static inline uint32_t applyAdjustometerEma(uint32_t rawHz,
 #if ADJUSTOMETER_SLIDING_WINDOW
   if (adjustometerBaselineReady) {
     // 71/1024 approximates 1-(3/4)^(1/4); retain fractional hertz.
-    const int64_t previous = (int64_t)filteredHz * 65536 + slidingEmaFraction;
+    const int64_t previous = ((int64_t)filteredHz * 65536) + slidingEmaFraction;
     const int64_t next =
-        previous + (((int64_t)rawHz * 65536 - previous) * 71) / 1024;
-    const uint32_t rounded = (uint32_t)((next + 32768) / 65536);
-    slidingEmaFraction = (int32_t)(next - (int64_t)rounded * 65536);
+        previous + (((((int64_t)rawHz * 65536) - previous) * 71) / 1024);
+    const int64_t scaled = (next + 32768) / 65536;
+    const uint32_t rounded = (uint32_t)scaled;
+    slidingEmaFraction = (int32_t)(next - ((int64_t)rounded * 65536));
     return rounded;
   }
 #endif
@@ -157,10 +164,14 @@ static inline uint32_t applyAdjustometerEma(uint32_t rawHz,
   // EMA: filtered += (rawHz - filtered) / (2^SHIFT)
   // Guarantee minimum ±1 step when delta != 0 to prevent integer truncation
   // stall (positive delta < 2^SHIFT would otherwise truncate to 0).
-  int32_t delta = (int32_t)rawHz - (int32_t)filteredHz;
-  int32_t step = delta >> ADJUSTOMETER_EMA_SHIFT;
-  if (step == 0 && delta != 0) {
-    step = (delta > 0) ? 1 : -1;
+  const int32_t delta = (int32_t)rawHz - (int32_t)filteredHz;
+  int32_t step = floorShift(delta, ADJUSTOMETER_EMA_SHIFT);
+  if ((step == 0) && (delta != 0)) {
+    if (delta > 0) {
+      step = 1;
+    } else {
+      step = -1;
+    }
   }
   return filteredHz + (uint32_t)step;
 }
@@ -175,12 +186,13 @@ static inline uint32_t absDiffU32(uint32_t a, uint32_t b) {
   return (a >= b) ? (a - b) : (b - a);
 }
 
-#if ADJUSTOMETER_PWM_FILTER_US
+#if (ADJUSTOMETER_PWM_FILTER_US) != 0U
 /** Average one drive period using capture time, including a partial oldest
  * interval. Linear interpolation avoids a sample-count-dependent PWM notch. */
 static uint32_t averageDrivePeriod(uint32_t rawHz, uint32_t nowUs) {
+  const uint32_t filterUs = ADJUSTOMETER_PWM_FILTER_US;
   const uint32_t dt = nowUs - frequencyWindow.previousUs;
-  if (!frequencyWindow.ready || dt > ADJUSTOMETER_PWM_FILTER_US) {
+  if (!frequencyWindow.ready || (dt > filterUs)) {
     frequencyWindow.head = 0U;
     frequencyWindow.count = 0U;
     frequencyWindow.previousHz = rawHz;
@@ -198,26 +210,28 @@ static uint32_t averageDrivePeriod(uint32_t rawHz, uint32_t nowUs) {
   }
   frequencyWindow.previousUs = nowUs;
   frequencyWindow.previousHz = rawHz;
-  uint32_t remainingUs = ADJUSTOMETER_PWM_FILTER_US;
+  uint32_t remainingUs = filterUs;
   float area = 0.0f;
   float oldestHz = (float)rawHz;
   size_t index = frequencyWindow.head;
-  for (size_t i = 0U; i < frequencyWindow.count && remainingUs > 0U; ++i) {
+  for (size_t i = 0U; (i < frequencyWindow.count) && (remainingUs > 0U); ++i) {
     index = (index + COUNTOF(frequencyWindow.intervals) - 1U) %
             COUNTOF(frequencyWindow.intervals);
     const frequency_interval_t *interval = &frequencyWindow.intervals[index];
-    const uint32_t takeUs =
-        remainingUs < interval->durationUs ? remainingUs : interval->durationUs;
+    const uint32_t takeUs = (remainingUs < interval->durationUs)
+                                ? remainingUs
+                                : interval->durationUs;
     const float fraction = (float)takeUs / (float)interval->durationUs;
     area += (float)takeUs *
             (interval->lastHz +
-             0.5f * fraction * (interval->firstHz - interval->lastHz));
+             (0.5f * fraction * (interval->firstHz - interval->lastHz)));
     oldestHz = interval->firstHz;
     remainingUs -= takeUs;
   }
   area += (float)remainingUs * oldestHz;
-  const float average = area / (float)ADJUSTOMETER_PWM_FILTER_US;
-  return average >= (float)UINT32_MAX ? UINT32_MAX : (uint32_t)(average + 0.5f);
+  const float average = area / (float)filterUs;
+  return (average >= (float)UINT32_MAX) ? UINT32_MAX
+                                        : (uint32_t)(average + 0.5f);
 }
 #endif
 
@@ -229,7 +243,7 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
   HAL_ATOMIC_STORE(&adjustometerRawHz, rawHz, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&adjustometerMeasuredUs, nowUs, HAL_ATOMIC_RELAXED);
   uint32_t filtered;
-#if ADJUSTOMETER_PWM_FILTER_US
+#if (ADJUSTOMETER_PWM_FILTER_US) != 0U
   if (HAL_ATOMIC_LOAD(&adjustometerBaselineReady, HAL_ATOMIC_ACQUIRE)) {
     filtered = averageDrivePeriod(rawHz, nowUs);
   } else
@@ -248,10 +262,12 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
         adjustometerBaselineEstimate = filtered;
         adjustometerBaselineStableWindows = 0U;
       } else {
-        adjustometerBaselineEstimate =
-            adjustometerBaselineEstimate +
-            (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
-             ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+        const int32_t tracked =
+            (int32_t)adjustometerBaselineEstimate +
+            floorShift((int32_t)filtered -
+                           (int32_t)adjustometerBaselineEstimate,
+                       ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+        adjustometerBaselineEstimate = (uint32_t)tracked;
 
         if (absDiffU32(filtered, adjustometerBaselineEstimate) <=
             ADJUSTOMETER_BASELINE_LOCK_TOLERANCE_HZ) {
@@ -309,10 +325,12 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
         HAL_ATOMIC_STORE(&adjustometerBaselineReady, true, HAL_ATOMIC_RELEASE);
       } else {
         // Still verifying - keep EMA-tracking so final baseline is accurate
-        adjustometerBaselineEstimate =
-            adjustometerBaselineEstimate +
-            (((int32_t)filtered - (int32_t)adjustometerBaselineEstimate) >>
-             ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+        const int32_t tracked =
+            (int32_t)adjustometerBaselineEstimate +
+            floorShift((int32_t)filtered -
+                           (int32_t)adjustometerBaselineEstimate,
+                       ADJUSTOMETER_BASELINE_TRACK_SHIFT);
+        adjustometerBaselineEstimate = (uint32_t)tracked;
       }
     }
     HAL_ATOMIC_STORE(&adjustometerPulse, (int32_t)0, HAL_ATOMIC_RELEASE);
@@ -344,9 +362,10 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
           adjustometerZeroCandidateWindows = 1U;
         }
 
-        if (adjustometerZeroCandidateWindows <
+        const uint32_t releaseWindows =
             ADJUSTOMETER_ZERO_HOLD_RELEASE_WINDOWS *
-                (ADJUSTOMETER_SLIDING_WINDOW ? 4U : 1U)) {
+            ((ADJUSTOMETER_SLIDING_WINDOW != 0) ? 4U : 1U);
+        if (adjustometerZeroCandidateWindows < releaseWindows) {
           pulse = 0;
         } else {
           adjustometerZeroHold = false;
@@ -354,6 +373,8 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
           adjustometerZeroCandidateWindows = 0U;
         }
       }
+    } else {
+      /* No hold: the live pulse goes out as measured. */
     }
 
     HAL_ATOMIC_STORE(&adjustometerPulse, pulse, HAL_ATOMIC_RELEASE);
@@ -363,7 +384,7 @@ static void processAdjustometerFrequency(uint32_t rawHz, uint32_t nowUs) {
 
 /** @brief Discard an incomplete window after capture loss. */
 static void discardCaptureWindow(void) {
-#if ADJUSTOMETER_PWM_FILTER_US
+#if (ADJUSTOMETER_PWM_FILTER_US) != 0U
   frequencyWindow.ready = false;
 #endif
   captureIndex = 0U;
@@ -379,22 +400,26 @@ static void discardCaptureWindow(void) {
 void updateAdjustometerCapture(void) {
   if (!captureStarted) {
     const uint32_t nowUs = hal_micros();
-    if (!hal_elapsed_u32(nowUs, captureRetryUs, 100000U))
+    if (!hal_elapsed_u32(nowUs, captureRetryUs, 100000U)) {
       return;
+    }
     captureRetryUs = nowUs;
-    captureStarted = hal_pulse_capture_deinit() == HAL_OK &&
-                     hal_pulse_capture_init(&captureConfig) == HAL_OK;
+    captureStarted = (hal_pulse_capture_deinit() == HAL_OK) &&
+                     (hal_pulse_capture_init(&captureConfig) == HAL_OK);
     return;
   }
+  static uint32_t captureTicks[4];
   for (unsigned int block = 0U; block < 64U; ++block) {
     hal_pulse_capture_sample_t sample;
     const hal_status_t status = hal_pulse_capture_read(&sample);
-    if (status == HAL_EAGAIN)
+    if (status == HAL_EAGAIN) {
       return;
+    }
     if (status != HAL_OK) {
       discardCaptureWindow();
-      if (status == HAL_ETIMEOUT)
+      if (status == HAL_ETIMEOUT) {
         return;
+      }
       (void)hal_pulse_capture_deinit();
       captureStarted = false;
       captureRetryUs = hal_micros();
@@ -404,16 +429,19 @@ void updateAdjustometerCapture(void) {
                      HAL_ATOMIC_RELEASE);
     captureTicks[captureIndex] = sample.ticks;
     captureIndex = (uint8_t)((captureIndex + 1U) % COUNTOF(captureTicks));
-    if (captureFilled < COUNTOF(captureTicks))
+    if (captureFilled < COUNTOF(captureTicks)) {
       ++captureFilled;
-    if (captureFilled < COUNTOF(captureTicks))
+    }
+    if (captureFilled < COUNTOF(captureTicks)) {
       continue;
+    }
     uint64_t ticks = 0U;
-    for (size_t i = 0U; i < COUNTOF(captureTicks); ++i)
+    for (size_t i = 0U; i < COUNTOF(captureTicks); ++i) {
       ticks += captureTicks[i];
+    }
     const uint32_t rawHz =
-        (uint32_t)(((uint64_t)ADJUSTOMETER_PULSE_WINDOW * sample.clock_hz +
-                    ticks / 2U) /
+        (uint32_t)((((uint64_t)ADJUSTOMETER_PULSE_WINDOW * sample.clock_hz) +
+                    (ticks / 2U)) /
                    ticks);
     processAdjustometerFrequency(rawHz, sample.measured_us);
     if (!ADJUSTOMETER_SLIDING_WINDOW || !adjustometerBaselineReady) {
@@ -446,6 +474,8 @@ static bool isSignalLost(void) {
       dynamicLossUs = ADJUSTOMETER_SIGNAL_LOSS_MIN_US;
     } else if (dynamicLossUs > ADJUSTOMETER_SIGNAL_LOSS_MAX_US) {
       dynamicLossUs = ADJUSTOMETER_SIGNAL_LOSS_MAX_US;
+    } else {
+      /* Between the bounds: the dynamic value stands. */
     }
     signalLossUs = dynamicLossUs;
   }
@@ -527,18 +557,20 @@ uint32_t getBaseline(void) {
  * @brief Reset all runtime sensor, baseline and filter state.
  */
 static void resetSensorsState(void) {
-#if ADJUSTOMETER_PWM_FILTER_US
+#if (ADJUSTOMETER_PWM_FILTER_US) != 0U
   frequencyWindow.ready = false;
 #endif
   adjustometerRawHz = 0;
   adjustometerMeasuredUs = 0;
   adjustometerSampleSequence = 0;
-  auxiliaryTelemetry =
-      (uint32_t)(ADJ_STATUS_FUEL_TEMP_BROKEN | ADJ_STATUS_VOLTAGE_BAD) << 16;
+  const uint32_t brokenStatus =
+      (uint32_t)ADJ_STATUS_FUEL_TEMP_BROKEN | (uint32_t)ADJ_STATUS_VOLTAGE_BAD;
+  auxiliaryTelemetry = brokenStatus << 16;
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
-  captureIndex = captureFilled = 0U;
+  captureIndex = 0U;
+  captureFilled = 0U;
   HAL_ATOMIC_STORE(&captureHealthy, false, HAL_ATOMIC_RELEASE);
   adjustometerFilteredHz = 0;
   adjustometerBaselineStartUs = 0;
@@ -568,28 +600,31 @@ static float adcEma(float raw, float prev) {
   if (prev < 0.0f) {
     return raw;
   }
-  return prev + ((raw - prev) / (float)(1U << ADC_EMA_SHIFT));
+  const uint32_t weight = 1UL << ADC_EMA_SHIFT;
+  return prev + ((raw - prev) / (float)weight);
 }
 
 /**
  * @brief Read and filter the module supply voltage.
  * @return Tenths-of-volt value clamped to an 8-bit register.
  */
-uint8_t getSupplyVoltageRaw(void) {
+TESTABLE_STATIC uint8_t getSupplyVoltageRaw(void) {
   float avgAdc = 0.0f;
   float volts = 0.0f;
-  if (fiesta_adc_read_average_ex(ADC_VOLT_PIN, &avgAdc) != HAL_OK ||
-      fiesta_adc_to_voltage_ex((int)(avgAdc + 0.5f), (float)VDIV_R1_KOHM,
-                               (float)VDIV_R2_KOHM, &volts) != HAL_OK) {
+  if ((fiesta_adc_read_average_ex(ADC_VOLT_PIN, &avgAdc) != HAL_OK) ||
+      (fiesta_adc_to_voltage_ex((int)(avgAdc + 0.5f), (float)VDIV_R1_KOHM,
+                                (float)VDIV_R2_KOHM, &volts) != HAL_OK)) {
     volts = 0.0f;
   }
   filteredVoltage = adcEma(volts, filteredVoltage);
-  if (isnan(filteredVoltage) || filteredVoltage < 0.0f)
+  if (isnan(filteredVoltage) || (filteredVoltage < 0.0f)) {
     filteredVoltage = 0.0f;
+  }
   // Return tenths-of-volt clamped to uint8_t (0 = 0.0 V, 255 = 25.5 V).
-  float tv = filteredVoltage * 10.0f + 0.5f;
-  if (tv > 255.0f)
+  float tv = (filteredVoltage * 10.0f) + 0.5f;
+  if (tv > 255.0f) {
     tv = 255.0f;
+  }
   return (uint8_t)tv;
 }
 
@@ -598,19 +633,22 @@ uint8_t getSupplyVoltageRaw(void) {
  * @return Rounded fuel temperature in degrees Celsius as an 8-bit value.
  * @note This is the module's G81-like fuel-temperature input.
  */
-uint8_t getFuelTemperatureRaw(void) {
+TESTABLE_STATIC uint8_t getFuelTemperatureRaw(void) {
   float tempC = 0.0f;
   if (fiesta_ntc_read_temperature_ex(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A,
                                      R_VP37_FUEL_B, &tempC) != HAL_OK) {
     tempC = 0.0f;
   }
-  if (isnan(tempC))
+  if (isnan(tempC) != 0) {
     tempC = 0.0f;
+  }
   filteredFuelTemp = adcEma(tempC, filteredFuelTemp);
-  if (isnan(filteredFuelTemp) || filteredFuelTemp < 0.0f)
+  if (isnan(filteredFuelTemp) || (filteredFuelTemp < 0.0f)) {
     filteredFuelTemp = 0.0f;
-  if (filteredFuelTemp > 255.0f)
+  }
+  if (filteredFuelTemp > 255.0f) {
     filteredFuelTemp = 255.0f;
+  }
   return (uint8_t)(filteredFuelTemp + 0.5f);
 }
 
@@ -621,7 +659,7 @@ void updateAuxiliarySensors(void) {
   if (fuelTemp == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
     status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
   }
-  if (voltage < ADJ_VOLTAGE_MIN_TV || voltage > ADJ_VOLTAGE_MAX_TV) {
+  if ((voltage < ADJ_VOLTAGE_MIN_TV) || (voltage > ADJ_VOLTAGE_MAX_TV)) {
     status |= ADJ_STATUS_VOLTAGE_BAD;
   }
   const uint32_t packed =
@@ -663,7 +701,7 @@ hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out) {
       continue;
     }
     const uint32_t ageUs = hal_micros() - sample.measuredUs;
-    sample.ageUs = (uint16_t)(ageUs > UINT16_MAX ? UINT16_MAX : ageUs);
+    sample.ageUs = (uint16_t)((ageUs > UINT16_MAX) ? UINT16_MAX : ageUs);
     *out = sample;
     return HAL_OK;
   }
