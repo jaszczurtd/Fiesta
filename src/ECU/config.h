@@ -205,9 +205,6 @@ extern "C" {
 #define MAX_LAMP_TIME 10 // Maximum lamp time in seconds
 #define MIN_LAMP_TIME 1  // Minimum lamp time in seconds
 
-// Nominal voltage for VP37 correction factor calculation.
-#define NOMINAL_VOLTAGE 12.0f
-
 /* ============================================================================
  * TWEAKABLE PARAMETERS (runtime-calibrated)
  * ==========================================================================*/

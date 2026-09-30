@@ -4,6 +4,9 @@
 
 #include <hal/analog/hal_adc_utils.h>
 #include <hal/temperature/hal_ntc.h>
+#if defined(HAL_ENABLE_ADC_SCAN)
+#include <hal/analog/hal_adc_scan.h>
+#endif
 
 #include <stddef.h>
 #include <stdint.h>
@@ -51,6 +54,45 @@ static inline hal_status_t fiesta_adc_to_voltage_ex(int raw,
   return hal_adc_raw_to_voltage_ex(raw, 3.3f, HAL_ADC_UTIL_DEFAULT_BITS,
                                    high_side_resistance, low_side_resistance,
                                    out_voltage);
+}
+
+/**
+ * @brief Spacing between averaged ADC samples [us].
+ *
+ * One scan frame while the HAL ADC scan runs, so every sample comes from a
+ * different frame; ten microseconds for a polled converter.
+ */
+static inline uint16_t fiesta_adc_sample_spacing_us(void) {
+  uint32_t spacing = 10U;
+#if defined(HAL_ENABLE_ADC_SCAN)
+  if (hal_adc_scan_is_running()) {
+    const uint32_t frameUs = (hal_adc_scan_frame_period_ns() + 999U) / 1000U;
+    if (frameUs > spacing) {
+      spacing = frameUs;
+    }
+  }
+#endif
+  return (uint16_t)spacing;
+}
+
+/**
+ * @brief Voltage in front of a divider: source -> R1 -> @p pin -> R2 -> ground.
+ *
+ * Averaged with fiesta_adc_sample_spacing_us() between samples.
+ * @return The voltage [V], or 0 V when the read or the conversion fails.
+ */
+static inline float fiesta_adc_read_divided_volts(uint8_t pin,
+                                                  float high_side_resistance,
+                                                  float low_side_resistance) {
+  float average = 0.0f;
+  float voltage = 0.0f;
+  if ((fiesta_adc_read_average_spaced_ex(pin, fiesta_adc_sample_spacing_us(),
+                                         &average) != HAL_OK) ||
+      (fiesta_adc_to_voltage_ex((int)(average + 0.5f), high_side_resistance,
+                                low_side_resistance, &voltage) != HAL_OK)) {
+    voltage = 0.0f;
+  }
+  return voltage;
 }
 
 /**

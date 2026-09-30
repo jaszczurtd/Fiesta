@@ -169,9 +169,9 @@ void sc_param_reply_get_param_list(const sc_param_descriptor_t *descs,
     return;
   }
 
-  bool first = true;
   bool truncated = false;
   if (descs != NULL) {
+    bool first = true;
     for (size_t i = 0u; i < count; ++i) {
       if (descs[i].id == NULL) {
         continue;
@@ -285,7 +285,7 @@ void sc_param_reply_get_param(const sc_param_descriptor_t *descs, size_t count,
   emit(response, emit_user);
 }
 
-/* ── Phase 8 — staging-mirror writes ──────────────────────────────── */
+/* ── Phase 8 - staging-mirror writes ──────────────────────────────── */
 
 bool sc_param_reply_set_param(const sc_param_descriptor_t *descs, size_t count,
                               void *staging_ctx, const void *active_ctx,

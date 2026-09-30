@@ -1,6 +1,7 @@
 #include "engineMaps.h"
 #include "unity.h"
 #include "vp37.h"
+#include "vp37_maps.h"
 
 void setUp(void) {}
 void tearDown(void) {}

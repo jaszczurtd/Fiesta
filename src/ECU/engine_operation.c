@@ -197,7 +197,7 @@ void engineOperation_process(engineOperation *self) {
   }
 
   VP37Pump *pump = &getECUContext()->injectionPump;
-  if (!pump->vp37Initialized || !pump->feedback.calibrationDone) {
+  if (!VP37_isReady(pump)) {
     engineOperation_reset(self, hal_millis());
     return;
   }

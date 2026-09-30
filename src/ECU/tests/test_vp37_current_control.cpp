@@ -37,7 +37,7 @@ static void capture(uint32_t latchedUs, float amps,
   sample = {};
   sample.periodUs = kPeriodUs;
   sample.onTimeUs =
-      (uint32_t)(((uint64_t)kPeriodUs * (uint32_t)duty) / PWM_RESOLUTION);
+      (uint32_t)(((uint64_t)kPeriodUs * (uint32_t)duty) / VP37_PWM_RESOLUTION);
   sample.pwmCommand = duty;
   sample.latchUs = latchedUs;
   sample.latchPeriodUs = kPeriodUs;
@@ -302,7 +302,7 @@ static SimulationResult simulateCurrentLoop(bool enabled,
   s_pump.supply.localVolts = 12.0f;
   s_pump.supply.lastVolts = 12.0f;
   s_pump.supply.cycleEnabled = true;
-  hal_mock_adc_inject(ADC_VP37_CURRENT_PIN, 0);
+  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 0);
   VP37_currentSenseInit();
   hal_mock_set_micros(0U);
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
@@ -346,7 +346,7 @@ static SimulationResult simulateCurrentLoop(bool enabled,
       pendingPwm =
           (int32_t)std::lround((nominal + s_pump.currentControl.correctionPwm) *
                                s_pump.supply.correction);
-      pendingPwm = hal_constrain(pendingPwm, 0, PWM_RESOLUTION);
+      pendingPwm = hal_constrain(pendingPwm, 0, VP37_PWM_RESOLUTION);
       s_pump.output.finalPWM = pendingPwm;
       VP37_recordCurrentCommand(&s_pump, nominal, pendingPwm, us);
       result.peakCorrection =
@@ -367,18 +367,20 @@ static SimulationResult simulateCurrentLoop(bool enabled,
         }
       }
     }
-    // valToPWM writes PWM_RESOLUTION - drive. The external driver is active
-    // LOW, so physical ON starts after compare and ends at the next wrap.
+    // valToPWM writes VP37_PWM_RESOLUTION - drive. The external driver is
+    // active LOW, so physical ON starts after compare and ends at the next
+    // wrap.
     const bool on =
         (us >= pwmPhaseUs) &&
-        ((uint64_t)(us - cycleStart) * PWM_RESOLUTION >=
-         (uint64_t)(PWM_RESOLUTION - (uint32_t)latchedPwm) * kPeriodUs);
+        ((uint64_t)(us - cycleStart) * VP37_PWM_RESOLUTION >=
+         (uint64_t)(VP37_PWM_RESOLUTION - (uint32_t)latchedPwm) * kPeriodUs);
     if ((us % frameUs) == 0U) {
       frames[frame * VP37_CURRENT_SCAN_PINS] =
           adcCode(on ? coilAmps * 0.22f : 0.0f);
       frames[frame * VP37_CURRENT_SCAN_PINS + 1U] = 1234U;
       const float divider =
-          (float)V_DIVIDER_R2 / (float)(V_DIVIDER_R1 + V_DIVIDER_R2);
+          (float)VP37_SUPPLY_DIVIDER_R2 /
+          (float)(VP37_SUPPLY_DIVIDER_R1 + VP37_SUPPLY_DIVIDER_R2);
       frames[frame * VP37_CURRENT_SCAN_PINS + 2U] =
           adcCode(railAt(us + 16U, disturbance) * divider);
       frame++;

@@ -2,6 +2,7 @@
 #define T_HARDWARECONFIG
 
 #include "../common/adjustometer_protocol.h"
+#include "vp37_power_stage.h"
 #include <libConfig.h>
 
 #ifdef VP37
@@ -9,7 +10,7 @@
 // the upper end stop and static friction on descents (bench, 2026-09-16);
 #include "../common/vp37_drive_config.h"
 #define TURBO_PWM_FREQUENCY_HZ 300
-#define ANGLE_PWM_FREQUENCY_HZ 200
+#define ANGLE_PWM_FREQUENCY_HZ VP37_TIMING_PWM_FREQUENCY_HZ
 #else
 #ifndef VP37_PWM_FREQUENCY_HZ
 #define VP37_PWM_FREQUENCY_HZ 300
@@ -21,14 +22,14 @@
 // RP2040 flash-backed EEPROM emulation size used by ECU module.
 #define ECU_EEPROM_SIZE_BYTES HAL_RP_FLASH_EEPROM_SIZE
 
-#define PWM_WRITE_RESOLUTION 11
-#define PWM_RESOLUTION 2047
+#define PWM_WRITE_RESOLUTION VP37_PWM_WRITE_RESOLUTION
+#define PWM_RESOLUTION VP37_PWM_RESOLUTION
 
 // rpi pio pin numbers
 #define PIO_INTERRUPT_HALL 7
 #define PIO_TURBO 10
-#define PIO_VP37_RPM 9
-#define PIO_VP37_ANGLE 5
+#define PIO_VP37_RPM VP37_QUANTITY_PWM_PIN
+#define PIO_VP37_ANGLE VP37_TIMING_PWM_PIN
 
 #define PIO_DPF_LAMP 8
 
@@ -43,16 +44,10 @@
 #define PIN_MOSI 19
 #define PIN_SCK 18
 
-#define ADC_VOLT_PIN 28
-#define ADC_SENSORS_PIN 27
-// GPIO26 belongs to the VP37 source shunt; no other peripheral may claim it.
-#define ADC_VP37_CURRENT_PIN 26
-
-// Low-side shunt installed in the VP37 quantity-actuator MOSFET source.
-#define VP37_CURRENT_SHUNT_OHMS 0.22f
-// Holding-map adjustment for the installed source shunt; PID gains are
-// separate.
-#define VP37_PWM_FF_HARDWARE_GAIN 1.08f
+#define ADC_VOLT_PIN VP37_SUPPLY_ADC_PIN
+#define ADC_SENSORS_PIN VP37_SCAN_AUX_ADC_PIN
+// The VP37 source shunt; no other peripheral may claim it.
+#define ADC_VP37_CURRENT_PIN VP37_SHUNT_ADC_PIN
 
 // for serial - GPS
 #define SERIAL_RX_GPIO 22
@@ -65,13 +60,6 @@
 // Set CS and INT for OBD-2
 #define CAN1_GPIO 6
 #define CAN1_INT 14
-
-// Maximum wait for Adjustometer baseline calibration at startup [ms].
-// Must accommodate the oscillator warm-up period (ADJUSTOMETER_WARMUP_MS
-// on the Adjustometer side) plus convergence (250 ms) plus post-convergence
-// verification (1000 ms).  Extra margin handles repeated convergence restarts
-// caused by slow oscillator drift on cold power-on.
-#define ADJUSTOMETER_BASELINE_WAIT_MS 8000
 
 // PCF8574 i2c addr
 #define PCF8574_ADDR 0x38
@@ -103,8 +91,8 @@
 
 // real values (resitance) for ECU main supply voltage measurement
 
-#define V_DIVIDER_R1 47
-#define V_DIVIDER_R2 10
+#define V_DIVIDER_R1 VP37_SUPPLY_DIVIDER_R1
+#define V_DIVIDER_R2 VP37_SUPPLY_DIVIDER_R2
 
 // real values (resistance) for temperature (coolant/oil) measurement
 

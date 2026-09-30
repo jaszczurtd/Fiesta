@@ -31,8 +31,6 @@ extern "C" {
 
 /** @brief Longest console line the test layer accepts. */
 #define VP37_CMD_BUF_SIZE 64U
-/** @brief Bench ceiling for the integral cap set by command L. */
-#define VP37_BENCH_INTEGRAL_LIMIT_MAX 360.0f
 
 /** @brief Full 0-100-0 cycles per profile, by default. */
 #ifndef CYCLIC_FULL_CYCLES

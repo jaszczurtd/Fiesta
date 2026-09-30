@@ -44,7 +44,8 @@ add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
 # registry, the sequencer and the console parser.
 # Every unit of the VP37 module, so the fixture binaries never mix units
 # built with the functional tests with archive members built without.
-set(ECU_VP37_SOURCES ../vp37.c ../vp37_feedback.c ../vp37_compensation.c
+set(ECU_VP37_SOURCES ../vp37.c ../vp37_feedback.c ../vp37_adjustometer.c
+    ../vp37_snapshot.c ../vp37_tuning.c ../vp37_compensation.c
     ../vp37_control.c ../vp37_telemetry.c ../vp37_current_control.c)
 set(ECU_TEST_FIXTURE_SOURCES ${ECU_VP37_SOURCES} ../tests.c ../tests_workers.c
     ../tests_helpers.c)
@@ -52,6 +53,39 @@ add_executable(test_vp37_bench test_vp37.cpp ${ECU_TEST_FIXTURE_SOURCES})
 target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_vp37_bench PRIVATE ecu_mock)
 add_test(NAME test_vp37_bench COMMAND test_vp37_bench)
+# The snapshot with its telemetry part, copied while another thread publishes.
+add_executable(test_vp37_snapshot test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
+target_compile_definitions(test_vp37_snapshot PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+target_link_libraries(test_vp37_snapshot PRIVATE ecu_mock)
+add_test(NAME test_vp37_snapshot COMMAND test_vp37_snapshot)
+# Publications from inside the reader's poll delay make the wait deterministic.
+if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_definitions(test_vp37_snapshot PRIVATE VP37_TEST_DELAY_HOOK=1)
+    target_link_options(test_vp37_snapshot PRIVATE "-Wl,--wrap=hal_delay_us")
+    # The same tests under ThreadSanitizer: the cores share the publication
+    # only through atomics, so any plain access to it is reported as a race.
+    # GCC's TSan runtime needs a fixed address layout on kernels with wide
+    # mmap randomization, hence setarch -R. Valgrind skips the label.
+    find_program(ECU_SETARCH setarch)
+    if(ECU_SETARCH)
+        add_executable(test_vp37_snapshot_tsan test_vp37_snapshot.cpp
+            ${ECU_VP37_SOURCES})
+        target_compile_definitions(test_vp37_snapshot_tsan PRIVATE
+            ECU_FUNCTIONAL_TESTS_ENABLED=1 VP37_TEST_DELAY_HOOK=1
+            VP37_SNAPSHOT_TEST_STEPS=20000U)
+        target_compile_options(test_vp37_snapshot_tsan PRIVATE
+            -fsanitize=thread -fno-omit-frame-pointer
+            $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wno-tsan>
+            $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wno-tsan>)
+        target_link_options(test_vp37_snapshot_tsan PRIVATE -fsanitize=thread
+            "-Wl,--wrap=hal_delay_us")
+        target_link_libraries(test_vp37_snapshot_tsan PRIVATE ecu_mock)
+        add_test(NAME test_vp37_snapshot_tsan COMMAND ${ECU_SETARCH}
+            ${CMAKE_SYSTEM_PROCESSOR} -R $<TARGET_FILE:test_vp37_snapshot_tsan>)
+        set_tests_properties(test_vp37_snapshot_tsan PROPERTIES
+            LABELS "sanitizer" ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1")
+    endif()
+endif()
 add_executable(test_tests_registry test_tests_registry.cpp
     ${ECU_TEST_FIXTURE_SOURCES})
 target_compile_definitions(test_tests_registry

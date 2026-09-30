@@ -18,3 +18,4 @@ misra-c2012-8.7:vp37.c
 misra-c2012-8.7:vp37_current.c
 # DR-006: SerialConfigurator command service API (see deviation-register.md).
 misra-c2012-8.7:*sc_command_handlers.c
+misra-c2012-19.2:*vp37_snapshot.c

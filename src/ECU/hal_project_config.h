@@ -29,6 +29,12 @@
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 24u /* SC surface (17) + headroom */
 #define HAL_ENABLE_APP_TASK1
 
+/* The VP37 module's bench telemetry and RAM trace follow the functional-test
+ * image, so a bench build needs no second flag. */
+#if defined(ECU_FUNCTIONAL_TESTS_ENABLED) && (ECU_FUNCTIONAL_TESTS_ENABLED != 0)
+#define VP37_TELEMETRY_ENABLED 1
+#endif
+
 /* One storage layout for firmware and host tests. CMake reads the reservation
  * here to keep the linker boundary and C definitions consistent. */
 #ifndef HAL_RP_FLASH_EEPROM_SIZE

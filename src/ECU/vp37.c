@@ -1,9 +1,11 @@
 // VP37 injection pump: lifecycle, demand and the control cycle. The cycle
-// runs on core 1 under vp37StateMutex and calls into the other units of the
-// module in the order the command is built: feedback, feedforward, the
-// multipliers, the correction loop, the output.
+// runs on the control core, calls into the other units of the module in the
+// order the command is built: feedback, feedforward, the multipliers, the
+// correction loop, the output, and ends by publishing the pump.
 
 #include "vp37_internal.h"
+
+#include "../common/fiesta_sensor_helpers.h"
 #include <math.h>
 #include <string.h>
 
@@ -32,12 +34,57 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm);
 
+static bool VP37_alwaysAllowDrive(void) { return true; }
+static void VP37_noWatchdog(void) {}
+static const char *VP37_noTestName(void) { return NULL; }
+static uint32_t VP37_noCyclicDelay(void) { return 0U; }
+
+hal_status_t VP37_setCallbacks(VP37Pump *self, const VP37Callbacks *callbacks) {
+  hal_status_t status = HAL_EINVAL;
+  if ((self != NULL) && (callbacks != NULL) &&
+      (callbacks->writeQuantityPwm != NULL) &&
+      (callbacks->writeTimingPwm != NULL) &&
+      (callbacks->setDriveEnabled != NULL) &&
+      (callbacks->driveEnabled != NULL) &&
+      (callbacks->adjustometerTransfer != NULL)) {
+    if (self->vp37Initialized || self->servicesFixed) {
+      status = HAL_ESTATE;
+    } else {
+      self->callbacks = *callbacks;
+      if (self->callbacks.driveAllowed == NULL) {
+        self->callbacks.driveAllowed = VP37_alwaysAllowDrive;
+      }
+      if (self->callbacks.feedWatchdog == NULL) {
+        self->callbacks.feedWatchdog = VP37_noWatchdog;
+      }
+      if (self->callbacks.activeTestName == NULL) {
+        self->callbacks.activeTestName = VP37_noTestName;
+      }
+      if (self->callbacks.cyclicDelayMs == NULL) {
+        self->callbacks.cyclicDelayMs = VP37_noCyclicDelay;
+      }
+      status = HAL_OK;
+    }
+  }
+  return status;
+}
+
+/** @brief Whether VP37_setCallbacks() has run; the entry points that reach
+ * the hardware check it, the control step runs only after VP37_init(). */
+static bool VP37_hasCallbacks(const VP37Pump *self) {
+  return self->callbacks.writeQuantityPwm != NULL;
+}
+
 VP37InitStatus VP37_init(VP37Pump *self) {
   if (self->vp37Initialized) {
     return VP37_INIT_ALREADY_INITIALIZED;
   }
+  if (!VP37_hasCallbacks(self)) {
+    return VP37_INIT_OUTPUT_UNAVAILABLE;
+  }
+  self->servicesFixed = true;
 
-  if (!waitForAdjustometerBaseline()) {
+  if (!VP37_waitForAdjustometerBaseline(self)) {
     derr_limited("VP37 init baseline",
                  "VP37 adjustometer baseline not ready, cannot initialize");
     return VP37_INIT_BASELINE_NOT_READY;
@@ -63,8 +110,8 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pid.positiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
   self->output.pwmValue = VP37_PWM_MIN;
   self->supply.correction = 1.0f;
-  self->supply.inputVolts = NOMINAL_VOLTAGE;
-  self->supply.heldVolts = NOMINAL_VOLTAGE;
+  self->supply.inputVolts = VP37_NOMINAL_VOLTAGE;
+  self->supply.heldVolts = VP37_NOMINAL_VOLTAGE;
   self->supply.ready = false;
   self->supply.frozen = false;
   self->output.lastPWMval = -1;
@@ -159,7 +206,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->feedforward.mapTrimTransfers = 0U;
   // The bench cap equals the bottom of the position profile, so it only ever
   // limits what a console command lowered.
-#if ECU_FUNCTIONAL_TESTS_ENABLED
+#if VP37_TELEMETRY_ENABLED
   self->pid.integralOverride = VP37_BENCH_INTEGRAL_CAP_PWM;
 #else
   self->pid.integralOverride = 0.0f;
@@ -178,7 +225,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   hal_pid_controller_set_max_integral(self->pid.controller,
                                       VP37_PID_MAX_INTEGRAL);
 
-  valToPWM(PIO_VP37_ANGLE, 0);
+  self->callbacks.writeTimingPwm(0);
 
   if (!VP37_makeCalibration(self)) {
     VP37_updateAdjustometerPosition(self);
@@ -197,13 +244,15 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   VP37_enableVP37(self, self->feedback.calibrationDone);
 
   self->vp37Initialized = true;
+  VP37_publish(self);
   return VP37_INIT_OK;
 }
 
 void VP37_enableVP37(VP37Pump *self, bool enable) {
-  (void)self;
-  pcf8574_write(PCF8574_O_VP37_ENABLE, enable);
-  deb("vp37 enabled: %d", VP37_isVP37Enabled(self));
+  if (VP37_hasCallbacks(self)) {
+    self->callbacks.setDriveEnabled(enable);
+    deb("vp37 enabled: %d", VP37_isVP37Enabled(self));
+  }
 }
 
 void VP37_stop(VP37Pump *self) {
@@ -211,13 +260,18 @@ void VP37_stop(VP37Pump *self) {
   self->vp37Initialized = false;
   self->output.finalPWM = 0;
   self->output.lastPWMval = 0;
-  valToPWM(PIO_VP37_RPM, 0);
+  if (VP37_hasCallbacks(self)) {
+    self->callbacks.writeQuantityPwm(0);
+  }
   VP37_enableVP37(self, false);
 }
 
+bool VP37_isReady(const VP37Pump *self) {
+  return self->vp37Initialized && self->feedback.calibrationDone;
+}
+
 bool VP37_isVP37Enabled(VP37Pump *self) {
-  (void)self;
-  return pcf8574_read(PCF8574_O_VP37_ENABLE);
+  return VP37_hasCallbacks(self) && self->callbacks.driveEnabled();
 }
 
 /**
@@ -338,20 +392,27 @@ bool VP37_demandAtRest(const VP37Pump *self) {
 }
 
 void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
-  (void)self;
-  angle = hal_constrain(angle, 0, 100);
-  valToPWM(PIO_VP37_ANGLE,
-           hal_map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
+  if (VP37_hasCallbacks(self)) {
+    angle = hal_constrain(angle, 0, 100);
+    self->callbacks.writeTimingPwm(
+        hal_map(angle, 0, 100, TIMING_PWM_MIN, TIMING_PWM_MAX));
+  }
 }
 
 void VP37_process(VP37Pump *self) {
   if (!self->vp37Initialized) {
+    // A stop outside the step: publish it once and complete a running trace.
+    VP37_publishStop(self);
+#if VP37_TELEMETRY_ENABLED
+    VP37_traceStop();
+#endif
     return;
   }
   // DMA ownership is shorter than a position step; retain blocks promptly.
   (void)VP37_acquireCurrentScan(self);
-  if (!isfinite(self->pidTimeUpdate) || self->pidTimeUpdate < 1.0f ||
-      self->pidTimeUpdate > 100.0f) {
+  if (!isfinite(self->pidTimeUpdate) ||
+      (self->pidTimeUpdate < VP37_PID_TIME_UPDATE_MIN) ||
+      (self->pidTimeUpdate > VP37_PID_TIME_UPDATE_MAX)) {
     VP37_stop(self);
     return;
   }
@@ -386,9 +447,9 @@ void VP37_process(VP37Pump *self) {
     VP37_stop(self);
     derr("VP37 disabled: invalid feedback status:%u fresh:%d",
          self->feedback.lastStatus, self->feedback.fresh);
-  } else if ((int32_t)getGlobalValue(F_RPM) > RPM_MAX_EVER) {
+  } else if (!self->callbacks.driveAllowed()) {
     VP37_stop(self);
-    derr("VP37 disabled: RPM too high");
+    derr("VP37 disabled: drive not allowed");
   } else {
     self->pidDtUs = self->pidStarted ? nowUs - self->pidLastUs : periodUs;
     self->pidLastUs = nowUs;
@@ -396,10 +457,12 @@ void VP37_process(VP37Pump *self) {
     VP37_positionCycle(self);
   }
   (void)VP37_acquireCurrentScan(self);
-#if ECU_FUNCTIONAL_TESTS_ENABLED
+  // Measured up to the publication, so the snapshot carries this step's time.
+  self->controlExecUs = hal_micros() - nowUs;
+  VP37_publish(self);
+#if VP37_TELEMETRY_ENABLED
   VP37_traceRecord(self);
 #endif
-  self->controlExecUs = hal_micros() - nowUs;
 }
 
 /**
@@ -576,12 +639,14 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
  * still matters: the multiplier can only reject changes already measured.
  */
 static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
-  self->supply.lastVolts = getGlobalValue(F_VOLTS);
-  self->supply.localVolts = getLocalSystemSupplyVoltage();
+  self->supply.lastVolts = self->feedback.supplyVolts;
+  self->supply.localVolts = fiesta_adc_read_divided_volts(
+      VP37_SUPPLY_ADC_PIN, (float)VP37_SUPPLY_DIVIDER_R1,
+      (float)VP37_SUPPLY_DIVIDER_R2);
   if (self->supply.lastVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
     self->supply.lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
-  self->thermal.lastFuelTemp = getGlobalValue(F_FUEL_TEMP);
+  self->thermal.lastFuelTemp = self->feedback.fuelTempC;
   VP37_updateVoltageCorrection(self, cycle->dt);
   VP37_updateTemperatureCorrection(self, cycle->dt);
   VP37_updateDriveCorrection(self, cycle->dt);
@@ -723,6 +788,6 @@ static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm) {
   self->output.finalPWM = pwm;
   if (self->output.lastPWMval != pwm) {
     self->output.lastPWMval = pwm;
-    valToPWM(PIO_VP37_RPM, pwm);
+    self->callbacks.writeQuantityPwm(pwm);
   }
 }

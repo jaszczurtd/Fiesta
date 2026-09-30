@@ -16,26 +16,6 @@
 extern "C" {
 #endif
 
-typedef struct {
-  int16_t pulseHz;             // deviation from baseline [Hz]
-  uint8_t voltageRaw;          // supply voltage in 0.1 V units
-  uint8_t fuelTempC;           // fuel temperature °C
-  uint8_t status;              // bitmask (ADJ_STATUS_*)
-  bool commOk;                 // true if I2C transaction succeeded
-  uint32_t signalHz;           // filtered absolute oscillator frequency [Hz]
-  uint32_t baselineHz;         // locked zero-reference frequency [Hz]
-  int32_t signedDeltaHz;       // signalHz - baselineHz, without abs/zero-hold
-  int16_t chipTempDeciC;       // RP2040 die temperature in 0.1 °C units
-  uint8_t extendedFlags;       // bitmask (ADJUSTOMETER_EXT_FLAG_*)
-  bool extendedTelemetryValid; // versioned extension is coherent
-  bool fastFeedback, feedbackFresh;
-  uint32_t rawHz, sampleNumber, measuredUs;
-  uint16_t ageUs;
-  hal_status_t readStatus;
-  uint32_t readUs;
-  uint8_t readRetries;
-} adjustometer_reading_t;
-
 // in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 
@@ -165,8 +145,22 @@ bool pcf8574_read(unsigned char pin);
  * @brief Write a logical output value to one PWM-controlled channel.
  * @param pin Logical PWM output identifier.
  * @param val Command value in project PWM units.
+ * @note Reports DTC_PWM_CHANNEL_NOT_INIT on every write, set or cleared.
  */
 void valToPWM(unsigned char pin, int32_t val);
+
+/**
+ * @brief Write one PWM output without touching the DTC store.
+ * @param pin Logical PWM output identifier.
+ * @param val Command value in project PWM units; the output is active low.
+ * @return False when pwm_init() has not created a channel for @p pin.
+ * @note For the VP37 control step: it must not wait on the DTC mutex, which
+ * core 0 holds while it writes the DTC store.
+ */
+bool pwmWrite(unsigned char pin, int32_t val);
+
+/** @brief Whether pwm_init() created a channel for @p pin. */
+bool pwmChannelReady(unsigned char pin);
 
 /**
  * @brief Refresh medium-rate sensor values.
@@ -283,53 +277,22 @@ void updateValsForDebug(void);
 void pwm_init(void);
 
 /**
- * @brief Take a thread-safe snapshot of the latest Adjustometer state.
- * @param out Caller-owned storage receiving the snapshot. Must not be NULL.
- * @note Triggers a fresh I2C read via readAdjustometer() and copies the
- *       resulting snapshot into @p out. No heap allocation; the caller
- *       provides the destination (stack or static). Adjustometer is only
- *       a project-local G149-like signal source, not a literal OEM G149
- *       implementation.
+ * @brief Write one register address to an I2C device and read bytes back.
+ * @param address 7-bit device address.
+ * @param reg Register address the read starts at.
+ * @param data Destination of @p len bytes.
+ * @param len Number of bytes to read.
+ * @return HAL_OK, or the bus error of hal_i2c_write_read_bus_ex().
+ * @note Holds i2cBusMutex for the whole transaction.
  */
-void getVP37Adjustometer(adjustometer_reading_t *out);
-
-/** @brief Select versioned fast feedback before starting control; false retains
- * legacy API behavior. Changing mode resets sample-age tracking. Call during
- * single-owner initialization. */
-void setVP37AdjustometerFastFeedback(bool enabled);
+hal_status_t i2cReadRegisters(uint8_t address, uint8_t reg, uint8_t *data,
+                              size_t len);
 
 /**
- * @brief Refresh the optional Adjustometer diagnostic-telemetry extension.
- * @param out Snapshot receiving legacy and cached extension fields.
- * @return True when a new coherent version-1 extension was received.
- * @note Failure does not affect legacy commOk or the VP37 control path.
- */
-bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out);
-
-/**
- * @brief Wait until the Adjustometer reports that its quantity-feedback
- * baseline capture is ready.
- * @return True when baseline becomes ready before timeout, otherwise false.
- * @note Baseline readiness gates the project-local G149-like feedback path
- * before the ECU enables the inner VP37 loop.
- */
-bool waitForAdjustometerBaseline(void);
-
-/**
- * @brief Get current ECU system supply voltage.
- * @return Supply voltage in volts, or 0 when unavailable.
- * @note With VP37 enabled, sourced from Adjustometer telemetry.
- *       Without VP37, sourced from the local ADC divider path.
+ * @brief Get current ECU system supply voltage from the local ADC divider.
+ * @return Supply voltage in volts, or 0 when the conversion fails.
  */
 float getSystemSupplyVoltage(void);
-
-/**
- * @brief Read ECU supply voltage directly from its local ADC divider.
- * @return Supply voltage in volts, or 0 when the conversion fails.
- * @note This bypasses Adjustometer transport and filtering. VP37 uses its fast
- *       changes while retaining the Adjustometer path as its reference.
- */
-float getLocalSystemSupplyVoltage(void);
 
 #ifdef __cplusplus
 }

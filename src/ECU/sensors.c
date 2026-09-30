@@ -1,14 +1,12 @@
 
 #include "sensors.h"
-#include "../common/adjustometer_feedback.h"
 #include "../common/fiesta_sensor_helpers.h"
+#include "../common/fiesta_unit_testing.h"
 #include "can.h"
-#include "ecu_unit_testing.h"
 #include "engineFuel.h"
 #include "gps.h"
 #include "rpm.h"
 
-#include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
 
 #include <hal/analog/hal_adc_scan.h>
@@ -39,11 +37,6 @@ typedef struct {
   int32_t lastCoolantTemp;
   int32_t lastOilTemp;
   bool lastIsEngineRunning;
-  adjustometer_reading_t adjustometer;
-  uint8_t adjCommErrors;
-  bool fastFeedback;
-  bool sampleTracked;
-  uint32_t sampleChangedUs;
   float driverDemandPercent;
   float driverFilteredPercent;
   uint32_t driverDemandUpdatedMs;
@@ -51,49 +44,26 @@ typedef struct {
 } sensors_runtime_state_t;
 
 NOINIT static sensors_persistent_state_t s_sensorsPersistent;
-static sensors_runtime_state_t s_sensorsState = {
-    .collantTableIdx = 0,
-    .collantValuesSet = 0,
-    .collantTable = {0.0f},
-    .oilTableIdx = 0,
-    .oilValuesSet = 0,
-    .oilTable = {0.0f},
-    .pcf8574State = 0,
-    .pwmVp37 = NULL,
-    .pwmTurbo = NULL,
-    .pwmAngle = NULL,
-    .lowCurrentValue = 0,
-    .lastVoltage = 0.0f,
-    .lastEGTTemp = 0,
-    .lastCoolantTemp = 0,
-    .lastOilTemp = 0,
-    .lastIsEngineRunning = false,
-    .adjustometer = {.pulseHz = 0,
-                     .voltageRaw = 0,
-                     .fuelTempC = 0,
-                     .status = ADJ_STATUS_SIGNAL_LOST,
-                     .commOk = false,
-                     .signalHz = 0U,
-                     .baselineHz = 0U,
-                     .signedDeltaHz = 0,
-                     .chipTempDeciC = 0,
-                     .extendedFlags = 0U,
-                     .extendedTelemetryValid = false,
-                     .fastFeedback = false,
-                     .feedbackFresh = false,
-                     .rawHz = 0U,
-                     .sampleNumber = 0U,
-                     .measuredUs = 0U,
-                     .ageUs = 0U,
-                     .readStatus = HAL_EAGAIN,
-                     .readUs = 0U,
-                     .readRetries = 0U},
-    .adjCommErrors = 0};
+static sensors_runtime_state_t s_sensorsState = {.collantTableIdx = 0,
+                                                 .collantValuesSet = 0,
+                                                 .collantTable = {0.0f},
+                                                 .oilTableIdx = 0,
+                                                 .oilValuesSet = 0,
+                                                 .oilTable = {0.0f},
+                                                 .pcf8574State = 0,
+                                                 .pwmVp37 = NULL,
+                                                 .pwmTurbo = NULL,
+                                                 .pwmAngle = NULL,
+                                                 .lowCurrentValue = 0,
+                                                 .lastVoltage = 0.0f,
+                                                 .lastEGTTemp = 0,
+                                                 .lastCoolantTemp = 0,
+                                                 .lastOilTemp = 0,
+                                                 .lastIsEngineRunning = false};
 
 m_mutex_def(analog4051Mutex);
 m_mutex_def(valueFieldsMutex);
 m_mutex_def(i2cBusMutex);
-m_mutex_def(adjustometerStateMutex);
 
 /**
  * @brief Validate a global value index before accessing the value table.
@@ -186,18 +156,10 @@ float getGlobalValue(int idx) {
 }
 
 void initSensors(void) {
-  s_sensorsState.fastFeedback = false;
-  s_sensorsState.sampleTracked = false;
-  memset(&s_sensorsState.adjustometer, 0, sizeof(s_sensorsState.adjustometer));
-  s_sensorsState.adjustometer.status = ADJ_STATUS_SIGNAL_LOST;
-  s_sensorsState.adjCommErrors = 0U;
   // Firmware lifetime is process-long; in host tests setUp() may call this
   // repeatedly, so keep mutex init idempotent to avoid re-allocation churn.
   if (valueFieldsMutex == NULL) {
     m_mutex_init(valueFieldsMutex);
-  }
-  if (adjustometerStateMutex == NULL) {
-    m_mutex_init(adjustometerStateMutex);
   }
   hal_adc_set_resolution(HAL_ADC_UTIL_DEFAULT_BITS);
   pwm_init();
@@ -473,14 +435,7 @@ bool sensors_scanCoversInputs(void) {
  * while the scan runs, so four samples come from four frames; ten
  * microseconds for a polled converter. */
 TESTABLE_STATIC uint16_t sensors_adcSampleDelayUs(void) {
-  uint32_t delay = 10U;
-  if (hal_adc_scan_is_running()) {
-    const uint32_t frameUs = (hal_adc_scan_frame_period_ns() + 999U) / 1000U;
-    if (frameUs > delay) {
-      delay = frameUs;
-    }
-  }
-  return (uint16_t)delay;
+  return fiesta_adc_sample_spacing_us();
 }
 
 hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage) {
@@ -598,9 +553,8 @@ static const char *i2cEndTransmissionError(uint8_t code) {
 bool pcf8574_init(void) {
   s_sensorsState.pcf8574State = 0;
 
-  // i2cBusMutex serializes us against multi-step transactions (e.g.
-  // adjustometer) that split a begin/write/end from a later request_from; the
-  // HAL-internal mutex alone covers only a single begin/end pair.
+  // i2cBusMutex orders every ECU transaction on the bus, the Adjustometer
+  // transfer of the other core included.
   m_mutex_enter_blocking(i2cBusMutex);
   bool success = false;
   uint8_t notFound =
@@ -862,7 +816,7 @@ void pwm_init(void) {
       PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
-void valToPWM(unsigned char pin, int32_t val) {
+static hal_pwm_freq_channel_t sensors_pwmChannel(unsigned char pin) {
   hal_pwm_freq_channel_t ch = NULL;
   switch (pin) {
   case PIO_TURBO:
@@ -877,8 +831,23 @@ void valToPWM(unsigned char pin, int32_t val) {
   default:
     break;
   }
+  return ch;
+}
+
+bool pwmChannelReady(unsigned char pin) {
+  return sensors_pwmChannel(pin) != NULL;
+}
+
+bool pwmWrite(unsigned char pin, int32_t val) {
+  const hal_pwm_freq_channel_t ch = sensors_pwmChannel(pin);
   if (ch != NULL) {
     hal_pwm_freq_write(ch, (PWM_RESOLUTION - val));
+  }
+  return ch != NULL;
+}
+
+void valToPWM(unsigned char pin, int32_t val) {
+  if (pwmWrite(pin, val)) {
     dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, false);
   } else {
     derr("config for this pwm is not initialized!");
@@ -886,372 +855,22 @@ void valToPWM(unsigned char pin, int32_t val) {
   }
 }
 
-// ── Adjustometer I2C readout (replaces ADS1115) ─────────────────────────────
+// ── Adjustometer bus transfer ───────────────────────────────────────────────
 
-// Runtime I2C bus recovery: if the Adjustometer (or any I2C slave) resets
-// mid-transaction, the ECU master can get stuck.  After several consecutive
-// failed transactions, reinitialise the bus with GPIO-level recovery.
-#define I2C_RECOVERY_THRESHOLD 5
-#define ADJ_COMM_ERROR_THRESHOLD 3
-static uint8_t i2cConsecutiveErrors = 0;
-
-/**
- * @brief Count I2C errors and recover the bus when the threshold is reached.
- */
-static void i2cCheckRecovery(void) {
-  i2cConsecutiveErrors++;
-  if (i2cConsecutiveErrors >= I2C_RECOVERY_THRESHOLD) {
-    deb("I2C: %u consecutive errors, performing bus recovery",
-        (unsigned)i2cConsecutiveErrors);
-    hal_i2c_deinit();
-    initI2C();
-    i2cConsecutiveErrors = 0;
-  }
-}
-
-/**
- * @brief Shared error-counter bump for Adjustometer I2C failures.
- * @return Snapshot of the adjustometer state after the bump.
- * @note Runs outside i2cBusMutex but under adjustometerStateMutex so the
- *       comm counter and commOk flag cannot be torn against a parallel
- *       reader on the other core.
- */
-static adjustometer_reading_t adjustometerRecordCommError(void) {
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  s_sensorsState.adjCommErrors++;
-  if (s_sensorsState.adjCommErrors >= ADJ_COMM_ERROR_THRESHOLD) {
-    s_sensorsState.adjustometer.commOk = false;
-  }
-  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
-  m_mutex_exit(adjustometerStateMutex);
-  return snapshot;
-}
-
-/**
- * @brief Read and validate the optional versioned telemetry block.
- * @param out Decoded extension fields; legacy fields are left unchanged.
- * @return True when version and sequence checks pass.
- * @note The caller must hold i2cBusMutex. Failure is intentionally not counted
- *       as a legacy communication error.
- */
-static bool adjustometerReadExtendedLocked(adjustometer_reading_t *out) {
-  const uint8_t txErr = hal_i2c_write_byte(ADJUSTOMETER_I2C_ADDR,
-                                           ADJUSTOMETER_EXT_REG_START, NULL);
-  if (txErr != 0U) {
-    return false;
-  }
-
-  const uint8_t received =
-      hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR, ADJUSTOMETER_EXT_REG_COUNT);
-  if (received != ADJUSTOMETER_EXT_REG_COUNT) {
-    return false;
-  }
-
-  uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT];
-  for (uint8_t i = 0U; i < ADJUSTOMETER_EXT_REG_COUNT; i++) {
-    const int value = hal_i2c_read();
-    if (value < 0) {
-      return false;
-    }
-    buf[i] = (uint8_t)value;
-  }
-
-  const uint8_t version =
-      buf[ADJUSTOMETER_REG_EXT_VERSION - ADJUSTOMETER_EXT_REG_START];
-  const uint8_t seqBegin =
-      buf[ADJUSTOMETER_REG_EXT_SEQ_BEGIN - ADJUSTOMETER_EXT_REG_START];
-  const uint8_t seqEnd =
-      buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START];
-  if (version != ADJUSTOMETER_EXT_VERSION || seqBegin != seqEnd ||
-      (seqBegin & 1U) != 0U) {
-    return false;
-  }
-
-  out->extendedFlags =
-      buf[ADJUSTOMETER_REG_EXT_FLAGS - ADJUSTOMETER_EXT_REG_START];
-  out->signalHz = jh_load_be32(
-      &buf[ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->baselineHz = jh_load_be32(
-      &buf[ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->signedDeltaHz = (int32_t)jh_load_be32(
-      &buf[ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->chipTempDeciC = (int16_t)jh_load_be16(
-      &buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START]);
-  out->extendedTelemetryValid = true;
-  return true;
-}
-
-/**
- * @brief Read the full Adjustometer register block over I2C for the VP37
- * quantity-feedback path.
- * @return Latest Adjustometer reading structure, reusing previous values on
- * failure.
- * @note The returned pulse, status, and fuel-temperature fields form a
- * project-local G149/G81-like telemetry bundle, not a literal OEM sensor block.
- */
-void setVP37AdjustometerFastFeedback(bool enabled) {
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  s_sensorsState.fastFeedback = enabled;
-  s_sensorsState.sampleTracked = false;
-  m_mutex_exit(adjustometerStateMutex);
-}
-
-static adjustometer_reading_t readAdjustometerFeedback(void) {
-  const uint32_t startedUs = hal_micros();
-  uint8_t retries = 0U;
-  uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
-  adjustometer_feedback_t decoded = {0};
-  hal_status_t status = HAL_EBUS;
+hal_status_t i2cReadRegisters(uint8_t address, uint8_t reg, uint8_t *data,
+                              size_t len) {
   m_mutex_enter_blocking(i2cBusMutex);
-  for (unsigned int attempt = 0U; attempt < 3U; attempt++) {
-    retries = (uint8_t)attempt;
-    const uint8_t start = ADJUSTOMETER_FEEDBACK_START;
-    status = hal_i2c_write_read_bus_ex(0, ADJUSTOMETER_I2C_ADDR, &start, 1U,
-                                       frame, COUNTOF(frame));
-    if (status != HAL_OK) {
-      break;
-    }
-    status = adjustometer_feedback_decode(frame, &decoded);
-    if (status != HAL_EAGAIN) {
-      break;
-    }
-  }
-  const uint32_t nowUs = hal_micros();
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
-  snapshot.fastFeedback = true;
-  snapshot.readStatus = status;
-  snapshot.readUs = nowUs - startedUs;
-  snapshot.readRetries = retries;
-  snapshot.feedbackFresh = false;
-  snapshot.commOk = status == HAL_OK;
-  if (status == HAL_OK) {
-    const bool tracked = s_sensorsState.sampleTracked;
-    const bool advanced = !tracked || decoded.number != snapshot.sampleNumber;
-    const bool clockBackwards =
-        tracked && (uint32_t)(decoded.measuredUs - snapshot.measuredUs) >=
-                       UINT32_C(0x80000000);
-    if (advanced) {
-      s_sensorsState.sampleChangedUs = nowUs;
-    }
-    snapshot.feedbackFresh =
-        !clockBackwards && decoded.ageUs <= ADJUSTOMETER_FEEDBACK_MAX_AGE_US &&
-        !hal_elapsed_u32(nowUs, s_sensorsState.sampleChangedUs,
-                         ADJUSTOMETER_FEEDBACK_MAX_AGE_US);
-    s_sensorsState.sampleTracked = true;
-    snapshot.pulseHz = decoded.pulseHz;
-    snapshot.voltageRaw = decoded.voltage;
-    snapshot.fuelTempC = decoded.fuelTemp;
-    snapshot.status = decoded.status;
-    snapshot.rawHz = decoded.rawHz;
-    snapshot.signalHz = decoded.filteredHz;
-    snapshot.baselineHz = decoded.baselineHz;
-    snapshot.signedDeltaHz =
-        (int32_t)decoded.filteredHz - (int32_t)decoded.baselineHz;
-    snapshot.sampleNumber = decoded.number;
-    snapshot.measuredUs = decoded.measuredUs;
-    snapshot.ageUs = decoded.ageUs;
-  }
-  s_sensorsState.adjustometer = snapshot;
-  m_mutex_exit(adjustometerStateMutex);
+  const hal_status_t status =
+      hal_i2c_write_read_bus_ex(0, address, &reg, 1U, data, len);
   m_mutex_exit(i2cBusMutex);
-  return snapshot;
-}
-
-static adjustometer_reading_t readAdjustometer(void) {
-  if (s_sensorsState.fastFeedback) {
-    return readAdjustometerFeedback();
-  }
-
-  m_mutex_enter_blocking(i2cBusMutex);
-
-  // Set register pointer to 0x00 (PULSE_HI)
-  uint8_t txErr = hal_i2c_write_byte(ADJUSTOMETER_I2C_ADDR,
-                                     ADJUSTOMETER_REG_PULSE_HI, NULL);
-  if (txErr) {
-    m_mutex_exit(i2cBusMutex);
-    derr("Adjustometer I2C tx error: %s (%d)", i2cEndTransmissionError(txErr),
-         (int)txErr);
-    i2cCheckRecovery();
-    return adjustometerRecordCommError();
-  }
-
-  // Read 5 registers starting from 0x00
-  uint8_t received = hal_i2c_request_from(ADJUSTOMETER_I2C_ADDR,
-                                          ADJUSTOMETER_LEGACY_REG_COUNT);
-  if (received != ADJUSTOMETER_LEGACY_REG_COUNT) {
-    m_mutex_exit(i2cBusMutex);
-    // dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-    derr("Adjustometer I2C read error: expected %d bytes, got %d",
-         ADJUSTOMETER_LEGACY_REG_COUNT, (int)received);
-    i2cCheckRecovery();
-    return adjustometerRecordCommError();
-  }
-
-  uint8_t buf[ADJUSTOMETER_LEGACY_REG_COUNT];
-  for (uint8_t i = 0; i < ADJUSTOMETER_LEGACY_REG_COUNT; i++) {
-    int b = hal_i2c_read();
-    if (b < 0) {
-      m_mutex_exit(i2cBusMutex);
-      derr("Adjustometer I2C read error at byte %d: %d", (int)i, b);
-      // dtcManagerSetActive(DTC_ADJ_COMM_LOST, true);
-      i2cCheckRecovery();
-      return adjustometerRecordCommError();
-    }
-    buf[i] = (uint8_t)b;
-  }
-
-  m_mutex_exit(i2cBusMutex);
-
-  // dtcManagerSetActive(DTC_ADJ_COMM_LOST, false);
-
-  // Build the snapshot off the shared state so parallel readers on the other
-  // core never see a half-updated field block.
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
-  m_mutex_exit(adjustometerStateMutex);
-  snapshot.pulseHz = (int16_t)jh_load_be16(buf);
-  snapshot.voltageRaw = buf[2];
-  snapshot.fuelTempC = buf[3];
-  snapshot.status = buf[4];
-  snapshot.commOk = true;
-  snapshot.fastFeedback = false;
-
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  s_sensorsState.adjustometer = snapshot;
-  s_sensorsState.adjCommErrors = 0;
-  m_mutex_exit(adjustometerStateMutex);
-
-  i2cConsecutiveErrors = 0;
-
-  // dtcManagerSetActive(DTC_ADJ_SIGNAL_LOST,     (r.status &
-  // ADJ_STATUS_SIGNAL_LOST) != 0);
-  // dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, (r.status &
-  // ADJ_STATUS_FUEL_TEMP_BROKEN) != 0);
-  // dtcManagerSetActive(DTC_ADJ_VOLTAGE_BAD,     (r.status &
-  // ADJ_STATUS_VOLTAGE_BAD) != 0);
-
-  return snapshot;
-}
-
-/**
- * @brief Wait until the project-local G149-like baseline capture is finished.
- * @return True when baseline becomes ready before timeout, otherwise false.
- */
-bool waitForAdjustometerBaseline(void) {
-  uint32_t start = hal_millis();
-  while ((hal_millis() - start) < ADJUSTOMETER_BASELINE_WAIT_MS) {
-    adjustometer_reading_t r = readAdjustometer();
-    if (!r.commOk) {
-      /* device may still be booting - keep retrying until timeout */
-      hal_delay_ms(10);
-      watchdog_feed();
-      continue;
-    }
-    if ((r.status & (ADJ_STATUS_BASELINE_PENDING | ADJ_STATUS_SIGNAL_LOST)) ==
-            0 &&
-        (!r.fastFeedback || r.feedbackFresh)) {
-      deb("Adjustometer baseline ready (%lu ms)",
-          (unsigned long)(hal_millis() - start));
-      return true;
-    }
-    hal_delay_ms(10);
-    watchdog_feed();
-  }
-  derr("Adjustometer baseline timeout (%u ms)", ADJUSTOMETER_BASELINE_WAIT_MS);
-  return false;
-}
-
-/**
- * @brief Take a snapshot of the latest Adjustometer reading for the VP37 inner
- * loop.
- * @param out Caller-owned storage receiving the snapshot (must not be NULL).
- * @note Uses readAdjustometer()'s by-value return so the caller's copy is
- *       consistent even if another core writes the shared state in between.
- */
-void getVP37Adjustometer(adjustometer_reading_t *out) {
-  if (out == NULL) {
-    return;
-  }
-  *out = readAdjustometer();
-}
-
-/**
- * @brief Read a coherent versioned Adjustometer telemetry extension.
- * @param out Snapshot receiving legacy and extension fields (must not be NULL).
- * @return True when a fresh extension snapshot passed version and sequence
- * checks.
- * @note Extension failures are intentionally isolated from the legacy
- * communication-error counter and from the VP37 control path.
- */
-bool getVP37AdjustometerExtendedTelemetry(adjustometer_reading_t *out) {
-  if (out == NULL) {
-    return false;
-  }
-
-  m_mutex_enter_blocking(adjustometerStateMutex);
-  adjustometer_reading_t snapshot = s_sensorsState.adjustometer;
-  m_mutex_exit(adjustometerStateMutex);
-
-  m_mutex_enter_blocking(i2cBusMutex);
-  bool received = false;
-  for (uint8_t attempt = 0U; attempt < 2U && !received; attempt++) {
-    received = adjustometerReadExtendedLocked(&snapshot);
-  }
-  m_mutex_exit(i2cBusMutex);
-
-  if (received) {
-    m_mutex_enter_blocking(adjustometerStateMutex);
-    s_sensorsState.adjustometer.signalHz = snapshot.signalHz;
-    s_sensorsState.adjustometer.baselineHz = snapshot.baselineHz;
-    s_sensorsState.adjustometer.signedDeltaHz = snapshot.signedDeltaHz;
-    s_sensorsState.adjustometer.chipTempDeciC = snapshot.chipTempDeciC;
-    s_sensorsState.adjustometer.extendedFlags = snapshot.extendedFlags;
-    s_sensorsState.adjustometer.extendedTelemetryValid = true;
-
-    // Refresh legacy fields in the returned snapshot without changing them.
-    snapshot.pulseHz = s_sensorsState.adjustometer.pulseHz;
-    snapshot.voltageRaw = s_sensorsState.adjustometer.voltageRaw;
-    snapshot.fuelTempC = s_sensorsState.adjustometer.fuelTempC;
-    snapshot.status = s_sensorsState.adjustometer.status;
-    snapshot.commOk = s_sensorsState.adjustometer.commOk;
-    m_mutex_exit(adjustometerStateMutex);
-  }
-
-  *out = snapshot;
-  return received;
+  return status;
 }
 
 /**
  * @brief Read ECU supply voltage from the local ADC divider path.
  * @return Supply voltage in volts, clamped to 0 on invalid conversion.
  */
-float getLocalSystemSupplyVoltage(void) {
-  float average = 0.0f;
-  float voltage = 0.0f;
-  if (fiesta_adc_read_average_spaced_ex(
-          ADC_VOLT_PIN, sensors_adcSampleDelayUs(), &average) != HAL_OK ||
-      fiesta_adc_to_voltage_ex((int)(average + 0.5f), (float)V_DIVIDER_R1,
-                               (float)V_DIVIDER_R2, &voltage) != HAL_OK) {
-    return 0.0f;
-  }
-  return voltage;
-}
-
-/**
- * @brief Read ECU system supply voltage.
- * @return Supply voltage in volts.
- * @note With VP37 enabled, the value comes from Adjustometer telemetry.
- *       Without VP37, the value is measured locally via ADC divider.
- */
 float getSystemSupplyVoltage(void) {
-#ifdef VP37
-  adjustometer_reading_t reading = readAdjustometer();
-  if (!reading.commOk) {
-    return 0.0f;
-  }
-  return reading.voltageRaw * 0.1f;
-#else
-  return getLocalSystemSupplyVoltage();
-#endif
+  return fiesta_adc_read_divided_volts(ADC_VOLT_PIN, (float)V_DIVIDER_R1,
+                                       (float)V_DIVIDER_R2);
 }
