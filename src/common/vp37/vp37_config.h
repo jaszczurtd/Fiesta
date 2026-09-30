@@ -9,7 +9,7 @@
 
 #include <JaszczurHAL.h>
 
-#include "../common/vp37_drive_config.h"
+#include "../vp37_drive_config.h"
 #include "vp37_maps.h"
 #include "vp37_power_stage.h"
 

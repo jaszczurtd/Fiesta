@@ -5,6 +5,13 @@ function(add_ecu_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+# The same for a suite of the VP37 module, owned by src/common/vp37/tests.
+function(add_vp37_test NAME)
+    add_executable(${NAME} ${VP37_SOURCE_DIR}/tests/${NAME}.cpp ${ARGN})
+    target_link_libraries(${NAME} PRIVATE ecu_mock)
+    add_test(NAME ${NAME} COMMAND ${NAME})
+endfunction()
+
 add_ecu_test(test_glowPlugs)
 add_ecu_test(test_ecu_params)
 set_tests_properties(test_ecu_params PROPERTIES
@@ -26,15 +33,18 @@ add_ecu_test(test_dtcManager)
 add_ecu_test(test_dtc_recovery)
 add_ecu_test(test_turbo)
 add_ecu_test(test_engine_maps)
-add_ecu_test(test_adjustometer)
-add_ecu_test(test_vp37)
-add_ecu_test(test_vp37_current)
-add_ecu_test(test_vp37_current_control)
-add_executable(test_vp37_current_fast test_vp37_current.cpp ../vp37_current.c)
+add_vp37_test(test_adjustometer)
+add_vp37_test(test_vp37)
+add_vp37_test(test_vp37_current)
+add_vp37_test(test_vp37_current_control)
+add_ecu_test(test_vp37_adapter)
+add_executable(test_vp37_current_fast ${VP37_SOURCE_DIR}/tests/test_vp37_current.cpp
+    ${VP37_SOURCE_DIR}/vp37_current.c)
 target_compile_definitions(test_vp37_current_fast PRIVATE VP37_PWM_FREQUENCY_HZ=1000)
 target_link_libraries(test_vp37_current_fast PRIVATE ecu_mock)
 add_test(NAME test_vp37_current_fast COMMAND test_vp37_current_fast)
-add_executable(test_vp37_current_200hz test_vp37_current.cpp ../vp37_current.c)
+add_executable(test_vp37_current_200hz ${VP37_SOURCE_DIR}/tests/test_vp37_current.cpp
+    ${VP37_SOURCE_DIR}/vp37_current.c)
 target_compile_definitions(test_vp37_current_200hz PRIVATE VP37_PWM_FREQUENCY_HZ=200)
 target_link_libraries(test_vp37_current_200hz PRIVATE ecu_mock)
 add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
@@ -44,17 +54,27 @@ add_test(NAME test_vp37_current_200hz COMMAND test_vp37_current_200hz)
 # registry, the sequencer and the console parser.
 # Every unit of the VP37 module, so the fixture binaries never mix units
 # built with the functional tests with archive members built without.
-set(ECU_VP37_SOURCES ../vp37.c ../vp37_feedback.c ../vp37_adjustometer.c
-    ../vp37_snapshot.c ../vp37_tuning.c ../vp37_compensation.c
-    ../vp37_control.c ../vp37_telemetry.c ../vp37_current_control.c)
+set(ECU_VP37_SOURCES ${VP37_SOURCES})
+list(REMOVE_ITEM ECU_VP37_SOURCES
+    ${VP37_SOURCE_DIR}/vp37_current.c ${VP37_SOURCE_DIR}/vp37_maps.c)
 set(ECU_TEST_FIXTURE_SOURCES ${ECU_VP37_SOURCES} ../tests.c ../tests_workers.c
     ../tests_helpers.c)
-add_executable(test_vp37_bench test_vp37.cpp ${ECU_TEST_FIXTURE_SOURCES})
+# The tests-layer cases need the real test layer; the plain binary runs the
+# adapter cases against the stubs.
+add_executable(test_vp37_adapter_bench test_vp37_adapter.cpp
+    ${ECU_TEST_FIXTURE_SOURCES})
+target_compile_definitions(test_vp37_adapter_bench
+    PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+target_link_libraries(test_vp37_adapter_bench PRIVATE ecu_mock)
+add_test(NAME test_vp37_adapter_bench COMMAND test_vp37_adapter_bench)
+add_executable(test_vp37_bench ${VP37_SOURCE_DIR}/tests/test_vp37.cpp
+    ${ECU_VP37_SOURCES})
 target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_vp37_bench PRIVATE ecu_mock)
 add_test(NAME test_vp37_bench COMMAND test_vp37_bench)
 # The snapshot with its telemetry part, copied while another thread publishes.
-add_executable(test_vp37_snapshot test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
+add_executable(test_vp37_snapshot
+    ${VP37_SOURCE_DIR}/tests/test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
 target_compile_definitions(test_vp37_snapshot PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_vp37_snapshot PRIVATE ecu_mock)
 add_test(NAME test_vp37_snapshot COMMAND test_vp37_snapshot)
@@ -68,8 +88,8 @@ if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     # mmap randomization, hence setarch -R. Valgrind skips the label.
     find_program(ECU_SETARCH setarch)
     if(ECU_SETARCH)
-        add_executable(test_vp37_snapshot_tsan test_vp37_snapshot.cpp
-            ${ECU_VP37_SOURCES})
+        add_executable(test_vp37_snapshot_tsan
+            ${VP37_SOURCE_DIR}/tests/test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
         target_compile_definitions(test_vp37_snapshot_tsan PRIVATE
             ECU_FUNCTIONAL_TESTS_ENABLED=1 VP37_TEST_DELAY_HOOK=1
             VP37_SNAPSHOT_TEST_STEPS=20000U)
@@ -107,8 +127,8 @@ if(UNIX AND NOT APPLE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 # The release at zero demand is a build option; this binary compiles the VP37
 # units with it off and checks that the bottom is held under drive instead.
-add_executable(test_vp37_hold_at_min test_vp37_hold_at_min.cpp
-    ${ECU_VP37_SOURCES})
+add_executable(test_vp37_hold_at_min
+    ${VP37_SOURCE_DIR}/tests/test_vp37_hold_at_min.cpp ${ECU_VP37_SOURCES})
 target_compile_definitions(test_vp37_hold_at_min
     PRIVATE VP37_PWM_DISABLE_AT_MIN_POSITION=0)
 target_link_libraries(test_vp37_hold_at_min PRIVATE ecu_mock)

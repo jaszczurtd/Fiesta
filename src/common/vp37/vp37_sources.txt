@@ -1,0 +1,18 @@
+# Translation units of the VP37 module, one per line, relative to this
+# directory. The single list every build reads:
+#   - src/common/vp37/vp37_sources.cmake for the ECU host-test builds,
+#   - scripts/sync_vscode_projects.py, which writes JH_EXTRA_SOURCES into the
+#     jaszczurhal.project.json of every module the registry marks with
+#     "sharedSources": ["vp37"], so the firmware builds compile the same
+#     files. tests/test_module_registry.py keeps the manifests in step.
+vp37.c
+vp37_adjustometer.c
+vp37_snapshot.c
+vp37_tuning.c
+vp37_feedback.c
+vp37_compensation.c
+vp37_control.c
+vp37_telemetry.c
+vp37_current.c
+vp37_current_control.c
+vp37_maps.c

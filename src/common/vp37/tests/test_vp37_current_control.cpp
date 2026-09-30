@@ -1,6 +1,6 @@
+#include "../vp37_internal.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "unity.h"
-#include "vp37_internal.h"
 
 #include <cmath>
 #include <cstdio>

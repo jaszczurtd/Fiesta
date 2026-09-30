@@ -1,8 +1,8 @@
 #include "vp37_current.h"
 
-#include "../common/fiesta_sensor_helpers.h"
-#include "config.h"
-#include "hardwareConfig.h"
+#include "../fiesta_sensor_helpers.h"
+#include "../vp37_drive_config.h"
+#include "vp37_power_stage.h"
 
 #include <string.h>
 

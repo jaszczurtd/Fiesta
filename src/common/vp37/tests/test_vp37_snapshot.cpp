@@ -1,9 +1,9 @@
 // The published snapshot crosses cores without a lock: the control core never
 // waits for a reader, and a copy that returns HAL_OK is never torn.
 
-#include "testable/vp37_testable.h"
+#include "../vp37_internal.h"
 #include "unity.h"
-#include "vp37_internal.h"
+#include "vp37_testable.h"
 
 #include <atomic>
 #include <chrono>

@@ -269,20 +269,21 @@ downward assistance, demand ramp and position API retain their existing roles.
 | [`obd_ford_diag.c`](src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
 | [`dtcManager.c`](src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
 | [`rpm.c`](src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
-| [`vp37.c`](src/ECU/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
+| [`src/common/vp37/`](src/common/vp37/) | the VP37 module, shared with the coming test bench; its translation units are the list in [`vp37_sources.txt`](src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
+| [`vp37.c`](src/common/vp37/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
 | [`vp37_adapter.c`](src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, and `F_FUEL_TEMP`/`F_VOLTS` from the published status |
-| [`vp37_adjustometer.c`](src/ECU/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
-| [`vp37_snapshot.c`](src/ECU/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
-| [`vp37_feedback.c`](src/ECU/vp37_feedback.c) | Adjustometer position and the calibration sweep |
-| [`vp37_compensation.c`](src/ECU/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
-| [`vp37_control.c`](src/ECU/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
-| [`vp37_current.c`](src/ECU/vp37_current.c) | coil current measured on the shunt |
-| [`vp37_current_control.c`](src/ECU/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
-| [`vp37_tuning.c`](src/ECU/vp37_tuning.c) | gains, limits, and switches the bench may change, each checked against its range |
-| [`vp37_telemetry.c`](src/ECU/vp37_telemetry.c) | control samples and bench traces, printed on core 0; bench image only |
+| [`vp37_adjustometer.c`](src/common/vp37/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
+| [`vp37_snapshot.c`](src/common/vp37/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
+| [`vp37_feedback.c`](src/common/vp37/vp37_feedback.c) | Adjustometer position and the calibration sweep |
+| [`vp37_compensation.c`](src/common/vp37/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
+| [`vp37_control.c`](src/common/vp37/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
+| [`vp37_current.c`](src/common/vp37/vp37_current.c) | coil current measured on the shunt |
+| [`vp37_current_control.c`](src/common/vp37/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
+| [`vp37_tuning.c`](src/common/vp37/vp37_tuning.c) | gains, limits, and switches the bench may change, each checked against its range |
+| [`vp37_telemetry.c`](src/common/vp37/vp37_telemetry.c) | control samples and bench traces, printed on core 0; bench image only |
 | [`turbo.c`](src/ECU/turbo.c) | boost control from manifold pressure |
 | [`engineMaps.c`](src/ECU/engineMaps.c) | N75 duty table |
-| [`vp37_maps.c`](src/ECU/vp37_maps.c) | VP37 holding map, integral and dead-zone tapers |
+| [`vp37_maps.c`](src/common/vp37/vp37_maps.c) | VP37 holding map, integral and dead-zone tapers |
 | [`engineFan.c`](src/ECU/engineFan.c), [`engineHeater.c`](src/ECU/engineHeater.c), [`glowPlugs.c`](src/ECU/glowPlugs.c), [`heatedWindshield.c`](src/ECU/heatedWindshield.c) | relay outputs |
 | [`engineFuel.c`](src/ECU/engineFuel.c) | fuel level |
 | [`gps.c`](src/ECU/gps.c) | NMEA time and date |

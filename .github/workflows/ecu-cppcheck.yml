@@ -33,7 +33,7 @@ jobs:
             --suppress=unusedFunction \
             --suppress=knownConditionTrueFalse \
             --suppress=checkersReport \
-            *.c 2>&1 | tee cppcheck-current.log
+            *.c ../common/vp37/*.c 2>&1 | tee cppcheck-current.log
 
       - name: Baseline gating
         working-directory: src/ECU

@@ -12,28 +12,28 @@
  * from a .h would break that assumption and cause "type undefined" errors.
  */
 
+#include "../common/vp37/vp37.h"
 #include "engineFan.h"
 #include "engineHeater.h"
-#include "heatedWindshield.h"
-#include "glowPlugs.h"
 #include "engine_operation.h"
+#include "glowPlugs.h"
+#include "heatedWindshield.h"
 #include "rpm.h"
 #include "turbo.h"
-#include "vp37.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct {
-    engineFan         fan;
-    engineHeater      heater;
-    heatedWindshields windows;
-    glowPlugs         glowP;
-    RPM               rpm;
-    engineOperation   engineOp;
-    Turbo             turbo;
-    VP37Pump          injectionPump;
+  engineFan fan;
+  engineHeater heater;
+  heatedWindshields windows;
+  glowPlugs glowP;
+  RPM rpm;
+  engineOperation engineOp;
+  Turbo turbo;
+  VP37Pump injectionPump;
 } ecu_context_t;
 
 /**

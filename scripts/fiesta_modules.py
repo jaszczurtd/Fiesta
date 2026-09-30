@@ -24,15 +24,19 @@ REGISTRY_NAME = "modules.json"
 SCHEMA_VERSION = 1
 KINDS = ("firmware", "host-app")
 ANALYSES = ("cppcheck",)
+SHARED_SOURCE_SETS = ("vp37",)
 USB_VID = "0x2e8a"
 USB_PID = "0x000a"
 USB_PRODUCT_PREFIX = "Fiesta "
 BY_ID_HINT_PREFIX = "Fiesta_"
 MODULE_KEYS = {
     "name", "kind", "token", "macro", "serialConfigurator",
-    "hostTests", "analysis", "ci",
+    "hostTests", "analysis", "ci", "sharedSources",
 }
 SC_KEYS = {"index", "displayName", "tests"}
+
+SHARED_SOURCE_DIRS = {"vp37": Path("src/common/vp37")}
+SHARED_SOURCE_LISTS = {"vp37": "vp37_sources.txt"}
 
 TOKENS_HEADER = Path("src/common/scDefinitions/sc_fiesta_module_tokens.h")
 SC_TABLE_HEADER = Path("src/SerialConfigurator/src/core/sc_module_table.h")
@@ -62,6 +66,7 @@ class Module:
     analysis: tuple[str, ...]
     ci: bool
     by_id_hint: str | None
+    shared_sources: tuple[str, ...] = ()
 
     @property
     def is_firmware(self) -> bool:
@@ -177,8 +182,62 @@ def _module(raw: Any, position: int, repo_root: Path) -> Module:
         raise RegistryError(f"{where}.analysis: allowed values {list(ANALYSES)}")
     if analysis and host_tests is None:
         raise RegistryError(f"{where}.analysis: needs hostTests")
+    shared = raw.get("sharedSources", [])
+    if (not isinstance(shared, list)
+            or any(s not in SHARED_SOURCE_SETS for s in shared)):
+        raise RegistryError(
+            f"{where}.sharedSources: allowed values {list(SHARED_SOURCE_SETS)}")
+    if shared and not firmware:
+        raise RegistryError(f"{where}.sharedSources: only firmware modules "
+                            "compile a shared source set")
     return Module(name, kind, token, macro, sc_entry, host_tests, tuple(analysis),
-                  _flag(raw.get("ci", True), f"{where}.ci"), hint)
+                  _flag(raw.get("ci", True), f"{where}.ci"), hint, tuple(shared))
+
+
+def shared_source_files(set_name: str, repo_root: Path = REPO_ROOT) -> list[str]:
+    """The translation units of a shared source set, relative to its
+    directory, in list order."""
+    directory = repo_root / SHARED_SOURCE_DIRS[set_name]
+    lines = (directory / SHARED_SOURCE_LISTS[set_name]).read_text().splitlines()
+    names = [line.strip() for line in lines
+             if line.strip() and not line.lstrip().startswith("#")]
+    missing = [name for name in names if not (directory / name).is_file()]
+    if missing:
+        raise RegistryError(f"{SHARED_SOURCE_LISTS[set_name]}: missing {missing}")
+    unlisted = sorted(path.name for path in directory.glob("*.c")
+                      if path.name not in names)
+    if unlisted:
+        raise RegistryError(
+            f"{SHARED_SOURCE_LISTS[set_name]}: unlisted sources {unlisted}")
+    return names
+
+
+def shared_extra_sources(module: Module, repo_root: Path = REPO_ROOT) -> str:
+    """The JH_EXTRA_SOURCES value of a module: every file of its shared
+    source sets, relative to src/<module>."""
+    entries: list[str] = []
+    for set_name in module.shared_sources:
+        directory = SHARED_SOURCE_DIRS[set_name]
+        for name in shared_source_files(set_name, repo_root):
+            below_src = directory.relative_to("src").as_posix()
+            entries.append(f"../{below_src}/{name}")
+    return ";".join(entries)
+
+
+def apply_shared_sources(manifest: dict, module: Module,
+                         repo_root: Path = REPO_ROOT) -> None:
+    """Make cmake.cache.JH_EXTRA_SOURCES of a firmware manifest match the
+    module's shared source sets: set it from the lists, or remove it when the
+    module compiles none, so a dropped registry entry cannot leave a stale
+    value behind."""
+    cache = manifest.get("cmake", {}).get("cache")
+    if module.shared_sources:
+        if cache is None:
+            raise RegistryError(f"module {module.name}: sharedSources needs a "
+                                "cmake.cache in jaszczurhal.project.json")
+        cache["JH_EXTRA_SOURCES"] = shared_extra_sources(module, repo_root)
+    elif cache is not None:
+        cache.pop("JH_EXTRA_SOURCES", None)
 
 
 def load(repo_root: Path = REPO_ROOT) -> Registry:

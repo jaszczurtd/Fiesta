@@ -5,7 +5,7 @@
 
 #include "vp37_internal.h"
 
-#include "../common/fiesta_sensor_helpers.h"
+#include "../fiesta_sensor_helpers.h"
 #include <math.h>
 #include <string.h>
 

@@ -36,6 +36,7 @@ include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -108,21 +109,12 @@ set(ECU_SOURCES
     ${ECU_SRC}/dtcManager.c
     ${ECU_SRC}/ecuPersistence.c
     ${ECU_SRC}/engineMaps.c
-    ${ECU_SRC}/vp37_maps.c
     ${ECU_SRC}/config.c
     ${ECU_SRC}/gps.c
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
-    ${ECU_SRC}/vp37.c
-    ${ECU_SRC}/vp37_feedback.c
-    ${ECU_SRC}/vp37_adjustometer.c
-    ${ECU_SRC}/vp37_snapshot.c
-    ${ECU_SRC}/vp37_tuning.c
-    ${ECU_SRC}/vp37_compensation.c
-    ${ECU_SRC}/vp37_control.c
-    ${ECU_SRC}/vp37_telemetry.c
-    ${ECU_SRC}/vp37_current.c
-    ${ECU_SRC}/vp37_current_control.c
+    # The VP37 module: the list in src/common/vp37/vp37_sources.txt.
+    ${VP37_SOURCES}
     ${ECU_SRC}/vp37_adapter.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
@@ -146,6 +138,7 @@ target_include_directories(ecu_mock PUBLIC
     ${HAL_SRC}
     ${HAL_SRC}/utils
     ${ECU_SRC}
+    ${VP37_SOURCE_DIR}
     ${CANDEFS}
     ${SCDEFS}
 )
@@ -170,6 +163,28 @@ target_compile_options(ecu_mock PRIVATE
     -Werror
 )
 
+# The module's translation units compiled with the consumer's configuration
+# but WITHOUT the ECU's header directory: any include of an ECU header in
+# src/common/vp37 stops this build, so the module stays compilable for its
+# next consumer. An object library is enough - the guarantee is compilation.
+add_library(vp37_standalone OBJECT ${VP37_SOURCES})
+target_include_directories(vp37_standalone BEFORE PRIVATE
+    ${ECU_SRC}/tests/include   # the consumer's hal_project_config.h
+)
+target_include_directories(vp37_standalone PRIVATE
+    ${HAL_MANAGED_INCLUDE_DIRS}
+    ${HAL_SRC}
+    ${HAL_SRC}/utils
+)
+target_compile_definitions(vp37_standalone PRIVATE
+    UNIT_TEST
+    UNITY_INCLUDE_CONFIG_H
+    HAL_TARGET_MOCK
+    SERIAL_7N1=2
+    SERIAL_8N1=6
+)
+target_compile_options(vp37_standalone PRIVATE -Wall -Wextra -Werror)
+
 # Static-analysis integration.
 # - check-cppcheck: manual target (cmake --build ... --target check-cppcheck)
 # - test_cppcheck: regular CTest test (runs with ctest)
@@ -177,7 +192,8 @@ find_program(CPPCHECK_EXECUTABLE cppcheck)
 option(ECU_ENABLE_CPPCHECK_TARGET "Enable check-cppcheck custom target" ON)
 
 if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
-    file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC} "${ECU_SRC}/*.c")
+    file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC}
+        "${ECU_SRC}/*.c" "${VP37_SOURCE_DIR}/*.c")
 
     set(ECU_CPPCHECK_ARGS
         --enable=all
@@ -232,7 +248,7 @@ if(ECU_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
             -p ${CMAKE_BINARY_DIR}
             -quiet
             -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
-            "^.*/src/(ECU|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
+            "^.*/src/(ECU|common/vp37|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
         COMMENT "Running clang-tidy for ECU host-compilable sources"
         VERBATIM
     )

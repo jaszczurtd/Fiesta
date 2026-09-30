@@ -7,13 +7,13 @@
 #include <hal/core/jh_endian.h>
 
 #include "../common/fiesta_unit_testing.h"
+#include "../common/vp37/vp37.h"
 #include "config.h"
 #include "dtcManager.h"
 #include "hardwareConfig.h"
 #include "rpm.h"
 #include "sensors.h"
 #include "tests.h"
-#include "vp37.h"
 
 #ifdef UNIT_TEST
 #include "tests/testable/obd2_testable.h"
