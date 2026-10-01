@@ -1,9 +1,11 @@
 # MISRA-C
 
 Repository-level safety / MISRA-C status, policy, and entry points for the
-Fiesta project. The only module currently in MISRA-C migration scope is
-[`src/ECU`](src/ECU/); `src/Clocks`, `src/OilAndSpeed`, and
-`src/Adjustometer` are out of MISRA scope.
+Fiesta project. The MISRA-C migration covers [`src/ECU`](src/ECU/), the
+shared VP37 module [`src/common/vp37`](src/common/vp37/) and
+[`src/Adjustometer`](src/Adjustometer/); the last two are held at zero
+active findings. `src/Clocks`, `src/OilAndSpeed`, `src/Fiesta_clock` and the
+bench's own files in `src/VP37TestBench` are out of MISRA scope.
 
 ## ECU MISRA-C migration status
 
@@ -14,8 +16,13 @@ repeatable screening snapshot below. Formal MISRA compliance is not claimed.
 
 Scope:
 
-- `src/ECU` is in scope for MISRA-C migration,
-- `src/Clocks`, `src/OilAndSpeed`, and `src/Adjustometer` are currently out of MISRA scope.
+- `src/ECU` is in scope for MISRA-C migration; the rest of `src/ECU` outside
+  the VP37 module is a screening snapshot,
+- `src/common/vp37` (compiled into the ECU and `VP37TestBench`) and
+  `src/Adjustometer` are in scope and gated at zero active findings by
+  gate 4 of `runalltests.sh`,
+- `src/Clocks`, `src/OilAndSpeed`, `src/Fiesta_clock` and the bench's own
+  files in `src/VP37TestBench` are out of MISRA scope.
 
 Completed areas include:
 

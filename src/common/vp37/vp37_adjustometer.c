@@ -17,6 +17,12 @@
 /** Pause between two baseline polls [ms]. */
 #define VP37_ADJ_BASELINE_POLL_MS 10U
 
+/* A failed transfer (write and read phase) blocks the control step; it must
+ * end within the communication cutoff, which the HAL default does not. */
+#if (2U * HAL_RP_I2C_TIMEOUT_US) >= (VP37_ADJ_COMM_CUTOFF_MS * 1000U)
+#error "Include vp37_hal_config.h from the board's hal_project_config.h"
+#endif
+
 hal_status_t VP37_setAdjustometerFastFeedback(VP37Pump *self, bool enabled) {
   hal_status_t status = HAL_EINVAL;
   if (self != NULL) {

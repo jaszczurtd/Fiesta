@@ -10,6 +10,8 @@
  * the ECU, plus the ST7796S display.
  */
 
+#include "../common/vp37/vp37_hal_config.h"
+
 #define HAL_ENABLE_I2C     /* Adjustometer feedback bus          */
 #define HAL_ENABLE_SPI     /* display bus                        */
 #define HAL_ENABLE_ST7796S /* 480x320 TFT panel                  */

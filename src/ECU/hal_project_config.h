@@ -12,9 +12,9 @@
 
 /* ── Modules used by ECU ─────────────────────────────────────────────── */
 
+#include "../common/vp37/vp37_hal_config.h"
+
 #define HAL_ENABLE_I2C /* I2C master (sensors + AT24C256)    */
-/* Bound failed feedback transfers; the 30-byte frame normally needs < 1 ms. */
-#define HAL_RP_I2C_TIMEOUT_US 2000U
 #ifndef HAL_ENABLE_KV
 #define HAL_ENABLE_KV /* KV store -> EEPROM                 */
 #endif

@@ -394,7 +394,11 @@ Adjustometer on the same I²C protocol. The bench adapter
 the board services: the two PWM channels written active low like on the ECU,
 the drive enable on a plain GPIO instead of the ECU's PCF8574, and the
 Adjustometer transfer without a bus mutex, because the bench I²C has one
-user. The demand comes from a potentiometer on the auxiliary scan input.
+user. Like the ECU, it includes
+[`vp37_hal_config.h`](src/common/vp37/vp37_hal_config.h) from its
+`hal_project_config.h`: each I²C phase is bounded to 2 ms, so a hung bus
+cannot hold a control step past the 20 ms feedback cutoff, and the module
+stops the build when the bound is missing. The demand comes from a potentiometer on the auxiliary scan input.
 Core 0 runs the timers, the display and debug output; core 1 starts the pump
 and runs `VP37_process()`. The screen redraws a value only when it changes,
 and a corner dot shows the Adjustometer connection the way Clocks shows its
