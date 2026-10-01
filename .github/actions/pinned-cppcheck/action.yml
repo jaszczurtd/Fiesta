@@ -1,0 +1,17 @@
+name: Pinned cppcheck
+description: Restore or build the cppcheck pinned by the JaszczurHAL submodule.
+
+runs:
+  using: composite
+  steps:
+    - name: Cache pinned cppcheck build
+      uses: actions/cache@v4
+      with:
+        path: |
+          src/JaszczurHAL/third_party/cppcheck
+          src/JaszczurHAL/.build/tools/cppcheck
+        key: cppcheck-${{ runner.os }}-${{ hashFiles('src/JaszczurHAL/third_party/cppcheck_version.conf') }}
+
+    - name: Build pinned cppcheck
+      shell: bash
+      run: ./src/JaszczurHAL/scripts/ensure_cppcheck.sh --force

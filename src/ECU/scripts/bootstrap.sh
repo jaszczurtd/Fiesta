@@ -2,14 +2,14 @@
 # =============================================================================
 # Fiesta dev-environment bootstrap (Debian-like Linux)
 #
-# Installs system deps (incl. Python 3, cppcheck, GTK-4 dev headers),
-# native RP toolchain, syncs JaszczurHAL, runs host tests (runalltests.sh),
+# Installs system deps (incl. Python 3, GTK-4 dev headers), native RP
+# toolchain, syncs JaszczurHAL, runs host tests (runalltests.sh),
 # compiles firmware with -Werror for every firmware module listed in
 # modules.json, and finally builds + tests + packages the SerialConfigurator
 # desktop tool (CMake desktop build + tests + .deb package).
-# Idempotent - safe to re-run. Also covers the deps used by
-# misra/check_misra.sh (cppcheck + Python 3; the MISRA addon ships with the
-# cppcheck package).
+# Idempotent - safe to re-run. cppcheck and its MISRA addon (runalltests.sh,
+# misra/check_misra.sh) are the build pinned by JaszczurHAL, not the
+# distribution package.
 #
 # Env overrides:
 #   SKIP_APT=1      skip apt-get steps
@@ -109,57 +109,6 @@ check_arm_cpp_toolchain() {
 }
 
 # -----------------------------------------------------------------------------
-# 2d. cppcheck (static analysis + MISRA screening via bundled addon)
-# -----------------------------------------------------------------------------
-find_misra_addon() {
-    # Fast path: dpkg knows exactly which files cppcheck ships. Capture once and
-    # test the result; `grep -q` inside a pipe can hit the pipefail+SIGPIPE false
-    # negative, and it re-ran the same query twice.
-    if command -v dpkg >/dev/null 2>&1; then
-        local dpkg_hit
-        dpkg_hit=$(dpkg -L cppcheck 2>/dev/null | grep -m1 -E '/misra\.py$') || true
-        if [[ -n "$dpkg_hit" ]]; then
-            echo "$dpkg_hit"
-            return 0
-        fi
-    fi
-    # Direct probe of common locations (Debian/Ubuntu/Fedora/source).
-    local candidates=(
-        /usr/share/cppcheck/addons/misra.py
-        /usr/local/share/cppcheck/addons/misra.py
-        /usr/lib/cppcheck/addons/misra.py
-        /usr/share/cppcheck-addons/misra.py
-    )
-    for p in "${candidates[@]}"; do
-        [[ -f "$p" ]] && { echo "$p"; return 0; }
-    done
-    # Broad fallback.
-    local found
-    found=$(find /usr/share /usr/lib /usr/local/share /usr/local/lib 2>/dev/null \
-        -name misra.py -path '*cppcheck*' -print -quit)
-    if [[ -n "$found" ]]; then
-        echo "$found"
-        return 0
-    fi
-    return 1
-}
-
-check_cppcheck() {
-    if ! command -v cppcheck >/dev/null 2>&1; then
-        err "cppcheck is unavailable after system dependency provisioning."
-        exit 1
-    fi
-    ok "cppcheck present: $(cppcheck --version 2>&1 | head -1)"
-    local addon
-    if addon=$(find_misra_addon); then
-        ok "cppcheck MISRA addon: $addon"
-    else
-        warn "cppcheck misra.py addon not found - misra/check_misra.sh may fail"
-        warn "On Debian/Ubuntu the addon ships with the 'cppcheck' package; check 'dpkg -L cppcheck | grep misra'"
-    fi
-}
-
-# -----------------------------------------------------------------------------
 # 4. GitHub libraries
 # -----------------------------------------------------------------------------
 fetch_libraries() {
@@ -203,6 +152,11 @@ fetch_libraries() {
     # PMD for the runalltests.sh duplicate gate; CI does not run that gate.
     info "Ensuring pinned PMD for duplicate detection"
     "$hal_dir/scripts/ensure_pmd.sh" --force
+
+    # cppcheck for the cppcheck and MISRA gates; distribution packages differ
+    # between hosts and so do their findings.
+    info "Ensuring pinned cppcheck for static analysis and MISRA"
+    "$hal_dir/scripts/ensure_cppcheck.sh" --force
 }
 
 # -----------------------------------------------------------------------------
@@ -367,7 +321,6 @@ info "  HAL_DIR:  $HAL_DIR"
 install_apt
 check_python
 check_arm_cpp_toolchain
-check_cppcheck
 fetch_libraries
 setup_git_hooks
 run_tests

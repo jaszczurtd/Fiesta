@@ -53,9 +53,10 @@ Narzędzia potrzebne w Linux:
   `curl`, `ca-certificates`, `perl`;
 - aplikacja desktopowa: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`;
   opcjonalne `libshumate-dev` włącza mapę GPS zamiast pola zastępczego;
-- kontrola jakości: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`,
-  `clang-format`, `default-jre-headless`; pakiet cppcheck dostarcza również
-  dodatek MISRA, a Java uruchamia PMD w bramce duplikacji;
+- kontrola jakości: `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`,
+  `default-jre-headless`; Java uruchamia PMD w bramce duplikacji, a cppcheck
+  z dodatkiem MISRA to build przypięty przez JaszczurHAL, który przygotowuje
+  skrypt instalacyjny;
 - firmware RP: `gcc-arm-none-eabi`, `libstdc++-arm-none-eabi-newlib`,
   `libusb-1.0-0-dev` i `pkg-config`. HAL przygotowuje przypięte Pico SDK
   oraz `picotool`.
@@ -71,9 +72,9 @@ bash runmefirst.sh
 Skrypt najpierw usuwa katalogi `build_test` i `.build` modułów firmware oraz
 `build` SerialConfiguratora, także przy pomijaniu testów lub kompilacji.
 Zachowuje katalogi kompilacji HAL i lokalne ustawienia VS Code.
-Następnie instaluje pakiety, sprawdza Pythona, cppcheck z dodatkiem MISRA oraz
-bibliotekę C++ toolchaina Arm. Następnie inicjalizuje przypięty submoduł HAL,
-przygotowuje jego zależności razem z PMD, uruchamia testy hostowe i analizatory, kompiluje
+Następnie instaluje pakiety, sprawdza Pythona oraz bibliotekę C++ toolchaina
+Arm. Potem inicjalizuje przypięty submoduł HAL, przygotowuje jego zależności
+razem z PMD i przypiętym cppcheck, uruchamia testy hostowe i analizatory, kompiluje
 sześć modułów firmware, przygotowuje artefakty UF2 z manifestami oraz buduje,
 testuje i pakuje SerialConfigurator do pakietu Debian.
 

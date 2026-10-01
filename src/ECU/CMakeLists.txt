@@ -185,13 +185,14 @@ target_compile_definitions(vp37_standalone PRIVATE
 )
 target_compile_options(vp37_standalone PRIVATE -Wall -Wextra -Werror)
 
-# Static-analysis integration.
+# Static-analysis integration with the cppcheck build pinned by JaszczurHAL;
+# its launcher names the repair command when that build is missing.
 # - check-cppcheck: manual target (cmake --build ... --target check-cppcheck)
 # - test_cppcheck: regular CTest test (runs with ctest)
-find_program(CPPCHECK_EXECUTABLE cppcheck)
+set(ECU_CPPCHECK ${HAL_LIB}/scripts/cppcheck.sh)
 option(ECU_ENABLE_CPPCHECK_TARGET "Enable check-cppcheck custom target" ON)
 
-if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
+if(ECU_ENABLE_CPPCHECK_TARGET)
     file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC}
         "${ECU_SRC}/*.c" "${VP37_SOURCE_DIR}/*.c")
 
@@ -211,7 +212,7 @@ if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
 
     add_custom_target(check-cppcheck
         COMMAND ${CMAKE_COMMAND} -E chdir ${ECU_SRC}
-            ${CPPCHECK_EXECUTABLE}
+            ${ECU_CPPCHECK}
             ${ECU_CPPCHECK_ARGS}
             ${ECU_CPPCHECK_SOURCES}
         COMMENT "Running cppcheck for ECU sources"
@@ -220,7 +221,7 @@ if(ECU_ENABLE_CPPCHECK_TARGET AND CPPCHECK_EXECUTABLE)
 
     add_test(
         NAME test_cppcheck
-        COMMAND ${CPPCHECK_EXECUTABLE} ${ECU_CPPCHECK_ARGS} ${ECU_CPPCHECK_SOURCES}
+        COMMAND ${ECU_CPPCHECK} ${ECU_CPPCHECK_ARGS} ${ECU_CPPCHECK_SOURCES}
     )
     set_tests_properties(test_cppcheck PROPERTIES
         WORKING_DIRECTORY ${ECU_SRC}

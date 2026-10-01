@@ -528,8 +528,9 @@ its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
 ## Builds and CI
 
 - **Host tests.** Each module builds a Unity test binary with the HAL mock.
-  [`runalltests.sh`](runalltests.sh) runs them together with cppcheck,
-  Valgrind, clang-tidy and the PMD CPD duplicate gate
+  [`runalltests.sh`](runalltests.sh) runs them together with cppcheck and the
+  MISRA scan (both on the cppcheck build pinned by JaszczurHAL), Valgrind,
+  clang-tidy and the PMD CPD duplicate gate
   ([`scripts/fiesta_cpd.py`](scripts/fiesta_cpd.py): production code within
   each module, host tests and Python across the repository). Test helpers
   shared by modules live in [`src/common/tests/`](src/common/tests/). No

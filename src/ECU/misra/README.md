@@ -10,7 +10,10 @@ shipping licensed MISRA text extracts in the repository.
 Contents:
 
 - `check_misra.sh`
-  - local runner around `cppcheck` and its `misra.py` addon,
+  - local runner around `cppcheck` and its `misra.py` addon; it runs the
+    cppcheck build pinned by JaszczurHAL (`scripts/cppcheck.sh` in the HAL
+    checkout), because findings and the addon change between cppcheck
+    releases; `--cppcheck` or `CPPCHECK_BIN` picks another executable,
   - loads JaszczurHAL's compiler-atomic model when the sibling HAL checkout is
     available,
   - writes reusable artifacts to `misra/.results/` by default.
