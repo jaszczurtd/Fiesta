@@ -10,7 +10,8 @@ Run a project-local MISRA screening pass using cppcheck's MISRA addon.
 The default project is src/ECU, whose scan also covers src/common/vp37.
 
 Options:
-  -c, --cppcheck <path>       cppcheck executable or absolute path
+  -c, --cppcheck <path>       cppcheck executable or absolute path; default:
+                              JaszczurHAL's pinned build (scripts/cppcheck.sh)
       --project <dir>         module directory to scan instead of src/ECU;
                               its misra/suppressions.txt applies when present
       --fail-paths <ere>      return non-zero when an active finding's path
@@ -47,7 +48,6 @@ suppressions_file="$script_dir/suppressions.txt"
 extra_source_globs=("../common/vp37/*.c")
 fail_paths=""
 out_dir="$script_dir/.results"
-cppcheck_bin="${CPPCHECK_BIN:-cppcheck}"
 addon_python="${CPPCHECK_ADDON_PYTHON:-python3}"
 rule_texts="${MISRA_RULE_TEXTS:-}"
 quiet=0
@@ -55,6 +55,7 @@ fail_on_findings=0
 temp_addon_config=""
 hal_root="$project_root/../JaszczurHAL"
 hal_src="$hal_root/src"
+cppcheck_bin="${CPPCHECK_BIN:-$hal_root/scripts/cppcheck.sh}"
 hal_cppcheck_config="$hal_root/config/tooling/cppcheck-atomics.cfg"
 
 while [[ $# -gt 0 ]]; do
@@ -111,8 +112,9 @@ if [[ -z "$rule_texts" && -f "$script_dir/rule-texts.local.txt" ]]; then
     rule_texts="$script_dir/rule-texts.local.txt"
 fi
 
-if ! command -v "$cppcheck_bin" >/dev/null 2>&1; then
-    echo "cppcheck not found: $cppcheck_bin" >&2
+if ! cppcheck_version=$("$cppcheck_bin" --version 2>&1); then
+    echo "cppcheck is not usable: $cppcheck_bin" >&2
+    echo "$cppcheck_version" >&2
     exit 2
 fi
 
@@ -279,7 +281,7 @@ printf '%s\n' "$active_count" > "$count_file"
     echo "ECU MISRA screening summary"
     echo "Generated: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
     echo "Project root: $project_root"
-    echo "Cppcheck: $("$cppcheck_bin" --version 2>&1 | head -n 1)"
+    echo "Cppcheck: ${cppcheck_version%%$'\n'*}"
     echo "Output directory: $out_dir"
     if [[ ${#suppressions_args[@]} -gt 0 ]]; then
         echo "Suppressions file: $script_dir/suppressions.txt"

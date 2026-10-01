@@ -373,7 +373,7 @@
       "command": "bash",
       "args": [
         "-c",
-        "cd '${workspaceFolder}' && cppcheck --enable=all --std=c99 -I. --suppress=missingInclude --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=knownConditionTrueFalse --suppress=checkersReport *.c 2>&1 | tee cppcheck-baseline.log"
+        "cd '${workspaceFolder}' && cmake -S . -B build_test && cmake --build build_test --target check-cppcheck 2>&1 | tee cppcheck-baseline.log"
       ],
       "presentation": {
         "echo": true,

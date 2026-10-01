@@ -62,9 +62,9 @@ Required toolchain:
   `curl`, `ca-certificates`, `perl`
 - desktop/package: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`; `libshumate-dev`
   enables the live map instead of its fallback placeholder
-- QA: `cppcheck`, `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`,
-  `default-jre-headless` (`cppcheck` ships the MISRA addon used by
-  `src/ECU/misra/check_misra.sh`; Java runs PMD for the duplicate gate)
+- QA: `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`,
+  `default-jre-headless` (Java runs PMD for the duplicate gate); cppcheck and
+  its MISRA addon are the build pinned by JaszczurHAL, made by the setup flow
 - native RP firmware: `gcc-arm-none-eabi`,
   `libstdc++-arm-none-eabi-newlib`, `libusb-1.0-0-dev`, and `pkg-config`;
   the setup flow prepares the pinned Pico SDK and `picotool` through
@@ -86,22 +86,21 @@ and local VS Code settings are preserved. The setup then:
 
 1. installs the firmware, desktop/package, map, and QA packages listed above,
 2. verifies Python 3 is available,
-3. verifies `cppcheck` is available and its MISRA addon is reachable,
-4. verifies the Arm C++ runtime required by native firmware builds,
-5. initializes `src/JaszczurHAL` at the revision recorded by Fiesta, stopping if the submodule has local changes,
-6. prepares JaszczurHAL's pinned source dependencies, plus the Pico SDK and
-   `picotool` required by native RP firmware builds and PMD for the duplicate
-   gate,
-7. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
+3. verifies the Arm C++ runtime required by native firmware builds,
+4. initializes `src/JaszczurHAL` at the revision recorded by Fiesta, stopping if the submodule has local changes,
+5. prepares JaszczurHAL's pinned source dependencies, plus the Pico SDK and
+   `picotool` required by native RP firmware builds, PMD for the duplicate
+   gate and the pinned cppcheck for the cppcheck and MISRA gates,
+6. runs the complete host-QA matrix through `runalltests.sh` for `ECU`,
    `Clocks`, `OilAndSpeed`, `Adjustometer`, `VP37TestBench`, and
    `SerialConfigurator` (runtime
    CTest plus cppcheck, PMD CPD duplicate detection, Valgrind and clang-tidy
    gates),
-8. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
-9. builds and tests `SerialConfigurator` and, unless disabled, creates its
+7. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
+8. builds and tests `SerialConfigurator` and, unless disabled, creates its
    Debian package.
 
-The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs (`cppcheck` + Python 3; cppcheck's Debian package ships the `misra.py` addon).
+The toolchain set up by `runmefirst.sh` also covers everything `src/ECU/misra/check_misra.sh` needs: the pinned cppcheck with its `misra.py` addon and Python 3. Distribution cppcheck packages differ in findings, so no Fiesta gate uses them.
 
 Run from repository root as a regular (non-root) user - the script uses `sudo`
 only for apt and will prompt for the password when needed:

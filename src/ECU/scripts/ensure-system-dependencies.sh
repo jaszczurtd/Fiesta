@@ -6,7 +6,7 @@ FIESTA_APT_PACKAGES=(
     gcc-arm-none-eabi libstdc++-arm-none-eabi-newlib
     libusb-1.0-0-dev pkg-config
     libgtk-4-dev dpkg-dev libshumate-dev
-    clang-format clang-tidy clang-tools valgrind cppcheck default-jre-headless
+    clang-format clang-tidy clang-tools valgrind default-jre-headless
 )
 
 dependency_info() {

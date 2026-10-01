@@ -17,23 +17,19 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install cppcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cppcheck
+      - name: Prepare HAL dependencies
+        run: ./src/common/scripts/ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host
 
+      - name: Prepare pinned cppcheck
+        uses: ./.github/actions/pinned-cppcheck
+
+      # The profile is the check-cppcheck target that runalltests.sh runs.
       - name: Run cppcheck (ECU profile)
-        working-directory: src/ECU
         run: |
           set -euo pipefail
-          cppcheck --enable=all --std=c99 -I. \
-            --library=../JaszczurHAL/config/tooling/cppcheck-atomics.cfg \
-            --suppress=missingInclude \
-            --suppress=missingIncludeSystem \
-            --suppress=unusedFunction \
-            --suppress=knownConditionTrueFalse \
-            --suppress=checkersReport \
-            *.c ../common/vp37/*.c 2>&1 | tee cppcheck-current.log
+          cmake -S src/ECU -B src/ECU/build_test
+          cmake --build src/ECU/build_test --target check-cppcheck 2>&1 \
+            | tee src/ECU/cppcheck-current.log
 
       - name: Baseline gating
         working-directory: src/ECU

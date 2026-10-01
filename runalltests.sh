@@ -157,9 +157,6 @@ run_module_target() {
 header "Gate 1/7: Checking required tools"
 
 REQUIRED_TOOLS=(cmake ctest gcc g++ make python3 git java)
-if [[ "${SKIP_CPPCHECK}" -eq 0 ]]; then
-    REQUIRED_TOOLS+=(cppcheck)
-fi
 if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
     REQUIRED_TOOLS+=(valgrind)
 fi
@@ -176,6 +173,15 @@ for tool in "${REQUIRED_TOOLS[@]}"; do
         missing=1
     fi
 done
+
+# The cppcheck and MISRA gates run the cppcheck build pinned by JaszczurHAL;
+# its launcher names the repair command when that build is not ready.
+if cppcheck_version="$("${SCRIPT_DIR}/src/JaszczurHAL/scripts/cppcheck.sh" --version 2>&1)"; then
+    printf '  %-20s %s\n' "cppcheck" "${cppcheck_version}"
+else
+    fail "${cppcheck_version}"
+    missing=1
+fi
 
 if [[ "${missing}" -ne 0 ]]; then
     fail "Missing required tools. Install prerequisites and retry."

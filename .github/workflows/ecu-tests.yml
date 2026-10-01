@@ -13,6 +13,7 @@ on:
       - "runmefirst.sh"
       - "src/ECU/**"
       - ".github/workflows/ecu-tests.yml"
+      - ".github/actions/pinned-cppcheck/**"
   pull_request:
     paths:
       - ".gitmodules"
@@ -25,6 +26,7 @@ on:
       - "runmefirst.sh"
       - "src/ECU/**"
       - ".github/workflows/ecu-tests.yml"
+      - ".github/actions/pinned-cppcheck/**"
   workflow_dispatch:
 
 jobs:
@@ -44,10 +46,13 @@ jobs:
       - name: Prepare HAL dependencies
         run: ./src/common/scripts/ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host
 
+      - name: Prepare pinned cppcheck
+        uses: ./.github/actions/pinned-cppcheck
+
       - name: Install analysis dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cppcheck valgrind clang-tidy clang-tools
+          sudo apt-get install -y valgrind clang-tidy clang-tools
 
       - name: Test dependency initialization and project tooling
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
