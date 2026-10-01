@@ -4106,9 +4106,9 @@ void test_vp37_init_status_names_every_result(void) {
                            VP37_initStatusName(VP37_INIT_CALIBRATION_FAILED));
   TEST_ASSERT_EQUAL_STRING("no output",
                            VP37_initStatusName(VP37_INIT_OUTPUT_UNAVAILABLE));
-  TEST_ASSERT_EQUAL_STRING(
-      "unknown",
-      VP37_initStatusName((VP37InitStatus)(VP37_INIT_OUTPUT_UNAVAILABLE + 1)));
+  /* NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange) */
+  const auto invalid = (VP37InitStatus)(VP37_INIT_OUTPUT_UNAVAILABLE + 1);
+  TEST_ASSERT_EQUAL_STRING("unknown", VP37_initStatusName(invalid));
 }
 
 int main(void) {
