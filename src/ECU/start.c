@@ -282,6 +282,14 @@ static void initializeCore0(void) {
   dtcManagerInit();
   ecuParamsInit();
 
+  // Core 1 does not run the pump yet, so the erase pause harms nothing here.
+  // Key-value writes never erase; this also spares the erase to the
+  // compaction a full log needs later.
+  const hal_status_t prepareStatus = ecuPersistencePrepareStorage();
+  if (prepareStatus != HAL_OK) {
+    derr("KV spare bank erase failed: %s", hal_status_to_string(prepareStatus));
+  }
+
   initTests();
   start_initContextMutexes();
 
@@ -367,8 +375,9 @@ static void initializeCore0(void) {
   Turbo_init(&s_ctx.turbo);
   m_mutex_exit(turboStateMutex);
 
-  canInit(CAN_RETRIES);
-  obdInit(CAN_RETRIES);
+  /* Both log a failure and stay off; OBD also raises DTC_OBD_CAN_INIT_FAIL. */
+  (void)canInit(CAN_RETRIES);
+  (void)obdInit(CAN_RETRIES);
 
   setGlobalValue(F_VOLTS, getSystemSupplyVoltage());
 

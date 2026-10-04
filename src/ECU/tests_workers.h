@@ -203,8 +203,9 @@ typedef struct {
   uint32_t before;       /**< Counter read before the write, 0 when absent. */
   uint32_t after;        /**< Counter read back after the write. */
   hal_status_t read;     /**< Status of the read before the write. */
-  hal_status_t write;    /**< Status of the publication. */
+  hal_status_t write;    /**< Status of the write. */
   hal_status_t readBack; /**< Status of the read after the write. */
+  uint32_t writeUs;      /**< Time the write took on this core [us]. */
   bool ok;               /**< Every step succeeded and after == before + 1. */
 } tests_workers_kv_result_t;
 

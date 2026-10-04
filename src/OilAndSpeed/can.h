@@ -7,7 +7,11 @@
 
 #include "start.h"
 
-bool canInit(void);
+/**
+ * @brief Create the CAN channel.
+ * @return HAL_OK, or the error of the last creation attempt.
+ */
+hal_status_t canInit(void);
 void canMainLoop(void);
 void updateCANrecipients(void);
 void updateEGTrecipients(void);
@@ -21,7 +25,7 @@ float readFuel(void);
 bool isGPSAvailable(void);
 bool isEngineRunning(void);
 int getEngineRPM(void);
-bool canSendLoop(void);
+void canSendLoop(void);
 /** @brief Create and start the periodic broadcast timers: the oil/speed frame
  * every CAN_UPDATE_RECIPIENTS, the EGT frame every CAN_EGT_UPDATE_INTERVAL.
  * @return False when the timer table could not be set up. */

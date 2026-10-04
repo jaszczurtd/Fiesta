@@ -1,6 +1,7 @@
 #ifndef T_OBD
 #define T_OBD
 
+#include <hal/core/hal_status.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -10,8 +11,10 @@ extern "C" {
 /**
  * @brief Initialize the OBD/UDS CAN responder.
  * @param retries Number of CAN initialization retries to attempt.
+ * @return HAL_OK, or the error of the channel creation or of the request
+ *         filters (logged, DTC_OBD_CAN_INIT_FAIL set, OBD stays off).
  */
-void obdInit(int retries);
+hal_status_t obdInit(int retries);
 
 /**
  * @brief Poll CAN and advance the OBD/ISO-TP state machine.

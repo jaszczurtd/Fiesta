@@ -59,7 +59,7 @@ static void setup_runtime(void) {
   helloMessage();
 
   PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
-  clockCanInit();
+  (void)clockCanInit(); /* logs the reason itself */
   configSessionInit();
 
   temp_initial_read();

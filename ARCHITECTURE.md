@@ -318,8 +318,9 @@ In short:
 
 Clocks drives the instrument cluster. It listens on the main CAN bus and
 produces square waves for the factory speedometer, tachometer, and oil gauge,
-draws extra readouts on a TFT display, and sounds the buzzer. It only
-consumes data; the ECU needs nothing from it.
+draws extra readouts on a TFT display, and sounds the buzzer. Apart from its
+display brightness, sent every 50 ms, it only consumes data; the ECU needs
+nothing from it.
 
 | File | Responsibility |
 |---|---|
@@ -328,7 +329,7 @@ consumes data; the ECU needs nothing from it.
 | [`TFTExtension.cpp`](src/Clocks/TFTExtension.cpp) | TFT drawing |
 | [`logic.cpp`](src/Clocks/logic.cpp) | turns CAN signals into gauge, display, and buzzer state |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN reception; the MCP2515 filters admit only Fiesta IDs |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness frame; the MCP2515 filters admit only Fiesta IDs |
 
 The CAN controller and the TFT share one SPI bus.
 
@@ -486,10 +487,14 @@ The ECU sits on two separate CAN buses:
 | CAN0 "main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | traffic between modules |
 | CAN1 "OBD-2" | ECU, OBD-II port | external diagnostic tools |
 
-On CAN0 the ECU publishes engine state, boost, fuel, DTCs, and GPS time, and
-reads oil pressure, wheel speed, and EGT. Clocks only listens. OilAndSpeed
-and Fiesta_clock mostly transmit. On CAN1 the ECU answers OBD-II and UDS
-requests from whatever tool is connected. A bus-off controller or a refused
+On CAN0 the ECU publishes engine state, RPM, throttle, boost, fuel, and GPS
+position and time. It reads oil pressure, wheel speed, and EGT from
+OilAndSpeed and the DPF state from frame `0x124`. DTCs never go out on CAN0;
+diagnostic tools read them over CAN1. Clocks mostly listens: its only frame
+carries the display brightness (`0x126`), and OilAndSpeed takes it as a sign
+that the cluster is present. OilAndSpeed transmits and reads a few ECU values.
+Fiesta_clock only transmits its RTC time (`0x130`). On CAN1 the ECU answers
+OBD-II and UDS requests from whatever tool is connected. A bus-off controller or a refused
 transmit raises U0073; its failure type byte (`DTC_DETAIL_*`) names the frame
 that failed, and the UDS DTC record carries it as the third DTC byte.
 

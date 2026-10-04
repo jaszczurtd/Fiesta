@@ -154,8 +154,7 @@ void test_failed_pause_prevents_flash_write_and_allows_retry(void) {
 void test_interrupted_write_still_resumes_gps(void) {
   prepareKv();
   const uint32_t value = 21u;
-  hal_mock_eeprom_set_replace_fail_phase(
-      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_BODY);
+  hal_mock_eeprom_tear_next_append(5u);
   hal_status_t resumed = HAL_NONE;
   TEST_ASSERT_EQUAL_INT(HAL_EIO,
                         ecuPersistenceExecute(storeValue, &value, &resumed));
@@ -191,6 +190,38 @@ void test_failed_resume_does_not_undo_storage_and_is_retried(void) {
   TEST_ASSERT_EQUAL_UINT(2u, s_resumeCount);
 }
 
+void test_prepare_erases_the_spare_bank_under_the_gps_pause(void) {
+  prepareKv();
+  const uint32_t value = 25u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        ecuPersistenceExecute(storeValue, &value, nullptr));
+  hal_kv_stats_t stats = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
+  TEST_ASSERT_FALSE(stats.spare_erased);
+  s_pauseCount = s_resumeCount = 0u;
+  hal_mock_eeprom_clear_erase_count();
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistencePrepareStorage());
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_eeprom_get_erase_count());
+  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
+  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
+  TEST_ASSERT_FALSE(s_paused);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
+  TEST_ASSERT_TRUE(stats.spare_erased);
+
+  /* Already erased: no flash write, no pause. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistencePrepareStorage());
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_eeprom_get_erase_count());
+  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
+}
+
+void test_prepare_reports_a_refused_pause(void) {
+  prepareKv();
+  s_pauseStatus = HAL_EBUSY;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, ecuPersistencePrepareStorage());
+  TEST_ASSERT_EQUAL_UINT(0u, s_resumeCount);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_execute_without_flash_keeps_gps_running);
@@ -200,5 +231,7 @@ int main(void) {
   RUN_TEST(test_failed_pause_prevents_flash_write_and_allows_retry);
   RUN_TEST(test_interrupted_write_still_resumes_gps);
   RUN_TEST(test_failed_resume_does_not_undo_storage_and_is_retried);
+  RUN_TEST(test_prepare_erases_the_spare_bank_under_the_gps_pause);
+  RUN_TEST(test_prepare_reports_a_refused_pause);
   return UNITY_END();
 }

@@ -58,10 +58,10 @@ static void initializeCore0(void) {
 
   initSPI();
 
-  result = canInit();
-  setLEDColor(result ? RED : GREEN);
-  if (result) {
-    derr("cannot setup CAN, exiting");
+  const hal_status_t canStatus = canInit();
+  setLEDColor(canStatus == HAL_OK ? GREEN : RED);
+  if (canStatus != HAL_OK) {
+    derr("cannot setup CAN (%s), exiting", hal_status_to_string(canStatus));
     return;
   }
 

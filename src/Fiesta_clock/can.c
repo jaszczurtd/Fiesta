@@ -50,15 +50,21 @@ static uint32_t packRtcDateTime(const PCF_DateTime *dt) {
          (uint32_t)dt->minute;
 }
 
-void clockCanInit(void) {
+hal_status_t clockCanInit(void) {
   s_clockCanState.frameNumber = 0u;
   s_clockCanState.nextSendMs = hal_millis() + CLOCK_CAN_SEND_INTERVAL_MS;
   hal_can_config_t canCfg = hal_can_default_config();
   canCfg.mcp2515.cs_pin = CAN_CS;
 
-  s_clockCanState.handle = hal_can_create_with_retry(
-      &canCfg, CAN_INT, NULL, CLOCK_CAN_RETRIES - 1, NULL);
-  s_clockCanState.initialized = (s_clockCanState.handle != NULL);
+  const hal_status_t st =
+      hal_can_create_with_retry(&canCfg, CAN_INT, NULL, CLOCK_CAN_RETRIES - 1,
+                                NULL, &s_clockCanState.handle);
+  s_clockCanState.initialized = (st == HAL_OK);
+  if (st != HAL_OK) {
+    derr("CAN init failed, the clock runs without CAN: %s",
+         hal_status_to_string(st));
+  }
+  return st;
 }
 
 void clockCanTick(void) {
@@ -92,6 +98,9 @@ void clockCanTick(void) {
   out[CAN_FRAME_RTC_UPDATE_SECOND] = dt.second;
   out[CAN_FRAME_RTC_UPDATE_INTEGRITY] = integrityOk ? 1u : 0u;
 
-  hal_can_send(s_clockCanState.handle, CAN_ID_RTC_UPDATE, CAN_FRAME_MAX_LENGTH,
-               out);
+  const hal_status_t st = hal_can_send(
+      s_clockCanState.handle, CAN_ID_RTC_UPDATE, CAN_FRAME_MAX_LENGTH, out);
+  if (st != HAL_OK) {
+    derr_limited("can", "RTC frame not sent: %s", hal_status_to_string(st));
+  }
 }

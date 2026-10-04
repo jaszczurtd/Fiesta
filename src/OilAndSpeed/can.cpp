@@ -22,24 +22,40 @@ static bool dpfConnected = false;
 static unsigned long clusterMessages = 0, lastClusterMessages = 0;
 static bool clusterConnected = false;
 
-bool canInit(void) {
+hal_status_t canInit(void) {
   ecuConnected = false;
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
 
-  bool error = false;
-
   hal_can_config_t canCfg = hal_can_default_config();
   canCfg.mcp2515.cs_pin = CAN_CS;
 
-  canHandle = hal_can_create_with_retry(&canCfg, CAN_INT, NULL, MAX_RETRIES,
-                                        watchdog_feed);
-  error = (canHandle == NULL);
-  if (!error) {
-    deb("CAN BUS Shield init ok!");
-    canMainLoop();
+  const hal_status_t st = hal_can_create_with_retry(
+      &canCfg, CAN_INT, NULL, MAX_RETRIES, watchdog_feed, &canHandle);
+  if (st != HAL_OK) {
+    derr("CAN BUS Shield init failed: %s", hal_status_to_string(st));
+    return st;
   }
-  return error;
+  deb("CAN BUS Shield init ok!");
+  canMainLoop();
+  return HAL_OK;
+}
+
+/**
+ * @brief Send one broadcast frame; a failure is logged with its reason.
+ * @param id CAN identifier.
+ * @param buf CAN_FRAME_MAX_LENGTH payload bytes.
+ */
+static void canBroadcast(uint32_t id, const uint8_t *buf) {
+  if (canHandle == NULL) {
+    return; /* canInit() failed and said why */
+  }
+  const hal_status_t st =
+      hal_can_send(canHandle, id, CAN_FRAME_MAX_LENGTH, buf);
+  if (st != HAL_OK) {
+    derr_limited("can", "frame 0x%03lx not sent: %s", (unsigned long)id,
+                 hal_status_to_string(st));
+  }
 }
 
 void updateCANrecipients(void) {
@@ -55,8 +71,7 @@ void updateCANrecipients(void) {
   buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] =
       (uint8_t)getGlobalValue(F_ABS_CAR_SPEED);
 
-  hal_can_send(canHandle, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
-               CAN_FRAME_MAX_LENGTH, buf);
+  canBroadcast(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, buf);
 }
 
 void updateEGTrecipients(void) {
@@ -72,7 +87,7 @@ void updateEGTrecipients(void) {
   buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI] = MSB(dpfTemp);
   buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO] = LSB(dpfTemp);
 
-  hal_can_send(canHandle, CAN_ID_EGT_UPDATE, CAN_FRAME_MAX_LENGTH, buf);
+  canBroadcast(CAN_ID_EGT_UPDATE, buf);
 }
 
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
@@ -119,7 +134,15 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   }
 }
 
-void canMainLoop(void) { hal_can_process_all(canHandle, onCanFrame); }
+void canMainLoop(void) {
+  if (canHandle == NULL) {
+    return;
+  }
+  const hal_status_t st = hal_can_process_all(canHandle, onCanFrame, NULL);
+  if (st != HAL_OK) {
+    derr_limited("can", "receive failed: %s", hal_status_to_string(st));
+  }
+}
 
 bool isClusterConnected(void) { return clusterConnected; }
 
@@ -174,7 +197,7 @@ void canTickBroadcastTimers(void) {
                                   COUNTOF(canBroadcastTimerTable));
 }
 
-bool canSendLoop(void) {
+void canSendLoop(void) {
   // Bench packet generators only; the periodic frames run on the broadcast
   // timers.
 #ifdef ABS_CAR_SPEED_PACKET_TEST
@@ -190,7 +213,7 @@ bool canSendLoop(void) {
     if (now < pauseUntil) {
       (void)hal_periodic_random_int_get_ex(
           &speedRandom, now, ABS_CAR_SPEED_SEQUENCE_DELAY, 200, &speed);
-      return true;
+      return;
     } else {
       pauseUntil = 0;
     }
@@ -243,6 +266,4 @@ bool canSendLoop(void) {
     updateCANrecipients();
   }
 #endif
-
-  return true;
 }

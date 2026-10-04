@@ -230,22 +230,24 @@ void test_kv_one_shot_counts_up_and_reports_the_store(void) {
   testsWorkersKvStart();
   TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(),
                               "TEST: KV counter 1 -> 2 write=HAL_OK keys="));
+  // The time the write held the core, which an erase used to make 150 ms.
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), " us="));
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
   TEST_ASSERT_EQUAL_UINT32(2U, counter);
 }
 
-void test_kv_one_shot_names_a_refused_publication(void) {
+void test_kv_one_shot_names_a_failed_write(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
   prepareStorage();
   console("run kv");
   TEST_ASSERT_TRUE(testsWorkersKvLastResult()->ok);
 
-  // The bank publication fails, as the flash coordinator refused it on the
-  // bench for ten days: the report must say so instead of looking fine.
-  hal_mock_eeprom_set_replace_fail_phase(
-      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_BODY);
+  // The write fails half way, as a flash write the coordinator refused did
+  // on the bench for ten days: the report must say so instead of looking
+  // fine.
+  hal_mock_eeprom_tear_next_append(5U);
   hal_mock_serial_reset();
   testsWorkersKvStart();
   const tests_workers_kv_result_t *result = testsWorkersKvLastResult();
@@ -256,7 +258,6 @@ void test_kv_one_shot_names_a_refused_publication(void) {
   TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "TEST: KV counter"), line);
   TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "FAILED"), line);
   TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "write=HAL_EIO"), line);
-  hal_mock_eeprom_set_replace_fail_phase(HAL_MOCK_EEPROM_REPLACE_FAIL_NONE);
 }
 
 /** @brief Hold the mock clock at ms, run one tick and report the demand. */
@@ -998,7 +999,7 @@ int main(void) {
   RUN_TEST(test_random_draws_a_bounded_and_repeatable_sequence);
   RUN_TEST(test_sequence_visits_every_sequenced_test_in_registry_order);
   RUN_TEST(test_kv_one_shot_counts_up_and_reports_the_store);
-  RUN_TEST(test_kv_one_shot_names_a_refused_publication);
+  RUN_TEST(test_kv_one_shot_names_a_failed_write);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
   RUN_TEST(

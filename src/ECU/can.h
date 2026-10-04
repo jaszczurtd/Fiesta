@@ -21,8 +21,10 @@ void canMainLoop(void);
 /**
  * @brief Initialize the main CAN bus interface.
  * @param retries Number of initialization retries requested by the caller.
+ * @return HAL_OK, or the error of the last attempt (logged; CAN0 stays off
+ *         and the CAN functions do nothing).
  */
-void canInit(int retries);
+hal_status_t canInit(int retries);
 
 /**
  * @brief Send the full set of periodic CAN updates.
@@ -79,18 +81,19 @@ uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM);
  * @param frameNo Frame sequence number to insert.
  * @param outBuf Output buffer receiving the frame payload.
  * @param outLen Size of the output buffer in bytes.
- * @return True on success, otherwise false.
+ * @return HAL_OK, or HAL_EINVAL for a NULL or too short buffer.
  */
-bool CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
+hal_status_t CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
 
 /**
  * @brief Build the extended GPS longitude/time CAN frame payload.
  * @param frameNo Frame sequence number to insert.
  * @param outBuf Output buffer receiving the frame payload.
  * @param outLen Size of the output buffer in bytes.
- * @return True on success, otherwise false.
+ * @return HAL_OK, or HAL_EINVAL for a NULL or too short buffer.
  */
-bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
+hal_status_t CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf,
+                                      int outLen);
 
 /**
  * @brief Send the pair of extended GPS CAN frames.

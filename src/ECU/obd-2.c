@@ -30,9 +30,10 @@
 
 static void iso_tp_process(void);
 static void unsupportedServicePrint(uint8_t mode);
-static bool obdCanSendFrame(uint32_t responseId, const uint8_t *data);
-static bool obdTransportSendPayload(uint32_t responseId, uint32_t requestId,
-                                    const uint8_t *data, size_t length);
+static hal_status_t obdCanSendFrame(uint32_t responseId, const uint8_t *data);
+static hal_status_t obdTransportSendPayload(uint32_t responseId,
+                                            uint32_t requestId,
+                                            const uint8_t *data, size_t length);
 
 typedef enum {
   ISO_TP_IDLE = 0,
@@ -127,27 +128,32 @@ void obdSetTotalDistanceKm(uint32_t km) {
  * @brief Initialize the CAN-based OBD/UDS responder.
  * @param retries Number of CAN initialization retries to request.
  */
-void obdInit(int retries) {
+hal_status_t obdInit(int retries) {
 
   hal_can_config_t canCfg = hal_can_default_config();
   canCfg.mcp2515.cs_pin = CAN1_GPIO;
 
-  s_obdState.canHandle = hal_can_create_with_retry(
-      &canCfg, CAN1_INT, NULL, retries > 0 ? retries - 1 : 0, watchdog_feed);
-  s_obdState.initializedFlag =
-      (s_obdState.canHandle != NULL) &&
-      hal_can_set_std_filters(s_obdState.canHandle, LISTEN_ID, FUNCTIONAL_ID);
+  hal_status_t st = hal_can_create_with_retry(
+      &canCfg, CAN1_INT, NULL, retries > 0 ? retries - 1 : 0, watchdog_feed,
+      &s_obdState.canHandle);
+  if (st == HAL_OK) {
+    st =
+        hal_can_set_std_filters(s_obdState.canHandle, LISTEN_ID, FUNCTIONAL_ID);
+  }
+  s_obdState.initializedFlag = (st == HAL_OK);
 
   if (s_obdState.initializedFlag) {
     deb("OBD-2 CAN Shield init ok!");
     dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, false);
   } else {
+    derr("OBD-2 CAN Shield init failed: %s", hal_status_to_string(st));
     if (s_obdState.canHandle != NULL) {
       hal_can_destroy(s_obdState.canHandle);
       s_obdState.canHandle = NULL;
     }
     dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
   }
+  return st;
 }
 
 /**
@@ -166,13 +172,20 @@ void obdLoop(void) {
   }
 
   if (!hal_gpio_read(CAN1_INT)) {
-    if (hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue,
-                        &s_obdState.dlcValue, s_obdState.rxBufValue)) {
+    const hal_status_t st =
+        hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue,
+                        &s_obdState.dlcValue, s_obdState.rxBufValue);
+    if (st == HAL_OK) {
       if ((s_obdState.rxIdValue == (uint32_t)FUNCTIONAL_ID) ||
           (s_obdState.rxIdValue == (uint32_t)LISTEN_ID)) {
         obdReqWithDlc(s_obdState.rxIdValue, s_obdState.dlcValue,
                       s_obdState.rxBufValue);
       }
+    } else if (st != HAL_EAGAIN) {
+      derr_limited("obd", "OBD CAN receive failed: %s",
+                   hal_status_to_string(st));
+    } else {
+      /* HAL_EAGAIN: the interrupt line was low but the frame is gone. */
     }
   }
 }
@@ -286,10 +299,13 @@ void obdReqWithDlc(uint32_t requestId, uint8_t dlc, const uint8_t *data) {
     unsupportedServicePrint(mode);
   }
 
-  if ((response.length > 0u) &&
-      !obdTransportSendPayload(responseId, requestId, response.data,
-                               response.length)) {
-    derr("OBD response TX start failed id=0x%03lX", (unsigned long)responseId);
+  if (response.length > 0u) {
+    const hal_status_t st = obdTransportSendPayload(
+        responseId, requestId, response.data, response.length);
+    if (st != HAL_OK) {
+      derr("OBD response TX start failed id=0x%03lX: %s",
+           (unsigned long)responseId, hal_status_to_string(st));
+    }
   }
 }
 
@@ -301,11 +317,12 @@ static void unsupportedServicePrint(uint8_t mode) {
   deb("Unsupported service $%02X requested!", mode);
 }
 
-static bool obdCanSendFrame(uint32_t responseId, const uint8_t *data) {
-  const bool sent = hal_can_send(s_obdState.canHandle, responseId,
-                                 HAL_CAN_MAX_DATA_LEN, data);
-  if (!sent) {
-    derr("OBD CAN TX failed id=0x%03lX", (unsigned long)responseId);
+static hal_status_t obdCanSendFrame(uint32_t responseId, const uint8_t *data) {
+  const hal_status_t sent = hal_can_send(s_obdState.canHandle, responseId,
+                                         HAL_CAN_MAX_DATA_LEN, data);
+  if (sent != HAL_OK) {
+    derr("OBD CAN TX failed id=0x%03lX: %s", (unsigned long)responseId,
+         hal_status_to_string(sent));
   }
   return sent;
 }
@@ -316,18 +333,21 @@ static bool obdCanSendFrame(uint32_t responseId, const uint8_t *data) {
  * @param requestId CAN request identifier expected on flow-control frames.
  * @param data Payload bytes to transmit.
  * @param length Number of payload bytes to send.
- * @return True when the single frame or first frame was queued.
+ * @return HAL_OK when the single frame or first frame went out, HAL_EINVAL
+ *         for an empty or oversized payload, HAL_EBUSY while another
+ *         multi-frame response is in progress, or the send error.
  */
-static bool obdTransportSendPayload(uint32_t responseId, uint32_t requestId,
-                                    const uint8_t *data, size_t length) {
-  bool started = false;
+static hal_status_t obdTransportSendPayload(uint32_t responseId,
+                                            uint32_t requestId,
+                                            const uint8_t *data,
+                                            size_t length) {
+  hal_status_t started = HAL_OK;
 
-  if ((data == NULL) || (length == 0u) || (length > OBD_MAX_RESPONSE_PAYLOAD) ||
-      (s_obdState.isoTpState.state != ISO_TP_IDLE)) {
-    return false;
-  }
-
-  if (length <= (size_t)(HAL_CAN_MAX_DATA_LEN - 1u)) {
+  if ((data == NULL) || (length == 0u) || (length > OBD_MAX_RESPONSE_PAYLOAD)) {
+    started = HAL_EINVAL;
+  } else if (s_obdState.isoTpState.state != ISO_TP_IDLE) {
+    started = HAL_EBUSY;
+  } else if (length <= (size_t)(HAL_CAN_MAX_DATA_LEN - 1u)) {
     uint8_t singleFrame[HAL_CAN_MAX_DATA_LEN];
     (void)memset(singleFrame, 0, sizeof(singleFrame));
     singleFrame[0] = (uint8_t)length;
@@ -342,7 +362,8 @@ static bool obdTransportSendPayload(uint32_t responseId, uint32_t requestId,
     firstFrame[1] = (uint8_t)(length & 0xFFu);
     (void)memcpy(&firstFrame[2], data, firstPayloadLength);
 
-    if (obdCanSendFrame(responseId, firstFrame)) {
+    started = obdCanSendFrame(responseId, firstFrame);
+    if (started == HAL_OK) {
       (void)memcpy(s_obdState.isoTpState.data, data, length);
       s_obdState.isoTpState.len = length;
       s_obdState.isoTpState.offset = firstPayloadLength;
@@ -357,7 +378,6 @@ static bool obdTransportSendPayload(uint32_t responseId, uint32_t requestId,
       s_obdState.isoTpState.txRetryStart = hal_millis();
       s_obdState.isoTpState.fcWaitStart = hal_millis();
       s_obdState.isoTpState.state = ISO_TP_WAIT_FC;
-      started = true;
     }
   }
 
@@ -386,17 +406,21 @@ static void iso_tp_process(void) {
       if (hal_gpio_read(CAN1_INT)) {
         break; // no more frames
       }
-      bool gotFrame =
+      const hal_status_t rx =
           hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue,
                           &s_obdState.dlcValue, s_obdState.rxBufValue);
-      if (!gotFrame) {
+      if (rx != HAL_OK) {
+        if (rx != HAL_EAGAIN) {
+          derr_limited("obd", "ISO-TP receive failed: %s",
+                       hal_status_to_string(rx));
+        }
         break;
       }
       bool idMatches =
           (s_obdState.rxIdValue == s_obdState.isoTpState.requestId) ||
           (s_obdState.rxIdValue == (uint32_t)LISTEN_ID) ||
           (s_obdState.rxIdValue == (uint32_t)FUNCTIONAL_ID);
-      if (gotFrame && idMatches) {
+      if (idMatches) {
         if ((s_obdState.dlcValue >= 3u) &&
             ((s_obdState.rxBufValue[0] & 0xF0u) == 0x30u)) {
           const uint8_t fcType = s_obdState.rxBufValue[0] & 0x0Fu;
@@ -456,7 +480,7 @@ static void iso_tp_process(void) {
     }
   }
 
-  if (!obdCanSendFrame(s_obdState.isoTpState.responseId, tpData)) {
+  if (obdCanSendFrame(s_obdState.isoTpState.responseId, tpData) != HAL_OK) {
     if (hal_millis_deadline_expired(s_obdState.isoTpState.txRetryStart,
                                     ISO_TP_TX_RETRY_TIMEOUT_MS)) {
       derr("ISO-TP timeout retrying consecutive frame");
