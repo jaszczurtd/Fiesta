@@ -27,7 +27,7 @@ extern "C" void watchdog_feed(void) {}
 
 static void ensure_can_ready(void) {
   if (oilspeedTestGetCanHandle() == NULL) {
-    canInit();
+    TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
   }
   TEST_ASSERT_NOT_NULL(oilspeedTestGetCanHandle());
   hal_mock_can_reset(oilspeedTestGetCanHandle());
@@ -127,7 +127,8 @@ static void drainSent(sent_counts_t *counts) {
   uint32_t id = 0u;
   uint8_t len = 0u;
   uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
-  while (hal_mock_can_get_sent(oilspeedTestGetCanHandle(), &id, &len, data)) {
+  while (hal_mock_can_get_sent(oilspeedTestGetCanHandle(), &id, &len, data) ==
+         HAL_OK) {
     if (id == CAN_ID_OIL_AND_SPEED_MODULE_UPDATE) {
       counts->oilSpeed++;
     } else if (id == CAN_ID_EGT_UPDATE) {
@@ -141,7 +142,7 @@ static void drainSent(sent_counts_t *counts) {
 void test_send_loop_sends_no_periodic_frames(void) {
   sent_counts_t counts = {};
   for (uint32_t pass = 0u; pass < 1000u; pass++) {
-    (void)canSendLoop();
+    canSendLoop();
     drainSent(&counts);
   }
   TEST_ASSERT_EQUAL_UINT32(0u, counts.oilSpeed);
@@ -162,7 +163,7 @@ void test_broadcast_timers_pace_oil_speed_and_egt_frames(void) {
   for (uint32_t ms = 1u; ms <= durationMs; ms++) {
     hal_mock_set_millis(start + ms);
     canTickBroadcastTimers();
-    (void)canSendLoop();
+    canSendLoop();
     drainSent(&counts);
   }
 
@@ -185,7 +186,8 @@ void test_egt_frame_carries_both_temperatures(void) {
   uint32_t id = 0u;
   uint8_t len = 0u;
   uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
-  TEST_ASSERT_TRUE(
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
       hal_mock_can_get_sent(oilspeedTestGetCanHandle(), &id, &len, data));
   TEST_ASSERT_EQUAL_UINT32(CAN_ID_EGT_UPDATE, id);
   TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, len);
@@ -197,6 +199,20 @@ void test_egt_frame_carries_both_temperatures(void) {
                               data[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
 }
 
+/* A controller that does not come up: canInit() returns why, and the
+ * broadcasts and the receive loop do nothing without a channel. */
+void test_can_init_reports_why_the_bus_stayed_off(void) {
+  hal_can_destroy(oilspeedTestGetCanHandle());
+  hal_mock_can_fail_creates(MAX_RETRIES + 1);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, canInit());
+  TEST_ASSERT_NULL(oilspeedTestGetCanHandle());
+  updateCANrecipients();
+  updateEGTrecipients();
+  canMainLoop();
+  hal_mock_can_fail_creates(0u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_truncated_ecu_update_02_frame_is_ignored);
@@ -206,5 +222,6 @@ int main(void) {
   RUN_TEST(test_send_loop_sends_no_periodic_frames);
   RUN_TEST(test_broadcast_timers_pace_oil_speed_and_egt_frames);
   RUN_TEST(test_egt_frame_carries_both_temperatures);
+  RUN_TEST(test_can_init_reports_why_the_bus_stayed_off);
   return UNITY_END();
 }

@@ -19,7 +19,7 @@ extern "C" void watchdog_feed(void) {}
 
 static void ensure_can_ready(void) {
   if (clocksTestGetCanHandle() == NULL) {
-    canInit();
+    TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
   }
   TEST_ASSERT_NOT_NULL(clocksTestGetCanHandle());
   hal_mock_can_reset(clocksTestGetCanHandle());
@@ -107,7 +107,8 @@ void test_non_fiesta_frame_is_rejected_by_acceptance_filters(void) {
   hal_mock_can_inject(clocksTestGetCanHandle(), 0x555u, CAN_FRAME_MAX_LENGTH,
                       frame);
 
-  TEST_ASSERT_FALSE(hal_can_available(clocksTestGetCanHandle()));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                        hal_can_available(clocksTestGetCanHandle()));
 }
 
 void test_unknown_can_id_does_not_update_state(void) {
@@ -122,6 +123,19 @@ void test_unknown_can_id_does_not_update_state(void) {
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, valueFields[F_FUEL]);
 }
 
+/* A controller that does not come up: canInit() returns why, and the loop
+ * functions do nothing without a channel. */
+void test_can_init_reports_why_the_bus_stayed_off(void) {
+  hal_can_destroy(clocksTestGetCanHandle());
+  hal_mock_can_fail_creates(MAX_RETRIES + 1);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, canInit());
+  TEST_ASSERT_NULL(clocksTestGetCanHandle());
+  updateCANrecipients();
+  canMainLoop();
+  hal_mock_can_fail_creates(0u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_truncated_ecu_update_01_frame_is_ignored);
@@ -130,5 +144,6 @@ int main(void) {
   RUN_TEST(test_rpm_frame_updates_cluster_in_same_can_drain);
   RUN_TEST(test_non_fiesta_frame_is_rejected_by_acceptance_filters);
   RUN_TEST(test_unknown_can_id_does_not_update_state);
+  RUN_TEST(test_can_init_reports_why_the_bus_stayed_off);
   return UNITY_END();
 }

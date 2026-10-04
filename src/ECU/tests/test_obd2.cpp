@@ -18,7 +18,7 @@
 
 static void ensure_obd_can_ready(void) {
   if (obdTestGetCanHandle() == NULL) {
-    obdInit(1);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, obdInit(1));
   }
   TEST_ASSERT_NOT_NULL(obdTestGetCanHandle());
   hal_mock_can_reset(obdTestGetCanHandle());
@@ -27,8 +27,14 @@ static void ensure_obd_can_ready(void) {
   hal_mock_set_millis(0u);
 }
 
+/* True when a sent frame was popped; asserts the mock had no other error. */
 static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
-  return hal_mock_can_get_sent(obdTestGetCanHandle(), id, len, data);
+  const hal_status_t st =
+      hal_mock_can_get_sent(obdTestGetCanHandle(), id, len, data);
+  if (st != HAL_EAGAIN) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, st);
+  }
+  return st == HAL_OK;
 }
 
 /* Pops the next frame and checks it is a single-frame negative response to
@@ -1092,6 +1098,33 @@ void test_isotp_failed_consecutive_frame_retries_same_payload(void) {
   }
 }
 
+// ── CAN init
+// ──────────────────────────────────────────────────────────────────────
+
+static bool obdInitFailActive(void) {
+  uint16_t codes[16] = {0};
+  const uint8_t n = dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, 16u);
+  for (uint8_t i = 0u; i < n; i++) {
+    if (codes[i] == DTC_OBD_CAN_INIT_FAIL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* A failed OBD init returns its reason, raises DTC_OBD_CAN_INIT_FAIL and a
+ * later successful init clears it. */
+void test_obd_init_failure_returns_the_status_and_raises_the_dtc(void) {
+  hal_can_destroy(obdTestGetCanHandle());
+  hal_mock_can_fail_creates(2u);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, obdInit(2));
+  TEST_ASSERT_NULL(obdTestGetCanHandle());
+  TEST_ASSERT_TRUE(obdInitFailActive());
+  hal_mock_can_fail_creates(0u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, obdInit(1));
+  TEST_ASSERT_FALSE(obdInitFailActive());
+}
+
 // ── main
 // ──────────────────────────────────────────────────────────────────────
 
@@ -1209,5 +1242,6 @@ int main(void) {
   RUN_TEST(test_totdist_set_max_3byte);
 #endif
 
+  RUN_TEST(test_obd_init_failure_returns_the_status_and_raises_the_dtc);
   return UNITY_END();
 }

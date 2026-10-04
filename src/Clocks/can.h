@@ -8,7 +8,12 @@
 
 extern volatile float valueFields[];
 
-bool canInit(void);
+/**
+ * @brief Create the CAN channel and set the Fiesta acceptance filters.
+ * @return HAL_OK, or the error of the channel creation or of the first filter
+ *         that failed (the channel is released then).
+ */
+hal_status_t canInit(void);
 void canMainLoop(void);
 void receivedCanMessage(void);
 void updateCANrecipients(void);

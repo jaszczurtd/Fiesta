@@ -6,14 +6,20 @@
 
 static void ensure_can_ready(void) {
   if (canTestGetCanHandle() == NULL) {
-    canInit(1);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, canInit(1));
   }
   TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
   hal_mock_can_reset(canTestGetCanHandle());
 }
 
+/* True when a sent frame was popped; asserts the mock had no other error. */
 static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
-  return hal_mock_can_get_sent(canTestGetCanHandle(), id, len, data);
+  const hal_status_t st =
+      hal_mock_can_get_sent(canTestGetCanHandle(), id, len, data);
+  if (st != HAL_EAGAIN) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, st);
+  }
+  return st == HAL_OK;
 }
 
 #ifndef VP37
@@ -93,8 +99,10 @@ void test_build_gps_lat_lon_frames_encode_high_precision_values(void) {
 
   uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
   uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x33, latBuf, (int)sizeof(latBuf)));
-  TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x34, lonBuf, (int)sizeof(lonBuf)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, CAN_buildGpsLatFrame(0x33, latBuf, (int)sizeof(latBuf)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, CAN_buildGpsLonTimeFrame(0x34, lonBuf, (int)sizeof(lonBuf)));
 
   TEST_ASSERT_EQUAL_UINT8(0x33, latBuf[CAN_FRAME_NUMBER]);
   TEST_ASSERT_EQUAL_UINT8(0x34, lonBuf[CAN_FRAME_NUMBER]);
@@ -121,8 +129,10 @@ void test_build_gps_lat_lon_frames_clamp_coordinates(void) {
 
   uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
   uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  TEST_ASSERT_TRUE(CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
-  TEST_ASSERT_TRUE(CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
 
   const int32_t lat = gpsFrameLatitude(latBuf);
   const int32_t lon = gpsFrameLongitude(lonBuf);
@@ -172,7 +182,7 @@ static void assert_rpm_frame(int32_t expectedRpm) {
 void test_can_init_uses_one_shot_with_software_retry(void) {
   hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
 
-  TEST_ASSERT_TRUE(hal_can_get_mode(canTestGetCanHandle(), &mode));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_mode(canTestGetCanHandle(), &mode));
   TEST_ASSERT_NOT_EQUAL(0u, mode & HAL_CAN_MODE_ONE_SHOT);
 }
 
@@ -296,6 +306,27 @@ void test_can_update_01_contains_adc_supply_voltage_without_vp37(void) {
 }
 #endif
 
+/* A controller that does not come up: canInit() says why, CAN0 stays off and
+ * the periodic sends do nothing until a later init works. */
+void test_can_init_reports_why_can0_stayed_off(void) {
+  hal_can_destroy(canTestGetCanHandle());
+  hal_mock_can_fail_creates(2u);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, canInit(2));
+  TEST_ASSERT_NULL(canTestGetCanHandle());
+  CAN_sendAll();
+  canMainLoop();
+  hal_mock_can_fail_creates(0u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, canInit(1));
+  TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
+}
+
+void test_gps_frame_builders_refuse_a_short_buffer(void) {
+  uint8_t shortBuf[CAN_FRAME_MAX_LENGTH - 1] = {0};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, CAN_buildGpsLatFrame(0x01, shortBuf, (int)sizeof(shortBuf)));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, CAN_buildGpsLonTimeFrame(0x02, NULL, 8));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pack_gps_datetime_valid);
@@ -312,5 +343,7 @@ int main(void) {
 #ifndef VP37
   RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
 #endif
+  RUN_TEST(test_can_init_reports_why_can0_stayed_off);
+  RUN_TEST(test_gps_frame_builders_refuse_a_short_buffer);
   return UNITY_END();
 }

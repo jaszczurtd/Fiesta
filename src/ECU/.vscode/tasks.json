@@ -19,6 +19,7 @@
         "rp2350-arm:pico2w - Raspberry Pi Pico 2 W",
         "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
         "stm32g474:nucleo-g474re - ST NUCLEO-G474RE",
+        "stm32g474:nucleo-g474re-canhat - ST NUCLEO-G474RE with CAN-FD HAT",
         "stm32g474:nucleo-g474re-core1262-hf - ST NUCLEO-G474RE with Core1262-HF",
         "stm32g474:nucleo-g474re-pim730 - ST NUCLEO-G474RE with PIM730/RM2"
       ],

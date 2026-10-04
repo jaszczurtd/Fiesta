@@ -22,6 +22,7 @@ add_executable(test_can
     test_can.cpp
     ${OILSPEED_SRC}/can.cpp
     ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
+    ${HAL_SRC}/hal/can/hal_can.cpp
     ${HAL_SRC}/hal/can/hal_can_util.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_can.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp

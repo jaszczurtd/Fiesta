@@ -20,50 +20,55 @@ static bool lastOilSpeedModuleConnected = false;
 static bool interrupt = false;
 static hal_can_t canHandle = NULL;
 
-static bool configureFiestaCanFilters(void) {
+static hal_status_t configureFiestaCanFilters(void) {
   const hal_can_filter_t filter = {CAN_FIESTA_STD_ID_BASE,
                                    CAN_FIESTA_STD_ID_MASK, 0u};
 
-  for (uint8_t index = 0u; index < HAL_CAN_MAX_FILTERS; index++) {
-    if (!hal_can_set_filter(canHandle, index, &filter)) {
-      return false;
-    }
+  hal_status_t st = HAL_OK;
+  for (uint8_t index = 0u; index < HAL_CAN_MAX_FILTERS && st == HAL_OK;
+       index++) {
+    st = hal_can_set_filter(canHandle, index, &filter);
   }
-  return true;
+  return st;
 }
 
 #ifdef UNIT_TEST
 hal_can_t clocksTestGetCanHandle(void) { return canHandle; }
 #endif
 
-bool canInit(void) {
+hal_status_t canInit(void) {
   ecuConnected = false;
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
   interrupt = false;
 
-  bool error = false;
-
   hal_can_config_t canCfg = hal_can_default_config();
   canCfg.mcp2515.cs_pin = CAN_CS;
 
-  canHandle = hal_can_create_with_retry(&canCfg, CAN_INT, receivedCanMessage,
-                                        MAX_RETRIES, hal_watchdog_feed);
-  error = (canHandle == NULL);
-  if (!error && !configureFiestaCanFilters()) {
-    derr("CAN acceptance-filter configuration failed");
+  hal_status_t st =
+      hal_can_create_with_retry(&canCfg, CAN_INT, receivedCanMessage,
+                                MAX_RETRIES, hal_watchdog_feed, &canHandle);
+  if (st != HAL_OK) {
+    derr("CAN BUS Shield init failed: %s", hal_status_to_string(st));
+    return st;
+  }
+  st = configureFiestaCanFilters();
+  if (st != HAL_OK) {
+    derr("CAN acceptance-filter configuration failed: %s",
+         hal_status_to_string(st));
     hal_can_destroy(canHandle);
     canHandle = NULL;
-    error = true;
+    return st;
   }
-  if (!error) {
-    deb("CAN BUS Shield init ok!");
-    canMainLoop();
-  }
-  return error;
+  deb("CAN BUS Shield init ok!");
+  canMainLoop();
+  return HAL_OK;
 }
 
 void updateCANrecipients(void) {
+  if (canHandle == NULL) {
+    return; /* canInit() failed and said why */
+  }
   uint8_t out[CAN_FRAME_MAX_LENGTH] = {};
 
   out[CAN_FRAME_NUMBER] = frameNumber++;
@@ -72,7 +77,12 @@ void updateCANrecipients(void) {
   out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_HI] = MSB(br);
   out[CAN_FRAME_CLOCK_BRIGHTNESS_UPDATE_LO] = LSB(br);
 
-  hal_can_send(canHandle, CAN_ID_CLOCK_BRIGHTNESS, CAN_FRAME_MAX_LENGTH, out);
+  const hal_status_t st = hal_can_send(canHandle, CAN_ID_CLOCK_BRIGHTNESS,
+                                       CAN_FRAME_MAX_LENGTH, out);
+  if (st != HAL_OK) {
+    derr_limited("can", "brightness frame not sent: %s",
+                 hal_status_to_string(st));
+  }
 }
 
 void receivedCanMessage(void) { interrupt = true; }
@@ -232,7 +242,15 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   }
 }
 
-void canMainLoop(void) { hal_can_process_all(canHandle, onCanFrame); }
+void canMainLoop(void) {
+  if (canHandle == NULL) {
+    return;
+  }
+  const hal_status_t st = hal_can_process_all(canHandle, onCanFrame, NULL);
+  if (st != HAL_OK) {
+    derr_limited("can", "receive failed: %s", hal_status_to_string(st));
+  }
+}
 
 bool isEcuConnected(void) { return ecuConnected; }
 

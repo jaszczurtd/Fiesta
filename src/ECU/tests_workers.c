@@ -568,8 +568,10 @@ void testsWorkersKvStart(void) {
     readStatus = HAL_OK;
   }
   const uint32_t next = before + 1U;
+  const uint32_t writeStartUs = hal_micros();
   const hal_status_t writeStatus =
       ecuPersistenceExecute(kvCounterOperation, &next, NULL);
+  const uint32_t writeUs = hal_micros() - writeStartUs;
   uint32_t after = 0U;
   const hal_status_t backStatus =
       hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &after);
@@ -582,22 +584,24 @@ void testsWorkersKvStart(void) {
   s_kvResult.read = readStatus;
   s_kvResult.write = writeStatus;
   s_kvResult.readBack = backStatus;
+  s_kvResult.writeUs = writeUs;
   s_kvResult.ok = ok;
   if (ok) {
-    deb("TEST: KV counter %lu -> %lu write=%s keys=%u/%u gen=%lu",
+    deb("TEST: KV counter %lu -> %lu write=%s keys=%u/%u gen=%lu us=%lu",
         (unsigned long)before, (unsigned long)after,
         hal_status_to_string(writeStatus),
         statsOk ? (unsigned)stats.key_count : 0U,
         statsOk ? (unsigned)stats.key_capacity : 0U,
-        statsOk ? (unsigned long)stats.generation : 0UL);
+        statsOk ? (unsigned long)stats.generation : 0UL,
+        (unsigned long)writeUs);
   } else {
     derr("TEST: KV counter %lu -> %lu FAILED read=%s write=%s back=%s "
-         "keys=%u/%u",
+         "keys=%u/%u us=%lu",
          (unsigned long)before, (unsigned long)after,
          hal_status_to_string(readStatus), hal_status_to_string(writeStatus),
          hal_status_to_string(backStatus),
          statsOk ? (unsigned)stats.key_count : 0U,
-         statsOk ? (unsigned)stats.key_capacity : 0U);
+         statsOk ? (unsigned)stats.key_capacity : 0U, (unsigned long)writeUs);
   }
 }
 

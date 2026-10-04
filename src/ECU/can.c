@@ -106,11 +106,12 @@ static uint8_t canTxDetailForId(uint32_t id) {
  * @param id CAN identifier.
  * @param len Payload length.
  * @param buf Payload bytes.
- * @return True when the driver accepted the frame.
+ * @return HAL_OK when the frame went out, otherwise the hal_can_send() error
+ *         (the HAL logs it with the frame id).
  */
-static bool canSend(uint32_t id, uint8_t len, const uint8_t *buf) {
-  const bool sent = hal_can_send(s_canState.canBusHandle, id, len, buf);
-  if (!sent) {
+static hal_status_t canSend(uint32_t id, uint8_t len, const uint8_t *buf) {
+  const hal_status_t sent = hal_can_send(s_canState.canBusHandle, id, len, buf);
+  if (sent != HAL_OK) {
     if (s_canState.txFailures < UINT16_MAX) {
       s_canState.txFailures++;
     }
@@ -144,7 +145,7 @@ static hal_can_config_t can0Config(void) {
   return cfg;
 }
 
-void canInit(int retries) {
+hal_status_t canInit(int retries) {
   s_canState.dpfConnectedFlag = false;
   s_canState.dpfEverSeenFlag = false;
   s_canState.dpfMessagesCount = 0uL;
@@ -156,17 +157,19 @@ void canInit(int retries) {
   resetRpmPublisher();
 
   hal_can_config_t canCfg = can0Config();
-  s_canState.canBusHandle =
-      hal_can_create_with_retry(&canCfg, CAN0_INT, receivedCanMessage,
-                                retries > 0 ? retries - 1 : 0, watchdog_feed);
-  s_canState.isInitialized = (s_canState.canBusHandle != NULL);
+  const hal_status_t st = hal_can_create_with_retry(
+      &canCfg, CAN0_INT, receivedCanMessage, retries > 0 ? retries - 1 : 0,
+      watchdog_feed, &s_canState.canBusHandle);
+  s_canState.isInitialized = (st == HAL_OK);
 
   if (s_canState.isInitialized) {
     deb("CAN BUS Shield init ok!");
   } else {
-    derr("CAN BUS Shield init problem. CAN communication would not be "
-         "possible.");
+    derr("CAN BUS Shield init problem (%s). CAN communication would not be "
+         "possible.",
+         hal_status_to_string(st));
   }
+  return st;
 }
 
 uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
@@ -210,9 +213,10 @@ static int32_t gpsCoordToMicroDeg(float coord, int32_t minVal, int32_t maxVal) {
   return scaled;
 }
 
-bool CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
+hal_status_t CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf,
+                                  int outLen) {
   if (outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
-    return false;
+    return HAL_EINVAL;
   }
 
   int32_t latMicro =
@@ -227,12 +231,13 @@ bool CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
   outBuf[CAN_FRAME_GPS_EXT_LAT_B0] = (uint8_t)(latRaw & 0xFFu);
   outBuf[CAN_FRAME_GPS_EXT_STATUS] =
       (uint8_t)getGlobalValue(F_GPS_IS_AVAILABLE);
-  return true;
+  return HAL_OK;
 }
 
-bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
+hal_status_t CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf,
+                                      int outLen) {
   if (outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
-    return false;
+    return HAL_EINVAL;
   }
 
   int32_t lonMicro =
@@ -250,7 +255,7 @@ bool CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf, int outLen) {
   outBuf[CAN_FRAME_GPS_EXT_DT_HI] = (uint8_t)((packedDt >> 16) & 0xFFu);
   outBuf[CAN_FRAME_GPS_EXT_DT_MD] = (uint8_t)((packedDt >> 8) & 0xFFu);
   outBuf[CAN_FRAME_GPS_EXT_DT_LO] = (uint8_t)(packedDt & 0xFFu);
-  return true;
+  return HAL_OK;
 }
 
 void CAN_sendGpsExtended(void) {
@@ -261,13 +266,14 @@ void CAN_sendGpsExtended(void) {
   uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
   uint8_t lonTimeBuf[CAN_FRAME_MAX_LENGTH] = {0};
 
+  /* A failed send is counted by canSend() for the bus fault check. */
   if (CAN_buildGpsLatFrame(s_canState.frameNumberVal++, latBuf,
-                           (int)sizeof(latBuf))) {
-    canSend(CAN_ID_GPS_EXT_LAT, CAN_FRAME_MAX_LENGTH, latBuf);
+                           (int)sizeof(latBuf)) == HAL_OK) {
+    (void)canSend(CAN_ID_GPS_EXT_LAT, CAN_FRAME_MAX_LENGTH, latBuf);
   }
   if (CAN_buildGpsLonTimeFrame(s_canState.frameNumberVal++, lonTimeBuf,
-                               (int)sizeof(lonTimeBuf))) {
-    canSend(CAN_ID_GPS_EXT_LON_TIME, CAN_FRAME_MAX_LENGTH, lonTimeBuf);
+                               (int)sizeof(lonTimeBuf)) == HAL_OK) {
+    (void)canSend(CAN_ID_GPS_EXT_LON_TIME, CAN_FRAME_MAX_LENGTH, lonTimeBuf);
   }
 }
 
@@ -301,7 +307,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_OIL] =
         hal_can_encode_temp_i8(getGlobalValue(F_OIL_TEMP));
 
-    canSend(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
+    (void)canSend(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] =
@@ -314,7 +320,7 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
     buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = getGlobalValue(F_GPS_CAR_SPEED);
 
-    canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
+    (void)canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
 
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] =
@@ -323,7 +329,7 @@ void CAN_updaterecipients_01(void) {
         hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = getGlobalValue(F_FAN_ENABLED);
 
-    canSend(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
+    (void)canSend(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
   }
 }
 
@@ -349,8 +355,9 @@ void CAN_updaterecipients_02(void) {
       buf[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
 
       s_canState.lastRpmAttemptAtMs = now;
-      const bool rpmSent = canSend(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);
-      if (rpmSent) {
+      const hal_status_t rpmSent =
+          canSend(CAN_ID_RPM, CAN_FRAME_MAX_LENGTH, buf);
+      if (rpmSent == HAL_OK) {
         s_canState.rpmHasBeenSent = true;
         s_canState.lastRpmSent = rpm;
         s_canState.lastRpmSentAtMs = now;
@@ -384,7 +391,7 @@ void CAN_sendTurboUpdate(void) {
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (uint8_t)hi_d;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (uint8_t)lo_d;
 
-    canSend(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
+    (void)canSend(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
   }
 }
 
@@ -398,7 +405,7 @@ void CAN_sendThrottleUpdate(void) {
     buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
     buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
-    canSend(CAN_ID_THROTTLE, sizeof(buf), buf);
+    (void)canSend(CAN_ID_THROTTLE, sizeof(buf), buf);
   }
 }
 
@@ -485,7 +492,11 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
 void canMainLoop(void) {
   if (s_canState.isInitialized) {
-    hal_can_process_all(s_canState.canBusHandle, onCanFrame);
+    const hal_status_t st =
+        hal_can_process_all(s_canState.canBusHandle, onCanFrame, NULL);
+    if (st != HAL_OK) {
+      derr_limited("can", "CAN0 receive failed: %s", hal_status_to_string(st));
+    }
   }
 }
 
@@ -501,9 +512,15 @@ bool isEGTConnected(void) { return s_canState.egtConnectedFlag; }
  */
 static void canReportBusFault(void) {
   hal_can_state_t state = HAL_CAN_STATE_ERROR_ACTIVE;
-  const bool haveState = s_canState.isInitialized &&
-                         hal_can_get_state(s_canState.canBusHandle, &state);
-  if (haveState && (state == HAL_CAN_STATE_BUS_OFF)) {
+  hal_status_t stateStatus = HAL_EUNINIT;
+  if (s_canState.isInitialized) {
+    stateStatus = hal_can_get_state(s_canState.canBusHandle, &state);
+    if (stateStatus != HAL_OK) {
+      derr_limited("can", "CAN0 state unreadable: %s",
+                   hal_status_to_string(stateStatus));
+    }
+  }
+  if ((stateStatus == HAL_OK) && (state == HAL_CAN_STATE_BUS_OFF)) {
     dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_BUS_OFF);
   } else if (s_canState.txFailures > 0u) {
     dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, s_canState.txFailDetail);

@@ -4,6 +4,7 @@
 #include <hal/gps/hal_gps.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/storage/hal_eeprom.h>
+#include <hal/storage/hal_kv.h>
 #include <hal/system/hal_sync.h>
 #include <hal/system/hal_system.h>
 
@@ -71,6 +72,15 @@ hal_status_t ecuPersistenceExecute(ecu_persistence_operation_fn operation,
   }
   hal_mutex_unlock(s_persistenceMutex);
   return operationStatus;
+}
+
+static hal_status_t prepareSpareBank(const void *user) {
+  (void)user;
+  return hal_kv_prepare_ex();
+}
+
+hal_status_t ecuPersistencePrepareStorage(void) {
+  return ecuPersistenceExecute(prepareSpareBank, NULL, NULL);
 }
 
 void ecuPersistencePoll(void) {

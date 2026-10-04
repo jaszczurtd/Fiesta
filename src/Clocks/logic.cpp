@@ -95,7 +95,8 @@ static void initializeCore0(void) {
 
   hal_watchdog_feed();
 
-  hal_rgb_led_set_color(canInit() ? HAL_RGB_LED_RED : HAL_RGB_LED_GREEN);
+  hal_rgb_led_set_color(canInit() == HAL_OK ? HAL_RGB_LED_GREEN
+                                            : HAL_RGB_LED_RED);
 
   while (sec < secDest) {
     hal_watchdog_feed();

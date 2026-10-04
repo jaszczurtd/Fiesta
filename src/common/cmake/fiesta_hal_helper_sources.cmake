@@ -6,6 +6,7 @@ function(fiesta_hal_helper_sources OUT_VAR HAL_SRC)
         ${HAL_SRC}/hal/core/hal_math.cpp
         ${HAL_SRC}/hal/core/hal_text.cpp
         ${HAL_SRC}/hal/core/jh_endian.cpp
+        ${HAL_SRC}/hal/system/hal_device_id.cpp
         ${HAL_SRC}/hal/system/hal_periodic_random.cpp
         ${HAL_SRC}/hal/temperature/hal_ntc.cpp
         PARENT_SCOPE

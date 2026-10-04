@@ -51,6 +51,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crc.cpp
     ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
+    ${HAL_SRC}/hal/can/hal_can.cpp
     ${HAL_SRC}/hal/can/hal_can_util.cpp
     ${HAL_SRC}/hal/storage/hal_eeprom.cpp
     ${HAL_SRC}/hal/storage/hal_kv.cpp
