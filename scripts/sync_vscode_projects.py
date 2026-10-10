@@ -92,14 +92,14 @@ def desired_project_files(
         else {}
     )
     usb_product = str(identity.get("usbProduct") or "")
-    variants = manifest.get("variants")
+    # Variant tasks follow JH_PROJECT_VARIANTS in the module's hal_project_config.h.
     desired_tasks = project_tasks_document(
         registry,
         target,
         board,
         module=module.name,
         usb_product=usb_product,
-        variants=variants if isinstance(variants, list) else None,
+        project_dir=vscode_dir.parent,
     )
     shared_labels = {
         str(task.get("label"))
