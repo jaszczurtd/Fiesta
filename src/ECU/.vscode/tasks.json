@@ -9,7 +9,6 @@
         "esp32:esp32-devkitc-v4 - Espressif ESP32-DevKitC V4",
         "esp32s3:waveshare-esp32-s3-zero - Waveshare ESP32-S3-Zero SKU 25081",
         "rp2040:pico - Raspberry Pi Pico",
-        "rp2040:pico-core1262-hf - Raspberry Pi Pico with Core1262-HF",
         "rp2040:pico-rm2 - Raspberry Pi Pico with PIM730/RM2",
         "rp2040:picow - Raspberry Pi Pico W",
         "rp2040:rp2040-lora-lf - Waveshare RP2040-LoRa-LF",
@@ -20,7 +19,6 @@
         "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
         "stm32g474:nucleo-g474re - ST NUCLEO-G474RE",
         "stm32g474:nucleo-g474re-canhat - ST NUCLEO-G474RE with CAN-FD HAT",
-        "stm32g474:nucleo-g474re-core1262-hf - ST NUCLEO-G474RE with Core1262-HF",
         "stm32g474:nucleo-g474re-pim730 - ST NUCLEO-G474RE with PIM730/RM2"
       ],
       "default": "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB"
@@ -333,8 +331,8 @@
       "problemMatcher": []
     },
     {
-      "label": "Project: Build variant: bench",
-      "detail": "Build the ECU variant bench.",
+      "label": "Project: Build variant: BENCH",
+      "detail": "Build the BENCH variant: ECU with the functional test console.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -345,14 +343,14 @@
         "--project",
         "${workspaceFolder}",
         "--variant",
-        "bench"
+        "BENCH"
       ],
       "group": "build",
       "problemMatcher": "$gcc"
     },
     {
-      "label": "Project: Upload variant: bench",
-      "detail": "Build and upload the ECU variant bench.",
+      "label": "Project: Upload variant: BENCH",
+      "detail": "Build and upload the BENCH variant: ECU with the functional test console.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -363,7 +361,7 @@
         "--project",
         "${workspaceFolder}",
         "--variant",
-        "bench"
+        "BENCH"
       ],
       "problemMatcher": "$gcc"
     },

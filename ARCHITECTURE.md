@@ -294,8 +294,13 @@ downward assistance, demand ramp and position API retain their existing roles.
 | [`tests_workers.c`](src/ECU/tests_workers.c) | what each test does: demand generators, one-shot actions and the progress they report |
 | [`tests_helpers.c`](src/ECU/tests_helpers.c) | test parameters and the runner behind the bench console and the configurator's test commands, with its engine-speed interlock and keepalive; idle stubs without `ECU_FUNCTIONAL_TESTS_ENABLED` |
 
-The tests exist only in the bench image. `Project: Build variant: bench` and
-`Project: Upload variant: bench` build it into `src/ECU/.build/variants/bench`;
+The tests exist only in the bench image, the `BENCH` variant that
+[`hal_project_config.h`](src/ECU/hal_project_config.h) declares with
+`ECU_FUNCTIONAL_TESTS_ENABLED=1`. The HAL modules and settings it shares with
+the host tests are in [`ecu_hal_config.h`](src/ECU/ecu_hal_config.h), because
+JaszczurHAL reads the variant declaration only from `hal_project_config.h`
+itself. `Project: Build variant: BENCH` and
+`Project: Upload variant: BENCH` build it into `src/ECU/.build/variants/BENCH`;
 `Project: Build` and `Project: Upload` give the image for the car.
 
 [`hardwareConfig.h`](src/ECU/hardwareConfig.h) assigns every pin and address.
@@ -395,7 +400,8 @@ Adjustometer on the same I²C protocol. The bench adapter
 the board services: the two PWM channels written active low like on the ECU,
 the drive enable on a plain GPIO instead of the ECU's PCF8574, and the
 Adjustometer transfer without a bus mutex, because the bench I²C has one
-user. Like the ECU, it includes
+user. Like the ECU (through
+[`ecu_hal_config.h`](src/ECU/ecu_hal_config.h)), it includes
 [`vp37_hal_config.h`](src/common/vp37/vp37_hal_config.h) from its
 `hal_project_config.h`: each I²C phase is bounded to 2 ms, so a hung bus
 cannot hold a control step past the 20 ms feedback cutoff, and the module

@@ -2,62 +2,18 @@
 
 /**
  * @file hal_project_config.h
- * @brief JaszczurHAL module configuration for the ECU project.
+ * @brief JaszczurHAL project configuration for the ECU firmware.
  *
- * Opt-in model (HAL >= 1.6.0): only HAL_ENABLE_* modules listed here are
- * compiled in. Core APIs (GPIO, ADC, PWM, SPI, timer, soft_timer,
- * watchdog, debug, mutex, critical_section, hal_serial, hal_pid_controller,
- * hal_time_from_components) are always available.
+ * Declares the firmware variants. The HAL modules and settings, shared with
+ * the host tests, are in ecu_hal_config.h.
  */
 
-/* ── Modules used by ECU ─────────────────────────────────────────────── */
+/* ── Variants ────────────────────────────────────────────────────────── */
 
-#include "../common/vp37/vp37_hal_config.h"
+/* The base image is the one for the car; BENCH adds the functional test
+ * console (jh-vscode build --variant BENCH). */
+#define JH_PROJECT_VARIANTS(X)                                                 \
+  X(BENCH, "ECU with the functional test console",                             \
+    ECU_FUNCTIONAL_TESTS_ENABLED = 1)
 
-#define HAL_ENABLE_I2C /* I2C master (sensors + AT24C256)    */
-#ifndef HAL_ENABLE_KV
-#define HAL_ENABLE_KV /* KV store -> EEPROM                 */
-#endif
-#define HAL_ENABLE_CAN      /* Generic CAN API facade             */
-#define HAL_ENABLE_MCP2515  /* MCP2515 CAN backend                */
-#define HAL_ENABLE_SWSERIAL /* Software serial (GPS)               */
-#define HAL_ENABLE_GPS      /* TinyGPS++ -> SWSERIAL              */
-#define HAL_ENABLE_PWM_FREQ /* Frequency-controlled PWM           */
-#define HAL_ENABLE_ADC_SCAN /* Hardware-paced shunt/supply scan   */
-#define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
-#define HAL_ENABLE_SERIAL_COMMANDS
-#define HAL_COMMAND_ROUTER_MAX_COMMANDS 24u /* SC surface (17) + headroom */
-#define HAL_ENABLE_APP_TASK1
-
-/* The VP37 module's bench telemetry and RAM trace follow the functional-test
- * image, so a bench build needs no second flag. */
-#if defined(ECU_FUNCTIONAL_TESTS_ENABLED) && (ECU_FUNCTIONAL_TESTS_ENABLED != 0)
-#define VP37_TELEMETRY_ENABLED 1
-#endif
-
-/* One storage layout for firmware and host tests. CMake reads the reservation
- * here to keep the linker boundary and C definitions consistent. */
-#ifndef HAL_RP_FLASH_EEPROM_SIZE
-#define HAL_RP_FLASH_EEPROM_SIZE 32768
-#endif
-#define ECU_KV_BASE 4096u
-#define ECU_KV_SIZE (HAL_RP_FLASH_EEPROM_SIZE / 2u)
-#define HAL_KV_MAX_BANK_SIZE (ECU_KV_SIZE / 2u)
-/* Keys in use: DTC schema and marker, one flags word and one timestamp per
- * registry entry, the parameter blob and the bench counter; the index has
- * room for the registry to grow. */
-#define HAL_KV_MAX_KEYS 64u
-
-#if (ECU_KV_SIZE % 8192u) != 0u ||                                             \
-    (ECU_KV_BASE + ECU_KV_SIZE) > HAL_RP_FLASH_EEPROM_SIZE
-#error                                                                         \
-    "ECU KV requires two complete flash sectors within the EEPROM reservation"
-#endif
-
-/* The transaction engine applies this per coordination phase. Three bounded
- * waits plus the measured 32 KiB erase/program stay below the 4 s watchdog. */
-#define HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS 750u
-
-/* Native RP system stacks, in bytes. */
-#define HAL_RP_CORE0_STACK_SIZE 4096u
-#define HAL_RP_CORE1_STACK_SIZE 4096u
+#include "ecu_hal_config.h"

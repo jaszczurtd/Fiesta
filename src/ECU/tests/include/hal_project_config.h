@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../hal_project_config.h"
+#include "../../ecu_hal_config.h"
 
 /**
  * @file tests/include/hal_project_config.h
