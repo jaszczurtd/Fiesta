@@ -111,7 +111,8 @@ czerwony po 2 sekundach bez transakcji I2C, a na końcu zielony heartbeat.
 | `telemetry.c / telemetry.h` | Publikacja spójnych bloków I2C i pierwotnych rejestrów. |
 | `start.c / start.h` | Przenośny start aplikacji i praca rdzeni. |
 | `led.c / led.h` | Sygnalizacja statusu. |
-| `config.h`, `hardwareConfig.h` | Czasy, progi, piny i parametry analogowe. |
+| `device_tree.json` | Płytka, piny, magistrala ECU i dioda statusu. |
+| `config.h`, `hardwareConfig.h` | Czasy, progi i parametry analogowe. |
 | `../common/adjustometer_feedback.h` | Wspólna reprezentacja pomiaru i kodowanie protokołu. |
 
 Testy hostowe sprawdzają pomiar, dryf baseline, zero hold, utratę sygnału, LED

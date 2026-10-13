@@ -1,0 +1,33 @@
+{
+  "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "oscillator": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "pull": "up" }
+    },
+    "supplyVoltage": { "compatible": "jaszczurhal,adc-input" },
+    "fuelTemperature": { "compatible": "jaszczurhal,adc-input" }
+  },
+  "assemblies": {
+    "rp2040-zero": {
+      "target": "rp2040",
+      "board": "rp2040-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed", "pixelOrder": "GRB" },
+      "buses": {
+        "ecu": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 0, "scl": 1 }
+        }
+      },
+      "nodes": {
+        "oscillator": { "present": true, "pins": { "in": 2 } },
+        "supplyVoltage": { "present": true, "pins": { "in": 29 } },
+        "fuelTemperature": { "present": true, "pins": { "in": 28 } }
+      }
+    }
+  }
+}

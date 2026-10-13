@@ -69,23 +69,39 @@ def mark_linux_only(task: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def manifest_selection(module_dir: Path, manifest: dict[str, Any]) -> tuple[str, str, str | None]:
+    """Target, board and assembly of a module: with device_tree.json the
+    assembly the manifest selects (the only one when it selects none), else
+    the manifest's target and board."""
+    import device_tree_project
+
+    if device_tree_project.device_tree_path(module_dir) is None:
+        return str(manifest["target"]), str(manifest["board"]), None
+    entry, _ = device_tree_project.choose(module_dir, None, manifest.get("assembly"))
+    return entry["target"], entry["board"], entry["name"]
+
+
 def desired_project_files(
     module: Module,
     registry: dict[str, dict[str, Any]],
+    jh_root: Path,
 ) -> dict[Path, str]:
-    vscode_dir = REPO_ROOT / "src" / module.name / ".vscode"
+    module_dir = REPO_ROOT / "src" / module.name
+    vscode_dir = module_dir / ".vscode"
     manifest = load_json(vscode_dir / "jaszczurhal.project.json")
     settings = load_json(vscode_dir / "settings.json")
     current_tasks = load_json(vscode_dir / "tasks.json")
 
     from vscode_task_config import (
+        assembly_debug_builds,
+        assembly_launch_document,
         keybindings_reference,
         project_tasks_document,
+        sync_cortex_debug_launch_document,
         vscode_entry_settings,
     )
 
-    target = str(manifest["target"])
-    board = str(manifest["board"])
+    target, board, assembly = manifest_selection(module_dir, manifest)
     identity = (
         manifest.get("identity")
         if isinstance(manifest.get("identity"), dict)
@@ -99,7 +115,8 @@ def desired_project_files(
         board,
         module=module.name,
         usb_product=usb_product,
-        project_dir=vscode_dir.parent,
+        project_dir=module_dir,
+        selected_assembly=assembly,
     )
     shared_labels = {
         str(task.get("label"))
@@ -133,6 +150,22 @@ def desired_project_files(
     # "sharedSources" loses the stale value on the next sync.
     apply_shared_sources(manifest, module, REPO_ROOT)
     outputs = {vscode_dir / "jaszczurhal.project.json": json_text(manifest)}
+    if assembly is not None:
+        # One debug profile per assembly and variant, as sync-board-picker
+        # writes it; profiles of the module's own stay.
+        launch_path = vscode_dir / "launch.json"
+        launch = load_json(launch_path) if launch_path.is_file() else {}
+        sync_cortex_debug_launch_document(
+            launch,
+            assembly_launch_document(
+                manifest,
+                assembly_debug_builds(module_dir),
+                workspace_dir=module_dir,
+                jh_root=jh_root,
+                default_assembly=assembly,
+            ),
+        )
+        outputs[launch_path] = json_text(launch)
 
     return outputs | {
         vscode_dir / "settings.json": json_text(settings),
@@ -181,7 +214,7 @@ def main(argv: list[str]) -> int:
     registry = tooling_target_registry(jh_root)
     expected: dict[Path, str] = {}
     for module in load_module_registry().firmware():
-        expected.update(desired_project_files(module, registry))
+        expected.update(desired_project_files(module, registry, jh_root))
     expected[REPO_ROOT / ".vscode" / "tasks.json"] = json_text(desired_root_tasks())
 
     mismatches = [

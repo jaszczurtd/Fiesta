@@ -302,7 +302,7 @@ static SimulationResult simulateCurrentLoop(bool enabled,
   s_pump.supply.localVolts = 12.0f;
   s_pump.supply.lastVolts = 12.0f;
   s_pump.supply.cycleEnabled = true;
-  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 0);
   VP37_currentSenseInit();
   hal_mock_set_micros(0U);
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
@@ -379,8 +379,9 @@ static SimulationResult simulateCurrentLoop(bool enabled,
           adcCode(on ? coilAmps * 0.22f : 0.0f);
       frames[frame * VP37_CURRENT_SCAN_PINS + 1U] = 1234U;
       const float divider =
-          (float)VP37_SUPPLY_DIVIDER_R2 /
-          (float)(VP37_SUPPLY_DIVIDER_R1 + VP37_SUPPLY_DIVIDER_R2);
+          (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS /
+          (float)(JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS +
+                  JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS);
       frames[frame * VP37_CURRENT_SCAN_PINS + 2U] =
           adcCode(railAt(us + 16U, disturbance) * divider);
       frame++;

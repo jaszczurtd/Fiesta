@@ -8,7 +8,7 @@
  * heatedWindshield unit tests.
  *
  * Key behavior:
- * - Button is active-low on HEATED_WINDOWS_PIN.
+ * - Button is active-low on JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN.
  * - waitingForUnpress prevents repeated toggles while button is held.
  * - volts < MINIMUM_VOLTS_AMOUNT blocks enabling and forces disable when
  * active.
@@ -18,11 +18,11 @@
 static heatedWindshields hw;
 
 static void setButtonReleased(void) {
-  hal_mock_gpio_inject_level(HEATED_WINDOWS_PIN, true);
+  hal_mock_gpio_inject_level(JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN, true);
 }
 
 static void setButtonPressed(void) {
-  hal_mock_gpio_inject_level(HEATED_WINDOWS_PIN, false);
+  hal_mock_gpio_inject_level(JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN, false);
 }
 
 static void enableHeatedWindowByButtonSequence(void) {
@@ -51,8 +51,9 @@ void test_init_sets_defaults_and_input_mode(void) {
   TEST_ASSERT_FALSE(hw.lastHeatedWindowEnabled);
   TEST_ASSERT_FALSE(hw.waitingForUnpress);
   TEST_ASSERT_EQUAL_INT32(0, hw.heatedWindowsOverallTimer);
-  TEST_ASSERT_EQUAL_UINT32(HAL_GPIO_INPUT_PULLUP,
-                           hal_mock_gpio_get_mode(HEATED_WINDOWS_PIN));
+  TEST_ASSERT_EQUAL_UINT32(
+      HAL_GPIO_INPUT_PULLUP,
+      hal_mock_gpio_get_mode(JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN));
 }
 
 void test_button_press_enables_heating_when_voltage_ok(void) {

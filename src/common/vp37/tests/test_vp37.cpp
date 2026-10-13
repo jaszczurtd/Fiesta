@@ -999,8 +999,10 @@ struct SupplyScanFixture {
 
 static uint16_t supplyScanRaw(float volts) {
   const float voltsPerCode =
-      3.3f * ((float)VP37_SUPPLY_DIVIDER_R1 + (float)VP37_SUPPLY_DIVIDER_R2) /
-      ((float)VP37_SUPPLY_DIVIDER_R2 * 4095.0f);
+      3.3f *
+      ((float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS +
+       (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS) /
+      ((float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS * 4095.0f);
   const int target = (int)(volts / voltsPerCode + .5f);
   int lower = 0;
   int upper = 4095;
@@ -1074,7 +1076,7 @@ static void setupSupplyScan(VP37Pump *pump, uint32_t startUs) {
   VP37_setVP37PID(pump, 0.0f, 0.0f, 0.0f, false);
   hal_mock_set_micros(startUs);
   TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
-  hal_mock_adc_inject(VP37_SHUNT_ADC_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 0);
   VP37_currentSenseInit();
   TEST_ASSERT_EQUAL(HAL_OK, VP37_currentScanStart());
 }

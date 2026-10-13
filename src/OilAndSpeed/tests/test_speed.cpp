@@ -51,7 +51,7 @@ void test_setupSpeedometer_interrupts_drive_abs_speed_updates(void) {
   TEST_ASSERT_TRUE(setupSpeedometer());
 
   for (int i = 0; i < 43; i++) {
-    hal_mock_gpio_fire_interrupt(ABS_INPUT_PIN);
+    hal_mock_gpio_fire_interrupt(JH_HW_NODE_ABS_SPEED_PIN_IN);
   }
 
   hal_mock_set_millis(124);

@@ -12,13 +12,13 @@ void setUp(void) {
   hal_mock_set_millis(0);
   initSensors();
   initFuelMeasurement();
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 0);
 }
 
 void tearDown(void) {}
 
 void test_readFuel_first_read_returns_expected_value(void) {
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 1000);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1000);
 
   int got = (int)readFuel();
 
@@ -26,23 +26,23 @@ void test_readFuel_first_read_returns_expected_value(void) {
 }
 
 void test_readFuel_before_next_window_keeps_last_value(void) {
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 1000);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1000);
   int first = (int)readFuel();
 
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 1200);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1200);
   int second = (int)readFuel();
 
   TEST_ASSERT_EQUAL_INT(first, second);
 }
 
 void test_readFuel_after_time_window_recomputes_average(void) {
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 1000);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1000);
   int first = (int)readFuel();
   TEST_ASSERT_EQUAL_INT(expectedFuelFromRawAdc(1000), first);
 
   hal_mock_advance_millis(7000);
 
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 1200);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1200);
   int second = (int)readFuel();
 
   int expectedAvg =
@@ -54,7 +54,7 @@ void test_readFuel_index_wrap_after_full_buffer(void) {
   const int expected = expectedFuelFromRawAdc(1000);
 
   for (int i = 0; i < (FUEL_MAX_SAMPLES + 4); i++) {
-    hal_mock_adc_inject(ADC_SENSORS_PIN, 1000);
+    hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 1000);
     int got = (int)readFuel();
     TEST_ASSERT_EQUAL_INT(expected, got);
   }

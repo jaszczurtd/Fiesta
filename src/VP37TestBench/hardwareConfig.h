@@ -1,33 +1,27 @@
 #ifndef C_HARDWAREC
 #define C_HARDWAREC
 
-// The power stage is the twin of the ECU one: same pins, same parts, same
-// values. Everything the drive needs comes from the shared header.
-#include "../common/vp37/vp37_power_stage.h"
+// Pins, buses and addresses come from the pico assembly of device_tree.json;
+// the code reads the JH_HW_* macros of the generated jh_hardware.h directly.
+// The power stage has the parts and values of the ECU one (type
+// fiesta,vp37-power-stage) and its own wiring.
+#include "../common/adjustometer_protocol.h"
+#include "../common/vp37/vp37_config.h"
 
-// The Adjustometer runs its bus at the fast-mode clock, like on the ECU.
-#define PIN_SDA 0
-#define PIN_SCL 1
-
-#define PIN_MISO 16
-#define PIN_MOSI 19
-#define PIN_SCK 18
-
-// Drive enable: a plain GPIO stands in for the ECU's PCF8574 output.
-#define PIN_VP37_ENABLE 22
-
-// Board status LED. The firmware gets the pin from the board profile; the
-// host mock has no board, so the Pico pin is named explicitly.
-#ifdef HAL_LED_BUILTIN
-#define PIN_ONBOARD_LED HAL_LED_BUILTIN
-#else
-#define PIN_ONBOARD_LED 25
+// hal_i2c_init() starts the default bus 0.
+#if JH_HW_BUS_I2C_INDEX != 0
+#error "the bench runs the Adjustometer on I2C bus 0"
+#endif
+// The Adjustometer firmware answers at the address of its protocol header.
+#if JH_HW_NODE_ADJUSTOMETER_ADDRESS != ADJUSTOMETER_I2C_ADDR
+#error                                                                         \
+    "device_tree.json and adjustometer_protocol.h disagree on the Adjustometer address"
 #endif
 
-// LCD / display
-#define TFT_CS 17  // CS
-#define TFT_RST 20 // reset
-#define TFT_DC 15  // A0
+// hal_display_init() drives the ST7796S on SPI 0.
+#if JH_HW_BUS_SPI_INDEX != 0
+#error "hal_display_init() drives the ST7796S on SPI 0"
+#endif
 
 // RGB565 colour constants
 #define ST77XX_BLACK 0x0000

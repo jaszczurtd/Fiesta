@@ -140,7 +140,7 @@ void canTestResetRpmPublisher(void) { resetRpmPublisher(); }
 
 static hal_can_config_t can0Config(void) {
   hal_can_config_t cfg = hal_can_default_config();
-  cfg.mcp2515.cs_pin = CAN0_GPIO;
+  cfg.mcp2515.cs_pin = JH_HW_NODE_CAN_MAIN_PIN_CS;
   cfg.mcp2515.one_shot_tx = true;
   return cfg;
 }
@@ -158,8 +158,8 @@ hal_status_t canInit(int retries) {
 
   hal_can_config_t canCfg = can0Config();
   const hal_status_t st = hal_can_create_with_retry(
-      &canCfg, CAN0_INT, receivedCanMessage, retries > 0 ? retries - 1 : 0,
-      watchdog_feed, &s_canState.canBusHandle);
+      &canCfg, JH_HW_NODE_CAN_MAIN_PIN_INT, receivedCanMessage,
+      retries > 0 ? retries - 1 : 0, watchdog_feed, &s_canState.canBusHandle);
   s_canState.isInitialized = (st == HAL_OK);
 
   if (s_canState.isInitialized) {

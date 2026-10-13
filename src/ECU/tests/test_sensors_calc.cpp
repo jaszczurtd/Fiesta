@@ -20,7 +20,7 @@
  *   FUEL_MAX         = 320
  *   FUEL_MIN         = 1280
  *   RPM_MAX_EVER     = 5000
- *   ADC_SENSORS_PIN  = 27
+ *   JH_HW_NODE_VP37_SCAN_AUX_PIN_IN  = 27
  *
  * readThrottle() maps ADC reading to [0, PWM_RESOLUTION] and then inverts:
  *   return abs(result - PWM_RESOLUTION)
@@ -35,7 +35,7 @@
 void setUp(void) {
   initSensors();
   hal_mock_set_millis(0);
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 0);
 }
 
 void tearDown(void) {}
@@ -75,7 +75,7 @@ void test_throttle_legacy_percentage_retains_integer_conversion(void) {
 
 static float sampleDriverDemand(int adc, uint32_t ms) {
   hal_mock_set_millis(ms);
-  hal_mock_adc_inject(ADC_SENSORS_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, adc);
   readThrottleValues();
   return getDriverDemandPercent();
 }
@@ -145,7 +145,7 @@ void test_driver_demand_uses_elapsed_sample_time_across_clock_wrap(void) {
 void test_driver_demand_reset_and_getter_do_not_reuse_or_advance_filter(void) {
   const float initial = sampleDriverDemand(2700, 0U);
   setGlobalValue(F_THROTTLE_POS, NAN);
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 0);
   for (uint32_t ms = 10U; ms <= 500U; ms += 10U) {
     hal_mock_set_millis(ms);
     TEST_ASSERT_EQUAL_FLOAT(initial, getDriverDemandPercent());
@@ -241,9 +241,9 @@ void test_set_global_value_invalid_index_does_not_modify_valid_slot(void) {
 }
 
 void test_init_spi_does_not_drive_vp37_current_sense_pin(void) {
-  hal_gpio_set_mode(ADC_VP37_CURRENT_PIN, HAL_GPIO_INPUT);
+  hal_gpio_set_mode(JH_HW_NODE_VP37_PIN_SHUNT_ADC, HAL_GPIO_INPUT);
   initSPI();
-  TEST_ASSERT_FALSE(hal_mock_gpio_is_output(ADC_VP37_CURRENT_PIN));
+  TEST_ASSERT_FALSE(hal_mock_gpio_is_output(JH_HW_NODE_VP37_PIN_SHUNT_ADC));
 }
 
 // ── internal testable helpers ───────────────────────────────────────────────
@@ -288,7 +288,8 @@ void test_internal_engine_load_helper_clamps_overflow_to_hundred(void) {
 void test_pcf8574_write_targets_expected_address(void) {
   hal_mock_i2c_set_busy(false);
   pcf8574_write(0, true);
-  TEST_ASSERT_EQUAL_UINT8(PCF8574_ADDR, hal_mock_i2c_get_last_addr());
+  TEST_ASSERT_EQUAL_UINT8(JH_HW_NODE_EXPANDER_ADDRESS,
+                          hal_mock_i2c_get_last_addr());
 }
 
 void test_pcf8574_write_changes_address_free_after_release(void) {
@@ -350,7 +351,7 @@ void test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample(
   for (int i = 0; i < F_LAST; ++i) {
     setGlobalValue(i, 1000.0f + (float)i);
   }
-  hal_mock_adc_inject(ADC_SENSORS_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 0);
   readThrottleValues();
   TEST_ASSERT_EQUAL_FLOAT((float)PWM_RESOLUTION,
                           getGlobalValue(F_THROTTLE_POS));
@@ -360,7 +361,7 @@ void test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample(
     }
   }
 
-  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, THROTTLE_MAX);
   TEST_ASSERT_FLOAT_WITHIN(.00001f, 100.0f, getDriverDemandPercent());
   TEST_ASSERT_EQUAL_INT(100, getThrottlePercentage());
   readThrottleValues();
@@ -368,7 +369,7 @@ void test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample(
   TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
 
   setGlobalValue(F_THROTTLE_POS, 1000.0f);
-  hal_mock_adc_inject(ADC_SENSORS_PIN, -1);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, -1);
   readThrottleValues();
   TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_THROTTLE_POS));
   TEST_ASSERT_EQUAL_FLOAT(0.0f, getDriverDemandPercent());
@@ -377,7 +378,7 @@ void test_throttle_poll_updates_only_its_cache_and_getters_do_not_resample(
 void test_readHighValues_preserves_the_independently_sampled_throttle(void) {
   const float demand = sampleDriverDemand(2700, 0U);
   setGlobalValue(F_THROTTLE_POS, 1234.0f);
-  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, THROTTLE_MAX);
   readHighValues();
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, getGlobalValue(F_THROTTLE_POS));
   TEST_ASSERT_EQUAL_FLOAT(demand, getDriverDemandPercent());
@@ -423,7 +424,7 @@ void test_throttle_adc_at_idle_gives_zero(void) {
    * hal_adc_compensate_rp2040_12bit adds 32 -> 3762. We inject 3730 and accept
    * the result as "near 0" within tolerance.
    */
-  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, THROTTLE_MAX);
   int val = readThrottle();
   TEST_ASSERT_INT_WITHIN(50, 0, val);
 }
@@ -436,7 +437,7 @@ void test_throttle_adc_at_full_gives_max(void) {
    * 1811. 1811 - THROTTLE_MIN (1795) = 16; result = 16 / divider ≈ 16 abs(16 -
    * 2047) ≈ 2031 - near PWM_RESOLUTION, within tolerance.
    */
-  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MIN);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, THROTTLE_MIN);
   int val = readThrottle();
   TEST_ASSERT_INT_WITHIN(100, PWM_RESOLUTION, val);
 }
@@ -447,9 +448,9 @@ void test_throttle_unreadable_input_gives_zero_demand(void) {
    * The inverted mapping would turn a zero stand-in into full throttle, so
    * an unreadable pedal must read as no demand.
    */
-  hal_mock_adc_inject(ADC_SENSORS_PIN, -1);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, -1);
   int val = readThrottle();
-  hal_mock_adc_inject(ADC_SENSORS_PIN, THROTTLE_MAX);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, THROTTLE_MAX);
   TEST_ASSERT_EQUAL_INT(0, val);
 }
 
@@ -478,7 +479,7 @@ void test_scan_timings_follow_the_frame_period(void) {
 void test_scan_without_the_sensor_inputs_is_reported_uncovered(void) {
   static uint16_t buffer[2u * 4u * 1u];
   hal_adc_scan_config_t config = {};
-  config.pins[0] = ADC_VP37_CURRENT_PIN;
+  config.pins[0] = JH_HW_NODE_VP37_PIN_SHUNT_ADC;
   config.pin_count = 1u;
   config.conversion_period_ns = 8000u;
   config.buffer = buffer;

@@ -1,0 +1,75 @@
+{
+  "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "can": { "compatible": "microchip,mcp2515" },
+    "rtc": { "compatible": "jaszczurhal,i2c-device" },
+    "oled": { "compatible": "jaszczurhal,i2c-device" },
+    "tempInside": { "compatible": "jaszczurhal,onewire-device" },
+    "tempOutside": { "compatible": "jaszczurhal,onewire-device" },
+    "buttonHour": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "activeLow": true, "pull": "up" }
+    },
+    "buttonMinute": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "activeLow": true, "pull": "up" }
+    },
+    "buttonSet": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "activeLow": true, "pull": "up" }
+    },
+    "ignition": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "activeLow": true, "pull": "up" }
+    },
+    "ledRed": { "compatible": "jaszczurhal,gpio-output" },
+    "ledOrange": { "compatible": "jaszczurhal,gpio-output" },
+    "ledBlue": { "compatible": "jaszczurhal,gpio-output" },
+    "supplyVoltage": { "compatible": "jaszczurhal,adc-input" }
+  },
+  "assemblies": {
+    "rp2040-zero": {
+      "target": "rp2040",
+      "board": "rp2040-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "ledRed" },
+      "releaseReservations": ["status-led"],
+      "nets": {
+        "ledBlue": {
+          "endpoint": { "domain": "soc-gpio", "id": 16 },
+          "owner": "ledBlue.out"
+        }
+      },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 10000000,
+          "pins": { "sck": 2, "mosi": 3, "miso": 0 }
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 8, "scl": 9 }
+        }
+      },
+      "nodes": {
+        "can": { "present": true, "bus": "spi", "pins": { "cs": 1, "int": 4 } },
+        "rtc": { "present": true, "bus": "i2c", "address": 81 },
+        "oled": { "present": true, "bus": "i2c", "address": 60 },
+        "tempInside": { "present": true, "pins": { "data": 6 } },
+        "tempOutside": { "present": true, "pins": { "data": 7 } },
+        "buttonHour": { "present": true, "pins": { "in": 10 } },
+        "buttonMinute": { "present": true, "pins": { "in": 11 } },
+        "buttonSet": { "present": true, "pins": { "in": 12 } },
+        "ignition": { "present": true, "pins": { "in": 13 } },
+        "ledRed": { "present": true, "pins": { "out": 14 } },
+        "ledOrange": { "present": true, "pins": { "out": 15 } },
+        "ledBlue": { "present": true, "pins": { "out": { "net": "ledBlue" } } },
+        "supplyVoltage": { "present": true, "pins": { "in": 26 } }
+      }
+    }
+  }
+}

@@ -1,33 +1,37 @@
 #include "peripherials.h"
 
 void setupOnboardLed(void) {
-  hal_rgb_led_init(PIN_RGB, NUMPIXELS);
+  (void)fiesta_status_led_init();
   hal_rgb_led_set_color(HAL_RGB_LED_BLUE);
 }
 
 void initSPI(void) {
-  hal_gpio_set_mode(CAN_CS, HAL_GPIO_OUTPUT);
-  hal_gpio_write(CAN_CS, true);
+  hal_gpio_set_mode(JH_HW_NODE_CAN_PIN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(JH_HW_NODE_CAN_PIN_CS, true);
 
-  hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
 
-  hal_gpio_set_mode(OIL_OUTPUT_PIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_OIL_LAMP_PIN_OUT, HAL_GPIO_OUTPUT);
   enableOilLamp(true);
 }
 
-void enableOilLamp(bool enable) { hal_gpio_write(OIL_OUTPUT_PIN, enable); }
+void enableOilLamp(bool enable) {
+  hal_gpio_write(JH_HW_NODE_OIL_LAMP_PIN_OUT, enable);
+}
 
 void initBasicPIO(void) {
   hal_pwm_set_resolution(PWM_WRITE_RESOLUTION);
   lcdBrightness(INITIAL_BRIGHTNESS);
 
-  Buzzer::initHardware(BUZZER);
+  Buzzer::initHardware(JH_HW_NODE_BUZZER_PIN_OUT);
   initBuzzers();
 }
 
 void lcdBrightness(int val) {
   valueFields[F_CLOCK_BRIGHTNESS] = val;
-  hal_pwm_write(PIN_BRIGHTNESS, ((1 << PWM_WRITE_RESOLUTION) - 1) - val);
+  hal_pwm_write(JH_HW_NODE_BACKLIGHT_PIN_OUT,
+                ((1 << PWM_WRITE_RESOLUTION) - 1) - val);
 }
 
 int getThrottlePercentage(void) {

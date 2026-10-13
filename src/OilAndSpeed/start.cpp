@@ -94,11 +94,11 @@ static void initializeCore0(void) {
 
   hal_thermocouple_config_t egt_cfg = {};
   egt_cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
-  egt_cfg.bus.i2c.sda_pin = PIN_I2C_SDA;
-  egt_cfg.bus.i2c.scl_pin = PIN_I2C_SCL;
-  egt_cfg.bus.i2c.clock_hz = 100000UL;
-  egt_cfg.bus.i2c.i2c_bus = 0;
-  egt_cfg.bus.i2c.i2c_addr = MCP9600_ADDR_PRE_DPF;
+  egt_cfg.bus.i2c.sda_pin = JH_HW_BUS_I2C_PIN_SDA;
+  egt_cfg.bus.i2c.scl_pin = JH_HW_BUS_I2C_PIN_SCL;
+  egt_cfg.bus.i2c.clock_hz = JH_HW_BUS_I2C_FREQUENCY_HZ;
+  egt_cfg.bus.i2c.i2c_bus = JH_HW_BUS_I2C_INDEX;
+  egt_cfg.bus.i2c.i2c_addr = JH_HW_NODE_EGT_PRE_DPF_ADDRESS;
 
   egt_pre_dpf = hal_thermocouple_init(&egt_cfg);
   if (!egt_pre_dpf) {
@@ -114,7 +114,7 @@ static void initializeCore0(void) {
     deb("[EGT] MCP9600 #1 OK");
   }
 
-  egt_cfg.bus.i2c.i2c_addr = MCP9600_ADDR_MID_DPF;
+  egt_cfg.bus.i2c.i2c_addr = JH_HW_NODE_EGT_MID_DPF_ADDRESS;
   egt_mid_dpf = hal_thermocouple_init(&egt_cfg);
   if (!egt_mid_dpf) {
     derr("[EGT] MCP9600 #2 not found!");

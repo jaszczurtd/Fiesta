@@ -3,8 +3,7 @@
     "project": "Fiesta",
     "module": "Adjustometer",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "rp2040-zero",
+    "assembly": "rp2040-zero",
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

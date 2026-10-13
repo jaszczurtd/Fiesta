@@ -1,0 +1,55 @@
+{
+  "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "bindings": ["../common/vp37/fiesta-vp37-power-stage.json"],
+  "nodes": {
+    "vp37": { "compatible": "fiesta,vp37-power-stage" },
+    "vp37ScanAux": { "compatible": "jaszczurhal,adc-input" },
+    "adjustometer": { "compatible": "jaszczurhal,i2c-device" },
+    "tft": { "compatible": "jaszczurhal,spi-device" },
+    "tftDc": { "compatible": "jaszczurhal,gpio-output" },
+    "tftReset": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 32000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 0, "scl": 1 }
+        }
+      },
+      "nodes": {
+        "vp37": {
+          "present": true,
+          "pins": {
+            "quantityPwm": 9,
+            "timingPwm": 5,
+            "shuntAdc": 26,
+            "supplyAdc": 28,
+            "enable": 22
+          }
+        },
+        "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
+        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "tft": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "tftDc": { "present": true, "pins": { "out": 15 } },
+        "tftReset": { "present": true, "pins": { "out": 20 } }
+      }
+    }
+  }
+}

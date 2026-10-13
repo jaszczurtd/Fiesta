@@ -1,0 +1,12 @@
+{
+  "$schema": "../../JaszczurHAL/config/hardware/binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "fiesta,pcf8574a-fast",
+  "description": "PCF8574A 8-bit I2C output expander of the ECU. The datasheet rates it for 100 kHz; the ECU runs it at the 400 kHz of the Adjustometer bus, outside that rating, until the part is replaced by a 400 kHz PCA8574A or moved to its own bus.",
+  "domain": "expander",
+  "bus": { "kind": "i2c", "required": true, "maximumFrequencyHz": 400000 },
+  "pinCount": 8,
+  "signals": {
+    "int": { "direction": "input", "required": false, "domains": ["soc-gpio"] }
+  }
+}

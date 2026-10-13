@@ -669,8 +669,9 @@ static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
 static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
   self->supply.lastVolts = self->feedback.supplyVolts;
   self->supply.localVolts = fiesta_adc_read_divided_volts(
-      VP37_SUPPLY_ADC_PIN, (float)VP37_SUPPLY_DIVIDER_R1,
-      (float)VP37_SUPPLY_DIVIDER_R2);
+      JH_HW_NODE_VP37_PIN_SUPPLY_ADC,
+      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS,
+      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS);
   if (self->supply.lastVolts < VP37_MIN_COMPENSATION_VOLTAGE) {
     self->supply.lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }

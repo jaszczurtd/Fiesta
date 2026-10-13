@@ -2,7 +2,7 @@
 
 #include "../fiesta_sensor_helpers.h"
 #include "../vp37_drive_config.h"
-#include "vp37_power_stage.h"
+#include "vp37_config.h"
 
 #include <string.h>
 
@@ -82,11 +82,11 @@ static float VP37_currentRawToVolts(int raw) {
 }
 
 float VP37_currentRawToAmps(uint16_t raw) {
-  return VP37_currentRawToVolts((int)raw) / VP37_CURRENT_SHUNT_OHMS;
+  return VP37_currentRawToVolts((int)raw) / JH_HW_NODE_VP37_PROP_SHUNT_OHMS;
 }
 
 uint16_t VP37_currentAmpsToRaw(float amps) {
-  float raw = (amps * VP37_CURRENT_SHUNT_OHMS *
+  float raw = (amps * JH_HW_NODE_VP37_PROP_SHUNT_OHMS *
                (float)VP37_CURRENT_ADC_MAX_RAW / 3.3f) +
               0.5f;
   if (!(raw > 0.0f)) {
@@ -113,7 +113,8 @@ static uint16_t VP37_currentCompensatedRaw(int reading) {
 }
 
 static uint16_t VP37_currentReadRaw(void) {
-  return VP37_currentCompensatedRaw(hal_adc_read(VP37_SHUNT_ADC_PIN));
+  return VP37_currentCompensatedRaw(
+      hal_adc_read(JH_HW_NODE_VP37_PIN_SHUNT_ADC));
 }
 
 /** Subtract the calibrated zero and report whether the code hit the end stop.
@@ -259,9 +260,9 @@ HAL_RAM_FUNC(VP37_currentPulseAnalyze)(const VP37CurrentPhaseSample *samples,
 hal_status_t VP37_currentScanStart(void) {
   hal_adc_scan_config_t config;
   (void)memset(&config, 0, sizeof(config));
-  config.pins[0] = VP37_SHUNT_ADC_PIN;
-  config.pins[1] = VP37_SCAN_AUX_ADC_PIN;
-  config.pins[2] = VP37_SUPPLY_ADC_PIN;
+  config.pins[0] = JH_HW_NODE_VP37_PIN_SHUNT_ADC;
+  config.pins[1] = JH_HW_NODE_VP37_SCAN_AUX_PIN_IN;
+  config.pins[2] = JH_HW_NODE_VP37_PIN_SUPPLY_ADC;
   config.pin_count = VP37_CURRENT_SCAN_PINS;
   config.conversion_period_ns = VP37_CURRENT_SCAN_CONVERSION_NS;
   /* Both halves of the scan block; the scan owns them while it runs. */
@@ -274,8 +275,10 @@ hal_status_t VP37_currentScanStart(void) {
   if (status == HAL_OK) {
     s_scanHistoryFrames = 0U;
     s_scanPending = false;
-    s_scanShuntPosition = hal_adc_scan_pin_position(VP37_SHUNT_ADC_PIN);
-    s_scanSupplyPosition = hal_adc_scan_pin_position(VP37_SUPPLY_ADC_PIN);
+    s_scanShuntPosition =
+        hal_adc_scan_pin_position(JH_HW_NODE_VP37_PIN_SHUNT_ADC);
+    s_scanSupplyPosition =
+        hal_adc_scan_pin_position(JH_HW_NODE_VP37_PIN_SUPPLY_ADC);
   }
   return status;
 }
@@ -471,8 +474,10 @@ static hal_status_t HAL_RAM_FUNC(VP37_currentScanReducePeriod)(
         (((float)supplySum[1] / (float)supplyCount[1]) * onFraction) +
         (((float)supplySum[0] / (float)supplyCount[0]) * (1.0f - onFraction));
     supplyValid = fiesta_adc_to_voltage_ex(
-                      (int)(rawMean + 0.5f), (float)VP37_SUPPLY_DIVIDER_R1,
-                      (float)VP37_SUPPLY_DIVIDER_R2, &supplyVolts) == HAL_OK;
+                      (int)(rawMean + 0.5f),
+                      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS,
+                      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS,
+                      &supplyVolts) == HAL_OK;
   }
   out->supplySamples = supplyCount[0] + supplyCount[1];
   out->supplyVolts = supplyVolts;
@@ -509,9 +514,10 @@ HAL_RAM_FUNC(VP37_currentReduceLatestSupply)(const VP37CurrentScanView *view,
       const uint64_t roundedMean = (sum + ((uint64_t)frames / 2U)) / frames;
       const int mean = (int)roundedMean;
       out->supplyLatestValid =
-          fiesta_adc_to_voltage_ex(mean, (float)VP37_SUPPLY_DIVIDER_R1,
-                                   (float)VP37_SUPPLY_DIVIDER_R2,
-                                   &out->supplyLatestVolts) == HAL_OK;
+          fiesta_adc_to_voltage_ex(
+              mean, (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS,
+              (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS,
+              &out->supplyLatestVolts) == HAL_OK;
       out->supplyLatestUs =
           block->startUs + VP37_currentFramesToUs(first, block->frameNs) +
           (VP37_currentFramesToUs(frames, block->frameNs) / 2U);

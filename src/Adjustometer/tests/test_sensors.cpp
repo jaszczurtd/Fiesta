@@ -41,7 +41,7 @@ static void injectVoltage(int tenthsOfVolt) {
   int adc = (int)(volts / ratio * 4095.0f / 3.3f);
   if (adc < 0)
     adc = 0;
-  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_SUPPLY_VOLTAGE_PIN_IN, adc);
 }
 
 /**
@@ -50,7 +50,7 @@ static void injectVoltage(int tenthsOfVolt) {
  * broken=false -> ADC mid-range -> NTC conversion returns a positive value.
  */
 static void injectFuelTemp(bool broken) {
-  hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, broken ? 4090 : 2000);
+  hal_mock_adc_inject(JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN, broken ? 4090 : 2000);
 }
 
 /**
@@ -274,7 +274,7 @@ void test_status_does_not_mutate_fuel_temp_ema(void) {
   TEST_ASSERT_TRUE(tempBefore > 0);
 
   /* Shift ADC to a significantly different (but valid) value */
-  hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, 1000);
+  hal_mock_adc_inject(JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN, 1000);
   /* 50 status calls - must not advance the temperature EMA */
   for (int i = 0; i < 50; i++)
     getAdjustometerStatus();

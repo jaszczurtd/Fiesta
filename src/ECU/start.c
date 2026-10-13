@@ -137,7 +137,7 @@ static void start_forceWatchdogReset(const char *reason) {
   bool ledOn = false;
   while (true) {
     ledOn = !ledOn;
-    hal_gpio_write(HAL_LED_PIN, ledOn);
+    hal_gpio_write(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT, ledOn);
     // Intentionally do not feed/update watchdog.
     hal_idle();
     hal_delay_ms(150);
@@ -410,8 +410,9 @@ static void initializeCore0(void) {
 void callAtEverySecond(void) {
   s_startRuntimeState.alertBlinkState =
       (s_startRuntimeState.alertBlinkState) ? false : true;
-  hal_gpio_write(HAL_LED_PIN, s_startRuntimeState.alertBlinkState);
-  hal_gpio_write(PIO_DPF_LAMP, isDPFRegenerating());
+  hal_gpio_write(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT,
+                 s_startRuntimeState.alertBlinkState);
+  hal_gpio_write(JH_HW_NODE_DPF_LAMP_PIN_OUT, isDPFRegenerating());
   CAN_sendGpsExtended();
   start_reportWatchdogSnapshot();
   start_reportResetReason();
@@ -543,7 +544,8 @@ static void initializeCore1(void) {
     // The scan owns the converter from now on: an input it does not carry
     // cannot be read for the rest of the run.
     derr("ADC scan leaves a sensor input unreadable (pins %u, %u expected)",
-         (unsigned)ADC_SENSORS_PIN, (unsigned)ADC_VOLT_PIN);
+         (unsigned)JH_HW_NODE_VP37_SCAN_AUX_PIN_IN,
+         (unsigned)JH_HW_NODE_VP37_PIN_SUPPLY_ADC);
   } else {
     // The scan carries every input the sensors read through hal_adc_read().
   }

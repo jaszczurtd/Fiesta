@@ -213,13 +213,12 @@ run_tests() {
 compile_firmware_for() {
     local module="$1"
     local src="$SRC_ROOT/$module"
-    local build="$src/.build"
 
-    info "[$module] compiling native firmware from tracked target/board manifest"
+    info "[$module] compiling native firmware from tracked assembly manifest"
     fiesta_run_compile "$src" build "$src" 1 1 0 ""
 
     local uf2
-    uf2=$(fiesta_find_uf2_artifact "$build" || true)
+    uf2=$(fiesta_find_uf2_artifact "$src" || true)
     if [[ -n "$uf2" ]]; then
         ok "[$module] firmware: $uf2"
         local manifest
@@ -230,7 +229,7 @@ compile_firmware_for() {
         fi
         ok "[$module] manifest: $manifest"
     else
-        warn "[$module] compile finished but no .uf2 found in $build"
+        warn "[$module] compile finished but no .uf2 found in $src/.build"
     fi
 }
 

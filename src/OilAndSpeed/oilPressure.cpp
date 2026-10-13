@@ -37,14 +37,14 @@ static float readSenderResistanceOhm(int raw) {
 
 bool setupOilPressure(void) {
   hal_adc_set_resolution(OIL_PRESSURE_ADC_BITS);
-  hal_gpio_set_mode(OIL_PRESSURE_ADC_PIN, HAL_GPIO_INPUT);
+  hal_gpio_set_mode(JH_HW_NODE_OIL_PRESSURE_PIN_IN, HAL_GPIO_INPUT);
   setGlobalValue(F_OIL_PRESSURE, 0.0f);
   filteredPressure = 0.0f;
   return true;
 }
 
 void readOilPressure(void) {
-  int raw = hal_adc_read(OIL_PRESSURE_ADC_PIN);
+  int raw = hal_adc_read(JH_HW_NODE_OIL_PRESSURE_PIN_IN);
   if (raw < 0) {
     return;
   }

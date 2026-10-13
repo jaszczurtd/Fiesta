@@ -33,18 +33,18 @@ static void helloMessage(void) {
 static void setup_runtime(void) {
   hal_watchdog_enable(CFG_WATCHDOG_TIMEOUT_MS, false);
 
-  hal_gpio_set_mode(PIN_LED_RED, HAL_GPIO_OUTPUT);
-  hal_gpio_set_mode(PIN_LED_ORANGE, HAL_GPIO_OUTPUT);
-  hal_gpio_set_mode(PIN_LED_BLUE, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_LED_RED_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_LED_ORANGE_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_LED_BLUE_PIN_OUT, HAL_GPIO_OUTPUT);
   redLED(false);
   orangeLED(false);
   blueLED(false);
 
-  hal_gpio_set_mode(PIN_BUTTON_HOUR, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_set_mode(PIN_BUTTON_MINUTE, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_set_mode(PIN_BUTTON_SET, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_HOUR_PIN_IN, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_MINUTE_PIN_IN, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_SET_PIN_IN, HAL_GPIO_INPUT_PULLUP);
 
-  hal_gpio_set_mode(PIN_IGNITION, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_IGNITION_PIN_IN, HAL_GPIO_INPUT_PULLUP);
 
   hal_adc_set_resolution((uint8_t)CFG_ADC_RESOLUTION_BITS);
 
@@ -190,21 +190,21 @@ static void setDisplaytMode(void) {
 
 void redLED(bool state) {
   const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
-  hal_gpio_write(PIN_LED_RED, level);
+  hal_gpio_write(JH_HW_NODE_LED_RED_PIN_OUT, level);
 }
 
 void orangeLED(bool state) {
   const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
-  hal_gpio_write(PIN_LED_ORANGE, level);
+  hal_gpio_write(JH_HW_NODE_LED_ORANGE_PIN_OUT, level);
 }
 
 void blueLED(bool state) {
   const bool level = state ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL;
-  hal_gpio_write(PIN_LED_BLUE, level);
+  hal_gpio_write(JH_HW_NODE_LED_BLUE_PIN_OUT, level);
 }
 
 bool ignition(void) {
-  return hal_gpio_read(PIN_IGNITION) == IGNITION_ACTIVE_LEVEL;
+  return hal_gpio_read(JH_HW_NODE_IGNITION_PIN_IN) == IGNITION_ACTIVE_LEVEL;
 }
 
 bool setButtonPressed(void) {
@@ -221,15 +221,15 @@ bool setButtonPressed(void) {
 }
 
 bool setButton(void) {
-  return hal_gpio_read(PIN_BUTTON_SET) == BUTTON_ACTIVE_LEVEL;
+  return hal_gpio_read(JH_HW_NODE_BUTTON_SET_PIN_IN) == BUTTON_ACTIVE_LEVEL;
 }
 
 bool setHour(void) {
-  return hal_gpio_read(PIN_BUTTON_HOUR) == BUTTON_ACTIVE_LEVEL;
+  return hal_gpio_read(JH_HW_NODE_BUTTON_HOUR_PIN_IN) == BUTTON_ACTIVE_LEVEL;
 }
 
 bool setMinute(void) {
-  return hal_gpio_read(PIN_BUTTON_MINUTE) == BUTTON_ACTIVE_LEVEL;
+  return hal_gpio_read(JH_HW_NODE_BUTTON_MINUTE_PIN_IN) == BUTTON_ACTIVE_LEVEL;
 }
 
 bool anyButton(void) { return setButton() || setHour() || setMinute(); }

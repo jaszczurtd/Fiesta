@@ -28,7 +28,7 @@ void setUp(void) {
 void tearDown(void) { hal_mock_i2c_set_busy(false); }
 
 static void sampleDriverDemand(int raw) {
-  hal_mock_adc_inject(ADC_SENSORS_PIN, raw);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, raw);
   readThrottleValues();
 }
 

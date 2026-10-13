@@ -1,0 +1,116 @@
+{
+  "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "bindings": [
+    "../common/vp37/fiesta-vp37-power-stage.json",
+    "bindings/fiesta-pcf8574a-fast.json",
+    "bindings/fiesta-soft-serial-gps.json"
+  ],
+  "nodes": {
+    "canMain": { "compatible": "microchip,mcp2515" },
+    "canObd": { "compatible": "microchip,mcp2515" },
+    "expander": { "compatible": "fiesta,pcf8574a-fast" },
+    "adjustometer": { "compatible": "jaszczurhal,i2c-device" },
+    "glowPlugs": { "compatible": "jaszczurhal,gpio-output" },
+    "fan": { "compatible": "jaszczurhal,gpio-output" },
+    "heaterHi": { "compatible": "jaszczurhal,gpio-output" },
+    "heaterLo": { "compatible": "jaszczurhal,gpio-output" },
+    "glowPlugsLamp": { "compatible": "jaszczurhal,gpio-output" },
+    "heatedWindowLeft": { "compatible": "jaszczurhal,gpio-output" },
+    "heatedWindowRight": { "compatible": "jaszczurhal,gpio-output" },
+    "vp37": { "compatible": "fiesta,vp37-power-stage" },
+    "turbo": {
+      "compatible": "jaszczurhal,pwm-output",
+      "properties": { "activeLow": true }
+    },
+    "muxA": { "compatible": "jaszczurhal,gpio-output" },
+    "muxB": { "compatible": "jaszczurhal,gpio-output" },
+    "muxC": { "compatible": "jaszczurhal,gpio-output" },
+    "vp37ScanAux": { "compatible": "jaszczurhal,adc-input" },
+    "hall": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "pull": "up" }
+    },
+    "dpfLamp": { "compatible": "jaszczurhal,gpio-output" },
+    "heatedWindowButton": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "activeLow": true, "pull": "up" }
+    },
+    "gps": { "compatible": "fiesta,soft-serial-gps" }
+  },
+  "assemblies": {
+    "rp2040-plus": {
+      "target": "rp2040",
+      "board": "rp2040-plus-4mb",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 10000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 0, "scl": 1 }
+        }
+      },
+      "nodes": {
+        "canMain": { "present": true, "bus": "spi", "pins": { "cs": 17, "int": 15 } },
+        "canObd": { "present": true, "bus": "spi", "pins": { "cs": 6, "int": 14 } },
+        "expander": { "present": true, "bus": "i2c", "address": 56 },
+        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "glowPlugs": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 0 } }
+        },
+        "fan": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 1 } }
+        },
+        "heaterHi": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 2 } }
+        },
+        "heaterLo": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 3 } }
+        },
+        "glowPlugsLamp": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 4 } }
+        },
+        "heatedWindowLeft": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 5 } }
+        },
+        "heatedWindowRight": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 6 } }
+        },
+        "vp37": {
+          "present": true,
+          "pins": {
+            "quantityPwm": 9,
+            "timingPwm": 5,
+            "shuntAdc": 26,
+            "supplyAdc": 28,
+            "enable": { "domain": "device-pin", "node": "expander", "index": 7 }
+          }
+        },
+        "turbo": { "present": true, "pins": { "out": 10 } },
+        "muxA": { "present": true, "pins": { "out": 11 } },
+        "muxB": { "present": true, "pins": { "out": 12 } },
+        "muxC": { "present": true, "pins": { "out": 13 } },
+        "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
+        "hall": { "present": true, "pins": { "in": 7 } },
+        "dpfLamp": { "present": true, "pins": { "out": 8 } },
+        "heatedWindowButton": { "present": true, "pins": { "in": 20 } },
+        "gps": { "present": true, "pins": { "rx": 22, "tx": 21 } }
+      }
+    }
+  }
+}

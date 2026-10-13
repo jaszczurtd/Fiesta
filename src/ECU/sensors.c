@@ -95,8 +95,8 @@ static float sensors_readNtcViaMux(uint8_t muxChannel, size_t *tableIdx,
   m_mutex_enter_blocking(analog4051Mutex);
   set4051ActivePin(muxChannel);
   const hal_status_t temperature_status = fiesta_ntc_read_temperature_spaced_ex(
-      ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), R_TEMP_A, R_TEMP_B,
-      &temperature);
+      JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, sensors_adcSampleDelayUs(), R_TEMP_A,
+      R_TEMP_B, &temperature);
   const hal_status_t average_status =
       temperature_status == HAL_OK
           ? hal_math_rolling_average_f32_ex(
@@ -120,16 +120,19 @@ void initI2C(void) {
     m_mutex_init(i2cBusMutex);
     i2cMutexInited = true;
   }
-  hal_i2c_bus_clear(PIN_SDA, PIN_SCL);
-  hal_i2c_init(PIN_SDA, PIN_SCL, HAL_I2C_CLOCK_FAST_HZ);
+  hal_i2c_bus_clear(JH_HW_BUS_I2C_PIN_SDA, JH_HW_BUS_I2C_PIN_SCL);
+  hal_i2c_init(JH_HW_BUS_I2C_PIN_SDA, JH_HW_BUS_I2C_PIN_SCL,
+               JH_HW_BUS_I2C_FREQUENCY_HZ);
 }
 
 void initSPI(void) {
-  hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
 
   // Deassert all SPI chip-selects immediately so that no MCP2515
   // floats its /CS low during another chip's SPI transactions.
-  const uint8_t spiCsPins[] = {CAN0_GPIO, CAN1_GPIO};
+  const uint8_t spiCsPins[] = {JH_HW_NODE_CAN_MAIN_PIN_CS,
+                               JH_HW_NODE_CAN_OBD_PIN_CS};
   for (uint32_t i = 0; i < COUNTOF(spiCsPins); i++) {
     hal_gpio_set_mode(spiCsPins[i], HAL_GPIO_OUTPUT);
     hal_gpio_write(spiCsPins[i], true);
@@ -189,8 +192,8 @@ void initSensors(void) {
 }
 
 void initBasicPIO(void) {
-  hal_gpio_set_mode(HAL_LED_PIN, HAL_GPIO_OUTPUT);
-  hal_gpio_set_mode(PIO_DPF_LAMP, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_DPF_LAMP_PIN_OUT, HAL_GPIO_OUTPUT);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -273,9 +276,9 @@ static void sensors_throttleDiagSurvey(void) {
   m_mutex_enter_blocking(analog4051Mutex);
   for (unsigned char channel = 0U; channel < 8U; channel++) {
     set4051ActivePin(channel);
-    (void)hal_adc_read(ADC_SENSORS_PIN);
+    (void)hal_adc_read(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN);
     hal_delay_us(10U);
-    values[channel] = hal_adc_read(ADC_SENSORS_PIN);
+    values[channel] = hal_adc_read(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN);
   }
   set4051ActivePin(HC4051_I_THROTTLE_POS);
   m_mutex_exit(analog4051Mutex);
@@ -304,11 +307,11 @@ static int32_t sensors_readThrottleDiag(void) {
   set4051ActivePin(HC4051_I_THROTTLE_POS);
   const uint32_t settledUs = hal_micros();
   for (size_t i = 0U; i < 5U; i++) {
-    sample[i] = hal_adc_read(ADC_SENSORS_PIN);
+    sample[i] = hal_adc_read(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN);
     shunt[i] = 0U;
     supply[i] = 0U;
-    (void)hal_adc_scan_latest(ADC_VP37_CURRENT_PIN, &shunt[i]);
-    (void)hal_adc_scan_latest(ADC_VOLT_PIN, &supply[i]);
+    (void)hal_adc_scan_latest(JH_HW_NODE_VP37_PIN_SHUNT_ADC, &shunt[i]);
+    (void)hal_adc_scan_latest(JH_HW_NODE_VP37_PIN_SUPPLY_ADC, &supply[i]);
     if (i > 0U) {
       hal_delay_us(sensors_adcSampleDelayUs());
     }
@@ -319,7 +322,7 @@ static int32_t sensors_readThrottleDiag(void) {
   uint32_t firstHit = 0U;
   int firstValue = 0;
   for (uint32_t i = 0U; i < SENSORS_THROTTLE_DIAG_STRESS_READS; i++) {
-    const int value = hal_adc_read(ADC_SENSORS_PIN);
+    const int value = hal_adc_read(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN);
     const int delta = value - reference;
     if ((delta > SENSORS_THROTTLE_DIAG_STRESS_BAND) ||
         (delta < -SENSORS_THROTTLE_DIAG_STRESS_BAND)) {
@@ -331,9 +334,9 @@ static int32_t sensors_readThrottleDiag(void) {
     }
   }
   const uint32_t stressEndUs = hal_micros();
-  const bool muxA = hal_gpio_read(A_4051);
-  const bool muxB = hal_gpio_read(B_4051);
-  const bool muxC = hal_gpio_read(C_4051);
+  const bool muxA = hal_gpio_read(JH_HW_NODE_MUX_A_PIN_OUT);
+  const bool muxB = hal_gpio_read(JH_HW_NODE_MUX_B_PIN_OUT);
+  const bool muxC = hal_gpio_read(JH_HW_NODE_MUX_C_PIN_OUT);
   m_mutex_exit(analog4051Mutex);
   s_throttleStress.reads += SENSORS_THROTTLE_DIAG_STRESS_READS;
   s_throttleStress.hits += hits;
@@ -418,7 +421,8 @@ TESTABLE_STATIC uint32_t sensors_muxSettleUs(void) {
 }
 
 bool sensors_scanCoversInputs(void) {
-  static const uint8_t scannedInputs[] = {ADC_SENSORS_PIN, ADC_VOLT_PIN};
+  static const uint8_t scannedInputs[] = {JH_HW_NODE_VP37_SCAN_AUX_PIN_IN,
+                                          JH_HW_NODE_VP37_PIN_SUPPLY_ADC};
   bool covered = true;
   if (hal_adc_scan_is_running()) {
     for (size_t i = 0U; i < (sizeof(scannedInputs) / sizeof(scannedInputs[0]));
@@ -443,8 +447,9 @@ hal_status_t sensors_readMuxAverage(unsigned char channel, float *outAverage) {
   if (outAverage != NULL) {
     m_mutex_enter_blocking(analog4051Mutex);
     set4051ActivePin(channel);
-    status = fiesta_adc_read_average_spaced_ex(
-        ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), outAverage);
+    status = fiesta_adc_read_average_spaced_ex(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN,
+                                               sensors_adcSampleDelayUs(),
+                                               outAverage);
     m_mutex_exit(analog4051Mutex);
     if (status != HAL_OK) {
       derr_limited("mux read", "Analog input %u unreadable: %s",
@@ -501,8 +506,8 @@ float readAirTemperature(void) {
 
   set4051ActivePin(HC4051_I_AIR_TEMP);
   if (fiesta_ntc_read_temperature_spaced_ex(
-          ADC_SENSORS_PIN, sensors_adcSampleDelayUs(), R_TEMP_AIR_A,
-          R_TEMP_AIR_B, &a) != HAL_OK) {
+          JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, sensors_adcSampleDelayUs(),
+          R_TEMP_AIR_A, R_TEMP_AIR_B, &a) != HAL_OK) {
     a = 0.0f;
   }
   m_mutex_exit(analog4051Mutex);
@@ -557,8 +562,8 @@ bool pcf8574_init(void) {
   // transfer of the other core included.
   m_mutex_enter_blocking(i2cBusMutex);
   bool success = false;
-  uint8_t notFound =
-      hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
+  uint8_t notFound = hal_i2c_write_byte(JH_HW_NODE_EXPANDER_ADDRESS,
+                                        s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
   if (!success || notFound) {
@@ -588,8 +593,8 @@ void pcf8574_write(unsigned char pin, bool value) {
     bitClear(s_sensorsState.pcf8574State, pin);
   }
   bool success = false;
-  uint8_t notFound =
-      hal_i2c_write_byte(PCF8574_ADDR, s_sensorsState.pcf8574State, &success);
+  uint8_t notFound = hal_i2c_write_byte(JH_HW_NODE_EXPANDER_ADDRESS,
+                                        s_sensorsState.pcf8574State, &success);
   m_mutex_exit(i2cBusMutex);
 
   if (!success || notFound) {
@@ -609,7 +614,7 @@ bool pcf8574_read(unsigned char pin) {
 
   m_mutex_enter_blocking(i2cBusMutex);
   bool readOk = false;
-  uint8_t raw = hal_i2c_read_byte(PCF8574_ADDR, &readOk);
+  uint8_t raw = hal_i2c_read_byte(JH_HW_NODE_EXPANDER_ADDRESS, &readOk);
   if (readOk) {
     // Commit the refreshed shadow latch while still holding the bus mutex,
     // so pcf8574_write() cannot race on pcf8574State between the read and
@@ -744,17 +749,17 @@ void init4051(void) {
     m_mutex_init(analog4051Mutex);
   }
 
-  hal_gpio_set_mode(C_4051, HAL_GPIO_OUTPUT);
-  hal_gpio_set_mode(B_4051, HAL_GPIO_OUTPUT);
-  hal_gpio_set_mode(A_4051, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_MUX_C_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_MUX_B_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(JH_HW_NODE_MUX_A_PIN_OUT, HAL_GPIO_OUTPUT);
 
   set4051ActivePin(0);
 }
 
 void set4051ActivePin(unsigned char pin) {
-  hal_gpio_write(A_4051, (pin & 0x01) > 0);
-  hal_gpio_write(B_4051, (pin & 0x02) > 0);
-  hal_gpio_write(C_4051, (pin & 0x04) > 0);
+  hal_gpio_write(JH_HW_NODE_MUX_A_PIN_OUT, (pin & 0x01) > 0);
+  hal_gpio_write(JH_HW_NODE_MUX_B_PIN_OUT, (pin & 0x02) > 0);
+  hal_gpio_write(JH_HW_NODE_MUX_C_PIN_OUT, (pin & 0x04) > 0);
   // Under the hardware-paced scan the readers see the newest scanned sample,
   // which must already belong to the new channel; polled reads convert live.
   if (hal_adc_scan_is_running()) {
@@ -808,24 +813,24 @@ void pwm_init(void) {
   if (s_sensorsState.pwmAngle != NULL) {
     hal_pwm_freq_destroy(s_sensorsState.pwmAngle);
   }
-  s_sensorsState.pwmVp37 =
-      hal_pwm_freq_create(PIO_VP37_RPM, VP37_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
-  s_sensorsState.pwmTurbo =
-      hal_pwm_freq_create(PIO_TURBO, TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmVp37 = hal_pwm_freq_create(
+      JH_HW_NODE_VP37_PIN_QUANTITY_PWM, VP37_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+  s_sensorsState.pwmTurbo = hal_pwm_freq_create(
+      JH_HW_NODE_TURBO_PIN_OUT, TURBO_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
   s_sensorsState.pwmAngle = hal_pwm_freq_create(
-      PIO_VP37_ANGLE, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
+      JH_HW_NODE_VP37_PIN_TIMING_PWM, ANGLE_PWM_FREQUENCY_HZ, PWM_RESOLUTION);
 }
 
 static hal_pwm_freq_channel_t sensors_pwmChannel(unsigned char pin) {
   hal_pwm_freq_channel_t ch = NULL;
   switch (pin) {
-  case PIO_TURBO:
+  case JH_HW_NODE_TURBO_PIN_OUT:
     ch = s_sensorsState.pwmTurbo;
     break;
-  case PIO_VP37_RPM:
+  case JH_HW_NODE_VP37_PIN_QUANTITY_PWM:
     ch = s_sensorsState.pwmVp37;
     break;
-  case PIO_VP37_ANGLE:
+  case JH_HW_NODE_VP37_PIN_TIMING_PWM:
     ch = s_sensorsState.pwmAngle;
     break;
   default:
@@ -860,8 +865,8 @@ void valToPWM(unsigned char pin, int32_t val) {
 hal_status_t i2cReadRegisters(uint8_t address, uint8_t reg, uint8_t *data,
                               size_t len) {
   m_mutex_enter_blocking(i2cBusMutex);
-  const hal_status_t status =
-      hal_i2c_write_read_bus_ex(0, address, &reg, 1U, data, len);
+  const hal_status_t status = hal_i2c_write_read_bus_ex(
+      JH_HW_BUS_I2C_INDEX, address, &reg, 1U, data, len);
   m_mutex_exit(i2cBusMutex);
   return status;
 }
@@ -871,6 +876,8 @@ hal_status_t i2cReadRegisters(uint8_t address, uint8_t reg, uint8_t *data,
  * @return Supply voltage in volts, clamped to 0 on invalid conversion.
  */
 float getSystemSupplyVoltage(void) {
-  return fiesta_adc_read_divided_volts(ADC_VOLT_PIN, (float)V_DIVIDER_R1,
-                                       (float)V_DIVIDER_R2);
+  return fiesta_adc_read_divided_volts(
+      JH_HW_NODE_VP37_PIN_SUPPLY_ADC,
+      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS,
+      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS);
 }

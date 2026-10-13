@@ -57,7 +57,7 @@ void test_display_names_the_start_status(void) {
 }
 
 void test_display_follows_the_demand_pot(void) {
-  hal_mock_adc_inject(VP37_SCAN_AUX_ADC_PIN, 2048);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, 2048);
   hal_delay_ms(250U);
   app_task0();
   TEST_ASSERT_EQUAL_STRING("50 %", hal_mock_display_last_print());

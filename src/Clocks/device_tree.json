@@ -1,0 +1,52 @@
+{
+  "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "can": { "compatible": "microchip,mcp2515" },
+    "tft": {
+      "compatible": "ilitek,ili9341",
+      "properties": { "width": 240, "height": 320, "rotation": 90 }
+    },
+    "backlight": {
+      "compatible": "jaszczurhal,pwm-output",
+      "properties": { "activeLow": true }
+    },
+    "buzzer": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    },
+    "speedOutput": { "compatible": "jaszczurhal,gpio-output" },
+    "tachoOutput": { "compatible": "jaszczurhal,gpio-output" },
+    "oilLamp": { "compatible": "jaszczurhal,gpio-output" }
+  },
+  "assemblies": {
+    "rp2040-zero": {
+      "target": "rp2040",
+      "board": "rp2040-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed", "pixelOrder": "GRB" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 10000000,
+          "pins": { "sck": 2, "mosi": 3, "miso": 0 }
+        }
+      },
+      "nodes": {
+        "can": { "present": true, "bus": "spi", "pins": { "cs": 1, "int": 4 } },
+        "tft": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": 6, "dc": 8, "reset": 7 }
+        },
+        "backlight": { "present": true, "pins": { "out": 5 } },
+        "buzzer": { "present": true, "pins": { "out": 14 } },
+        "speedOutput": { "present": true, "pins": { "out": 9 } },
+        "tachoOutput": { "present": true, "pins": { "out": 10 } },
+        "oilLamp": { "present": true, "pins": { "out": 11 } }
+      }
+    }
+  }
+}

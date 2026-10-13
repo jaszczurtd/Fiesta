@@ -19,7 +19,7 @@ heatedWindshields *getHeatedWindshieldsInstance(void) {
  */
 static bool heatedWindshields_isHeatedButtonPressed(heatedWindshields *self) {
   (void)self;
-  return hal_gpio_read(HEATED_WINDOWS_PIN);
+  return hal_gpio_read(JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN);
 }
 
 /**
@@ -39,7 +39,8 @@ void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable,
 }
 
 void heatedWindshields_init(heatedWindshields *self) {
-  hal_gpio_set_mode(HEATED_WINDOWS_PIN, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_HEATED_WINDOW_BUTTON_PIN_IN,
+                    HAL_GPIO_INPUT_PULLUP);
 
   self->heatedWindowEnabled = false;
   self->lastHeatedWindowEnabled = false;
@@ -114,10 +115,12 @@ void heatedWindshields_process(heatedWindshields *self) {
     // execute action
     if (self->heatedWindowEnabled != self->lastHeatedWindowEnabled) {
       self->lastHeatedWindowEnabled = self->heatedWindowEnabled;
-      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled,
-                                     PCF8574_O_HEATED_WINDOW_L);
-      heatedWindshields_heatedWindow(self, self->heatedWindowEnabled,
-                                     PCF8574_O_HEATED_WINDOW_P);
+      heatedWindshields_heatedWindow(
+          self, self->heatedWindowEnabled,
+          JH_HW_NODE_HEATED_WINDOW_LEFT_PIN_OUT_INDEX);
+      heatedWindshields_heatedWindow(
+          self, self->heatedWindowEnabled,
+          JH_HW_NODE_HEATED_WINDOW_RIGHT_PIN_OUT_INDEX);
     }
   }
 }

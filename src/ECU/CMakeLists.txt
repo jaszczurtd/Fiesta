@@ -36,10 +36,13 @@ include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
+# jh_hardware.h of the firmware assembly, loaded first like in the firmware.
+fiesta_hardware_header(ECU_HW_HEADER "${ECU_SRC}" "${HAL_LIB}")
 
 # ── Mock implementations (from JaszczurHAL) ────────────────────────────────────
 file(GLOB MOCK_SOURCES ${HAL_SRC}/hal/impl/.mock/*.cpp)
@@ -134,6 +137,7 @@ add_library(ecu_mock STATIC
 target_include_directories(ecu_mock BEFORE PUBLIC
     ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
 )
+fiesta_include_hardware_header("${ECU_HW_HEADER}" ecu_mock)
 target_include_directories(ecu_mock PUBLIC
     ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}
@@ -172,6 +176,7 @@ add_library(vp37_standalone OBJECT ${VP37_SOURCES})
 target_include_directories(vp37_standalone BEFORE PRIVATE
     ${ECU_SRC}/tests/include   # the consumer's hal_project_config.h
 )
+fiesta_include_hardware_header("${ECU_HW_HEADER}" vp37_standalone)
 target_include_directories(vp37_standalone PRIVATE
     ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}
@@ -202,6 +207,7 @@ if(ECU_ENABLE_CPPCHECK_TARGET)
         --std=c99
         --library=${HAL_LIB}/config/tooling/cppcheck-atomics.cfg
         -I.
+        --include=${ECU_HW_HEADER}
         --include=hal_project_config.h
         --suppress=missingInclude
         --suppress=missingIncludeSystem

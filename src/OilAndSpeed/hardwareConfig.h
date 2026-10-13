@@ -1,32 +1,16 @@
 #ifndef C_HARDWAREC
 #define C_HARDWAREC
 
-#define PIN_MISO 0
-#define PIN_MOSI 3
-#define PIN_SCK 2
+// Pins, buses and addresses come from the rp2040-zero assembly of
+// device_tree.json; the code reads the JH_HW_* macros of the generated
+// jh_hardware.h directly.
 
-#define CAN_INT 4
-#define CAN_CS 1
-
-#define PIN_RGB 16
-#define NUMPIXELS 1
+// hal_can_default_config() puts the MCP2515 on the default SPI bus 0.
+#if JH_HW_BUS_SPI_INDEX != 0
+#error "OilAndSpeed drives the MCP2515 on SPI bus 0"
+#endif
 
 #define PWM_WRITE_RESOLUTION 11
 #define PWM_RESOLUTION 2047
-
-#define ABS_INPUT_PIN  14
-
-// ADC input for resistive oil pressure sender (0..10 bar, nominal 10..180 Ohm)
-#if defined(A3)
-#define OIL_PRESSURE_ADC_PIN A3
-#else
-#define OIL_PRESSURE_ADC_PIN 29
-#endif
-
-#define MCP9600_ADDR_PRE_DPF   0x60
-#define MCP9600_ADDR_MID_DPF   0x67
-
-#define PIN_I2C_SDA       12
-#define PIN_I2C_SCL       13
 
 #endif

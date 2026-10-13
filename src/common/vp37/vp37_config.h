@@ -13,6 +13,23 @@
 #include "vp37_maps.h"
 #include "vp37_power_stage.h"
 
+/** PWM counter resolution of both actuator channels [bits] and full scale. */
+#define VP37_PWM_WRITE_RESOLUTION 11
+#define VP37_PWM_RESOLUTION 2047
+/* The full scale is what the write resolution addresses. */
+#ifdef __cplusplus
+static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
+                  (1UL << VP37_PWM_WRITE_RESOLUTION),
+              "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
+#else
+_Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
+                   (1UL << VP37_PWM_WRITE_RESOLUTION),
+               "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
+#endif
+
+/** Timing actuator drive frequency [Hz]. */
+#define VP37_TIMING_PWM_FREQUENCY_HZ 200
+
 /** Bench telemetry and the RAM trace; the ECU derives it from its
  * functional-test image in hal_project_config.h. */
 #ifndef VP37_TELEMETRY_ENABLED
@@ -232,6 +249,9 @@
 #define VP37_PWM_FF_AT_MAX (VP37_FF_MAP[VP37_FF_KNOTS - 1U][VP37_FF_COL_PWM])
 #define VP37_PWM_FF_MOTION_BOOST                                               \
   (VP37_FF_MAP[VP37_FF_KNOTS - 1U][VP37_FF_COL_MOTION])
+/** Holding-map adjustment for the installed source shunt; a feedforward
+ * scale, not a gain of the ADC measurement. PID gains are separate. */
+#define VP37_PWM_FF_HARDWARE_GAIN 1.08f
 // Runtime upward boost at start and after bench R: the map's column times
 // 1.25 (bench A/B on 130 Hz, 2026-09-16: ascent medians -25 %, P95 unchanged),
 // carried through the same reference rescale as the map.
