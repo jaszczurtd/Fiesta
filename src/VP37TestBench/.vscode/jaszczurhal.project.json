@@ -3,8 +3,7 @@
     "project": "Fiesta",
     "module": "VP37TestBench",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

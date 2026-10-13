@@ -131,11 +131,11 @@ void obdSetTotalDistanceKm(uint32_t km) {
 hal_status_t obdInit(int retries) {
 
   hal_can_config_t canCfg = hal_can_default_config();
-  canCfg.mcp2515.cs_pin = CAN1_GPIO;
+  canCfg.mcp2515.cs_pin = JH_HW_NODE_CAN_OBD_PIN_CS;
 
   hal_status_t st = hal_can_create_with_retry(
-      &canCfg, CAN1_INT, NULL, retries > 0 ? retries - 1 : 0, watchdog_feed,
-      &s_obdState.canHandle);
+      &canCfg, JH_HW_NODE_CAN_OBD_PIN_INT, NULL, retries > 0 ? retries - 1 : 0,
+      watchdog_feed, &s_obdState.canHandle);
   if (st == HAL_OK) {
     st =
         hal_can_set_std_filters(s_obdState.canHandle, LISTEN_ID, FUNCTIONAL_ID);
@@ -171,7 +171,7 @@ void obdLoop(void) {
     return;
   }
 
-  if (!hal_gpio_read(CAN1_INT)) {
+  if (!hal_gpio_read(JH_HW_NODE_CAN_OBD_PIN_INT)) {
     const hal_status_t st =
         hal_can_receive(s_obdState.canHandle, &s_obdState.rxIdValue,
                         &s_obdState.dlcValue, s_obdState.rxBufValue);
@@ -403,7 +403,7 @@ static void iso_tp_process(void) {
     // Drain up to several frames per call so that stale/non-OBD traffic
     // cannot keep the MCP2515 RX buffers occupied while we wait for FC.
     for (size_t drain = 0u; drain < (size_t)HAL_CAN_MAX_DATA_LEN; drain++) {
-      if (hal_gpio_read(CAN1_INT)) {
+      if (hal_gpio_read(JH_HW_NODE_CAN_OBD_PIN_INT)) {
         break; // no more frames
       }
       const hal_status_t rx =

@@ -53,12 +53,25 @@ static uint32_t packRtcDateTime(const PCF_DateTime *dt) {
 hal_status_t clockCanInit(void) {
   s_clockCanState.frameNumber = 0u;
   s_clockCanState.nextSendMs = hal_millis() + CLOCK_CAN_SEND_INTERVAL_MS;
+  /* Open the MCP2515 bus on its own pins; the HAL would otherwise start
+   * SPI 0 lazily on its default pins. */
+  hal_gpio_set_mode(JH_HW_NODE_CAN_PIN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(JH_HW_NODE_CAN_PIN_CS, true);
+  const hal_status_t spiStatus =
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
+  if (spiStatus != HAL_OK) {
+    s_clockCanState.initialized = false;
+    derr("SPI init failed, the clock runs without CAN: %s",
+         hal_status_to_string(spiStatus));
+    return spiStatus;
+  }
   hal_can_config_t canCfg = hal_can_default_config();
-  canCfg.mcp2515.cs_pin = CAN_CS;
+  canCfg.mcp2515.cs_pin = JH_HW_NODE_CAN_PIN_CS;
 
-  const hal_status_t st =
-      hal_can_create_with_retry(&canCfg, CAN_INT, NULL, CLOCK_CAN_RETRIES - 1,
-                                NULL, &s_clockCanState.handle);
+  const hal_status_t st = hal_can_create_with_retry(
+      &canCfg, JH_HW_NODE_CAN_PIN_INT, NULL, CLOCK_CAN_RETRIES - 1, NULL,
+      &s_clockCanState.handle);
   s_clockCanState.initialized = (st == HAL_OK);
   if (st != HAL_OK) {
     derr("CAN init failed, the clock runs without CAN: %s",

@@ -76,7 +76,7 @@ void test_vp37_adapter_pwm_writes_leave_the_dtc_store_alone(void) {
   vp37AdapterCallbacks()->writeQuantityPwm(500);
   vp37AdapterCallbacks()->writeTimingPwm(300);
   TEST_ASSERT_TRUE(pwmDtcActive());
-  valToPWM(PIO_VP37_RPM, 500);
+  valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, 500);
   TEST_ASSERT_FALSE(pwmDtcActive());
 }
 
@@ -91,7 +91,7 @@ void test_vp37_invalid_timing_or_pid_step_disables_output(void) {
   TEST_ASSERT_FALSE(pump->vp37Initialized);
   uint8_t latch = 0xff;
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame(0, &latch, 1));
-  TEST_ASSERT_EQUAL_UINT8(0, latch & (1U << PCF8574_O_VP37_ENABLE));
+  TEST_ASSERT_EQUAL_UINT8(0, latch & (1U << JH_HW_NODE_VP37_PIN_ENABLE_INDEX));
 
   pump->vp37Initialized = true;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
@@ -106,7 +106,7 @@ void test_vp37_invalid_timing_or_pid_step_disables_output(void) {
   TEST_ASSERT_EQUAL_INT32(0, pump->output.lastPWMval);
   const int lastFrame = hal_mock_i2c_get_write_frame_count() - 1;
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame(lastFrame, &latch, 1));
-  TEST_ASSERT_EQUAL_UINT8(0, latch & (1U << PCF8574_O_VP37_ENABLE));
+  TEST_ASSERT_EQUAL_UINT8(0, latch & (1U << JH_HW_NODE_VP37_PIN_ENABLE_INDEX));
 }
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED
@@ -238,7 +238,7 @@ void test_vp37_sensor_demand_uses_shared_ramp_and_motion_feedforward(void) {
     const uint32_t motionMs = ms < 310U ? ms : 310U;
     hal_mock_set_millis(ms);
     if ((ms % 10U) == 0U) {
-      hal_mock_adc_inject(ADC_SENSORS_PIN, rawCodes[inputStep]);
+      hal_mock_adc_inject(JH_HW_NODE_VP37_SCAN_AUX_PIN_IN, rawCodes[inputStep]);
       readThrottleValues();
     }
     TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(

@@ -13,19 +13,19 @@
 #include <utils/multicoreWatchdog.h>
 
 static void vp37AdapterWriteQuantity(int32_t command) {
-  (void)pwmWrite(PIO_VP37_RPM, command);
+  (void)pwmWrite(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, command);
 }
 
 static void vp37AdapterWriteTiming(int32_t command) {
-  (void)pwmWrite(PIO_VP37_ANGLE, command);
+  (void)pwmWrite(JH_HW_NODE_VP37_PIN_TIMING_PWM, command);
 }
 
 static void vp37AdapterSetEnabled(bool enabled) {
-  pcf8574_write(PCF8574_O_VP37_ENABLE, enabled);
+  pcf8574_write(JH_HW_NODE_VP37_PIN_ENABLE_INDEX, enabled);
 }
 
 static bool vp37AdapterEnabled(void) {
-  return pcf8574_read(PCF8574_O_VP37_ENABLE);
+  return pcf8574_read(JH_HW_NODE_VP37_PIN_ENABLE_INDEX);
 }
 
 static hal_status_t vp37AdapterAdjustometerTransfer(uint8_t reg, uint8_t *data,
@@ -71,8 +71,8 @@ const VP37Callbacks *vp37AdapterCallbacks(void) {
 
 VP37InitStatus vp37AdapterStart(VP37Pump *pump) {
   VP37InitStatus status = VP37_INIT_OUTPUT_UNAVAILABLE;
-  const bool outputs =
-      pwmChannelReady(PIO_VP37_RPM) && pwmChannelReady(PIO_VP37_ANGLE);
+  const bool outputs = pwmChannelReady(JH_HW_NODE_VP37_PIN_QUANTITY_PWM) &&
+                       pwmChannelReady(JH_HW_NODE_VP37_PIN_TIMING_PWM);
   dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, !outputs);
   if (!outputs) {
     derr("VP37 drive outputs are not initialized");

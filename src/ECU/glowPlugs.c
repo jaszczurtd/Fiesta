@@ -60,12 +60,12 @@ void glowPlugs_init(glowPlugs *self) {
 
 void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable) {
   (void)self;
-  pcf8574_write(PCF8574_O_GLOW_PLUGS, enable);
+  pcf8574_write(JH_HW_NODE_GLOW_PLUGS_PIN_OUT_INDEX, enable);
 }
 
 void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable) {
   (void)self;
-  pcf8574_write(PCF8574_O_GLOW_PLUGS_LAMP, enable);
+  pcf8574_write(JH_HW_NODE_GLOW_PLUGS_LAMP_PIN_OUT_INDEX, enable);
 }
 
 bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self) {

@@ -24,8 +24,9 @@ static bool pop_can_tx(uint32_t *id, uint8_t *len, uint8_t *data) {
 
 #ifndef VP37
 static void injectSupplyVoltageAdc(float volts) {
-  const float ratio =
-      ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+  const float ratio = ((float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS +
+                       (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS) /
+                      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS;
   int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
   if (adc < 0) {
     adc = 0;
@@ -33,7 +34,7 @@ static void injectSupplyVoltageAdc(float volts) {
   if (adc > 4095) {
     adc = 4095;
   }
-  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SUPPLY_ADC, adc);
 }
 
 static void refreshMediumValuesUntilVoltsUpdated(void) {

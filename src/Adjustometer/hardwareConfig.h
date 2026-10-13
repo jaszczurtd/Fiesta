@@ -3,20 +3,17 @@
 
 #include <libConfig.h>
 
-// rpi pio pin numbers
-#define PIO_INTERRUPT_HALL 2
+// Pins come from the rp2040-zero assembly of device_tree.json; the code reads
+// the JH_HW_* macros of the generated jh_hardware.h directly.
 
-#define PIN_SDA 0
-#define PIN_SCL 1
-
-#define ADC_VOLT_PIN 29
-#define ADC_FUEL_TEMP_PIN 28
+// The ECU is the bus master; the module answers at ADJUSTOMETER_I2C_ADDR.
+// hal_i2c_slave_init() starts the default bus 0.
+#if JH_HW_BUS_ECU_INDEX != 0
+#error "the Adjustometer answers the ECU on I2C bus 0"
+#endif
 
 #define R_VP37_FUEL_A 2300 // sensor
 #define R_VP37_FUEL_B 3300
-
-#define PIN_RGB 16
-#define NUMPIXELS 1
 
 // Supply voltage divider: R1=47k (high-side), R2=10k (low-side).
 // Ratio = (R1+R2)/R2 = 5.7, max measurable ≈ 18.8 V.

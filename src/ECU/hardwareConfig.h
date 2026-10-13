@@ -2,7 +2,7 @@
 #define T_HARDWARECONFIG
 
 #include "../common/adjustometer_protocol.h"
-#include "../common/vp37/vp37_power_stage.h"
+#include "../common/vp37/vp37_config.h"
 #include <libConfig.h>
 
 #ifdef VP37
@@ -25,54 +25,19 @@
 #define PWM_WRITE_RESOLUTION VP37_PWM_WRITE_RESOLUTION
 #define PWM_RESOLUTION VP37_PWM_RESOLUTION
 
-// rpi pio pin numbers
-#define PIO_INTERRUPT_HALL 7
-#define PIO_TURBO 10
-#define PIO_VP37_RPM VP37_QUANTITY_PWM_PIN
-#define PIO_VP37_ANGLE VP37_TIMING_PWM_PIN
+// Pins, buses and addresses come from the rp2040-plus assembly of
+// device_tree.json; the code reads the JH_HW_* macros of the generated
+// jh_hardware.h directly.
 
-#define PIO_DPF_LAMP 8
-
-#define A_4051 11
-#define B_4051 12
-#define C_4051 13
-
-#define PIN_SDA 0
-#define PIN_SCL 1
-
-#define PIN_MISO 16
-#define PIN_MOSI 19
-#define PIN_SCK 18
-
-#define ADC_VOLT_PIN VP37_SUPPLY_ADC_PIN
-#define ADC_SENSORS_PIN VP37_SCAN_AUX_ADC_PIN
-// The VP37 source shunt; no other peripheral may claim it.
-#define ADC_VP37_CURRENT_PIN VP37_SHUNT_ADC_PIN
-
-// for serial - GPS
-#define SERIAL_RX_GPIO 22
-#define SERIAL_TX_GPIO 21
-
-// Set CS and INT for CAN
-#define CAN0_GPIO 17
-#define CAN0_INT 15
-
-// Set CS and INT for OBD-2
-#define CAN1_GPIO 6
-#define CAN1_INT 14
-
-// PCF8574 i2c addr
-#define PCF8574_ADDR 0x38
-
-// PCF8574 GPIO assignments
-#define PCF8574_O_GLOW_PLUGS 0
-#define PCF8574_O_FAN 1
-#define PCF8574_O_HEATER_HI 2
-#define PCF8574_O_HEATER_LO 3
-#define PCF8574_O_GLOW_PLUGS_LAMP 4
-#define PCF8574_O_HEATED_WINDOW_L 5
-#define PCF8574_O_HEATED_WINDOW_P 6
-#define PCF8574_O_VP37_ENABLE 7
+// The PCF8574A writes and the MCP2515 configurations use the default bus 0.
+#if (JH_HW_BUS_I2C_INDEX != 0) || (JH_HW_BUS_SPI_INDEX != 0)
+#error "the ECU drives its I2C and SPI devices on bus 0"
+#endif
+// The Adjustometer firmware answers at the address of its protocol header.
+#if JH_HW_NODE_ADJUSTOMETER_ADDRESS != ADJUSTOMETER_I2C_ADDR
+#error                                                                         \
+    "device_tree.json and adjustometer_protocol.h disagree on the Adjustometer address"
+#endif
 
 // 4051 inputs assignments
 #define HC4051_I_COOLANT_TEMP 0
@@ -83,16 +48,6 @@
 #define HC4051_I_BAR_PRESSURE 5
 // 6 not used ATM
 // 7 not used ATM
-
-// physical pin of microcontroller for heated windows switch on/off
-#define HEATED_WINDOWS_PIN 20
-
-#define HAL_LED_PIN 25
-
-// real values (resitance) for ECU main supply voltage measurement
-
-#define V_DIVIDER_R1 VP37_SUPPLY_DIVIDER_R1
-#define V_DIVIDER_R2 VP37_SUPPLY_DIVIDER_R2
 
 // real values (resistance) for temperature (coolant/oil) measurement
 

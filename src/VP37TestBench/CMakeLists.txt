@@ -25,6 +25,9 @@ set(HAL_SRC   ${HAL_LIB}/src)
 
 include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
+# jh_hardware.h of the firmware assembly, loaded first like in the firmware.
+fiesta_hardware_header(BENCH_HW_HEADER "${BENCH_SRC}" "${HAL_LIB}")
 # The VP37 module: the list in src/common/vp37/vp37_sources.txt.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
@@ -93,6 +96,7 @@ add_library(bench_mock STATIC
 target_include_directories(bench_mock BEFORE PUBLIC
     ${BENCH_SRC}/tests/include   # test-only hal_project_config.h override
 )
+fiesta_include_hardware_header("${BENCH_HW_HEADER}" bench_mock)
 target_include_directories(bench_mock PUBLIC
     ${HAL_MANAGED_INCLUDE_DIRS}
     ${HAL_SRC}

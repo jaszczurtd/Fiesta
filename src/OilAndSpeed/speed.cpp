@@ -52,7 +52,8 @@ bool setupSpeedometer(void) {
   bool success =
       calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
   if (success) {
-    hal_gpio_attach_interrupt(ABS_INPUT_PIN, onImpulse, HAL_GPIO_IRQ_RISING);
+    hal_gpio_attach_interrupt(JH_HW_NODE_ABS_SPEED_PIN_IN, onImpulse,
+                              HAL_GPIO_IRQ_RISING);
     return success;
   }
   derr("error while calculating tire dimension");

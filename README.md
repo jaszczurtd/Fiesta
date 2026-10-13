@@ -96,7 +96,7 @@ and local VS Code settings are preserved. The setup then:
    `SerialConfigurator` (runtime
    CTest plus cppcheck, PMD CPD duplicate detection, Valgrind and clang-tidy
    gates),
-7. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`; firmware settings come from each module's `.vscode/jaszczurhal.project.json`,
+7. compiles firmware for every Fiesta module and reports each module-named `.uf2` and `.manifest.json` artifact: `ECU`, `Clocks`, `OilAndSpeed`, `Adjustometer`, `Fiesta_clock`, `VP37TestBench`; firmware settings come from each module's `.vscode/jaszczurhal.project.json` and its hardware from the module's `device_tree.json`,
 8. builds and tests `SerialConfigurator` and, unless disabled, creates its
    Debian package.
 
@@ -161,8 +161,8 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
   SerialConfigurator module table and the module lists used by the shell
   scripts; `--check` fails when a generated file is out of date.
 - `scripts/sync_vscode_projects.py` - regenerates cross-platform settings,
-  tasks and keybinding references for every firmware module in `modules.json`
-  from JaszczurHAL's board/task registry. The repository pre-commit hook runs it with `--stage`
+  tasks, debug profiles of each assembly and keybinding references for every
+  firmware module in `modules.json` from JaszczurHAL's registries. The repository pre-commit hook runs it with `--stage`
   and stages changed managed outputs. Run it with `--check` in review or CI.
 - `scripts/configure_git_hooks.py` - configures the repository-local hook path
   from Linux, macOS or Windows without requiring Bash.
@@ -175,8 +175,9 @@ module-local wrapper scripts. Fiesta keeps only project-specific helpers:
   `fiesta-modules.sh`. The firmware build routes through the
   JaszczurHAL multi-target dispatcher (`jh_firmware_project`, rp2040 target).
 
-Tracked module settings contain no COM port. Board and port selections are
-written to ignored `.vscode/jaszczurhal.local.json` files. The `Windows
+Tracked module settings contain no COM port. Each module describes its board,
+devices and pins in `device_tree.json`, whose assembly fixes the board; port
+selections are written to ignored `.vscode/jaszczurhal.local.json` files. The `Windows
 firmware` workflow repeats generation checks, builds the five CI modules
 (`VP37TestBench` opts out through `"ci": false` in `modules.json`) and
 refreshes their compile databases on a native `windows-2025` runner; physical

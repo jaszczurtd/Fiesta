@@ -42,7 +42,8 @@ void RPM_resetRPMCycle(RPM *self) { self->rpmCycle = false; }
 
 /*
  G28-like crank sensor ISR - called on every crankshaft pulse edge.
- The 150ms time-window check and pulse snapshot MUST stay inside the ISR.
+ The RPM_REFRESH_INTERVAL window check and pulse snapshot MUST stay inside
+ the ISR.
  Moving them to main loop causes jitter because the main loop
  iteration time varies with CAN, OBD, turbo, etc. workload. That makes
  the counting window non-deterministic and RPM readings unstable.
@@ -74,7 +75,7 @@ hal_status_t RPM_init(RPM *self) {
     return HAL_EINVAL;
   }
 
-  hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_HALL_PIN_IN, HAL_GPIO_INPUT_PULLUP);
 
   self->rpmValue = 0;
   self->previousMillis = 0;
@@ -117,11 +118,12 @@ hal_status_t RPM_init(RPM *self) {
 #endif
 
 #if HAL_TARGET_IS_RP
-  const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
-      PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE, RPM_IRQ_OWNER_CORE);
+  const hal_status_t irqStatus =
+      hal_gpio_attach_interrupt_ex(JH_HW_NODE_HALL_PIN_IN, countRPM,
+                                   HAL_GPIO_IRQ_CHANGE, RPM_IRQ_OWNER_CORE);
 #else
   const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
-      PIO_INTERRUPT_HALL, countRPM, HAL_GPIO_IRQ_CHANGE, 0);
+      JH_HW_NODE_HALL_PIN_IN, countRPM, HAL_GPIO_IRQ_CHANGE, 0);
 #endif
 
   if (irqStatus != HAL_OK) {
@@ -246,7 +248,7 @@ void RPM_process(RPM *self) {
     self->rpmCycle = false;
     s_lastPTermQ10 = 0;
     s_lastIDeltaQ10 = 0;
-    valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+    valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, self->currentRPMSolenoid);
     return;
   }
 
@@ -258,12 +260,12 @@ void RPM_process(RPM *self) {
     self->rpmCycle = false;
     s_lastPTermQ10 = 0;
     s_lastIDeltaQ10 = 0;
-    valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+    valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, self->currentRPMSolenoid);
     return;
   }
 
   if (self->rpmCycle) {
-    valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+    valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, self->currentRPMSolenoid);
     return;
   }
 
@@ -274,7 +276,7 @@ void RPM_process(RPM *self) {
   if (error <= RPM_PI_DEADBAND_RPM && error >= -RPM_PI_DEADBAND_RPM) {
     s_lastPTermQ10 = 0;
     s_lastIDeltaQ10 = 0;
-    valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+    valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, self->currentRPMSolenoid);
     return;
   }
 
@@ -331,7 +333,7 @@ void RPM_process(RPM *self) {
   hal_soft_timer_set_interval(self->rpmCycleTimer, RPM_PI_UPDATE_INTERVAL_MS);
   hal_soft_timer_restart(self->rpmCycleTimer);
 
-  valToPWM(PIO_VP37_RPM, self->currentRPMSolenoid);
+  valToPWM(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, self->currentRPMSolenoid);
 
 #endif /*VP37*/
 }

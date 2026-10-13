@@ -33,7 +33,8 @@ static void getAdjustedDateTime(int *year, int *month, int *day, int *hour,
 
 void initGPS(void) {
   if (!s_gpsRuntime.isGPSInitialized) {
-    hal_gps_init(SERIAL_RX_GPIO, SERIAL_TX_GPIO, 9600, HAL_UART_CFG_8N1);
+    hal_gps_init(JH_HW_NODE_GPS_PIN_RX, JH_HW_NODE_GPS_PIN_TX,
+                 JH_HW_NODE_GPS_PROP_BAUD_RATE, HAL_UART_CFG_8N1);
     s_gpsRuntime.isGPSInitialized = true;
   }
 }

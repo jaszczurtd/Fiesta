@@ -53,6 +53,7 @@ rule_texts="${MISRA_RULE_TEXTS:-}"
 quiet=0
 fail_on_findings=0
 temp_addon_config=""
+temp_hardware_dir=""
 hal_root="$project_root/../JaszczurHAL"
 hal_src="$hal_root/src"
 cppcheck_bin="${CPPCHECK_BIN:-$hal_root/scripts/cppcheck.sh}"
@@ -139,6 +140,9 @@ EOF
 fi
 
 cleanup() {
+    if [[ -n "$temp_hardware_dir" && -d "$temp_hardware_dir" ]]; then
+        rm -rf "$temp_hardware_dir"
+    fi
     if [[ -n "$temp_addon_config" && -f "$temp_addon_config" ]]; then
         rm -f "$temp_addon_config"
     fi
@@ -199,6 +203,21 @@ if [[ -f "$project_config" ]]; then
     config_args=(--include="$project_config")
 else
     echo "Warning: $project_config not found; HAL feature flags stay invisible to the scan." >&2
+fi
+
+# The firmware build loads jh_hardware.h of the module's assembly before that
+# configuration; the scan resolves the same header from device_tree.json. It
+# is generated outside the project, so its macros never count as findings.
+if [[ -f "$project_root/device_tree.json" ]]; then
+    temp_hardware_dir=$(mktemp -d)
+    hardware_root="$temp_hardware_dir/.build"
+    if ! python3 "$hal_root/scripts/generate_hardware_config.py" resolve \
+        --config-dir "$project_root" --output-root "$hardware_root" \
+        --output-dir "$hardware_root/hardware"; then
+        echo "Hardware configuration of $project_root failed." >&2
+        exit 2
+    fi
+    config_args=(--include="$hardware_root/hardware/jh_hardware.h" "${config_args[@]}")
 fi
 
 pushd "$project_root" >/dev/null

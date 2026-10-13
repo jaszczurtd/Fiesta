@@ -146,36 +146,23 @@ fiesta_run_compile() {
     fi
 }
 
+# Prints the UF2 of the module's selected assembly, as jh-vscode reports it;
+# a device tree build writes it below .build/<target>/<assembly>.
 fiesta_find_uf2_artifact() {
-    local build_dir="$1"
+    local project_dir="$1"
+    local jh_entry="$project_dir/../JaszczurHAL/vscode/entry/jh-vscode"
 
-    python3 - "$build_dir" <<'PYEOF'
+    [[ -x "$jh_entry" ]] || return 1
+    "$jh_entry" config-dump --json --project "$project_dir" 2>/dev/null \
+        | python3 -c '
+import json
 import pathlib
 import sys
 
-build_dir = pathlib.Path(sys.argv[1])
-if not build_dir.exists():
-    raise SystemExit
-
-module_name = build_dir.parent.name
-preferred_names = []
-if module_name:
-    preferred_names.append(f"{module_name}.uf2")
-preferred_names.append("firmware.uf2")
-
-for name in preferred_names:
-    preferred = build_dir / name
-    if preferred.is_file():
-        print(str(preferred))
-        raise SystemExit
-
-candidates = [p for p in build_dir.rglob("*.uf2") if p.is_file()]
-if not candidates:
-    raise SystemExit
-
-latest = max(candidates, key=lambda p: p.stat().st_mtime)
-print(str(latest))
-PYEOF
+path = json.load(sys.stdin).get("artifacts", {}).get("uf2")
+if path and pathlib.Path(path).is_file():
+    print(path)
+'
 }
 
 fiesta_manifest_path_for_uf2() {

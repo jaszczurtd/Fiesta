@@ -6,10 +6,11 @@
 
 static void cleanupRpmResources(void) {
   uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
-  if (hal_gpio_get_interrupt_owner_ex(PIO_INTERRUPT_HALL, &owner) == HAL_OK) {
+  if (hal_gpio_get_interrupt_owner_ex(JH_HW_NODE_HALL_PIN_IN, &owner) ==
+      HAL_OK) {
     hal_mock_gpio_set_current_core(owner);
     TEST_ASSERT_EQUAL_INT(HAL_OK,
-                          hal_gpio_detach_interrupt_ex(PIO_INTERRUPT_HALL));
+                          hal_gpio_detach_interrupt_ex(JH_HW_NODE_HALL_PIN_IN));
   }
 
 #ifndef VP37
@@ -38,7 +39,7 @@ void test_rpm_create_on_mock_core0_registers_owned_irq(void) {
 
   uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
   TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_gpio_get_interrupt_owner_ex(PIO_INTERRUPT_HALL, &owner));
+      HAL_OK, hal_gpio_get_interrupt_owner_ex(JH_HW_NODE_HALL_PIN_IN, &owner));
   TEST_ASSERT_EQUAL_UINT8(0u, owner);
 }
 
@@ -48,8 +49,8 @@ void test_rpm_create_on_mock_core1_propagates_core_affinity_error(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, RPM_create());
 
   uint8_t owner = 0u;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_ENOENT, hal_gpio_get_interrupt_owner_ex(PIO_INTERRUPT_HALL, &owner));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_gpio_get_interrupt_owner_ex(
+                                        JH_HW_NODE_HALL_PIN_IN, &owner));
   TEST_ASSERT_EQUAL_UINT8(HAL_GPIO_IRQ_CORE_NONE, owner);
 #ifndef VP37
   TEST_ASSERT_NULL(getRPMInstance()->rpmCycleTimer);

@@ -10,11 +10,12 @@
 #include <string.h>
 
 static inline void injectLocalSupplyVoltage(float volts) {
-  const float ratio =
-      ((float)V_DIVIDER_R1 + (float)V_DIVIDER_R2) / (float)V_DIVIDER_R2;
+  const float ratio = ((float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_HIGH_OHMS +
+                       (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS) /
+                      (float)JH_HW_NODE_VP37_PROP_SUPPLY_DIVIDER_LOW_OHMS;
   int adc = (int)((volts / ratio) * (4095.0f / 3.3f) + 0.5f);
   adc = hal_constrain(adc, 0, 4095);
-  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SUPPLY_ADC, adc);
 }
 
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,

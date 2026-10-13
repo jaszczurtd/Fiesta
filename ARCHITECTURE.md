@@ -20,7 +20,7 @@ This document explains how the pieces fit together. Setup and builds are in
    │  RP2040,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
    │           │ ─── I²C ───► PCF8574         relays (0x38)
-   │           │ ◄── UART ──  GPS receiver
+   │           │ ◄─ PIO UART  GPS receiver
    │           │ ─── CAN1 ──► OBD-II port
    └─────┬─────┘ ◄─ ADC, GPIO, PWM ─► sensors and actuators
          │
@@ -37,8 +37,10 @@ the other modules either feed the ECU data or display what it publishes.
 ## Hardware platform
 
 All modules run on RP2040 boards: Raspberry Pi Pico, RP2040-Plus, or
-RP2040-Zero. Each module picks its board in
-`.vscode/jaszczurhal.project.json`. RP2040 was chosen because it is cheap and
+RP2040-Zero. Each module describes its board, devices and pins in its own
+`device_tree.json`; the build generates `jh_hardware.h` from it and the code
+reads its `JH_HW_*` macros directly.
+RP2040 was chosen because it is cheap and
 easy to get, has two cores, flexible GPIO interrupts and PWM, and flash that
 can emulate EEPROM for DTCs and settings. The firmware talks to the hardware
 through JaszczurHAL, so moving a module to another MCU means porting the HAL
@@ -303,11 +305,14 @@ itself. `Project: Build variant: BENCH` and
 `Project: Upload variant: BENCH` build it into `src/ECU/.build/variants/BENCH`;
 `Project: Build` and `Project: Upload` give the image for the car.
 
-[`hardwareConfig.h`](src/ECU/hardwareConfig.h) assigns every pin and address.
+[`device_tree.json`](src/ECU/device_tree.json) assigns every pin and address.
 In short:
 
-- **I²C** at 400 kHz, ECU as master: Adjustometer at `0x57`, PCF8574 relay
-  expander at `0x38`.
+- **I²C** at 400 kHz, ECU as master: Adjustometer at `0x57`, PCF8574A relay
+  expander at `0x38`. The PCF8574A is rated for 100 kHz, so it runs outside
+  its datasheet until it is replaced by a PCA8574A or gets its own bus. Its
+  local type in `src/ECU/bindings/` caps the bus at 400 kHz, so a faster
+  I²C clock fails the device tree check.
 - **SPI** shared by two MCP2515 CAN controllers, CAN0 for the car and CAN1 for
   the OBD-II port.
 - **ADC**: six analog inputs through the HC4051 multiplexer (coolant, oil and
@@ -315,8 +320,9 @@ In short:
   voltage, and the VP37 shunt on GPIO26, which no other peripheral may use.
   While the VP37 current scan runs it owns the converter, and the other analog
   reads come from its buffer.
-- **PWM** for the VP37, N75, and DPF lamp outputs; **GPIO interrupt** for the
-  engine Hall sensor; **UART** for GPS.
+- **PWM** for the VP37 and N75 outputs; **GPIO** for the DPF lamp;
+  **GPIO interrupt** for the engine Hall sensor; a **software serial** line
+  on the PIO for GPS.
 - **Flash-backed EEPROM** for DTCs and settings.
 
 ### Clocks
@@ -392,8 +398,10 @@ Adjustometer does not take part in the configurator protocol.
 ### VP37TestBench
 
 VP37TestBench runs the shared VP37 drive module (`src/common/vp37`) on the
-pump test stand: its own RP2040 with an ST7796S display, a power stage that
-is the twin of the ECU one (same pins, parts and values, see
+pump test stand: its own RP2040 with an ST7796S display, a power stage of the
+same type as the ECU one (parts and values from
+[`fiesta-vp37-power-stage.json`](src/common/vp37/fiesta-vp37-power-stage.json),
+pins from its own `device_tree.json`, read through
 [`vp37_power_stage.h`](src/common/vp37/vp37_power_stage.h)) and the
 Adjustometer on the same I²C protocol. The bench adapter
 ([`vp37_bench_adapter.c`](src/VP37TestBench/vp37_bench_adapter.c)) provides
@@ -472,7 +480,8 @@ no CAN or configurator session.
 ```text
 src/<Module>/
 ├── start.{c,cpp}/.h       # entry points, soft-timer table, watchdog
-├── hardwareConfig.h       # pins and addresses
+├── device_tree.json       # board, devices, pins and addresses
+├── hardwareConfig.h       # electrical constants and wiring checks
 ├── hal_project_config.h   # enabled HAL features
 ├── config.{c,cpp}/.h      # settings and the configurator session
 ├── can.{c,cpp}/.h         # CAN frames
@@ -528,7 +537,7 @@ flashing sequence are in
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
 | Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
-| Auxiliary | GPS date and time on the ECU UART, republished on CAN; RTC time from Fiesta_clock |
+| Auxiliary | GPS date and time on the ECU software serial line, republished on CAN; RTC time from Fiesta_clock |
 
 ## Persistence
 
@@ -597,7 +606,7 @@ Fiesta/
 
 - Frame IDs and layouts:
   [`canDefinitions.h`](src/common/canDefinitions/canDefinitions.h).
-- Pins and addresses: each module's `hardwareConfig.h`.
+- Pins and addresses: each module's `device_tree.json`.
 - Start-up order and timing: each module's `start.{c,cpp}`.
 - Connector pinout and wire colours:
   [`Fiesta_pcbs/pinout.txt`](Fiesta_pcbs/pinout.txt),

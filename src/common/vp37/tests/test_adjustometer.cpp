@@ -43,7 +43,7 @@ static void injectAdjExtendedData(uint8_t version, uint8_t seqBegin,
 
 void setUp(void) {
   setUpVp37Fixture();
-  hal_mock_adc_inject(VP37_SUPPLY_ADC_PIN, 0);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SUPPLY_ADC, 0);
   memset(&s_pump, 0, sizeof(s_pump));
   (void)VP37_setCallbacks(&s_pump, vp37ModuleCallbacks());
 }

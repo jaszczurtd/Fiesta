@@ -28,10 +28,11 @@ hal_status_t canInit(void) {
   dpfMessages = lastDPFMessages = 0;
 
   hal_can_config_t canCfg = hal_can_default_config();
-  canCfg.mcp2515.cs_pin = CAN_CS;
+  canCfg.mcp2515.cs_pin = JH_HW_NODE_CAN_PIN_CS;
 
-  const hal_status_t st = hal_can_create_with_retry(
-      &canCfg, CAN_INT, NULL, MAX_RETRIES, watchdog_feed, &canHandle);
+  const hal_status_t st =
+      hal_can_create_with_retry(&canCfg, JH_HW_NODE_CAN_PIN_INT, NULL,
+                                MAX_RETRIES, watchdog_feed, &canHandle);
   if (st != HAL_OK) {
     derr("CAN BUS Shield init failed: %s", hal_status_to_string(st));
     return st;

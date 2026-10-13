@@ -23,7 +23,7 @@ void engineFan_init(engineFan *self) {
 
 void engineFan_fan(engineFan *self, bool enable) {
   (void)self;
-  pcf8574_write(PCF8574_O_FAN, enable);
+  pcf8574_write(JH_HW_NODE_FAN_PIN_OUT_INDEX, enable);
 }
 
 bool engineFan_isFanEnabled(const engineFan *self) {

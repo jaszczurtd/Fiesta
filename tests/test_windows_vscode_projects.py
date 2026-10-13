@@ -17,10 +17,26 @@ import fiesta_modules  # noqa: E402
 
 MODULES = tuple(module.name for module in fiesta_modules.load().firmware())
 LINUX_ONLY_TASKS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
-MANAGED_DEBUG_PROFILES = {
-    "Project: Debug Firmware",
-    "Project: Debug Firmware (RP2350 ARM)",
-    "Project: Debug Firmware (STM32G474 / ST-Link)",
+# Every module builds from one RP2040 assembly of its device_tree.json; the
+# probe gets one profile per assembly and variant, each for its own ELF.
+DEBUG_PROFILES = {
+    "ECU": {
+        "Project: Debug rp2040-plus (RP2040)":
+            ("rp2040/rp2040-plus", "Project: Build (Debug) rp2040-plus"),
+        "Project: Debug rp2040-plus variant: BENCH (RP2040)":
+            ("rp2040/rp2040-plus/variants/BENCH",
+             "Project: Build (Debug) rp2040-plus variant: BENCH"),
+    },
+    "Clocks": {"Project: Debug rp2040-zero (RP2040)":
+               ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+    "OilAndSpeed": {"Project: Debug rp2040-zero (RP2040)":
+                    ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+    "Fiesta_clock": {"Project: Debug rp2040-zero (RP2040)":
+                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+    "Adjustometer": {"Project: Debug rp2040-zero (RP2040)":
+                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+    "VP37TestBench": {"Project: Debug pico (RP2040)":
+                      ("rp2040/pico", "Project: Build (Debug) pico")},
 }
 
 
@@ -118,7 +134,8 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             paths.extend(
                 path
                 for path in (REPO_ROOT / "src" / module / ".vscode").glob("*.json")
-                if path.name != "c_cpp_properties.json"
+                # The ignored local file holds this machine's port by design.
+                if path.name not in ("c_cpp_properties.json", "jaszczurhal.local.json")
             )
         for path in paths:
             content = path.read_text(encoding="utf-8")
@@ -135,14 +152,14 @@ class WindowsVscodeProjectTests(unittest.TestCase):
                 profile["name"]: profile
                 for profile in document["configurations"]
             }
-            self.assertEqual(set(profiles), MANAGED_DEBUG_PROFILES, module)
-            self.assertEqual(
-                profiles["Project: Debug Firmware (STM32G474 / ST-Link)"][
-                    "configFiles"
-                ],
-                ["board/st_nucleo_g4.cfg"],
-                module,
-            )
+            self.assertEqual(set(profiles), set(DEBUG_PROFILES[module]), module)
+            for name, (build, task) in DEBUG_PROFILES[module].items():
+                profile = profiles[name]
+                self.assertEqual("${workspaceFolder}/.build/" + build + "/firmware.elf",
+                                 profile["executable"], name)
+                self.assertEqual(task, profile["preLaunchTask"], name)
+                self.assertEqual(["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
+                                 profile["configFiles"], name)
 
 
 if __name__ == "__main__":

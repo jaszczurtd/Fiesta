@@ -29,6 +29,9 @@ include(${HAL_LIB_EXTERNAL}/cmake/jh_managed_frameworks.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
+# jh_hardware.h of the firmware assembly, loaded first like in the firmware.
+fiesta_hardware_header(CLOCKS_HW_HEADER "${CLOCKS_SRC}" "${HAL_LIB_EXTERNAL}")
 jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -80,6 +83,7 @@ add_library(clocks_mock STATIC
 target_include_directories(clocks_mock BEFORE PUBLIC
     ${CLOCKS_SRC}/tests/include   # test-only hal_project_config.h override
 )
+fiesta_include_hardware_header("${CLOCKS_HW_HEADER}" clocks_mock)
 
 target_include_directories(clocks_mock PUBLIC
     ${HAL_MANAGED_INCLUDE_DIRS}

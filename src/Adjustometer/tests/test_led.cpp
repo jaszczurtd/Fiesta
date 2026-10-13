@@ -29,7 +29,7 @@ static void lockBaseline(uint32_t freqHz) {
 
 /** Inject ADC so fuel temp appears OK or broken. */
 static void injectFuelTemp(bool broken) {
-  hal_mock_adc_inject(ADC_FUEL_TEMP_PIN, broken ? 4090 : 2000);
+  hal_mock_adc_inject(JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN, broken ? 4090 : 2000);
 }
 
 /** Inject ADC so voltage is normal. */
@@ -37,7 +37,7 @@ static void injectVoltageOk(void) {
   const float ratio =
       (float)(VDIV_R1_KOHM + VDIV_R2_KOHM) / (float)VDIV_R2_KOHM;
   int adc = (int)(12.0f / ratio * 4095.0f / 3.3f);
-  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_SUPPLY_VOLTAGE_PIN_IN, adc);
 }
 
 /** Inject ADC so voltage reads as too low (5V -> below 8V threshold). */
@@ -45,7 +45,7 @@ static void injectVoltageBad(void) {
   const float ratio =
       (float)(VDIV_R1_KOHM + VDIV_R2_KOHM) / (float)VDIV_R2_KOHM;
   int adc = (int)(5.0f / ratio * 4095.0f / 3.3f);
-  hal_mock_adc_inject(ADC_VOLT_PIN, adc);
+  hal_mock_adc_inject(JH_HW_NODE_SUPPLY_VOLTAGE_PIN_IN, adc);
 }
 
 /** Settle ADC EMA filters to injected values. */
@@ -83,6 +83,15 @@ void tearDown(void) {}
 
 /* ── All-OK: steady green at half brightness ─────────────────────────────────
  */
+
+/* The status LED is the board's WS2812, started in the GRB order the
+ * assembly gives it. */
+void test_led_uses_the_assembly_status_led(void) {
+  TEST_ASSERT_EQUAL_UINT8(16U, hal_mock_rgb_led_get_pin());
+  TEST_ASSERT_EQUAL_UINT8(1U, hal_mock_rgb_led_get_num_pixels());
+  TEST_ASSERT_EQUAL_INT(HAL_RGB_LED_PIXEL_GRB_KHZ800,
+                        hal_mock_rgb_led_get_pixel_type());
+}
 
 void test_all_ok_steady_green(void) {
   lockBaseline(10000);
@@ -291,6 +300,7 @@ void test_voltage_bad_clears_returns_to_green(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_led_uses_the_assembly_status_led);
   RUN_TEST(test_all_ok_steady_green);
   RUN_TEST(test_signal_lost_red_blink);
   RUN_TEST(test_no_i2c_red_green_cycle);

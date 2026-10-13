@@ -122,7 +122,7 @@ void Turbo_process(Turbo *self) {
 
 #endif
 
-  valToPWM(PIO_TURBO, self->n75);
+  valToPWM(JH_HW_NODE_TURBO_PIN_OUT, self->n75);
 }
 
 void Turbo_showDebug(Turbo *self) {

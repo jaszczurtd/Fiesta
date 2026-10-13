@@ -44,7 +44,7 @@ static struct {
 } frequencyWindow;
 #endif
 static const hal_pulse_capture_config_t captureConfig = {
-    PIO_INTERRUPT_HALL, true, ADJUSTOMETER_SIGNAL_LOSS_MIN_US};
+    JH_HW_NODE_OSCILLATOR_PIN_IN, true, ADJUSTOMETER_SIGNAL_LOSS_MIN_US};
 static void resetSensorsState(void);
 static bool isSignalLost(void);
 
@@ -52,7 +52,8 @@ static bool isSignalLost(void);
  * @brief Initialize the I2C slave interface and default status register.
  */
 void initI2C(void) {
-  hal_i2c_slave_init(PIN_SDA, PIN_SCL, ADJUSTOMETER_I2C_ADDR);
+  hal_i2c_slave_init(JH_HW_BUS_ECU_PIN_SDA, JH_HW_BUS_ECU_PIN_SCL,
+                     ADJUSTOMETER_I2C_ADDR);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS,
                            ADJ_STATUS_BASELINE_PENDING);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_EXT_VERSION,
@@ -67,7 +68,7 @@ void initI2C(void) {
  */
 /** @brief Configure the GPIO and ADC resources of the module. */
 static void initBasicPIO(void) {
-  hal_gpio_set_mode(PIO_INTERRUPT_HALL, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_OSCILLATOR_PIN_IN, HAL_GPIO_INPUT_PULLUP);
   hal_adc_set_resolution(HAL_ADC_UTIL_DEFAULT_BITS);
 }
 
@@ -611,7 +612,8 @@ static float adcEma(float raw, float prev) {
 TESTABLE_STATIC uint8_t getSupplyVoltageRaw(void) {
   float avgAdc = 0.0f;
   float volts = 0.0f;
-  if ((fiesta_adc_read_average_ex(ADC_VOLT_PIN, &avgAdc) != HAL_OK) ||
+  if ((fiesta_adc_read_average_ex(JH_HW_NODE_SUPPLY_VOLTAGE_PIN_IN, &avgAdc) !=
+       HAL_OK) ||
       (fiesta_adc_to_voltage_ex((int)(avgAdc + 0.5f), (float)VDIV_R1_KOHM,
                                 (float)VDIV_R2_KOHM, &volts) != HAL_OK)) {
     volts = 0.0f;
@@ -635,8 +637,9 @@ TESTABLE_STATIC uint8_t getSupplyVoltageRaw(void) {
  */
 TESTABLE_STATIC uint8_t getFuelTemperatureRaw(void) {
   float tempC = 0.0f;
-  if (fiesta_ntc_read_temperature_ex(ADC_FUEL_TEMP_PIN, R_VP37_FUEL_A,
-                                     R_VP37_FUEL_B, &tempC) != HAL_OK) {
+  if (fiesta_ntc_read_temperature_ex(JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN,
+                                     R_VP37_FUEL_A, R_VP37_FUEL_B,
+                                     &tempC) != HAL_OK) {
     tempC = 0.0f;
   }
   if (isnan(tempC) != 0) {

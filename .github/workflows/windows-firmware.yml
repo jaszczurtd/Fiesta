@@ -58,8 +58,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "$module firmware build failed." }
             & $entry refresh-intellisense --project $project
             if ($LASTEXITCODE -ne 0) { throw "$module IntelliSense refresh failed." }
-            Copy-Item (Join-Path $project '.build\firmware.uf2') `
-              (Join-Path $artifacts "$module.uf2")
+            # The device tree build writes below .build\<target>\<assembly>.
+            $dump = & $entry config-dump --json --project $project | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw "$module config dump failed." }
+            Copy-Item $dump.artifacts.uf2 (Join-Path $artifacts "$module.uf2")
           }
 
       - name: Verify checkout stayed clean

@@ -5,15 +5,16 @@ static volatile float valueFields[F_LAST];
 m_mutex_def(valueFieldsMutex);
 
 void setupOnboardLed(void) {
-  hal_rgb_led_init(PIN_RGB, NUMPIXELS);
+  (void)fiesta_status_led_init();
   setLEDColor(BLUE);
 }
 
 void initSPI(void) {
-  hal_gpio_set_mode(CAN_CS, HAL_GPIO_OUTPUT);
-  hal_gpio_write(CAN_CS, true);
+  hal_gpio_set_mode(JH_HW_NODE_CAN_PIN_CS, HAL_GPIO_OUTPUT);
+  hal_gpio_write(JH_HW_NODE_CAN_PIN_CS, true);
 
-  hal_spi_init(0, PIN_MISO, PIN_MOSI, PIN_SCK);
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
 }
 
 void initBasicPIO(void) {

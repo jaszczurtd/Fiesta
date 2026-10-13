@@ -99,13 +99,14 @@ i debug, odświeżać IntelliSense, wgrywać firmware i otwierać monitor portu.
 Testy hostowe, cppcheck, MISRA, Valgrind i SerialConfigurator pozostają
 zorientowane na Linux. macOS nie był sprawdzany.
 
-Każdy moduł firmware ma katalog `.vscode/`. Wybór płytki i portu trafia do
+Każdy moduł firmware ma katalog `.vscode/` i własny `device_tree.json` z płytką,
+urządzeniami i pinami; płytkę ustala montaż z tego pliku. Wybór portu trafia do
 ignorowanego `jaszczurhal.local.json`; repozytorium nie zapisuje numerów COM.
 Listę modułów trzyma `modules.json`. `scripts/fiesta_modules.py` sprawdza ją
 i generuje z niej nagłówek tokenów, tabelę modułów SerialConfiguratora oraz
 listy modułów dla skryptów powłoki; z `--check` zgłasza nieaktualny plik.
-Pliki zadań generuje `scripts/sync_vscode_projects.py`, korzystając z tej listy
-i z rejestru HAL. Hook pre-commit regeneruje i dodaje zmienione pliki do indeksu.
+Pliki zadań i profile debuggera dla każdego montażu generuje
+`scripts/sync_vscode_projects.py`, korzystając z tej listy i z rejestrów HAL. Hook pre-commit regeneruje i dodaje zmienione pliki do indeksu.
 `python3 scripts/sync_vscode_projects.py --check` sprawdza ich aktualność.
 Hooki można skonfigurować przez `scripts/configure_git_hooks.py`.
 

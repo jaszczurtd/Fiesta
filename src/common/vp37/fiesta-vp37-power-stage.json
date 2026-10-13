@@ -1,0 +1,40 @@
+{
+  "$schema": "../../JaszczurHAL/config/hardware/binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "fiesta,vp37-power-stage",
+  "description": "VP37 actuator drive and its measurement: low-side MOSFET PWM channels of the quantity and timing actuators, the source shunt of the quantity MOSFET, the supply divider and the drive enable. Each firmware wires its own pins; the parts and values are those of every stage of this type.",
+  "domain": "custom",
+  "signals": {
+    "quantityPwm": { "direction": "output", "required": true, "domains": ["soc-gpio"] },
+    "timingPwm": { "direction": "output", "required": true, "domains": ["soc-gpio"] },
+    "shuntAdc": { "direction": "input", "required": true, "domains": ["soc-gpio"] },
+    "supplyAdc": { "direction": "input", "required": true, "domains": ["soc-gpio"] },
+    "enable": { "direction": "output", "required": true, "domains": ["soc-gpio", "device-pin"] }
+  },
+  "properties": {
+    "shuntOhms": {
+      "type": "number",
+      "cType": "float",
+      "description": "Low-side shunt in the quantity MOSFET source.",
+      "unit": "ohm",
+      "default": 0.22,
+      "minimum": 0.001
+    },
+    "supplyDividerHighOhms": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Supply divider resistor between the supply and the ADC pin.",
+      "unit": "ohm",
+      "default": 47000,
+      "minimum": 0
+    },
+    "supplyDividerLowOhms": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Supply divider resistor between the ADC pin and ground.",
+      "unit": "ohm",
+      "default": 10000,
+      "minimum": 1
+    }
+  }
+}

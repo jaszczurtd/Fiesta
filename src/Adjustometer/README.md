@@ -109,7 +109,8 @@ active conditions: purple for fuel temperature, yellow for voltage, red after
 | `telemetry.c / telemetry.h` | Publication of coherent I2C blocks and legacy mirror. |
 | `start.c / start.h` | Portable app entry and core scheduling. |
 | `led.c / led.h` | Status indication. |
-| `config.h`, `hardwareConfig.h` | Timing, thresholds, pins and analog circuit parameters. |
+| `device_tree.json` | Board, pins, the ECU bus and the status LED. |
+| `config.h`, `hardwareConfig.h` | Timing, thresholds and analog circuit parameters. |
 | `../common/adjustometer_feedback.h` | Shared feedback representation and wire encoding. |
 
 Host tests cover sensor behavior, baseline drift, zero hold, signal loss, LED

@@ -69,8 +69,6 @@ extern "C" {
 // using 7-bit-adress for lcd-library
 // if you use your own library for twi check I2C-adress-handle
 
-#define SSD1306_ADDRESS OLED_I2C_ADDR
-
 #ifdef I2C
 #include "twi_i2c.h" // library for I2C-communication
                      // if you want to use other lib for I2C

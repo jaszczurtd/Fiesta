@@ -106,7 +106,7 @@ const uint8_t init_sequence[] = {
 void lcd_command(uint8_t cmd[], uint8_t size) {
 #if defined I2C
   TWI_Start();
-  TWI_address(SSD1306_ADDRESS, 0);
+  TWI_address(JH_HW_NODE_OLED_ADDRESS, 0);
   TWI_Write(0x00); // 0x00 for command, 0x40 for data
   for (uint8_t i = 0; i < size; i++) {
     TWI_Write(cmd[i]);
@@ -126,7 +126,7 @@ void lcd_command(uint8_t cmd[], uint8_t size) {
 void lcd_data(uint8_t data[], uint16_t size) {
 #if defined I2C
   TWI_Start();
-  TWI_address(SSD1306_ADDRESS, 0);
+  TWI_address(JH_HW_NODE_OLED_ADDRESS, 0);
   TWI_Write(0x40); // 0x00 for command, 0x40 for data
   for (uint16_t i = 0; i < size; i++) {
     TWI_Write(data[i]);

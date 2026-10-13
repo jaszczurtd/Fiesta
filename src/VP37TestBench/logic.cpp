@@ -202,7 +202,7 @@ static void updateAdjConnection(void) {
 // timer functions
 static void callAtEverySecond(void) {
   s_alertBlink = !s_alertBlink;
-  hal_gpio_write(PIN_ONBOARD_LED, s_alertBlink);
+  hal_gpio_write(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT, s_alertBlink);
 }
 
 #define DISPLAY_LINES 6
