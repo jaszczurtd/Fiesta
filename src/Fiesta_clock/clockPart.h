@@ -8,9 +8,8 @@
 #ifndef clockPart_h
 #define clockPart_h
 
-#include <stdio.h>
 #include "main.h"
-#include "font.h"
+#include <stdio.h>
 
 extern int rc5Code, switchCode;
 extern bool powerIsOn;
@@ -27,6 +26,5 @@ void printClockHour(unsigned char x, unsigned char y);
 
 void startTimerForSeconds(unsigned char seconds);
 bool checkIfTimerReached(void);
-
 
 #endif /* clockPart_h */

@@ -17,17 +17,16 @@ static void setDisplaytMode(void);
 static void setup_runtime(void);
 
 static void helloMessage(void) {
-  lcd_init(LCD_DISP_ON);
-
-  lcd_clrscr();
-
-  lcd_charMode(NORMALSIZE);
-  lcd_gotoxy(8, 0);
-  lcd_puts("FORD");
-
-  lcd_charMode(DOUBLESIZE);
-  lcd_gotoxy(4, 2);
-  lcd_puts("FIESTA");
+  const hal_status_t status = clock_display_init();
+  if (hal_status_is_error(status)) {
+    derr("OLED init failed: %d", (int)status);
+    return;
+  }
+  (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+  (void)clock_display_text(8, 0, 1, "FORD");
+  (void)clock_display_text(4, 2, 2, "FIESTA");
+  /* Temperature conversion blocks; show the greeting before starting it. */
+  (void)hal_display_flush_ex();
 }
 
 static void setup_runtime(void) {
@@ -48,8 +47,6 @@ static void setup_runtime(void) {
 
   hal_adc_set_resolution((uint8_t)CFG_ADC_RESOLUTION_BITS);
 
-  TWI_Init();
-
   idleTimer = false;
   blinkLED = false;
   idleLEDCycles = 0;
@@ -64,7 +61,8 @@ static void setup_runtime(void) {
 
   temp_initial_read();
 
-  lcd_clrscr();
+  (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+  (void)hal_display_flush_ex();
 }
 
 void app_start(void) {
@@ -92,12 +90,13 @@ void app_task0(void) {
 
     temp_initial_read();
 
-    lcd_clrscr();
+    (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+    (void)hal_display_flush_ex();
   }
 
   if (idleTimer) {
     if (checkIfTimerReached()) {
-      lcd_sleep(true);
+      (void)hal_display_suspend_ex();
       blinkLED = true;
     }
 
@@ -111,7 +110,7 @@ void app_task0(void) {
     }
 
   } else {
-    lcd_sleep(false);
+    (void)hal_display_resume_ex();
   }
 
   if (!ig) {
@@ -136,6 +135,10 @@ void app_task0(void) {
   } else {
     idleTimer = false;
     setDisplaytMode();
+  }
+
+  if (!blinkLED) {
+    (void)hal_display_flush_ex();
   }
 }
 
@@ -162,7 +165,7 @@ static void setDisplaytMode(void) {
       if (mode_ignition > MODE_VOLT) {
         mode_ignition = MODE_CLOCK;
       }
-      lcd_clrscr();
+      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
     }
 
     int countVal = CFG_CHANGE_MODE_CYCLES;
@@ -183,7 +186,7 @@ static void setDisplaytMode(void) {
       if (mode_ignition > MODE_VOLT) {
         mode_ignition = MODE_CLOCK;
       }
-      lcd_clrscr();
+      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
     }
   }
 }

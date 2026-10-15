@@ -13,7 +13,7 @@
 #include "config.h"
 #include "hardwareConfig.h"
 
-#include "lcd.h"
+#include "display.h"
 #include "utils.h"
 
 #include "RTC.h"
@@ -22,7 +22,6 @@
 #include "clockPart.h"
 #include "ds18b20.h"
 #include "tempPart.h"
-#include "twi_i2c.h"
 #include "voltPart.h"
 
 bool ignition(void);

@@ -1,7 +1,7 @@
 #include "peripherials.h"
 
 void setupOnboardLed(void) {
-  (void)fiesta_status_led_init();
+  (void)hal_rgb_led_init_board_status();
   hal_rgb_led_set_color(HAL_RGB_LED_BLUE);
 }
 

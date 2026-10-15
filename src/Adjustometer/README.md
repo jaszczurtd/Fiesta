@@ -1,5 +1,7 @@
 # VP37 Adjustometer
 
+[Polski](README.pl.md) · [Architecture](../../ARCHITECTURE.md)
+
 Actuator position transducer for the VP37 diesel injection pump, providing
 frequency-derived feedback to the ECU over I2C.
 
@@ -141,8 +143,8 @@ JH=../JaszczurHAL/vscode/entry/jh-vscode
 
 `upload` matches the VS Code task (`Ctrl+Shift+2`); `upload-uf2` uses BOOTSEL.
 `monitor` opens USB CDC (`Ctrl+Shift+3`). Port selection (`Ctrl+Shift+9`) updates
-local settings; upload still verifies the module identity. Fiesta manifest and
-USB-identity handling live in `src/common/scripts/`.
+local settings; upload still verifies the module identity. The [build guide](../../doc/BUILDING.md#prepare-a-configurator-manifest)
+describes separate Fiesta manifest preparation. HAL jh-vscode checks USB identity.
 
 ## License
 

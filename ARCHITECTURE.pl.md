@@ -1,0 +1,342 @@
+# Architektura Fiesty
+
+[English](ARCHITECTURE.md) · [O projekcie](README.pl.md)
+
+Fiesta zastępuje i rozszerza elektronikę Forda Fiesty 1.8 (M)TDDI. Pięć
+modułów firmware dzieli zadania w samochodzie: ECU steruje silnikiem,
+a pozostałe obsługują wskaźniki, dodatkowe pomiary, czas i pomiar położenia
+pompy. SerialConfigurator łączy się z nimi przez USB, odczytuje i zmienia
+ustawienia oraz wgrywa firmware.
+
+Osobny VP37TestBench obsługuje pompę na stanowisku. Ten dokument opisuje
+powiązania między modułami. Polecenia programistyczne zawiera
+[instrukcja przygotowania i kompilacji](doc/BUILDING.pl.md), a szczegóły
+sterowania znajdują się w dokumentacji modułów.
+
+## Układ systemu
+
+```text
+                 CAN0 (główna)
+   ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, buzzer
+   │           │ ◄──────────  OilAndSpeed     olej, prędkość, EGT
+   │    ECU    │ ◄──────────  Fiesta_clock    czas RTC, 1 Hz
+   │  RP2040,  │
+   │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
+   │           │ ─── I²C ───► PCF8574         przekaźniki (0x38)
+   │           │ ◄─ PIO UART  odbiornik GPS
+   │           │ ─── CAN1 ──► gniazdo OBD-II
+   └─────┬─────┘ ◄─ ADC, GPIO, PWM ─► czujniki i elementy wykonawcze
+         │
+         │ USB CDC, poza samochodem
+         ▼
+   Fiesta Serial Configurator (Linux, GTK4)
+     łączy się też z Clocks, OilAndSpeed i Fiesta_clock
+```
+
+ECU jako jedyny moduł steruje silnikiem. Wymagania MISRA-C obejmują ECU,
+współdzielony moduł VP37 i Adjustometer. Pozostałe moduły dostarczają dane
+lub prezentują to, co publikuje ECU.
+
+## Sprzęt
+
+Moduły używają płytek RP2040: Raspberry Pi Pico, RP2040-Plus i RP2040-Zero.
+Każdy opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje
+z niego `jh_hardware.h`, a kod czyta makra `JH_HW_*`.
+
+RP2040 wybrano ze względu na cenę, dostępność, dwa rdzenie, GPIO z przerwaniami,
+PWM i możliwość emulacji EEPROM we flash. Firmware korzysta z JaszczurHAL.
+Przeniesienie na inny MCU wymaga również odpowiedniego backendu HAL, opisu
+montażu, sprawdzenia czasu wykonania i pamięci oraz walidacji sprzętowej.
+
+Schematy, projekty PCB i mapy złączy są w [`Fiesta_pcbs/`](Fiesta_pcbs/).
+[`pinout.txt`](Fiesta_pcbs/pinout.txt) opisuje złącze ECU ze 104 pinami,
+a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
+
+## Moduły
+
+| Moduł | Język | Zadania | MISRA |
+|---|---|---|---|
+| [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
+| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników. | Poza zakresem. |
+| [OilAndSpeed](src/OilAndSpeed/) | C++ | Olej, prędkość i temperatury spalin. | Poza zakresem. |
+| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC i czas przez CAN. | Poza zakresem. |
+| [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
+| [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
+| [SerialConfigurator](src/SerialConfigurator/) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
+
+[`modules.json`](modules.json) określa rodzaj, token, pozycję konfiguratora
+i katalog testów każdego modułu. Dodawanie modułu zaczyna się od tego rejestru.
+[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) sprawdza go i generuje
+nagłówek tokenów w `src/common/scDefinitions`, tabelę konfiguratora oraz listy
+dla skryptów powłoki. Korzystają z nich generator VS Code, `runalltests.sh`,
+`runmefirst.sh`, bootstrap i konfigurator. Indeks pozycji konfiguratora jest
+jawny, ponieważ wiąże zapisane ścieżki obrazów z modułem. Listy w workflow CI
+są zapisane bezpośrednio, a test porównuje je z rejestrem.
+
+[`legacy/`](legacy/) zawiera wycofane DPF_main, AdaptiveLights i Fading.
+Nie są kompilowane ani testowane.
+
+### ECU
+
+ECU steruje pompą wtryskową VP37, zaworem doładowania N75, świecami żarowymi,
+wentylatorem, grzałką bloku i ogrzewaną szybą. Przechowuje DTC i odpowiada na
+OBD-II jako Ford Fiesta 1.8 DI EEC-V ECU.
+
+Rdzeń 0 obsługuje timery, CAN, diagnostykę, przekaźniki, pamięć i sesje USB.
+Rdzeń 1 wykonuje cykl VP37, przerwanie pomiaru RPM i sterowanie turbiną.
+Nie ma RTOS. Rdzeń sterujący publikuje atomowe kopie stanu dla rdzenia 0;
+dostęp do zatrzasku wyjść I²C i pamięci DTC chronią muteksy. Flash zapisuje rdzeń 0.
+
+[Dokumentacja ECU](src/ECU/README.pl.md) opisuje synchronizację, zadawanie
+położenia, sprzężenie prądowe, kompensację, telemetrię, RAM i obraz BENCH.
+[Dokumentacja Adjustometera](src/Adjustometer/README.pl.md) opisuje pomiar położenia.
+
+ECU współdzieli I²C 400 kHz między Adjustometer (`0x57`) i ekspander
+przekaźników PCF8574A (`0x38`). PCF8574A jest przeznaczony do 100 kHz,
+więc pracuje poza specyfikacją do czasu wymiany albo wydzielenia magistrali.
+Lokalna definicja urządzenia ogranicza konfigurację magistrali do 400 kHz.
+
+### Clocks
+
+Clocks odbiera dane CAN i generuje przebiegi prostokątne dla fabrycznego
+prędkościomierza, obrotomierza i wskaźnika oleju. Rysuje dodatkowe wskazania
+na TFT i obsługuje buzzer. Nadaje tylko jasność ekranu co 50 ms;
+ECU nie wymaga od niego danych. Kontroler CAN i TFT współdzielą SPI.
+
+| Plik | Zadanie |
+|---|---|
+| [Cluster.cpp](src/Clocks/Cluster.cpp) | Generuje sygnały fabrycznych wskaźników. |
+| [Gauge.h](src/Clocks/Gauge.h), [simpleGauge.cpp](src/Clocks/simpleGauge.cpp), [tempGauge.cpp](src/Clocks/tempGauge.cpp), [pressureGauge.cpp](src/Clocks/pressureGauge.cpp) | Przeliczają wskazania. |
+| [TFTExtension.cpp](src/Clocks/TFTExtension.cpp) | Rysuje ekran TFT. |
+| [logic.cpp](src/Clocks/logic.cpp) | Zamienia dane CAN na stan wskaźników, ekranu i buzzera. |
+| [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
+| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła jasność; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
+
+### OilAndSpeed
+
+OilAndSpeed mierzy ciśnienie oleju czujnikiem rezystancyjnym, prędkość przez
+impulsy ABS oraz temperatury spalin przed DPF i wewnątrz niego przez dwa
+MCP9600 na własnym I²C. Nadaje olej i prędkość co 50 ms, a temperatury co
+250 ms i po każdym odczycie termopar. Te same ramki informują o obecności modułu.
+
+| Plik | Zadanie |
+|---|---|
+| [oilPressure.cpp](src/OilAndSpeed/oilPressure.cpp) | Przelicza ADC na bary. |
+| [speed.cpp](src/OilAndSpeed/speed.cpp) | Przelicza częstotliwość impulsów ABS na prędkość. |
+| [can.cpp](src/OilAndSpeed/can.cpp) | Obsługuje ramki oleju, prędkości i EGT. |
+| [config.cpp](src/OilAndSpeed/config.cpp) | Obsługuje sesję konfiguratora i odczyt interwałów pomiarowych. |
+
+### Adjustometer
+
+Adjustometer mierzy częstotliwość oscylatora Hartleya połączonego z cewkami
+czujnika pompy, około 22-37 kHz. HAL zbiera bloki 32 okresów przez PIO i DMA.
+Cztery bloki tworzą okno 128 okresów przesuwane o 32; surowe okna są uśredniane
+przez okres napędu VP37, co usuwa tętnienia PWM bez opóźnienia dodatkowego filtra.
+Publikowana odchyłka od poziomu odniesienia ma jednostkę Hz; kalibracja ECU
+przelicza ją na położenie.
+
+Rdzeń 0 odbiera pomiary i publikuje wynik. Rdzeń 1 obsługuje pomocnicze ADC,
+diagnostykę, LED i logowanie USB. Moduł ma własny RP2040 i zwykle mieści się na PCB ECU.
+
+Slave I²C `0x57` udostępnia:
+
+| Rejestry | Zawartość |
+|---|---|
+| `0x00..0x04` | Starszy format impulsu, napięcie, temperatura paliwa i status. |
+| `0x05..0x16` | Częstotliwość, poziom odniesienia, odchyłka ze znakiem i temperatura MCU. |
+| `0x17..0x34` | Wersjonowany blok 30 B dla sterowania: numer próbki, czas i wiek pomiaru. |
+
+Aktywny sterownik VP37 wymaga ostatniego bloku. ECU sprawdza spójność i świeżość;
+starszy firmware z samym blokiem legacy nie dostarcza wymaganego sprzężenia.
+HAL zamraża mapę na czas odczytu I²C. Bity statusu oznaczają brak sygnału
+(`0x01`), uszkodzenie czujnika paliwa (`0x02`), oczekiwanie na poziom
+odniesienia (`0x04`) i niewłaściwe zasilanie (`0x08`).
+
+Start obejmuje 500 ms rozgrzewania, ustalenie poziomu odniesienia (minimum
+80 ms, wymuszone po 250 ms) i 1000 ms kontroli dryftu. ECU czeka do
+`VP37_ADJUSTOMETER_BASELINE_WAIT_MS` (8 s), zanim kalibruje skok. Szczegóły
+pomiaru, startu i resetu opisuje [README](src/Adjustometer/README.pl.md).
+Adjustometer nie obsługuje protokołu konfiguratora.
+
+### VP37TestBench
+
+VP37TestBench uruchamia `src/common/vp37` na stanowisku pompy: RP2040,
+wyświetlacz ST7796S, stopień mocy tego samego typu co ECU i Adjustometer
+z tym samym protokołem I²C. Elementy i wartości stopnia opisuje
+[fiesta-vp37-power-stage.json](src/common/vp37/fiesta-vp37-power-stage.json),
+a piny własny `device_tree.json`; odczytuje je
+[vp37_power_stage.h](src/common/vp37/vp37_power_stage.h).
+
+[vp37_bench_adapter.c](src/VP37TestBench/vp37_bench_adapter.c) obsługuje dwa
+kanały PWM aktywne stanem niskim, włączenie napędu przez GPIO zamiast PCF8574
+oraz I²C bez muteksu, bo magistrala ma jednego użytkownika. Zarówno stanowisko,
+jak ECU przez [ecu_hal_config.h](src/ECU/ecu_hal_config.h), dołączają
+[vp37_hal_config.h](src/common/vp37/vp37_hal_config.h). Każda faza I²C ma limit
+2 ms, aby zablokowana magistrala nie przekroczyła granicy świeżości sprzężenia
+20 ms. Brak limitu zatrzymuje kompilację.
+
+Położenie zadaje potencjometr na pomocniczym wejściu skanu. Rdzeń 0 obsługuje
+timery, ekran i logowanie; rdzeń 1 uruchamia pompę i `VP37_process()`.
+Ekran odświeża wartości po zmianie. Kropka w rogu świeci stale na zielono,
+gdy napływają ramki Adjustometera, i miga na czerwono przy ich braku.
+Po zatrzymaniu pompy rdzeń 1 odpytuje status raz na sekundę. Bez pompy start
+kończy się timeoutem poziomu odniesienia, a stanowisko nadal działa; pozwala
+to sprawdzić podstawowe uruchomienie. Moduł nie obsługuje protokołu konfiguratora.
+
+### Fiesta_clock
+
+Fiesta_clock utrzymuje datę i czas w PCF8563 i nadaje je co sekundę jako
+`CAN_ID_RTC_UPDATE` (`0x130`). Milczy, gdy RTC zgłasza utratę integralności.
+Konfigurator odczytuje i ustawia czas; commit odrzuca niepoprawną datę,
+uwzględniając lata przestępne. Lokalny ekran pokazuje czas, temperatury dwóch
+DS18B20 i napięcie zasilania. OLED SSD1306 128×32 obsługuje sterownik
+JaszczurHAL. Ekran i RTC współdzielą I²C opisane w `device_tree.json`.
+HAL zapisuje napisy bezpośrednio do pamięci panelu, bez bufora obrazu.
+Zegar zachowuje pierwotny font 6×8 (w tym „ś"), skalę 1 i 2 oraz ustawienia
+panelu, w tym kontrast 0x3f. Tryb bezczynności usypia panel, zachowując
+pamięć kontrolera. Zmiana stanu zapłonu ponownie ustawia konfigurację panelu.
+Po początkowym odczycie temperatur powitanie jest kasowane na ekranie.
+
+### Serial Configurator
+
+Aplikacja C/GTK4 dla Linuksa wykrywa moduły USB, pokazuje tożsamość,
+odczytuje i zmienia parametry, uruchamia testy obrazu stanowiskowego ECU
+oraz wgrywa firmware po sprawdzeniu manifestu. CLI obsługuje wykrywanie,
+ustawienia, GPS, testy i uwierzytelnione wejście do bootloadera.
+Pełne kopiowanie UF2 i ponowne połączenie zapewnia GUI.
+
+Biblioteka rdzenia obsługuje porty, protokół, uwierzytelnianie, parametry
+i wgrywanie, bez kodu GUI. Warstwa GTK prezentuje dane; nie otwiera portów
+ani nie parsuje ramek. Od systemu zależą wykrywanie urządzeń, hot-plug,
+wyszukiwanie dysku UF2, lokalizacja konfiguracji i pakowanie. Działa Linux;
+Windows 10/11 jest planowany, ale transport szeregowy pozostaje POSIX.
+Polecenia i ograniczenia opisuje [README](src/SerialConfigurator/README.pl.md).
+
+## Kod współdzielony
+
+- **[JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL)** jest osobnym
+  repozytorium w submodule `src/JaszczurHAL`. `runmefirst.sh` inicjalizuje
+  commit zapisany przez Fiestę. HAL zapewnia GPIO, ADC, PWM, I²C, SPI, CAN,
+  timery, PID, KV na emulowanym EEPROM, logowanie i mock do testów hostowych.
+  Moduł implementuje `app_start()`, `app_task0()` i opcjonalnie `app_task1()`.
+- **[canDefinitions](src/common/canDefinitions/canDefinitions.h)** zawiera
+  identyfikatory CAN, układ ramek i skalowanie danych między modułami.
+- **[scDefinitions](src/common/scDefinitions/)** zawiera
+  [protokół konfiguratora](src/common/scDefinitions/PROTOCOL.pl.md).
+  `sc_config_session_t` z [sc_command_handlers.h](src/common/scDefinitions/sc_command_handlers.h)
+  uruchamia sesję szeregową, obsługę poleceń SC i adapter między nimi.
+  Plik `config` modułu określa parametry, wartości i callbacki.
+
+Większość modułów ma poniższy układ. Fiesta_clock zachowuje starsze nazwy
+`main.c` i `RTC.c`. VP37TestBench implementuje funkcje wejściowe HAL
+w `logic.cpp`, bez CAN i sesji konfiguratora.
+
+```text
+src/<Module>/
+├── start.{c,cpp}/.h       # start, tabela timerów, watchdog
+├── device_tree.json       # płytka, urządzenia, piny i adresy
+├── hardwareConfig.h       # stałe elektryczne i kontrola połączeń
+├── hal_project_config.h   # włączone funkcje HAL
+├── config.{c,cpp}/.h      # ustawienia i sesja konfiguratora
+├── can.{c,cpp}/.h         # ramki CAN
+├── <pliki logiki modułu>
+├── CMakeLists.txt         # testy hostowe
+├── tests/                 # testy kompilowane jako C++
+└── .vscode/               # manifest i zadania jh-vscode
+```
+
+## Komunikacja
+
+### CAN
+
+| Magistrala | Uczestnicy | Cel |
+|---|---|---|
+| CAN0 „main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | Komunikacja między modułami. |
+| CAN1 „OBD-2" | ECU, gniazdo OBD-II | Zewnętrzna diagnostyka. |
+
+ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie, paliwo,
+pozycję i czas GPS. Odbiera olej, prędkość i EGT z OilAndSpeed oraz stan DPF
+z `0x124`. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
+Clocks nadaje tylko jasność (`0x126`), którą OilAndSpeed traktuje też jako
+sygnał obecności wskaźników. OilAndSpeed dodatkowo odbiera wybrane dane ECU.
+Fiesta_clock nadaje tylko czas (`0x130`). Na CAN1 ECU odpowiada na OBD-II i UDS.
+Bus-off lub odrzucone nadanie zgłasza U0073; `DTC_DETAIL_*` wskazuje ramkę,
+a rekord UDS zawiera tę informację jako trzeci bajt DTC.
+
+### I²C
+
+ECU jest masterem dla Adjustometera (`0x57`) i ekspandera PCF8574 (`0x38`).
+OilAndSpeed i Fiesta_clock mają osobne magistrale dla swoich czujników.
+
+### USB
+
+ECU, Clocks, OilAndSpeed i Fiesta_clock występują jako urządzenia
+`Fiesta <Module>` z UID płytki w numerze seryjnym. Konfigurator rozróżnia je
+również przy podłączeniu kilku płytek. Format transmisji, tożsamość i sekwencję
+wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
+
+## Połączenia z samochodem
+
+| Kierunek | Sygnały |
+|---|---|
+| Czujniki -> ECU | Temperatury płynu, oleju i dolotu; paliwo, przepustnica, ciśnienie dolotu, Hall RPM, przycisk ogrzewanej szyby, zasilanie. |
+| Czujniki -> OilAndSpeed | Olej, ABS, EGT przed DPF i wewnątrz. |
+| ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
+| Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), TFT, buzzer. |
+| Diagnostyka | OBD-II przez CAN1. |
+| Pomocnicze | Data i czas GPS przez programowy port szeregowy ECU, dalej CAN; czas RTC z Fiesta_clock. |
+
+## Zapis danych
+
+Moduły zapisujące ustawienia używają KV JaszczurHAL na emulowanym EEPROM
+(`ECU_EEPROM_SIZE_BYTES` w ECU). ECU przechowuje tam także DTC; muteks chroni
+odczyty rdzenia 1 przed równoczesnym zapisem rdzenia 0.
+
+## Kompilacja i CI
+
+[Testy hostowe i CI](doc/TESTING.pl.md) opisują wybór modułów i kontrole.
+Fiesta_clock ma buildy firmware i test hostowy wyświetlacza, a VP37TestBench
+lokalne buildy i testy hostowe, bez firmware CI. SerialConfigurator ma osobny
+projekt testów aplikacji desktopowej.
+
+[Instrukcja kompilacji](doc/BUILDING.pl.md) opisuje ścieżki montaży i wariantów,
+manifesty, wgrywanie oraz SWD. `jh-vscode build` tworzy firmware; bootstrap
+Fiesty dodaje i sprawdza manifest. [Runner systemd](src/ECU/scripts/systemd/README.pl.md)
+może codziennie przygotowywać środowisko, testować i kompilować projekt oraz
+wysyłać wynik e-mailem.
+
+## Układ repozytorium
+
+```text
+Fiesta/
+├── README.md                    # wprowadzenie
+├── ARCHITECTURE.md              # architektura
+├── MISRA.md                     # zakres i zasady MISRA-C
+├── doc/                         # kompilacja, testy, galeria
+├── modules.json                 # rejestr modułów
+├── scripts/                     # rejestr, VS Code, duplikaty, hooki Git
+├── .github/workflows/           # CI
+├── src/
+│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/ VP37TestBench/
+│   ├── JaszczurHAL/             # submoduł HAL
+│   ├── SerialConfigurator/      # aplikacja desktopowa i CLI
+│   └── common/
+│       ├── canDefinitions/      # identyfikatory i ramki CAN
+│       ├── cmake/               # współdzielone helpery CMake
+│       ├── scDefinitions/       # protokół konfiguratora
+│       ├── scripts/             # manifesty, UF2 i nazwy modułów
+│       ├── tests/               # helpery testów hostowych
+│       └── vp37/                # sterownik VP37 i jego testy
+├── Fiesta_pcbs/                 # schematy, PCB i złącza
+├── materials/                   # dokumenty referencyjne i zdjęcia
+└── legacy/                      # wycofane moduły
+```
+
+## Dalsze informacje
+
+- Identyfikatory i ramki: [canDefinitions.h](src/common/canDefinitions/canDefinitions.h).
+- Piny i adresy: `device_tree.json` modułu.
+- Start i harmonogram: `start.{c,cpp}` modułu.
+- Złącza i przewody: [pinout.txt](Fiesta_pcbs/pinout.txt), [wirings.txt](Fiesta_pcbs/wirings.txt).
+- Wyniki MISRA: raport workflow `ecu-misra.yml` i [instrukcja runnera](src/ECU/misra/README.pl.md).
+- Implementacja HAL: repozytorium JaszczurHAL.

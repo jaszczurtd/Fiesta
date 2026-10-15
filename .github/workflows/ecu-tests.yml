@@ -12,6 +12,7 @@ on:
       - "runalltests.sh"
       - "runmefirst.sh"
       - "src/ECU/**"
+      - "src/Fiesta_clock/**"
       - ".github/workflows/ecu-tests.yml"
       - ".github/actions/pinned-cppcheck/**"
   pull_request:
@@ -25,6 +26,7 @@ on:
       - "runalltests.sh"
       - "runmefirst.sh"
       - "src/ECU/**"
+      - "src/Fiesta_clock/**"
       - ".github/workflows/ecu-tests.yml"
       - ".github/actions/pinned-cppcheck/**"
   workflow_dispatch:

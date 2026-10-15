@@ -1,5 +1,7 @@
 # Serial Configurator protocol
 
+[Polski](PROTOCOL.pl.md) · [Configurator guide](../../SerialConfigurator/README.md)
+
 The Fiesta Serial Configurator talks to ECU, Clocks, OilAndSpeed, and
 RTC_Clock over each module's USB CDC port. One text protocol carries module
 discovery, parameter reads and writes, authentication, and the request to
@@ -121,8 +123,34 @@ the staged copy, `SC_COMMIT_PARAMS` validates and applies it, and
 `SC_REVERT_PARAMS` copies the active values back. ECU and RTC_Clock have writable parameters; Clocks and
 OilAndSpeed only report theirs.
 
-To add a parameter, add one descriptor row and one field to the module's
-values struct. If the value is persisted, raise `schema_since` as well.
+### Add a parameter
+
+Add a descriptor and its field to the module's values struct, then update
+initialization, defaults and validation. Keep the identifier, units and ranges
+consistent with the replies. Fields marked `NOT_PERSISTED` do not extend
+the saved blob.
+`READ_ONLY` controls writes through the protocol; it does not itself exclude
+a field from persistence.
+
+For a new persisted field:
+
+1. Assign a new storage schema version. Set the new descriptor's `schema_since`
+   to that version; retain existing fields' introduction versions.
+2. Pass the new schema to `sc_param_blob_encode()`. A descriptor whose
+   `schema_since` is greater than the encoder's schema is silently omitted.
+3. Recalculate the blob size including its header and CRC, enlarge read/write
+   buffers, and update expected-size and accepted-length checks.
+4. Keep old schemas readable. Load defaults before decoding so fields absent
+   from an older blob receive defined values, and validate the decoded result.
+5. Test old-data migration, new-schema round trips, malformed lengths/CRC,
+   rejected values and persistence errors. Commit, reload and verify the new
+   field, rather than checking only the staged response.
+
+For example, [`ECU/config.c`](../../ECU/config.c) explicitly encodes schema V2
+into 18 bytes and accepts V1/V2 lengths on read. Adding a V3 descriptor alone
+would leave that field out of the saved V2 blob even if the save succeeds.
+See the [ECU parameter tests](../../ECU/tests/test_ecu_params.cpp) and the
+[shared codec tests](../../SerialConfigurator/tests/test_sc_param.c).
 
 | File | Contents |
 |---|---|
@@ -208,13 +236,19 @@ the same UID to come back before it sends the post-flash `HELLO`.
 
 ## Flashing
 
-Every firmware build writes `.build/firmware.uf2` and
-`.build/firmware.manifest.json`. The manifest holds `module_name`,
-`fw_version`, `build_id`, the SHA-256 of the UF2, and `uf2_file`, the UF2 name
-without a path. The build fails when the checksum does not match.
+`jh-vscode build` writes `firmware.uf2` under the selected module's
+`.build/<target>/<assembly>/` directory, or its `variants/<variant>/`
+subdirectory. It does not create a Fiesta manifest. The Fiesta bootstrap
+creates and verifies `firmware.manifest.json` next to the image; direct builds
+need the separate [manifest preparation step](../../../doc/BUILDING.md#prepare-a-configurator-manifest).
 
-The host rejects a manifest with a missing field, a path in `uf2_file`, or a
-checksum that does not match the UF2. It checks the checksum again right
+The host requires `module_name`, `fw_version`, `build_id` and the UF2's
+`sha256`. `uf2_file` is optional when the UF2 is selected explicitly. It must
+be a filename without a path when present, and is required to resolve an image
+from a manifest-only selection. The Fiesta helper always writes it.
+
+The host rejects a manifest with a missing required field, a path in
+`uf2_file`, or a checksum that does not match the UF2. It checks the checksum again right
 before the reboot, so choosing a manifest is enough to pick the image. The
 optional `signature` field is read but not verified; ed25519 verification is
 not implemented.
@@ -222,7 +256,7 @@ not implemented.
 The configurator's flash flow then authenticates, sends
 `SC_REBOOT_BOOTLOADER`, waits for the BOOTSEL drive, copies the UF2, waits for
 the module to come back, and checks its `HELLO`. The steps are listed in the
-[Serial Configurator README](../../SerialConfigurator/README.md#current-functionality).
+[Serial Configurator README](../../SerialConfigurator/README.md#flash-firmware).
 
 The VS Code upload task goes through JaszczurHAL `jh-vscode upload`, which
 checks the port against the module's USB identity before it flashes. The rules

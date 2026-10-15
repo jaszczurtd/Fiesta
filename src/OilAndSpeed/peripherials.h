@@ -4,7 +4,6 @@
 #include "../common/canDefinitions/canDefinitions.h"
 #include <JaszczurHAL.h>
 
-#include "../common/fiesta_status_led.h"
 #include "config.h"
 #include "hardwareConfig.h"
 

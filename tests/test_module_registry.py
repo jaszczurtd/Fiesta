@@ -295,11 +295,12 @@ class RepositoryRegistryTests(unittest.TestCase):
         roots = set(re.findall(r"--input-root src/(\S+)", text))
         self.assertEqual(roots, self.ci_modules(firmware_only=False) | {"common"})
 
-    def test_tooling_tests_run_when_only_the_registry_changes(self) -> None:
+    def test_tooling_tests_run_when_registry_or_clock_changes(self) -> None:
         text = (WORKFLOWS / "ecu-tests.yml").read_text(encoding="utf-8")
         self.assertIn("unittest discover -s tests", text)
         # Both the push and the pull_request path filters.
         self.assertEqual(text.count('- "modules.json"'), 2)
+        self.assertEqual(text.count('- "src/Fiesta_clock/**"'), 2)
 
     def test_windows_workflow_matches_registry(self) -> None:
         text = (WORKFLOWS / "windows-firmware.yml").read_text(encoding="utf-8")
