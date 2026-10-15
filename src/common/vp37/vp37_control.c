@@ -128,20 +128,20 @@ void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
 
 /** @brief Update the settled-target hysteresis that freezes integration. */
 void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
-  const float absoluteError = fabsf((float)self->pid.error);
+  const int32_t error = self->pid.error;
   // Fixed bands on purpose: widening them with the dead zone froze the
   // integral up to twice the dead zone from the target and left standing
   // errors of 120 Hz on the upper stroke. There the dead zone alone bounds
   // the error; the hold matters where the band is narrower than the zone.
-  const float enterHz = (float)VP37_INTEGRAL_HOLD_ENTER_HZ;
-  const float exitHz = (float)VP37_INTEGRAL_HOLD_EXIT_HZ;
+  const int32_t enterHz = VP37_INTEGRAL_HOLD_ENTER_HZ;
+  const int32_t exitHz = VP37_INTEGRAL_HOLD_EXIT_HZ;
   self->pid.integralHoldEntered = false;
   if (!targetSettled) {
     self->pid.integralHold = false;
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
   } else if (!self->pid.integralHold) {
-    if (absoluteError > enterHz) {
+    if ((error < -enterHz) || (error > enterHz)) {
       self->pid.integralHoldEnterPending = false;
     } else {
       if (!self->pid.integralHoldEnterPending) {
@@ -156,14 +156,18 @@ void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
         self->pid.integralHoldReleasePending = false;
       }
     }
-  } else if (absoluteError <= exitHz) {
-    self->pid.integralHoldReleasePending = false;
-  } else if (!self->pid.integralHoldReleasePending) {
-    self->pid.integralHoldReleasePending = true;
-    self->pid.integralHoldReleaseStartedMs = hal_millis();
   } else {
-    if (hal_millis_deadline_expired(self->pid.integralHoldReleaseStartedMs,
-                                    VP37_INTEGRAL_HOLD_RELEASE_MS)) {
+    const int32_t releaseThresholdHz =
+        self->pid.integralHoldReleasePending ? enterHz : exitHz;
+    // Once armed, only recovery into the settled band cancels release.
+    if ((error >= -releaseThresholdHz) && (error <= releaseThresholdHz)) {
+      self->pid.integralHoldReleasePending = false;
+    } else if (!self->pid.integralHoldReleasePending) {
+      self->pid.integralHoldReleasePending = true;
+      self->pid.integralHoldReleaseStartedMs = hal_millis();
+    } else if (hal_millis_deadline_expired(
+                   self->pid.integralHoldReleaseStartedMs,
+                   VP37_INTEGRAL_HOLD_RELEASE_MS)) {
       self->pid.integralHold = false;
       self->pid.integralHoldEnterPending = false;
       self->pid.integralHoldReleasePending = false;

@@ -87,6 +87,12 @@ potrzebne do postoju. Ruchome żądania zachowują pierwotną granicę.
 Telemetria podaje `mode:position` i osobne `test:<name|none>`;
 nie oznacza potencjometru jako osobnego trybu regulatora.
 
+Przy ustalonym celu 100 ms w paśmie ±12 Hz zamraża całkę, aby nie zwiększać
+siły przeciw tarciu statycznemu. Błąd przekraczający ±40 Hz rozpoczyna
+odliczanie 500 ms do zwolnienia całki. Powrót do ±12 Hz je kasuje;
+wahania wokół ±40 Hz nie rozpoczynają go od nowa, więc utrzymujący się
+dryf zwalnia całkę.
+
 ## Kompensacja napięcia i rezystancji
 
 Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`.

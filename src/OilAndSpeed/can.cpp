@@ -27,8 +27,7 @@ hal_status_t canInit(void) {
   ecuMessages = lastEcuMessages = 0;
   dpfMessages = lastDPFMessages = 0;
 
-  hal_can_config_t canCfg = hal_can_default_config();
-  canCfg.mcp2515.cs_pin = JH_HW_NODE_CAN_PIN_CS;
+  hal_can_config_t canCfg = JH_HW_NODE_CAN_CONFIG_INIT;
 
   const hal_status_t st =
       hal_can_create_with_retry(&canCfg, JH_HW_NODE_CAN_PIN_INT, NULL,

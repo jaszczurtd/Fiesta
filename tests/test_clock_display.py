@@ -9,6 +9,8 @@ import sys
 import tempfile
 import unittest
 
+from native_build import compile_sources
+
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "src/Fiesta_clock"
 HAL = ROOT / "src/JaszczurHAL"
@@ -24,7 +26,16 @@ class ClockDisplayTests(unittest.TestCase):
         cls.binary = build / "clock_display"
         generator = [sys.executable, str(HAL / "scripts/generate_hardware_config.py")]
         output = build / "hardware"
-        common = ["--config-dir", str(MODULE), "--output-root", str(build),
+        config = build / "config"
+        config.mkdir()
+        tree = json.loads((MODULE / "device_tree.json").read_text())
+        # Exercise all pull modes through the production app_start().
+        for node, pull in (("buttonHour", "none"), ("buttonMinute", "down"),
+                           ("buttonSet", "up"), ("ignition", "down")):
+            tree["nodes"][node]["properties"]["pull"] = pull
+        (config / "device_tree.json").write_text(json.dumps(tree))
+        (config / "hal_project_config.h").write_text((MODULE / "hal_project_config.h").read_text())
+        common = ["--config-dir", str(config), "--output-root", str(build),
                   "--output-dir", str(output)]
         cls.run_command([*generator, "resolve", *common])
         cls.run_command([*generator, "finalize", *common,
@@ -40,14 +51,7 @@ class ClockDisplayTests(unittest.TestCase):
                     ("hal_display.cpp", "drivers/hal_display.cpp",
                      "drivers/ssd1306_driver.cpp", "drivers/jh_gfx.cpp")]
         sources.append(MODULE / "tests/test_display.cpp")
-        objects = []
-        for index, source in enumerate(sources):
-            obj = build / f"{index}.o"
-            c = source.suffix == ".c"
-            cls.run_command([os.environ.get("CC" if c else "CXX", "cc" if c else "c++"),
-                             "-std=gnu11" if c else "-std=c++17", *flags,
-                             "-c", str(source), "-o", str(obj)])
-            objects.append(str(obj))
+        objects = compile_sources(sources, flags, build, cls.run_command)
         cls.run_command([os.environ.get("CXX", "c++"), *objects,
                          "-Wl,--gc-sections", "-o", str(cls.binary)])
 

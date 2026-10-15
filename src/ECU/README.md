@@ -95,6 +95,11 @@ Moving demands retain the original climb floor. Telemetry reports
 `mode:position` and a separate `test:<name|none>` field; it does not identify a
 potentiometer controller mode.
 
+At a settled target, 100 ms within ±12 Hz freezes the integral to avoid
+building force against static friction. An error beyond ±40 Hz starts
+a 500 ms release timer. Returning to ±12 Hz cancels it; fluctuations
+around ±40 Hz do not restart it, so persistent drift releases the integral.
+
 ## Supply and resistance compensation
 
 Supply compensation scales the complete feedforward and PID command by

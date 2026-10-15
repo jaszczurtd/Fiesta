@@ -39,11 +39,14 @@ static void setup_runtime(void) {
   orangeLED(false);
   blueLED(false);
 
-  hal_gpio_set_mode(JH_HW_NODE_BUTTON_HOUR_PIN_IN, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_set_mode(JH_HW_NODE_BUTTON_MINUTE_PIN_IN, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_set_mode(JH_HW_NODE_BUTTON_SET_PIN_IN, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_HOUR_PIN_IN,
+                    JH_HW_NODE_BUTTON_HOUR_INPUT_MODE);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_MINUTE_PIN_IN,
+                    JH_HW_NODE_BUTTON_MINUTE_INPUT_MODE);
+  hal_gpio_set_mode(JH_HW_NODE_BUTTON_SET_PIN_IN,
+                    JH_HW_NODE_BUTTON_SET_INPUT_MODE);
 
-  hal_gpio_set_mode(JH_HW_NODE_IGNITION_PIN_IN, HAL_GPIO_INPUT_PULLUP);
+  hal_gpio_set_mode(JH_HW_NODE_IGNITION_PIN_IN, JH_HW_NODE_IGNITION_INPUT_MODE);
 
   hal_adc_set_resolution((uint8_t)CFG_ADC_RESOLUTION_BITS);
 
