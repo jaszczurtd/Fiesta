@@ -2352,7 +2352,8 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->pid.terms.integral);
 
   hal_mock_set_millis(2500U);
-  injectAdjRegisterData(4580, 144, 49, ADJ_STATUS_OK);
+  // Recovery into the entry band cancels the pending release.
+  injectAdjRegisterData(4588, 144, 49, ADJ_STATUS_OK);
   VP37_process(pump);
   TEST_ASSERT_TRUE(pump->pid.integralHold);
   TEST_ASSERT_FALSE(pump->pid.integralHoldReleasePending);
@@ -2382,6 +2383,47 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
     VP37_process(pump);
   }
   TEST_ASSERT_FLOAT_WITHIN(.001f, heldIntegral, pump->pid.terms.integral);
+}
+
+static void checkIntegralHoldReleaseWithExitBandNoise(int32_t direction) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50);
+  for (uint32_t ms = 5U; ms <= 200U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+
+  // A biased measurement occasionally dips below the release threshold,
+  // but never recovers into the settled-position band.
+  for (uint32_t ms = 205U; ms <= 700U; ms += 5U) {
+    const int32_t error = direction * ((ms % 20U == 0U) ? 39 : 50);
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)(4600 - error), 144, 49, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->pid.integralHold);
+    TEST_ASSERT_TRUE(pump->pid.integralHoldReleasePending);
+    TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->pid.terms.integral);
+  }
+  hal_mock_set_millis(705U);
+  injectAdjRegisterData((int16_t)(4600 - direction * 39), 144, 49,
+                        ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+  TEST_ASSERT_FALSE(pump->pid.integralHoldReleasePending);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0, direction * pump->pid.terms.integral);
+}
+
+void test_vp37_integral_hold_releases_positive_drift_with_exit_band_noise(
+    void) {
+  checkIntegralHoldReleaseWithExitBandNoise(1);
+}
+
+void test_vp37_integral_hold_releases_negative_drift_with_exit_band_noise(
+    void) {
+  checkIntegralHoldReleaseWithExitBandNoise(-1);
 }
 
 void test_vp37_integral_hold_requires_continuous_time_near_target(void) {
@@ -4167,6 +4209,10 @@ int main(void) {
   RUN_TEST(
       test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error);
   RUN_TEST(test_vp37_integral_hold_requires_continuous_time_near_target);
+  RUN_TEST(
+      test_vp37_integral_hold_releases_positive_drift_with_exit_band_noise);
+  RUN_TEST(
+      test_vp37_integral_hold_releases_negative_drift_with_exit_band_noise);
   RUN_TEST(test_vp37_supply_change_does_not_freeze_integral);
   RUN_TEST(test_vp37_supply_change_alone_leaves_the_integral_hold_engaged);
   RUN_TEST(test_vp37_integral_limit_tapers_with_ramped_position);

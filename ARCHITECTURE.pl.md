@@ -43,6 +43,11 @@ Moduły używają płytek RP2040: Raspberry Pi Pico, RP2040-Plus i RP2040-Zero.
 Każdy opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje
 z niego `jh_hardware.h`, a kod czyta makra `JH_HW_*`.
 
+Inicjalizacja MCP2515 używa wygenerowanej konfiguracji każdego węzła,
+w tym magistrali SPI, chip select, bitrate i częstotliwości oscylatora.
+Fiesta_clock odczytuje też ustawienia `pull` wejść; polaryzacja GPIO
+pochodzi z `activeLow`.
+
 RP2040 wybrano ze względu na cenę, dostępność, dwa rdzenie, GPIO z przerwaniami,
 PWM i możliwość emulacji EEPROM we flash. Firmware korzysta z JaszczurHAL.
 Przeniesienie na inny MCU wymaga również odpowiedniego backendu HAL, opisu

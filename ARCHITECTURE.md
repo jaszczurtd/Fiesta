@@ -49,6 +49,10 @@ can emulate EEPROM for DTCs and settings. The firmware talks to the hardware
 through JaszczurHAL. A move to another MCU also needs a matching HAL backend,
 assembly description, timing and memory checks, and hardware validation.
 
+MCP2515 initialization uses each node's generated configuration, including
+SPI bus, chip select, bitrate and oscillator frequency. Fiesta_clock also
+uses the input `pull` settings; GPIO polarity comes from `activeLow`.
+
 Schematics, layouts, and connector maps for every board are in
 [`Fiesta_pcbs/`](Fiesta_pcbs/). [`pinout.txt`](Fiesta_pcbs/pinout.txt) maps
 the 104-pin ECU connector and [`wirings.txt`](Fiesta_pcbs/wirings.txt) lists

@@ -29,9 +29,9 @@
 // device_tree.json; the code reads the JH_HW_* macros of the generated
 // jh_hardware.h directly.
 
-// The PCF8574A writes and the MCP2515 configurations use the default bus 0.
-#if (JH_HW_BUS_I2C_INDEX != 0) || (JH_HW_BUS_SPI_INDEX != 0)
-#error "the ECU drives its I2C and SPI devices on bus 0"
+// The PCF8574A writes use the default I2C bus 0.
+#if JH_HW_BUS_I2C_INDEX != 0
+#error "the ECU drives its I2C devices on bus 0"
 #endif
 // The Adjustometer firmware answers at the address of its protocol header.
 #if JH_HW_NODE_ADJUSTOMETER_ADDRESS != ADJUSTOMETER_I2C_ADDR

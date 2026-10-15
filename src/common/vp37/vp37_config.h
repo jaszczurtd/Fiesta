@@ -129,8 +129,10 @@ _Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
   (VP37_INTEGRAL_DEADBAND_MAP[VP37_STROKE_TAPER_KNOTS - 1U]                    \
                              [VP37_TAPER_COL_VALUE])
 #define VP37_PID_DEADBAND_TOP_MAX_HZ 600.0f
-// After 100 ms continuously inside the narrow band, hold integral until a
-// persistent error leaves the wider band. This avoids winding force against
+// After 100 ms continuously inside the narrow band, hold integral. Crossing
+// the wider band starts release confirmation; only returning to the narrow
+// band cancels it. Noise at the wider boundary cannot prolong the hold.
+// This avoids winding force against
 // static friction and releasing it as a visible position jump. The bands stay
 // fixed: scaling them with the integration dead zone let standing errors of
 // twice the zone persist on the upper stroke, where the zone alone bounds them.

@@ -23,6 +23,7 @@ static bool hour_down = false;
 static int bus_inits = 0;
 static PCF_DateTime now = {};
 static std::array<uint8_t, 512> greeting;
+static std::array<hal_gpio_mode_t, 32> gpio_modes;
 
 static Ssd1306Panel panel;
 
@@ -73,7 +74,9 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t) {
   frames.push_back(tx);
   return 0;
 }
-void hal_gpio_set_mode(uint8_t, hal_gpio_mode_t) {}
+void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
+  gpio_modes.at(pin) = mode;
+}
 void hal_gpio_write(uint8_t, bool) {}
 bool hal_gpio_read(uint8_t pin) {
   if (pin == JH_HW_NODE_IGNITION_PIN_IN) {
@@ -222,6 +225,11 @@ static void test_app() {
   now.hour = 21;
   now.minute = 56;
   app_start();
+  assert(gpio_modes.at(JH_HW_NODE_BUTTON_HOUR_PIN_IN) == HAL_GPIO_INPUT);
+  assert(gpio_modes.at(JH_HW_NODE_BUTTON_MINUTE_PIN_IN) ==
+         HAL_GPIO_INPUT_PULLDOWN);
+  assert(gpio_modes.at(JH_HW_NODE_BUTTON_SET_PIN_IN) == HAL_GPIO_INPUT_PULLUP);
+  assert(gpio_modes.at(JH_HW_NODE_IGNITION_PIN_IN) == HAL_GPIO_INPUT_PULLDOWN);
   // lcd_clrscr() used to blank the physical panel before app_start returned.
   assert(image() == (std::array<uint8_t, 512>{}));
   assert(greeting != (std::array<uint8_t, 512>{}));

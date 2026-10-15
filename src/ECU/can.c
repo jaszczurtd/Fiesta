@@ -139,8 +139,7 @@ void canTestResetRpmPublisher(void) { resetRpmPublisher(); }
 #endif
 
 static hal_can_config_t can0Config(void) {
-  hal_can_config_t cfg = hal_can_default_config();
-  cfg.mcp2515.cs_pin = JH_HW_NODE_CAN_MAIN_PIN_CS;
+  hal_can_config_t cfg = JH_HW_NODE_CAN_MAIN_CONFIG_INIT;
   cfg.mcp2515.one_shot_tx = true;
   return cfg;
 }

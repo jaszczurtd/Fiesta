@@ -130,8 +130,7 @@ void obdSetTotalDistanceKm(uint32_t km) {
  */
 hal_status_t obdInit(int retries) {
 
-  hal_can_config_t canCfg = hal_can_default_config();
-  canCfg.mcp2515.cs_pin = JH_HW_NODE_CAN_OBD_PIN_CS;
+  hal_can_config_t canCfg = JH_HW_NODE_CAN_OBD_CONFIG_INIT;
 
   hal_status_t st = hal_can_create_with_retry(
       &canCfg, JH_HW_NODE_CAN_OBD_PIN_INT, NULL, retries > 0 ? retries - 1 : 0,
