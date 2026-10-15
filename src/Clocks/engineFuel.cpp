@@ -168,12 +168,15 @@ void EngineFuelGauge::drawChangeableFuelContent(int w, int fh, int y) {
       fullRedrawNeeded = false;
     }
 
-    hal_display_fill_rect(x, y + 1, w, fh - 2, color);
-    int toFill = width - w - 1;
-    if (toFill < 0) {
-      toFill = 0;
+    // An empty or a full tank leaves one of the two bars without width; the
+    // display refuses zero-sized rectangles, so such a bar is not drawn.
+    if (w > 0) {
+      hal_display_fill_rect(x, y + 1, w, fh - 2, color);
     }
-    hal_display_fill_rect(x + w, y + 1, toFill, fh - 2, HAL_COLOR(BLACK));
+    int toFill = width - w - 1;
+    if (toFill > 0) {
+      hal_display_fill_rect(x + w, y + 1, toFill, fh - 2, HAL_COLOR(BLACK));
+    }
     hal_display_draw_rect(x, y, width, fh, FUEL_BOX_COLOR);
   }
 }

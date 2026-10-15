@@ -84,13 +84,11 @@ void tearDown(void) {}
 /* ── All-OK: steady green at half brightness ─────────────────────────────────
  */
 
-/* The status LED is the board's WS2812, started in the GRB order the
- * assembly gives it. */
+/* The status LED is the board's WS2812. Its colour order is the assembly's
+ * choice: RP2040-Zero boards come with LEDs of either order. */
 void test_led_uses_the_assembly_status_led(void) {
   TEST_ASSERT_EQUAL_UINT8(16U, hal_mock_rgb_led_get_pin());
   TEST_ASSERT_EQUAL_UINT8(1U, hal_mock_rgb_led_get_num_pixels());
-  TEST_ASSERT_EQUAL_INT(HAL_RGB_LED_PIXEL_GRB_KHZ800,
-                        hal_mock_rgb_led_get_pixel_type());
 }
 
 void test_all_ok_steady_green(void) {
