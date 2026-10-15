@@ -5,6 +5,18 @@ function(add_clocks_test NAME)
 endfunction()
 
 add_clocks_test(test_buzzerStrategy)
+
+# The fuel bar, drawn on the HAL display mock.
+add_executable(test_engineFuel
+    test_engineFuel.cpp
+    ${CLOCKS_SRC}/engineFuel.cpp
+    ${HAL_SRC}/hal/display/hal_display.cpp
+    ${HAL_SRC}/hal/impl/.mock/hal_display.cpp
+    ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/time/jh_calendar.c
+)
+target_link_libraries(test_engineFuel PRIVATE clocks_mock)
+add_test(NAME test_engineFuel COMMAND test_engineFuel)
 add_clocks_test(test_config_session)
 fiesta_add_sc_session_test_support(test_config_session)
 

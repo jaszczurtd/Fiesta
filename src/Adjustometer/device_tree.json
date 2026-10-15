@@ -14,7 +14,7 @@
       "target": "rp2040",
       "board": "rp2040-zero",
       "clock": { "tree": "default" },
-      "statusLed": { "node": "board.statusLed", "pixelOrder": "GRB" },
+      "statusLed": { "node": "board.statusLed", "pixelOrder": "RGB" },
       "buses": {
         "ecu": {
           "kind": "i2c",
