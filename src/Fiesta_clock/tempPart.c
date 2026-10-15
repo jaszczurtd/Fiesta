@@ -70,14 +70,12 @@ void temp_read_display(void) {
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%d.%d ", temp_in_hi, temp_in_lo);
 
-  lcd_charMode(DOUBLESIZE);
   if (temp_in_hi < 0) {
     x = 0;
   } else {
     x = 1;
   }
-  lcd_gotoxy(x, y);
-  lcd_puts(s);
+  (void)clock_display_text(x, y, 2, s);
 
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%d.%d ", temp_out_hi, temp_out_lo);
@@ -86,13 +84,8 @@ void temp_read_display(void) {
   } else {
     x = 12;
   }
-  lcd_gotoxy(x, y);
-  lcd_puts(s);
+  (void)clock_display_text(x, y, 2, s);
 
-  lcd_charMode(NORMALSIZE);
-  lcd_gotoxy(2, 0);
-  lcd_puts("wewn.");
-
-  lcd_gotoxy(13, 0);
-  lcd_puts("zewn.");
+  (void)clock_display_text(2, 0, 1, "wewn.");
+  (void)clock_display_text(13, 0, 1, "zewn.");
 }

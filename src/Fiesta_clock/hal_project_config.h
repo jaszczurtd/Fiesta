@@ -8,13 +8,12 @@
  * compiled in. Core APIs (GPIO, ADC, timer, watchdog) are always
  * available.
  *
- * Note: graphics stay on the legacy lcd.c path for now, so no HAL display
- * backend is enabled.
  */
 
 /* ── Modules used by Fiesta_clock ────────────────────────────────────── */
 
 #define HAL_ENABLE_PCF8563 /* PCF8563 RTC -> RTC, I2C            */
+#define HAL_ENABLE_SSD1306 /* OLED -> DISPLAY, I2C              */
 #define HAL_ENABLE_DS18B20 /* DS18B20 1-Wire -> ONEWIRE          */
 #define HAL_ENABLE_CAN     /* Generic CAN API facade             */
 #define HAL_ENABLE_MCP2515 /* MCP2515 CAN backend                */

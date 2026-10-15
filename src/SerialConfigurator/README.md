@@ -1,69 +1,53 @@
 # SerialConfigurator
 
-GTK4 desktop companion for Fiesta modules (Linux-first) with a HELLO-based
-module detection UI.
-The project now also includes a first-class CLI shell over the same core.
+[Polski](README.pl.md) · [Fiesta overview](../../README.md) · [Protocol](../common/scDefinitions/PROTOCOL.md)
 
-## Requirements
+SerialConfigurator is a Linux C/GTK4 application for discovering Fiesta USB
+modules, reading and changing settings, flashing firmware and running ECU
+bench tests. A CLI shares its core library for discovery, settings, GPS,
+tests and authenticated bootloader entry. The complete firmware update flow
+runs in the GUI.
+
+## Build
+
+Run from `src/SerialConfigurator`. On Debian-compatible Linux, install:
 
 ```bash
 sudo apt update
 sudo apt install -y build-essential cmake pkg-config libgtk-4-dev dpkg-dev
 ```
 
-Optional/full-development packages:
-
-```bash
-# Live OpenStreetMap GPS view; without it the Map tab shows a placeholder.
-sudo apt install -y libshumate-dev
-
-# Local check-valgrind / check-clang-tidy targets.
-sudo apt install -y valgrind clang-tidy clang-tools
-```
-
-## Build
+`libshumate-dev` enables the OpenStreetMap view; without it the map tab shows
+a placeholder. `valgrind`, `clang-tidy` and `clang-tools` enable the local
+quality targets. The [Fiesta setup](../../doc/BUILDING.md) installs these too.
 
 ```bash
 cmake -S . -B build
 cmake --build build
-```
-
-### JaszczurHAL integration
-
-The serial frame codec is compiled directly from
-`JaszczurHAL/src/hal/serial/hal_serial_frame.h`. The build requires a
-JaszczurHAL checkout and stops during CMake configuration when the header is
-missing. There is no local frame-codec fallback.
-
-Default path:
-
-- `SC_JASZCZURHAL_DIR=../JaszczurHAL` (relative to this module; the pinned
-  Fiesta submodule)
-
-Override it when JaszczurHAL is stored elsewhere:
-
-```bash
-cmake -S . -B build \
-  -DSC_JASZCZURHAL_DIR=/absolute/path/to/JaszczurHAL
-```
-
-#### Shared crypto and authentication code
-
-`src/core/sc_crypto.h` and `src/core/sc_auth.h` are thin C entry points over
-JaszczurHAL. `hal_crypto.cpp` (Base64, MD5, SHA-256/HMAC-SHA256,
-ChaCha20-Poly1305) and `hal_sc_auth.cpp` (the per-device key derivation and
-challenge response, the same code the firmware runs) are compiled straight
-into `serial_configurator_core`. This repository keeps no crypto
-implementation and no fallback backend; CMake stops when the HAL sources are
-missing.
-
-## Run
-
-```bash
 ./build/serial-configurator
 ```
 
-## CLI
+CMake uses `SC_JASZCZURHAL_DIR=../JaszczurHAL`, the Fiesta submodule. For a
+separate checkout, configure with `-DSC_JASZCZURHAL_DIR=/absolute/path/to/JaszczurHAL`.
+The build requires the HAL frame codec and crypto/authentication sources and
+stops if they are missing. It compiles `hal_serial_frame.h`, `hal_crypto.cpp`
+and `hal_sc_auth.cpp` into the core instead of maintaining local copies.
+The latter two provide Base64, MD5, SHA-256/HMAC-SHA256, ChaCha20-Poly1305 and
+the same UID-based authentication as firmware, through `sc_crypto.h` and `sc_auth.h`.
+
+## Discover and select a module
+
+Click **Detect Fiesta Modules**. A background scan sends `HELLO` to candidates
+under `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`, reads metadata and parameter
+catalogues, and probes each `SC_GET_PARAM` value against its range/default
+metadata. The window shows `Detecting...` while scanning. A valid response
+turns the corresponding module indicator green; the log shows discovery details.
+All candidates are checked so duplicate instances can be reported as ambiguous.
+**Disconnect** clears detected state and returns indicators to red.
+
+The module registry selects ECU, Clocks, OilAndSpeed and RTC_Clock for this
+protocol. Adjustometer and VP37TestBench are not configurator targets.
+Read-only operations need no authentication:
 
 ```bash
 ./build/serial-configurator-cli detect
@@ -72,251 +56,165 @@ missing.
 ./build/serial-configurator-cli param-list --module ECU
 ./build/serial-configurator-cli get-values --uid E661A4D1234567AB
 ./build/serial-configurator-cli get-param nominal_rpm --module ECU
-./build/serial-configurator-cli get-gps --module ECU
-./build/serial-configurator-cli reboot-bootloader --module ECU \
-  --manifest /path/to/firmware.manifest.json
+```
+
+The UID above is an example; select the one reported for your board.
+Use `--module`, `--uid` or `--port` to resolve the target. Ambiguous selection
+is rejected. Parameter output includes inferred `BOOL`, `INT`, `UINT`,
+`FLOAT` or `TEXT` types.
+
+## Change settings
+
+ECU exposes writable thresholds stored in a versioned KV blob. RTC_Clock
+accepts `rtc_year/month/day/hour/minute/second` and reports read-only
+`rtc_integrity`; commit validates the whole date, including leap years.
+Clocks and OilAndSpeed expose read-only, non-persisted thresholds and intervals.
+
+In the GUI Values tab, edit fields and choose **Apply staged**, then **Commit**
+to validate and apply them. **Revert** restores staging from active values.
+Writing requires authentication. The CLI supports the same steps:
+
+```bash
 ./build/serial-configurator-cli set-param --id nominal_rpm --value 900 --module ECU
 ./build/serial-configurator-cli commit-params --module ECU
 ./build/serial-configurator-cli revert-params --module ECU
-./build/serial-configurator-cli set-and-commit \
-  --id nominal_rpm --value 900 --module ECU
+```
+
+For a single change in one authenticated session:
+
+```bash
+./build/serial-configurator-cli set-and-commit --id nominal_rpm --value 900 --module ECU
+```
+
+On commit failure, `set-and-commit` attempts to revert staging.
+[The protocol guide](../common/scDefinitions/PROTOCOL.md#parameters) explains
+storage schemas and how to extend the catalogue without losing saved values.
+
+## Flash firmware
+
+Prepare the selected UF2 and its [manifest](../../doc/BUILDING.md#prepare-a-configurator-manifest).
+Each GUI module section has image and optional manifest pickers, remembers
+paths in `flash-paths.json`, and shows progress. The picker starts in the
+remembered directory, then tries the sibling picker's directory and the
+module-local `./<Module>/.build` directory when available.
+
+The manifest requires `module_name`, `fw_version`, `build_id` and `sha256`.
+Optional `uf2_file` resolves the image beside the manifest when only a manifest
+is selected; it must be a filename without path components. `signature` is
+parsed but not verified: ed25519 verification is not implemented.
+
+The update performs these steps:
+
+1. Check UF2 format, manifest, module identity and SHA-256.
+2. Authenticate with `HELLO`, `SC_AUTH_BEGIN` and `SC_AUTH_PROVE` using HMAC-SHA256 and a key derived from the device UID. Each challenge is consumed once; a new `HELLO` clears authentication.
+3. Send `SC_REBOOT_BOOTLOADER` and wait for its acknowledgment.
+4. Find the BOOTSEL drive under `/media/$USER` or `/run/media/$USER` (`RPI-RP2*` or `RP2350`).
+5. Copy UF2 in chunks, then wait for the same UID under `/dev/serial/by-id/`.
+6. Read `HELLO` again and, when requested by the operation, check firmware version against the manifest.
+
+The progress bar pulses while waiting and shows a fraction during copying.
+Detection, other modules' Flash buttons and all image pickers are disabled
+while the update runs. `ScFlashStatus` distinguishes failures such as
+`MANIFEST_MODULE_MISMATCH`, `BOOTSEL_TIMEOUT` and `POST_FLASH_FW_MISMATCH`.
+
+The CLI can authenticate and request bootloader entry:
+
+```bash
+./build/serial-configurator-cli reboot-bootloader --module ECU \
+  --manifest /path/to/firmware.manifest.json
+```
+
+This command does not perform the GUI's UF2 copy and reconnection sequence.
+
+## Read GPS
+
+```bash
+./build/serial-configurator-cli get-gps --module ECU
+```
+
+ECU reports availability, latitude, longitude, speed and UTC epoch through
+`SC_GET_GPS`. The GUI GPS View polls every 4 seconds. With libshumate it shows
+an OpenStreetMap marker and recenter control; otherwise it shows a placeholder.
+
+## Run ECU bench tests
+
+The ECU Values page has Settings and Tests sub-tabs. Tests are discovered
+through `SC_TEST_LIST` and shown with descriptions, parameters, Defaults and
+Run controls. **Run sequence** starts tests marked for the sequence; **Skip**
+and **Stop** affect the running test. Firmware without tests or without the
+commands shows **No tests available**.
+
+Run authenticates, sends the edited parameters and starts the test. Parameters
+last until ECU reset. The status panel shows test, initiator, sequence step,
+elapsed time, demanded/measured position, test-specific progress and last result.
+It polls every 250 ms while its test runs, including when another tab is shown.
+ECU stops the test on session end or after 3 seconds without test commands.
+Closing, disconnecting or detecting again therefore stops it. The default RPM
+interlock refuses or stops a test while engine speed exceeds its configured limit.
+
+```bash
 ./build/serial-configurator-cli test-list --module ECU
 ./build/serial-configurator-cli test-set --id cyclic_passes --value 2 --module ECU
 ./build/serial-configurator-cli test-run all --module ECU
 ./build/serial-configurator-cli test-status --module ECU
+./build/serial-configurator-cli test-skip --module ECU
 ./build/serial-configurator-cli test-stop --module ECU
 ```
 
-## Test
+`test-run` follows progress once a second; Ctrl-C requests a stop. Exit status
+is 0 when every finished test reports `done` or `ok`, otherwise 6. See
+[functional test rules](../common/scDefinitions/PROTOCOL.md#functional-tests)
+for interlocks, console-only tests and status freshness.
+
+## Tests
 
 ```bash
 ./scripts/desktop-build.sh test
+ctest --test-dir build -N
 ```
 
-## Debian package (.deb)
+The first command builds and runs tests; the second lists the configured
+cases without executing them. Coverage includes selectors, discovery, frame
+and reply parsing, authentication/crypto, manifests, parameter transactions,
+GPS, functional tests, serial deadlines and `HELLO_REQUIRED` recovery.
+Flash tests use mock transport and temporary BOOTSEL/by-id directories;
+they do not demonstrate physical USB upload. GTK adds progress-bar and Tests
+tab checks; the latter skips without a display.
+
+CMake maintains the test list, including `serial-configurator-cli-selectors-tests`.
+Keep `-Wall -Wextra -Werror` enabled. The
+[CI workflow](../../.github/workflows/serial-configurator-tests.yml) builds
+GUI/CLI and runs tests, Valgrind and clang-tidy.
+
+## Package and editor
 
 ```bash
 ./scripts/desktop-build.sh package
 ```
 
-The generated package is written to `build/*.deb`.
-After installation, Linux desktop menus should show `Fiesta USB Configurator`.
-The launcher icon is packaged from `scripts/icon.png`.
+The package is `build/*.deb`. Installation adds **Fiesta USB Configurator**
+to desktop menus, using `scripts/icon.png`.
 
-## Current Functionality
+| Shortcut | VS Code task | Action |
+|---|---|---|
+| Ctrl+Shift+1 | `Project: Build` | Configure and compile. |
+| Ctrl+Shift+2 | `Project: Upload` | Build and launch the application. |
+| Ctrl+Shift+5 | `Project: Test` | Build and run CTest. |
+| Ctrl+Shift+6 | `Project: Refresh IntelliSense` | Configure with `CMAKE_EXPORT_COMPILE_COMMANDS=ON` and regenerate `c_cpp_properties.json`. |
+| Ctrl+Shift+7 | `Project: Clean` | Remove `build/`. |
 
-Detection (read-only, no auth):
+Copy matching entries from `.vscode/keybindings.reference.json` into your
+VS Code user keybindings (`~/.config/Code/User/keybindings.json` on Linux).
 
-- `Detect Fiesta Modules` button sends `HELLO` to devices discovered under
-  `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`.
-- Detection runs in a background thread, so the GTK window stays responsive
-  after button click (`Detecting...` state is shown immediately).
-- Module status indicators (ECU, Clocks, OilAndSpeed, RTC_Clock) start red and switch to
-  green when a valid `OK HELLO ... module=<name> ...` response is received.
-- Metadata + read-only parameter catalog/value reads run in the same detection
-  worker flow (sequentially, no separate queue).
-- For each discovered parameter id, the app probes `SC_GET_PARAM <id>` and
-  validates parsed min/max/default semantics (including range checks).
-- `Disconnect` clears detected state and returns all lamps to red.
-- Scanning walks all discovered candidates so duplicate module instances can
-  be flagged as ambiguous targets.
-- A scrollable log view shows HELLO responses and detection details.
-- Core and CLI support read-only `SC_*` requests across all
-  in-scope firmware modules, the ones with a `serialConfigurator` entry in
-  the repository's `modules.json` (`ECU`, `Clocks`, `OilAndSpeed`, `RTC_Clock`):
-  `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`.
+## Source map
 
-Authenticated bootloader entry (Phase 3 + 5):
+`src/ui/main.c` calls `sc_app_run()`, and `sc_app.c` assembles the window.
+`sc_detection.c` runs background discovery, `sc_module_details.c` renders
+details, and `sc_flash_tab.c`, `sc_values_tab.c`, `sc_map_tab.c` and
+`sc_tests_tab.c` implement their respective views.
 
-- `sc_core_authenticate` runs HELLO -> `SC_AUTH_BEGIN` -> `SC_AUTH_PROVE`
-  using HMAC-SHA256 over a per-device key derived from the RP2040 UID.
-  One-shot challenge consumption defeats replay; a new HELLO clears the
-  authenticated session.
-- `sc_core_reboot_to_bootloader` issues `SC_REBOOT_BOOTLOADER` after a
-  successful auth and verifies the firmware ACK before returning.
-
-Manifest pre-flash gate (Phase 4):
-
-- Hard-rejecting host-side parser that requires `module_name`,
-  `fw_version`, `build_id`, `sha256` to match the artifact byte-for-byte.
-  Optional `uf2_file` lets the host resolve the UF2 sidecar path from the
-  manifest location (manifest-only picker flow).
-  `signature` is parsed but verification is deferred to a future
-  ed25519 backend.
-
-Flash flow (Phase 6, end-to-end):
-
-- Per-module Flash sections in the GUI: UF2 + optional manifest pickers
-  with persistent paths (`flash-paths.json`), live status field, and a
-  custom GTK progress bar widget that pulses during non-copy phases and shows fraction
-  during the COPY phase.
-- File-pickers open in a practical initial folder order: directory of the
-  last remembered path for that slot, then the sibling slot's directory,
-  then the module-local `./<Module>/.build` directory when available.
-- `sc_core_flash` orchestrator composes UF2 format check + manifest verify
-  + auth + reboot + BOOTSEL drive watcher (`/media/$USER` + `/run/media/$USER`,
-  matching `RPI-RP2*` / `RP2350`) + chunked UF2 copy with progress +
-  `/dev/serial/by-id/` re-enumeration waiter on the same UID + post-flash
-  HELLO with optional `fw_version` match against the manifest.
-- Returns a stable 13-code `ScFlashStatus` enum so the GUI can render
-  the specific reason on failure (`MANIFEST_MODULE_MISMATCH`,
-  `BOOTSEL_TIMEOUT`, `POST_FLASH_FW_MISMATCH`, ...). Lock policy: the
-  Detect button + every other module's Flash button + every section's
-  pickers go insensitive while the flow runs.
-
-CLI:
-
-- CLI supports `detect`, `list`, `meta`, `param-list`, `get-values`,
-  `get-param <id>`, `get-gps`, `reboot-bootloader`, `set-param`,
-  `commit-params`, `revert-params`, `set-and-commit`, and the functional
-  test commands `test-list`, `test-status`, `test-set`, `test-run`,
-  `test-stop`, and `test-skip`.
-- CLI prints parsed payloads with inferred value types
-  (`BOOL`/`INT`/`UINT`/`FLOAT`/`TEXT`) for parameter responses.
-- CLI target selection is fail-closed: ambiguous target resolution is rejected
-  (use selectors `--module`, `--uid`, or `--port`).
-
-Authenticated parameter writes (Phase 8):
-
-- ECU and RTC_Clock writable descriptors use a staged transaction:
-  `SC_SET_PARAM` changes staging, `SC_COMMIT_PARAMS` validates and applies it,
-  and `SC_REVERT_PARAMS` restores staging from active values.
-- The GUI Values tab exposes per-module forms and Apply staged / Commit /
-  Revert controls. Clocks and OilAndSpeed remain read-only.
-- The CLI exposes the same flow and provides `set-and-commit` as a
-  single-command operator convenience under one authenticated session; on
-  commit failure it attempts to revert staging.
-
-GPS view:
-
-- ECU exposes the read-only `SC_GET_GPS` snapshot (`available`, latitude,
-  longitude, speed, and UTC epoch).
-- The GUI GPS View tab polls on the ECU update cadence (4 seconds). With
-  libshumate it renders an OpenStreetMap marker and recenter control; without
-  libshumate it builds a placeholder instead.
-- `get-gps` exposes the same snapshot in the CLI.
-
-ECU functional tests:
-
-- On the Values tab the ECU page has two sub-tabs: Settings (the parameter
-  form) and Tests. The Tests sub-tab lists the tests the ECU reports
-  (`SC_TEST_LIST`), each with its description, runtime parameters, Defaults
-  and Run. Run sequence starts every test marked for the sequence; Skip and
-  Stop act on the running test. An ECU built without tests, or firmware
-  without the commands, shows "No tests available".
-- The status panel shows the running test, who started it, its step in a
-  sequence, the elapsed time, the demanded and measured actuator position,
-  the test's own progress (cyclic profile and rate, random target, staircase
-  setpoint, pot phase, cycles and passes), and the last result.
-- Run authenticates, sends the parameters edited in the form, then starts
-  the test. Values set this way hold until the ECU resets.
-- The ECU stops a test started here when the session ends or when status
-  polls stop for 3 seconds, so the tab keeps polling (every 250 ms) while its
-  test runs, even when another tab is shown. Closing the window, Disconnect,
-  or a new detection therefore stops the test. With the engine-speed
-  interlock built in, the ECU refuses to start and stops a test once the
-  engine turns; the tab says so.
-- `test-run` in the CLI follows the test the same way and prints its
-  progress once a second; Ctrl-C asks the ECU to stop it. It exits 0 when
-  every finished test reports `done` or `ok`, and 6 otherwise.
-- The protocol is described in
-  [`PROTOCOL.md`](../common/scDefinitions/PROTOCOL.md#functional-tests).
-
-Module-specific behaviour above the common baseline:
-
-- `ECU` exposes a richer parameter catalogue (six writable thresholds,
-  schema-versioned KV blob).
-- `Clocks` and `OilAndSpeed` expose read-only / not-persisted descriptors
-  mirroring their compile-time thresholds and sampling intervals.
-- `RTC_Clock` exposes writable RTC calendar fields
-  (`rtc_year/month/day/hour/minute/second`) plus read-only
-  `rtc_integrity`; commit is validated as a full date-time tuple.
-
-The wire vocabulary, descriptor types, and reply machinery for every
-module are shared via [`src/common/scDefinitions/`](../common/scDefinitions/);
-the protocol is described in
-[`PROTOCOL.md`](../common/scDefinitions/PROTOCOL.md).
-
-## Code Structure
-
-- `src/ui/main.c` is a thin entrypoint only (`sc_app_run(...)`).
-- `src/ui/sc_app.c` assembles the GTK window and top-level tabs.
-- `src/ui/sc_detection.c` owns the asynchronous detection workflow.
-- `src/ui/sc_module_details.c` contains module details rendering helpers.
-- `src/ui/sc_flash_tab.c`, `sc_values_tab.c`, and `sc_map_tab.c` own the
-  Flash, Values, and GPS View tabs respectively; `sc_tests_tab.c` owns the
-  Tests sub-tab of the ECU page.
-- `src/core/sc_core.c` contains discovery/session/protocol orchestration.
-- `src/core/sc_transport.c` contains Linux/POSIX serial transport operations.
-- `JaszczurHAL/src/hal/serial/hal_serial_frame.h` provides the shared serial
-  frame codec used by transport and host tests.
-- `src/core/sc_flash.c`, `sc_manifest.c`, `sc_gps.c`, and `sc_tests.c` own
-  UF2/BOOTSEL, manifest, GPS, and functional test logic.
-- `src/core/sc_text.c` and `sc_time.c` hold the token, string, clock, and
-  sleep helpers the core modules share.
-- `src/core/sc_crypto.h` contains shared crypto bridge API (backend-selected).
-- `src/cli/sc_cli_main.c` dispatches CLI commands; command, selector, and
-  output logic live in the adjacent `sc_cli_*` files.
-
-## CI / Test Baseline
-
-The project registers 19 non-GTK host CTest targets. When GTK4 is available,
-the progress-bar and Tests sub-tab targets are registered as well, making 21
-targets in the full documented desktop environment. They cover core /
-protocol / crypto / flash / manifest / parameter-write / GPS / functional
-test / orchestrator surfaces:
-
-- `serial-configurator-progressbar-tests` (custom flash progress bar widget)
-- `serial-configurator-tests-tab-tests` (Tests sub-tab against a mock ECU;
-  skips without a display)
-- `serial-configurator-core-tests` (smoke checks)
-- `serial-configurator-core-api-tests` (API surface checks)
-- `serial-configurator-core-protocol-tests` (read-only protocol parsing + flow)
-- `serial-configurator-crypto-tests` (bridge checks for `sc_crypto`)
-- `serial-configurator-frame-tests` (`$SC,...*<crc>` codec)
-- `serial-configurator-auth-tests` (HMAC-SHA256 + per-device key derivation)
-- `serial-configurator-manifest-tests` (Phase 4 hard-reject parser)
-- `serial-configurator-phase5-tests` (auth + reboot orchestration)
-- `serial-configurator-phase8-host-tests` (authenticated parameter-write host flow)
-- `serial-configurator-i18n-tests` (compiled-in EN+PL string tables)
-- `serial-configurator-flash-tests` (UF2 format checker)
-- `serial-configurator-flash-paths-tests` (`flash-paths.json` persistence)
-- `serial-configurator-sc-param-tests` (descriptor framework - find /
-  validate / get / set / load_defaults / 3 reply emitters /
-  schema-versioned blob codec)
-- `serial-configurator-transport-timeout-tests` (command deadlines and the
-  `HELLO_REQUIRED` re-handshake rule)
-- `serial-configurator-sc-gps-tests` (`SC_GET_GPS` parsing and validation)
-- `serial-configurator-sc-tests-tests` (`SC_TEST_*` catalog, status, and
-  actions against a mock ECU)
-- `serial-configurator-flash-bootsel-tests` (Phase 6.3 BOOTSEL drive watcher)
-- `serial-configurator-flash-copy-reenum-tests` (Phase 6.4 UF2 copy +
-  re-enumeration waiter)
-- `serial-configurator-flash-orchestrator-tests` (Phase 6.5 `sc_core_flash`
-  end-to-end through mock transport + `mkdtemp` BOOTSEL/by-id fixtures)
-
-Recommended first CI steps:
-
-- Configure and build (`cmake -S ... -B ... && cmake --build ...`)
-- Run tests (`ctest --test-dir ... --output-on-failure`)
-- Keep `-Wall -Wextra -Werror` enabled to block warning regressions
-
-GitHub Actions workflow for this module is in:
-`.github/workflows/serial-configurator-tests.yml`.
-
-## VS Code
-
-The following tasks are defined in `.vscode/tasks.json`:
-
-| Shortcut       | Task                          | Description                                      |
-|----------------|-------------------------------|--------------------------------------------------|
-| Ctrl+Shift+1   | `Project: Build`              | Configure (CMake) and compile                    |
-| Ctrl+Shift+2   | `Project: Upload`             | Compile and launch the application               |
-| Ctrl+Shift+5   | `Project: Test`               | Build and run CTest smoke tests                  |
-| Ctrl+Shift+6   | `Project: Refresh IntelliSense` | Re-run CMake with `CMAKE_EXPORT_COMPILE_COMMANDS=ON` and regenerate `.vscode/c_cpp_properties.json` |
-| Ctrl+Shift+7   | `Project: Clean`              | Remove `build/` directory                        |
-
-Reference keybinding entries are in `.vscode/keybindings.reference.json`.
-The global `~/.config/Code/User/keybindings.json` must contain matching entries
-for the shortcuts to work - see `keybindings.reference.json` for the exact JSON
-to paste.
+`src/core/sc_core.c` coordinates discovery and sessions. `sc_transport.c`
+handles POSIX serial I/O. `sc_flash.c`, `sc_manifest.c`, `sc_gps.c` and
+`sc_tests.c` implement the corresponding operations; `sc_text.c` and
+`sc_time.c` provide shared text and timing helpers. `src/cli/sc_cli_main.c`
+dispatches commands to the adjacent command, selector and output modules.

@@ -1,5 +1,7 @@
 # VP37 Adjustometer
 
+[English](README.md) · [Architektura](../../ARCHITECTURE.pl.md)
+
 Czujnik położenia nastawnika pompy VP37, przekazujący do ECU pomiar oparty
 na częstotliwości przez I2C.
 
@@ -14,13 +16,12 @@ znaczniki czasu przez PIO i DMA, bez przerwania GPIO na każde zbocze. Wartość
 z histerezą w pobliżu zera. Kalibracja położenia i kompensacja sterowania
 należą do ECU.
 
-Po ustaleniu baseline okno przesuwa się co 32 okresy
+Po ustaleniu poziomu odniesienia (baseline) okno przesuwa się co 32 okresy
 (`ADJUSTOMETER_SLIDING_WINDOW`, domyślnie 1), a publikowana częstotliwość to
 średnia ważona czasem z surowych okien z dokładnie jednego okresu PWM
 nastawnika (`ADJUSTOMETER_PWM_FILTER_US`, domyślnie okres
 `VP37_PWM_FREQUENCY_HZ` z `src/common/vp37_drive_config.h`, wspólnego z ECU).
-Uśrednienie po jednym okresie PWM znosi tętnienie, które napęd PWM odciska na
-nastawniku, bez opóźnienia filtru rekurencyjnego: skok ustala się w jednym
+Uśrednienie po jednym okresie PWM znosi tętnienie, wywołane przez napęd PWM, bez opóźnienia filtru rekurencyjnego: skok ustala się w jednym
 okresie, a rampa spóźnia się o pół okresu, około 4 ms przy 130 Hz. Zmianę
 częstotliwości PWM trzeba podać obu firmware'om. `ADJUSTOMETER_PWM_FILTER_US=0`
 przywraca ułamkowy EMA przesuwanego okna (waga 71/1024, wyjście z zera po ośmiu
@@ -46,10 +47,10 @@ i wymaga sześciu stabilnych okien w granicach 12 Hz. Dodatkowa weryfikacja trwa
 1000 ms; dryf powyżej 500 Hz ponawia ustalanie zera. ECU może kalibrować zakres
 dopiero po uzyskaniu gotowości czujnika.
 
-Zero hold włącza się w granicach 40 Hz, a zwalnia po przekroczeniu 50 Hz przez
+Podtrzymanie zera (zero hold) włącza się w granicach 40 Hz, a zwalnia po przekroczeniu 50 Hz przez
 dwa kolejne okna o tym samym znaku. Utrata sygnału jest wykrywana po trzech
-okresach filtrowanej częstotliwości od ostatniego pełnego bloku capture,
-z ograniczeniem do 10-200 ms. Błąd capture odrzuca niepełne okno i unieważnia
+okresach filtrowanej częstotliwości od ostatniego pełnego bloku pomiarowego,
+z ograniczeniem do 10-200 ms. Błąd przechwytywania okresów odrzuca niepełne okno i unieważnia
 pomiar; po przepełnieniu lub błędzie peryferium pomiar uruchamia się ponownie
 po 100 ms. Ustalony baseline zostaje zachowany; przerwana weryfikacja
 podczas startu rozpoczyna się ponownie. Przy utracie sygnału pulse
@@ -92,7 +93,7 @@ z trzema poprawnymi pomiarami. Ta próbka jest niezależna od odczytu regulatora
 
 ## Podział rdzeni i LED
 
-Core 0 inicjalizuje czujniki, odbiera dane capture co 1 ms i publikuje szybkie dane
+Core 0 inicjalizuje czujniki, odbiera dane pomiarowe co 1 ms i publikuje szybkie dane
 oraz ich kopię w pierwotnych rejestrach. Core 1 odczytuje ADC co 10 ms, publikuje
 rozszerzenie diagnostyczne, obsługuje LED i USB. Temperaturę układu i logi
 odświeża co 250 ms. Zapis USB ma zerowy timeout i może pomijać tekst, jeśli host
@@ -143,8 +144,9 @@ JH=../JaszczurHAL/vscode/entry/jh-vscode
 
 `upload` odpowiada zadaniu VS Code (`Ctrl+Shift+2`), a `upload-uf2` używa BOOTSEL.
 `monitor` otwiera USB CDC (`Ctrl+Shift+3`). Wybór portu (`Ctrl+Shift+9`) zmienia
-lokalne ustawienia; upload nadal sprawdza tożsamość modułu. Obsługa manifestu
-Fiesta i tożsamości USB znajduje się w `src/common/scripts/`.
+lokalne ustawienia; upload nadal sprawdza tożsamość modułu. Manifest Fiesty przygotowuje osobny krok opisany w
+[instrukcji kompilacji](../../doc/BUILDING.pl.md#manifest-dla-konfiguratora).
+Tożsamość USB sprawdza narzędzie `jh-vscode` w HAL.
 
 ## Licencja
 

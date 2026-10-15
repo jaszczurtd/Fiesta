@@ -1,185 +1,131 @@
-# Fiesta daily bootstrap - systemd user service
+# Daily build with a systemd user service
 
-Runs the ECU bootstrap once a day on a Raspberry Pi (or any Linux host with
-systemd), captures the result, and emails a status summary.
+[Polski](README.pl.md) · [Build guide](../../../../doc/BUILDING.md)
 
-What the runner does, in order:
+The timer runs Fiesta setup, tests and builds at 13:00 local time on a Linux
+host with systemd, such as a Raspberry Pi. `Persistent=true` allows a missed
+run after the user service manager starts again.
 
-1. clone or hard-reset `$FIESTA_DIR` to `origin/$BRANCH`,
-2. run `runmefirst.sh` to clear module build directories,
-3. initialize the pinned HAL submodule, repair missing apt packages through
-   non-interactive `sudo`, then build and test the project,
-4. send an email with PASS/FAIL, HEAD SHA, commit subject, and the last
-   80 lines of the log (full log attached).
+Use a dedicated checkout: each run clones or **resets `$FIESTA_DIR` with
+`git reset --hard origin/$BRANCH`**, discarding tracked local changes.
+`runmefirst.sh` then clears module build directories, initializes the recorded
+HAL revision, installs missing packages through non-interactive sudo and runs
+tests/builds. Local HAL changes stop submodule initialization. HAL build
+directories and local VS Code settings are preserved.
 
-Module build artifacts are left in place after each run and cleared by
-`runmefirst.sh` before the next successful repo update is built. HAL build
-directories and local VS Code settings are preserved. Logs go to `$HOME/.cache/fiesta-bootstrap/run-*.log`
-(symlinked as `last.log`).
+The runner emails PASS/FAIL, HEAD SHA, commit subject and the last 80 log lines.
+The attachment is limited to the last 512 KB; the complete log stays in
+`$FIESTA_LOG_DIR` (default `$HOME/.cache/fiesta-bootstrap/`), with `last.log`
+pointing to the latest run.
 
-## Files
+## Files and service account
 
-| File | Purpose |
-| ---- | ------- |
-| `fiesta-bootstrap-run.sh`      | Main runner (git sync + clean + bootstrap + email) |
-| `send-status.py`               | SMTP mailer (stdlib `smtplib`, no extra deps) |
-| `fiesta-bootstrap.service`     | systemd oneshot unit |
-| `fiesta-bootstrap.timer`       | systemd timer (13:00 daily, `Persistent=true`) |
-| `fiesta-bootstrap.env.example` | SMTP / path config template |
+| File | Role |
+|---|---|
+| `fiesta-bootstrap-run.sh` | Updates the checkout, runs setup and sends the result. |
+| `send-status.py` | Sends SMTP mail with Python's standard library. |
+| `fiesta-bootstrap.service` | User oneshot service. |
+| `fiesta-bootstrap.timer` | Daily schedule. |
+| `fiesta-bootstrap.env.example` | Paths and SMTP configuration template. |
 
-## File placement (important)
+Only `.service` and `.timer` go in `~/.config/systemd/user/`. Keep the scripts
+in the repository so updates reach them together. The service's `ExecStart`
+uses `%h/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh`;
+change the unit if your checkout lives elsewhere.
 
-Only **two** files from this directory belong in `~/.config/systemd/user/`:
+Run `systemctl --user` as the service account. Prefixing it with `sudo`
+switches to root's user session and can fail with
+`Failed to connect to bus: No medium found`.
 
-- `fiesta-bootstrap.service`
-- `fiesta-bootstrap.timer`
+## Install
 
-Everything else (`fiesta-bootstrap-run.sh`, `send-status.py`,
-`fiesta-bootstrap.env.example`) **stays in the repo**. The service's
-`ExecStart=` points at the runner via `%h/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh`,
-and the runner invokes `send-status.py` from its own directory. Do not
-copy those scripts into `~/.config/systemd/user/` - it will not help, and
-it creates drift the next time you `git pull`.
-
-## `systemctl --user` never takes `sudo`
-
-`--user` is the current user's scope. Prefixing it with `sudo` switches
-to `root`, which has no user-bus session, and you get:
-
-```
-Failed to connect to bus: No medium found
-```
-
-Always run user-scope commands as yourself:
+Run as the account that will own the service. The first setup uses interactive
+sudo for apt and may take time:
 
 ```bash
-systemctl --user daemon-reload            # yes
-sudo systemctl --user daemon-reload       # NO
-```
-
-## One-time install on the Pi
-
-```bash
-# 1. Clone the repo (the unit path assumes ~/Documents/Fiesta)
 mkdir -p ~/Documents
 git clone --recurse-submodules https://github.com/jaszczurtd/Fiesta.git ~/Documents/Fiesta
-
-# 2. Run bootstrap once so system and native RP dependencies are set up
 bash ~/Documents/Fiesta/runmefirst.sh
 
-# The daily user service must be able to reuse sudo without a prompt.
-sudo -n true
-
-# 3. Create and protect the env file
 mkdir -p ~/.config
 cp ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap.env.example \
    ~/.config/fiesta-bootstrap.env
 chmod 600 ~/.config/fiesta-bootstrap.env
-$EDITOR ~/.config/fiesta-bootstrap.env     # fill in SMTP_*, MAIL_TO, etc.
+```
 
-# 4. Install user systemd units - ONLY .service and .timer go here.
-#    Do NOT copy fiesta-bootstrap-run.sh or send-status.py into this dir.
+Edit `~/.config/fiesta-bootstrap.env` with your editor, filling in SMTP and
+recipient settings before enabling the timer. Paths in that file must be
+absolute; see below.
+
+Unattended package repair requires persistent sudo permission for the required
+apt commands without a password prompt. `sudo -n true` checks only the current
+sudo context; a cached password or permission for `true` alone does not prove
+that a later apt invocation will work. The runner checks this context and
+uses `sudo -n` for installation, but never changes sudo policy. The package
+list is in [`ensure-system-dependencies.sh`](../ensure-system-dependencies.sh).
+
+Install the units and enable the schedule:
+
+```bash
 mkdir -p ~/.config/systemd/user
 cp ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap.service \
    ~/.config/systemd/user/
 cp ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap.timer \
    ~/.config/systemd/user/
 chmod +x ~/Documents/Fiesta/src/ECU/scripts/systemd/fiesta-bootstrap-run.sh
-
-# 5. Enable the timer
 systemctl --user daemon-reload
 systemctl --user enable --now fiesta-bootstrap.timer
 systemctl --user status fiesta-bootstrap.timer
-systemctl --user list-timers --all | grep fiesta
-
-# 6. Let the service run even when no one is logged in
-loginctl enable-linger "$USER"
-or even better:
-sudo loginctl enable-linger pi
-
 ```
 
-## Updating an existing installation
+To keep the user service manager running after logout, enable lingering for
+this same account. This command may require administrator authorization:
 
-Publish the Fiesta changes before updating the Pi. The runner lives in the
-checkout, so pull it before the first run with the new cleanup flow:
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+## Update and inspect
+
+Publish changes before updating the build machine. If only repository scripts
+changed, no unit reinstall is needed:
 
 ```bash
 git -C ~/Documents/Fiesta pull --ff-only
 systemctl --user start fiesta-bootstrap.service
 ```
 
-No unit or timer reinstall is needed when only the repository scripts change.
-The bootstrap initializes the pinned HAL submodule automatically. Local HAL
-changes stop initialization; preserve them before running the service.
-
-## Smoke test / inspection
+Starting the service runs the reset/setup/build/email sequence immediately.
+Inspect its progress and schedule with:
 
 ```bash
-# Fire the service now (does not wait for 13:00)
-systemctl --user start fiesta-bootstrap.service
-
-# Watch live logs
 journalctl --user -u fiesta-bootstrap.service -f
-
-# Confirm the timer is armed
-systemctl --user list-timers | grep fiesta-bootstrap
-
-# Latest run log on disk
+systemctl --user list-timers --all
 less ~/.cache/fiesta-bootstrap/last.log
 ```
 
-## Email setup notes
+Use your configured log path if it differs from the default.
+`TimeoutStartSec=30min` bounds the service run; adjust the unit if the machine
+needs longer, then reload the user manager.
 
-- Gmail: create an **App Password** (requires 2FA on the bot account) and
-  put it in `SMTP_PASS`. Regular account passwords will not work.
-- Corporate SMTP relays that require only the sender host: leave `SMTP_USER`
-  / `SMTP_PASS` empty and the script will skip authentication.
-- Port 465 -> implicit TLS; anything else -> STARTTLS.
+## SMTP configuration
 
-## Gotcha: `EnvironmentFile` does not expand `%h` or `$HOME`
+Use credentials accepted by the provider for automated SMTP clients, such as
+an application password when supported. Put the secret in `SMTP_PASS`.
+For a relay allowing unauthenticated sending from this host, leave `SMTP_USER`
+and `SMTP_PASS` empty. The mailer uses implicit TLS on port 465 and STARTTLS
+on other ports.
 
-`systemd`'s `EnvironmentFile=` directive reads the file as literal
-`KEY=VALUE` pairs - it does **not** expand:
+## Environment paths
 
-- systemd specifiers (`%h`, `%u`, ...),
-- shell variables (`$HOME`),
-- tildes (`~`).
+Values in `fiesta-bootstrap.env` are literal. They do not expand `%h`, `%u`,
+`$HOME` or `~`. This differs from the unit's `EnvironmentFile=` and `ExecStart=`
+paths, where systemd specifiers such as `%h` are used.
 
-If you put `FIESTA_DIR=%h/Documents/Fiesta` in `fiesta-bootstrap.env`, the
-value reaches the runner literally. Older runner versions could then create a
-literal `%h` directory and eventually fail during firmware linking with a
-confusing error. The current runner rejects unexpanded `%...`, `~`, and `$...`
-tokens before any checkout or build work and also requires `FIESTA_DIR` to be
-absolute.
-
-The runner now fail-fasts with a clear error when it sees a `%...` / `~` /
-`$...` in `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR`, or `BRANCH`, and
-when `FIESTA_DIR` is not absolute.
-
-**Fix**: in `~/.config/fiesta-bootstrap.env`, either
-
-- leave `FIESTA_DIR` **unset** (the runner defaults to `$HOME/Documents/Fiesta`), or
-- set it to an **absolute path**, e.g. `FIESTA_DIR=/home/pi/Documents/Fiesta`.
-
-If an earlier run already created a literal `%h` directory, clean it up
-once:
-
-```bash
-rm -rf "$HOME/%h"
-```
-
-## Notes
-
-- The runner uses `git reset --hard origin/$BRANCH` on every run. Do **not**
-  keep local changes in the Pi's checkout; they will be discarded.
-- The runner invokes apt only when a tracked package is missing. It uses
-  `sudo -n`, so the `sudo -n true` check during service installation must pass.
-  Once it passes, later package additions are handled without an interactive
-  repair. The runner never edits sudo policy.
-- Package ownership lives in
-  `src/ECU/scripts/ensure-system-dependencies.sh`. New dependencies added there
-  are installed automatically by the next daily run.
-- The runner caps attached log size at 512 KB (tail); the full file stays
-  under `$FIESTA_LOG_DIR`.
-- `TimeoutStartSec=30min` is a safety net; adjust if the Pi 5 needs more.
+Leave `FIESTA_DIR` unset to use the runner's `$HOME/Documents/Fiesta` default,
+or supply an absolute path such as `FIESTA_DIR=/home/pi/Documents/Fiesta`.
+Replace `pi` with the actual account's path. The runner rejects unexpanded
+`%...`, `~` and `$...` tokens in `FIESTA_DIR`, `FIESTA_REPO_URL`,
+`FIESTA_LOG_DIR` and `BRANCH`, and rejects a relative `FIESTA_DIR` before any
+checkout or build. If an older runner created a literal `%h` directory,
+inspect its contents before removing that mistaken checkout.

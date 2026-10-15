@@ -1,5 +1,4 @@
 #include "led.h"
-#include "../common/fiesta_status_led.h"
 #include "sensors.h"
 #include <hal/gpio/hal_rgb_led.h>
 #include <hal/i2c/hal_i2c_slave.h>
@@ -27,7 +26,7 @@ void initLed(void) {
   ledLastToggleMs = 0;
   ledSeqLen = 0;
   ledSeqIdx = 0;
-  (void)fiesta_status_led_init();
+  (void)hal_rgb_led_init_board_status();
   hal_rgb_led_set_brightness(LED_BRIGHTNESS_FULL);
   (void)hal_rgb_led_off();
   lastI2CTransactionCount = hal_i2c_slave_get_transaction_count();

@@ -1,215 +1,63 @@
 # Fiesta
 
-Firmware i elektronika do Forda Fiesty 1.8 diesel. Projekt powstał dla
-niestandardowego silnika łączącego elementy 1.8D z wtryskiem pośrednim oraz
-1.8TDDI z wtryskiem bezpośrednim, z zamontowaną pompą VP37.
+[English](README.md)
 
-Projekt pozostaje na etapie POC. Cały system nie został jeszcze sprawdzony
-jako zintegrowana całość w samochodzie drogowym. Próby ECU i VP37 odbywają się
-na osobnym silniku zamontowanym na stalowej ramie w garażu. Część funkcji
-pracowała już w samochodzie: rozszerzenie zegarów oraz ECU nadzorujące
-parametry silnika bez sterowania VP37.
+Firmware i elektronika do Forda Fiesty 1.8 diesel z niestandardowym silnikiem
+łączącym części 1.8D z wtryskiem pośrednim i 1.8TDDI z wtryskiem bezpośrednim
+oraz pompą VP37. [JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL)
+zapewnia obsługę sprzętu i narzędzia. Autor: Marcin „Jaszczur" Kielesiński.
 
-Autorem jest Marcin „Jaszczur" Kielesiński. Warstwę sprzętową i narzędzia
-zapewnia [JaszczurHAL](https://github.com/jaszczurtd/JaszczurHAL).
+Projekt jest na etapie prototypu. Cały system nie został sprawdzony jako
+zintegrowana instalacja w samochodzie drogowym. Próby ECU i VP37 odbywają się
+na osobnym silniku na stalowej ramie. Clocks i funkcje nadzorcze ECU były
+używane w samochodzie bez sterowania VP37.
 
 ## Moduły
 
-- `ECU`: sterowanie silnikiem, pompą VP37, doładowaniem i odbiornikami,
-  diagnostyka oraz zapis DTC.
-- `Clocks`: fabryczne wskaźniki, dodatkowy ekran TFT i buzzer.
-- `OilAndSpeed`: pomiar ciśnienia oleju, prędkości i temperatur spalin.
-- `Adjustometer`: pomiar położenia nastawnika VP37 przez częstotliwość
-  oscylatora, przekazywany do ECU przez I²C.
-- `VP37TestBench`: stanowisko testowe pompy VP37 - wspólny moduł napędu
-  (`src/common/vp37`) na sprzęcie stanowiska, z wyświetlaczem i zadawaniem
-  położenia potencjometrem.
-- `Fiesta_clock`: zegar RTC, publikacja czasu przez CAN i lokalny wyświetlacz.
-- `SerialConfigurator`: aplikacja C/GTK4 oraz CLI do wykrywania modułów,
-  odczytu i zmiany ustawień, aktualizacji firmware oraz podglądu GPS ECU.
+| Moduł | Przeznaczenie |
+|---|---|
+| [ECU](src/ECU/README.pl.md) | Sterowanie silnikiem, VP37 i doładowaniem, przekaźniki, diagnostyka i zapis DTC. |
+| [Clocks](src/Clocks/) | Fabryczne wskaźniki, dodatkowy ekran TFT i ostrzeżenia dźwiękowe. |
+| [OilAndSpeed](src/OilAndSpeed/) | Pomiar ciśnienia oleju, prędkości i temperatur spalin. |
+| [Adjustometer](src/Adjustometer/README.pl.md) | Pomiar położenia nastawnika VP37 przekazywany do ECU przez I²C. |
+| [Fiesta_clock](src/Fiesta_clock/) | Publikacja czasu RTC przez CAN i lokalny wyświetlacz. |
+| [VP37TestBench](src/VP37TestBench/) | Współdzielony sterownik VP37 na osobnym stanowisku pompy. |
+| [SerialConfigurator](src/SerialConfigurator/README.pl.md) | GUI i CLI dla Linuksa: wykrywanie USB, ustawienia i testy stanowiskowe ECU; GUI umożliwia też wgrywanie firmware. |
 
-Opis połączeń i odpowiedzialności zawiera anglojęzyczny
-[ARCHITECTURE.md](ARCHITECTURE.md). Szczegóły pomiaru nastawnika opisuje
-[README Adjustometera](src/Adjustometer/README.pl.md).
-
-## Zależności
-
-Wszystkie moduły korzystają z submodułu `src/JaszczurHAL`, przypiętego do
-konkretnego commitu. Pobierz projekt razem z biblioteką:
+## Pierwsze kroki
 
 ```bash
 git clone --recurse-submodules https://github.com/jaszczurtd/Fiesta.git
 cd Fiesta
 ```
 
-Po pobraniu zmian w istniejącym checkoutcie uruchom
-`./scripts/init_hal_submodule.sh`. Skrypt wybiera zapisaną wersję HAL
-i zatrzymuje się przy lokalnych zmianach w submodule. Zasady aktualizacji
-opisuje [DEPENDENCIES.pl.md](DEPENDENCIES.pl.md).
+Przed uruchomieniem `runmefirst.sh` przeczytaj [instrukcję przygotowania
+środowiska](doc/BUILDING.pl.md): skrypt instaluje zależności i usuwa katalogi
+kompilacji modułów. Po aktualizacji istniejącego projektu uruchom
+`./scripts/init_hal_submodule.sh`, aby wybrać commit HAL zapisany w Fieście.
+Skrypt zatrzyma się, jeśli HAL zawiera lokalne zmiany.
 
-Narzędzia potrzebne w Linux:
+## Dokumentacja
 
-- podstawowe: `git`, `build-essential`, `cmake`, `ninja-build`, `python3`,
-  `curl`, `ca-certificates`, `perl`;
-- aplikacja desktopowa: `pkg-config`, `libgtk-4-dev`, `dpkg-dev`;
-  opcjonalne `libshumate-dev` włącza mapę GPS zamiast pola zastępczego;
-- kontrola jakości: `valgrind`, `clang-tidy`, `clang-tools`, `clang-format`,
-  `default-jre-headless`; Java uruchamia PMD w bramce duplikacji, a cppcheck
-  z dodatkiem MISRA to build przypięty przez JaszczurHAL, który przygotowuje
-  skrypt instalacyjny;
-- firmware RP: `gcc-arm-none-eabi`, `libstdc++-arm-none-eabi-newlib`,
-  `libusb-1.0-0-dev` i `pkg-config`. HAL przygotowuje przypięte Pico SDK
-  oraz `picotool`.
-
-## Przygotowanie środowiska
-
-Na Debianie i zgodnych systemach, z katalogu głównego projektu uruchom:
-
-```bash
-bash runmefirst.sh
-```
-
-Skrypt najpierw usuwa katalogi `build_test` i `.build` modułów firmware oraz
-`build` SerialConfiguratora, także przy pomijaniu testów lub kompilacji.
-Zachowuje katalogi kompilacji HAL i lokalne ustawienia VS Code.
-Następnie instaluje pakiety, sprawdza Pythona oraz bibliotekę C++ toolchaina
-Arm. Potem inicjalizuje przypięty submoduł HAL, przygotowuje jego zależności
-razem z PMD i przypiętym cppcheck, uruchamia testy hostowe i analizatory, kompiluje
-sześć modułów firmware, przygotowuje artefakty UF2 z manifestami oraz buduje,
-testuje i pakuje SerialConfigurator do pakietu Debian.
-
-Uruchamiaj go jako zwykły użytkownik. `sudo` jest używane tylko do instalacji
-pakietów; uruchomienie całego skryptu jako root utworzyłoby pliki robocze
-należące do roota. Skrypt odrzuca taki sposób wywołania, chyba że jawnie
-ustawisz `ALLOW_ROOT=1`.
-
-Opcje środowiskowe: `SKIP_APT=1`, `APT_NONINTERACTIVE=1`, `SKIP_TESTS=1`,
-`SKIP_BUILD=1`, `SKIP_DESKTOP=1`, `SKIP_DESKTOP_PACKAGE=1`.
-
-## Środowiska pracy
-
-Linux, w tym Raspberry Pi OS i systemy zgodne z Debianem, jest głównym
-środowiskiem rozwoju. WSL2 obsługuje te same skrypty, lecz upload wymaga
-udostępnienia rzeczywistego urządzenia USB lub dysku BOOTSEL.
-
-Windows obsługuje rozwój wszystkich sześciu firmware (workflow CI buduje
-pięć - `VP37TestBench` wyłącza się wpisem `"ci": false` w `modules.json`). Po uruchomieniu
-`src/JaszczurHAL/runmefirst.ps1` zadania VS Code pozwalają kompilować release
-i debug, odświeżać IntelliSense, wgrywać firmware i otwierać monitor portu.
-Testy hostowe, cppcheck, MISRA, Valgrind i SerialConfigurator pozostają
-zorientowane na Linux. macOS nie był sprawdzany.
-
-Każdy moduł firmware ma katalog `.vscode/` i własny `device_tree.json` z płytką,
-urządzeniami i pinami; płytkę ustala montaż z tego pliku. Wybór portu trafia do
-ignorowanego `jaszczurhal.local.json`; repozytorium nie zapisuje numerów COM.
-Listę modułów trzyma `modules.json`. `scripts/fiesta_modules.py` sprawdza ją
-i generuje z niej nagłówek tokenów, tabelę modułów SerialConfiguratora oraz
-listy modułów dla skryptów powłoki; z `--check` zgłasza nieaktualny plik.
-Pliki zadań i profile debuggera dla każdego montażu generuje
-`scripts/sync_vscode_projects.py`, korzystając z tej listy i z rejestrów HAL. Hook pre-commit regeneruje i dodaje zmienione pliki do indeksu.
-`python3 scripts/sync_vscode_projects.py --check` sprawdza ich aktualność.
-Hooki można skonfigurować przez `scripts/configure_git_hooks.py`.
-
-Workflow Windows kompiluje wszystkie moduły i odświeża bazy komend
-kompilacji. Weryfikacja uploadu na fizycznym urządzeniu pozostaje ręczna.
-
-## Kompilacja i testy
-
-Aplikacje używają punktów wejścia `app_start()` oraz `app_task0()` z HAL,
-a przy drugim kontekście wykonania również `app_task1()`.
-
-Zestaw testów hostowych, cppcheck, wykrywanie duplikacji, Valgrind i
-clang-tidy uruchomisz przez:
-
-```bash
-./runalltests.sh -j8
-```
-
-Obsługiwane opcje pomijania analizatorów to `--skip-cppcheck`,
-`--skip-valgrind` i `--skip-clang-tidy`. CTest uruchamia testy wykonania
-z wyłączeniem etykiety `static-analysis`; analizatory mają osobne etapy.
-
-Bramka duplikacji (`scripts/fiesta_cpd.py`) używa PMD CPD przypiętego w
-JaszczurHAL, z jego progami: 100 tokenów dla C/C++ i 50 dla Pythona. Kod
-produkcyjny porównuje tylko w obrębie jednego modułu, a testy hostowe i skrypty
-Pythona w całym repozytorium. Wspólne helpery testów leżą w `src/common/tests/`.
-Każdy znaleziony duplikat zatrzymuje bramkę.
-
-Dla ECU, Clocks, OilAndSpeed, Adjustometera i VP37TestBench można uruchomić
-testy osobno:
-
-```bash
-cmake -S src/<Module> -B src/<Module>/build_test -DCMAKE_BUILD_TYPE=Release
-cmake --build src/<Module>/build_test --parallel
-ctest --test-dir src/<Module>/build_test --output-on-failure
-```
-
-Fiesta_clock jest sprawdzany przez kompilację firmware; nie ma własnego
-projektu testów hostowych. SerialConfigurator ma osobny projekt CMake.
-
-W katalogu wybranego modułu firmware:
-
-```bash
-../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
-../JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
-../JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
-../JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project "$PWD"
-../JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
-```
-
-`Project: Upload` (`Ctrl+Shift+2`) używa uploadu przez USB CDC i weryfikuje
-tożsamość modułu. Wariant UF2 korzysta z dysku BOOTSEL. Monitor portu
-(`Ctrl+Shift+3`) odnajduje moduły po identyfikatorach
-`/dev/serial/by-id/usb-Jaszczur_Fiesta_*`.
-
-SerialConfigurator:
-
-```bash
-cd src/SerialConfigurator
-./scripts/desktop-build.sh build
-./scripts/desktop-build.sh run
-./scripts/desktop-build.sh test
-./build/serial-configurator-cli detect
-```
-
-GUI i CLI współdzielą obsługę protokołu. CLI udostępnia `detect`, `list`,
-`meta`, `param-list`, `get-values`, `get-param`, `get-gps`,
-`reboot-bootloader`, `set-param`, `commit-params`, `revert-params`
-i `set-and-commit`. Zapisy parametrów wymagają uwierzytelnienia. GUI
-sprawdza format UF2 i manifest przed aktualizacją, obsługuje restart do
-BOOTSEL, kopiowanie z postępem i ponowne wykrycie modułu.
-
-## Debugowanie i automatyzacja
-
-Konfiguracje Cortex-Debug obsługują Raspberry Pi Debug Probe w trybie
-CMSIS-DAP, z firmware v2 lub nowszym, oraz starszy Picoprobe. Połącz
-`SC` z `SWCLK`, `SD` z `SWDIO` oraz masy; płytka wymaga własnego zasilania.
-Potrzebne są rozszerzenie `marus25.cortex-debug`, OpenOCD i GDB dla Arm.
-
-W VS Code naciśnij F5 i wybierz RP2040, RP2350 albo dołączenie do działającego
-układu. Wariant launch buduje debug przed wgraniem; attach nie wgrywa obrazu.
-Upload przez `jh-vscode` korzysta z USB, a nie z sondy SWD.
-
-W `src/ECU/scripts/systemd/` znajdują się usługa i timer użytkownika,
-które codziennie o 13:00 pobierają projekt, przygotowują środowisko, budują
-firmware i wysyłają wynik e-mailem. Konfigurację, wymagania sudo i SMTP
-opisuje znajdujący się tam anglojęzyczny README. Runner korzysta z bootstrapu
-Fiesty i przypiętej wersji HAL.
+- [Architektura i komunikacja](ARCHITECTURE.pl.md)
+- [Kompilacja, wgrywanie i debugowanie](doc/BUILDING.pl.md)
+- [Testy hostowe i CI](doc/TESTING.pl.md)
+- [Aktualizacja JaszczurHAL](DEPENDENCIES.pl.md)
+- [Protokół Serial Configuratora](src/common/scDefinitions/PROTOCOL.pl.md)
+- [Zakres MISRA i zasady przeglądu](MISRA.pl.md)
+- [Codzienna kompilacja przez systemd](src/ECU/scripts/systemd/README.pl.md)
+- [Galeria i zdjęcia stanowiska](doc/GALLERY.pl.md)
 
 ## Zakres walidacji
 
-Projekt nie deklaruje zgodności z ISO 26262, AUTOSAR ani pełnej zgodności
-MISRA. Migracją MISRA-C objęte są ECU, wspólny moduł VP37
-(`src/common/vp37`, zero aktywnych znalezisk, bramka w `runalltests.sh`)
-oraz Adjustometer (również zero, ta sama bramka); stan i odstępstwa opisuje
-anglojęzyczny [MISRA.md](MISRA.md). Pozostałe moduły nie są objęte tym
-zakresem. Testy hostowe używają mocków HAL; projekt nie ma stanowiska HIL.
-Rozwój prowadzi jedna osoba, z kontrolą przez testy i CI.
+Projekt nie deklaruje zgodności z ISO 26262, AUTOSAR ani formalnej zgodności
+MISRA. Analiza MISRA obejmuje ECU, współdzielony kod VP37 i Adjustometer;
+dla dwóch ostatnich bramka odrzuca aktywne znaleziska poza zapisanymi
+odstępstwami. Testy hostowe używają mocków HAL i nie potwierdzają zachowania
+elektrycznego ani mechanicznego. Projekt ma stanowisko silnikowe, ale nie ma
+automatycznego stanowiska HIL.
 
-RP2040 nie jest układem klasy AEC-Q100. Wejście Halla silnika korzysta
-z przerwań GPIO; Adjustometer mierzy częstotliwość przez PIO/DMA.
-Bezpieczeństwo działania ECU, defensywna obsługa błędów oraz dalsza
-walidacja sprzętowa pozostają istotną częścią prac.
-
-Zdjęcia elektroniki, silnika testowego, konfiguratora i diagnostyki są
-w `materials/imgs/` oraz w [galerii projektu](https://postimg.cc/gallery/pHF4jy2).
+RP2040 nie ma kwalifikacji AEC-Q100. Pomiar obrotów silnika używa przerwań
+GPIO, a Adjustometer mierzy okresy przez PIO/DMA. Zmiany sterowania wymagają
+prób sprzętowych. Wyniki testów i CI dotyczą sprawdzanego przez nie zakresu;
+nie zastępują przeglądu ani walidacji całego pojazdu.

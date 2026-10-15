@@ -1,5 +1,7 @@
 # Zależność JaszczurHAL
 
+[English](DEPENDENCIES.md) · [Kompilacja](doc/BUILDING.pl.md)
+
 Fiesta zapisuje konkretny commit JaszczurHAL w submodule `src/JaszczurHAL`.
 Korzystają z niego firmware, testy hostowe i generowane zadania VS Code.
 Osobny checkout HAL używany przez inne projekty może pozostać na swoim miejscu.
@@ -42,12 +44,14 @@ Najpierw opublikuj commit HAL, aby pozostali programiści i CI mogli go pobrać.
 Z katalogu głównego Fiesty wybierz go i sprawdź oba projekty razem:
 
 ```bash
+# Wpisz opublikowany hash commita HAL.
+read -r hal_commit
 git -C src/JaszczurHAL fetch origin
-git -C src/JaszczurHAL checkout --detach <published-commit>
+git -C src/JaszczurHAL checkout --detach "$hal_commit"
 ./runalltests.sh -j8
 ```
 
-Zbuduj również release i debug wszystkich pięciu modułów oraz sprawdź
+Zbuduj również release i debug wszystkich modułów firmware z `modules.json` (w tym VP37TestBench) oraz sprawdź
 aktualność generowanych plików VS Code. Dodaj `src/JaszczurHAL` do indeksu
 razem z powiązanymi zmianami Fiesty i po przeglądzie zapisz je we wspólnym
 commicie. Zmiana wskaźnika uruchamia istniejące workflow testów modułów
@@ -56,7 +60,7 @@ oraz kompilacji firmware.
 Przed edycją HAL wewnątrz submodułu utwórz gałąź:
 
 ```bash
-git -C src/JaszczurHAL switch -c <branch>
+git -C src/JaszczurHAL switch -c work/fiesta-hal
 ```
 
 Zmiany HAL i Fiesty mają osobne commity. Niezapisanych zmian w submodule

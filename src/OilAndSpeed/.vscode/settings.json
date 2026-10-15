@@ -1,12 +1,9 @@
 {
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.configurationProvider": "",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "files.associations": {
         "*.ino": "cpp"
-    },
-    "files.exclude": {
-        "**/.build": true
     },
     "search.exclude": {
         "**/.build": true

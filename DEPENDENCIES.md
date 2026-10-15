@@ -1,5 +1,7 @@
 # JaszczurHAL dependency
 
+[Polski](DEPENDENCIES.pl.md) · [Build guide](doc/BUILDING.md)
+
 Fiesta records one JaszczurHAL commit in the `src/JaszczurHAL` Git submodule.
 All firmware builds, host tests and generated VS Code tasks use that checkout.
 A separate HAL checkout used by other projects can stay where it is.
@@ -41,12 +43,14 @@ Publish the HAL commit first so other developers and CI can fetch it. From
 Fiesta's root, select it and validate the resulting combination:
 
 ```bash
+# Enter the published HAL commit hash.
+read -r hal_commit
 git -C src/JaszczurHAL fetch origin
-git -C src/JaszczurHAL checkout --detach <published-commit>
+git -C src/JaszczurHAL checkout --detach "$hal_commit"
 ./runalltests.sh -j8
 ```
 
-Also build release and debug firmware for all five modules and check generated
+Also build release and debug firmware for every firmware module in `modules.json` (including VP37TestBench) and check generated
 VS Code files. Stage `src/JaszczurHAL` with the related Fiesta changes and
 commit them together after review. Changing this Git pointer triggers the
 existing module and firmware workflows.
@@ -54,7 +58,7 @@ existing module and firmware workflows.
 For development inside the submodule, create a HAL branch before editing:
 
 ```bash
-git -C src/JaszczurHAL switch -c <branch>
+git -C src/JaszczurHAL switch -c work/fiesta-hal
 ```
 
 HAL changes and Fiesta changes have separate commits. A dirty submodule or an

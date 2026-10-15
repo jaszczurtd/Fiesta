@@ -93,6 +93,7 @@ def desired_project_files(
     current_tasks = load_json(vscode_dir / "tasks.json")
 
     from vscode_task_config import (
+        apply_project_view_settings,
         assembly_debug_builds,
         assembly_launch_document,
         keybindings_reference,
@@ -144,6 +145,13 @@ def desired_project_files(
         or "../JaszczurHAL/vscode/entry/jh-vscode"
     )
     settings.update(vscode_entry_settings(unix_entry))
+    # IntelliSense follows the firmware database of Project: Refresh
+    # IntelliSense, never CMake Tools on the module's host-test CMakeLists.txt.
+    apply_project_view_settings(
+        settings,
+        str(settings.get("C_Cpp.default.compileCommands")
+            or "${workspaceFolder}/.build/compile_commands_patched.json"),
+    )
 
     # The firmware compiles the shared source sets through JH_EXTRA_SOURCES;
     # every firmware manifest is managed, so a module dropped from

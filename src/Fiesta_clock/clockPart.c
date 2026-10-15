@@ -244,10 +244,9 @@ void manageSetMode(void) {
       clockSetModeDelayLoops = 0;
       activeItem = 0;
 
-      lcd_clrscr();
-      lcd_gotoxy(6, 2);
-      lcd_charMode(DOUBLESIZE);
-      lcd_puts("PUSC");
+      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+      (void)clock_display_text(6, 2, 2, "PUSC");
+      (void)hal_display_flush_ex();
 
       hourDelay = minuteDelay = 0;
 
@@ -344,18 +343,14 @@ void clockMainFunction(void) {
 
   printCurrentItemsState();
 
-  lcd_gotoxy(0, 0);
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%s-%s %s, %s ", getItem(D_DAY), getItem(D_MONTH),
            getItem(D_YEAR), getItem(D_WEEKDAY));
 
-  lcd_charMode(NORMALSIZE);
-  lcd_puts(s);
+  (void)clock_display_text(0, 0, 1, s);
 
   unsigned char x = 4;
   unsigned char y = 2;
-
-  lcd_gotoxy(x, y);
 
   char secondDivider = ' ';
   if (!clockSetMode) {
@@ -370,14 +365,11 @@ void clockMainFunction(void) {
   snprintf(s, BUF_L, "%s%c%s", getItem(D_HOUR), secondDivider,
            getItem(D_MINUTE));
 
-  lcd_charMode(DOUBLESIZE);
-  lcd_puts(s);
+  (void)clock_display_text(x, y, 2, s);
 
-  lcd_gotoxy(x + 11, y + 1);
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%s", getItem(D_SECOND));
-  lcd_charMode(NORMALSIZE);
-  lcd_puts(s);
+  (void)clock_display_text(x + 11, y + 1, 1, s);
 }
 
 static int lastSecondValue = -1;

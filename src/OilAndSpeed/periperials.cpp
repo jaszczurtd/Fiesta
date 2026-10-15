@@ -5,7 +5,7 @@ static volatile float valueFields[F_LAST];
 m_mutex_def(valueFieldsMutex);
 
 void setupOnboardLed(void) {
-  (void)fiesta_status_led_init();
+  (void)hal_rgb_led_init_board_status();
   setLEDColor(BLUE);
 }
 
