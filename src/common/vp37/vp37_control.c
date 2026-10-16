@@ -92,7 +92,7 @@ float VP37_integralLimit(const VP37Pump *self) {
  * so integrating small errors there only winds force against the mechanism.
  * Below the taper start the loop keeps its full accuracy.
  */
-float VP37_integralDeadband(const VP37Pump *self) {
+float HAL_RAM_FUNC(VP37_integralDeadband)(const VP37Pump *self) {
   const float base = VP37_INTEGRAL_DEADBAND_MAP[0U][VP37_TAPER_COL_VALUE];
   float deadband = base;
   if (self->pid.integralDeadbandTopHz > base) {
@@ -126,8 +126,18 @@ void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
   hal_pid_controller_set_kd(self->pid.controller, self->pid.effectiveKd);
 }
 
-/** @brief Update the settled-target hysteresis that freezes integration. */
-void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
+/**
+ * @brief Update the settled-target hysteresis that freezes integration.
+ * @param self VP37 controller instance to update.
+ * @param targetSettled The demand stands at its target.
+ * @note The hold engages after the confirmation time inside the entry band
+ * and keeps the integral out of the static-friction band. A large error
+ * releases it after VP37_INTEGRAL_HOLD_RELEASE_MS. With the offset release on,
+ * the hold engages only when the mean error is inside the entry band too, and
+ * where the integral dead zone is the base zone, a mean error that stays
+ * outside the entry band also releases it.
+ */
+void HAL_RAM_FUNC(VP37_updateIntegralHold)(VP37Pump *self, bool targetSettled) {
   const int32_t error = self->pid.error;
   // Fixed bands on purpose: widening them with the dead zone froze the
   // integral up to twice the dead zone from the target and left standing
@@ -135,13 +145,36 @@ void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
   // the error; the hold matters where the band is narrower than the zone.
   const int32_t enterHz = VP37_INTEGRAL_HOLD_ENTER_HZ;
   const int32_t exitHz = VP37_INTEGRAL_HOLD_EXIT_HZ;
+  const bool meanEntry = self->pid.integralHoldOffsetMs > 0U;
+  // Only where the integral dead zone is the base zone: above the taper start
+  // integration walks until the mechanism breaks free (VP37_PID_DEADBAND), and
+  // a 120 s hold at 90 % demand turned the offset release into stick-slip.
+  const bool offsetRelease =
+      meanEntry && (self->pid.integralDeadbandHz <= (float)VP37_PID_DEADBAND);
   self->pid.integralHoldEntered = false;
   if (!targetSettled) {
+    // A moving target starts the mean afresh from the error it leaves.
+    self->pid.integralHoldMeanError = (float)error;
     self->pid.integralHold = false;
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
-  } else if (!self->pid.integralHold) {
-    if ((error < -enterHz) || (error > enterHz)) {
+    self->pid.integralHoldOffsetPending = false;
+    return;
+  }
+  const float dt = (float)self->pidDtUs * 0.000001f;
+  self->pid.integralHoldMeanError +=
+      ((float)error - self->pid.integralHoldMeanError) * dt /
+      (VP37_INTEGRAL_HOLD_MEAN_FILTER_S + dt);
+  const float meanAbs = fabsf(self->pid.integralHoldMeanError);
+  const bool meanInBand = meanAbs <= (float)enterHz;
+  // Where the offset release applies the mean must come closer before the
+  // hold engages than it may stray before the hold releases.
+  const bool meanSettled =
+      meanAbs <=
+      (offsetRelease ? self->pid.integralHoldMeanEnterHz : (float)enterHz);
+  if (!self->pid.integralHold) {
+    if ((error < -enterHz) || (error > enterHz) ||
+        (meanEntry && !meanSettled)) {
       self->pid.integralHoldEnterPending = false;
     } else {
       if (!self->pid.integralHoldEnterPending) {
@@ -154,23 +187,42 @@ void VP37_updateIntegralHold(VP37Pump *self, bool targetSettled) {
         self->pid.integralHoldEntered = true;
         self->pid.integralHoldEnterPending = false;
         self->pid.integralHoldReleasePending = false;
+        self->pid.integralHoldOffsetPending = false;
       }
     }
   } else {
     const int32_t releaseThresholdHz =
         self->pid.integralHoldReleasePending ? enterHz : exitHz;
+    bool release = false;
     // Once armed, only recovery into the settled band cancels release.
     if ((error >= -releaseThresholdHz) && (error <= releaseThresholdHz)) {
       self->pid.integralHoldReleasePending = false;
     } else if (!self->pid.integralHoldReleasePending) {
       self->pid.integralHoldReleasePending = true;
       self->pid.integralHoldReleaseStartedMs = hal_millis();
+    } else {
+      release =
+          hal_millis_deadline_expired(self->pid.integralHoldReleaseStartedMs,
+                                      VP37_INTEGRAL_HOLD_RELEASE_MS);
+    }
+    // A standing offset below the large-error band: only the mean decides.
+    if (!offsetRelease || meanInBand) {
+      self->pid.integralHoldOffsetPending = false;
+    } else if (!self->pid.integralHoldOffsetPending) {
+      self->pid.integralHoldOffsetPending = true;
+      self->pid.integralHoldOffsetStartedMs = hal_millis();
     } else if (hal_millis_deadline_expired(
-                   self->pid.integralHoldReleaseStartedMs,
-                   VP37_INTEGRAL_HOLD_RELEASE_MS)) {
+                   self->pid.integralHoldOffsetStartedMs,
+                   self->pid.integralHoldOffsetMs)) {
+      release = true;
+    } else {
+      // The offset has not persisted long enough yet.
+    }
+    if (release) {
       self->pid.integralHold = false;
       self->pid.integralHoldEnterPending = false;
       self->pid.integralHoldReleasePending = false;
+      self->pid.integralHoldOffsetPending = false;
     }
   }
 }

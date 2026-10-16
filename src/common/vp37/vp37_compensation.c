@@ -361,15 +361,37 @@ static void VP37_trackDriveSupply(VP37Pump *self) {
  * change. Only the very first value is taken whole: a cyclic ramp touches zero
  * demand several times a second, so snapping at rest would hand the command
  * every wild estimate the ramp produces and defeat the limit where it matters
- * most.
+ * most. A held multiplier (after an arrival, VP37_THERMAL_HOLD_DEFAULT) keeps
+ * the value it arrived with plus whatever its source has risen since the
+ * source's lowest point; when the hold ends it takes the source value whole,
+ * which is a settled estimate there.
+ * @param hold The position has arrived where the hold applies.
  */
-void VP37_updateThermalScale(VP37Pump *self, float dt) {
-  const float target = self->thermal.driveCompensationUsed
-                           ? self->thermal.driveCorrection
-                           : self->thermal.temperatureCorrection;
+void HAL_RAM_FUNC(VP37_updateThermalScale)(VP37Pump *self, float dt,
+                                           bool hold) {
+  const float target = VP37_thermalSource(self);
   if (!self->thermal.scaleReady) {
     self->thermal.scale = target;
     self->thermal.scaleReady = true;
+    self->thermal.scaleHeld = false;
+  } else if (hold) {
+    if (!self->thermal.scaleHeld) {
+      self->thermal.scaleHeldBase = self->thermal.scale;
+      self->thermal.scaleHeldFloor = target;
+      self->thermal.scaleHeld = true;
+    } else {
+      self->thermal.scaleHeldFloor =
+          fminf(self->thermal.scaleHeldFloor, target);
+    }
+    // The estimate settling after the approach only falls; coil heating
+    // raises it. The command passes the rise above the lowest value on.
+    self->thermal.scale =
+        self->thermal.scaleHeldBase + (target - self->thermal.scaleHeldFloor);
+  } else if (self->thermal.scaleHeld) {
+    // The target has moved: the moving actuator takes the multiplier it would
+    // have had without the hold, as its estimate swings with the motion.
+    self->thermal.scale = target;
+    self->thermal.scaleHeld = false;
   } else {
     const float step = VP37_THERMAL_SCALE_SLEW_PER_S * dt;
     const float delta = target - self->thermal.scale;

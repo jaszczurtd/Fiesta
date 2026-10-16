@@ -49,6 +49,19 @@ typedef enum {
                                         resistance. */
   VP37_TUNING_CYCLE_VOLTAGE,       /**< 0/1: full-period supply mean. */
   VP37_TUNING_SUPPLY_FROZEN,       /**< 0/1: hold the supply multiplier. */
+  VP37_TUNING_HOLD_OFFSET_MS,      /**< Whole ms the settled mean error stays
+                                        outside the entry band before the
+                                        integral hold releases, to
+                                        VP37_INTEGRAL_HOLD_OFFSET_MAX_MS; zero
+                                        releases on large errors only. */
+  VP37_TUNING_THERMAL_HOLD,        /**< 0/1: after an arrival the thermal
+                                        multiplier does not fall. */
+  VP37_TUNING_HOLD_CURRENT,        /**< 0/1: the current loop keeps the held
+                                        thermal excess. */
+  VP37_TUNING_HOLD_MEAN_ENTER_HZ,  /**< Mean error the hold engages within
+                                        where the offset release applies,
+                                        VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ to
+                                        VP37_INTEGRAL_HOLD_ENTER_HZ [Hz]. */
   VP37_TUNING_COUNT
 } VP37TuningParam;
 

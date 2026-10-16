@@ -505,6 +505,12 @@ static const TuningCase kTuningCases[] = {
     {VP37_TUNING_DRIVE_COMPENSATION, 0.0f, 1.0f, true},
     {VP37_TUNING_CYCLE_VOLTAGE, 0.0f, 1.0f, true},
     {VP37_TUNING_SUPPLY_FROZEN, 0.0f, 1.0f, true},
+    {VP37_TUNING_HOLD_OFFSET_MS, 0.0f, (float)VP37_INTEGRAL_HOLD_OFFSET_MAX_MS,
+     true},
+    {VP37_TUNING_THERMAL_HOLD, 0.0f, 1.0f, true},
+    {VP37_TUNING_HOLD_CURRENT, 0.0f, 1.0f, true},
+    {VP37_TUNING_HOLD_MEAN_ENTER_HZ, VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ,
+     (float)VP37_INTEGRAL_HOLD_ENTER_HZ, false},
 };
 
 static void assertTuningRefused(VP37Pump *pump, VP37TuningParam param,
@@ -574,6 +580,11 @@ void test_vp37_tuning_side_effects_follow_the_setting(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         VP37_setTuning(pump, VP37_TUNING_HOLD_CONFIRM_MS, 250));
   TEST_ASSERT_FALSE(pump->pid.integralHoldEnterPending);
+  // A new offset time drops a pending offset release.
+  pump->pid.integralHoldOffsetPending = true;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 800));
+  TEST_ASSERT_FALSE(pump->pid.integralHoldOffsetPending);
 }
 
 void test_vp37_tuning_reset_restores_defaults_and_keeps_switches(void) {
@@ -583,6 +594,11 @@ void test_vp37_tuning_reset_restores_defaults_and_keeps_switches(void) {
     const TuningCase *c = &kTuningCases[i];
     (void)VP37_setTuning(pump, c->param, (c->max < 0.0f) ? 7.0f : c->max);
   }
+  // The widest mean entry band and an enabled switch are possible defaults.
+  (void)VP37_setTuning(pump, VP37_TUNING_HOLD_MEAN_ENTER_HZ,
+                       VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ);
+  (void)VP37_setTuning(pump, VP37_TUNING_HOLD_CURRENT,
+                       VP37_THERMAL_HOLD_CURRENT_DEFAULT ? 0.0f : 1.0f);
   VP37_resetTuning(pump);
   TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, VP37_getTuning(pump, VP37_TUNING_KP));
   TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KI, VP37_getTuning(pump, VP37_TUNING_KI));
@@ -599,6 +615,14 @@ void test_vp37_tuning_reset_restores_defaults_and_keeps_switches(void) {
                           VP37_getTuning(pump, VP37_TUNING_TEMPERATURE_WEIGHT));
   TEST_ASSERT_EQUAL_FLOAT((float)VP37_INTEGRAL_HOLD_CONFIRM_MS,
                           VP37_getTuning(pump, VP37_TUNING_HOLD_CONFIRM_MS));
+  TEST_ASSERT_EQUAL_FLOAT((float)VP37_INTEGRAL_HOLD_OFFSET_MS,
+                          VP37_getTuning(pump, VP37_TUNING_HOLD_OFFSET_MS));
+  TEST_ASSERT_EQUAL_FLOAT(VP37_THERMAL_HOLD_DEFAULT ? 1.0f : 0.0f,
+                          VP37_getTuning(pump, VP37_TUNING_THERMAL_HOLD));
+  TEST_ASSERT_EQUAL_FLOAT(VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ,
+                          VP37_getTuning(pump, VP37_TUNING_HOLD_MEAN_ENTER_HZ));
+  TEST_ASSERT_EQUAL_FLOAT(VP37_THERMAL_HOLD_CURRENT_DEFAULT ? 1.0f : 0.0f,
+                          VP37_getTuning(pump, VP37_TUNING_HOLD_CURRENT));
   TEST_ASSERT_EQUAL_FLOAT(VP37_PID_DEADBAND_TOP_HZ,
                           VP37_getTuning(pump, VP37_TUNING_DEADBAND_TOP_HZ));
   TEST_ASSERT_EQUAL_FLOAT(VP37_PWM_FF_MOTION_BOOST_DEFAULT,
@@ -2326,6 +2350,9 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
     void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
+  // The large-error release alone; the offset release has its own tests.
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 0));
   VP37_setPositionDemandPercentage(pump, 50);
   for (uint32_t ms = 5; ms <= 1000; ms += 5) {
     hal_mock_set_millis(ms);
@@ -2388,6 +2415,9 @@ void test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error(
 static void checkIntegralHoldReleaseWithExitBandNoise(int32_t direction) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
+  // The large-error release alone; the offset release has its own tests.
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 0));
   VP37_setPositionDemandPercentage(pump, 50);
   for (uint32_t ms = 5U; ms <= 200U; ms += 5U) {
     hal_mock_set_millis(ms);
@@ -2429,6 +2459,9 @@ void test_vp37_integral_hold_releases_negative_drift_with_exit_band_noise(
 void test_vp37_integral_hold_requires_continuous_time_near_target(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
+  // The instantaneous band alone; the mean entry has its own test.
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 0));
   VP37_setPositionDemandPercentage(pump, 50);
   for (uint32_t ms = 5U; ms <= 250U; ms += 5U) {
     hal_mock_set_millis(ms);
@@ -2439,6 +2472,435 @@ void test_vp37_integral_hold_requires_continuous_time_near_target(void) {
     VP37_process(pump);
     TEST_ASSERT_EQUAL(ms >= 250U, pump->pid.integralHold);
   }
+}
+
+/** @brief A process-test pump; helpers that set it up more than once per test
+ * release the previous controller first, tearDown releases the last one. */
+static VP37Pump *freshProcessPump(void) {
+  VP37Pump *pump = vp37TestPump();
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
+  }
+  setupPumpForProcessTests(pump);
+  return pump;
+}
+
+/** @brief Settle at 50 % (4600 Hz) into the integral hold. */
+static VP37Pump *settleIntoIntegralHold(uint32_t offsetReleaseMs,
+                                        uint32_t &ms) {
+  VP37Pump *pump = freshProcessPump();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS,
+                                               (float)offsetReleaseMs));
+  VP37_setPositionDemandPercentage(pump, 50);
+  for (ms = 5U; ms <= 500U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  return pump;
+}
+
+void test_vp37_integral_hold_offset_release_removes_standing_offset(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(1000U, ms);
+  // 25 Hz short sits inside the large-error band; only the mean releases it.
+  // The 0.3 s mean leaves the entry band about 200 ms after the step.
+  const uint32_t start = ms;
+  for (; ms <= start + 1500U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4575, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    if (ms <= start + 1150U) {
+      TEST_ASSERT_TRUE(pump->pid.integralHold);
+      TEST_ASSERT_FALSE(pump->pid.integralHoldReleasePending);
+      TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->pid.terms.integral);
+    }
+    if (ms >= start + 1250U) {
+      TEST_ASSERT_FALSE(pump->pid.integralHold);
+    }
+  }
+  // Short of the target, the resumed integral pushes the actuator up.
+  TEST_ASSERT_GREATER_THAN_FLOAT(0, pump->pid.terms.integral);
+}
+
+void test_vp37_integral_hold_keeps_standing_offset_without_offset_release(
+    void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  const uint32_t start = ms;
+  for (; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4575, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->pid.integralHold);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0, pump->pid.terms.integral);
+}
+
+void test_vp37_integral_hold_offset_release_needs_a_persistent_mean(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(1000U, ms);
+  // Noise around the target, up to 20 Hz either way, averages out.
+  const uint32_t start = ms;
+  for (; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    const int16_t noise = ((ms / 5U) % 2U == 0U) ? 20 : -20;
+    injectAdjRegisterData((int16_t)(4600 + noise), 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->pid.integralHold);
+    TEST_ASSERT_FALSE(pump->pid.integralHoldOffsetPending);
+  }
+}
+
+void test_vp37_integral_hold_offset_release_stays_off_on_the_upper_stroke(
+    void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 1000));
+  pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  VP37_setPositionDemandPercentage(pump, 100);
+  const int16_t target = (int16_t)pump->demand.target;
+  uint32_t ms = 5U;
+  for (; ms <= 2000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(target, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  TEST_ASSERT_GREATER_THAN_FLOAT((float)VP37_PID_DEADBAND,
+                                 pump->pid.integralDeadbandHz);
+  // The widened dead zone keeps a 25 Hz offset held: integration there walks
+  // the mechanism into stick-slip.
+  const float held = pump->pid.terms.integral;
+  for (const uint32_t start = ms; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)(target - 25), 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->pid.integralHold);
+    TEST_ASSERT_FALSE(pump->pid.integralHoldOffsetPending);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.001f, held, pump->pid.terms.integral);
+}
+
+static uint32_t holdEntryAfterArrival(uint32_t offsetReleaseMs) {
+  VP37Pump *pump = freshProcessPump();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS,
+                                               (float)offsetReleaseMs));
+  VP37_setPositionDemandPercentage(pump, 50);
+  uint32_t ms = 5U;
+  // The settled target is still 300 Hz away for half a second...
+  for (; ms <= 500U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4300, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->pid.integralHold);
+  }
+  // ...then the actuator passes the target, as the end of an arrival does.
+  const uint32_t arrival = ms;
+  for (; ms <= arrival + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    if (pump->pid.integralHold) {
+      break;
+    }
+  }
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  return ms - arrival;
+}
+
+/** @brief Follow the demand @p shortHz short of it for @p forMs. */
+static void standBelowTarget(VP37Pump *pump, int16_t shortHz, uint32_t forMs,
+                             uint32_t &ms) {
+  for (const uint32_t start = ms; ms <= start + forMs; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)(pump->demand.desired - shortHz), 144U, 49U,
+                          ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_EQUAL_INT32(pump->demand.target, pump->demand.desired);
+  TEST_ASSERT_EQUAL_INT32(shortHz, pump->pid.error);
+}
+
+/** @brief Settle at 40 %, then move the target to 50 % and stand 9 Hz short
+ * of it for 2 s, with the offset release on. */
+static VP37Pump *standShortAfterAMove(float meanEnterHz, uint32_t &ms) {
+  VP37Pump *pump = freshProcessPump();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 1000));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      VP37_setTuning(pump, VP37_TUNING_HOLD_MEAN_ENTER_HZ, meanEnterHz));
+  VP37_setPositionDemandPercentage(pump, 40);
+  standBelowTarget(pump, 0, 500U, ms);
+  VP37_setPositionDemandPercentage(pump, 50);
+  standBelowTarget(pump, 9, 2000U, ms);
+  return pump;
+}
+
+void test_vp37_integral_hold_mean_entry_band_waits_for_a_closer_mean(void) {
+  uint32_t ms = 5U;
+  // 9 Hz short is inside the full entry band: the hold engages...
+  VP37Pump *pump = standShortAfterAMove((float)VP37_INTEGRAL_HOLD_ENTER_HZ, ms);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  // ...but not with a 6 Hz mean entry band, until the mean comes closer.
+  pump = standShortAfterAMove(6.0f, ms);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+  standBelowTarget(pump, 3, 2000U, ms);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  // Back at 9 Hz the mean is still inside the full band: the hold stays.
+  standBelowTarget(pump, 9, 3000U, ms);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  TEST_ASSERT_FALSE(pump->pid.integralHoldOffsetPending);
+}
+
+void test_vp37_integral_hold_mean_entry_band_stays_off_on_the_upper_stroke(
+    void) {
+  VP37Pump *pump = freshProcessPump();
+  pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_OFFSET_MS, 1000));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_HOLD_MEAN_ENTER_HZ,
+                                       VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ));
+  VP37_setPositionDemandPercentage(pump, 100);
+  const int16_t target = (int16_t)pump->demand.target;
+  for (uint32_t ms = 5U; ms <= 2000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData((int16_t)(target - 9), 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  // Above the taper start the full entry band decides.
+  TEST_ASSERT_GREATER_THAN_FLOAT((float)VP37_PID_DEADBAND,
+                                 pump->pid.integralDeadbandHz);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+}
+
+void test_vp37_integral_hold_waits_for_the_mean_after_an_arrival(void) {
+  // Alone, the instantaneous band holds after the confirmation time.
+  TEST_ASSERT_UINT32_WITHIN(10U, VP37_INTEGRAL_HOLD_CONFIRM_MS,
+                            holdEntryAfterArrival(0U));
+  // With the offset release, the mean of the arrival must reach the mean
+  // entry band first: it decays from about 245 Hz with the filter time
+  // constant, then the dwell follows.
+  const float reachMs = VP37_INTEGRAL_HOLD_MEAN_FILTER_S * 1000.0f *
+                        logf(245.0f / VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ);
+  TEST_ASSERT_UINT32_WITHIN(150U,
+                            (uint32_t)reachMs + VP37_INTEGRAL_HOLD_CONFIRM_MS,
+                            holdEntryAfterArrival(1000U));
+}
+
+/** @brief Multiplier change over 3 s settled at another fuel temperature. */
+static float thermalScaleChangeInHold(bool thermalHold, uint8_t fuelTempC) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD,
+                                               thermalHold ? 1.0f : 0.0f));
+  const float before = pump->thermal.scale;
+  for (const uint32_t start = ms; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, fuelTempC, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL(thermalHold, pump->thermal.scaleHeld);
+  }
+  return pump->thermal.scale - before;
+}
+
+void test_vp37_thermal_hold_keeps_the_multiplier_from_falling(void) {
+  // Cold fuel lowers the source the way the estimate settles after a rising
+  // approach.
+  TEST_ASSERT_LESS_THAN_FLOAT(-0.005f, thermalScaleChangeInHold(false, 20U));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, thermalScaleChangeInHold(true, 20U));
+}
+
+void test_vp37_thermal_hold_follows_a_rise_above_the_lowest_value(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 1));
+  const float arrived = pump->thermal.scale;
+  float lowest = pump->thermal.temperatureCorrection;
+  // The source settles down first: the multiplier stays where it arrived...
+  for (const uint32_t start = ms; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    lowest = fminf(lowest, pump->thermal.temperatureCorrection);
+    TEST_ASSERT_TRUE(pump->thermal.scaleHeld);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, arrived, pump->thermal.scale);
+  // ...then the coil heats: the multiplier rises by as much as the source has
+  // risen above its lowest value.
+  for (const uint32_t start = ms; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 90U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_TRUE(pump->thermal.scaleHeld);
+  }
+  TEST_ASSERT_GREATER_THAN_FLOAT(arrived + 0.005f, pump->thermal.scale);
+  TEST_ASSERT_FLOAT_WITHIN(
+      1e-6f, arrived + (pump->thermal.temperatureCorrection - lowest),
+      pump->thermal.scale);
+}
+
+void test_vp37_thermal_hold_waits_for_the_position_to_arrive(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 1));
+  VP37_setPositionDemandPercentage(pump, 50);
+  uint32_t ms = 5U;
+  for (; ms <= 300U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4300, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  // The target is settled, but the actuator is still 300 Hz short: the
+  // multiplier keeps following the cooling fuel down.
+  const float approaching = pump->thermal.scale;
+  for (const uint32_t start = ms; ms <= start + 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4300, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->thermal.scaleArrived);
+  }
+  TEST_ASSERT_LESS_THAN_FLOAT(approaching, pump->thermal.scale);
+  // Within the large-error band the position has arrived; the multiplier
+  // stops falling from then on, even when the position leaves the band again.
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData(4570, 144U, 20U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_TRUE(pump->thermal.scaleArrived);
+  const float arrived = pump->thermal.scale;
+  for (const uint32_t start = ms += 5U; ms <= start + 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4500, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->thermal.scaleArrived);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, arrived, pump->thermal.scale);
+  // A new target starts over.
+  VP37_setPositionDemandPercentage(pump, 60);
+  hal_mock_set_millis(ms);
+  injectAdjRegisterData(4500, 144U, 20U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->thermal.scaleArrived);
+}
+
+void test_vp37_thermal_hold_stays_off_on_the_upper_stroke(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 1));
+  VP37_setPositionDemandPercentage(pump, 100);
+  const int16_t target = (int16_t)pump->demand.target;
+  uint32_t ms = 5U;
+  for (; ms <= 2000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(target, 144U, 49U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  // Settled, but above the taper start: the multiplier follows cooling fuel.
+  const float before = pump->thermal.scale;
+  for (const uint32_t start = ms; ms <= start + 3000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(target, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_FALSE(pump->thermal.scaleHeld);
+  }
+  TEST_ASSERT_LESS_THAN_FLOAT(before - 0.005f, pump->thermal.scale);
+}
+
+/** @brief Current target per unscaled command count of one more settled
+ * step with the switch set. */
+static float currentTargetWith(VP37Pump *pump, bool holdCurrent, uint32_t &ms) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setTuning(pump, VP37_TUNING_HOLD_CURRENT,
+                                               holdCurrent ? 1.0f : 0.0f));
+  hal_mock_set_millis(ms += 5U);
+  injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_GREATER_THAN_FLOAT(0.0f, pump->output.pwmValue);
+  return pump->currentControl.targetAmps / pump->output.pwmValue;
+}
+
+void test_vp37_thermal_hold_current_target_keeps_the_held_excess(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 1));
+  // Cooling fuel lowers the source while the held multiplier stays.
+  for (const uint32_t start = ms; ms <= start + 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->thermal.scaleHeld);
+  const float plain = currentTargetWith(pump, false, ms);
+  const float kept = currentTargetWith(pump, true, ms);
+  const float excess =
+      pump->thermal.scale / pump->thermal.temperatureCorrection;
+  TEST_ASSERT_GREATER_THAN_FLOAT(1.005f, excess);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, excess, kept / plain);
+}
+
+void test_vp37_thermal_hold_current_target_is_plain_without_the_hold(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 0));
+  for (const uint32_t start = ms; ms <= start + 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_FALSE(pump->thermal.scaleHeld);
+  const float plain = currentTargetWith(pump, false, ms);
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, plain, currentTargetWith(pump, true, ms));
+}
+
+void test_vp37_thermal_hold_resumes_when_the_target_moves(void) {
+  uint32_t ms = 0U;
+  VP37Pump *pump = settleIntoIntegralHold(0U, ms);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        VP37_setTuning(pump, VP37_TUNING_THERMAL_HOLD, 1));
+  for (const uint32_t start = ms; ms <= start + 1000U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  const float held = pump->thermal.scale;
+  TEST_ASSERT_TRUE(pump->thermal.scaleHeld);
+  // The cooled source sits well below the held multiplier...
+  TEST_ASSERT_LESS_THAN_FLOAT(held - 0.005f,
+                              pump->thermal.temperatureCorrection);
+  // ...and a new target ends the hold: the multiplier takes the source at
+  // once, then follows it again.
+  VP37_setPositionDemandPercentage(pump, 55);
+  hal_mock_set_millis(ms += 5U);
+  injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+  VP37_process(pump);
+  TEST_ASSERT_FALSE(pump->thermal.scaleArrived);
+  TEST_ASSERT_FALSE(pump->thermal.scaleHeld);
+  TEST_ASSERT_EQUAL_FLOAT(pump->thermal.temperatureCorrection,
+                          pump->thermal.scale);
+  const float resumed = pump->thermal.scale;
+  for (const uint32_t start = ms; ms <= start + 1500U; ms += 5U) {
+    hal_mock_set_millis(ms);
+    injectAdjRegisterData(4600, 144U, 20U, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  // The cooling source falls on; the multiplier follows within its slew.
+  TEST_ASSERT_FALSE(pump->thermal.scaleHeld);
+  TEST_ASSERT_LESS_THAN_FLOAT(resumed, pump->thermal.scale);
+  TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(pump->thermal.temperatureCorrection,
+                                     pump->thermal.scale);
+  TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(
+      resumed - (VP37_THERMAL_SCALE_SLEW_PER_S * 1.5f) - 1e-4f,
+      pump->thermal.scale);
 }
 
 void test_vp37_supply_change_does_not_freeze_integral(void) {
@@ -4209,6 +4671,23 @@ int main(void) {
   RUN_TEST(
       test_vp37_integral_hold_rejects_bias_and_releases_on_persistent_error);
   RUN_TEST(test_vp37_integral_hold_requires_continuous_time_near_target);
+  RUN_TEST(test_vp37_integral_hold_offset_release_removes_standing_offset);
+  RUN_TEST(
+      test_vp37_integral_hold_keeps_standing_offset_without_offset_release);
+  RUN_TEST(test_vp37_integral_hold_offset_release_needs_a_persistent_mean);
+  RUN_TEST(
+      test_vp37_integral_hold_offset_release_stays_off_on_the_upper_stroke);
+  RUN_TEST(test_vp37_integral_hold_waits_for_the_mean_after_an_arrival);
+  RUN_TEST(test_vp37_integral_hold_mean_entry_band_waits_for_a_closer_mean);
+  RUN_TEST(
+      test_vp37_integral_hold_mean_entry_band_stays_off_on_the_upper_stroke);
+  RUN_TEST(test_vp37_thermal_hold_keeps_the_multiplier_from_falling);
+  RUN_TEST(test_vp37_thermal_hold_follows_a_rise_above_the_lowest_value);
+  RUN_TEST(test_vp37_thermal_hold_current_target_keeps_the_held_excess);
+  RUN_TEST(test_vp37_thermal_hold_current_target_is_plain_without_the_hold);
+  RUN_TEST(test_vp37_thermal_hold_resumes_when_the_target_moves);
+  RUN_TEST(test_vp37_thermal_hold_stays_off_on_the_upper_stroke);
+  RUN_TEST(test_vp37_thermal_hold_waits_for_the_position_to_arrive);
   RUN_TEST(
       test_vp37_integral_hold_releases_positive_drift_with_exit_band_noise);
   RUN_TEST(

@@ -22,7 +22,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:116 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:117 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -36,7 +36,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu "
         "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
         "execus:%lu plim:%.1f stand_slew:%.1f stand_upper:%.1f adec:%.0f "
-        "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f",
+        "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f "
+        "hoff:%lu thold:%u",
         view->pid.kp, view->pid.ki, view->pid.kd, view->pid.topKd,
         view->pid.effectiveKd, view->pid.tf, view->pidTimeUpdate,
         view->feedback.adjustMin, view->feedback.adjustMax,
@@ -84,7 +85,9 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND,
         VP37_ARRIVAL_DECEL_PERCENT_PER_S2, VP37_INTEGRAL_HOLD_ENTER_HZ,
         VP37_STATIONARY_RISE_WEIGHT, VP37_STATIONARY_FALL_WEIGHT,
-        view->demand.topArrivalDecel, view->feedforward.motionRateCap);
+        view->demand.topArrivalDecel, view->feedforward.motionRateCap,
+        (unsigned long)view->pid.integralHoldOffsetMs,
+        view->thermal.scaleHoldEnabled ? 1U : 0U);
     adjustometer_reading_t telemetry = view->adjustometer;
     const bool extendedFresh = VP37_readAdjustometerExtended(self, &telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "

@@ -143,6 +143,45 @@ _Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
 #define VP37_INTEGRAL_HOLD_CONFIRM_MAX_MS 1000U
 #define VP37_INTEGRAL_HOLD_EXIT_HZ 40
 #define VP37_INTEGRAL_HOLD_RELEASE_MS 500U
+// A standing offset inside the large-error band also ends the hold where the
+// integral dead zone is the base zone: the error low-passed at a settled target
+// averages the position noise out, and once it stays outside the entry band
+// for VP37_INTEGRAL_HOLD_OFFSET_MS the integral resumes. With the offset
+// release on, the hold engages only when the mean error is inside the entry
+// band too, on the whole stroke. Zero keeps the large-error release only.
+// Bench 2026-10-16: an early hold left S20 standing 12-23 Hz short with the
+// integral at zero; the release brought it to ~9 Hz. Above the taper start the
+// same release walked a 120 s hold at 90 % demand into stick-slip.
+#define VP37_INTEGRAL_HOLD_MEAN_FILTER_S 0.3f
+#define VP37_INTEGRAL_HOLD_OFFSET_MS 1000U
+#define VP37_INTEGRAL_HOLD_OFFSET_MAX_MS 5000U
+// Where the offset release applies, the hold engages only once the mean error
+// is within this band; the release still waits for the full entry band. With
+// the full band an early hold froze 30 s holds 8-10 Hz short; 6 Hz brought
+// S50/S75 to ~6-8 Hz without jumps on 120 s holds at 75 % (2026-10-16).
+#define VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ 6.0f
+#define VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ 1.0f
+// After the position arrives at a settled target (first within the large-error
+// band), the thermal multiplier does not fall below the value it arrived with
+// until the target moves, where the integral dead zone is the base zone. A
+// rising approach raises the drive-resistance estimate (the moving armature
+// lowers the current) and it relaxes for some 6 s afterwards: a 0.9 % drop
+// pulled the 85.5 % demand 45-60 Hz short with the integral held
+// (2026-10-15), while the held value lands it within ~11 Hz. Coil heating
+// then raises the estimate about 0.015 %/s, and the multiplier passes that
+// rise on: a fully frozen multiplier let 30 s holds creep 5 Hz in 6 s until
+// the offset release stepped in (S50 sawtooth 8-13 Hz, 2026-10-16). When the
+// target moves the multiplier takes its source value again: slewing down from
+// a held value left rising random steps without the lift the moving estimate
+// gives (2026-10-16). Above the taper start a held multiplier walked long
+// holds into stick-slip, so it keeps following its source.
+#define VP37_THERMAL_HOLD_DEFAULT true
+// The current loop aims at the current of the reference resistance scaled by
+// the source, so it took a held excess back as over-current: cpwm settled near
+// -2 PWM and the settled position crept 5-7 Hz short within seconds of the
+// integral hold (S75, 2026-10-16). With this on, its target carries the same
+// excess while the multiplier is held.
+#define VP37_THERMAL_HOLD_CURRENT_DEFAULT true
 // Every approach from rest starts with an empty integral, so the holding map's
 // residual is uncovered until the integral rebuilds; on the near-zero-stiffness
 // upper stroke that showed as a 400 Hz drop right after arrival. When the

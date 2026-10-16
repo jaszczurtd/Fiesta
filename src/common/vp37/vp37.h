@@ -100,6 +100,17 @@ typedef struct {
   uint32_t integralHoldConfirmMs; /**< Continuous time inside the entry band. */
   bool integralHoldReleasePending;
   uint32_t integralHoldReleaseStartedMs;
+  float integralHoldMeanError;   /**< Error low-passed while the target stays
+                                      settled, in Hz; noise around the target
+                                      averages out, a standing offset does not.
+                                    */
+  uint32_t integralHoldOffsetMs; /**< Time the mean error must stay outside the
+                                      entry band to release the hold; zero
+                                      leaves only the large-error release. */
+  bool integralHoldOffsetPending;
+  uint32_t integralHoldOffsetStartedMs;
+  float integralHoldMeanEnterHz; /**< Mean error the hold engages within where
+                                      the offset release applies, in Hz. */
   float negativeLimit;
   float upperLimit;
   float kp;
@@ -201,6 +212,17 @@ typedef struct {
   float scale;                   /**< Rate-limited multiplier actually applied,
                                            between the measured path and the model. */
   bool scaleReady;               /**< The multiplier has taken a first value. */
+  /** After an arrival in the base dead zone the multiplier does not fall
+   * until the target moves (bench X7). */
+  bool scaleHoldEnabled;
+  bool scaleHeld;       /**< The hold shaped the multiplier this step. */
+  float scaleHeldBase;  /**< Multiplier when the hold began. */
+  float scaleHeldFloor; /**< Lowest source value since the hold began. */
+  /** The current loop's target keeps the held excess over the source (bench
+   * X9). */
+  bool scaleHoldCurrent;
+  /** The position has reached the settled target since it settled. */
+  bool scaleArrived;
 } VP37Thermal;
 
 /** @brief Shunt scan bookkeeping and the newest reduced block. */
