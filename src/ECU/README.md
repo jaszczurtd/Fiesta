@@ -96,9 +96,26 @@ Moving demands retain the original climb floor. Telemetry reports
 potentiometer controller mode.
 
 At a settled target, 100 ms within ±12 Hz freezes the integral to avoid
-building force against static friction. An error beyond ±40 Hz starts
-a 500 ms release timer. Returning to ±12 Hz cancels it; fluctuations
-around ±40 Hz do not restart it, so persistent drift releases the integral.
+building force against static friction; the error averaged over 0.3 s must be
+within ±12 Hz too, so a pass through the band during an arrival does not
+freeze it. An error beyond ±40 Hz starts a 500 ms release timer. Returning to
+±12 Hz cancels it; fluctuations around ±40 Hz do not restart it, so persistent
+drift releases the integral. Below 75 % of the stroke, where the integral dead
+zone has its base width, the hold engages only once the averaged error is
+within ±6 Hz (bench knob `X8=<Hz>`, 1-12), and an averaged error outside
+±12 Hz for 1 s releases it (bench knob `X6=<ms>`, 0 off).
+
+After the position first comes within ±40 Hz of a settled target below 75 % of
+the stroke, the thermal multiplier does not fall below the value the actuator
+arrived with until the target moves (bench knob `X7=0|1`). A rising approach
+raises the drive-resistance estimate, and its later relaxation would otherwise
+pull the settled position below the target while the integral is held. Coil
+heating raises the estimate afterwards, and the multiplier follows that rise.
+While the multiplier is held, the current loop aims at the same excess over
+the estimate, so it does not take the extra drive back (bench knob `X9=0|1`).
+When the target moves, the multiplier returns to the estimate at once.
+Above 75 % of the stroke both rules stay off: there they walked long holds
+into stick-slip.
 
 ## Supply and resistance compensation
 

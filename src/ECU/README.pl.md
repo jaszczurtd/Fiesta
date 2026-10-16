@@ -88,10 +88,25 @@ Telemetria podaje `mode:position` i osobne `test:<name|none>`;
 nie oznacza potencjometru jako osobnego trybu regulatora.
 
 Przy ustalonym celu 100 ms w paśmie ±12 Hz zamraża całkę, aby nie zwiększać
-siły przeciw tarciu statycznemu. Błąd przekraczający ±40 Hz rozpoczyna
-odliczanie 500 ms do zwolnienia całki. Powrót do ±12 Hz je kasuje;
-wahania wokół ±40 Hz nie rozpoczynają go od nowa, więc utrzymujący się
-dryf zwalnia całkę.
+siły przeciw tarciu statycznemu; w paśmie ±12 Hz musi być też błąd uśredniony
+z 0,3 s, więc przejście przez pasmo w trakcie dojazdu jej nie zamraża. Błąd
+przekraczający ±40 Hz rozpoczyna odliczanie 500 ms do zwolnienia całki. Powrót
+do ±12 Hz je kasuje; wahania wokół ±40 Hz nie rozpoczynają go od nowa, więc
+utrzymujący się dryf zwalnia całkę. Poniżej 75% skoku, gdzie strefa martwa
+całki ma bazową szerokość, blokada wchodzi dopiero przy uśrednionym błędzie
+w ±6 Hz (nastawa `X8=<Hz>`, 1-12), a uśredniony błąd poza ±12 Hz przez 1 s ją
+zwalnia (nastawa `X6=<ms>`, 0 wyłącza).
+
+Gdy pozycja po raz pierwszy znajdzie się w ±40 Hz od ustalonego celu poniżej
+75% skoku, mnożnik termiczny nie spada poniżej wartości, z którą nastawnik
+dojechał, do zmiany celu (nastawa `X7=0|1`). Dojazd w górę podnosi estymatę
+rezystancji toru sterowania, a jej późniejsza relaksacja ściągałaby ustaloną
+pozycję poniżej celu przy zamrożonej całce. Nagrzewanie cewki podnosi potem
+estymatę i mnożnik idzie za tym wzrostem. Gdy mnożnik jest trzymany, cel pętli
+prądu ma tę samą nadwyżkę ponad estymatę, więc pętla nie odbiera dodatkowego
+napędu (nastawa `X9=0|1`). Przy zmianie celu mnożnik od razu wraca do
+estymaty. Powyżej 75% skoku obie reguły są
+wyłączone: tam prowadziły długie postoje do zrywów tarcia.
 
 ## Kompensacja napięcia i rezystancji
 

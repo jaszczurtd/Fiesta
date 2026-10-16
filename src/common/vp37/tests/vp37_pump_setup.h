@@ -28,6 +28,7 @@ static inline void vp37SetupCalibratedPump(VP37Pump *pump,
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   pump->pid.topKd = VP37_PID_TOP_KD;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
+  pump->pid.integralHoldMeanEnterHz = VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ;
   pump->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST;
   pump->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
   pump->thermal.temperatureCorrection = 1.0f;

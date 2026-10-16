@@ -496,6 +496,42 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
     deb("VP37 assist rate cap X5: %.0f ok", cap);
     return true;
   }
+  if ((prefix == 'X') && (cmd[1] == '6') && (cmd[2] == '=')) {
+    float offsetMs = 0.0f;
+    if (!parseValue(&cmd[3], &offsetMs) ||
+        !tune(self, VP37_TUNING_HOLD_OFFSET_MS, offsetMs)) {
+      return false;
+    }
+    deb("VP37 hold offset release X6: %.0f ms ok", offsetMs);
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '7') && (cmd[2] == '=')) {
+    float mode = 0.0f;
+    if (!parseValue(&cmd[3], &mode) ||
+        !tune(self, VP37_TUNING_THERMAL_HOLD, mode)) {
+      return false;
+    }
+    deb("VP37 thermal hold X7: %.0f ok", mode);
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '8') && (cmd[2] == '=')) {
+    float band = 0.0f;
+    if (!parseValue(&cmd[3], &band) ||
+        !tune(self, VP37_TUNING_HOLD_MEAN_ENTER_HZ, band)) {
+      return false;
+    }
+    deb("VP37 hold mean entry X8: %.1f Hz ok", band);
+    return true;
+  }
+  if ((prefix == 'X') && (cmd[1] == '9') && (cmd[2] == '=')) {
+    float on = 0.0f;
+    if (!parseValue(&cmd[3], &on) ||
+        !tune(self, VP37_TUNING_HOLD_CURRENT, on)) {
+      return false;
+    }
+    deb("VP37 hold current X9: %.0f ok", on);
+    return true;
+  }
   if ((prefix == 'R') && (cmd[1] == '\0')) {
     applyDefaults(self);
     return true;

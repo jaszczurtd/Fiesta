@@ -160,6 +160,11 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   self->pid.integralHoldReleasePending = false;
   self->pid.integralHoldReleaseStartedMs = 0U;
+  self->pid.integralHoldMeanError = 0.0f;
+  self->pid.integralHoldOffsetMs = VP37_INTEGRAL_HOLD_OFFSET_MS;
+  self->pid.integralHoldMeanEnterHz = VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ;
+  self->pid.integralHoldOffsetPending = false;
+  self->pid.integralHoldOffsetStartedMs = 0U;
   self->controlStarted = false;
   self->pidStarted = false;
   self->pidDtUs = 0U;
@@ -220,6 +225,12 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->thermal.driveCompensationUsed = false;
   self->thermal.scale = 1.0f;
   self->thermal.scaleReady = false;
+  self->thermal.scaleHoldEnabled = VP37_THERMAL_HOLD_DEFAULT;
+  self->thermal.scaleHoldCurrent = VP37_THERMAL_HOLD_CURRENT_DEFAULT;
+  self->thermal.scaleHeld = false;
+  self->thermal.scaleHeldBase = 0.0f;
+  self->thermal.scaleHeldFloor = 0.0f;
+  self->thermal.scaleArrived = false;
   self->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
   self->pid.integralDeadbandHz = (float)VP37_PID_DEADBAND;
   self->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
@@ -508,6 +519,8 @@ static void VP37_positionCycle(VP37Pump *self) {
   VP37Cycle cycle;
   VP37_beginCycle(self, &cycle);
   VP37_rampDemand(self, &cycle);
+  // One dead zone per step: the thermal hold and the integral hold share it.
+  self->pid.integralDeadbandHz = VP37_integralDeadband(self);
   VP37_blendMotion(self, &cycle);
   // FF and PID share the warm reference domain; temperature scales the sum.
   self->feedforward.pwm = VP37_feedForward(self, self->demand.desired);
@@ -679,7 +692,20 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
   VP37_updateVoltageCorrection(self, cycle->dt);
   VP37_updateTemperatureCorrection(self, cycle->dt);
   VP37_updateDriveCorrection(self, cycle->dt);
-  VP37_updateThermalScale(self, cycle->dt);
+  const bool targetSettled =
+      cycle->stationaryTarget && (self->demand.desired == self->demand.target);
+  // The position has arrived once it first comes within the large-error band
+  // of the settled target; the moving actuator still pulls the estimate up.
+  const int32_t error = self->pid.error;
+  self->thermal.scaleArrived =
+      targetSettled &&
+      (self->thermal.scaleArrived || ((error >= -VP37_INTEGRAL_HOLD_EXIT_HZ) &&
+                                      (error <= VP37_INTEGRAL_HOLD_EXIT_HZ)));
+  // Only where the integral dead zone is the base zone (VP37_THERMAL_HOLD_*).
+  const bool thermalHold =
+      self->thermal.scaleHoldEnabled && self->thermal.scaleArrived &&
+      (self->pid.integralDeadbandHz <= (float)VP37_PID_DEADBAND);
+  VP37_updateThermalScale(self, cycle->dt, thermalHold);
   cycle->outputScale = self->supply.correction * self->thermal.scale;
 }
 
@@ -708,6 +734,7 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
     self->pid.integralHold = false;
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
+    self->pid.integralHoldOffsetPending = false;
     self->pid.softFloorActive = false;
     self->output.pwmLimited = false;
     VP37_writeQuantityPWM(self, 0);
@@ -766,7 +793,6 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool targetSettled =
       cycle->stationaryTarget && (self->demand.desired == self->demand.target);
   VP37_updateDerivativeGain(self, targetSettled);
-  self->pid.integralDeadbandHz = VP37_integralDeadband(self);
   VP37_updateIntegralHold(self, targetSettled);
   const bool freezeIntegral = rampWindup || self->pid.integralHold;
   const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.error)
@@ -808,7 +834,13 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   self->pid.softFloorActive =
       self->pid.softFloorActive && self->pid.terms.saturated_low;
 
-  VP37_recordCurrentCommand(self, self->output.pwmValue, self->output.finalPWM,
+  // A held thermal multiplier drives above the resistance estimate on
+  // purpose; the current loop keeps that excess instead of taking it back.
+  float currentNominal = self->output.pwmValue;
+  if (self->thermal.scaleHeld && self->thermal.scaleHoldCurrent) {
+    currentNominal *= self->thermal.scale / VP37_thermalSource(self);
+  }
+  VP37_recordCurrentCommand(self, currentNominal, self->output.finalPWM,
                             hal_micros());
   VP37_writeQuantityPWM(self, self->output.finalPWM);
 }

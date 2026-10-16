@@ -51,7 +51,16 @@ hal_status_t VP37_acquireCurrentScan(VP37Pump *self);
 void VP37_updateVoltageCorrection(VP37Pump *self, float dt);
 void VP37_updateTemperatureCorrection(VP37Pump *self, float dt);
 void VP37_updateDriveCorrection(VP37Pump *self, float dt);
-void VP37_updateThermalScale(VP37Pump *self, float dt);
+void VP37_updateThermalScale(VP37Pump *self, float dt, bool hold);
+
+/** @brief The thermal multiplier's source in force: the measured drive
+ * resistance once it is used, the fuel-temperature model before; both stay
+ * within VP37_TEMPERATURE_FACTOR_MIN..MAX. */
+static inline float VP37_thermalSource(const VP37Pump *self) {
+  return self->thermal.driveCompensationUsed
+             ? self->thermal.driveCorrection
+             : self->thermal.temperatureCorrection;
+}
 
 // ── vp37_current_control.c ─────────────────────────────────────────────────
 /** @brief Clear current feedback/history while preserving its enable switch.

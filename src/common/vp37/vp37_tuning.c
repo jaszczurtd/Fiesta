@@ -44,6 +44,14 @@ static bool VP37_tuningAccepts(VP37TuningParam param, float value) {
       [VP37_TUNING_DRIVE_COMPENSATION] = {0.0f, 1.0f, true},
       [VP37_TUNING_CYCLE_VOLTAGE] = {0.0f, 1.0f, true},
       [VP37_TUNING_SUPPLY_FROZEN] = {0.0f, 1.0f, true},
+      [VP37_TUNING_HOLD_OFFSET_MS] = {0.0f,
+                                      (float)VP37_INTEGRAL_HOLD_OFFSET_MAX_MS,
+                                      true},
+      [VP37_TUNING_THERMAL_HOLD] = {0.0f, 1.0f, true},
+      [VP37_TUNING_HOLD_CURRENT] = {0.0f, 1.0f, true},
+      [VP37_TUNING_HOLD_MEAN_ENTER_HZ] = {VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ,
+                                          (float)VP37_INTEGRAL_HOLD_ENTER_HZ,
+                                          false},
   };
   bool accepted = false;
   if (((uint32_t)param < (uint32_t)VP37_TUNING_COUNT) && isfinite(value)) {
@@ -139,6 +147,19 @@ static void VP37_applyTuning(VP37Pump *self, VP37TuningParam param,
   case VP37_TUNING_SUPPLY_FROZEN:
     self->supply.frozen = on;
     break;
+  case VP37_TUNING_HOLD_OFFSET_MS:
+    self->pid.integralHoldOffsetMs = (uint32_t)value;
+    self->pid.integralHoldOffsetPending = false;
+    break;
+  case VP37_TUNING_THERMAL_HOLD:
+    self->thermal.scaleHoldEnabled = on;
+    break;
+  case VP37_TUNING_HOLD_CURRENT:
+    self->thermal.scaleHoldCurrent = on;
+    break;
+  case VP37_TUNING_HOLD_MEAN_ENTER_HZ:
+    self->pid.integralHoldMeanEnterHz = value;
+    break;
   default:
     /* Unreachable: the range lookup rejected every other value. */
     break;
@@ -221,6 +242,18 @@ static float VP37_tuningValue(const VP37Pump *self, VP37TuningParam param) {
   case VP37_TUNING_SUPPLY_FROZEN:
     value = VP37_switchValue(self->supply.frozen);
     break;
+  case VP37_TUNING_HOLD_OFFSET_MS:
+    value = (float)self->pid.integralHoldOffsetMs;
+    break;
+  case VP37_TUNING_THERMAL_HOLD:
+    value = VP37_switchValue(self->thermal.scaleHoldEnabled);
+    break;
+  case VP37_TUNING_HOLD_CURRENT:
+    value = VP37_switchValue(self->thermal.scaleHoldCurrent);
+    break;
+  case VP37_TUNING_HOLD_MEAN_ENTER_HZ:
+    value = self->pid.integralHoldMeanEnterHz;
+    break;
   default:
     break;
   }
@@ -240,6 +273,10 @@ void VP37_resetTuning(VP37Pump *self) {
   self->thermal.temperatureCompensationWeight = 1.0f;
   self->currentControl.enabled = true;
   self->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
+  self->pid.integralHoldOffsetMs = VP37_INTEGRAL_HOLD_OFFSET_MS;
+  self->thermal.scaleHoldEnabled = VP37_THERMAL_HOLD_DEFAULT;
+  self->thermal.scaleHoldCurrent = VP37_THERMAL_HOLD_CURRENT_DEFAULT;
+  self->pid.integralHoldMeanEnterHz = VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ;
   self->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
   self->feedforward.motionBoostUp = VP37_PWM_FF_MOTION_BOOST_DEFAULT;
   self->feedforward.motionBoostDown = VP37_PWM_FF_DESCENT_BOOST;
@@ -266,6 +303,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
     self->pid.integralHoldEnterPending = false;
     self->pid.integralHoldReleasePending = false;
     self->pid.integralHoldReleaseStartedMs = 0U;
+    self->pid.integralHoldOffsetPending = false;
     self->output.lastPWMval = -1;
     self->output.finalPWM = VP37_PWM_MIN;
   }
