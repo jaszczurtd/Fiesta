@@ -441,8 +441,61 @@ void test_current_control_stays_bounded_during_supply_and_demand_changes(void) {
   }
 }
 
+void test_current_control_identical_wrap_rewrites_keep_known_reference(void) {
+  const int32_t offsets[] = {-100, -1, 0, 1, 100};
+  const uint32_t origins[] = {100000U, UINT32_MAX - 15U};
+  for (size_t j = 0U; j < COUNTOF(origins); ++j) {
+    const uint32_t origin = origins[j];
+    for (size_t i = 0U; i < COUNTOF(offsets); ++i) {
+      VP37_resetCurrentControl(&s_pump);
+      record(origin - 3000U);
+      record((uint32_t)((int64_t)origin + (int64_t)offsets[i]));
+      capture(origin, 3.0f);
+      updateAt(origin + 12000U);
+      TEST_ASSERT_TRUE(s_pump.currentControl.active);
+      TEST_ASSERT_FLOAT_WITHIN(0.0001f, referenceAmps(kNominalPwm, 1.034f),
+                               s_pump.currentControl.sampleTargetAmps);
+    }
+  }
+}
+
+void test_current_control_same_reference_wrap_uses_observed_duty(void) {
+  const int32_t offsets[] = {-100, 0, 100};
+  for (size_t i = 0U; i < COUNTOF(offsets); ++i) {
+    VP37_resetCurrentControl(&s_pump);
+    record(97000U);
+    record((uint32_t)(100000 + offsets[i]), kNominalPwm, 710);
+    capture(100000U, 3.0f, 710);
+    updateAt(112000U);
+    TEST_ASSERT_TRUE(s_pump.currentControl.active);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, referenceAmps(kNominalPwm, 1.034f),
+                             s_pump.currentControl.sampleTargetAmps);
+  }
+}
+
+void test_current_control_wrap_keeps_reference_and_qualification_guards(void) {
+  for (uint32_t field = 0U; field < 3U; field++) {
+    VP37_resetCurrentControl(&s_pump);
+    s_pump.supply.localScale = 1.034f;
+    record(97000U);
+    if (field == 1U) {
+      s_pump.supply.localScale = 1.02f;
+    }
+    record(100000U, field == 0U ? 821.0f : kNominalPwm);
+    if (field == 2U) {
+      s_pump.currentControl.history[1U].driveSettled = true;
+    }
+    capture(100000U, 3.0f);
+    updateAt(112000U);
+    TEST_ASSERT_FALSE(s_pump.currentControl.active);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_current_control_identical_wrap_rewrites_keep_known_reference);
+  RUN_TEST(test_current_control_same_reference_wrap_uses_observed_duty);
+  RUN_TEST(test_current_control_wrap_keeps_reference_and_qualification_guards);
   RUN_TEST(test_current_control_uses_the_command_latched_before_the_on_phase);
   RUN_TEST(test_current_control_preserves_the_baseline_voltage_scale);
   RUN_TEST(test_current_control_rejects_writes_ambiguous_at_pwm_wrap);

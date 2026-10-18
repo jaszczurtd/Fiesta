@@ -506,12 +506,16 @@ static void runCore0(void) {
            (VP37_readTrace(&s_vp37TraceSamples[sampleCount]) == HAL_OK)) {
       sampleCount++;
     }
-    if (!VP37_traceCapturing() &&
-        (VP37_readSnapshot(&s_ctx.injectionPump, &s_vp37Snapshot) == HAL_OK)) {
+    // Host guards need fresh feedback while the RAM trace records too.
+    if (VP37_readSnapshot(&s_ctx.injectionPump, &s_vp37Snapshot) == HAL_OK) {
       VP37_showDebug(&s_ctx.injectionPump, &s_vp37Snapshot);
     }
     for (size_t i = 0U; i < sampleCount; i++) {
       VP37_showTrace(&s_vp37TraceSamples[i]);
+    }
+    uint32_t completedCount = 0U;
+    if (VP37_takeTraceCompletion(&completedCount) == HAL_OK) {
+      deb("VP37 trace end samples:%lu", (unsigned long)completedCount);
     }
   }
 #endif

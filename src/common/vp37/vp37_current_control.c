@@ -92,13 +92,20 @@ void VP37_recordCurrentCommand(VP37Pump *self, float nominalPWM,
   }
 }
 
+static bool VP37_currentCommandFresh(const VP37CurrentCommand *command,
+                                     const VP37CurrentPulseResult *sample,
+                                     uint32_t nowUs) {
+  return !hal_elapsed_u32(nowUs, command->writtenUs,
+                          VP37_CURRENT_CONTROL_MAX_AGE_US +
+                              (2U * sample->latchPeriodUs));
+}
+
 static bool VP37_currentCommandMatches(const VP37CurrentCommand *command,
                                        const VP37CurrentPulseResult *sample,
                                        uint32_t nowUs) {
-  const int32_t difference = sample->latchedPwm - command->pwm;
-  return !hal_elapsed_u32(nowUs, command->writtenUs,
-                          VP37_CURRENT_CONTROL_MAX_AGE_US +
-                              (2U * sample->latchPeriodUs)) &&
+  const int64_t difference =
+      (int64_t)sample->latchedPwm - (int64_t)command->pwm;
+  return VP37_currentCommandFresh(command, sample, nowUs) &&
          (difference <= VP37_CURRENT_CONTROL_DUTY_TOLERANCE) &&
          (difference >= -VP37_CURRENT_CONTROL_DUTY_TOLERANCE);
 }
@@ -111,21 +118,44 @@ VP37_findCurrentCommand(const VP37CurrentControl *control,
   // current falling edge is the wrap that latched this period's compare.
   const uint32_t latchAge = now - sample->latchUs;
   uint32_t bestAge = UINT32_MAX;
-  bool ambiguous = false;
   for (uint32_t i = 0U; i < control->count; i++) {
     const VP37CurrentCommand *entry = &control->history[i];
     const uint32_t age = now - entry->writtenUs;
     const uint32_t distance =
         (age >= latchAge) ? (age - latchAge) : (latchAge - age);
-    if (distance <= VP37_CURRENT_CONTROL_EDGE_GUARD_US) {
-      ambiguous = true;
-    }
-    if ((age > latchAge) && (age < bestAge)) {
+    if ((age > latchAge) && (distance > VP37_CURRENT_CONTROL_EDGE_GUARD_US) &&
+        (age < bestAge)) {
       matched = entry;
       bestAge = age;
     }
   }
-  if (ambiguous) {
+  if ((matched != NULL) && VP37_currentCommandFresh(matched, sample, now)) {
+    const VP37CurrentCommand *const known = matched;
+    int64_t bestDifference = (int64_t)sample->latchedPwm - (int64_t)known->pwm;
+    bestDifference = (bestDifference < 0) ? -bestDifference : bestDifference;
+    for (uint32_t i = 0U; i < control->count; i++) {
+      const VP37CurrentCommand *entry = &control->history[i];
+      const uint32_t age = now - entry->writtenUs;
+      const uint32_t distance =
+          (age >= latchAge) ? (age - latchAge) : (latchAge - age);
+      if (distance <= VP37_CURRENT_CONTROL_EDGE_GUARD_US) {
+        // Every possible wrap owner must have the same current reference
+        // and hold qualification. Measured latch duty selects its PWM.
+        if ((entry->nominalPwm != known->nominalPwm) ||
+            (entry->voltageScale != known->voltageScale) ||
+            (entry->driveSettled != known->driveSettled)) {
+          matched = NULL;
+          break;
+        }
+        int64_t difference = (int64_t)sample->latchedPwm - (int64_t)entry->pwm;
+        difference = (difference < 0) ? -difference : difference;
+        if (difference < bestDifference) {
+          bestDifference = difference;
+          matched = entry;
+        }
+      }
+    }
+  } else {
     matched = NULL;
   }
   if ((matched != NULL) && !VP37_currentCommandMatches(matched, sample, now)) {

@@ -9,6 +9,8 @@
 #include "tests.h"
 #include "tests_workers.h"
 #include "unity.h"
+#include "vp37_current.h"
+#include "vp37_internal.h"
 #include "vp37_tuning.h"
 
 #include "../../common/scDefinitions/sc_command_handlers.h"
@@ -60,6 +62,7 @@ static VP37Pump *preparePump(void) {
   VP37Pump *pump = &getECUContext()->injectionPump;
   memset(pump, 0, sizeof(*pump));
   pump->pid.controller = hal_pid_controller_create();
+  pump->pid.researchReferenceWeight = 1.0f;
   pump->feedback.calibrationDone = true;
   pump->vp37Initialized = true;
   pump->feedback.adjustMin = 100;
@@ -992,9 +995,247 @@ void test_configurator_start_follows_the_engine_speed_interlock(void) {
   setGlobalValue(F_RPM, 0.0f);
 }
 
+void test_research_limit_requires_zero_and_rest(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->demand.physicalLimitPercent = 85.0f;
+  pump->demand.requestedPercent = 0.0f;
+  pump->demand.atRest = false;
+  console("X13=100");
+  TEST_ASSERT_EQUAL_FLOAT(85.0f, pump->demand.physicalLimitPercent);
+  pump->demand.atRest = true;
+  console("X13=100");
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.physicalLimitPercent);
+  console("X13=101");
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.physicalLimitPercent);
+}
+
+void test_research_scan_requires_unused_current_and_releases_adc(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  (void)VP37_currentScanStop();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  pump->demand.requestedPercent = 0.0f;
+  pump->demand.atRest = true;
+  pump->thermal.observationEnabled = true;
+  console("X12=0");
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, VP37_currentScanFrameNs());
+  pump->thermal.observationEnabled = false;
+  pump->thermal.driveCompensationEnabled = false;
+  pump->currentControl.enabled = false;
+  pump->supply.cycleEnabled = false;
+  console("X12=0");
+  TEST_ASSERT_EQUAL_UINT32(0U, VP37_currentScanFrameNs());
+  console("X12=1");
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, VP37_currentScanFrameNs());
+  pump->output.finalPWM = 1;
+  console("X12=0");
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, VP37_currentScanFrameNs());
+  (void)VP37_currentScanStop();
+}
+
+void test_fixed_triangle_uses_time_after_skipped_calls_and_wrap(void) {
+  (void)preparePump();
+  initTests();
+  testsWorkersSetFixedCyclicPeriod(2000U);
+  hal_mock_set_millis(UINT32_MAX - 400U);
+  testsWorkersCyclicStart();
+  bool finished = false;
+  hal_mock_set_millis(99U);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, testsWorkersCyclicStep(&finished));
+  TEST_ASSERT_FALSE(finished);
+  hal_mock_set_millis(599U);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, testsWorkersCyclicStep(&finished));
+  hal_mock_set_millis(1099U);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, testsWorkersCyclicStep(&finished));
+  hal_mock_set_millis(2099U);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 50.0f, testsWorkersCyclicStep(&finished));
+  testsWorkersSetFixedCyclicPeriod(0U);
+}
+
+void test_research_reference_switch_requires_rest_and_resets_to_modern(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->demand.atRest = false;
+  pump->demand.requestedPercent = 0.0f;
+  pump->output.finalPWM = 0;
+  pump->thermal.driveCompensationEnabled = false;
+  pump->currentControl.enabled = false;
+  pump->supply.cycleEnabled = false;
+  console("X15=1");
+  TEST_ASSERT_FALSE(pump->pid.septemberReference);
+  pump->demand.atRest = true;
+  console("X15=1");
+  TEST_ASSERT_TRUE(pump->pid.septemberReference);
+  TEST_ASSERT_EQUAL_FLOAT(0.001f, pump->pid.kd);
+  console("R");
+  TEST_ASSERT_FALSE(pump->pid.septemberReference);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KD, pump->pid.kd);
+}
+
+void test_full_range_selection_requires_rest_and_preserves_damping_schedule(
+    void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->thermal.driveCompensationEnabled = false;
+  pump->currentControl.enabled = false;
+  pump->supply.cycleEnabled = false;
+  pump->demand.requestedPercent = 0.0f;
+  pump->output.finalPWM = 1;
+  pump->demand.atRest = true;
+  console("X16=1");
+  TEST_ASSERT_FALSE(pump->pid.fullRangePrototype);
+  pump->output.finalPWM = 0;
+  console("X16=1");
+  TEST_ASSERT_TRUE(pump->pid.fullRangePrototype);
+  TEST_ASSERT_FALSE(pump->pid.septemberReference);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.kd);
+  TEST_ASSERT_EQUAL_FLOAT(VP37_PID_TOP_KD, pump->pid.topKd);
+  TEST_ASSERT_FALSE(pump->thermal.scaleHoldEnabled);
+  console("R");
+  TEST_ASSERT_FALSE(pump->pid.fullRangePrototype);
+}
+
+void test_research_freeze_is_bounded_profile_gated_and_resettable(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  console("X17=1");
+  TEST_ASSERT_EQUAL_UINT8(0U, pump->pid.researchFreezeMask);
+  pump->pid.fullRangePrototype = true;
+  console("X17=1");
+  TEST_ASSERT_EQUAL_UINT8(1U, pump->pid.researchFreezeMask);
+  console("X17=2");
+  TEST_ASSERT_EQUAL_UINT8(1U, pump->pid.researchFreezeMask);
+  pump->thermal.driveCompensationEnabled = true;
+  pump->thermal.driveCompensationUsed = true;
+  pump->thermal.driveResistanceReady = true;
+  pump->thermal.scaleReady = true;
+  console("X17=3");
+  TEST_ASSERT_EQUAL_UINT8(3U, pump->pid.researchFreezeMask);
+  console("X17=4");
+  console("X17=1.5");
+  TEST_ASSERT_EQUAL_UINT8(3U, pump->pid.researchFreezeMask);
+  console("R");
+  TEST_ASSERT_EQUAL_UINT8(0U, pump->pid.researchFreezeMask);
+}
+
+void test_reference_weight_command_is_bounded_profile_gated_and_resettable(
+    void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->demand.atRest = true;
+  pump->demand.requestedPercent = 0.0f;
+  console("X21=0.1");
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, pump->pid.researchReferenceWeight);
+  console("X16=1");
+  // A real control step releases the output after the profile reset.
+  pump->output.finalPWM = 0;
+  console("X21=0.1");
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, .1f, pump->pid.researchReferenceWeight);
+  console("X21=-1");
+  console("X21=1.1");
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, .1f, pump->pid.researchReferenceWeight);
+  pump->output.finalPWM = 700;
+  console("X21=1");
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, .1f, pump->pid.researchReferenceWeight);
+  console("R");
+  TEST_ASSERT_EQUAL_FLOAT(1.0f, pump->pid.researchReferenceWeight);
+}
+
+void test_ramp_damping_command_is_bounded_and_requires_released_zero(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->demand.atRest = true;
+  pump->demand.requestedPercent = 0.0f;
+  pump->output.finalPWM = 0;
+  console("X22=1");
+  TEST_ASSERT_FALSE(pump->pid.researchRampDamping);
+  console("X16=1");
+  pump->output.finalPWM = 0;
+  console("X22=1");
+  TEST_ASSERT_TRUE(pump->pid.researchRampDamping);
+  console("X22=-1");
+  console("X22=0.5");
+  console("X22=2");
+  TEST_ASSERT_TRUE(pump->pid.researchRampDamping);
+  pump->output.finalPWM = 700;
+  console("X22=0");
+  TEST_ASSERT_TRUE(pump->pid.researchRampDamping);
+  console("R");
+  TEST_ASSERT_FALSE(pump->pid.researchRampDamping);
+}
+
+void test_upper_deadband_command_selects_the_mode_and_resets(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  pump->demand.atRest = true;
+  pump->demand.requestedPercent = 0.0f;
+  pump->output.finalPWM = 0;
+  console("X23=1");
+  TEST_ASSERT_FALSE(pump->pid.researchUpperDeadband);
+  console("X16=1");
+  pump->output.finalPWM = 0;
+  console("N41");
+  console("X23=1");
+  TEST_ASSERT_TRUE(pump->pid.researchUpperDeadband);
+  TEST_ASSERT_EQUAL_FLOAT(41.0f, pump->pid.integralDeadbandTopHz);
+  console("R");
+  TEST_ASSERT_FALSE(pump->pid.researchUpperDeadband);
+}
+
+void test_descent_trace_command_requires_profile_and_arms_control_capture(
+    void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  console("B1");
+  TEST_ASSERT_FALSE(VP37_traceCapturing());
+  pump->pid.fullRangePrototype = true;
+  console("B1");
+  TEST_ASSERT_FALSE(VP37_traceCapturing());
+  pump->pid.researchMotionIntegralGate = true;
+  console("B2");
+  TEST_ASSERT_FALSE(VP37_traceCapturing());
+  console("B1");
+  TEST_ASSERT_TRUE(VP37_traceCapturing());
+  VP37TraceSample sample = {};
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_readTrace(&sample));
+  VP37_traceStop();
+  TEST_ASSERT_EQUAL(HAL_ENOENT, VP37_readTrace(&sample));
+}
+
+void test_descent_share_command_is_released_profile_gated_and_resettable(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  console("R");
+  TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.descentIntegralRetainedShare);
+  console("X26=0.5");
+  TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.descentIntegralRetainedShare);
+  pump->pid.fullRangePrototype = true;
+  pump->demand.atRest = true;
+  pump->demand.requestedPercent = 0.0f;
+  pump->output.finalPWM = 0;
+  console("X26=0.5");
+  TEST_ASSERT_EQUAL_FLOAT(.5f, pump->pid.descentIntegralRetainedShare);
+  console("X26=0.1");
+  TEST_ASSERT_EQUAL_FLOAT(.5f, pump->pid.descentIntegralRetainedShare);
+  pump->output.finalPWM = 1;
+  console("X26=0.4");
+  TEST_ASSERT_EQUAL_FLOAT(.5f, pump->pid.descentIntegralRetainedShare);
+  pump->output.finalPWM = 0;
+  console("R");
+  TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.descentIntegralRetainedShare);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_registry_refuses_every_call_before_initialization);
+  RUN_TEST(test_descent_share_command_is_released_profile_gated_and_resettable);
+  RUN_TEST(
+      test_descent_trace_command_requires_profile_and_arms_control_capture);
+  RUN_TEST(test_upper_deadband_command_selects_the_mode_and_resets);
+  RUN_TEST(test_ramp_damping_command_is_bounded_and_requires_released_zero);
+  RUN_TEST(
+      test_reference_weight_command_is_bounded_profile_gated_and_resettable);
   RUN_TEST(test_one_test_owns_the_demand_and_gives_it_back_on_stop);
   RUN_TEST(test_random_draws_a_bounded_and_repeatable_sequence);
   RUN_TEST(test_sequence_visits_every_sequenced_test_in_registry_order);
@@ -1025,5 +1266,12 @@ int main(void) {
   RUN_TEST(test_configurator_test_stops_when_the_host_goes_quiet);
   RUN_TEST(test_configurator_test_stops_when_the_session_ends);
   RUN_TEST(test_configurator_start_follows_the_engine_speed_interlock);
+  RUN_TEST(test_research_limit_requires_zero_and_rest);
+  RUN_TEST(test_research_scan_requires_unused_current_and_releases_adc);
+  RUN_TEST(test_fixed_triangle_uses_time_after_skipped_calls_and_wrap);
+  RUN_TEST(test_research_reference_switch_requires_rest_and_resets_to_modern);
+  RUN_TEST(
+      test_full_range_selection_requires_rest_and_preserves_damping_schedule);
+  RUN_TEST(test_research_freeze_is_bounded_profile_gated_and_resettable);
   return UNITY_END();
 }

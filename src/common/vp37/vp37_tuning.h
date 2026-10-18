@@ -62,13 +62,35 @@ typedef enum {
                                         where the offset release applies,
                                         VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ to
                                         VP37_INTEGRAL_HOLD_ENTER_HZ [Hz]. */
+  VP37_TUNING_RESEARCH_FREEZE, /**< Whole mask0..3; full-range research only.
+                                  Bit0 holds I; bit1 holds ready R and scale. */
+  VP37_TUNING_RESEARCH_MOTION_INTEGRAL,  /**< 0/1; conditional I, full profile
+                                            only. */
+  VP37_TUNING_RESEARCH_SLOW_DAMPING,     /**< 0/1, full profile at released zero
+                                            only. */
+  VP37_TUNING_RESEARCH_REFERENCE_WEIGHT, /**< Reference weight0..1, full profile
+                                            at rest. */
+  VP37_TUNING_RESEARCH_RAMP_DAMPING, /**< 0/1; upper measurement D during ramp.
+                                        Full profile at released zero only. */
+  VP37_TUNING_RESEARCH_RAMP_BRAKING, /**< 0/1; allow I to brake reference lead
+                                         during a full-profile ramp. */
+  VP37_TUNING_RESEARCH_UPPER_DEADBAND, /**< 0/1; use the tuned upper I dead zone
+                                          above90% in the full profile.
+                                          Released zero only. */
+  VP37_TUNING_RESEARCH_DESCENT_UNWIND, /**< 0/1; unwind new negative I during
+                                           measured approach. Full profile
+                                           at released zero only. */
+  VP37_TUNING_RESEARCH_DESCENT_SHARE,  /**< Retained acquired I share0.25..0.75.
+                                            Full profile at released zero. */
   VP37_TUNING_COUNT
 } VP37TuningParam;
 
 /**
  * @brief Set one tuning parameter.
  * @return HAL_OK, or HAL_EINVAL for NULL, an unknown parameter or a value
- * outside its range, which leaves the pump unchanged.
+ * outside its range, which leaves the pump unchanged. HAL_ESTATE rejects a
+ * research hold outside its profile or before the drive estimate is ready,
+ * or a research damping/dead-zone switch before release at zero.
  */
 hal_status_t VP37_setTuning(VP37Pump *self, VP37TuningParam param, float value);
 

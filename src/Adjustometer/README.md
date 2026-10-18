@@ -23,7 +23,7 @@ time-weighted mean of the raw windows over exactly one VP37 drive period
 from `src/common/vp37_drive_config.h`, shared with the ECU). Averaging over one
 drive period cancels the ripple the PWM drive imprints on the actuator without
 the lag of a recursive filter: a step settles within one period and a ramp lags
-by half a period, about 4 ms at 130 Hz. A drive-frequency override has to be
+by half a period, 2.5 ms at the default 200 Hz. A drive-frequency override has to be
 given to both firmware builds. `ADJUSTOMETER_PWM_FILTER_US=0` restores the
 fractional EMA of the sliding window (weight 71/1024, zero release after eight
 short updates). Baseline acquisition keeps the original cadence and integer

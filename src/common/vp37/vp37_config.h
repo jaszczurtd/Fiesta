@@ -100,10 +100,29 @@ _Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
 #define VP37_PID_TOP_KD 0.001f
 /** Bench ceiling for the upper-target derivative gain. */
 #define VP37_PID_TOP_KD_MAX 0.01f
+/** Diagnostic state holds; available only in the full-range research profile.
+ */
+/** Conditional integration uses measured motion, in Hz/s, on the control core.
+ */
+#define VP37_MOTION_INTEGRAL_FILTER_S 0.05f
+#define VP37_DESCENT_INTEGRAL_UNWIND_S 0.005f
+/** Default share of acquired descent I retained for the new holding state. */
+#define VP37_DESCENT_INTEGRAL_RETAINED_SHARE 0.4f
+/** Stable interior holding I must qualify before it can be reused. */
+#define VP37_HOLDING_BIAS_CONFIRM_S 2.0f
+#define VP37_HOLDING_BIAS_MAX_DRIFT_PWM 0.5f
+#define VP37_MOTION_INTEGRAL_ENTER_HZ_S 50.0f
+#define VP37_MOTION_INTEGRAL_EXIT_HZ_S 25.0f
+#define VP37_RESEARCH_FREEZE_INTEGRAL_MASK 1U
+#define VP37_RESEARCH_FREEZE_DRIVE_MASK 2U
 /** Time constant for engaging and releasing upper-target damping [s]. */
 #define VP37_PID_TOP_D_BLEND_S 0.05f
 // Derivative filter time constant [s].
 #define VP37_PID_TF 0.003f
+/** Extra derivative gain for the slow-damping experiment [PWM*s/Hz]. */
+#define VP37_SLOW_DAMPING_KD 0.006f
+/** Time constant of each of its two velocity filters [s]. */
+#define VP37_SLOW_DAMPING_TF_S 0.05f
 // Column order of the stroke tapers in vp37_maps.h: {demand [%], value}.
 #define VP37_TAPER_COL_PERCENT 0U
 #define VP37_TAPER_COL_VALUE 1U
@@ -382,10 +401,10 @@ _Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
  * negative-stiffness steps (from ~90 %, static sweep 2026-09-20) stays out of
  * reach; the maximum fuel quantity is cut accordingly. In cold fuel the band
  * just under 86 % is soft as well: a 30 s full-demand hold there hopped up to
- * the target in two of three tries, at 85 % in none (bench 2026-09-28, FT
+ * the target in two of three tries, at 90 % in none (bench 2026-09-28, FT
  * 34 C). 100 restores the full travel. The stroke maps (holding map, tapers,
  * upper damping) keep the physical scale. */
-#define VP37_PHYSICAL_LIMIT_PERCENT 85.0f
+#define VP37_PHYSICAL_LIMIT_PERCENT 90.0f
 /** Optional deceleration of every rising ramp into the top of the demand
  * range [% of travel/s^2]; bench knob X2. Zero disables it and a standing
  * target keeps its own arrival brake. Off since the Adjustometer averages one

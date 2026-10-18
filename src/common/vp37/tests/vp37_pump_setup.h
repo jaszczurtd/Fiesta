@@ -26,6 +26,8 @@ static inline void vp37SetupCalibratedPump(VP37Pump *pump,
   pump->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
   pump->feedforward.motionRateCap = VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;
+  pump->pid.researchReferenceWeight = 1.0f;
+  pump->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
   pump->pid.topKd = VP37_PID_TOP_KD;
   pump->pid.integralHoldConfirmMs = VP37_INTEGRAL_HOLD_CONFIRM_MS;
   pump->pid.integralHoldMeanEnterHz = VP37_INTEGRAL_HOLD_MEAN_ENTER_HZ;

@@ -17,6 +17,8 @@
 #include <hal/core/hal_mutex_once.h>
 
 #include "../common/scDefinitions/sc_protocol.h"
+#include "../common/vp37/vp37_current.h"
+#include "../common/vp37/vp37_internal.h"
 #include "../common/vp37/vp37_tuning.h"
 #include "config.h"
 #include "ecuContext.h"
@@ -285,6 +287,7 @@ static bool parseSwitch(const char *cmd, char *outDigit) {
 
 static void applyDefaults(VP37Pump *self) {
   VP37_resetTuning(self);
+  testsWorkersSetFixedCyclicPeriod(0U);
   testsHelpersParamsReset();
   testsWorkersManualHoldSet(VP37_BENCH_HOLD_MS_DEFAULT);
   deb(TEST_HIGHLIGHT_ON
@@ -456,8 +459,11 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
   const char prefix = testsHelpersUpper(cmd[0]);
   char digit = '\0';
 
-  if ((prefix == 'B') && (cmd[1] == '\0')) {
-    const hal_status_t status = VP37_startTrace(self);
+  const bool descentTrace =
+      (prefix == 'B') && (cmd[1] == '1') && (cmd[2] == '\0');
+  if ((prefix == 'B') && ((cmd[1] == '\0') || descentTrace)) {
+    const hal_status_t status =
+        descentTrace ? VP37_startTraceOnDescent(self) : VP37_startTrace(self);
     deb("VP37 trace: %s samples:%u", hal_status_to_string(status),
         (unsigned int)VP37_TRACE_SAMPLES);
     return true;
@@ -530,6 +536,177 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       return false;
     }
     deb("VP37 hold current X9: %.0f ok", on);
+    return true;
+  }
+  if ((strncmp(cmd, "X15=", 4U) == 0) || (strncmp(cmd, "X16=", 4U) == 0)) {
+    const bool referenceCommand = strncmp(cmd, "X15=", 4U) == 0;
+    char enabled = '\0';
+    if (!parseSwitch(&cmd[3], &enabled) || !self->demand.atRest ||
+        self->demand.requestedPercent != 0.0f || self->output.finalPWM != 0 ||
+        self->thermal.driveCompensationEnabled ||
+        self->currentControl.enabled || self->supply.cycleEnabled) {
+      return false;
+    }
+    VP37_resetTuning(self);
+    self->thermal.driveCompensationEnabled = false;
+    self->currentControl.enabled = false;
+    self->supply.cycleEnabled = false;
+    self->pid.septemberReference = referenceCommand && (enabled == '1');
+    self->pid.fullRangePrototype = !referenceCommand && (enabled == '1');
+    if (self->pid.septemberReference) {
+      VP37_setVP37PID(self, 0.05f, 0.2f, 0.001f, true);
+      self->pid.topKd = 0.0f;
+      self->thermal.scaleHoldEnabled = false;
+      self->feedforward.motionBoostUp = 32.0f;
+      self->feedforward.motionBoostDown = 0.0f;
+      self->feedforward.motionRateCap = 0.0f;
+      self->demand.topArrivalDecel = 0.0f;
+    }
+    if (self->pid.fullRangePrototype) {
+      self->pid.integralDeadbandTopHz = 0.0f;
+      self->thermal.scaleHoldEnabled = false;
+    }
+    deb("VP37 research %s X%u: %c ok",
+        referenceCommand ? "reference" : "prototype",
+        referenceCommand ? 15U : 16U, enabled);
+    return true;
+  }
+  if (strcmp(cmd, "X19=1") == 0) {
+    if (testsActiveName() != NULL) {
+      return false;
+    }
+    int32_t maximum = 0;
+    const hal_status_t status = VP37_probeCalibrationMaximum(self, &maximum);
+    deb("VP37 research calibration probe X19: status:%d measured:%ld done",
+        status, (long)maximum);
+    return true;
+  }
+  if (strncmp(cmd, "X23=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_UPPER_DEADBAND, enabled)) {
+      return false;
+    }
+    deb("VP37 research upper deadband X23: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X26=", 4U) == 0) {
+    float share = 0.0f;
+    if (!parseValue(&cmd[4], &share) ||
+        !tune(self, VP37_TUNING_RESEARCH_DESCENT_SHARE, share)) {
+      return false;
+    }
+    deb("VP37 research descent share X26: %.3f ok", share);
+    return true;
+  }
+  if (strncmp(cmd, "X25=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_DESCENT_UNWIND, enabled)) {
+      return false;
+    }
+    deb("VP37 research descent unwind X25: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X24=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_RAMP_BRAKING, enabled)) {
+      return false;
+    }
+    deb("VP37 research ramp braking X24: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X22=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_RAMP_DAMPING, enabled)) {
+      return false;
+    }
+    deb("VP37 research ramp damping X22: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X21=", 4U) == 0) {
+    float weight = 1.0f;
+    if (!parseValue(&cmd[4], &weight) ||
+        !tune(self, VP37_TUNING_RESEARCH_REFERENCE_WEIGHT, weight)) {
+      return false;
+    }
+    deb("VP37 research reference weight X21: %.3f ok", weight);
+    return true;
+  }
+  if (strncmp(cmd, "X20=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_SLOW_DAMPING, enabled)) {
+      return false;
+    }
+    deb("VP37 research slow damping X20: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X18=", 4U) == 0) {
+    float enabled = 0.0f;
+    if (!parseValue(&cmd[4], &enabled) ||
+        !tune(self, VP37_TUNING_RESEARCH_MOTION_INTEGRAL, enabled)) {
+      return false;
+    }
+    deb("VP37 research motion integral X18: %.0f ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X17=", 4U) == 0) {
+    float mask = 0.0f;
+    if (!parseValue(&cmd[4], &mask) ||
+        !tune(self, VP37_TUNING_RESEARCH_FREEZE, mask)) {
+      return false;
+    }
+    deb("VP37 research freeze X17: %.0f ok", mask);
+    return true;
+  }
+  if (strncmp(cmd, "X12=", 4U) == 0) {
+    char enabled = '\0';
+    if (!parseSwitch(&cmd[3], &enabled) || !self->demand.atRest ||
+        self->demand.requestedPercent != 0.0f || self->output.finalPWM != 0 ||
+        self->thermal.observationEnabled ||
+        self->thermal.driveCompensationEnabled ||
+        self->currentControl.enabled || self->supply.cycleEnabled) {
+      return false;
+    }
+    const hal_status_t status =
+        enabled == '1' ? VP37_currentScanStart() : VP37_currentScanStop();
+    if (status != HAL_OK) {
+      return false;
+    }
+    self->scan.running = enabled == '1';
+    self->scan.frameNs = VP37_currentScanFrameNs();
+    self->scan.lastSequence = 0U;
+    self->scan.cycleResultStatus = HAL_EAGAIN;
+    self->scan.cycleResult.waveformValid = false;
+    self->scan.cycleResult.profileValid = false;
+    self->thermal.cycleValid = false;
+    self->currentControl.matchFound = false;
+    deb("VP37 research scan X12: %c ok", enabled);
+    return true;
+  }
+  if (strncmp(cmd, "X13=", 4U) == 0) {
+    float limit = 0.0f;
+    if (!parseValue(&cmd[4], &limit) || limit < 85.0f || limit > 100.0f ||
+        !self->demand.atRest || self->demand.requestedPercent != 0.0f ||
+        self->output.finalPWM != 0) {
+      return false;
+    }
+    self->demand.physicalLimitPercent = limit;
+    deb("VP37 research limit X13: %.2f ok", limit);
+    return true;
+  }
+  if (strncmp(cmd, "X14=", 4U) == 0) {
+    float period = 0.0f;
+    if (!parseValue(&cmd[4], &period) || !self->demand.atRest ||
+        self->demand.requestedPercent != 0.0f || self->output.finalPWM != 0 ||
+        (period != 0.0f && (period < 400.0f || period > 10000.0f))) {
+      return false;
+    }
+    testsWorkersSetFixedCyclicPeriod((uint32_t)period);
+    deb("VP37 research triangle X14: %.0f ms ok", period);
     return true;
   }
   if ((prefix == 'R') && (cmd[1] == '\0')) {
