@@ -64,7 +64,7 @@ Opcjonalne sterowanie silnikiem włącza `ECU_ENGINE_CONTROL_ENABLED` w `config.
 
 ## Regulacja położenia
 
-VP37 używa PWM 130 Hz. Pojedynczy skok w górę od pierwszego cyklu jest
+VP37 używa PWM 200 Hz, wspólnego z filtrem okresu sterowania Adjustometera. Pojedynczy skok w górę od pierwszego cyklu jest
 traktowany jako nieruchomy cel: rampa rośnie 225%/s ze wspomaganiem ruchu
 0,6 i hamuje przed celem 750%/s². Nastawnik podąża za rampą i dojeżdża wolniej,
 ograniczając przeregulowanie i oscylacje. Cel zmieniony ponownie w ciągu
@@ -111,7 +111,7 @@ wyłączone: tam prowadziły długie postoje do zrywów tarcia.
 ## Kompensacja napięcia i rezystancji
 
 Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`.
-Bloki skanu ADC docierają co 2,016 ms przy PWM 130 Hz. Rdzeń 1 odbiera je między
+Bloki skanu ADC docierają niezależnie od kroku regulacji pozycji. Rdzeń 1 odbiera je między
 krokami położenia i śledzi zbocza bramki przez granice bloków. Każdy kod ADC
 jest kompensowany raz przy odbiorze. Krok 5 ms redukuje każdy zakończony impuls
 raz i odświeża ostatnie okno napięcia w każdym kroku.
@@ -215,6 +215,33 @@ Wspomaganie w górę ma pełną wartość do 75% skalibrowanego skoku, liniowo
 zanika do 85% i pozostaje wyłączone wyżej, ograniczając przyspieszenie
 w wrażliwym obszarze. Mapa podtrzymania, wspomaganie w dół, rampa i API
 zachowują swoje zadania.
+
+
+## Badawczy profil regulacji
+
+Rewizja 148 zawiera opcjonalny profil pełnej kalibracji do badań na stanowisku.
+Zwykły start i reset nastaw zachowują limit 85% skoku; wgranie tej rewizji
+nie włącza profilu badawczego.
+
+Komendy stanowiska wybierają fizyczny limit skoku (`X13`), blokadę całki
+zależną od ruchu (`X18`), wagę zadania (`X21`), górne pasmo całki (`X23`),
+hamowanie rampy (`X24`) oraz pomoc podczas zejścia (`X25`, domyślnie wyłączona).
+`X26` wybiera pozostawiany udział korekty zejścia od 0,25 do 0,75, domyślnie
+0,4. Opcje korzystają ze wspólnej ścieżki zadawania pozycji i zachowują limity
+wyjścia oraz całki.
+
+Przy zejściu pomoc zaczyna działać po zmierzonym ruchu o 0,3 punktu
+procentowego. Wycofuje nadmiar ujemnej całki do korekty podtrzymania i kończy
+się przy pierwszym wejściu w pasmo całki lub przekroczeniu celu. Dla tego
+samego celu wewnątrz skoku można użyć wcześniej zmierzonej korekty po dwóch
+sekundach stabilnego postoju bez nasycenia. Końce zakresu nie uczą tej
+korekty. Stop, reset i przyjęte zmiany nastaw unieważniają obserwację.
+Dla nieznanego celu pozostaje wybrany udział korekty.
+
+Telemetria pokazuje `ibias`, `ianchor`, `ipart` i `iphase` dla zejścia oraz
+`ihvalid`, `ihtar`, `ihbias` i `ireuse` dla zapamiętanej korekty postoju.
+Profil badawczy wymaga osobnego odbioru sprzętowego przed użyciem jako
+zwykłe ustawienia pracy.
 
 ## Mapa źródeł
 

@@ -20,6 +20,11 @@ const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS] = {
     {100.0f, 844.0f, 31.0f}, // full demand
 };
 
+const float VP37_SEPTEMBER_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS] = {
+    {0.0f, 585.0f, 0.0f},   {5.0f, 610.0f, 10.0f},  {10.0f, 635.0f, 12.0f},
+    {25.0f, 705.0f, 15.0f}, {50.0f, 790.0f, 20.0f}, {75.0f, 835.0f, 22.0f},
+    {90.0f, 835.0f, 32.0f}, {95.0f, 828.0f, 32.0f}, {100.0f, 820.0f, 32.0f}};
+
 // Integral authority above the holding map [nominal PWM]: full below the taper
 // start, tapered near the upper endpoint where the stroke loses position
 // authority. The 82 % knot lies on the straight taper; it only gives the dead

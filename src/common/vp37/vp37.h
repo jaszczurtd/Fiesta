@@ -84,6 +84,13 @@ typedef struct {
   uint32_t mapTrimTransfers; /**< Integral-to-trim transfers so far. */
 } VP37Feedforward;
 
+/** @brief Descent assistance runs once for each new position demand. */
+typedef enum {
+  VP37_DESCENT_UNWIND_WAITING = 0, /**< Await a measured descent. */
+  VP37_DESCENT_UNWIND_ACTIVE,      /**< Return part of the acquired bias. */
+  VP37_DESCENT_UNWIND_ARRIVED      /**< Keep ordinary I after first arrival. */
+} VP37DescentUnwindPhase;
+
 /** @brief The correction loop: gains, authority, dead zone and the settled
  * hold. */
 typedef struct {
@@ -116,19 +123,66 @@ typedef struct {
   float kp;
   float ki;
   float kd;
-  float topKd;         /**< Additional settled-target D gain [PWM*s/Hz], blended
-                            from zero at 85% to its full value at 90% demand. */
-  float effectiveKd;   /**< Base plus scheduled D gain last sent to the PID,
-                            in PWM*s/Hz. */
+  float topKd;       /**< Additional settled-target D gain [PWM*s/Hz], blended
+                          from zero at 85% to its full value at 90% demand. */
+  float effectiveKd; /**< Base plus scheduled D gain last sent to the PID,
+                          in PWM*s/Hz. */
+  bool researchSlowDamping;   /**< Additional low-band velocity damping, off by
+                                 default. */
+  bool researchRampDamping;   /**< Keep upper measurement D during the reference
+                                  ramp in the full-range profile; default off. */
+  bool researchRampBraking;   /**< Allow I to brake a plant leading its moving
+                                   reference in the full profile; default off. */
+  bool researchUpperDeadband; /**< Allow a tuned I dead zone above90% in the
+                                  full-range profile; default off. */
+  bool slowDampingReady;      /**< Velocity has a preceding feedback sample. */
+  int32_t slowDampingPosition;  /**< Previous raw feedback, Hz. */
+  float slowDampingVelocity[2]; /**< Cascaded velocity filters, Hz/s. */
+  float
+      researchReferenceWeight; /**< Upper reference P weight, 0..1; default1. */
+  float integralInput; /**< HAL I input: position error and reference increment,
+                          Hz. */
+  float referenceKp;   /**< Local complete reference gain, PWM/Hz. */
+  float slowDampingOutput; /**< Extra nominal PWM correction. */
   float topDBlend;     /**< Filtered upper-target damping activation, 0..1. */
   float integralLimit; /**< Available integral contribution in nominal PWM
                              counts. */
-  float integralOverride;      /**< Bench cap in nominal PWM; zero selects
-                                     position profile. */
-  float integralDeadbandTopHz; /**< Dead zone at full stroke; zero keeps the
-                                  base dead zone everywhere. */
-  float integralDeadbandHz;    /**< Dead zone applied in the last step. */
-  bool integralHoldEntered;    /**< Hold engaged in this step; transfer once. */
+  bool
+      fullRangePrototype; /**< Research: base I rules across the full stroke. */
+  uint8_t researchFreezeMask; /**< Diagnostic: bit0 holds I, bit1 holds the
+                                  drive estimate and applied thermal scale. */
+  bool
+      researchMotionIntegralGate; /**< Conditional I experiment, default off. */
+  bool researchDescentIntegralUnwind; /**< Unwind new descent bias during
+                                          measured approach; default off. */
+  float descentIntegralRetainedShare; /**< Acquired I share retained after
+                                          breakaway,0.25..0.75; default0.4. */
+  int32_t motionIntegralTarget; /**< Demand whose preceding bias was saved. */
+  float motionIntegralBias;     /**< Integral PWM before that demand changed. */
+  float
+      motionIntegralAnchor; /**< Previous holding I inside the stroke; zero
+                                after a maximum demand or at calibration max. */
+  int32_t motionIntegralStartPosition; /**< Feedback at the new demand [Hz]. */
+  float descentUnwindTarget; /**< Partial return target, in integral PWM. */
+  VP37DescentUnwindPhase descentUnwindPhase; /**< Assistance lifecycle. */
+  int32_t holdingIntegralTarget; /**< Qualified interior demand [Hz]. */
+  float holdingIntegralBias; /**< Measured holding correction [nominal PWM]. */
+  float holdingIntegralCandidate; /**< I at the start of qualification [PWM]. */
+  float holdingIntegralElapsed;   /**< Continuous qualification time [s]. */
+  bool holdingIntegralReady; /**< A stable interior correction was observed. */
+  bool descentUnwindUsesHolding; /**< Return target uses measured holding I. */
+  bool motionIntegralReady;
+  bool motionIntegralHold; /**< I held while measured motion approaches its
+                              goal. */
+  int32_t motionIntegralPosition; /**< Previous measured feedback, Hz. */
+  float motionIntegralVelocity;   /**< Filtered measured velocity, Hz/s. */
+  bool septemberReference;        /**< Research port selected only at rest. */
+  float integralOverride;         /**< Bench cap in nominal PWM; zero selects
+                                        position profile. */
+  float integralDeadbandTopHz;    /**< Dead zone at full stroke; zero keeps the
+                                     base dead zone everywhere. */
+  float integralDeadbandHz;       /**< Dead zone applied in the last step. */
+  bool integralHoldEntered; /**< Hold engaged in this step; transfer once. */
   bool softFloorActive;
 } VP37Pid;
 
@@ -449,6 +503,7 @@ typedef struct {
   bool hardwareClamp : 1;  /**< Active downstream bounds. */
   bool quantityAtRest : 1; /**< Quantity drive released at zero demand. */
   bool fresh : 1;
+  bool motionIntegralHold : 1; /**< Conditional I hold from the same step. */
 } VP37TraceSample;
 #endif
 
@@ -487,13 +542,26 @@ bool VP37_waitForPublication(const VP37Pump *self, uint32_t timeoutUs);
  * @return HAL_OK, HAL_EINVAL for NULL, HAL_EBUSY if capturing/draining,
  * or HAL_EAGAIN when control is inactive. */
 hal_status_t VP37_startTrace(const VP37Pump *self);
+/** @brief Arm a descent capture on the control core, retaining the step before
+ * the first measured0.3pp descent under the motion gate. A released demand or
+ * stopped controller completes a partial capture without waiting for motion.
+ * @param self Running controller; non-NULL, full profile and motion gate on.
+ * @return The same statuses as VP37_startTrace, or HAL_ESTATE for a missing
+ * research profile or motion gate. */
+hal_status_t VP37_startTraceOnDescent(const VP37Pump *self);
 /** @brief Take the next sample of a completed capture; non-NULL sample. A
  * stopped controller completes a partial capture. Error leaves sample
  * unchanged.
  * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN while recording, or
  * HAL_ENOENT. */
 hal_status_t VP37_readTrace(VP37TraceSample *sample);
-/** @brief Whether a capture is being recorded. */
+/** @brief Consume the drained capture's completion on the reading core.
+ * Call after each read batch, before reading another capture.
+ * @param count Non-NULL; receives the actual sample count, including zero.
+ * @return HAL_OK once per drained capture, HAL_EINVAL for NULL or HAL_EAGAIN
+ * when no completion is pending. Error leaves count unchanged. */
+hal_status_t VP37_takeTraceCompletion(uint32_t *count);
+/** @brief Whether a capture is armed or recording. */
 bool VP37_traceCapturing(void);
 /** @brief Print a non-NULL captured sample. */
 void VP37_showTrace(const VP37TraceSample *sample);

@@ -115,8 +115,10 @@ static void runCore1(void) {
       const uint32_t nowMs = hal_millis();
       if (hal_elapsed_u32(nowMs, lastPeriodicLogMs, DEBUG_UPDATE)) {
         lastPeriodicLogMs = nowMs;
-        deb("rev:4 p:%d raw:%lu f:%lu age:%u v:%u ft:%u s:%u bl:%lu ready:%d",
-            sample.pulseHz, (unsigned long)sample.rawHz,
+        const uint32_t filterUs = ADJUSTOMETER_PWM_FILTER_US;
+        deb("rev:5 pwmus:%u p:%d raw:%lu f:%lu age:%u v:%u ft:%u s:%u bl:%lu "
+            "ready:%d",
+            (unsigned int)filterUs, sample.pulseHz, (unsigned long)sample.rawHz,
             (unsigned long)sample.filteredHz, sample.ageUs, sample.voltage,
             sample.fuelTemp, sample.status, (unsigned long)sample.baselineHz,
             isAdjustometerReady());

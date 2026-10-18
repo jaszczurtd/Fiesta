@@ -23,6 +23,8 @@ extern "C" {
  * reference rate [nominal PWM]}. The first knot sits at 0 and the last at
  * 100; the top motion value is the scale the runtime boost is a ratio to. */
 extern const float VP37_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS];
+/** @brief September 10 holding/motion table, before the source-shunt scale. */
+extern const float VP37_SEPTEMBER_FF_MAP[VP37_FF_KNOTS][VP37_FF_COLUMNS];
 
 // ── VP37 integral authority and dead zone along the stroke ───────────────────
 #define VP37_STROKE_TAPER_KNOTS 4U

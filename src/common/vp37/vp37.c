@@ -118,6 +118,19 @@ VP37InitStatus VP37_init(VP37Pump *self) {
     return VP37_INIT_BASELINE_NOT_READY;
   }
 
+  self->pid.researchFreezeMask = 0U;
+  self->pid.researchMotionIntegralGate = false;
+  self->pid.researchSlowDamping = false;
+  self->pid.researchRampDamping = false;
+  self->pid.researchUpperDeadband = false;
+  self->pid.researchRampBraking = false;
+  self->pid.researchDescentIntegralUnwind = false;
+  self->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
+  self->pid.researchReferenceWeight = 1.0f;
+  VP37_resetMotionIntegralGate(self);
+  VP37_resetSlowDamping(self);
+  self->pid.fullRangePrototype = false;
+  self->pid.septemberReference = false;
   self->demand.requestedPercent = -1;
   self->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
   self->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
@@ -295,6 +308,17 @@ void VP37_enableVP37(VP37Pump *self, bool enable) {
 }
 
 void VP37_stop(VP37Pump *self) {
+  self->pid.researchFreezeMask = 0U;
+  self->pid.researchMotionIntegralGate = false;
+  self->pid.researchSlowDamping = false;
+  self->pid.researchRampDamping = false;
+  self->pid.researchUpperDeadband = false;
+  self->pid.researchRampBraking = false;
+  self->pid.researchDescentIntegralUnwind = false;
+  self->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
+  self->pid.researchReferenceWeight = 1.0f;
+  VP37_resetMotionIntegralGate(self);
+  VP37_resetSlowDamping(self);
   VP37_resetCurrentControl(self);
   self->vp37Initialized = false;
   self->output.finalPWM = 0;
@@ -549,7 +573,7 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
                                 : self->demand.desiredPosition;
   cycle->dt = (float)self->pidDtUs * 0.000001f;
   cycle->stationaryTarget =
-      !self->demand.targetMoving ||
+      (!self->pid.septemberReference && !self->demand.targetMoving) ||
       hal_millis_deadline_expired(self->demand.targetChangedMs,
                                   VP37_TARGET_STABLE_MS);
   cycle->ki = 0.0f;
@@ -583,11 +607,13 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
                      ? VP37_DESIRED_UPPER_SLEW_PERCENT_PER_SECOND
                      : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
     if (standingRise) {
-      rate = upper ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
-                   : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND;
+      rate = self->pid.septemberReference
+                 ? (upper ? 125.0f : 150.0f)
+                 : (upper ? VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND
+                          : VP37_STATIONARY_SLEW_PERCENT_PER_SECOND);
     }
     float step = travel * (rate * 0.01f) * cycle->dt;
-    if (standingRise) {
+    if (standingRise && !self->pid.septemberReference) {
       // At most the speed that still stops at the target: v = sqrt(2 a d).
       const float decel = travel * (VP37_ARRIVAL_DECEL_PERCENT_PER_S2 * 0.01f);
       step = fminf(step, sqrtf(2.0f * decel * delta) * cycle->dt);
@@ -629,7 +655,9 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
                                : VP37_DESIRED_SLEW_PERCENT_PER_SECOND;
   const float maxRise = assistRate / VP37_PWM_FF_MOTION_REFERENCE_RATE;
   const float rise =
-      (cycle->stationaryTarget ? VP37_STATIONARY_RISE_WEIGHT : 1.0f) *
+      (cycle->stationaryTarget
+           ? (self->pid.septemberReference ? 0.3f : VP37_STATIONARY_RISE_WEIGHT)
+           : 1.0f) *
       ((upwardStep > 0.0f) ? hal_constrain((self->demand.desiredPosition -
                                             cycle->previousPosition) /
                                                upwardStep,
@@ -689,6 +717,18 @@ static void VP37_updateMultipliers(VP37Pump *self, VP37Cycle *cycle) {
     self->supply.lastVolts = VP37_MIN_COMPENSATION_VOLTAGE;
   }
   self->thermal.lastFuelTemp = self->feedback.fuelTempC;
+  if (self->pid.septemberReference) {
+    // The historical law used the Adjustometer rail directly, with no R/C loop.
+    self->supply.inputVolts = self->supply.lastVolts;
+    self->supply.heldVolts = self->supply.lastVolts;
+    self->supply.correction = VP37_NOMINAL_VOLTAGE / self->supply.lastVolts;
+    self->supply.cycleUsed = false;
+    VP37_updateTemperatureCorrection(self, cycle->dt);
+    self->thermal.scale = self->thermal.temperatureCorrection;
+    self->thermal.driveCompensationUsed = false;
+    cycle->outputScale = self->supply.correction * self->thermal.scale;
+    return;
+  }
   VP37_updateVoltageCorrection(self, cycle->dt);
   VP37_updateTemperatureCorrection(self, cycle->dt);
   VP37_updateDriveCorrection(self, cycle->dt);
@@ -722,6 +762,8 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
     VP37_updateDerivativeGain(self, false);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.terms = (hal_pid_terms_t){0};
+    VP37_resetMotionIntegralGate(self);
+    VP37_resetSlowDamping(self);
     self->feedforward.pwm = 0.0f;
     self->feedforward.riseBlend = 0.0f;
     self->feedforward.fallBlend = 0.0f;
@@ -758,8 +800,9 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   if (self->feedback.position < self->demand.desired) {
     const bool targetSettled = cycle->stationaryTarget &&
                                (self->demand.desired == self->demand.target);
-    const float holdingTrim =
-        targetSettled ? fminf(self->pid.terms.integral, 0.0f) : 0.0f;
+    const float holdingTrim = (targetSettled && !self->pid.septemberReference)
+                                  ? fminf(self->pid.terms.integral, 0.0f)
+                                  : 0.0f;
     const float floor = self->feedforward.pwm + holdingTrim -
                         (float)VP37_PWM_FF_SOFT_FLOOR_MARGIN;
     if (floor > lowerCommand) {
@@ -786,21 +829,32 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
  * the actuator, so they never freeze integration.
  */
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
+  // A plant ahead of a moving reference needs braking, not a lag freeze.
+  const bool leadingRamp =
+      self->pid.fullRangePrototype && self->pid.researchRampBraking &&
+      (((float)self->demand.desired - (float)cycle->previousDesired) *
+           (float)self->pid.error <
+       0.0f);
   const bool rampWindup =
-      (cycle->previousDesired >= 0) &&
+      (cycle->previousDesired >= 0) && !leadingRamp &&
       (self->demand.desired != cycle->previousDesired) &&
       ((self->pid.terms.integral * cycle->ki * (float)self->pid.error) >= 0.0f);
   const bool targetSettled =
       cycle->stationaryTarget && (self->demand.desired == self->demand.target);
   VP37_updateDerivativeGain(self, targetSettled);
   VP37_updateIntegralHold(self, targetSettled);
-  const bool freezeIntegral = rampWindup || self->pid.integralHold;
+  const bool diagnosticHold = self->pid.fullRangePrototype &&
+                              ((self->pid.researchFreezeMask &
+                                VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U);
+  const bool motionHold = VP37_motionIntegralHold(
+      self, targetSettled && (cycle->previousDesired == self->demand.desired),
+      cycle->dt);
+  const bool freezeIntegral =
+      rampWindup || self->pid.integralHold || diagnosticHold || motionHold;
   const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.error)
                                                 : self->pid.integralDeadbandHz;
-  const hal_status_t pidStatus =
-      hal_pid_controller_step_ex(self->pid.controller, (float)self->pid.error,
-                                 (float)self->feedback.position, cycle->dt,
-                                 integralDeadband, &self->pid.terms);
+  const hal_status_t pidStatus = VP37_stepDampedCorrection(
+      self, cycle->dt, integralDeadband, cycle->previousDesired);
   bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);

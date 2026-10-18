@@ -77,6 +77,12 @@ void testsWorkersManualHoldSet(uint32_t holdMs);
 uint32_t testsWorkersManualHoldMs(void);
 
 /** @brief Arm the cyclic ramp generator at zero. */
+/**
+ * @brief Select the research triangle period; zero keeps the registry profile.
+ * @param periodMs Full cycle duration in milliseconds, set before starting.
+ */
+void testsWorkersSetFixedCyclicPeriod(uint32_t periodMs);
+
 void testsWorkersCyclicStart(void);
 
 /**

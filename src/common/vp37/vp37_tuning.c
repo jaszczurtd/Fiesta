@@ -16,6 +16,15 @@ typedef struct {
 /** @brief Whether @p value is finite and inside the range of @p param. */
 static bool VP37_tuningAccepts(VP37TuningParam param, float value) {
   static const VP37TuningRange k_ranges[VP37_TUNING_COUNT] = {
+      [VP37_TUNING_RESEARCH_DESCENT_SHARE] = {0.25f, 0.75f, false},
+      [VP37_TUNING_RESEARCH_DESCENT_UNWIND] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_RAMP_BRAKING] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_UPPER_DEADBAND] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_RAMP_DAMPING] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_REFERENCE_WEIGHT] = {0.0f, 1.0f, false},
+      [VP37_TUNING_RESEARCH_SLOW_DAMPING] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_MOTION_INTEGRAL] = {0.0f, 1.0f, true},
+      [VP37_TUNING_RESEARCH_FREEZE] = {0.0f, 3.0f, true},
       [VP37_TUNING_KP] = {0.0f, FLT_MAX, false},
       [VP37_TUNING_KI] = {0.0f, FLT_MAX, false},
       [VP37_TUNING_KD] = {0.0f, FLT_MAX, false},
@@ -79,6 +88,39 @@ static void VP37_applyTuning(VP37Pump *self, VP37TuningParam param,
                              float value) {
   const bool on = value > 0.5f;
   switch (param) {
+  case VP37_TUNING_RESEARCH_DESCENT_SHARE:
+    self->pid.descentIntegralRetainedShare = value;
+    VP37_resetMotionIntegralGate(self);
+    break;
+  case VP37_TUNING_RESEARCH_DESCENT_UNWIND:
+    self->pid.researchDescentIntegralUnwind = on;
+    VP37_resetMotionIntegralGate(self);
+    break;
+  case VP37_TUNING_RESEARCH_RAMP_BRAKING:
+    self->pid.researchRampBraking = on;
+    break;
+  case VP37_TUNING_RESEARCH_UPPER_DEADBAND:
+    self->pid.researchUpperDeadband = on;
+    break;
+  case VP37_TUNING_RESEARCH_RAMP_DAMPING:
+    self->pid.researchRampDamping = on;
+    self->pid.topDBlend = 0.0f;
+    break;
+  case VP37_TUNING_RESEARCH_REFERENCE_WEIGHT:
+    self->pid.researchReferenceWeight = value;
+    VP37_resetSlowDamping(self);
+    break;
+  case VP37_TUNING_RESEARCH_SLOW_DAMPING:
+    self->pid.researchSlowDamping = on;
+    VP37_resetSlowDamping(self);
+    break;
+  case VP37_TUNING_RESEARCH_MOTION_INTEGRAL:
+    self->pid.researchMotionIntegralGate = on;
+    VP37_resetMotionIntegralGate(self);
+    break;
+  case VP37_TUNING_RESEARCH_FREEZE:
+    self->pid.researchFreezeMask = (uint8_t)value;
+    break;
   case VP37_TUNING_KP:
     VP37_setVP37PID(self, value, self->pid.ki, self->pid.kd, false);
     break;
@@ -170,7 +212,64 @@ hal_status_t VP37_setTuning(VP37Pump *self, VP37TuningParam param,
                             float value) {
   hal_status_t status = HAL_EINVAL;
   if ((self != NULL) && VP37_tuningAccepts(param, value)) {
+    if ((param == VP37_TUNING_RESEARCH_REFERENCE_WEIGHT) &&
+        (!self->demand.atRest || self->demand.requestedPercent != 0.0f ||
+         self->output.finalPWM != 0 ||
+         ((value < 1.0f) &&
+          (!self->pid.fullRangePrototype || !(self->pid.ki > 0.0f) ||
+           ((self->pid.researchFreezeMask &
+             VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U))))) {
+      return HAL_ESTATE;
+    }
+    if ((self->pid.researchReferenceWeight < 1.0f) &&
+        (((param == VP37_TUNING_KI) && (value == 0.0f)) ||
+         ((param == VP37_TUNING_RESEARCH_FREEZE) &&
+          (((uint8_t)value & VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U)))) {
+      return HAL_ESTATE;
+    }
+    if (((param == VP37_TUNING_RESEARCH_SLOW_DAMPING) ||
+         (param == VP37_TUNING_RESEARCH_RAMP_DAMPING) ||
+         (param == VP37_TUNING_RESEARCH_UPPER_DEADBAND) ||
+         (param == VP37_TUNING_RESEARCH_RAMP_BRAKING) ||
+         (param == VP37_TUNING_RESEARCH_DESCENT_UNWIND) ||
+         (param == VP37_TUNING_RESEARCH_DESCENT_SHARE)) &&
+        ((!self->pid.fullRangePrototype && (value != 0.0f)) ||
+         !self->demand.atRest || (self->demand.requestedPercent != 0.0f) ||
+         (self->output.finalPWM != 0))) {
+      return HAL_ESTATE;
+    }
+    if ((param == VP37_TUNING_RESEARCH_MOTION_INTEGRAL) && (value != 0.0f) &&
+        !self->pid.fullRangePrototype) {
+      return HAL_ESTATE;
+    }
+    if ((param == VP37_TUNING_RESEARCH_FREEZE) && (value != 0.0f)) {
+      const uint8_t mask = (uint8_t)value;
+      if (!self->pid.fullRangePrototype ||
+          (((mask & VP37_RESEARCH_FREEZE_DRIVE_MASK) != 0U) &&
+           (!self->thermal.driveCompensationEnabled ||
+            !self->thermal.driveCompensationUsed ||
+            !self->thermal.driveResistanceReady ||
+            !self->thermal.scaleReady))) {
+        return HAL_ESTATE;
+      }
+    }
+    if (self->pid.fullRangePrototype && (value != 0.0f) &&
+        ((param == VP37_TUNING_CURRENT_FEEDBACK) ||
+         (param == VP37_TUNING_MAP_TRIM) ||
+         (param == VP37_TUNING_THERMAL_HOLD))) {
+      return HAL_ESTATE;
+    }
+    if (self->pid.septemberReference && (value != 0.0f) &&
+        ((param == VP37_TUNING_CURRENT_FEEDBACK) ||
+         (param == VP37_TUNING_DRIVE_COMPENSATION) ||
+         (param == VP37_TUNING_CYCLE_VOLTAGE) ||
+         (param == VP37_TUNING_MAP_TRIM) ||
+         (param == VP37_TUNING_THERMAL_HOLD))) {
+      return HAL_ESTATE;
+    }
     VP37_applyTuning(self, param, value);
+    self->pid.holdingIntegralReady = false;
+    self->pid.holdingIntegralElapsed = 0.0f;
     status = HAL_OK;
   }
   return status;
@@ -182,6 +281,33 @@ static float VP37_switchValue(bool on) { return on ? 1.0f : 0.0f; }
 static float VP37_tuningValue(const VP37Pump *self, VP37TuningParam param) {
   float value = 0.0f;
   switch (param) {
+  case VP37_TUNING_RESEARCH_DESCENT_SHARE:
+    value = self->pid.descentIntegralRetainedShare;
+    break;
+  case VP37_TUNING_RESEARCH_DESCENT_UNWIND:
+    value = VP37_switchValue(self->pid.researchDescentIntegralUnwind);
+    break;
+  case VP37_TUNING_RESEARCH_RAMP_BRAKING:
+    value = VP37_switchValue(self->pid.researchRampBraking);
+    break;
+  case VP37_TUNING_RESEARCH_UPPER_DEADBAND:
+    value = VP37_switchValue(self->pid.researchUpperDeadband);
+    break;
+  case VP37_TUNING_RESEARCH_RAMP_DAMPING:
+    value = VP37_switchValue(self->pid.researchRampDamping);
+    break;
+  case VP37_TUNING_RESEARCH_REFERENCE_WEIGHT:
+    value = self->pid.researchReferenceWeight;
+    break;
+  case VP37_TUNING_RESEARCH_SLOW_DAMPING:
+    value = VP37_switchValue(self->pid.researchSlowDamping);
+    break;
+  case VP37_TUNING_RESEARCH_MOTION_INTEGRAL:
+    value = self->pid.researchMotionIntegralGate ? 1.0f : 0.0f;
+    break;
+  case VP37_TUNING_RESEARCH_FREEZE:
+    value = (float)self->pid.researchFreezeMask;
+    break;
   case VP37_TUNING_KP:
     value = self->pid.kp;
     break;
@@ -265,6 +391,19 @@ float VP37_getTuning(const VP37Pump *self, VP37TuningParam param) {
 }
 
 void VP37_resetTuning(VP37Pump *self) {
+  self->pid.researchFreezeMask = 0U;
+  self->pid.researchMotionIntegralGate = false;
+  self->pid.researchSlowDamping = false;
+  self->pid.researchRampDamping = false;
+  self->pid.researchUpperDeadband = false;
+  self->pid.researchRampBraking = false;
+  self->pid.researchDescentIntegralUnwind = false;
+  self->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
+  self->pid.researchReferenceWeight = 1.0f;
+  VP37_resetMotionIntegralGate(self);
+  VP37_resetSlowDamping(self);
+  self->pid.fullRangePrototype = false;
+  self->pid.septemberReference = false;
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
   VP37_setDerivativeFilter(self, VP37_PID_TF);
@@ -296,6 +435,8 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   hal_pid_controller_set_kd(self->pid.controller, kd);
 
   if (shouldTriggerReset) {
+    VP37_resetMotionIntegralGate(self);
+    VP37_resetSlowDamping(self);
     VP37_resetCurrentControl(self);
     hal_pid_controller_reset(self->pid.controller);
     self->pid.topDBlend = 0.0f;

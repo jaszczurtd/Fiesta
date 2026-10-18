@@ -22,7 +22,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:117 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:148 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -37,7 +37,11 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
         "execus:%lu plim:%.1f stand_slew:%.1f stand_upper:%.1f adec:%.0f "
         "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f "
-        "hoff:%lu thold:%u",
+        "hoff:%lu thold:%u ref:%u full:%u freeze:%u mgate:%u mvel:%.1f "
+        "slowd:%u sd:%.3f beta:%.3f rkp:%.5f ierr:%.3f dramp:%u udb:%u "
+        "rbrake:%u ileak:%u ibias:%.3f iphase:%u ipart:%.3f istart:%ld "
+        "itau:%.3f ishare:%.3f ianchor:%.3f ihvalid:%u ihtar:%ld ihbias:%.3f "
+        "ireuse:%u",
         view->pid.kp, view->pid.ki, view->pid.kd, view->pid.topKd,
         view->pid.effectiveKd, view->pid.tf, view->pidTimeUpdate,
         view->feedback.adjustMin, view->feedback.adjustMax,
@@ -87,7 +91,27 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         VP37_STATIONARY_RISE_WEIGHT, VP37_STATIONARY_FALL_WEIGHT,
         view->demand.topArrivalDecel, view->feedforward.motionRateCap,
         (unsigned long)view->pid.integralHoldOffsetMs,
-        view->thermal.scaleHoldEnabled ? 1U : 0U);
+        view->thermal.scaleHoldEnabled ? 1U : 0U,
+        view->pid.septemberReference ? 1U : 0U,
+        view->pid.fullRangePrototype ? 1U : 0U,
+        (unsigned int)view->pid.researchFreezeMask,
+        view->pid.researchMotionIntegralGate ? 1U : 0U,
+        view->pid.motionIntegralVelocity,
+        view->pid.researchSlowDamping ? 1U : 0U, view->pid.slowDampingOutput,
+        view->pid.researchReferenceWeight, view->pid.referenceKp,
+        view->pid.integralInput, view->pid.researchRampDamping ? 1U : 0U,
+        view->pid.researchUpperDeadband ? 1U : 0U,
+        view->pid.researchRampBraking ? 1U : 0U,
+        view->pid.researchDescentIntegralUnwind ? 1U : 0U,
+        view->pid.motionIntegralBias,
+        (unsigned int)view->pid.descentUnwindPhase,
+        view->pid.descentUnwindTarget,
+        (long)view->pid.motionIntegralStartPosition,
+        VP37_DESCENT_INTEGRAL_UNWIND_S, view->pid.descentIntegralRetainedShare,
+        view->pid.motionIntegralAnchor,
+        view->pid.holdingIntegralReady ? 1U : 0U,
+        (long)view->pid.holdingIntegralTarget, view->pid.holdingIntegralBias,
+        view->pid.descentUnwindUsesHolding ? 1U : 0U);
     adjustometer_reading_t telemetry = view->adjustometer;
     const bool extendedFresh = VP37_readAdjustometerExtended(self, &telemetry);
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "
@@ -217,6 +241,7 @@ static VP37TraceSample VP37_controlSample(const VP37Telemetry *view) {
       .mapTrim = view->feedforward.mapTrimApplied,
       .thermalScale = view->thermal.scale,
       .integralHold = view->pid.integralHold,
+      .motionIntegralHold = view->pid.motionIntegralHold,
       .fuelTemp = view->thermal.lastFuelTemp,
       .temperatureCorrection = view->thermal.temperatureCorrection,
       .terms = view->pid.terms,
@@ -244,7 +269,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "ff:%.1f P:%.1f I:%.1f D:%.1f raw:%.1f corr:%.1f lo:%.1f hi:%.1f "
       "sh:%d sl:%d sf:%d hw:%d rest:%d st:%u hzraw:%lu hz:%lu sn:%lu su:%lu "
       "age:%u io:%d ious:%lu retry:%u fresh:%d pdt:%lu V:%.1f Vl:%.2f "
-      "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d vp:%d vhi:%d "
+      "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d cg:%d vp:%d vhi:%d "
       "ft:%.0f tcf:%.4f tsc:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
       (unsigned long)sample->sequence, sample->requestedPercent, sample->target,
@@ -262,29 +287,38 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned int)sample->retries, sample->fresh,
       (unsigned long)sample->pidDtUs, sample->volts, sample->localVolts,
       sample->compensationInputVolts, sample->compensationVolts,
-      sample->voltageCorrection, sample->integralHold, sample->cycleVoltageUsed,
+      sample->voltageCorrection, sample->integralHold,
+      sample->motionIntegralHold, sample->cycleVoltageUsed,
       sample->voltageOverRange, sample->fuelTemp, sample->temperatureCorrection,
       sample->thermalScale, sample->motionFF,
       (unsigned long)sample->cyclicDelayMs, sample->mapTrim);
 }
 
-/* Who holds the trace buffer. Only the control core moves IDLE -> RECORDING
+/* Who holds the trace buffer. Only the control core moves IDLE ->
+ * ARMED/RECORDING
  * -> READY and only the reading core moves READY -> IDLE, so each side acts on
  * the buffer alone between two release/acquire hand-overs. */
-enum { VP37_TRACE_IDLE = 0U, VP37_TRACE_RECORDING, VP37_TRACE_READY };
+enum {
+  VP37_TRACE_IDLE = 0U,
+  VP37_TRACE_RECORDING,
+  VP37_TRACE_READY,
+  VP37_TRACE_ARMED
+};
 
 static struct {
   VP37TraceSample samples[VP37_TRACE_SAMPLES];
   uint32_t count; /**< Samples recorded; the control core's while recording. */
   uint32_t next;  /**< Next sample to read; the reading core's. */
   uint8_t state;  /**< VP37_TRACE_*, changed atomically. */
+  uint32_t completedCount; /**< Reading core: count handed to the console. */
+  bool endPending; /**< Reading core: completion has not been consumed. */
 } s_trace;
 
 static uint8_t VP37_traceState(void) {
   return HAL_ATOMIC_LOAD(&s_trace.state, HAL_ATOMIC_ACQUIRE);
 }
 
-hal_status_t VP37_startTrace(const VP37Pump *self) {
+static hal_status_t VP37_startTraceMode(const VP37Pump *self, bool descent) {
   if (self == NULL) {
     return HAL_EINVAL;
   }
@@ -294,14 +328,28 @@ hal_status_t VP37_startTrace(const VP37Pump *self) {
   if (!self->vp37Initialized) {
     return HAL_EAGAIN;
   }
+  if (descent && (!self->pid.fullRangePrototype ||
+                  !self->pid.researchMotionIntegralGate)) {
+    return HAL_ESTATE;
+  }
   s_trace.count = 0U;
-  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_RECORDING,
+  HAL_ATOMIC_STORE(&s_trace.state,
+                   (uint8_t)(descent ? VP37_TRACE_ARMED : VP37_TRACE_RECORDING),
                    HAL_ATOMIC_RELEASE);
   return HAL_OK;
 }
 
+hal_status_t VP37_startTrace(const VP37Pump *self) {
+  return VP37_startTraceMode(self, false);
+}
+
+hal_status_t VP37_startTraceOnDescent(const VP37Pump *self) {
+  return VP37_startTraceMode(self, true);
+}
+
 bool VP37_traceCapturing(void) {
-  return VP37_traceState() == VP37_TRACE_RECORDING;
+  const uint8_t state = VP37_traceState();
+  return (state == VP37_TRACE_RECORDING) || (state == VP37_TRACE_ARMED);
 }
 
 hal_status_t VP37_readTrace(VP37TraceSample *sample) {
@@ -309,7 +357,7 @@ hal_status_t VP37_readTrace(VP37TraceSample *sample) {
     return HAL_EINVAL;
   }
   const uint8_t state = VP37_traceState();
-  if (state == VP37_TRACE_RECORDING) {
+  if ((state == VP37_TRACE_RECORDING) || (state == VP37_TRACE_ARMED)) {
     return HAL_EAGAIN;
   }
   hal_status_t status = HAL_ENOENT;
@@ -321,6 +369,8 @@ hal_status_t VP37_readTrace(VP37TraceSample *sample) {
     }
     // Hand the buffer back after the last sample, or at once when empty.
     if (s_trace.next >= s_trace.count) {
+      s_trace.completedCount = s_trace.count;
+      s_trace.endPending = true;
       s_trace.next = 0U;
       HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_IDLE,
                        HAL_ATOMIC_RELEASE);
@@ -329,8 +379,20 @@ hal_status_t VP37_readTrace(VP37TraceSample *sample) {
   return status;
 }
 
+hal_status_t VP37_takeTraceCompletion(uint32_t *count) {
+  if (count == NULL) {
+    return HAL_EINVAL;
+  }
+  if (!s_trace.endPending) {
+    return HAL_EAGAIN;
+  }
+  *count = s_trace.completedCount;
+  s_trace.endPending = false;
+  return HAL_OK;
+}
+
 void VP37_traceStop(void) {
-  if (VP37_traceState() == VP37_TRACE_RECORDING) {
+  if (VP37_traceCapturing()) {
     HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_READY,
                      HAL_ATOMIC_RELEASE);
   }
@@ -342,11 +404,27 @@ void VP37_traceStop(void) {
  * been stopped, so a reader never waits on a recording that cannot end.
  */
 void VP37_traceRecord(const VP37Pump *self) {
-  if (VP37_traceState() == VP37_TRACE_RECORDING) {
+  const uint8_t state = VP37_traceState();
+  const bool released = (state == VP37_TRACE_ARMED) && self->demand.atRest;
+  if (state == VP37_TRACE_ARMED) {
+    const bool moving = self->pid.motionIntegralHold && (self->pid.error < 0) &&
+                        (self->demand.desired == self->demand.target) &&
+                        VP37_hasMeasuredDescent(self);
+    if (!moving && self->vp37Initialized && !released) {
+      // Keep the preceding step without allocating another trace buffer.
+      s_trace.samples[0] = VP37_controlSample(VP37_publishedTelemetry());
+      s_trace.count = 1U;
+      return;
+    }
+    HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_RECORDING,
+                     HAL_ATOMIC_RELEASE);
+  }
+  if ((state == VP37_TRACE_RECORDING) || (state == VP37_TRACE_ARMED)) {
     s_trace.samples[s_trace.count] =
         VP37_controlSample(VP37_publishedTelemetry());
     s_trace.count++;
-    if ((s_trace.count == COUNTOF(s_trace.samples)) || !self->vp37Initialized) {
+    if ((s_trace.count == COUNTOF(s_trace.samples)) || !self->vp37Initialized ||
+        released) {
       VP37_traceStop();
     }
   }

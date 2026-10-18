@@ -4,6 +4,12 @@
 #include "utils/unity.h"
 #include <cmath>
 
+// Independent step/ramp expectations for the two supported test periods.
+static_assert(ADJUSTOMETER_PWM_FILTER_US == 7692 ||
+                  ADJUSTOMETER_PWM_FILTER_US == 5000,
+              "Add explicit fixture values");
+static constexpr bool k200Hz = ADJUSTOMETER_PWM_FILTER_US == 5000;
+
 static uint32_t sample(uint32_t hz, uint32_t us) {
   hal_mock_set_micros(us);
   adj_test_sensors_process_frequency(hz, us);
@@ -24,7 +30,9 @@ void tearDown(void) {}
 
 static void stepAt(uint32_t start) {
   TEST_ASSERT_EQUAL_UINT32(34000U, sample(34000U, start));
-  TEST_ASSERT_UINT32_WITHIN(1U, 33870U, sample(32000U, start + 1000U));
+  // The first linear1ms transition contributes half its2000Hz step area.
+  TEST_ASSERT_UINT32_WITHIN(1U, k200Hz ? 33800U : 33870U,
+                            sample(32000U, start + 1000U));
   for (uint32_t t = 2000U; t <= 10000U; t += 1000U) {
     const uint32_t filtered = sample(32000U, start + t);
     TEST_ASSERT_TRUE(filtered >= 32000U && filtered <= 34000U);
@@ -43,7 +51,8 @@ void test_pwm_ripple_is_rejected_with_irregular_capture_intervals(void) {
   uint32_t maxError = 0U;
   for (size_t i = 0U; i < 1000U; ++i) {
     now += dt[i % COUNTOF(dt)];
-    const float phase = 2.0f * 3.141592654f * 130.0f * (float)now * 1e-6f;
+    const float phase =
+        2.0f * 3.141592654f * (k200Hz ? 200.0f : 130.0f) * (float)now * 1e-6f;
     const uint32_t filtered =
         sample((uint32_t)(34000.0f + 1000.0f * sinf(phase)), now);
     const uint32_t error = (uint32_t)abs((int)filtered - 34000);
@@ -59,8 +68,8 @@ void test_motion_lags_by_half_window_instead_of_an_ema_tail(void) {
   for (uint32_t t = 1000U; t <= 20000U; t += 1000U) {
     filtered = sample(34000U - t / 50U, t + 1U);
   }
-  // 20 kHz/s ramp: half of 7692 us is 76.92 Hz behind the current sample.
-  TEST_ASSERT_UINT32_WITHIN(1U, 33677U, filtered);
+  // A20kHz/s ramp lags50Hz at5000us,76.92Hz at7692us.
+  TEST_ASSERT_UINT32_WITHIN(1U, k200Hz ? 33650U : 33677U, filtered);
 }
 
 void test_gap_and_reset_do_not_reuse_old_motion(void) {

@@ -16,6 +16,7 @@
 #include "../common/scDefinitions/sc_command_handlers.h"
 #include "../common/scDefinitions/sc_protocol.h"
 
+#include <hal/core/hal_compiler.h>
 #include <math.h>
 
 //=============================================================================
@@ -168,7 +169,15 @@ void testsWorkersReset(void) {
 // Cyclic ramp
 //=============================================================================
 
+static uint32_t s_fixedCyclicPeriodMs;
+static uint32_t s_fixedCyclicStartedMs;
+
+void testsWorkersSetFixedCyclicPeriod(uint32_t periodMs) {
+  HAL_ATOMIC_STORE(&s_fixedCyclicPeriodMs, periodMs, HAL_ATOMIC_RELEASE);
+}
+
 void testsWorkersCyclicStart(void) {
+  s_fixedCyclicStartedMs = hal_millis();
   s_cyclic.value = 0;
   s_cyclic.increment = 1;
   s_cyclic.previousMs = hal_millis();
@@ -178,12 +187,26 @@ void testsWorkersCyclicStart(void) {
 }
 
 uint32_t testsWorkersCyclicDelayMs(void) {
-  return s_cyclicDelaysMs[s_cyclic.profile];
+  const uint32_t period =
+      HAL_ATOMIC_LOAD(&s_fixedCyclicPeriodMs, HAL_ATOMIC_ACQUIRE);
+  return period != 0U ? period / 200U : s_cyclicDelaysMs[s_cyclic.profile];
 }
 
 float testsWorkersCyclicStep(bool *outFinished) {
   *outFinished = false;
   const uint32_t nowMs = hal_millis();
+  const uint32_t period =
+      HAL_ATOMIC_LOAD(&s_fixedCyclicPeriodMs, HAL_ATOMIC_ACQUIRE);
+  if (period != 0U) {
+    const uint32_t totalMs = period * paramU32(TEST_PARAM_CYCLIC_CYCLES);
+    if (hal_elapsed_u32(nowMs, s_fixedCyclicStartedMs, totalMs)) {
+      *outFinished = true;
+      return 0.0f;
+    }
+    const uint32_t phase = (nowMs - s_fixedCyclicStartedMs) % period;
+    const uint32_t distance = phase <= period / 2U ? phase : period - phase;
+    return 200.0f * (float)distance / (float)period;
+  }
   if (!hal_elapsed_u32(nowMs, s_cyclic.previousMs,
                        testsWorkersCyclicDelayMs())) {
     return (float)s_cyclic.value;

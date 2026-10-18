@@ -11,18 +11,170 @@ TESTABLE_STATIC float VP37_strokeTaper(const float *knots, size_t count,
 static float VP37_mapTrimAt(const VP37Pump *self, float percent);
 static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight);
 
+void VP37_resetMotionIntegralGate(VP37Pump *self) {
+  self->pid.motionIntegralReady = false;
+  self->pid.motionIntegralHold = false;
+  self->pid.motionIntegralPosition = 0;
+  self->pid.motionIntegralTarget = 0;
+  self->pid.motionIntegralBias = 0.0f;
+  self->pid.motionIntegralAnchor = 0.0f;
+  self->pid.motionIntegralStartPosition = 0;
+  self->pid.descentUnwindTarget = 0.0f;
+  self->pid.descentUnwindPhase = VP37_DESCENT_UNWIND_WAITING;
+  self->pid.holdingIntegralTarget = 0;
+  self->pid.holdingIntegralBias = 0.0f;
+  self->pid.holdingIntegralCandidate = 0.0f;
+  self->pid.holdingIntegralElapsed = 0.0f;
+  self->pid.holdingIntegralReady = false;
+  self->pid.descentUnwindUsesHolding = false;
+  self->pid.motionIntegralVelocity = 0.0f;
+}
+
+bool HAL_RAM_FUNC(VP37_hasMeasuredDescent)(const VP37Pump *self) {
+  const float stroke =
+      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
+  const float travel = (float)self->pid.motionIntegralStartPosition -
+                       (float)self->feedback.position;
+  return (stroke > 0.0f) && (travel >= 0.003f * stroke);
+}
+
+/** @brief Observe a holding correction without changing the controller output.
+ */
+static void HAL_RAM_FUNC(VP37_observeHoldingIntegral)(VP37Pump *self,
+                                                      bool settled, float dt) {
+  const float integral = self->pid.terms.integral;
+  const bool qualified =
+      self->pid.researchDescentIntegralUnwind && settled &&
+      (self->demand.target > self->feedback.adjustMin) &&
+      (self->demand.target < self->feedback.adjustMax) &&
+      (fabsf((float)self->pid.error) <= self->pid.integralDeadbandHz) &&
+      isfinite(integral) && (fabsf(integral) < self->pid.integralLimit) &&
+      !self->pid.terms.saturated_low && !self->pid.terms.saturated_high &&
+      (self->output.finalPWM > VP37_PWM_MIN) &&
+      (self->output.finalPWM < VP37_PWM_MAX) &&
+      ((self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_INTEGRAL_MASK) ==
+       0U);
+  if (!qualified || !isfinite(self->pid.holdingIntegralCandidate) ||
+      (fabsf(integral - self->pid.holdingIntegralCandidate) >
+       VP37_HOLDING_BIAS_MAX_DRIFT_PWM)) {
+    self->pid.holdingIntegralElapsed = 0.0f;
+    self->pid.holdingIntegralCandidate = integral;
+  } else {
+    self->pid.holdingIntegralElapsed = fminf(
+        self->pid.holdingIntegralElapsed + dt, VP37_HOLDING_BIAS_CONFIRM_S);
+    if (self->pid.holdingIntegralElapsed >= VP37_HOLDING_BIAS_CONFIRM_S) {
+      self->pid.holdingIntegralTarget = self->demand.target;
+      self->pid.holdingIntegralBias = integral;
+      self->pid.holdingIntegralReady = true;
+    }
+  }
+}
+
+bool HAL_RAM_FUNC(VP37_motionIntegralHold)(VP37Pump *self, bool settled,
+                                           float dt) {
+  if (!self->pid.fullRangePrototype || !self->pid.researchMotionIntegralGate ||
+      !isfinite(dt) || (dt <= 0.0f) || (dt > 0.15f)) {
+    VP37_resetMotionIntegralGate(self);
+    return false;
+  }
+  const int32_t position = self->feedback.position;
+  const bool newTarget = !self->pid.motionIntegralReady ||
+                         self->pid.motionIntegralTarget != self->demand.target;
+  const float previousError =
+      (float)self->demand.target - (float)self->pid.motionIntegralPosition;
+  if (newTarget) {
+    const bool fromMaximum =
+        (position >= self->feedback.adjustMax) ||
+        (self->pid.motionIntegralReady &&
+         (self->pid.motionIntegralTarget >= self->feedback.adjustMax));
+    self->pid.motionIntegralTarget = self->demand.target;
+    self->pid.motionIntegralBias = self->pid.terms.integral;
+    // At the endpoint, I may retain arbitrary breakaway drive. It cannot
+    // identify the next holding correction; use the nominal map's zero.
+    self->pid.motionIntegralAnchor =
+        fromMaximum ? 0.0f : self->pid.terms.integral;
+    self->pid.motionIntegralStartPosition = position;
+    self->pid.descentUnwindTarget = self->pid.terms.integral;
+    self->pid.descentUnwindPhase = VP37_DESCENT_UNWIND_WAITING;
+    self->pid.descentUnwindUsesHolding = false;
+    self->pid.holdingIntegralElapsed = 0.0f;
+    self->pid.holdingIntegralCandidate = self->pid.terms.integral;
+  }
+  if (self->pid.motionIntegralReady) {
+    const float velocity =
+        ((float)position - (float)self->pid.motionIntegralPosition) / dt;
+    const float alpha = dt / (VP37_MOTION_INTEGRAL_FILTER_S + dt);
+    self->pid.motionIntegralVelocity +=
+        alpha * (velocity - self->pid.motionIntegralVelocity);
+  } else {
+    self->pid.motionIntegralVelocity = 0.0f;
+    self->pid.motionIntegralReady = true;
+  }
+  self->pid.motionIntegralPosition = position;
+  const float error = (float)self->pid.error;
+  const float threshold = self->pid.motionIntegralHold
+                              ? VP37_MOTION_INTEGRAL_EXIT_HZ_S
+                              : VP37_MOTION_INTEGRAL_ENTER_HZ_S;
+  // Retain the holding bias during approach. At rest it may build; motion
+  // away from the goal permits integration to brake an overshoot.
+  self->pid.motionIntegralHold =
+      settled && (fabsf(error) > self->pid.integralDeadbandHz) &&
+      ((self->pid.motionIntegralVelocity * error) > 0.0f) &&
+      (fabsf(self->pid.motionIntegralVelocity) > threshold);
+  VP37_observeHoldingIntegral(self, settled && !newTarget, dt);
+  if (self->pid.researchDescentIntegralUnwind && settled && !newTarget) {
+    if ((fabsf(error) <= self->pid.integralDeadbandHz) ||
+        ((previousError * error) <= 0.0f)) {
+      self->pid.descentUnwindPhase = VP37_DESCENT_UNWIND_ARRIVED;
+    } else if ((self->pid.descentUnwindPhase == VP37_DESCENT_UNWIND_WAITING) &&
+               self->pid.motionIntegralHold && (error < 0.0f) &&
+               !self->pid.integralHold &&
+               ((self->pid.researchFreezeMask &
+                 VP37_RESEARCH_FREEZE_INTEGRAL_MASK) == 0U)) {
+      const float acquired =
+          self->pid.terms.integral - self->pid.motionIntegralAnchor;
+      if (VP37_hasMeasuredDescent(self) && (acquired < 0.0f)) {
+        // Retain the declared share for the new holding position.
+        self->pid.descentUnwindUsesHolding =
+            self->pid.holdingIntegralReady &&
+            (self->pid.holdingIntegralTarget == self->demand.target);
+        if (self->pid.descentUnwindUsesHolding) {
+          // Reuse observed holding drive, without adding negative drive.
+          self->pid.descentUnwindTarget = fmaxf(
+              self->pid.terms.integral,
+              hal_constrain(self->pid.holdingIntegralBias,
+                            -self->pid.integralLimit, self->pid.integralLimit));
+        } else {
+          self->pid.descentUnwindTarget =
+              self->pid.motionIntegralAnchor +
+              self->pid.descentIntegralRetainedShare * acquired;
+        }
+        self->pid.descentUnwindPhase = VP37_DESCENT_UNWIND_ACTIVE;
+      }
+    } else {
+      // Active assistance keeps its first target until arrival.
+    }
+  }
+  return self->pid.motionIntegralHold;
+}
+
 float VP37_feedForward(VP37Pump *self, int32_t position) {
   // The holding map and its motion column are data in vp37_maps.c; this is
   // only the interpolation between its knots and the blending of motion.
   const float percent = VP37_strokePercent(self, (float)position);
   // Extra acceleration excites the upper stroke; preserve lower-stroke drive.
+  const bool reference = self->pid.septemberReference;
+  const float(*const map)[VP37_FF_COLUMNS] =
+      reference ? VP37_SEPTEMBER_FF_MAP : VP37_FF_MAP;
   const float riseWeight =
-      hal_constrain(hal_math_map_f32(percent, VP37_PWM_FF_MOTION_TAPER_START,
-                                     VP37_PWM_FF_MOTION_TAPER_END, 1.0f, 0.0f),
-                    0.0f, 1.0f);
+      reference ? 1.0f
+                : hal_constrain(hal_math_map_f32(
+                                    percent, VP37_PWM_FF_MOTION_TAPER_START,
+                                    VP37_PWM_FF_MOTION_TAPER_END, 1.0f, 0.0f),
+                                0.0f, 1.0f);
   for (size_t i = 1U; i < VP37_FF_KNOTS; ++i) {
-    const float *lower = VP37_FF_MAP[i - 1U];
-    const float *upper = VP37_FF_MAP[i];
+    const float *lower = map[i - 1U];
+    const float *upper = map[i];
     if (percent <= upper[VP37_FF_COL_PERCENT]) {
       const float holding = hal_math_map_f32(
           percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
@@ -32,7 +184,8 @@ float VP37_feedForward(VP37Pump *self, int32_t position) {
            hal_math_map_f32(
                percent, lower[VP37_FF_COL_PERCENT], upper[VP37_FF_COL_PERCENT],
                lower[VP37_FF_COL_MOTION], upper[VP37_FF_COL_MOTION]) *
-           (self->feedforward.motionBoostUp / VP37_PWM_FF_MOTION_BOOST)) -
+           (self->feedforward.motionBoostUp /
+            map[VP37_FF_KNOTS - 1U][VP37_FF_COL_MOTION])) -
           (self->feedforward.fallBlend * self->feedforward.motionBoostDown);
       self->feedforward.mapTrimApplied = VP37_mapTrimAt(self, percent);
       return (holding * VP37_PWM_FF_HARDWARE_GAIN) +
@@ -41,7 +194,8 @@ float VP37_feedForward(VP37Pump *self, int32_t position) {
   }
   self->feedforward.motion = 0.0f;
   self->feedforward.mapTrimApplied = VP37_mapTrimAt(self, 100.0f);
-  return (VP37_PWM_FF_AT_MAX * VP37_PWM_FF_HARDWARE_GAIN) +
+  return (map[VP37_FF_KNOTS - 1U][VP37_FF_COL_PWM] *
+          VP37_PWM_FF_HARDWARE_GAIN) +
          self->feedforward.mapTrimApplied;
 }
 
@@ -72,13 +226,17 @@ float VP37_computePositiveCorrectionLimit(float fuelTempC,
 /**
  * @brief Integral authority for the demanded position.
  * @return Authority in nominal PWM counts.
- * @note The position profile tapers the authority toward the top of the
- * stroke; the bench cap only ever lowers what the profile allows.
+ * @note The research profile allows the full tuning range; the output limits
+ * and PID anti-windup still bound the actual correction. The normal profile
+ * retains its position taper. A positive bench cap only lowers either limit.
  */
 float VP37_integralLimit(const VP37Pump *self) {
-  float limit = VP37_strokeTaper(
-      &VP37_INTEGRAL_LIMIT_MAP[0U][0U], VP37_STROKE_TAPER_KNOTS,
-      VP37_strokePercent(self, self->demand.desiredPosition));
+  float limit =
+      self->pid.fullRangePrototype
+          ? VP37_BENCH_INTEGRAL_LIMIT_MAX
+          : VP37_strokeTaper(
+                &VP37_INTEGRAL_LIMIT_MAP[0U][0U], VP37_STROKE_TAPER_KNOTS,
+                VP37_strokePercent(self, self->demand.desiredPosition));
   if (self->pid.integralOverride > 0.0f) {
     limit = fminf(limit, self->pid.integralOverride);
   }
@@ -95,7 +253,14 @@ float VP37_integralLimit(const VP37Pump *self) {
 float HAL_RAM_FUNC(VP37_integralDeadband)(const VP37Pump *self) {
   const float base = VP37_INTEGRAL_DEADBAND_MAP[0U][VP37_TAPER_COL_VALUE];
   float deadband = base;
-  if (self->pid.integralDeadbandTopHz > base) {
+  if (self->pid.fullRangePrototype && self->pid.researchUpperDeadband) {
+    const float percent =
+        VP37_strokePercent(self, self->demand.desiredPosition);
+    const float weight = hal_constrain(
+        hal_math_map_f32(percent, 90.0f, 95.0f, 0.0f, 1.0f), 0.0f, 1.0f);
+    deadband += fmaxf(0.0f, self->pid.integralDeadbandTopHz - base) * weight;
+  } else if (!self->pid.septemberReference && !self->pid.fullRangePrototype &&
+             (self->pid.integralDeadbandTopHz > base)) {
     // The table holds the default top; the bench may have moved it.
     float taper[VP37_STROKE_TAPER_KNOTS * VP37_STROKE_TAPER_COLUMNS];
     (void)memcpy(taper, VP37_INTEGRAL_DEADBAND_MAP, sizeof(taper));
@@ -111,11 +276,16 @@ float HAL_RAM_FUNC(VP37_integralDeadband)(const VP37Pump *self) {
 void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
   const float percent = VP37_strokePercent(self, self->demand.desiredPosition);
   float weight = 0.0f;
-  if ((self->pid.topKd > 0.0f) && !self->demand.atRest && (percent > 85.0f)) {
+  if (((self->pid.topKd > 0.0f) || self->pid.researchSlowDamping) &&
+      !self->demand.atRest && (percent > 85.0f)) {
     const float dt = (float)self->pidDtUs * 0.000001f;
     const float alpha = dt / (VP37_PID_TOP_D_BLEND_S + dt);
-    self->pid.topDBlend = hal_math_low_pass(alpha, targetSettled ? 1.0f : 0.0f,
-                                            self->pid.topDBlend);
+    if (self->pid.fullRangePrototype && self->pid.researchRampDamping) {
+      self->pid.topDBlend = 1.0f;
+    } else {
+      self->pid.topDBlend = hal_math_low_pass(
+          alpha, targetSettled ? 1.0f : 0.0f, self->pid.topDBlend);
+    }
     weight = hal_constrain(hal_math_map_f32(percent, 85.0f, 90.0f, 0.0f, 1.0f),
                            0.0f, 1.0f);
   } else {
@@ -138,6 +308,11 @@ void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
  * outside the entry band also releases it.
  */
 void HAL_RAM_FUNC(VP37_updateIntegralHold)(VP37Pump *self, bool targetSettled) {
+  if (self->pid.septemberReference) {
+    self->pid.integralHold = false;
+    self->pid.integralHoldEntered = false;
+    return;
+  }
   const int32_t error = self->pid.error;
   // Fixed bands on purpose: widening them with the dead zone froze the
   // integral up to twice the dead zone from the target and left standing
@@ -347,4 +522,138 @@ static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight) {
     *weight = scaled - (float)index;
   }
   *lower = index;
+}
+
+void VP37_resetSlowDamping(VP37Pump *self) {
+  self->pid.integralInput = 0.0f;
+  self->pid.referenceKp = self->pid.kp;
+  self->pid.slowDampingReady = false;
+  self->pid.slowDampingPosition = 0;
+  self->pid.slowDampingOutput = 0.0f;
+  for (size_t i = 0U; i < COUNTOF(self->pid.slowDampingVelocity); ++i) {
+    self->pid.slowDampingVelocity[i] = 0.0f;
+  }
+}
+
+float HAL_RAM_FUNC(VP37_updateSlowDamping)(VP37Pump *self, float dt) {
+  if (!self->pid.fullRangePrototype || !self->pid.researchSlowDamping ||
+      !isfinite(dt) || (dt <= 0.0f) || (dt > 0.1f)) {
+    VP37_resetSlowDamping(self);
+    return 0.0f;
+  }
+  float velocity = 0.0f;
+  if (self->pid.slowDampingReady) {
+    velocity = ((float)self->feedback.position -
+                (float)self->pid.slowDampingPosition) /
+               dt;
+  } else {
+    self->pid.slowDampingReady = true;
+  }
+  self->pid.slowDampingPosition = self->feedback.position;
+  const float alpha = dt / (VP37_SLOW_DAMPING_TF_S + dt);
+  for (size_t i = 0U; i < COUNTOF(self->pid.slowDampingVelocity); ++i) {
+    self->pid.slowDampingVelocity[i] =
+        hal_math_low_pass(alpha, velocity, self->pid.slowDampingVelocity[i]);
+    velocity = self->pid.slowDampingVelocity[i];
+  }
+  const float percent = VP37_strokePercent(self, self->demand.desiredPosition);
+  const float weight = hal_constrain(
+      hal_math_map_f32(percent, 85.0f, 90.0f, 0.0f, 1.0f), 0.0f, 1.0f);
+  self->pid.slowDampingOutput =
+      self->pid.researchSlowDamping
+          ? -VP37_SLOW_DAMPING_KD * velocity * weight * self->pid.topDBlend
+          : 0.0f;
+  return self->pid.slowDampingOutput;
+}
+
+float VP37_referencePotential(const VP37Pump *self, float position,
+                              float *weight) {
+  const float span =
+      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
+  float blend = 0.0f;
+  float result = 0.0f;
+  if (span > 0.0f) {
+    const float width = span * 0.05f;
+    const float distance =
+        position - ((float)self->feedback.adjustMin + span * 0.85f);
+    if (distance >= width) {
+      blend = 1.0f;
+      result = distance - (0.5f * width);
+    } else if (distance > 0.0f) {
+      blend = distance / width;
+      result = 0.5f * distance * blend;
+    } else {
+      // The original controller remains active below the upper blend.
+    }
+  }
+  if (weight != NULL) {
+    *weight = blend;
+  }
+  return result;
+}
+
+hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
+                                       int32_t previousDesired) {
+  const float extraD = VP37_updateSlowDamping(self, dt);
+  const float error = (float)self->pid.error;
+  float input = error;
+  float integrationBand = deadband;
+  self->pid.referenceKp = self->pid.kp;
+  if (self->pid.fullRangePrototype &&
+      self->pid.researchReferenceWeight < 1.0f) {
+    if (!(self->pid.ki > 0.0f) || !isfinite(dt) || !(dt > 0.0f)) {
+      return HAL_ESTATE;
+    }
+    float weight = 0.0f;
+    const float potential =
+        VP37_referencePotential(self, (float)self->demand.desired, &weight);
+    const float previous =
+        previousDesired >= 0
+            ? VP37_referencePotential(self, (float)previousDesired, NULL)
+            : potential;
+    const float reduction =
+        self->pid.kp * (1.0f - self->pid.researchReferenceWeight);
+    // Shift the physical bias only when the reference moves. At a fixed
+    // reference this is the ordinary PID, including through the upper blend.
+    input = error - hal_constrain(error, -deadband, deadband) -
+            reduction * (potential - previous) / (self->pid.ki * dt);
+    integrationBand = 0.0f;
+    self->pid.referenceKp -= reduction * weight;
+  }
+  if (self->pid.fullRangePrototype && self->pid.researchDescentIntegralUnwind &&
+      self->pid.motionIntegralHold &&
+      (self->pid.descentUnwindPhase == VP37_DESCENT_UNWIND_ACTIVE) &&
+      !self->pid.integralHold &&
+      ((self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_INTEGRAL_MASK) ==
+       0U) &&
+      (error < 0.0f) && (self->pid.ki > 0.0f) && isfinite(dt) && (dt > 0.0f)) {
+    const float acquired =
+        self->pid.terms.integral - self->pid.descentUnwindTarget;
+    if (acquired < 0.0f) {
+      // Return only the qualified share while approaching the first arrival.
+      input =
+          -acquired / (self->pid.ki * (VP37_DESCENT_INTEGRAL_UNWIND_S + dt));
+      integrationBand = 0.0f;
+    }
+  }
+  self->pid.integralInput = input;
+  const float extra = extraD + self->pid.kp * (error - input);
+  // Restore ordinary P and include every term before conditional anti-windup.
+  hal_pid_controller_set_output_limits(self->pid.controller,
+                                       self->pid.negativeLimit - extra,
+                                       self->pid.upperLimit - extra);
+  const hal_status_t status = hal_pid_controller_step_ex(
+      self->pid.controller, input, (float)self->feedback.position, dt,
+      integrationBand, &self->pid.terms);
+  hal_pid_controller_set_output_limits(
+      self->pid.controller, self->pid.negativeLimit, self->pid.upperLimit);
+  if (status == HAL_OK) {
+    self->pid.terms.proportional = self->pid.kp * error;
+    self->pid.terms.derivative += extraD;
+    self->pid.terms.unconstrained += extra;
+    self->pid.terms.output =
+        hal_constrain(self->pid.terms.output + extra, self->pid.negativeLimit,
+                      self->pid.upperLimit);
+  }
+  return status;
 }

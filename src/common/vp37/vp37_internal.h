@@ -33,10 +33,57 @@ extern "C" {
 
 // ── vp37.c ──────────────────────────────────────────────────────────────────
 bool VP37_demandAtRest(const VP37Pump *self);
+/** @brief Forget conditional-integration motion history, keeping its switch. */
+void VP37_resetMotionIntegralGate(VP37Pump *self);
+/** @brief Whether feedback descended0.3pp from the current demand start. */
+bool VP37_hasMeasuredDescent(const VP37Pump *self);
+/** @brief Clear velocity history and the extra damping command. */
+void VP37_resetSlowDamping(VP37Pump *self);
+/** @brief Integral of the upper-stroke blend with respect to position.
+ * @param self Calibrated pump supplying the full stroke bounds.
+ * @param position Reference along the calibrated stroke, in Hz.
+ * @param weight Optional output of the blend derivative, from0 at85% to1 at90%.
+ * @return Continuous potential in Hz, zero below85%; invalid spans return0.
+ */
+float VP37_referencePotential(const VP37Pump *self, float position,
+                              float *weight);
+/** @brief Update the research velocity filter without filtering P or I.
+ * @param self Control-core pump with current feedback and upper-D blend.
+ * @param dt Seconds since the preceding position step; invalid values reset.
+ * @return Extra nominal PWM, zero outside the enabled upper profile.
+ */
+float VP37_updateSlowDamping(VP37Pump *self, float dt);
+/** @brief Step the PID with reference weighting and damping inside its limits.
+ * @param self Control-core pump with nominal correction bounds and gains set.
+ * @param dt Position-step duration in seconds.
+ * @param deadband Integration deadband in Hz, including any hold decision.
+ * @param previousDesired Preceding ramp reference in Hz; negative primes it.
+ * @return The HAL PID status; terms change only on a successful step.
+ */
+hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
+                                       int32_t previousDesired);
+/** @brief Hold I while measured feedback moves toward a standing target.
+ * @param self Pump owned by the control core.
+ * @param settled Target and its ramp are unchanged this step.
+ * @param dt Control-step duration in seconds.
+ * @return Whether this step must retain the existing integral bias. */
+bool VP37_motionIntegralHold(VP37Pump *self, bool settled, float dt);
 
 // ── vp37_feedback.c ─────────────────────────────────────────────────────────
 bool VP37_updateAdjustometerPosition(VP37Pump *self);
 bool VP37_makeCalibration(VP37Pump *self);
+#if VP37_TELEMETRY_ENABLED
+/** @brief Measure the upper endpoint without committing a new calibration.
+ * @param self Calibrated control-core pump, released at zero demand and I=0.
+ * @param maximum Non-NULL output, changed only on successful settling.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_ESTATE unless released and allowed,
+ * or HAL_ETIMEOUT when valid settling is not obtained within one second.
+ * @note Drives the calibration PWM for 200..1000 ms, logs each feedback frame,
+ * then writes zero on every started-probe exit. PID/calibration are retained;
+ * control clocks restart after the intentional pause. Bench diagnostics only.
+ */
+hal_status_t VP37_probeCalibrationMaximum(VP37Pump *self, int32_t *maximum);
+#endif
 
 // ── vp37_adjustometer.c ─────────────────────────────────────────────────────
 /** @brief Poll the Adjustometer until its baseline is ready, feeding the

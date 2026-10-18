@@ -72,7 +72,7 @@ send to VP37. Optional engine control is enabled by
 
 ## Position control
 
-VP37 uses 130 Hz PWM. A lone rising demand step is approached as a standing
+VP37 uses 200 Hz PWM, shared with the Adjustometer drive-period filter. A lone rising demand step is approached as a standing
 target from its first cycle: the ramp rises at 225%/s with 0.6 of the motion
 assist and brakes before the target at 750%/s², so the actuator follows the
 ramp closely and arrives slowly instead of overshooting and ringing. A target
@@ -120,8 +120,7 @@ into stick-slip.
 ## Supply and resistance compensation
 
 Supply compensation scales the complete feedforward and PID command by
-`12 V / compensated voltage`. ADC scan blocks arrive every 2.016 ms at 130 Hz
-PWM. Core 1 copies them between position steps and tracks gate edges across
+`12 V / compensated voltage`. ADC scan blocks arrive independently of the position-control step. Core 1 copies them between position steps and tracks gate edges across
 block boundaries. Each ADC code is compensated once on arrival; the 5 ms
 control step reduces each completed pulse once
 and refreshes the latest supply window at every step. The frames
@@ -225,6 +224,33 @@ Upward motion assistance retains its full value through 75% of the calibrated
 stroke, fades linearly to zero at 85%, and remains off above that point.
 This limits acceleration into the sensitive upper region. The holding map,
 downward assistance, demand ramp and position API retain their existing roles.
+
+
+## Research control profile
+
+Revision 148 includes an optional full-calibration profile for bench research.
+The normal startup and tuning reset retain the 85% travel limit; installing
+this revision does not enable the research profile.
+
+Bench controls select the physical travel limit (`X13`), motion-dependent
+integral hold (`X18`), reference weight (`X21`), upper integral deadband
+(`X23`), ramp braking (`X24`) and descent assistance (`X25`, disabled by
+default). `X26` selects the retained fraction of descent correction, from
+0.25 to 0.75, with a default of 0.4. These options use the shared position
+demand path and remain subject to output and integral limits.
+
+During a descending approach, assistance begins after a measured 0.3
+percentage-point movement. It reduces excess negative integral toward a
+holding correction and ends on the first integral-band entry or target
+crossing. A previously measured correction can be reused for the same
+interior target after two seconds of stable, unsaturated holding. Endpoints
+cannot teach this correction. Stop, reset and accepted tuning changes
+invalidate it. Unknown targets use the retained-fraction fallback.
+
+Telemetry reports `ibias`, `ianchor`, `ipart` and `iphase` for the descent,
+and `ihvalid`, `ihtar`, `ihbias` and `ireuse` for the learned holding correction.
+The research profile requires separate hardware qualification before use as
+normal operating defaults.
 
 ## Source map
 

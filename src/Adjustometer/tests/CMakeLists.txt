@@ -5,7 +5,11 @@ function(add_adj_test NAME)
 endfunction()
 
 function(add_adj_internal_test NAME)
-    add_executable(${NAME} ${NAME}.cpp sensors_internal_bridge.cpp)
+    set(test_source "${NAME}.cpp")
+    if(ARGC GREATER 1)
+        set(test_source "${ARGV1}")
+    endif()
+    add_executable(${NAME} ${test_source} sensors_internal_bridge.cpp)
     target_link_libraries(${NAME} PRIVATE adj_mock_common)
     target_compile_definitions(${NAME} PRIVATE UNITY_INCLUDE_CONFIG_H)
     target_include_directories(${NAME} PRIVATE
@@ -26,3 +30,7 @@ target_compile_definitions(test_sensors_sliding PRIVATE
 add_adj_internal_test(test_sensors_pwm_filter)
 target_compile_definitions(test_sensors_pwm_filter PRIVATE
     ADJUSTOMETER_SLIDING_WINDOW=1 ADJUSTOMETER_PWM_FILTER_US=7692)
+
+add_adj_internal_test(test_sensors_pwm_filter_200hz test_sensors_pwm_filter.cpp)
+target_compile_definitions(test_sensors_pwm_filter_200hz PRIVATE
+    ADJUSTOMETER_SLIDING_WINDOW=1 ADJUSTOMETER_PWM_FILTER_US=5000)

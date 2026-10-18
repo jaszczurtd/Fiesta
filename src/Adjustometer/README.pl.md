@@ -22,7 +22,7 @@ Po ustaleniu poziomu odniesienia (baseline) okno przesuwa się co 32 okresy
 nastawnika (`ADJUSTOMETER_PWM_FILTER_US`, domyślnie okres
 `VP37_PWM_FREQUENCY_HZ` z `src/common/vp37_drive_config.h`, wspólnego z ECU).
 Uśrednienie po jednym okresie PWM znosi tętnienie, wywołane przez napęd PWM, bez opóźnienia filtru rekurencyjnego: skok ustala się w jednym
-okresie, a rampa spóźnia się o pół okresu, około 4 ms przy 130 Hz. Zmianę
+okresie, a rampa spóźnia się o pół okresu, 2,5 ms przy domyślnych 200 Hz. Zmianę
 częstotliwości PWM trzeba podać obu firmware'om. `ADJUSTOMETER_PWM_FILTER_US=0`
 przywraca ułamkowy EMA przesuwanego okna (waga 71/1024, wyjście z zera po ośmiu
 krótkich aktualizacjach). Ustalanie baseline zachowuje pierwotne tempo
