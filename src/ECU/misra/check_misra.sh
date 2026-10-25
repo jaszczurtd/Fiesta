@@ -56,6 +56,8 @@ temp_addon_config=""
 temp_hardware_dir=""
 hal_root="$project_root/../JaszczurHAL"
 hal_src="$hal_root/src"
+# hal/core/hal_status.h and hal_array.h include jhbase headers.
+hal_jhbase_include="$hal_root/third_party/jhbase/include"
 cppcheck_bin="${CPPCHECK_BIN:-$hal_root/scripts/cppcheck.sh}"
 hal_cppcheck_config="$hal_root/config/tooling/cppcheck-atomics.cfg"
 
@@ -175,7 +177,11 @@ fi
 include_args=(-I.)
 library_args=()
 if [[ -d "$hal_src" ]]; then
-    include_args+=(-I"$hal_src" -I"$hal_src/utils")
+    if [[ ! -f "$hal_jhbase_include/jb/status.h" ]]; then
+        echo "jhbase headers not found: $hal_jhbase_include (run src/common/scripts/ensure-jaszczurhal-dependencies.sh)" >&2
+        exit 2
+    fi
+    include_args+=(-I"$hal_src" -I"$hal_src/utils" -I"$hal_jhbase_include")
     if [[ ! -f "$hal_cppcheck_config" ]]; then
         echo "JaszczurHAL cppcheck atomic model not found: $hal_cppcheck_config" >&2
         exit 2
@@ -211,8 +217,17 @@ fi
 if [[ -f "$project_root/device_tree.json" ]]; then
     temp_hardware_dir=$(mktemp -d)
     hardware_root="$temp_hardware_dir/.build"
+    # Several assemblies: the one the module's manifest selects by default.
+    assembly_args=()
+    manifest="$project_root/.vscode/jaszczurhal.project.json"
+    if [[ -f "$manifest" ]]; then
+        assembly=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("assembly", ""))' "$manifest")
+        if [[ -n "$assembly" ]]; then
+            assembly_args=(--assembly "$assembly")
+        fi
+    fi
     if ! python3 "$hal_root/scripts/generate_hardware_config.py" resolve \
-        --config-dir "$project_root" --output-root "$hardware_root" \
+        --config-dir "$project_root" "${assembly_args[@]}" --output-root "$hardware_root" \
         --output-dir "$hardware_root/hardware"; then
         echo "Hardware configuration of $project_root failed." >&2
         exit 2

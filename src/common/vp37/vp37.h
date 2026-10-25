@@ -46,16 +46,17 @@ typedef struct {
 
 /** @brief Source-independent requested position and its shared motion ramp. */
 typedef struct {
-  float requestedPercent;     /**< Requested position in 0..100%; -1 before a
-                                 demand. */
-  float physicalLimitPercent; /**< Share of the travel that 100 % demand
-                                 reaches; VP37_PHYSICAL_LIMIT_PERCENT at start.
-                                 Outside (0, 100] the full travel applies. */
-  float topArrivalDecel;      /**< Brake of every rising ramp into the top of
-                                 the range [% of travel/s^2]; 0 = off. */
-  int32_t target;             /**< Calibrated position target [Hz]. */
-  int32_t desired;            /**< Ramped target sent to the PID [Hz]. */
-  float desiredPosition;      /**< Fractional ramp state [Hz]. */
+  float requestedPercent; /**< Requested position in 0..100%; -1 before a
+                             demand. */
+  float
+      physicalLimitPercent; /**< Share of the travel that 100 % demand
+                               reaches; VP37_PHYSICAL_LIMIT_PERCENT at start,
+                               always one VP37_physicalLimitValid() accepts. */
+  float topArrivalDecel;    /**< Brake of every rising ramp into the top of
+                               the range [% of travel/s^2]; 0 = off. */
+  int32_t target;           /**< Calibrated position target [Hz]. */
+  int32_t desired;          /**< Ramped target sent to the PID [Hz]. */
+  float desiredPosition;    /**< Fractional ramp state [Hz]. */
   uint32_t targetChangedMs;
   bool targetMoving; /**< The last target change came within
                         VP37_TARGET_STABLE_MS of the one before it. */
@@ -766,6 +767,15 @@ int32_t VP37_getPositionDemandMinValue(const VP37Pump *self);
  * calibration.
  */
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self);
+
+/**
+ * @brief Whether a physical limit of the stroke may be installed.
+ * @param percent Share of the calibrated travel [%].
+ * @return true for a finite value above VP37_PERCENT_MIN and at most
+ * VP37_PERCENT_MAX, the range VP37_PHYSICAL_LIMIT_PERCENT is checked against
+ * at compile time; the bench applies the same rule to a limit set at runtime.
+ */
+bool VP37_physicalLimitValid(float percent);
 
 #ifdef __cplusplus
 }

@@ -29,7 +29,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.c
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
 # jh_hardware.h of the firmware assembly, loaded first like in the firmware.
 fiesta_hardware_header(ADJ_HW_HEADER "${ADJ_SRC}" "${HAL_LIB}")
-jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
+fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 
 # ── Mock implementations ───────────────────────────────────────────────────────

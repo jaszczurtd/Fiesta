@@ -20,7 +20,7 @@ for development commands and the module guides for control details.
    ┌───────────┐ ◄──────────► Clocks          dashboard gauges, TFT, buzzer
    │           │ ◄──────────  OilAndSpeed     oil pressure, wheel speed, EGT
    │    ECU    │ ◄──────────  Fiesta_clock    RTC time, 1 Hz
-   │  RP2040,  │
+   │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
    │           │ ─── I²C ───► PCF8574         relays (0x38)
    │           │ ◄─ PIO UART  GPS receiver
@@ -39,13 +39,17 @@ the other modules either feed the ECU data or display what it publishes.
 
 ## Hardware platform
 
-All modules run on RP2040 boards: Raspberry Pi Pico, RP2040-Plus, or
-RP2040-Zero. Each module describes its board, devices and pins in its own
-`device_tree.json`; the build generates `jh_hardware.h` from it and the code
-reads its `JH_HW_*` macros directly.
-RP2040 was chosen because it is cheap and
-easy to get, has two cores, flexible GPIO interrupts and PWM, and flash that
-can emulate EEPROM for DTCs and settings. The firmware talks to the hardware
+ECU runs on a Waveshare RP2350-Plus. Its PCB also takes the RP2040-Plus,
+which has the same header layout; `device_tree.json` keeps both as assemblies
+with identical wiring, and `rp2350-plus` is the default. The other modules run
+on RP2040 boards: Raspberry Pi Pico or RP2040-Zero. Each module describes its
+board, devices and pins in its own `device_tree.json`; the build generates
+`jh_hardware.h` from it and the code reads its `JH_HW_*` macros directly.
+RP2040 and RP2350 were chosen because they are cheap and easy to get, have two
+cores, flexible GPIO interrupts and PWM, and flash that can emulate EEPROM for
+DTCs and settings. RP2350 gives the ECU faster cores with a floating-point
+unit and more SRAM. The RP2040 ADC correction table applies only to RP2040
+builds; RP2350 ADC codes are used as read. The firmware talks to the hardware
 through JaszczurHAL. A move to another MCU also needs a matching HAL backend,
 assembly description, timing and memory checks, and hardware validation.
 

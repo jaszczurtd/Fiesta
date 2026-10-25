@@ -189,7 +189,7 @@ consistency wnosi dodatkowe gwarancje.
 
 Dowody zapisane przy decyzji: testy kopii stanu z ThreadSanitizer i przeplataniem
 publikacji; zastąpienie słów atomowych zwykłą kopią zgłasza wyścig. Testy działają na
-x86 z silniejszym porządkiem sprzętowym, więc uzasadnienie RP2040 opiera się na modelu
+x86 z silniejszym porządkiem sprzętowym, więc uzasadnienie dla RP2040 i RP2350 opiera się na modelu
 C11 i barierach `dmb` emitowanych przez kompilator. cppcheck 2.13 nie sprawdza Amendment
 4; wpis dokumentuje decyzję. Data: 2026-09-30.
 

@@ -84,6 +84,7 @@ void test_vp37_position_demand_reaches_calibrated_maximum(void) {
   pump->feedback.calibrationDone = true;
   pump->feedback.adjustMin = 100;
   pump->feedback.adjustMax = 9100;
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
 
   VP37_setPositionDemandPercentage(pump, 100.0f);
 
@@ -96,6 +97,7 @@ void test_vp37_position_demand_clamps_negative_input(void) {
   pump->feedback.calibrationDone = true;
   pump->feedback.adjustMin = 200;
   pump->feedback.adjustMax = 9200;
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
 
   VP37_setPositionDemandPercentage(pump, -10.0f);
 
@@ -190,7 +192,7 @@ static int32_t strokeAt(const VP37Pump *pump, float share) {
 void test_vp37_percent_demand_ends_at_the_physical_limit(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
-  pump->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  pump->demand.physicalLimitPercent = (float)VP37_PHYSICAL_LIMIT_PERCENT;
   const int32_t top = strokeAt(pump, VP37_PHYSICAL_LIMIT_PERCENT * .01f);
   TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 100.0f));
   TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.requestedPercent);
@@ -207,7 +209,7 @@ void test_vp37_percent_demand_ends_at_the_physical_limit(void) {
 void test_vp37_counts_demand_is_capped_at_the_physical_limit(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
-  pump->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  pump->demand.physicalLimitPercent = (float)VP37_PHYSICAL_LIMIT_PERCENT;
   const int32_t top = strokeAt(pump, VP37_PHYSICAL_LIMIT_PERCENT * .01f);
   TEST_ASSERT_EQUAL_INT32(top, VP37_getPositionDemandMaxValue(pump));
   TEST_ASSERT_EQUAL(
@@ -220,16 +222,27 @@ void test_vp37_counts_demand_is_capped_at_the_physical_limit(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.02f, 50.0f, pump->demand.requestedPercent);
 }
 
-void test_vp37_full_or_invalid_physical_limit_keeps_the_calibrated_top(void) {
+void test_vp37_full_physical_limit_keeps_the_calibrated_top(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
-  const float limits[] = {100.0f, 0.0f, -5.0f, 150.0f, NAN};
-  for (size_t i = 0U; i < COUNTOF(limits); ++i) {
-    pump->demand.physicalLimitPercent = limits[i];
-    TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 100.0f));
-    TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.target);
-    TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax,
-                            VP37_getPositionDemandMaxValue(pump));
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 100.0f));
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.target);
+  TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax,
+                          VP37_getPositionDemandMaxValue(pump));
+}
+
+// A limit is a share of the stroke: the full travel and anything below it
+// down to, but not including, zero. The same rule gates the bench knob.
+void test_vp37_physical_limit_is_a_share_of_the_stroke(void) {
+  const float accepted[] = {(float)VP37_PERCENT_MAX, 50.5f, 0.1f,
+                            (float)VP37_PHYSICAL_LIMIT_PERCENT};
+  for (size_t i = 0U; i < COUNTOF(accepted); ++i) {
+    TEST_ASSERT_TRUE(VP37_physicalLimitValid(accepted[i]));
+  }
+  const float rejected[] = {0.0f, -5.0f, 100.5f, 150.0f, NAN, INFINITY};
+  for (size_t i = 0U; i < COUNTOF(rejected); ++i) {
+    TEST_ASSERT_FALSE(VP37_physicalLimitValid(rejected[i]));
   }
 }
 
@@ -276,7 +289,7 @@ void test_vp37_init_returns_ok_when_baseline_ready(void) {
   TEST_ASSERT_TRUE(pump->vp37Initialized);
   TEST_ASSERT_TRUE(pump->feedback.calibrationDone);
   TEST_ASSERT_EQUAL_FLOAT(VP37_PID_TOP_KD, pump->pid.topKd);
-  TEST_ASSERT_EQUAL_FLOAT(VP37_PHYSICAL_LIMIT_PERCENT,
+  TEST_ASSERT_EQUAL_FLOAT((float)VP37_PHYSICAL_LIMIT_PERCENT,
                           pump->demand.physicalLimitPercent);
   TEST_ASSERT_EQUAL_INT32(100, pump->feedback.adjustMin);
   TEST_ASSERT_EQUAL_INT32(8200, pump->feedback.adjustMax);
@@ -3260,6 +3273,9 @@ static void initCalibratedPump(VP37Pump *pump) {
 void test_vp37_first_demand_after_init_ramps_from_the_bottom(void) {
   VP37Pump *pump = vp37TestPump();
   initCalibratedPump(pump);
+  // The first step is measured far from its target, so the target sits on the
+  // full travel whatever the default limit; the limit has its own tests.
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
   const float travel = 8100.0f;
   const float standingStep =
       travel * VP37_STATIONARY_SLEW_PERCENT_PER_SECOND * .01f * .005f;
@@ -3521,9 +3537,13 @@ static void checkUpperRules(float limit) {
   // The map's motion column at 80 %, halved by the taper when it applies.
   TEST_ASSERT_FLOAT_WITHIN(.001f, 12.266667f, pump->feedforward.motion);
   pump->demand.desiredPosition = (float)pump->feedback.adjustMax;
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 45.0f, VP37_integralLimit(pump));
+  TEST_ASSERT_FLOAT_WITHIN(.01f,
+                           VP37_INTEGRAL_LIMIT_MAP[VP37_STROKE_TAPER_KNOTS - 1U]
+                                                  [VP37_TAPER_COL_VALUE],
+                           VP37_integralLimit(pump));
   pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
-  TEST_ASSERT_FLOAT_WITHIN(.01f, 380.0f, VP37_integralDeadband(pump));
+  TEST_ASSERT_FLOAT_WITHIN(.01f, VP37_PID_DEADBAND_TOP_HZ,
+                           VP37_integralDeadband(pump));
   pump->pid.topKd = .002f;
   pump->pidDtUs = 5000U;
   pump->demand.atRest = false;
@@ -3539,11 +3559,8 @@ void test_vp37_upper_stroke_rules_apply_under_any_physical_limit(void) {
   checkUpperRules(85.0f);
   checkUpperRules(86.0f);
   checkUpperRules(89.9f);
-  checkUpperRules(90.0f);
-  checkUpperRules(100.0f);
-  // Outside (0, 100] the full travel applies.
-  checkUpperRules(0.0f);
-  checkUpperRules(150.0f);
+  checkUpperRules((float)VP37_PHYSICAL_LIMIT_PERCENT);
+  checkUpperRules((float)VP37_PERCENT_MAX);
 }
 
 // First step of a tracked rise from a settled 80 % of the travel; a demand in
@@ -4463,16 +4480,12 @@ void test_vp37_integral_deadband_widens_only_in_the_upper_stroke(void) {
                           pump->pid.integralDeadbandHz);
 }
 
-// The dead zone bends at 82 % of the travel. Below the bend it follows the
-// straight 12 -> 120 Hz taper it had; above it the zone widens steeply,
-// 42 Hz at the bend to 380 Hz at the full travel (bench 2026-09-28: 30 s
-// holds at the 85 % limit stayed put, at 86 % two of three hopped). With the
-// physical limit at 90 % of the travel the 95 % target of the upper
-// staircases (85.5 % of the travel) and the full-demand target both lie above
-// the bend, on the steep segment. The extra knot must not move the integral
-// authority off its straight taper.
-void test_vp37_dead_zone_bends_to_hold_full_demand_below_the_unstable_band(
-    void) {
+// The dead zone bends at the map's third knot: a gentle slope from the taper
+// start to the bend, a steep one from the bend to the top. The position loop
+// walks the same table the knots come from, so the test reads them there and
+// checks the slopes between them, not any one tuning value. The extra knot
+// must not move the integral authority off its straight taper.
+void test_vp37_dead_zone_bends_at_the_map_knot(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
   pump->pid.integralDeadbandTopHz = VP37_PID_DEADBAND_TOP_HZ;
@@ -4482,29 +4495,42 @@ void test_vp37_dead_zone_bends_to_hold_full_demand_below_the_unstable_band(
     pump->demand.desiredPosition =
         (float)pump->feedback.adjustMin + (travel * percent / 100.0f);
   };
-  const auto straightTaper = [](float percent) {
-    return 12.0f + ((percent - 75.0f) * 108.0f / 25.0f);
+  const auto knot = [](uint32_t row, uint32_t column) {
+    return VP37_INTEGRAL_DEADBAND_MAP[row][column];
   };
-  const auto aboveBend = [](float percent) {
-    return 42.0f + ((percent - 82.0f) * 338.0f / 18.0f);
+  const float start = knot(1U, VP37_TAPER_COL_PERCENT);
+  const float bend = knot(2U, VP37_TAPER_COL_PERCENT);
+  const float top = knot(3U, VP37_TAPER_COL_PERCENT);
+  const auto gentle = [&](float percent) {
+    return knot(1U, VP37_TAPER_COL_VALUE) +
+           ((percent - start) / (bend - start)) *
+               (knot(2U, VP37_TAPER_COL_VALUE) -
+                knot(1U, VP37_TAPER_COL_VALUE));
   };
+  const auto steep = [&](float percent) {
+    return knot(2U, VP37_TAPER_COL_VALUE) +
+           ((percent - bend) / (top - bend)) * (knot(3U, VP37_TAPER_COL_VALUE) -
+                                                knot(2U, VP37_TAPER_COL_VALUE));
+  };
+  TEST_ASSERT_TRUE(start < bend);
+  TEST_ASSERT_TRUE(bend < top);
 
-  at(75.0f);
+  at(start);
   TEST_ASSERT_EQUAL_FLOAT((float)VP37_PID_DEADBAND,
                           VP37_integralDeadband(pump));
-  at(80.0f);
-  TEST_ASSERT_FLOAT_WITHIN(.5f, straightTaper(80.0f),
-                           VP37_integralDeadband(pump));
-  at(82.0f);
-  TEST_ASSERT_FLOAT_WITHIN(.5f, straightTaper(82.0f),
-                           VP37_integralDeadband(pump));
-  const float top95 = 95.0f * VP37_PHYSICAL_LIMIT_PERCENT / 100.0f;
-  TEST_ASSERT_TRUE(top95 > 82.0f);
-  at(top95);
-  TEST_ASSERT_FLOAT_WITHIN(.5f, aboveBend(top95), VP37_integralDeadband(pump));
-  TEST_ASSERT_TRUE(VP37_integralDeadband(pump) > straightTaper(top95) + 40.0f);
-  at(VP37_PHYSICAL_LIMIT_PERCENT);
-  TEST_ASSERT_FLOAT_WITHIN(1.0f, aboveBend(VP37_PHYSICAL_LIMIT_PERCENT),
+  const float belowBend = (start + bend) / 2.0f;
+  at(belowBend);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, gentle(belowBend), VP37_integralDeadband(pump));
+  at(bend);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, gentle(bend), VP37_integralDeadband(pump));
+  const float aboveBend = (bend + top) / 2.0f;
+  at(aboveBend);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, steep(aboveBend), VP37_integralDeadband(pump));
+  // Steep means steeper: the straight line through the gentle slope falls
+  // short of the zone above the bend.
+  TEST_ASSERT_TRUE(gentle(aboveBend) < steep(aboveBend));
+  at(top);
+  TEST_ASSERT_FLOAT_WITHIN(.5f, VP37_PID_DEADBAND_TOP_HZ,
                            VP37_integralDeadband(pump));
 
   // Integral authority: 120 to the taper start, then 3 PWM per percent.
@@ -6708,7 +6734,8 @@ int main(void) {
   RUN_TEST(test_vp37_position_demand_in_counts_matches_the_percentage_entry);
   RUN_TEST(test_vp37_percent_demand_ends_at_the_physical_limit);
   RUN_TEST(test_vp37_counts_demand_is_capped_at_the_physical_limit);
-  RUN_TEST(test_vp37_full_or_invalid_physical_limit_keeps_the_calibrated_top);
+  RUN_TEST(test_vp37_full_physical_limit_keeps_the_calibrated_top);
+  RUN_TEST(test_vp37_physical_limit_is_a_share_of_the_stroke);
   RUN_TEST(test_vp37_pid_time_update_setter);
   RUN_TEST(test_vp37_init_returns_already_initialized);
   RUN_TEST(test_vp37_init_returns_ok_when_baseline_ready);
@@ -6780,8 +6807,7 @@ int main(void) {
   RUN_TEST(test_vp37_measured_drive_does_not_apply_silence_as_heating_time);
   RUN_TEST(test_vp37_stroke_taper_holds_ends_flat_and_walks_the_knots);
   RUN_TEST(test_vp37_integral_deadband_widens_only_in_the_upper_stroke);
-  RUN_TEST(
-      test_vp37_dead_zone_bends_to_hold_full_demand_below_the_unstable_band);
+  RUN_TEST(test_vp37_dead_zone_bends_at_the_map_knot);
   RUN_TEST(
       test_vp37_integral_hold_bands_stay_fixed_under_the_scheduled_dead_zone);
   RUN_TEST(test_vp37_map_trim_absorbs_the_settled_integral_without_a_bump);

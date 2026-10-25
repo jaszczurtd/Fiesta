@@ -65,12 +65,13 @@ For unattended builds see the [systemd guide](../src/ECU/scripts/systemd/README.
 
 ## Build one module
 
-This example selects ECU and its `rp2040-plus` assembly explicitly:
+This example selects ECU and its default `rp2350-plus` assembly explicitly;
+`--assembly rp2040-plus` builds the same ECU for the RP2040-Plus:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2040-plus
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2350-plus
 ```
 
 Choose another module and an assembly from its `device_tree.json`. Firmware
@@ -80,15 +81,16 @@ A module with one assembly can select it automatically. Inspect the resolved
 configuration without compiling:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode config-dump --project src/ECU --assembly rp2040-plus --json
+src/JaszczurHAL/vscode/entry/jh-vscode config-dump --project src/ECU --assembly rp2350-plus --json
 ```
 
 Artifacts are under `src/<Module>/.build/<target>/<assembly>/`, named
 `firmware.elf` and `firmware.uf2`. ECU uses
-`src/ECU/.build/rp2040/rp2040-plus/`. For its bench image:
+`src/ECU/.build/rp2350-arm/rp2350-plus/` (`src/ECU/.build/rp2040/rp2040-plus/`
+for the RP2040-Plus). For its bench image:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2040-plus --variant BENCH
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus --variant BENCH
 ```
 
 That image goes under `variants/BENCH/` inside the assembly directory.
@@ -101,8 +103,8 @@ use `config-dump` to confirm the file before selecting it for upload.
 These commands act on connected hardware:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2040-plus
+src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
 ```
 
@@ -126,7 +128,7 @@ that UF2 changes. Example for the default ECU image:
     set -e
     source src/common/scripts/fiesta-firmware-common.sh
     fiesta_prepare_manifest_for_uf2 "$PWD/src/ECU" \
-        "$PWD/src/ECU/.build/rp2040/rp2040-plus/firmware.uf2"
+        "$PWD/src/ECU/.build/rp2350-arm/rp2350-plus/firmware.uf2"
 )
 ```
 
@@ -146,10 +148,11 @@ Cortex-Debug (`marus25.cortex-debug`) and make `openocd` and
 in the VS Code user profile; on other hosts use PATH or Cortex-Debug settings.
 
 Open the module directory, press F5 and select its assembly profile. ECU ships
-`Project: Debug rp2040-plus (RP2040)` and the corresponding `variant: BENCH`
-profile. Each launches a debug build, flashes it and stops at `main`.
-Other modules have profiles for their own RP2040 assemblies. The generated
-files currently provide neither RP2350 nor attach-only profiles.
+`Project: Debug rp2350-plus (RP2350 ARM)`, `Project: Debug rp2040-plus (RP2040)`
+and the corresponding `variant: BENCH` profiles. Each launches a debug build,
+flashes it and stops at `main`. Other modules have profiles for their own
+RP2040 assemblies. The generated files currently provide no attach-only
+profiles.
 USB upload uses `jh-vscode`; the probe serves the Cortex-Debug/GDB path.
 
 ## Maintain generated configuration

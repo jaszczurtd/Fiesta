@@ -13,9 +13,22 @@ function(fiesta_hardware_header OUT_VAR MODULE_DIR HAL_ROOT)
     jh_find_python(_fiesta_hw_python)
     set(_fiesta_hw_root "${CMAKE_BINARY_DIR}/.build")
     set(_fiesta_hw_out "${_fiesta_hw_root}/hardware")
+    # A module with several assemblies resolves the one its manifest selects,
+    # as the firmware does by default; a local developer selection does not
+    # apply here.
+    set(_fiesta_hw_manifest "${MODULE_DIR}/.vscode/jaszczurhal.project.json")
+    set(_fiesta_hw_assembly_args)
+    if(EXISTS "${_fiesta_hw_manifest}")
+        file(READ "${_fiesta_hw_manifest}" _fiesta_hw_manifest_text)
+        string(JSON _fiesta_hw_assembly ERROR_VARIABLE _fiesta_hw_no_assembly
+            GET "${_fiesta_hw_manifest_text}" assembly)
+        if(NOT _fiesta_hw_no_assembly)
+            set(_fiesta_hw_assembly_args --assembly "${_fiesta_hw_assembly}")
+        endif()
+    endif()
     execute_process(
         COMMAND "${_fiesta_hw_python}" "${HAL_ROOT}/scripts/generate_hardware_config.py"
-            resolve --config-dir "${MODULE_DIR}"
+            resolve --config-dir "${MODULE_DIR}" ${_fiesta_hw_assembly_args}
             --output-root "${_fiesta_hw_root}" --output-dir "${_fiesta_hw_out}"
         RESULT_VARIABLE _fiesta_hw_result
         ERROR_VARIABLE _fiesta_hw_error)
@@ -40,6 +53,9 @@ function(fiesta_hardware_header OUT_VAR MODULE_DIR HAL_ROOT)
             list(APPEND _fiesta_hw_inputs "${MODULE_DIR}/${_fiesta_hw_path}")
         endif()
     endforeach()
+    if(EXISTS "${_fiesta_hw_manifest}")
+        list(APPEND _fiesta_hw_inputs "${_fiesta_hw_manifest}")
+    endif()
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_fiesta_hw_inputs})
     set(${OUT_VAR} "${_fiesta_hw_out}/jh_hardware.h" PARENT_SCOPE)
 endfunction()

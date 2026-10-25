@@ -68,6 +68,7 @@ static VP37Pump *preparePump(void) {
   pump->feedback.adjustMin = 100;
   pump->feedback.adjustMax = 9100;
   pump->demand.requestedPercent = -1.0f;
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
   hal_mock_set_millis(0U);
   return pump;
 }
@@ -998,16 +999,24 @@ void test_configurator_start_follows_the_engine_speed_interlock(void) {
 void test_research_limit_requires_zero_and_rest(void) {
   VP37Pump *pump = preparePump();
   initTests();
-  pump->demand.physicalLimitPercent = 85.0f;
+  pump->demand.physicalLimitPercent = (float)VP37_PHYSICAL_LIMIT_PERCENT;
   pump->demand.requestedPercent = 0.0f;
   pump->demand.atRest = false;
   console("X13=100");
-  TEST_ASSERT_EQUAL_FLOAT(85.0f, pump->demand.physicalLimitPercent);
+  TEST_ASSERT_EQUAL_FLOAT((float)VP37_PHYSICAL_LIMIT_PERCENT,
+                          pump->demand.physicalLimitPercent);
   pump->demand.atRest = true;
   console("X13=100");
   TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.physicalLimitPercent);
-  console("X13=101");
-  TEST_ASSERT_EQUAL_FLOAT(100.0f, pump->demand.physicalLimitPercent);
+  console("X13=50.5");
+  TEST_ASSERT_EQUAL_FLOAT(50.5f, pump->demand.physicalLimitPercent);
+  // A share of the stroke: nothing above the full travel, nothing at or
+  // below zero.
+  const char *const rejected[] = {"X13=101", "X13=0", "X13=-5", "X13=nan"};
+  for (size_t i = 0U; i < COUNTOF(rejected); ++i) {
+    console(rejected[i]);
+    TEST_ASSERT_EQUAL_FLOAT(50.5f, pump->demand.physicalLimitPercent);
+  }
 }
 
 void test_research_scan_requires_unused_current_and_releases_adc(void) {

@@ -57,7 +57,7 @@ odstępstwami. Testy hostowe używają mocków HAL i nie potwierdzają zachowani
 elektrycznego ani mechanicznego. Projekt ma stanowisko silnikowe, ale nie ma
 automatycznego stanowiska HIL.
 
-RP2040 nie ma kwalifikacji AEC-Q100. Pomiar obrotów silnika używa przerwań
+RP2040 i RP2350 nie mają kwalifikacji AEC-Q100. Pomiar obrotów silnika używa przerwań
 GPIO, a Adjustometer mierzy okresy przez PIO/DMA. Zmiany sterowania wymagają
 prób sprzętowych. Wyniki testów i CI dotyczą sprawdzanego przez nie zakresu;
 nie zastępują przeglądu ani walidacji całego pojazdu.

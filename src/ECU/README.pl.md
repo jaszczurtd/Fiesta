@@ -43,13 +43,14 @@ przyjmuje 0-100% użytecznego skoku.
 `hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)`
 przyjmuje surowe jednostki sprzężenia w granicach
 `VP37_getPositionDemandMinValue()` i `VP37_getPositionDemandMaxValue()`.
-Użyteczny skok kończy się przy `VP37_PHYSICAL_LIMIT_PERCENT` (85%)
+Użyteczny skok kończy się przy `VP37_PHYSICAL_LIMIT_PERCENT`
 skalibrowanego zakresu. Ograniczenie utrzymuje nastawnik poniżej obszarów
-ujemnej sztywności u góry i miękkiego zakresu poniżej 86% w zimnym paliwie,
-kosztem największych dawek. Wartość 100 przywraca pełny skok.
+ujemnej sztywności u góry, kosztem największych dawek. Wartość 100 przywraca
+pełny skok. Limit jest udziałem skoku: powyżej zera i najwyżej 100; pilnuje
+tego kompilacja i tak samo komenda stanowiska `X13`.
 
 Martwa strefa całkowania rośnie silnie powyżej 82% skoku, więc postój przy
-pełnym żądaniu ustala się około 100 Hz poniżej limitu. Oba API zapisują to samo
+pełnym żądaniu ustala się poniżej limitu. Oba API zapisują to samo
 żądanie: wejście kierowcy, sterowanie silnikiem i testy używają jednej rampy,
 feedforward i PID. Różnią się tylko jednostką. Nie ma osobnego trybu źródła,
 flagi filtra ani alternatywnej ścieżki położenia. Awaryjny stop i kalibracja
@@ -113,7 +114,7 @@ wyłączone: tam prowadziły długie postoje do zrywów tarcia.
 Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`.
 Bloki skanu ADC docierają niezależnie od kroku regulacji pozycji. Rdzeń 1 odbiera je między
 krokami położenia i śledzi zbocza bramki przez granice bloków. Każdy kod ADC
-jest kompensowany raz przy odbiorze. Krok 5 ms redukuje każdy zakończony impuls
+jest kompensowany raz przy odbiorze (tablica korekcji RP2040; kody RP2350 bez zmian). Krok 5 ms redukuje każdy zakończony impuls
 raz i odświeża ostatnie okno napięcia w każdym kroku.
 
 Średnia obejmuje ostatni okres PWM bez oczekiwania na zbocze prądu.
@@ -220,7 +221,7 @@ zachowują swoje zadania.
 ## Badawczy profil regulacji
 
 Rewizja 148 zawiera opcjonalny profil pełnej kalibracji do badań na stanowisku.
-Zwykły start i reset nastaw zachowują limit 85% skoku; wgranie tej rewizji
+Zwykły start i reset nastaw zachowują domyślny limit skoku; wgranie tej rewizji
 nie włącza profilu badawczego.
 
 Komendy stanowiska wybierają fizyczny limit skoku (`X13`), blokadę całki
@@ -285,10 +286,14 @@ Konfiguracja HAL współdzielona z testami hostowymi jest w
 [ecu_hal_config.h](ecu_hal_config.h); deklarację wariantu HAL czyta wyłącznie
 z `hal_project_config.h`. W VS Code wybierz `Project: Build variant: BENCH`
 lub `Project: Upload variant: BENCH`. Obraz trafia do
-`src/ECU/.build/rp2040/rp2040-plus/variants/BENCH/`. Zadania bez wariantu
-dają obraz samochodu. Odpowiedniki CLI podaje [instrukcja kompilacji](../../doc/BUILDING.pl.md).
+`src/ECU/.build/rp2350-arm/rp2350-plus/variants/BENCH/`, a dla montażu
+RP2040-Plus pod `.build/rp2040/rp2040-plus/`. Zadania bez wariantu dają obraz
+samochodu. Odpowiedniki CLI podaje [instrukcja kompilacji](../../doc/BUILDING.pl.md).
 
-[device_tree.json](device_tree.json) przypisuje piny i adresy:
+[device_tree.json](device_tree.json) przypisuje piny i adresy. Montaże
+`rp2350-plus` (Waveshare RP2350-Plus, domyślny) i `rp2040-plus` (Waveshare
+RP2040-Plus) mają wspólne PCB i okablowanie; wybiera je `--assembly` lub
+wybór montażu w VS Code. Interfejsy:
 
 - **I²C 400 kHz:** ECU master, Adjustometer `0x57`, PCF8574A `0x38`.
   PCF8574A dopuszcza 100 kHz, więc pracuje poza specyfikacją do wymiany na

@@ -55,7 +55,7 @@ have a gate rejecting active findings outside recorded deviations. Host tests
 use HAL mocks and do not establish electrical or mechanical behaviour. The
 project has an engine test stand, but no automated HIL rig.
 
-RP2040 is not AEC-Q100 qualified. Engine speed uses GPIO edge interrupts;
+Neither RP2040 nor RP2350 is AEC-Q100 qualified. Engine speed uses GPIO edge interrupts;
 Adjustometer uses PIO/DMA period capture. Hardware trials remain necessary
 when changing the control path. Test and CI results describe their checked
 scope; they do not replace review or validation of the whole vehicle.

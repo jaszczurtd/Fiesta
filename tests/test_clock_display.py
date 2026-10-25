@@ -44,7 +44,8 @@ class ClockDisplayTests(unittest.TestCase):
         flags = ["-Wall", "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
                  "-DHAL_TARGET_RP2040=1",
                  f'-DJH_HARDWARE_HEADER="{build / "hardware/jh_hardware.h"}"',
-                 "-I", str(HAL / "tests"), "-I", str(build / "hardware"), "-I", str(MODULE), "-I", str(HAL / "src")]
+                 "-I", str(HAL / "tests"), "-I", str(build / "hardware"), "-I", str(MODULE), "-I", str(HAL / "src"),
+                 "-I", str(HAL / "third_party/jhbase/include")]
         sources = [MODULE / name for name in
                    ("display.c", "clock_font.c", "main.c", "clockPart.c", "tempPart.c", "voltPart.c", "utils.c")]
         sources += [HAL / "src/hal/display" / name for name in

@@ -20,7 +20,7 @@ sterowania znajdują się w dokumentacji modułów.
    ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, buzzer
    │           │ ◄──────────  OilAndSpeed     olej, prędkość, EGT
    │    ECU    │ ◄──────────  Fiesta_clock    czas RTC, 1 Hz
-   │  RP2040,  │
+   │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
    │           │ ─── I²C ───► PCF8574         przekaźniki (0x38)
    │           │ ◄─ PIO UART  odbiornik GPS
@@ -39,8 +39,10 @@ lub prezentują to, co publikuje ECU.
 
 ## Sprzęt
 
-Moduły używają płytek RP2040: Raspberry Pi Pico, RP2040-Plus i RP2040-Zero.
-Każdy opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje
+ECU pracuje na Waveshare RP2350-Plus. Jego PCB przyjmuje też RP2040-Plus
+o tym samym układzie złączy; `device_tree.json` zawiera oba montaże
+z identycznym okablowaniem, domyślny jest `rp2350-plus`. Pozostałe moduły
+używają płytek RP2040: Raspberry Pi Pico i RP2040-Zero. Każdy moduł opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje
 z niego `jh_hardware.h`, a kod czyta makra `JH_HW_*`.
 
 Inicjalizacja MCP2515 używa wygenerowanej konfiguracji każdego węzła,
@@ -48,8 +50,10 @@ w tym magistrali SPI, chip select, bitrate i częstotliwości oscylatora.
 Fiesta_clock odczytuje też ustawienia `pull` wejść; polaryzacja GPIO
 pochodzi z `activeLow`.
 
-RP2040 wybrano ze względu na cenę, dostępność, dwa rdzenie, GPIO z przerwaniami,
-PWM i możliwość emulacji EEPROM we flash. Firmware korzysta z JaszczurHAL.
+RP2040 i RP2350 wybrano ze względu na cenę, dostępność, dwa rdzenie, GPIO
+z przerwaniami, PWM i możliwość emulacji EEPROM we flash. RP2350 daje ECU
+szybsze rdzenie z jednostką zmiennoprzecinkową i więcej SRAM. Tablica korekcji
+ADC RP2040 działa tylko w buildach RP2040; kody ADC RP2350 są używane wprost. Firmware korzysta z JaszczurHAL.
 Przeniesienie na inny MCU wymaga również odpowiedniego backendu HAL, opisu
 montażu, sprawdzenia czasu wykonania i pamięci oraz walidacji sprzętowej.
 

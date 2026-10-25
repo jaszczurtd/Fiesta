@@ -199,8 +199,8 @@ variable, the only case sequential consistency adds.
 
 Evidence: the host tests of the snapshot run under ThreadSanitizer and with interleaved
 publications, and a plain copy in place of the atomic words is reported as a race; they
-run on x86, whose hardware ordering is stronger than required, so the ordering on the
-RP2040 rests on the C11 model above, which the compiler implements with `dmb`. cppcheck
+run on x86, whose hardware ordering is stronger than required, so the ordering on
+RP2040 and RP2350 rests on the C11 model above, which the compiler implements with `dmb`. cppcheck
 2.13 does not check Amendment 4 rules; this row records the decision. Decided
 2026-09-30.
 

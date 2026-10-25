@@ -2,6 +2,42 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Project: Debug rp2350-plus (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/rp2350-arm/rp2350-plus/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) rp2350-plus",
+            "openOCDLaunchCommands": [
+                "adapter speed 2000"
+            ]
+        },
+        {
+            "name": "Project: Debug rp2350-plus variant: BENCH (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/rp2350-arm/rp2350-plus/variants/BENCH/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) rp2350-plus variant: BENCH",
+            "openOCDLaunchCommands": [
+                "adapter speed 2000"
+            ]
+        },
+        {
             "name": "Project: Debug rp2040-plus (RP2040)",
             "type": "cortex-debug",
             "request": "launch",

@@ -6,9 +6,10 @@
       "description": "Select an assembly of device_tree.json",
       "type": "pickString",
       "options": [
-        "rp2040-plus - rp2040/rp2040-plus-4mb"
+        "rp2040-plus - rp2040/rp2040-plus-4mb",
+        "rp2350-plus - rp2350-arm/rp2350-plus-4mb"
       ],
-      "default": "rp2040-plus - rp2040/rp2040-plus-4mb"
+      "default": "rp2350-plus - rp2350-arm/rp2350-plus-4mb"
     }
   ],
   "tasks": [
@@ -430,6 +431,44 @@
         "${workspaceFolder}",
         "--assembly",
         "rp2040-plus",
+        "--variant",
+        "BENCH"
+      ],
+      "hide": true,
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Build (Debug) rp2350-plus",
+      "detail": "Build the rp2350-plus assembly with debug settings for its debug profile.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build-debug",
+        "--project",
+        "${workspaceFolder}",
+        "--assembly",
+        "rp2350-plus"
+      ],
+      "hide": true,
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Build (Debug) rp2350-plus variant: BENCH",
+      "detail": "Build the rp2350-plus assembly, variant BENCH, with debug settings for its debug profile.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build-debug",
+        "--project",
+        "${workspaceFolder}",
+        "--assembly",
+        "rp2350-plus",
         "--variant",
         "BENCH"
       ],

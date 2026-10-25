@@ -39,10 +39,13 @@ class CanHardwareTests(unittest.TestCase):
                 tree["bindings"] = bindings
                 tree["nodes"][node]["properties"] = {"bitrateHz": 250000, "oscillatorHz": 16000000}
                 (build / "device_tree.json").write_text(json.dumps(tree))
+                # The assembly the module's manifest selects by default.
+                manifest = json.loads((source_dir / ".vscode/jaszczurhal.project.json").read_text())
+                name = manifest["assembly"]
                 self.run_command([sys.executable, str(HAL / "scripts/generate_hardware_config.py"),
-                                  "resolve", "--config-dir", str(build), "--output-dir", str(build),
-                                  "--output-root", str(build)])
-                assembly = next(iter(tree["assemblies"].values()))
+                                  "resolve", "--config-dir", str(build), "--assembly", name,
+                                  "--output-dir", str(build), "--output-root", str(build)])
+                assembly = tree["assemblies"][name]
                 cs = assembly["nodes"][node]["pins"]["cs"]
                 bus = assembly["buses"][assembly["nodes"][node]["bus"]]["index"]
                 harness = build / "probe.cpp"
@@ -80,6 +83,7 @@ int main() {{ (void){call}; return 1; }}
                 flags = ["-Wall", "-Wextra", "-Werror", "-O2", "-flto", "-ffunction-sections", "-fdata-sections",
                          "-DHAL_TARGET_MOCK=1", "-I", str(HAL / "src"), "-I", str(source_dir),
                          "-I", str(HAL / "third_party/cJSON"),
+                         "-I", str(HAL / "third_party/jhbase/include"),
                          "-include", str(source_dir / "hal_project_config.h"),
                          "-include", str(build / "jh_hardware.h")]
                 # Keep the real default implementation linked: reverting the fix must fail at runtime.

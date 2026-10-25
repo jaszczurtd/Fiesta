@@ -118,11 +118,51 @@ void test_heater_off_when_fan_is_on(void) {
 }
 
 void test_heater_off_when_glow_plugs_active(void) {
-  glowPlugs_initGlowPlugsTime(getGlowPlugsInstance(),
-                              -10.0f); /* starts heating */
-  TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(getGlowPlugsInstance()));
-
+  TEST_ASSERT_TRUE(pcf8574_init());
+  setGlobalValue(F_COOLANT_TEMP, -10.0f);
+  glowPlugs *glow = getGlowPlugsInstance();
+  glowPlugs_initGlowPlugsTime(glow, -10.0f);
+  glowPlugs_process(
+      glow); /* Start the after-start countdown at the same time. */
+  const int32_t ticks = glow->glowPlugsTime;
+  TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(glow));
   TEST_ASSERT_FALSE(heaterLoOn(&eheater));
+
+  for (int32_t tick = 1; tick <= ticks; ++tick) {
+    hal_mock_set_millis((uint32_t)tick * 1000u);
+    glowPlugs_process(glow);
+  }
+
+  /* Zero is the final active tick; the relay is switched off on the next one.
+   */
+  TEST_ASSERT_EQUAL_INT32(0, glow->glowPlugsTime);
+  const uint8_t glowMask = (uint8_t)(1u << JH_HW_NODE_GLOW_PLUGS_PIN_OUT_INDEX);
+  uint8_t latch = 0;
+  const int lastFrame = hal_mock_i2c_get_write_frame_count() - 1;
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame(lastFrame, &latch, 1));
+  TEST_ASSERT_BITS_HIGH(glowMask, latch);
+  TEST_ASSERT_TRUE(glowPlugs_isGlowPlugsHeating(glow));
+  TEST_ASSERT_FALSE(heaterLoOn(&eheater));
+  TEST_ASSERT_FALSE(eheater.heaterHiEnabled);
+
+  hal_mock_i2c_reset_write_log();
+  hal_mock_set_millis((uint32_t)(ticks + 1) * 1000u);
+  glowPlugs_process(glow);
+  TEST_ASSERT_FALSE(glowPlugs_isGlowPlugsHeating(glow));
+  TEST_ASSERT_TRUE(heaterLoOn(&eheater));
+  TEST_ASSERT_TRUE(eheater.heaterHiEnabled);
+
+  /* Every latch write must have the glow relay off before enabling heaters. */
+  const uint8_t heaterMask =
+      (uint8_t)((1u << JH_HW_NODE_HEATER_HI_PIN_OUT_INDEX) |
+                (1u << JH_HW_NODE_HEATER_LO_PIN_OUT_INDEX));
+  const int frames = hal_mock_i2c_get_write_frame_count();
+  TEST_ASSERT_GREATER_THAN_INT(0, frames);
+  for (int i = 0; i < frames; ++i) {
+    TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame(i, &latch, 1));
+    TEST_ASSERT_BITS_LOW(glowMask, latch);
+  }
+  TEST_ASSERT_BITS_HIGH(heaterMask, latch);
 }
 
 // ── On-conditions and Hi/Lo selection ────────────────────────────────────────

@@ -50,12 +50,13 @@ for a 0-100% demand across the usable stroke, and
 `hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)` for
 raw feedback counts, bounded by `VP37_getPositionDemandMinValue()` and
 `VP37_getPositionDemandMaxValue()`. The usable stroke ends at
-`VP37_PHYSICAL_LIMIT_PERCENT` (85%) of the calibrated travel. This keeps the
-actuator below the negative-stiffness steps of the upper stroke and below the
-band under 86% that turns soft in cold fuel, at the cost of the largest fuel
-quantities; 100 restores the full travel. The integration dead zone widens
-steeply above 82% of the travel, so a full-demand hold settles about 100 Hz
-short of the limit instead of creeping up to it. Both write the same
+`VP37_PHYSICAL_LIMIT_PERCENT` of the calibrated travel. This keeps the
+actuator below the negative-stiffness steps of the upper stroke, at the cost
+of the largest fuel quantities; 100 restores the full travel. The limit is a
+share of the stroke, above zero and at most 100, checked at compile time and
+by the bench knob `X13` alike. The integration dead zone widens steeply above
+82% of the travel, so a full-demand hold settles short of the limit instead
+of creeping up to it. Both write the same
 demand, so driver input, engine control, and bench tests share one position
 ramp, feedforward, and PID. The unit is the only difference: the controller
 has no input-source mode, source-specific behaviour, filter-mode flag, or
@@ -121,8 +122,9 @@ into stick-slip.
 
 Supply compensation scales the complete feedforward and PID command by
 `12 V / compensated voltage`. ADC scan blocks arrive independently of the position-control step. Core 1 copies them between position steps and tracks gate edges across
-block boundaries. Each ADC code is compensated once on arrival; the 5 ms
-control step reduces each completed pulse once
+block boundaries. Each ADC code is compensated once on arrival (RP2040
+correction table; RP2350 codes pass unchanged); the 5 ms control step reduces
+each completed pulse once
 and refreshes the latest supply window at every step. The frames
 provide a mean over the latest PWM-period window without waiting for a current
 edge. While the mean is less than 20 ms old, a bounded voltage prediction
@@ -229,7 +231,7 @@ downward assistance, demand ramp and position API retain their existing roles.
 ## Research control profile
 
 Revision 148 includes an optional full-calibration profile for bench research.
-The normal startup and tuning reset retain the 85% travel limit; installing
+The normal startup and tuning reset retain the default travel limit; installing
 this revision does not enable the research profile.
 
 Bench controls select the physical travel limit (`X13`), motion-dependent
@@ -296,12 +298,15 @@ the host tests are in [`ecu_hal_config.h`](../../src/ECU/ecu_hal_config.h), beca
 JaszczurHAL reads the variant declaration only from `hal_project_config.h`
 itself. Select `Project: Build variant: BENCH` or
 `Project: Upload variant: BENCH` in VS Code. Artifacts go to
-`src/ECU/.build/rp2040/rp2040-plus/variants/BENCH/`. Tasks for `rp2040-plus`
-without a variant build the car image. See the [build guide](../../doc/BUILDING.md)
+`src/ECU/.build/rp2350-arm/rp2350-plus/variants/BENCH/`, or under
+`.build/rp2040/rp2040-plus/` for the RP2040-Plus assembly. Tasks without a
+variant build the car image. See the [build guide](../../doc/BUILDING.md)
 for CLI equivalents.
 
 [`device_tree.json`](../../src/ECU/device_tree.json) assigns every pin and address.
-The interfaces are:
+Its `rp2350-plus` assembly (Waveshare RP2350-Plus, the default) and
+`rp2040-plus` assembly (Waveshare RP2040-Plus) share the PCB and the wiring;
+`--assembly` or the VS Code assembly picker selects one. The interfaces are:
 
 - **I²C** at 400 kHz, ECU as master: Adjustometer at `0x57`, PCF8574A relay
   expander at `0x38`. The PCF8574A is rated for 100 kHz, so it runs outside

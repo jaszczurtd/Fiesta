@@ -54,13 +54,14 @@ void glowPlugs_init(glowPlugs *self) {
   self->lastGlowPlugsTime = 0;
   self->lastGlowPlugsLampTime = 0;
   self->lastSecond = 0;
+  self->heatingEnabled = false;
   self->warmAfterStart = false;
   self->initialized = false;
 }
 
 void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable) {
-  (void)self;
   pcf8574_write(JH_HW_NODE_GLOW_PLUGS_PIN_OUT_INDEX, enable);
+  self->heatingEnabled = enable;
 }
 
 void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable) {
@@ -69,7 +70,7 @@ void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable) {
 }
 
 bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self) {
-  return (self->glowPlugsTime > 0);
+  return self->heatingEnabled;
 }
 
 void glowPlugs_initGlowPlugsTime(glowPlugs *self, float temp) {

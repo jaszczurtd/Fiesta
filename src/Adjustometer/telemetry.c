@@ -1,15 +1,9 @@
 #include "telemetry.h"
 #include <hal/i2c/hal_i2c_slave.h>
 
-#if defined(__cplusplus)
-static_assert(ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES <=
-                  HAL_I2C_SLAVE_REG_MAP_SIZE,
-              "Adjustometer feedback exceeds register map");
-#else
-_Static_assert((ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES) <=
-                   HAL_I2C_SLAVE_REG_MAP_SIZE,
-               "Adjustometer feedback exceeds register map");
-#endif
+JB_STATIC_ASSERT((ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES) <=
+                     HAL_I2C_SLAVE_REG_MAP_SIZE,
+                 "Adjustometer feedback exceeds register map");
 
 /* Each block has one writer; the HAL freezes complete publications for I2C. */
 static void publishSequencedRegisters(uint8_t start, uint8_t *frame,

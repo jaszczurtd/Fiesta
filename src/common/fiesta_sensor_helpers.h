@@ -15,11 +15,27 @@
 extern "C" {
 #endif
 
+/*
+ * Per-sample correction of the ADC codes Fiesta reads. RP2040, and the host
+ * build that models it, gets the established 12-bit DNL compensation. RP2350
+ * has other, smaller DNL steps that the RP2040 table does not describe, so its
+ * codes are used as read.
+ */
+#if HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_RP2350_RISCV
+#define FIESTA_ADC_SAMPLE_TRANSFORM NULL
+static inline int fiesta_adc_compensate(int sample) { return sample; }
+#else
+#define FIESTA_ADC_SAMPLE_TRANSFORM hal_adc_compensate_rp2040_12bit
+static inline int fiesta_adc_compensate(int sample) {
+  return hal_adc_compensate_rp2040_12bit(sample);
+}
+#endif
+
 /**
  * @brief Read a Fiesta ADC input with an explicit spacing between samples.
  *
  * Discard one reading, collect four samples @p sample_delay_us apart and
- * compensate the RP2040 12-bit ADC transfer gaps. A module whose converter is
+ * correct each with fiesta_adc_compensate(). A module whose converter is
  * driven by a DMA scan passes at least one scan frame period, so the samples
  * come from distinct frames; a polled converter converts on every read and ten
  * microseconds suffice.
@@ -28,8 +44,11 @@ static inline hal_status_t
 fiesta_adc_read_average_spaced_ex(uint8_t pin, uint16_t sample_delay_us,
                                   float *out_average) {
   const hal_adc_average_config_t config = {
-      pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES, sample_delay_us,
-      true, hal_adc_compensate_rp2040_12bit,
+      pin,
+      (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES,
+      sample_delay_us,
+      true,
+      FIESTA_ADC_SAMPLE_TRANSFORM,
   };
   return hal_adc_read_average_ex(&config, out_average);
 }
@@ -38,8 +57,8 @@ fiesta_adc_read_average_spaced_ex(uint8_t pin, uint16_t sample_delay_us,
  * @brief Read a Fiesta ADC input using the historical RP2040 sampling policy.
  *
  * This keeps the former tools helper semantics explicit: discard one reading,
- * collect four samples ten microseconds apart and compensate the RP2040
- * 12-bit ADC transfer gaps.
+ * collect four samples ten microseconds apart and correct each with
+ * fiesta_adc_compensate().
  */
 static inline hal_status_t fiesta_adc_read_average_ex(uint8_t pin,
                                                       float *out_average) {

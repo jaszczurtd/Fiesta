@@ -17,26 +17,38 @@ import fiesta_modules  # noqa: E402
 
 MODULES = tuple(module.name for module in fiesta_modules.load().firmware())
 LINUX_ONLY_TASKS = {"Quality: Cppcheck baseline", "Quality: MISRA scan"}
-# Every module builds from one RP2040 assembly of its device_tree.json; the
-# probe gets one profile per assembly and variant, each for its own ELF.
+# Every module builds from the RP assemblies of its device_tree.json (ECU:
+# RP2350-Plus and RP2040-Plus on the same PCB); the probe gets one profile per
+# assembly and variant, each for its own ELF and the OpenOCD target of its MCU.
 DEBUG_PROFILES = {
     "ECU": {
+        "Project: Debug rp2350-plus (RP2350 ARM)":
+            ("rp2350-arm/rp2350-plus", "Project: Build (Debug) rp2350-plus",
+             "target/rp2350.cfg"),
+        "Project: Debug rp2350-plus variant: BENCH (RP2350 ARM)":
+            ("rp2350-arm/rp2350-plus/variants/BENCH",
+             "Project: Build (Debug) rp2350-plus variant: BENCH", "target/rp2350.cfg"),
         "Project: Debug rp2040-plus (RP2040)":
-            ("rp2040/rp2040-plus", "Project: Build (Debug) rp2040-plus"),
+            ("rp2040/rp2040-plus", "Project: Build (Debug) rp2040-plus",
+             "target/rp2040.cfg"),
         "Project: Debug rp2040-plus variant: BENCH (RP2040)":
             ("rp2040/rp2040-plus/variants/BENCH",
-             "Project: Build (Debug) rp2040-plus variant: BENCH"),
+             "Project: Build (Debug) rp2040-plus variant: BENCH", "target/rp2040.cfg"),
     },
     "Clocks": {"Project: Debug rp2040-zero (RP2040)":
-               ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+               ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+                "target/rp2040.cfg")},
     "OilAndSpeed": {"Project: Debug rp2040-zero (RP2040)":
-                    ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+                    ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+                     "target/rp2040.cfg")},
     "Fiesta_clock": {"Project: Debug rp2040-zero (RP2040)":
-                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+                      "target/rp2040.cfg")},
     "Adjustometer": {"Project: Debug rp2040-zero (RP2040)":
-                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero")},
+                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+                      "target/rp2040.cfg")},
     "VP37TestBench": {"Project: Debug pico (RP2040)":
-                      ("rp2040/pico", "Project: Build (Debug) pico")},
+                      ("rp2040/pico", "Project: Build (Debug) pico", "target/rp2040.cfg")},
 }
 
 
@@ -153,12 +165,12 @@ class WindowsVscodeProjectTests(unittest.TestCase):
                 for profile in document["configurations"]
             }
             self.assertEqual(set(profiles), set(DEBUG_PROFILES[module]), module)
-            for name, (build, task) in DEBUG_PROFILES[module].items():
+            for name, (build, task, target) in DEBUG_PROFILES[module].items():
                 profile = profiles[name]
                 self.assertEqual("${workspaceFolder}/.build/" + build + "/firmware.elf",
                                  profile["executable"], name)
                 self.assertEqual(task, profile["preLaunchTask"], name)
-                self.assertEqual(["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
+                self.assertEqual(["interface/cmsis-dap.cfg", target],
                                  profile["configFiles"], name)
 
 

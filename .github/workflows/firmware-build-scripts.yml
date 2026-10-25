@@ -92,6 +92,14 @@ jobs:
           ../JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
           ../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
 
+      # ECU defaults to the RP2350-Plus; its PCB also takes the RP2040-Plus.
+      - name: Verify RP2040-Plus release build
+        if: matrix.module == 'ECU'
+        working-directory: src/ECU
+        run: |
+          set -eux
+          ../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD" --assembly rp2040-plus
+
       - name: Verify debug build
         working-directory: src/${{ matrix.module }}
         run: |

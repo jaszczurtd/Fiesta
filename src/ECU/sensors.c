@@ -291,7 +291,7 @@ static void sensors_throttleDiagSurvey(void) {
  * @brief Demand read with every sample and its frame-mates recorded.
  * @return Driver demand in the PWM domain, as the production read gives it.
  * @note Mirrors sensors_readMuxAverage() step for step: one discarded read,
- * four kept one sample spacing apart, RP2040 transfer-gap compensation,
+ * four kept one sample spacing apart, fiesta_adc_compensate() on each,
  * so the demand is the one the production path would have produced. The
  * shunt and supply samples come from the same scan frame right after each
  * sensors sample, so a rotated frame shows as the neighbours carrying each
@@ -353,7 +353,7 @@ static int32_t sensors_readThrottleDiag(void) {
 
   float sum = 0.0f;
   for (size_t i = 1U; i < 5U; i++) {
-    sum += (float)hal_adc_compensate_rp2040_12bit(sample[i]);
+    sum += (float)fiesta_adc_compensate(sample[i]);
   }
   const int32_t rawVal = (int32_t)(sum / 4.0f);
   const int32_t demand = sensors_computeThrottlePositionFromRaw(rawVal);

@@ -17,15 +17,9 @@
 #define VP37_PWM_WRITE_RESOLUTION 11
 #define VP37_PWM_RESOLUTION 2047
 /* The full scale is what the write resolution addresses. */
-#ifdef __cplusplus
-static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
-                  (1UL << VP37_PWM_WRITE_RESOLUTION),
-              "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
-#else
-_Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
-                   (1UL << VP37_PWM_WRITE_RESOLUTION),
-               "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
-#endif
+JB_STATIC_ASSERT(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
+                     (1UL << VP37_PWM_WRITE_RESOLUTION),
+                 "VP37_PWM_RESOLUTION must match VP37_PWM_WRITE_RESOLUTION");
 
 /** Timing actuator drive frequency [Hz]. */
 #define VP37_TIMING_PWM_FREQUENCY_HZ 200
@@ -398,13 +392,15 @@ _Static_assert(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
 #define VP37_PERCENT_MAX 100
 /** Physical top of the usable stroke [% of the calibrated travel]. Demand
  * 0..100 % maps onto 0..this share of the travel, so the upper stroke with its
- * negative-stiffness steps (from ~90 %, static sweep 2026-09-20) stays out of
- * reach; the maximum fuel quantity is cut accordingly. In cold fuel the band
- * just under 86 % is soft as well: a 30 s full-demand hold there hopped up to
- * the target in two of three tries, at 90 % in none (bench 2026-09-28, FT
- * 34 C). 100 restores the full travel. The stroke maps (holding map, tapers,
- * upper damping) keep the physical scale. */
-#define VP37_PHYSICAL_LIMIT_PERCENT 90.0f
+ * negative-stiffness steps (static sweep 2026-09-20) stays out of reach; the
+ * maximum fuel quantity is cut accordingly. VP37_PERCENT_MAX restores the full
+ * travel. The stroke maps (holding map, tapers, upper damping) keep the
+ * physical scale. A share of the stroke: above zero, at most the full travel;
+ * the bench knob X13 keeps the same range at runtime. */
+#define VP37_PHYSICAL_LIMIT_PERCENT 90
+JB_STATIC_ASSERT((VP37_PHYSICAL_LIMIT_PERCENT > VP37_PERCENT_MIN) &&
+                     (VP37_PHYSICAL_LIMIT_PERCENT <= VP37_PERCENT_MAX),
+                 "VP37_PHYSICAL_LIMIT_PERCENT is a share of the stroke");
 /** Optional deceleration of every rising ramp into the top of the demand
  * range [% of travel/s^2]; bench knob X2. Zero disables it and a standing
  * target keeps its own arrival brake. Off since the Adjustometer averages one

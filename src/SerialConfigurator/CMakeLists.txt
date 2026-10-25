@@ -66,6 +66,10 @@ set(
 )
 
 set(SC_JASZCZURHAL_INCLUDE_DIR "${SC_JASZCZURHAL_DIR}/src")
+# hal/core/hal_status.h and hal_array.h include jhbase headers.
+include("${SC_JASZCZURHAL_DIR}/cmake/jh_jhbase.cmake")
+jh_jhbase_include_dir(SC_JHBASE_INCLUDE_DIR)
+set(SC_JASZCZURHAL_INCLUDE_DIRS "${SC_JASZCZURHAL_INCLUDE_DIR}" "${SC_JHBASE_INCLUDE_DIR}")
 set(
     SC_JASZCZURHAL_SERIAL_FRAME_HEADER
     "${SC_JASZCZURHAL_INCLUDE_DIR}/hal/serial/hal_serial_frame.h"
@@ -185,7 +189,7 @@ add_library(serial_configurator_core STATIC
 
 target_include_directories(serial_configurator_core
     PUBLIC
-        ${SC_JASZCZURHAL_INCLUDE_DIR}
+        ${SC_JASZCZURHAL_INCLUDE_DIRS}
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core
 )
 
@@ -473,13 +477,13 @@ if(BUILD_TESTING)
     # hosts that lack libgtk-4-dev).
     target_include_directories(serial-configurator-i18n-tests
         PRIVATE
-            ${SC_JASZCZURHAL_INCLUDE_DIR}
+            ${SC_JASZCZURHAL_INCLUDE_DIRS}
             ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
     target_include_directories(serial-configurator-sc-param-tests
         PRIVATE
-            ${SC_JASZCZURHAL_INCLUDE_DIR}
+            ${SC_JASZCZURHAL_INCLUDE_DIRS}
     )
 
     target_link_libraries(serial-configurator-flash-tests

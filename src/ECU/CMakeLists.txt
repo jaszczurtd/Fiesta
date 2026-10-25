@@ -38,7 +38,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.c
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
-jh_managed_framework_include_dirs(HAL_MANAGED_INCLUDE_DIRS)
+fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB}")
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 # jh_hardware.h of the firmware assembly, loaded first like in the firmware.

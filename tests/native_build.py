@@ -1,6 +1,14 @@
 """Compile native fixtures with the compiler selected for each source language."""
 
 import os
+import subprocess
+
+
+def run_command(command):
+    result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+    if result.returncode:
+        raise AssertionError(result.stdout + result.stderr)
+    return result
 
 
 def compile_sources(sources, flags, build, run_command):

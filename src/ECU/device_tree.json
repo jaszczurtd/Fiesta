@@ -39,6 +39,79 @@
     "gps": { "compatible": "fiesta,soft-serial-gps" }
   },
   "assemblies": {
+    "rp2350-plus": {
+      "target": "rp2350-arm",
+      "board": "rp2350-plus-4mb",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 10000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 0, "scl": 1 }
+        }
+      },
+      "nodes": {
+        "canMain": { "present": true, "bus": "spi", "pins": { "cs": 17, "int": 15 } },
+        "canObd": { "present": true, "bus": "spi", "pins": { "cs": 6, "int": 14 } },
+        "expander": { "present": true, "bus": "i2c", "address": 56 },
+        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "glowPlugs": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 0 } }
+        },
+        "fan": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 1 } }
+        },
+        "heaterHi": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 2 } }
+        },
+        "heaterLo": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 3 } }
+        },
+        "glowPlugsLamp": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 4 } }
+        },
+        "heatedWindowLeft": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 5 } }
+        },
+        "heatedWindowRight": {
+          "present": true,
+          "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 6 } }
+        },
+        "vp37": {
+          "present": true,
+          "pins": {
+            "quantityPwm": 9,
+            "timingPwm": 5,
+            "shuntAdc": 26,
+            "supplyAdc": 28,
+            "enable": { "domain": "device-pin", "node": "expander", "index": 7 }
+          }
+        },
+        "turbo": { "present": true, "pins": { "out": 10 } },
+        "muxA": { "present": true, "pins": { "out": 11 } },
+        "muxB": { "present": true, "pins": { "out": 12 } },
+        "muxC": { "present": true, "pins": { "out": 13 } },
+        "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
+        "hall": { "present": true, "pins": { "in": 7 } },
+        "dpfLamp": { "present": true, "pins": { "out": 8 } },
+        "heatedWindowButton": { "present": true, "pins": { "in": 20 } },
+        "gps": { "present": true, "pins": { "rx": 22, "tx": 21 } }
+      }
+    },
     "rp2040-plus": {
       "target": "rp2040",
       "board": "rp2040-plus-4mb",

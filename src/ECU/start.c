@@ -631,7 +631,7 @@ static void runCore1(void) {
 
 void app_start(void) {
   initializeCore0();
-// init core1 here only if target is not RP2040
+// init core1 here only if target is not RP (RP2040/RP2350 start it in the HAL)
 #if !HAL_TARGET_IS_RP
   initializeCore1();
 #endif

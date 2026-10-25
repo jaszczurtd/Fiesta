@@ -23,6 +23,8 @@ static inline void vp37SetupCalibratedPump(VP37Pump *pump,
   pump->demand.target = -1;
   pump->demand.desired = -1;
   pump->demand.requestedPercent = -1.0f;
+  // The tests address the whole calibrated travel; the limit has its own.
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
   pump->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
   pump->feedforward.motionRateCap = VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S;
   pump->pidTimeUpdate = VP37_PID_TIME_UPDATE;

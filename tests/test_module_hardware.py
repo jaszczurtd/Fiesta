@@ -55,13 +55,28 @@ class ModuleHardwareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="fiesta-hardware-") as temp:
             root = Path(temp) / ".build"
             for module in MODULES:
-                with self.subTest(module=module):
-                    result = subprocess.run(
-                        [sys.executable, str(HAL_ROOT / "scripts" / "generate_hardware_config.py"),
-                         "resolve", "--config-dir", str(REPO_ROOT / "src" / module),
-                         "--output-root", str(root), "--output-dir", str(root / module)],
-                        capture_output=True, text=True, check=False)
-                    self.assertEqual(0, result.returncode, result.stderr)
+                tree = load_json(REPO_ROOT / "src" / module / "device_tree.json")
+                for assembly in tree["assemblies"]:
+                    with self.subTest(module=module, assembly=assembly):
+                        result = subprocess.run(
+                            [sys.executable,
+                             str(HAL_ROOT / "scripts" / "generate_hardware_config.py"),
+                             "resolve", "--config-dir", str(REPO_ROOT / "src" / module),
+                             "--assembly", assembly, "--output-root", str(root),
+                             "--output-dir", str(root / module / assembly)],
+                            capture_output=True, text=True, check=False)
+                        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_ecu_assemblies_share_the_pcb_wiring(self) -> None:
+        # One ECU PCB carries either module; only the MCU target and board differ.
+        assemblies = load_json(REPO_ROOT / "src" / "ECU" / "device_tree.json")["assemblies"]
+        self.assertEqual({"rp2040-plus", "rp2350-plus"}, set(assemblies))
+
+        def wiring(assembly: dict) -> dict:
+            return {key: value for key, value in assembly.items()
+                    if key not in ("target", "board")}
+
+        self.assertEqual(wiring(assemblies["rp2040-plus"]), wiring(assemblies["rp2350-plus"]))
 
     def test_code_takes_wiring_from_the_device_tree(self) -> None:
         headers = [REPO_ROOT / "src" / module / "hardwareConfig.h" for module in MODULES]

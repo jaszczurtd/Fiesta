@@ -3,7 +3,7 @@
     "project": "Fiesta",
     "module": "ECU",
     "toolchain": "cmake",
-    "assembly": "rp2040-plus",
+    "assembly": "rp2350-plus",
     "buildDir": "${project}/.build",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

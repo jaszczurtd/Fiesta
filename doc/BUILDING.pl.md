@@ -65,12 +65,13 @@ nadzoru opisuje [instrukcja systemd](../src/ECU/scripts/systemd/README.pl.md).
 
 ## Kompilacja modułu
 
-Przykład jawnie wybiera ECU i montaż `rp2040-plus`:
+Przykład jawnie wybiera ECU i jego domyślny montaż `rp2350-plus`;
+`--assembly rp2040-plus` buduje to samo ECU dla RP2040-Plus:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2040-plus
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2350-plus
 ```
 
 Dla innego modułu wybierz montaż z jego `device_tree.json`. Ustawienia firmware
@@ -80,15 +81,16 @@ montażu narzędzie może wybrać go automatycznie. Wynik rozwiązywania konfigu
 można odczytać bez kompilacji:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode config-dump --project src/ECU --assembly rp2040-plus --json
+src/JaszczurHAL/vscode/entry/jh-vscode config-dump --project src/ECU --assembly rp2350-plus --json
 ```
 
 Pliki `firmware.elf` i `firmware.uf2` trafiają do
 `src/<Module>/.build/<target>/<assembly>/`. ECU używa
-`src/ECU/.build/rp2040/rp2040-plus/`. Obraz stanowiskowy zbudujesz poleceniem:
+`src/ECU/.build/rp2350-arm/rp2350-plus/` (`src/ECU/.build/rp2040/rp2040-plus/`
+dla RP2040-Plus). Obraz stanowiskowy zbudujesz poleceniem:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2040-plus --variant BENCH
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus --variant BENCH
 ```
 
 Ten obraz trafia do podkatalogu `variants/BENCH/` w katalogu montażu.
@@ -101,8 +103,8 @@ obrazu do wgrania sprawdź ją przez `config-dump`.
 Te polecenia działają na podłączonym sprzęcie:
 
 ```bash
-src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2040-plus
-src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2040-plus
+src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2350-plus
+src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
 ```
 
@@ -125,7 +127,7 @@ Przykład dla domyślnego obrazu ECU:
     set -e
     source src/common/scripts/fiesta-firmware-common.sh
     fiesta_prepare_manifest_for_uf2 "$PWD/src/ECU" \
-        "$PWD/src/ECU/.build/rp2040/rp2040-plus/firmware.uf2"
+        "$PWD/src/ECU/.build/rp2350-arm/rp2350-plus/firmware.uf2"
 )
 ```
 
@@ -145,10 +147,11 @@ oraz `arm-none-eabi-gdb`. Setup HAL dla Windows ustawia ścieżki narzędzi
 w profilu użytkownika VS Code; na innych systemach użyj PATH lub ustawień Cortex-Debug.
 
 Otwórz katalog modułu, naciśnij F5 i wybierz profil montażu. ECU udostępnia
-`Project: Debug rp2040-plus (RP2040)` i jego odpowiednik `variant: BENCH`.
-Każdy buduje wersję debug, wgrywa ją i zatrzymuje wykonanie w `main`.
-Pozostałe moduły mają profile dla własnych montaży RP2040. Generowane pliki
-obecnie nie zawierają profili RP2350 ani samego dołączenia do działającego układu.
+`Project: Debug rp2350-plus (RP2350 ARM)`, `Project: Debug rp2040-plus (RP2040)`
+i ich odpowiedniki `variant: BENCH`. Każdy buduje wersję debug, wgrywa ją
+i zatrzymuje wykonanie w `main`. Pozostałe moduły mają profile dla własnych
+montaży RP2040. Generowane pliki obecnie nie zawierają profili samego
+dołączenia do działającego układu.
 Wgrywanie przez USB obsługuje `jh-vscode`; sonda służy do pracy Cortex-Debug/GDB.
 
 ## Generowane pliki konfiguracji

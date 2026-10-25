@@ -67,7 +67,8 @@ int TempGauge::getBaseY(void) {
 
 void TempGauge::drawTempValue(int x, int y, int valToDisplay) {
   hal_display_set_sans_bold_with_pos_and_color(x, y, TEXT_COLOR);
-  hal_display_fill_rect(x, y - 14, 35, 16, ICONS_BG_COLOR);
+  // Include the full ERR label and its glyph offset before drawing a number.
+  hal_display_fill_rect(x, y - 14, 40, 16, ICONS_BG_COLOR);
 
   if (valToDisplay < TEMP_LOWEST || valToDisplay > TEMP_HIGHEST) {
     hal_display_set_text_color(HAL_COLOR(RED));

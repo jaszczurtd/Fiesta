@@ -14,6 +14,7 @@ static void setupPumpForEngineOperation(VP37Pump *pump) {
   pump->feedback.adjustMax = 9100;
   pump->feedback.adjustMiddle =
       (pump->feedback.adjustMax + pump->feedback.adjustMin) / 2;
+  pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
 }
 
 void setUp(void) {

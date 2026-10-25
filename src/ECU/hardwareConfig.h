@@ -19,15 +19,15 @@
 #define ANGLE_PWM_FREQUENCY_HZ 300
 #endif
 
-// RP2040 flash-backed EEPROM emulation size used by ECU module.
+// RP flash-backed EEPROM emulation size used by ECU module.
 #define ECU_EEPROM_SIZE_BYTES HAL_RP_FLASH_EEPROM_SIZE
 
 #define PWM_WRITE_RESOLUTION VP37_PWM_WRITE_RESOLUTION
 #define PWM_RESOLUTION VP37_PWM_RESOLUTION
 
-// Pins, buses and addresses come from the rp2040-plus assembly of
-// device_tree.json; the code reads the JH_HW_* macros of the generated
-// jh_hardware.h directly.
+// Pins, buses and addresses come from the selected assembly of
+// device_tree.json (rp2350-plus by default, rp2040-plus on the same PCB); the
+// code reads the JH_HW_* macros of the generated jh_hardware.h directly.
 
 // The PCF8574A writes use the default I2C bus 0.
 #if JH_HW_BUS_I2C_INDEX != 0

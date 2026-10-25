@@ -101,7 +101,7 @@ uint16_t VP37_currentAmpsToRaw(float amps) {
 
 /** Compensate the RP2040 transfer gaps and clamp to the 12-bit range. */
 static uint16_t VP37_currentCompensatedRaw(int reading) {
-  int raw = hal_adc_compensate_rp2040_12bit(reading);
+  int raw = fiesta_adc_compensate(reading);
   if (raw < 0) {
     raw = 0;
   } else if (raw > (int)VP37_CURRENT_ADC_MAX_RAW) {

@@ -19,6 +19,7 @@ typedef struct {
   int32_t lastGlowPlugsLampTime;
 
   unsigned long lastSecond;
+  bool heatingEnabled; /**< Last commanded glow plug relay state. */
   bool warmAfterStart;
   bool initialized;
 } glowPlugs;
@@ -50,8 +51,9 @@ void glowPlugs_enableGlowPlugs(glowPlugs *self, bool enable);
 void glowPlugs_glowPlugsLamp(glowPlugs *self, bool enable);
 
 /**
- * @brief Check whether glow plugs are currently considered active.
- * @return True when heating time is still active, otherwise false.
+ * @brief Check the last commanded glow plug relay state.
+ * @return True until the controller issues a relay-off command.
+ * @note This state does not confirm I2C delivery or current through the plugs.
  */
 bool glowPlugs_isGlowPlugsHeating(const glowPlugs *self);
 

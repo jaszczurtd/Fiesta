@@ -689,7 +689,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
   }
   if (strncmp(cmd, "X13=", 4U) == 0) {
     float limit = 0.0f;
-    if (!parseValue(&cmd[4], &limit) || limit < 85.0f || limit > 100.0f ||
+    if (!parseValue(&cmd[4], &limit) || !VP37_physicalLimitValid(limit) ||
         !self->demand.atRest || self->demand.requestedPercent != 0.0f ||
         self->output.finalPWM != 0) {
       return false;

@@ -26,7 +26,9 @@ if [[ ! -d "$JASZCZURHAL_DIR/scripts" ]]; then
     exit 1
 fi
 
+# jhbase first: it supplies the pins of unity and other HAL components.
 SOURCE_DEPENDENCIES=(
+    jhbase
     bearssl
     cjson
     lodepng

@@ -6,13 +6,15 @@
 # JaszczurHAL runalltests workflow.
 #
 # Gates (in order):
-#   1. Tool presence check
+#   1. Tool presence check and the Python tooling tests (tests/test_*.py)
 #   2. Host runtime tests for all modules (cmake + ctest)
 #   3. Static analysis: cppcheck (modules with "analysis": ["cppcheck"])
-#   4. Duplicate detection: PMD CPD (production code per module, host tests
+#   4. MISRA screening of src/common/vp37 and src/Adjustometer against the
+#      deviation register
+#   5. Duplicate detection: PMD CPD (production code per module, host tests
 #      and Python together; scripts/fiesta_cpd.py)
-#   5. Valgrind memcheck targets for all modules
-#   6. clang-tidy targets for all modules
+#   6. Valgrind memcheck targets for all modules
+#   7. clang-tidy targets for all modules
 #
 # Covered modules: every module with "hostTests" in modules.json.
 #

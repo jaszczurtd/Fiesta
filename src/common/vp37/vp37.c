@@ -132,7 +132,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pid.fullRangePrototype = false;
   self->pid.septemberReference = false;
   self->demand.requestedPercent = -1;
-  self->demand.physicalLimitPercent = VP37_PHYSICAL_LIMIT_PERCENT;
+  self->demand.physicalLimitPercent = (float)VP37_PHYSICAL_LIMIT_PERCENT;
   self->demand.topArrivalDecel = VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2;
   self->currentControl.enabled = true;
   VP37_resetCurrentControl(self);
@@ -355,6 +355,23 @@ static hal_status_t VP37_demandAcceptance(const VP37Pump *self) {
   return status;
 }
 
+bool VP37_physicalLimitValid(float percent) {
+  return isfinite(percent) && (percent > (float)VP37_PERCENT_MIN) &&
+         (percent <= (float)VP37_PERCENT_MAX);
+}
+
+/**
+ * @brief Highest position a demand may reach.
+ * @param self Controller instance with a calibrated stroke.
+ * @return The calibrated position at the physical limit.
+ */
+static int32_t VP37_demandTop(const VP37Pump *self) {
+  const float travel =
+      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
+  return self->feedback.adjustMin +
+         (int32_t)lroundf(travel * self->demand.physicalLimitPercent * 0.01f);
+}
+
 /**
  * @brief Hand one accepted demand to the control loop.
  * @param self Controller instance, already checked and calibrated.
@@ -364,20 +381,6 @@ static hal_status_t VP37_demandAcceptance(const VP37Pump *self) {
  * unit the caller works in, and the settle timer restarts only when the
  * target really moves.
  */
-/**
- * @brief Highest position a demand may reach.
- * @param self Controller instance with a calibrated stroke.
- * @return The calibrated position at the physical limit; the full travel when
- * the limit is outside (0, 100].
- */
-static int32_t VP37_demandTop(const VP37Pump *self) {
-  const float limit = self->demand.physicalLimitPercent;
-  const float share =
-      ((limit > 0.0f) && (limit <= 100.0f)) ? (limit * 0.01f) : 1.0f;
-  const float travel =
-      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
-  return self->feedback.adjustMin + (int32_t)lroundf(travel * share);
-}
 
 static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target) {
   self->demand.requestedPercent = percent;
