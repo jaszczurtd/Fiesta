@@ -309,6 +309,21 @@ class RepositoryRegistryTests(unittest.TestCase):
         self.assertEqual(set(re.findall(r"'([^']+)'", listed.group(1))),
                          self.ci_modules(firmware_only=True))
 
+    def test_linux_workflows_fetch_hal_components_before_building(self) -> None:
+        # A fresh CI checkout has no JaszczurHAL third_party components (jhbase
+        # and the rest); a developer tree usually has them, so only this check
+        # catches a workflow that configures against HAL without fetching them.
+        build = re.compile(r"cmake -S src/|jh-vscode (?:build|clean)")
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            first_build = build.search(text)
+            if first_build is None:
+                continue
+            with self.subTest(workflow=path.name):
+                fetch = text.find("ensure-jaszczurhal-dependencies.sh")
+                self.assertNotEqual(-1, fetch)
+                self.assertLess(fetch, first_build.start())
+
 
 if __name__ == "__main__":
     unittest.main()
