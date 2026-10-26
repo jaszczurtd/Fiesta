@@ -17,7 +17,11 @@
 #define HAL_DISPLAY_ILI9341 /* Select ILI9341 as the TFT driver    */
 #define HAL_ENABLE_RGB_LED  /* NeoPixel status LED                */
 #define HAL_ENABLE_MCP9600  /* MCP9600 -> THERMOCOUPLE, I2C       */
-#define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_GPS
+#define HAL_ENABLE_SWSERIAL
+#define HAL_GPS_TRANSPORT_SWSERIAL /* GP27/28 have no matching hardware UART.  \
+                                    */
+#define HAL_ENABLE_CRYPTO          /* hal_crypto + hal_sc_auth (SC link) */
 #define HAL_ENABLE_SERIAL_COMMANDS
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
 #ifndef HAL_ENABLE_APP_TASK1

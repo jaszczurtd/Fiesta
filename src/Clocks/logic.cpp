@@ -4,6 +4,7 @@
 #include "buzzerStrategy.h"
 #include "chargeLamp.h"
 #include "egt.h"
+#include "gps.h"
 #include "oilPressure.h"
 #include "speed.h"
 #include "timingDiag.h"
@@ -14,8 +15,8 @@
 
 // Core 0 receives CAN, measures the ABS speed, drives both mechanical gauges,
 // the lamps and the buzzer. Core 1 draws the TFT, reads the oil pressure and
-// both EGT and serves the configurator session. Core 0 starts before the logo
-// and does not wait for core 1.
+// both EGT and GPS and serves the configurator session. Core 0 starts before
+// the logo and does not wait for core 1.
 
 const char *err = "ERR";
 
@@ -298,11 +299,19 @@ void readLocalEgt(void) {
   clocksStatePublishLocal(&localMeasurements);
 }
 
+// Poll every pass, publish on new data or a change of validity or speed.
+static void readLocalGPS(void) {
+  if (clocksGpsReadChanged(&localMeasurements.gps)) {
+    clocksStatePublishLocal(&localMeasurements);
+  }
+}
+
 static void initializeCore1(void) {
   timingDiagPaintStack(1u);
   initTFT();
   (void)setupOilPressure();
   egtInit();
+  initGPS();
 
   int sec = hal_get_seconds();
   const int secDest = sec + FIESTA_INTRO_TIME;
@@ -317,6 +326,7 @@ static void initializeCore1(void) {
 
   while (sec < secDest) {
     updateWatchdogCore1();
+    readLocalGPS();
     hal_idle();
     sec = hal_get_seconds();
   }
@@ -353,6 +363,7 @@ static void runCore1(void) {
   updateWatchdogCore1();
   statusVariable1 = 1;
   const uint32_t loopStart = timingDiagLoopStart();
+  readLocalGPS();
 
   if (clocksStateRefreshView()) {
     triggerDrawHighImportanceValue(true);

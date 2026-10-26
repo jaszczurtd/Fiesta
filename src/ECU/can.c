@@ -190,26 +190,7 @@ hal_status_t canInit(int retries) {
 }
 
 uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
-  int32_t yy = (int32_t)(dateYYMMDD / 10000u);
-  int32_t mm = (int32_t)((dateYYMMDD / 100u) % 100u);
-  int32_t dd = (int32_t)(dateYYMMDD % 100u);
-  int32_t hh = (int32_t)(timeHHMM / 100u);
-  int32_t mi = (int32_t)(timeHHMM % 100u);
-
-  if (mm < 1 || mm > 12 || dd < 1 || dd > 31 || hh < 0 || hh > 23 || mi < 0 ||
-      mi > 59) {
-    return 0u;
-  }
-
-  int32_t yearOffset = yy - 20; // base year 2020
-  if (yearOffset < 0) {
-    yearOffset = 0;
-  } else if (yearOffset > 15) {
-    yearOffset = 15;
-  }
-
-  return ((uint32_t)yearOffset << 20) | ((uint32_t)mm << 16) |
-         ((uint32_t)dd << 11) | ((uint32_t)hh << 6) | (uint32_t)mi;
+  return fiesta_can_pack_gps_datetime(dateYYMMDD, timeHHMM);
 }
 
 /**

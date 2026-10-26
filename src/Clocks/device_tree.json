@@ -1,6 +1,7 @@
 {
   "$schema": "../JaszczurHAL/config/hardware/device_tree.schema.json",
   "schemaVersion": 1,
+  "bindings": ["../common/bindings/fiesta-soft-serial-gps.json"],
   "nodes": {
     "can": { "compatible": "microchip,mcp2515" },
     "tft": {
@@ -22,7 +23,8 @@
     "absSpeed": { "compatible": "jaszczurhal,gpio-input" },
     "oilPressure": { "compatible": "jaszczurhal,adc-input" },
     "egtPreDpf": { "compatible": "jaszczurhal,i2c-device" },
-    "egtMidDpf": { "compatible": "jaszczurhal,i2c-device" }
+    "egtMidDpf": { "compatible": "jaszczurhal,i2c-device" },
+    "gps": { "compatible": "fiesta,soft-serial-gps" }
   },
   "assemblies": {
     "rp2040-zero": {
@@ -61,7 +63,8 @@
         "absSpeed": { "present": true, "pins": { "in": 15 } },
         "oilPressure": { "present": true, "pins": { "in": 29 } },
         "egtPreDpf": { "present": true, "bus": "i2c", "address": 96 },
-        "egtMidDpf": { "present": true, "bus": "i2c", "address": 103 }
+        "egtMidDpf": { "present": true, "bus": "i2c", "address": 103 },
+        "gps": { "present": true, "pins": { "rx": 27, "tx": 28 } }
       }
     }
   }

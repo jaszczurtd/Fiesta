@@ -17,7 +17,7 @@ sterowania znajdują się w dokumentacji modułów.
 
 ```text
                  CAN0 (główna)
-   ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT
+   ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT, GPS
    │           │ ◄──────────  OilAndSpeed     zastąpiony przez Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    czas RTC, 1 Hz
    │  RP2350,  │
@@ -66,7 +66,7 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 | Moduł | Język | Zadania | MISRA |
 |---|---|---|---|
 | [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
-| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość i temperatury spalin. | Poza zakresem. |
+| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
 | [OilAndSpeed](src/OilAndSpeed/) | C++ | Dawny moduł oleju, prędkości i EGT, zastąpiony przez Clocks. | Poza zakresem. |
 | [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC i czas przez CAN. | Poza zakresem. |
 | [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
@@ -125,6 +125,25 @@ temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
 albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną
 flagą, więc odbiorca nie odczyta go jako zera.
 
+Rdzeń 1 odczytuje GPS przez PIO/software serial: TX odbiornika łączy się
+z GP27, a RX z GP28, przy 9600 baud. Clocks uruchamia się normalnie bez
+odbiornika i fixa.
+
+Współrzędne pozostają w `double` do przeliczenia na mikrostopnie dla
+`SC_GET_GPS` i CAN. Lokalny GPS zastępuje dawne pola GPS z ramki ECU `0x129`
+i pozostaje dostępny po utracie komunikacji z ECU. Odczyt działa w każdym
+obiegu, a nowe dane i zmiany ważności wyzwalają publikację migawki.
+Odświeżanie ekranu korzysta z przeliczonej wcześniej prędkości.
+
+Ostatnia pozycja wygasa po 4 s. UTC pochodzi z jednego zdania RMC z fixem
+i wygasa po 2 s. Clocks zachowuje UTC dla CAN i SC oraz nadaje go z sekundami
+i ważnością w `0x131` co sekundę.
+
+Przełącznik kompilacji `CLOCKS_PUBLISH_LEGACY_GPS` ma domyślną wartość 0,
+więc Clocks nie nadaje `0x12D`/`0x12E`. Wartość 1 służy do prób na wydzielonej
+magistrali do czasu zatrzymania tych ramek w ECU. Przygotowane ramki zawierają
+UTC. Oba moduły odwołują się do bindingu GPS w `src/common/bindings/`.
+
 Kontrolka ładowania korzysta z obrotów silnika i napięcia akumulatora z ECU.
 Świeci, gdy silnik stoi albo te dane są nieaktualne, i gaśnie, gdy po
 rozruchu napięcie potwierdzi ładowanie. Zapala się ponownie po zaniku
@@ -142,9 +161,10 @@ na TFT ma własny zakres.
 | [speed.cpp](src/Clocks/speed.cpp) | Przelicza częstotliwość impulsów ABS na prędkość. |
 | [oilPressure.cpp](src/Clocks/oilPressure.cpp) | Przelicza ADC na bary i wykrywa zwarcie lub przerwę czujnika. |
 | [egt.cpp](src/Clocks/egt.cpp) | Odczytuje oba MCP9600 i ponownie szuka brakującego układu. |
+| [gps.cpp](src/Clocks/gps.cpp) | Odczytuje lokalny GPS, kontroluje świeżość UTC i koduje ramki GPS. |
 | [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
 | [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
-| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością oraz EGT; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
+| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
 
 Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze
 `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` z
@@ -297,7 +317,7 @@ ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie, paliwo,
 pozycję i czas GPS. Odbiera olej, prędkość i EGT z Clocks oraz stan DPF
 z `0x124`. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
 Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
-(`0x12A`) i obie temperatury spalin (`0x12F`).
+(`0x12A`), obie temperatury spalin (`0x12F`) oraz UTC z GPS (`0x131`).
 Fiesta_clock nadaje tylko czas (`0x130`). Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
 ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
 gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
@@ -322,11 +342,11 @@ wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
 | Kierunek | Sygnały |
 |---|---|
 | Czujniki -> ECU | Temperatury płynu, oleju i dolotu; paliwo, przepustnica, ciśnienie dolotu, Hall RPM, przycisk ogrzewanej szyby, zasilanie. |
-| Czujniki -> Clocks | Olej, ABS, EGT przed DPF i wewnątrz. |
+| Czujniki -> Clocks | Olej, ABS, EGT przed DPF i wewnątrz, GPS. |
 | ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
 | Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), kontrolki oleju i ładowania, TFT, buzzer. |
 | Diagnostyka | OBD-II przez CAN1. |
-| Pomocnicze | Data i czas GPS przez programowy port szeregowy ECU, dalej CAN; czas RTC z Fiesta_clock. |
+| Pomocnicze | Pozycja i UTC z GPS w Clocks; dawne ramki GPS z ECU; czas RTC z Fiesta_clock. |
 
 ## Zapis danych
 

@@ -94,6 +94,17 @@ class ModuleHardwareTests(unittest.TestCase):
             with self.subTest(source=str(source.relative_to(REPO_ROOT))):
                 self.assertEqual([], JH_HW_ALIAS.findall(source.read_text(encoding="utf-8")))
 
+    def test_gps_uses_one_shared_software_serial_binding(self) -> None:
+        shared = "../common/bindings/fiesta-soft-serial-gps.json"
+        for module in ("ECU", "Clocks"):
+            tree = load_json(REPO_ROOT / "src" / module / "device_tree.json")
+            self.assertIn(shared, tree["bindings"])
+            self.assertEqual("fiesta,soft-serial-gps", tree["nodes"]["gps"]["compatible"])
+            self.assertTrue((REPO_ROOT / "src" / module / shared).is_file())
+        clocks = load_json(REPO_ROOT / "src" / "Clocks" / "device_tree.json")
+        self.assertEqual({"rx": 27, "tx": 28},
+                         clocks["assemblies"]["rp2040-zero"]["nodes"]["gps"]["pins"])
+
     def test_vp37_power_stages_share_the_type_values(self) -> None:
         # ECU and bench wire their own pins; shunt and divider come from the
         # shared type and are never overridden per firmware.

@@ -112,9 +112,11 @@ enum {
   CAN_FRAME_GPS_EXT_LAT_B1,
   CAN_FRAME_GPS_EXT_LAT_B0,
   CAN_FRAME_GPS_EXT_STATUS, // bit0: GPS available
-  CAN_FRAME_GPS_EXT_RSVD1,
-  CAN_FRAME_GPS_EXT_RSVD2,
+  // uint16 GPS km/h * 10, zero without fix or below 5 km/h.
+  CAN_FRAME_GPS_EXT_SPEED_HI,
+  CAN_FRAME_GPS_EXT_SPEED_LO,
 };
+#define CAN_GPS_STATUS_AVAILABLE 0x01u
 
 #define CAN_ID_GPS_EXT_LON_TIME 0x12e
 enum {
@@ -150,6 +152,17 @@ enum {
   CAN_FRAME_RTC_UPDATE_SECOND,    // seconds 0..59
   CAN_FRAME_RTC_UPDATE_INTEGRITY, // 1 = RTC integrity OK, 0 = integrity lost
 };
+
+// Clocks: UTC from one RMC sentence with a fresh fix, at most 2 seconds old.
+#define CAN_ID_GPS_UTC_UPDATE 0x131
+enum {
+  CAN_FRAME_GPS_UTC_EPOCH_B3 = 1, // uint32 Unix seconds, big-endian
+  CAN_FRAME_GPS_UTC_EPOCH_B2,
+  CAN_FRAME_GPS_UTC_EPOCH_B1,
+  CAN_FRAME_GPS_UTC_EPOCH_B0,
+  CAN_FRAME_GPS_UTC_STATUS, // bit 0 valid; bytes 6 and 7 reserved, zero
+};
+#define CAN_GPS_UTC_STATUS_VALID 0x01u
 
 enum {
   F_FUEL,

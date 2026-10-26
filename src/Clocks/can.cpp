@@ -177,6 +177,22 @@ void updateEGTrecipients(void) {
   canBroadcast(CAN_ID_EGT_UPDATE, out);
 }
 
+void updateGPSrecipients(void) {
+  if (canHandle == NULL)
+    return;
+  clocks_local_snapshot_t local = {};
+  clocksStateCopyLocal(&local);
+  uint8_t lat[CAN_FRAME_MAX_LENGTH], lonTime[CAN_FRAME_MAX_LENGTH];
+  uint8_t utc[CAN_FRAME_MAX_LENGTH];
+  if (clocksGpsEncode(&local.gps, lat, lonTime, utc) != HAL_OK)
+    return;
+#if CLOCKS_PUBLISH_LEGACY_GPS
+  canBroadcast(CAN_ID_GPS_EXT_LAT, lat);
+  canBroadcast(CAN_ID_GPS_EXT_LON_TIME, lonTime);
+#endif
+  canBroadcast(CAN_ID_GPS_UTC_UPDATE, utc);
+}
+
 void receivedCanMessage(void) {
   interrupt = true;
   timingDiagCanInterrupt();
@@ -262,7 +278,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   } break;
 
   case CAN_ID_ECU_UPDATE_02: {
-    if (len <= CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED) {
+    if (len <= CAN_FRAME_ECU_UPDATE_FUEL_LO) {
       derr("Received truncated ECU_UPDATE_02 frame with len: %d", len);
       return;
     }
@@ -272,8 +288,6 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
              static_cast<int8_t>(buf[CAN_FRAME_ECU_UPDATE_INTAKE]));
     putValue(F_FUEL, jh_u16_from_bytes(buf[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                        buf[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
-    putValue(F_GPS_IS_AVAILABLE, buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
-    putValue(F_GPS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
   } break;
 
   case CAN_ID_ECU_UPDATE_03: {
@@ -311,6 +325,9 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   case CAN_ID_GPS_EXT_LON_TIME:
     // GPS frames of the ECU; Clocks reads its own receiver instead.
     break;
+  case CAN_ID_GPS_UTC_UPDATE:
+    derr_limited("can", "UTC frame of Clocks came from another node");
+    break;
 
   default:
     deb("received unknown CAN frame:%03x len:%d\n", canID, len);
@@ -337,9 +354,11 @@ bool canRxPending(void) { return interrupt; }
 // EGT every CAN_EGT_UPDATE_INTERVAL; never on every loop pass.
 static hal_soft_timer_t timerCANUpdate = NULL;
 static hal_soft_timer_t timerEGTUpdate = NULL;
+static hal_soft_timer_t timerGPSUpdate = NULL;
 static const hal_soft_timer_table_entry_t canBroadcastTimerTable[] = {
     {&timerCANUpdate, updateCANrecipients, (uint32_t)CAN_UPDATE_RECIPIENTS},
-    {&timerEGTUpdate, updateEGTrecipients, (uint32_t)CAN_EGT_UPDATE_INTERVAL}};
+    {&timerEGTUpdate, updateEGTrecipients, (uint32_t)CAN_EGT_UPDATE_INTERVAL},
+    {&timerGPSUpdate, updateGPSrecipients, CAN_GPS_UPDATE_INTERVAL}};
 
 bool canSetupBroadcastTimers(void) {
   return hal_soft_timer_setup_table(canBroadcastTimerTable,

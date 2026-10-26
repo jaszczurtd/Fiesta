@@ -4,7 +4,7 @@
   "bindings": [
     "../common/vp37/fiesta-vp37-power-stage.json",
     "bindings/fiesta-pcf8574a-fast.json",
-    "bindings/fiesta-soft-serial-gps.json"
+    "../common/bindings/fiesta-soft-serial-gps.json"
   ],
   "nodes": {
     "canMain": { "compatible": "microchip,mcp2515" },

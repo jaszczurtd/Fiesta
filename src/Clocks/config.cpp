@@ -1,4 +1,5 @@
 #include "config.h"
+#include "clocksState.h"
 
 #include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_serial_session.h>
@@ -57,6 +58,23 @@ static const sc_param_descriptor_t k_clocks_params[] = {
 };
 static const size_t k_clocks_params_count = COUNTOF(k_clocks_params);
 
+static void readGpsForSession(void *user, sc_command_gps_snapshot_t *out) {
+  (void)user;
+  if (out == nullptr)
+    return;
+  clocks_local_snapshot_t local = {};
+  clocksStateCopyLocal(&local);
+  *out = {};
+  out->available = local.gps.available;
+  if (out->available) {
+    out->lat_e6 = clocksGpsMicrodegrees(local.gps.latitude);
+    out->lon_e6 = clocksGpsMicrodegrees(local.gps.longitude);
+    const uint16_t speed = clocksGpsSpeedX10(&local.gps);
+    out->speed_kmh_x10 = speed > INT16_MAX ? INT16_MAX : (int16_t)speed;
+    out->epoch = local.gps.epochUtc;
+  }
+}
+
 void configSessionInit(void) {
   if (sc_config_session_stop(&s_sc, "Clocks") != HAL_OK) {
     return;
@@ -69,6 +87,7 @@ void configSessionInit(void) {
   serviceConfig.params = k_clocks_params;
   serviceConfig.param_count = k_clocks_params_count;
   serviceConfig.active_values = &k_clocks_values;
+  serviceConfig.read_gps = readGpsForSession;
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
   (void)sc_config_session_start(&s_sc, &serviceConfig, nullptr, nullptr,

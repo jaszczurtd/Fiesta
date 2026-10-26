@@ -50,6 +50,26 @@ static inline int16_t fiesta_can_get_temp_i16(const uint8_t *field) {
   return (int16_t)jh_load_be16(field);
 }
 
+/**
+ * @brief Pack YYMMDD and HHMM into the existing 24-bit GPS calendar format.
+ * @param dateYYMMDD Two-digit year, month and day as YYMMDD.
+ * @param timeHHMM Hour and minute as HHMM.
+ * @return Packed value, or 0 for invalid month/day/time ranges. The year
+ *         offset is clamped to the legacy 2020..2035 range.
+ */
+static inline uint32_t fiesta_can_pack_gps_datetime(uint32_t dateYYMMDD,
+                                                    uint32_t timeHHMM) {
+  const uint32_t yy = dateYYMMDD / 10000u;
+  const uint32_t mm = (dateYYMMDD / 100u) % 100u;
+  const uint32_t dd = dateYYMMDD % 100u;
+  const uint32_t hh = timeHHMM / 100u;
+  const uint32_t mi = timeHHMM % 100u;
+  if (mm < 1u || mm > 12u || dd < 1u || dd > 31u || hh > 23u || mi > 59u)
+    return 0u;
+  const uint32_t yearOffset = yy < 20u ? 0u : (yy > 35u ? 15u : yy - 20u);
+  return (yearOffset << 20) | (mm << 16) | (dd << 11) | (hh << 6) | mi;
+}
+
 #ifdef __cplusplus
 }
 #endif

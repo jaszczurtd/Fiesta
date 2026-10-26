@@ -1,5 +1,6 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../../common/tests/sc_session_test_support.h"
+#include "clocksState.h"
 #include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/serial/hal_serial_frame.h"
@@ -12,6 +13,9 @@ void setUp(void) {
   configSessionInit();
   hal_mock_serial_reset();
   hal_mock_set_millis(0);
+  clocksStateInit();
+  const clocks_local_snapshot_t empty = {};
+  clocksStatePublishLocal(&empty);
 }
 
 void tearDown(void) {}
@@ -142,6 +146,39 @@ void test_clocks_framed_request_with_bad_crc_is_silently_dropped(void) {
   TEST_ASSERT_FALSE(configSessionActive());
 }
 
+void test_clocks_gps_is_available_as_a_command_without_receiver(void) {
+  performHello();
+  const char *response = sendSerialLine("SC_GET_GPS\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "GPS"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "available=0"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "lat_e6=0"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "epoch=0"));
+}
+
+void test_clocks_gps_reports_precise_position_and_utc_then_expires(void) {
+  clocks_local_snapshot_t local = {};
+  local.gps.available = local.gps.utcValid = true;
+  local.gps.latitude = 52.2296756;
+  local.gps.longitude = -123.1234566;
+  local.gps.speedKmh = 15.06;
+  local.gps.epochUtc = 1793018096u;
+  clocksStatePublishLocal(&local);
+  performHello();
+  const char *response = sendSerialLine("SC_GET_GPS\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "available=1"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "lat_e6=52229676"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "lon_e6=-123123457"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "epoch=1793018096"));
+  hal_mock_set_millis(GPS_UTC_MAX_AGE_MS + 1u);
+  response = sendSerialLine("SC_GET_GPS\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "available=1"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "epoch=0"));
+  hal_mock_set_millis(GPS_MAX_AGE_MS + 1u);
+  response = sendSerialLine("SC_GET_GPS\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "available=0"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "lat_e6=0"));
+}
+
 int main(void) {
   UNITY_BEGIN();
 
@@ -157,6 +194,8 @@ int main(void) {
   RUN_TEST(test_clocks_sc_set_param_returns_sc_unknown_cmd);
   RUN_TEST(test_clocks_framed_hello_responds_with_same_seq);
   RUN_TEST(test_clocks_framed_request_with_bad_crc_is_silently_dropped);
+  RUN_TEST(test_clocks_gps_is_available_as_a_command_without_receiver);
+  RUN_TEST(test_clocks_gps_reports_precise_position_and_utc_then_expires);
 
   return UNITY_END();
 }

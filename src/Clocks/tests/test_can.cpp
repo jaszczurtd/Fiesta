@@ -107,8 +107,8 @@ void test_full_ecu_update_02_frame_updates_state(void) {
 
   TEST_ASSERT_EQUAL_INT(45, (int)canValues[F_INTAKE_TEMP]);
   TEST_ASSERT_EQUAL_INT(4096, (int)canValues[F_FUEL]);
-  TEST_ASSERT_EQUAL_FLOAT(1.0f, canValues[F_GPS_IS_AVAILABLE]);
-  TEST_ASSERT_EQUAL_FLOAT(60.0f, canValues[F_GPS_CAR_SPEED]);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, canValues[F_GPS_IS_AVAILABLE]);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, canValues[F_GPS_CAR_SPEED]);
 }
 
 void test_rpm_frame_updates_cluster_in_same_can_drain(void) {
@@ -426,10 +426,10 @@ void test_broadcast_timers_pace_the_periodic_frames(void) {
   TEST_ASSERT_TRUE(canSetupBroadcastTimers());
   uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
   (void)lastSent(0u, payload);
-  uint32_t sent[3] = {0u, 0u, 0u}; // brightness, oil and speed, EGT
-  const uint32_t ids[3] = {CAN_ID_CLOCK_BRIGHTNESS,
+  uint32_t sent[4] = {0u, 0u, 0u, 0u}; // brightness, oil and speed, EGT, UTC
+  const uint32_t ids[4] = {CAN_ID_CLOCK_BRIGHTNESS,
                            CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
-                           CAN_ID_EGT_UPDATE};
+                           CAN_ID_EGT_UPDATE, CAN_ID_GPS_UTC_UPDATE};
   const uint32_t durationMs = 10000u;
 
   for (uint32_t ms = 1u; ms <= durationMs; ms++) {
@@ -448,6 +448,60 @@ void test_broadcast_timers_pace_the_periodic_frames(void) {
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_UPDATE_RECIPIENTS, sent[0]);
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_UPDATE_RECIPIENTS, sent[1]);
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_EGT_UPDATE_INTERVAL, sent[2]);
+  TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_GPS_UPDATE_INTERVAL, sent[3]);
+}
+
+void test_local_gps_survives_ecu_values_and_ecu_connection_loss(void) {
+  hal_mock_set_millis(12000u);
+  clocks_local_snapshot_t local = {};
+  local.gps.available = true;
+  local.gps.locationUpdatedMs = hal_millis();
+  local.gps.speedKmh = 42.0;
+  clocksStatePublishLocal(&local);
+  const uint8_t ecu[CAN_FRAME_MAX_LENGTH] = {0u, 45u, 0u, 12u, 0u, 99u, 0u, 0u};
+  hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_ECU_UPDATE_02, 8u, ecu);
+  canMainLoop();
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_TRUE(isGPSAvailable());
+  TEST_ASSERT_EQUAL_INT(42, getGPSSpeed());
+  canCheckConnection();
+  canCheckConnection();
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEcuConnected());
+  TEST_ASSERT_TRUE(isGPSAvailable());
+  TEST_ASSERT_EQUAL_INT(42, getGPSSpeed());
+}
+
+void test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership(void) {
+  hal_mock_set_millis(13000u);
+  clocks_local_snapshot_t local = {};
+  local.gps.available = local.gps.utcValid = true;
+  local.gps.locationUpdatedMs = local.gps.utcUpdatedMs = hal_millis();
+  local.gps.latitude = 52.2296756;
+  local.gps.epochUtc = 1793018096u;
+  clocksStatePublishLocal(&local);
+  updateGPSrecipients();
+  uint32_t id;
+  uint8_t len, payload[8];
+  unsigned utcFrames = 0u, legacyFrames = 0u;
+  while (hal_mock_can_get_sent(clocksTestGetCanHandle(), &id, &len, payload) ==
+         HAL_OK) {
+    if (id == CAN_ID_GPS_UTC_UPDATE) {
+      ++utcFrames;
+      TEST_ASSERT_EQUAL_UINT8(8u, len);
+      TEST_ASSERT_EQUAL_UINT32(1793018096u, jh_load_be32(payload + 1));
+      TEST_ASSERT_EQUAL_UINT8(1u, payload[CAN_FRAME_GPS_UTC_STATUS]);
+    } else if (id == CAN_ID_GPS_EXT_LAT || id == CAN_ID_GPS_EXT_LON_TIME) {
+      ++legacyFrames;
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT(1u, utcFrames);
+  TEST_ASSERT_EQUAL_UINT(CLOCKS_PUBLISH_LEGACY_GPS ? 2u : 0u, legacyFrames);
+  hal_mock_set_millis(13000u + GPS_UTC_MAX_AGE_MS + 1u);
+  updateGPSrecipients();
+  TEST_ASSERT_TRUE(lastSent(CAN_ID_GPS_UTC_UPDATE, payload));
+  TEST_ASSERT_EQUAL_UINT32(0u, jh_load_be32(payload + 1));
+  TEST_ASSERT_EQUAL_UINT8(0u, payload[CAN_FRAME_GPS_UTC_STATUS]);
 }
 
 /* A controller that does not come up: canInit() returns why, and the loop
@@ -486,6 +540,8 @@ int main(void) {
   RUN_TEST(test_egt_frame_carries_signed_temperatures_and_validity);
   RUN_TEST(test_egt_channel_without_measurement_is_zero_without_its_flag);
   RUN_TEST(test_broadcast_timers_pace_the_periodic_frames);
+  RUN_TEST(test_local_gps_survives_ecu_values_and_ecu_connection_loss);
+  RUN_TEST(test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership);
   RUN_TEST(test_can_init_reports_why_the_bus_stayed_off);
   return UNITY_END();
 }

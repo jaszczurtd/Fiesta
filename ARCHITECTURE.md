@@ -17,7 +17,7 @@ for development commands and the module guides for control details.
 
 ```text
                  CAN0 (main)
-   ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT
+   ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT, GPS
    │           │ ◄──────────  OilAndSpeed     superseded by Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    RTC time, 1 Hz
    │  RP2350,  │
@@ -67,7 +67,7 @@ the loom colours.
 | Module | Language | Role | MISRA |
 |---|---|---|---|
 | [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
-| [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature | no |
+| [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | earlier oil, speed and EGT module, superseded by Clocks | no |
 | [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
@@ -127,6 +127,25 @@ and both exhaust temperatures every 250 ms. Each measurement carries a
 validity flag. A missing thermocouple or a shorted or open oil sender goes
 out with its flag cleared, so receivers do not read it as zero.
 
+Core 1 polls GPS through PIO/software serial: receiver TX connects to GP27
+and receiver RX to GP28, at 9600 baud. Clocks starts normally without the
+receiver or a fix.
+
+Coordinates remain `double` until conversion to microdegrees for `SC_GET_GPS`
+and CAN. Local GPS values replace the old GPS fields from ECU frame `0x129`
+and survive loss of ECU communication. Polling runs every pass; GPS changes
+and validity transitions trigger a new snapshot. Display refresh reuses
+the converted speed.
+
+The last position expires after 4 s. UTC comes from one RMC sentence with a
+fix and expires after 2 s. Clocks keeps UTC for CAN and SC and publishes it
+with seconds and validity in `0x131` every second.
+
+The compile-time switch `CLOCKS_PUBLISH_LEGACY_GPS` defaults to 0, disabling
+`0x12D`/`0x12E` in Clocks. Set it to 1 only on an isolated bus until the ECU
+stops publishing those IDs. The prepared frames use UTC. Both modules refer
+to the GPS binding in `src/common/bindings/`.
+
 The charge lamp follows engine RPM and battery voltage from the ECU. It stays
 lit while the engine is stopped or those values are stale, and goes out once
 the voltage confirms charging after the start. It lights again when charging
@@ -144,9 +163,10 @@ the TFT voltage gauge keeps its own range.
 | [`speed.cpp`](src/Clocks/speed.cpp) | ABS pulse frequency to speed |
 | [`oilPressure.cpp`](src/Clocks/oilPressure.cpp) | ADC reading to bar, sender short and open detection |
 | [`egt.cpp`](src/Clocks/egt.cpp) | both MCP9600 readings; a missing converter is looked for again |
+| [`gps.cpp`](src/Clocks/gps.cpp) | local GPS, fresh UTC and GPS frame encoding |
 | [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, and EGT frames; the MCP2515 filters admit only Fiesta IDs |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
 
 The CAN controller and the TFT share one SPI bus. The display writes in
 bands of `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES`, set in
@@ -321,7 +341,8 @@ position and time. It reads oil pressure, wheel speed, and EGT from
 Clocks and the DPF state from frame `0x124`. DTCs never go out on CAN0;
 diagnostic tools read them over CAN1. Clocks sends its display brightness
 (`0x126`), oil pressure with ABS speed (`0x12A`), and both exhaust
-temperatures (`0x12F`). Fiesta_clock only transmits its RTC time (`0x130`). On CAN1 the ECU answers
+temperatures (`0x12F`), and GPS UTC (`0x131`). Fiesta_clock transmits only RTC
+time (`0x130`). On CAN1 the ECU answers
 OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
 temperature PIDs and the oil pressure DID answer with a negative response
 (`0x22`, conditions not correct) while Clocks marks that value invalid or its
@@ -349,11 +370,11 @@ flashing sequence are in
 | Direction | Signals |
 |---|---|
 | Sensors to ECU | coolant, oil, and intake air temperature; fuel level; throttle; manifold pressure; engine RPM (Hall); heated-window button; supply voltage |
-| Sensors to Clocks | oil pressure, ABS wheel speed, EGT before and inside the DPF |
+| Sensors to Clocks | oil pressure, ABS wheel speed, EGT before and inside the DPF, GPS |
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
 | Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), oil and charge lamps, TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
-| Auxiliary | GPS date and time on the ECU software serial line, republished on CAN; RTC time from Fiesta_clock |
+| Auxiliary | GPS position and UTC in Clocks; legacy GPS from ECU; RTC time from Fiesta_clock |
 
 ## Persistence
 

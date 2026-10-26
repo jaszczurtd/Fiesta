@@ -17,6 +17,26 @@
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
 
+// Preserve the ECU's location-age limit; UTC must come from a newer RMC.
+#define GPS_MAX_AGE_MS 4000u
+#define GPS_UTC_MAX_AGE_MS 2000u
+#define GPS_MIN_SPEED_KMH 5u
+#define CAN_GPS_UPDATE_INTERVAL 1000u
+JB_STATIC_ASSERT(GPS_MAX_AGE_MS > 0u && GPS_MAX_AGE_MS <= 4000u,
+                 "GPS_MAX_AGE_MS must be in 1..4000 ms");
+JB_STATIC_ASSERT(GPS_UTC_MAX_AGE_MS > 0u && GPS_UTC_MAX_AGE_MS <= 2000u,
+                 "GPS_UTC_MAX_AGE_MS must be in 1..2000 ms");
+JB_STATIC_ASSERT(GPS_UTC_MAX_AGE_MS < GPS_MAX_AGE_MS,
+                 "GPS UTC must expire before the position");
+JB_STATIC_ASSERT(GPS_MIN_SPEED_KMH == 5u,
+                 "GPS speed cutoff must match the 5 km/h wire format");
+JB_STATIC_ASSERT(CAN_GPS_UPDATE_INTERVAL == 1000u,
+                 "CAN_GPS_UPDATE_INTERVAL must match the 1 s UTC cadence");
+// ECU owns 0x12D/0x12E until migration stage 6. Enable only on an isolated bus.
+#ifndef CLOCKS_PUBLISH_LEGACY_GPS
+#define CLOCKS_PUBLISH_LEGACY_GPS 0
+#endif
+
 // delay time right after start, before first serious alerts will show up (in
 // seconds)
 #define SERIOUS_ALERTS_DELAY_TIME 1

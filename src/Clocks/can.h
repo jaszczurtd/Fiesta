@@ -24,6 +24,8 @@ void receivedCanMessage(void);
 void updateCANrecipients(void);
 /** @brief Send the EGT frame of both channels with their validity. */
 void updateEGTrecipients(void);
+/** @brief Send UTC every second; legacy GPS IDs default to disabled. */
+void updateGPSrecipients(void);
 /** @brief Create the timers of the periodic frames (core 0).
  * @return False when the timer table could not be set up. */
 bool canSetupBroadcastTimers(void);

@@ -2,7 +2,7 @@
   "$schema": "../../JaszczurHAL/config/hardware/binding.schema.json",
   "schemaVersion": 1,
   "compatible": "fiesta,soft-serial-gps",
-  "description": "NMEA GPS receiver on two GPIO lines of the software serial, without a UART controller.",
+  "description": "NMEA GPS receiver on software serial GPIO lines without a UART controller.",
   "domain": "custom",
   "signals": {
     "rx": { "direction": "input", "required": true, "domains": ["soc-gpio"] },

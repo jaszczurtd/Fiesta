@@ -52,6 +52,7 @@ add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
     ${CLOCKS_SRC}/clocksState.cpp
     ${CLOCKS_SRC}/config.cpp
+    ${CLOCKS_SRC}/gps.cpp
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp
     ${HAL_SRC}/hal/core/jh_handle_pool.cpp
@@ -74,6 +75,13 @@ add_library(clocks_mock STATIC
     ${HAL_SRC}/hal/impl/.mock/hal_sync.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_serial.cpp
     ${HAL_SRC}/hal/impl/.mock/hal_secure_random.cpp
+    ${HAL_SRC}/hal/gps/hal_gps.cpp
+    ${HAL_SRC}/hal/gps/hal_gps_core.cpp
+    ${HAL_SRC}/hal/gps/hal_gps_nmea_utils.cpp
+    ${HAL_SRC}/hal/gps/gps_nmea_parser.cpp
+    ${HAL_SRC}/hal/impl/.mock/hal_gps.cpp
+    ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/time/jh_calendar.c
     ${UNITY_SOURCE}
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.

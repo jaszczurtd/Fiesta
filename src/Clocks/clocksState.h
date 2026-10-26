@@ -2,6 +2,7 @@
 #define C_CLOCKS_STATE
 
 #include "../common/canDefinitions/canDefinitions.h"
+#include "gps.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -9,8 +10,8 @@
 // Core 0 decodes the ECU frames, measures the ABS speed and publishes both
 // as one snapshot. Core 1 copies the latest snapshot into its display view at
 // the start of every pass, and publishes its own measurements (oil pressure,
-// both EGT) for core 0. The lock covers only the copies; drawing, I2C, serial
-// and parsing run outside it.
+// both EGT, GPS) for core 0. The lock covers only the copies. Drawing, I2C,
+// serial and parsing run outside it.
 
 typedef struct {
   float values[F_LAST]; // decoded ECU frames and the ABS speed, by F_*
@@ -30,6 +31,7 @@ typedef struct {
   float egtC[EGT_CHANNELS];
   bool egtValid[EGT_CHANNELS];
   uint32_t egtUpdatedMs[EGT_CHANNELS];
+  clocks_gps_snapshot_t gps;
 } clocks_local_snapshot_t;
 
 /** @brief Create the lock; call on core 0 before core 1 starts. */
@@ -58,7 +60,9 @@ void clocksStatePublishLocal(const clocks_local_snapshot_t *local);
  * @brief Core 0: copy the latest local measurements of core 1.
  * @param out Receives the copy; NULL is ignored. A reading older than
  *        OIL_PRESSURE_MAX_AGE_MS or THERMOCOUPLE_MAX_AGE_MS at the end of the
- *        copy comes without its valid flag.
+ *        copy comes without its valid flag. GPS position and UTC expire
+ *        independently at GPS_MAX_AGE_MS and GPS_UTC_MAX_AGE_MS; expired
+ *        position fields and the expired UTC epoch are cleared.
  */
 void clocksStateCopyLocal(clocks_local_snapshot_t *out);
 
