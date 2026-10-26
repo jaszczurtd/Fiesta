@@ -17,6 +17,9 @@
 #define TURPO_PERCENT_TEXT_POS_X 12
 #define TURPO_PERCENT_TEXT_POS_Y 76
 
+// Last drawn value of a gauge that showed ERR
+#define PRESSURE_NOT_MEASURED INT32_MIN
+
 extern const char *err;
 
 class PressureGauge : public Gauge {
@@ -38,8 +41,13 @@ private:
   int lastLO_d;
   unsigned short *lastAnimImg;
 
-  static void drawTextForPressureIndicators(int x, int y, const char *format,
-                                            ...);
+  /**
+   * @brief Draw the value text, after clearing all that any earlier one left.
+   * @param color Text color.
+   * @param unit Whether the unit label follows; ERR replaces it.
+   */
+  static void drawTextForPressureIndicators(int x, int y, uint16_t color,
+                                            bool unit, const char *format, ...);
 };
 
 void redrawPressureGauges(void);

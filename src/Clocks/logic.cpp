@@ -2,10 +2,20 @@
 #include "logic.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "buzzerStrategy.h"
+#include "chargeLamp.h"
+#include "egt.h"
+#include "oilPressure.h"
+#include "speed.h"
+#include "timingDiag.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
+
+// Core 0 receives CAN, measures the ABS speed, drives both mechanical gauges,
+// the lamps and the buzzer. Core 1 draws the TFT, reads the oil pressure and
+// both EGT and serves the configurator session. Core 0 starts before the logo
+// and does not wait for core 1.
 
 const char *err = "ERR";
 
@@ -13,7 +23,10 @@ void callAtEverySecond(void);
 void callAtEveryHalfSecond(void);
 void callAtEveryHalfHalfSecond(void);
 void updateValsForDebug(void);
-void processTemperatureBuzzerAlerts(void);
+void processAlerts(void);
+void processTemperatureBuzzerAlerts(const clocks_local_snapshot_t *local);
+void readLocalOilPressure(void);
+void readLocalEgt(void);
 
 void drawLowImportanceValues(void);
 void drawMediumImportanceValues(void);
@@ -22,27 +35,37 @@ void drawHighImportanceValuesIfChanged(void);
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
+static bool startBeepDone = false;
 static Cluster cluster;
 static BuzzerStrategy buzzerStrategy;
+
+static hal_soft_timer_t timerCANCheck = NULL;
+static hal_soft_timer_t timerAlerts = NULL;
 
 static hal_soft_timer_t timerEverySecond = NULL;
 static hal_soft_timer_t timerHalfSecond = NULL;
 static hal_soft_timer_t timerQuarterSecond = NULL;
-static hal_soft_timer_t timerSoftInit = NULL;
 static hal_soft_timer_t timerEGT = NULL;
 static hal_soft_timer_t timerDebug = NULL;
-static hal_soft_timer_t timerCANUpdate = NULL;
-static hal_soft_timer_t timerCANCheck = NULL;
+static hal_soft_timer_t timerOilPressure = NULL;
+static hal_soft_timer_t timerThermocouples = NULL;
 
-static const hal_soft_timer_table_entry_t clocksTimerTable[] = {
+// Measurements of core 1, published after every reading.
+static clocks_local_snapshot_t localMeasurements;
+
+static const hal_soft_timer_table_entry_t canTimerTable[] = {
+    {&timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION},
+    {&timerAlerts, processAlerts, (uint32_t)(SECOND / 2)}};
+
+static const hal_soft_timer_table_entry_t displayTimerTable[] = {
     {&timerEverySecond, callAtEverySecond, (uint32_t)SECOND},
     {&timerHalfSecond, callAtEveryHalfSecond, (uint32_t)(SECOND / 2)},
     {&timerQuarterSecond, callAtEveryHalfHalfSecond, (uint32_t)(SECOND / 4)},
-    {&timerSoftInit, softInitDisplay, (uint32_t)DISPLAY_SOFTINIT_TIME},
     {&timerEGT, changeEGT, (uint32_t)DPF_SHOW_TIME_INTERVAL},
     {&timerDebug, updateValsForDebug, (uint32_t)DEBUG_UPDATE},
-    {&timerCANUpdate, updateCANrecipients, (uint32_t)CAN_UPDATE_RECIPIENTS},
-    {&timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION}};
+    {&timerOilPressure, readLocalOilPressure,
+     (uint32_t)OIL_PRESSURE_READ_INTERVAL},
+    {&timerThermocouples, readLocalEgt, (uint32_t)THERMOCOUPLE_READ_INTERVAL}};
 
 NOINIT int statusVariable0;
 NOINIT int statusVariable1;
@@ -50,11 +73,6 @@ NOINIT int statusVariable1;
 #ifdef DEBUG_SCREEN
 void debugFunc(void) { deb("Debug function called"); }
 #endif
-
-void setupTimers(void) {
-  hal_soft_timer_setup_table(clocksTimerTable, COUNTOF(clocksTimerTable),
-                             hal_watchdog_feed, CORE_OPERATION_DELAY);
-}
 
 static int *wValues = NULL;
 static int wSize = 0;
@@ -64,6 +82,7 @@ void executeByWatchdog(int *values, int size) {
 }
 
 static void initializeCore0(void) {
+  timingDiagPaintStack(0u);
 
   hal_debug_init_default();
   hal_debug_set_module_prefix(SC_MODULE_TOKEN_CLOCKS);
@@ -72,6 +91,7 @@ static void initializeCore0(void) {
 
   setupOnboardLed();
   initBasicPIO();
+  initChargeLamp();
   buzzerStrategy.reset();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
@@ -80,106 +100,67 @@ static void initializeCore0(void) {
   }
 
   initSPI();
-  initTFT();
-
-  int sec = hal_get_seconds();
-  const int secDest = sec + FIESTA_INTRO_TIME;
-
-#ifndef DEBUG_SCREEN
-  hal_display_fill_screen(HAL_COLOR(WHITE));
-  const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
-  const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
-  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT,
-                         HAL_COLOR(WHITE), (uint16_t *)FiestaLogo);
-#endif // DEBUG_SCREEN
-
-  hal_watchdog_feed();
+  clocksStateInit();
+  cluster.init();
+  if (!setupSpeedometer()) {
+    derr("cannot setup the ABS speedometer");
+  }
 
   hal_rgb_led_set_color(canInit() == HAL_OK ? HAL_RGB_LED_GREEN
                                             : HAL_RGB_LED_RED);
-
-  while (sec < secDest) {
-    hal_watchdog_feed();
-    sec = hal_get_seconds();
-  }
-
-  softInitDisplay();
-  hal_display_fill_screen(ICONS_BG_COLOR);
-
-  initFuelMeasurement();
   canCheckConnection();
-
-#ifdef DEBUG_SCREEN
-  debugFunc();
-#else
-  triggerDrawHighImportanceValue(true);
-  redrawAllGauges();
-#endif
-
-  alertsStartSecond = hal_get_seconds() + SERIOUS_ALERTS_DELAY_TIME;
-
-  callAtEverySecond();
-  callAtEveryHalfSecond();
-  callAtEveryHalfHalfSecond();
-  updateValsForDebug();
-
   updateCANrecipients();
-  canMainLoop();
 
-  hal_watchdog_feed();
-
-  setupTimers();
-  configSessionInit();
+  hal_soft_timer_setup_table(canTimerTable, COUNTOF(canTimerTable),
+                             hal_watchdog_feed, CORE_OPERATION_DELAY);
+  (void)canSetupBroadcastTimers();
 
   setStartedCore0();
-
-  startBuzzer(BUZZER_SHORT);
-  deb("Setup finished");
 }
 
-extern "C" void app_task0(void) {
+// Wait for the next CAN frame or the end of one loop period, whichever
+// comes first; a pending frame never waits for a sleep to end.
+static void waitForCanOrLoopPeriod(void) {
+  const uint32_t started = hal_micros();
+  while (!canRxPending() &&
+         !hal_elapsed_u32(hal_micros(), started,
+                          (uint32_t)CORE_OPERATION_DELAY * 1000u)) {
+    hal_idle();
+  }
+}
+
+static void runCore0(void) {
+  static uint32_t lastCanPollMs = 0u;
+
   statusVariable0 = 0;
   updateWatchdogCore0();
-
-  if (!isEnvironmentStarted()) {
-    statusVariable0 = -1;
-    hal_delay_ms(CORE_OPERATION_DELAY);
-    hal_idle();
-    return;
-  }
-
   statusVariable0 = 1;
+  const uint32_t loopStart = timingDiagLoopStart();
 
-  // Drain CAN RX before timer callbacks that may execute heavy draw paths.
-  canMainLoop();
-
-  hal_soft_timer_tick_table(clocksTimerTable, COUNTOF(clocksTimerTable));
-  if (lastThreadSeconds < hal_get_seconds()) {
-    lastThreadSeconds = hal_get_seconds() + THREAD_CONTROL_SECONDS;
-
-    deb("thread is alive");
-  }
-  statusVariable0 = 2;
-  drawHighImportanceValuesIfChanged();
-  statusVariable0 = 3;
-  configSessionTick();
-
-  if (isEcuConnected()) {
-    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
-  } else {
-    hal_rgb_led_set_color(alertSwitch() ? HAL_RGB_LED_NONE : HAL_RGB_LED_RED);
+  if (canRxPending() || hal_millis_interval_elapsed_now(
+                            &lastCanPollMs, CAN_MAIN_LOOP_READ_INTERVAL)) {
+    canMainLoop();
   }
 
+  hal_soft_timer_tick_table(canTimerTable, COUNTOF(canTimerTable));
+  canTickBroadcastTimers();
+  updateChargeLamp();
+
+  if (!startBeepDone && isEnvironmentStarted()) {
+    startBeepDone = true;
+    startBuzzer(BUZZER_SHORT);
+  }
   loopBuzzers();
 
-  cluster.update(getCurrentCarSpeed(), getEngineRPM());
+  onImpulseTranslating();
+  updateCluster();
 
-  // One more drain at the end of loop to lower chance of RX FIFO buildup.
-  canMainLoop();
-
-  hal_delay_ms(CORE_OPERATION_DELAY);
-  hal_idle();
+  timingDiagLoopEnd(0u, loopStart);
+  statusVariable0 = 2;
+  waitForCanOrLoopPeriod();
 }
+
+extern "C" void app_task0(void) { runCore0(); }
 
 void seriousAlertsDrawFunctions() {
 #ifndef DEBUG_SCREEN
@@ -205,9 +186,7 @@ void callAtEverySecond(void) {
 }
 
 void callAtEveryHalfSecond(void) {
-
-  enableOilLamp((getOilPressure() < MIN_OIL_PRESSURE));
-  processTemperatureBuzzerAlerts();
+  timingDiagDisplayTick();
 
   seriousAlertBlink = (seriousAlertBlink) ? false : true;
 
@@ -215,13 +194,24 @@ void callAtEveryHalfSecond(void) {
   drawMediumImportanceValues();
 }
 
-void processTemperatureBuzzerAlerts(void) {
+// Core 0: the oil lamp and the temperature buzzer follow the ECU state of
+// core 0 and the local measurements of core 1. A faulty oil sender keeps the
+// lamp on.
+void processAlerts(void) {
+  clocks_local_snapshot_t local;
+  clocksStateCopyLocal(&local);
+  enableOilLamp(!local.oilValid || local.oilBar < MIN_OIL_PRESSURE);
+  processTemperatureBuzzerAlerts(&local);
+}
+
+void processTemperatureBuzzerAlerts(const clocks_local_snapshot_t *local) {
   BuzzerStrategyInput input;
-  input.engineRunning = isEngineRunning();
+  input.engineRunning = (int(canGetValue(F_RPM)) != 0);
   input.nowMs = hal_millis();
-  input.coolantTemp = int(valueFields[F_COOLANT_TEMP]);
-  input.oilTemp = int(valueFields[F_OIL_TEMP]);
-  input.egtTemp = int(valueFields[F_EGT]);
+  input.coolantTemp = int(canGetValue(F_COOLANT_TEMP));
+  input.oilTemp = int(canGetValue(F_OIL_TEMP));
+  input.egtTemp =
+      local->egtValid[EGT_PRE_DPF] ? int(local->egtC[EGT_PRE_DPF]) : 0;
 
   switch (buzzerStrategy.process(input)) {
   case BUZZER_STRATEGY_MIDDLE:
@@ -245,8 +235,10 @@ void triggerDrawHighImportanceValue(bool state) {
   highImportanceValueChanged = state;
 }
 
+// Core 0: called from the RPM and speed frames and once per loop pass.
 void updateCluster(void) {
-  cluster.update(getCurrentCarSpeed(), getEngineRPM());
+  cluster.update((unsigned int)canGetValue(F_ABS_CAR_SPEED),
+                 (unsigned int)canGetValue(F_RPM));
 }
 
 void drawLowImportanceValues(void) {
@@ -286,18 +278,108 @@ void drawHighImportanceValuesIfChanged(void) {
   }
 }
 
-static void initializeCore1(void) { setStartedCore1(); }
+// Core 1: one reading of the oil pressure sender.
+void readLocalOilPressure(void) {
+  float bar = 0.0f;
+  const bool valid = (readOilPressure(&bar) == OIL_SENDER_OK);
+  localMeasurements.oilValid = valid;
+  localMeasurements.oilBar = valid ? bar : 0.0f;
+  if (valid) {
+    localMeasurements.oilUpdatedMs = hal_millis();
+  }
+  clocksStatePublishLocal(&localMeasurements);
+}
+
+// Core 1: one reading of both thermocouples.
+void readLocalEgt(void) {
+  const uint32_t started = timingDiagLoopStart();
+  egtRead(&localMeasurements, hal_millis());
+  timingDiagEgtRead(started);
+  clocksStatePublishLocal(&localMeasurements);
+}
+
+static void initializeCore1(void) {
+  timingDiagPaintStack(1u);
+  initTFT();
+  (void)setupOilPressure();
+  egtInit();
+
+  int sec = hal_get_seconds();
+  const int secDest = sec + FIESTA_INTRO_TIME;
+
+#ifndef DEBUG_SCREEN
+  hal_display_fill_screen(HAL_COLOR(WHITE));
+  const int x = (SCREEN_W - FIESTA_LOGO_WIDTH) / 2;
+  const int y = (SCREEN_H - FIESTA_LOGO_HEIGHT) / 2;
+  hal_display_draw_image(x, y, FIESTA_LOGO_WIDTH, FIESTA_LOGO_HEIGHT,
+                         HAL_COLOR(WHITE), (uint16_t *)FiestaLogo);
+#endif // DEBUG_SCREEN
+
+  while (sec < secDest) {
+    updateWatchdogCore1();
+    hal_idle();
+    sec = hal_get_seconds();
+  }
+
+  hal_display_fill_screen(ICONS_BG_COLOR);
+
+  initFuelMeasurement();
+  (void)clocksStateRefreshView();
+
+#ifdef DEBUG_SCREEN
+  debugFunc();
+#else
+  triggerDrawHighImportanceValue(true);
+  redrawAllGauges();
+#endif
+
+  alertsStartSecond = hal_get_seconds() + SERIOUS_ALERTS_DELAY_TIME;
+
+  callAtEverySecond();
+  callAtEveryHalfSecond();
+  callAtEveryHalfHalfSecond();
+  updateValsForDebug();
+
+  hal_soft_timer_setup_table(displayTimerTable, COUNTOF(displayTimerTable),
+                             hal_watchdog_feed, CORE_OPERATION_DELAY);
+  configSessionInit();
+
+  setStartedCore1();
+  deb("Setup finished");
+}
 
 static void runCore1(void) {
+  statusVariable1 = 0;
   updateWatchdogCore1();
-
-  if (!isEnvironmentStarted()) {
-    statusVariable1 = -1;
-    hal_delay_ms(CORE_OPERATION_DELAY);
-    hal_idle();
-    return;
-  }
   statusVariable1 = 1;
+  const uint32_t loopStart = timingDiagLoopStart();
+
+  if (clocksStateRefreshView()) {
+    triggerDrawHighImportanceValue(true);
+  }
+
+  hal_soft_timer_tick_table(displayTimerTable, COUNTOF(displayTimerTable));
+  if (lastThreadSeconds < hal_get_seconds()) {
+    lastThreadSeconds = hal_get_seconds() + THREAD_CONTROL_SECONDS;
+
+    deb("thread is alive");
+  }
+  statusVariable1 = 2;
+  drawHighImportanceValuesIfChanged();
+  statusVariable1 = 3;
+  configSessionTick();
+
+  if (isEcuConnected()) {
+    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+  } else {
+    hal_rgb_led_set_color(alertSwitch() ? HAL_RGB_LED_NONE : HAL_RGB_LED_RED);
+  }
+
+  if (timingDiagRedrawDue()) {
+    redrawAllGauges();
+    triggerDrawHighImportanceValue(true);
+  }
+  timingDiagLoopEnd(1u, loopStart);
 
   hal_delay_ms(CORE_OPERATION_DELAY);
   hal_idle();
@@ -306,11 +388,13 @@ static void runCore1(void) {
 void updateValsForDebug(void) {
 
   deb("ECU:%s", isEcuConnected() ? "on" : "off");
-  deb("oil & speed module:%s", isOilSpeedModuleConnected() ? "on" : "off");
+  deb("DPF:%s", isDPFConnected() ? "on" : "off");
   deb("current speed:%d Km/h current rpm:%d RPM", getCurrentCarSpeed(),
       getEngineRPM());
-  deb("EGT: %dC DPF: %dC", int(valueFields[F_EGT]),
-      int(valueFields[F_DPF_TEMP]));
+  deb("EGT: %dC%s DPF: %dC%s oil: %.1fbar%s", int(valueFields[F_EGT]),
+      isEgtValid(EGT_PRE_DPF) ? "" : " (n/a)", int(valueFields[F_DPF_TEMP]),
+      isEgtValid(EGT_IN_DPF) ? "" : " (n/a)", (double)getOilPressure(),
+      isOilPressureValid() ? "" : " (sender fault)");
 }
 
 extern "C" void app_start(void) {

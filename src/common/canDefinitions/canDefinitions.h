@@ -79,12 +79,16 @@ enum {
   CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED
 };
 
+// Sent by Clocks.
 #define CAN_ID_OIL_AND_SPEED_MODULE_UPDATE 0x12a
 enum {
   CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI = 1,
   CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO,
   CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED,
+  CAN_FRAME_OIL_AND_SPEED_STATUS, // CAN_OIL_AND_SPEED_STATUS_* bits
 };
+// The oil pressure sender reads in range; without it the pressure is 0.
+#define CAN_OIL_AND_SPEED_STATUS_OIL_VALID 0x01u
 
 #define CAN_ID_ECU_UPDATE_03 0x12b
 enum {
@@ -124,13 +128,18 @@ enum {
   CAN_FRAME_GPS_EXT_DT_LO,
 };
 
+// Sent by Clocks. Both temperatures are int16_t in whole °C (big-endian).
 #define CAN_ID_EGT_UPDATE 0x12f
 enum {
   CAN_FRAME_EGT_UPDATE_EGT_HI = 1,
   CAN_FRAME_EGT_UPDATE_EGT_LO,
   CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI,
   CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO,
+  CAN_FRAME_EGT_UPDATE_STATUS, // CAN_EGT_STATUS_* bits
 };
+// A channel without its bit has no measurement and carries 0.
+#define CAN_EGT_STATUS_EGT_VALID 0x01u
+#define CAN_EGT_STATUS_DPF_TEMP_VALID 0x02u
 
 #define CAN_ID_RTC_UPDATE 0x130
 enum {

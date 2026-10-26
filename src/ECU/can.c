@@ -22,6 +22,12 @@ typedef struct {
   bool egtEverSeenFlag;
   unsigned long egtMessagesCount;
   unsigned long lastEgtMessagesCount;
+  bool egtValidFlag; /* valid bits of the last EGT frame */
+  bool dpfTempValidFlag;
+  bool oilConnectedFlag;
+  bool oilValidFlag; /* valid bit of the last oil and speed frame */
+  unsigned long oilMessagesCount;
+  unsigned long lastOilMessagesCount;
   hal_can_t canBusHandle;
   bool isInitialized;
   bool rpmHasBeenSent;
@@ -48,6 +54,12 @@ static can_state_t s_canState = {.frameNumberVal = 0u,
                                  .egtEverSeenFlag = false,
                                  .egtMessagesCount = 0uL,
                                  .lastEgtMessagesCount = 0uL,
+                                 .egtValidFlag = false,
+                                 .dpfTempValidFlag = false,
+                                 .oilConnectedFlag = false,
+                                 .oilValidFlag = false,
+                                 .oilMessagesCount = 0uL,
+                                 .lastOilMessagesCount = 0uL,
                                  .canBusHandle = NULL,
                                  .isInitialized = false,
                                  .rpmHasBeenSent = false,
@@ -153,6 +165,12 @@ hal_status_t canInit(int retries) {
   s_canState.egtEverSeenFlag = false;
   s_canState.egtMessagesCount = 0uL;
   s_canState.lastEgtMessagesCount = 0uL;
+  s_canState.egtValidFlag = false;
+  s_canState.dpfTempValidFlag = false;
+  s_canState.oilConnectedFlag = false;
+  s_canState.oilValidFlag = false;
+  s_canState.oilMessagesCount = 0uL;
+  s_canState.lastOilMessagesCount = 0uL;
   resetRpmPublisher();
 
   hal_can_config_t canCfg = can0Config();
@@ -436,18 +454,30 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   } break;
 
   case CAN_ID_EGT_UPDATE: {
-    if (len <= CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO) {
+    if (len <= CAN_FRAME_EGT_UPDATE_STATUS) {
       derr("Received truncated EGT frame with len: %d", len);
       return;
     }
     s_canState.egtMessagesCount++;
     s_canState.egtEverSeenFlag = true;
 
-    setGlobalValue(F_EGT, jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_EGT_HI],
-                                            buf[CAN_FRAME_EGT_UPDATE_EGT_LO]));
-    setGlobalValue(F_DPF_TEMP,
-                   jh_u16_from_bytes(buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
-                                     buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_LO]));
+    /* Signed whole degrees; a channel without its valid bit has no
+     * measurement, which the frame carries as 0. */
+    const uint8_t status = buf[CAN_FRAME_EGT_UPDATE_STATUS];
+    s_canState.egtValidFlag = (status & CAN_EGT_STATUS_EGT_VALID) != 0u;
+    s_canState.dpfTempValidFlag =
+        (status & CAN_EGT_STATUS_DPF_TEMP_VALID) != 0u;
+    float egt = 0.0f;
+    float dpfTemp = 0.0f;
+    if (s_canState.egtValidFlag) {
+      egt = (float)fiesta_can_get_temp_i16(&buf[CAN_FRAME_EGT_UPDATE_EGT_HI]);
+    }
+    if (s_canState.dpfTempValidFlag) {
+      dpfTemp = (float)fiesta_can_get_temp_i16(
+          &buf[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI]);
+    }
+    setGlobalValue(F_EGT, egt);
+    setGlobalValue(F_DPF_TEMP, dpfTemp);
   } break;
 
   case CAN_ID_CLOCK_BRIGHTNESS: {
@@ -472,14 +502,21 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   } break;
 
   case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE: {
-    if (len <= CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED) {
-      derr("Received truncated OilAndSpeed frame with len: %d", len);
+    if (len <= CAN_FRAME_OIL_AND_SPEED_STATUS) {
+      derr("Received truncated oil and speed frame with len: %d", len);
       return;
     }
-    setGlobalValue(F_OIL_PRESSURE,
-                   fiesta_can_join_decimal_tenths(
-                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
-                       buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]));
+    /* A faulty oil pressure sender comes without its valid bit. */
+    s_canState.oilMessagesCount++;
+    s_canState.oilValidFlag = (buf[CAN_FRAME_OIL_AND_SPEED_STATUS] &
+                               CAN_OIL_AND_SPEED_STATUS_OIL_VALID) != 0u;
+    float oilPressure = 0.0f;
+    if (s_canState.oilValidFlag) {
+      oilPressure = fiesta_can_join_decimal_tenths(
+          buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI],
+          buf[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO]);
+    }
+    setGlobalValue(F_OIL_PRESSURE, oilPressure);
     setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
   } break;
 
@@ -502,6 +539,18 @@ void canMainLoop(void) {
 bool isDPFConnected(void) { return s_canState.dpfConnectedFlag; }
 
 bool isEGTConnected(void) { return s_canState.egtConnectedFlag; }
+
+bool isEGTValid(void) {
+  return s_canState.egtConnectedFlag && s_canState.egtValidFlag;
+}
+
+bool isDPFTempValid(void) {
+  return s_canState.egtConnectedFlag && s_canState.dpfTempValidFlag;
+}
+
+bool isOilPressureValid(void) {
+  return s_canState.oilConnectedFlag && s_canState.oilValidFlag;
+}
 
 /**
  * @brief Raise or clear U0073 from the controller state and failed sends.
@@ -538,6 +587,10 @@ void canCheckConnection(void) {
   s_canState.lastEgtMessagesCount = s_canState.egtMessagesCount;
   dtcManagerSetActive(DTC_EGT_COMM_LOST, s_canState.egtEverSeenFlag &&
                                              !s_canState.egtConnectedFlag);
+
+  s_canState.oilConnectedFlag =
+      (s_canState.oilMessagesCount != s_canState.lastOilMessagesCount);
+  s_canState.lastOilMessagesCount = s_canState.oilMessagesCount;
 
   s_canState.dpfConnectedFlag =
       (s_canState.dpfMessagesCount != s_canState.lastDpfMessagesCount);

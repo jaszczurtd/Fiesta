@@ -1,3 +1,4 @@
+#include "can.h"
 #include "config.h"
 #include "gps.h"
 #include "hal/impl/.mock/hal_mock.h"
@@ -251,6 +252,122 @@ void test_pid_egt_as_catalyst_temp(void) {
   TEST_ASSERT_EQUAL_INT(2, len);
   uint16_t result = ((uint16_t)data[0] << 8) | data[1];
   TEST_ASSERT_EQUAL_UINT16(6400, result);
+}
+
+void test_pid_catalyst_temp_clamps_to_its_range(void) {
+  // Below -40 C the field reads -40 C instead of wrapping around.
+  setGlobalValue(F_EGT, -55.0f);
+  uint8_t data[4] = {0};
+  int len = 0;
+  TEST_ASSERT_TRUE(encodeMode01PidData(CAT_TEMP_B1S1, data, &len));
+  TEST_ASSERT_EQUAL_UINT16(0u, ((uint16_t)data[0] << 8) | data[1]);
+
+  setGlobalValue(F_EGT, 7000.0f);
+  TEST_ASSERT_TRUE(encodeMode01PidData(CAT_TEMP_B1S1, data, &len));
+  TEST_ASSERT_EQUAL_UINT16(65535u, ((uint16_t)data[0] << 8) | data[1]);
+}
+
+// ── Measurements of Clocks ───────────────────────────────────────────────────
+
+static void ensure_can0_ready(void) {
+  if (canTestGetCanHandle() == NULL) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, canInit(1));
+  }
+  hal_mock_can_reset(canTestGetCanHandle());
+  canCheckConnection(); // forget the frames of earlier tests
+  canCheckConnection();
+}
+
+/* One EGT and one oil and speed frame of Clocks, then the connection check
+ * that finds them. */
+static void receive_clocks_frames(uint8_t egtStatus, uint8_t oilStatus) {
+  uint8_t egt[CAN_FRAME_MAX_LENGTH] = {0};
+  egt[CAN_FRAME_EGT_UPDATE_STATUS] = egtStatus; // 0 C in both channels
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, egt);
+  uint8_t oil[CAN_FRAME_MAX_LENGTH] = {0};
+  oil[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = 2;
+  oil[CAN_FRAME_OIL_AND_SPEED_STATUS] = oilStatus;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, oil);
+  canMainLoop();
+  canCheckConnection();
+}
+
+static void request(uint8_t service, uint8_t a, uint8_t b) {
+  const uint8_t length = (service == OBD_MODE_CURRENT_DATA) ? 2u : 3u;
+  const uint8_t req[8] = {length, service, a, b, 0u, 0u, 0u, 0u};
+  obdReq(LISTEN_ID, req);
+}
+
+/* Pops a positive Mode 01 reply for @p pid and returns its 16-bit value. */
+static uint16_t pop_mode01_word(uint8_t pid) {
+  uint32_t id = 0;
+  uint8_t len = 0;
+  uint8_t tx[8] = {0};
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+  TEST_ASSERT_EQUAL_UINT8(0x41u, tx[1]);
+  TEST_ASSERT_EQUAL_UINT8(pid, tx[2]);
+  return (uint16_t)(((uint16_t)tx[3] << 8) | tx[4]);
+}
+
+void test_temperature_pids_without_measurement_are_conditions_not_correct(
+    void) {
+  ensure_can0_ready();
+  receive_clocks_frames(0u, 0u);
+  request(OBD_MODE_CURRENT_DATA, CAT_TEMP_B1S1, 0u);
+  assert_negative_reply(OBD_MODE_CURRENT_DATA, NRC_CONDITIONS_NOT_CORRECT);
+  request(OBD_MODE_CURRENT_DATA, P_DPF_TEMP, 0u);
+  assert_negative_reply(OBD_MODE_CURRENT_DATA, NRC_CONDITIONS_NOT_CORRECT);
+
+  // A measured 0 C is a reading: (0 + 40) * 10.
+  receive_clocks_frames(
+      CAN_EGT_STATUS_EGT_VALID | CAN_EGT_STATUS_DPF_TEMP_VALID, 0u);
+  request(OBD_MODE_CURRENT_DATA, CAT_TEMP_B1S1, 0u);
+  TEST_ASSERT_EQUAL_UINT16(400u, pop_mode01_word(CAT_TEMP_B1S1));
+  request(OBD_MODE_CURRENT_DATA, P_DPF_TEMP, 0u);
+  TEST_ASSERT_EQUAL_UINT16(400u, pop_mode01_word(P_DPF_TEMP));
+
+  // Each channel has its own flag.
+  receive_clocks_frames(CAN_EGT_STATUS_EGT_VALID, 0u);
+  request(OBD_MODE_CURRENT_DATA, CAT_TEMP_B1S1, 0u);
+  TEST_ASSERT_EQUAL_UINT16(400u, pop_mode01_word(CAT_TEMP_B1S1));
+  request(OBD_MODE_CURRENT_DATA, P_DPF_TEMP, 0u);
+  assert_negative_reply(OBD_MODE_CURRENT_DATA, NRC_CONDITIONS_NOT_CORRECT);
+}
+
+void test_temperature_pids_lose_the_measurement_when_frames_stop(void) {
+  ensure_can0_ready();
+  receive_clocks_frames(CAN_EGT_STATUS_EGT_VALID, 0u);
+  canCheckConnection(); // no EGT frame since the previous check
+
+  request(OBD_MODE_CURRENT_DATA, CAT_TEMP_B1S1, 0u);
+  assert_negative_reply(OBD_MODE_CURRENT_DATA, NRC_CONDITIONS_NOT_CORRECT);
+}
+
+void test_live_data_did_of_a_missing_egt_is_conditions_not_correct(void) {
+  ensure_can0_ready();
+  receive_clocks_frames(0u, 0u);
+  request(UDS_SVC_READ_DATA_BY_ID, 0xF4u, CAT_TEMP_B1S1);
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_CONDITIONS_NOT_CORRECT);
+}
+
+void test_oil_pressure_did_without_measurement_is_conditions_not_correct(void) {
+  ensure_can0_ready();
+  receive_clocks_frames(0u, 0u);
+  request(UDS_SVC_READ_DATA_BY_ID, MSB(DID_FORD_OIL_PRESSURE),
+          LSB(DID_FORD_OIL_PRESSURE));
+  assert_negative_reply(UDS_SVC_READ_DATA_BY_ID, NRC_CONDITIONS_NOT_CORRECT);
+
+  receive_clocks_frames(0u, CAN_OIL_AND_SPEED_STATUS_OIL_VALID);
+  request(UDS_SVC_READ_DATA_BY_ID, MSB(DID_FORD_OIL_PRESSURE),
+          LSB(DID_FORD_OIL_PRESSURE));
+  uint32_t id = 0;
+  uint8_t len = 0;
+  uint8_t tx[8] = {0};
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &len, tx));
+  TEST_ASSERT_EQUAL_UINT8(UDS_RSP_READ_DATA_BY_ID, tx[1]);
+  TEST_ASSERT_EQUAL_UINT16(20u, ((uint16_t)tx[4] << 8) | tx[5]); // 2.0 bar
 }
 
 void test_stmin_to_ms_preserves_millisecond_values(void) {
@@ -1151,6 +1268,12 @@ int main(void) {
   RUN_TEST(test_pid_intake_pressure_clamps_to_255_kpa);
   RUN_TEST(test_pid_unsupported_returns_false);
   RUN_TEST(test_pid_egt_as_catalyst_temp);
+  RUN_TEST(test_pid_catalyst_temp_clamps_to_its_range);
+  RUN_TEST(
+      test_temperature_pids_without_measurement_are_conditions_not_correct);
+  RUN_TEST(test_temperature_pids_lose_the_measurement_when_frames_stop);
+  RUN_TEST(test_live_data_did_of_a_missing_egt_is_conditions_not_correct);
+  RUN_TEST(test_oil_pressure_did_without_measurement_is_conditions_not_correct);
 
   // obd_encodeTempByte helper
   RUN_TEST(test_obd_temp_byte_zero_celsius);

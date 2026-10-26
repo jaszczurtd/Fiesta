@@ -17,7 +17,12 @@
     },
     "speedOutput": { "compatible": "jaszczurhal,gpio-output" },
     "tachoOutput": { "compatible": "jaszczurhal,gpio-output" },
-    "oilLamp": { "compatible": "jaszczurhal,gpio-output" }
+    "oilLamp": { "compatible": "jaszczurhal,gpio-output" },
+    "chargeLamp": { "compatible": "jaszczurhal,gpio-output" },
+    "absSpeed": { "compatible": "jaszczurhal,gpio-input" },
+    "oilPressure": { "compatible": "jaszczurhal,adc-input" },
+    "egtPreDpf": { "compatible": "jaszczurhal,i2c-device" },
+    "egtMidDpf": { "compatible": "jaszczurhal,i2c-device" }
   },
   "assemblies": {
     "rp2040-zero": {
@@ -31,6 +36,12 @@
           "index": 0,
           "frequencyHz": 10000000,
           "pins": { "sck": 2, "mosi": 3, "miso": 0 }
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 12, "scl": 13 }
         }
       },
       "nodes": {
@@ -45,7 +56,12 @@
         "buzzer": { "present": true, "pins": { "out": 14 } },
         "speedOutput": { "present": true, "pins": { "out": 9 } },
         "tachoOutput": { "present": true, "pins": { "out": 10 } },
-        "oilLamp": { "present": true, "pins": { "out": 11 } }
+        "oilLamp": { "present": true, "pins": { "out": 11 } },
+        "chargeLamp": { "present": true, "pins": { "out": 26 } },
+        "absSpeed": { "present": true, "pins": { "in": 15 } },
+        "oilPressure": { "present": true, "pins": { "in": 29 } },
+        "egtPreDpf": { "present": true, "bus": "i2c", "address": 96 },
+        "egtMidDpf": { "present": true, "bus": "i2c", "address": 103 }
       }
     }
   }

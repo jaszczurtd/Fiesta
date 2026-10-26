@@ -167,6 +167,88 @@ void test_truncated_oil_and_speed_frame_is_ignored(void) {
   TEST_ASSERT_EQUAL_FLOAT(88.0f, getGlobalValue(F_ABS_CAR_SPEED));
 }
 
+void test_egt_frame_decodes_negative_temperatures_and_validity(void) {
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_TRUE(
+      fiesta_can_put_temp_i16(&frame[CAN_FRAME_EGT_UPDATE_EGT_HI], -21.0f));
+  TEST_ASSERT_TRUE(fiesta_can_put_temp_i16(
+      &frame[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI], 655.0f));
+  frame[CAN_FRAME_EGT_UPDATE_STATUS] =
+      CAN_EGT_STATUS_EGT_VALID | CAN_EGT_STATUS_DPF_TEMP_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
+
+  TEST_ASSERT_EQUAL_FLOAT(-21.0f, getGlobalValue(F_EGT));
+  TEST_ASSERT_EQUAL_FLOAT(655.0f, getGlobalValue(F_DPF_TEMP));
+}
+
+void test_egt_channel_without_valid_bit_has_no_measurement(void) {
+  setGlobalValue(F_EGT, 321.0f);
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  (void)fiesta_can_put_temp_i16(&frame[CAN_FRAME_EGT_UPDATE_EGT_HI], 700.0f);
+  (void)fiesta_can_put_temp_i16(&frame[CAN_FRAME_EGT_UPDATE_DPF_TEMP_HI],
+                                410.0f);
+  frame[CAN_FRAME_EGT_UPDATE_STATUS] = CAN_EGT_STATUS_DPF_TEMP_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
+
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_EGT));
+  TEST_ASSERT_EQUAL_FLOAT(410.0f, getGlobalValue(F_DPF_TEMP));
+}
+
+void test_oil_pressure_without_valid_bit_has_no_measurement(void) {
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  frame[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = 3;
+  frame[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = 5;
+  frame[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = 64;
+  frame[CAN_FRAME_OIL_AND_SPEED_STATUS] = CAN_OIL_AND_SPEED_STATUS_OIL_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_FLOAT(3.5f, getGlobalValue(F_OIL_PRESSURE));
+  TEST_ASSERT_EQUAL_FLOAT(64.0f, getGlobalValue(F_ABS_CAR_SPEED));
+
+  frame[CAN_FRAME_OIL_AND_SPEED_STATUS] = 0u;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_OIL_PRESSURE));
+  TEST_ASSERT_EQUAL_FLOAT(64.0f, getGlobalValue(F_ABS_CAR_SPEED));
+}
+
+// A valid bit counts only while frames of its kind keep arriving.
+void test_measurement_validity_needs_the_flag_and_fresh_frames(void) {
+  canCheckConnection(); // forget the frames of earlier tests
+  canCheckConnection();
+  TEST_ASSERT_FALSE(isEGTValid());
+  TEST_ASSERT_FALSE(isOilPressureValid());
+
+  uint8_t egt[CAN_FRAME_MAX_LENGTH] = {0};
+  egt[CAN_FRAME_EGT_UPDATE_STATUS] = CAN_EGT_STATUS_EGT_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, egt);
+  uint8_t oil[CAN_FRAME_MAX_LENGTH] = {0};
+  oil[CAN_FRAME_OIL_AND_SPEED_STATUS] = CAN_OIL_AND_SPEED_STATUS_OIL_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, oil);
+  canMainLoop();
+  canCheckConnection();
+  TEST_ASSERT_TRUE(isEGTValid());
+  TEST_ASSERT_FALSE(isDPFTempValid());
+  TEST_ASSERT_TRUE(isOilPressureValid());
+
+  oil[CAN_FRAME_OIL_AND_SPEED_STATUS] = 0u;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, oil);
+  canMainLoop();
+  TEST_ASSERT_FALSE(isOilPressureValid());
+
+  canCheckConnection(); // no EGT frame since the previous check
+  TEST_ASSERT_FALSE(isEGTValid());
+}
+
 static void assert_rpm_frame(int32_t expectedRpm) {
   uint32_t id = 0u;
   uint8_t len = 0u;
@@ -336,6 +418,10 @@ int main(void) {
   RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
   RUN_TEST(test_truncated_egt_frame_is_ignored);
   RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
+  RUN_TEST(test_egt_frame_decodes_negative_temperatures_and_validity);
+  RUN_TEST(test_egt_channel_without_valid_bit_has_no_measurement);
+  RUN_TEST(test_oil_pressure_without_valid_bit_has_no_measurement);
+  RUN_TEST(test_measurement_validity_needs_the_flag_and_fresh_frames);
   RUN_TEST(test_can_init_uses_one_shot_with_software_retry);
   RUN_TEST(test_rpm_update_retries_after_failed_send);
   RUN_TEST(test_rpm_update_sends_periodic_heartbeat);

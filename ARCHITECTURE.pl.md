@@ -17,8 +17,8 @@ sterowania znajdują się w dokumentacji modułów.
 
 ```text
                  CAN0 (główna)
-   ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, buzzer
-   │           │ ◄──────────  OilAndSpeed     olej, prędkość, EGT
+   ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT
+   │           │ ◄──────────  OilAndSpeed     zastąpiony przez Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    czas RTC, 1 Hz
    │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
@@ -66,8 +66,8 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 | Moduł | Język | Zadania | MISRA |
 |---|---|---|---|
 | [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
-| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników. | Poza zakresem. |
-| [OilAndSpeed](src/OilAndSpeed/) | C++ | Olej, prędkość i temperatury spalin. | Poza zakresem. |
+| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość i temperatury spalin. | Poza zakresem. |
+| [OilAndSpeed](src/OilAndSpeed/) | C++ | Dawny moduł oleju, prędkości i EGT, zastąpiony przez Clocks. | Poza zakresem. |
 | [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC i czas przez CAN. | Poza zakresem. |
 | [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
 | [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
@@ -107,26 +107,56 @@ Lokalna definicja urządzenia ogranicza konfigurację magistrali do 400 kHz.
 
 ### Clocks
 
-Clocks odbiera dane CAN i generuje przebiegi prostokątne dla fabrycznego
-prędkościomierza, obrotomierza i wskaźnika oleju. Rysuje dodatkowe wskazania
-na TFT i obsługuje buzzer. Nadaje tylko jasność ekranu co 50 ms;
-ECU nie wymaga od niego danych. Kontroler CAN i TFT współdzielą SPI.
+Clocks obsługuje zestaw wskaźników i mierzy to, czego nie odczytuje ECU.
+Generuje przebiegi prostokątne dla fabrycznego prędkościomierza, obrotomierza
+i wskaźnika oleju, steruje kontrolkami oleju i ładowania, rysuje dodatkowe
+wskazania na TFT i obsługuje buzzer. Mierzy ciśnienie oleju czujnikiem
+rezystancyjnym, prędkość przez impulsy ABS oraz temperatury spalin przed DPF
+i wewnątrz niego przez dwa MCP9600 na własnym I²C.
+
+Pracę dzielą dwa rdzenie RP2040. Rdzeń 0 odbiera i nadaje CAN, mierzy prędkość
+z ABS oraz steruje wskaźnikami, kontrolkami i buzzerem. Rdzeń 1 rysuje TFT,
+odczytuje czujnik oleju i obie termopary oraz obsługuje sesję konfiguratora.
+Rdzenie wymieniają kopie swojego stanu pod krótką blokadą, więc rysowanie ani
+powolny odczyt I²C nie opóźniają ramki CAN.
+
+Clocks nadaje jasność ekranu, ciśnienie oleju i prędkość z ABS co 50 ms, a obie
+temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
+albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną
+flagą, więc odbiorca nie odczyta go jako zera.
+
+Kontrolka ładowania korzysta z obrotów silnika i napięcia akumulatora z ECU.
+Świeci, gdy silnik stoi albo te dane są nieaktualne, i gaśnie, gdy po
+rozruchu napięcie potwierdzi ładowanie. Zapala się ponownie po zaniku
+ładowania i miga z częstotliwością 2 Hz przy zbyt wysokim napięciu. Progi
+i czasy potwierdzeń są w [config.h](src/Clocks/config.h); wskaźnik napięcia
+na TFT ma własny zakres.
 
 | Plik | Zadanie |
 |---|---|
 | [Cluster.cpp](src/Clocks/Cluster.cpp) | Generuje sygnały fabrycznych wskaźników. |
 | [Gauge.h](src/Clocks/Gauge.h), [simpleGauge.cpp](src/Clocks/simpleGauge.cpp), [tempGauge.cpp](src/Clocks/tempGauge.cpp), [pressureGauge.cpp](src/Clocks/pressureGauge.cpp) | Przeliczają wskazania. |
 | [TFTExtension.cpp](src/Clocks/TFTExtension.cpp) | Rysuje ekran TFT. |
-| [logic.cpp](src/Clocks/logic.cpp) | Zamienia dane CAN na stan wskaźników, ekranu i buzzera. |
+| [logic.cpp](src/Clocks/logic.cpp) | Uruchamia oba rdzenie i ich pętle; zamienia dane CAN na stan wskaźników, ekranu i buzzera. |
+| [clocksState.cpp](src/Clocks/clocksState.cpp) | Przekazuje kopie stanu między rdzeniami. |
+| [speed.cpp](src/Clocks/speed.cpp) | Przelicza częstotliwość impulsów ABS na prędkość. |
+| [oilPressure.cpp](src/Clocks/oilPressure.cpp) | Przelicza ADC na bary i wykrywa zwarcie lub przerwę czujnika. |
+| [egt.cpp](src/Clocks/egt.cpp) | Odczytuje oba MCP9600 i ponownie szuka brakującego układu. |
+| [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
 | [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
-| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła jasność; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
+| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością oraz EGT; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
+
+Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze
+`HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` z
+[hal_project_config.h](src/Clocks/hal_project_config.h), więc CAN dostaje
+magistralę między dwoma pasami.
 
 ### OilAndSpeed
 
-OilAndSpeed mierzy ciśnienie oleju czujnikiem rezystancyjnym, prędkość przez
-impulsy ABS oraz temperatury spalin przed DPF i wewnątrz niego przez dwa
-MCP9600 na własnym I²C. Nadaje olej i prędkość co 50 ms, a temperatury co
-250 ms i po każdym odczycie termopar. Te same ramki informują o obecności modułu.
+OilAndSpeed to dawny, osobny moduł pomiaru ciśnienia oleju, prędkości z ABS
+i temperatur spalin. Te same ramki nadaje teraz Clocks, a każde ID CAN ma
+jednego nadawcę, więc OilAndSpeed nie może pracować na jednej magistrali
+z obecnym Clocks.
 
 | Plik | Zadanie |
 |---|---|
@@ -260,22 +290,25 @@ src/<Module>/
 
 | Magistrala | Uczestnicy | Cel |
 |---|---|---|
-| CAN0 „main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | Komunikacja między modułami. |
+| CAN0 „main" | ECU, Clocks, Fiesta_clock | Komunikacja między modułami. |
 | CAN1 „OBD-2" | ECU, gniazdo OBD-II | Zewnętrzna diagnostyka. |
 
 ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie, paliwo,
-pozycję i czas GPS. Odbiera olej, prędkość i EGT z OilAndSpeed oraz stan DPF
+pozycję i czas GPS. Odbiera olej, prędkość i EGT z Clocks oraz stan DPF
 z `0x124`. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
-Clocks nadaje tylko jasność (`0x126`), którą OilAndSpeed traktuje też jako
-sygnał obecności wskaźników. OilAndSpeed dodatkowo odbiera wybrane dane ECU.
-Fiesta_clock nadaje tylko czas (`0x130`). Na CAN1 ECU odpowiada na OBD-II i UDS.
+Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
+(`0x12A`) i obie temperatury spalin (`0x12F`).
+Fiesta_clock nadaje tylko czas (`0x130`). Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
+ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
+gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
+przychodzić.
 Bus-off lub odrzucone nadanie zgłasza U0073; `DTC_DETAIL_*` wskazuje ramkę,
 a rekord UDS zawiera tę informację jako trzeci bajt DTC.
 
 ### I²C
 
 ECU jest masterem dla Adjustometera (`0x57`) i ekspandera PCF8574 (`0x38`).
-OilAndSpeed i Fiesta_clock mają osobne magistrale dla swoich czujników.
+Clocks i Fiesta_clock mają osobne magistrale dla swoich czujników.
 
 ### USB
 
@@ -289,9 +322,9 @@ wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
 | Kierunek | Sygnały |
 |---|---|
 | Czujniki -> ECU | Temperatury płynu, oleju i dolotu; paliwo, przepustnica, ciśnienie dolotu, Hall RPM, przycisk ogrzewanej szyby, zasilanie. |
-| Czujniki -> OilAndSpeed | Olej, ABS, EGT przed DPF i wewnątrz. |
+| Czujniki -> Clocks | Olej, ABS, EGT przed DPF i wewnątrz. |
 | ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
-| Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), TFT, buzzer. |
+| Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), kontrolki oleju i ładowania, TFT, buzzer. |
 | Diagnostyka | OBD-II przez CAN1. |
 | Pomocnicze | Data i czas GPS przez programowy port szeregowy ECU, dalej CAN; czas RTC z Fiesta_clock. |
 

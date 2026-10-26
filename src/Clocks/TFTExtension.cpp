@@ -20,11 +20,6 @@ void initTFT(void) {
                         HAL_DISPLAY_INVERT_OFF, HAL_DISPLAY_COLOR_ORDER_RGB);
 }
 
-void softInitDisplay(void) {
-  hal_display_soft_init(75);
-  hal_display_set_rotation(HAL_DISPLAY_ROTATION(JH_HW_NODE_TFT_PROP_ROTATION));
-}
-
 void redrawAllGauges(void) {
   redrawFuel();
   redrawTempGauges();

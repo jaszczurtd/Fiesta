@@ -17,8 +17,8 @@ have been used in the car without VP37 actuation.
 | Module | Purpose |
 |---|---|
 | [ECU](src/ECU/README.md) | Engine, VP37 and boost control, relay outputs, diagnostics and DTC storage. |
-| [Clocks](src/Clocks/) | Factory gauges, TFT readouts and audible warnings. |
-| [OilAndSpeed](src/OilAndSpeed/) | Oil pressure, vehicle speed and exhaust temperatures. |
+| [Clocks](src/Clocks/) | Factory gauges, TFT readouts and warnings; oil pressure, vehicle speed and exhaust temperatures. |
+| [OilAndSpeed](src/OilAndSpeed/) | Earlier oil pressure, speed and exhaust temperature module, superseded by Clocks. |
 | [Adjustometer](src/Adjustometer/README.md) | VP37 position measurement, delivered to the ECU over I²C. |
 | [Fiesta_clock](src/Fiesta_clock/) | RTC time on CAN and a local display. |
 | [VP37TestBench](src/VP37TestBench/) | The shared VP37 controller on a separate pump test stand. |

@@ -21,6 +21,9 @@ typedef struct {
 class Cluster {
 public:
   Cluster();
+  /** @brief Set up both outputs and their timers on the calling core. */
+  void init(void);
+  /** @brief Retune the outputs; does nothing before init(). */
   void update(unsigned int speed, unsigned int rpm);
 
 private:
@@ -37,6 +40,7 @@ private:
 
   unsigned int lastSpeed;
   unsigned int lastRpm;
+  bool initialized;
 };
 
 #endif

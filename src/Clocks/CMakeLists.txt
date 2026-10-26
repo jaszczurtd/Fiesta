@@ -50,6 +50,7 @@ endif()
 
 add_library(clocks_mock STATIC
     ${CLOCKS_SRC}/buzzerStrategy.cpp
+    ${CLOCKS_SRC}/clocksState.cpp
     ${CLOCKS_SRC}/config.cpp
     ${HAL_SRC}/hal/core/hal_assert.cpp
     ${HAL_SRC}/hal/core/hal_config.cpp

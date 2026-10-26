@@ -7,17 +7,6 @@ endfunction()
 add_oilspeed_test(test_config_session)
 fiesta_add_sc_session_test_support(test_config_session)
 
-add_executable(test_speed
-    test_speed.cpp
-    ${OILSPEED_SRC}/speed.cpp
-    ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
-)
-target_link_libraries(test_speed PRIVATE oilspeed_mock)
-target_compile_definitions(test_speed PRIVATE
-    PI=3.14159265358979323846
-)
-add_test(NAME test_speed COMMAND test_speed)
-
 add_executable(test_can
     test_can.cpp
     ${OILSPEED_SRC}/can.cpp

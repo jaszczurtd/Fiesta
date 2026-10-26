@@ -8,6 +8,7 @@
 
 #include "../common/fiesta_unit_testing.h"
 #include "../common/vp37/vp37.h"
+#include "can.h"
 #include "config.h"
 #include "dtcManager.h"
 #include "hardwareConfig.h"
@@ -264,13 +265,24 @@ static void encodeMode01Pid_21_40(uint8_t *txData) {
 }
 
 /**
+ * @brief Store a temperature as (A*256+B)/10 - 40 degrees Celsius.
+ * @param field Two data bytes of the PID.
+ * @param celsius Temperature; below -40 C it reads -40 C, above 6513.5 C
+ *        6513.5 C.
+ */
+static void encodeTenthsTemp(uint8_t *field, float celsius) {
+  const int32_t raw =
+      hal_constrain((int32_t)((celsius + 40.0f) * 10.0f), 0, 65535);
+  jh_store_be16(field, (uint16_t)raw);
+}
+
+/**
  * @brief Encode catalyst-temperature style data from EGT inputs.
  * @param txData Output frame buffer.
  */
 static void encodeMode01CatalystTemp(uint8_t *txData) {
   txData[0] = 0x04;
-  int32_t temp = ((int32_t)(getGlobalValue(F_EGT)) + 40) * 10;
-  jh_store_be16(&txData[3], temp);
+  encodeTenthsTemp(&txData[3], getGlobalValue(F_EGT));
 }
 
 /**
@@ -365,15 +377,8 @@ static void encodeMode01Pid_61_80(uint8_t *txData) {
  */
 static void encodeMode01DpfTemp(uint8_t *txData) {
   txData[0] = 0x04;
-  // PID 0x7C: DPF temperature bank 1, formula = (A*256+B)/10 - 40 °C
-  int32_t raw = (int32_t)((getGlobalValue(F_DPF_TEMP) + 40.0f) * 10.0f);
-  if (raw < 0) {
-    raw = 0;
-  }
-  if (raw > 65535) {
-    raw = 65535;
-  }
-  jh_store_be16(&txData[3], raw);
+  // PID 0x7C: DPF temperature bank 1
+  encodeTenthsTemp(&txData[3], getGlobalValue(F_DPF_TEMP));
 }
 
 /**
@@ -474,6 +479,31 @@ static const mode01_pid_handler_t s_mode01PidHandlers[] = {
     {PID_E1_FF, encodeMode01Pid_E1_FF},
 };
 
+typedef bool (*mode01_has_data_t)(void);
+
+typedef struct {
+  uint8_t pid;
+  mode01_has_data_t hasData;
+} mode01_measured_pid_t;
+
+/* PIDs of a measurement that can be missing; the others always have data. */
+static const mode01_measured_pid_t s_mode01MeasuredPids[] = {
+    {CAT_TEMP_B1S1, isEGTValid},  {CAT_TEMP_B1S2, isEGTValid},
+    {CAT_TEMP_B2S1, isEGTValid},  {CAT_TEMP_B2S2, isEGTValid},
+    {P_DPF_TEMP, isDPFTempValid},
+};
+
+bool obdMode01PidHasData(uint8_t pid) {
+  bool hasData = true;
+  for (size_t i = 0; i < COUNTOF(s_mode01MeasuredPids); i++) {
+    if (s_mode01MeasuredPids[i].pid == pid) {
+      hasData = s_mode01MeasuredPids[i].hasData();
+      break;
+    }
+  }
+  return hasData;
+}
+
 /**
  * @brief Dispatch one Mode 01 PID request through the encoder table.
  * @param pid Requested PID.
@@ -488,8 +518,12 @@ static bool handleMode01(uint8_t pid, obd_response_t *response, uint8_t mode,
   bool handled = false;
   for (size_t i = 0; i < COUNTOF(s_mode01PidHandlers); i++) {
     if (s_mode01PidHandlers[i].pid == pid) {
-      s_mode01PidHandlers[i].encoder(txData);
-      *tx = true;
+      if (obdMode01PidHasData(pid)) {
+        s_mode01PidHandlers[i].encoder(txData);
+        *tx = true;
+      } else {
+        obdResponseSetNegative(response, mode, NRC_CONDITIONS_NOT_CORRECT);
+      }
       handled = true;
       break;
     }

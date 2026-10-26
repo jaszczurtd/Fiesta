@@ -1,5 +1,7 @@
 
 #include "Cluster.h"
+#include "timingDiag.h"
+#include <hal/core/hal_memory.h>
 
 cluster_s Cluster::speedometer;
 cluster_s Cluster::tachometer;
@@ -28,12 +30,17 @@ constexpr std::array<CalibrationPoint, 13> SPEED_CALIBRATION = {
      {210, 275.8f},
      {220, 290.5f}}};
 
-static void toggle_callback(hal_timer_t timer, void *user_data) {
+// Timer interrupt: from RAM, so bitmaps read from flash by the display core
+// do not delay the gauge edges.
+static void HAL_RAM_FUNC(toggle_callback)(hal_timer_t timer, void *user_data) {
   (void)timer;
   cluster_s *data = static_cast<cluster_s *>(user_data);
   if (data != nullptr) {
     hal_gpio_write(data->pin, data->state);
     data->state = !data->state;
+    if (data->pin == JH_HW_NODE_TACHO_OUTPUT_PIN_OUT) {
+      timingDiagTachoToggle(data->half_period_us);
+    }
   }
 }
 
@@ -130,11 +137,18 @@ unsigned int Cluster::calculate_freq_from_rpm(unsigned int rpm) {
   return (freq < 1) ? 1 : (unsigned int)freq;
 }
 
-Cluster::Cluster() {
+Cluster::Cluster() : lastSpeed(0u), lastRpm(0u), initialized(false) {}
+
+// The timer interrupts run on the core that creates the timers, so init()
+// is called explicitly on core 0 instead of from a global constructor.
+void Cluster::init(void) {
   init_output(JH_HW_NODE_SPEED_OUTPUT_PIN_OUT);
   init_output(JH_HW_NODE_TACHO_OUTPUT_PIN_OUT);
   resetSpeed();
   resetRPM();
+  lastSpeed = 0u;
+  lastRpm = 0u;
+  initialized = true;
 }
 
 uint32_t Cluster::calculate_period(unsigned int freq) {
@@ -194,6 +208,9 @@ void Cluster::resetRPM() {
 }
 
 void Cluster::update(unsigned int speed, unsigned int rpm) {
+  if (!initialized) {
+    return;
+  }
   if (lastSpeed != speed) {
     lastSpeed = speed;
 

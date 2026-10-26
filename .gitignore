@@ -61,6 +61,7 @@ Fiesta_pcbs/**/~*.pcb
 Fiesta_pcbs/**/fp-info-cache
 Fiesta_pcbs/**/*-backups/
 Fiesta_pcbs/**/*#autosave*
+Fiesta_pcbs/**/*#auto_saved_files*
 
 # jh-vscode user-local active board and serial-port selection
 src/*/.vscode/jaszczurhal.local.json

@@ -35,9 +35,15 @@ DEBUG_PROFILES = {
             ("rp2040/rp2040-plus/variants/BENCH",
              "Project: Build (Debug) rp2040-plus variant: BENCH", "target/rp2040.cfg"),
     },
-    "Clocks": {"Project: Debug rp2040-zero (RP2040)":
-               ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
-                "target/rp2040.cfg")},
+    "Clocks": {
+        "Project: Debug rp2040-zero (RP2040)":
+            ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+             "target/rp2040.cfg"),
+        "Project: Debug rp2040-zero variant: TIMING (RP2040)":
+            ("rp2040/rp2040-zero/variants/TIMING",
+             "Project: Build (Debug) rp2040-zero variant: TIMING",
+             "target/rp2040.cfg"),
+    },
     "OilAndSpeed": {"Project: Debug rp2040-zero (RP2040)":
                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
                      "target/rp2040.cfg")},

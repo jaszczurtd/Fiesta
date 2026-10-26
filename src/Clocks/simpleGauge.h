@@ -19,13 +19,16 @@ enum {
   SIMPLE_G_EGT,
   SIMPLE_G_VOLTS,
   SIMPLE_G_ECU,
-  SIMPLE_G_SPEED_AND_OIL
+  SIMPLE_G_DPF
 };
 
 // text modes
 enum { MODE_M_NORMAL, MODE_M_TEMP, MODE_M_KILOMETERS };
 
 #define ECU_CONNECTION_RADIUS 4
+
+// EGT gauge value of a channel without a measurement
+#define EGT_NOT_MEASURED INT32_MIN
 
 #define VOLTS_OK_COLOR 0x4228
 #define VOLTS_LOW_ERROR_COLOR 0xA000
@@ -40,6 +43,7 @@ public:
   void redraw(void);
   void switchCurrentEGTMode(void);
   void resetCurrentEGTMode(void);
+  void selectEGTMode(bool dpf);
   int getBaseX(void);
   int getBaseY(void);
   void showSimpleGauge(void);

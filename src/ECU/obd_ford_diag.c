@@ -9,6 +9,7 @@
 
 #include "../common/fiesta_unit_testing.h"
 #include "../common/vp37/vp37.h"
+#include "can.h"
 #include "config.h"
 #include "dtcManager.h"
 #include "hardwareConfig.h"
@@ -890,7 +891,9 @@ static void handleUdsReadDataById(uint32_t requestId, uint8_t mode,
     uint8_t pid = jh_u16_lsb(did);
     uint8_t dataBytes[4] = {0};
     int dataLen = 0;
-    if (encodeMode01PidData(pid, dataBytes, &dataLen)) {
+    if (!obdMode01PidHasData(pid)) {
+      obdResponseSetNegative(response, mode, NRC_CONDITIONS_NOT_CORRECT);
+    } else if (encodeMode01PidData(pid, dataBytes, &dataLen)) {
       uint8_t payload[3 + 4];
       (void)memset(payload, 0, sizeof(payload));
       initReadDidPayload(payload, did);
@@ -1063,14 +1066,19 @@ static void handleUdsReadDataById(uint32_t requestId, uint8_t mode,
     payload[3] = raw;
     obdResponseSetPayload(response, sizeof(payload), payload);
   } else if (did == (uint16_t)DID_FORD_OIL_PRESSURE) {
-    // DD03: Oil pressure, 2 bytes big-endian, kPa × 10.
-    int32_t raw = hal_constrain(
-        (int32_t)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
-    uint8_t payload[5];
-    (void)memset(payload, 0, sizeof(payload));
-    initReadDidPayload(payload, did);
-    jh_store_be16(&payload[3], (uint16_t)raw);
-    obdResponseSetPayload(response, sizeof(payload), payload);
+    // DD03: Oil pressure, 2 bytes big-endian, kPa × 10; a faulty sender
+    // leaves no measurement to send.
+    if (isOilPressureValid()) {
+      int32_t raw = hal_constrain(
+          (int32_t)(getGlobalValue(F_OIL_PRESSURE) * 10.0f), 0, 65535);
+      uint8_t payload[5];
+      (void)memset(payload, 0, sizeof(payload));
+      initReadDidPayload(payload, did);
+      jh_store_be16(&payload[3], (uint16_t)raw);
+      obdResponseSetPayload(response, sizeof(payload), payload);
+    } else {
+      obdResponseSetNegative(response, mode, NRC_CONDITIONS_NOT_CORRECT);
+    }
   } else if (did == (uint16_t)DID_FORD_BOOST) {
     // DD04: Boost/intake pressure, 2 bytes big-endian, bar × 1000.
     int32_t raw = hal_constrain((int32_t)(getGlobalValue(F_PRESSURE) * 1000.0f),

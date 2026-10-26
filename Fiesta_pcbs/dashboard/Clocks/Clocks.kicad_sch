@@ -4636,12 +4636,6 @@
 		(uuid "274cfa50-f03e-443e-abc4-219a8ea37d3b")
 	)
 	(junction
-		(at 73.66 144.78)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "2ba94a12-f322-44ff-9cb3-61ee4713d2fa")
-	)
-	(junction
 		(at 82.55 96.52)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5763,16 +5757,6 @@
 	)
 	(wire
 		(pts
-			(xy 88.9 46.99) (xy 96.52 46.99)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "753aa7cc-476f-489d-86a5-bb6ebf47d69a")
-	)
-	(wire
-		(pts
 			(xy 130.81 130.81) (xy 133.35 130.81)
 		)
 		(stroke
@@ -5820,16 +5804,6 @@
 			(type default)
 		)
 		(uuid "7d1f3f9c-1a26-4a89-adca-c0604d93de35")
-	)
-	(wire
-		(pts
-			(xy 48.26 46.99) (xy 81.28 46.99)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7ff4e29f-6b15-4102-b6d8-6bbd7111b479")
 	)
 	(wire
 		(pts
@@ -6333,16 +6307,6 @@
 	)
 	(wire
 		(pts
-			(xy 48.26 144.78) (xy 73.66 144.78)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "c879490a-4545-4341-9d72-b4e5f4677b4c")
-	)
-	(wire
-		(pts
 			(xy 179.07 71.12) (xy 200.66 71.12)
 		)
 		(stroke
@@ -6400,16 +6364,6 @@
 			(type default)
 		)
 		(uuid "cc3d920d-e09d-4b46-a93a-d91f7862a22e")
-	)
-	(wire
-		(pts
-			(xy 48.26 46.99) (xy 48.26 144.78)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "cc544acc-e9b3-4f33-b71e-cf99a3eff86e")
 	)
 	(wire
 		(pts
@@ -11150,92 +11104,6 @@
 			(project "Clocks"
 				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
 					(reference "#PWR04")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Diode:1N4007")
-		(at 85.09 46.99 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "ca038bf2-eebd-4e1d-b9c0-3443aa7e9fda")
-		(property "Reference" "D3"
-			(at 85.09 40.64 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1N4007"
-			(at 85.09 43.18 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal"
-			(at 85.09 51.435 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "http://www.vishay.com/docs/88503/1n4001.pdf"
-			(at 85.09 46.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "1000V 1A General Purpose Rectifier Diode, DO-41"
-			(at 85.09 46.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Device" "D"
-			(at 85.09 46.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Pins" "1=K 2=A"
-			(at 85.09 46.99 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "2"
-			(uuid "5bc216d8-b13a-4488-86a5-60d9f79abff6")
-		)
-		(pin "1"
-			(uuid "70a5f1fc-c5be-4d55-adc9-32e566ea5c70")
-		)
-		(instances
-			(project "Clocks"
-				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
-					(reference "D3")
 					(unit 1)
 				)
 			)

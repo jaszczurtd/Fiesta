@@ -17,8 +17,8 @@ for development commands and the module guides for control details.
 
 ```text
                  CAN0 (main)
-   ┌───────────┐ ◄──────────► Clocks          dashboard gauges, TFT, buzzer
-   │           │ ◄──────────  OilAndSpeed     oil pressure, wheel speed, EGT
+   ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT
+   │           │ ◄──────────  OilAndSpeed     superseded by Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    RTC time, 1 Hz
    │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
@@ -67,8 +67,8 @@ the loom colours.
 | Module | Language | Role | MISRA |
 |---|---|---|---|
 | [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
-| [`Clocks`](src/Clocks/) | C++ | instrument cluster | no |
-| [`OilAndSpeed`](src/OilAndSpeed/) | C++ | oil pressure, wheel speed, exhaust gas temperature | no |
+| [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature | no |
+| [`OilAndSpeed`](src/OilAndSpeed/) | C++ | earlier oil, speed and EGT module, superseded by Clocks | no |
 | [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
 | [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
@@ -109,31 +109,55 @@ separate bus. The local binding limits the configured bus to 400 kHz.
 
 ### Clocks
 
-Clocks drives the instrument cluster. It listens on the main CAN bus and
-produces square waves for the factory speedometer, tachometer, and oil gauge,
-draws extra readouts on a TFT display, and sounds the buzzer. Apart from its
-display brightness, sent every 50 ms, it only consumes data; the ECU needs
-nothing from it.
+Clocks drives the instrument cluster and measures what the ECU does not read
+itself. It produces square waves for the factory speedometer, tachometer, and
+oil gauge, switches the oil and charge lamps, draws extra readouts on a TFT
+display, and sounds the buzzer. It reads oil pressure from a resistive sender,
+vehicle speed from the ABS pulse line, and exhaust gas temperature before and
+inside the DPF through two MCP9600 amplifiers on its own I²C bus.
+
+The two RP2040 cores split the work. Core 0 receives and sends CAN, measures
+the ABS speed, and drives the gauges, lamps, and buzzer. Core 1 draws the TFT,
+reads the oil sender and both thermocouples, and serves the configurator
+session. The cores exchange copies of their state under a short lock, so
+drawing or a slow I²C read does not hold up a CAN frame.
+
+Clocks sends its display brightness, oil pressure, and ABS speed every 50 ms
+and both exhaust temperatures every 250 ms. Each measurement carries a
+validity flag. A missing thermocouple or a shorted or open oil sender goes
+out with its flag cleared, so receivers do not read it as zero.
+
+The charge lamp follows engine RPM and battery voltage from the ECU. It stays
+lit while the engine is stopped or those values are stale, and goes out once
+the voltage confirms charging after the start. It lights again when charging
+stops and blinks at 2 Hz on overvoltage.
+The limits and confirmation times are in [`config.h`](src/Clocks/config.h);
+the TFT voltage gauge keeps its own range.
 
 | File | Responsibility |
 |---|---|
 | [`Cluster.cpp`](src/Clocks/Cluster.cpp) | square waves for the factory gauges |
 | [`Gauge.h`](src/Clocks/Gauge.h), [`simpleGauge.cpp`](src/Clocks/simpleGauge.cpp), [`tempGauge.cpp`](src/Clocks/tempGauge.cpp), [`pressureGauge.cpp`](src/Clocks/pressureGauge.cpp) | gauge scaling |
 | [`TFTExtension.cpp`](src/Clocks/TFTExtension.cpp) | TFT drawing |
-| [`logic.cpp`](src/Clocks/logic.cpp) | turns CAN signals into gauge, display, and buzzer state |
+| [`logic.cpp`](src/Clocks/logic.cpp) | start-up and loops of both cores; turns CAN signals into gauge, display, and buzzer state |
+| [`clocksState.cpp`](src/Clocks/clocksState.cpp) | state copies passed between the cores |
+| [`speed.cpp`](src/Clocks/speed.cpp) | ABS pulse frequency to speed |
+| [`oilPressure.cpp`](src/Clocks/oilPressure.cpp) | ADC reading to bar, sender short and open detection |
+| [`egt.cpp`](src/Clocks/egt.cpp) | both MCP9600 readings; a missing converter is looked for again |
+| [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness frame; the MCP2515 filters admit only Fiesta IDs |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, and EGT frames; the MCP2515 filters admit only Fiesta IDs |
 
-The CAN controller and the TFT share one SPI bus.
+The CAN controller and the TFT share one SPI bus. The display writes in
+bands of `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES`, set in
+[`hal_project_config.h`](src/Clocks/hal_project_config.h), so CAN gets the
+bus between two bands.
 
 ### OilAndSpeed
 
-OilAndSpeed measures what the ECU does not read itself: oil pressure from a
-resistive sender, vehicle speed from the ABS pulse line, and exhaust gas
-temperature before and inside the DPF through two MCP9600 amplifiers on its
-own I²C bus. It sends the results on CAN for the ECU and Clocks: oil pressure
-and speed every 50 ms, exhaust temperatures every 250 ms and after each
-thermocouple reading. The same frames tell the receivers the module is present.
+OilAndSpeed is the earlier standalone module for oil pressure, ABS speed, and
+exhaust gas temperature. Clocks now sends the same frames, and every CAN ID
+has one sender, so OilAndSpeed must not share the bus with the current Clocks.
 
 | File | Responsibility |
 |---|---|
@@ -289,24 +313,26 @@ The ECU sits on two separate CAN buses:
 
 | Bus | Members | Purpose |
 |---|---|---|
-| CAN0 "main" | ECU, Clocks, OilAndSpeed, Fiesta_clock | traffic between modules |
+| CAN0 "main" | ECU, Clocks, Fiesta_clock | traffic between modules |
 | CAN1 "OBD-2" | ECU, OBD-II port | external diagnostic tools |
 
 On CAN0 the ECU publishes engine state, RPM, throttle, boost, fuel, and GPS
 position and time. It reads oil pressure, wheel speed, and EGT from
-OilAndSpeed and the DPF state from frame `0x124`. DTCs never go out on CAN0;
-diagnostic tools read them over CAN1. Clocks mostly listens: its only frame
-carries the display brightness (`0x126`), and OilAndSpeed takes it as a sign
-that the cluster is present. OilAndSpeed transmits and reads a few ECU values.
-Fiesta_clock only transmits its RTC time (`0x130`). On CAN1 the ECU answers
-OBD-II and UDS requests from whatever tool is connected. A bus-off controller or a refused
+Clocks and the DPF state from frame `0x124`. DTCs never go out on CAN0;
+diagnostic tools read them over CAN1. Clocks sends its display brightness
+(`0x126`), oil pressure with ABS speed (`0x12A`), and both exhaust
+temperatures (`0x12F`). Fiesta_clock only transmits its RTC time (`0x130`). On CAN1 the ECU answers
+OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
+temperature PIDs and the oil pressure DID answer with a negative response
+(`0x22`, conditions not correct) while Clocks marks that value invalid or its
+frames stop. A bus-off controller or a refused
 transmit raises U0073; its failure type byte (`DTC_DETAIL_*`) names the frame
 that failed, and the UDS DTC record carries it as the third DTC byte.
 
 ### I²C
 
 The ECU is the master on its bus, with Adjustometer at `0x57` and the PCF8574
-relay expander at `0x38`. OilAndSpeed and Fiesta_clock run separate I²C buses
+relay expander at `0x38`. Clocks and Fiesta_clock run separate I²C buses
 for their own sensors.
 
 ### USB
@@ -323,9 +349,9 @@ flashing sequence are in
 | Direction | Signals |
 |---|---|
 | Sensors to ECU | coolant, oil, and intake air temperature; fuel level; throttle; manifold pressure; engine RPM (Hall); heated-window button; supply voltage |
-| Sensors to OilAndSpeed | oil pressure, ABS wheel speed, EGT before and inside the DPF |
+| Sensors to Clocks | oil pressure, ABS wheel speed, EGT before and inside the DPF |
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
-| Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), TFT display, buzzer |
+| Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), oil and charge lamps, TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
 | Auxiliary | GPS date and time on the ECU software serial line, republished on CAN; RTC time from Fiesta_clock |
 

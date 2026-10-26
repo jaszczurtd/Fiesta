@@ -5,11 +5,10 @@
 #include <JaszczurHAL.h>
 
 #include "buzzer.h"
+#include "clocksState.h"
 #include "config.h"
 #include "hardwareConfig.h"
 #include <hal/hal.h>
-
-extern volatile float valueFields[];
 
 #define INITIAL_BRIGHTNESS ((1 << PWM_WRITE_RESOLUTION) - 1)
 
@@ -19,5 +18,7 @@ void initBasicPIO(void);
 void enableOilLamp(bool enable);
 int getThrottlePercentage(void);
 void lcdBrightness(int val);
+/** @return Backlight level last set by lcdBrightness(). */
+int getLcdBrightness(void);
 
 #endif

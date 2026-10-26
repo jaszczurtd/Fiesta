@@ -113,6 +113,27 @@ bool isDPFConnected(void);
 bool isEGTConnected(void);
 
 /**
+ * @brief Whether F_EGT holds a measurement.
+ * @return True when the last EGT frame marked the pre-DPF temperature valid
+ *         and EGT frames still arrive (canCheckConnection()).
+ */
+bool isEGTValid(void);
+
+/**
+ * @brief Whether F_DPF_TEMP holds a measurement.
+ * @return True when the last EGT frame marked the in-DPF temperature valid
+ *         and EGT frames still arrive.
+ */
+bool isDPFTempValid(void);
+
+/**
+ * @brief Whether F_OIL_PRESSURE holds a measurement.
+ * @return True when the last oil and speed frame marked the pressure valid
+ *         and those frames still arrive (canCheckConnection()).
+ */
+bool isOilPressureValid(void);
+
+/**
  * @brief Refresh connection state and DTCs for external CAN modules.
  */
 void canCheckConnection(void);

@@ -5,6 +5,14 @@
 namespace {
 constexpr int kBarTextX = 12;
 constexpr int kBarTextY = 71;
+// The unit label after the value, in the default font.
+constexpr int kUnitTextX = kBarTextX + 25;
+constexpr int kUnitTextY = kBarTextY - 6;
+const char *const kUnitText = "BAR";
+// Cleared before every value: the widest text the gauge draws (ERR in the
+// bold font, which replaces the unit label) and the unit label itself.
+constexpr int kValueAreaWidth = 44;
+constexpr int kValueAreaHeight = 15;
 } // namespace
 
 PressureGauge turbop_g = PressureGauge(PRESSURE_G_TURBO);
@@ -27,8 +35,9 @@ PressureGauge::PressureGauge(int mode) {
   lastAnimImg = NULL;
 }
 
-void PressureGauge::drawTextForPressureIndicators(int x, int y,
-                                                  const char *format, ...) {
+void PressureGauge::drawTextForPressureIndicators(int x, int y, uint16_t color,
+                                                  bool unit, const char *format,
+                                                  ...) {
   char displayTxt[DISPLAY_TXT_SIZE];
 
   va_list valist;
@@ -36,21 +45,19 @@ void PressureGauge::drawTextForPressureIndicators(int x, int y,
   hal_display_prepare_text_v(displayTxt, DISPLAY_TXT_SIZE, format, valist);
   va_end(valist);
 
-  int x1 = x + kBarTextX;
-  int y1 = y + kBarTextY - 12;
+  // Bold glyphs reach 12 rows above the baseline.
+  hal_display_fill_rect(x + kBarTextX, y + kBarTextY - 12, kValueAreaWidth,
+                        kValueAreaHeight, ICONS_BG_COLOR);
 
-  hal_display_fill_rect(x1, y1, 28, 15, ICONS_BG_COLOR);
-
-  x1 = x + kBarTextX;
-  y1 = y + kBarTextY;
-
-  hal_display_set_sans_bold_with_pos_and_color(x1, y1, TEXT_COLOR);
+  hal_display_set_sans_bold_with_pos_and_color(x + kBarTextX, y + kBarTextY,
+                                               color);
   hal_display_println(displayTxt);
 
-  x1 = x + kBarTextX + 25;
-  y1 = y + kBarTextY - 6;
-  hal_display_set_default_font_with_pos_and_color(x1, y1, TEXT_COLOR);
-  hal_display_println("BAR");
+  if (unit) {
+    hal_display_set_default_font_with_pos_and_color(x + kUnitTextX,
+                                                    y + kUnitTextY, TEXT_COLOR);
+    hal_display_println(kUnitText);
+  }
 }
 
 int PressureGauge::getBaseX(void) {
@@ -72,7 +79,12 @@ int PressureGauge::getBaseY(void) {
   return -1;
 }
 
-void PressureGauge::redraw(void) { drawOnce = true; }
+// The icon covers the texts, so the next passes draw them all again.
+void PressureGauge::redraw(void) {
+  drawOnce = true;
+  lastHI = lastLO = lastHI_d = lastLO_d = C_INIT_VAL;
+  lastAnimImg = NULL;
+}
 
 void PressureGauge::showPressureGauge(void) {
 
@@ -104,11 +116,22 @@ void PressureGauge::showPressureGauge(void) {
       break;
     }
 
-    fiesta_can_split_decimal_tenths(current, &hi, &lo);
-    if (hi != lastHI || lo != lastLO) {
-      lastHI = hi;
-      lastLO = lo;
-      drawTextForPressureIndicators(getBaseX(), getBaseY(), "%d.%d", hi, lo);
+    // A faulty oil pressure sender shows a red ERR in place of the value and
+    // its unit, as the temperature gauges do.
+    if (mode == PRESSURE_G_OIL && !isOilPressureValid()) {
+      if (lastHI != PRESSURE_NOT_MEASURED) {
+        lastHI = lastLO = PRESSURE_NOT_MEASURED;
+        drawTextForPressureIndicators(getBaseX(), getBaseY(), HAL_COLOR(RED),
+                                      false, "%s", err);
+      }
+    } else {
+      fiesta_can_split_decimal_tenths(current, &hi, &lo);
+      if (hi != lastHI || lo != lastLO) {
+        lastHI = hi;
+        lastLO = lo;
+        drawTextForPressureIndicators(getBaseX(), getBaseY(), TEXT_COLOR, true,
+                                      "%d.%d", hi, lo);
+      }
     }
 
     switch (mode) {

@@ -4,9 +4,8 @@
 
 #include <cstring>
 
-// engineFuel.cpp reads the CAN value table and the alert blinkers of
-// logic.cpp; the bar tests below need neither, so they are fixed here.
-volatile float valueFields[F_LAST];
+// engineFuel.cpp reads the display view of clocksState.cpp and the alert
+// blinkers of logic.cpp; the bar tests below need no blinking.
 bool alertSwitch(void) { return false; }
 bool seriousAlertSwitch(void) { return false; }
 

@@ -13,7 +13,6 @@
 #include <hal/display/hal_display.h>
 
 void initTFT(void);
-void softInitDisplay(void);
 void redrawAllGauges(void);
 
 #endif

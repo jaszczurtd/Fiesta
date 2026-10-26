@@ -318,6 +318,41 @@
       "problemMatcher": []
     },
     {
+      "label": "Project: Build variant: TIMING",
+      "detail": "Build the TIMING variant: Clocks with CAN, gauge and display timing statistics.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "TIMING"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Upload variant: TIMING",
+      "detail": "Build and upload the TIMING variant: Clocks with CAN, gauge and display timing statistics.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "TIMING"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Project: Check device tree",
       "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
       "type": "shell",
@@ -377,6 +412,26 @@
         "${workspaceFolder}",
         "--assembly",
         "rp2040-zero"
+      ],
+      "hide": true,
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Build (Debug) rp2040-zero variant: TIMING",
+      "detail": "Build the rp2040-zero assembly, variant TIMING, with debug settings for its debug profile.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build-debug",
+        "--project",
+        "${workspaceFolder}",
+        "--assembly",
+        "rp2040-zero",
+        "--variant",
+        "TIMING"
       ],
       "hide": true,
       "problemMatcher": "$gcc"

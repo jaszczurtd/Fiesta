@@ -51,6 +51,15 @@ const char *obdJ1979GetPidName(uint8_t pid);
 bool encodeMode01PidData(uint8_t pid, uint8_t *out, int *outLen);
 
 /**
+ * @brief Whether a Mode 01 PID has a measurement to send now.
+ * @param pid PID to check.
+ * @return False only for an EGT or DPF temperature PID whose value is no
+ *         measurement (isEGTValid(), isDPFTempValid()); true otherwise, also
+ *         for PIDs without an encoder.
+ */
+bool obdMode01PidHasData(uint8_t pid);
+
+/**
  * @brief Build a response for Ford UDS, KWP2000, or SCP services.
  * @param requestId CAN identifier on which the request was received.
  * @param mode Requested diagnostic service.

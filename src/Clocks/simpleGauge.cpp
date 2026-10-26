@@ -9,7 +9,7 @@ SimpleGauge gps_g = SimpleGauge(SIMPLE_G_GPS);
 SimpleGauge egt_g = SimpleGauge(SIMPLE_G_EGT);
 SimpleGauge volts_g = SimpleGauge(SIMPLE_G_VOLTS);
 SimpleGauge ecu_g = SimpleGauge(SIMPLE_G_ECU);
-SimpleGauge oil_speed_g = SimpleGauge(SIMPLE_G_SPEED_AND_OIL);
+SimpleGauge dpf_g = SimpleGauge(SIMPLE_G_DPF);
 
 void redrawSimpleGauges(void) {
   engineLoad_g.redraw();
@@ -33,16 +33,20 @@ void showSimpleGauges(void) {
 
 void showECUConnectionGauge(void) {
   ecu_g.showSimpleGauge();
-  oil_speed_g.showSimpleGauge();
+  dpf_g.showSimpleGauge();
 }
 
 void showEGTGauge(void) { egt_g.showSimpleGauge(); }
 
+// Both measured EGT channels take turns; otherwise the one that measures is
+// shown, the one before the DPF when neither does.
 void changeEGT(void) {
-  if (isDPFConnected()) {
+  const bool preDpf = isEgtValid(EGT_PRE_DPF);
+  const bool inDpf = isEgtValid(EGT_IN_DPF);
+  if (preDpf && inDpf) {
     egt_g.switchCurrentEGTMode();
   } else {
-    egt_g.resetCurrentEGTMode();
+    egt_g.selectEGTMode(inDpf);
   }
 }
 
@@ -57,8 +61,8 @@ SimpleGauge::SimpleGauge(int mode) {
     lastShowedVal = isEcuConnected();
     break;
 
-  case SIMPLE_G_SPEED_AND_OIL:
-    lastShowedVal = isOilSpeedModuleConnected();
+  case SIMPLE_G_DPF:
+    lastShowedVal = isDPFConnected();
     break;
 
   default:
@@ -125,7 +129,7 @@ int SimpleGauge::getBaseX(void) {
     return 223;
   case SIMPLE_G_ECU:
     return SCREEN_W - (3 * ECU_CONNECTION_RADIUS);
-  case SIMPLE_G_SPEED_AND_OIL:
+  case SIMPLE_G_DPF:
     return SCREEN_W - (6 * ECU_CONNECTION_RADIUS);
   }
   return -1;
@@ -141,7 +145,7 @@ int SimpleGauge::getBaseY(void) {
     return BIG_ICONS_HEIGHT + (BIG_ICONS_OFFSET * 2);
   case SIMPLE_G_VOLTS:
     return 185;
-  case SIMPLE_G_SPEED_AND_OIL:
+  case SIMPLE_G_DPF:
   case SIMPLE_G_ECU:
     return SCREEN_H - (3 * ECU_CONNECTION_RADIUS);
   }
@@ -156,6 +160,13 @@ void SimpleGauge::switchCurrentEGTMode(void) {
 }
 
 void SimpleGauge::resetCurrentEGTMode(void) { currentIsDPF = false; }
+
+void SimpleGauge::selectEGTMode(bool dpf) {
+  if (currentIsDPF != dpf) {
+    currentIsDPF = dpf;
+    redraw();
+  }
+}
 
 void SimpleGauge::showSimpleGauge(void) {
 
@@ -192,8 +203,8 @@ void SimpleGauge::showSimpleGauge(void) {
     }
     break;
 
-  case SIMPLE_G_SPEED_AND_OIL:
-    if (!isOilSpeedModuleConnected()) {
+  case SIMPLE_G_DPF:
+    if (DPF_MODULE_INSTALLED && !isDPFConnected()) {
       draw = true;
     }
     break;
@@ -253,8 +264,8 @@ void SimpleGauge::showSimpleGauge(void) {
   case SIMPLE_G_ECU:
     currentVal = isEcuConnected();
     break;
-  case SIMPLE_G_SPEED_AND_OIL:
-    currentVal = isOilSpeedModuleConnected();
+  case SIMPLE_G_DPF:
+    currentVal = isDPFConnected();
     break;
   }
 
@@ -302,7 +313,7 @@ void SimpleGauge::showSimpleGauge(void) {
       lastShowedVal = currentVal;
       break;
 
-    case SIMPLE_G_SPEED_AND_OIL:
+    case SIMPLE_G_DPF:
     case SIMPLE_G_ECU:
       draw = true;
       drawOnce = true;
@@ -331,13 +342,14 @@ void SimpleGauge::showSimpleGauge(void) {
   } break;
 
   case SIMPLE_G_EGT: {
-    currentVal = (int)valueFields[F_EGT];
-    if (currentIsDPF) {
-      currentVal = (int)valueFields[F_DPF_TEMP];
-    }
-
-    if (currentVal < TEMP_EGT_MIN) {
-      currentVal = TEMP_EGT_MIN - 1;
+    // A channel without a measurement shows N/A, never a pretended value.
+    const bool measured = isEgtValid(currentIsDPF ? EGT_IN_DPF : EGT_PRE_DPF);
+    currentVal = EGT_NOT_MEASURED;
+    if (measured) {
+      currentVal = (int)valueFields[currentIsDPF ? F_DPF_TEMP : F_EGT];
+      if (currentVal < TEMP_EGT_MIN) {
+        currentVal = TEMP_EGT_MIN - 1;
+      }
     }
 
     if (lastShowedVal != currentVal) {
@@ -346,7 +358,7 @@ void SimpleGauge::showSimpleGauge(void) {
     }
 
     bool overheat = false;
-    if (currentVal > TEMP_EGT_OK_HI) {
+    if (measured && currentVal > TEMP_EGT_OK_HI) {
       overheat = true;
     }
 
@@ -356,7 +368,9 @@ void SimpleGauge::showSimpleGauge(void) {
     }
 
     if (draw) {
-      if (currentVal < TEMP_EGT_MIN) {
+      if (!measured) {
+        format = "N/A";
+      } else if (currentVal < TEMP_EGT_MIN) {
         format = "COLD";
       } else if (currentVal > TEMP_EGT_MAX) {
         format = ((char *)err);
@@ -369,7 +383,8 @@ void SimpleGauge::showSimpleGauge(void) {
         }
       }
 
-      bool isTemp = (currentVal > TEMP_EGT_MIN && currentVal < TEMP_EGT_MAX);
+      bool isTemp =
+          measured && (currentVal > TEMP_EGT_MIN && currentVal < TEMP_EGT_MAX);
       txtMode = MODE_M_NORMAL;
       if (isTemp) {
         txtMode = MODE_M_TEMP;
@@ -399,7 +414,7 @@ void SimpleGauge::showSimpleGauge(void) {
     }
   } break;
 
-  case SIMPLE_G_SPEED_AND_OIL:
+  case SIMPLE_G_DPF:
   case SIMPLE_G_ECU: {
     x = getBaseX();
     y = getBaseY();
@@ -412,8 +427,12 @@ void SimpleGauge::showSimpleGauge(void) {
         color = (seriousAlertSwitch()) ? HAL_COLOR(RED) : ICONS_BG_COLOR;
         break;
 
-      case SIMPLE_G_SPEED_AND_OIL:
-        color = (!seriousAlertSwitch()) ? HAL_COLOR(PURPLE) : ICONS_BG_COLOR;
+      case SIMPLE_G_DPF:
+        // No alarm for a module that is not installed yet.
+        color =
+            (DPF_MODULE_INSTALLED && !isDPFConnected() && !seriousAlertSwitch())
+                ? HAL_COLOR(PURPLE)
+                : ICONS_BG_COLOR;
         break;
       }
 
