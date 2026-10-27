@@ -1,9 +1,10 @@
 #include "config.h"
 
-#include "RTC.h"
+#include "clockTime.h"
 
 #include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_serial_session.h>
+#include <hal/time/jh_calendar.h>
 
 #include "../common/scDefinitions/sc_command_handlers.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
@@ -11,6 +12,7 @@
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
 
+/* CET/CEST date and time; the RTC keeps UTC. */
 typedef struct {
   int16_t rtc_year;
   int16_t rtc_month;
@@ -22,8 +24,8 @@ typedef struct {
 } clock_values_t;
 
 static const sc_param_descriptor_t k_clock_params[] = {
-    SC_PARAM_SCALAR_I16("rtc_year", clock_values_t, rtc_year, 2000, 2099, 2026,
-                        1, "rtc"),
+    SC_PARAM_SCALAR_I16("rtc_year", clock_values_t, rtc_year, CFG_RTC_MIN_YEAR,
+                        CFG_RTC_MAX_YEAR, 2026, 1, "rtc"),
     SC_PARAM_SCALAR_I16("rtc_month", clock_values_t, rtc_month, 1, 12, 1, 1,
                         "rtc"),
     SC_PARAM_SCALAR_I16("rtc_day", clock_values_t, rtc_day, 1, 31, 1, 1, "rtc"),
@@ -63,31 +65,6 @@ static clock_values_t s_staging = {
 
 static bool s_stagingDirty = false;
 
-static bool isLeapYear(int32_t year) {
-  if ((year % 400) == 0) {
-    return true;
-  }
-  if ((year % 100) == 0) {
-    return false;
-  }
-  return ((year % 4) == 0);
-}
-
-static int32_t daysInMonth(int32_t year, int32_t month) {
-  static const int32_t k_days[12] = {31, 28, 31, 30, 31, 30,
-                                     31, 31, 30, 31, 30, 31};
-
-  if (month < 1 || month > 12) {
-    return 0;
-  }
-
-  if (month == 2 && isLeapYear(year)) {
-    return 29;
-  }
-
-  return k_days[month - 1];
-}
-
 static bool clockValuesValidate(const clock_values_t *values,
                                 const char **reason) {
   if (reason != NULL) {
@@ -101,7 +78,8 @@ static bool clockValuesValidate(const clock_values_t *values,
     return false;
   }
 
-  if (values->rtc_year < 2000 || values->rtc_year > 2099) {
+  if (values->rtc_year < CFG_RTC_MIN_YEAR ||
+      values->rtc_year > CFG_RTC_MAX_YEAR) {
     if (reason != NULL) {
       *reason = "year_range";
     }
@@ -115,8 +93,11 @@ static bool clockValuesValidate(const clock_values_t *values,
     return false;
   }
 
-  const int32_t maxDay = daysInMonth(values->rtc_year, values->rtc_month);
-  if (values->rtc_day < 1 || values->rtc_day > maxDay) {
+  uint8_t maxDay = 0u;
+  if (jh_calendar_days_in_month((uint16_t)values->rtc_year,
+                                (uint8_t)values->rtc_month,
+                                &maxDay) != HAL_OK ||
+      values->rtc_day < 1 || values->rtc_day > (int16_t)maxDay) {
     if (reason != NULL) {
       *reason = "day_for_month";
     }
@@ -147,63 +128,30 @@ static bool clockValuesValidate(const clock_values_t *values,
   return true;
 }
 
-static uint8_t weekdayFromDate(int32_t year, int32_t month, int32_t day) {
-  static const int32_t k_offsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-  int32_t y = year;
-
-  if (month < 3) {
-    y -= 1;
-  }
-
-  const int32_t sundayZero =
-      (y + y / 4 - y / 100 + y / 400 + k_offsets[month - 1] + day) % 7;
-
-  return (uint8_t)((sundayZero + 6) % 7); /* 0 = Monday, ..., 6 = Sunday */
-}
-
-static bool rtcDateTimeIsValid(const PCF_DateTime *dt) {
-  if (dt == NULL) {
-    return false;
-  }
-
-  if (dt->year < 1900 || dt->year > 2099) {
-    return false;
-  }
-  if (dt->month < 1u || dt->month > 12u) {
-    return false;
-  }
-  if (dt->day < 1u || dt->day > 31u) {
-    return false;
-  }
-  if (dt->hour > 23u || dt->minute > 59u || dt->second > 59u) {
-    return false;
-  }
-  return true;
-}
-
 static bool clockValuesLoadFromRtc(clock_values_t *outValues) {
   if (outValues == NULL) {
     return false;
   }
 
   PCF_DateTime dt = {0};
-  const unsigned char dtResult = PCF_GetDateTime(&dt);
-  if (!rtcDateTimeIsValid(&dt)) {
+  bool trusted = false;
+  if (clockTimeReadLocal(&dt, &trusted) != HAL_OK) {
     return false;
   }
 
-  bool integrityOk = (dtResult == 0u);
-  if (PCF_GetClockIntegrity(&integrityOk) != 0u) {
-    integrityOk = (dtResult == 0u);
+  const clock_values_t loaded = {
+      .rtc_year = (int16_t)dt.year,
+      .rtc_month = (int16_t)dt.month,
+      .rtc_day = (int16_t)dt.day,
+      .rtc_hour = (int16_t)dt.hour,
+      .rtc_minute = (int16_t)dt.minute,
+      .rtc_second = (int16_t)dt.second,
+      .rtc_integrity = trusted ? 1 : 0,
+  };
+  if (!clockValuesValidate(&loaded, NULL)) {
+    return false;
   }
-
-  outValues->rtc_year = (int16_t)dt.year;
-  outValues->rtc_month = (int16_t)dt.month;
-  outValues->rtc_day = (int16_t)dt.day;
-  outValues->rtc_hour = (int16_t)dt.hour;
-  outValues->rtc_minute = (int16_t)dt.minute;
-  outValues->rtc_second = (int16_t)dt.second;
-  outValues->rtc_integrity = integrityOk ? 1 : 0;
+  *outValues = loaded;
   return true;
 }
 
@@ -211,30 +159,30 @@ static void clockValuesRefreshActiveFromRtc(void) {
   clock_values_t refreshed = s_active;
   if (clockValuesLoadFromRtc(&refreshed)) {
     s_active = refreshed;
-    if (!s_stagingDirty) {
-      s_staging = s_active;
-    }
+  } else {
+    /* Keep the last date, but do not vouch for it. */
+    s_active.rtc_integrity = 0;
+  }
+  if (!s_stagingDirty) {
+    s_staging = s_active;
   }
 }
 
 static bool clockValuesApplyToRtc(const clock_values_t *values) {
-  const char *reason = NULL;
-  if (!clockValuesValidate(values, &reason)) {
-    (void)reason;
+  if (!clockValuesValidate(values, NULL)) {
     return false;
   }
 
-  PCF_DateTime dt = {0};
-  dt.year = values->rtc_year;
-  dt.month = (unsigned char)values->rtc_month;
-  dt.day = (unsigned char)values->rtc_day;
-  dt.hour = (unsigned char)values->rtc_hour;
-  dt.minute = (unsigned char)values->rtc_minute;
-  dt.second = (unsigned char)values->rtc_second;
-  dt.weekday =
-      weekdayFromDate(values->rtc_year, values->rtc_month, values->rtc_day);
-
-  return (PCF_SetDateTime(&dt) == 0u);
+  const PCF_DateTime dt = {
+      .second = (unsigned char)values->rtc_second,
+      .minute = (unsigned char)values->rtc_minute,
+      .hour = (unsigned char)values->rtc_hour,
+      .day = (unsigned char)values->rtc_day,
+      .weekday = 0u,
+      .month = (unsigned char)values->rtc_month,
+      .year = values->rtc_year,
+  };
+  return clockTimeWriteLocal(&dt) == HAL_OK;
 }
 
 static void configSessionRefresh(void *user) {
@@ -318,3 +266,7 @@ bool configSessionActive(void) {
 }
 
 uint32_t configSessionId(void) { return hal_serial_session_id(&s_sc.session); }
+
+bool configSessionEditPending(void) {
+  return s_stagingDirty && configSessionActive();
+}

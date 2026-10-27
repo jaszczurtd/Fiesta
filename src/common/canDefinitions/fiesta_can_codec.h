@@ -4,6 +4,7 @@
 
 #include <hal/core/hal_math.h>
 #include <hal/core/jh_endian.h>
+#include <hal/time/jh_calendar.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -51,7 +52,8 @@ static inline int16_t fiesta_can_get_temp_i16(const uint8_t *field) {
 }
 
 /**
- * @brief Pack YYMMDD and HHMM into the existing 24-bit GPS calendar format.
+ * @brief Pack YYMMDD and HHMM into the 24-bit calendar format of 0x12E and
+ *        0x130.
  * @param dateYYMMDD Two-digit year, month and day as YYMMDD.
  * @param timeHHMM Hour and minute as HHMM.
  * @return Packed value, or 0 for invalid month/day/time ranges. The year
@@ -68,6 +70,35 @@ static inline uint32_t fiesta_can_pack_gps_datetime(uint32_t dateYYMMDD,
     return 0u;
   const uint32_t yearOffset = yy < 20u ? 0u : (yy > 35u ? 15u : yy - 20u);
   return (yearOffset << 20) | (mm << 16) | (dd << 11) | (hh << 6) | mi;
+}
+
+/** Years the 24-bit calendar format of 0x12E and 0x130 can hold. */
+#define FIESTA_CAN_DATETIME_MIN_YEAR 2020u
+#define FIESTA_CAN_DATETIME_MAX_YEAR 2035u
+
+/**
+ * @brief Store UTC seconds in the 24-bit calendar format, to the minute.
+ * @param field Three payload bytes, high byte first.
+ * @param epoch UTC seconds.
+ * @return true for a year from FIESTA_CAN_DATETIME_MIN_YEAR to
+ *         FIESTA_CAN_DATETIME_MAX_YEAR; false stores zeros.
+ */
+static inline bool fiesta_can_put_utc_datetime(uint8_t *field, uint32_t epoch) {
+  jh_calendar_datetime_t dt;
+  uint32_t packed = 0u;
+  const bool fits = jh_calendar_epoch_to_datetime(
+                        epoch, FIESTA_CAN_DATETIME_MAX_YEAR, &dt) == HAL_OK &&
+                    dt.year >= FIESTA_CAN_DATETIME_MIN_YEAR;
+  if (fits) {
+    packed =
+        fiesta_can_pack_gps_datetime((uint32_t)(dt.year % 100u) * 10000u +
+                                         (uint32_t)dt.month * 100u + dt.day,
+                                     (uint32_t)dt.hour * 100u + dt.minute);
+  }
+  field[0] = (uint8_t)(packed >> 16);
+  field[1] = (uint8_t)(packed >> 8);
+  field[2] = (uint8_t)packed;
+  return fits;
 }
 
 #ifdef __cplusplus

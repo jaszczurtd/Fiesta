@@ -19,7 +19,7 @@ sterowania znajdują się w dokumentacji modułów.
                  CAN0 (główna)
    ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT, GPS
    │           │ ◄──────────  OilAndSpeed     zastąpiony przez Clocks
-   │    ECU    │ ◄──────────  Fiesta_clock    czas RTC, 1 Hz
+   │    ECU    │ ◄──────────  Fiesta_clock    czas RTC w UTC, 1 Hz
    │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
    │           │ ─── I²C ───► PCF8574         przekaźniki (0x38)
@@ -68,7 +68,7 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 | [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
 | [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
 | [OilAndSpeed](src/OilAndSpeed/) | C++ | Dawny moduł oleju, prędkości i EGT, zastąpiony przez Clocks. | Poza zakresem. |
-| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC i czas przez CAN. | Poza zakresem. |
+| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS, czas przez CAN. | Poza zakresem. |
 | [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
 | [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
 | [SerialConfigurator](src/SerialConfigurator/) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
@@ -244,11 +244,38 @@ to sprawdzić podstawowe uruchomienie. Moduł nie obsługuje protokołu konfigur
 
 ### Fiesta_clock
 
-Fiesta_clock utrzymuje datę i czas w PCF8563 i nadaje je co sekundę jako
-`CAN_ID_RTC_UPDATE` (`0x130`). Milczy, gdy RTC zgłasza utratę integralności.
-Konfigurator odczytuje i ustawia czas; commit odrzuca niepoprawną datę,
-uwzględniając lata przestępne. Lokalny ekran pokazuje czas, temperatury dwóch
-DS18B20 i napięcie zasilania. OLED SSD1306 128×32 obsługuje sterownik
+Fiesta_clock przechowuje w PCF8563 czas UTC i co sekundę nadaje go jako
+`CAN_ID_RTC_UPDATE` (`0x130`). Integralność 1 ramka ma tylko przy zaufanym
+UTC; w pozostałych przypadkach bajty daty i czasu są zerowe. Znacznik w KV
+JaszczurHAL zapisuje, że ten firmware ustawił RTC na UTC. Do tego momentu RTC
+zawiera czas lokalny zapisany przez starszy firmware: ekran pokazuje go bez
+zmian, a ramka nie zgłasza integralności. Znacznik powstaje dopiero wtedy,
+gdy odczyt RTC potwierdzi nowy czas UTC. Gdy odczyt kontrolny albo zapis
+znacznika zawiedzie, a flash odpowie, że znacznika nie ma, zegar zapisuje
+tę samą chwilę z powrotem jako czas lokalny, więc ekran i kolejny start
+odczytują ją poprawnie. Gdy flash nie odpowiada, znacznik może tam być: RTC
+zostaje przy UTC, wyświetlanym poprawnie, ale niezaufanym, a zegar co 30 s
+próbuje potwierdzić znacznik. Start, przy którym flash jest nieczytelny,
+pokazuje RTC jako UTC bez zaufania, bo większość zegarów ma już wtedy znacznik.
+
+Zegar ustawia RTC według ramki UTC z GPS w Clocks (`0x131`). Filtry MCP2515
+przepuszczają tylko ten identyfikator. RTC bez zaufanego UTC ustawia pierwsza
+poprawna ramka, także gdy rejestry RTC nie zawierają poprawnej daty. Działający
+RTC jest korygowany dopiero przy odchyłce większej niż 2 s i nie częściej niż
+raz na 10 minut; po błędzie RTC, także nieudanym odczycie, albo błędzie flasha
+kolejna próba następuje po 30 s. Każdy zapis jest sprawdzany odczytem. Ramki
+odczytane po przerwie pętli głównej dłuższej niż 500 ms albo w czasie edycji
+czasu przyciskami lub konfiguratorem są odrzucane. Bez GPS i CAN RTC pracuje
+samodzielnie.
+
+Ekran, przyciski i konfigurator używają czasu CET/CEST przeliczanego przez
+`hal_time`. Ustawiony czas jest zamieniany na UTC. Godzina pominięta przy
+wiosennej zmianie czasu liczy się jako CET, a godzina powtórzona jesienią
+jako jej pierwsze, letnie wystąpienie. Dzień tygodnia wynika z daty, więc
+przyciski go nie ustawiają. Konfigurator odczytuje i ustawia czas; commit
+odrzuca niepoprawną datę, uwzględniając lata przestępne.
+
+Lokalny ekran pokazuje czas, temperatury dwóch DS18B20 i napięcie zasilania. OLED SSD1306 128×32 obsługuje sterownik
 JaszczurHAL. Ekran i RTC współdzielą I²C opisane w `device_tree.json`.
 HAL zapisuje napisy bezpośrednio do pamięci panelu, bez bufora obrazu.
 Zegar zachowuje pierwotny font 6×8 (w tym „ś"), skalę 1 i 2 oraz ustawienia
@@ -318,7 +345,7 @@ pozycję i czas GPS. Odbiera olej, prędkość i EGT z Clocks oraz stan DPF
 z `0x124`. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
 Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
 (`0x12A`), obie temperatury spalin (`0x12F`) oraz UTC z GPS (`0x131`).
-Fiesta_clock nadaje tylko czas (`0x130`). Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
+Fiesta_clock nadaje czas UTC (`0x130`) i odbiera tylko UTC z GPS w Clocks. Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
 ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
 gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
 przychodzić.
@@ -346,20 +373,21 @@ wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
 | ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
 | Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), kontrolki oleju i ładowania, TFT, buzzer. |
 | Diagnostyka | OBD-II przez CAN1. |
-| Pomocnicze | Pozycja i UTC z GPS w Clocks; dawne ramki GPS z ECU; czas RTC z Fiesta_clock. |
+| Pomocnicze | Pozycja i UTC z GPS w Clocks; dawne ramki GPS z ECU; czas RTC w UTC z Fiesta_clock. |
 
 ## Zapis danych
 
 Moduły zapisujące ustawienia używają KV JaszczurHAL na emulowanym EEPROM
 (`ECU_EEPROM_SIZE_BYTES` w ECU). ECU przechowuje tam także DTC; muteks chroni
-odczyty rdzenia 1 przed równoczesnym zapisem rdzenia 0.
+odczyty rdzenia 1 przed równoczesnym zapisem rdzenia 0. Fiesta_clock
+przechowuje tam tylko znacznik, że jego RTC zawiera UTC.
 
 ## Kompilacja i CI
 
 [Testy hostowe i CI](doc/TESTING.pl.md) opisują wybór modułów i kontrole.
-Fiesta_clock ma buildy firmware i test hostowy wyświetlacza, a VP37TestBench
-lokalne buildy i testy hostowe, bez firmware CI. SerialConfigurator ma osobny
-projekt testów aplikacji desktopowej.
+Fiesta_clock ma buildy firmware i testy hostowe wyświetlacza oraz obsługi
+czasu, a VP37TestBench lokalne buildy i testy hostowe, bez firmware CI.
+SerialConfigurator ma osobny projekt testów aplikacji desktopowej.
 
 [Instrukcja kompilacji](doc/BUILDING.pl.md) opisuje ścieżki montaży i wariantów,
 manifesty, wgrywanie oraz SWD. `jh-vscode build` tworzy firmware; bootstrap

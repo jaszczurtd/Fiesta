@@ -4684,6 +4684,12 @@
 		(uuid "6a6fb8c6-0295-48f7-ab93-fa7f226c91e8")
 	)
 	(junction
+		(at 113.03 83.82)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "706569fe-a882-4988-88a7-3d0303e2aa5d")
+	)
+	(junction
 		(at 187.96 107.95)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4974,6 +4980,16 @@
 			(type default)
 		)
 		(uuid "1386b7df-3b0c-4462-a89f-61a12f3e7377")
+	)
+	(wire
+		(pts
+			(xy 107.95 83.82) (xy 107.95 85.09)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "13a74ec0-40c2-41a6-a939-62daf8b390d5")
 	)
 	(wire
 		(pts
@@ -6594,6 +6610,16 @@
 			(type default)
 		)
 		(uuid "ea2315a1-1f00-45c2-83de-b7614180da1b")
+	)
+	(wire
+		(pts
+			(xy 113.03 83.82) (xy 107.95 83.82)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "eade21d3-2e05-446a-ba44-c2ccf83dbd03")
 	)
 	(wire
 		(pts
@@ -10364,6 +10390,74 @@
 	)
 	(symbol
 		(lib_id "power:GND")
+		(at 107.95 90.17 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a13710a4-83ab-42a5-a6fd-22ddaa225492")
+		(property "Reference" "#PWR034"
+			(at 107.95 96.52 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 107.9499 93.98 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 107.95 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 107.95 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 107.95 90.17 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "6d0b04f2-7354-4141-80c7-592550a93c95")
+		)
+		(instances
+			(project "Clocks"
+				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
+					(reference "#PWR034")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
 		(at 130.81 130.81 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -11036,6 +11130,76 @@
 			(project "Clocks"
 				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
 					(reference "C7")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:C_Polarized_Small")
+		(at 107.95 87.63 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "c6aaae5f-947f-44c6-a69d-9dc57f42dc52")
+		(property "Reference" "C10"
+			(at 110.49 85.8138 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "4,7uF"
+			(at 108.458 85.598 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 107.95 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 107.95 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Polarized capacitor, small symbol"
+			(at 107.95 87.63 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "31c13e2c-cc57-4adb-a015-8c78c3983508")
+		)
+		(pin "1"
+			(uuid "299fdc7f-df5f-41e6-b3b9-dcae22c0af80")
+		)
+		(instances
+			(project "Clocks"
+				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
+					(reference "C10")
 					(unit 1)
 				)
 			)

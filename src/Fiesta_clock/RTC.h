@@ -30,9 +30,6 @@
 
 #define PCF_DISABLE_ALARM 80
 
-#define PCF_MAX_YEAR 2100
-#define PCF_MIN_YEAR 1900
-
 typedef struct {
   unsigned char minute;
   unsigned char hour;
@@ -64,8 +61,13 @@ unsigned char PCF_GetTimer(void);
 unsigned char PCF_SetAlarm(PCF_Alarm *alarm);
 unsigned char PCF_GetAlarm(PCF_Alarm *alarm);
 
-unsigned char PCF_SetDateTime(PCF_DateTime *dateTime);
 unsigned char PCF_GetDateTime(PCF_DateTime *dateTime);
-unsigned char PCF_GetClockIntegrity(bool *integrityOk);
+/** Write UTC seconds; the HAL derives the weekday (0 = Sunday).
+ * @return HAL_OK, HAL_EINVAL outside the RTC range, or HAL_EIO. */
+hal_status_t PCF_WriteEpoch(uint32_t epoch);
+/** Read the registers with the integrity bit.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EIO for a bus error, or HAL_EPROTO
+ *         for contents that are no valid date. */
+hal_status_t PCF_ReadDateTime(hal_rtc_datetime_t *dateTime);
 
 #endif /* RTC_H_ */

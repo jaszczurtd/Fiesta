@@ -10,6 +10,10 @@ Python test suite. It compiles the production UI, HAL renderer and SSD1306
 driver against simulated board I/O. A controller RAM model interprets I²C
 addressing and data writes; glyph images in both sizes are compared against
 recordings from the original driver. Tests also cover sleep/wake commands.
+A second test compiles the clock's time code with the HAL RTC driver against
+a PCF8563 register model and simulated CAN, flash and configurator calls. It
+checks the UTC marker, CET/CEST conversion, setting the RTC from GPS UTC, the
+`0x130` frame, and time edits from the buttons and the configurator.
 They need a host C/C++ compiler and no connected board. They do not establish
 physical panel compatibility or measure hardware timing.
 VP37TestBench participates in local builds and tests, but its `ci: false`
@@ -58,10 +62,10 @@ or VP37TestBench. For the desktop application follow the
 List registered tests with `ctest --test-dir src/ECU/build_test -N`.
 Listing tests does not execute them.
 
-Run the Fiesta_clock display test separately with:
+Run the Fiesta_clock display and time tests separately with:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_clock_display.py' -v
+python3 -m unittest discover -s tests -p 'test_clock_*.py' -v
 ```
 
 ## Validate a HAL update

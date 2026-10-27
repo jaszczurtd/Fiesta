@@ -18,5 +18,16 @@
 #define HAL_ENABLE_CAN     /* Generic CAN API facade             */
 #define HAL_ENABLE_MCP2515 /* MCP2515 CAN backend                */
 #define HAL_ENABLE_CRYPTO  /* hal_crypto + hal_sc_auth (SC link) */
+#define HAL_ENABLE_KV      /* UTC marker of the RTC -> flash    */
 #define HAL_ENABLE_SERIAL_COMMANDS
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
+
+/* Two 4 KiB KV banks fill the flash reservation, which CMake reads here.
+ * The store holds a single key. */
+#ifndef HAL_RP_FLASH_EEPROM_SIZE
+#define HAL_RP_FLASH_EEPROM_SIZE 8192
+#endif
+#define HAL_KV_MAX_KEYS 4u
+/* The transaction engine applies this per coordination phase; three bounded
+ * waits and a sector erase stay below the 2 s watchdog. */
+#define HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS 500u

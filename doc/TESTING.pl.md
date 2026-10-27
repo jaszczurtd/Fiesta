@@ -10,7 +10,11 @@ przez główny zestaw testów Pythona. Kompiluje on kod ekranów, renderer HAL
 i sterownik SSD1306 z symulowaną obsługą wejść/wyjść. Model pamięci
 kontrolera interpretuje adresowanie i zapis danych I²C, a obrazy znaków
 w obu rozmiarach są porównywane z zapisami ze starego sterownika. Testy
-obejmują też komendy usypiania i budzenia. Wymagają kompilatora C/C++
+obejmują też komendy usypiania i budzenia. Drugi test kompiluje kod obsługi
+czasu zegara ze sterownikiem RTC z HAL, modelem rejestrów PCF8563
+i symulowanymi wywołaniami CAN, flasha oraz konfiguratora. Sprawdza znacznik
+UTC, przeliczanie CET/CEST, ustawianie RTC według UTC z GPS, ramkę `0x130`
+oraz zmianę czasu przyciskami i konfiguratorem. Testy wymagają kompilatora C/C++
 na hoście, bez podłączonej płytki. Nie potwierdzają zgodności fizycznego
 panelu ani nie mierzą czasu działania na sprzęcie. VP37TestBench uczestniczy w lokalnej kompilacji i testach,
 ale `ci: false` wyłącza go z macierzy firmware CI.
@@ -59,10 +63,10 @@ odpowiedniego modułu. Aplikację desktopową opisuje
 Listę zarejestrowanych testów pokaże `ctest --test-dir src/ECU/build_test -N`.
 Samo wylistowanie nie uruchamia testów.
 
-Sam test wyświetlacza Fiesta_clock uruchomisz poleceniem:
+Same testy wyświetlacza i czasu Fiesta_clock uruchomisz poleceniem:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_clock_display.py' -v
+python3 -m unittest discover -s tests -p 'test_clock_*.py' -v
 ```
 
 ## Sprawdzenie aktualizacji HAL

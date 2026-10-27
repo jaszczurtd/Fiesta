@@ -19,7 +19,7 @@ for development commands and the module guides for control details.
                  CAN0 (main)
    ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT, GPS
    │           │ ◄──────────  OilAndSpeed     superseded by Clocks
-   │    ECU    │ ◄──────────  Fiesta_clock    RTC time, 1 Hz
+   │    ECU    │ ◄──────────  Fiesta_clock    RTC time in UTC, 1 Hz
    │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
    │           │ ─── I²C ───► PCF8574         relays (0x38)
@@ -69,7 +69,7 @@ the loom colours.
 | [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
 | [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
 | [`OilAndSpeed`](src/OilAndSpeed/) | C++ | earlier oil, speed and EGT module, superseded by Clocks | no |
-| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock, time broadcast on CAN | no |
+| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock set from GPS UTC, time broadcast on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
 | [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
@@ -250,12 +250,37 @@ smoke test. VP37TestBench does not take part in the configurator protocol.
 
 ### Fiesta_clock
 
-Fiesta_clock keeps calendar time in a PCF8563 and sends it once a second as
-`CAN_ID_RTC_UPDATE` (`0x130`). It stays silent while the RTC reports lost
-integrity. The configurator can read and set the date and time; a commit is
-rejected unless the whole date is valid, leap years included. The module also
-shows the time, temperatures from two DS18B20 sensors, and the supply voltage
-on a 128×32 SSD1306 OLED driven by JaszczurHAL. The OLED and RTC share the
+Fiesta_clock keeps UTC in a PCF8563 and sends it once a second as
+`CAN_ID_RTC_UPDATE` (`0x130`). The frame has integrity 1 only for trusted UTC;
+otherwise its date and time bytes are zero. A marker in the HAL key-value store
+records that this firmware has set the RTC to UTC. Until then the RTC holds the
+local time written by older firmware: the display shows it unchanged, and the
+frame reports no integrity. The marker is stored only after the RTC reads back
+the new UTC. If the read-back or the marker fails and the flash answers that
+the marker is missing, the clock writes the same moment back as local time, so
+the display and the next start read it right. If the flash gives no answer,
+the marker may be there: the RTC keeps UTC, shown right but not trusted, and
+the clock confirms the marker every 30 s. A start that cannot read the flash
+shows the RTC as UTC without trust, as most clocks have the marker by then.
+
+The clock sets the RTC from the GPS UTC frame of Clocks (`0x131`), the only ID
+its MCP2515 filters accept. The first valid frame sets an RTC without trusted
+UTC, also one whose registers hold no valid date. A running RTC is corrected
+only when it is more than 2 s off, at most once in 10 minutes; after an RTC
+error, a failed read included, or a flash error the next attempt waits 30 s.
+Every write is read back and checked. Frames read after a main-loop pause longer
+than 500 ms, or while the buttons or the configurator edit the time, are
+dropped. Without GPS or CAN the RTC keeps running on its own.
+
+The display, the buttons and the configurator use CET/CEST, converted with
+`hal_time`. Setting the time converts it to UTC. A local time skipped by the
+spring change counts as CET; the repeated autumn hour counts as its first,
+CEST pass. The weekday follows the date, so the buttons do not set it. The
+configurator can read and set the date and time; a commit is rejected unless
+the whole date is valid, leap years included.
+
+The module also shows the time, temperatures from two DS18B20 sensors, and the
+supply voltage on a 128×32 SSD1306 OLED driven by JaszczurHAL. The OLED and RTC share the
 I²C bus described in `device_tree.json`. HAL writes text directly to panel
 RAM, without a framebuffer. The clock retains its original 6×8 font
 (including Polish ś), scales 1 and 2, and panel settings, including contrast
@@ -341,8 +366,8 @@ position and time. It reads oil pressure, wheel speed, and EGT from
 Clocks and the DPF state from frame `0x124`. DTCs never go out on CAN0;
 diagnostic tools read them over CAN1. Clocks sends its display brightness
 (`0x126`), oil pressure with ABS speed (`0x12A`), and both exhaust
-temperatures (`0x12F`), and GPS UTC (`0x131`). Fiesta_clock transmits only RTC
-time (`0x130`). On CAN1 the ECU answers
+temperatures (`0x12F`), and GPS UTC (`0x131`). Fiesta_clock transmits RTC time in
+UTC (`0x130`) and reads only the GPS UTC of Clocks. On CAN1 the ECU answers
 OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
 temperature PIDs and the oil pressure DID answer with a negative response
 (`0x22`, conditions not correct) while Clocks marks that value invalid or its
@@ -374,21 +399,21 @@ flashing sequence are in
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
 | Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), oil and charge lamps, TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
-| Auxiliary | GPS position and UTC in Clocks; legacy GPS from ECU; RTC time from Fiesta_clock |
+| Auxiliary | GPS position and UTC in Clocks; legacy GPS from ECU; RTC time in UTC from Fiesta_clock |
 
 ## Persistence
 
 Modules that store settings keep them in the JaszczurHAL key-value store on
 flash-backed EEPROM (`ECU_EEPROM_SIZE_BYTES` on the ECU). The ECU also stores
 its DTCs there; a mutex keeps core-1 reads from racing core-0 writes.
+Fiesta_clock stores only the marker that its RTC holds UTC.
 
 ## Builds and CI
 
 [Host tests and CI](doc/TESTING.md) describe the module selection and quality
-checks. Fiesta_clock has firmware builds and a host test of its display;
-VP37TestBench has
-local builds and host tests but opts out of firmware CI. SerialConfigurator
-has a separate desktop test project.
+checks. Fiesta_clock has firmware builds and host tests of its display and
+time handling; VP37TestBench has local builds and host tests but opts out of
+firmware CI. SerialConfigurator has a separate desktop test project.
 
 [The build guide](doc/BUILDING.md) explains assembly and variant paths,
 manifest preparation, upload and SWD debugging. Plain `jh-vscode build`

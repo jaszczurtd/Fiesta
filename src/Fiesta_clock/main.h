@@ -20,6 +20,7 @@
 #include "adc.h"
 #include "can.h"
 #include "clockPart.h"
+#include "clockTime.h"
 #include "ds18b20.h"
 #include "tempPart.h"
 #include "voltPart.h"

@@ -1,7 +1,8 @@
 #include "can.h"
 
-#include "RTC.h"
+#include "clockTime.h"
 #include "hardwareConfig.h"
+#include "rtcSync.h"
 
 #include "../common/canDefinitions/canDefinitions.h"
 
@@ -20,34 +21,17 @@ typedef struct {
 static clock_can_state_t s_clockCanState = {
     .handle = NULL, .initialized = false, .frameNumber = 0u, .nextSendMs = 0u};
 
-static bool rtcDatetimeIsValid(const PCF_DateTime *dt) {
-  if (dt == NULL) {
-    return false;
+/* The clock receives only the GPS UTC of Clocks, so other traffic cannot
+ * fill the receive buffers. */
+static hal_status_t clockCanConfigureFilters(void) {
+  const hal_can_filter_t filter = {CAN_ID_GPS_UTC_UPDATE, HAL_CAN_STD_ID_MASK,
+                                   0u};
+  hal_status_t st = HAL_OK;
+  for (uint8_t index = 0u; index < HAL_CAN_MAX_FILTERS && st == HAL_OK;
+       index++) {
+    st = hal_can_set_filter(s_clockCanState.handle, index, &filter);
   }
-
-  if (dt->minute > 59u || dt->hour > 23u || dt->day < 1u || dt->day > 31u ||
-      dt->month < 1u || dt->month > 12u) {
-    return false;
-  }
-
-  return true;
-}
-
-static uint32_t packRtcDateTime(const PCF_DateTime *dt) {
-  if (!rtcDatetimeIsValid(dt)) {
-    return 0u;
-  }
-
-  int32_t yearOffset = dt->year - 2020;
-  if (yearOffset < 0) {
-    yearOffset = 0;
-  } else if (yearOffset > 15) {
-    yearOffset = 15;
-  }
-
-  return ((uint32_t)yearOffset << 20) | ((uint32_t)dt->month << 16) |
-         ((uint32_t)dt->day << 11) | ((uint32_t)dt->hour << 6) |
-         (uint32_t)dt->minute;
+  return st;
 }
 
 hal_status_t clockCanInit(void) {
@@ -68,51 +52,69 @@ hal_status_t clockCanInit(void) {
   }
   hal_can_config_t canCfg = JH_HW_NODE_CAN_CONFIG_INIT;
 
-  const hal_status_t st = hal_can_create_with_retry(
-      &canCfg, JH_HW_NODE_CAN_PIN_INT, NULL, CLOCK_CAN_RETRIES - 1, NULL,
-      &s_clockCanState.handle);
+  hal_status_t st = hal_can_create_with_retry(&canCfg, JH_HW_NODE_CAN_PIN_INT,
+                                              NULL, CLOCK_CAN_RETRIES - 1, NULL,
+                                              &s_clockCanState.handle);
+  if (st == HAL_OK) {
+    st = clockCanConfigureFilters();
+    if (st != HAL_OK) {
+      hal_can_destroy(s_clockCanState.handle);
+      s_clockCanState.handle = NULL;
+    }
+  }
   s_clockCanState.initialized = (st == HAL_OK);
   if (st != HAL_OK) {
     derr("CAN init failed, the clock runs without CAN: %s",
          hal_status_to_string(st));
   }
+  rtcSyncInit(hal_millis());
   return st;
 }
 
-void clockCanTick(void) {
-  if (!s_clockCanState.initialized) {
-    return;
+static void clockCanOnFrame(uint32_t id, uint8_t len, const uint8_t *data) {
+  if (id == CAN_ID_GPS_UTC_UPDATE) {
+    rtcSyncReceive(data, len);
   }
+}
 
-  const uint32_t nowMs = hal_millis();
-  if ((int32_t)(nowMs - s_clockCanState.nextSendMs) < 0) {
-    return;
-  }
-  s_clockCanState.nextSendMs = nowMs + CLOCK_CAN_SEND_INTERVAL_MS;
-
-  PCF_DateTime dt = {0};
-  const unsigned char dtResult = PCF_GetDateTime(&dt);
-  bool integrityOk = (dtResult == 0u);
-  if (PCF_GetClockIntegrity(&integrityOk) != 0u) {
-    integrityOk = (dtResult == 0u);
-  }
-  if (!integrityOk || !rtcDatetimeIsValid(&dt)) {
-    return;
-  }
+/* The RTC time as UTC; without trusted UTC the fields stay zero. */
+static void clockCanSendRtc(void) {
+  uint32_t epoch = 0u;
+  bool trusted = false;
+  (void)clockTimeReadUtc(&epoch, &trusted);
 
   uint8_t out[CAN_FRAME_MAX_LENGTH] = {0};
-  const uint32_t packedDateTime = packRtcDateTime(&dt);
-
   out[CAN_FRAME_NUMBER] = s_clockCanState.frameNumber++;
-  out[CAN_FRAME_RTC_UPDATE_DT_HI] = (uint8_t)((packedDateTime >> 16) & 0xFFu);
-  out[CAN_FRAME_RTC_UPDATE_DT_MD] = (uint8_t)((packedDateTime >> 8) & 0xFFu);
-  out[CAN_FRAME_RTC_UPDATE_DT_LO] = (uint8_t)(packedDateTime & 0xFFu);
-  out[CAN_FRAME_RTC_UPDATE_SECOND] = dt.second;
-  out[CAN_FRAME_RTC_UPDATE_INTEGRITY] = integrityOk ? 1u : 0u;
+  /* A date the frame format cannot hold goes out without integrity. */
+  if (trusted &&
+      fiesta_can_put_utc_datetime(&out[CAN_FRAME_RTC_UPDATE_DT_HI], epoch)) {
+    out[CAN_FRAME_RTC_UPDATE_SECOND] = (uint8_t)(epoch % 60u);
+    out[CAN_FRAME_RTC_UPDATE_INTEGRITY] = 1u;
+  }
 
   const hal_status_t st = hal_can_send(
       s_clockCanState.handle, CAN_ID_RTC_UPDATE, CAN_FRAME_MAX_LENGTH, out);
   if (st != HAL_OK) {
     derr_limited("can", "RTC frame not sent: %s", hal_status_to_string(st));
   }
+}
+
+void clockCanTick(bool timeEditActive) {
+  if (!s_clockCanState.initialized) {
+    return;
+  }
+
+  const uint32_t nowMs = hal_millis();
+  const hal_status_t rx =
+      hal_can_process_all(s_clockCanState.handle, clockCanOnFrame, NULL);
+  if (rx != HAL_OK) {
+    derr_limited("can", "receive failed: %s", hal_status_to_string(rx));
+  }
+  rtcSyncTick(nowMs, timeEditActive);
+
+  if ((int32_t)(nowMs - s_clockCanState.nextSendMs) < 0) {
+    return;
+  }
+  s_clockCanState.nextSendMs = nowMs + CLOCK_CAN_SEND_INTERVAL_MS;
+  clockCanSendRtc();
 }

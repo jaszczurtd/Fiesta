@@ -65,8 +65,10 @@ Odpowiedzi parametrów pokazują rozpoznane typy `BOOL`, `INT`, `UINT`, `FLOAT` 
 ## Zmiana ustawień
 
 ECU udostępnia zapisywane progi w wersjonowanym bloku KV. RTC_Clock przyjmuje
-`rtc_year/month/day/hour/minute/second` i raportuje `rtc_integrity` tylko do
-odczytu; commit sprawdza pełną datę, w tym lata przestępne. Clocks i OilAndSpeed
+`rtc_year/month/day/hour/minute/second` w czasie CET/CEST i zapisuje je w RTC
+jako UTC. Pole `rtc_integrity` tylko do odczytu ma wartość 1 wyłącznie wtedy,
+gdy RTC zawiera zaufany czas UTC. Commit sprawdza pełną datę, w tym lata
+przestępne. Clocks i OilAndSpeed
 pokazują progi oraz interwały tylko do odczytu, bez utrwalania.
 
 Na karcie Values edytuj pola, wybierz **Apply staged**, a potem **Commit**,

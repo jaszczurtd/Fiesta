@@ -201,28 +201,21 @@ unsigned char PCF_GetAlarm(PCF_Alarm *alarm) {
   return 0u;
 }
 
-unsigned char PCF_SetDateTime(PCF_DateTime *dateTime) {
-  if (!dateTime || !pcf_ensure_rtc()) {
-    return 1u;
+hal_status_t PCF_WriteEpoch(uint32_t epoch) {
+  if (!pcf_ensure_rtc()) {
+    return HAL_EIO;
   }
+  return hal_rtc_set_epoch_ex(s_rtc, epoch);
+}
 
-  if (dateTime->second >= 60u || dateTime->minute >= 60u ||
-      dateTime->hour >= 24u || dateTime->day > 32u || dateTime->weekday > 6u ||
-      dateTime->month > 12u || dateTime->year < PCF_MIN_YEAR ||
-      dateTime->year >= PCF_MAX_YEAR) {
-    return 1u;
+hal_status_t PCF_ReadDateTime(hal_rtc_datetime_t *dateTime) {
+  if (dateTime == NULL) {
+    return HAL_EINVAL;
   }
-
-  hal_rtc_datetime_t dt = {0};
-  dt.second = dateTime->second;
-  dt.minute = dateTime->minute;
-  dt.hour = dateTime->hour;
-  dt.day = dateTime->day;
-  dt.weekday = dateTime->weekday;
-  dt.month = dateTime->month;
-  dt.year = (uint16_t)dateTime->year;
-
-  return hal_rtc_set_datetime(s_rtc, &dt) ? 0u : 1u;
+  if (!pcf_ensure_rtc()) {
+    return HAL_EIO;
+  }
+  return hal_rtc_get_datetime_ex(s_rtc, dateTime);
 }
 
 unsigned char PCF_GetDateTime(PCF_DateTime *dateTime) {
@@ -244,18 +237,4 @@ unsigned char PCF_GetDateTime(PCF_DateTime *dateTime) {
   dateTime->year = (int)dt.year;
 
   return dt.clock_integrity ? 0u : 1u;
-}
-
-unsigned char PCF_GetClockIntegrity(bool *integrityOk) {
-  if (integrityOk == NULL || !pcf_ensure_rtc()) {
-    return 1u;
-  }
-
-  bool ok = false;
-  if (!hal_rtc_get_clock_integrity(s_rtc, &ok)) {
-    return 1u;
-  }
-
-  *integrityOk = ok;
-  return 0u;
 }

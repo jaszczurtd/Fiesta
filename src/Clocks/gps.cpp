@@ -5,7 +5,6 @@
 #include <JaszczurHAL.h>
 #include <hal/gps/hal_gps.h>
 #include <hal/time/hal_time.h>
-#include <hal/time/jh_calendar.h>
 #include <math.h>
 #include <string.h>
 
@@ -116,17 +115,8 @@ hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint8_t *lat,
   if (gps->utcValid) {
     jh_store_be32(utc + CAN_FRAME_GPS_UTC_EPOCH_B3, gps->epochUtc);
     utc[CAN_FRAME_GPS_UTC_STATUS] = CAN_GPS_UTC_STATUS_VALID;
-    jh_calendar_datetime_t dt;
-    if (jh_calendar_epoch_to_datetime(gps->epochUtc, 2035u, &dt) == HAL_OK &&
-        dt.year >= 2020u) {
-      const uint32_t date = (uint32_t)(dt.year % 100u) * 10000u +
-                            (uint32_t)dt.month * 100u + dt.day;
-      const uint32_t packed = fiesta_can_pack_gps_datetime(
-          date, (uint32_t)dt.hour * 100u + dt.minute);
-      lonTime[CAN_FRAME_GPS_EXT_DT_HI] = (uint8_t)(packed >> 16);
-      lonTime[CAN_FRAME_GPS_EXT_DT_MD] = (uint8_t)(packed >> 8);
-      lonTime[CAN_FRAME_GPS_EXT_DT_LO] = (uint8_t)packed;
-    }
+    (void)fiesta_can_put_utc_datetime(&lonTime[CAN_FRAME_GPS_EXT_DT_HI],
+                                      gps->epochUtc);
   }
   return HAL_OK;
 }

@@ -20,6 +20,8 @@ static bool ignition_on = false;
 static bool set_down = false;
 static int set_reads_until_release = 0;
 static bool hour_down = false;
+static bool sc_edit_pending = false;
+static bool can_time_edit = false;
 static int bus_inits = 0;
 static PCF_DateTime now = {};
 static std::array<uint8_t, 512> greeting;
@@ -138,14 +140,24 @@ unsigned char PCF_GetDateTime(PCF_DateTime *value) {
   *value = now;
   return 0;
 }
-unsigned char PCF_SetDateTime(PCF_DateTime *value) {
-  now = *value;
-  return 0;
+hal_status_t clockTimeInit(void) { return HAL_OK; }
+hal_status_t clockTimeReadLocal(PCF_DateTime *value, bool *trusted) {
+  *value = now;
+  if (trusted) {
+    *trusted = true;
+  }
+  return HAL_OK;
 }
+hal_status_t clockTimeWriteLocal(const PCF_DateTime *value) {
+  now = *value;
+  return HAL_OK;
+}
+void clockTimeUpdateWeekday(PCF_DateTime *) {}
 hal_status_t clockCanInit(void) { return HAL_OK; }
-void clockCanTick(void) {}
+void clockCanTick(bool timeEditActive) { can_time_edit = timeEditActive; }
 void configSessionInit(void) {}
 void configSessionTick(void) {}
+bool configSessionEditPending(void) { return sc_edit_pending; }
 void ds18b20_setPin(unsigned char) {}
 void ds18b20_gettemp(int *hi, int *lo, double *native) {
   if (greeting[0] == 0 && greeting[48] == 0) {
@@ -268,6 +280,19 @@ static void test_app() {
   voltMainFunction();
   flush();
   assert(image() != temperature);
+  // GPS leaves the RTC alone while SC or the buttons edit the time.
+  sc_edit_pending = true;
+  app_task0();
+  assert(can_time_edit);
+  sc_edit_pending = false;
+  app_task0();
+  assert(!can_time_edit);
+  setClockSetMode(true);
+  app_task0();
+  assert(can_time_edit);
+  setClockSetMode(false);
+  app_task0();
+  assert(!can_time_edit);
 }
 
 static void test_prompt() {

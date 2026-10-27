@@ -66,8 +66,9 @@ is rejected. Parameter output includes inferred `BOOL`, `INT`, `UINT`,
 ## Change settings
 
 ECU exposes writable thresholds stored in a versioned KV blob. RTC_Clock
-accepts `rtc_year/month/day/hour/minute/second` and reports read-only
-`rtc_integrity`; commit validates the whole date, including leap years.
+accepts `rtc_year/month/day/hour/minute/second` in CET/CEST and stores them in
+its RTC as UTC. Read-only `rtc_integrity` is 1 only while the RTC holds trusted
+UTC. Commit validates the whole date, including leap years.
 Clocks and OilAndSpeed expose read-only, non-persisted thresholds and intervals.
 
 In the GUI Values tab, edit fields and choose **Apply staged**, then **Commit**

@@ -143,6 +143,8 @@ enum {
 #define CAN_EGT_STATUS_EGT_VALID 0x01u
 #define CAN_EGT_STATUS_DPF_TEMP_VALID 0x02u
 
+// Fiesta_clock, once a second: the RTC time in UTC. Without integrity the
+// clock has no trusted UTC and the date and time bytes are zero.
 #define CAN_ID_RTC_UPDATE 0x130
 enum {
   CAN_FRAME_RTC_UPDATE_DT_HI = 1, // packed datetime: YYYY offset from 2020
@@ -150,7 +152,7 @@ enum {
   CAN_FRAME_RTC_UPDATE_DT_MD,
   CAN_FRAME_RTC_UPDATE_DT_LO,
   CAN_FRAME_RTC_UPDATE_SECOND,    // seconds 0..59
-  CAN_FRAME_RTC_UPDATE_INTEGRITY, // 1 = RTC integrity OK, 0 = integrity lost
+  CAN_FRAME_RTC_UPDATE_INTEGRITY, // 1 = trusted UTC, 0 = no trusted time
 };
 
 // Clocks: UTC from one RMC sentence with a fresh fix, at most 2 seconds old.

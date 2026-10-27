@@ -59,7 +59,8 @@ static void setup_runtime(void) {
   helloMessage();
 
   PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
-  (void)clockCanInit(); /* logs the reason itself */
+  (void)clockTimeInit(); /* logs the reason itself */
+  (void)clockCanInit();  /* logs the reason itself */
   configSessionInit();
 
   temp_initial_read();
@@ -79,7 +80,7 @@ void app_start(void) {
 
 void app_task0(void) {
   hal_watchdog_feed();
-  clockCanTick();
+  clockCanTick(isClockSetMode() || configSessionEditPending());
   configSessionTick();
 
   bool ig = ignition();

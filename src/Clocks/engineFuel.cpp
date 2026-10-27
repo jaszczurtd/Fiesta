@@ -91,11 +91,6 @@ void EngineFuelGauge::showFuelAmount(int currentVal, int maxVal) {
     fullRedrawNeeded = true;
   }
 
-  int center = ((FUEL_HEIGHT - FUEL_GAUGE_HEIGHT) / 2);
-  if (center < 0) {
-    center = 0;
-  }
-
   if (f_drawOnce) {
     int x = 0;
     int y = getBaseY();

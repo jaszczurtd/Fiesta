@@ -138,16 +138,16 @@ void setItem(bool increase) {
 
   case D_YEAR:
     if (increase) {
-      if (pcfDateTime.year < PCF_MAX_YEAR) {
+      if (pcfDateTime.year < CFG_RTC_MAX_YEAR) {
         pcfDateTime.year++;
       } else {
-        pcfDateTime.year = PCF_MIN_YEAR;
+        pcfDateTime.year = CFG_RTC_MIN_YEAR;
       }
     } else {
-      if (pcfDateTime.year > PCF_MIN_YEAR) {
+      if (pcfDateTime.year > CFG_RTC_MIN_YEAR) {
         pcfDateTime.year--;
       } else {
-        pcfDateTime.year = PCF_MAX_YEAR;
+        pcfDateTime.year = CFG_RTC_MAX_YEAR;
       }
     }
     break;
@@ -199,23 +199,9 @@ void setItem(bool increase) {
       }
     }
     break;
-
-  case D_WEEKDAY:
-    if (increase) {
-      if (pcfDateTime.weekday < 6) {
-        pcfDateTime.weekday++;
-      } else {
-        pcfDateTime.weekday = 0;
-      }
-    } else {
-      if (pcfDateTime.weekday > 0) {
-        pcfDateTime.weekday--;
-      } else {
-        pcfDateTime.weekday = 6;
-      }
-    }
-    break;
   }
+  /* The weekday follows the date; it is shown but not set. */
+  clockTimeUpdateWeekday(&pcfDateTime);
   setItemVisible();
   pause();
 }
@@ -230,7 +216,14 @@ void setClockSetMode(bool enabled) {
 
 bool isClockSetMode(void) { return clockSetMode; }
 
-void getTime(void) { PCF_GetDateTime(&pcfDateTime); }
+void getTime(void) { (void)clockTimeReadLocal(&pcfDateTime, NULL); }
+
+static void storeTime(void) {
+  const hal_status_t status = clockTimeWriteLocal(&pcfDateTime);
+  if (status != HAL_OK) {
+    derr("RTC time not stored as UTC: %s", hal_status_to_string(status));
+  }
+}
 
 static int clockSetModeDelayLoops = 0;
 static bool clockSetModeOrdered = false;
@@ -288,7 +281,7 @@ void clockMainFunction(void) {
 
         activeItem = D_HOUR;
         setItem(true);
-        PCF_SetDateTime(&pcfDateTime);
+        storeTime();
         hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
       } else {
         hourDelay = 0;
@@ -306,7 +299,7 @@ void clockMainFunction(void) {
 
         activeItem = D_MINUTE;
         setItem(true);
-        PCF_SetDateTime(&pcfDateTime);
+        storeTime();
         hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
       } else {
         minuteDelay = 0;
@@ -318,10 +311,13 @@ void clockMainFunction(void) {
     if (setButtonPressed()) {
       pause();
 
-      if (++activeItem > CLOCK_SETTABLE_ITEMS - 1) {
+      if (++activeItem == D_WEEKDAY) {
+        ++activeItem;
+      }
+      if (activeItem > CLOCK_SETTABLE_ITEMS - 1) {
         setClockSetMode(false);
 
-        PCF_SetDateTime(&pcfDateTime);
+        storeTime();
         return;
       }
     } else if (setHour()) {
@@ -384,13 +380,15 @@ bool checkIfTimerReached(void) {
     return true;
   }
 
-  PCF_GetDateTime(&pcfDateTime);
+  /* Only the seconds count here; the shown and edited time stays intact. */
+  PCF_DateTime now = {0};
+  PCF_GetDateTime(&now);
   if (lastSecondValue == -1) {
-    lastSecondValue = pcfDateTime.second;
+    lastSecondValue = now.second;
     return false;
   }
-  if (lastSecondValue != pcfDateTime.second) {
-    lastSecondValue = pcfDateTime.second;
+  if (lastSecondValue != now.second) {
+    lastSecondValue = now.second;
     secondsToCount--;
   }
   return false;
