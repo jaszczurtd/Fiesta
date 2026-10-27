@@ -23,7 +23,6 @@ for development commands and the module guides for control details.
    │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
    │           │ ─── I²C ───► PCF8574         relays (0x38)
-   │           │ ◄─ PIO UART  GPS receiver
    │           │ ─── CAN1 ──► OBD-II port
    └─────┬─────┘ ◄─ ADC, GPIO, PWM ─► sensors and actuators
          │
@@ -132,8 +131,8 @@ and receiver RX to GP28, at 9600 baud. Clocks starts normally without the
 receiver or a fix.
 
 Coordinates remain `double` until conversion to microdegrees for `SC_GET_GPS`
-and CAN. Local GPS values replace the old GPS fields from ECU frame `0x129`
-and survive loss of ECU communication. Polling runs every pass; GPS changes
+and CAN. They survive loss of ECU communication. The ECU sends the old GPS
+fields of frame `0x129` as zero, and Clocks does not read them. Polling runs every pass; GPS changes
 and validity transitions trigger a new snapshot. Display refresh reuses
 the converted speed.
 
@@ -141,10 +140,9 @@ The last position expires after 4 s. UTC comes from one RMC sentence with a
 fix and expires after 2 s. Clocks keeps UTC for CAN and SC and publishes it
 with seconds and validity in `0x131` every second.
 
-The compile-time switch `CLOCKS_PUBLISH_LEGACY_GPS` defaults to 0, disabling
-`0x12D`/`0x12E` in Clocks. Set it to 1 only on an isolated bus until the ECU
-stops publishing those IDs. The prepared frames use UTC. Both modules refer
-to the GPS binding in `src/common/bindings/`.
+Once a second Clocks also sends the position with GPS speed (`0x12D`) and the
+position with the date and time to the minute in UTC (`0x12E`). Its device
+tree refers to the GPS binding in `src/common/bindings/`.
 
 The charge lamp follows engine RPM and battery voltage from the ECU. It stays
 lit while the engine is stopped or those values are stale, and goes out once
@@ -166,7 +164,7 @@ the TFT voltage gauge keeps its own range.
 | [`gps.cpp`](src/Clocks/gps.cpp) | local GPS, fresh UTC and GPS frame encoding |
 | [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
+| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, GPS position and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
 
 The CAN controller and the TFT share one SPI bus. The display writes in
 bands of `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES`, set in
@@ -361,12 +359,13 @@ The ECU sits on two separate CAN buses:
 | CAN0 "main" | ECU, Clocks, Fiesta_clock | traffic between modules |
 | CAN1 "OBD-2" | ECU, OBD-II port | external diagnostic tools |
 
-On CAN0 the ECU publishes engine state, RPM, throttle, boost, fuel, and GPS
-position and time. It reads oil pressure, wheel speed, and EGT from
-Clocks and the DPF state from frame `0x124`. DTCs never go out on CAN0;
+On CAN0 the ECU publishes engine state, RPM, throttle, boost, and fuel. It
+reads oil pressure, wheel speed, and EGT from Clocks, the DPF state from frame
+`0x124`, and the RTC time of Fiesta_clock (`0x130`), which dates new DTCs. DTCs never go out on CAN0;
 diagnostic tools read them over CAN1. Clocks sends its display brightness
 (`0x126`), oil pressure with ABS speed (`0x12A`), and both exhaust
-temperatures (`0x12F`), and GPS UTC (`0x131`). Fiesta_clock transmits RTC time in
+temperatures (`0x12F`), GPS position and time (`0x12D`, `0x12E`), and GPS
+UTC (`0x131`). Fiesta_clock transmits RTC time in
 UTC (`0x130`) and reads only the GPS UTC of Clocks. On CAN1 the ECU answers
 OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
 temperature PIDs and the oil pressure DID answer with a negative response
@@ -399,7 +398,7 @@ flashing sequence are in
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
 | Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), oil and charge lamps, TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
-| Auxiliary | GPS position and UTC in Clocks; legacy GPS from ECU; RTC time in UTC from Fiesta_clock |
+| Auxiliary | GPS position and UTC in Clocks; RTC time in UTC from Fiesta_clock |
 
 ## Persistence
 

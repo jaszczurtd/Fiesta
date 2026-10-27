@@ -39,7 +39,7 @@ core 0.
 
 The main controllers (VP37, turbo, RPM, fan, heater, glow plugs, windows, and
 engine state) live in one `ecu_context_t` in
-[`ecuContext.h`](../../src/ECU/ecuContext.h). CAN, sensors, DTC storage, GPS, OBD,
+[`ecuContext.h`](../../src/ECU/ecuContext.h). CAN, sensors, DTC storage, RTC time, OBD,
 and the configurator session keep their state in file-local structs.
 
 ## Position demand and input conditioning
@@ -283,7 +283,7 @@ normal operating defaults.
 | [`vp37_maps.c`](../../src/common/vp37/vp37_maps.c) | VP37 holding map, integral and dead-zone tapers |
 | [`engineFan.c`](../../src/ECU/engineFan.c), [`engineHeater.c`](../../src/ECU/engineHeater.c), [`glowPlugs.c`](../../src/ECU/glowPlugs.c), [`heatedWindshield.c`](../../src/ECU/heatedWindshield.c) | relay outputs |
 | [`engineFuel.c`](../../src/ECU/engineFuel.c) | fuel level |
-| [`gps.c`](../../src/ECU/gps.c) | NMEA time and date |
+| [`rtcTime.c`](../../src/ECU/rtcTime.c) | UTC from the `0x130` frame of Fiesta_clock: it dates the first occurrence of a DTC and the watchdog reboot report, and counts as unknown after 3 s without a trusted frame |
 | [`config.c`](../../src/ECU/config.c) | stored settings and the configurator session |
 | [`tests.c`](../../src/ECU/tests.c) | the functional test suite: each bench test, what it drives, and whether the sequence and the configurator include it |
 | [`tests_workers.c`](../../src/ECU/tests_workers.c) | what each test does: demand generators, one-shot actions and the progress they report |
@@ -321,8 +321,7 @@ Its `rp2350-plus` assembly (Waveshare RP2350-Plus, the default) and
   While the VP37 current scan runs it owns the converter, and the other analog
   reads come from its buffer.
 - **PWM** for the VP37 and N75 outputs; **GPIO** for the DPF lamp;
-  **GPIO interrupt** for the engine Hall sensor; a **software serial** line
-  on the PIO for GPS.
+  **GPIO interrupt** for the engine Hall sensor.
 - **Flash-backed EEPROM** for DTCs and settings.
 
 

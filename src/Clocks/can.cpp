@@ -186,10 +186,8 @@ void updateGPSrecipients(void) {
   uint8_t utc[CAN_FRAME_MAX_LENGTH];
   if (clocksGpsEncode(&local.gps, lat, lonTime, utc) != HAL_OK)
     return;
-#if CLOCKS_PUBLISH_LEGACY_GPS
   canBroadcast(CAN_ID_GPS_EXT_LAT, lat);
   canBroadcast(CAN_ID_GPS_EXT_LON_TIME, lonTime);
-#endif
   canBroadcast(CAN_ID_GPS_UTC_UPDATE, utc);
 }
 
@@ -323,10 +321,10 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   } break;
   case CAN_ID_GPS_EXT_LAT:
   case CAN_ID_GPS_EXT_LON_TIME:
-    // GPS frames of the ECU; Clocks reads its own receiver instead.
-    break;
   case CAN_ID_GPS_UTC_UPDATE:
-    derr_limited("can", "UTC frame of Clocks came from another node");
+    // GPS frames of Clocks; another sender is a fault, e.g. an old ECU image.
+    derr_limited("can", "GPS frame 0x%03lx of Clocks came from another node",
+                 (unsigned long)canID);
     break;
 
   default:

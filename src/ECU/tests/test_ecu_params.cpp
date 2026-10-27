@@ -137,7 +137,7 @@ void test_ecu_params_validate_rejects_nominal_rpm_out_of_range(void) {
   TEST_ASSERT_EQUAL_STRING("nominal_rpm_range", reason);
 }
 
-void test_unchanged_parameters_skip_flash_and_gps_recovery(void) {
+void test_unchanged_parameters_skip_flash(void) {
   ecu_params_values_t values = {};
   ecuParamsLoadDefaults(&values);
   TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&values));
@@ -159,6 +159,6 @@ int main(void) {
   RUN_TEST(test_ecu_params_validate_rejects_invalid_hysteresis);
   RUN_TEST(test_ecu_params_validate_rejects_nominal_rpm_out_of_range);
   RUN_TEST(test_ecu_params_stage_and_apply_updates_active_set);
-  RUN_TEST(test_unchanged_parameters_skip_flash_and_gps_recovery);
+  RUN_TEST(test_unchanged_parameters_skip_flash);
   return UNITY_END();
 }

@@ -4,6 +4,7 @@
 #include "hal/storage/hal_eeprom.h"
 #include "hal/storage/hal_kv.h"
 #include "hardwareConfig.h"
+#include "rtcTime.h"
 #include "testable/dtcManager_testable.h"
 #include "unity.h"
 #include <utils/tools_logger_config.h>
@@ -27,7 +28,7 @@ static void countCommit(void *ctx) {
 void setUp(void) {
   hal_mock_set_millis(0u);
   hal_mock_eeprom_reset();
-  hal_mock_gps_reset();
+  rtcTimeResetForTest();
   dtcManagerResetRuntimeStateForTest();
 }
 

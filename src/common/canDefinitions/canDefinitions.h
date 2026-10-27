@@ -75,8 +75,8 @@ enum {
   CAN_FRAME_ECU_UPDATE_INTAKE = 1,
   CAN_FRAME_ECU_UPDATE_FUEL_HI,
   CAN_FRAME_ECU_UPDATE_FUEL_LO,
-  CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE,
-  CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED
+  CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE, // withdrawn, always 0: GPS is in Clocks
+  CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED  // withdrawn, always 0
 };
 
 // Sent by Clocks.
@@ -105,6 +105,7 @@ enum {
   CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO,
 };
 
+// Sent by Clocks, once a second, like 0x12E.
 #define CAN_ID_GPS_EXT_LAT 0x12d
 enum {
   CAN_FRAME_GPS_EXT_LAT_B3 = 1, // int32 latitude * 1e6 (big-endian)
@@ -187,10 +188,6 @@ enum {
   F_OUTSIDE_LUMENS,
   F_CLOCK_BRIGHTNESS,
   F_GPS_IS_AVAILABLE,
-  F_LATITUDE,
-  F_LONGITUDE,
-  F_GPS_TIME, // HHMM (local adjusted time)
-  F_GPS_DATE, // YYMMDD (local adjusted date)
   F_FAN_ENABLED,
   F_PRESSURE_DESIRED,
   F_ABS_CAR_SPEED,

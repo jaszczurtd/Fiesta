@@ -34,7 +34,7 @@ muteksy. Flash zapisuje rdzeń 0.
 
 Główne sterowniki VP37, turbo, RPM, wentylatora, grzałki, świec, szyb i stanu
 silnika znajdują się w `ecu_context_t` w [ecuContext.h](ecuContext.h).
-CAN, czujniki, DTC, GPS, OBD i sesja konfiguratora mają stan lokalny w plikach.
+CAN, czujniki, DTC, czas RTC, OBD i sesja konfiguratora mają stan lokalny w plikach.
 
 ## Zadawanie położenia i przygotowanie wejścia
 
@@ -272,7 +272,7 @@ zwykłe ustawienia pracy.
 | [vp37_maps.c](../common/vp37/vp37_maps.c) | Mapa podtrzymania i zmiany całki oraz martwej strefy. |
 | [engineFan.c](engineFan.c), [engineHeater.c](engineHeater.c), [glowPlugs.c](glowPlugs.c), [heatedWindshield.c](heatedWindshield.c) | Wyjścia przekaźnikowe. |
 | [engineFuel.c](engineFuel.c) | Poziom paliwa. |
-| [gps.c](gps.c) | Data i czas NMEA. |
+| [rtcTime.c](rtcTime.c) | Czas UTC z ramki `0x130` Fiesta_clock. Oznacza pierwsze wystąpienie DTC i raport restartu przez watchdog; po 3 s bez zaufanej ramki czas jest nieznany. |
 | [config.c](config.c) | Ustawienia i sesja konfiguratora. |
 | [tests.c](tests.c) | Rejestr testów, sterowane elementy, dostępność sekwencji i konfiguratora. |
 | [tests_workers.c](tests_workers.c) | Generatory żądań, czynności jednorazowe i postęp. |
@@ -305,7 +305,7 @@ wybór montażu w VS Code. Interfejsy:
   GPIO26 zarezerwowanym dla tego pomiaru. Skan prądu VP37 zajmuje ADC;
   pozostałe odczyty analogowe korzystają wtedy z jego bufora.
 - **PWM:** VP37 i N75; **GPIO:** kontrolka DPF; **przerwanie GPIO:** Hall
-  silnika; **port programowy na PIO:** GPS.
+  silnika.
 - **EEPROM emulowany we flash:** DTC i ustawienia.
 
 ## Budżet RAM sterowania

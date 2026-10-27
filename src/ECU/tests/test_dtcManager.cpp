@@ -2,6 +2,7 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
 #include "hal/storage/hal_kv.h"
+#include "rtcTime.h"
 #include "sensors.h"
 #include "testable/dtcManager_testable.h"
 #include "unity.h"
@@ -20,7 +21,7 @@ void setUp(void) {
   hal_mock_eeprom_reset();
   hal_eeprom_init(HAL_EEPROM_FLASH, ECU_EEPROM_SIZE_BYTES, 0);
   initSensors();
-  hal_mock_gps_reset();
+  rtcTimeResetForTest();
 
   dtcManagerInit();
   dtcManagerClearAll();
@@ -84,11 +85,7 @@ void test_dtc_every_entry_with_timestamp_and_detail_persists(void) {
       DTC_DPF_COMM_LOST,     DTC_EGT_COMM_LOST,        DTC_ADJ_COMM_LOST,
       DTC_ADJ_SIGNAL_LOST,   DTC_ADJ_FUEL_TEMP_BROKEN, DTC_ADJ_VOLTAGE_BAD,
       DTC_RPM_IRQ_INIT_FAIL, DTC_CAN_BUS_FAULT};
-  hal_mock_gps_reset();
-  hal_mock_gps_set_valid(true);
-  hal_mock_gps_set_age(0);
-  hal_mock_gps_set_date(2026, 1, 1);
-  hal_mock_gps_set_time(12, 0, 0);
+  rtcTimeStore(1767268800u); // 2026-01-01 12:00:00 UTC
   for (size_t i = 0; i < COUNTOF(codes); i++) {
     dtcManagerSetActiveDetail(codes[i], true, (uint8_t)(0x80u + i));
   }
@@ -102,7 +99,7 @@ void test_dtc_every_entry_with_timestamp_and_detail_persists(void) {
   for (size_t i = 0; i < COUNTOF(codes); i++) {
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(0x80u + i),
                             dtcManagerGetDetail(codes[i]));
-    TEST_ASSERT_NOT_EQUAL_UINT32(0u, dtcManagerGetTimestamp(codes[i]));
+    TEST_ASSERT_EQUAL_UINT32(1767268800u, dtcManagerGetTimestamp(codes[i]));
   }
 }
 
@@ -145,26 +142,24 @@ void test_dtc_clear_all_preserves_foreign_kv_entries(void) {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, actual, sizeof(expected));
 }
 
-void test_dtc_timestamp_nonzero_when_gps_is_available(void) {
-  hal_mock_gps_set_valid(true);
-  hal_mock_gps_set_age(0);
-  hal_mock_gps_set_date(2026, 4, 4);
-  hal_mock_gps_set_time(12, 0, 0);
+void test_dtc_timestamp_is_the_rtc_time_when_it_is_fresh(void) {
+  rtcTimeStore(1775304000u); // 2026-04-04 12:00:00 UTC
+  hal_mock_advance_millis(2500u);
 
   dtcManagerSetActive(DTC_PWM_CHANNEL_NOT_INIT, true);
   uint32_t ts = dtcManagerGetTimestamp(DTC_PWM_CHANNEL_NOT_INIT);
 
-  TEST_ASSERT_TRUE(ts > 0u);
+  TEST_ASSERT_EQUAL_UINT32(1775304002u, ts);
 }
 
-void test_dtc_timestamp_zero_when_gps_is_unavailable(void) {
-  hal_mock_gps_set_valid(false);
-  hal_mock_gps_set_age(0);
-
+void test_dtc_timestamp_zero_without_rtc_time(void) {
   dtcManagerSetActive(DTC_DPF_COMM_LOST, true);
-  uint32_t ts = dtcManagerGetTimestamp(DTC_DPF_COMM_LOST);
+  TEST_ASSERT_EQUAL_UINT32(0u, dtcManagerGetTimestamp(DTC_DPF_COMM_LOST));
 
-  TEST_ASSERT_EQUAL_UINT32(0u, ts);
+  rtcTimeStore(1775304000u);
+  hal_mock_advance_millis(RTC_TIME_MAX_AGE_MS);
+  dtcManagerSetActive(DTC_EGT_COMM_LOST, true);
+  TEST_ASSERT_EQUAL_UINT32(0u, dtcManagerGetTimestamp(DTC_EGT_COMM_LOST));
 }
 
 void test_dtc_get_codes_respects_output_limit(void) {
@@ -266,8 +261,8 @@ int main(void) {
   RUN_TEST(test_dtc_deactivate_clears_only_active_flag);
   RUN_TEST(test_dtc_clear_all_resets_all_kinds);
   RUN_TEST(test_dtc_clear_all_preserves_foreign_kv_entries);
-  RUN_TEST(test_dtc_timestamp_nonzero_when_gps_is_available);
-  RUN_TEST(test_dtc_timestamp_zero_when_gps_is_unavailable);
+  RUN_TEST(test_dtc_timestamp_is_the_rtc_time_when_it_is_fresh);
+  RUN_TEST(test_dtc_timestamp_zero_without_rtc_time);
   RUN_TEST(test_dtc_get_codes_respects_output_limit);
   RUN_TEST(test_find_dtc_index_returns_expected_slots);
   RUN_TEST(test_rpm_irq_init_failure_is_reportable_and_persistent);

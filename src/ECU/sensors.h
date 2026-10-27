@@ -19,8 +19,6 @@ extern "C" {
 // in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * 1000
 
-#define GPS_TIME_DATE_BUFFER_SIZE 16
-
 /** Driver-demand input filter time constant, in seconds. */
 #define SENSORS_DRIVER_FILTER_S 0.03f
 /** Minimum filtered change accepted as driver demand, in percentage points. */
@@ -51,7 +49,7 @@ void initI2C(void);
 void initSPI(void);
 
 /**
- * @brief Initialize sensor infrastructure, globals, PWM, and GPS.
+ * @brief Initialize sensor infrastructure, globals and PWM.
  */
 void initSensors(void);
 

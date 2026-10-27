@@ -159,6 +159,10 @@ void test_can_frames_encode_precise_coordinates_speed_and_utc(void) {
   TEST_ASSERT_EQUAL_UINT32(1793018096u, jh_load_be32(utc + 1));
   TEST_ASSERT_EQUAL_HEX8(1u, utc[5]);
   TEST_ASSERT_EQUAL_HEX8(0u, utc[6] | utc[7]);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(nullptr, lat, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, nullptr, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, lat, nullptr, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, lat, lon, nullptr));
   gps.available = gps.utcValid = false;
   TEST_ASSERT_EQUAL_INT(HAL_OK, clocksGpsEncode(&gps, lat, lon, utc));
   const uint8_t zero[8] = {};
@@ -180,6 +184,10 @@ void test_speed_threshold_and_wire_limits(void) {
   TEST_ASSERT_EQUAL_UINT16(0u, clocksGpsSpeedX10(&gps));
   TEST_ASSERT_EQUAL_INT32(0, clocksGpsMicrodegrees(NAN));
   TEST_ASSERT_EQUAL_INT32(0, clocksGpsMicrodegrees(INFINITY));
+  TEST_ASSERT_EQUAL_INT32(180000000, clocksGpsMicrodegrees(180.0));
+  TEST_ASSERT_EQUAL_INT32(-180000000, clocksGpsMicrodegrees(-180.0));
+  TEST_ASSERT_EQUAL_INT32(0, clocksGpsMicrodegrees(180.000001));
+  TEST_ASSERT_EQUAL_INT32(0, clocksGpsMicrodegrees(-200.0));
 }
 
 void test_legacy_year_does_not_wrap_or_change_utc(void) {

@@ -32,10 +32,6 @@ JB_STATIC_ASSERT(GPS_MIN_SPEED_KMH == 5u,
                  "GPS speed cutoff must match the 5 km/h wire format");
 JB_STATIC_ASSERT(CAN_GPS_UPDATE_INTERVAL == 1000u,
                  "CAN_GPS_UPDATE_INTERVAL must match the 1 s UTC cadence");
-// ECU owns 0x12D/0x12E until migration stage 6. Enable only on an isolated bus.
-#ifndef CLOCKS_PUBLISH_LEGACY_GPS
-#define CLOCKS_PUBLISH_LEGACY_GPS 0
-#endif
 
 // delay time right after start, before first serious alerts will show up (in
 // seconds)
@@ -191,10 +187,6 @@ JB_STATIC_ASSERT(THERMOCOUPLE_MAX_AGE_MS >= 2 * THERMOCOUPLE_READ_INTERVAL &&
 
 // max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9
-
-// in miliseconds
-#define GPS_UPDATE 4 * 1000
-#define GPS_MIN_KMPH_SPEED 5.0
 
 // min-max value for indicator
 #define VOLTS_MIN_VAL 11.6

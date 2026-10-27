@@ -130,10 +130,10 @@ To polecenie nie wykonuje kopiowania UF2 i ponownego połączenia z sekwencji GU
 ## Odczyt GPS
 
 ```bash
-./build/serial-configurator-cli get-gps --module ECU
+./build/serial-configurator-cli get-gps --module Clocks
 ```
 
-ECU raportuje dostępność, szerokość i długość geograficzną, prędkość oraz
+Clocks raportuje dostępność, szerokość i długość geograficzną, prędkość oraz
 czas UTC przez `SC_GET_GPS`. Karta GPS View odpytuje co 4 s. Z libshumate
 pokazuje znacznik OpenStreetMap i centrowanie; bez niego informację zastępczą.
 

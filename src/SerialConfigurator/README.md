@@ -130,10 +130,10 @@ This command does not perform the GUI's UF2 copy and reconnection sequence.
 ## Read GPS
 
 ```bash
-./build/serial-configurator-cli get-gps --module ECU
+./build/serial-configurator-cli get-gps --module Clocks
 ```
 
-ECU reports availability, latitude, longitude, speed and UTC epoch through
+Clocks reports availability, latitude, longitude, speed and UTC epoch through
 `SC_GET_GPS`. The GUI GPS View polls every 4 seconds. With libshumate it shows
 an OpenStreetMap marker and recenter control; otherwise it shows a placeholder.
 

@@ -3,8 +3,7 @@
   "schemaVersion": 1,
   "bindings": [
     "../common/vp37/fiesta-vp37-power-stage.json",
-    "bindings/fiesta-pcf8574a-fast.json",
-    "../common/bindings/fiesta-soft-serial-gps.json"
+    "bindings/fiesta-pcf8574a-fast.json"
   ],
   "nodes": {
     "canMain": { "compatible": "microchip,mcp2515" },
@@ -35,8 +34,7 @@
     "heatedWindowButton": {
       "compatible": "jaszczurhal,gpio-input",
       "properties": { "activeLow": true, "pull": "up" }
-    },
-    "gps": { "compatible": "fiesta,soft-serial-gps" }
+    }
   },
   "assemblies": {
     "rp2350-plus": {
@@ -108,8 +106,7 @@
         "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
         "hall": { "present": true, "pins": { "in": 7 } },
         "dpfLamp": { "present": true, "pins": { "out": 8 } },
-        "heatedWindowButton": { "present": true, "pins": { "in": 20 } },
-        "gps": { "present": true, "pins": { "rx": 22, "tx": 21 } }
+        "heatedWindowButton": { "present": true, "pins": { "in": 20 } }
       }
     },
     "rp2040-plus": {
@@ -181,8 +178,7 @@
         "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
         "hall": { "present": true, "pins": { "in": 7 } },
         "dpfLamp": { "present": true, "pins": { "out": 8 } },
-        "heatedWindowButton": { "present": true, "pins": { "in": 20 } },
-        "gps": { "present": true, "pins": { "rx": 22, "tx": 21 } }
+        "heatedWindowButton": { "present": true, "pins": { "in": 20 } }
       }
     }
   }

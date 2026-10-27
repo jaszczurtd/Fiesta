@@ -340,7 +340,7 @@ void test_pcf8574_read_invalid_pin_returns_false(void) {
 // ── readHighValues field wiring ─────────────────────────────────────────────
 //
 // readHighValues() is the core polling step on the sensor timer. It must
-// refresh F_RPM, F_PRESSURE, F_GPS_CAR_SPEED and
+// refresh F_RPM, F_PRESSURE and
 // F_CALCULATED_ENGINE_LOAD on every tick, and must NOT touch fields owned by
 // readMediumValues() (F_COOLANT_TEMP, F_OIL_TEMP, F_INTAKE_TEMP, F_FUEL,
 // F_VOLTS). These tests guard the explicit setGlobalValue() wiring against

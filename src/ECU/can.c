@@ -1,8 +1,7 @@
 #include "can.h"
 
 #include "dtcManager.h"
-#include "gps.h"
-#include <math.h>
+#include "rtcTime.h"
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
 
@@ -85,12 +84,6 @@ static uint8_t canTxDetailForId(uint32_t id) {
   switch (id) {
   case CAN_ID_RPM:
     detail = DTC_DETAIL_CAN_TX_RPM;
-    break;
-  case CAN_ID_GPS_EXT_LAT:
-    detail = DTC_DETAIL_CAN_TX_GPS_LAT;
-    break;
-  case CAN_ID_GPS_EXT_LON_TIME:
-    detail = DTC_DETAIL_CAN_TX_GPS_LON_TIME;
     break;
   case CAN_ID_ECU_UPDATE_01:
     detail = DTC_DETAIL_CAN_TX_ECU_UPDATE_01;
@@ -189,92 +182,6 @@ hal_status_t canInit(int retries) {
   return st;
 }
 
-uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM) {
-  return fiesta_can_pack_gps_datetime(dateYYMMDD, timeHHMM);
-}
-
-/**
- * @brief Convert a floating GPS coordinate to clamped microdegrees.
- * @param coord Coordinate value in decimal degrees.
- * @param minVal Minimum allowed microdegree value.
- * @param maxVal Maximum allowed microdegree value.
- * @return Coordinate converted to microdegrees and clamped to range.
- */
-static int32_t gpsCoordToMicroDeg(float coord, int32_t minVal, int32_t maxVal) {
-  int32_t scaled = (int32_t)roundf(coord * 1000000.0f);
-  if (scaled < minVal) {
-    return minVal;
-  }
-  if (scaled > maxVal) {
-    return maxVal;
-  }
-  return scaled;
-}
-
-hal_status_t CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf,
-                                  int outLen) {
-  if (outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
-    return HAL_EINVAL;
-  }
-
-  int32_t latMicro =
-      gpsCoordToMicroDeg(getGlobalValue(F_LATITUDE), -90000000, 90000000);
-  uint32_t latRaw = (uint32_t)latMicro;
-
-  memset(outBuf, 0, (size_t)outLen);
-  outBuf[CAN_FRAME_NUMBER] = frameNo;
-  outBuf[CAN_FRAME_GPS_EXT_LAT_B3] = (uint8_t)((latRaw >> 24) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LAT_B2] = (uint8_t)((latRaw >> 16) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LAT_B1] = (uint8_t)((latRaw >> 8) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LAT_B0] = (uint8_t)(latRaw & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_STATUS] =
-      (uint8_t)getGlobalValue(F_GPS_IS_AVAILABLE);
-  return HAL_OK;
-}
-
-hal_status_t CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf,
-                                      int outLen) {
-  if (outBuf == NULL || outLen < CAN_FRAME_MAX_LENGTH) {
-    return HAL_EINVAL;
-  }
-
-  int32_t lonMicro =
-      gpsCoordToMicroDeg(getGlobalValue(F_LONGITUDE), -180000000, 180000000);
-  uint32_t lonRaw = (uint32_t)lonMicro;
-  uint32_t packedDt = CAN_packGpsDateTime((uint32_t)getGlobalValue(F_GPS_DATE),
-                                          (uint32_t)getGlobalValue(F_GPS_TIME));
-
-  memset(outBuf, 0, (size_t)outLen);
-  outBuf[CAN_FRAME_NUMBER] = frameNo;
-  outBuf[CAN_FRAME_GPS_EXT_LON_B3] = (uint8_t)((lonRaw >> 24) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LON_B2] = (uint8_t)((lonRaw >> 16) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LON_B1] = (uint8_t)((lonRaw >> 8) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_LON_B0] = (uint8_t)(lonRaw & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_DT_HI] = (uint8_t)((packedDt >> 16) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_DT_MD] = (uint8_t)((packedDt >> 8) & 0xFFu);
-  outBuf[CAN_FRAME_GPS_EXT_DT_LO] = (uint8_t)(packedDt & 0xFFu);
-  return HAL_OK;
-}
-
-void CAN_sendGpsExtended(void) {
-  if (!s_canState.isInitialized) {
-    return;
-  }
-
-  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  uint8_t lonTimeBuf[CAN_FRAME_MAX_LENGTH] = {0};
-
-  /* A failed send is counted by canSend() for the bus fault check. */
-  if (CAN_buildGpsLatFrame(s_canState.frameNumberVal++, latBuf,
-                           (int)sizeof(latBuf)) == HAL_OK) {
-    (void)canSend(CAN_ID_GPS_EXT_LAT, CAN_FRAME_MAX_LENGTH, latBuf);
-  }
-  if (CAN_buildGpsLonTimeFrame(s_canState.frameNumberVal++, lonTimeBuf,
-                               (int)sizeof(lonTimeBuf)) == HAL_OK) {
-    (void)canSend(CAN_ID_GPS_EXT_LON_TIME, CAN_FRAME_MAX_LENGTH, lonTimeBuf);
-  }
-}
-
 void CAN_sendAll(void) {
   CAN_updaterecipients_01();
   hal_delay_ms(CORE_OPERATION_DELAY);
@@ -315,8 +222,9 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
 
-    buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = isGPSAvailable();
-    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = getGlobalValue(F_GPS_CAR_SPEED);
+    // GPS moved to Clocks; the withdrawn fields stay zero.
+    buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = 0u;
+    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = 0u;
 
     (void)canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
 
@@ -501,6 +409,21 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     setGlobalValue(F_ABS_CAR_SPEED, buf[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
   } break;
 
+  case CAN_ID_RTC_UPDATE: {
+    if (len <= CAN_FRAME_RTC_UPDATE_INTEGRITY) {
+      derr("Received truncated RTC frame with len: %d", len);
+      return;
+    }
+    /* Without integrity the clock has no trusted UTC: forget the last time
+     * instead of letting it age. */
+    uint32_t utc = 0u;
+    if (buf[CAN_FRAME_RTC_UPDATE_INTEGRITY] == 1u) {
+      (void)fiesta_can_get_utc_datetime(&buf[CAN_FRAME_RTC_UPDATE_DT_HI],
+                                        buf[CAN_FRAME_RTC_UPDATE_SECOND], &utc);
+    }
+    rtcTimeStore(utc);
+  } break;
+
   default:
     deb("received unknown CAN frame:%03x len:%d\n", canID, len);
     break;
@@ -562,6 +485,7 @@ static void canReportBusFault(void) {
 void canCheckConnection(void) {
   s_canState.lastThrottleSent = C_INIT_VAL;
   canReportBusFault();
+  rtcTimeExpire();
 
   s_canState.egtConnectedFlag =
       (s_canState.egtMessagesCount != s_canState.lastEgtMessagesCount);

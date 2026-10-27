@@ -23,7 +23,6 @@ sterowania znajdują się w dokumentacji modułów.
    │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
    │           │ ─── I²C ───► PCF8574         przekaźniki (0x38)
-   │           │ ◄─ PIO UART  odbiornik GPS
    │           │ ─── CAN1 ──► gniazdo OBD-II
    └─────┬─────┘ ◄─ ADC, GPIO, PWM ─► czujniki i elementy wykonawcze
          │
@@ -130,8 +129,9 @@ z GP27, a RX z GP28, przy 9600 baud. Clocks uruchamia się normalnie bez
 odbiornika i fixa.
 
 Współrzędne pozostają w `double` do przeliczenia na mikrostopnie dla
-`SC_GET_GPS` i CAN. Lokalny GPS zastępuje dawne pola GPS z ramki ECU `0x129`
-i pozostaje dostępny po utracie komunikacji z ECU. Odczyt działa w każdym
+`SC_GET_GPS` i CAN. Lokalny GPS pozostaje dostępny po utracie komunikacji
+z ECU. ECU wysyła dawne pola GPS ramki `0x129` jako zera, a Clocks ich
+nie odczytuje. Odczyt działa w każdym
 obiegu, a nowe dane i zmiany ważności wyzwalają publikację migawki.
 Odświeżanie ekranu korzysta z przeliczonej wcześniej prędkości.
 
@@ -139,10 +139,9 @@ Ostatnia pozycja wygasa po 4 s. UTC pochodzi z jednego zdania RMC z fixem
 i wygasa po 2 s. Clocks zachowuje UTC dla CAN i SC oraz nadaje go z sekundami
 i ważnością w `0x131` co sekundę.
 
-Przełącznik kompilacji `CLOCKS_PUBLISH_LEGACY_GPS` ma domyślną wartość 0,
-więc Clocks nie nadaje `0x12D`/`0x12E`. Wartość 1 służy do prób na wydzielonej
-magistrali do czasu zatrzymania tych ramek w ECU. Przygotowane ramki zawierają
-UTC. Oba moduły odwołują się do bindingu GPS w `src/common/bindings/`.
+Co sekundę Clocks wysyła też pozycję z prędkością GPS (`0x12D`) oraz pozycję
+z datą i czasem UTC z dokładnością do minuty (`0x12E`). Jego device tree
+odwołuje się do bindingu GPS w `src/common/bindings/`.
 
 Kontrolka ładowania korzysta z obrotów silnika i napięcia akumulatora z ECU.
 Świeci, gdy silnik stoi albo te dane są nieaktualne, i gaśnie, gdy po
@@ -164,7 +163,7 @@ na TFT ma własny zakres.
 | [gps.cpp](src/Clocks/gps.cpp) | Odczytuje lokalny GPS, kontroluje świeżość UTC i koduje ramki GPS. |
 | [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
 | [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
-| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
+| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT, pozycji GPS oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
 
 Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze
 `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` z
@@ -340,11 +339,12 @@ src/<Module>/
 | CAN0 „main" | ECU, Clocks, Fiesta_clock | Komunikacja między modułami. |
 | CAN1 „OBD-2" | ECU, gniazdo OBD-II | Zewnętrzna diagnostyka. |
 
-ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie, paliwo,
-pozycję i czas GPS. Odbiera olej, prędkość i EGT z Clocks oraz stan DPF
-z `0x124`. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
+ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie i paliwo.
+Odbiera olej, prędkość i EGT z Clocks, stan DPF z `0x124` oraz czas RTC
+z Fiesta_clock (`0x130`), którym oznacza nowe DTC. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
 Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
-(`0x12A`), obie temperatury spalin (`0x12F`) oraz UTC z GPS (`0x131`).
+(`0x12A`), obie temperatury spalin (`0x12F`), pozycję i czas GPS (`0x12D`,
+`0x12E`) oraz UTC z GPS (`0x131`).
 Fiesta_clock nadaje czas UTC (`0x130`) i odbiera tylko UTC z GPS w Clocks. Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
 ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
 gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
@@ -373,7 +373,7 @@ wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
 | ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
 | Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), kontrolki oleju i ładowania, TFT, buzzer. |
 | Diagnostyka | OBD-II przez CAN1. |
-| Pomocnicze | Pozycja i UTC z GPS w Clocks; dawne ramki GPS z ECU; czas RTC w UTC z Fiesta_clock. |
+| Pomocnicze | Pozycja i UTC z GPS w Clocks; czas RTC w UTC z Fiesta_clock. |
 
 ## Zapis danych
 

@@ -4,7 +4,7 @@
 /*
  * Phase 8.7: fourth top-level notebook page - "Map".
  *
- * Polls the ECU's SC_GET_GPS endpoint on a 2-second main-loop timer
+ * Polls the SC_GET_GPS endpoint of Clocks on a 4-second main-loop timer
  * (well under the SC framing budget for a single command) and renders
  * the latest position on a libshumate map widget. Falls back to a
  * static placeholder when libshumate is not compiled in - the tab

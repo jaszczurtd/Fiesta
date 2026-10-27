@@ -27,7 +27,7 @@ successful run does not establish the result for the current checkout.
 
 ECU sources compile as C with Pico SDK, while the final link includes C++ HAL
 code. Control instances are grouped in `ecu_context_t`; CAN, sensors, DTC,
-GPS, OBD and session code keep file-local state. Public ECU headers support
+RTC time, OBD and session code keep file-local state. Public ECU headers support
 C linkage, and PID and soft timers have HAL C interfaces. Host tests and ECU
 firmware use `-Werror`.
 

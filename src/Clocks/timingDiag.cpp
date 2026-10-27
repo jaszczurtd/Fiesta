@@ -157,8 +157,6 @@ static bool isEcuFrame(uint32_t canID) {
   case CAN_ID_ECU_UPDATE_02:
   case CAN_ID_ECU_UPDATE_03:
   case CAN_ID_TURBO_PRESSURE:
-  case CAN_ID_GPS_EXT_LAT:
-  case CAN_ID_GPS_EXT_LON_TIME:
     return true;
   default:
     return false;

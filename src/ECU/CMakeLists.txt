@@ -57,7 +57,6 @@ set(HAL_UTIL_SOURCES
     ${HAL_COMMAND_SOURCES}
     ${HAL_SRC}/hal/i2c/hal_i2c.cpp
     ${HAL_SRC}/hal/spi/hal_spi.cpp
-    ${HAL_SRC}/hal/gps/hal_gps.cpp
     ${HAL_SRC}/hal/security/hal_sc_auth.cpp
     ${HAL_SRC}/hal/security/hal_crc.cpp
     ${HAL_SRC}/hal/serial/hal_serial.cpp
@@ -66,9 +65,6 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/time/hal_time.cpp
     ${HAL_SRC}/hal/time/hal_time_ntp.cpp
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
-    ${HAL_SRC}/hal/gps/gps_nmea_parser.cpp
-    ${HAL_SRC}/hal/gps/hal_gps_nmea_utils.cpp
-    ${HAL_SRC}/hal/gps/hal_gps_core.cpp
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crypto.cpp
@@ -114,7 +110,7 @@ set(ECU_SOURCES
     ${ECU_SRC}/ecuPersistence.c
     ${ECU_SRC}/engineMaps.c
     ${ECU_SRC}/config.c
-    ${ECU_SRC}/gps.c
+    ${ECU_SRC}/rtcTime.c
     ${ECU_SRC}/can.c
     ${ECU_SRC}/turbo.c
     # The VP37 module: the list in src/common/vp37/vp37_sources.txt.

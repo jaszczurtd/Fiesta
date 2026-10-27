@@ -43,7 +43,7 @@ through `SC_JASZCZURHAL_DIR`.
 | Group | Commands | Needs authentication |
 |---|---|---|
 | Session | `HELLO`, `SC_BYE` | no |
-| Reads | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_GET_GPS` (ECU only) | no |
+| Reads | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_GET_GPS` (Clocks only) | no |
 | Authentication | `SC_AUTH_BEGIN`, `SC_AUTH_PROVE` | no |
 | Parameter writes | `SC_SET_PARAM`, `SC_COMMIT_PARAMS`, `SC_REVERT_PARAMS` | yes |
 | Flashing | `SC_REBOOT_BOOTLOADER` | yes |

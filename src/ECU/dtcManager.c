@@ -2,7 +2,8 @@
 
 #include "../common/fiesta_unit_testing.h"
 #include "ecuPersistence.h"
-#include "gps.h"
+#include "hardwareConfig.h"
+#include "rtcTime.h"
 #include <utils/tools_common_defs.h>
 
 #include <hal/system/hal_system.h>
@@ -46,7 +47,7 @@ typedef struct {
   bool active;
   bool stored;
   bool permanent;
-  uint32_t firstOccurrence; // unix epoch from GPS, 0 = unknown
+  uint32_t firstOccurrence; // UTC from Fiesta_clock (0x130), 0 = unknown
   uint8_t detail;           // ISO 14229-1 failure type byte, 0 = none
 } dtc_entry_t;
 
@@ -295,7 +296,7 @@ static hal_status_t saveDtcSnapshotToKv(uint8_t idx, uint8_t flags,
       .detail = detail,
       .firstOccurrence = firstOccurrence,
   };
-  return ecuPersistenceExecute(saveDtcSnapshotOperation, &snapshot, NULL);
+  return ecuPersistenceExecute(saveDtcSnapshotOperation, &snapshot);
 }
 
 /**
@@ -306,7 +307,7 @@ static hal_status_t saveAllToKv(void) {
   dtc_full_snapshot_context_t context = {
       .includeSchema = false,
   };
-  return ecuPersistenceExecute(saveAllToKvOperation, &context, NULL);
+  return ecuPersistenceExecute(saveAllToKvOperation, &context);
 }
 
 static bool saveSchemaSnapshotToKv(void) {
@@ -314,7 +315,7 @@ static bool saveSchemaSnapshotToKv(void) {
       .includeSchema = true,
   };
   return hal_status_to_bool(
-      ecuPersistenceExecute(saveAllToKvOperation, &context, NULL));
+      ecuPersistenceExecute(saveAllToKvOperation, &context));
 }
 
 /**
@@ -543,7 +544,7 @@ static hal_status_t initializeKvStorage(uint16_t *outSpan) {
     return HAL_EINVAL;
   }
   const hal_status_t status =
-      ecuPersistenceExecute(initializeKvOperation, NULL, NULL);
+      ecuPersistenceExecute(initializeKvOperation, NULL);
   *outSpan = dtcKvEffectiveSpan();
   return status;
 }
@@ -621,8 +622,7 @@ static hal_status_t clearDtcKeysOperation(const void *user) {
 }
 
 static bool clearDtcKeys(void) {
-  return hal_status_to_bool(
-      ecuPersistenceExecute(clearDtcKeysOperation, NULL, NULL));
+  return hal_status_to_bool(ecuPersistenceExecute(clearDtcKeysOperation, NULL));
 }
 
 void dtcManagerLogStorageStats(void) {
@@ -762,9 +762,9 @@ static void setActiveImpl(uint16_t code, bool active, bool updateDetail,
     if (!s_dtcState.dtcs[idx].stored) {
       s_dtcState.dtcs[idx].stored = true;
       changed = true;
-      // Record GPS timestamp on first occurrence
+      // Record the RTC time on first occurrence
       if (s_dtcState.dtcs[idx].firstOccurrence == 0) {
-        s_dtcState.dtcs[idx].firstOccurrence = gpsGetEpoch();
+        s_dtcState.dtcs[idx].firstOccurrence = rtcTimeGetUtc();
       }
     }
     if (!s_dtcState.dtcs[idx].permanent) {
@@ -1018,7 +1018,6 @@ const char *dtcManagerGetName(uint16_t code) {
        "U0100 Lost communication with DPF module (project mapping)"},
       {DTC_EGT_COMM_LOST, "U1902 Lost communication with EGT module"},
       {DTC_CAN0_INIT_FAIL, "U1903 CAN0 bus init failure"},
-      {DTC_GPS_SIGNAL_LOST, "U1904 GPS data unavailable/stale"},
       {DTC_ISOTP_FC_TIMEOUT, "U1906 ISO-TP flow-control timeout"},
       {DTC_ISOTP_FC_ABORT, "U1907 ISO-TP flow-control abort from tester"},
       {DTC_ENGINE_OVERSPEED, "P0219 Engine overspeed condition"},

@@ -593,7 +593,7 @@ void testsWorkersKvStart(void) {
   const uint32_t next = before + 1U;
   const uint32_t writeStartUs = hal_micros();
   const hal_status_t writeStatus =
-      ecuPersistenceExecute(kvCounterOperation, &next, NULL);
+      ecuPersistenceExecute(kvCounterOperation, &next);
   const uint32_t writeUs = hal_micros() - writeStartUs;
   uint32_t after = 0U;
   const hal_status_t backStatus =

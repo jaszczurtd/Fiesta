@@ -94,16 +94,37 @@ class ModuleHardwareTests(unittest.TestCase):
             with self.subTest(source=str(source.relative_to(REPO_ROOT))):
                 self.assertEqual([], JH_HW_ALIAS.findall(source.read_text(encoding="utf-8")))
 
-    def test_gps_uses_one_shared_software_serial_binding(self) -> None:
+    def test_gps_lives_in_clocks_with_the_one_shared_binding(self) -> None:
         shared = "../common/bindings/fiesta-soft-serial-gps.json"
-        for module in ("ECU", "Clocks"):
-            tree = load_json(REPO_ROOT / "src" / module / "device_tree.json")
-            self.assertIn(shared, tree["bindings"])
-            self.assertEqual("fiesta,soft-serial-gps", tree["nodes"]["gps"]["compatible"])
-            self.assertTrue((REPO_ROOT / "src" / module / shared).is_file())
         clocks = load_json(REPO_ROOT / "src" / "Clocks" / "device_tree.json")
+        self.assertIn(shared, clocks["bindings"])
+        self.assertEqual("fiesta,soft-serial-gps", clocks["nodes"]["gps"]["compatible"])
+        self.assertTrue((REPO_ROOT / "src" / "Clocks" / shared).is_file())
         self.assertEqual({"rx": 27, "tx": 28},
                          clocks["assemblies"]["rp2040-zero"]["nodes"]["gps"]["pins"])
+
+        # The ECU dates its DTCs from the RTC frame and has no receiver.
+        ecu = load_json(REPO_ROOT / "src" / "ECU" / "device_tree.json")
+        self.assertNotIn(shared, ecu["bindings"])
+        self.assertNotIn("gps", ecu["nodes"])
+        for name, assembly in ecu["assemblies"].items():
+            with self.subTest(assembly=name):
+                self.assertNotIn("gps", assembly["nodes"])
+
+        # One binding file for the type, no copy next to a module.
+        defining = []
+        for path in (REPO_ROOT / "src").rglob("*.json"):
+            parts = path.relative_to(REPO_ROOT / "src").parts
+            if parts[0] == "JaszczurHAL" or any(
+                    part.startswith((".", "build")) for part in parts[:-1]):
+                continue
+            text = path.read_text(encoding="utf-8")
+            if '"compatible"' not in text:
+                continue  # e.g. VS Code files, which allow comments
+            data = json.loads(text)
+            if isinstance(data, dict) and data.get("compatible") == "fiesta,soft-serial-gps":
+                defining.append(path.relative_to(REPO_ROOT).as_posix())
+        self.assertEqual(["src/common/bindings/fiesta-soft-serial-gps.json"], defining)
 
     def test_vp37_power_stages_share_the_type_values(self) -> None:
         # ECU and bench wire their own pins; shunt and divider come from the

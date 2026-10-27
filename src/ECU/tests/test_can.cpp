@@ -1,6 +1,7 @@
 #include "can.h"
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "rtcTime.h"
 #include "sensors.h"
 #include "unity.h"
 
@@ -53,6 +54,7 @@ void setUp(void) {
   hal_mock_can_set_state(canTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
   hal_mock_set_millis(0u);
   canTestResetRpmPublisher();
+  rtcTimeResetForTest();
   for (int32_t i = 0; i < F_LAST; i++) {
     setGlobalValue(i, 0.0f);
   }
@@ -63,83 +65,87 @@ void tearDown(void) { hal_mock_i2c_set_busy(false); }
 void test_pack_gps_datetime_valid(void) {
   // 2026-04-03 14:27 -> yy=26 => offset=6
   // packed: [yearOff:4][month:4][day:5][hour:5][min:6]
-  uint32_t packed = CAN_packGpsDateTime(260403, 1427);
+  uint32_t packed = fiesta_can_pack_gps_datetime(260403, 1427);
   uint32_t expected = (6u << 20) | (4u << 16) | (3u << 11) | (14u << 6) | 27u;
   TEST_ASSERT_EQUAL_UINT32(expected, packed);
 }
 
 void test_pack_gps_datetime_invalid_returns_zero(void) {
-  TEST_ASSERT_EQUAL_UINT32(0u,
-                           CAN_packGpsDateTime(261303, 1427)); // invalid month
-  TEST_ASSERT_EQUAL_UINT32(0u,
-                           CAN_packGpsDateTime(260403, 2460)); // invalid time
+  TEST_ASSERT_EQUAL_UINT32(
+      0u, fiesta_can_pack_gps_datetime(261303, 1427)); // invalid month
+  TEST_ASSERT_EQUAL_UINT32(
+      0u, fiesta_can_pack_gps_datetime(260403, 2460)); // invalid time
 }
 
-/* Latitude in 1e-6 degrees, decoded independently from the frame bytes. */
-static int32_t gpsFrameLatitude(const uint8_t *latBuf) {
-  return (int32_t)(((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B3] << 24) |
-                   ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B2] << 16) |
-                   ((uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B1] << 8) |
-                   (uint32_t)latBuf[CAN_FRAME_GPS_EXT_LAT_B0]);
+/* 0x130 of Fiesta_clock: packed date and time to the minute, the seconds and
+ * the integrity byte. */
+static void inject_rtc_frame(const uint8_t *packed, uint8_t second,
+                             uint8_t integrity) {
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  frame[CAN_FRAME_RTC_UPDATE_DT_HI] = packed[0];
+  frame[CAN_FRAME_RTC_UPDATE_DT_MD] = packed[1];
+  frame[CAN_FRAME_RTC_UPDATE_DT_LO] = packed[2];
+  frame[CAN_FRAME_RTC_UPDATE_SECOND] = second;
+  frame[CAN_FRAME_RTC_UPDATE_INTEGRITY] = integrity;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_RTC_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
 }
 
-/* Longitude in 1e-6 degrees, decoded independently from the frame bytes. */
-static int32_t gpsFrameLongitude(const uint8_t *lonBuf) {
-  return (int32_t)(((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B3] << 24) |
-                   ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B2] << 16) |
-                   ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B1] << 8) |
-                   (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_LON_B0]);
+// 2026-10-27 09:41 UTC, written out by hand from the field layout.
+static const uint8_t kRtcPacked[3] = {0x6Au, 0xDAu, 0x69u};
+static const uint32_t kRtcUtc = 1793094067u; // the same minute, second 7
+
+void test_rtc_frame_gives_the_utc_time(void) {
+  inject_rtc_frame(kRtcPacked, 7u, 1u);
+  TEST_ASSERT_EQUAL_UINT32(kRtcUtc, rtcTimeGetUtc());
+
+  // The encoder of Fiesta_clock and this decoder agree at the year limits.
+  const uint32_t limits[] = {1577836800u,  // 2020-01-01 00:00:00
+                             2082758399u}; // 2035-12-31 23:59:59
+  for (size_t i = 0; i < COUNTOF(limits); i++) {
+    uint8_t packed[3] = {0};
+    TEST_ASSERT_TRUE(fiesta_can_put_utc_datetime(packed, limits[i]));
+    inject_rtc_frame(packed, (uint8_t)(limits[i] % 60u), 1u);
+    TEST_ASSERT_EQUAL_UINT32(limits[i], rtcTimeGetUtc());
+  }
 }
 
-void test_build_gps_lat_lon_frames_encode_high_precision_values(void) {
-  setGlobalValue(F_LATITUDE, 52.2297f);
-  setGlobalValue(F_LONGITUDE, 21.0122f);
-  setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
-  setGlobalValue(F_GPS_DATE, 260403.0f); // YYMMDD
-  setGlobalValue(F_GPS_TIME, 1427.0f);   // HHMM
+void test_rtc_frame_without_integrity_or_with_a_bad_date_clears_the_time(void) {
+  inject_rtc_frame(kRtcPacked, 7u, 1u);
+  inject_rtc_frame(kRtcPacked, 7u, 0u);
+  TEST_ASSERT_EQUAL_UINT32(0u, rtcTimeGetUtc());
 
-  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, CAN_buildGpsLatFrame(0x33, latBuf, (int)sizeof(latBuf)));
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, CAN_buildGpsLonTimeFrame(0x34, lonBuf, (int)sizeof(lonBuf)));
-
-  TEST_ASSERT_EQUAL_UINT8(0x33, latBuf[CAN_FRAME_NUMBER]);
-  TEST_ASSERT_EQUAL_UINT8(0x34, lonBuf[CAN_FRAME_NUMBER]);
-  TEST_ASSERT_EQUAL_UINT8(1, latBuf[CAN_FRAME_GPS_EXT_STATUS]);
-
-  const int32_t lat = gpsFrameLatitude(latBuf);
-  const int32_t lon = gpsFrameLongitude(lonBuf);
-
-  TEST_ASSERT_EQUAL_INT(52229700, lat); // 52.229700 * 1e6
-  TEST_ASSERT_EQUAL_INT(21012200, lon); // 21.012200 * 1e6
-
-  uint32_t packedDt = ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_HI] << 16) |
-                      ((uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_MD] << 8) |
-                      (uint32_t)lonBuf[CAN_FRAME_GPS_EXT_DT_LO];
-  TEST_ASSERT_EQUAL_UINT32(CAN_packGpsDateTime(260403, 1427), packedDt);
+  const uint8_t zero[3] = {0u, 0u, 0u};
+  const uint8_t month13[3] = {0x6Du, 0xDAu, 0x69u};
+  const uint8_t feb30[3] = {0x62u, 0xF2u, 0x69u};
+  const uint8_t *bad[] = {zero, month13, feb30};
+  for (size_t i = 0; i < COUNTOF(bad); i++) {
+    inject_rtc_frame(kRtcPacked, 7u, 1u);
+    inject_rtc_frame(bad[i], 7u, 1u);
+    TEST_ASSERT_EQUAL_UINT32(0u, rtcTimeGetUtc());
+  }
+  inject_rtc_frame(kRtcPacked, 7u, 1u);
+  inject_rtc_frame(kRtcPacked, 60u, 1u);
+  TEST_ASSERT_EQUAL_UINT32(0u, rtcTimeGetUtc());
 }
 
-void test_build_gps_lat_lon_frames_clamp_coordinates(void) {
-  setGlobalValue(F_LATITUDE, 120.0f);
-  setGlobalValue(F_LONGITUDE, -250.0f);
-  setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
-  setGlobalValue(F_GPS_DATE, 260403.0f);
-  setGlobalValue(F_GPS_TIME, 1427.0f);
+void test_truncated_rtc_frame_is_ignored(void) {
+  inject_rtc_frame(kRtcPacked, 7u, 1u);
+  uint8_t shortFrame[CAN_FRAME_RTC_UPDATE_INTEGRITY] = {0};
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_RTC_UPDATE,
+                      (uint8_t)sizeof(shortFrame), shortFrame);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT32(kRtcUtc, rtcTimeGetUtc());
+}
 
-  uint8_t latBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  uint8_t lonBuf[CAN_FRAME_MAX_LENGTH] = {0};
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, CAN_buildGpsLatFrame(0x01, latBuf, (int)sizeof(latBuf)));
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, CAN_buildGpsLonTimeFrame(0x02, lonBuf, (int)sizeof(lonBuf)));
-
-  const int32_t lat = gpsFrameLatitude(latBuf);
-  const int32_t lon = gpsFrameLongitude(lonBuf);
-
-  TEST_ASSERT_EQUAL_INT(90000000, lat);
-  TEST_ASSERT_EQUAL_INT(-180000000, lon);
+void test_connection_check_drops_a_silent_rtc(void) {
+  inject_rtc_frame(kRtcPacked, 7u, 1u);
+  hal_mock_advance_millis(RTC_TIME_MAX_AGE_MS);
+  canCheckConnection();
+  // Even when the tick counter comes back to the reception time.
+  hal_mock_set_millis(0u);
+  TEST_ASSERT_EQUAL_UINT32(0u, rtcTimeGetUtc());
 }
 
 void test_truncated_egt_frame_is_ignored(void) {
@@ -403,19 +409,52 @@ void test_can_init_reports_why_can0_stayed_off(void) {
   TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
 }
 
-void test_gps_frame_builders_refuse_a_short_buffer(void) {
-  uint8_t shortBuf[CAN_FRAME_MAX_LENGTH - 1] = {0};
-  TEST_ASSERT_EQUAL_INT(
-      HAL_EINVAL, CAN_buildGpsLatFrame(0x01, shortBuf, (int)sizeof(shortBuf)));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, CAN_buildGpsLonTimeFrame(0x02, NULL, 8));
+/* GPS moved to Clocks: 0x129 keeps intake and fuel with the withdrawn GPS
+ * bytes zero, also after 0x123 filled the same buffer positions, and the
+ * periodic set sends neither 0x12D nor 0x12E. */
+void test_ecu_frames_carry_no_gps(void) {
+  setGlobalValue(F_COOLANT_TEMP, 90.0f);
+  setGlobalValue(F_OIL_TEMP, 100.0f);
+  setGlobalValue(F_INTAKE_TEMP, 25.0f);
+  setGlobalValue(F_FUEL, 300.0f);
+  setGlobalValue(F_GPS_IS_AVAILABLE, 1.0f);
+  setGlobalValue(F_GPS_CAR_SPEED, 77.0f);
+
+  CAN_sendAll();
+
+  uint32_t id = 0;
+  uint8_t len = 0;
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  bool sawUpdate02 = false;
+  while (pop_can_tx(&id, &len, data)) {
+    TEST_ASSERT_NOT_EQUAL_UINT32(CAN_ID_GPS_EXT_LAT, id);
+    TEST_ASSERT_NOT_EQUAL_UINT32(CAN_ID_GPS_EXT_LON_TIME, id);
+    if (id == CAN_ID_ECU_UPDATE_01) {
+      TEST_ASSERT_NOT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_COOLANT]);
+      TEST_ASSERT_NOT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_OIL]);
+    }
+    if (id == CAN_ID_ECU_UPDATE_02) {
+      sawUpdate02 = true;
+      TEST_ASSERT_EQUAL_UINT8(hal_can_encode_temp_i8(25.0f),
+                              data[CAN_FRAME_ECU_UPDATE_INTAKE]);
+      TEST_ASSERT_EQUAL_UINT16(
+          300u, jh_u16_from_bytes(data[CAN_FRAME_ECU_UPDATE_FUEL_HI],
+                                  data[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
+      TEST_ASSERT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
+      TEST_ASSERT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
+    }
+  }
+  TEST_ASSERT_TRUE(sawUpdate02);
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pack_gps_datetime_valid);
   RUN_TEST(test_pack_gps_datetime_invalid_returns_zero);
-  RUN_TEST(test_build_gps_lat_lon_frames_encode_high_precision_values);
-  RUN_TEST(test_build_gps_lat_lon_frames_clamp_coordinates);
+  RUN_TEST(test_rtc_frame_gives_the_utc_time);
+  RUN_TEST(test_rtc_frame_without_integrity_or_with_a_bad_date_clears_the_time);
+  RUN_TEST(test_truncated_rtc_frame_is_ignored);
+  RUN_TEST(test_connection_check_drops_a_silent_rtc);
   RUN_TEST(test_truncated_egt_frame_is_ignored);
   RUN_TEST(test_truncated_oil_and_speed_frame_is_ignored);
   RUN_TEST(test_egt_frame_decodes_negative_temperatures_and_validity);
@@ -431,6 +470,6 @@ int main(void) {
   RUN_TEST(test_can_update_01_contains_adc_supply_voltage_without_vp37);
 #endif
   RUN_TEST(test_can_init_reports_why_can0_stayed_off);
-  RUN_TEST(test_gps_frame_builders_refuse_a_short_buffer);
+  RUN_TEST(test_ecu_frames_carry_no_gps);
   return UNITY_END();
 }

@@ -426,10 +426,12 @@ void test_broadcast_timers_pace_the_periodic_frames(void) {
   TEST_ASSERT_TRUE(canSetupBroadcastTimers());
   uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
   (void)lastSent(0u, payload);
-  uint32_t sent[4] = {0u, 0u, 0u, 0u}; // brightness, oil and speed, EGT, UTC
-  const uint32_t ids[4] = {CAN_ID_CLOCK_BRIGHTNESS,
-                           CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
-                           CAN_ID_EGT_UPDATE, CAN_ID_GPS_UTC_UPDATE};
+  // brightness, oil and speed, EGT, UTC, GPS position and speed, GPS time
+  uint32_t sent[6] = {0u, 0u, 0u, 0u, 0u, 0u};
+  const uint32_t ids[6] = {
+      CAN_ID_CLOCK_BRIGHTNESS, CAN_ID_OIL_AND_SPEED_MODULE_UPDATE,
+      CAN_ID_EGT_UPDATE,       CAN_ID_GPS_UTC_UPDATE,
+      CAN_ID_GPS_EXT_LAT,      CAN_ID_GPS_EXT_LON_TIME};
   const uint32_t durationMs = 10000u;
 
   for (uint32_t ms = 1u; ms <= durationMs; ms++) {
@@ -449,6 +451,8 @@ void test_broadcast_timers_pace_the_periodic_frames(void) {
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_UPDATE_RECIPIENTS, sent[1]);
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_EGT_UPDATE_INTERVAL, sent[2]);
   TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_GPS_UPDATE_INTERVAL, sent[3]);
+  TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_GPS_UPDATE_INTERVAL, sent[4]);
+  TEST_ASSERT_UINT32_WITHIN(1u, durationMs / CAN_GPS_UPDATE_INTERVAL, sent[5]);
 }
 
 void test_local_gps_survives_ecu_values_and_ecu_connection_loss(void) {
@@ -472,7 +476,7 @@ void test_local_gps_survives_ecu_values_and_ecu_connection_loss(void) {
   TEST_ASSERT_EQUAL_INT(42, getGPSSpeed());
 }
 
-void test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership(void) {
+void test_gps_broadcast_sends_utc_and_the_position_frames(void) {
   hal_mock_set_millis(13000u);
   clocks_local_snapshot_t local = {};
   local.gps.available = local.gps.utcValid = true;
@@ -483,7 +487,7 @@ void test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership(void) {
   updateGPSrecipients();
   uint32_t id;
   uint8_t len, payload[8];
-  unsigned utcFrames = 0u, legacyFrames = 0u;
+  unsigned utcFrames = 0u, positionFrames = 0u;
   while (hal_mock_can_get_sent(clocksTestGetCanHandle(), &id, &len, payload) ==
          HAL_OK) {
     if (id == CAN_ID_GPS_UTC_UPDATE) {
@@ -492,11 +496,11 @@ void test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership(void) {
       TEST_ASSERT_EQUAL_UINT32(1793018096u, jh_load_be32(payload + 1));
       TEST_ASSERT_EQUAL_UINT8(1u, payload[CAN_FRAME_GPS_UTC_STATUS]);
     } else if (id == CAN_ID_GPS_EXT_LAT || id == CAN_ID_GPS_EXT_LON_TIME) {
-      ++legacyFrames;
+      ++positionFrames;
     }
   }
   TEST_ASSERT_EQUAL_UINT(1u, utcFrames);
-  TEST_ASSERT_EQUAL_UINT(CLOCKS_PUBLISH_LEGACY_GPS ? 2u : 0u, legacyFrames);
+  TEST_ASSERT_EQUAL_UINT(2u, positionFrames);
   hal_mock_set_millis(13000u + GPS_UTC_MAX_AGE_MS + 1u);
   updateGPSrecipients();
   TEST_ASSERT_TRUE(lastSent(CAN_ID_GPS_UTC_UPDATE, payload));
@@ -541,7 +545,7 @@ int main(void) {
   RUN_TEST(test_egt_channel_without_measurement_is_zero_without_its_flag);
   RUN_TEST(test_broadcast_timers_pace_the_periodic_frames);
   RUN_TEST(test_local_gps_survives_ecu_values_and_ecu_connection_loss);
-  RUN_TEST(test_gps_broadcast_sends_utc_and_preserves_legacy_id_ownership);
+  RUN_TEST(test_gps_broadcast_sends_utc_and_the_position_frames);
   RUN_TEST(test_can_init_reports_why_the_bus_stayed_off);
   return UNITY_END();
 }

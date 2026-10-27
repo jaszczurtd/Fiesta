@@ -2,7 +2,6 @@
 #include "config.h"
 #include "../common/fiesta_unit_testing.h"
 #include "ecuPersistence.h"
-#include "gps.h"
 #include "tests.h"
 
 #include <hal/serial/hal_serial.h>
@@ -263,15 +262,11 @@ ecuParamsPersist(const ecu_params_values_t *values) {
       .blob = blob,
       .size = (uint16_t)sizeof(blob),
   };
-  hal_status_t resumeStatus = HAL_NONE;
   const hal_status_t persistStatus =
-      ecuPersistenceExecute(ecuParamsPersistBlob, &context, &resumeStatus);
+      ecuPersistenceExecute(ecuParamsPersistBlob, &context);
   if (persistStatus != HAL_OK) {
     hal_derr("ECU params persistence failed: %s",
              hal_status_to_string(persistStatus));
-  } else if (hal_status_is_error(resumeStatus)) {
-    hal_derr("ECU params committed; GPS resume queued: %s",
-             hal_status_to_string(resumeStatus));
   }
   return persistStatus;
 }
@@ -387,19 +382,6 @@ static bool configSessionWritesReady(void *user) {
   return !s_loadPending;
 }
 
-static void configSessionReadGps(void *user,
-                                 sc_command_gps_snapshot_t *outSnapshot) {
-  (void)user;
-  if (outSnapshot == NULL) {
-    return;
-  }
-  outSnapshot->available = isGPSAvailable();
-  outSnapshot->lat_e6 = outSnapshot->available ? gpsGetLatE6() : 0;
-  outSnapshot->lon_e6 = outSnapshot->available ? gpsGetLonE6() : 0;
-  outSnapshot->speed_kmh_x10 = outSnapshot->available ? gpsGetSpeedKmhX10() : 0;
-  outSnapshot->epoch = outSnapshot->available ? gpsGetEpoch() : 0u;
-}
-
 static void configSessionForwardNonSc(const char *line, void *user) {
   (void)user;
   tickTestsHandleSerialLine(line);
@@ -421,7 +403,6 @@ void configSessionInit(void) {
   serviceConfig.commit = configSessionCommit;
   serviceConfig.revert = configSessionRevert;
   serviceConfig.writes_ready = configSessionWritesReady;
-  serviceConfig.read_gps = configSessionReadGps;
   serviceConfig.tests = testsScOps();
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);

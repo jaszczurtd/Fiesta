@@ -15,17 +15,13 @@ hal_status_t ecuPersistenceInit(void);
 /**
  * @brief Serialize one core-0 storage operation.
  *
- * GPS is paused only by the EEPROM flash-write callbacks, immediately around
- * a physical write. Reads, validation and RAM staging leave GPS running. All
- * ECU EEPROM/KV writes and GPS polling must remain on core 0. The return value
- * reports the storage operation (including a failed write preparation).
- * A failed GPS resume is retained for retry by ecuPersistencePoll(). Optional
- * outResumeStatus receives the latest resume result, or HAL_NONE when no
- * physical write was attempted.
+ * All ECU EEPROM/KV writes must remain on core 0. The HAL flash provider
+ * coordinates interrupts, the other core and DMA around physical writes.
+ * @return The status of the storage operation, including a failed write
+ * preparation; HAL_EINVAL without @p operation.
  */
 hal_status_t ecuPersistenceExecute(ecu_persistence_operation_fn operation,
-                                   const void *user,
-                                   hal_status_t *outResumeStatus);
+                                   const void *user);
 
 /**
  * @brief Erase the spare key-value bank ahead of the next compaction.
@@ -33,19 +29,12 @@ hal_status_t ecuPersistenceExecute(ecu_persistence_operation_fn operation,
  * Key-value writes only program the active bank; erasing stops both cores
  * for tens of milliseconds per flash sector. Call this only where such a pause
  * is harmless: at start-up, before core 1 runs the pump. Serialized like
- * every other storage operation, GPS paused around the erase.
+ * every other storage operation.
  * @return HAL_OK when the spare bank is erased (at once when it already was),
  * HAL_EUNINIT before the key-value store is initialized, or the failure of
- * the GPS pause or of the erase.
+ * the erase.
  */
 hal_status_t ecuPersistencePrepareStorage(void);
-
-/**
- * @brief Retry a GPS resume left pending by a completed storage operation.
- *
- * Call from the core-0 service loop. Attempts are rate-limited internally.
- */
-void ecuPersistencePoll(void);
 
 #ifdef __cplusplus
 }

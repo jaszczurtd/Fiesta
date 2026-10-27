@@ -101,6 +101,35 @@ static inline bool fiesta_can_put_utc_datetime(uint8_t *field, uint32_t epoch) {
   return fits;
 }
 
+/**
+ * @brief Read UTC seconds stored by fiesta_can_put_utc_datetime().
+ * @param field Three payload bytes, high byte first.
+ * @param second Seconds of the minute sent next to the field, 0..59.
+ * @param outEpoch UTC seconds; left unchanged on failure.
+ * @return true for a real date and time; false for the zero field, an
+ *         impossible date or @p second above 59.
+ */
+static inline bool fiesta_can_get_utc_datetime(const uint8_t *field,
+                                               uint8_t second,
+                                               uint32_t *outEpoch) {
+  const uint32_t packed = ((uint32_t)field[0] << 16) |
+                          ((uint32_t)field[1] << 8) | (uint32_t)field[2];
+  jh_calendar_datetime_t dt;
+  dt.year = (uint16_t)(FIESTA_CAN_DATETIME_MIN_YEAR + (packed >> 20));
+  dt.month = (uint8_t)((packed >> 16) & 0x0Fu);
+  dt.day = (uint8_t)((packed >> 11) & 0x1Fu);
+  dt.hour = (uint8_t)((packed >> 6) & 0x1Fu);
+  dt.minute = (uint8_t)(packed & 0x3Fu);
+  dt.second = second;
+  dt.weekday = 0u;
+  uint64_t epoch = 0u;
+  const bool valid = jh_calendar_datetime_to_epoch(&dt, &epoch) == HAL_OK;
+  if (valid) {
+    *outEpoch = (uint32_t)epoch;
+  }
+  return valid;
+}
+
 #ifdef __cplusplus
 }
 #endif

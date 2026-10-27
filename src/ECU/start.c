@@ -6,10 +6,12 @@
 #include "ecuContext.h"
 #include "ecuPersistence.h"
 #include "obd-2.h"
+#include "rtcTime.h"
 #include "vp37_adapter.h"
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/system/hal_system.h>
+#include <hal/time/jh_calendar.h>
 #include <hal/timers/hal_soft_timer.h>
 #include <hal/usb/hal_usb.h>
 #include <utils/multicoreWatchdog.h>
@@ -34,7 +36,6 @@ typedef struct {
   hal_soft_timer_t timerMediumHandle;
   hal_soft_timer_t timerHighHandle;
   hal_soft_timer_t timerThrottleHandle;
-  hal_soft_timer_t timerGPSHandle;
   hal_soft_timer_t timerDebugHandle;
   hal_soft_timer_t timerCANUpdateHandle;
   hal_soft_timer_t timerCANLoopHandle;
@@ -45,6 +46,7 @@ typedef struct {
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
   bool resetReasonReported;
+  uint32_t rebootUtcVal; // last trusted UTC before a watchdog reboot, 0 = none
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
@@ -55,6 +57,7 @@ typedef struct {
 typedef struct {
   int statusVariable0Val;
   int statusVariable1Val;
+  uint32_t lastUtcVal; // last trusted RTC time (UTC), 0 = none since power-up
 } start_persistent_state_t;
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
@@ -75,7 +78,6 @@ static start_runtime_state_t s_startRuntimeState = {
     .timerMediumHandle = NULL,
     .timerHighHandle = NULL,
     .timerThrottleHandle = NULL,
-    .timerGPSHandle = NULL,
     .timerDebugHandle = NULL,
     .timerCANUpdateHandle = NULL,
     .timerCANLoopHandle = NULL,
@@ -85,7 +87,8 @@ static start_runtime_state_t s_startRuntimeState = {
     .alertBlinkState = false,
     .core1InitStatus = HAL_NONE,
     .core1InitErrorReported = false,
-    .resetReasonReported = false};
+    .resetReasonReported = false,
+    .rebootUtcVal = 0u};
 
 NOINIT static start_persistent_state_t s_startPersistentState;
 static hal_mutex_t turboStateMutex = NULL;
@@ -154,7 +157,6 @@ static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
      (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER)},
     {&s_startRuntimeState.timerHighHandle, readHighValues,
      (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER)},
-    {&s_startRuntimeState.timerGPSHandle, getGPSData, (uint32_t)GPS_UPDATE},
     {&s_startRuntimeState.timerDebugHandle, updateValsForDebug,
      (uint32_t)DEBUG_UPDATE},
     {&s_startRuntimeState.timerCANUpdateHandle, CAN_updaterecipients_01,
@@ -195,9 +197,15 @@ static void start_reportWatchdogSnapshot(void) {
     return;
   }
   watchdog_feed();
-  if (hal_text_is_printable(getGPSDate(), GPS_TIME_DATE_BUFFER_SIZE) &&
-      hal_text_is_printable(getGPSTime(), GPS_TIME_DATE_BUFFER_SIZE)) {
-    derr("Watchdog reboot at %s %s", getGPSDate(), getGPSTime());
+  jh_calendar_datetime_t lastUtc;
+  if ((s_startRuntimeState.rebootUtcVal != 0u) &&
+      (jh_calendar_epoch_to_datetime(s_startRuntimeState.rebootUtcVal,
+                                     JH_CALENDAR_MAX_YEAR,
+                                     &lastUtc) == HAL_OK)) {
+    derr("Watchdog reboot at %04u-%02u-%02u %02u:%02u:%02u UTC",
+         (unsigned)lastUtc.year, (unsigned)lastUtc.month, (unsigned)lastUtc.day,
+         (unsigned)lastUtc.hour, (unsigned)lastUtc.minute,
+         (unsigned)lastUtc.second);
   } else {
     derr("Watchdog reboot, time of day unknown");
   }
@@ -304,10 +312,13 @@ static void initializeCore0(void) {
     derr("EEPROM progress callback setup failed: %s",
          hal_status_to_string(progressStatus));
   }
-  if (!rebooted) {
+  if (rebooted) {
+    // Kept apart: the report waits for a USB host while the time moves on.
+    s_startRuntimeState.rebootUtcVal = s_startPersistentState.lastUtcVal;
+  } else {
     s_startPersistentState.statusVariable0Val =
         s_startPersistentState.statusVariable1Val = 0;
-    initGPSDateAndTime();
+    s_startPersistentState.lastUtcVal = 0u;
   }
 
   pcf8574_init();
@@ -413,7 +424,11 @@ void callAtEverySecond(void) {
   hal_gpio_write(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT,
                  s_startRuntimeState.alertBlinkState);
   hal_gpio_write(JH_HW_NODE_DPF_LAMP_PIN_OUT, isDPFRegenerating());
-  CAN_sendGpsExtended();
+  // Survives a watchdog reboot, which reports it.
+  const uint32_t utc = rtcTimeGetUtc();
+  if (utc != 0u) {
+    s_startPersistentState.lastUtcVal = utc;
+  }
   start_reportWatchdogSnapshot();
   start_reportResetReason();
 
@@ -459,8 +474,6 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 1;
   glowPlugs_process(getGlowPlugsInstance());
 
-  hal_gps_update();
-  ecuPersistencePoll();
   dtcManagerPoll();
   ecuParamsPoll();
 

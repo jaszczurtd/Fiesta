@@ -180,12 +180,13 @@ extern "C" {
 // max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9
 
-// in miliseconds
-#define GPS_UPDATE 4 * 1000
-#define GPS_MIN_KMPH_SPEED 5.0
-
-// used for determine if GPS is available
-#define MAX_GPS_AGE 4000
+// Fiesta_clock sends its RTC time (0x130) every second; a received time stays
+// usable for DTC timestamps this long.
+#define RTC_TIME_MAX_AGE_MS 3000u
+#if (RTC_TIME_MAX_AGE_MS <= 1000u) || (RTC_TIME_MAX_AGE_MS > 3000u)
+#error                                                                         \
+    "RTC_TIME_MAX_AGE_MS must outlast the 1 s 0x130 period and stay within 3 s"
+#endif
 
 // min-max value for indicator
 #define VOLTS_MIN_VAL 11.6

@@ -35,7 +35,7 @@ Firmware i host kompilują ten sam kodek z HAL
 | Grupa | Polecenia | Uwierzytelnienie |
 |---|---|---|
 | Sesja | `HELLO`, `SC_BYE` | Nie. |
-| Odczyt | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_GET_GPS` (tylko ECU) | Nie. |
+| Odczyt | `SC_GET_META`, `SC_GET_PARAM_LIST`, `SC_GET_VALUES`, `SC_GET_PARAM`, `SC_GET_GPS` (tylko Clocks) | Nie. |
 | Uwierzytelnianie | `SC_AUTH_BEGIN`, `SC_AUTH_PROVE` | Nie. |
 | Zapis parametrów | `SC_SET_PARAM`, `SC_COMMIT_PARAMS`, `SC_REVERT_PARAMS` | Tak. |
 | Wgrywanie | `SC_REBOOT_BOOTLOADER` | Tak. |

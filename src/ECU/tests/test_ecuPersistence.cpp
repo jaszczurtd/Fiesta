@@ -1,38 +1,13 @@
 #include "ecuPersistence.h"
 #include "unity.h"
-#include <hal/gps/hal_gps.h>
 #include <hal/impl/.mock/hal_mock.h>
 #include <hal/storage/hal_eeprom.h>
 #include <hal/storage/hal_kv.h>
 
 static unsigned s_callCount;
-static unsigned s_pauseCount;
-static unsigned s_resumeCount;
-static bool s_paused;
-static hal_status_t s_pauseStatus;
-static hal_status_t s_resumeStatus;
-
-/* Transport doubles let the test observe the exact storage boundary. */
-extern "C" hal_status_t hal_gps_pause(void) {
-  ++s_pauseCount;
-  if (s_pauseStatus == HAL_OK) {
-    s_paused = true;
-  }
-  return s_pauseStatus;
-}
-
-extern "C" hal_status_t hal_gps_resume(void) {
-  ++s_resumeCount;
-  if (s_resumeStatus == HAL_OK) {
-    s_paused = false;
-  }
-  return s_resumeStatus;
-}
 
 void setUp(void) {
-  s_callCount = s_pauseCount = s_resumeCount = 0u;
-  s_paused = false;
-  s_pauseStatus = s_resumeStatus = HAL_OK;
+  s_callCount = 0u;
   hal_mock_set_millis(0u);
   hal_mock_eeprom_reset();
   hal_mock_kv_full_reset();
@@ -72,166 +47,102 @@ static hal_status_t commitKv(const void *user) {
 static void prepareKv(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, HAL_RP_FLASH_EEPROM_SIZE, 0u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(initializeKv, nullptr, nullptr));
-  s_pauseCount = s_resumeCount = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(initializeKv, nullptr));
   hal_mock_eeprom_clear_write_count();
 }
 
-static void checkGpsPausedDuringWrite(void *user) {
-  ++*static_cast<unsigned *>(user);
-  TEST_ASSERT_TRUE(s_paused);
-}
+static void countProgress(void *user) { ++*static_cast<unsigned *>(user); }
 
-void test_execute_without_flash_keeps_gps_running(void) {
+void test_execute_runs_the_operation_once(void) {
   const unsigned value = 1u;
-  hal_status_t resumeStatus = HAL_NONE;
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(succeed, &value, &resumeStatus));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(succeed, &value));
   TEST_ASSERT_EQUAL_UINT(1u, value);
   TEST_ASSERT_EQUAL_UINT(1u, s_callCount);
-  TEST_ASSERT_EQUAL_INT(HAL_NONE, resumeStatus);
-  TEST_ASSERT_EQUAL_UINT(0u, s_pauseCount);
-  TEST_ASSERT_EQUAL_UINT(0u, s_resumeCount);
 }
 
 void test_execute_propagates_storage_failure_and_releases_mutex(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_EIO, ecuPersistenceExecute(fail, NULL, NULL));
-  TEST_ASSERT_EQUAL_INT(HAL_EIO, ecuPersistenceExecute(fail, NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, ecuPersistenceExecute(fail, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, ecuPersistenceExecute(fail, NULL));
   TEST_ASSERT_EQUAL_UINT(2u, s_callCount);
 }
 
 void test_execute_rejects_missing_operation(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, ecuPersistenceExecute(NULL, NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, ecuPersistenceExecute(NULL, NULL));
   TEST_ASSERT_EQUAL_UINT(0u, s_callCount);
 }
 
-void test_gps_pause_covers_only_physical_publication(void) {
+void test_only_a_commit_writes_flash(void) {
   prepareKv();
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(initializeKv, nullptr, nullptr));
-  TEST_ASSERT_EQUAL_UINT(0u, s_pauseCount);
 
   const uint32_t value = 17u;
   unsigned progress = 0u;
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_set_progress_callback(
-                                    checkGpsPausedDuringWrite, &progress));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_set_progress_callback(countProgress, &progress));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(false));
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(storeValue, &value, nullptr));
-  TEST_ASSERT_EQUAL_UINT(0u, s_pauseCount);
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(commitKv, nullptr, nullptr));
-  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(storeValue, &value));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
+  TEST_ASSERT_EQUAL_UINT(0u, progress);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(commitKv, nullptr));
+  TEST_ASSERT_GREATER_THAN_UINT32(0u, hal_mock_eeprom_get_write_count());
   TEST_ASSERT_GREATER_THAN_UINT(0u, progress);
-  TEST_ASSERT_FALSE(s_paused);
+  uint32_t loaded = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(42u, &loaded));
+  TEST_ASSERT_EQUAL_UINT32(value, loaded);
+
+  /* An unchanged value needs no write. */
+  hal_mock_eeprom_clear_write_count();
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(true));
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(storeValue, &value, nullptr));
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(commitKv, nullptr, nullptr));
-  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(storeValue, &value));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(commitKv, nullptr));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_eeprom_set_progress_callback(nullptr, nullptr));
 }
 
-void test_failed_pause_prevents_flash_write_and_allows_retry(void) {
-  prepareKv();
-  const uint32_t value = 19u;
-  s_pauseStatus = HAL_EBUSY;
-  TEST_ASSERT_EQUAL_INT(HAL_EBUSY,
-                        ecuPersistenceExecute(storeValue, &value, nullptr));
-  TEST_ASSERT_EQUAL_UINT(0u, s_resumeCount);
-  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
-  s_pauseStatus = HAL_OK;
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(commitKv, nullptr, nullptr));
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
-}
-
-void test_interrupted_write_still_resumes_gps(void) {
+void test_interrupted_write_is_reported_and_releases_mutex(void) {
   prepareKv();
   const uint32_t value = 21u;
   hal_mock_eeprom_tear_next_append(5u);
-  hal_status_t resumed = HAL_NONE;
-  TEST_ASSERT_EQUAL_INT(HAL_EIO,
-                        ecuPersistenceExecute(storeValue, &value, &resumed));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, resumed);
-  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
-  TEST_ASSERT_FALSE(s_paused);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, ecuPersistenceExecute(storeValue, &value));
+
+  const unsigned one = 1u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(succeed, &one));
+  TEST_ASSERT_EQUAL_UINT(1u, s_callCount);
 }
 
-void test_failed_resume_does_not_undo_storage_and_is_retried(void) {
-  prepareKv();
-  const uint32_t value = 23u;
-  s_resumeStatus = HAL_ENOMEM;
-  hal_status_t resumed = HAL_NONE;
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(storeValue, &value, &resumed));
-  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, resumed);
-  uint32_t loaded = 0u;
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(42u, &loaded));
-  TEST_ASSERT_EQUAL_UINT32(value, loaded);
-  ecuPersistencePoll();
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
-  hal_mock_advance_millis(999u);
-  ecuPersistencePoll();
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
-  s_resumeStatus = HAL_OK;
-  hal_mock_advance_millis(1u);
-  ecuPersistencePoll();
-  TEST_ASSERT_EQUAL_UINT(2u, s_resumeCount);
-  TEST_ASSERT_FALSE(s_paused);
-  hal_mock_advance_millis(1000u);
-  ecuPersistencePoll();
-  TEST_ASSERT_EQUAL_UINT(2u, s_resumeCount);
-}
-
-void test_prepare_erases_the_spare_bank_under_the_gps_pause(void) {
+void test_prepare_erases_the_spare_bank_once(void) {
   prepareKv();
   const uint32_t value = 25u;
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        ecuPersistenceExecute(storeValue, &value, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistenceExecute(storeValue, &value));
   hal_kv_stats_t stats = {};
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
   TEST_ASSERT_FALSE(stats.spare_erased);
-  s_pauseCount = s_resumeCount = 0u;
   hal_mock_eeprom_clear_erase_count();
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistencePrepareStorage());
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_eeprom_get_erase_count());
-  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
-  TEST_ASSERT_EQUAL_UINT(1u, s_resumeCount);
-  TEST_ASSERT_FALSE(s_paused);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
   TEST_ASSERT_TRUE(stats.spare_erased);
 
-  /* Already erased: no flash write, no pause. */
+  /* Already erased: no flash write. */
   TEST_ASSERT_EQUAL_INT(HAL_OK, ecuPersistencePrepareStorage());
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_eeprom_get_erase_count());
-  TEST_ASSERT_EQUAL_UINT(1u, s_pauseCount);
 }
 
-void test_prepare_reports_a_refused_pause(void) {
-  prepareKv();
-  s_pauseStatus = HAL_EBUSY;
-  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, ecuPersistencePrepareStorage());
-  TEST_ASSERT_EQUAL_UINT(0u, s_resumeCount);
+void test_prepare_before_kv_init_is_refused(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, ecuPersistencePrepareStorage());
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_erase_count());
 }
 
 int main(void) {
   UNITY_BEGIN();
-  RUN_TEST(test_execute_without_flash_keeps_gps_running);
+  RUN_TEST(test_execute_runs_the_operation_once);
   RUN_TEST(test_execute_propagates_storage_failure_and_releases_mutex);
   RUN_TEST(test_execute_rejects_missing_operation);
-  RUN_TEST(test_gps_pause_covers_only_physical_publication);
-  RUN_TEST(test_failed_pause_prevents_flash_write_and_allows_retry);
-  RUN_TEST(test_interrupted_write_still_resumes_gps);
-  RUN_TEST(test_failed_resume_does_not_undo_storage_and_is_retried);
-  RUN_TEST(test_prepare_erases_the_spare_bank_under_the_gps_pause);
-  RUN_TEST(test_prepare_reports_a_refused_pause);
+  RUN_TEST(test_only_a_commit_writes_flash);
+  RUN_TEST(test_interrupted_write_is_reported_and_releases_mutex);
+  RUN_TEST(test_prepare_erases_the_spare_bank_once);
+  RUN_TEST(test_prepare_before_kv_init_is_refused);
   return UNITY_END();
 }

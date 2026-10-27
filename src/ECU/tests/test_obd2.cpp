@@ -1,10 +1,10 @@
 #include "can.h"
 #include "config.h"
-#include "gps.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
 #include "obd-2.h"
 #include "obd_protocol.h"
+#include "rtcTime.h"
 #include "sensors.h"
 #include "testable/obd2_testable.h"
 #include "unity.h"
@@ -83,6 +83,7 @@ static void assert_mode01_request_is_answered(void) {
 
 void setUp(void) {
   ensure_obd_can_ready();
+  rtcTimeResetForTest();
   dtcManagerClearAll();
   for (int i = 0; i < F_LAST; i++) {
     setGlobalValue(i, 0.0f);
@@ -482,36 +483,25 @@ void test_fill_dtc_payload_small_buffer(void) {
   TEST_ASSERT_EQUAL_INT(0, fillDtcPayload(0x43, DTC_KIND_STORED, buf, 1));
 }
 
-void test_dtc_timestamp_first_occurrence_from_gps(void) {
+void test_dtc_timestamp_first_occurrence_from_rtc(void) {
   dtcManagerClearAll();
-  hal_mock_gps_reset();
-  hal_mock_gps_set_valid(true);
-  hal_mock_gps_set_age(0);
-  hal_mock_gps_set_date(2026, 1, 1);
-  hal_mock_gps_set_time(12, 0, 0);
-
-  uint32_t expected = gpsGetEpoch();
-  TEST_ASSERT_GREATER_THAN_UINT32(0u, expected);
+  rtcTimeStore(1767268800u); // 2026-01-01 12:00:00 UTC
 
   dtcManagerSetActive(DTC_OBD_CAN_INIT_FAIL, true);
-  TEST_ASSERT_EQUAL_UINT32(expected,
+  TEST_ASSERT_EQUAL_UINT32(1767268800u,
                            dtcManagerGetTimestamp(DTC_OBD_CAN_INIT_FAIL));
 }
 
 void test_dtc_timestamp_not_overwritten_on_reactivation(void) {
   dtcManagerClearAll();
-  hal_mock_gps_reset();
-  hal_mock_gps_set_valid(true);
-  hal_mock_gps_set_age(0);
-  hal_mock_gps_set_date(2026, 1, 1);
-  hal_mock_gps_set_time(12, 0, 0);
+  rtcTimeStore(1767268800u); // 2026-01-01 12:00:00 UTC
 
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
   uint32_t firstTs = dtcManagerGetTimestamp(DTC_PCF8574_COMM_FAIL);
   TEST_ASSERT_GREATER_THAN_UINT32(0u, firstTs);
 
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, false);
-  hal_mock_gps_set_time(13, 0, 0);
+  rtcTimeStore(1767272400u); // an hour later
   dtcManagerSetActive(DTC_PCF8574_COMM_FAIL, true);
 
   TEST_ASSERT_EQUAL_UINT32(firstTs,
@@ -1354,7 +1344,7 @@ int main(void) {
   RUN_TEST(test_fill_dtc_payload_with_codes);
   RUN_TEST(test_fill_dtc_payload_null_safety);
   RUN_TEST(test_fill_dtc_payload_small_buffer);
-  RUN_TEST(test_dtc_timestamp_first_occurrence_from_gps);
+  RUN_TEST(test_dtc_timestamp_first_occurrence_from_rtc);
   RUN_TEST(test_dtc_timestamp_not_overwritten_on_reactivation);
 
   // TOTDIST

@@ -34,13 +34,10 @@ set(CLOCKS_CAN_TEST_SOURCES
     ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
     ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
 )
-foreach(CLOCKS_CAN_TEST IN ITEMS test_can test_can_gps_legacy)
-    add_executable(${CLOCKS_CAN_TEST} ${CLOCKS_CAN_TEST_SOURCES})
-    target_link_libraries(${CLOCKS_CAN_TEST} PRIVATE clocks_mock)
-    target_include_directories(${CLOCKS_CAN_TEST} BEFORE PRIVATE ${HAL_SRC})
-    add_test(NAME ${CLOCKS_CAN_TEST} COMMAND ${CLOCKS_CAN_TEST})
-endforeach()
-target_compile_definitions(test_can_gps_legacy PRIVATE CLOCKS_PUBLISH_LEGACY_GPS=1)
+add_executable(test_can ${CLOCKS_CAN_TEST_SOURCES})
+target_link_libraries(test_can PRIVATE clocks_mock)
+target_include_directories(test_can BEFORE PRIVATE ${HAL_SRC})
+add_test(NAME test_can COMMAND test_can)
 
 # ABS speed, moved from OilAndSpeed with its algorithm unchanged.
 add_executable(test_speed

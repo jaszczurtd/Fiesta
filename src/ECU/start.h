@@ -15,7 +15,6 @@
 #include "engineHeater.h"
 #include "engine_operation.h"
 #include "glowPlugs.h"
-#include "gps.h"
 #include "hardwareConfig.h"
 #include "heatedWindshield.h"
 #include "rpm.h"

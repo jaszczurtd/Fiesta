@@ -69,38 +69,6 @@ void CAN_updaterecipients_02(void);
 void sendThrottleValueCAN(int value);
 
 /**
- * @brief Pack GPS date and time into the project CAN payload format.
- * @param dateYYMMDD Date encoded as YYMMDD.
- * @param timeHHMM Time encoded as HHMM.
- * @return Packed 24-bit date/time value, or 0 on invalid input.
- */
-uint32_t CAN_packGpsDateTime(uint32_t dateYYMMDD, uint32_t timeHHMM);
-
-/**
- * @brief Build the extended GPS latitude CAN frame payload.
- * @param frameNo Frame sequence number to insert.
- * @param outBuf Output buffer receiving the frame payload.
- * @param outLen Size of the output buffer in bytes.
- * @return HAL_OK, or HAL_EINVAL for a NULL or too short buffer.
- */
-hal_status_t CAN_buildGpsLatFrame(uint8_t frameNo, uint8_t *outBuf, int outLen);
-
-/**
- * @brief Build the extended GPS longitude/time CAN frame payload.
- * @param frameNo Frame sequence number to insert.
- * @param outBuf Output buffer receiving the frame payload.
- * @param outLen Size of the output buffer in bytes.
- * @return HAL_OK, or HAL_EINVAL for a NULL or too short buffer.
- */
-hal_status_t CAN_buildGpsLonTimeFrame(uint8_t frameNo, uint8_t *outBuf,
-                                      int outLen);
-
-/**
- * @brief Send the pair of extended GPS CAN frames.
- */
-void CAN_sendGpsExtended(void);
-
-/**
  * @brief Check whether the DPF module is currently considered connected.
  * @return True when the DPF module is connected, otherwise false.
  */

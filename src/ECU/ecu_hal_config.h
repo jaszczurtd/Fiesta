@@ -26,8 +26,6 @@
 #endif
 #define HAL_ENABLE_CAN      /* Generic CAN API facade             */
 #define HAL_ENABLE_MCP2515  /* MCP2515 CAN backend                */
-#define HAL_ENABLE_SWSERIAL /* Software serial (GPS)               */
-#define HAL_ENABLE_GPS      /* NMEA                               */
 #define HAL_ENABLE_PWM_FREQ /* Frequency-controlled PWM           */
 #define HAL_ENABLE_ADC_SCAN /* Hardware-paced shunt/supply scan   */
 #define HAL_ENABLE_CRYPTO   /* hal_crypto + hal_sc_auth (SC link) */

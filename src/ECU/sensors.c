@@ -4,7 +4,6 @@
 #include "../common/fiesta_unit_testing.h"
 #include "can.h"
 #include "engineFuel.h"
-#include "gps.h"
 #include "rpm.h"
 
 #include <utils/tools_common_defs.h>
@@ -187,8 +186,6 @@ void initSensors(void) {
   s_sensorsState.lastCoolantTemp = 0;
   s_sensorsState.lastOilTemp = 0;
   s_sensorsState.lastIsEngineRunning = false;
-
-  initGPS();
 }
 
 void initBasicPIO(void) {
@@ -733,7 +730,6 @@ void readThrottleValues(void) {
 void readHighValues(void) {
   setGlobalValue(F_RPM, RPM_getCurrentRPM(getRPMInstance()));
   setGlobalValue(F_PRESSURE, readBarPressure());
-  setGlobalValue(F_GPS_CAR_SPEED, getCurrentCarSpeed());
   setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());
 
   // Transmit throttle/turbo each high-rate tick to avoid stale cluster values

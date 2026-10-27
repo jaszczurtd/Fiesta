@@ -27,7 +27,7 @@ przebieg nie potwierdza wyniku dla bieżącego checkoutu.
 
 Źródła ECU są kompilowane jako C z Pico SDK, ale końcowe linkowanie obejmuje
 kod C++ HAL. Instancje sterowania znajdują się w `ecu_context_t`; CAN,
-czujniki, DTC, GPS, OBD i sesja przechowują stan lokalnie w plikach. Publiczne
+czujniki, DTC, czas RTC, OBD i sesja przechowują stan lokalnie w plikach. Publiczne
 nagłówki ECU zapewniają wiązanie C, a PID i timery programowe mają interfejsy
 C w HAL. Testy hostowe i firmware ECU używają `-Werror`.
 

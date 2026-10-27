@@ -89,7 +89,10 @@ uint8_t dtcManagerGetCodes(dtc_kind_t kind, uint16_t *outCodes,
 /**
  * @brief Get the first-occurrence timestamp for a DTC.
  * @param code DTC code to query.
- * @return Unix epoch timestamp, or 0 when unknown or missing.
+ * @return UTC seconds from the RTC time of Fiesta_clock (0x130), or 0 when
+ *         unknown or missing. Codes stored by firmware that dated them from
+ *         GPS keep their earlier value, which counted local CET/CEST time as
+ *         Unix seconds.
  */
 uint32_t dtcManagerGetTimestamp(uint16_t code);
 
