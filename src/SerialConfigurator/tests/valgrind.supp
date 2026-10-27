@@ -62,6 +62,19 @@
    fun:gtk_init_check
 }
 
+# glibc dependency list (l_initfini) of a module loaded by dlopen(); on the
+# GitHub ubuntu-24.04 runner gtk_init loads the dconf GIO module this way.
+# The default 12-frame stack ends in dlopen, so only the loader frames match.
+{
+   glibc-dlopen-dependency-list
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   ...
+   fun:_dl_map_object_deps
+   fun:dl_open_worker_begin
+}
+
 # Fontconfig/Pango font matching caches: upstream GNOME/pango pango.supp.
 # These match only definite leaks inside the system font libraries.
 {

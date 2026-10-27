@@ -37,15 +37,16 @@ bramkę MISRA, PMD CPD, Valgrind i clang-tidy. Analiza statyczna działa osobno,
 Buildy hostowe używają Debug. SerialConfigurator jest dodatkowo budowany
 w Release, tak jak w CI, z uruchomieniem testów w
 `src/SerialConfigurator/build/release`. Sprawdza to również optymalizację
-i włączone przez kompilator mechanizmy ochrony libc.
+i włączone przez kompilator mechanizmy ochrony libc. Etap Valgrinda sprawdza
+oba buildy SerialConfiguratora; CI uruchamia go na Release.
 
 Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
 `scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
 Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i
 `pl_PL.UTF-8`; przed bramką zainstaluj i wygeneruj te locale.
 Ten sam runner otacza target Valgrinda SC, więc Valgrind sprawdza sam plik
-binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig;
-błędy aplikacji nadal przerywają kontrolę.
+binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig
+oraz loader glibc podczas startu GTK; błędy aplikacji nadal przerywają kontrolę.
 
 `--skip-cppcheck`, `--skip-valgrind` i `--skip-clang-tidy` pozwalają pomijać
 wybrane kontrole podczas pracy. Taki przebieg nie potwierdza przejścia pełnej

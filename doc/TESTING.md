@@ -36,6 +36,7 @@ under `/tmp/fiesta_*`.
 Host builds use Debug. SerialConfigurator also builds and runs its tests in
 Release, matching CI, under `src/SerialConfigurator/build/release`. This
 checks optimized builds and the compiler's enabled libc hardening as well.
+The Valgrind stage checks both SerialConfigurator builds; CI runs it on Release.
 
 GUI tests run with the current display or Xvfb through
 `scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
@@ -43,7 +44,8 @@ Clocks view runs in the current locale and explicitly in `C` and
 `pl_PL.UTF-8`; install/generate those locales before running the gate.
 The same runner wraps the SC Valgrind target, so Valgrind checks the test
 binary itself. Suppressions cover the documented system GTK/fontconfig
-stacks; application errors remain failures.
+stacks and the glibc loader during GTK start-up; application errors remain
+failures.
 
 `--skip-cppcheck`, `--skip-valgrind` and `--skip-clang-tidy` omit individual
 checks for development. Such a run does not establish that the complete gate

@@ -119,15 +119,22 @@ module_build_dir() {
     return 1
 }
 
+# Prints the log name of a module step; Debug keeps the bare module name.
+module_log_name() {
+    if [[ "$2" == Debug ]]; then
+        printf '%s\n' "$1"
+    else
+        printf '%s_%s\n' "$1" "$2"
+    fi
+}
+
 configure_build_and_test_module() {
     local name="$1"
     local src_rel="$2"
     local build_rel="$3"
     local build_type="${4:-Debug}"
-    local log_name="$name"
-    if [[ "$build_type" != Debug ]]; then
-        log_name="${name}_${build_type}"
-    fi
+    local log_name
+    log_name="$(module_log_name "${name}" "${build_type}")"
 
     local src_abs="${SCRIPT_DIR}/${src_rel}"
     local build_abs="${SCRIPT_DIR}/${build_rel}"
@@ -157,16 +164,19 @@ run_module_target() {
     local name="$1"
     local build_rel="$2"
     local target="$3"
+    local build_type="${4:-Debug}"
+    local log_name
+    log_name="$(module_log_name "${name}" "${build_type}")"
 
     local build_abs="${SCRIPT_DIR}/${build_rel}"
-    info "[${name}] running target: ${target}"
+    info "[${name}/${build_type}] running target: ${target}"
     local gui_runner=()
     if [[ "${name}" == "SerialConfigurator" && "${target}" == "check-valgrind" ]]; then
         gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
     fi
-    run_logged "/tmp/fiesta_${name}_${target}.log" \
+    run_logged "/tmp/fiesta_${log_name}_${target}.log" \
         "${gui_runner[@]}" cmake --build "${build_abs}" --target "${target}" --parallel "${JOBS}"
-    pass "[${name}] ${target} passed"
+    pass "[${name}/${build_type}] ${target} passed"
 }
 
 header "Gate 1/7: Checking required tools"
@@ -250,6 +260,10 @@ if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-valgrind"
+        if [[ "${name}" == "SerialConfigurator" ]]; then
+            # CI runs memcheck on the Release build.
+            run_module_target "${name}" "${build_rel}/release" "check-valgrind" Release
+        fi
     done
     pass "Valgrind gate passed for all modules."
 else
