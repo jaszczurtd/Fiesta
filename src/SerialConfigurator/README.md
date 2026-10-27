@@ -45,7 +45,7 @@ turns the corresponding module indicator green; the log shows discovery details.
 All candidates are checked so duplicate instances can be reported as ambiguous.
 **Disconnect** clears detected state and returns indicators to red.
 
-The module registry selects ECU, Clocks, OilAndSpeed and RTC_Clock for this
+The module registry selects ECU, Clocks and RTC_Clock for this
 protocol. Adjustometer and VP37TestBench are not configurator targets.
 Read-only operations need no authentication:
 
@@ -69,7 +69,7 @@ ECU exposes writable thresholds stored in a versioned KV blob. RTC_Clock
 accepts `rtc_year/month/day/hour/minute/second` in CET/CEST and stores them in
 its RTC as UTC. Read-only `rtc_integrity` is 1 only while the RTC holds trusted
 UTC. Commit validates the whole date, including leap years.
-Clocks and OilAndSpeed expose read-only, non-persisted thresholds and intervals.
+Clocks expose read-only, non-persisted thresholds and intervals.
 
 In the GUI Values tab, edit fields and choose **Apply staged**, then **Commit**
 to validate and apply them. **Revert** restores staging from active values.
@@ -179,8 +179,11 @@ cases without executing them. Coverage includes selectors, discovery, frame
 and reply parsing, authentication/crypto, manifests, parameter transactions,
 GPS, functional tests, serial deadlines and `HELLO_REQUIRED` recovery.
 Flash tests use mock transport and temporary BOOTSEL/by-id directories;
-they do not demonstrate physical USB upload. GTK adds progress-bar and Tests
-tab checks; the latter skips without a display.
+they do not demonstrate physical USB upload. GTK adds checks for the progress
+bar, Tests tab and live Clocks readings, including C and Polish locales.
+The desktop helper, full gate and CI use the same display runner, which
+starts Xvfb when no display is available. Missing Xvfb or a required locale
+fails the live-view tests instead of skipping them.
 
 CMake maintains the test list, including `serial-configurator-cli-selectors-tests`.
 Keep `-Wall -Wextra -Werror` enabled. The
@@ -219,3 +222,14 @@ handles POSIX serial I/O. `sc_flash.c`, `sc_manifest.c`, `sc_gps.c` and
 `sc_tests.c` implement the corresponding operations; `sc_text.c` and
 `sc_time.c` provide shared text and timing helpers. `src/cli/sc_cli_main.c`
 dispatches commands to the adjacent command, selector and output modules.
+
+The visible Clocks Values page polls once a second. ABS speed is shown in km/h, oil
+pressure in bar and both EGT channels in °C. An unavailable or expired
+measurement is shown as `--`; a transport failure also clears the readings.
+Polling pauses and readings clear during detection and flashing. Hidden pages
+do not poll. Numeric output follows the desktop locale. Clocks parameters are read-only.
+The map reads GPS from Clocks and clears its old marker when the fix, module
+or USB connection disappears; polling resumes after detection.
+
+DPF is visible as inactive. It cannot be detected, selected for flashing or
+given a firmware path. Existing saved paths for the retired module are discarded.

@@ -758,7 +758,31 @@ static int test_sc_bye_command_is_sent_and_parsed(void) {
   return 0;
 }
 
+static int test_retired_and_inactive_tokens_are_not_detected(void) {
+  const char *tokens[] = {"OIL&SPD", "OilAndSpeed", "DPF"};
+  for (size_t i = 0; i < COUNTOF(tokens); ++i) {
+    char hello[128];
+    snprintf(hello, sizeof(hello),
+             "OK HELLO module=%s proto=1 session=42 fw=v1 build=test uid=1234",
+             tokens[i]);
+    MockDevice device = {.candidate_path = "/dev/fake",
+                         .device_path = "/dev/fake",
+                         .hello_response = hello};
+    ScCore core;
+    MockTransportContext context;
+    char log[1024] = {0};
+    detect_mock_devices(&core, &context, &device, 1u, log, sizeof(log));
+    for (size_t j = 0; j < SC_MODULE_COUNT; ++j) {
+      TEST_ASSERT(!core.modules[j].detected,
+                  "retired or inactive token detected");
+    }
+  }
+  return 0;
+}
+
 int main(void) {
+  if (test_retired_and_inactive_tokens_are_not_detected() != 0)
+    return 1;
   if (test_detect_parses_structured_hello_fields() != 0) {
     return 1;
   }

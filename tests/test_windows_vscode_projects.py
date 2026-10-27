@@ -44,9 +44,6 @@ DEBUG_PROFILES = {
              "Project: Build (Debug) rp2040-zero variant: TIMING",
              "target/rp2040.cfg"),
     },
-    "OilAndSpeed": {"Project: Debug rp2040-zero (RP2040)":
-                    ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
-                     "target/rp2040.cfg")},
     "Fiesta_clock": {"Project: Debug rp2040-zero (RP2040)":
                      ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
                       "target/rp2040.cfg")},

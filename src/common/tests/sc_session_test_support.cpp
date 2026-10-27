@@ -62,7 +62,7 @@ const char *sendSerialLine(const char *inner_with_eol) {
     return raw;
   }
 
-  static char unwrapped[200];
+  static char unwrapped[HAL_SERIAL_FRAME_PAYLOAD_MAX + 1u];
   uint16_t got_seq = 0u;
   unwrapped[0] = '\0';
   TEST_ASSERT_TRUE_MESSAGE(

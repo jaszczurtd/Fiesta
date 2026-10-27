@@ -33,6 +33,14 @@ the MISRA gate, PMD CPD, Valgrind and clang-tidy. Static analysis runs separatel
 so its duration does not look like a stalled runtime test. Logs are written
 under `/tmp/fiesta_*`.
 
+GUI tests run with the current display or Xvfb through
+`scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
+Clocks view runs in the current locale and explicitly in `C` and
+`pl_PL.UTF-8`; install/generate those locales before running the gate.
+The same runner wraps the SC Valgrind target, so Valgrind checks the test
+binary itself. Suppressions cover the documented system GTK/fontconfig
+stacks; application errors remain failures.
+
 `--skip-cppcheck`, `--skip-valgrind` and `--skip-clang-tidy` omit individual
 checks for development. Such a run does not establish that the complete gate
 passes. `-j<N>` controls build parallelism.
@@ -56,7 +64,7 @@ cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure -LE static-analysis
 ```
 
-Use the corresponding module directory for Clocks, OilAndSpeed, Adjustometer
+Use the corresponding module directory for Clocks, Adjustometer
 or VP37TestBench. For the desktop application follow the
 [SerialConfigurator guide](../src/SerialConfigurator/README.md#tests).
 List registered tests with `ctest --test-dir src/ECU/build_test -N`.
@@ -82,7 +90,7 @@ local firmware validation.
 | Workflow | Checks |
 |---|---|
 | [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | ECU build, tests, cppcheck, Valgrind and clang-tidy. |
-| [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [oilandspeed-tests.yml](../.github/workflows/oilandspeed-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Module build, tests, Valgrind and clang-tidy. |
+| [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Module build, tests, Valgrind and clang-tidy. |
 | [serial-configurator-tests.yml](../.github/workflows/serial-configurator-tests.yml) | GUI/CLI build, tests, Valgrind and clang-tidy. |
 | [firmware-build-scripts.yml](../.github/workflows/firmware-build-scripts.yml) | Release/debug builds for firmware selected for CI. |
 | [windows-firmware.yml](../.github/workflows/windows-firmware.yml) | Generation checks, firmware builds and compile databases on Windows for the same CI selection. |

@@ -214,6 +214,7 @@ void CAN_updaterecipients_01(void) {
 
     (void)canSend(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
 
+    (void)memset(buf, 0, sizeof(buf));
     buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] =
         hal_can_encode_temp_i8(getGlobalValue(F_INTAKE_TEMP));
@@ -221,10 +222,6 @@ void CAN_updaterecipients_01(void) {
     int16_t fuel = (int16_t)getGlobalValue(F_FUEL);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
-
-    // GPS moved to Clocks; the withdrawn fields stay zero.
-    buf[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = 0u;
-    buf[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = 0u;
 
     (void)canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
 

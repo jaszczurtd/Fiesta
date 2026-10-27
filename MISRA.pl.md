@@ -13,7 +13,7 @@ obsługiwanych przez analizator.
 |---|---|
 | `src/common/vp37`, Adjustometer i wybrane nagłówki współdzielone | Bramka 4 w `runalltests.sh` odrzuca aktywne znaleziska po uwzględnieniu zapisanych wyciszeń. |
 | Pozostały kod ECU i źródła współdzielone włączone przez runner | Raport do przeglądu; brak wymogu zerowej liczby znalezisk w bramce. |
-| Clocks, OilAndSpeed, Fiesta_clock i własne pliki VP37TestBench | Poza zakresem MISRA. Współdzielony VP37 używany przez stanowisko pozostaje w zakresie. |
+| Clocks, Fiesta_clock i własne pliki VP37TestBench | Poza zakresem MISRA. Współdzielony VP37 używany przez stanowisko pozostaje w zakresie. |
 
 Bramka uruchamia `check_misra.sh --fail-paths` dla ECU i drugi skan
 z `--project src/Adjustometer`. Wyrażenia ścieżek w

@@ -2,8 +2,8 @@
 
 [English](ARCHITECTURE.md) · [O projekcie](README.pl.md)
 
-Fiesta zastępuje i rozszerza elektronikę Forda Fiesty 1.8 (M)TDDI. Pięć
-modułów firmware dzieli zadania w samochodzie: ECU steruje silnikiem,
+Fiesta zastępuje i rozszerza elektronikę Forda Fiesty 1.8 (M)TDDI. Cztery
+moduły firmware dzielą zadania w samochodzie: ECU steruje silnikiem,
 a pozostałe obsługują wskaźniki, dodatkowe pomiary, czas i pomiar położenia
 pompy. SerialConfigurator łączy się z nimi przez USB, odczytuje i zmienia
 ustawienia oraz wgrywa firmware.
@@ -18,7 +18,6 @@ sterowania znajdują się w dokumentacji modułów.
 ```text
                  CAN0 (główna)
    ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT, GPS
-   │           │ ◄──────────  OilAndSpeed     zastąpiony przez Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    czas RTC w UTC, 1 Hz
    │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
@@ -29,7 +28,7 @@ sterowania znajdują się w dokumentacji modułów.
          │ USB CDC, poza samochodem
          ▼
    Fiesta Serial Configurator (Linux, GTK4)
-     łączy się też z Clocks, OilAndSpeed i Fiesta_clock
+     łączy się też z Clocks i Fiesta_clock
 ```
 
 ECU jako jedyny moduł steruje silnikiem. Wymagania MISRA-C obejmują ECU,
@@ -66,7 +65,6 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 |---|---|---|---|
 | [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
 | [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
-| [OilAndSpeed](src/OilAndSpeed/) | C++ | Dawny moduł oleju, prędkości i EGT, zastąpiony przez Clocks. | Poza zakresem. |
 | [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS, czas przez CAN. | Poza zakresem. |
 | [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
 | [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
@@ -169,20 +167,6 @@ Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze
 `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` z
 [hal_project_config.h](src/Clocks/hal_project_config.h), więc CAN dostaje
 magistralę między dwoma pasami.
-
-### OilAndSpeed
-
-OilAndSpeed to dawny, osobny moduł pomiaru ciśnienia oleju, prędkości z ABS
-i temperatur spalin. Te same ramki nadaje teraz Clocks, a każde ID CAN ma
-jednego nadawcę, więc OilAndSpeed nie może pracować na jednej magistrali
-z obecnym Clocks.
-
-| Plik | Zadanie |
-|---|---|
-| [oilPressure.cpp](src/OilAndSpeed/oilPressure.cpp) | Przelicza ADC na bary. |
-| [speed.cpp](src/OilAndSpeed/speed.cpp) | Przelicza częstotliwość impulsów ABS na prędkość. |
-| [can.cpp](src/OilAndSpeed/can.cpp) | Obsługuje ramki oleju, prędkości i EGT. |
-| [config.cpp](src/OilAndSpeed/config.cpp) | Obsługuje sesję konfiguratora i odczyt interwałów pomiarowych. |
 
 ### Adjustometer
 
@@ -359,7 +343,7 @@ Clocks i Fiesta_clock mają osobne magistrale dla swoich czujników.
 
 ### USB
 
-ECU, Clocks, OilAndSpeed i Fiesta_clock występują jako urządzenia
+ECU, Clocks i Fiesta_clock występują jako urządzenia
 `Fiesta <Module>` z UID płytki w numerze seryjnym. Konfigurator rozróżnia je
 również przy podłączeniu kilku płytek. Format transmisji, tożsamość i sekwencję
 wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
@@ -407,7 +391,7 @@ Fiesta/
 ├── scripts/                     # rejestr, VS Code, duplikaty, hooki Git
 ├── .github/workflows/           # CI
 ├── src/
-│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/ VP37TestBench/
+│   ├── ECU/ Clocks/ Fiesta_clock/ Adjustometer/ VP37TestBench/
 │   ├── JaszczurHAL/             # submoduł HAL
 │   ├── SerialConfigurator/      # aplikacja desktopowa i CLI
 │   └── common/

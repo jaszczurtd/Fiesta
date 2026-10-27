@@ -15,7 +15,7 @@
  * modules.json, so the on-disk schema does not depend on entry order there.
  * Adjustometer is intentionally absent (v1.32 policy lock). */
 #define SC_MODULE_NAME_ROW(token, display_name, source_dir, tests)             \
-  (display_name),
+  ((source_dir) != NULL ? (display_name) : NULL),
 static const char *const k_module_names[SC_MODULE_COUNT] = {
     SC_MODULE_TABLE(SC_MODULE_NAME_ROW)};
 #undef SC_MODULE_NAME_ROW
@@ -68,7 +68,7 @@ static int find_index_by_name(const char *name) {
     return -1;
   }
   for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-    if (strcmp(k_module_names[i], name) == 0) {
+    if (k_module_names[i] != NULL && strcmp(k_module_names[i], name) == 0) {
       return (int)i;
     }
   }
@@ -358,8 +358,12 @@ static bool serialize(const ScFlashPaths *in, char *out, size_t out_size) {
   out[pos++] = '{';
   out[pos++] = '\n';
 
+  bool first = true;
   for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-    if (i > 0u) {
+    if (k_module_names[i] == NULL) {
+      continue;
+    }
+    if (!first) {
       if (pos + 2u >= out_size)
         return false;
       out[pos++] = ',';
@@ -367,6 +371,7 @@ static bool serialize(const ScFlashPaths *in, char *out, size_t out_size) {
     }
     if (pos + 2u >= out_size)
       return false;
+    first = false;
     out[pos++] = ' ';
     out[pos++] = ' ';
     if (!append_json_string(out, out_size, &pos, k_module_names[i]))

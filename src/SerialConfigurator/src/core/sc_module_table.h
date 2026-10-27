@@ -12,7 +12,7 @@
 #define SC_MODULE_TABLE(X) \
   X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true) \
   X(SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS, "Clocks", false) \
-  X(SC_MODULE_TOKEN_OIL_AND_SPEED, SC_MODULE_OIL_AND_SPEED, "OilAndSpeed", false) \
+  X(NULL, SC_MODULE_DPF, NULL, false) \
   X(SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK, "Fiesta_clock", false)
 
 /* NULL-terminated by-id name fragments of Fiesta boards that

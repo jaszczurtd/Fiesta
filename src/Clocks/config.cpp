@@ -1,5 +1,8 @@
 #include "config.h"
+#include "../common/scDefinitions/sc_clocks_measurements.h"
 #include "clocksState.h"
+#include <hal/core/hal_math.h>
+#include <math.h>
 
 #include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_serial_session.h>
@@ -25,15 +28,33 @@ typedef struct {
   int16_t oil_max_c;
   int16_t egt_warn_c;
   int16_t egt_max_c;
+  int16_t oil_pressure_read_interval_ms;
+  int16_t thermocouple_read_interval_ms;
+  int16_t valid;
+  int16_t abs_speed_kmh, abs_valid;
+  int16_t oil_pressure_cbar, oil_valid;
+  int16_t egt_pre_dpf_c, egt_pre_dpf_valid;
+  int16_t egt_mid_dpf_c, egt_mid_dpf_valid;
 } clocks_values_t;
 
-static const clocks_values_t k_clocks_values = {
+static clocks_values_t s_clocks_values = {
     .coolant_warn_c = (int16_t)TEMP_OK_HI,
     .coolant_max_c = (int16_t)TEMP_MAX,
     .oil_warn_c = (int16_t)TEMP_OIL_OK_HI,
     .oil_max_c = (int16_t)TEMP_OIL_MAX,
     .egt_warn_c = (int16_t)TEMP_EGT_OK_HI,
     .egt_max_c = (int16_t)TEMP_EGT_MAX,
+    .oil_pressure_read_interval_ms = OIL_PRESSURE_READ_INTERVAL,
+    .thermocouple_read_interval_ms = THERMOCOUPLE_READ_INTERVAL,
+    .valid = 0,
+    .abs_speed_kmh = 0,
+    .abs_valid = 0,
+    .oil_pressure_cbar = 0,
+    .oil_valid = 0,
+    .egt_pre_dpf_c = 0,
+    .egt_pre_dpf_valid = 0,
+    .egt_mid_dpf_c = 0,
+    .egt_mid_dpf_valid = 0,
 };
 
 static const sc_param_descriptor_t k_clocks_params[] = {
@@ -55,8 +76,66 @@ static const sc_param_descriptor_t k_clocks_params[] = {
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
                                          egt_max_c, 1300, 1800,
                                          (int16_t)TEMP_EGT_MAX, 1, "egt"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
+        "oil_pressure_read_interval_ms", clocks_values_t,
+        oil_pressure_read_interval_ms, OIL_PRESSURE_READ_INTERVAL_MIN,
+        OIL_PRESSURE_READ_INTERVAL_MAX, OIL_PRESSURE_READ_INTERVAL, 1,
+        "sampling"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
+        "thermocouple_read_interval_ms", clocks_values_t,
+        thermocouple_read_interval_ms, THERMOCOUPLE_READ_INTERVAL_MIN,
+        THERMOCOUPLE_READ_INTERVAL_MAX, THERMOCOUPLE_READ_INTERVAL, 1,
+        "sampling"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_ABS_ID, clocks_values_t,
+                                         abs_speed_kmh, 0, 32767, 0, 1,
+                                         "measurements"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_OIL_ID, clocks_values_t,
+                                         oil_pressure_cbar, 0, 32767, 0, 1,
+                                         "measurements"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_EGT0_ID, clocks_values_t,
+                                         egt_pre_dpf_c, -32768, 32767, 0, 1,
+                                         "measurements"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_EGT1_ID, clocks_values_t,
+                                         egt_mid_dpf_c, -32768, 32767, 0, 1,
+                                         "measurements"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_VALID_ID, clocks_values_t,
+                                         valid, 0, SC_CLOCKS_VALID_ALL, 0, 1,
+                                         "validity"),
 };
 static const size_t k_clocks_params_count = COUNTOF(k_clocks_params);
+
+static int16_t measurement(float value) {
+  return isfinite(value)
+             ? (int16_t)hal_constrain(value, (float)INT16_MIN, (float)INT16_MAX)
+             : 0;
+}
+
+static void refreshValues(void *user) {
+  (void)user;
+  clocks_local_snapshot_t local = {};
+  clocksStateCopyLocal(&local);
+  s_clocks_values.abs_valid = isAbsSpeedValid();
+  s_clocks_values.abs_speed_kmh =
+      s_clocks_values.abs_valid ? measurement((float)getCurrentCarSpeed()) : 0;
+  s_clocks_values.oil_valid = local.oilValid && isfinite(local.oilBar);
+  s_clocks_values.oil_pressure_cbar =
+      s_clocks_values.oil_valid ? measurement(local.oilBar * 100.0f) : 0;
+  s_clocks_values.egt_pre_dpf_valid =
+      local.egtValid[EGT_PRE_DPF] && isfinite(local.egtC[EGT_PRE_DPF]);
+  s_clocks_values.egt_pre_dpf_c = s_clocks_values.egt_pre_dpf_valid
+                                      ? measurement(local.egtC[EGT_PRE_DPF])
+                                      : 0;
+  s_clocks_values.egt_mid_dpf_valid =
+      local.egtValid[EGT_IN_DPF] && isfinite(local.egtC[EGT_IN_DPF]);
+  s_clocks_values.egt_mid_dpf_c = s_clocks_values.egt_mid_dpf_valid
+                                      ? measurement(local.egtC[EGT_IN_DPF])
+                                      : 0;
+  s_clocks_values.valid =
+      (s_clocks_values.abs_valid ? SC_CLOCKS_VALID_ABS : 0) |
+      (s_clocks_values.oil_valid ? SC_CLOCKS_VALID_OIL : 0) |
+      (s_clocks_values.egt_pre_dpf_valid ? SC_CLOCKS_VALID_EGT0 : 0) |
+      (s_clocks_values.egt_mid_dpf_valid ? SC_CLOCKS_VALID_EGT1 : 0);
+}
 
 static void readGpsForSession(void *user, sc_command_gps_snapshot_t *out) {
   (void)user;
@@ -86,8 +165,9 @@ void configSessionInit(void) {
   serviceConfig.build_id = BUILD_ID;
   serviceConfig.params = k_clocks_params;
   serviceConfig.param_count = k_clocks_params_count;
-  serviceConfig.active_values = &k_clocks_values;
+  serviceConfig.active_values = &s_clocks_values;
   serviceConfig.read_gps = readGpsForSession;
+  serviceConfig.refresh = refreshValues;
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
   (void)sc_config_session_start(&s_sc, &serviceConfig, nullptr, nullptr,

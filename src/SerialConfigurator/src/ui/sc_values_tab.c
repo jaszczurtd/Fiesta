@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "sc_clocks_measurements.h"
 #include "sc_core.h"
 #include "sc_i18n.h"
 #include "sc_protocol.h"
 #include "sc_tests_tab.h"
+#include <hal/core/hal_array.h>
 
 /* ── Per-row + per-subtab state, attached to widgets via
  *    g_object_set_data_full so destruction is automatic. ──────────── */
@@ -20,6 +22,7 @@ typedef struct ParamRow {
   int16_t applied_value; /* last value confirmed in firmware staging */
   GtkAdjustment *adjustment;
   GtkWidget *status_label;
+  GtkWidget *read_label;
   bool dirty;
   bool suppress_change_signal;
   ModuleSubtab *owner;
@@ -31,6 +34,9 @@ struct ModuleSubtab {
   GPtrArray *rows; /* of ParamRow* (owns) */
   GtkWidget *footer_status;
   bool is_rtc_clock;
+  bool read_only;
+  guint poll_id;
+  GtkWidget *page;
   bool suppress_rtc_recompute;
   ParamRow *rtc_year_row;
   ParamRow *rtc_month_row;
@@ -43,6 +49,9 @@ static void module_subtab_free(gpointer data) {
   ModuleSubtab *m = (ModuleSubtab *)data;
   if (m == NULL) {
     return;
+  }
+  if (m->poll_id != 0u) {
+    g_source_remove(m->poll_id);
   }
   if (m->rows != NULL) {
     g_ptr_array_unref(m->rows);
@@ -232,6 +241,14 @@ static GtkWidget *build_param_row(ModuleSubtab *m,
   gtk_widget_set_size_request(id_label, 220, -1);
   gtk_box_append(GTK_BOX(hbox), id_label);
 
+  if (m->read_only) {
+    row->read_label = gtk_label_new(detail->value.raw);
+    gtk_label_set_xalign(GTK_LABEL(row->read_label), 0.0f);
+    gtk_box_append(GTK_BOX(hbox), row->read_label);
+    g_ptr_array_add(m->rows, row);
+    return hbox;
+  }
+
   GtkAdjustment *adj = gtk_adjustment_new((double)cur_v, (double)min_v,
                                           (double)max_v, 1.0, 10.0, 0.0);
   row->adjustment = adj;
@@ -405,6 +422,88 @@ static void on_revert_clicked(GtkButton *btn, gpointer user_data) {
   footer_set_error(m, SC_I18N_VALUES_REVERT_FAILED_FMT, err);
 }
 
+static const ScTypedValue *find_value(const ScParamValuesData *values,
+                                      const char *id) {
+  for (size_t i = 0u; i < values->count; ++i) {
+    if (strcmp(values->entries[i].id, id) == 0) {
+      return &values->entries[i].value;
+    }
+  }
+  return NULL;
+}
+
+static void show_reading(ParamRow *row, const ScParamValuesData *values) {
+  const ScTypedValue *value =
+      values != NULL ? find_value(values, row->id) : NULL;
+  unsigned valid_bit = 0u;
+  const char *unit = "";
+  double divisor = 1.0;
+  static const struct {
+    const char *id;
+    const char *unit;
+    unsigned bit;
+    unsigned divisor;
+  } measurements[] = {
+#define SC_READING_ROW(id, bit, unit, divisor) {id, unit, bit, divisor},
+      SC_CLOCKS_MEASUREMENTS(SC_READING_ROW)
+#undef SC_READING_ROW
+  };
+  for (size_t i = 0u; i < COUNTOF(measurements); ++i) {
+    if (strcmp(row->id, measurements[i].id) == 0) {
+      valid_bit = measurements[i].bit;
+      unit = measurements[i].unit;
+      divisor = measurements[i].divisor;
+      break;
+    }
+  }
+  const ScTypedValue *valid = valid_bit != 0u && values != NULL
+                                  ? find_value(values, SC_CLOCKS_VALID_ID)
+                                  : NULL;
+  char text[160];
+  if (value == NULL || (valid_bit != 0u &&
+                        (valid == NULL || ((unsigned)typed_value_to_i16(valid) &
+                                           valid_bit) == 0u))) {
+    snprintf(text, sizeof(text), "-- %s", unit);
+  } else if (valid_bit != 0u) {
+    snprintf(text, sizeof(text), divisor == 100.0 ? "%.2f %s" : "%.0f %s",
+             (double)typed_value_to_i16(value) / divisor, unit);
+  } else {
+    snprintf(text, sizeof(text), "%s%s", value->raw,
+             strstr(row->id, "_ms") != NULL ? " ms" : "");
+  }
+  gtk_label_set_text(GTK_LABEL(row->read_label), text);
+}
+
+static gboolean refresh_readings(gpointer user) {
+  ModuleSubtab *m = user;
+  const bool busy =
+      m->state->detection_in_progress || m->state->flash_in_progress;
+  if (!busy && !gtk_widget_get_mapped(m->page)) {
+    return G_SOURCE_CONTINUE;
+  }
+  /* Shared static scratch: all polls execute on the GTK main thread. */
+  static ScCommandResult result;
+  static ScParamValuesData values;
+  char log[128] = {0}, error[128] = {0};
+  const ScModuleStatus *status = module_status_for(m->state, m->module_index);
+  const bool ok = !busy && m->state->connected && status != NULL &&
+                  status->detected && !status->target_ambiguous &&
+                  sc_core_sc_get_values(&m->state->core, m->module_index,
+                                        &result, log, sizeof(log)) &&
+                  sc_core_parse_param_values_result(&result, &values, error,
+                                                    sizeof(error)) &&
+                  !values.truncated;
+  for (size_t i = 0u; i < m->rows->len; ++i) {
+    show_reading(g_ptr_array_index(m->rows, i), ok ? &values : NULL);
+  }
+  return G_SOURCE_CONTINUE;
+}
+
+static void on_readings_mapped(GtkWidget *widget, gpointer user) {
+  (void)widget;
+  (void)refresh_readings(user);
+}
+
 /* ── Build a per-module sub-tab ──────────────────────────────────── */
 
 static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
@@ -414,6 +513,7 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
   m->rows = g_ptr_array_new_with_free_func(param_row_free);
 
   GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  m->page = outer;
   gtk_widget_set_margin_start(outer, 12);
   gtk_widget_set_margin_end(outer, 12);
   gtk_widget_set_margin_top(outer, 12);
@@ -443,13 +543,14 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
    * post-detection rebuild path; if a future module ships a much
    * larger catalog we can move this off the main thread. */
   ScCommandResult result;
-  char cmd_log[256];
+  char cmd_log[256] = {0};
   const ScModuleStatus *target_status =
       sc_core_module_status(&state->core, module_index);
   const char *target_name =
       (target_status != NULL && target_status->display_name != NULL)
           ? target_status->display_name
           : "?";
+  m->read_only = strcmp(target_name, SC_MODULE_CLOCKS) == 0;
   m->is_rtc_clock =
       (target_status != NULL && target_status->display_name != NULL &&
        strcmp(target_status->display_name, SC_MODULE_CLOCK) == 0);
@@ -494,7 +595,7 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
 
   for (size_t i = 0u; i < list.count; ++i) {
     ScCommandResult pr;
-    char pl[256];
+    char pl[256] = {0};
     if (!sc_core_sc_get_param(&state->core, module_index, list.ids[i], &pr, pl,
                               sizeof(pl))) {
       continue;
@@ -502,6 +603,9 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
     ScParamDetailData detail;
     char err2[256];
     if (!sc_core_parse_param_result(&pr, &detail, err2, sizeof(err2))) {
+      continue;
+    }
+    if (m->read_only && strcmp(detail.group, "validity") == 0) {
       continue;
     }
     const char *group = detail.group[0] != '\0' ? detail.group : "general";
@@ -558,6 +662,12 @@ static GtkWidget *build_module_subtab(AppState *state, size_t module_index) {
   }
 
   rtc_recompute_day_constraints(m);
+
+  if (m->read_only) {
+    g_signal_connect(outer, "map", G_CALLBACK(on_readings_mapped), m);
+    m->poll_id = g_timeout_add(1000u, refresh_readings, m);
+    return outer;
+  }
 
   /* Footer with [Apply staged] [Commit] [Revert] + status label. */
   GtkWidget *footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

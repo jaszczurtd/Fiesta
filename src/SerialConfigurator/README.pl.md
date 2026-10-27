@@ -45,7 +45,7 @@ modułu na zielony; log pokazuje szczegóły. Skan sprawdza wszystkich kandydat�
 aby zgłosić niejednoznaczny wybór przy powtórzonych modułach.
 **Disconnect** usuwa wykryty stan i ustawia wskaźniki na czerwono.
 
-Rejestr wybiera do protokołu ECU, Clocks, OilAndSpeed i RTC_Clock.
+Rejestr wybiera do protokołu ECU, Clocks i RTC_Clock.
 Adjustometer i VP37TestBench nie są obsługiwane przez konfigurator.
 Odczyt nie wymaga uwierzytelnienia:
 
@@ -68,8 +68,8 @@ ECU udostępnia zapisywane progi w wersjonowanym bloku KV. RTC_Clock przyjmuje
 `rtc_year/month/day/hour/minute/second` w czasie CET/CEST i zapisuje je w RTC
 jako UTC. Pole `rtc_integrity` tylko do odczytu ma wartość 1 wyłącznie wtedy,
 gdy RTC zawiera zaufany czas UTC. Commit sprawdza pełną datę, w tym lata
-przestępne. Clocks i OilAndSpeed
-pokazują progi oraz interwały tylko do odczytu, bez utrwalania.
+przestępne. Clocks
+pokazuje progi oraz interwały tylko do odczytu, bez utrwalania.
 
 Na karcie Values edytuj pola, wybierz **Apply staged**, a potem **Commit**,
 aby sprawdzić i zastosować zmiany. **Revert** przywraca kopię roboczą
@@ -178,8 +178,11 @@ Zakres obejmuje wybór urządzenia, wykrywanie, ramki i odpowiedzi,
 uwierzytelnianie/kryptografię, manifesty, transakcje parametrów, GPS, testy
 funkcjonalne, terminy odpowiedzi i odtwarzanie sesji po `HELLO_REQUIRED`.
 Testy wgrywania używają mocka transportu i tymczasowych katalogów BOOTSEL/by-id;
-nie potwierdzają wgrywania przez fizyczne USB. GTK dodaje testy paska postępu
-i karty Tests; ten ostatni jest pomijany bez ekranu.
+nie potwierdzają wgrywania przez fizyczne USB. GTK dodaje testy paska postępu,
+karty Tests i bieżących pomiarów Clocks, także w locale C i polskim.
+Skrypt desktopowy, pełna bramka i CI używają tego samego runnera ekranu,
+który przy braku ekranu uruchamia Xvfb. Brak Xvfb lub wymaganego locale
+przerywa testy wskazań zamiast je pomijać.
 
 CMake utrzymuje listę testów, w tym `serial-configurator-cli-selectors-tests`.
 Zachowuj `-Wall -Wextra -Werror`. [Workflow CI](../../.github/workflows/serial-configurator-tests.yml)
@@ -217,3 +220,14 @@ porty POSIX. `sc_flash.c`, `sc_manifest.c`, `sc_gps.c` i `sc_tests.c`
 implementują odpowiednie operacje, a `sc_text.c` i `sc_time.c` współdzielone
 funkcje tekstowe i czasowe. `src/cli/sc_cli_main.c` kieruje polecenia do
 sąsiednich modułów obsługi poleceń, wyboru urządzenia i formatowania wyników.
+
+Otwarta zakładka wartości Clocks odświeża wskazania co sekundę. Prędkość ABS jest podana
+w km/h, ciśnienie oleju w barach, a oba kanały EGT w °C. Brakujący lub
+nieaktualny pomiar jest oznaczony `--`; błąd transmisji również czyści
+wskazania. Podczas wykrywania i wgrywania wskazania gasną, a odpytywanie
+jest wstrzymane. Ukryte zakładki nie odpytują modułu. Format liczb zależy od locale.
+Parametry Clocks są tylko do odczytu. Mapa korzysta z GPS Clocks i usuwa
+stary znacznik po utracie fixa, modułu lub USB; odpytywanie wraca po wykryciu.
+
+DPF jest widoczny jako nieaktywny. Nie można go wykryć, wybrać do wgrywania
+ani przypisać mu ścieżki firmware'u. Stare ścieżki wycofanego modułu są odrzucane.

@@ -75,8 +75,6 @@ enum {
   CAN_FRAME_ECU_UPDATE_INTAKE = 1,
   CAN_FRAME_ECU_UPDATE_FUEL_HI,
   CAN_FRAME_ECU_UPDATE_FUEL_LO,
-  CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE, // withdrawn, always 0: GPS is in Clocks
-  CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED  // withdrawn, always 0
 };
 
 // Sent by Clocks.

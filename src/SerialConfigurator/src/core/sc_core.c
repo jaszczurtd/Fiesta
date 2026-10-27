@@ -409,13 +409,15 @@ static int module_index_from_token(const char *token) {
   }
 
   for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-    if (strcmp(token, k_module_defs[i].token) == 0) {
+    if (k_module_defs[i].token != NULL &&
+        strcmp(token, k_module_defs[i].token) == 0) {
       return (int)i;
     }
   }
 
   for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-    if (strcmp(token, k_module_defs[i].display_name) == 0) {
+    if (k_module_defs[i].token != NULL &&
+        strcmp(token, k_module_defs[i].display_name) == 0) {
       return (int)i;
     }
   }
@@ -766,7 +768,8 @@ static bool sc_core_send_sc_command_internal(ScCore *core, size_t module_index,
     return false;
   }
 
-  if (module_index >= SC_MODULE_COUNT) {
+  if (module_index >= SC_MODULE_COUNT ||
+      sc_core_module_source_dir(module_index) == NULL) {
     log_append(log_output, log_output_size,
                "[ERROR] Module index out of range: %zu\n", module_index);
     return false;
@@ -1962,7 +1965,8 @@ ScFlashStatus sc_core_flash(const ScTransport *transport, size_t module_index,
                             size_t error_size) {
   if (transport == NULL || device_path == NULL || uid_hex == NULL ||
       uid_hex[0] == '\0' || uf2_path == NULL ||
-      module_index >= SC_MODULE_COUNT) {
+      module_index >= SC_MODULE_COUNT ||
+      sc_core_module_source_dir(module_index) == NULL) {
     flash_set_error(error_buf, error_size, "null/invalid input");
     return SC_FLASH_STATUS_NULL_ARG;
   }

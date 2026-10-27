@@ -95,12 +95,38 @@ class RegistryRulesTests(unittest.TestCase):
         self.assertEqual([m.name for m in registry.host_tests()],
                          ["ECU", "Adjustometer", "SerialConfigurator"])
 
+    def test_inactive_entry_needs_no_project_and_has_no_firmware_identity(self):
+        modules = copy.deepcopy(BASE_MODULES)
+        modules.append({"name": "dpfmodule", "kind": "inactive", "macro": "DPF",
+                        "serialConfigurator": {"index": 2, "displayName": "DPF"}})
+        repo = FixtureRepo(modules=modules)
+        self.addCleanup(repo.close)
+        shutil.rmtree(repo.root / "src/dpfmodule")
+        registry = repo.load()
+        self.assertEqual(registry.serial_configurator()[2].name, "dpfmodule")
+        self.assertNotIn("dpfmodule", [m.name for m in registry.firmware()])
+        self.assertNotIn("dpfmodule", [m.name for m in registry.ci()])
+        self.assertNotIn("SC_MODULE_TOKEN_DPF", fiesta_modules.tokens_header(registry))
+        self.assertIn("X(NULL, SC_MODULE_DPF, NULL, false)",
+                      fiesta_modules.sc_table_header(registry))
+        for field, value in (("token", "OIL&SPD"), ("hostTests", "build"),
+                             ("ci", True)):
+            bad = copy.deepcopy(modules)
+            bad[-1][field] = value
+            rejected = FixtureRepo(modules=bad)
+            self.addCleanup(rejected.close)
+            with self.assertRaises(RegistryError):
+                rejected.load()
+
     def test_rejects_wrong_schema(self) -> None:
         self.assert_rejected("schemaVersion", schema=2)
 
     def test_rejects_duplicate_names_tokens_and_macros(self) -> None:
         self.assert_rejected("duplicate token", modules=modified(1, token="ECU"))
         self.assert_rejected("duplicate macro", modules=modified(1, macro="ECU"))
+        inactive = {"name": "dpfmodule", "kind": "inactive", "macro": "ECU",
+                    "serialConfigurator": {"index": 2, "displayName": "DPF"}}
+        self.assert_rejected("duplicate macro", modules=[*BASE_MODULES, inactive])
         duplicate = copy.deepcopy(BASE_MODULES) + [copy.deepcopy(BASE_MODULES[3])]
         self.assert_rejected("duplicate module name", modules=duplicate)
 

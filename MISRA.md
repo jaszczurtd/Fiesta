@@ -13,7 +13,7 @@ the analyzer implements.
 |---|---|
 | `src/common/vp37`, Adjustometer and selected shared headers | Gate 4 of `runalltests.sh` rejects active findings after recorded suppressions. |
 | Other ECU code and shared sources included by its runner | Screening report for review; not a zero-findings gate. |
-| Clocks, OilAndSpeed, Fiesta_clock and VP37TestBench's own files | Outside MISRA scope. The shared VP37 code used by the bench remains in scope. |
+| Clocks, Fiesta_clock and VP37TestBench's own files | Outside MISRA scope. The shared VP37 code used by the bench remains in scope. |
 
 The gate runs `check_misra.sh --fail-paths` for ECU and a second scan with
 `--project src/Adjustometer`. Its path expressions in

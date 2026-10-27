@@ -11,7 +11,6 @@ on:
       - "runalltests.sh"
       - "src/ECU/**"
       - "src/Clocks/**"
-      - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
       - ".github/workflows/firmware-build-scripts.yml"
@@ -25,7 +24,6 @@ on:
       - "runalltests.sh"
       - "src/ECU/**"
       - "src/Clocks/**"
-      - "src/OilAndSpeed/**"
       - "src/Adjustometer/**"
       - "src/Fiesta_clock/**"
       - ".github/workflows/firmware-build-scripts.yml"
@@ -41,7 +39,6 @@ jobs:
         module:
           - ECU
           - Clocks
-          - OilAndSpeed
           - Adjustometer
           - Fiesta_clock
     env:
@@ -61,7 +58,7 @@ jobs:
           python3 src/JaszczurHAL/scripts/generate_hal_features.py \
             --lint --effective \
             --input-root src/ECU --input-root src/Clocks \
-            --input-root src/OilAndSpeed --input-root src/Adjustometer \
+            --input-root src/Adjustometer \
             --input-root src/Fiesta_clock --input-root src/SerialConfigurator \
             --input-root src/common \
             --resolution-output "$RUNNER_TEMP/fiesta-effective-feature-resolution.json"

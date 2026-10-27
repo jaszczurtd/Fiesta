@@ -130,7 +130,8 @@ void sc_core_detect_modules(ScCore *core, char *log_output,
                             size_t log_output_size);
 size_t sc_core_module_count(void);
 const ScModuleStatus *sc_core_module_status(const ScCore *core, size_t index);
-/* Module directory under src/, or NULL when index is out of range. */
+/* Module directory under src/, or NULL for an inactive entry or an out-of-range
+ * index. */
 const char *sc_core_module_source_dir(size_t index);
 /* True when the module firmware reports functional tests (Tests tab). */
 bool sc_core_module_has_tests(size_t index);

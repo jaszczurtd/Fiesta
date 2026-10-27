@@ -30,7 +30,7 @@ i lokalne ustawienia VS Code. Następnie:
 Lista pakietów znajduje się w
 [`ensure-system-dependencies.sh`](../src/ECU/scripts/ensure-system-dependencies.sh).
 Obejmuje toolchainy C/C++ i Arm, CMake, Ninja, Python, Git, curl, certyfikaty CA,
-Perl, libusb, pkg-config, GTK4, dpkg-dev, libshumate, Valgrind, clang-format,
+Perl, libusb, pkg-config, GTK4, dpkg-dev, libshumate, Xvfb, xauth, locales, Valgrind, clang-format,
 clang-tidy, clang-tools i Javę dla PMD. Setup buduje cppcheck w wersji wybranej
 przez HAL; wersje z dystrybucji mogą dawać inne wyniki analizy.
 
@@ -155,6 +155,12 @@ dołączenia do działającego układu.
 Wgrywanie przez USB obsługuje `jh-vscode`; sonda służy do pracy Cortex-Debug/GDB.
 
 ## Generowane pliki konfiguracji
+
+Wpis `kind: "inactive"` rezerwuje tylko indeks i nazwę w SerialConfiguratorze.
+DPF zajmuje indeks 2; ECU, Clocks i RTC_Clock zachowują indeksy 0, 1 i 3.
+Nieaktywna pozycja nie ma tokenu, identyfikacji USB, projektu firmware,
+testów ani buildu CI. Jej zapisane ścieżki obrazów są ignorowane i pomijane
+przy zapisie konfiguracji.
 
 [`modules.json`](../modules.json) zawiera rodzaje modułów, tokeny, testy hostowe
 i wybór modułów CI. `scripts/fiesta_modules.py` generuje nagłówek tokenów,

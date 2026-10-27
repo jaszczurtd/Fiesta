@@ -26,7 +26,7 @@ run_app() {
 
 run_tests() {
     build
-    ctest --test-dir "$BUILD_DIR" --output-on-failure
+    bash "${PROJECT_DIR}/../../scripts/sc-with-display.sh" ctest --test-dir "$BUILD_DIR" --output-on-failure
 }
 
 package_deb() {

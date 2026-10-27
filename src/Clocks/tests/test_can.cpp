@@ -74,8 +74,23 @@ void test_truncated_ecu_update_01_frame_is_ignored(void) {
   TEST_ASSERT_EQUAL_FLOAT(13.8f, canValues[F_VOLTS]);
 }
 
+void test_truncated_ecu_update_02_frame_is_ignored(void) {
+  canValues[F_INTAKE_TEMP] = 77.0f;
+  canValues[F_FUEL] = 13.8f;
+
+  // A truncated ECU_UPDATE_02 must preserve intake and fuel values.
+  // a 3-byte frame must be rejected without touching state.
+  uint8_t shortFrame[3] = {0x00, 0x11, 0x22};
+  hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_ECU_UPDATE_02, 3,
+                      shortFrame);
+  canMainLoop();
+
+  TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
+  TEST_ASSERT_EQUAL_FLOAT(13.8f, canValues[F_FUEL]);
+}
+
 // Clocks is the only sender of 0x12A and 0x12F; the same IDs from another
-// node, e.g. a forgotten OilAndSpeed, must not overwrite its measurements.
+// node, e.g. a retired sender, must not overwrite its measurements.
 void test_own_frames_from_another_node_change_nothing(void) {
   canSetValue(F_ABS_CAR_SPEED, 42.0f);
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0x00, 0x05, 0x00, 0x99,
@@ -98,8 +113,8 @@ void test_full_ecu_update_02_frame_updates_state(void) {
   frame[CAN_FRAME_ECU_UPDATE_INTAKE] = 45;
   frame[CAN_FRAME_ECU_UPDATE_FUEL_HI] = 0x10; // 4096
   frame[CAN_FRAME_ECU_UPDATE_FUEL_LO] = 0x00;
-  frame[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE] = 1;
-  frame[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED] = 60;
+  frame[4u] = 1;
+  frame[5u] = 60;
 
   hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_ECU_UPDATE_02,
                       CAN_FRAME_MAX_LENGTH, frame);
@@ -141,8 +156,9 @@ void test_unknown_can_id_does_not_update_state(void) {
   canValues[F_FUEL] = 1234.0f;
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0xAA, 0xBB, 0xCC, 0xDD,
                                          0xEE, 0xFF, 0x11, 0x22};
-  hal_mock_can_inject(clocksTestGetCanHandle(), 0x131u, CAN_FRAME_MAX_LENGTH,
+  hal_mock_can_inject(clocksTestGetCanHandle(), 0x132u, CAN_FRAME_MAX_LENGTH,
                       frame);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(clocksTestGetCanHandle()));
   canMainLoop();
   TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, canValues[F_FUEL]);
@@ -516,6 +532,7 @@ void test_can_init_reports_why_the_bus_stayed_off(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EIO, canInit());
   TEST_ASSERT_NULL(clocksTestGetCanHandle());
   updateCANrecipients();
+  updateEGTrecipients();
   canMainLoop();
   hal_mock_can_fail_creates(0u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
@@ -524,6 +541,7 @@ void test_can_init_reports_why_the_bus_stayed_off(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_truncated_ecu_update_01_frame_is_ignored);
+  RUN_TEST(test_truncated_ecu_update_02_frame_is_ignored);
   RUN_TEST(test_own_frames_from_another_node_change_nothing);
   RUN_TEST(test_full_ecu_update_02_frame_updates_state);
   RUN_TEST(test_rpm_frame_updates_cluster_in_same_can_drain);

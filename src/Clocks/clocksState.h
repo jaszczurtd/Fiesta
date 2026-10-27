@@ -15,6 +15,7 @@
 
 typedef struct {
   float values[F_LAST]; // decoded ECU frames and the ABS speed, by F_*
+  bool absReady; // ABS capture initialized; zero speed is a valid reading
   bool ecuConnected;
   bool dpfConnected;
   uint32_t ecuUpdatedMs; // hal_millis() of the last ECU frame, 0 before one
@@ -73,6 +74,8 @@ extern float valueFields[];
 bool isEcuConnected(void);
 bool isDPFConnected(void);
 bool isOilPressureValid(void);
+/** @return True after core 0 initializes ABS capture successfully. */
+bool isAbsSpeedValid(void);
 /** @param channel EGT_PRE_DPF or EGT_IN_DPF. */
 bool isEgtValid(int channel);
 bool isFanEnabled(void);

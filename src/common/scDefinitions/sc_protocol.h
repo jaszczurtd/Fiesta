@@ -6,7 +6,7 @@
  *        vocabulary used by Fiesta firmware modules and by the host tool.
  *
  * Every SC_* command and status token used anywhere in firmware
- * (ECU, Clocks, OilAndSpeed) or host (SerialConfigurator core / CLI / UI)
+ * (ECU, Clocks) or host (SerialConfigurator core / CLI / UI)
  * MUST live here. Adding a raw "SC_..." literal directly in module
  * config.c, host transport, or CLI handlers bypasses this shared
  * definition and is forbidden - see provider §11
@@ -312,7 +312,7 @@ extern "C" {
  * value outside the descriptor's declared [min, max]. */
 #define SC_REPLY_BAD_REQUEST_OUT_OF_RANGE_FMT                                  \
   SC_STATUS_BAD_REQUEST " " SC_REPLY_REASON_OUT_OF_RANGE " id=%s min=%d "      \
-                                                         "max=%d"
+                        "max=%d"
 
 /* ── GPS telemetry snapshot reply ──────────────────────────────────── */
 

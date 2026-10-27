@@ -14,7 +14,6 @@ extern "C" {
  * no token is reused by accident. */
 #define SC_MODULE_TOKEN_ECU "ECU"
 #define SC_MODULE_TOKEN_CLOCKS "CLOCKS"
-#define SC_MODULE_TOKEN_OIL_AND_SPEED "OIL&SPD"
 #define SC_MODULE_TOKEN_CLOCK "RTC_CLK"
 #define SC_MODULE_TOKEN_ADJUSTOMETER "ADJ"
 #define SC_MODULE_TOKEN_VP37_TESTBENCH "VP37TB"
@@ -22,7 +21,7 @@ extern "C" {
 /* Names shown by SerialConfigurator. */
 #define SC_MODULE_ECU "ECU"
 #define SC_MODULE_CLOCKS "Clocks"
-#define SC_MODULE_OIL_AND_SPEED "OilAndSpeed"
+#define SC_MODULE_DPF "DPF"
 #define SC_MODULE_CLOCK "RTC_Clock"
 
 #ifdef __cplusplus

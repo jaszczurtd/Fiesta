@@ -4,7 +4,7 @@
  *   - find_by_id, validate_range, get_i16, set_i16, load_defaults
  *     (kind / read-only / range / NULL guards),
  *   - reply_get_param_list / reply_get_values_i16 / reply_get_param
- *     emit byte-identical strings to the legacy ECU/Clocks/OilAndSpeed
+ *     emit byte-identical strings to the legacy ECU/Clocks
  *     emitters,
  *   - blob_encode / blob_decode round-trip + reject paths +
  *     schema-versioned upgrade where a V1-shaped blob is decoded

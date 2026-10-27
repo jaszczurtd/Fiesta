@@ -138,8 +138,12 @@ configure_build_and_test_module() {
         cmake --build "${build_abs}" --parallel "${JOBS}"
 
     info "[${name}] running ctest (runtime-only, static-analysis label excluded)"
+    local gui_runner=()
+    if [[ "${name}" == "SerialConfigurator" ]]; then
+        gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
+    fi
     run_logged "/tmp/fiesta_${name}_ctest.log" \
-        ctest --test-dir "${build_abs}" --progress --output-on-failure -LE static-analysis
+        "${gui_runner[@]}" ctest --test-dir "${build_abs}" --progress --output-on-failure -LE static-analysis
 
     pass "[${name}] host tests passed"
 }
@@ -151,8 +155,12 @@ run_module_target() {
 
     local build_abs="${SCRIPT_DIR}/${build_rel}"
     info "[${name}] running target: ${target}"
+    local gui_runner=()
+    if [[ "${name}" == "SerialConfigurator" && "${target}" == "check-valgrind" ]]; then
+        gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
+    fi
     run_logged "/tmp/fiesta_${name}_${target}.log" \
-        cmake --build "${build_abs}" --target "${target}" --parallel "${JOBS}"
+        "${gui_runner[@]}" cmake --build "${build_abs}" --target "${target}" --parallel "${JOBS}"
     pass "[${name}] ${target} passed"
 }
 

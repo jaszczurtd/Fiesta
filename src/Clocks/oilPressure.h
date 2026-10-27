@@ -7,7 +7,7 @@
 #include <hal/core/hal_status.h>
 
 // Oil pressure sender on JH_HW_NODE_OIL_PRESSURE_PIN_IN, moved from
-// OilAndSpeed with its characteristic and filter. Core 1 reads it every
+// the existing characteristic and filter. Core 1 reads it every
 // OIL_PRESSURE_READ_INTERVAL.
 
 // Oil pressure sender parameters

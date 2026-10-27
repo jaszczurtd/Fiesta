@@ -85,7 +85,7 @@ Scope: `src/common/scDefinitions/*.c`.
 
 Suppression: none.
 
-Twelve Required findings in sources compiled into the ECU, Clocks and OilAndSpeed
+Twelve Required findings in sources compiled into the ECU, Clocks and Fiesta_clock
 firmware: `<stdio.h>` for `snprintf`, two pointer casts in the parameter-descriptor
 offset mechanism, and mechanical type and `else` cleanups. Disposition waits on the open
 decision whether `src/common/scDefinitions` belongs in MISRA scope.

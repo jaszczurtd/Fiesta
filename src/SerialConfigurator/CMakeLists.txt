@@ -158,7 +158,7 @@ set(FIESTA_SC_DEFINITIONS_DIR "${FIESTA_COMMON_DIR}/scDefinitions")
 # R1.1: Single-source-of-truth library for the SC wire vocabulary plus the
 # generic descriptor-driven SC reply machinery. Shared by host (SC core,
 # CLI, host tests starting in R1.3) and firmware modules (ECU/Clocks/
-# OilAndSpeed migrating onto it from R1.2 onward via the shared firmware build).
+# Other firmware modules use the same shared helpers).
 #
 # This library remains JaszczurHAL-free: sc_param_handlers.c includes only the
 # HAL-free sc_protocol.h. The HAL-bound fiesta_default_vocabulary lives in
@@ -506,9 +506,24 @@ if(BUILD_TESTING)
     # Custom progress-bar widget test - embeds src/ui/sc_progressbar.c
     # by #include. Unlike the i18n test, the widget is GTK-backed
     # (GtkDrawingArea + cairo), so the target only registers when GTK4
-    # is available on the host. The test itself skips at runtime when
-    # no display is reachable, so headless CI runs do not fail.
+    # is available on the host. The gate and CI provide Xvfb when no
+    # display is available; live-view tests must execute, never skip.
     if(GTK4_FOUND)
+        add_executable(serial-configurator-live-views-tests
+            tests/test_sc_live_views.c src/ui/sc_i18n.c)
+        target_link_libraries(serial-configurator-live-views-tests PRIVATE
+            serial_configurator_core PkgConfig::GTK4)
+        target_include_directories(serial-configurator-live-views-tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR})
+        add_test(NAME serial-configurator-live-views-tests
+            COMMAND serial-configurator-live-views-tests)
+        foreach(locale IN ITEMS C pl_PL.UTF-8)
+            add_test(NAME serial-configurator-live-views-${locale}-tests
+                COMMAND $<TARGET_FILE:serial-configurator-live-views-tests>)
+            set_tests_properties(serial-configurator-live-views-${locale}-tests
+                PROPERTIES ENVIRONMENT "LC_ALL=${locale}")
+        endforeach()
+
         add_executable(serial-configurator-progressbar-tests
             tests/test_sc_progressbar.c
         )

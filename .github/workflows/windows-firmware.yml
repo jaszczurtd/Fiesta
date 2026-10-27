@@ -49,7 +49,7 @@ jobs:
         working-directory: workspace/Fiesta
         run: |
           $entry = 'src\JaszczurHAL\vscode\entry\jh-vscode.cmd'
-          $modules = @('ECU', 'Clocks', 'OilAndSpeed', 'Adjustometer', 'Fiesta_clock')
+          $modules = @('ECU', 'Clocks', 'Adjustometer', 'Fiesta_clock')
           $artifacts = '.build\windows-artifacts'
           New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
           foreach ($module in $modules) {

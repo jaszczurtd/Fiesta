@@ -100,6 +100,8 @@ bool isEcuConnected(void) { return s_view.ecuConnected; }
 
 bool isDPFConnected(void) { return s_view.dpfConnected; }
 
+bool isAbsSpeedValid(void) { return s_view.absReady; }
+
 bool isOilPressureValid(void) { return s_local.oilValid; }
 
 bool isEgtValid(int channel) {

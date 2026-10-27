@@ -22,7 +22,6 @@ add_clocks_test(test_config_session)
 fiesta_add_sc_session_test_support(test_config_session)
 
 set(CLOCKS_CAN_TEST_SOURCES
-    test_can.cpp
     ${CLOCKS_SRC}/can.cpp
     ${HAL_SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
     ${HAL_SRC}/hal/can/hal_can.cpp
@@ -34,12 +33,14 @@ set(CLOCKS_CAN_TEST_SOURCES
     ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
     ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
 )
-add_executable(test_can ${CLOCKS_CAN_TEST_SOURCES})
+add_executable(test_can test_can.cpp ${CLOCKS_CAN_TEST_SOURCES})
+# Exercise ABS readiness through CAN publication and the real SC reply.
+target_sources(test_config_session PRIVATE ${CLOCKS_CAN_TEST_SOURCES})
 target_link_libraries(test_can PRIVATE clocks_mock)
 target_include_directories(test_can BEFORE PRIVATE ${HAL_SRC})
 add_test(NAME test_can COMMAND test_can)
 
-# ABS speed, moved from OilAndSpeed with its algorithm unchanged.
+# ABS speed, moved with its existing algorithm unchanged.
 add_executable(test_speed
     test_speed.cpp
     ${CLOCKS_SRC}/speed.cpp

@@ -2,7 +2,7 @@
 
 [English](PROTOCOL.md) · [Instrukcja konfiguratora](../../SerialConfigurator/README.pl.md)
 
-SerialConfigurator komunikuje się z ECU, Clocks, OilAndSpeed i RTC_Clock przez
+SerialConfigurator komunikuje się z ECU, Clocks i RTC_Clock przez
 USB CDC. Protokół tekstowy obejmuje wykrywanie modułów, odczyt i zmianę
 parametrów, uwierzytelnianie oraz wejście do bootloadera przed wgrywaniem.
 Logi diagnostyczne współdzielą strumień, ale nie są traktowane jako odpowiedzi.
@@ -106,7 +106,16 @@ utrwalane wartości do wersjonowanego bloku z CRC32 (PKZIP).
 Zapis wymaga uwierzytelnienia i używa kopii roboczej: `SC_SET_PARAM` zmienia
 kopię, `SC_COMMIT_PARAMS` sprawdza ją i stosuje, a `SC_REVERT_PARAMS` odtwarza
 ją z aktywnych wartości. ECU i RTC_Clock pozwalają zmieniać parametry;
-Clocks i OilAndSpeed udostępniają tylko odczyt.
+Clocks udostępnia tylko odczyt.
+
+Clocks udostępnia przez `SC_GET_VALUES` interwały próbkowania i pomiary
+tylko do odczytu: `abs_kmh` (km/h), `oil_cbar` (0,01 bara), `egt0_c`
+(przed DPF, °C), `egt1_c` (w DPF, °C) oraz `valid`. Bity 0-3 `valid`
+oznaczają kolejno ABS, olej, EGT0 i EGT1. Niepoprawne pomiary mają wartość
+0; klient musi sprawdzić bity, aby odróżnić je od poprawnego zera. Ważność
+ABS oznacza poprawną inicjalizację pomiaru, także na postoju. Każde żądanie
+pobiera nową migawkę; olej i EGT tracą ważność niezależnie od komunikacji
+z ECU. Cały katalog i odpowiedź wartości mieszczą się w jednej ramce SC.
 
 ### Dodawanie parametru
 

@@ -23,7 +23,6 @@ class CanHardwareTests(unittest.TestCase):
         cases = (("ECU", "can.c", "canInit(1)", "canMain"),
                  ("ECU", "obd-2.c", "obdInit(1)", "canObd"),
                  ("Clocks", "can.cpp", "canInit()", "can"),
-                 ("OilAndSpeed", "can.cpp", "canInit()", "can"),
                  ("Fiesta_clock", "can.c", "clockCanInit()", "can"))
         for module, source_name, call, node in cases:
             with self.subTest(module=module, source=source_name), tempfile.TemporaryDirectory() as temp:

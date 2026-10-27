@@ -10,7 +10,7 @@
  * SSOT compilable on environments that do not have JaszczurHAL on
  * the include path (e.g. SerialConfigurator host CI runs that fall
  * back to the @c sc_crypto_none backend). Firmware modules
- * (ECU, Clocks, OilAndSpeed) include this file because they own a
+ * (ECU, Clocks) include this file because they own a
  * @c hal_serial_session_t and must hand the dialect to the HAL
  * helper at init; pure host tooling (SC core / CLI / UI) only
  * needs @ref sc_protocol.h.

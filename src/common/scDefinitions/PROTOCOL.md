@@ -2,7 +2,7 @@
 
 [Polski](PROTOCOL.pl.md) · [Configurator guide](../../SerialConfigurator/README.md)
 
-The Fiesta Serial Configurator talks to ECU, Clocks, OilAndSpeed, and
+The Fiesta Serial Configurator talks to ECU, Clocks, and
 RTC_Clock over each module's USB CDC port. One text protocol carries module
 discovery, parameter reads and writes, authentication, and the request to
 enter the bootloader before flashing. Debug log lines share the same stream
@@ -120,8 +120,16 @@ and packs persisted values into a versioned blob with a CRC32 (PKZIP).
 
 Writes are staged and need an authenticated session. `SC_SET_PARAM` changes
 the staged copy, `SC_COMMIT_PARAMS` validates and applies it, and
-`SC_REVERT_PARAMS` copies the active values back. ECU and RTC_Clock have writable parameters; Clocks and
-OilAndSpeed only report theirs.
+`SC_REVERT_PARAMS` copies the active values back. ECU and RTC_Clock have writable parameters; Clocks only reports its parameters.
+
+Clocks also reports read-only sampling intervals and measurements through
+`SC_GET_VALUES`: `abs_kmh` (km/h), `oil_cbar` (0.01 bar), `egt0_c`
+(before DPF, °C), `egt1_c` (inside DPF, °C), and `valid`. Bits 0-3 of
+`valid` mark ABS, oil, EGT0 and EGT1 respectively. Invalid measurements
+are zeroed; clients must check the bits to distinguish them from valid zero.
+ABS validity means capture initialized successfully, including at standstill.
+Each request takes a new snapshot; oil and EGT expire independently of ECU
+communication. The complete catalog and value reply fit a single SC frame.
 
 ### Add a parameter
 

@@ -151,6 +151,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_REVERT_OK] = "Reverted.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT] = "Revert failed: %s",
 
+    [SC_I18N_MODULE_INACTIVE] = "inactive",
     [SC_I18N_TAB_MAP] = "GPS View",
     [SC_I18N_MAP_PLACEHOLDER] =
         "Connect and detect Clocks to see the GPS position.",
@@ -402,6 +403,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_REVERT_OK] = "Cofnięto.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT] = "Cofnięcie nie powiodło się: %s",
 
+    [SC_I18N_MODULE_INACTIVE] = "nieaktywny",
     [SC_I18N_TAB_MAP] = "Widok GPS",
     [SC_I18N_MAP_PLACEHOLDER] =
         "Podłącz i wykryj Clocks, aby zobaczyć pozycję GPS.",

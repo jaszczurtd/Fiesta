@@ -440,8 +440,8 @@ void test_ecu_frames_carry_no_gps(void) {
       TEST_ASSERT_EQUAL_UINT16(
           300u, jh_u16_from_bytes(data[CAN_FRAME_ECU_UPDATE_FUEL_HI],
                                   data[CAN_FRAME_ECU_UPDATE_FUEL_LO]));
-      TEST_ASSERT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_GPS_AVAILABLE]);
-      TEST_ASSERT_EQUAL_UINT8(0u, data[CAN_FRAME_ECU_UPDATE_VEHICLE_SPEED]);
+      TEST_ASSERT_EQUAL_UINT8(0u, data[4u]);
+      TEST_ASSERT_EQUAL_UINT8(0u, data[5u]);
     }
   }
   TEST_ASSERT_TRUE(sawUpdate02);

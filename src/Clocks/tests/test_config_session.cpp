@@ -1,5 +1,6 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
 #include "../../common/tests/sc_session_test_support.h"
+#include "can.h"
 #include "clocksState.h"
 #include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
@@ -8,6 +9,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+/* CAN publication is real; drawing and backlight are unrelated to SC. */
+void updateCluster(void) {}
+int getLcdBrightness(void) { return 0; }
 
 void setUp(void) {
   configSessionInit();
@@ -40,6 +45,52 @@ void test_clocks_non_framed_input_is_silently_dropped(void) {
   TEST_ASSERT_FALSE(configSessionActive());
   TEST_ASSERT_EQUAL_UINT32(0u, configSessionId());
   TEST_ASSERT_EQUAL_STRING("", response);
+}
+
+void test_clocks_config_session_init_resets_active_state(void) {
+  performHello();
+
+  TEST_ASSERT_TRUE(configSessionActive());
+  TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
+
+  configSessionInit();
+
+  TEST_ASSERT_FALSE(configSessionActive());
+  TEST_ASSERT_EQUAL_UINT32(0u, configSessionId());
+}
+
+void test_clocks_hello_uses_current_millis_in_session_id(void) {
+  hal_mock_set_millis(1234u);
+  const char *response = sendSerialLine("HELLO\n");
+
+  TEST_ASSERT_TRUE(configSessionActive());
+  TEST_ASSERT_EQUAL_UINT32((((uint32_t)1u << 20) ^ 1234u), configSessionId());
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(response, "session=1049810"));
+}
+
+void test_clocks_handles_multiple_hello_commands_in_one_rx_buffer(void) {
+  /* Stream two framed HELLOs back-to-back to verify the byte parser keeps
+   * the session active across boundaries and drains them in order. */
+  char frame_a[160];
+  char frame_b[160];
+  buildFrame(nextTestSeq(), "HELLO", frame_a, sizeof(frame_a));
+  buildFrame(nextTestSeq(), "HELLO", frame_b, sizeof(frame_b));
+
+  char both[400];
+  TEST_ASSERT_TRUE(strlen(frame_a) + strlen(frame_b) < sizeof(both));
+  snprintf(both, sizeof(both), "%s%s", frame_a, frame_b);
+
+  hal_mock_serial_reset();
+  hal_mock_serial_inject_rx(both, -1);
+  configSessionTick();
+
+  TEST_ASSERT_TRUE(configSessionActive());
+  TEST_ASSERT_EQUAL_UINT32(((uint32_t)2u << 20), configSessionId());
+
+  const char *raw = hal_mock_serial_last_line();
+  TEST_ASSERT_NOT_NULL(raw);
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "OK HELLO"));
+  TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "module=" SC_MODULE_TOKEN_CLOCKS));
 }
 
 void test_clocks_sc_get_meta_requires_hello_first(void) {
@@ -179,8 +230,131 @@ void test_clocks_gps_reports_precise_position_and_utc_then_expires(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "lat_e6=0"));
 }
 
+/* Parse complete scalar tokens: valid=1 must never match valid=13. */
+static int scalar(const char *reply, const char *id) {
+  char key[80];
+  snprintf(key, sizeof(key), " %s=", id);
+  const char *at = strstr(reply, key);
+  TEST_ASSERT_NOT_NULL(at);
+  int value = 0;
+  TEST_ASSERT_EQUAL_INT(1, sscanf(at + strlen(key), "%d", &value));
+  return value;
+}
+
+void test_clocks_sampling_intervals_moved_to_the_catalog(void) {
+  performHello();
+  const char *response = sendSerialLine("SC_GET_PARAM_LIST\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "oil_pressure_read_interval_ms"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "thermocouple_read_interval_ms"));
+  TEST_ASSERT_NULL(strstr(response, "*"));
+  const char *ids[] = {"oil_pressure_read_interval_ms",
+                       "thermocouple_read_interval_ms"};
+  const int minimum[] = {OIL_PRESSURE_READ_INTERVAL_MIN,
+                         THERMOCOUPLE_READ_INTERVAL_MIN};
+  const int maximum[] = {OIL_PRESSURE_READ_INTERVAL_MAX,
+                         THERMOCOUPLE_READ_INTERVAL_MAX};
+  const int configured[] = {OIL_PRESSURE_READ_INTERVAL,
+                            THERMOCOUPLE_READ_INTERVAL};
+  for (size_t i = 0; i < COUNTOF(ids); ++i) {
+    char command[96];
+    snprintf(command, sizeof(command), "SC_GET_PARAM %s\n", ids[i]);
+    response = sendSerialLine(command);
+    TEST_ASSERT_EQUAL_INT(minimum[i], scalar(response, "min"));
+    TEST_ASSERT_EQUAL_INT(maximum[i], scalar(response, "max"));
+    TEST_ASSERT_GREATER_OR_EQUAL_INT(minimum[i], scalar(response, "value"));
+    TEST_ASSERT_LESS_OR_EQUAL_INT(maximum[i], scalar(response, "value"));
+    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, "value"));
+    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, "default"));
+    TEST_ASSERT_NOT_NULL(strstr(response, "group=sampling"));
+    response = sendSerialLine("SC_GET_VALUES\n");
+    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, ids[i]));
+  }
+}
+
+void test_abs_validity_crosses_the_core_snapshot_and_sc_reply(void) {
+  canSetValue(F_ABS_CAR_SPEED, 42.0f);
+  canSetAbsReady(false);
+  canCheckConnection();
+  clocksStateRefreshView();
+  performHello();
+  const char *response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "valid"));
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "abs_kmh"));
+  canSetAbsReady(true);
+  /* The display view must not change until core 1 refreshes its snapshot. */
+  canCheckConnection();
+  TEST_ASSERT_FALSE(isAbsSpeedValid());
+  clocksStateRefreshView();
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_EQUAL_INT(1, scalar(response, "valid"));
+  TEST_ASSERT_EQUAL_INT(42, scalar(response, "abs_kmh"));
+  canSetValue(F_ABS_CAR_SPEED, 0.0f);
+  canCheckConnection();
+  clocksStateRefreshView();
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_EQUAL_INT(1, scalar(response, "valid"));
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "abs_kmh"));
+  canSetAbsReady(false);
+  canCheckConnection();
+  clocksStateRefreshView();
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "valid"));
+}
+
+void test_live_values_refresh_and_expire_without_the_ecu(void) {
+  clocks_ecu_snapshot_t ecu = {};
+  ecu.absReady = true;
+  ecu.values[F_ABS_CAR_SPEED] = 42.0f;
+  clocksStatePublishEcu(&ecu);
+  clocksStateRefreshView();
+  clocks_local_snapshot_t local = {};
+  local.oilBar = 1.25f;
+  local.oilValid = true;
+  local.egtC[EGT_PRE_DPF] = 805.0f;
+  local.egtValid[EGT_PRE_DPF] = true;
+  local.egtC[EGT_IN_DPF] = 601.0f;
+  local.egtValid[EGT_IN_DPF] = true;
+  clocksStatePublishLocal(&local);
+  performHello();
+  const char *response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "abs_kmh=42"));
+  TEST_ASSERT_EQUAL_INT(15, scalar(response, "valid"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "oil_cbar=125"));
+
+  TEST_ASSERT_NOT_NULL(strstr(response, "egt0_c=805"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "egt1_c=601"));
+  TEST_ASSERT_NULL(strstr(response, "*=*"));
+  ecu.values[F_ABS_CAR_SPEED] = 32767.0f;
+  clocksStatePublishEcu(&ecu);
+  clocksStateRefreshView();
+  local.oilBar = 327.66f;
+  local.egtC[EGT_PRE_DPF] = -32768.0f;
+  local.egtC[EGT_IN_DPF] = 32767.0f;
+  clocksStatePublishLocal(&local);
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_EQUAL_INT(15, scalar(response, "valid"));
+  TEST_ASSERT_NULL(strstr(response, "*=*"));
+  TEST_ASSERT_TRUE(strlen(response) <= HAL_SERIAL_FRAME_PAYLOAD_MAX);
+  local.oilBar = 2.50f;
+  clocksStatePublishLocal(&local);
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "oil_cbar=250"));
+  hal_mock_set_millis(THERMOCOUPLE_MAX_AGE_MS + OIL_PRESSURE_MAX_AGE_MS);
+  response = sendSerialLine("SC_GET_VALUES\n");
+  TEST_ASSERT_NOT_NULL(strstr(response, "oil_cbar=0"));
+  TEST_ASSERT_EQUAL_INT(1, scalar(response, "valid"));
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "egt0_c"));
+  TEST_ASSERT_EQUAL_INT(0, scalar(response, "egt1_c"));
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_clocks_config_session_init_resets_active_state);
+  RUN_TEST(test_clocks_hello_uses_current_millis_in_session_id);
+  RUN_TEST(test_clocks_handles_multiple_hello_commands_in_one_rx_buffer);
+  RUN_TEST(test_clocks_sampling_intervals_moved_to_the_catalog);
+  RUN_TEST(test_live_values_refresh_and_expire_without_the_ecu);
+  RUN_TEST(test_abs_validity_crosses_the_core_snapshot_and_sc_reply);
 
   RUN_TEST(test_clocks_hello_activates_session_and_reports_module);
   RUN_TEST(test_clocks_non_framed_input_is_silently_dropped);

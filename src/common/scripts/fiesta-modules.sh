@@ -5,7 +5,6 @@
 FIESTA_FIRMWARE_MODULES=(
     ECU
     Clocks
-    OilAndSpeed
     Fiesta_clock
     Adjustometer
     VP37TestBench
@@ -15,7 +14,6 @@ FIESTA_FIRMWARE_MODULES=(
 FIESTA_HOST_TEST_MODULES=(
     ECU:src/ECU:src/ECU/build_test
     Clocks:src/Clocks:src/Clocks/build_test
-    OilAndSpeed:src/OilAndSpeed:src/OilAndSpeed/build_test
     Adjustometer:src/Adjustometer:src/Adjustometer/build_test
     VP37TestBench:src/VP37TestBench:src/VP37TestBench/build_test
     SerialConfigurator:src/SerialConfigurator:src/SerialConfigurator/build
@@ -30,7 +28,6 @@ fiesta_module_token_for() {
     case "$1" in
         ECU) printf '%s\n' ECU ;;
         Clocks) printf '%s\n' CLOCKS ;;
-        OilAndSpeed) printf '%s\n' 'OIL&SPD' ;;
         Fiesta_clock) printf '%s\n' RTC_CLK ;;
         Adjustometer) printf '%s\n' ADJ ;;
         VP37TestBench) printf '%s\n' VP37TB ;;

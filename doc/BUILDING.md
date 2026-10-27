@@ -31,7 +31,7 @@ The package list is maintained in
 [`ensure-system-dependencies.sh`](../src/ECU/scripts/ensure-system-dependencies.sh).
 It includes the C/C++ and Arm toolchains, CMake, Ninja, Python, Git, curl,
 CA certificates, Perl, libusb, pkg-config, GTK4, dpkg-dev, libshumate,
-Valgrind, clang-format, clang-tidy, clang-tools and Java for PMD.
+Xvfb, xauth, locales, Valgrind, clang-format, clang-tidy, clang-tools and Java for PMD.
 The setup builds the cppcheck version selected by HAL; distribution versions
 can produce different findings.
 
@@ -156,6 +156,12 @@ profiles.
 USB upload uses `jh-vscode`; the probe serves the Cortex-Debug/GDB path.
 
 ## Maintain generated configuration
+
+An entry with `kind: "inactive"` only reserves its SerialConfigurator index
+and display name. DPF uses index 2, while ECU, Clocks and RTC_Clock keep
+indices 0, 1 and 3. Inactive entries have no token, USB identity, firmware
+project, tests or CI build. Their saved flash paths are ignored and omitted
+when saving configuration.
 
 [`modules.json`](../modules.json) lists module kinds, tokens, host tests and
 CI selection. `scripts/fiesta_modules.py` generates the token header,

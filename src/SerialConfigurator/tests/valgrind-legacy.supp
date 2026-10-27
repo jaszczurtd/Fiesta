@@ -25,3 +25,23 @@
    ...
    fun:gtk_init_check
 }
+
+# Fontconfig/Pango font matching caches: upstream GNOME/pango pango.supp.
+# These match only definite leaks inside the system font libraries.
+{
+  sc_system_fontconfig_render_prepare
+  Memcheck:Leak
+  fun:realloc
+  obj:*libfontconfig.so*
+  obj:*libfontconfig.so*
+  fun:FcFontRenderPrepare
+}
+{
+  sc_system_pango_cairo_fontconfig_substitution
+  Memcheck:Leak
+  fun:realloc
+  obj:*libfontconfig.so*
+  obj:*libfontconfig.so*
+  obj:*libcairo.so*
+  obj:*libpangocairo-1.0.so*
+}

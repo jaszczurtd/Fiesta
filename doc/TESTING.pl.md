@@ -34,6 +34,14 @@ bramkę MISRA, PMD CPD, Valgrind i clang-tidy. Analiza statyczna działa osobno,
 żeby jej czas nie wyglądał jak zawieszony test wykonania. Logi trafiają do
 `/tmp/fiesta_*`.
 
+Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
+`scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
+Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i
+`pl_PL.UTF-8`; przed bramką zainstaluj i wygeneruj te locale.
+Ten sam runner otacza target Valgrinda SC, więc Valgrind sprawdza sam plik
+binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig;
+błędy aplikacji nadal przerywają kontrolę.
+
 `--skip-cppcheck`, `--skip-valgrind` i `--skip-clang-tidy` pozwalają pomijać
 wybrane kontrole podczas pracy. Taki przebieg nie potwierdza przejścia pełnej
 bramki. `-j<N>` określa równoległość kompilacji.
@@ -57,7 +65,7 @@ cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure -LE static-analysis
 ```
 
-Dla Clocks, OilAndSpeed, Adjustometera lub VP37TestBench wybierz katalog
+Dla Clocks, Adjustometera lub VP37TestBench wybierz katalog
 odpowiedniego modułu. Aplikację desktopową opisuje
 [instrukcja SerialConfiguratora](../src/SerialConfigurator/README.pl.md#testy).
 Listę zarejestrowanych testów pokaże `ctest --test-dir src/ECU/build_test -N`.
@@ -83,7 +91,7 @@ lokalnej walidacji firmware.
 | Workflow | Kontrole |
 |---|---|
 | [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | Kompilacja ECU, testy, cppcheck, Valgrind i clang-tidy. |
-| [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [oilandspeed-tests.yml](../.github/workflows/oilandspeed-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Kompilacja modułu, testy, Valgrind i clang-tidy. |
+| [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Kompilacja modułu, testy, Valgrind i clang-tidy. |
 | [serial-configurator-tests.yml](../.github/workflows/serial-configurator-tests.yml) | Kompilacja GUI/CLI, testy, Valgrind i clang-tidy. |
 | [firmware-build-scripts.yml](../.github/workflows/firmware-build-scripts.yml) | Release/debug modułów firmware wybranych do CI. |
 | [windows-firmware.yml](../.github/workflows/windows-firmware.yml) | Kontrola generowania, buildy firmware i bazy komend kompilacji w Windows dla tego samego wyboru modułów. |

@@ -5,7 +5,7 @@ FIESTA_APT_PACKAGES=(
     git build-essential cmake ninja-build python3 curl ca-certificates perl
     gcc-arm-none-eabi libstdc++-arm-none-eabi-newlib
     libusb-1.0-0-dev pkg-config
-    libgtk-4-dev dpkg-dev libshumate-dev
+    libgtk-4-dev dpkg-dev libshumate-dev xvfb xauth locales
     clang-format clang-tidy clang-tools valgrind default-jre-headless
 )
 
@@ -65,6 +65,29 @@ run_dependency_command_as_root() {
     sudo "$@"
 }
 
+ensure_test_locales() {
+    local mode="$1" non_interactive="$2" missing
+    missing=$(python3 - <<'PYLOCALE'
+import locale
+missing = []
+for name in ("en_US.UTF-8", "pl_PL.UTF-8"):
+    try:
+        locale.setlocale(locale.LC_ALL, name)
+    except locale.Error:
+        missing.append(name)
+print(" ".join(missing))
+PYLOCALE
+    )
+    if [[ -z "$missing" ]]; then
+        return 0
+    fi
+    if [[ "$mode" == 'check' ]]; then
+        dependency_error "Missing GUI test locales: $missing"
+        return 1
+    fi
+    run_dependency_command_as_root "$non_interactive" locale-gen en_US.UTF-8 pl_PL.UTF-8
+}
+
 ensure_system_dependencies() {
     local mode='install'
     local non_interactive='0'
@@ -95,7 +118,8 @@ ensure_system_dependencies() {
     list_missing_system_packages
     if [[ ${#MISSING_SYSTEM_PACKAGES[@]} -eq 0 ]]; then
         dependency_ok 'All required system packages are installed.'
-        return 0
+        ensure_test_locales "$mode" "$non_interactive"
+        return
     fi
 
     if [[ "$mode" == 'check' ]]; then
@@ -114,6 +138,7 @@ ensure_system_dependencies() {
         return 1
     fi
     dependency_ok 'Required system packages are installed.'
+    ensure_test_locales "$mode" "$non_interactive"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

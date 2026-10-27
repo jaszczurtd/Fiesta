@@ -103,7 +103,9 @@ static void initializeCore0(void) {
   initSPI();
   clocksStateInit();
   cluster.init();
-  if (!setupSpeedometer()) {
+  const bool absReady = setupSpeedometer();
+  canSetAbsReady(absReady);
+  if (!absReady) {
     derr("cannot setup the ABS speedometer");
   }
 

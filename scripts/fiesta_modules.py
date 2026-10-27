@@ -22,7 +22,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_NAME = "modules.json"
 SCHEMA_VERSION = 1
-KINDS = ("firmware", "host-app")
+KINDS = ("firmware", "host-app", "inactive")
 ANALYSES = ("cppcheck",)
 SHARED_SOURCE_SETS = ("vp37",)
 USB_VID = "0x2e8a"
@@ -152,7 +152,8 @@ def _module(raw: Any, position: int, repo_root: Path) -> Module:
         raise RegistryError(f"{where}: unknown keys {sorted(unknown)}")
     name = _text(raw.get("name"), f"{where}.name")
     where = f"module {name}"
-    if "/" in name or "\\" in name or not (repo_root / "src" / name).is_dir():
+    if "/" in name or "\\" in name or (raw.get("kind") != "inactive" and
+            not (repo_root / "src" / name).is_dir()):
         raise RegistryError(f"{where}: src/{name} is not a module directory")
     kind = raw.get("kind")
     if kind not in KINDS:
@@ -169,6 +170,16 @@ def _module(raw: Any, position: int, repo_root: Path) -> Module:
             sc_entry = _serial_configurator(raw["serialConfigurator"],
                                             f"{where}.serialConfigurator")
         hint = _by_id_hint(repo_root, name)
+    elif kind == "inactive":
+        if {"token", "hostTests", "analysis", "sharedSources", "ci"} & set(raw):
+            raise RegistryError(f"{where}: inactive modules have no firmware, tests or CI")
+        macro = _text(raw.get("macro"), f"{where}.macro")
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", macro):
+            raise RegistryError(f"{where}.macro: expected an upper-case C identifier part")
+        sc_entry = _serial_configurator(raw.get("serialConfigurator"),
+                                        f"{where}.serialConfigurator")
+        if sc_entry.tests:
+            raise RegistryError(f"{where}: inactive modules have no functional tests")
     elif {"token", "macro", "serialConfigurator"} & set(raw):
         raise RegistryError(f"{where}: only firmware modules have token, macro "
                             "and serialConfigurator")
@@ -191,7 +202,7 @@ def _module(raw: Any, position: int, repo_root: Path) -> Module:
         raise RegistryError(f"{where}.sharedSources: only firmware modules "
                             "compile a shared source set")
     return Module(name, kind, token, macro, sc_entry, host_tests, tuple(analysis),
-                  _flag(raw.get("ci", True), f"{where}.ci"), hint, tuple(shared))
+                  _flag(raw.get("ci", kind != "inactive"), f"{where}.ci"), hint, tuple(shared))
 
 
 def shared_source_files(set_name: str, repo_root: Path = REPO_ROOT) -> list[str]:
@@ -257,7 +268,7 @@ def load(repo_root: Path = REPO_ROOT) -> Registry:
     firmware = registry.firmware()
     _unique([m.name for m in registry.modules], "module name")
     _unique([m.token for m in firmware], "token")
-    _unique([m.macro for m in firmware], "macro")
+    _unique([m.macro for m in registry.modules if m.macro], "macro")
     _unique([m.by_id_hint for m in firmware], "byIdHint")
     for module in firmware:
         for other in firmware:
@@ -307,7 +318,8 @@ def tokens_header(registry: Registry) -> str:
 
 def sc_table_header(registry: Registry) -> str:
     rows = [
-        f"  X(SC_MODULE_TOKEN_{m.macro}, SC_MODULE_{m.macro}, {_c_string(m.name)}, "
+        f"  X({('SC_MODULE_TOKEN_' + m.macro) if m.is_firmware else 'NULL'}, "
+        f"SC_MODULE_{m.macro}, {_c_string(m.name) if m.is_firmware else 'NULL'}, "
         f"{'true' if m.serial_configurator.tests else 'false'})"
         for m in registry.serial_configurator()
     ]

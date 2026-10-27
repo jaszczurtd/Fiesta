@@ -1,5 +1,6 @@
 """Check bootstrap cleanup without installing packages or building firmware."""
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,67 @@ MODULE_FRAGMENT = "src/common/scripts/fiesta-modules.sh"
 
 @unittest.skipUnless(shutil.which("bash"), "runmefirst requires Bash")
 class RunmefirstTests(unittest.TestCase):
+    @unittest.skipUnless(Path("/bin/sh").is_file(), "GUI runner requires POSIX")
+    def test_sc_display_runner_propagates_errors_and_requires_headless_display(self):
+        runner = ROOT / "scripts/sc-with-display.sh"
+        with tempfile.TemporaryDirectory(prefix="fiesta-gui-runner-") as temporary:
+            bindir = Path(temporary)
+            env = dict(os.environ, PATH=str(bindir), DISPLAY=":9")
+            env.pop("WAYLAND_DISPLAY", None)
+            command = [shutil.which("bash"), str(runner), "/bin/sh", "-c", "exit 23"]
+            # A real display preserves the command and its failure status.
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 23, result.stderr)
+            env.pop("DISPLAY")
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("require a display", result.stderr)
+            # Exercise command forwarding under the headless runner as well.
+            (bindir / "env").symlink_to(shutil.which("env"))
+            xvfb = bindir / "xvfb-run"
+            xvfb.write_text('#!/bin/sh\n[ "$1" = -a ] || exit 2\nshift\nexec "$@"\n')
+            xvfb.chmod(0o755)
+            command[-1] = '[ "$GDK_BACKEND" = x11 ] || exit 2; exit 23'
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 23, result.stderr)
+            # The documented desktop helper must use the same display path.
+            project = bindir / "Fiesta checkout/src/SerialConfigurator"
+            (project / "scripts").mkdir(parents=True)
+            shutil.copy2(ROOT / "src/SerialConfigurator/scripts/desktop-build.sh", project / "scripts")
+            (project.parents[1] / "scripts").mkdir()
+            shutil.copy2(runner, project.parents[1] / "scripts")
+            (bindir / "dirname").symlink_to(shutil.which("dirname"))
+            (bindir / "bash").symlink_to(shutil.which("bash"))
+            for name, status in (("cmake", 0), ("ctest", 23)):
+                stub = bindir / name
+                stub.write_text(f"#!/bin/sh\nexit {status}\n")
+                stub.chmod(0o755)
+            result = subprocess.run([shutil.which("bash"), str(project / "scripts/desktop-build.sh"), "test"],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 23, result.stderr)
+
+    @unittest.skipUnless(Path("/bin/sh").is_file(), "Locale setup requires POSIX")
+    def test_missing_gui_locale_is_rejected_or_generated_by_setup(self):
+        helper = ROOT / "src/ECU/scripts/ensure-system-dependencies.sh"
+        with tempfile.TemporaryDirectory(prefix="fiesta-locales-") as temporary:
+            base = Path(temporary)
+            python = base / "python3"
+            python.write_text("#!/bin/sh\necho pl_PL.UTF-8\n")
+            python.chmod(0o755)
+            env = dict(os.environ, PATH=str(base))
+            marker = base / "root-call"
+            script = ('. "$1"\nmarker=$2\n'
+                      'run_dependency_command_as_root() { printf "%s" "$*" > "$marker"; }\n'
+                      'ensure_test_locales "$3" 1\n')
+            command = [shutil.which("bash"), "-c", script, "locale-test", str(helper), str(marker)]
+            result = subprocess.run([*command, "check"], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Missing GUI test locales", result.stderr)
+            self.assertFalse(marker.exists())
+            result = subprocess.run([*command, "install"], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(marker.read_text(), "1 locale-gen en_US.UTF-8 pl_PL.UTF-8")
+
     def test_cleanup_is_scoped_and_precedes_bootstrap_from_another_directory(self):
         with tempfile.TemporaryDirectory(prefix="fiesta-cleanup-") as temporary:
             base = Path(temporary)

@@ -69,6 +69,11 @@ static int test_module_table(void) {
   for (size_t i = 0u; i < sc_core_module_count(); ++i) {
     const char *name = sc_core_module_status(&core, i)->display_name;
     const char *dir = sc_core_module_source_dir(i);
+    if (strcmp(name, SC_MODULE_DPF) == 0) {
+      TEST_ASSERT(i == 2u && dir == NULL && !sc_core_module_has_tests(i),
+                  "inactive DPF keeps its slot without firmware or tests");
+      continue;
+    }
     TEST_ASSERT(dir != 0 && dir[0] != '\0', "source dir should not be empty");
     if (strcmp(name, SC_MODULE_ECU) == 0) {
       TEST_ASSERT(strcmp(dir, "ECU") == 0, "ECU source dir");

@@ -24,6 +24,7 @@ static hal_can_t canHandle = NULL;
 static uint32_t lastEcuFrameMs = 0u;
 static uint32_t redrawSeq = 0u;
 static bool stateChanged = false;
+static bool absReady = false;
 
 // hal_millis() of the last decode of each value; a value never decoded is not
 // fresh.
@@ -58,6 +59,7 @@ static void publishState(void) {
 
   static clocks_ecu_snapshot_t snapshot;
   memcpy(snapshot.values, canValues, sizeof(snapshot.values));
+  snapshot.absReady = absReady;
   snapshot.ecuConnected = ecuConnected;
   snapshot.dpfConnected = dpfConnected;
   snapshot.ecuUpdatedMs = lastEcuFrameMs;
@@ -305,7 +307,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
   case CAN_ID_OIL_AND_SPEED_MODULE_UPDATE:
   case CAN_ID_EGT_UPDATE:
     // Clocks sends these itself and every ID has one sender: a second one is
-    // a wiring or configuration fault, e.g. the old OilAndSpeed still on.
+    // a wiring or configuration fault, e.g. a retired sender still connected.
     derr_limited("can", "frame 0x%03lx of Clocks came from another node",
                  (unsigned long)canID);
     break;
@@ -407,4 +409,9 @@ void canCheckConnection(void) {
   }
   stateChanged = true;
   publishState();
+}
+
+void canSetAbsReady(bool ready) {
+  absReady = ready;
+  stateChanged = true;
 }

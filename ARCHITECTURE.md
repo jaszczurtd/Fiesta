@@ -3,7 +3,7 @@
 [Polski](ARCHITECTURE.pl.md) · [Project overview](README.md)
 
 Fiesta replaces and extends parts of the electronics in a Ford Fiesta 1.8
-(M)TDDI. Five firmware modules, each on its own PCB, share the car's work: the
+(M)TDDI. Four firmware modules, each on its own PCB, share the car's work: the
 ECU runs the engine, the others drive the dashboard, measure what the ECU does
 not, keep time, and read the injection pump position. A desktop application,
 the Fiesta Serial Configurator, connects to the modules over USB to read and
@@ -18,7 +18,6 @@ for development commands and the module guides for control details.
 ```text
                  CAN0 (main)
    ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT, GPS
-   │           │ ◄──────────  OilAndSpeed     superseded by Clocks
    │    ECU    │ ◄──────────  Fiesta_clock    RTC time in UTC, 1 Hz
    │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
@@ -29,7 +28,7 @@ for development commands and the module guides for control details.
          │ USB CDC, off-vehicle
          ▼
    Fiesta Serial Configurator (Linux, GTK-4)
-     also connects to Clocks, OilAndSpeed and Fiesta_clock
+     also connects to Clocks and Fiesta_clock
 ```
 
 The ECU is the hub. It is the only module that controls the engine. The
@@ -67,7 +66,6 @@ the loom colours.
 |---|---|---|---|
 | [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
 | [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
-| [`OilAndSpeed`](src/OilAndSpeed/) | C++ | earlier oil, speed and EGT module, superseded by Clocks | no |
 | [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock set from GPS UTC, time broadcast on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
 | [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
@@ -170,19 +168,6 @@ The CAN controller and the TFT share one SPI bus. The display writes in
 bands of `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES`, set in
 [`hal_project_config.h`](src/Clocks/hal_project_config.h), so CAN gets the
 bus between two bands.
-
-### OilAndSpeed
-
-OilAndSpeed is the earlier standalone module for oil pressure, ABS speed, and
-exhaust gas temperature. Clocks now sends the same frames, and every CAN ID
-has one sender, so OilAndSpeed must not share the bus with the current Clocks.
-
-| File | Responsibility |
-|---|---|
-| [`oilPressure.cpp`](src/OilAndSpeed/oilPressure.cpp) | ADC reading to bar |
-| [`speed.cpp`](src/OilAndSpeed/speed.cpp) | ABS pulse frequency to speed |
-| [`can.cpp`](src/OilAndSpeed/can.cpp) | oil, speed, and EGT frames |
-| [`config.cpp`](src/OilAndSpeed/config.cpp) | configurator session, read-only sampling intervals |
 
 ### Adjustometer
 
@@ -382,7 +367,7 @@ for their own sensors.
 
 ### USB
 
-ECU, Clocks, OilAndSpeed, and Fiesta_clock each show up as a separate USB
+ECU, Clocks, and Fiesta_clock each show up as a separate USB
 device named `Fiesta <Module>` with the board's unique ID as serial number.
 The configurator uses these names to find the right module even when several
 boards are connected. The protocol on that link, the identity rules, and the
@@ -432,7 +417,7 @@ Fiesta/
 ├── scripts/                     # registry, VS Code and duplicate-gate tools, git hooks
 ├── .github/workflows/           # CI
 ├── src/
-│   ├── ECU/ Clocks/ OilAndSpeed/ Fiesta_clock/ Adjustometer/ VP37TestBench/
+│   ├── ECU/ Clocks/ Fiesta_clock/ Adjustometer/ VP37TestBench/
 │   ├── JaszczurHAL/             # pinned HAL submodule
 │   ├── SerialConfigurator/      # desktop application and CLI
 │   └── common/

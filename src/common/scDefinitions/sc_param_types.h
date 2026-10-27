@@ -106,7 +106,7 @@ typedef struct {
 /**
  * @brief Builder for a read-only / not-persisted SCALAR_I16 descriptor.
  *
- * Targets Clocks / OilAndSpeed today: their parameters mirror
+ * Targets Clocks today: their parameters mirror
  * compile-time defines so they are visible on the wire but never
  * mutated and never persisted.
  */

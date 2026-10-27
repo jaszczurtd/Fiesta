@@ -84,7 +84,7 @@ Zakres: `src/common/scDefinitions/*.c`.
 
 Wyciszenie: brak.
 
-Dwanaście znalezisk Required w źródłach kompilowanych do ECU, Clocks i OilAndSpeed:
+Dwanaście znalezisk Required w źródłach kompilowanych do ECU, Clocks i Fiesta_clock:
 `<stdio.h>` dla `snprintf`, dwa rzutowania wskaźników w dostępie do pól przez offset
 deskryptora oraz poprawki typów i `else`. Decyzja czeka na rozstrzygnięcie, czy
 `src/common/scDefinitions` podlega wymaganiom MISRA.

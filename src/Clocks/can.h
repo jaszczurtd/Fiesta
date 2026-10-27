@@ -56,5 +56,7 @@ bool canValueFresh(int idx, uint32_t nowMs, uint32_t maxAgeMs);
  * @param val New value.
  */
 void canSetValue(int idx, float val);
+/** @brief Core 0: publish whether ABS capture initialized successfully. */
+void canSetAbsReady(bool ready);
 
 #endif

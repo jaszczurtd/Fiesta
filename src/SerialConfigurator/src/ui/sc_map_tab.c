@@ -153,6 +153,16 @@ static void sc_map_apply_fix(ScMapTabState *m, const ScGpsSnapshot *snap) {
 }
 #endif /* SC_HAVE_SHUMATE */
 
+static void sc_map_clear_fix(ScMapTabState *m) {
+  m->have_fix = false;
+#ifdef SC_HAVE_SHUMATE
+  if (m->marker != NULL) {
+    gtk_widget_set_visible(GTK_WIDGET(m->marker), FALSE);
+  }
+  sc_map_set_recenter_enabled(m, false);
+#endif
+}
+
 static gboolean sc_map_poll_tick(gpointer user_data) {
   AppState *state = (AppState *)user_data;
   ScMapTabState *m = sc_map_state(state);
@@ -161,6 +171,7 @@ static gboolean sc_map_poll_tick(gpointer user_data) {
   }
 
   if (!state->connected) {
+    sc_map_clear_fix(m);
 #ifdef SC_HAVE_SHUMATE
     sc_map_set_recenter_enabled(m, false);
 #endif
@@ -170,11 +181,17 @@ static gboolean sc_map_poll_tick(gpointer user_data) {
   /* Yield to the detection worker and the flash orchestrator -
    * both can hold the serial port exclusively. */
   if (state->detection_in_progress || state->flash_in_progress) {
+    sc_map_clear_fix(m);
+    sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_PLACEHOLDER));
+    return G_SOURCE_CONTINUE;
+  }
+  if (!gtk_widget_get_mapped(state->map_tab_root)) {
     return G_SOURCE_CONTINUE;
   }
 
   const size_t gps_idx = find_gps_module(state);
   if (gps_idx >= SC_MODULE_COUNT) {
+    sc_map_clear_fix(m);
 #ifdef SC_HAVE_SHUMATE
     sc_map_set_recenter_enabled(m, false);
 #endif
@@ -186,6 +203,8 @@ static gboolean sc_map_poll_tick(gpointer user_data) {
   char log_buf[256];
   log_buf[0] = '\0';
   if (!sc_gps_get(&state->core, gps_idx, &result, log_buf, sizeof(log_buf))) {
+    sc_map_clear_fix(m);
+    sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_DISCONNECTED));
     /* Transport hiccup is expected when the cable is yanked
      * mid-poll; stay quiet and try again next tick. */
     return G_SOURCE_CONTINUE;
@@ -194,10 +213,13 @@ static gboolean sc_map_poll_tick(gpointer user_data) {
   ScGpsSnapshot snap;
   char err[160];
   if (!sc_gps_parse_result(&result, &snap, err, sizeof(err))) {
+    sc_map_clear_fix(m);
+    sc_map_set_status(m, sc_i18n_string_get(SC_I18N_MAP_WAITING_FIX));
     return G_SOURCE_CONTINUE;
   }
 
   if (!snap.available) {
+    sc_map_clear_fix(m);
 #ifdef SC_HAVE_SHUMATE
     sc_map_set_recenter_enabled(m, false);
 #endif
@@ -213,6 +235,7 @@ static gboolean sc_map_poll_tick(gpointer user_data) {
                  snap.latitude_deg, snap.longitude_deg, snap.speed_kmh);
   sc_map_set_status(m, buf);
 #endif
+  m->have_fix = true;
 
   return G_SOURCE_CONTINUE;
 }
@@ -268,6 +291,11 @@ static void sc_map_build_shumate(ScMapTabState *m, GtkWidget *parent_box) {
 }
 #endif /* SC_HAVE_SHUMATE */
 
+static void sc_map_on_mapped(GtkWidget *widget, gpointer user) {
+  (void)widget;
+  (void)sc_map_poll_tick(user);
+}
+
 GtkWidget *sc_map_tab_build(AppState *state) {
   if (state == 0) {
     return gtk_label_new("");
@@ -298,6 +326,7 @@ GtkWidget *sc_map_tab_build(AppState *state) {
   gtk_box_append(GTK_BOX(root), m->status_label);
 
   state->map_tab_root = root;
+  g_signal_connect(root, "map", G_CALLBACK(sc_map_on_mapped), state);
 
   /* Polling is permanent - the tick callback itself short-circuits
    * when disconnected. This keeps the start/stop logic in one place
