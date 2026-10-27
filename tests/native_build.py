@@ -26,3 +26,22 @@ def compile_sources(sources, flags, build, run_command):
                      "-c", str(source), "-o", str(obj)])
         objects.append(str(obj))
     return objects
+
+
+def run_clocks_harness(root, sources, build):
+    """Build a host harness against the Clocks configuration and run it.
+
+    The harness replaces hardware only; the listed Clocks and HAL sources are
+    the production files.
+    """
+    hal = root / "src/JaszczurHAL"
+    module = root / "src/Clocks"
+    flags = ["-Wall", "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+             "-DHAL_TARGET_MOCK=1", "-include", str(module / "hal_project_config.h"),
+             "-I", str(module), "-I", str(hal / "src"),
+             "-I", str(hal / "third_party/jhbase/include")]
+    objects = compile_sources(sources, flags, build, run_command)
+    binary = build / "harness"
+    run_command([os.environ.get("CXX", "c++"), *objects,
+                 "-Wl,--gc-sections", "-o", str(binary)])
+    run_command([str(binary)])

@@ -29,6 +29,8 @@ enum { MODE_M_NORMAL, MODE_M_TEMP, MODE_M_KILOMETERS };
 
 // EGT gauge value of a channel without a measurement
 #define EGT_NOT_MEASURED INT32_MIN
+// GPS gauge value while the receiver does not communicate
+#define GPS_NOT_LINKED INT32_MIN
 
 #define VOLTS_OK_COLOR 0x4228
 #define VOLTS_LOW_ERROR_COLOR 0xA000

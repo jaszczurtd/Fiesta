@@ -10,12 +10,19 @@
 
 static hal_gps_utc_t s_cachedUtc;
 static uint32_t s_cachedEpoch;
+// Valid NMEA sentences counted by HAL and when that count last grew.
+static uint32_t s_sentences;
+static uint32_t s_sentenceMs;
+static bool s_sentenceSeen;
 
 void initGPS(void) {
   s_cachedUtc = {};
   s_cachedEpoch = 0u;
+  s_sentenceMs = 0u;
+  s_sentenceSeen = false;
   hal_gps_init(JH_HW_NODE_GPS_PIN_RX, JH_HW_NODE_GPS_PIN_TX,
                JH_HW_NODE_GPS_PROP_BAUD_RATE, HAL_UART_CFG_8N1);
+  s_sentences = hal_gps_passed_checksum();
 }
 
 // The RMC calendar changes at receiver rate; polling only advances its age.
@@ -42,6 +49,8 @@ void clocksGpsExpire(clocks_gps_snapshot_t *gps, uint32_t nowMs) {
   }
   if (!gps->available) {
     gps->latitude = gps->longitude = gps->speedKmh = 0.0;
+    if (hal_elapsed_u32(nowMs, gps->linkUpdatedMs, GPS_LINK_MAX_AGE_MS + 1u))
+      gps->linked = false;
   }
 }
 
@@ -52,6 +61,14 @@ bool readGPS(clocks_gps_snapshot_t *out) {
   const bool updated = hal_gps_location_is_updated();
   *out = {};
   const uint32_t nowMs = hal_millis();
+  // Checksum-valid sentences, not raw bytes: noise or a wrong baud rate is no
+  // communication.
+  const uint32_t sentences = hal_gps_passed_checksum();
+  if (sentences != s_sentences) {
+    s_sentences = sentences;
+    s_sentenceMs = nowMs;
+    s_sentenceSeen = true;
+  }
   const uint32_t age = hal_gps_location_age();
   out->latitude = hal_gps_latitude();
   out->longitude = hal_gps_longitude();
@@ -68,6 +85,15 @@ bool readGPS(clocks_gps_snapshot_t *out) {
     out->utcValid = out->epochUtc != 0u;
     out->utcUpdatedMs = nowMs - utc.age_ms;
   }
+  out->linked = s_sentenceSeen;
+  out->linkUpdatedMs = s_sentenceMs;
+  // A valid fix proves the link, also where HAL counts no sentence.
+  if (out->available &&
+      (!out->linked ||
+       hal_elapsed_u32(out->locationUpdatedMs, out->linkUpdatedMs, 1u))) {
+    out->linked = true;
+    out->linkUpdatedMs = out->locationUpdatedMs;
+  }
   clocksGpsExpire(out, nowMs);
   return updated;
 }
@@ -77,10 +103,11 @@ bool clocksGpsReadChanged(clocks_gps_snapshot_t *gps) {
     return false;
   const bool available = gps->available;
   const bool utcValid = gps->utcValid;
+  const bool linked = gps->linked;
   const double speed = gps->speedKmh;
   const bool updated = readGPS(gps);
   return updated || available != gps->available || utcValid != gps->utcValid ||
-         speed != gps->speedKmh;
+         linked != gps->linked || speed != gps->speedKmh;
 }
 
 int32_t clocksGpsMicrodegrees(double degrees) {

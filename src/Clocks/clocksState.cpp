@@ -125,3 +125,5 @@ int getGPSSpeed(void) { return int(valueFields[F_GPS_CAR_SPEED]); }
 float getOilPressure(void) { return valueFields[F_OIL_PRESSURE]; }
 
 bool isGPSAvailable(void) { return valueFields[F_GPS_IS_AVAILABLE] > 0; }
+
+bool isGPSLinked(void) { return s_local.gps.linked; }

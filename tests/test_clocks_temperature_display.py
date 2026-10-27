@@ -1,11 +1,10 @@
 """Check Clocks temperature transitions with the production GFX font renderer."""
 
-import os
 from pathlib import Path
 import tempfile
 import unittest
 
-from native_build import compile_sources, run_command
+from native_build import run_clocks_harness
 
 ROOT = Path(__file__).resolve().parents[1]
 HAL = ROOT / "src/JaszczurHAL"
@@ -98,17 +97,9 @@ int main(void) {
   }
 }
 ''')
-            flags = ["-Wall", "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
-                     "-DHAL_TARGET_MOCK=1", "-include", str(MODULE / "hal_project_config.h"),
-                     "-I", str(MODULE), "-I", str(HAL / "src"),
-                     "-I", str(HAL / "third_party/jhbase/include")]
-            sources = [MODULE / "tempGauge.cpp", harness,
-                       HAL / "src/hal/display/drivers/jh_gfx.cpp"]
-            objects = compile_sources(sources, flags, build, run_command)
-            binary = build / "display"
-            run_command([os.environ.get("CXX", "c++"), *objects,
-                         "-Wl,--gc-sections", "-o", str(binary)])
-            run_command([str(binary)])
+            run_clocks_harness(ROOT, [MODULE / "tempGauge.cpp", harness,
+                                      HAL / "src/hal/display/drivers/jh_gfx.cpp"],
+                               build)
 
 
 if __name__ == "__main__":

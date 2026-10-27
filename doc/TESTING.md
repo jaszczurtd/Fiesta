@@ -33,6 +33,10 @@ the MISRA gate, PMD CPD, Valgrind and clang-tidy. Static analysis runs separatel
 so its duration does not look like a stalled runtime test. Logs are written
 under `/tmp/fiesta_*`.
 
+Host builds use Debug. SerialConfigurator also builds and runs its tests in
+Release, matching CI, under `src/SerialConfigurator/build/release`. This
+checks optimized builds and the compiler's enabled libc hardening as well.
+
 GUI tests run with the current display or Xvfb through
 `scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
 Clocks view runs in the current locale and explicitly in `C` and

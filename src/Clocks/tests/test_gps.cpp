@@ -48,10 +48,67 @@ void test_missing_receiver_and_no_fix_are_unavailable(void) {
   readGPS(&gps);
   TEST_ASSERT_FALSE(gps.available);
   TEST_ASSERT_FALSE(gps.utcValid);
+  TEST_ASSERT_FALSE(gps.linked); // no receiver: nothing ever arrived
   sentence("GPRMC,123456,V,,,,,,,261026,,,N");
   readGPS(&gps);
   TEST_ASSERT_FALSE(gps.available);
   TEST_ASSERT_EQUAL_UINT32(0u, gps.epochUtc);
+  TEST_ASSERT_TRUE(gps.linked); // no fix, but the receiver talks
+}
+
+// Bytes failing the NMEA checksum, as at a wrong baud rate.
+static void corruptSentence(const char *body) {
+  hal_gps_encode('$');
+  for (const char *c = body; *c; ++c) {
+    hal_gps_encode(*c);
+  }
+  const char tail[] = "*00\r\n";
+  for (const char *c = tail; *c; ++c) {
+    hal_gps_encode(*c);
+  }
+}
+
+void test_receiver_link_needs_valid_sentences_and_expires(void) {
+  clocks_gps_snapshot_t gps;
+  corruptSentence("GPRMC,123456,V,,,,,,,261026,,,N");
+  readGPS(&gps);
+  TEST_ASSERT_FALSE(gps.linked);
+
+  sentence("GPRMC,123456,V,,,,,,,261026,,,N");
+  TEST_ASSERT_TRUE(clocksGpsReadChanged(&gps));
+  TEST_ASSERT_TRUE(gps.linked);
+  hal_mock_set_millis(10000u + GPS_LINK_MAX_AGE_MS);
+  readGPS(&gps);
+  TEST_ASSERT_TRUE(gps.linked);
+  // Silence: the change of the link alone asks for a publication.
+  hal_mock_set_millis(10000u + GPS_LINK_MAX_AGE_MS + 1u);
+  TEST_ASSERT_TRUE(clocksGpsReadChanged(&gps));
+  TEST_ASSERT_FALSE(gps.linked);
+  TEST_ASSERT_FALSE(gps.available);
+
+  // The next sentence restores it; a copy core 1 stops renewing expires too.
+  sentence("GPRMC,123460,V,,,,,,,261026,,,N");
+  clocks_local_snapshot_t local = {};
+  readGPS(&local.gps);
+  clocksStatePublishLocal(&local);
+  TEST_ASSERT_TRUE(isGPSLinked());
+  hal_mock_set_millis(10000u + 2u * GPS_LINK_MAX_AGE_MS + 2u);
+  clocksStateCopyLocal(&local);
+  TEST_ASSERT_FALSE(local.gps.linked);
+}
+
+void test_a_valid_fix_keeps_the_link_until_it_expires(void) {
+  fix(); // HAL counts no sentence for injected fixes
+  clocks_gps_snapshot_t gps;
+  readGPS(&gps);
+  TEST_ASSERT_TRUE(gps.available);
+  TEST_ASSERT_TRUE(gps.linked);
+  clocksGpsExpire(&gps, hal_millis() + GPS_LINK_MAX_AGE_MS + 1u);
+  TEST_ASSERT_TRUE(gps.available);
+  TEST_ASSERT_TRUE(gps.linked);
+  clocksGpsExpire(&gps, hal_millis() + GPS_MAX_AGE_MS + 1u);
+  TEST_ASSERT_FALSE(gps.available);
+  TEST_ASSERT_FALSE(gps.linked);
 }
 
 void test_position_retains_double_precision_and_utc_seconds(void) {
@@ -268,6 +325,8 @@ void test_publication_poll_detects_availability_without_utc_or_speed(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_missing_receiver_and_no_fix_are_unavailable);
+  RUN_TEST(test_receiver_link_needs_valid_sentences_and_expires);
+  RUN_TEST(test_a_valid_fix_keeps_the_link_until_it_expires);
   RUN_TEST(test_position_retains_double_precision_and_utc_seconds);
   RUN_TEST(test_invalid_location_clears_even_fresh_utc);
   RUN_TEST(test_gga_time_cannot_replace_the_date_time_pair_from_rmc);

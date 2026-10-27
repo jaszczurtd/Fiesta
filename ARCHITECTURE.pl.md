@@ -122,6 +122,10 @@ temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
 albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną
 flagą, więc odbiorca nie odczyta go jako zera.
 
+Odczyt EGT na TFT pokazuje temperaturę przed DPF. Co 5 s zmienia się
+z temperaturą wewnątrz DPF tylko wtedy, gdy podłączony moduł DPF zgłasza
+regenerację w ramce `0x124`.
+
 Rdzeń 1 odczytuje GPS przez PIO/software serial: TX odbiornika łączy się
 z GP27, a RX z GP28, przy 9600 baud. Clocks uruchamia się normalnie bez
 odbiornika i fixa.
@@ -136,6 +140,12 @@ Odświeżanie ekranu korzysta z przeliczonej wcześniej prędkości.
 Ostatnia pozycja wygasa po 4 s. UTC pochodzi z jednego zdania RMC z fixem
 i wygasa po 2 s. Clocks zachowuje UTC dla CAN i SC oraz nadaje go z sekundami
 i ważnością w `0x131` co sekundę.
+
+Piktogram GPS na TFT ma zieloną kropkę przy fixie, a bez niego czerwoną,
+migającą raz na sekundę. Odbiornik nadaje NMEA także bez fixa. Gdy przez 3 s
+nie przyjdzie żadne zdanie z poprawną sumą kontrolną, Clocks uznaje go za
+nieobecny: zamiast prędkości pojawia się N/A, jak przy brakującej termoparze,
+a kropka miga dwa razy szybciej.
 
 Co sekundę Clocks wysyła też pozycję z prędkością GPS (`0x12D`) oraz pozycję
 z datą i czasem UTC z dokładnością do minuty (`0x12E`). Jego device tree

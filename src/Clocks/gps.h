@@ -12,9 +12,13 @@ typedef struct {
   double speedKmh;
   uint32_t locationUpdatedMs;
   uint32_t utcUpdatedMs;
+  uint32_t linkUpdatedMs; // last valid NMEA sentence or fix
   uint32_t epochUtc;
   bool available;
   bool utcValid;
+  // The receiver communicates: a valid sentence within GPS_LINK_MAX_AGE_MS
+  // or a valid fix. False with a missing receiver or a broken RX line.
+  bool linked;
 } clocks_gps_snapshot_t;
 
 /** @brief Core 1: initialize the PIO/software-serial receiver without waiting
@@ -30,10 +34,12 @@ bool readGPS(clocks_gps_snapshot_t *out);
  * @brief Core 1: poll HAL, replacing the previous snapshot in place.
  * @param gps In/out snapshot; NULL is ignored and returns false.
  * @return True when a new fix, including an unchanged position, or a change
- *         of availability, UTC validity or speed requires publication.
+ *         of availability, UTC validity, receiver link or speed requires
+ *         publication.
  */
 bool clocksGpsReadChanged(clocks_gps_snapshot_t *gps);
-/** @brief Expire location and UTC independently at nowMs; NULL is ignored. */
+/** @brief Expire location, UTC and the receiver link independently at nowMs;
+ * NULL is ignored. A valid location keeps the link. */
 void clocksGpsExpire(clocks_gps_snapshot_t *gps, uint32_t nowMs);
 /** @brief Round finite degrees to signed microdegrees; invalid input yields 0.
  */

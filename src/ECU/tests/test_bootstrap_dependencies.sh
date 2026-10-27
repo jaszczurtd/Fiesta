@@ -27,7 +27,9 @@ grep -Fq 'SKIP_APT=0 APT_NONINTERACTIVE=1' "$DAILY_RUNNER" || \
     fail 'daily runner does not enable unattended package installation'
 
 fixture_installed=0
+fixture_locales_installed=0
 declare -a apt_calls=()
+declare -a locale_calls=()
 
 dpkg-query() {
     if [[ "$fixture_installed" == '1' ]]; then
@@ -44,13 +46,29 @@ apt-get() {
     fi
 }
 
+# Locale checks and generation must never use the host configuration.
+python3() {
+    [[ "$#" -eq 1 && "$1" == '-' ]] || fail 'unexpected Python command'
+    if [[ "$fixture_locales_installed" == '0' ]]; then
+        printf 'en_US.UTF-8 pl_PL.UTF-8\n'
+    fi
+}
+
+locale-gen() {
+    locale_calls+=("$*")
+    fixture_locales_installed=1
+}
+
 sudo() {
     [[ "$1" == '-n' ]] || fail 'unattended install omitted sudo -n'
     shift
     if [[ "$1" == 'true' ]]; then
         return 0
     fi
-    "$@"
+    case "$1" in
+        apt-get|locale-gen) "$@" ;;
+        *) fail "unmocked privileged command: $1" ;;
+    esac
 }
 
 ensure_system_dependencies --install --non-interactive
@@ -59,9 +77,22 @@ ensure_system_dependencies --install --non-interactive
 [[ "${apt_calls[1]}" == *'ninja-build'* ]] || fail 'Ninja was not installed'
 [[ "${apt_calls[1]}" == *'gcc-arm-none-eabi'* ]] || fail 'GNU Arm was not installed'
 
+[[ ${#locale_calls[@]} -eq 1 ]] || fail 'expected one locale generation call'
+[[ "${locale_calls[0]}" == 'en_US.UTF-8 pl_PL.UTF-8' ]] || fail 'wrong test locales'
+
 apt_calls=()
+locale_calls=()
 ensure_system_dependencies --check
 [[ ${#apt_calls[@]} -eq 0 ]] || fail 'check mode changed package state'
+[[ ${#locale_calls[@]} -eq 0 ]] || fail 'check mode generated locales'
+
+fixture_locales_installed=0
+if ensure_system_dependencies --check 2>/dev/null; then
+    fail 'check mode accepted missing test locales'
+fi
+[[ ${#apt_calls[@]} -eq 0 && ${#locale_calls[@]} -eq 0 ]] || \
+    fail 'missing-locale check changed system state'
+fixture_locales_installed=1
 
 fixture_installed=0
 sudo() { return 1; }

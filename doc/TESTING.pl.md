@@ -34,6 +34,11 @@ bramkę MISRA, PMD CPD, Valgrind i clang-tidy. Analiza statyczna działa osobno,
 żeby jej czas nie wyglądał jak zawieszony test wykonania. Logi trafiają do
 `/tmp/fiesta_*`.
 
+Buildy hostowe używają Debug. SerialConfigurator jest dodatkowo budowany
+w Release, tak jak w CI, z uruchomieniem testów w
+`src/SerialConfigurator/build/release`. Sprawdza to również optymalizację
+i włączone przez kompilator mechanizmy ochrony libc.
+
 Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
 `scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
 Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i

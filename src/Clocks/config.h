@@ -32,6 +32,13 @@ JB_STATIC_ASSERT(GPS_MIN_SPEED_KMH == 5u,
                  "GPS speed cutoff must match the 5 km/h wire format");
 JB_STATIC_ASSERT(CAN_GPS_UPDATE_INTERVAL == 1000u,
                  "CAN_GPS_UPDATE_INTERVAL must match the 1 s UTC cadence");
+// The receiver sends NMEA at least once a second, also without a fix; no
+// valid sentence for this long means no communication with it.
+#define GPS_LINK_MAX_AGE_MS 3000u
+JB_STATIC_ASSERT(GPS_LINK_MAX_AGE_MS > 1000u &&
+                     GPS_LINK_MAX_AGE_MS <= GPS_MAX_AGE_MS,
+                 "GPS_LINK_MAX_AGE_MS must outlast the 1 s NMEA cycle and "
+                 "not exceed GPS_MAX_AGE_MS");
 
 // delay time right after start, before first serious alerts will show up (in
 // seconds)

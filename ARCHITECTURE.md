@@ -124,6 +124,10 @@ and both exhaust temperatures every 250 ms. Each measurement carries a
 validity flag. A missing thermocouple or a shorted or open oil sender goes
 out with its flag cleared, so receivers do not read it as zero.
 
+The EGT readout on the TFT shows the temperature before the DPF. It takes
+turns every 5 s with the temperature inside the DPF only while a connected
+DPF module reports a regeneration in frame `0x124`.
+
 Core 1 polls GPS through PIO/software serial: receiver TX connects to GP27
 and receiver RX to GP28, at 9600 baud. Clocks starts normally without the
 receiver or a fix.
@@ -137,6 +141,12 @@ the converted speed.
 The last position expires after 4 s. UTC comes from one RMC sentence with a
 fix and expires after 2 s. Clocks keeps UTC for CAN and SC and publishes it
 with seconds and validity in `0x131` every second.
+
+The GPS icon on the TFT has a green dot with a fix and a red one blinking
+once a second without it. The receiver sends NMEA also without a fix; when
+no sentence with a valid checksum has arrived for 3 s, Clocks treats it as
+missing. The speed then reads N/A, as for a missing thermocouple, and the dot
+blinks twice as fast.
 
 Once a second Clocks also sends the position with GPS speed (`0x12D`) and the
 position with the date and time to the minute in UTC (`0x12E`). Its device

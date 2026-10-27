@@ -209,9 +209,13 @@ static int test_retired_and_inactive_paths_never_become_flash_targets(void) {
   TEST_ASSERT(sc_flash_paths_save(&paths), "save active paths only");
   f = fopen(g_test_path, "rb");
   TEST_ASSERT(f != NULL, "open saved paths");
-  char saved[4096] = {0};
-  (void)fread(saved, 1u, sizeof(saved) - 1u, f);
-  fclose(f);
+  char saved[4096];
+  const size_t saved_size = fread(saved, 1u, sizeof(saved) - 1u, f);
+  const bool read_ok = !ferror(f) && feof(f);
+  const int close_result = fclose(f);
+  TEST_ASSERT(read_ok && close_result == 0, "read complete saved paths");
+  TEST_ASSERT(saved_size > 0u, "saved paths are not empty");
+  saved[saved_size] = '\0';
   TEST_ASSERT(strstr(saved, "OilAndSpeed") == NULL &&
                   strstr(saved, "DPF") == NULL,
               "retired and inactive paths omitted");

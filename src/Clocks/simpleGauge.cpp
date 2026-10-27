@@ -38,15 +38,13 @@ void showECUConnectionGauge(void) {
 
 void showEGTGauge(void) { egt_g.showSimpleGauge(); }
 
-// Both measured EGT channels take turns; otherwise the one that measures is
-// shown, the one before the DPF when neither does.
+// The channel inside the DPF takes turns with the one before it only while a
+// connected DPF module reports a regeneration; otherwise the gauge shows EGT.
 void changeEGT(void) {
-  const bool preDpf = isEgtValid(EGT_PRE_DPF);
-  const bool inDpf = isEgtValid(EGT_IN_DPF);
-  if (preDpf && inDpf) {
+  if (isDPFConnected() && isDPFRegenerating()) {
     egt_g.switchCurrentEGTMode();
   } else {
-    egt_g.selectEGTMode(inDpf);
+    egt_g.selectEGTMode(false);
   }
 }
 
@@ -259,7 +257,9 @@ void SimpleGauge::showSimpleGauge(void) {
     currentVal = ((getEngineRPM() / 10) * 10);
     break;
   case SIMPLE_G_GPS:
-    currentVal = getGPSSpeed();
+    // Without communication there is no speed to show, as without a
+    // thermocouple.
+    currentVal = isGPSLinked() ? getGPSSpeed() : GPS_NOT_LINKED;
     break;
   case SIMPLE_G_ECU:
     currentVal = isEcuConnected();
@@ -285,8 +285,12 @@ void SimpleGauge::showSimpleGauge(void) {
 
     case SIMPLE_G_GPS:
       offset = 1;
-      format = "%d";
-      txtMode = MODE_M_KILOMETERS;
+      if (currentVal == GPS_NOT_LINKED) {
+        format = "N/A";
+      } else {
+        format = "%d";
+        txtMode = MODE_M_KILOMETERS;
+      }
       break;
 
     case SIMPLE_G_INTAKE:
@@ -325,8 +329,12 @@ void SimpleGauge::showSimpleGauge(void) {
   switch (mode) {
   case SIMPLE_G_GPS: {
 
+    // Green with a fix; red blinking without one, twice as fast while the
+    // receiver does not communicate.
     if (isGPSAvailable()) {
       color = HAL_COLOR(GREEN);
+    } else if (!isGPSLinked()) {
+      color = (seriousAlertSwitch()) ? HAL_COLOR(RED) : ICONS_BG_COLOR;
     } else {
       color = (alertSwitch()) ? HAL_COLOR(RED) : ICONS_BG_COLOR;
     }

@@ -123,29 +123,34 @@ configure_build_and_test_module() {
     local name="$1"
     local src_rel="$2"
     local build_rel="$3"
+    local build_type="${4:-Debug}"
+    local log_name="$name"
+    if [[ "$build_type" != Debug ]]; then
+        log_name="${name}_${build_type}"
+    fi
 
     local src_abs="${SCRIPT_DIR}/${src_rel}"
     local build_abs="${SCRIPT_DIR}/${build_rel}"
 
-    info "[${name}] configuring"
-    run_logged "/tmp/fiesta_${name}_configure.log" \
+    info "[${name}/${build_type}] configuring"
+    run_logged "/tmp/fiesta_${log_name}_configure.log" \
         cmake -S "${src_abs}" -B "${build_abs}" \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE="${build_type}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-    info "[${name}] building"
-    run_logged "/tmp/fiesta_${name}_build.log" \
+    info "[${name}/${build_type}] building"
+    run_logged "/tmp/fiesta_${log_name}_build.log" \
         cmake --build "${build_abs}" --parallel "${JOBS}"
 
-    info "[${name}] running ctest (runtime-only, static-analysis label excluded)"
+    info "[${name}/${build_type}] running ctest (runtime-only, static-analysis label excluded)"
     local gui_runner=()
     if [[ "${name}" == "SerialConfigurator" ]]; then
         gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
     fi
-    run_logged "/tmp/fiesta_${name}_ctest.log" \
+    run_logged "/tmp/fiesta_${log_name}_ctest.log" \
         "${gui_runner[@]}" ctest --test-dir "${build_abs}" --progress --output-on-failure -LE static-analysis
 
-    pass "[${name}] host tests passed"
+    pass "[${name}/${build_type}] host tests passed"
 }
 
 run_module_target() {
@@ -207,6 +212,10 @@ header "Gate 2/7: Host runtime tests for all modules"
 for entry in "${MODULE_MATRIX[@]}"; do
     IFS=':' read -r name src_rel build_rel <<< "${entry}"
     configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}"
+    if [[ "${name}" == "SerialConfigurator" ]]; then
+        # Match the CI compiler configuration as well as the Debug checks.
+        configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}/release" Release
+    fi
 done
 pass "All module host tests passed."
 

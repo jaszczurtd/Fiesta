@@ -84,6 +84,9 @@ float readFuel(void);
 int getCurrentCarSpeed(void);
 int getGPSSpeed(void);
 bool isGPSAvailable(void);
+/** @return True while the GPS receiver communicates, with or without a fix;
+ *          see clocks_gps_snapshot_t::linked. */
+bool isGPSLinked(void);
 bool isEngineRunning(void);
 int getEngineRPM(void);
 float getOilPressure(void);
