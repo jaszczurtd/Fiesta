@@ -22,6 +22,7 @@ static int set_reads_until_release = 0;
 static bool hour_down = false;
 static bool sc_edit_pending = false;
 static bool can_time_edit = false;
+static int ds18b20_polls = 0;
 static int bus_inits = 0;
 static PCF_DateTime now = {};
 static std::array<uint8_t, 512> greeting;
@@ -159,6 +160,7 @@ void configSessionInit(void) {}
 void configSessionTick(void) {}
 bool configSessionEditPending(void) { return sc_edit_pending; }
 void ds18b20_setPin(unsigned char) {}
+void ds18b20_poll(void) { ++ds18b20_polls; }
 void ds18b20_gettemp(int *hi, int *lo, double *native) {
   if (greeting[0] == 0 && greeting[48] == 0) {
     greeting = image();
@@ -257,8 +259,11 @@ static void test_app() {
   }
   const auto asleep = frames.size();
   const auto sleeping_image = image();
+  const int polls = ds18b20_polls;
   app_task0();
   assert(frames.size() == asleep + 1);
+  // The sensors convert for CAN also with the panel asleep.
+  assert(ds18b20_polls == polls + 1);
   assert(frames.back() == (std::vector<uint8_t>{0, 0xae}));
   assert(image() == sleeping_image);
   const auto wakes = command_count(0xaf);

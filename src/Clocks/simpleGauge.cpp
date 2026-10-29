@@ -51,7 +51,7 @@ void changeEGT(void) {
 SimpleGauge::SimpleGauge(int mode) {
   this->mode = mode;
   drawOnce = true;
-  resetCurrentEGTMode();
+  currentIsDPF = false;
   lastV1 = lastV2 = C_INIT_VAL;
 
   switch (mode) {
@@ -156,8 +156,6 @@ void SimpleGauge::switchCurrentEGTMode(void) {
   currentIsDPF = !currentIsDPF;
   redraw();
 }
-
-void SimpleGauge::resetCurrentEGTMode(void) { currentIsDPF = false; }
 
 void SimpleGauge::selectEGTMode(bool dpf) {
   if (currentIsDPF != dpf) {

@@ -69,7 +69,7 @@ ECU udostępnia zapisywane progi w wersjonowanym bloku KV. RTC_Clock przyjmuje
 jako UTC. Pole `rtc_integrity` tylko do odczytu ma wartość 1 wyłącznie wtedy,
 gdy RTC zawiera zaufany czas UTC. Commit sprawdza pełną datę, w tym lata
 przestępne. Clocks
-pokazuje progi oraz interwały tylko do odczytu, bez utrwalania.
+pokazuje progi tylko do odczytu, bez utrwalania.
 
 Na karcie Values edytuj pola, wybierz **Apply staged**, a potem **Commit**,
 aby sprawdzić i zastosować zmiany. **Revert** przywraca kopię roboczą

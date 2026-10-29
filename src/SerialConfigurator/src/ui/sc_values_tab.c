@@ -468,8 +468,7 @@ static void show_reading(ParamRow *row, const ScParamValuesData *values) {
     snprintf(text, sizeof(text), divisor == 100.0 ? "%.2f %s" : "%.0f %s",
              (double)typed_value_to_i16(value) / divisor, unit);
   } else {
-    snprintf(text, sizeof(text), "%s%s", value->raw,
-             strstr(row->id, "_ms") != NULL ? " ms" : "");
+    snprintf(text, sizeof(text), "%s", value->raw);
   }
   gtk_label_set_text(GTK_LABEL(row->read_label), text);
 }

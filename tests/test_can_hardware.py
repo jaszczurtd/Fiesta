@@ -65,6 +65,7 @@ void hal_watchdog_feed(void) {{}}
 uint32_t hal_millis(void) {{ return 0; }}
 void hal_gpio_set_mode(uint8_t, hal_gpio_mode_t) {{}}
 void hal_gpio_write(uint8_t, bool) {{}}
+void rtcSyncInit(uint32_t) {{}} // Fiesta_clock resets its GPS sync state first
 hal_status_t hal_spi_init(uint8_t, uint8_t, uint8_t, uint8_t) {{ return HAL_OK; }}
 hal_status_t hal_can_create_with_retry(const hal_can_config_t *cfg, uint8_t,
                                       void (*)(void), int, void (*)(void), hal_can_t *) {{

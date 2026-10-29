@@ -127,10 +127,9 @@ static int test_height_fallback_for_invalid_input(void) {
 }
 
 int main(int argc, char **argv) {
-  /* gtk_init() requires a usable display. Headless CI machines
-   * often lack one - skip-passing the suite there beats a hard
-   * failure that masks real bugs. The DISPLAY / WAYLAND_DISPLAY
-   * environment variables are the authoritative signal. */
+  /* gtk_init() requires a usable display. Without one the test exits
+   * with SC_TEST_SKIPPED, which CTest reports as skipped. The DISPLAY /
+   * WAYLAND_DISPLAY environment variables are the authoritative signal. */
   (void)argc;
   (void)argv;
   const char *display = g_getenv("DISPLAY");
@@ -139,13 +138,13 @@ int main(int argc, char **argv) {
       (wayland == NULL || wayland[0] == '\0')) {
     fprintf(stdout, "test_sc_progressbar: skipped "
                     "(no DISPLAY / WAYLAND_DISPLAY in env)\n");
-    return EXIT_SUCCESS;
+    return SC_TEST_SKIPPED;
   }
 
   if (!gtk_init_check()) {
     fprintf(stdout, "test_sc_progressbar: skipped "
                     "(gtk_init_check failed - no usable display)\n");
-    return EXIT_SUCCESS;
+    return SC_TEST_SKIPPED;
   }
 
   int failures = 0;

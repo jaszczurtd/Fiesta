@@ -52,6 +52,26 @@ extern "C" {
 void testsWorkersReset(void);
 
 /**
+ * @brief Print the step announcement recorded by the control core, once.
+ * @note Call from core 0 (console output); never waits for the control core.
+ */
+void testsWorkersPrintStepEvent(void);
+
+/**
+ * @brief Tell whether a recorded step announcement still awaits its print.
+ * @return true from the record until core 0 printed it.
+ * @note The control core holds a changed demand back while this is true, so
+ *       the announcement reaches the log before the move it announces, as it
+ *       did when the control core printed it itself.
+ */
+bool testsWorkersStepEventPending(void);
+
+#ifdef UNIT_TEST
+/** @brief Called between the words of each read attempt of the step event. */
+extern void (*testsWorkersStepEventReadHookForTest)(void);
+#endif
+
+/**
  * @brief Step delay of the cyclic profile in progress.
  * @return Delay in milliseconds; valid while the cyclic test runs.
  */

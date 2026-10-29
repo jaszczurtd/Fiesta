@@ -188,6 +188,15 @@ extern "C" {
     "RTC_TIME_MAX_AGE_MS must outlast the 1 s 0x130 period and stay within 3 s"
 #endif
 
+// Core 1 starts no other work (Turbo, RPM, test demand) when the next VP37
+// step is due within this time [us]; it waits for the deadline instead. It has
+// to cover the longest such piece of work: the `late` field of the VP37 CFG
+// line shows how far that work ran past a deadline with the value in use.
+#define CORE1_VP37_GUARD_US 400u
+#if (CORE1_VP37_GUARD_US < 100u) || (CORE1_VP37_GUARD_US > 2000u)
+#error "CORE1_VP37_GUARD_US must be in 100..2000 us"
+#endif
+
 // min-max value for indicator
 #define VOLTS_MIN_VAL 11.6
 #define VOLTS_MAX_VAL 14.7

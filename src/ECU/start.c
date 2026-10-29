@@ -46,7 +46,7 @@ typedef struct {
   volatile hal_status_t core1InitStatus;
   bool core1InitErrorReported;
   bool resetReasonReported;
-  uint32_t rebootUtcVal; // last trusted UTC before a watchdog reboot, 0 = none
+  uint32_t rebootUtcVal; // trusted UTC before a watchdog reboot, 0 = unknown
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
@@ -57,7 +57,7 @@ typedef struct {
 typedef struct {
   int statusVariable0Val;
   int statusVariable1Val;
-  uint32_t lastUtcVal; // last trusted RTC time (UTC), 0 = none since power-up
+  uint32_t lastUtcVal; // trusted RTC time (UTC) of the last second, 0 = unknown
 } start_persistent_state_t;
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
@@ -198,10 +198,12 @@ static void start_reportWatchdogSnapshot(void) {
   }
   watchdog_feed();
   jh_calendar_datetime_t lastUtc;
+  /* Only the years of 0x130 can be real; others come from damaged RAM. */
   if ((s_startRuntimeState.rebootUtcVal != 0u) &&
       (jh_calendar_epoch_to_datetime(s_startRuntimeState.rebootUtcVal,
-                                     JH_CALENDAR_MAX_YEAR,
-                                     &lastUtc) == HAL_OK)) {
+                                     FIESTA_CAN_DATETIME_MAX_YEAR,
+                                     &lastUtc) == HAL_OK) &&
+      (lastUtc.year >= FIESTA_CAN_DATETIME_MIN_YEAR)) {
     derr("Watchdog reboot at %04u-%02u-%02u %02u:%02u:%02u UTC",
          (unsigned)lastUtc.year, (unsigned)lastUtc.month, (unsigned)lastUtc.day,
          (unsigned)lastUtc.hour, (unsigned)lastUtc.minute,
@@ -424,11 +426,8 @@ void callAtEverySecond(void) {
   hal_gpio_write(JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT,
                  s_startRuntimeState.alertBlinkState);
   hal_gpio_write(JH_HW_NODE_DPF_LAMP_PIN_OUT, isDPFRegenerating());
-  // Survives a watchdog reboot, which reports it.
-  const uint32_t utc = rtcTimeGetUtc();
-  if (utc != 0u) {
-    s_startPersistentState.lastUtcVal = utc;
-  }
+  // Survives a watchdog reboot, which reports it; 0 reports an unknown time.
+  s_startPersistentState.lastUtcVal = rtcTimeGetUtc();
   start_reportWatchdogSnapshot();
   start_reportResetReason();
 
@@ -505,6 +504,7 @@ static void runCore0(void) {
 #endif
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
+  testsPrintEvents();
   // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
@@ -594,6 +594,24 @@ static void start_takeOverVP37(void) {
 }
 #endif
 
+#ifdef VP37
+/**
+ * @brief Spin until the VP37 deadline when it is due within the guard time.
+ * @param pump Pump whose deadline is waited for.
+ * @note In RAM, so the wait itself does not depend on the flash cache.
+ */
+static void HAL_RAM_FUNC(start_waitForVP37Deadline)(const VP37Pump *pump) {
+  // Busy wait while the deadline is within the guard but not reached yet;
+  // hal_micros() also runs from RAM.
+  bool waiting = true;
+  while (waiting) {
+    const uint32_t nowUs = hal_micros();
+    waiting = VP37_controlDueWithin(pump, nowUs, CORE1_VP37_GUARD_US) &&
+              !VP37_controlDueWithin(pump, nowUs, 0U);
+  }
+}
+#endif
+
 /**
  * @brief Run one core-1 control-loop iteration.
  */
@@ -615,24 +633,32 @@ static void runCore1(void) {
   }
 
   s_startPersistentState.statusVariable1Val = 1;
-  hal_mutex_lock(turboStateMutex);
-  Turbo_process(&s_ctx.turbo);
-  hal_mutex_unlock(turboStateMutex);
-  s_startPersistentState.statusVariable1Val = 2;
-  RPM_process(getRPMInstance());
 #ifdef VP37
   start_takeOverVP37();
-  // A running functional test owns the demand; the application produces it
-  // otherwise, including every build without tests.
-  if (!tickTests()) {
-#if ECU_ENGINE_CONTROL_ENABLED
-    engineOperation_process(&s_ctx.engineOp);
-    engineOperation_showDebug(&s_ctx.engineOp);
-#else
-    (void)VP37_setPositionDemandPercentage(&s_ctx.injectionPump,
-                                           getDriverDemandPercent());
+  // Close to the next VP37 deadline core 1 starts nothing else, so the step
+  // does not wait for the tail of other work.
+  if (!VP37_controlDueWithin(&s_ctx.injectionPump, hal_micros(),
+                             CORE1_VP37_GUARD_US)) {
 #endif
+    hal_mutex_lock(turboStateMutex);
+    Turbo_process(&s_ctx.turbo);
+    hal_mutex_unlock(turboStateMutex);
+    s_startPersistentState.statusVariable1Val = 2;
+    RPM_process(getRPMInstance());
+#ifdef VP37
+    // A running functional test owns the demand; the application produces it
+    // otherwise, including every build without tests.
+    if (!tickTests()) {
+#if ECU_ENGINE_CONTROL_ENABLED
+      engineOperation_process(&s_ctx.engineOp);
+      engineOperation_showDebug(&s_ctx.engineOp);
+#else
+      (void)VP37_setPositionDemandPercentage(&s_ctx.injectionPump,
+                                             getDriverDemandPercent());
+#endif
+    }
   }
+  start_waitForVP37Deadline(&s_ctx.injectionPump);
   VP37_process(&s_ctx.injectionPump);
 #else
   RPM_showDebug(&s_ctx.rpm);

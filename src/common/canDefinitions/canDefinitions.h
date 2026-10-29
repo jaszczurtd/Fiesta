@@ -154,7 +154,8 @@ enum {
   CAN_FRAME_RTC_UPDATE_INTEGRITY, // 1 = trusted UTC, 0 = no trusted time
 };
 
-// Clocks: UTC from one RMC sentence with a fresh fix, at most 2 seconds old.
+// Clocks: UTC from one RMC sentence with a fresh fix, at most 2 seconds old,
+// moved on by its age to the time of sending.
 #define CAN_ID_GPS_UTC_UPDATE 0x131
 enum {
   CAN_FRAME_GPS_UTC_EPOCH_B3 = 1, // uint32 Unix seconds, big-endian
@@ -164,6 +165,21 @@ enum {
   CAN_FRAME_GPS_UTC_STATUS, // bit 0 valid; bytes 6 and 7 reserved, zero
 };
 #define CAN_GPS_UTC_STATUS_VALID 0x01u
+
+// Fiesta_clock, once a second and at once when a value changes: the air
+// temperatures of its two DS18B20 sensors.
+#define CAN_ID_AIR_TEMP_UPDATE 0x132
+enum {
+  CAN_FRAME_AIR_TEMP_INSIDE_HI = 1, // int16 °C * 10 (big-endian)
+  CAN_FRAME_AIR_TEMP_INSIDE_LO,
+  CAN_FRAME_AIR_TEMP_OUTSIDE_HI, // int16 °C * 10 (big-endian)
+  CAN_FRAME_AIR_TEMP_OUTSIDE_LO,
+  CAN_FRAME_AIR_TEMP_STATUS, // CAN_AIR_TEMP_STATUS_* bits; bytes 6 and 7
+                             // reserved, zero
+};
+// A sensor without its bit has no fresh reading and carries 0.
+#define CAN_AIR_TEMP_STATUS_INSIDE_VALID 0x01u
+#define CAN_AIR_TEMP_STATUS_OUTSIDE_VALID 0x02u
 
 enum {
   F_FUEL,

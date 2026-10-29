@@ -768,10 +768,14 @@ static bool sc_core_send_sc_command_internal(ScCore *core, size_t module_index,
     return false;
   }
 
-  if (module_index >= SC_MODULE_COUNT ||
-      sc_core_module_source_dir(module_index) == NULL) {
+  if (module_index >= SC_MODULE_COUNT) {
     log_append(log_output, log_output_size,
                "[ERROR] Module index out of range: %zu\n", module_index);
+    return false;
+  }
+  if (sc_core_module_inactive(module_index)) {
+    log_append(log_output, log_output_size, "[ERROR] Module %s is inactive.\n",
+               core->modules[module_index].display_name);
     return false;
   }
 
@@ -975,6 +979,11 @@ void sc_core_detect_modules(ScCore *core, char *log_output,
   log_append(log_output, log_output_size, "\nDetection summary:\n");
   for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
     const ScModuleStatus *status = &core->modules[i];
+    if (sc_core_module_inactive(i)) {
+      log_append(log_output, log_output_size, "- %-12s : INACTIVE\n",
+                 status->display_name);
+      continue;
+    }
     log_append(log_output, log_output_size, "- %-12s : %s (instances=%zu%s)\n",
                status->display_name,
                status->detected ? "DETECTED" : "NOT DETECTED",
@@ -987,6 +996,10 @@ size_t sc_core_module_count(void) { return SC_MODULE_COUNT; }
 
 const char *sc_core_module_source_dir(size_t index) {
   return (index < SC_MODULE_COUNT) ? k_module_defs[index].source_dir : 0;
+}
+
+bool sc_core_module_inactive(size_t index) {
+  return index < SC_MODULE_COUNT && k_module_defs[index].source_dir == 0;
 }
 
 bool sc_core_module_has_tests(size_t index) {

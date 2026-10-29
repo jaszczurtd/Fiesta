@@ -230,12 +230,12 @@ int main(int argc, char **argv) {
       (wayland == NULL || wayland[0] == '\0')) {
     fprintf(stdout, "test_sc_tests_tab: skipped "
                     "(no DISPLAY / WAYLAND_DISPLAY in env)\n");
-    return EXIT_SUCCESS;
+    return SC_TEST_SKIPPED;
   }
   if (!gtk_init_check()) {
     fprintf(stdout, "test_sc_tests_tab: skipped "
                     "(gtk_init_check failed - no usable display)\n");
-    return EXIT_SUCCESS;
+    return SC_TEST_SKIPPED;
   }
   /* gtk_init takes the system locale; numbers are checked with a dot. */
   (void)setlocale(LC_NUMERIC, "C");

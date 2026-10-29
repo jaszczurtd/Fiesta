@@ -112,6 +112,12 @@ bool tickTests(void);
 void tickTestsHandleSerialLine(const char *line);
 
 /**
+ * @brief Print the test step changes recorded on the control core.
+ * @note Call from the core 0 loop; a no-op when tests are not compiled in.
+ */
+void testsPrintEvents(void);
+
+/**
  * @brief Console name of the running test.
  * @return Name, or NULL when no test runs or tests are not compiled in.
  */

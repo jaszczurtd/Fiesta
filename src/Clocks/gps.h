@@ -49,12 +49,14 @@ uint16_t clocksGpsSpeedX10(const clocks_gps_snapshot_t *gps);
 /**
  * @brief Encode GPS 0x12D/0x12E and UTC 0x131, leaving frame numbers zero.
  * @param gps Snapshot already checked for freshness.
+ * @param nowMs hal_millis() of sending; the UTC of the sentence moves on by
+ *        its age, to the nearest second.
  * @param lat Eight-byte 0x12D payload.
  * @param lonTime Eight-byte 0x12E payload, date/time in UTC.
  * @param utc Eight-byte 0x131 payload.
  * @return HAL_OK, HAL_EINVAL for any NULL argument.
  */
-hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint8_t *lat,
-                             uint8_t *lonTime, uint8_t *utc);
+hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint32_t nowMs,
+                             uint8_t *lat, uint8_t *lonTime, uint8_t *utc);
 
 #endif

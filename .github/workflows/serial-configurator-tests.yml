@@ -44,7 +44,7 @@ jobs:
           sudo apt-get install -y build-essential cmake pkg-config libgtk-4-dev valgrind clang-tidy clang-tools xvfb xauth locales
 
       - name: Generate test locales
-        run: sudo locale-gen en_US.UTF-8 pl_PL.UTF-8
+        run: sudo locale-gen $(cat scripts/test-locales.txt)
 
       - name: Prepare HAL dependencies
         run: ./src/common/scripts/ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host

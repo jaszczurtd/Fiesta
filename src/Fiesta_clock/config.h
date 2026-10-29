@@ -28,6 +28,11 @@
 #define CFG_CLOCK_SET_MODE_DELAY_LOOPS 80
 
 #define CFG_TEMP_DELAY_LOOPS 20
+/* CAN 0x132 sends a DS18B20 reading while its newest 12-bit conversion
+ * (750 ms each, back to back) is younger than this. */
+#define CFG_TEMP_MAX_AGE_MS 3000u
+JB_STATIC_ASSERT(CFG_TEMP_MAX_AGE_MS >= 1500u && CFG_TEMP_MAX_AGE_MS <= 10000u,
+                 "CFG_TEMP_MAX_AGE_MS must be in 1500..10000 ms");
 #define CFG_VOLT_DELAY_LOOPS 6
 
 #define CFG_ADC_RESOLUTION_BITS 10u
@@ -51,10 +56,16 @@ JB_STATIC_ASSERT(CFG_RTC_MIN_YEAR >= 2000 &&
 #define CFG_RTC_SYNC_TOLERANCE_S 2u
 #define CFG_RTC_SYNC_CORRECTION_INTERVAL_MS 600000u
 #define CFG_RTC_SYNC_RETRY_MS 30000u
-JB_STATIC_ASSERT(CFG_RTC_SYNC_TOLERANCE_S == 2u &&
-                     CFG_RTC_SYNC_CORRECTION_INTERVAL_MS == 600000u &&
-                     CFG_RTC_SYNC_RETRY_MS == 30000u,
-                 "the RTC correction rules are agreed values");
+JB_STATIC_ASSERT(CFG_RTC_SYNC_TOLERANCE_S >= 1u &&
+                     CFG_RTC_SYNC_TOLERANCE_S <= 5u,
+                 "CFG_RTC_SYNC_TOLERANCE_S must be in 1..5 s");
+JB_STATIC_ASSERT(CFG_RTC_SYNC_CORRECTION_INTERVAL_MS >= 60000u &&
+                     CFG_RTC_SYNC_CORRECTION_INTERVAL_MS <= 3600000u,
+                 "CFG_RTC_SYNC_CORRECTION_INTERVAL_MS must be in 1..60 min");
+JB_STATIC_ASSERT(
+    CFG_RTC_SYNC_RETRY_MS >= 5000u &&
+        CFG_RTC_SYNC_RETRY_MS <= CFG_RTC_SYNC_CORRECTION_INTERVAL_MS,
+    "CFG_RTC_SYNC_RETRY_MS must be 5 s to the correction interval");
 /* Frames read after a longer pause of the main loop (a held button, the
  * temperature reading after an ignition change) may have waited in the
  * receive queue and are dropped. A normal pass takes tens of milliseconds. */

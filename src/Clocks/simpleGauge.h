@@ -44,7 +44,6 @@ public:
                              const char *format, ...);
   void redraw(void);
   void switchCurrentEGTMode(void);
-  void resetCurrentEGTMode(void);
   void selectEGTMode(bool dpf);
   int getBaseX(void);
   int getBaseY(void);

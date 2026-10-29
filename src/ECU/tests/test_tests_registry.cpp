@@ -17,7 +17,12 @@
 #include "../../common/scDefinitions/sc_protocol.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
+
+/* The wait of tests_helpers.c for a printed announcement; the test states the
+ * value it expects instead of reading it back. */
+#define STEP_EVENT_APPLY_TIMEOUT_MS 50U
 
 #ifdef ECU_TEST_CLOCK_INTERLEAVING
 static void (*s_clockHook)(void);
@@ -265,7 +270,21 @@ void test_kv_one_shot_names_a_failed_write(void) {
 }
 
 /** @brief Hold the mock clock at ms, run one tick and report the demand. */
+/** @brief One control tick at the given time with core 0 printing a recorded
+ * step announcement at once, so a changed demand applies in the same tick
+ * sequence; the hold itself is tested with bare tickTests() calls below. */
 static float tickAt(uint32_t ms) {
+  hal_mock_set_millis(ms);
+  (void)tickTests();
+  if (testsWorkersStepEventPending()) {
+    testsPrintEvents();
+    (void)tickTests();
+  }
+  return getECUContext()->injectionPump.demand.requestedPercent;
+}
+
+/** @brief The demand applied after one bare tick, without core 0. */
+static float bareTickAt(uint32_t ms) {
   hal_mock_set_millis(ms);
   (void)tickTests();
   return getECUContext()->injectionPump.demand.requestedPercent;
@@ -1235,6 +1254,175 @@ void test_descent_share_command_is_released_profile_gated_and_resettable(void) {
   TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.descentIntegralRetainedShare);
 }
 
+/** @brief The console line core 0 printed last, without the debug prefix. */
+static const char *lastTestLine(void) {
+  const char *line = hal_mock_deb_last_line();
+  const char *found = (line != nullptr) ? strstr(line, "TEST: ") : nullptr;
+  return (found != nullptr) ? found : "";
+}
+
+void test_step_announcements_are_recorded_by_the_control_core_and_printed_once(
+    void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  // The start itself reports once; from here the control core only records
+  // each step, so nothing else reaches the console from it.
+  hal_mock_serial_reset();
+  (void)bareTickAt(0U);
+  TEST_ASSERT_EQUAL_STRING("", lastTestLine());
+  // Core 0 prints it in the line the bench tools cut the logs with ...
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: top 75.0 % (series 1/5)", lastTestLine());
+  // ... once: the same record is not printed again.
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", lastTestLine());
+  // The next step of the staircase, after its dwell.
+  (void)bareTickAt(TOP_STEPS_DWELL_MS);
+  TEST_ASSERT_EQUAL_STRING("", lastTestLine());
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: top 85.5 % (series 1/5)", lastTestLine());
+  // A record that core 0 missed is replaced by the newer one.
+  hal_mock_serial_reset();
+  (void)bareTickAt(2U * TOP_STEPS_DWELL_MS);
+  (void)bareTickAt(3U * TOP_STEPS_DWELL_MS);
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: top 95.0 % (series 1/5)", lastTestLine());
+}
+
+void test_topzero_and_pot_announcements_keep_their_lines(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
+  (void)bareTickAt(0U);
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: topzero 75.0 % (series 1/5)", lastTestLine());
+  console("stop");
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
+  (void)bareTickAt(0U);
+  testsPrintEvents();
+  char expected[64];
+  (void)snprintf(expected, sizeof(expected),
+                 "TEST: pot rise %ld %%/s (pass 1/3)",
+                 (long)testsHelpersParam(TEST_PARAM_POT_RATE));
+  TEST_ASSERT_EQUAL_STRING(expected, lastTestLine());
+}
+
+static uint32_t s_stepEventHookCalls;
+
+/* The control core enters the next step between the words of a read. */
+static void recordNextStepBetweenTheWords(void) {
+  if (s_stepEventHookCalls++ == 0U) {
+    (void)bareTickAt(TOP_STEPS_DWELL_MS);
+  }
+}
+
+void test_step_announcement_read_retries_after_a_concurrent_record(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  (void)bareTickAt(0U);
+  s_stepEventHookCalls = 0U;
+  testsWorkersStepEventReadHookForTest = recordNextStepBetweenTheWords;
+  testsPrintEvents();
+  testsWorkersStepEventReadHookForTest = nullptr;
+  // The torn pair (the first demand with the second record) never prints;
+  // the second attempt prints the step in progress.
+  TEST_ASSERT_EQUAL_STRING("TEST: top 85.5 % (series 1/5)", lastTestLine());
+  TEST_ASSERT_EQUAL_UINT32(2U, s_stepEventHookCalls);
+}
+
+static void recordAStepEveryTime(void) {
+  s_stepEventHookCalls++;
+  (void)bareTickAt(s_stepEventHookCalls * TOP_STEPS_DWELL_MS);
+}
+
+void test_step_announcement_read_gives_up_while_the_control_core_records(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  hal_mock_serial_reset();
+  (void)bareTickAt(0U);
+  s_stepEventHookCalls = 0U;
+  testsWorkersStepEventReadHookForTest = recordAStepEveryTime;
+  testsPrintEvents();
+  testsWorkersStepEventReadHookForTest = nullptr;
+  // Core 0 gave up instead of waiting for the control core ...
+  TEST_ASSERT_EQUAL_STRING("", lastTestLine());
+  TEST_ASSERT_GREATER_THAN_UINT32(1U, s_stepEventHookCalls);
+  // ... and prints the latest record on its next pass.
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: top 0.0 % (series 1/5)", lastTestLine());
+}
+
+void test_changed_demand_waits_for_its_announcement_to_be_printed(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  // The first step is recorded; until core 0 prints it the actuator keeps
+  // the previous demand, so the log carries the announcement before the move.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(0U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(5U));
+  TEST_ASSERT_TRUE(testsWorkersStepEventPending());
+  testsPrintEvents();
+  TEST_ASSERT_FALSE(testsWorkersStepEventPending());
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(10U));
+  // The next step of the staircase waits the same way.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(TOP_STEPS_DWELL_MS));
+  testsPrintEvents();
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 85.5f, bareTickAt(TOP_STEPS_DWELL_MS + 5U));
+}
+
+void test_changed_demand_applies_after_the_print_timeout(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  // Core 0 never prints (console muted, for instance): the move is delayed
+  // by the timeout at most, never lost.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(0U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f,
+                           bareTickAt(STEP_EVENT_APPLY_TIMEOUT_MS - 1U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f,
+                           bareTickAt(STEP_EVENT_APPLY_TIMEOUT_MS));
+  TEST_ASSERT_TRUE(testsWorkersStepEventPending());
+}
+
+void test_demands_without_an_announcement_apply_at_once(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_CYCLIC));
+  // The cyclic profile records nothing, so its demand is never held back.
+  float previous = bareTickAt(0U);
+  bool moved = false;
+  for (uint32_t ms = CYCLIC_DELAYTIME_A; ms <= 20U * CYCLIC_DELAYTIME_A;
+       ms += CYCLIC_DELAYTIME_A) {
+    const float demand = bareTickAt(ms);
+    moved |= demand != previous;
+    previous = demand;
+  }
+  TEST_ASSERT_TRUE(moved);
+  TEST_ASSERT_FALSE(testsWorkersStepEventPending());
+}
+
+void test_demand_hold_starts_from_the_stopped_actuator(void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, tickAt(0U));
+  // Stopping commands zero; the next test holds at zero, not at the old step.
+  console("stop");
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.001f, 0.0f, getECUContext()->injectionPump.demand.requestedPercent);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(10U));
+  testsPrintEvents();
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(15U));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_registry_refuses_every_call_before_initialization);
@@ -1252,6 +1440,15 @@ int main(void) {
   RUN_TEST(test_kv_one_shot_names_a_failed_write);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
+  RUN_TEST(
+      test_step_announcements_are_recorded_by_the_control_core_and_printed_once);
+  RUN_TEST(test_topzero_and_pot_announcements_keep_their_lines);
+  RUN_TEST(test_step_announcement_read_retries_after_a_concurrent_record);
+  RUN_TEST(test_step_announcement_read_gives_up_while_the_control_core_records);
+  RUN_TEST(test_changed_demand_waits_for_its_announcement_to_be_printed);
+  RUN_TEST(test_changed_demand_applies_after_the_print_timeout);
+  RUN_TEST(test_demands_without_an_announcement_apply_at_once);
+  RUN_TEST(test_demand_hold_starts_from_the_stopped_actuator);
   RUN_TEST(
       test_pot_turns_to_full_demand_as_a_tracked_target_then_holds_and_returns);
   RUN_TEST(test_pot_rate_command_is_bounded_and_reset_restores_the_default);

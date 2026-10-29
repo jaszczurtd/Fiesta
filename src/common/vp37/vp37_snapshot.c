@@ -86,6 +86,8 @@ static void VP37_buildTelemetry(const VP37Pump *self,
   telemetry->controlSequence = self->controlSequence;
   telemetry->pidDtUs = self->pidDtUs;
   telemetry->controlExecUs = self->controlExecUs;
+  telemetry->controlLateMaxUs = self->controlLateMaxUs;
+  telemetry->controlOverruns = self->controlOverruns;
   telemetry->cyclicDelayMs = self->callbacks.cyclicDelayMs();
   telemetry->activeTestName = self->callbacks.activeTestName();
   telemetry->adjustometer = self->adjustometer.last;

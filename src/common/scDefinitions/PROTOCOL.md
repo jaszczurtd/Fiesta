@@ -122,9 +122,9 @@ Writes are staged and need an authenticated session. `SC_SET_PARAM` changes
 the staged copy, `SC_COMMIT_PARAMS` validates and applies it, and
 `SC_REVERT_PARAMS` copies the active values back. ECU and RTC_Clock have writable parameters; Clocks only reports its parameters.
 
-Clocks also reports read-only sampling intervals and measurements through
-`SC_GET_VALUES`: `abs_kmh` (km/h), `oil_cbar` (0.01 bar), `egt0_c`
-(before DPF, °C), `egt1_c` (inside DPF, °C), and `valid`. Bits 0-3 of
+Clocks also reports read-only measurements through `SC_GET_VALUES`:
+`abs_kmh` (km/h), `oil_cbar` (0.01 bar), `egt0_c` (before DPF, °C),
+`egt1_c` (inside DPF, °C), and `valid`. Bits 0-3 of
 `valid` mark ABS, oil, EGT0 and EGT1 respectively. Invalid measurements
 are zeroed; clients must check the bits to distinguish them from valid zero.
 ABS validity means capture initialized successfully, including at standstill.

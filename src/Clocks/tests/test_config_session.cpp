@@ -119,6 +119,8 @@ void test_clocks_sc_get_param_list_returns_empty_list_baseline(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "SC_OK PARAM_LIST"));
   TEST_ASSERT_NOT_NULL(strstr(response, "coolant_warn_c"));
   TEST_ASSERT_NOT_NULL(strstr(response, "egt_max_c"));
+  // The whole catalog fits one reply, without the truncation mark.
+  TEST_ASSERT_NULL(strstr(response, "*"));
 }
 
 void test_clocks_sc_get_values_returns_empty_snapshot_baseline(void) {
@@ -241,36 +243,6 @@ static int scalar(const char *reply, const char *id) {
   return value;
 }
 
-void test_clocks_sampling_intervals_moved_to_the_catalog(void) {
-  performHello();
-  const char *response = sendSerialLine("SC_GET_PARAM_LIST\n");
-  TEST_ASSERT_NOT_NULL(strstr(response, "oil_pressure_read_interval_ms"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "thermocouple_read_interval_ms"));
-  TEST_ASSERT_NULL(strstr(response, "*"));
-  const char *ids[] = {"oil_pressure_read_interval_ms",
-                       "thermocouple_read_interval_ms"};
-  const int minimum[] = {OIL_PRESSURE_READ_INTERVAL_MIN,
-                         THERMOCOUPLE_READ_INTERVAL_MIN};
-  const int maximum[] = {OIL_PRESSURE_READ_INTERVAL_MAX,
-                         THERMOCOUPLE_READ_INTERVAL_MAX};
-  const int configured[] = {OIL_PRESSURE_READ_INTERVAL,
-                            THERMOCOUPLE_READ_INTERVAL};
-  for (size_t i = 0; i < COUNTOF(ids); ++i) {
-    char command[96];
-    snprintf(command, sizeof(command), "SC_GET_PARAM %s\n", ids[i]);
-    response = sendSerialLine(command);
-    TEST_ASSERT_EQUAL_INT(minimum[i], scalar(response, "min"));
-    TEST_ASSERT_EQUAL_INT(maximum[i], scalar(response, "max"));
-    TEST_ASSERT_GREATER_OR_EQUAL_INT(minimum[i], scalar(response, "value"));
-    TEST_ASSERT_LESS_OR_EQUAL_INT(maximum[i], scalar(response, "value"));
-    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, "value"));
-    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, "default"));
-    TEST_ASSERT_NOT_NULL(strstr(response, "group=sampling"));
-    response = sendSerialLine("SC_GET_VALUES\n");
-    TEST_ASSERT_EQUAL_INT(configured[i], scalar(response, ids[i]));
-  }
-}
-
 void test_abs_validity_crosses_the_core_snapshot_and_sc_reply(void) {
   canSetValue(F_ABS_CAR_SPEED, 42.0f);
   canSetAbsReady(false);
@@ -352,7 +324,6 @@ int main(void) {
   RUN_TEST(test_clocks_config_session_init_resets_active_state);
   RUN_TEST(test_clocks_hello_uses_current_millis_in_session_id);
   RUN_TEST(test_clocks_handles_multiple_hello_commands_in_one_rx_buffer);
-  RUN_TEST(test_clocks_sampling_intervals_moved_to_the_catalog);
   RUN_TEST(test_live_values_refresh_and_expire_without_the_ecu);
   RUN_TEST(test_abs_validity_crosses_the_core_snapshot_and_sc_reply);
 

@@ -397,9 +397,13 @@ typedef struct {
 typedef struct {
   float pidTimeUpdate;
   uint32_t controlLastUs, controlDtUs, controlSequence, pidDtUs;
-  uint32_t controlExecUs; /**< Execution time of the published step up to
-                             its publication [us]. */
-  uint32_t cyclicDelayMs; /**< Step delay of the running cyclic test [ms]. */
+  uint32_t controlExecUs;    /**< Execution time of the published step up to
+                                its publication [us]. */
+  uint32_t controlLateMaxUs; /**< Latest start after the deadline in the last
+                                completed window of steps [us]. */
+  uint32_t controlOverruns;  /**< Steps so far that started a whole period
+                                late or more. */
+  uint32_t cyclicDelayMs;    /**< Step delay of the running cyclic test [ms]. */
   const char *activeTestName;          /**< Running bench test, or NULL. */
   adjustometer_reading_t adjustometer; /**< Newest Adjustometer reading. */
   VP37Feedback feedback;
@@ -442,6 +446,17 @@ typedef struct {
   float pidTimeUpdate;
   uint32_t controlLastUs;
   uint32_t controlDtUs;
+  uint32_t controlDueUs;  /**< Deadline of the next step on a fixed grid of
+                               pidTimeUpdate periods [us, hal_micros()]. */
+  uint32_t controlLateUs; /**< Start of the latest step after its deadline
+                               [us]. */
+  uint32_t controlLateWindowUs; /**< Latest start in the window of
+                                     VP37_CONTROL_LATE_WINDOW_STEPS steps in
+                                     progress, overruns excluded [us]. */
+  uint32_t controlLateMaxUs; /**< The same for the last completed window; what
+                                 the telemetry reports [us]. */
+  uint32_t controlOverruns;  /**< Steps that started a whole period late or
+                                  more; each starts a new grid. */
   uint32_t
       controlExecUs; /**< Execution time of the latest control step [us]. */
   uint32_t controlSequence;
@@ -666,11 +681,28 @@ void VP37_showCurrentPulse(const VP37Snapshot *snapshot);
 
 /**
  * @brief Process one cycle of the VP37 inner quantity-actuator loop.
+ *
+ * A step runs once its deadline has passed. Deadlines lie on a fixed grid of
+ * pidTimeUpdate periods, so a late start does not move the next deadline; a
+ * step a whole period late or more starts a new grid instead of a burst of
+ * steps.
  * @note This is the low-level N146/G149-like loop. Higher-level requested-fuel-
  *       quantity arbitration is still represented only partially in the current
  * code.
  */
 void VP37_process(VP37Pump *self);
+
+/**
+ * @brief Tell whether the next control step is due within a margin.
+ * @param self Pump; NULL is never due.
+ * @param nowUs hal_micros() of the check.
+ * @param marginUs Time before the deadline that already counts as due [us].
+ * @return true before the first step, when the deadline has passed, or when
+ *         it comes within marginUs.
+ * @note Lets the control-loop core keep other work away from the deadline.
+ */
+bool VP37_controlDueWithin(const VP37Pump *self, uint32_t nowUs,
+                           uint32_t marginUs);
 
 /**
  * @brief Enable or disable the VP37 output stage.

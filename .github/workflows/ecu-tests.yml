@@ -12,7 +12,10 @@ on:
       - "runalltests.sh"
       - "runmefirst.sh"
       - "src/ECU/**"
+      - "src/Adjustometer/**"
+      - "src/Clocks/**"
       - "src/Fiesta_clock/**"
+      - "src/SerialConfigurator/**"
       - ".github/workflows/ecu-tests.yml"
       - ".github/actions/pinned-cppcheck/**"
   pull_request:
@@ -26,7 +29,10 @@ on:
       - "runalltests.sh"
       - "runmefirst.sh"
       - "src/ECU/**"
+      - "src/Adjustometer/**"
+      - "src/Clocks/**"
       - "src/Fiesta_clock/**"
+      - "src/SerialConfigurator/**"
       - ".github/workflows/ecu-tests.yml"
       - ".github/actions/pinned-cppcheck/**"
   workflow_dispatch:

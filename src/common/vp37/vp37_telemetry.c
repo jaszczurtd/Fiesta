@@ -22,7 +22,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:148 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:149 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -35,7 +35,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu "
         "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu "
         "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
-        "execus:%lu plim:%.1f stand_slew:%.1f stand_upper:%.1f adec:%.0f "
+        "execus:%lu late:%lu ovr:%lu plim:%.1f stand_slew:%.1f "
+        "stand_upper:%.1f adec:%.0f "
         "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f "
         "hoff:%lu thold:%u ref:%u full:%u freeze:%u mgate:%u mvel:%.1f "
         "slowd:%u sd:%.3f beta:%.3f rkp:%.5f ierr:%.3f dramp:%u udb:%u "
@@ -84,7 +85,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         view->thermal.driveLearning ? 1U : 0U,
         (unsigned long)view->thermal.driveLearnedSamples,
         (unsigned long)view->scan.collectUs, (unsigned long)view->controlExecUs,
-        view->demand.physicalLimitPercent,
+        (unsigned long)view->controlLateMaxUs,
+        (unsigned long)view->controlOverruns, view->demand.physicalLimitPercent,
         VP37_STATIONARY_SLEW_PERCENT_PER_SECOND,
         VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND,
         VP37_ARRIVAL_DECEL_PERCENT_PER_S2, VP37_INTEGRAL_HOLD_ENTER_HZ,

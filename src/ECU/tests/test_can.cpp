@@ -5,6 +5,8 @@
 #include "sensors.h"
 #include "unity.h"
 
+#include <cstring>
+
 static void ensure_can_ready(void) {
   if (canTestGetCanHandle() == NULL) {
     TEST_ASSERT_EQUAL_INT(HAL_OK, canInit(1));
@@ -409,6 +411,31 @@ void test_can_init_reports_why_can0_stayed_off(void) {
   TEST_ASSERT_NOT_NULL(canTestGetCanHandle());
 }
 
+/* GPS frames of Clocks and air temperatures of Fiesta_clock reach the ECU,
+ * which has no CAN0 filter; it skips them without a report. A frame of an
+ * unknown ID is still reported. */
+void test_frames_of_other_modules_are_skipped_quietly(void) {
+  ensure_can_ready();
+  const uint8_t frame[CAN_FRAME_MAX_LENGTH] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
+  const uint32_t ids[] = {CAN_ID_GPS_EXT_LAT, CAN_ID_GPS_EXT_LON_TIME,
+                          CAN_ID_GPS_UTC_UPDATE, CAN_ID_AIR_TEMP_UPDATE};
+  // Past the rate limit of earlier reports, so a report would print.
+  hal_mock_set_millis(hal_millis() + 3600000u);
+  hal_mock_serial_reset();
+  for (size_t i = 0u; i < COUNTOF(ids); i++) {
+    hal_mock_can_inject(canTestGetCanHandle(), ids[i], CAN_FRAME_MAX_LENGTH,
+                        frame);
+  }
+  canMainLoop();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+
+  hal_mock_can_inject(canTestGetCanHandle(), 0x13Fu, CAN_FRAME_MAX_LENGTH,
+                      frame);
+  canMainLoop();
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "unknown CAN frame:13f"));
+}
+
 /* GPS moved to Clocks: 0x129 keeps intake and fuel with the withdrawn GPS
  * bytes zero, also after 0x123 filled the same buffer positions, and the
  * periodic set sends neither 0x12D nor 0x12E. */
@@ -471,5 +498,6 @@ int main(void) {
 #endif
   RUN_TEST(test_can_init_reports_why_can0_stayed_off);
   RUN_TEST(test_ecu_frames_carry_no_gps);
+  RUN_TEST(test_frames_of_other_modules_are_skipped_quietly);
   return UNITY_END();
 }

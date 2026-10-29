@@ -19,7 +19,7 @@ używane w samochodzie bez sterowania VP37.
 | [ECU](src/ECU/README.pl.md) | Sterowanie silnikiem, VP37 i doładowaniem, przekaźniki, diagnostyka i zapis DTC. |
 | [Clocks](src/Clocks/) | Fabryczne wskaźniki, dodatkowy ekran TFT i ostrzeżenia; pomiar ciśnienia oleju, prędkości i temperatur spalin. |
 | [Adjustometer](src/Adjustometer/README.pl.md) | Pomiar położenia nastawnika VP37 przekazywany do ECU przez I²C. |
-| [Fiesta_clock](src/Fiesta_clock/) | Publikacja czasu RTC przez CAN i lokalny wyświetlacz. |
+| [Fiesta_clock](src/Fiesta_clock/) | Publikacja czasu RTC i temperatur powietrza przez CAN oraz lokalny wyświetlacz. |
 | [VP37TestBench](src/VP37TestBench/) | Współdzielony sterownik VP37 na osobnym stanowisku pompy. |
 | [SerialConfigurator](src/SerialConfigurator/README.pl.md) | GUI i CLI dla Linuksa: wykrywanie USB, ustawienia i testy stanowiskowe ECU; GUI umożliwia też wgrywanie firmware. |
 

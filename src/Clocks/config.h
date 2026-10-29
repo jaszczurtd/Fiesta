@@ -251,7 +251,12 @@ JB_STATIC_ASSERT(CHARGE_LAMP_DATA_TIMEOUT_MS >=
 // just a general timer tasks info message on main thread
 #define THREAD_CONTROL_SECONDS 5
 
-#define MAX_RETRIES 15
+// a CAN controller that does not answer is tried again this often from the
+// core-0 loop, in miliseconds; an attempt does not wait for it
+#define CAN_INIT_RETRY_INTERVAL 1000
+JB_STATIC_ASSERT(CAN_INIT_RETRY_INTERVAL >= 100 &&
+                     CAN_INIT_RETRY_INTERVAL <= 10000,
+                 "CAN_INIT_RETRY_INTERVAL must be in 100..10000 ms");
 
 #define MIN_OIL_PRESSURE 0.2
 

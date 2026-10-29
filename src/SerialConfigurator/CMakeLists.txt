@@ -22,40 +22,35 @@ set(MEMORYCHECK_COMMAND_OPTIONS
     "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
     CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
-    set(_SC_VALGRIND_SUPP_FULL
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
-    set(_SC_VALGRIND_SUPP_LEGACY
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind-legacy.supp")
+    set(MEMORYCHECK_SUPPRESSIONS_FILE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
+    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
 
-    set(_SC_VALGRIND_SUPP_SELECTED "${_SC_VALGRIND_SUPP_FULL}")
-
-    # Some older Valgrind builds reject newer suppression classes used by
-    # NVIDIA-specific noise filters (e.g. Memcheck:ReallocZero). Probe the
-    # suppression parser at configure time and transparently fall back to a
-    # legacy-compatible suppression file when needed.
-    if(MEMORYCHECK_COMMAND AND EXISTS "${_SC_VALGRIND_SUPP_LEGACY}")
+    # NVIDIA EGL noise uses suppression kinds (e.g. Memcheck:ReallocZero) that
+    # older Valgrind builds reject. Those entries live in their own file, added
+    # only when this Valgrind parses it.
+    set(_SC_VALGRIND_SUPP_NVIDIA
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind-nvidia.supp")
+    if(MEMORYCHECK_COMMAND)
         execute_process(
             COMMAND "${MEMORYCHECK_COMMAND}"
                     "--tool=memcheck"
                     "--leak-check=no"
                     "--quiet"
-                    "--suppressions=${_SC_VALGRIND_SUPP_FULL}"
+                    "--suppressions=${_SC_VALGRIND_SUPP_NVIDIA}"
                     "${CMAKE_COMMAND}" -E true
             RESULT_VARIABLE _SC_VALGRIND_SUPP_PROBE_RC
             OUTPUT_QUIET
             ERROR_QUIET
         )
-
-        if(NOT _SC_VALGRIND_SUPP_PROBE_RC EQUAL 0)
+        if(_SC_VALGRIND_SUPP_PROBE_RC EQUAL 0)
+            set(MEMORYCHECK_COMMAND_OPTIONS
+                "${MEMORYCHECK_COMMAND_OPTIONS} --suppressions=${_SC_VALGRIND_SUPP_NVIDIA}")
+        else()
             message(STATUS
-                "Valgrind rejected tests/valgrind.supp; using legacy-compatible suppressions")
-            set(_SC_VALGRIND_SUPP_SELECTED "${_SC_VALGRIND_SUPP_LEGACY}")
+                "Valgrind rejected tests/valgrind-nvidia.supp; memcheck runs without it")
         endif()
     endif()
-
-    set(MEMORYCHECK_SUPPRESSIONS_FILE
-        "${_SC_VALGRIND_SUPP_SELECTED}"
-    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
 endif()
 
 set(
@@ -509,6 +504,9 @@ if(BUILD_TESTING)
     # is available on the host. The gate and CI provide Xvfb when no
     # display is available; live-view tests must execute, never skip.
     if(GTK4_FOUND)
+        # Without a usable display the progress-bar and Tests-tab tests exit
+        # with this code, which CTest reports as skipped instead of passed.
+        set(SC_TEST_SKIPPED 77)
         add_executable(serial-configurator-live-views-tests
             tests/test_sc_live_views.c src/ui/sc_i18n.c)
         target_link_libraries(serial-configurator-live-views-tests PRIVATE
@@ -517,7 +515,12 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR})
         add_test(NAME serial-configurator-live-views-tests
             COMMAND serial-configurator-live-views-tests)
-        foreach(locale IN ITEMS C pl_PL.UTF-8)
+        # C and every locale the setup installs for the GUI tests.
+        file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/test-locales.txt"
+            SC_TEST_LOCALES)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/test-locales.txt")
+        foreach(locale IN ITEMS C ${SC_TEST_LOCALES})
             add_test(NAME serial-configurator-live-views-${locale}-tests
                 COMMAND $<TARGET_FILE:serial-configurator-live-views-tests>)
             set_tests_properties(serial-configurator-live-views-${locale}-tests
@@ -541,9 +544,14 @@ if(BUILD_TESTING)
             NAME serial-configurator-progressbar-tests
             COMMAND serial-configurator-progressbar-tests
         )
+        target_compile_definitions(serial-configurator-progressbar-tests
+            PRIVATE SC_TEST_SKIPPED=${SC_TEST_SKIPPED})
+        set_tests_properties(serial-configurator-progressbar-tests
+            PROPERTIES SKIP_RETURN_CODE ${SC_TEST_SKIPPED})
 
         # Tests sub-tab of the ECU page against the mock ECU; embeds
-        # src/ui/sc_tests_tab.c by #include and skips without a display.
+        # src/ui/sc_tests_tab.c by #include and reports a skip without a
+        # display.
         add_executable(serial-configurator-tests-tab-tests
             tests/test_sc_tests_tab.c
             tests/sc_mock_ecu.c
@@ -563,6 +571,10 @@ if(BUILD_TESTING)
             NAME serial-configurator-tests-tab-tests
             COMMAND serial-configurator-tests-tab-tests
         )
+        target_compile_definitions(serial-configurator-tests-tab-tests
+            PRIVATE SC_TEST_SKIPPED=${SC_TEST_SKIPPED})
+        set_tests_properties(serial-configurator-tests-tab-tests
+            PROPERTIES SKIP_RETURN_CODE ${SC_TEST_SKIPPED})
     endif()
 
     add_test(

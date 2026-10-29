@@ -222,10 +222,8 @@ header "Gate 2/7: Host runtime tests for all modules"
 for entry in "${MODULE_MATRIX[@]}"; do
     IFS=':' read -r name src_rel build_rel <<< "${entry}"
     configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}"
-    if [[ "${name}" == "SerialConfigurator" ]]; then
-        # Match the CI compiler configuration as well as the Debug checks.
-        configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}/release" Release
-    fi
+    # CI tests every module on its Release build; the gate checks both.
+    configure_build_and_test_module "${name}" "${src_rel}" "${build_rel}/release" Release
 done
 pass "All module host tests passed."
 
@@ -260,10 +258,8 @@ if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-valgrind"
-        if [[ "${name}" == "SerialConfigurator" ]]; then
-            # CI runs memcheck on the Release build.
-            run_module_target "${name}" "${build_rel}/release" "check-valgrind" Release
-        fi
+        # CI runs memcheck on the Release build.
+        run_module_target "${name}" "${build_rel}/release" "check-valgrind" Release
     done
     pass "Valgrind gate passed for all modules."
 else
@@ -275,6 +271,8 @@ if [[ "${SKIP_CLANG_TIDY}" -eq 0 ]]; then
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-clang-tidy"
+        # CI runs clang-tidy on the Release compile database.
+        run_module_target "${name}" "${build_rel}/release" "check-clang-tidy" Release
     done
     pass "clang-tidy gate passed for all modules."
 else

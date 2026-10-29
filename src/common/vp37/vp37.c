@@ -183,6 +183,11 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pidDtUs = 0U;
   self->controlSequence = 0U;
   self->controlDtUs = 0U;
+  self->controlDueUs = 0U;
+  self->controlLateUs = 0U;
+  self->controlLateWindowUs = 0U;
+  self->controlLateMaxUs = 0U;
+  self->controlOverruns = 0U;
   self->controlExecUs = 0U;
   self->pid.terms = (hal_pid_terms_t){0};
   self->pid.softFloorActive = false;
@@ -465,6 +470,15 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle) {
   }
 }
 
+bool HAL_RAM_FUNC(VP37_controlDueWithin)(const VP37Pump *self, uint32_t nowUs,
+                                         uint32_t marginUs) {
+  if (self == NULL) {
+    return false;
+  }
+  return !self->controlStarted ||
+         ((int32_t)(self->controlDueUs - nowUs) <= (int32_t)marginUs);
+}
+
 void VP37_process(VP37Pump *self) {
   if (!self->vp37Initialized) {
     // A stop outside the step: publish it once and complete a running trace.
@@ -484,9 +498,31 @@ void VP37_process(VP37Pump *self) {
   }
   const uint32_t nowUs = hal_micros();
   const uint32_t periodUs = (uint32_t)(self->pidTimeUpdate * 1000.0f);
-  if (self->controlStarted &&
-      !hal_elapsed_u32(nowUs, self->controlLastUs, periodUs)) {
+  if (!self->controlStarted) {
+    self->controlDueUs = nowUs;
+  }
+  const int32_t lateUs = (int32_t)(nowUs - self->controlDueUs);
+  if (lateUs < 0) {
     return;
+  }
+  // The next deadline stays on the grid, so a late start does not stretch
+  // the period. A whole period late starts a new grid instead of a burst.
+  if ((uint32_t)lateUs >= periodUs) {
+    self->controlDueUs = nowUs + periodUs;
+    self->controlOverruns++;
+  } else {
+    self->controlDueUs += periodUs;
+    // The window maximum sizes the guard of the control core; a stall of a
+    // whole period (flash, start-up) is counted above instead.
+    if ((uint32_t)lateUs > self->controlLateWindowUs) {
+      self->controlLateWindowUs = (uint32_t)lateUs;
+    }
+  }
+  self->controlLateUs = (uint32_t)lateUs;
+  if ((self->controlSequence % VP37_CONTROL_LATE_WINDOW_STEPS) ==
+      (VP37_CONTROL_LATE_WINDOW_STEPS - 1U)) {
+    self->controlLateMaxUs = self->controlLateWindowUs;
+    self->controlLateWindowUs = 0U;
   }
   self->controlDtUs =
       self->controlStarted ? (nowUs - self->controlLastUs) : periodUs;

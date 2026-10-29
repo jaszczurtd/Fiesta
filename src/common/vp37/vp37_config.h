@@ -80,6 +80,12 @@ JB_STATIC_ASSERT(((unsigned)VP37_PWM_RESOLUTION + 1U) ==
 // Control periods the step accepts; outside them the pump stops [ms].
 #define VP37_PID_TIME_UPDATE_MIN 1.0f
 #define VP37_PID_TIME_UPDATE_MAX 100.0f
+// Steps per window of the reported late start; 100 steps of the 5 ms period
+// match the 500 ms telemetry line, so every line shows one whole window.
+#define VP37_CONTROL_LATE_WINDOW_STEPS 100U
+JB_STATIC_ASSERT((VP37_CONTROL_LATE_WINDOW_STEPS >= 10U) &&
+                     (VP37_CONTROL_LATE_WINDOW_STEPS <= 10000U),
+                 "VP37_CONTROL_LATE_WINDOW_STEPS covers a telemetry period");
 // PID + Feedforward (FF) architecture:
 //   pwm = pwm_ff(desired) + pid_correction
 // PID output is now interpreted as PWM correction (units: PWM counts),

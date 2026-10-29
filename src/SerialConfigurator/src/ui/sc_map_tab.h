@@ -39,7 +39,8 @@ GtkWidget *sc_map_tab_build(AppState *state);
  */
 void sc_map_tab_set_connected(AppState *state, bool connected);
 
-/** @brief Release any widgets and timers owned by the Map tab. */
+/** @brief Release the timer and state of the Map tab; destroying the page
+ *        calls it too, and a second call does nothing. */
 void sc_map_tab_dispose(AppState *state);
 
 #ifdef __cplusplus

@@ -12,11 +12,19 @@
 // state through the snapshot of clocksState.h.
 
 /**
- * @brief Create the CAN channel and set the Fiesta acceptance filters.
+ * @brief Create the CAN channel and set the Fiesta acceptance filters, in one
+ *        attempt that does not wait for the controller.
  * @return HAL_OK, or the error of the channel creation or of the first filter
  *         that failed (the channel is released then).
  */
 hal_status_t canInit(void);
+/**
+ * @brief Try canInit() again when the channel is down and
+ *        CAN_INIT_RETRY_INTERVAL has passed since the last attempt; call from
+ *        the core-0 loop.
+ * @return True when this call brought the channel up.
+ */
+bool canRetryInit(void);
 /** @brief Drain received frames and publish the changed ECU state. */
 void canMainLoop(void);
 void receivedCanMessage(void);

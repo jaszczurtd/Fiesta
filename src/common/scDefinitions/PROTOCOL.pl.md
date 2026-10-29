@@ -108,9 +108,9 @@ kopię, `SC_COMMIT_PARAMS` sprawdza ją i stosuje, a `SC_REVERT_PARAMS` odtwarza
 ją z aktywnych wartości. ECU i RTC_Clock pozwalają zmieniać parametry;
 Clocks udostępnia tylko odczyt.
 
-Clocks udostępnia przez `SC_GET_VALUES` interwały próbkowania i pomiary
-tylko do odczytu: `abs_kmh` (km/h), `oil_cbar` (0,01 bara), `egt0_c`
-(przed DPF, °C), `egt1_c` (w DPF, °C) oraz `valid`. Bity 0-3 `valid`
+Clocks udostępnia przez `SC_GET_VALUES` pomiary tylko do odczytu:
+`abs_kmh` (km/h), `oil_cbar` (0,01 bara), `egt0_c` (przed DPF, °C),
+`egt1_c` (w DPF, °C) oraz `valid`. Bity 0-3 `valid`
 oznaczają kolejno ABS, olej, EGT0 i EGT1. Niepoprawne pomiary mają wartość
 0; klient musi sprawdzić bity, aby odróżnić je od poprawnego zera. Ważność
 ABS oznacza poprawną inicjalizację pomiaru, także na postoju. Każde żądanie

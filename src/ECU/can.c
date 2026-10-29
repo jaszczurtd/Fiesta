@@ -421,8 +421,15 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
     rtcTimeStore(utc);
   } break;
 
+  case CAN_ID_GPS_EXT_LAT:
+  case CAN_ID_GPS_EXT_LON_TIME:
+  case CAN_ID_GPS_UTC_UPDATE:
+  case CAN_ID_AIR_TEMP_UPDATE:
+    /* Frames of Clocks and Fiesta_clock that the ECU does not use. */
+    break;
+
   default:
-    deb("received unknown CAN frame:%03x len:%d\n", canID, len);
+    derr_limited("can", "received unknown CAN frame:%03x len:%d", canID, len);
     break;
   }
 }

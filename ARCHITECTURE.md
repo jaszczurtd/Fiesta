@@ -18,7 +18,7 @@ for development commands and the module guides for control details.
 ```text
                  CAN0 (main)
    ┌───────────┐ ◄──────────► Clocks          gauges, TFT, oil, speed, EGT, GPS
-   │    ECU    │ ◄──────────  Fiesta_clock    RTC time in UTC, 1 Hz
+   │    ECU    │ ◄──────────  Fiesta_clock    RTC time in UTC, air temperatures
    │  RP2350,  │
    │ two cores │ ◄── I²C ───  Adjustometer    VP37 pump position (0x57)
    │           │ ─── I²C ───► PCF8574         relays (0x38)
@@ -66,7 +66,7 @@ the loom colours.
 |---|---|---|---|
 | [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
 | [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
-| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock set from GPS UTC, time broadcast on CAN | no |
+| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock set from GPS UTC; time and air temperatures on CAN | no |
 | [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
 | [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
@@ -117,7 +117,9 @@ The two RP2040 cores split the work. Core 0 receives and sends CAN, measures
 the ABS speed, and drives the gauges, lamps, and buzzer. Core 1 draws the TFT,
 reads the oil sender and both thermocouples, and serves the configurator
 session. The cores exchange copies of their state under a short lock, so
-drawing or a slow I²C read does not hold up a CAN frame.
+drawing or a slow I²C read does not hold up a CAN frame. When the CAN
+controller does not answer at start, core 0 tries again every second while
+the display and the gauges run.
 
 Clocks sends its display brightness, oil pressure, and ABS speed every 50 ms
 and both exhaust temperatures every 250 ms. Each measurement carries a
@@ -140,7 +142,8 @@ the converted speed.
 
 The last position expires after 4 s. UTC comes from one RMC sentence with a
 fix and expires after 2 s. Clocks keeps UTC for CAN and SC and publishes it
-with seconds and validity in `0x131` every second.
+with seconds and validity in `0x131` every second, moved on by the age of the
+sentence to the time of sending.
 
 The GPS icon on the TFT has a green dot with a fix and a red one blinking
 once a second without it. The receiver sends NMEA also without a fix; when
@@ -265,6 +268,15 @@ Every write is read back and checked. Frames read after a main-loop pause longer
 than 500 ms, or while the buttons or the configurator edit the time, are
 dropped. Without GPS or CAN the RTC keeps running on its own.
 
+The clock also sends the inside and outside air temperatures from its two
+DS18B20 sensors as `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), in 0.1 °C. The frame
+goes out with the time once a second, and at once when a reading or its
+validity changes. Both sensors keep converting in every display mode; a
+12-bit conversion takes 750 ms. A sensor whose newest reading is 3 s old or
+more loses its valid bit and sends 0. A sensor missing when the clock opens it
+stays without a reading until the next opening, which the temperature screen
+and an ignition change perform.
+
 The display, the buttons and the configurator use CET/CEST, converted with
 `hal_time`. Setting the time converts it to UTC. A local time skipped by the
 spring change counts as CET; the repeated autumn hour counts as its first,
@@ -361,7 +373,8 @@ diagnostic tools read them over CAN1. Clocks sends its display brightness
 (`0x126`), oil pressure with ABS speed (`0x12A`), and both exhaust
 temperatures (`0x12F`), GPS position and time (`0x12D`, `0x12E`), and GPS
 UTC (`0x131`). Fiesta_clock transmits RTC time in
-UTC (`0x130`) and reads only the GPS UTC of Clocks. On CAN1 the ECU answers
+UTC (`0x130`) and the air temperatures (`0x132`), and reads only the GPS UTC
+of Clocks. On CAN1 the ECU answers
 OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
 temperature PIDs and the oil pressure DID answer with a negative response
 (`0x22`, conditions not correct) while Clocks marks that value invalid or its
@@ -393,7 +406,7 @@ flashing sequence are in
 | ECU to vehicle | VP37 pump (PWM and enable relay), N75 boost solenoid, glow plugs and their lamp, fan, block heater high/low, heated windshield left/right, DPF lamp |
 | Clocks to driver | speedometer, tachometer, and oil gauge (frequency inputs), oil and charge lamps, TFT display, buzzer |
 | Diagnostics | OBD-II port on CAN1 |
-| Auxiliary | GPS position and UTC in Clocks; RTC time in UTC from Fiesta_clock |
+| Auxiliary | GPS position and UTC in Clocks; RTC time in UTC and air temperatures from Fiesta_clock |
 
 ## Persistence
 

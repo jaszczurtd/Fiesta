@@ -18,7 +18,7 @@ sterowania znajdują się w dokumentacji modułów.
 ```text
                  CAN0 (główna)
    ┌───────────┐ ◄──────────► Clocks          wskaźniki, TFT, olej, prędkość, EGT, GPS
-   │    ECU    │ ◄──────────  Fiesta_clock    czas RTC w UTC, 1 Hz
+   │    ECU    │ ◄──────────  Fiesta_clock    czas RTC w UTC, temperatury powietrza
    │  RP2350,  │
    │ 2 rdzenie │ ◄── I²C ───  Adjustometer    położenie VP37 (0x57)
    │           │ ─── I²C ───► PCF8574         przekaźniki (0x38)
@@ -65,7 +65,7 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 |---|---|---|---|
 | [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
 | [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
-| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS, czas przez CAN. | Poza zakresem. |
+| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS; czas i temperatury powietrza przez CAN. | Poza zakresem. |
 | [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
 | [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
 | [SerialConfigurator](src/SerialConfigurator/) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
@@ -115,7 +115,8 @@ Pracę dzielą dwa rdzenie RP2040. Rdzeń 0 odbiera i nadaje CAN, mierzy prędko
 z ABS oraz steruje wskaźnikami, kontrolkami i buzzerem. Rdzeń 1 rysuje TFT,
 odczytuje czujnik oleju i obie termopary oraz obsługuje sesję konfiguratora.
 Rdzenie wymieniają kopie swojego stanu pod krótką blokadą, więc rysowanie ani
-powolny odczyt I²C nie opóźniają ramki CAN.
+powolny odczyt I²C nie opóźniają ramki CAN. Gdy sterownik CAN nie odpowiada
+przy starcie, rdzeń 0 ponawia próbę co sekundę, a ekran i wskaźniki działają.
 
 Clocks nadaje jasność ekranu, ciśnienie oleju i prędkość z ABS co 50 ms, a obie
 temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
@@ -139,7 +140,7 @@ Odświeżanie ekranu korzysta z przeliczonej wcześniej prędkości.
 
 Ostatnia pozycja wygasa po 4 s. UTC pochodzi z jednego zdania RMC z fixem
 i wygasa po 2 s. Clocks zachowuje UTC dla CAN i SC oraz nadaje go z sekundami
-i ważnością w `0x131` co sekundę.
+i ważnością w `0x131` co sekundę, przesunięty o wiek zdania do chwili nadania.
 
 Piktogram GPS na TFT ma zieloną kropkę przy fixie, a bez niego czerwoną,
 migającą raz na sekundę. Odbiornik nadaje NMEA także bez fixa. Gdy przez 3 s
@@ -261,6 +262,14 @@ odczytane po przerwie pętli głównej dłuższej niż 500 ms albo w czasie edyc
 czasu przyciskami lub konfiguratorem są odrzucane. Bez GPS i CAN RTC pracuje
 samodzielnie.
 
+Zegar nadaje też temperatury powietrza wewnątrz i na zewnątrz z dwóch
+czujników DS18B20 jako `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), w 0,1 °C. Ramka
+wychodzi razem z czasem co sekundę oraz od razu po zmianie odczytu lub jego
+ważności. Oba czujniki mierzą w każdym trybie ekranu; pomiar 12-bitowy trwa
+750 ms. Czujnik, którego najnowszy odczyt ma 3 s lub więcej, traci bit
+ważności i nadaje 0. Czujnik nieobecny przy otwarciu pozostaje bez odczytu do
+kolejnego otwarcia, które wykonują ekran temperatur i zmiana stanu zapłonu.
+
 Ekran, przyciski i konfigurator używają czasu CET/CEST przeliczanego przez
 `hal_time`. Ustawiony czas jest zamieniany na UTC. Godzina pominięta przy
 wiosennej zmianie czasu liczy się jako CET, a godzina powtórzona jesienią
@@ -339,7 +348,8 @@ z Fiesta_clock (`0x130`), którym oznacza nowe DTC. DTC są odczytywane przez CA
 Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
 (`0x12A`), obie temperatury spalin (`0x12F`), pozycję i czas GPS (`0x12D`,
 `0x12E`) oraz UTC z GPS (`0x131`).
-Fiesta_clock nadaje czas UTC (`0x130`) i odbiera tylko UTC z GPS w Clocks. Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
+Fiesta_clock nadaje czas UTC (`0x130`) i temperatury powietrza (`0x132`)
+oraz odbiera tylko UTC z GPS w Clocks. Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
 ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
 gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
 przychodzić.
@@ -367,7 +377,7 @@ wgrywania opisuje [protokół](src/common/scDefinitions/PROTOCOL.pl.md).
 | ECU -> samochód | VP37 (PWM i przekaźnik), N75, świece i kontrolka, wentylator, dwa poziomy grzania bloku, lewa/prawa część szyby, kontrolka DPF. |
 | Clocks -> kierowca | Wskaźniki prędkości, obrotów i oleju (wejścia częstotliwościowe), kontrolki oleju i ładowania, TFT, buzzer. |
 | Diagnostyka | OBD-II przez CAN1. |
-| Pomocnicze | Pozycja i UTC z GPS w Clocks; czas RTC w UTC z Fiesta_clock. |
+| Pomocnicze | Pozycja i UTC z GPS w Clocks; czas RTC w UTC i temperatury powietrza z Fiesta_clock. |
 
 ## Zapis danych
 

@@ -10,10 +10,11 @@ Python test suite. It compiles the production UI, HAL renderer and SSD1306
 driver against simulated board I/O. A controller RAM model interprets I²C
 addressing and data writes; glyph images in both sizes are compared against
 recordings from the original driver. Tests also cover sleep/wake commands.
-A second test compiles the clock's time code with the HAL RTC driver against
-a PCF8563 register model and simulated CAN, flash and configurator calls. It
-checks the UTC marker, CET/CEST conversion, setting the RTC from GPS UTC, the
-`0x130` frame, and time edits from the buttons and the configurator.
+A second test compiles the clock's time and CAN code with the HAL RTC driver
+against a PCF8563 register model, a DS18B20 model and simulated CAN, flash and
+configurator calls. It checks the UTC marker, CET/CEST conversion, setting the
+RTC from GPS UTC, the `0x130` and `0x132` frames, and time edits from the
+buttons and the configurator.
 They need a host C/C++ compiler and no connected board. They do not establish
 physical panel compatibility or measure hardware timing.
 VP37TestBench participates in local builds and tests, but its `ci: false`
@@ -33,19 +34,22 @@ the MISRA gate, PMD CPD, Valgrind and clang-tidy. Static analysis runs separatel
 so its duration does not look like a stalled runtime test. Logs are written
 under `/tmp/fiesta_*`.
 
-Host builds use Debug. SerialConfigurator also builds and runs its tests in
-Release, matching CI, under `src/SerialConfigurator/build/release`. This
-checks optimized builds and the compiler's enabled libc hardening as well.
-The Valgrind stage checks both SerialConfigurator builds; CI runs it on Release.
+Every host-tested module builds and runs its tests twice: in Debug, and in
+Release as CI does, under `<build dir>/release` (for example
+`src/SerialConfigurator/build/release`). Release also checks optimized builds
+and the compiler's enabled libc hardening. The Valgrind and clang-tidy stages
+check both builds of every module.
 
 GUI tests run with the current display or Xvfb through
 `scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
-Clocks view runs in the current locale and explicitly in `C` and
-`pl_PL.UTF-8`; install/generate those locales before running the gate.
+Clocks view runs in the current locale and explicitly in `C` and every
+locale listed in `scripts/test-locales.txt`; the setup script generates those
+and checks that they work.
 The same runner wraps the SC Valgrind target, so Valgrind checks the test
 binary itself. Suppressions cover the documented system GTK/fontconfig
 stacks and the glibc loader during GTK start-up; application errors remain
-failures.
+failures. Started directly without a display, the progress-bar and Tests-tab
+tests report a skip in CTest.
 
 `--skip-cppcheck`, `--skip-valgrind` and `--skip-clang-tidy` omit individual
 checks for development. Such a run does not establish that the complete gate
@@ -95,7 +99,7 @@ local firmware validation.
 
 | Workflow | Checks |
 |---|---|
-| [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | ECU build, tests, cppcheck, Valgrind and clang-tidy. |
+| [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | ECU build, tests, cppcheck, Valgrind and clang-tidy; the root Python tests, also after changes in the modules they read. |
 | [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Module build, tests, Valgrind and clang-tidy. |
 | [serial-configurator-tests.yml](../.github/workflows/serial-configurator-tests.yml) | GUI/CLI build, tests, Valgrind and clang-tidy. |
 | [firmware-build-scripts.yml](../.github/workflows/firmware-build-scripts.yml) | Release/debug builds for firmware selected for CI. |

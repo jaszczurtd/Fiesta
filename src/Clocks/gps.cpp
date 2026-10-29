@@ -87,10 +87,10 @@ bool readGPS(clocks_gps_snapshot_t *out) {
   }
   out->linked = s_sentenceSeen;
   out->linkUpdatedMs = s_sentenceMs;
-  // A valid fix proves the link, also where HAL counts no sentence.
-  if (out->available &&
-      (!out->linked ||
-       hal_elapsed_u32(out->locationUpdatedMs, out->linkUpdatedMs, 1u))) {
+  // A valid fix proves the link, also where HAL counts no sentence; an older
+  // fix never moves the time of a later sentence back.
+  if (out->available && (!out->linked || (int32_t)(out->locationUpdatedMs -
+                                                   out->linkUpdatedMs) > 0)) {
     out->linked = true;
     out->linkUpdatedMs = out->locationUpdatedMs;
   }
@@ -124,8 +124,8 @@ uint16_t clocksGpsSpeedX10(const clocks_gps_snapshot_t *gps) {
   return scaled >= (double)UINT16_MAX ? UINT16_MAX : (uint16_t)lround(scaled);
 }
 
-hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint8_t *lat,
-                             uint8_t *lonTime, uint8_t *utc) {
+hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint32_t nowMs,
+                             uint8_t *lat, uint8_t *lonTime, uint8_t *utc) {
   if (gps == nullptr || lat == nullptr || lonTime == nullptr || utc == nullptr)
     return HAL_EINVAL;
   memset(lat, 0, CAN_FRAME_MAX_LENGTH);
@@ -140,10 +140,13 @@ hal_status_t clocksGpsEncode(const clocks_gps_snapshot_t *gps, uint8_t *lat,
     jh_store_be16(lat + CAN_FRAME_GPS_EXT_SPEED_HI, clocksGpsSpeedX10(gps));
   }
   if (gps->utcValid) {
-    jh_store_be32(utc + CAN_FRAME_GPS_UTC_EPOCH_B3, gps->epochUtc);
+    // The sentence may be up to GPS_UTC_MAX_AGE_MS old; the frames carry the
+    // time of sending.
+    const uint32_t epoch =
+        gps->epochUtc + (nowMs - gps->utcUpdatedMs + 500u) / 1000u;
+    jh_store_be32(utc + CAN_FRAME_GPS_UTC_EPOCH_B3, epoch);
     utc[CAN_FRAME_GPS_UTC_STATUS] = CAN_GPS_UTC_STATUS_VALID;
-    (void)fiesta_can_put_utc_datetime(&lonTime[CAN_FRAME_GPS_EXT_DT_HI],
-                                      gps->epochUtc);
+    (void)fiesta_can_put_utc_datetime(&lonTime[CAN_FRAME_GPS_EXT_DT_HI], epoch);
   }
   return HAL_OK;
 }

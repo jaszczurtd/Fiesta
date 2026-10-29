@@ -156,12 +156,35 @@ void test_unknown_can_id_does_not_update_state(void) {
   canValues[F_FUEL] = 1234.0f;
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0xAA, 0xBB, 0xCC, 0xDD,
                                          0xEE, 0xFF, 0x11, 0x22};
-  hal_mock_can_inject(clocksTestGetCanHandle(), 0x132u, CAN_FRAME_MAX_LENGTH,
+  // Past the rate limit of earlier reports, so this one prints.
+  hal_mock_set_millis(hal_millis() + 3600000u);
+  hal_mock_serial_reset();
+  hal_mock_can_inject(clocksTestGetCanHandle(), 0x13Fu, CAN_FRAME_MAX_LENGTH,
                       frame);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(clocksTestGetCanHandle()));
   canMainLoop();
   TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, canValues[F_FUEL]);
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "unknown CAN frame:13f"));
+}
+
+/* The RTC time and air temperatures of Fiesta_clock pass the Fiesta filter;
+ * Clocks does not use them and does not report them as unknown. */
+void test_fiesta_clock_frames_are_ignored_quietly(void) {
+  canValues[F_INTAKE_TEMP] = 77.0f;
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0x01, 0x02, 0x03, 0x04,
+                                         0x05, 0x06, 0x07, 0x08};
+  hal_mock_set_millis(hal_millis() + 3600000u);
+  hal_mock_serial_reset();
+  hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_RTC_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_AIR_TEMP_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+  TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
+  TEST_ASSERT_EQUAL_UINT(0u, clusterUpdateCount);
 }
 
 static void injectFrame(uint32_t id, const uint8_t *frame) {
@@ -315,6 +338,17 @@ void test_oil_and_speed_frame_carries_the_local_measurements(void) {
   TEST_ASSERT_EQUAL_UINT8(72u, payload[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
   TEST_ASSERT_EQUAL_HEX8(CAN_OIL_AND_SPEED_STATUS_OIL_VALID,
                          payload[CAN_FRAME_OIL_AND_SPEED_STATUS]);
+
+  // Whole km/h in one byte: the edges stay, faster readings go out as 255.
+  const float speeds[] = {255.9f, 256.0f, 300.0f};
+  const uint8_t sent[] = {255u, 255u, 255u};
+  for (size_t i = 0; i < COUNTOF(speeds); i++) {
+    canSetValue(F_ABS_CAR_SPEED, speeds[i]);
+    updateCANrecipients();
+    TEST_ASSERT_TRUE(lastSent(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, payload));
+    TEST_ASSERT_EQUAL_UINT8(sent[i],
+                            payload[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED]);
+  }
 }
 
 void test_faulty_oil_sender_is_sent_as_no_measurement(void) {
@@ -524,18 +558,33 @@ void test_gps_broadcast_sends_utc_and_the_position_frames(void) {
   TEST_ASSERT_EQUAL_UINT8(0u, payload[CAN_FRAME_GPS_UTC_STATUS]);
 }
 
-/* A controller that does not come up: canInit() returns why, and the loop
- * functions do nothing without a channel. */
+/* A controller that does not come up: canInit() returns why at once, the loop
+ * functions do nothing without a channel, and the core-0 loop tries again
+ * every CAN_INIT_RETRY_INTERVAL until the channel is up. */
 void test_can_init_reports_why_the_bus_stayed_off(void) {
   hal_can_destroy(clocksTestGetCanHandle());
-  hal_mock_can_fail_creates(MAX_RETRIES + 1);
+  hal_mock_can_fail_creates(2u);
+  const uint32_t startMs = hal_millis();
   TEST_ASSERT_EQUAL_INT(HAL_EIO, canInit());
+  TEST_ASSERT_EQUAL_UINT32(startMs, hal_millis()); // no waiting
   TEST_ASSERT_NULL(clocksTestGetCanHandle());
   updateCANrecipients();
   updateEGTrecipients();
   canMainLoop();
-  hal_mock_can_fail_creates(0u);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, canInit());
+
+  hal_mock_set_millis(startMs + CAN_INIT_RETRY_INTERVAL - 1u);
+  TEST_ASSERT_FALSE(canRetryInit());
+  hal_mock_set_millis(startMs + CAN_INIT_RETRY_INTERVAL);
+  TEST_ASSERT_FALSE(canRetryInit()); // the second failure
+  TEST_ASSERT_NULL(clocksTestGetCanHandle());
+  TEST_ASSERT_EQUAL_UINT32(startMs + CAN_INIT_RETRY_INTERVAL, hal_millis());
+  hal_mock_set_millis(startMs + 2u * CAN_INIT_RETRY_INTERVAL - 1u);
+  TEST_ASSERT_FALSE(canRetryInit());
+  hal_mock_set_millis(startMs + 2u * CAN_INIT_RETRY_INTERVAL);
+  TEST_ASSERT_TRUE(canRetryInit());
+  TEST_ASSERT_NOT_NULL(clocksTestGetCanHandle());
+  hal_mock_set_millis(startMs + 4u * CAN_INIT_RETRY_INTERVAL);
+  TEST_ASSERT_FALSE(canRetryInit()); // up: no further attempts
 }
 
 int main(void) {
@@ -547,6 +596,7 @@ int main(void) {
   RUN_TEST(test_rpm_frame_updates_cluster_in_same_can_drain);
   RUN_TEST(test_non_fiesta_frame_is_rejected_by_acceptance_filters);
   RUN_TEST(test_unknown_can_id_does_not_update_state);
+  RUN_TEST(test_fiesta_clock_frames_are_ignored_quietly);
   RUN_TEST(test_display_view_changes_only_on_refresh);
   RUN_TEST(test_throttle_frame_requests_one_redraw);
   RUN_TEST(test_frame_without_redraw_value_refreshes_view_quietly);

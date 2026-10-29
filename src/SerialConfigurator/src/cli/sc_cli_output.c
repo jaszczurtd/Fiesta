@@ -59,9 +59,12 @@ void sc_cli_print_module_table(const ScCore *core) {
       continue;
     }
 
+    const char *found = sc_core_module_inactive(i) ? "inactive"
+                        : status->detected         ? "yes"
+                                                   : "no";
     printf("%-12s %-8s %-9zu %-10s %-22s %-14s %-10s %-10s\n",
-           status->display_name, status->detected ? "yes" : "no",
-           status->detected_instances, status->target_ambiguous ? "yes" : "no",
+           status->display_name, found, status->detected_instances,
+           status->target_ambiguous ? "yes" : "no",
            status->detected ? status->port_path : "-",
            status->detected ? sc_cli_value_or_dash(status->hello_identity.uid)
                             : "-",

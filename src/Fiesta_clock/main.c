@@ -80,6 +80,8 @@ void app_start(void) {
 
 void app_task0(void) {
   hal_watchdog_feed();
+  /* Conversions run in every display mode, so CAN gets fresh readings. */
+  ds18b20_poll();
   clockCanTick(isClockSetMode() || configSessionEditPending());
   configSessionTick();
 

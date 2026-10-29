@@ -28,8 +28,6 @@ typedef struct {
   int16_t oil_max_c;
   int16_t egt_warn_c;
   int16_t egt_max_c;
-  int16_t oil_pressure_read_interval_ms;
-  int16_t thermocouple_read_interval_ms;
   int16_t valid;
   int16_t abs_speed_kmh, abs_valid;
   int16_t oil_pressure_cbar, oil_valid;
@@ -44,8 +42,6 @@ static clocks_values_t s_clocks_values = {
     .oil_max_c = (int16_t)TEMP_OIL_MAX,
     .egt_warn_c = (int16_t)TEMP_EGT_OK_HI,
     .egt_max_c = (int16_t)TEMP_EGT_MAX,
-    .oil_pressure_read_interval_ms = OIL_PRESSURE_READ_INTERVAL,
-    .thermocouple_read_interval_ms = THERMOCOUPLE_READ_INTERVAL,
     .valid = 0,
     .abs_speed_kmh = 0,
     .abs_valid = 0,
@@ -76,16 +72,6 @@ static const sc_param_descriptor_t k_clocks_params[] = {
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("egt_max_c", clocks_values_t,
                                          egt_max_c, 1300, 1800,
                                          (int16_t)TEMP_EGT_MAX, 1, "egt"),
-    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
-        "oil_pressure_read_interval_ms", clocks_values_t,
-        oil_pressure_read_interval_ms, OIL_PRESSURE_READ_INTERVAL_MIN,
-        OIL_PRESSURE_READ_INTERVAL_MAX, OIL_PRESSURE_READ_INTERVAL, 1,
-        "sampling"),
-    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(
-        "thermocouple_read_interval_ms", clocks_values_t,
-        thermocouple_read_interval_ms, THERMOCOUPLE_READ_INTERVAL_MIN,
-        THERMOCOUPLE_READ_INTERVAL_MAX, THERMOCOUPLE_READ_INTERVAL, 1,
-        "sampling"),
     SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_CLOCKS_ABS_ID, clocks_values_t,
                                          abs_speed_kmh, 0, 32767, 0, 1,
                                          "measurements"),

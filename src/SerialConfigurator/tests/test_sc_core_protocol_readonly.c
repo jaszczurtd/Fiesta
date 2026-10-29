@@ -776,6 +776,27 @@ static int test_retired_and_inactive_tokens_are_not_detected(void) {
       TEST_ASSERT(!core.modules[j].detected,
                   "retired or inactive token detected");
     }
+    TEST_ASSERT(strstr(log, "- DPF          : INACTIVE\n") != NULL,
+                "detection summary marks DPF inactive");
+    size_t dpf = SC_MODULE_COUNT;
+    for (size_t j = 0; j < SC_MODULE_COUNT; ++j) {
+      if (sc_core_module_inactive(j)) {
+        TEST_ASSERT(dpf == SC_MODULE_COUNT, "one inactive entry");
+        dpf = j;
+      }
+    }
+    TEST_ASSERT(dpf < SC_MODULE_COUNT &&
+                    strcmp(core.modules[dpf].display_name, "DPF") == 0,
+                "DPF is the inactive entry");
+    TEST_ASSERT(!sc_core_module_inactive(SC_MODULE_COUNT),
+                "out-of-range index is not an entry");
+    ScCommandResult result;
+    char command_log[256] = {0};
+    TEST_ASSERT(
+        !sc_core_sc_bye(&core, dpf, &result, command_log, sizeof(command_log)),
+        "a command to DPF is refused");
+    TEST_ASSERT(strstr(command_log, "Module DPF is inactive.") != NULL,
+                "the refusal names the inactive module");
   }
   return 0;
 }

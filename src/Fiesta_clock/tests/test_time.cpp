@@ -10,7 +10,9 @@ extern "C" {
 #include <hal/time/hal_time.h>
 #include <hal/time/jh_calendar.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -99,6 +101,7 @@ static std::vector<Frame> can_tx;
 static hal_can_filter_t can_filters[HAL_CAN_MAX_FILTERS];
 static int can_filter_writes = 0;
 static uint8_t gps_frame_number = 0;
+static bool can_create_fails = false;
 
 static sc_command_service_config_t sc = {};
 static bool sc_active = false;
@@ -110,6 +113,27 @@ struct ClockValues {
 static std::vector<std::string> texts;
 static bool button_set = false, button_hour = false;
 static int set_presses = 0;
+
+// DS18B20 on a data pin: a 12-bit conversion takes 750 ms; a sensor that
+// stops answering keeps its last sample in the HAL, like the driver.
+struct Ds18b20 {
+  bool present;
+  float celsius;
+  bool converting;
+  uint32_t doneMs;
+  bool sampleValid;
+  bool sampleFresh;
+  float sample;
+  uint32_t sampleMs;
+};
+static Ds18b20 temp_inside = {}, temp_outside = {};
+static const uint32_t ds18b20_conversion_ms = 750u;
+
+static Ds18b20 *ds18b20_on(uint8_t pin) {
+  assert(pin == JH_HW_NODE_TEMP_INSIDE_PIN_DATA ||
+         pin == JH_HW_NODE_TEMP_OUTSIDE_PIN_DATA);
+  return pin == JH_HW_NODE_TEMP_INSIDE_PIN_DATA ? &temp_inside : &temp_outside;
+}
 
 extern "C" {
 char s[BUF_L + 1];
@@ -248,10 +272,57 @@ hal_status_t hal_can_create_with_retry(const hal_can_config_t *, uint8_t,
                                        void (*)(void), int, void (*)(void),
                                        hal_can_t *out) {
   static int handle;
-  *out = reinterpret_cast<hal_can_t>(&handle);
-  return HAL_OK;
+  *out = can_create_fails ? nullptr : reinterpret_cast<hal_can_t>(&handle);
+  return can_create_fails ? HAL_EIO : HAL_OK;
 }
 void hal_can_destroy(hal_can_t) {}
+
+hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
+  Ds18b20 *sensor = ds18b20_on(cfg->data_pin);
+  return sensor->present ? reinterpret_cast<hal_ds18b20_t>(sensor) : nullptr;
+}
+bool hal_ds18b20_request(hal_ds18b20_t h) {
+  Ds18b20 *sensor = reinterpret_cast<Ds18b20 *>(h);
+  if (sensor->converting || !sensor->present) {
+    return false;
+  }
+  sensor->converting = true;
+  sensor->doneMs = now_ms + ds18b20_conversion_ms;
+  return true;
+}
+hal_status_t hal_ds18b20_poll(hal_ds18b20_t h) {
+  Ds18b20 *sensor = reinterpret_cast<Ds18b20 *>(h);
+  if (!sensor->converting) {
+    return HAL_ESTATE;
+  }
+  if ((int32_t)(now_ms - sensor->doneMs) < 0) {
+    return HAL_EAGAIN;
+  }
+  sensor->converting = false;
+  if (!sensor->present) {
+    return HAL_EPROTO;
+  }
+  sensor->sample = sensor->celsius;
+  sensor->sampleValid = true;
+  sensor->sampleFresh = true;
+  sensor->sampleMs = now_ms;
+  return HAL_OK;
+}
+bool hal_ds18b20_is_busy(hal_ds18b20_t h) {
+  return reinterpret_cast<Ds18b20 *>(h)->converting;
+}
+bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
+  Ds18b20 *sensor = reinterpret_cast<Ds18b20 *>(h);
+  if (!sensor->sampleValid) {
+    return false;
+  }
+  *temp_c = sensor->sample;
+  if (fresh != nullptr) {
+    *fresh = sensor->sampleFresh;
+  }
+  sensor->sampleFresh = false;
+  return true;
+}
 hal_status_t hal_can_set_filter(hal_can_t, uint8_t index,
                                 const hal_can_filter_t *filter) {
   assert(index < HAL_CAN_MAX_FILTERS);
@@ -335,6 +406,7 @@ static void gps(uint32_t epoch, bool valid = true, uint8_t len = 8) {
 // One pass of the main loop after a pause of pauseMs.
 static void loop_pass(uint32_t pauseMs = 20u, bool edit = false) {
   now_ms += pauseMs;
+  ds18b20_poll();
   clockCanTick(edit);
 }
 
@@ -351,9 +423,9 @@ static void gps_offset(int offsetS, bool edit = false) {
   loop_pass(20u, edit);
 }
 
-static Frame last_rtc_frame() {
+static Frame last_frame(uint32_t id) {
   for (auto frame = can_tx.rbegin(); frame != can_tx.rend(); ++frame) {
-    if (frame->id == CAN_ID_RTC_UPDATE) {
+    if (frame->id == id) {
       return *frame;
     }
   }
@@ -361,12 +433,27 @@ static Frame last_rtc_frame() {
   return {};
 }
 
+static Frame last_rtc_frame() { return last_frame(CAN_ID_RTC_UPDATE); }
+
+static size_t sent_frames(uint32_t id) {
+  return (size_t)std::count_if(can_tx.begin(), can_tx.end(),
+                               [id](const Frame &f) { return f.id == id; });
+}
+
 // Advance past the next 0x130 deadline and return the frame.
 static Frame next_rtc_frame() {
-  const size_t sent = can_tx.size();
+  const size_t sent = sent_frames(CAN_ID_RTC_UPDATE);
   loop_pass(1000u);
-  assert(can_tx.size() == sent + 1u);
+  assert(sent_frames(CAN_ID_RTC_UPDATE) == sent + 1u);
   return last_rtc_frame();
+}
+
+// Every frame of the clock takes the next number, whatever its ID.
+static void expect_consecutive_numbers() {
+  for (size_t i = 1; i < can_tx.size(); ++i) {
+    assert(can_tx[i].data[CAN_FRAME_NUMBER] ==
+           (uint8_t)(can_tx[i - 1].data[CAN_FRAME_NUMBER] + 1u));
+  }
 }
 
 static uint32_t packed(const Frame &frame) {
@@ -620,6 +707,26 @@ static void test_transition() {
   assert(clockTimeIsUtc() && clockTimeSettled());
   expect_local(2026, 7, 1, 14, 0, 0, 2);
 
+  // The same without CAN: the loop still confirms the marker.
+  kv.clear();
+  rtc_fields(2026, 7, 1, 13, 0, 0);
+  can_create_fails = true;
+  PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
+  assert(clockTimeInit() == HAL_OK);
+  assert(clockCanInit() == HAL_EIO);
+  kv_get_fails = 1000;
+  assert(clockTimeWriteLocal(&set) == HAL_EIO);
+  const int setsWithoutCan = kv_writes;
+  const size_t framesWithoutCan = can_tx.size();
+  loop_pass();
+  assert(kv_writes == setsWithoutCan + 1 && !clockTimeIsUtc());
+  kv_get_fails = 0;
+  loop_for(retryMs);
+  assert(clockTimeIsUtc() && clockTimeSettled() &&
+         can_tx.size() == framesWithoutCan);
+  expect_local(2026, 7, 1, 14, 0, 0, 2);
+  can_create_fails = false;
+
   // The RTC cannot be read while the marker waits: neither the flash nor
   // the RTC is written, and the read error is returned for the retry.
   kv.clear();
@@ -750,11 +857,11 @@ static void test_rtc_frame() {
   for (int i = 1; i < CAN_FRAME_MAX_LENGTH; ++i) {
     assert(frame.data[i] == 0u);
   }
-  const uint8_t number = frame.data[CAN_FRAME_NUMBER];
 
   make_utc(utc(2026, 10, 15, 19, 56, 7));
   frame = next_rtc_frame();
-  assert(frame.data[CAN_FRAME_NUMBER] == (uint8_t)(number + 1u));
+  assert(sent_frames(CAN_ID_RTC_UPDATE) == 2u);
+  expect_consecutive_numbers();
   assert(frame.data[CAN_FRAME_RTC_UPDATE_INTEGRITY] == 1u);
   assert(packed(frame) == pack(2026, 10, 15, 19, 56));
   assert(frame.data[CAN_FRAME_RTC_UPDATE_SECOND] == 7u);
@@ -831,7 +938,8 @@ static void test_sync_legacy() {
 
 // Tolerance, both directions, the 10 min limit and a millisecond wrap.
 static void test_sync_correction() {
-  now_ms = 0xffffffffu - 300000u; // the 10 min limit spans the wrap
+  // The correction limit spans the wrap of hal_millis().
+  now_ms = 0xffffffffu - CFG_RTC_SYNC_CORRECTION_INTERVAL_MS / 2u;
   rtc_fields(2026, 10, 26, 18, 0, 0);
   start();
   make_utc(utc(2026, 10, 26, 18, 0, 0));
@@ -1074,6 +1182,147 @@ static void test_buttons() {
   assert(rtc_utc() == utc(2026, 10, 26, 0, 30, 0)); // CET after the change
 }
 
+static int16_t air_temp(const Frame &frame, int hi) {
+  return (int16_t)jh_load_be16(&frame.data[hi]);
+}
+
+static bool air_temp_valid(const Frame &frame, uint8_t bit) {
+  return (frame.data[CAN_FRAME_AIR_TEMP_STATUS] & bit) != 0u;
+}
+
+// Passes until the next 0x132 frame; returns the milliseconds it took.
+static uint32_t next_air_frame(uint32_t limitMs) {
+  const size_t sent = sent_frames(CAN_ID_AIR_TEMP_UPDATE);
+  const uint32_t startMs = now_ms;
+  while (sent_frames(CAN_ID_AIR_TEMP_UPDATE) == sent) {
+    assert(now_ms - startMs < limitMs);
+    loop_pass();
+  }
+  return now_ms - startMs;
+}
+
+// Air temperatures on 0x132: with the RTC frame every second and at once when
+// a reading or its validity changes.
+static void test_air_temp() {
+  // Nearest 0.1 °C, negative values and the int16 limits.
+  const struct {
+    float celsius;
+    int16_t tenths;
+  } values[] = {{21.4375f, 214},     {-3.0625f, -31},    {0.0625f, 1},
+                {-0.0625f, -1},      {0.03125f, 0},      {-0.03125f, 0},
+                {125.0f, 1250},      {-55.0f, -550},     {1e30f, INT16_MAX},
+                {-1e30f, INT16_MIN}, {3e38f, INT16_MAX}, {-3e38f, INT16_MIN}};
+  uint8_t field[2] = {};
+  for (const auto &value : values) {
+    assert(fiesta_can_put_temp_tenths_i16(field, value.celsius) &&
+           (int16_t)jh_load_be16(field) == value.tenths);
+  }
+  for (float none : {NAN, INFINITY, -INFINITY}) {
+    field[0] = field[1] = 0xffu;
+    assert(!fiesta_can_put_temp_tenths_i16(field, none) && field[0] == 0u &&
+           field[1] == 0u);
+  }
+
+  rtc_fields(2026, 10, 15, 21, 56, 7);
+  temp_inside.present = temp_outside.present = true;
+  temp_inside.celsius = 21.4375f;
+  temp_outside.celsius = -3.0625f;
+  start();
+  ds18b20_setPin(JH_HW_NODE_TEMP_INSIDE_PIN_DATA); // as temp_initial_read()
+  ds18b20_setPin(JH_HW_NODE_TEMP_OUTSIDE_PIN_DATA);
+
+  // The first readings go out when they arrive, before the RTC deadline.
+  assert(next_air_frame(1000u) <= ds18b20_conversion_ms + 20u);
+  assert(sent_frames(CAN_ID_RTC_UPDATE) == 0u);
+  Frame frame = last_frame(CAN_ID_AIR_TEMP_UPDATE);
+  assert(frame.len == CAN_FRAME_MAX_LENGTH);
+  assert(air_temp_valid(frame, CAN_AIR_TEMP_STATUS_INSIDE_VALID) &&
+         air_temp_valid(frame, CAN_AIR_TEMP_STATUS_OUTSIDE_VALID));
+  assert(air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 214 &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_OUTSIDE_HI) == -31);
+  assert(frame.data[CAN_FRAME_AIR_TEMP_STATUS] ==
+             (CAN_AIR_TEMP_STATUS_INSIDE_VALID |
+              CAN_AIR_TEMP_STATUS_OUTSIDE_VALID) &&
+         frame.data[6] == 0u && frame.data[7] == 0u);
+
+  // Steady readings, also a change below 0.1 °C: one frame per RTC frame.
+  next_rtc_frame();
+  temp_inside.celsius = 21.375f;
+  size_t rtc = sent_frames(CAN_ID_RTC_UPDATE);
+  size_t air = sent_frames(CAN_ID_AIR_TEMP_UPDATE);
+  loop_for(10000u);
+  assert(sent_frames(CAN_ID_RTC_UPDATE) - rtc == 10u &&
+         sent_frames(CAN_ID_AIR_TEMP_UPDATE) - air == 10u);
+  assert(air_temp(last_frame(CAN_ID_AIR_TEMP_UPDATE),
+                  CAN_FRAME_AIR_TEMP_INSIDE_HI) == 214);
+
+  // A new value goes out with its conversion, not at the next deadline.
+  next_rtc_frame();
+  temp_outside.celsius = -2.9375f;
+  rtc = sent_frames(CAN_ID_RTC_UPDATE);
+  assert(next_air_frame(1000u) <= ds18b20_conversion_ms + 20u);
+  assert(sent_frames(CAN_ID_RTC_UPDATE) == rtc);
+  assert(air_temp(last_frame(CAN_ID_AIR_TEMP_UPDATE),
+                  CAN_FRAME_AIR_TEMP_OUTSIDE_HI) == -29);
+
+  // A sensor that stops answering loses its bit once its last reading is
+  // CFG_TEMP_MAX_AGE_MS old; the change goes out at once.
+  next_rtc_frame();
+  temp_outside.present = false;
+  for (;;) {
+    loop_pass();
+    frame = last_frame(CAN_ID_AIR_TEMP_UPDATE);
+    if (!air_temp_valid(frame, CAN_AIR_TEMP_STATUS_OUTSIDE_VALID)) {
+      break;
+    }
+    assert(now_ms - temp_outside.sampleMs < CFG_TEMP_MAX_AGE_MS);
+  }
+  assert(now_ms - temp_outside.sampleMs < CFG_TEMP_MAX_AGE_MS + 20u);
+  assert(air_temp(frame, CAN_FRAME_AIR_TEMP_OUTSIDE_HI) == 0 &&
+         air_temp_valid(frame, CAN_AIR_TEMP_STATUS_INSIDE_VALID) &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 214);
+  rtc = sent_frames(CAN_ID_RTC_UPDATE);
+  air = sent_frames(CAN_ID_AIR_TEMP_UPDATE);
+  loop_for(5000u);
+  assert(sent_frames(CAN_ID_AIR_TEMP_UPDATE) - air ==
+         sent_frames(CAN_ID_RTC_UPDATE) - rtc);
+  assert(!air_temp_valid(last_frame(CAN_ID_AIR_TEMP_UPDATE),
+                         CAN_AIR_TEMP_STATUS_OUTSIDE_VALID));
+
+  // It answers again: the next conversion brings the bit back.
+  next_rtc_frame();
+  temp_outside.present = true;
+  assert(next_air_frame(1000u) <= ds18b20_conversion_ms + 40u);
+  frame = last_frame(CAN_ID_AIR_TEMP_UPDATE);
+  assert(air_temp_valid(frame, CAN_AIR_TEMP_STATUS_OUTSIDE_VALID) &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_OUTSIDE_HI) == -29);
+  expect_consecutive_numbers();
+}
+
+// A sensor missing at start stays without its bit until it is opened again,
+// as the temperature display and an ignition change do.
+static void test_air_temp_missing() {
+  rtc_fields(2026, 10, 15, 21, 56, 7);
+  temp_outside.present = true;
+  temp_outside.celsius = 5.0f;
+  start();
+  ds18b20_setPin(JH_HW_NODE_TEMP_INSIDE_PIN_DATA);
+  ds18b20_setPin(JH_HW_NODE_TEMP_OUTSIDE_PIN_DATA);
+  temp_inside.present = true;
+  temp_inside.celsius = 20.0f;
+  loop_for(5000u);
+  Frame frame = last_frame(CAN_ID_AIR_TEMP_UPDATE);
+  assert(frame.data[CAN_FRAME_AIR_TEMP_STATUS] ==
+             CAN_AIR_TEMP_STATUS_OUTSIDE_VALID &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 0 &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_OUTSIDE_HI) == 50);
+  ds18b20_setPin(JH_HW_NODE_TEMP_INSIDE_PIN_DATA);
+  assert(next_air_frame(1000u) <= ds18b20_conversion_ms + 20u);
+  frame = last_frame(CAN_ID_AIR_TEMP_UPDATE);
+  assert(air_temp_valid(frame, CAN_AIR_TEMP_STATUS_INSIDE_VALID) &&
+         air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 200);
+}
+
 int main(int argc, char **argv) {
   assert(argc == 2);
   const struct {
@@ -1091,6 +1340,8 @@ int main(int argc, char **argv) {
       {"sync_rejects", test_sync_rejects},
       {"sc", test_sc},
       {"buttons", test_buttons},
+      {"air_temp", test_air_temp},
+      {"air_temp_missing", test_air_temp_missing},
   };
   for (const auto &scenario : scenarios) {
     if (std::strcmp(argv[1], scenario.name) == 0) {

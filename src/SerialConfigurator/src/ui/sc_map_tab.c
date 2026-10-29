@@ -296,6 +296,12 @@ static void sc_map_on_mapped(GtkWidget *widget, gpointer user) {
   (void)sc_map_poll_tick(user);
 }
 
+/* The page goes with its window: the poll timer and its state go too. */
+static void sc_map_on_destroy(GtkWidget *widget, gpointer user) {
+  (void)widget;
+  sc_map_tab_dispose(user);
+}
+
 GtkWidget *sc_map_tab_build(AppState *state) {
   if (state == 0) {
     return gtk_label_new("");
@@ -327,6 +333,7 @@ GtkWidget *sc_map_tab_build(AppState *state) {
 
   state->map_tab_root = root;
   g_signal_connect(root, "map", G_CALLBACK(sc_map_on_mapped), state);
+  g_signal_connect(root, "destroy", G_CALLBACK(sc_map_on_destroy), state);
 
   /* Polling is permanent - the tick callback itself short-circuits
    * when disconnected. This keeps the start/stop logic in one place
@@ -370,4 +377,5 @@ void sc_map_tab_dispose(AppState *state) {
 #endif
   g_free(m);
   state->map_tab_state = 0;
+  state->map_tab_root = 0;
 }

@@ -21,7 +21,7 @@ static bool dpfConnected = false;
 static volatile bool interrupt = false;
 static hal_can_t canHandle = NULL;
 
-static uint32_t lastEcuFrameMs = 0u;
+static uint32_t lastInitAttemptMs = 0u;
 static uint32_t redrawSeq = 0u;
 static bool stateChanged = false;
 static bool absReady = false;
@@ -42,7 +42,6 @@ static void putValue(int idx, float value) {
 static void countEcuFrame(void) {
   ecuMessages++;
   ecuConnected = true;
-  lastEcuFrameMs = hal_millis();
 }
 
 // A value the display draws at once has changed.
@@ -62,7 +61,6 @@ static void publishState(void) {
   snapshot.absReady = absReady;
   snapshot.ecuConnected = ecuConnected;
   snapshot.dpfConnected = dpfConnected;
-  snapshot.ecuUpdatedMs = lastEcuFrameMs;
   snapshot.redrawSeq = redrawSeq;
   clocksStatePublishEcu(&snapshot);
 }
@@ -90,14 +88,17 @@ hal_status_t canInit(void) {
   dpfMessages = lastDPFMessages = 0;
   interrupt = false;
   memset(valueDecoded, 0, sizeof(valueDecoded));
+  lastInitAttemptMs = hal_millis();
 
   hal_can_config_t canCfg = JH_HW_NODE_CAN_CONFIG_INIT;
 
-  hal_status_t st = hal_can_create_with_retry(&canCfg, JH_HW_NODE_CAN_PIN_INT,
-                                              receivedCanMessage, MAX_RETRIES,
-                                              hal_watchdog_feed, &canHandle);
+  // One attempt: core 1 starts only after the core-0 set-up, and the core-0
+  // loop tries again (canRetryInit()).
+  hal_status_t st = hal_can_create_with_retry(
+      &canCfg, JH_HW_NODE_CAN_PIN_INT, receivedCanMessage, 0, NULL, &canHandle);
   if (st != HAL_OK) {
-    derr("CAN BUS Shield init failed: %s", hal_status_to_string(st));
+    derr_limited("can", "CAN BUS Shield init failed: %s",
+                 hal_status_to_string(st));
     return st;
   }
   st = configureFiestaCanFilters();
@@ -111,6 +112,14 @@ hal_status_t canInit(void) {
   deb("CAN BUS Shield init ok!");
   canMainLoop();
   return HAL_OK;
+}
+
+bool canRetryInit(void) {
+  if (canHandle != NULL || !hal_millis_deadline_expired(
+                               lastInitAttemptMs, CAN_INIT_RETRY_INTERVAL)) {
+    return false;
+  }
+  return canInit() == HAL_OK;
 }
 
 /**
@@ -153,8 +162,9 @@ void updateCANrecipients(void) {
   }
   oilAndSpeed[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_HI] = (uint8_t)hi;
   oilAndSpeed[CAN_FRAME_ECU_UPDATE_OIL_PRESSURE_LO] = (uint8_t)lo;
-  oilAndSpeed[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] =
-      (uint8_t)canValues[F_ABS_CAR_SPEED];
+  // The byte holds whole km/h; a faster reading goes out as its maximum.
+  oilAndSpeed[CAN_FRAME_ECU_UPDATE_ABS_CAR_SPEED] = (uint8_t)hal_constrain(
+      canValues[F_ABS_CAR_SPEED], 0.0f, (float)UINT8_MAX);
   canBroadcast(CAN_ID_OIL_AND_SPEED_MODULE_UPDATE, oilAndSpeed);
 }
 
@@ -186,7 +196,7 @@ void updateGPSrecipients(void) {
   clocksStateCopyLocal(&local);
   uint8_t lat[CAN_FRAME_MAX_LENGTH], lonTime[CAN_FRAME_MAX_LENGTH];
   uint8_t utc[CAN_FRAME_MAX_LENGTH];
-  if (clocksGpsEncode(&local.gps, lat, lonTime, utc) != HAL_OK)
+  if (clocksGpsEncode(&local.gps, hal_millis(), lat, lonTime, utc) != HAL_OK)
     return;
   canBroadcast(CAN_ID_GPS_EXT_LAT, lat);
   canBroadcast(CAN_ID_GPS_EXT_LON_TIME, lonTime);
@@ -329,8 +339,13 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
                  (unsigned long)canID);
     break;
 
+  case CAN_ID_RTC_UPDATE:
+  case CAN_ID_AIR_TEMP_UPDATE:
+    // Frames of Fiesta_clock that Clocks does not use.
+    break;
+
   default:
-    deb("received unknown CAN frame:%03x len:%d\n", canID, len);
+    derr_limited("can", "received unknown CAN frame:%03x len:%d", canID, len);
     break;
   }
 }

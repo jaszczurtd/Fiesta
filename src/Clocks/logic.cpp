@@ -147,6 +147,9 @@ static void runCore0(void) {
 
   hal_soft_timer_tick_table(canTimerTable, COUNTOF(canTimerTable));
   canTickBroadcastTimers();
+  if (canRetryInit()) {
+    hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+  }
   updateChargeLamp();
 
   if (!startBeepDone && isEnvironmentStarted()) {

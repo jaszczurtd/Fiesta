@@ -11,10 +11,11 @@ i sterownik SSD1306 z symulowaną obsługą wejść/wyjść. Model pamięci
 kontrolera interpretuje adresowanie i zapis danych I²C, a obrazy znaków
 w obu rozmiarach są porównywane z zapisami ze starego sterownika. Testy
 obejmują też komendy usypiania i budzenia. Drugi test kompiluje kod obsługi
-czasu zegara ze sterownikiem RTC z HAL, modelem rejestrów PCF8563
-i symulowanymi wywołaniami CAN, flasha oraz konfiguratora. Sprawdza znacznik
-UTC, przeliczanie CET/CEST, ustawianie RTC według UTC z GPS, ramkę `0x130`
-oraz zmianę czasu przyciskami i konfiguratorem. Testy wymagają kompilatora C/C++
+czasu i CAN zegara ze sterownikiem RTC z HAL, modelem rejestrów PCF8563,
+modelem DS18B20 i symulowanymi wywołaniami CAN, flasha oraz konfiguratora.
+Sprawdza znacznik UTC, przeliczanie CET/CEST, ustawianie RTC według UTC
+z GPS, ramki `0x130` i `0x132` oraz zmianę czasu przyciskami
+i konfiguratorem. Testy wymagają kompilatora C/C++
 na hoście, bez podłączonej płytki. Nie potwierdzają zgodności fizycznego
 panelu ani nie mierzą czasu działania na sprzęcie. VP37TestBench uczestniczy w lokalnej kompilacji i testach,
 ale `ci: false` wyłącza go z macierzy firmware CI.
@@ -34,19 +35,22 @@ bramkę MISRA, PMD CPD, Valgrind i clang-tidy. Analiza statyczna działa osobno,
 żeby jej czas nie wyglądał jak zawieszony test wykonania. Logi trafiają do
 `/tmp/fiesta_*`.
 
-Buildy hostowe używają Debug. SerialConfigurator jest dodatkowo budowany
-w Release, tak jak w CI, z uruchomieniem testów w
-`src/SerialConfigurator/build/release`. Sprawdza to również optymalizację
-i włączone przez kompilator mechanizmy ochrony libc. Etap Valgrinda sprawdza
-oba buildy SerialConfiguratora; CI uruchamia go na Release.
+Każdy moduł z testami hostowymi jest budowany i testowany dwa razy: w Debug
+oraz w Release, tak jak w CI, w `<katalog buildu>/release` (np.
+`src/SerialConfigurator/build/release`). Release sprawdza też optymalizację
+i włączone przez kompilator mechanizmy ochrony libc. Etapy Valgrinda
+i clang-tidy sprawdzają oba buildy każdego modułu.
 
 Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
 `scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
-Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i
-`pl_PL.UTF-8`; przed bramką zainstaluj i wygeneruj te locale.
+Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i każdym locale
+z `scripts/test-locales.txt`; skrypt przygotowania środowiska generuje je
+i sprawdza, czy działają.
 Ten sam runner otacza target Valgrinda SC, więc Valgrind sprawdza sam plik
 binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig
 oraz loader glibc podczas startu GTK; błędy aplikacji nadal przerywają kontrolę.
+Uruchomione bezpośrednio bez ekranu testy paska postępu i karty Tests są
+w CTest oznaczone jako pominięte.
 
 `--skip-cppcheck`, `--skip-valgrind` i `--skip-clang-tidy` pozwalają pomijać
 wybrane kontrole podczas pracy. Taki przebieg nie potwierdza przejścia pełnej
@@ -96,7 +100,7 @@ lokalnej walidacji firmware.
 
 | Workflow | Kontrole |
 |---|---|
-| [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | Kompilacja ECU, testy, cppcheck, Valgrind i clang-tidy. |
+| [ecu-tests.yml](../.github/workflows/ecu-tests.yml) | Kompilacja ECU, testy, cppcheck, Valgrind i clang-tidy; testy Pythona z katalogu głównego, także po zmianach w modułach, które czytają. |
 | [clocks-tests.yml](../.github/workflows/clocks-tests.yml), [adjustometer-tests.yml](../.github/workflows/adjustometer-tests.yml) | Kompilacja modułu, testy, Valgrind i clang-tidy. |
 | [serial-configurator-tests.yml](../.github/workflows/serial-configurator-tests.yml) | Kompilacja GUI/CLI, testy, Valgrind i clang-tidy. |
 | [firmware-build-scripts.yml](../.github/workflows/firmware-build-scripts.yml) | Release/debug modułów firmware wybranych do CI. |

@@ -18,8 +18,7 @@ typedef struct {
   bool absReady; // ABS capture initialized; zero speed is a valid reading
   bool ecuConnected;
   bool dpfConnected;
-  uint32_t ecuUpdatedMs; // hal_millis() of the last ECU frame, 0 before one
-  uint32_t redrawSeq;    // bumped when a value drawn at once has changed
+  uint32_t redrawSeq; // bumped when a value drawn at once has changed
 } clocks_ecu_snapshot_t;
 
 enum { EGT_PRE_DPF, EGT_IN_DPF, EGT_CHANNELS };

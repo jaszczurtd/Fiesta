@@ -9,6 +9,15 @@ FIESTA_APT_PACKAGES=(
     clang-format clang-tidy clang-tools valgrind default-jre-headless
 )
 
+# The locales the GUI tests need, one per line; CI and the SerialConfigurator
+# tests read the same file. Builtins only: callers may run without PATH.
+if [[ "${BASH_SOURCE[0]}" == */* ]]; then
+    FIESTA_TEST_LOCALES_FILE="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+else
+    FIESTA_TEST_LOCALES_FILE="$PWD"
+fi
+FIESTA_TEST_LOCALES_FILE="${FIESTA_TEST_LOCALES_FILE}/../../../scripts/test-locales.txt"
+
 dependency_info() {
     printf '[INFO] %s\n' "$*"
 }
@@ -65,19 +74,29 @@ run_dependency_command_as_root() {
     sudo "$@"
 }
 
-ensure_test_locales() {
-    local mode="$1" non_interactive="$2" missing
-    missing=$(python3 - <<'PYLOCALE'
+# Prints the listed locales the system does not provide.
+missing_test_locales() {
+    python3 - <<PYLOCALE
 import locale
 missing = []
-for name in ("en_US.UTF-8", "pl_PL.UTF-8"):
+for name in "$*".split():
     try:
         locale.setlocale(locale.LC_ALL, name)
     except locale.Error:
         missing.append(name)
 print(" ".join(missing))
 PYLOCALE
-    )
+}
+
+ensure_test_locales() {
+    local mode="$1" non_interactive="$2" missing
+    local -a locales=()
+    if ! mapfile -t locales < "$FIESTA_TEST_LOCALES_FILE" ||
+        [[ ${#locales[@]} -eq 0 ]]; then
+        dependency_error "No test locales in $FIESTA_TEST_LOCALES_FILE"
+        return 1
+    fi
+    missing=$(missing_test_locales "${locales[@]}")
     if [[ -z "$missing" ]]; then
         return 0
     fi
@@ -85,7 +104,13 @@ PYLOCALE
         dependency_error "Missing GUI test locales: $missing"
         return 1
     fi
-    run_dependency_command_as_root "$non_interactive" locale-gen en_US.UTF-8 pl_PL.UTF-8
+    run_dependency_command_as_root "$non_interactive" locale-gen "${locales[@]}" || return 1
+    # Some locale-gen versions ignore their arguments and still succeed.
+    missing=$(missing_test_locales "${locales[@]}")
+    if [[ -n "$missing" ]]; then
+        dependency_error "locale-gen did not provide the GUI test locales: $missing"
+        return 1
+    fi
 }
 
 ensure_system_dependencies() {

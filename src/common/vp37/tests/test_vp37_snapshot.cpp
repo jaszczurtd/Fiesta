@@ -192,6 +192,13 @@ void test_status_reads_back_exactly_what_the_step_published(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readSnapshot(&s_pump, &snapshot));
   TEST_ASSERT_TRUE(snapshot.status.supplyVolts == 13.7f);
   TEST_ASSERT_TRUE(snapshot.telemetry.feedback.fuelTempC == -12.625f);
+  // The grid timing the CFG line reports travels with the snapshot.
+  s_pump.controlLateMaxUs = 321U;
+  s_pump.controlOverruns = 7U;
+  VP37_publish(&s_pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readSnapshot(&s_pump, &snapshot));
+  TEST_ASSERT_EQUAL_UINT32(321U, snapshot.telemetry.controlLateMaxUs);
+  TEST_ASSERT_EQUAL_UINT32(7U, snapshot.telemetry.controlOverruns);
 
   s_pump.vp37Initialized = false;
   VP37_publish(&s_pump);

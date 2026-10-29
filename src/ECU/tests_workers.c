@@ -16,6 +16,7 @@
 #include "../common/scDefinitions/sc_command_handlers.h"
 #include "../common/scDefinitions/sc_protocol.h"
 
+#include "seqlock.h"
 #include <hal/core/hal_compiler.h>
 #include <math.h>
 
@@ -152,7 +153,10 @@ static float topZeroThresholdAt(size_t index) {
   return demand;
 }
 
+static void stepEventForgetPending(void);
+
 void testsWorkersReset(void) {
+  stepEventForgetPending();
   testsWorkersCyclicStart();
   testsWorkersRandomStart();
 
@@ -304,15 +308,56 @@ float testsWorkersManualStep(bool *outFinished) {
 }
 
 //=============================================================================
+// Step announcements: the control core records, core 0 prints
+//=============================================================================
+
+/* A step change on the control core must not wait for the serial port, so it
+ * only records the step; testsWorkersPrintStepEvent() prints it on core 0.
+ * One slot is enough: a step lasts at least a dwell, core 0 prints within a
+ * loop pass. The lock is odd while the control core writes. */
+typedef enum {
+  STEP_EVENT_TOP = 1,
+  STEP_EVENT_TOPZERO,
+  STEP_EVENT_POT,
+} step_event_kind_t;
+
+static ecu_seqlock_t s_stepEventLock;
+static uint32_t
+    s_stepEventPrintedSeq; /* core 0 writes, the control core reads */
+static uint32_t s_stepEventKind;
+static int32_t s_stepEventValue;  /* demand x10 [%], or the pot phase index */
+static int32_t s_stepEventRate;   /* pot rate [%/s] */
+static uint32_t s_stepEventCount; /* series or pass in progress, from 1 */
+static uint32_t s_stepEventTotal;
+
+#ifdef UNIT_TEST
+void (*testsWorkersStepEventReadHookForTest)(void) = NULL;
+#endif
+
+static void recordStepEvent(step_event_kind_t kind, int32_t value, int32_t rate,
+                            uint32_t count, uint32_t total) {
+  const uint32_t begun = ecuSeqlockWriteBegin(&s_stepEventLock);
+  HAL_ATOMIC_STORE(&s_stepEventKind, (uint32_t)kind, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_stepEventValue, value, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_stepEventRate, rate, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_stepEventCount, count, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_stepEventTotal, total, HAL_ATOMIC_RELAXED);
+  ecuSeqlockWriteEnd(&s_stepEventLock, begun);
+}
+
+static int32_t demandTenths(float demand) {
+  return (int32_t)lroundf(demand * 10.0f);
+}
+
+//=============================================================================
 // Upper travel staircase
 //=============================================================================
 
 /** @brief Report the step in progress, so a bench log can be cut into steps. */
 static void announceTopStep(void) {
-  deb("TEST: top %.1f %% (series %lu/%lu)",
-      s_topStepsSetpoints[s_topSteps.step],
-      (unsigned long)s_topSteps.series + 1UL,
-      (unsigned long)paramU32(TEST_PARAM_TOP_SERIES));
+  recordStepEvent(STEP_EVENT_TOP,
+                  demandTenths(s_topStepsSetpoints[s_topSteps.step]), 0,
+                  s_topSteps.series + 1U, paramU32(TEST_PARAM_TOP_SERIES));
 }
 
 void testsWorkersTopStepsStart(void) {
@@ -353,9 +398,8 @@ static float topZeroDemand(void) {
 
 /** @brief Report the half-step in progress, so a log can be cut into steps. */
 static void announceTopZeroStep(void) {
-  deb("TEST: topzero %.1f %% (series %lu/%lu)", topZeroDemand(),
-      (unsigned long)s_topZero.series + 1UL,
-      (unsigned long)paramU32(TEST_PARAM_TOPZERO_SERIES));
+  recordStepEvent(STEP_EVENT_TOPZERO, demandTenths(topZeroDemand()), 0,
+                  s_topZero.series + 1U, paramU32(TEST_PARAM_TOPZERO_SERIES));
 }
 
 void testsWorkersTopZeroStart(void) {
@@ -395,10 +439,64 @@ static const char *const s_potPhaseNames[] = {
     SC_TEST_PHASE_REST};
 
 static void announcePotPhase(void) {
-  deb("TEST: pot %s %ld %%/s (pass %lu/%lu)", s_potPhaseNames[s_pot.phase],
-      (long)testsHelpersParam(TEST_PARAM_POT_RATE),
-      (unsigned long)s_pot.passes + 1UL,
-      (unsigned long)paramU32(TEST_PARAM_POT_PASSES));
+  recordStepEvent(STEP_EVENT_POT, (int32_t)s_pot.phase,
+                  (int32_t)testsHelpersParam(TEST_PARAM_POT_RATE),
+                  s_pot.passes + 1U, paramU32(TEST_PARAM_POT_PASSES));
+}
+
+/** @brief No announcement awaits core 0 (single-core reset path). */
+static void stepEventForgetPending(void) {
+  HAL_ATOMIC_STORE(
+      &s_stepEventPrintedSeq,
+      HAL_ATOMIC_LOAD(&s_stepEventLock.sequence, HAL_ATOMIC_RELAXED),
+      HAL_ATOMIC_RELAXED);
+}
+
+bool testsWorkersStepEventPending(void) {
+  return HAL_ATOMIC_LOAD(&s_stepEventLock.sequence, HAL_ATOMIC_ACQUIRE) !=
+         HAL_ATOMIC_LOAD(&s_stepEventPrintedSeq, HAL_ATOMIC_ACQUIRE);
+}
+
+void testsWorkersPrintStepEvent(void) {
+  for (uint32_t attempt = 0U; attempt < ECU_SEQLOCK_READ_ATTEMPTS; attempt++) {
+    const uint32_t sequence = ecuSeqlockReadBegin(&s_stepEventLock);
+    if (sequence ==
+        HAL_ATOMIC_LOAD(&s_stepEventPrintedSeq, HAL_ATOMIC_RELAXED)) {
+      return; /* nothing new */
+    }
+    const uint32_t kind = HAL_ATOMIC_LOAD(&s_stepEventKind, HAL_ATOMIC_RELAXED);
+    const int32_t value =
+        HAL_ATOMIC_LOAD(&s_stepEventValue, HAL_ATOMIC_RELAXED);
+#ifdef UNIT_TEST
+    if (testsWorkersStepEventReadHookForTest != NULL) {
+      testsWorkersStepEventReadHookForTest();
+    }
+#endif
+    const int32_t rate = HAL_ATOMIC_LOAD(&s_stepEventRate, HAL_ATOMIC_RELAXED);
+    const uint32_t count =
+        HAL_ATOMIC_LOAD(&s_stepEventCount, HAL_ATOMIC_RELAXED);
+    const uint32_t total =
+        HAL_ATOMIC_LOAD(&s_stepEventTotal, HAL_ATOMIC_RELAXED);
+    if (!ecuSeqlockReadConsistent(&s_stepEventLock, sequence)) {
+      continue; /* the control core wrote meanwhile: read again */
+    }
+    if (kind == (uint32_t)STEP_EVENT_TOP) {
+      deb("TEST: top %.1f %% (series %lu/%lu)", (double)value / 10.0,
+          (unsigned long)count, (unsigned long)total);
+    } else if (kind == (uint32_t)STEP_EVENT_TOPZERO) {
+      deb("TEST: topzero %.1f %% (series %lu/%lu)", (double)value / 10.0,
+          (unsigned long)count, (unsigned long)total);
+    } else if ((kind == (uint32_t)STEP_EVENT_POT) && (value >= 0) &&
+               ((size_t)value < COUNTOF(s_potPhaseNames))) {
+      deb("TEST: pot %s %ld %%/s (pass %lu/%lu)", s_potPhaseNames[value],
+          (long)rate, (unsigned long)count, (unsigned long)total);
+    } else {
+      /* unknown kind: nothing to print */
+    }
+    /* Printed: the control core may apply the demand of this step now. */
+    HAL_ATOMIC_STORE(&s_stepEventPrintedSeq, sequence, HAL_ATOMIC_RELEASE);
+    return;
+  }
 }
 
 static void enterPotPhase(pot_phase_t phase, uint32_t nowMs) {

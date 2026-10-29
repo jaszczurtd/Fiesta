@@ -937,6 +937,52 @@ static void publishStatus(bool force) {
   }
 }
 
+/* How long a changed demand waits for core 0 to print the announcement of
+ * its step before it is applied regardless [ms]. */
+#define STEP_EVENT_APPLY_TIMEOUT_MS 50U
+#if (STEP_EVENT_APPLY_TIMEOUT_MS < 10U) || (STEP_EVENT_APPLY_TIMEOUT_MS > 500U)
+#error "STEP_EVENT_APPLY_TIMEOUT_MS must be in 10..500 ms"
+#endif
+
+/* The demand applied last and, while a changed one waits for its announcement
+ * to be printed, when the wait began. */
+static float s_appliedDemand;
+static bool s_holdingDemand;
+static uint32_t s_holdStartedMs;
+
+/**
+ * @brief Keep the previous demand while the announcement of a new step waits
+ * for core 0 to print it, so the log shows the step before the move.
+ * @param demand Demand the running test produced this tick.
+ * @return Demand to apply: the previous one during the wait, bounded by
+ *         STEP_EVENT_APPLY_TIMEOUT_MS, the new one afterwards.
+ */
+static float holdDemandUntilAnnounced(float demand) {
+  if (demand == s_appliedDemand) {
+    s_holdingDemand = false;
+  } else if (!testsWorkersStepEventPending()) {
+    s_holdingDemand = false;
+    s_appliedDemand = demand;
+  } else {
+    const uint32_t nowMs = hal_millis();
+    if (!s_holdingDemand) {
+      s_holdingDemand = true;
+      s_holdStartedMs = nowMs;
+    }
+    if (hal_elapsed_u32(nowMs, s_holdStartedMs, STEP_EVENT_APPLY_TIMEOUT_MS)) {
+      s_holdingDemand = false;
+      s_appliedDemand = demand;
+    }
+  }
+  return s_appliedDemand;
+}
+
+/** @brief Forget any wait: the demand just applied is the reference again. */
+static void resetDemandHold(float applied) {
+  s_appliedDemand = applied;
+  s_holdingDemand = false;
+}
+
 //=============================================================================
 // Activation
 //=============================================================================
@@ -948,6 +994,7 @@ static void activate(const ecu_test_t *entry, tests_source_t source) {
   s_runs++;
   // Announce before arming, so whatever the fixture prints reads as its own.
   deb("TEST: %s started", entry->name);
+  resetDemandHold(getECUContext()->injectionPump.demand.requestedPercent);
   if (entry->start != NULL) {
     entry->start();
   }
@@ -965,6 +1012,7 @@ static void deactivate(const char *result) {
   if (entry->drivesDemand) {
     (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
                                            0.0f);
+    resetDemandHold(0.0f);
   }
   s_active = START_TEST_NONE;
   s_lastTest = entry->id;
@@ -1102,6 +1150,8 @@ const char *testsActiveName(void) {
   const ecu_test_t *entry = findById(s_active);
   return entry != NULL ? entry->name : NULL;
 }
+
+void testsPrintEvents(void) { testsWorkersPrintStepEvent(); }
 
 uint32_t testsCyclicDelayMs(void) {
   return s_active == START_TEST_CYCLIC ? testsWorkersCyclicDelayMs() : 0U;
@@ -1345,7 +1395,7 @@ bool tickTests(void) {
   const bool owned = entry->drivesDemand;
   if (owned) {
     (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
-                                           demand);
+                                           holdDemandUntilAnnounced(demand));
   }
   if (finished) {
     const tests_source_t source = s_activeSource;
@@ -1546,6 +1596,8 @@ bool tickTests(void) { return false; }
 void tickTestsHandleSerialLine(const char *line) { (void)line; }
 
 const char *testsActiveName(void) { return NULL; }
+
+void testsPrintEvents(void) {}
 
 uint32_t testsCyclicDelayMs(void) { return 0U; }
 

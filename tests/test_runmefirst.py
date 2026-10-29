@@ -62,7 +62,9 @@ class RunmefirstTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="fiesta-locales-") as temporary:
             base = Path(temporary)
             python = base / "python3"
-            python.write_text("#!/bin/sh\necho pl_PL.UTF-8\n")
+            # pl_PL.UTF-8 is missing until locale-gen ran, or for good.
+            python.write_text('#!/bin/sh\n[ -e "${0%/*}/root-call" ] && '
+                              '[ ! -e "${0%/*}/broken" ] || echo pl_PL.UTF-8\n')
             python.chmod(0o755)
             env = dict(os.environ, PATH=str(base))
             marker = base / "root-call"
@@ -77,6 +79,12 @@ class RunmefirstTests(unittest.TestCase):
             result = subprocess.run([*command, "install"], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(marker.read_text(), "1 locale-gen en_US.UTF-8 pl_PL.UTF-8")
+            # A locale-gen that exits 0 without the locale fails the setup.
+            marker.unlink()
+            (base / "broken").touch()
+            result = subprocess.run([*command, "install"], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("locale-gen did not provide", result.stderr)
 
     def test_cleanup_is_scoped_and_precedes_bootstrap_from_another_directory(self):
         with tempfile.TemporaryDirectory(prefix="fiesta-cleanup-") as temporary:

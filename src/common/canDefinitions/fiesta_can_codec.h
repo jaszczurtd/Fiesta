@@ -43,6 +43,25 @@ static inline bool fiesta_can_put_temp_i16(uint8_t *field, float celsius) {
 }
 
 /**
+ * @brief Store a temperature in tenths of °C in a signed 16-bit big-endian
+ *        field.
+ * @param field Two payload bytes.
+ * @param celsius Temperature; NaN or infinity means no measurement.
+ * @return true for a measurement, stored rounded to the nearest 0.1 °C and
+ *         clamped to the int16_t range; false stores 0.
+ */
+static inline bool fiesta_can_put_temp_tenths_i16(uint8_t *field,
+                                                  float celsius) {
+  float tenths = celsius;
+  if (isfinite(celsius) != 0) {
+    tenths = roundf(hal_constrain(celsius, (float)INT16_MIN / 10.0f,
+                                  (float)INT16_MAX / 10.0f) *
+                    10.0f);
+  }
+  return fiesta_can_put_temp_i16(field, tenths);
+}
+
+/**
  * @brief Read a temperature stored by fiesta_can_put_temp_i16().
  * @param field Two payload bytes.
  * @return Whole °C, negative values included.
@@ -66,9 +85,11 @@ static inline uint32_t fiesta_can_pack_gps_datetime(uint32_t dateYYMMDD,
   const uint32_t dd = dateYYMMDD % 100u;
   const uint32_t hh = timeHHMM / 100u;
   const uint32_t mi = timeHHMM % 100u;
-  if (mm < 1u || mm > 12u || dd < 1u || dd > 31u || hh > 23u || mi > 59u)
+  if ((mm < 1u) || (mm > 12u) || (dd < 1u) || (dd > 31u) || (hh > 23u) ||
+      (mi > 59u)) {
     return 0u;
-  const uint32_t yearOffset = yy < 20u ? 0u : (yy > 35u ? 15u : yy - 20u);
+  }
+  const uint32_t yearOffset = (yy < 20u) ? 0u : ((yy > 35u) ? 15u : (yy - 20u));
   return (yearOffset << 20) | (mm << 16) | (dd << 11) | (hh << 6) | mi;
 }
 
@@ -86,14 +107,14 @@ static inline uint32_t fiesta_can_pack_gps_datetime(uint32_t dateYYMMDD,
 static inline bool fiesta_can_put_utc_datetime(uint8_t *field, uint32_t epoch) {
   jh_calendar_datetime_t dt;
   uint32_t packed = 0u;
-  const bool fits = jh_calendar_epoch_to_datetime(
-                        epoch, FIESTA_CAN_DATETIME_MAX_YEAR, &dt) == HAL_OK &&
-                    dt.year >= FIESTA_CAN_DATETIME_MIN_YEAR;
+  const bool fits = (jh_calendar_epoch_to_datetime(
+                         epoch, FIESTA_CAN_DATETIME_MAX_YEAR, &dt) == HAL_OK) &&
+                    (dt.year >= FIESTA_CAN_DATETIME_MIN_YEAR);
   if (fits) {
     packed =
-        fiesta_can_pack_gps_datetime((uint32_t)(dt.year % 100u) * 10000u +
-                                         (uint32_t)dt.month * 100u + dt.day,
-                                     (uint32_t)dt.hour * 100u + dt.minute);
+        fiesta_can_pack_gps_datetime(((uint32_t)(dt.year % 100u) * 10000u) +
+                                         ((uint32_t)dt.month * 100u) + dt.day,
+                                     ((uint32_t)dt.hour * 100u) + dt.minute);
   }
   field[0] = (uint8_t)(packed >> 16);
   field[1] = (uint8_t)(packed >> 8);

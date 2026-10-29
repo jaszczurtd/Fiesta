@@ -20,8 +20,16 @@ pomiarów mechanicznego zachowania układu.
 
 Nie ma RTOS. `start.c` instaluje tabelę par `(period, callback)`, wykonywanych
 przez rdzeń 0 od około 10 ms dla szybkich odczytów do sekundy dla obsługi
-okresowej. VP37 należy do rdzenia 1. Każdy krok publikuje stan za licznikiem
-sekwencji; rdzeń 0 kopiuje go bez blokady. Słowa danych są zapisywane
+okresowej. VP37 należy do rdzenia 1. Kroki sterowania biegną po stałej
+siatce okresów `pidTimeUpdate`: spóźniony start nie przesuwa następnego
+terminu, a start spóźniony o cały okres zaczyna nową siatkę zamiast serii
+kroków nadrabiających. W oknie `CORE1_VP37_GUARD_US` przed terminem rdzeń 1
+nie zaczyna innej pracy (turbina, RPM, zadanie testu) i czeka na termin
+z RAM, więc krok nie dziedziczy ogona tej pracy. Testy stanowiskowe zapisują
+ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0; zmienione zadanie testu
+czeka na ten wydruk, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
+ogłoszenie nadal poprzedza ruch, który zapowiada. Każdy krok publikuje
+stan za licznikiem sekwencji; rdzeń 0 kopiuje go bez blokady. Słowa danych są zapisywane
 i odczytywane atomowo z porządkiem relaxed, więc kopia nakładająca się na
 publikację zostaje odrzucona bez wyścigu danych. Sterowanie nie czeka na
 telemetrię ani aktualizację wartości globalnych.
@@ -153,7 +161,10 @@ rezystancja w omach), `rmatch` (dopasowany pomiar), `rquiet` (kwalifikacja
 historyczna), `rlearn` (aktualizacja w kroku) i `rlcnt` (licznik aktualizacji).
 Niedopasowane obserwacje podtrzymują gotową estymatę bez zmiany jej wartości.
 `scanus` mierzy odbiór i redukcję ADC, a `execus` cały krok sterowania;
-oba w µs, bez oczekiwania na następny krok.
+oba w µs, bez oczekiwania na następny krok. `late` to największe spóźnienie
+startu po terminie w ostatnim pełnym oknie 100 kroków, w µs, bez kroków
+spóźnionych o cały okres; `ovr` liczy takie kroki od startu. Osłona rdzenia 1
+ma pokrywać wartości `late` widziane na stanowisku.
 
 ## Sprzężenie prądowe
 

@@ -19,7 +19,7 @@ class ClockTimeTests(unittest.TestCase):
         build.mkdir()
         sources = [MODULE / name for name in
                    ("RTC.c", "clockTime.c", "rtcSync.c", "can.c", "config.c",
-                    "clockPart.c")]
+                    "clockPart.c", "ds18b20.c", "utils.c")]
         sources.append(ROOT / "src/common/scDefinitions/sc_param_handlers.c")
         sources += [HAL / "src/hal" / name for name in
                     ("rtc/hal_rtc.cpp", "rtc/jh_rtc_i2c_provider.cpp",
@@ -64,6 +64,12 @@ class ClockTimeTests(unittest.TestCase):
 
     def test_buttons_use_local_time(self):
         self.run_scenario("buttons")
+
+    def test_air_temperatures_on_change_and_every_second(self):
+        self.run_scenario("air_temp")
+
+    def test_air_temperature_of_a_missing_sensor(self):
+        self.run_scenario("air_temp_missing")
 
 
 if __name__ == "__main__":

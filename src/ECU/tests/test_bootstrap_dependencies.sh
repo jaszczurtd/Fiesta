@@ -28,6 +28,7 @@ grep -Fq 'SKIP_APT=0 APT_NONINTERACTIVE=1' "$DAILY_RUNNER" || \
 
 fixture_installed=0
 fixture_locales_installed=0
+fixture_locale_gen_works=1
 declare -a apt_calls=()
 declare -a locale_calls=()
 
@@ -56,7 +57,7 @@ python3() {
 
 locale-gen() {
     locale_calls+=("$*")
-    fixture_locales_installed=1
+    fixture_locales_installed=$fixture_locale_gen_works
 }
 
 sudo() {
@@ -92,6 +93,14 @@ if ensure_system_dependencies --check 2>/dev/null; then
 fi
 [[ ${#apt_calls[@]} -eq 0 && ${#locale_calls[@]} -eq 0 ]] || \
     fail 'missing-locale check changed system state'
+
+# A locale-gen that ignores its arguments still exits 0; the result counts.
+fixture_locale_gen_works=0
+if ensure_system_dependencies --install --non-interactive 2>/dev/null; then
+    fail 'install accepted locales that locale-gen did not provide'
+fi
+[[ ${#locale_calls[@]} -eq 1 ]] || fail 'expected one locale generation call'
+fixture_locale_gen_works=1
 fixture_locales_installed=1
 
 fixture_installed=0

@@ -69,7 +69,7 @@ ECU exposes writable thresholds stored in a versioned KV blob. RTC_Clock
 accepts `rtc_year/month/day/hour/minute/second` in CET/CEST and stores them in
 its RTC as UTC. Read-only `rtc_integrity` is 1 only while the RTC holds trusted
 UTC. Commit validates the whole date, including leap years.
-Clocks expose read-only, non-persisted thresholds and intervals.
+Clocks expose read-only, non-persisted thresholds.
 
 In the GUI Values tab, edit fields and choose **Apply staged**, then **Commit**
 to validate and apply them. **Revert** restores staging from active values.

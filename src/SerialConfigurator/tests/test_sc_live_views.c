@@ -199,9 +199,11 @@ int main(void) {
   state.connected = false;
   sc_map_tab_set_connected(&state, false);
   assert(!m->have_fix);
-  sc_map_tab_dispose(&state);
+  /* Destroying the page stops the poll timer and frees its state. */
   gtk_window_set_child(GTK_WINDOW(window), NULL);
   g_object_unref(map);
+  assert(sc_map_state(&state) == 0 && state.map_tab_root == 0);
+  sc_map_tab_dispose(&state); /* a second call does nothing */
   gtk_window_destroy(GTK_WINDOW(window));
   state.core.modules[1].display_name = NULL;
   GtkWidget *unnamed = build_module_subtab(&state, 1u);

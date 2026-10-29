@@ -25,9 +25,17 @@ The work is split between the cores:
 
 There is no RTOS. `start.c` installs a table of `(period, callback)` pairs
 that the core-0 loop calls when due, from about 10 ms for fast sensor reads to
-one second for housekeeping. The VP37 pump belongs to core 1: every control
-step ends by publishing its state behind a sequence counter, and core 0 copies
-that snapshot without a lock. The published words are written and read only
+one second for housekeeping. The VP37 pump belongs to core 1. Its control
+steps run on a fixed grid of `pidTimeUpdate` periods: a step that starts late
+does not move the next deadline, and a step a whole period late starts a new
+grid instead of a burst of catch-up steps. Within `CORE1_VP37_GUARD_US` before
+a deadline core 1 starts no other work (turbo, RPM, the test demand) and waits
+for the deadline from RAM, so the step does not inherit the tail of that work.
+The bench tests record their step announcements on core 1 and core 0 prints
+them; a changed test demand waits for that print, at most
+`STEP_EVENT_APPLY_TIMEOUT_MS`, so the log still shows the announcement before
+the move it announces. Every control step ends by publishing its state behind
+a sequence counter, and core 0 copies that snapshot without a lock. The published words are written and read only
 with relaxed atomic accesses, so an overlapping copy is discarded, never a
 data race, and the control loop never waits for the
 telemetry or for the global values it feeds. The bench telemetry waits on core
@@ -164,6 +172,10 @@ the cumulative update count. Unmatched observations keep the last ready
 estimate alive without changing its value. `scanus` measures ADC collection
 and reduction time; `execus` measures execution of the complete control step.
 Both durations are in microseconds and exclude the wait for the next step.
+`late` is the largest start after a deadline among the last completed window
+of 100 steps, in microseconds and without the steps a whole period late;
+`ovr` counts those steps since the start. The guard of core 1 has to cover
+the `late` values seen on the bench.
 
 ## Current feedback
 

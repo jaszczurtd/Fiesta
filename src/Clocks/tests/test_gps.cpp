@@ -111,6 +111,22 @@ void test_a_valid_fix_keeps_the_link_until_it_expires(void) {
   TEST_ASSERT_FALSE(gps.linked);
 }
 
+// A receiver that loses its fix keeps sending: the link outlives the fix.
+void test_link_outlives_a_lost_fix(void) {
+  sentence("GPRMC,123456,A,5213.7805,N,02100.7406,E,0.0,0.0,261026,,,A");
+  clocks_gps_snapshot_t gps;
+  readGPS(&gps);
+  TEST_ASSERT_TRUE(gps.available);
+  TEST_ASSERT_TRUE(gps.linked);
+  for (uint32_t second = 1u; second <= 2u * GPS_MAX_AGE_MS / 1000u; second++) {
+    hal_mock_set_millis(10000u + second * 1000u);
+    sentence("GPRMC,123457,V,,,,,,,261026,,,N");
+    readGPS(&gps);
+    TEST_ASSERT_TRUE(gps.linked);
+  }
+  TEST_ASSERT_FALSE(gps.available);
+}
+
 void test_position_retains_double_precision_and_utc_seconds(void) {
   fix();
   clocks_gps_snapshot_t gps;
@@ -206,7 +222,8 @@ void test_can_frames_encode_precise_coordinates_speed_and_utc(void) {
   clocks_gps_snapshot_t gps;
   readGPS(&gps);
   uint8_t lat[8], lon[8], utc[8];
-  TEST_ASSERT_EQUAL_INT(HAL_OK, clocksGpsEncode(&gps, lat, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        clocksGpsEncode(&gps, hal_millis(), lat, lon, utc));
   TEST_ASSERT_EQUAL_INT32(52229676, (int32_t)jh_load_be32(lat + 1));
   TEST_ASSERT_EQUAL_INT32(-123123457, (int32_t)jh_load_be32(lon + 1));
   TEST_ASSERT_EQUAL_UINT8(1u, lat[5]);
@@ -216,12 +233,35 @@ void test_can_frames_encode_precise_coordinates_speed_and_utc(void) {
   TEST_ASSERT_EQUAL_UINT32(1793018096u, jh_load_be32(utc + 1));
   TEST_ASSERT_EQUAL_HEX8(1u, utc[5]);
   TEST_ASSERT_EQUAL_HEX8(0u, utc[6] | utc[7]);
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(nullptr, lat, lon, utc));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, nullptr, lon, utc));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, lat, nullptr, utc));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, clocksGpsEncode(&gps, lat, lon, nullptr));
+  // Sent later, both frames move on by the age of the sentence, to the
+  // nearest second.
+  const struct {
+    uint32_t ageMs;
+    uint32_t epoch;
+    uint8_t minute;
+  } later[] = {{499u, 1793018096u, 0x22u},
+               {500u, 1793018097u, 0x22u},
+               {1500u, 1793018098u, 0x22u},
+               {GPS_UTC_MAX_AGE_MS, 1793018098u, 0x22u},
+               {4500u, 1793018101u, 0x23u}};
+  for (const auto &sent : later) {
+    TEST_ASSERT_EQUAL_INT(
+        HAL_OK,
+        clocksGpsEncode(&gps, gps.utcUpdatedMs + sent.ageMs, lat, lon, utc));
+    TEST_ASSERT_EQUAL_UINT32(sent.epoch, jh_load_be32(utc + 1));
+    TEST_ASSERT_EQUAL_HEX8(sent.minute, lon[7]);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        clocksGpsEncode(nullptr, hal_millis(), lat, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        clocksGpsEncode(&gps, hal_millis(), nullptr, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        clocksGpsEncode(&gps, hal_millis(), lat, nullptr, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        clocksGpsEncode(&gps, hal_millis(), lat, lon, nullptr));
   gps.available = gps.utcValid = false;
-  TEST_ASSERT_EQUAL_INT(HAL_OK, clocksGpsEncode(&gps, lat, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        clocksGpsEncode(&gps, hal_millis(), lat, lon, utc));
   const uint8_t zero[8] = {};
   TEST_ASSERT_EQUAL_HEX8_ARRAY(zero, lat, 8u);
   TEST_ASSERT_EQUAL_HEX8_ARRAY(zero, lon, 8u);
@@ -252,7 +292,8 @@ void test_legacy_year_does_not_wrap_or_change_utc(void) {
   gps.available = gps.utcValid = true;
   gps.epochUtc = 2082758400u;
   uint8_t lat[8], lon[8], utc[8];
-  TEST_ASSERT_EQUAL_INT(HAL_OK, clocksGpsEncode(&gps, lat, lon, utc));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        clocksGpsEncode(&gps, gps.utcUpdatedMs, lat, lon, utc));
   TEST_ASSERT_EQUAL_HEX8(0u, lon[5] | lon[6] | lon[7]);
   TEST_ASSERT_EQUAL_UINT32(2082758400u, jh_load_be32(utc + 1));
 }
@@ -327,6 +368,7 @@ int main(void) {
   RUN_TEST(test_missing_receiver_and_no_fix_are_unavailable);
   RUN_TEST(test_receiver_link_needs_valid_sentences_and_expires);
   RUN_TEST(test_a_valid_fix_keeps_the_link_until_it_expires);
+  RUN_TEST(test_link_outlives_a_lost_fix);
   RUN_TEST(test_position_retains_double_precision_and_utc_seconds);
   RUN_TEST(test_invalid_location_clears_even_fresh_utc);
   RUN_TEST(test_gga_time_cannot_replace_the_date_time_pair_from_rmc);

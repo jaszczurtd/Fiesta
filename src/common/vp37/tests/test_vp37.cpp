@@ -6544,6 +6544,180 @@ void test_descent_unwind_telemetry_reports_flag_and_saved_bias(void) {
 }
 #endif
 
+/** @brief A new start of the pump within one test: releases the controller
+ * of the previous setup first, as tearDown() does. */
+static void restartPumpForProcessTests(VP37Pump *pump) {
+  if (pump->pid.controller != NULL) {
+    hal_pid_controller_destroy(pump->pid.controller);
+    pump->pid.controller = NULL;
+  }
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+}
+
+/** @brief One control step at the given hal_micros(), with fresh feedback. */
+static void controlStepAt(VP37Pump *pump, uint32_t us) {
+  hal_mock_set_micros(us);
+  injectAdjRegisterData(4600, 144, 26, ADJ_STATUS_OK);
+  VP37_process(pump);
+}
+
+void test_vp37_control_grid_keeps_the_deadline_after_a_late_start(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  // The first step starts the grid now and counts a whole period.
+  controlStepAt(pump, 100000U);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(5000U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(105000U, pump->controlDueUs);
+  // A step 700 us late measures the real period, but the next deadline stays
+  // on the grid instead of moving by the delay.
+  controlStepAt(pump, 105700U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(700U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(5700U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(110000U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlOverruns);
+  // Nothing runs before the deadline; on it the short period closes the gap.
+  controlStepAt(pump, 109999U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  controlStepAt(pump, 110000U);
+  TEST_ASSERT_EQUAL_UINT32(3U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(4300U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(115000U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlOverruns);
+}
+
+void test_vp37_control_grid_restarts_after_a_whole_period_late(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  controlStepAt(pump, 100000U);
+  // A stall of more than a period: one step, counted, and a new grid from
+  // now instead of a burst of catch-up steps.
+  controlStepAt(pump, 112000U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(7000U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(12000U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(117000U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->controlOverruns);
+  controlStepAt(pump, 116999U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  controlStepAt(pump, 117000U);
+  TEST_ASSERT_EQUAL_UINT32(3U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(122000U, pump->controlDueUs);
+  // Exactly a period late is an overrun as well.
+  controlStepAt(pump, 127000U);
+  TEST_ASSERT_EQUAL_UINT32(4U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(5000U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(132000U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlOverruns);
+}
+
+void test_vp37_control_grid_crosses_the_microsecond_wrap(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  controlStepAt(pump, UINT32_MAX - 100U);
+  TEST_ASSERT_EQUAL_UINT32(4899U, pump->controlDueUs);
+  controlStepAt(pump, 4898U);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->controlSequence);
+  controlStepAt(pump, 5100U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(201U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(5201U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(9899U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlOverruns);
+}
+
+void test_vp37_control_grid_starts_afresh_after_a_stop_and_a_new_start(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  controlStepAt(pump, 100000U);
+  controlStepAt(pump, 105000U);
+  TEST_ASSERT_EQUAL_UINT32(110000U, pump->controlDueUs);
+  VP37_stop(pump);
+  // A stopped pump takes no step, whatever the old grid says.
+  controlStepAt(pump, 110000U);
+  TEST_ASSERT_EQUAL_UINT32(2U, pump->controlSequence);
+  // A new start steps at once, from a grid that begins there.
+  restartPumpForProcessTests(pump);
+  controlStepAt(pump, 300123U);
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->controlSequence);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateUs);
+  TEST_ASSERT_EQUAL_UINT32(5000U, pump->controlDtUs);
+  TEST_ASSERT_EQUAL_UINT32(305123U, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlOverruns);
+}
+
+void test_vp37_control_due_within_reports_the_deadline_margin(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  TEST_ASSERT_FALSE(VP37_controlDueWithin(NULL, 0U, 400U));
+  // Before the first step every moment is due, also one the counter puts
+  // "before" the zero the deadline still holds.
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 0U, 0U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 123456U, 400U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, UINT32_MAX - 1000U, 400U));
+  controlStepAt(pump, 100000U);
+  // Due within the margin, on the deadline and after it; not before.
+  TEST_ASSERT_FALSE(VP37_controlDueWithin(pump, 104599U, 400U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 104600U, 400U));
+  TEST_ASSERT_FALSE(VP37_controlDueWithin(pump, 104999U, 0U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 105000U, 0U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 106000U, 0U));
+  // The same across the counter wrap.
+  restartPumpForProcessTests(pump);
+  controlStepAt(pump, UINT32_MAX - 100U);
+  TEST_ASSERT_FALSE(VP37_controlDueWithin(pump, 4498U, 400U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 4499U, 400U));
+  TEST_ASSERT_TRUE(VP37_controlDueWithin(pump, 4899U, 0U));
+}
+
+void test_vp37_control_late_window_reports_the_last_completed_window(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  controlStepAt(pump, 100000U);
+  // Steps on the grid, three of them late, one of them a whole period late:
+  // the window keeps the largest late start among the regular steps.
+  for (uint32_t step = 2U; step <= VP37_CONTROL_LATE_WINDOW_STEPS; step++) {
+    uint32_t lateUs = 0U;
+    if (step == 10U) {
+      lateUs = 150U;
+    } else if (step == 40U) {
+      lateUs = 320U;
+    } else if (step == 60U) {
+      lateUs = 6000U;
+    } else if (step == 80U) {
+      lateUs = 210U;
+    } else {
+      lateUs = 0U;
+    }
+    controlStepAt(pump, pump->controlDueUs + lateUs);
+    TEST_ASSERT_EQUAL_UINT32(step, pump->controlSequence);
+    if (step < VP37_CONTROL_LATE_WINDOW_STEPS) {
+      // Nothing completed yet: the report still shows the previous window.
+      TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateMaxUs);
+    }
+  }
+  TEST_ASSERT_EQUAL_UINT32(1U, pump->controlOverruns);
+  TEST_ASSERT_EQUAL_UINT32(320U, pump->controlLateMaxUs);
+  TEST_ASSERT_EQUAL_UINT32(0U, pump->controlLateWindowUs);
+  // The next window starts from zero and leaves the report alone.
+  controlStepAt(pump, pump->controlDueUs + 50U);
+  TEST_ASSERT_EQUAL_UINT32(320U, pump->controlLateMaxUs);
+  TEST_ASSERT_EQUAL_UINT32(50U, pump->controlLateWindowUs);
+  controlStepAt(pump, pump->controlDueUs);
+  TEST_ASSERT_EQUAL_UINT32(50U, pump->controlLateWindowUs);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_holding_bias_requires_two_seconds_and_keeps_control_terms);
@@ -6782,6 +6956,12 @@ int main(void) {
       test_vp37_supply_prediction_bounds_both_polarities_and_keeps_voltage_floor);
 
   RUN_TEST(test_vp37_period_skips_duplicate_updates_and_handles_wrap);
+  RUN_TEST(test_vp37_control_grid_keeps_the_deadline_after_a_late_start);
+  RUN_TEST(test_vp37_control_grid_restarts_after_a_whole_period_late);
+  RUN_TEST(test_vp37_control_grid_crosses_the_microsecond_wrap);
+  RUN_TEST(test_vp37_control_grid_starts_afresh_after_a_stop_and_a_new_start);
+  RUN_TEST(test_vp37_control_due_within_reports_the_deadline_margin);
+  RUN_TEST(test_vp37_control_late_window_reports_the_last_completed_window);
   RUN_TEST(test_vp37_pwm_floor_is_visible_to_integrator);
   RUN_TEST(test_vp37_zero_demand_releases_drive_despite_feedback_offset);
   RUN_TEST(test_vp37_zero_demand_finishes_slew_and_resumes_without_stored_pid);
