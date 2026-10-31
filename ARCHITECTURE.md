@@ -116,10 +116,20 @@ inside the DPF through two MCP9600 amplifiers on its own I²C bus.
 The two RP2040 cores split the work. Core 0 receives and sends CAN, measures
 the ABS speed, and drives the gauges, lamps, and buzzer. Core 1 draws the TFT,
 reads the oil sender and both thermocouples, and serves the configurator
-session. The cores exchange copies of their state under a short lock, so
-drawing or a slow I²C read does not hold up a CAN frame. When the CAN
-controller does not answer at start, core 0 tries again every second while
-the display and the gauges run.
+session. The cores exchange copies of their state under a short lock. CAN
+and TFT share SPI; display transfers release it between bounded pixel bands.
+When the CAN controller does not answer at start, core 0 tries again every
+second while the display and the gauges run.
+
+ECU and Clocks use normal retransmission on the main CAN bus, so losing
+arbitration does not discard an update. The HAL bounds each synchronous send
+with a timeout and aborts a transmission that did not finish. ECU retains the
+latest snapshot of each periodic status, throttle and turbo frame and sends
+one pending frame per turn, at least 2 ms after its preceding transmission
+attempt. The core-0 loop gives RPM priority. Sequence numbers follow the actual
+send order; a newer snapshot replaces an unsent one of the same ID.
+High-rate sensor reads and periodic status snapshots retain their configured
+time grid after a late main-loop pass. Expired slots are skipped.
 
 Clocks sends its display brightness, oil pressure, and ABS speed every 50 ms
 and both exhaust temperatures every 250 ms. Each measurement carries a
@@ -246,7 +256,7 @@ smoke test. VP37TestBench does not take part in the configurator protocol.
 
 ### Fiesta_clock
 
-Fiesta_clock keeps UTC in a PCF8563 and sends it once a second as
+Fiesta_clock keeps UTC in a PCF8563 or DS3231 and sends it once a second as
 `CAN_ID_RTC_UPDATE` (`0x130`). The frame has integrity 1 only for trusted UTC;
 otherwise its date and time bytes are zero. A marker in the HAL key-value store
 records that this firmware has set the RTC to UTC. Until then the RTC holds the

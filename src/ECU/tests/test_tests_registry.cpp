@@ -177,8 +177,10 @@ void test_sequence_visits_every_sequenced_test_in_registry_order(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_ALL));
   // The one-shot storage checks run first and never own the demand.
   TEST_ASSERT_EQUAL_STRING("dtc", testsActiveName());
+  testsPrintEvents();
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("kv", testsActiveName());
+  testsPrintEvents();
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("cyclic", testsActiveName());
 
@@ -213,6 +215,44 @@ static void prepareStorage(void) {
   dtcManagerInit();
 }
 
+void test_one_shot_work_is_deferred_to_console_and_cancelled_before_dispatch(
+    void) {
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  prepareStorage();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_set_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, 41U));
+  console("run kv");
+  uint32_t counter = 0U;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(41U, counter);
+  TEST_ASSERT_EQUAL_STRING("kv", testsActiveName());
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(42U, counter);
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(42U, counter);
+  (void)tickTests();
+  TEST_ASSERT_NULL(testsActiveName());
+  console("run kv");
+  console("stop");
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(42U, counter);
+  console("run kv");
+  testsPrintEvents();
+  (void)tickTests();
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_kv_get_u32_ex(TESTS_WORKERS_KV_COUNTER_KEY, &counter));
+  TEST_ASSERT_EQUAL_UINT32(43U, counter);
+  TEST_ASSERT_NULL(testsActiveName());
+}
+
 void test_kv_one_shot_counts_up_and_reports_the_store(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
@@ -223,6 +263,8 @@ void test_kv_one_shot_counts_up_and_reports_the_store(void) {
 
   // From the console, as on the bench: a one-shot that never owns the demand.
   console("run kv");
+  testsPrintEvents();
+  TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_NULL(testsActiveName());
   const tests_workers_kv_result_t *result = testsWorkersKvLastResult();
   TEST_ASSERT_TRUE(result->ok);
@@ -251,6 +293,8 @@ void test_kv_one_shot_names_a_failed_write(void) {
   TEST_ASSERT_TRUE(initTests());
   prepareStorage();
   console("run kv");
+  testsPrintEvents();
+  TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_TRUE(testsWorkersKvLastResult()->ok);
 
   // The write fails half way, as a flash write the coordinator refused did
@@ -418,8 +462,10 @@ void test_skip_advances_the_sequence_and_stop_ends_it(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_ALL));
   // The two storage one-shots pass by themselves before the first profile.
+  testsPrintEvents();
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("kv", testsActiveName());
+  testsPrintEvents();
   TEST_ASSERT_FALSE(tickTests());
   TEST_ASSERT_EQUAL_STRING("cyclic", testsActiveName());
 
@@ -1128,7 +1174,7 @@ void test_research_freeze_is_bounded_profile_gated_and_resettable(void) {
   VP37Pump *pump = preparePump();
   initTests();
   console("X17=1");
-  TEST_ASSERT_EQUAL_UINT8(0U, pump->pid.researchFreezeMask);
+  TEST_ASSERT_EQUAL_UINT8(1U, pump->pid.researchFreezeMask);
   pump->pid.fullRangePrototype = true;
   console("X17=1");
   TEST_ASSERT_EQUAL_UINT8(1U, pump->pid.researchFreezeMask);
@@ -1261,6 +1307,99 @@ static const char *lastTestLine(void) {
   return (found != nullptr) ? found : "";
 }
 
+void test_registry_lifecycle_messages_wait_for_the_console_and_report_overflow(
+    void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL(HAL_OK, startTest(START_TEST_MANUAL));
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(strstr(lastTestLine(), "manual started"));
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL(HAL_OK, stopTests());
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  hal_debug_set_muted(true);
+  testsPrintEvents();
+  hal_debug_set_muted(false);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(strstr(lastTestLine(), "manual result: stopped"));
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+
+  // A stalled console must never prevent the requested stop.
+  for (unsigned i = 0U; i < 12U; ++i) {
+    TEST_ASSERT_EQUAL(HAL_OK, startTest(START_TEST_MANUAL));
+    TEST_ASSERT_EQUAL(HAL_OK, stopTests());
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->demand.requestedPercent);
+  }
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "lifecycle log overflow:"));
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+}
+
+void test_registry_metadata_prints_on_console_without_occupying_control_mailbox(
+    void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  const float previousKp = pump->pid.kp;
+  tickTestsHandleSerialLine("P0.025");
+  hal_mock_serial_reset();
+  // The framed console callback runs while the serial session mutes debug.
+  hal_debug_set_muted(true);
+  tickTestsHandleSerialLine("  LiSt");
+  hal_debug_set_muted(false);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: pot"));
+  TEST_ASSERT_EQUAL_FLOAT(previousKp, pump->pid.kp);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_FLOAT(.025f, pump->pid.kp);
+  hal_mock_serial_reset();
+  (void)tickTests();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  hal_debug_set_muted(true);
+  tickTestsHandleSerialLine("params");
+  testsPrintEvents();
+  hal_debug_set_muted(false);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: "));
+}
+
+void test_default_reset_applies_on_control_core_and_replies_once_per_command(
+    void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  hal_mock_serial_reset();
+  for (unsigned i = 0U; i < 2U; ++i) {
+    pump->pid.kp = .2f;
+    console("R");
+    TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, pump->pid.kp);
+    TEST_ASSERT_NULL(
+        strstr(hal_mock_deb_last_line(), "PID reset to defaults:"));
+  }
+  for (unsigned i = 0U; i < 2U; ++i) {
+    testsPrintEvents();
+    TEST_ASSERT_NOT_NULL(
+        strstr(hal_mock_deb_last_line(), "PID reset to defaults:"));
+    hal_mock_serial_reset();
+  }
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  console("R");
+  TEST_ASSERT_TRUE(initTests());
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+}
+
 void test_step_announcements_are_recorded_by_the_control_core_and_printed_once(
     void) {
   (void)preparePump();
@@ -1351,8 +1490,8 @@ void test_step_announcement_read_gives_up_while_the_control_core_records(void) {
   testsWorkersStepEventReadHookForTest = recordAStepEveryTime;
   testsPrintEvents();
   testsWorkersStepEventReadHookForTest = nullptr;
-  // Core 0 gave up instead of waiting for the control core ...
-  TEST_ASSERT_EQUAL_STRING("", lastTestLine());
+  // Only the pending lifecycle line printed; the torn step was skipped.
+  TEST_ASSERT_EQUAL_STRING("TEST: top started", lastTestLine());
   TEST_ASSERT_GREATER_THAN_UINT32(1U, s_stepEventHookCalls);
   // ... and prints the latest record on its next pass.
   testsPrintEvents();
@@ -1436,10 +1575,18 @@ int main(void) {
   RUN_TEST(test_one_test_owns_the_demand_and_gives_it_back_on_stop);
   RUN_TEST(test_random_draws_a_bounded_and_repeatable_sequence);
   RUN_TEST(test_sequence_visits_every_sequenced_test_in_registry_order);
+  RUN_TEST(
+      test_one_shot_work_is_deferred_to_console_and_cancelled_before_dispatch);
   RUN_TEST(test_kv_one_shot_counts_up_and_reports_the_store);
   RUN_TEST(test_kv_one_shot_names_a_failed_write);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);
+  RUN_TEST(
+      test_registry_metadata_prints_on_console_without_occupying_control_mailbox);
+  RUN_TEST(
+      test_registry_lifecycle_messages_wait_for_the_console_and_report_overflow);
+  RUN_TEST(
+      test_default_reset_applies_on_control_core_and_replies_once_per_command);
   RUN_TEST(
       test_step_announcements_are_recorded_by_the_control_core_and_printed_once);
   RUN_TEST(test_topzero_and_pot_announcements_keep_their_lines);

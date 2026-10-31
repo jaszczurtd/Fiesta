@@ -98,6 +98,18 @@ The [ECU guide](../src/ECU/README.md#bench-image-and-hardware) describes its
 functional tests. Changing assembly or variant changes the artifact path;
 use `config-dump` to confirm the file before selecting it for upload.
 
+Fiesta_clock selects its RTC in `src/Fiesta_clock/hal_project_config.h`:
+`RTC_pcf8563` is the default; `RTC_ds3231` selects the DS3231 at its fixed
+I²C address, 0x68, on the assembly's RTC bus. Select only one. The `DS3231`
+build variant defines `RTC_ds3231` without editing the header:
+
+```bash
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/Fiesta_clock --variant DS3231
+```
+
+Both use the same UTC synchronization and local display time. DS3231 has no
+PCF8563 countdown timer; the application polls time independently of it.
+
 ## Upload and monitor
 
 These commands act on connected hardware:
@@ -108,12 +120,16 @@ src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly r
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
 ```
 
-`upload` checks the USB identity before flashing; `upload-uf2` uses the
-BOOTSEL mass-storage drive. Monitoring uses the module's USB identity,
+`upload` checks the USB identity and requests BOOTSEL over the running
+firmware's CDC port before flashing. `upload-uf2` uses an existing BOOTSEL
+mass-storage drive. Default USB IDs come from the selected target descriptor
+in JaszczurHAL. Module manifests must leave VID/PID to that metadata so changing
+the assembly also selects the correct USB identity.
+Monitoring uses the module's USB identity,
 including stable `/dev/serial/by-id/usb-Jaszczur_Fiesta_*` paths on Linux.
 The corresponding VS Code tasks are `Project: Upload`,
 `Project: Upload (UF2 / BOOTSEL)` and `Project: Serial Monitor`.
-Keybinding references include Ctrl+Shift+2 for upload and Ctrl+Shift+3 for
+Keybinding references include Ctrl+Shift+1 for building, Ctrl+Shift+2 for upload and Ctrl+Shift+3 for
 monitoring; copy the module's reference bindings into your user keybindings.
 
 ## Prepare a configurator manifest

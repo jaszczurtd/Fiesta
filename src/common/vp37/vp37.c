@@ -128,6 +128,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
   self->pid.researchReferenceWeight = 1.0f;
   VP37_resetMotionIntegralGate(self);
+  VP37_resetUpperHolding(self);
   VP37_resetSlowDamping(self);
   self->pid.fullRangePrototype = false;
   self->pid.septemberReference = false;
@@ -323,6 +324,7 @@ void VP37_stop(VP37Pump *self) {
   self->pid.descentIntegralRetainedShare = VP37_DESCENT_INTEGRAL_RETAINED_SHARE;
   self->pid.researchReferenceWeight = 1.0f;
   VP37_resetMotionIntegralGate(self);
+  VP37_resetUpperHolding(self);
   VP37_resetSlowDamping(self);
   VP37_resetCurrentControl(self);
   self->vp37Initialized = false;
@@ -802,6 +804,7 @@ static bool VP37_releaseAtRest(VP37Pump *self) {
     hal_pid_controller_reset(self->pid.controller);
     self->pid.terms = (hal_pid_terms_t){0};
     VP37_resetMotionIntegralGate(self);
+    VP37_resetUpperHolding(self);
     VP37_resetSlowDamping(self);
     self->feedforward.pwm = 0.0f;
     self->feedforward.riseBlend = 0.0f;
@@ -881,10 +884,11 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool targetSettled =
       cycle->stationaryTarget && (self->demand.desired == self->demand.target);
   VP37_updateDerivativeGain(self, targetSettled);
+  self->pid.integralDeadbandHz = VP37_prepareUpperHolding(
+      self, targetSettled, cycle->dt, self->pid.integralDeadbandHz);
   VP37_updateIntegralHold(self, targetSettled);
-  const bool diagnosticHold = self->pid.fullRangePrototype &&
-                              ((self->pid.researchFreezeMask &
-                                VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U);
+  const bool diagnosticHold =
+      (self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U;
   const bool motionHold = VP37_motionIntegralHold(
       self, targetSettled && (cycle->previousDesired == self->demand.desired),
       cycle->dt);

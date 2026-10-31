@@ -164,9 +164,9 @@ typedef struct {
   bool sequenced;      /**< Part of the "run all" sequence. */
   bool scSupported;    /**< Offered to SerialConfigurator; a test that never
                             ends or leaves a fault behind is not. */
-  void (*start)(void); /**< Arms the test; NULL for a pure one-shot. */
-  float (*step)(bool *outFinished); /**< Demand per step; NULL finishes at
-                                       once, which is how a one-shot ends. */
+  void (*start)(void); /**< Optional initializer; one-shots run on core 0. */
+  float (*step)(bool *outFinished); /**< Demand per control step; NULL finishes
+                                       after start has run on core 0. */
   const char *(*result)(void); /**< Result token once finished; NULL reports
                                     SC_TEST_RESULT_DONE. */
   size_t (*progress)(struct sc_command_test_field_s *fields,

@@ -11,6 +11,8 @@ ROOT = MODULE.parents[1]
 
 
 class ClockTimeTests(unittest.TestCase):
+    defines = ()
+
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="fiesta-clock-time-test-")
@@ -24,10 +26,10 @@ class ClockTimeTests(unittest.TestCase):
         sources += [HAL / "src/hal" / name for name in
                     ("rtc/hal_rtc.cpp", "rtc/jh_rtc_i2c_provider.cpp",
                      "impl/rp2040/jh_rp_rtc_provider.cpp",
-                     "rtc/pcf8563/pcf8563.cpp", "time/hal_time.cpp",
+                     "rtc/pcf8563/pcf8563.cpp", "rtc/ds3231/ds3231.cpp", "time/hal_time.cpp",
                      "time/jh_calendar.c")]
         sources.append(MODULE / "tests/test_time.cpp")
-        cls.binary = build_clock_binary(build, "clock_time", sources)
+        cls.binary = build_clock_binary(build, "clock_time", sources, defines=cls.defines)
 
     def run_scenario(self, name):
         self.assertEqual(run_command([str(self.binary), name]).stdout, "PASS\n")
@@ -70,6 +72,10 @@ class ClockTimeTests(unittest.TestCase):
 
     def test_air_temperature_of_a_missing_sensor(self):
         self.run_scenario("air_temp_missing")
+
+
+class Ds3231TimeTests(ClockTimeTests):
+    defines = ("RTC_ds3231",)
 
 
 if __name__ == "__main__":

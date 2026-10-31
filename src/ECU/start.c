@@ -34,10 +34,8 @@ ecu_context_t *getECUContext(void) { return &s_ctx; }
 typedef struct {
   hal_soft_timer_t timerEverySecondHandle;
   hal_soft_timer_t timerMediumHandle;
-  hal_soft_timer_t timerHighHandle;
   hal_soft_timer_t timerThrottleHandle;
   hal_soft_timer_t timerDebugHandle;
-  hal_soft_timer_t timerCANUpdateHandle;
   hal_soft_timer_t timerCANLoopHandle;
   hal_soft_timer_t timerCANCheckHandle;
   int *wValuesPtr;
@@ -47,6 +45,8 @@ typedef struct {
   bool core1InitErrorReported;
   bool resetReasonReported;
   uint32_t rebootUtcVal; // trusted UTC before a watchdog reboot, 0 = unknown
+  uint32_t highValuesPhaseMs;
+  uint32_t canStatusPhaseMs;
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   uint32_t vp37DebugLastMs;
   uint32_t vp37CurrentLastMs;
@@ -76,10 +76,8 @@ static VP37TraceSample s_vp37TraceSamples[4];
 static start_runtime_state_t s_startRuntimeState = {
     .timerEverySecondHandle = NULL,
     .timerMediumHandle = NULL,
-    .timerHighHandle = NULL,
     .timerThrottleHandle = NULL,
     .timerDebugHandle = NULL,
-    .timerCANUpdateHandle = NULL,
     .timerCANLoopHandle = NULL,
     .timerCANCheckHandle = NULL,
     .wValuesPtr = NULL,
@@ -155,16 +153,42 @@ static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
      (uint32_t)SECOND},
     {&s_startRuntimeState.timerMediumHandle, readMediumValues,
      (uint32_t)(SECOND / MEDIUM_TIME_ONE_SECOND_DIVIDER)},
-    {&s_startRuntimeState.timerHighHandle, readHighValues,
-     (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER)},
     {&s_startRuntimeState.timerDebugHandle, updateValsForDebug,
      (uint32_t)DEBUG_UPDATE},
-    {&s_startRuntimeState.timerCANUpdateHandle, CAN_updaterecipients_01,
-     (uint32_t)CAN_UPDATE_RECIPIENTS},
     {&s_startRuntimeState.timerCANLoopHandle, canMainLoop,
      (uint32_t)CAN_MAIN_LOOP_READ_INTERVAL},
     {&s_startRuntimeState.timerCANCheckHandle, canCheckConnection,
      (uint32_t)CAN_CHECK_CONNECTION}};
+
+/* Keep the I/O phase after a late poll, serving only the newest due slot. */
+static bool start_periodicIOSlot(uint32_t nowMs, uint32_t *phaseMs,
+                                 uint32_t intervalMs) {
+  if (!hal_elapsed_u32(nowMs, *phaseMs, intervalMs)) {
+    return false;
+  }
+  const uint32_t elapsed = nowMs - *phaseMs;
+  *phaseMs += (elapsed / intervalMs) * intervalMs;
+  return true;
+}
+
+static void start_resetFastIOCadence(void) {
+  const uint32_t nowMs = hal_millis();
+  s_startRuntimeState.highValuesPhaseMs = nowMs;
+  s_startRuntimeState.canStatusPhaseMs = nowMs;
+}
+
+static void start_tickFastIO(void) {
+  const uint32_t nowMs = hal_millis();
+  if (start_periodicIOSlot(
+          nowMs, &s_startRuntimeState.highValuesPhaseMs,
+          (uint32_t)(SECOND / FREQUENT_TIME_ONE_SECOND_DIVIDER))) {
+    readHighValues();
+  }
+  if (start_periodicIOSlot(nowMs, &s_startRuntimeState.canStatusPhaseMs,
+                           (uint32_t)CAN_UPDATE_RECIPIENTS)) {
+    CAN_updaterecipients_01();
+  }
+}
 
 /**
  * @brief Configure the shared soft-timer table used by core 0.
@@ -172,6 +196,7 @@ static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
 void setupTimers(void) {
   hal_soft_timer_setup_table(startTimerInitTable, COUNTOF(startTimerInitTable),
                              watchdog_feed, CORE_OPERATION_DELAY);
+  start_resetFastIOCadence();
 }
 
 /**
@@ -488,6 +513,7 @@ static void runCore0(void) {
   CAN_updaterecipients_02();
   s_startPersistentState.statusVariable0Val = 3;
   hal_soft_timer_tick_table(startTimerInitTable, COUNTOF(startTimerInitTable));
+  start_tickFastIO();
   s_startPersistentState.statusVariable0Val = 4;
   obdLoop();
   s_startPersistentState.statusVariable0Val = 5;
@@ -498,6 +524,7 @@ static void runCore0(void) {
   heatedWindshields_process(getHeatedWindshieldsInstance());
   s_startPersistentState.statusVariable0Val = 8;
   configSessionTick();
+  canServicePeriodic();
   s_startPersistentState.statusVariable0Val = 9;
 #ifdef VP37
   vp37AdapterPublish(&s_ctx.injectionPump);
@@ -507,6 +534,7 @@ static void runCore0(void) {
   testsPrintEvents();
   // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
+  canServicePeriodic();
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
     // Format right after a step, never during one (see
@@ -532,10 +560,14 @@ static void runCore0(void) {
     }
   }
 #endif
+  canServicePeriodic();
   m_mutex_enter_blocking(turboStateMutex);
   Turbo_showDebug(&s_ctx.turbo);
   m_mutex_exit(turboStateMutex);
 
+  // Bench formatting can outlast a periodic TX slot. Service CAN again
+  // before idling so status frames keep their rate without a wire burst.
+  canServicePeriodic();
   hal_idle();
   hal_delay_ms(CORE_OPERATION_DELAY);
 }
@@ -598,9 +630,10 @@ static void start_takeOverVP37(void) {
 /**
  * @brief Spin until the VP37 deadline when it is due within the guard time.
  * @param pump Pump whose deadline is waited for.
- * @note In RAM, so the wait itself does not depend on the flash cache.
+ * @note Retain DMA blocks during the outer guard. The final short spin is
+ *       in RAM, so that part does not depend on the flash cache.
  */
-static void HAL_RAM_FUNC(start_waitForVP37Deadline)(const VP37Pump *pump) {
+static void HAL_RAM_FUNC(start_waitForVP37Deadline)(VP37Pump *pump) {
   // Busy wait while the deadline is within the guard but not reached yet;
   // hal_micros() also runs from RAM.
   bool waiting = true;
@@ -608,6 +641,16 @@ static void HAL_RAM_FUNC(start_waitForVP37Deadline)(const VP37Pump *pump) {
     const uint32_t nowUs = hal_micros();
     waiting = VP37_controlDueWithin(pump, nowUs, CORE1_VP37_GUARD_US) &&
               !VP37_controlDueWithin(pump, nowUs, 0U);
+    if (waiting && !VP37_controlDueWithin(pump, nowUs, CORE1_VP37_SPIN_US)) {
+      VP37_process(pump);
+    }
+  }
+}
+
+static void HAL_RAM_FUNC(start_retainVP37BetweenTasks)(VP37Pump *pump) {
+  // Leave the due position step until after the test/application demand.
+  if (!VP37_controlDueWithin(pump, hal_micros(), CORE1_VP37_GUARD_US)) {
+    VP37_process(pump);
   }
 }
 #endif
@@ -643,9 +686,13 @@ static void runCore1(void) {
     hal_mutex_lock(turboStateMutex);
     Turbo_process(&s_ctx.turbo);
     hal_mutex_unlock(turboStateMutex);
+#ifdef VP37
+    start_retainVP37BetweenTasks(&s_ctx.injectionPump);
+#endif
     s_startPersistentState.statusVariable1Val = 2;
     RPM_process(getRPMInstance());
 #ifdef VP37
+    start_retainVP37BetweenTasks(&s_ctx.injectionPump);
     // A running functional test owns the demand; the application produces it
     // otherwise, including every build without tests.
     if (!tickTests()) {

@@ -24,7 +24,7 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
 def identity(product: str, hint: str) -> dict:
     return {"enabled": True, "usbManufacturer": "Jaszczur", "usbProduct": product,
-            "usbVid": "0x2e8a", "usbPid": "0x000a", "byIdHint": hint}
+            "byIdHint": hint}
 
 
 BASE_MODULES = [
@@ -206,6 +206,8 @@ class RegistryRulesTests(unittest.TestCase):
     def test_usb_identity_rules(self) -> None:
         for field, value, pattern in (
             ("usbVid", "0x1234", "VID/PID"),
+            ("usbVid", "0x2e8a", "inherited from HAL"),
+            ("usbPid", "0x000a", "inherited from HAL"),
             ("usbProduct", "ECU", "usbProduct"),
             ("byIdHint", "ECU", "byIdHint must start"),
         ):

@@ -3129,6 +3129,22 @@ void test_vp37_upper_feedforward_flattens_without_changing_position_target(
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, pump->demand.target);
 }
 
+void test_upper_reference_increase_keeps_positive_incremental_drive(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  pump->feedback.adjustMin = 0;
+  pump->feedback.adjustMax = 10000;
+  pump->feedforward.riseBlend = 0.0f;
+  pump->feedforward.fallBlend = 0.0f;
+  float previous = -INFINITY;
+  for (int32_t position = 7500; position <= 9000; ++position) {
+    const float drive =
+        VP37_feedForward(pump, position) + .05f * (float)(position - 7500);
+    TEST_ASSERT_TRUE(drive >= previous);
+    previous = drive;
+  }
+}
+
 void test_vp37_motion_feedforward_brakes_when_upper_ramp_stops(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
@@ -3906,6 +3922,26 @@ void test_vp37_upper_derivative_blend_uses_elapsed_control_time(void) {
   TEST_ASSERT_EQUAL_UINT32(5000U, pump->pidDtUs);
   TEST_ASSERT_FLOAT_WITHIN(.000001f, 1.0f / 11.0f, pump->pid.topDBlend);
   TEST_ASSERT_FLOAT_WITHIN(.000001f, .002f / 11.0f, pump->pid.effectiveKd);
+}
+
+void test_vp37_upper_derivative_requires_an_explicit_gain(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.topKd);
+  pump->demand.atRest = false;
+  pump->demand.desiredPosition =
+      (float)pump->feedback.adjustMin +
+      .9f * (float)(pump->feedback.adjustMax - pump->feedback.adjustMin);
+  pump->pidDtUs = 5000U;
+  for (unsigned i = 0U; i < 200U; ++i) {
+    VP37_updateDerivativeGain(pump, true);
+  }
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.effectiveKd);
+  pump->pid.topKd = .001f;
+  for (unsigned i = 0U; i < 200U; ++i) {
+    VP37_updateDerivativeGain(pump, true);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.000001f, .001f, pump->pid.effectiveKd);
 }
 
 void test_vp37_upper_derivative_survives_62ms_target_updates_without_steps(
@@ -4822,12 +4858,10 @@ void test_full_range_integral_recovers_above_old_cap_and_respects_output(void) {
   TEST_ASSERT_FALSE(VP37_isReady(pump));
 }
 
-void test_research_integral_hold_keeps_bias_and_zero_still_releases(void) {
+static void verifyResearchIntegralHold(bool fullRange) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
-  TEST_ASSERT_EQUAL_INT(
-      HAL_ESTATE, VP37_setTuning(pump, VP37_TUNING_RESEARCH_FREEZE, 1.0f));
-  pump->pid.fullRangePrototype = true;
+  pump->pid.fullRangePrototype = fullRange;
   pump->pid.integralOverride = 120.0f;
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
   for (uint32_t i = 1U; i <= 200U; ++i) {
@@ -4859,11 +4893,18 @@ void test_research_integral_hold_keeps_bias_and_zero_still_releases(void) {
   TEST_ASSERT_EQUAL_UINT8(0U, pump->pid.researchFreezeMask);
 }
 
-void test_research_drive_hold_observes_without_changing_estimate_or_scale(
-    void) {
+void test_research_integral_hold_keeps_bias_and_zero_still_releases(void) {
+  verifyResearchIntegralHold(true);
+}
+
+void test_normal_integral_hold_keeps_bias_and_zero_still_releases(void) {
+  verifyResearchIntegralHold(false);
+}
+
+static void verifyResearchDriveHold(bool fullRange) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
-  pump->pid.fullRangePrototype = true;
+  pump->pid.fullRangePrototype = fullRange;
   pump->pid.integralOverride = 120.0f;
   pump->thermal.driveCompensationEnabled = true;
   TEST_ASSERT_EQUAL_INT(
@@ -4895,6 +4936,15 @@ void test_research_drive_hold_observes_without_changing_estimate_or_scale(
   VP37_stop(pump);
   TEST_ASSERT_EQUAL_UINT8(0U, pump->pid.researchFreezeMask);
   TEST_ASSERT_EQUAL_INT32(0, pump->output.finalPWM);
+}
+
+void test_research_drive_hold_observes_without_changing_estimate_or_scale(
+    void) {
+  verifyResearchDriveHold(true);
+}
+
+void test_normal_drive_hold_observes_without_changing_estimate_or_scale(void) {
+  verifyResearchDriveHold(false);
 }
 
 static void verifyMotionIntegralApproach(int32_t direction,
@@ -5167,7 +5217,8 @@ static void verifySlowDampingAuthority(float direction) {
   for (size_t i = 0U; i < COUNTOF(pump->pid.slowDampingVelocity); ++i) {
     pump->pid.slowDampingVelocity[i] = -direction * 10000.0f;
   }
-  pump->pid.error = (int32_t)(direction * 1000.0f);
+  // P plus the bounded D must still exceed either total-output limit.
+  pump->pid.error = (int32_t)(direction * 1200.0f);
   pump->pid.negativeLimit = -60.0f;
   pump->pid.upperLimit = 60.0f;
   TEST_ASSERT_EQUAL(HAL_OK, VP37_stepDampedCorrection(pump, .005f, 0.0f,
@@ -5624,6 +5675,423 @@ void test_ramp_damping_telemetry_reports_the_selected_mode(void) {
   VP37_showDebug(pump, &snapshot);
 }
 #endif
+
+static VP37Pump *prepareUpperHolding(int32_t target = 9000) {
+  VP37Pump *pump = vp37TestPump();
+  prepareReferencePump(pump, 1.0f, target);
+  pump->pid.fullRangePrototype = false;
+  pump->demand.atRest = false;
+  pump->demand.target = target;
+  pump->feedback.fresh = true;
+  pump->feedback.readStatus = HAL_OK;
+  pump->currentControl.enabled = true;
+  pump->thermal.driveCompensationEnabled = true;
+  pump->thermal.driveCompensationUsed = true;
+  pump->thermal.driveResistanceReady = true;
+  pump->feedforward.mapTrimEnabled = false;
+  pump->pid.error = 8;
+  pump->feedback.position = target - 8;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 50.0f, target));
+  hal_pid_controller_reset(pump->pid.controller);
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pid_controller_step_ex(
+                                pump->pid.controller, 8.0f, (float)(target - 8),
+                                .005f, 50.0f, &pump->pid.terms));
+  float applied = 0.0f;
+  TEST_ASSERT_EQUAL(
+      HAL_OK, hal_pid_controller_shift_integral_ex(pump->pid.controller, -30.0f,
+                                                   &applied, &pump->pid.terms));
+  TEST_ASSERT_EQUAL_FLOAT(-30.0f, applied);
+  pump->pid.correction = pump->pid.terms.output;
+  return pump;
+}
+
+void test_upper_holding_quiet_window_forgets_motion_older_than_its_window(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  for (unsigned i = 0U; i < 400U; ++i) {
+    pump->feedback.position = (i % 40U) < 20U ? 8800 : 9200;
+    (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  }
+  TEST_ASSERT_GREATER_THAN(225.0f, pump->pid.upperHoldingVariance);
+  pump->feedback.position = 9000;
+  for (unsigned i = 0U; i < 200U; ++i) {
+    (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 9000.0f, pump->pid.upperHoldingMean);
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 0.0f, pump->pid.upperHoldingVariance);
+}
+
+void test_upper_holding_quiet_window_rejects_motion_since_its_last_publication(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  pump->feedback.position = 9000;
+  for (unsigned i = 0U; i < 740U; ++i) {
+    (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.01f, 0.0f, pump->pid.upperHoldingVariance);
+  // A previously quiet completed window must not admit a bias update now.
+  pump->feedback.position = 9240;
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  TEST_ASSERT_GREATER_THAN_FLOAT(VP37_UPPER_HOLD_QUIET_VARIANCE,
+                                 pump->pid.upperHoldingVariance);
+}
+
+void test_upper_holding_bias_keeps_its_slow_gain_at_the_blend_start(void) {
+  VP37Pump *pump = prepareUpperHolding(8550);
+  pump->feedback.position = 8450;
+  pump->pid.error = 100;
+  pump->pid.upperHoldingElapsed = 3.0f;
+  pump->pid.upperHoldingBiasElapsed = 1.5f;
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  float weight = 0.0f;
+  (void)VP37_referencePotential(pump, 8550.0f, &weight);
+  // Isolate bias adaptation from the paired transfer of a gain increase.
+  pump->pid.upperHoldingExtraKp = .1f * weight;
+  const float before = pump->pid.terms.integral;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 8550));
+  // Ki .2 * holding share .05 * 1.5s * (100-12)Hz, also near 85%.
+  TEST_ASSERT_FLOAT_WITHIN(.001f, before + 1.32f, pump->pid.terms.integral);
+}
+
+void test_upper_holding_capture_delay_follows_the_existing_upper_blend(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  TEST_ASSERT_EQUAL_FLOAT(12.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  (void)VP37_prepareUpperHolding(pump, false, .005f, 192.0f);
+  pump->demand.target = 8550;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  pump->pid.upperHoldingElapsed = 2.69f;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  pump->pid.upperHoldingElapsed = 2.71f;
+  TEST_ASSERT_EQUAL_FLOAT(12.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+}
+
+void test_upper_holding_preserves_arrival_deadband_and_confirmation_before_settle(
+    void) {
+  VP37Pump *pump = prepareUpperHolding(8550);
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  pump->pid.integralDeadbandHz = 192.0f;
+  pump->pid.error = 10;
+  pump->pid.integralHoldMeanError = 100.0f;
+  pump->pidDtUs = 5000U;
+  hal_mock_set_millis(2000U);
+  VP37_updateIntegralHold(pump, true);
+  hal_mock_set_millis(2007U);
+  VP37_updateIntegralHold(pump, true);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  pump->pid.integralDeadbandHz =
+      VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, pump->pid.integralDeadbandHz);
+  hal_mock_set_millis(2014U);
+  VP37_updateIntegralHold(pump, true);
+  hal_mock_set_millis(2021U);
+  VP37_updateIntegralHold(pump, true);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+}
+
+void test_upper_holding_preserves_PD_and_ordinary_arrival_integration(void) {
+  VP37Pump *pump = prepareUpperHolding(8550);
+  const float integral = pump->pid.terms.integral;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  TEST_ASSERT_TRUE(pump->pid.upperHoldingActive);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 8550));
+  TEST_ASSERT_EQUAL_FLOAT(integral, pump->pid.terms.integral);
+  TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.terms.proportional);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.terms.derivative);
+  pump->pid.error = 70;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 8550));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, integral + .058f, pump->pid.terms.integral);
+  TEST_ASSERT_EQUAL_FLOAT(3.5f, pump->pid.terms.proportional);
+  pump->feedback.position += 8;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 8550));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -1.0f, pump->pid.terms.derivative);
+}
+
+void test_native_upper_holding_keeps_the_research_motion_gate_disabled(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  TEST_ASSERT_TRUE(pump->pid.upperHoldingActive);
+  TEST_ASSERT_FALSE(VP37_motionIntegralHold(pump, true, .005f));
+  pump->feedback.position += 100;
+  TEST_ASSERT_FALSE(VP37_motionIntegralHold(pump, true, .005f));
+  TEST_ASSERT_FALSE(pump->pid.motionIntegralReady);
+}
+
+void test_upper_holding_preserves_lower_moving_and_research_profiles(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  TEST_ASSERT_EQUAL_FLOAT(12.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  TEST_ASSERT_TRUE(pump->pid.upperHoldingActive);
+  pump->feedback.fresh = false;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  TEST_ASSERT_FALSE(pump->pid.upperHoldingActive);
+  pump->feedback.fresh = true;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, false, .005f, 192.0f));
+  pump->demand.target = 7500;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  TEST_ASSERT_FALSE(pump->pid.upperHoldingActive);
+  pump->demand.target = 9000;
+  pump->pid.fullRangePrototype = true;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  pump->pid.fullRangePrototype = false;
+  pump->pid.researchFreezeMask = 1U;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, true, .005f, 192.0f));
+  TEST_ASSERT_FALSE(pump->pid.upperHoldingActive);
+}
+
+void test_upper_holding_limits_complete_command_and_releases_on_new_demand(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.error = -100;
+  pump->pid.negativeLimit = -20.0f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_EQUAL_FLOAT(-20.0f, pump->pid.terms.output);
+  TEST_ASSERT_EQUAL_FLOAT(-30.0f, pump->pid.terms.integral);
+  TEST_ASSERT_TRUE(pump->pid.terms.saturated_low);
+  pump->demand.target = 8000;
+  TEST_ASSERT_EQUAL_FLOAT(192.0f,
+                          VP37_prepareUpperHolding(pump, false, .005f, 192.0f));
+  TEST_ASSERT_FALSE(pump->pid.upperHoldingActive);
+}
+
+void test_upper_holding_stiffens_without_a_drive_step_and_restores_moving_gain(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  hal_pid_controller_set_kd(pump->pid.controller, 0.0f);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.error = 8;
+  pump->feedback.position = 8992;
+  const float before = pump->pid.terms.integral;
+  pump->pid.upperHoldingMean = (float)pump->feedback.position;
+  for (unsigned i = 0U; i < 400U; ++i) {
+    (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+    TEST_ASSERT_EQUAL(HAL_OK,
+                      VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+    TEST_ASSERT_FLOAT_WITHIN(.0002f, before + .4f, pump->pid.terms.output);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .01f, pump->pid.upperHoldingExtraKp);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, before - .08f, pump->pid.terms.integral);
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .06f, pump->pid.referenceKp);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0002f, before + .4f, pump->pid.terms.output);
+  (void)VP37_prepareUpperHolding(pump, false, .005f, 192.0f);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0002f, before + .4f, pump->pid.terms.output);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingExtraKp);
+  TEST_ASSERT_EQUAL_FLOAT(.05f, pump->pid.referenceKp);
+}
+
+void test_upper_holding_captures_integral_early_without_the_legacy_offset_gate(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  pump->pid.upperHoldingActive = true;
+  pump->pid.upperHoldingCaptureReady = true;
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  pump->pid.integralDeadbandHz = 12.0f;
+  pump->pid.error = 10;
+  pump->pid.integralHoldMeanError = 100.0f;
+  pump->pidDtUs = 5000U;
+  hal_mock_set_millis(2000U);
+  VP37_updateIntegralHold(pump, true);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+  hal_mock_set_millis(2007U);
+  VP37_updateIntegralHold(pump, true);
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  TEST_ASSERT_EQUAL_UINT32(VP37_INTEGRAL_HOLD_CONFIRM_MS,
+                           pump->pid.integralHoldConfirmMs);
+  pump->pid.error = 20;
+  for (unsigned i = 1U; i <= 400U; ++i) {
+    hal_mock_set_millis(2007U + i * 5U);
+    VP37_updateIntegralHold(pump, true);
+  }
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  VP37_updateIntegralHold(pump, false);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+  pump->pid.upperHoldingActive = false;
+  pump->pid.error = 10;
+  pump->pid.integralHoldMeanError = 100.0f;
+  VP37_updateIntegralHold(pump, true);
+  hal_mock_set_millis(4015U);
+  VP37_updateIntegralHold(pump, true);
+  TEST_ASSERT_FALSE(pump->pid.integralHold);
+}
+
+void test_upper_holding_gain_waits_for_a_quiet_interval_and_limits_each_transfer(
+    void) {
+  VP37Pump *pump = prepareUpperHolding();
+  hal_pid_controller_set_kd(pump->pid.controller, 0.0f);
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  pump->pid.upperHoldingVariance = 400.0f;
+  pump->pid.upperHoldingBiasElapsed = 1.5f;
+  pump->pid.error = 500;
+  pump->feedback.position = 8500;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 500.0f, 9000));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingExtraKp);
+  pump->pid.upperHoldingVariance = 0.0f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 500.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .005f, pump->pid.upperHoldingExtraKp);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -32.5f, pump->pid.terms.integral);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -5.0f, pump->pid.terms.output);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingBiasElapsed);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 500.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .005f, pump->pid.upperHoldingExtraKp);
+}
+
+void test_upper_holding_stiffness_respects_integral_and_output_headroom(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.error = 100;
+  pump->pid.negativeLimit = -20.0f;
+  pump->pid.upperHoldingBiasElapsed = 1.5f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingExtraKp);
+  TEST_ASSERT_EQUAL_FLOAT(-30.0f, pump->pid.terms.integral);
+  TEST_ASSERT_EQUAL_FLOAT(-20.0f, pump->pid.terms.output);
+  TEST_ASSERT_TRUE(pump->pid.terms.saturated_low);
+  pump->pid.negativeLimit = -220.0f;
+  pump->pid.upperHoldingVariance = 400.0f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.integralInput);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -25.0f, pump->pid.terms.output);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f,
+                           -30.0f - 100.0f * pump->pid.upperHoldingExtraKp,
+                           pump->pid.terms.integral);
+  VP37_resetUpperHolding(pump);
+  TEST_ASSERT_FALSE(pump->pid.upperHoldingActive);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingElapsed);
+  pump->pid.upperHoldingExtraKp = .1f;
+  pump->pid.error = -100;
+  hal_pid_controller_set_max_integral(pump->pid.controller, 150.0f);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingExtraKp);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -30.0f, pump->pid.terms.integral);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -35.0f, pump->pid.terms.output);
+}
+
+void test_upper_holding_bias_waits_until_the_bumpless_gain_ramp_finishes(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  hal_pid_controller_set_kd(pump->pid.controller, 0.0f);
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  pump->pid.upperHoldingMean = 8900.0f;
+  pump->pid.upperHoldingVariance = 0.0f;
+  pump->pid.error = 100;
+  pump->feedback.position = 8900;
+  const float before = pump->pid.terms.integral;
+  const float drive = before + pump->pid.kp * (float)pump->pid.error;
+  unsigned transfers = 0U;
+  // Every paired P/I change preserves force. A concurrent bias step would
+  // add 1.32 PWM here and defeat that transfer's purpose.
+  while (pump->pid.upperHoldingExtraKp < .09999f && transfers < 20U) {
+    pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+    TEST_ASSERT_EQUAL(HAL_OK,
+                      VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+    TEST_ASSERT_FLOAT_WITHIN(.001f, drive, pump->pid.terms.output);
+    TEST_ASSERT_FLOAT_WITHIN(.001f,
+                             before - pump->pid.upperHoldingExtraKp * 100.0f,
+                             pump->pid.terms.integral);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingBiasElapsed);
+    ++transfers;
+  }
+  TEST_ASSERT_LESS_THAN_UINT(20U, transfers);
+  TEST_ASSERT_FLOAT_WITHIN(.00001f, .1f, pump->pid.upperHoldingExtraKp);
+  const float acquired = pump->pid.terms.integral;
+  // With unchanged gain a later quiet interval still corrects the offset.
+  pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, acquired + 1.32f, pump->pid.terms.integral);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, drive + 1.32f, pump->pid.terms.output);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingBiasElapsed);
+}
+
+void test_upper_holding_bias_is_a_bounded_step_between_quiet_intervals(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  hal_pid_controller_set_kd(pump->pid.controller, 0.0f);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.upperHoldingExtraKp = .1f;
+  pump->pid.upperHoldingMean = 8900.0f;
+  pump->pid.upperHoldingBiasElapsed = 1.49f;
+  pump->pid.error = 100;
+  pump->feedback.position = 8900;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -30.0f, pump->pid.terms.integral);
+  pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -28.68f, pump->pid.terms.integral);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.upperHoldingBiasElapsed);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -28.68f, pump->pid.terms.integral);
+  pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+  pump->pid.upperHoldingVariance = 400.0f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -28.68f, pump->pid.terms.integral);
+  pump->pid.upperHoldingVariance = 0.0f;
+  pump->pid.upperHoldingMean = 8000.0f;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 12.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -25.68f, pump->pid.terms.integral);
+}
+
+void test_upper_holding_bias_corrects_offset_while_continuous_I_is_held(void) {
+  VP37Pump *pump = prepareUpperHolding();
+  hal_pid_controller_set_kd(pump->pid.controller, 0.0f);
+  (void)VP37_prepareUpperHolding(pump, true, .005f, 192.0f);
+  pump->pid.upperHoldingElapsed = VP37_UPPER_HOLD_SETTLE_S;
+  pump->pid.upperHoldingExtraKp = .1f;
+  pump->pid.upperHoldingMean = 8900.0f;
+  pump->pid.upperHoldingVariance = 0.0f;
+  pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+  pump->pid.integralHold = true;
+  pump->pid.error = 100;
+  pump->feedback.position = 8900;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_stepDampedCorrection(pump, .005f, 100.0f, 9000));
+  TEST_ASSERT_TRUE(pump->pid.integralHold);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.integralInput);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -28.68f, pump->pid.terms.integral);
+  pump->pid.upperHoldingBiasElapsed = VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+  pump->pid.upperHoldingMean = 9000.0f;
+  pump->pid.error = 0;
+  pump->feedback.position = 9000;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_stepDampedCorrection(pump, .005f, 0.0f, 9000));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, -28.68f, pump->pid.terms.integral);
+}
 
 static VP37Pump *prepareUpperDeadband(void) {
   VP37Pump *pump = vp37TestPump();
@@ -6771,6 +7239,29 @@ int main(void) {
   RUN_TEST(test_ramp_braking_requires_the_full_profile);
   RUN_TEST(test_ramp_braking_switch_requires_released_zero_and_resets);
 
+  RUN_TEST(
+      test_upper_holding_quiet_window_forgets_motion_older_than_its_window);
+  RUN_TEST(
+      test_upper_holding_quiet_window_rejects_motion_since_its_last_publication);
+  RUN_TEST(test_upper_holding_bias_keeps_its_slow_gain_at_the_blend_start);
+  RUN_TEST(test_upper_holding_capture_delay_follows_the_existing_upper_blend);
+  RUN_TEST(
+      test_upper_holding_preserves_arrival_deadband_and_confirmation_before_settle);
+  RUN_TEST(test_upper_holding_preserves_PD_and_ordinary_arrival_integration);
+  RUN_TEST(test_native_upper_holding_keeps_the_research_motion_gate_disabled);
+  RUN_TEST(test_upper_holding_preserves_lower_moving_and_research_profiles);
+  RUN_TEST(
+      test_upper_holding_limits_complete_command_and_releases_on_new_demand);
+  RUN_TEST(
+      test_upper_holding_stiffens_without_a_drive_step_and_restores_moving_gain);
+  RUN_TEST(test_upper_holding_stiffness_respects_integral_and_output_headroom);
+  RUN_TEST(
+      test_upper_holding_captures_integral_early_without_the_legacy_offset_gate);
+  RUN_TEST(
+      test_upper_holding_gain_waits_for_a_quiet_interval_and_limits_each_transfer);
+  RUN_TEST(test_upper_holding_bias_waits_until_the_bumpless_gain_ramp_finishes);
+  RUN_TEST(test_upper_holding_bias_is_a_bounded_step_between_quiet_intervals);
+  RUN_TEST(test_upper_holding_bias_corrects_offset_while_continuous_I_is_held);
   RUN_TEST(test_upper_deadband_preserves_lower_range_and_legacy_default);
   RUN_TEST(test_upper_deadband_stops_static_windup_and_preserves_P_and_D);
   RUN_TEST(
@@ -6829,6 +7320,7 @@ int main(void) {
   RUN_TEST(test_vp37_upper_derivative_blends_only_above_85_percent);
   RUN_TEST(test_vp37_upper_derivative_waits_for_stationary_target_and_slew);
   RUN_TEST(test_vp37_upper_derivative_blend_uses_elapsed_control_time);
+  RUN_TEST(test_vp37_upper_derivative_requires_an_explicit_gain);
   RUN_TEST(
       test_vp37_upper_derivative_survives_62ms_target_updates_without_steps);
   RUN_TEST(test_vp37_upper_derivative_opposes_both_directions_of_motion);
@@ -6837,6 +7329,7 @@ int main(void) {
   RUN_TEST(test_vp37_stationary_target_uses_soft_approach);
   RUN_TEST(test_vp37_slew_tracks_a_250_percent_per_second_input);
   RUN_TEST(test_vp37_ramp_unwinds_existing_negative_trim);
+  RUN_TEST(test_upper_reference_increase_keeps_positive_incremental_drive);
   RUN_TEST(test_vp37_motion_feedforward_brakes_when_upper_ramp_stops);
   RUN_TEST(test_vp37_motion_taper_preserves_lower_drive_holding_and_descent);
   RUN_TEST(
@@ -7000,8 +7493,10 @@ int main(void) {
   RUN_TEST(test_full_range_uses_base_hold_offset_release_and_current_policy);
   RUN_TEST(test_full_range_integral_recovers_above_old_cap_and_respects_output);
   RUN_TEST(test_research_integral_hold_keeps_bias_and_zero_still_releases);
+  RUN_TEST(test_normal_integral_hold_keeps_bias_and_zero_still_releases);
   RUN_TEST(
       test_research_drive_hold_observes_without_changing_estimate_or_scale);
+  RUN_TEST(test_normal_drive_hold_observes_without_changing_estimate_or_scale);
   RUN_TEST(test_motion_integral_retains_bias_and_D_during_upward_approach);
   RUN_TEST(test_motion_integral_retains_bias_and_D_during_downward_approach);
   RUN_TEST(test_motion_integral_switch_is_profile_gated_and_resettable);

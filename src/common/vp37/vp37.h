@@ -145,7 +145,17 @@ typedef struct {
                           Hz. */
   float referenceKp;   /**< Local complete reference gain, PWM/Hz. */
   float slowDampingOutput; /**< Extra nominal PWM correction. */
-  float topDBlend;     /**< Filtered upper-target damping activation, 0..1. */
+  float topDBlend; /**< Filtered upper-target damping activation, 0..1. */
+  bool
+      upperHoldingActive; /**< Stationary upper target qualifies for holding. */
+  bool upperHoldingCaptureReady; /**< Upper-stroke capture delay elapsed. */
+  float upperHoldingElapsed;     /**< Continuous qualified upper hold [s]. */
+  float upperHoldingExtraKp; /**< Additional measured-position gain [PWM/Hz]. */
+  float upperHoldingMean;    /**< Mean of the latest holding window [Hz]. */
+  float upperHoldingVariance;    /**< Holding window variance [Hz squared]. */
+  float upperHoldingBiasElapsed; /**< Time since the last quiet holding update
+                                  * [s].
+                                  */
   float integralLimit; /**< Available integral contribution in nominal PWM
                              counts. */
   bool
@@ -173,8 +183,7 @@ typedef struct {
   bool holdingIntegralReady; /**< A stable interior correction was observed. */
   bool descentUnwindUsesHolding; /**< Return target uses measured holding I. */
   bool motionIntegralReady;
-  bool motionIntegralHold; /**< I held while measured motion approaches its
-                              goal. */
+  bool motionIntegralHold;        /**< I held by the measured-motion policy. */
   int32_t motionIntegralPosition; /**< Previous measured feedback, Hz. */
   float motionIntegralVelocity;   /**< Filtered measured velocity, Hz/s. */
   bool septemberReference;        /**< Research port selected only at rest. */
@@ -429,6 +438,14 @@ typedef struct {
 } VP37Snapshot;
 #endif
 
+/** @brief Private accumulator for one finite upper holding window. */
+typedef struct {
+  float elapsed;  /**< Window age [s]; negative before a staggered start. */
+  float mean;     /**< Mean position [Hz]. */
+  float m2;       /**< Sum of squared position deviations [Hz squared]. */
+  uint32_t count; /**< Samples accumulated in this window. */
+} VP37HoldingWindow;
+
 /**
  * @brief One VP37 injection pump: lifecycle and timing, then one member per
  * unit of the module. The members are embedded, not pointed to, because the
@@ -468,6 +485,8 @@ typedef struct {
   VP37Demand demand;
   VP37Feedforward feedforward;
   VP37Pid pid;
+  VP37HoldingWindow upperHoldingWindows[2]; /**< Overlapping private history;
+                                                excluded from snapshots. */
   VP37Supply supply;
   VP37Thermal thermal;
   VP37Scan scan;
@@ -520,7 +539,10 @@ typedef struct {
   bool quantityAtRest : 1; /**< Quantity drive released at zero demand. */
   bool fresh : 1;
   bool motionIntegralHold : 1; /**< Conditional I hold from the same step. */
+  bool upperHolding : 1; /**< Upper holding servo is active in this step. */
 } VP37TraceSample;
+JB_STATIC_ASSERT(sizeof(VP37TraceSample) <= 148U,
+                 "VP37 trace record exceeds its RP2040 RAM budget");
 #endif
 
 /**

@@ -44,7 +44,9 @@ GUI tests run with the current display or Xvfb through
 `scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
 Clocks view runs in the current locale and explicitly in `C` and every
 locale listed in `scripts/test-locales.txt`; the setup script generates those
-and checks that they work.
+and checks that they work. On Debian and Raspberry Pi OS `locale-gen` builds
+only the entries enabled in `/etc/locale.gen`, so the script enables them
+there first.
 The same runner wraps the SC Valgrind target, so Valgrind checks the test
 binary itself. Suppressions cover the documented system GTK/fontconfig
 stacks and the glibc loader during GTK start-up; application errors remain

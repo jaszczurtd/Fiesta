@@ -45,7 +45,8 @@ Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
 `scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
 Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i każdym locale
 z `scripts/test-locales.txt`; skrypt przygotowania środowiska generuje je
-i sprawdza, czy działają.
+i sprawdza, czy działają. Na Debianie i Raspberry Pi OS `locale-gen` buduje
+tylko wpisy włączone w `/etc/locale.gen`, więc skrypt najpierw je tam włącza.
 Ten sam runner otacza target Valgrinda SC, więc Valgrind sprawdza sam plik
 binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig
 oraz loader glibc podczas startu GTK; błędy aplikacji nadal przerywają kontrolę.

@@ -12,7 +12,7 @@ MODULE = ROOT / "src/Fiesta_clock"
 HAL = ROOT / "src/JaszczurHAL"
 
 
-def build_clock_binary(build, name, sources, tree=None):
+def build_clock_binary(build, name, sources, tree=None, defines=()):
     """Link ``sources`` into ``build / name``.
 
     ``tree`` replaces the module's device_tree.json, e.g. to try other pull
@@ -30,10 +30,12 @@ def build_clock_binary(build, name, sources, tree=None):
     common = ["--config-dir", str(config), "--output-root", str(build),
               "--output-dir", str(output)]
     run_command([*generator, "resolve", *common])
-    run_command([*generator, "finalize", *common,
+    definition_args = [arg for value in defines for arg in ("--define", value)]
+    run_command([*generator, "finalize", *common, *definition_args,
                  "--hardware", str(output / "jh_hardware_resolved.json"),
                  "--hardware-header", str(output / "jh_hardware.h")])
-    flags = ["-Wall", "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
+    flags = [*("-D" + value for value in defines),
+             "-Wall", "-Wextra", "-Werror", "-ffunction-sections", "-fdata-sections",
              "-DHAL_TARGET_RP2040=1",
              f'-DJH_HARDWARE_HEADER="{output / "jh_hardware.h"}"',
              "-I", str(HAL / "tests"), "-I", str(output), "-I", str(MODULE),

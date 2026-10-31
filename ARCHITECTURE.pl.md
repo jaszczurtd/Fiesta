@@ -114,9 +114,21 @@ i wewnątrz niego przez dwa MCP9600 na własnym I²C.
 Pracę dzielą dwa rdzenie RP2040. Rdzeń 0 odbiera i nadaje CAN, mierzy prędkość
 z ABS oraz steruje wskaźnikami, kontrolkami i buzzerem. Rdzeń 1 rysuje TFT,
 odczytuje czujnik oleju i obie termopary oraz obsługuje sesję konfiguratora.
-Rdzenie wymieniają kopie swojego stanu pod krótką blokadą, więc rysowanie ani
-powolny odczyt I²C nie opóźniają ramki CAN. Gdy sterownik CAN nie odpowiada
-przy starcie, rdzeń 0 ponawia próbę co sekundę, a ekran i wskaźniki działają.
+Rdzenie wymieniają kopie swojego stanu pod krótką blokadą. CAN i TFT dzielą
+SPI; ekran zwalnia magistralę między pasmami pikseli o ograniczonej wielkości.
+Gdy sterownik CAN nie odpowiada przy starcie, rdzeń 0 ponawia próbę co sekundę,
+a ekran i wskaźniki działają.
+
+ECU i Clocks używają automatycznej retransmisji na głównej magistrali CAN,
+więc przegrany arbitraż nie porzuca aktualizacji. HAL ogranicza czas każdego
+synchronicznego nadania i przerywa transmisję, która nie zakończyła się w tym czasie.
+ECU przechowuje najnowszą migawkę każdej okresowej ramki stanu, pedału i turbo.
+Nadaje po jednej oczekującej ramce, z odstępem co najmniej 2 ms od swojej
+poprzedniej próby nadania. Pętla rdzenia 0 daje pierwszeństwo RPM. Numery sekwencji
+odpowiadają faktycznej kolejności nadawania; nowsza migawka zastępuje niewysłaną
+ramkę o tym samym ID.
+Szybkie odczyty czujników i okresowe migawki stanu zachowują ustaloną siatkę
+czasu po opóźnionym obiegu pętli. Zaległe terminy są pomijane.
 
 Clocks nadaje jasność ekranu, ciśnienie oleju i prędkość z ABS co 50 ms, a obie
 temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
@@ -238,7 +250,7 @@ to sprawdzić podstawowe uruchomienie. Moduł nie obsługuje protokołu konfigur
 
 ### Fiesta_clock
 
-Fiesta_clock przechowuje w PCF8563 czas UTC i co sekundę nadaje go jako
+Fiesta_clock przechowuje w PCF8563 lub DS3231 czas UTC i co sekundę nadaje go jako
 `CAN_ID_RTC_UPDATE` (`0x130`). Integralność 1 ramka ma tylko przy zaufanym
 UTC; w pozostałych przypadkach bajty daty i czasu są zerowe. Znacznik w KV
 JaszczurHAL zapisuje, że ten firmware ustawił RTC na UTC. Do tego momentu RTC

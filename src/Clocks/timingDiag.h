@@ -12,10 +12,13 @@
 // tachometer toggle jitter, the charge lamp (state, changes, voltage range)
 // and its loop duration. The core that draws reports "T1": its loop duration,
 // the lateness of the half-second display timer and the longest pass over
-// both thermocouples. Each core keeps and prints
-// its own window, so no statistic crosses cores. Both lines also give the
-// unused stack of that core (s0_free, s1_free) on RP targets. Without
-// CLOCKS_TIMING_DIAG every hook compiles to nothing.
+// both thermocouples. Each core keeps its own window. Core 0 publishes a
+// snapshot without waiting; core 1 formats and prints both reports, outside
+// the snapshot lock. Both lines also give the
+// unused stack of that core (s0_free, s1_free) on RP targets. T0 ecu_ids gives
+// counts for update 01/02/03, RPM, throttle and turbo, in that order. window_ms
+// is the collecting interval, including windows held while a report waits.
+// Without CLOCKS_TIMING_DIAG every hook compiles to nothing.
 #ifndef CLOCKS_TIMING_DIAG
 #define CLOCKS_TIMING_DIAG 0
 #endif
@@ -25,6 +28,7 @@
 // with an idle phase of the same length.
 #define TIMING_DIAG_PHASE_MS 60000u
 #define TIMING_DIAG_REDRAW_MS 1000u
+#define TIMING_DIAG_CAN_PHASES 6u
 
 #if CLOCKS_TIMING_DIAG
 
@@ -66,8 +70,21 @@ void timingDiagEgtRead(uint32_t startUs);
 void timingDiagChargeLamp(bool lit, int32_t millivolts);
 /** @return Start stamp for timingDiagLoopEnd(). */
 uint32_t timingDiagLoopStart(void);
+/** @brief Record a core-0 section and return the next section's start stamp.
+ * @param phase Section index: receive, timers, broadcasts, local, gauges, wait.
+ * @param startUs Start stamp from timingDiagLoopStart() or the previous call.
+ */
+uint32_t timingDiagCanPhase(uint8_t phase, uint32_t startUs);
+/** @brief Record a successful CAN status sample, including sticky overflows.
+ * @param hardwareLost Cumulative lower bound of hardware receive losses.
+ * @param queueLost Cumulative HAL receive queue overflow count.
+ * @param tec Transmit error counter.
+ * @param rec Receive error counter.
+ */
+void timingDiagCanCounters(uint32_t hardwareLost, uint32_t queueLost,
+                           uint16_t tec, uint16_t rec);
 /**
- * @brief Close one loop iteration and print the window of that core.
+ * @brief Close an iteration; core 0 publishes T0, core 1 prints T0 and T1.
  * @param core 0 for the CAN core report, 1 for the display core report.
  * @param startUs Stamp returned by timingDiagLoopStart().
  */
@@ -98,6 +115,19 @@ static inline void timingDiagChargeLamp(bool lit, int32_t millivolts) {
   (void)millivolts;
 }
 static inline uint32_t timingDiagLoopStart(void) { return 0u; }
+static inline uint32_t timingDiagCanPhase(uint8_t phase, uint32_t startUs) {
+  (void)phase;
+  (void)startUs;
+  return 0u;
+}
+static inline void timingDiagCanCounters(uint32_t hardwareLost,
+                                         uint32_t queueLost, uint16_t tec,
+                                         uint16_t rec) {
+  (void)hardwareLost;
+  (void)queueLost;
+  (void)tec;
+  (void)rec;
+}
 static inline void timingDiagLoopEnd(uint8_t core, uint32_t startUs) {
   (void)core;
   (void)startUs;

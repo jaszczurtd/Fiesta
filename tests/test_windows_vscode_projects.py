@@ -44,9 +44,15 @@ DEBUG_PROFILES = {
              "Project: Build (Debug) rp2040-zero variant: TIMING",
              "target/rp2040.cfg"),
     },
-    "Fiesta_clock": {"Project: Debug rp2040-zero (RP2040)":
-                     ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
-                      "target/rp2040.cfg")},
+    "Fiesta_clock": {
+        "Project: Debug rp2040-zero (RP2040)":
+            ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
+             "target/rp2040.cfg"),
+        "Project: Debug rp2040-zero variant: DS3231 (RP2040)":
+            ("rp2040/rp2040-zero/variants/DS3231",
+             "Project: Build (Debug) rp2040-zero variant: DS3231",
+             "target/rp2040.cfg"),
+    },
     "Adjustometer": {"Project: Debug rp2040-zero (RP2040)":
                      ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
                       "target/rp2040.cfg")},
@@ -105,8 +111,8 @@ class WindowsVscodeProjectTests(unittest.TestCase):
                 (vscode_dir / "jaszczurhal.project.json").read_text(encoding="utf-8")
             )
             self.assertTrue(manifest["identity"]["enabled"], module)
-            self.assertEqual(manifest["identity"]["usbVid"], "0x2e8a", module)
-            self.assertEqual(manifest["identity"]["usbPid"], "0x000a", module)
+            self.assertNotIn("usbVid", manifest["identity"], module)
+            self.assertNotIn("usbPid", manifest["identity"], module)
 
     def test_module_paths_resolve_to_the_pinned_checkout(self) -> None:
         hal_root = (REPO_ROOT / "src" / "JaszczurHAL").resolve()
@@ -124,6 +130,22 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             self.assertTrue(schema.is_file(), schema)
             source = Path(manifest["cmake"]["sourceDir"].replace("${project}", str(project)))
             self.assertEqual(source.resolve(), hal_root / "cmake" / "jh_firmware_project")
+
+    def test_ecu_usb_identity_matches_each_mcu(self) -> None:
+        entry = REPO_ROOT / "src/JaszczurHAL/vscode/entry/jh_vscode.py"
+        for assembly, pid in (("rp2040-plus", 0x000A),
+                              ("rp2350-plus", 0x0009)):
+            with self.subTest(assembly=assembly):
+                result = subprocess.run(
+                    [sys.executable, str(entry), "config-dump", "--project",
+                     str(REPO_ROOT / "src/ECU"), "--assembly", assembly, "--json"],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                identity = json.loads(result.stdout)["identity"]
+                self.assertEqual(identity["usbVid"], 0x2E8A)
+                self.assertEqual(identity["usbPid"], pid)
+                self.assertEqual(identity["usbProduct"], "Fiesta ECU")
 
     def test_linux_only_quality_tasks_fail_explicitly_on_windows(self) -> None:
         found: set[str] = set()

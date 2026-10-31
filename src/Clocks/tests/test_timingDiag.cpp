@@ -31,7 +31,13 @@ static char s_lateWin[64]; // its ecu_late_win
 static long reportLost(void) {
   s_nowMs += TIMING_DIAG_REPORT_MS;
   hal_mock_set_millis(s_nowMs);
+  char previous[1024];
+  snprintf(previous, sizeof(previous), "%s", hal_mock_serial_last_line());
   timingDiagLoopEnd(0u, timingDiagLoopStart());
+  // The receive core only publishes. Formatting and serial I/O belong to
+  // the display core, including when both windows end on the same tick.
+  TEST_ASSERT_EQUAL_STRING(previous, hal_mock_serial_last_line());
+  timingDiagLoopEnd(1u, timingDiagLoopStart());
   const char *line = hal_mock_serial_last_line();
   s_late = field(line, "ecu_late:");
   s_win = field(line, " win:");
@@ -131,6 +137,45 @@ void test_a_window_without_ecu_frames_loses_nothing(void) {
   TEST_ASSERT_EQUAL_INT32(0, reportLost());
 }
 
+void test_pending_report_preserves_the_next_collecting_window(void) {
+  ecuFrame(3u);
+  s_nowMs += TIMING_DIAG_REPORT_MS;
+  hal_mock_set_millis(s_nowMs);
+  timingDiagLoopEnd(0u, timingDiagLoopStart());
+  ecuFrame(4u);
+  s_nowMs += TIMING_DIAG_REPORT_MS;
+  hal_mock_set_millis(s_nowMs);
+  timingDiagLoopEnd(0u, timingDiagLoopStart());
+  timingDiagLoopEnd(1u, timingDiagLoopStart());
+  TEST_ASSERT_EQUAL_INT32(1, field(hal_mock_serial_last_line(), "ecu_n:"));
+  ecuFrame(5u);
+  TEST_ASSERT_EQUAL_INT32(0, reportLost());
+  TEST_ASSERT_EQUAL_INT32(2, field(hal_mock_serial_last_line(), "ecu_n:"));
+  TEST_ASSERT_EQUAL_INT32(10000,
+                          field(hal_mock_serial_last_line(), "window_ms:"));
+}
+
+void test_report_counts_each_ecu_id_without_counting_unusable_frames(void) {
+  (void)reportLost();
+  const uint32_t ids[] = {CAN_ID_ECU_UPDATE_01, CAN_ID_ECU_UPDATE_02,
+                          CAN_ID_ECU_UPDATE_03, CAN_ID_RPM,
+                          CAN_ID_THROTTLE,      CAN_ID_TURBO_PRESSURE};
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  for (size_t i = 0u; i < COUNTOF(ids); ++i) {
+    payload[0] = (uint8_t)(10u + i);
+    timingDiagCanFrame(ids[i], payload, CAN_FRAME_MAX_LENGTH);
+  }
+  payload[0] = 16u;
+  timingDiagCanFrame(CAN_ID_ECU_UPDATE_01, payload, CAN_FRAME_MAX_LENGTH);
+  timingDiagCanFrame(CAN_ID_RPM, NULL, CAN_FRAME_MAX_LENGTH);
+  timingDiagCanFrame(CAN_ID_RPM, payload, 0u);
+  timingDiagCanFrame(0x7FFu, payload, CAN_FRAME_MAX_LENGTH);
+  (void)reportLost();
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "ecu_ids:2,1,1,1,1,1 "));
+  TEST_ASSERT_EQUAL_INT32(7, field(hal_mock_serial_last_line(), "ecu_n:"));
+}
+
 int main(void) {
   hal_mock_set_millis(s_nowMs);
   UNITY_BEGIN();
@@ -142,5 +187,7 @@ int main(void) {
   RUN_TEST(test_a_late_frame_names_the_report_that_counted_it);
   RUN_TEST(test_numbers_wrap_after_255);
   RUN_TEST(test_a_window_without_ecu_frames_loses_nothing);
+  RUN_TEST(test_pending_report_preserves_the_next_collecting_window);
+  RUN_TEST(test_report_counts_each_ecu_id_without_counting_unusable_frames);
   return UNITY_END();
 }

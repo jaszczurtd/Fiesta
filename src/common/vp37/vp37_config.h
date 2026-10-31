@@ -97,10 +97,10 @@ JB_STATIC_ASSERT((VP37_CONTROL_LATE_WINDOW_STEPS >= 10U) &&
 #define VP37_PID_KD 0.0f
 /** Additional derivative gain at settled upper targets [PWM*s/Hz]; zero
  * disables it. */
-#define VP37_PID_TOP_KD 0.001f
+#define VP37_PID_TOP_KD 0.0f
 /** Bench ceiling for the upper-target derivative gain. */
 #define VP37_PID_TOP_KD_MAX 0.01f
-/** Diagnostic state holds; available only in the full-range research profile.
+/** Diagnostic state holds; available in either position-control profile.
  */
 /** Conditional integration uses measured motion, in Hz/s, on the control core.
  */
@@ -117,6 +117,28 @@ JB_STATIC_ASSERT((VP37_CONTROL_LATE_WINDOW_STEPS >= 10U) &&
 #define VP37_RESEARCH_FREEZE_DRIVE_MASK 2U
 /** Time constant for engaging and releasing upper-target damping [s]. */
 #define VP37_PID_TOP_D_BLEND_S 0.05f
+/** Upper holding servo starts above this calibrated stroke percentage. */
+#define VP37_UPPER_HOLD_START_PERCENT 85.0f
+/** Quiet holding bias gain relative to the configured position-loop Ki. */
+#define VP37_UPPER_HOLD_INTEGRAL_RATIO 0.05f
+/** Retain the arrival controller before increasing holding stiffness [s]. */
+#define VP37_UPPER_HOLD_SETTLE_S 3.0f
+/** Additional holding gain relative to configured Kp at 90% stroke. */
+#define VP37_UPPER_HOLD_EXTRA_KP_RATIO 2.0f
+/** Maximum increase in one quiet holding update [PWM/Hz]. */
+#define VP37_UPPER_HOLD_KP_STEP 0.01f
+/** Bound the integral transfer paired with one gain increase [PWM]. */
+#define VP37_UPPER_HOLD_GAIN_TRANSFER_PWM 2.5f
+/** Upper holding captures I without the legacy offset-release gate [ms]. */
+#define VP37_UPPER_HOLD_CAPTURE_MS 5U
+/** Maximum current position window; its minimum settled length is half [s]. */
+#define VP37_UPPER_HOLD_WINDOW_S 0.6f
+/** Maximum position variance for holding bias changes [Hz squared]. */
+#define VP37_UPPER_HOLD_QUIET_VARIANCE 225.0f
+/** Minimum interval between holding bias corrections [s]. */
+#define VP37_UPPER_HOLD_BIAS_INTERVAL_S 1.5f
+/** Bound one holding bias correction [nominal PWM counts]. */
+#define VP37_UPPER_HOLD_BIAS_STEP_PWM 3.0f
 // Derivative filter time constant [s].
 #define VP37_PID_TF 0.003f
 /** Extra derivative gain for the slow-damping experiment [PWM*s/Hz]. */

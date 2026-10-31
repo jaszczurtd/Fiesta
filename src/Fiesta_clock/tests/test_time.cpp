@@ -25,7 +25,7 @@ extern "C" {
 static uint32_t now_ms = 1000u;
 
 struct Pcf8563 {
-  uint8_t regs[16];
+  uint8_t regs[32];
   bool busError;              // every transfer fails
   bool dropWrites;            // time writes are acknowledged but not stored
   bool vlStuck;               // the integrity bit stays set after a write
@@ -38,6 +38,14 @@ struct Pcf8563 {
 static Pcf8563 pcf = {};
 static std::vector<uint8_t> i2c_tx;
 
+#if defined(RTC_ds3231)
+static constexpr uint8_t RTC_ADDRESS = 0x68;
+static constexpr uint8_t TIME_REG = 0, MONTH_REG = 5, INTEGRITY_REG = 15;
+#else
+static constexpr uint8_t RTC_ADDRESS = 0x51;
+static constexpr uint8_t TIME_REG = 2, MONTH_REG = 7, INTEGRITY_REG = 2;
+#endif
+
 static uint8_t bcd(int value) {
   return (uint8_t)(((value / 10) << 4) | (value % 10));
 }
@@ -45,6 +53,16 @@ static int unbcd(uint8_t value) { return (value >> 4) * 10 + (value & 0x0f); }
 
 static void rtc_fields(int year, int month, int day, int hour, int minute,
                        int second, bool integrityLost = false) {
+#if defined(RTC_ds3231)
+  pcf.regs[0] = bcd(second);
+  pcf.regs[1] = bcd(minute);
+  pcf.regs[2] = bcd(hour);
+  pcf.regs[3] = 1;
+  pcf.regs[4] = bcd(day);
+  pcf.regs[5] = bcd(month);
+  pcf.regs[6] = bcd(year % 100);
+  pcf.regs[15] = integrityLost ? 0x80 : 0;
+#else
   pcf.regs[2] = (uint8_t)(bcd(second) | (integrityLost ? 0x80 : 0));
   pcf.regs[3] = bcd(minute);
   pcf.regs[4] = bcd(hour);
@@ -52,6 +70,7 @@ static void rtc_fields(int year, int month, int day, int hour, int minute,
   pcf.regs[6] = 0;
   pcf.regs[7] = bcd(month);
   pcf.regs[8] = bcd(year % 100);
+#endif
 }
 
 static uint32_t utc(int year, int month, int day, int hour, int minute,
@@ -70,13 +89,22 @@ static void rtc_set_utc(uint32_t epoch, bool integrityLost = false) {
 }
 
 static uint32_t rtc_utc() {
+#if defined(RTC_ds3231)
+  return hal_time_from_components(
+      2000 + unbcd(pcf.regs[6]), unbcd(pcf.regs[5] & 0x1f),
+      unbcd(pcf.regs[4] & 0x3f), unbcd(pcf.regs[2] & 0x3f),
+      unbcd(pcf.regs[1] & 0x7f), unbcd(pcf.regs[0] & 0x7f));
+#else
   return hal_time_from_components(
       2000 + unbcd(pcf.regs[8]), unbcd(pcf.regs[7] & 0x1f),
       unbcd(pcf.regs[5] & 0x3f), unbcd(pcf.regs[4] & 0x3f),
       unbcd(pcf.regs[3] & 0x7f), unbcd(pcf.regs[2] & 0x7f));
+#endif
 }
 
-static bool rtc_integrity_lost() { return (pcf.regs[2] & 0x80) != 0; }
+static bool rtc_integrity_lost() {
+  return (pcf.regs[INTEGRITY_REG] & 0x80) != 0;
+}
 
 // The RTC and the loop both run for this long.
 static void run_for(uint32_t seconds) {
@@ -164,7 +192,7 @@ hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda, uint8_t scl, uint32_t) {
   return HAL_OK;
 }
 void hal_i2c_begin_transmission_bus(uint8_t bus, hal_i2c_address_t address) {
-  assert(bus == JH_HW_BUS_I2C_INDEX && address == JH_HW_NODE_RTC_ADDRESS);
+  assert(bus == JH_HW_BUS_I2C_INDEX && address == RTC_ADDRESS);
   i2c_tx.clear();
 }
 size_t hal_i2c_write_bus(uint8_t, uint8_t value) {
@@ -177,7 +205,7 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t) {
   }
   if (i2c_tx.size() > 1u) {
     const uint8_t reg = i2c_tx[0];
-    if (reg == 2u) {
+    if (reg == TIME_REG) {
       if (pcf.failTimeWrites > 0) {
         --pcf.failTimeWrites;
         return 2;
@@ -189,15 +217,15 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t) {
         --pcf.writesBeforeError;
       }
       ++pcf.timeWrites;
-      if (pcf.dropWrites) {
-        return 0;
-      }
+    }
+    if (pcf.dropWrites) {
+      return 0;
     }
     for (size_t i = 1; i < i2c_tx.size(); ++i) {
-      pcf.regs[(reg + i - 1u) & 0x0fu] = i2c_tx[i];
+      pcf.regs[(reg + i - 1u) & 0x1fu] = i2c_tx[i];
     }
-    if (reg == 2u && pcf.vlStuck) {
-      pcf.regs[2] |= 0x80;
+    if (pcf.vlStuck) {
+      pcf.regs[INTEGRITY_REG] |= 0x80;
     }
   }
   return 0;
@@ -205,23 +233,22 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t) {
 bool hal_i2c_write_read_bus(uint8_t bus, hal_i2c_address_t address,
                             const uint8_t *tx, size_t tx_len, uint8_t *rx,
                             size_t rx_len) {
-  assert(bus == JH_HW_BUS_I2C_INDEX && address == JH_HW_NODE_RTC_ADDRESS &&
-         tx_len == 1u);
+  assert(bus == JH_HW_BUS_I2C_INDEX && address == RTC_ADDRESS && tx_len == 1u);
   if (pcf.busError) {
     return false;
   }
   // The one-byte integrity read still answers.
-  if (tx[0] == 2u && rx_len > 1u && pcf.failTimeReads > 0) {
+  if (tx[0] == TIME_REG && rx_len > 1u && pcf.failTimeReads > 0) {
     --pcf.failTimeReads;
     return false;
   }
-  if (tx[0] == 2u && rx_len > 1u && pcf.ticksBeforeRead > 0) {
+  if (tx[0] == TIME_REG && rx_len > 1u && pcf.ticksBeforeRead > 0) {
     rtc_set_utc(rtc_utc() + (uint32_t)pcf.ticksBeforeRead,
                 rtc_integrity_lost());
     pcf.ticksBeforeRead = 0;
   }
   for (size_t i = 0; i < rx_len; ++i) {
-    rx[i] = pcf.regs[(tx[0] + i) & 0x0fu];
+    rx[i] = pcf.regs[(tx[0] + i) & 0x1fu];
   }
   return true;
 }
@@ -828,7 +855,11 @@ static void test_transition() {
   pcf.writesBeforeError = -1;
   // A date outside the clock's years is never put back as local time.
   rtc_fields(CFG_RTC_MIN_YEAR, 1, 1, 0, 0, 0);
-  pcf.regs[7] |= 0x80; // century bit: 1900 + 00
+#if defined(RTC_ds3231)
+  pcf.regs[MONTH_REG] |= 0x80; // next century is outside 2000..2099
+#else
+  pcf.regs[MONTH_REG] |= 0x80; // century bit: 1900 + 00
+#endif
   const int writes = pcf.timeWrites;
   loop_pass();
   assert(pcf.timeWrites == writes && !clockTimeSettled());
@@ -971,7 +1002,7 @@ static void test_sync_correction() {
   assert(pcf.timeWrites == 3 && rtc_utc() == behind);
   assert(now_ms < 0x10000000u); // the limit ran across the wrap
   // An RTC that lost its integrity does not wait for the limit.
-  pcf.regs[2] |= 0x80;
+  pcf.regs[INTEGRITY_REG] |= 0x80;
   gps_offset(0);
   assert(pcf.timeWrites == 4 && !rtc_integrity_lost());
 }
@@ -1004,13 +1035,13 @@ static void test_sync_errors() {
     assert(pcf.timeWrites == attempted + 1 && clockTimeIsUtc());
     assert(rtc_utc() == utc(2026, 10, 26, 17, 0, 1));
     // Back to an RTC without trusted UTC for the next fault.
-    pcf.regs[2] |= 0x80;
+    pcf.regs[INTEGRITY_REG] |= 0x80;
     kv.clear();
     start();
     assert(!clockTimeIsUtc());
   }
   // Contents that are no valid date are set at once, not retried.
-  pcf.regs[7] = 0x13; // month 13
+  pcf.regs[MONTH_REG] = 0x13; // month 13
   const int before = pcf.timeWrites;
   gps(utc(2026, 10, 26, 17, 30, 0));
   loop_pass();
@@ -1023,14 +1054,14 @@ static void test_sync_errors() {
   pcf.failTimeReads = 1;
   gps_offset(-60);
   assert(pcf.timeWrites == corrected && pcf.failTimeReads == 0);
-  pcf.regs[2] |= 0x80;
+  pcf.regs[INTEGRITY_REG] |= 0x80;
   loop_for(retryMs - 40u);
   gps_offset(0); // the retry time minus 20 ms
   assert(pcf.timeWrites == corrected);
   gps_offset(0);
   assert(pcf.timeWrites == corrected + 1 && !rtc_integrity_lost());
   // Contents that are no valid date are set at once also within the limit.
-  pcf.regs[7] = 0x13;
+  pcf.regs[MONTH_REG] = 0x13;
   gps(utc(2026, 10, 26, 17, 40, 0));
   loop_pass();
   assert(pcf.timeWrites == corrected + 2 &&

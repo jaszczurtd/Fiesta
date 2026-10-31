@@ -12,7 +12,20 @@
 
 /* ── Modules used by Fiesta_clock ────────────────────────────────────── */
 
-#define HAL_ENABLE_PCF8563 /* PCF8563 RTC -> RTC, I2C            */
+/* Select one RTC. An external RTC_ds3231 definition overrides the default. */
+#define JH_PROJECT_VARIANTS(X)                                                 \
+  X(DS3231, "Fiesta_clock with a DS3231 RTC", RTC_ds3231 = 1)
+#if !defined(RTC_pcf8563) && !defined(RTC_ds3231)
+#define RTC_pcf8563
+#endif
+#if defined(RTC_pcf8563) && defined(RTC_ds3231)
+#error "Select exactly one Fiesta_clock RTC"
+#endif
+#if defined(RTC_ds3231)
+#define HAL_ENABLE_DS3231
+#else
+#define HAL_ENABLE_PCF8563
+#endif
 #define HAL_ENABLE_SSD1306 /* OLED -> DISPLAY, I2C              */
 #define HAL_ENABLE_DS18B20 /* DS18B20 1-Wire -> ONEWIRE          */
 #define HAL_ENABLE_CAN     /* Generic CAN API facade             */

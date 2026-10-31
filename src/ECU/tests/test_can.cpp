@@ -270,11 +270,11 @@ static void assert_rpm_frame(int32_t expectedRpm) {
                                           data[CAN_FRAME_RPM_UPDATE_LO]));
 }
 
-void test_can_init_uses_one_shot_with_software_retry(void) {
+void test_can_init_allows_hardware_arbitration_retry(void) {
   hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_mode(canTestGetCanHandle(), &mode));
-  TEST_ASSERT_NOT_EQUAL(0u, mode & HAL_CAN_MODE_ONE_SHOT);
+  TEST_ASSERT_EQUAL(0u, mode & HAL_CAN_MODE_ONE_SHOT);
 }
 
 void test_rpm_update_retries_after_failed_send(void) {
@@ -379,6 +379,7 @@ void test_can_update_01_contains_adc_supply_voltage_without_vp37(void) {
   TEST_ASSERT_TRUE(measuredVolts > 1.0f);
 
   CAN_updaterecipients_01();
+  canMainLoop();
 
   uint32_t id = 0;
   uint8_t len = 0;
@@ -474,8 +475,194 @@ void test_ecu_frames_carry_no_gps(void) {
   TEST_ASSERT_TRUE(sawUpdate02);
 }
 
+static uint8_t expect_sent_frame(uint32_t expectedId, uint8_t *payload) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  TEST_ASSERT_TRUE(pop_can_tx(&id, &length, payload));
+  TEST_ASSERT_EQUAL_UINT32(expectedId, id);
+  TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, length);
+  return payload[CAN_FRAME_NUMBER];
+}
+
+static void expect_no_sent_frame(void) {
+  uint32_t id = 0u;
+  uint8_t length = 0u;
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_FALSE(pop_can_tx(&id, &length, payload));
+}
+
+void test_periodic_service_sends_a_due_frame_without_running_rx_callbacks(
+    void) {
+  setGlobalValue(F_EGT, 321.0f);
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  TEST_ASSERT_TRUE(
+      fiesta_can_put_temp_i16(&frame[CAN_FRAME_EGT_UPDATE_EGT_HI], -21.0f));
+  frame[CAN_FRAME_EGT_UPDATE_STATUS] = CAN_EGT_STATUS_EGT_VALID;
+  hal_mock_can_inject(canTestGetCanHandle(), CAN_ID_EGT_UPDATE,
+                      CAN_FRAME_MAX_LENGTH, frame);
+  hal_mock_set_millis(100u);
+  CAN_updaterecipients_01();
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  const uint8_t first = expect_sent_frame(CAN_ID_ECU_UPDATE_01, payload);
+  hal_mock_set_millis(102u);
+  canServicePeriodic();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 1u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_02, payload));
+  TEST_ASSERT_EQUAL_FLOAT(321.0f, getGlobalValue(F_EGT));
+  canMainLoop();
+  TEST_ASSERT_EQUAL_FLOAT(-21.0f, getGlobalValue(F_EGT));
+  expect_no_sent_frame();
+}
+
+void test_periodic_group_spreads_frames_and_numbers_rpm_in_wire_order(void) {
+  hal_mock_set_millis(100u);
+  CAN_updaterecipients_01();
+  canMainLoop();
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  const uint8_t first = expect_sent_frame(CAN_ID_ECU_UPDATE_01, payload);
+  canMainLoop();
+  hal_mock_set_millis(101u);
+  canMainLoop();
+  expect_no_sent_frame();
+  hal_mock_set_millis(102u);
+  CAN_updaterecipients_02();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 1u),
+                          expect_sent_frame(CAN_ID_RPM, payload));
+  canMainLoop();
+  expect_no_sent_frame();
+  hal_mock_set_millis(104u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 2u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_02, payload));
+  hal_mock_set_millis(106u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 3u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_03, payload));
+  hal_mock_set_millis(108u);
+  canMainLoop();
+  expect_no_sent_frame();
+}
+
+void test_deferred_group_keeps_snapshot_and_coalesces_without_sequence_holes(
+    void) {
+  hal_mock_set_millis(100u);
+  setGlobalValue(F_INTAKE_TEMP, 25.0f);
+  CAN_updaterecipients_01();
+  canMainLoop();
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  const uint8_t first = expect_sent_frame(CAN_ID_ECU_UPDATE_01, payload);
+  setGlobalValue(F_INTAKE_TEMP, 99.0f);
+  hal_mock_set_millis(102u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 1u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_02, payload));
+  TEST_ASSERT_EQUAL_UINT8(hal_can_encode_temp_i8(25.0f),
+                          payload[CAN_FRAME_ECU_UPDATE_INTAKE]);
+  hal_mock_set_millis(103u);
+  setGlobalValue(F_INTAKE_TEMP, 35.0f);
+  CAN_updaterecipients_01();
+  canMainLoop();
+  expect_no_sent_frame();
+  hal_mock_set_millis(104u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 2u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_03, payload));
+  hal_mock_set_millis(106u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 3u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_01, payload));
+  hal_mock_set_millis(108u);
+  canMainLoop();
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(first + 4u),
+                          expect_sent_frame(CAN_ID_ECU_UPDATE_02, payload));
+  TEST_ASSERT_EQUAL_UINT8(hal_can_encode_temp_i8(35.0f),
+                          payload[CAN_FRAME_ECU_UPDATE_INTAKE]);
+  expect_no_sent_frame();
+}
+
+void test_deferred_group_spacing_survives_millis_wrap(void) {
+  hal_mock_set_millis(UINT32_MAX - 1u);
+  CAN_updaterecipients_01();
+  canMainLoop();
+  uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+  (void)expect_sent_frame(CAN_ID_ECU_UPDATE_01, payload);
+  hal_mock_set_millis(UINT32_MAX);
+  canMainLoop();
+  expect_no_sent_frame();
+  hal_mock_set_millis(0u);
+  canMainLoop();
+  (void)expect_sent_frame(CAN_ID_ECU_UPDATE_02, payload);
+  hal_mock_set_millis(1u);
+  canMainLoop();
+  expect_no_sent_frame();
+  hal_mock_set_millis(2u);
+  canMainLoop();
+  (void)expect_sent_frame(CAN_ID_ECU_UPDATE_03, payload);
+  expect_no_sent_frame();
+}
+
+void test_periodic_publisher_keeps_every_rate_with_frequent_rpm_and_sequence_wrap(
+    void) {
+  const uint32_t ids[] = {CAN_ID_ECU_UPDATE_01, CAN_ID_ECU_UPDATE_02,
+                          CAN_ID_ECU_UPDATE_03, CAN_ID_THROTTLE,
+                          CAN_ID_TURBO_PRESSURE};
+  uint32_t counts[COUNTOF(ids)] = {0u};
+  uint32_t rpmCount = 0u;
+  bool haveSequence = false;
+  uint8_t nextSequence = 0u;
+  for (uint32_t ms = 0u; ms <= 5020u; ++ms) {
+    hal_mock_set_millis(ms);
+    getRPMInstance()->rpmValue =
+        1000 + (int32_t)((ms < 5000u ? ms : 5000u) / 10u);
+    if (ms < 5000u && (ms % 50u) == 0u) {
+      CAN_updaterecipients_01();
+      CAN_sendThrottleUpdate();
+      CAN_sendTurboUpdate();
+    }
+    CAN_updaterecipients_02();
+    if ((ms % 4u) == 0u) {
+      canMainLoop();
+    }
+    uint32_t id = 0u;
+    uint8_t length = 0u;
+    uint8_t payload[CAN_FRAME_MAX_LENGTH] = {0};
+    while (pop_can_tx(&id, &length, payload)) {
+      if (haveSequence) {
+        TEST_ASSERT_EQUAL_UINT8(nextSequence, payload[CAN_FRAME_NUMBER]);
+      }
+      nextSequence = (uint8_t)(payload[CAN_FRAME_NUMBER] + 1u);
+      haveSequence = true;
+      if (id == CAN_ID_RPM) {
+        rpmCount++;
+      } else {
+        bool found = false;
+        for (size_t i = 0u; i < COUNTOF(ids); ++i) {
+          if (id == ids[i]) {
+            counts[i]++;
+            found = true;
+            break;
+          }
+        }
+        TEST_ASSERT_TRUE(found);
+      }
+    }
+  }
+  for (size_t i = 0u; i < COUNTOF(counts); ++i) {
+    TEST_ASSERT_EQUAL_UINT32(100u, counts[i]);
+  }
+  TEST_ASSERT_EQUAL_UINT32(501u, rpmCount);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(
+      test_periodic_service_sends_a_due_frame_without_running_rx_callbacks);
+  RUN_TEST(
+      test_periodic_publisher_keeps_every_rate_with_frequent_rpm_and_sequence_wrap);
+  RUN_TEST(test_periodic_group_spreads_frames_and_numbers_rpm_in_wire_order);
+  RUN_TEST(
+      test_deferred_group_keeps_snapshot_and_coalesces_without_sequence_holes);
+  RUN_TEST(test_deferred_group_spacing_survives_millis_wrap);
   RUN_TEST(test_pack_gps_datetime_valid);
   RUN_TEST(test_pack_gps_datetime_invalid_returns_zero);
   RUN_TEST(test_rtc_frame_gives_the_utc_time);
@@ -488,7 +675,7 @@ int main(void) {
   RUN_TEST(test_egt_channel_without_valid_bit_has_no_measurement);
   RUN_TEST(test_oil_pressure_without_valid_bit_has_no_measurement);
   RUN_TEST(test_measurement_validity_needs_the_flag_and_fresh_frames);
-  RUN_TEST(test_can_init_uses_one_shot_with_software_retry);
+  RUN_TEST(test_can_init_allows_hardware_arbitration_retry);
   RUN_TEST(test_rpm_update_retries_after_failed_send);
   RUN_TEST(test_rpm_update_sends_periodic_heartbeat);
   RUN_TEST(test_check_connection_reports_bus_off_with_iso_detail);

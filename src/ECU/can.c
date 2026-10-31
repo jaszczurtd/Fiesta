@@ -10,6 +10,10 @@
  */
 void receivedCanMessage(void);
 
+static const uint32_t kPeriodicIds[] = {
+    CAN_ID_ECU_UPDATE_01, CAN_ID_ECU_UPDATE_02, CAN_ID_ECU_UPDATE_03,
+    CAN_ID_THROTTLE, CAN_ID_TURBO_PRESSURE};
+
 typedef struct {
   uint8_t frameNumberVal;
   bool interruptPending;
@@ -34,6 +38,11 @@ typedef struct {
   uint32_t lastRpmSentAtMs;
   uint32_t lastRpmAttemptAtMs;
   bool rpmRetryPending;
+  uint32_t lastTxAttemptMs;
+  bool txAttempted;
+  uint8_t pendingPeriodicMask;
+  uint8_t nextPeriodic;
+  uint8_t periodicPayload[COUNTOF(kPeriodicIds)][CAN_FRAME_MAX_LENGTH];
   float lastTurboHiSent;
   float lastTurboLoSent;
   float lastTurboHiDesiredSent;
@@ -116,6 +125,8 @@ static uint8_t canTxDetailForId(uint32_t id) {
  */
 static hal_status_t canSend(uint32_t id, uint8_t len, const uint8_t *buf) {
   const hal_status_t sent = hal_can_send(s_canState.canBusHandle, id, len, buf);
+  s_canState.lastTxAttemptMs = hal_millis();
+  s_canState.txAttempted = true;
   if (sent != HAL_OK) {
     if (s_canState.txFailures < UINT16_MAX) {
       s_canState.txFailures++;
@@ -128,24 +139,29 @@ static hal_status_t canSend(uint32_t id, uint8_t len, const uint8_t *buf) {
 /**
  * @brief Reset the RPM publisher cache and retry state.
  */
-static void resetRpmPublisher(void) {
+static void resetTransmitState(void) {
   const uint32_t now = hal_millis();
   s_canState.rpmHasBeenSent = false;
   s_canState.lastRpmSent = 0;
   s_canState.lastRpmSentAtMs = now;
   s_canState.lastRpmAttemptAtMs = now;
   s_canState.rpmRetryPending = false;
+  s_canState.pendingPeriodicMask = 0u;
+  s_canState.nextPeriodic = 0u;
+  s_canState.txAttempted = false;
+  s_canState.lastTxAttemptMs = 0u;
 }
 
 #ifdef UNIT_TEST
 hal_can_t canTestGetCanHandle(void) { return s_canState.canBusHandle; }
 
-void canTestResetRpmPublisher(void) { resetRpmPublisher(); }
+void canTestResetRpmPublisher(void) { resetTransmitState(); }
 #endif
 
 static hal_can_config_t can0Config(void) {
   hal_can_config_t cfg = JH_HW_NODE_CAN_MAIN_CONFIG_INIT;
-  cfg.mcp2515.one_shot_tx = true;
+  // Retry arbitration; the HAL aborts a send that reaches its timeout.
+  cfg.mcp2515.one_shot_tx = false;
   return cfg;
 }
 
@@ -164,7 +180,7 @@ hal_status_t canInit(int retries) {
   s_canState.oilValidFlag = false;
   s_canState.oilMessagesCount = 0uL;
   s_canState.lastOilMessagesCount = 0uL;
-  resetRpmPublisher();
+  resetTransmitState();
 
   hal_can_config_t canCfg = can0Config();
   const hal_status_t st = hal_can_create_with_retry(
@@ -182,6 +198,37 @@ hal_status_t canInit(int retries) {
   return st;
 }
 
+/* Each periodic ID retains its latest snapshot. Assign the shared sequence
+ * only on transmission, so coalescing cannot manufacture receive losses. */
+static void canQueuePeriodic(uint8_t slot, const uint8_t *payload) {
+  (void)memcpy(s_canState.periodicPayload[slot], payload, CAN_FRAME_MAX_LENGTH);
+  s_canState.pendingPeriodicMask |= (uint8_t)(1u << slot);
+  canServicePeriodic();
+}
+
+/* Do not burst more frames than the other node's two hardware RX buffers.
+ * This function never sleeps; an RPM transmission has priority in the loop. */
+void canServicePeriodic(void) {
+  if (!s_canState.isInitialized || (s_canState.pendingPeriodicMask == 0u) ||
+      (s_canState.txAttempted &&
+       !hal_elapsed_u32(hal_millis(), s_canState.lastTxAttemptMs, 2u))) {
+    return;
+  }
+  for (size_t i = 0u; i < COUNTOF(kPeriodicIds); ++i) {
+    const uint8_t slot = s_canState.nextPeriodic;
+    const uint8_t bit = (uint8_t)(1u << slot);
+    s_canState.nextPeriodic = (uint8_t)((slot + 1u) % COUNTOF(kPeriodicIds));
+    if ((s_canState.pendingPeriodicMask & bit) != 0u) {
+      s_canState.pendingPeriodicMask &= (uint8_t)(UINT8_MAX ^ bit);
+      s_canState.periodicPayload[slot][CAN_FRAME_NUMBER] =
+          s_canState.frameNumberVal++;
+      (void)canSend(kPeriodicIds[slot], CAN_FRAME_MAX_LENGTH,
+                    s_canState.periodicPayload[slot]);
+      break;
+    }
+  }
+}
+
 void CAN_sendAll(void) {
   CAN_updaterecipients_01();
   hal_delay_ms(CORE_OPERATION_DELAY);
@@ -190,6 +237,11 @@ void CAN_sendAll(void) {
   CAN_sendThrottleUpdate();
   hal_delay_ms(CORE_OPERATION_DELAY);
   CAN_sendTurboUpdate();
+  while (s_canState.isInitialized && (s_canState.pendingPeriodicMask != 0u)) {
+    canServicePeriodic();
+    watchdog_feed();
+    hal_delay_ms(1u);
+  }
 }
 
 void CAN_updaterecipients_01(void) {
@@ -198,7 +250,7 @@ void CAN_updaterecipients_01(void) {
     int hi, lo;
 
     uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
-    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_NUMBER] = 0u;
 
     buf[CAN_FRAME_ECU_UPDATE_ENGINE_LOAD] =
         (uint8_t)getGlobalValue(F_CALCULATED_ENGINE_LOAD);
@@ -212,10 +264,10 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_OIL] =
         hal_can_encode_temp_i8(getGlobalValue(F_OIL_TEMP));
 
-    (void)canSend(CAN_ID_ECU_UPDATE_01, CAN_FRAME_MAX_LENGTH, buf);
+    canQueuePeriodic(0u, buf);
 
     (void)memset(buf, 0, sizeof(buf));
-    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_INTAKE] =
         hal_can_encode_temp_i8(getGlobalValue(F_INTAKE_TEMP));
 
@@ -223,16 +275,16 @@ void CAN_updaterecipients_01(void) {
     buf[CAN_FRAME_ECU_UPDATE_FUEL_HI] = MSB(fuel);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_LO] = LSB(fuel);
 
-    (void)canSend(CAN_ID_ECU_UPDATE_02, CAN_FRAME_MAX_LENGTH, buf);
+    canQueuePeriodic(1u, buf);
 
-    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] =
         getGlobalValue(F_PRESSURE_PERCENTAGE);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] =
         hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = getGlobalValue(F_FAN_ENABLED);
 
-    (void)canSend(CAN_ID_ECU_UPDATE_03, CAN_FRAME_MAX_LENGTH, buf);
+    canQueuePeriodic(2u, buf);
   }
 }
 
@@ -270,6 +322,7 @@ void CAN_updaterecipients_02(void) {
       }
     }
   }
+  canServicePeriodic();
 }
 
 void CAN_sendTurboUpdate(void) {
@@ -288,13 +341,13 @@ void CAN_sendTurboUpdate(void) {
     s_canState.lastTurboLoDesiredSent = lo_d;
     s_canState.lastTurboHiDesiredSent = hi_d;
 
-    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (uint8_t)hi;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_LO] = (uint8_t)lo;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_HI] = (uint8_t)hi_d;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_DESIRED_LO] = (uint8_t)lo_d;
 
-    (void)canSend(CAN_ID_TURBO_PRESSURE, sizeof(buf), buf);
+    canQueuePeriodic(4u, buf);
   }
 }
 
@@ -304,11 +357,11 @@ void CAN_sendThrottleUpdate(void) {
     s_canState.lastThrottleSent = throttle;
 
     uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
-    buf[CAN_FRAME_NUMBER] = s_canState.frameNumberVal++;
+    buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_THROTTLE_UPDATE_HI] = MSB(throttle);
     buf[CAN_FRAME_THROTTLE_UPDATE_LO] = LSB(throttle);
 
-    (void)canSend(CAN_ID_THROTTLE, sizeof(buf), buf);
+    canQueuePeriodic(3u, buf);
   }
 }
 
@@ -442,6 +495,7 @@ void canMainLoop(void) {
       derr_limited("can", "CAN0 receive failed: %s", hal_status_to_string(st));
     }
   }
+  canServicePeriodic();
 }
 
 bool isDPFConnected(void) { return s_canState.dpfConnectedFlag; }

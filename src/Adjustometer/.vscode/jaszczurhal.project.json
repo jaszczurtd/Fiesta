@@ -23,8 +23,6 @@
         "enabled": true,
         "usbManufacturer": "Jaszczur",
         "usbProduct": "Fiesta Adjustometer",
-        "usbVid": "0x2e8a",
-        "usbPid": "0x000a",
         "byIdHint": "Fiesta_Adjustometer"
     },
     "artifacts": {

@@ -6,18 +6,30 @@
 
 static hal_rtc_t s_rtc = NULL;
 
+static uint8_t pcf_i2c_address(void) {
+#if defined(RTC_ds3231)
+  return HAL_RTC_DS3231_DEFAULT_I2C_ADDR;
+#else
+  return JH_HW_NODE_RTC_ADDRESS;
+#endif
+}
+
 static bool pcf_ensure_rtc(void) {
   if (s_rtc) {
     return true;
   }
 
   hal_rtc_config_t cfg = {0};
+#if defined(RTC_ds3231)
+  cfg.chip = HAL_RTC_CHIP_DS3231;
+#else
   cfg.chip = HAL_RTC_CHIP_PCF8563;
+#endif
   cfg.bus.i2c.sda_pin = JH_HW_BUS_I2C_PIN_SDA;
   cfg.bus.i2c.scl_pin = JH_HW_BUS_I2C_PIN_SCL;
   cfg.bus.i2c.clock_hz = JH_HW_BUS_I2C_FREQUENCY_HZ;
   cfg.bus.i2c.i2c_bus = JH_HW_BUS_I2C_INDEX;
-  cfg.bus.i2c.i2c_addr = JH_HW_NODE_RTC_ADDRESS;
+  cfg.bus.i2c.i2c_addr = pcf_i2c_address();
 
   s_rtc = hal_rtc_init(&cfg);
   return s_rtc != NULL;
@@ -58,7 +70,7 @@ void PCF_Write(unsigned char addr, unsigned char *data, unsigned char count) {
     return;
   }
 
-  hal_i2c_begin_transmission_bus(JH_HW_BUS_I2C_INDEX, JH_HW_NODE_RTC_ADDRESS);
+  hal_i2c_begin_transmission_bus(JH_HW_BUS_I2C_INDEX, pcf_i2c_address());
   (void)hal_i2c_write_bus(JH_HW_BUS_I2C_INDEX, addr);
   for (unsigned char i = 0; i < count; ++i) {
     (void)hal_i2c_write_bus(JH_HW_BUS_I2C_INDEX, data[i]);
@@ -73,14 +85,14 @@ void PCF_Read(unsigned char addr, unsigned char *data, unsigned char count) {
 
   memset(data, 0, count);
 
-  hal_i2c_begin_transmission_bus(JH_HW_BUS_I2C_INDEX, JH_HW_NODE_RTC_ADDRESS);
+  hal_i2c_begin_transmission_bus(JH_HW_BUS_I2C_INDEX, pcf_i2c_address());
   (void)hal_i2c_write_bus(JH_HW_BUS_I2C_INDEX, addr);
   if (hal_i2c_end_transmission_bus(JH_HW_BUS_I2C_INDEX) != 0u) {
     return;
   }
 
-  if (hal_i2c_request_from_bus(JH_HW_BUS_I2C_INDEX, JH_HW_NODE_RTC_ADDRESS,
-                               count) != count) {
+  if (hal_i2c_request_from_bus(JH_HW_BUS_I2C_INDEX, pcf_i2c_address(), count) !=
+      count) {
     return;
   }
 
@@ -102,9 +114,11 @@ void PCF_Init(unsigned char mode) {
   if ((mode & PCF_ALARM_INTERRUPT_ENABLE) != 0u) {
     irq_mask = (uint8_t)(irq_mask | HAL_RTC_IRQ_ALARM);
   }
+#if !defined(RTC_ds3231)
   if ((mode & PCF_TIMER_INTERRUPT_ENABLE) != 0u) {
     irq_mask = (uint8_t)(irq_mask | HAL_RTC_IRQ_TIMER);
   }
+#endif
 
   (void)hal_rtc_set_interrupt_enable(s_rtc, irq_mask);
 }

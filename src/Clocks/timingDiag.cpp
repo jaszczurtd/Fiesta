@@ -5,6 +5,7 @@
 #include "../common/canDefinitions/canDefinitions.h"
 #include <JaszczurHAL.h>
 #include <hal/core/hal_memory.h>
+#include <hal/core/hal_mutex_once.h>
 #include <hal/hal.h>
 
 #include <stdio.h>
@@ -26,6 +27,11 @@ static const uint32_t kJitterEdgesUs[] = {5u,   10u,  25u,   50u,  100u,
 
 // Reports whose frame numbers a late frame is looked up in.
 #define TIMING_DIAG_LATE_HISTORY 4u
+
+// Order of the ecu_ids counters in T0.
+static const uint32_t kEcuFrameIds[] = {
+    CAN_ID_ECU_UPDATE_01, CAN_ID_ECU_UPDATE_02, CAN_ID_ECU_UPDATE_03,
+    CAN_ID_RPM,           CAN_ID_THROTTLE,      CAN_ID_TURBO_PRESSURE};
 
 // Late frames of one window that an earlier report counted as lost.
 typedef struct {
@@ -53,12 +59,20 @@ typedef struct {
   int32_t lampMvMin;
   int32_t lampMvMax;
   uint32_t ecuFrames;
+  uint32_t ecuTypeFrames[COUNTOF(kEcuFrameIds)];
   uint32_t ecuLate;   // numbered at or below s_ecuAccountedSeq on arrival
   int32_t ecuLastSeq; // highest unwrapped frame number of the window
   timing_diag_late_t ecuLateFrom[TIMING_DIAG_LATE_HISTORY];
   uint32_t ecuLateWindows; // used entries of ecuLateFrom
   uint32_t ecuLateOld;     // late frames older than the history
   uint32_t loopMax;
+  uint32_t phases[TIMING_DIAG_CAN_PHASES];
+  uint32_t reportMax;
+  uint32_t statusSamples;
+  uint32_t hardwareLost;
+  uint32_t queueLost;
+  uint16_t tec;
+  uint16_t rec;
 } timing_diag_can_window_t;
 
 typedef struct {
@@ -70,6 +84,25 @@ typedef struct {
 
 static timing_diag_can_window_t s_can;
 static timing_diag_display_window_t s_display;
+
+// Only the copies cross cores. Core 0 never waits for serial output, nor
+// discards a collecting window when the previous report is still pending.
+typedef struct {
+  timing_diag_can_window_t window;
+  uint32_t index;
+  uint32_t durationMs;
+  uint32_t lost;
+  uint32_t load;
+  uint32_t bootCanMs;
+  uint32_t bootRpmMs;
+  uint32_t stackFree;
+  uint32_t lampChangedMs;
+  bool lampLit;
+} timing_diag_can_report_t;
+static hal_mutex_t s_reportMutex = NULL;
+static timing_diag_can_report_t s_pendingReport;
+static bool s_reportPending = false;
+static uint32_t s_canWindowStartMs;
 
 static volatile uint32_t s_intStampUs = 0u; // 0 = no edge since the drain
 static uint32_t s_lastDrainUs = 0u;
@@ -149,18 +182,13 @@ static void HAL_RAM_FUNC(statAdd)(timing_diag_stat_t *stat, uint32_t value,
   }
 }
 
-static bool isEcuFrame(uint32_t canID) {
-  switch (canID) {
-  case CAN_ID_ECU_UPDATE_01:
-  case CAN_ID_RPM:
-  case CAN_ID_THROTTLE:
-  case CAN_ID_ECU_UPDATE_02:
-  case CAN_ID_ECU_UPDATE_03:
-  case CAN_ID_TURBO_PRESSURE:
-    return true;
-  default:
-    return false;
+static size_t ecuFrameIndex(uint32_t canID) {
+  for (size_t i = 0u; i < COUNTOF(kEcuFrameIds); ++i) {
+    if (kEcuFrameIds[i] == canID) {
+      return i;
+    }
   }
+  return COUNTOF(kEcuFrameIds);
 }
 
 void timingDiagCanInterrupt(void) {
@@ -238,9 +266,14 @@ static void countLateFrame(int32_t seq) {
 }
 
 void timingDiagCanFrame(uint32_t canID, const uint8_t *buf, uint8_t len) {
-  if (buf == NULL || len == 0u || !isEcuFrame(canID)) {
+  if (buf == NULL || len == 0u) {
     return;
   }
+  const size_t index = ecuFrameIndex(canID);
+  if (index >= COUNTOF(kEcuFrameIds)) {
+    return;
+  }
+  s_can.ecuTypeFrames[index]++;
   // The ECU numbers every frame it sends; unwrap the 8-bit counter so that
   // reordered transmit buffers are not counted as losses.
   const uint8_t number = buf[CAN_FRAME_NUMBER];
@@ -309,14 +342,31 @@ void timingDiagDisplayTick(void) {
 
 uint32_t timingDiagLoopStart(void) { return hal_micros(); }
 
-static void formatBuckets(char *out, size_t size,
-                          const timing_diag_stat_t *stat) {
+uint32_t timingDiagCanPhase(uint8_t phase, uint32_t startUs) {
+  const uint32_t now = hal_micros();
+  if (phase < COUNTOF(s_can.phases) && now - startUs > s_can.phases[phase]) {
+    s_can.phases[phase] = now - startUs;
+  }
+  return now;
+}
+
+void timingDiagCanCounters(uint32_t hardwareLost, uint32_t queueLost,
+                           uint16_t tec, uint16_t rec) {
+  s_can.statusSamples++;
+  s_can.hardwareLost = hardwareLost;
+  s_can.queueLost = queueLost;
+  s_can.tec = (tec > s_can.tec) ? tec : s_can.tec;
+  s_can.rec = (rec > s_can.rec) ? rec : s_can.rec;
+}
+
+static void formatCounts(char *out, size_t size, const uint32_t *counts,
+                         size_t count) {
   size_t used = 0u;
   out[0] = '\0';
-  for (size_t i = 0u; i < TIMING_DIAG_BUCKETS && used < size; i++) {
+  for (size_t i = 0u; i < count && used < size; i++) {
     const int written =
         snprintf(&out[used], size - used, "%s%lu", (i == 0u) ? "" : ",",
-                 (unsigned long)stat->buckets[i]);
+                 (unsigned long)counts[i]);
     if (written < 0) {
       break;
     }
@@ -328,19 +378,23 @@ static uint32_t statAverage(const timing_diag_stat_t *stat) {
   return (stat->count == 0u) ? 0u : (uint32_t)(stat->sum / stat->count);
 }
 
-static void reportCanWindow(void) {
-  timing_diag_can_window_t window;
+static void publishCanWindow(void) {
+  if (jh_hal_mutex_create_once(&s_reportMutex) == NULL ||
+      !hal_mutex_try_lock(s_reportMutex)) {
+    return;
+  }
+  if (s_reportPending) {
+    hal_mutex_unlock(s_reportMutex);
+    return;
+  }
+  timing_diag_can_window_t &window = s_pendingReport.window;
   hal_critical_section_enter();
+  const uint32_t endMs = hal_millis();
   window = s_can;
+  s_pendingReport.durationMs = endMs - s_canWindowStartMs;
+  s_canWindowStartMs = endMs;
   memset(&s_can, 0, sizeof(s_can));
   hal_critical_section_exit();
-
-  static char rxBuckets[96];
-  static char gapBuckets[96];
-  static char tachoBuckets[96];
-  formatBuckets(rxBuckets, sizeof(rxBuckets), &window.rx);
-  formatBuckets(gapBuckets, sizeof(gapBuckets), &window.gap);
-  formatBuckets(tachoBuckets, sizeof(tachoBuckets), &window.tacho);
 
   // Frames numbered after the last one accounted, against those received of
   // them: a frame lost between two windows counts in the later one. A frame
@@ -364,6 +418,46 @@ static void reportCanWindow(void) {
   }
   const uint32_t lost = (expected > received) ? expected - received : 0u;
 
+  s_pendingReport.index = reportIndex;
+  s_pendingReport.lost = lost;
+  s_pendingReport.load = (hal_millis() / TIMING_DIAG_PHASE_MS) % 2u;
+  s_pendingReport.bootCanMs = s_bootCanMs;
+  s_pendingReport.bootRpmMs = s_bootRpmMs;
+  s_pendingReport.stackFree = stackFreeBytes(0u);
+  s_pendingReport.lampChangedMs = s_lampChangedMs;
+  s_pendingReport.lampLit = s_lampLit;
+  s_reportPending = true;
+  hal_mutex_unlock(s_reportMutex);
+}
+
+static void reportCanWindow(void) {
+  if (jh_hal_mutex_create_once(&s_reportMutex) == NULL ||
+      !hal_mutex_try_lock(s_reportMutex)) {
+    return;
+  }
+  if (!s_reportPending) {
+    hal_mutex_unlock(s_reportMutex);
+    return;
+  }
+  static timing_diag_can_report_t report;
+  report = s_pendingReport;
+  s_reportPending = false;
+  hal_mutex_unlock(s_reportMutex);
+  const timing_diag_can_window_t &window = report.window;
+
+  static char rxBuckets[96];
+  static char gapBuckets[96];
+  static char tachoBuckets[96];
+  static char ecuIds[COUNTOF(kEcuFrameIds) * 11u];
+  formatCounts(ecuIds, sizeof(ecuIds), window.ecuTypeFrames,
+               COUNTOF(window.ecuTypeFrames));
+  formatCounts(rxBuckets, sizeof(rxBuckets), window.rx.buckets,
+               COUNTOF(window.rx.buckets));
+  formatCounts(gapBuckets, sizeof(gapBuckets), window.gap.buckets,
+               COUNTOF(window.gap.buckets));
+  formatCounts(tachoBuckets, sizeof(tachoBuckets), window.tacho.buckets,
+               COUNTOF(window.tacho.buckets));
+
   // "<win>x<count>" per report, "-" without late frames
   static char lateFrom[TIMING_DIAG_LATE_HISTORY * 24u];
   size_t used = 0u;
@@ -382,26 +476,35 @@ static void reportCanWindow(void) {
     (void)snprintf(lateFrom, sizeof(lateFrom), "-");
   }
 
-  deb("T0 load:%d rx_n:%lu rx_max:%lu rx_avg:%lu rx_h:%s rx_ns:%lu "
+  deb("T0 load:%d window_ms:%lu rx_n:%lu rx_max:%lu rx_avg:%lu rx_h:%s "
+      "rx_ns:%lu "
       "gap_n:%lu gap_max:%lu gap_h:%s drain_max:%lu tx_max:%lu ecu_n:%lu "
+      "ecu_ids:%s "
       "ecu_lost:%lu ecu_late:%lu ecu_late_win:%s ecu_late_old:%lu win:%lu "
       "tg_n:%lu tg_max:%lu tg_h:%s l0_max:%lu boot_can_ms:%lu "
       "boot_rpm_ms:%lu s0_free:%lu chg:%d chg_n:%lu chg_ms:%lu "
-      "chg_mv:%ld..%ld",
-      (int)((hal_millis() / TIMING_DIAG_PHASE_MS) % 2u),
+      "chg_mv:%ld..%ld phases:%lu,%lu,%lu,%lu,%lu,%lu report_us:%lu "
+      "status_n:%lu hw_lost:%lu queue_lost:%lu tec:%u rec:%u",
+      (int)report.load, (unsigned long)report.durationMs,
       (unsigned long)window.rx.count, (unsigned long)window.rx.max,
       (unsigned long)statAverage(&window.rx), rxBuckets,
       (unsigned long)window.rxUnstamped, (unsigned long)window.gap.count,
       (unsigned long)window.gap.max, gapBuckets, (unsigned long)window.drainMax,
-      (unsigned long)window.sendMax, (unsigned long)window.ecuFrames,
-      (unsigned long)lost, (unsigned long)window.ecuLate, lateFrom,
-      (unsigned long)window.ecuLateOld, (unsigned long)reportIndex,
+      (unsigned long)window.sendMax, (unsigned long)window.ecuFrames, ecuIds,
+      (unsigned long)report.lost, (unsigned long)window.ecuLate, lateFrom,
+      (unsigned long)window.ecuLateOld, (unsigned long)report.index,
       (unsigned long)window.tacho.count, (unsigned long)window.tacho.max,
-      tachoBuckets, (unsigned long)window.loopMax, (unsigned long)s_bootCanMs,
-      (unsigned long)s_bootRpmMs, (unsigned long)stackFreeBytes(0u),
-      s_lampLit ? 1 : 0, (unsigned long)window.lampChanges,
-      (unsigned long)s_lampChangedMs, (long)window.lampMvMin,
-      (long)window.lampMvMax);
+      tachoBuckets, (unsigned long)window.loopMax,
+      (unsigned long)report.bootCanMs, (unsigned long)report.bootRpmMs,
+      (unsigned long)report.stackFree, report.lampLit ? 1 : 0,
+      (unsigned long)window.lampChanges, (unsigned long)report.lampChangedMs,
+      (long)window.lampMvMin, (long)window.lampMvMax,
+      (unsigned long)window.phases[0], (unsigned long)window.phases[1],
+      (unsigned long)window.phases[2], (unsigned long)window.phases[3],
+      (unsigned long)window.phases[4], (unsigned long)window.phases[5],
+      (unsigned long)window.reportMax, (unsigned long)window.statusSamples,
+      (unsigned long)window.hardwareLost, (unsigned long)window.queueLost,
+      (unsigned)window.tec, (unsigned)window.rec);
 }
 
 static void reportDisplayWindow(void) {
@@ -432,15 +535,21 @@ void timingDiagLoopEnd(uint8_t core, uint32_t startUs) {
   }
 
   // A muted debug stream (open SC session) keeps the window collecting.
-  if (hal_debug_is_muted() ||
-      !hal_millis_interval_elapsed_now(&s_lastReportMs[index],
-                                       TIMING_DIAG_REPORT_MS)) {
+  if (hal_debug_is_muted()) {
     return;
   }
-  if (index == 0u) {
+  if (hal_millis_interval_elapsed_now(&s_lastReportMs[index],
+                                      TIMING_DIAG_REPORT_MS)) {
+    if (index == 0u) {
+      const uint32_t reportStart = hal_micros();
+      publishCanWindow();
+      s_can.reportMax = hal_micros() - reportStart;
+    } else {
+      reportDisplayWindow();
+    }
+  }
+  if (index == 1u) {
     reportCanWindow();
-  } else {
-    reportDisplayWindow();
   }
 }
 

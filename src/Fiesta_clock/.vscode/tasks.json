@@ -318,6 +318,41 @@
       "problemMatcher": []
     },
     {
+      "label": "Project: Build variant: DS3231",
+      "detail": "Build the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "DS3231"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Upload variant: DS3231",
+      "detail": "Build and upload the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "upload",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "DS3231"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Project: Check device tree",
       "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
       "type": "shell",
@@ -377,6 +412,26 @@
         "${workspaceFolder}",
         "--assembly",
         "rp2040-zero"
+      ],
+      "hide": true,
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Project: Build (Debug) rp2040-zero variant: DS3231",
+      "detail": "Build the rp2040-zero assembly, variant DS3231, with debug settings for its debug profile.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "build-debug",
+        "--project",
+        "${workspaceFolder}",
+        "--assembly",
+        "rp2040-zero",
+        "--variant",
+        "DS3231"
       ],
       "hide": true,
       "problemMatcher": "$gcc"

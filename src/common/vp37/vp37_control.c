@@ -11,6 +11,110 @@ TESTABLE_STATIC float VP37_strokeTaper(const float *knots, size_t count,
 static float VP37_mapTrimAt(const VP37Pump *self, float percent);
 static void VP37_mapTrimKnots(float percent, uint32_t *lower, float *weight);
 
+static bool HAL_RAM_FUNC(VP37_upperHoldingSettled)(const VP37Pump *self) {
+  return self->pid.upperHoldingActive &&
+         (self->pid.upperHoldingElapsed >= VP37_UPPER_HOLD_SETTLE_S);
+}
+
+static void VP37_resetHoldingWindows(VP37Pump *self) {
+  for (size_t i = 0U; i < COUNTOF(self->upperHoldingWindows); ++i) {
+    VP37HoldingWindow *window = &self->upperHoldingWindows[i];
+    window->elapsed = -VP37_UPPER_HOLD_WINDOW_S * (float)i /
+                      (float)COUNTOF(self->upperHoldingWindows);
+    window->mean = 0.0f;
+    window->m2 = 0.0f;
+    window->count = 0U;
+  }
+}
+
+static void HAL_RAM_FUNC(VP37_updateHoldingWindows)(VP37Pump *self, float dt) {
+  const float position = (float)self->feedback.position;
+  float longest = 0.0f;
+  for (size_t i = 0U; i < COUNTOF(self->upperHoldingWindows); ++i) {
+    VP37HoldingWindow *window = &self->upperHoldingWindows[i];
+    window->elapsed += dt;
+    if (window->elapsed <= 0.0f) {
+      continue;
+    }
+    ++window->count;
+    const float delta = position - window->mean;
+    window->mean += delta / (float)window->count;
+    window->m2 += delta * (position - window->mean);
+    if (window->elapsed > longest) {
+      // Use a window containing this sample, even between window boundaries.
+      longest = window->elapsed;
+      self->pid.upperHoldingMean = window->mean;
+      self->pid.upperHoldingVariance =
+          fmaxf(0.0f, window->m2 / (float)window->count);
+    }
+    if (window->elapsed >= VP37_UPPER_HOLD_WINDOW_S) {
+      window->elapsed -= VP37_UPPER_HOLD_WINDOW_S;
+      window->mean = 0.0f;
+      window->m2 = 0.0f;
+      window->count = 0U;
+    }
+  }
+}
+
+void VP37_resetUpperHolding(VP37Pump *self) {
+  self->pid.upperHoldingActive = false;
+  self->pid.upperHoldingCaptureReady = false;
+  self->pid.upperHoldingElapsed = 0.0f;
+  self->pid.upperHoldingExtraKp = 0.0f;
+  self->pid.upperHoldingMean = 0.0f;
+  self->pid.upperHoldingVariance = 0.0f;
+  self->pid.upperHoldingBiasElapsed = 0.0f;
+  VP37_resetHoldingWindows(self);
+}
+
+float HAL_RAM_FUNC(VP37_prepareUpperHolding)(VP37Pump *self, bool settled,
+                                             float dt, float deadband) {
+  const float span =
+      (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
+  const bool wasActive = self->pid.upperHoldingActive;
+  self->pid.upperHoldingActive =
+      settled && !self->demand.atRest && self->feedback.fresh &&
+      (self->feedback.readStatus == HAL_OK) && !self->pid.fullRangePrototype &&
+      !self->pid.septemberReference && !self->pid.researchSlowDamping &&
+      (self->pid.researchFreezeMask == 0U) &&
+      !self->feedforward.mapTrimEnabled && self->currentControl.enabled &&
+      self->thermal.driveCompensationEnabled &&
+      self->thermal.driveCompensationUsed &&
+      self->thermal.driveResistanceReady && isfinite(dt) && (dt > 0.0f) &&
+      (self->pid.ki > 0.0f) && (self->pid.kp > 0.0f) && (dt <= 0.15f) &&
+      (span > 0.0f) &&
+      ((float)self->demand.target >
+       (float)self->feedback.adjustMin +
+           span * (VP37_UPPER_HOLD_START_PERCENT * 0.01f)) &&
+      (self->demand.target < self->feedback.adjustMax);
+  self->pid.upperHoldingElapsed =
+      self->pid.upperHoldingActive
+          ? fminf(self->pid.upperHoldingElapsed + dt, VP37_UPPER_HOLD_SETTLE_S)
+          : 0.0f;
+  self->pid.upperHoldingCaptureReady = false;
+  if (self->pid.upperHoldingActive) {
+    float weight = 0.0f;
+    (void)VP37_referencePotential(self, (float)self->demand.target, &weight);
+    self->pid.upperHoldingCaptureReady =
+        self->pid.upperHoldingElapsed >=
+        VP37_UPPER_HOLD_SETTLE_S * (1.0f - weight);
+    self->pid.upperHoldingBiasElapsed =
+        fminf(self->pid.upperHoldingBiasElapsed + dt,
+              VP37_UPPER_HOLD_BIAS_INTERVAL_S);
+    if (!wasActive) {
+      VP37_resetHoldingWindows(self);
+      self->pid.upperHoldingMean = (float)self->feedback.position;
+      self->pid.upperHoldingVariance = 0.0f;
+    }
+    VP37_updateHoldingWindows(self, dt);
+  } else {
+    self->pid.upperHoldingBiasElapsed = 0.0f;
+  }
+  return self->pid.upperHoldingCaptureReady
+             ? fminf(deadband, (float)VP37_PID_DEADBAND)
+             : deadband;
+}
+
 void VP37_resetMotionIntegralGate(VP37Pump *self) {
   self->pid.motionIntegralReady = false;
   self->pid.motionIntegralHold = false;
@@ -72,8 +176,9 @@ static void HAL_RAM_FUNC(VP37_observeHoldingIntegral)(VP37Pump *self,
 
 bool HAL_RAM_FUNC(VP37_motionIntegralHold)(VP37Pump *self, bool settled,
                                            float dt) {
-  if (!self->pid.fullRangePrototype || !self->pid.researchMotionIntegralGate ||
-      !isfinite(dt) || (dt <= 0.0f) || (dt > 0.15f)) {
+  const bool research =
+      self->pid.fullRangePrototype && self->pid.researchMotionIntegralGate;
+  if (!research || !isfinite(dt) || (dt <= 0.0f) || (dt > 0.15f)) {
     VP37_resetMotionIntegralGate(self);
     return false;
   }
@@ -293,6 +398,15 @@ void VP37_updateDerivativeGain(VP37Pump *self, bool targetSettled) {
   }
   self->pid.effectiveKd =
       self->pid.kd + (self->pid.topKd * weight * self->pid.topDBlend);
+  if ((self->pid.upperHoldingExtraKp > 0.0f) && (self->pid.kp > 0.0f)) {
+    const float stiffness =
+        hal_constrain(self->pid.upperHoldingExtraKp /
+                          (self->pid.kp * VP37_UPPER_HOLD_EXTRA_KP_RATIO),
+                      0.0f, 1.0f);
+    self->pid.effectiveKd =
+        self->pid.kd +
+        (self->pid.effectiveKd - self->pid.kd) * (1.0f - stiffness);
+  }
   hal_pid_controller_set_kd(self->pid.controller, self->pid.effectiveKd);
 }
 
@@ -320,7 +434,14 @@ void HAL_RAM_FUNC(VP37_updateIntegralHold)(VP37Pump *self, bool targetSettled) {
   // the error; the hold matters where the band is narrower than the zone.
   const int32_t enterHz = VP37_INTEGRAL_HOLD_ENTER_HZ;
   const int32_t exitHz = VP37_INTEGRAL_HOLD_EXIT_HZ;
-  const bool meanEntry = self->pid.integralHoldOffsetMs > 0U;
+  const bool upperHolding =
+      self->pid.upperHoldingActive && self->pid.upperHoldingCaptureReady;
+  const bool meanEntry = !upperHolding && self->pid.integralHoldOffsetMs > 0U;
+  const uint32_t confirmationMs =
+      upperHolding &&
+              self->pid.integralHoldConfirmMs > VP37_UPPER_HOLD_CAPTURE_MS
+          ? VP37_UPPER_HOLD_CAPTURE_MS
+          : self->pid.integralHoldConfirmMs;
   // Only where the integral dead zone is the base zone: above the taper start
   // integration walks until the mechanism breaks free (VP37_PID_DEADBAND), and
   // a 120 s hold at 90 % demand turned the offset release into stick-slip.
@@ -357,7 +478,7 @@ void HAL_RAM_FUNC(VP37_updateIntegralHold)(VP37Pump *self, bool targetSettled) {
         self->pid.integralHoldEnterPending = true;
       }
       if (hal_millis_deadline_expired(self->pid.integralHoldEnterStartedMs,
-                                      self->pid.integralHoldConfirmMs)) {
+                                      confirmationMs)) {
         self->pid.integralHold = true;
         self->pid.integralHoldEntered = true;
         self->pid.integralHoldEnterPending = false;
@@ -566,8 +687,8 @@ float HAL_RAM_FUNC(VP37_updateSlowDamping)(VP37Pump *self, float dt) {
   return self->pid.slowDampingOutput;
 }
 
-float VP37_referencePotential(const VP37Pump *self, float position,
-                              float *weight) {
+float HAL_RAM_FUNC(VP37_referencePotential)(const VP37Pump *self,
+                                            float position, float *weight) {
   const float span =
       (float)self->feedback.adjustMax - (float)self->feedback.adjustMin;
   float blend = 0.0f;
@@ -592,13 +713,82 @@ float VP37_referencePotential(const VP37Pump *self, float position,
   return result;
 }
 
+/** @brief Transfer a change of holding P into I without changing drive. */
+static hal_status_t VP37_shiftUpperHoldingGain(VP37Pump *self, float target) {
+  const float previous = self->pid.upperHoldingExtraKp;
+  float next = 0.0f;
+  if (VP37_upperHoldingSettled(self)) {
+    next = fminf(target, previous);
+    if ((self->pid.upperHoldingVariance <= VP37_UPPER_HOLD_QUIET_VARIANCE) &&
+        (self->pid.upperHoldingBiasElapsed >=
+         VP37_UPPER_HOLD_BIAS_INTERVAL_S)) {
+      const float step = fminf(VP37_UPPER_HOLD_KP_STEP,
+                               VP37_UPPER_HOLD_GAIN_TRANSFER_PWM /
+                                   fmaxf(fabsf((float)self->pid.error), 1.0f));
+      next = fminf(target, previous + step);
+    }
+  }
+  const float error = (float)self->pid.error;
+  if ((next != previous) && (error != 0.0f)) {
+    float applied = 0.0f;
+    const hal_status_t status = hal_pid_controller_shift_integral_ex(
+        self->pid.controller, -(next - previous) * error, &applied,
+        &self->pid.terms);
+    if (status != HAL_OK) {
+      return status;
+    }
+    if (self->pid.upperHoldingActive) {
+      // Admission needs the paired transfer to preserve drive.
+      next = hal_constrain(previous - applied / error, fminf(previous, next),
+                           fmaxf(previous, next));
+    }
+    // On exit restore ordinary P even if I cannot take the full transfer.
+  }
+  self->pid.upperHoldingExtraKp = next;
+  if (next != previous) {
+    self->pid.upperHoldingBiasElapsed = 0.0f;
+  }
+  return HAL_OK;
+}
+
+/** @brief Adapt holding force once the measured position has settled. */
+static hal_status_t VP37_shiftUpperHoldingBias(VP37Pump *self) {
+  if (self->pid.upperHoldingVariance > VP37_UPPER_HOLD_QUIET_VARIANCE) {
+    return HAL_OK;
+  }
+  const float error = (float)self->demand.desired - self->pid.upperHoldingMean;
+  const float outside = error - hal_constrain(error, -(float)VP37_PID_DEADBAND,
+                                              (float)VP37_PID_DEADBAND);
+  const float delta = hal_constrain(
+      self->pid.ki * VP37_UPPER_HOLD_INTEGRAL_RATIO *
+          VP37_UPPER_HOLD_BIAS_INTERVAL_S * outside,
+      -VP37_UPPER_HOLD_BIAS_STEP_PWM, VP37_UPPER_HOLD_BIAS_STEP_PWM);
+  float applied = 0.0f;
+  const hal_status_t status = hal_pid_controller_shift_integral_ex(
+      self->pid.controller, delta, &applied, &self->pid.terms);
+  if (status == HAL_OK) {
+    self->pid.upperHoldingBiasElapsed = 0.0f;
+  }
+  return status;
+}
+
 hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
                                        int32_t previousDesired) {
   const float extraD = VP37_updateSlowDamping(self, dt);
   const float error = (float)self->pid.error;
-  float input = error;
-  float integrationBand = deadband;
+  const bool holding = self->pid.upperHoldingActive;
+  const bool stiffening = VP37_upperHoldingSettled(self);
+  float holdingWeight = 0.0f;
+  const float ratio =
+      holding && self->pid.upperHoldingCaptureReady ? 0.5f : 1.0f;
+  if (stiffening) {
+    (void)VP37_referencePotential(self, (float)self->demand.desired,
+                                  &holdingWeight);
+  }
+  float input = error * ratio;
+  float integrationBand = deadband * ratio;
   self->pid.referenceKp = self->pid.kp;
+  hal_pid_controller_set_kp(self->pid.controller, self->pid.referenceKp);
   if (self->pid.fullRangePrototype &&
       self->pid.researchReferenceWeight < 1.0f) {
     if (!(self->pid.ki > 0.0f) || !isfinite(dt) || !(dt > 0.0f)) {
@@ -636,24 +826,44 @@ hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
       integrationBand = 0.0f;
     }
   }
+  if (stiffening) {
+    input = 0.0f;
+    integrationBand = 0.0f;
+  }
   self->pid.integralInput = input;
-  const float extra = extraD + self->pid.kp * (error - input);
+  float extra = extraD + self->pid.kp * (error - input) +
+                self->pid.upperHoldingExtraKp * error;
   // Restore ordinary P and include every term before conditional anti-windup.
   hal_pid_controller_set_output_limits(self->pid.controller,
                                        self->pid.negativeLimit - extra,
                                        self->pid.upperLimit - extra);
-  const hal_status_t status = hal_pid_controller_step_ex(
+  hal_status_t status = hal_pid_controller_step_ex(
       self->pid.controller, input, (float)self->feedback.position, dt,
       integrationBand, &self->pid.terms);
-  hal_pid_controller_set_output_limits(
-      self->pid.controller, self->pid.negativeLimit, self->pid.upperLimit);
   if (status == HAL_OK) {
-    self->pid.terms.proportional = self->pid.kp * error;
+    const float previous = self->pid.upperHoldingExtraKp;
+    if (holding || (previous != 0.0f)) {
+      const float target =
+          self->pid.kp * VP37_UPPER_HOLD_EXTRA_KP_RATIO * holdingWeight;
+      const bool intervalReady =
+          self->pid.upperHoldingBiasElapsed >= VP37_UPPER_HOLD_BIAS_INTERVAL_S;
+      status = VP37_shiftUpperHoldingGain(self, target);
+      if ((status == HAL_OK) && stiffening && intervalReady &&
+          (self->pid.upperHoldingExtraKp == previous)) {
+        status = VP37_shiftUpperHoldingBias(self);
+      }
+    }
+    extra += (self->pid.upperHoldingExtraKp - previous) * error;
+    self->pid.referenceKp += self->pid.upperHoldingExtraKp;
+    self->pid.terms.proportional =
+        (self->pid.kp + self->pid.upperHoldingExtraKp) * error;
     self->pid.terms.derivative += extraD;
     self->pid.terms.unconstrained += extra;
     self->pid.terms.output =
         hal_constrain(self->pid.terms.output + extra, self->pid.negativeLimit,
                       self->pid.upperLimit);
   }
+  hal_pid_controller_set_output_limits(
+      self->pid.controller, self->pid.negativeLimit, self->pid.upperLimit);
   return status;
 }

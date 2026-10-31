@@ -139,14 +139,18 @@ static void runCore0(void) {
   updateWatchdogCore0();
   statusVariable0 = 1;
   const uint32_t loopStart = timingDiagLoopStart();
+  uint32_t phaseStart = loopStart;
 
   if (canRxPending() || hal_millis_interval_elapsed_now(
                             &lastCanPollMs, CAN_MAIN_LOOP_READ_INTERVAL)) {
     canMainLoop();
   }
+  phaseStart = timingDiagCanPhase(0u, phaseStart);
 
   hal_soft_timer_tick_table(canTimerTable, COUNTOF(canTimerTable));
+  phaseStart = timingDiagCanPhase(1u, phaseStart);
   canTickBroadcastTimers();
+  phaseStart = timingDiagCanPhase(2u, phaseStart);
   if (canRetryInit()) {
     hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
   }
@@ -159,11 +163,15 @@ static void runCore0(void) {
   loopBuzzers();
 
   onImpulseTranslating();
+  phaseStart = timingDiagCanPhase(3u, phaseStart);
   updateCluster();
+  (void)timingDiagCanPhase(4u, phaseStart);
 
   timingDiagLoopEnd(0u, loopStart);
   statusVariable0 = 2;
+  phaseStart = timingDiagLoopStart();
   waitForCanOrLoopPeriod();
+  (void)timingDiagCanPhase(5u, phaseStart);
 }
 
 extern "C" void app_task0(void) { runCore0(); }

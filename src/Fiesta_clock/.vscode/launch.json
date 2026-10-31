@@ -18,6 +18,24 @@
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
             ]
+        },
+        {
+            "name": "Project: Debug rp2040-zero variant: DS3231 (RP2040)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/rp2040/rp2040-zero/variants/DS3231/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) rp2040-zero variant: DS3231",
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
         }
     ]
 }

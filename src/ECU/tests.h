@@ -107,13 +107,15 @@ bool tickTests(void);
  * @param line NUL-terminated command line without the trailing CR or LF.
  * @note Wired as the unknown-line callback of the serial session, so the
  * bootstrap protocol sees every line first. The line is applied later, on the
- * core that owns the controller. A no-op when tests are not compiled in.
+ * core that owns the controller. Read-only list/params print on the console
+ * core directly. A no-op when tests are not compiled in.
  */
 void tickTestsHandleSerialLine(const char *line);
 
 /**
- * @brief Print the test step changes recorded on the control core.
- * @note Call from the core 0 loop; a no-op when tests are not compiled in.
+ * @brief Print recorded test steps and acknowledgements of default resets.
+ * @note Also runs pending DTC/KV one-shot actions and publishes their results.
+ *       Call from the core 0 loop; a no-op without functional tests.
  */
 void testsPrintEvents(void);
 

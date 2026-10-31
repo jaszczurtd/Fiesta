@@ -26,8 +26,8 @@ terminu, a start spóźniony o cały okres zaczyna nową siatkę zamiast serii
 kroków nadrabiających. W oknie `CORE1_VP37_GUARD_US` przed terminem rdzeń 1
 nie zaczyna innej pracy (turbina, RPM, zadanie testu) i czeka na termin
 z RAM, więc krok nie dziedziczy ogona tej pracy. Testy stanowiskowe zapisują
-ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0; zmienione zadanie testu
-czeka na ten wydruk, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
+ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0, razem z potwierdzeniami
+resetu nastaw. Zmienione zadanie testu czeka na swoje ogłoszenie, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
 ogłoszenie nadal poprzedza ruch, który zapowiada. Każdy krok publikuje
 stan za licznikiem sekwencji; rdzeń 0 kopiuje go bez blokady. Słowa danych są zapisywane
 i odczytywane atomowo z porządkiem relaxed, więc kopia nakładająca się na
@@ -84,10 +84,9 @@ Zejście zachowuje 300%/s. Pojedynczy skok w dół ma pełne wspomaganie przez
 25 ms, potem 0,3. Reguły górnego zakresu zależą od fizycznego położenia:
 wspomaganie w górę maleje między 75% a 85%; od 75% zmieniają się zakres
 całkowania i martwa strefa. Górne szybkości to 275%/s i 187,5%/s dla celu
-nieruchomego. Tłumienie ustalonego celu osiąga pełną wagę położenia między
-85% a 90%, z domyślnym wzmocnieniem 0,001 PWM·s/Hz. Włącza się po ustaleniu
-celu i zanika przez 50 ms po wznowieniu ruchu. Bez tych reguł szybka rampa
-przekraczała limit o jedną dziesiątą skoku, a zejście oscylowało.
+nieruchomego. Tłumienie ustalonego celu jest opcjonalne (`H`, domyślnie
+wyłączone). Jawnie ustawiona pochodna osiąga pełną wagę położenia między
+85% a 90%, włącza się po ustaleniu celu i zanika przez 50 ms po wznowieniu ruchu.
 
 Mapa podtrzymania i kompensacja napięcia/temperatury obowiązują w całym
 zakresie. Po ustaleniu żądania dolna granica wspomagania wznoszenia podąża
@@ -96,7 +95,41 @@ potrzebne do postoju. Ruchome żądania zachowują pierwotną granicę.
 Telemetria podaje `mode:position` i osobne `test:<name|none>`;
 nie oznacza potencjometru jako osobnego trybu regulatora.
 
-Przy ustalonym celu 100 ms w paśmie ±12 Hz zamraża całkę, aby nie zwiększać
+Przy stałym celu powyżej 85% skalibrowanego skoku poprawne sprzężenie oraz
+aktywne kompensacje prądu i rezystancji pozwalają włączyć profil postoju.
+Opóźnienie fazy przechwycenia maleje według istniejącego przejścia górnego
+zakresu: od trzech sekund przy 85% do zera przy 90%. Wcześniej całkowanie,
+strefa martwa i potwierdzanie blokady zachowują zwykłe reguły. W fazie
+przechwycenia całkowanie zwalnia o połowę, strefa zwęża się do ±12 Hz,
+a potwierdzenie blokady ma najwyżej 5 ms i następuje w kroku regulatora.
+Pomijane są wtedy starsza bramka średniego błędu i zwolnienie przez uchyb
+średni. Duży utrzymujący się błąd nadal zwalnia blokadę.
+
+Po trzech sekundach spełniania warunków ciągłe całkowanie ustaje,
+a P zwiększa się w spokojnych oknach, nie częściej niż co
+1,5 s, do trzykrotności ustawionego wzmocnienia przy 90% skoku. Dodatkowy
+udział maleje do zera przy 85%. Jeden przyrost nie przekracza 0,01 PWM/Hz,
+a równoczesne przesunięcie do I najwyżej 2,5 nominalnego counta PWM zachowuje
+sterowanie. Dodatkowa górna pochodna maleje wraz ze wzrostem sztywności.
+Ruchomy cel przywraca zwykłe P, także gdy limit całki nie pozwala w pełni
+skompensować tej zmiany.
+
+Jedna aktualizacja przy spokojnej pozycji albo przenosi zmianę wzmocnienia,
+albo koryguje bias całki. Parowane przeniesienie zachowuje napęd; korekta
+bias czeka na późniejszy przedział bez zmiany wzmocnienia.
+Spokojna pozycja oznacza wariancję najwyżej 225 Hz²
+w aktualnym oknie od 0,3 do 0,6 s, z bieżącą próbką sprzężenia. Statystyka
+odświeża się w każdym kroku regulacji. Aktualizacje następują nie częściej
+niż co 1,5 s i używają 5% ustawionego Ki w całym zakresie postoju.
+Krok korekty nie przekracza trzech
+nominalnych countów PWM i wynika z uśrednionego błędu poza ±12 Hz.
+Ciągłe całkowanie pozostaje zablokowane; osobne kroki korekty usuwają ustalony
+uchyb w granicach limitów całki i sterowania. Pola `uh`, `rkp`, `ierr`
+oraz `I` pokazują spełnienie warunków profilu, efektywne wzmocnienie, wejście ciągłego
+całkowania i zachowaną korektę. Profile badawcze zachowują własne reguły.
+
+Poza górnym profilem postoju 100 ms przy ustalonym celu w paśmie ±12 Hz
+zamraża całkę, aby nie zwiększać
 siły przeciw tarciu statycznemu; w paśmie ±12 Hz musi być też błąd uśredniony
 z 0,3 s, więc przejście przez pasmo w trakcie dojazdu jej nie zamraża. Błąd
 przekraczający ±40 Hz rozpoczyna odliczanie 500 ms do zwolnienia całki. Powrót
@@ -121,7 +154,8 @@ wyłączone: tam prowadziły długie postoje do zrywów tarcia.
 
 Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`.
 Bloki skanu ADC docierają niezależnie od kroku regulacji pozycji. Rdzeń 1 odbiera je między
-krokami położenia i śledzi zbocza bramki przez granice bloków. Każdy kod ADC
+krokami położenia, także między obsługą turbo, RPM i testów poza osłoną
+terminu, oraz śledzi zbocza bramki przez granice bloków. Każdy kod ADC
 jest kompensowany raz przy odbiorze (tablica korekcji RP2040; kody RP2350 bez zmian). Krok 5 ms redukuje każdy zakończony impuls
 raz i odświeża ostatnie okno napięcia w każdym kroku.
 
@@ -300,6 +334,15 @@ lub `Project: Upload variant: BENCH`. Obraz trafia do
 `src/ECU/.build/rp2350-arm/rp2350-plus/variants/BENCH/`, a dla montażu
 RP2040-Plus pod `.build/rp2040/rp2040-plus/`. Zadania bez wariantu dają obraz
 samochodu. Odpowiedniki CLI podaje [instrukcja kompilacji](../../doc/BUILDING.pl.md).
+
+Jednorazowe czynności DTC i KV wykonuje rdzeń 0. Rdzeń sterowania nadal
+obsługuje VP37 i przesuwa sekwencję testów po publikacji wyniku.
+Zatrzymanie testu anuluje czynność, która jeszcze nie zaczęła się wykonywać.
+Polecenia odczytu `list` i `params` również drukuje rdzeń konsoli, gdy
+callback portu szeregowego zwolni tymczasowe wyciszenie debug.
+Komunikaty startu, zatrzymania i wyniku testu trafiają tam przez ograniczoną
+kolejkę. Ich wydruk nie blokuje sterowania na mutex debug. Przepełnienie jest
+zgłaszane; zatrzymanie nastawnika nadal działa.
 
 [device_tree.json](device_tree.json) przypisuje piny i adresy. Montaże
 `rp2350-plus` (Waveshare RP2350-Plus, domyślny) i `rp2040-plus` (Waveshare

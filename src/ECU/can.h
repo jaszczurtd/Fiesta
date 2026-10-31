@@ -14,9 +14,16 @@ extern "C" {
 #endif
 
 /**
- * @brief Process pending CAN frames on the main CAN bus.
+ * @brief Process received main-bus frames and send a due deferred update.
  */
 void canMainLoop(void);
+
+/**
+ * @brief Send one due periodic snapshot without polling RX.
+ * @note Call only from core 0, between I/O or console work. Keeps the same
+ *       2 ms spacing and round-robin order as canMainLoop().
+ */
+void canServicePeriodic(void);
 
 /**
  * @brief Initialize the main CAN bus interface.
@@ -32,30 +39,33 @@ hal_status_t canInit(int retries);
 void CAN_sendAll(void);
 
 /**
- * @brief Send a legacy throttle-position CAN update when needed.
+ * @brief Queue a legacy throttle-position CAN update when needed.
  * @note In the current diesel-oriented codebase this frame carries the
  * G79/G185-like driver-demand signal, despite the historical throttle naming.
  */
 void CAN_sendThrottleUpdate(void);
 
 /**
- * @brief Send a turbo-pressure CAN update when needed.
+ * @brief Queue a turbo-pressure CAN update when needed.
  */
 void CAN_sendTurboUpdate(void);
 
 /**
- * @brief Send the first group of ECU update frames.
+ * @brief Queue snapshots of the three periodic ECU status frames.
+ * @note The core-0 loop sends one pending periodic frame at least 2 ms after
+ *       its preceding transmission attempt. A newer snapshot replaces an
+ *       unsent one; sequence numbers are assigned only at transmission.
  */
 void CAN_updaterecipients_01(void);
 
 /**
- * @brief Publish engine RPM on the main CAN bus.
+ * @brief Publish engine RPM and service a due periodic update.
  *
  * A changed value goes out at once and an unchanged one every
  * CAN_RPM_HEARTBEAT_INTERVAL_MS. A failed send is retried after
- * CAN_RPM_RETRY_INTERVAL_MS. The MCP2515 runs in one-shot mode, so an
- * unacknowledged frame never holds one of its three TX buffers. All of these
- * are due times checked once per core-0 loop, not latency guarantees.
+ * CAN_RPM_RETRY_INTERVAL_MS. The MCP2515 retries arbitration in hardware; the
+ * HAL aborts a transmission that reaches its timeout. All of these are due
+ * times checked once per core-0 loop, not latency guarantees.
  */
 void CAN_updaterecipients_02(void);
 

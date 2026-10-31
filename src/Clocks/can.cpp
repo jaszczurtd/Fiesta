@@ -91,6 +91,8 @@ hal_status_t canInit(void) {
   lastInitAttemptMs = hal_millis();
 
   hal_can_config_t canCfg = JH_HW_NODE_CAN_CONFIG_INIT;
+  // Retry arbitration; the HAL aborts a send that reaches its timeout.
+  canCfg.mcp2515.one_shot_tx = false;
 
   // One attempt: core 1 starts only after the core-0 set-up, and the core-0
   // loop tries again (canRetryInit()).
@@ -105,6 +107,7 @@ hal_status_t canInit(void) {
   if (st != HAL_OK) {
     derr("CAN acceptance-filter configuration failed: %s",
          hal_status_to_string(st));
+    hal_gpio_detach_interrupt(JH_HW_NODE_CAN_PIN_INT);
     hal_can_destroy(canHandle);
     canHandle = NULL;
     return st;
@@ -137,6 +140,9 @@ static void canBroadcast(uint32_t id, uint8_t *buf) {
     derr_limited("can", "frame 0x%03lx not sent: %s", (unsigned long)id,
                  hal_status_to_string(st));
   }
+  // The driver's send may retain incoming frames. Deliver them before the
+  // next transmit, rather than filling its ring across a broadcast batch.
+  canMainLoop();
 }
 
 void updateCANrecipients(void) {
@@ -209,8 +215,6 @@ void receivedCanMessage(void) {
 }
 
 static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
-  interrupt = false;
-
   if (buf == NULL || len > CAN_FRAME_MAX_LENGTH) {
     derr("Received invalid CAN frame with ID: %03x, len: %d\n", canID, len);
     return;
@@ -354,6 +358,9 @@ void canMainLoop(void) {
   if (canHandle == NULL) {
     return;
   }
+  // A new edge during the drain belongs to the next pass. The active-low
+  // pin also covers a frame whose interrupt is still asserted after it.
+  interrupt = false;
   const uint32_t drainStart = timingDiagLoopStart();
   const hal_status_t st = hal_can_process_all(canHandle, onCanFrame, NULL);
   timingDiagCanDrained(drainStart);
@@ -363,7 +370,10 @@ void canMainLoop(void) {
   publishState();
 }
 
-bool canRxPending(void) { return interrupt; }
+bool canRxPending(void) {
+  return canHandle != NULL &&
+         (interrupt || !hal_gpio_read(JH_HW_NODE_CAN_PIN_INT));
+}
 
 // Brightness, oil pressure and ABS speed every CAN_UPDATE_RECIPIENTS, both
 // EGT every CAN_EGT_UPDATE_INTERVAL; never on every loop pass.
@@ -403,6 +413,15 @@ void canSetValue(int idx, float val) {
 }
 
 void canCheckConnection(void) {
+#if CLOCKS_TIMING_DIAG
+  if (canHandle != NULL) {
+    hal_can_status_t status;
+    if (hal_can_get_status(canHandle, &status) == HAL_OK) {
+      timingDiagCanCounters(status.rx_hw_lost, status.rx_queue_overflow,
+                            status.tec, status.rec);
+    }
+  }
+#endif
   ecuConnected = (ecuMessages != lastEcuMessages);
   lastEcuMessages = ecuMessages;
 

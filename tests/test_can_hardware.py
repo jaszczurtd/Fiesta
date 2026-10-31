@@ -51,6 +51,7 @@ class CanHardwareTests(unittest.TestCase):
                 declaration = ("extern \"C\" " if source_name.endswith(".c") else "")
                 function = call.split("(")[0]
                 argument = "int" if module == "ECU" else "void"
+                one_shot = "false" if (module, source_name) in (("ECU", "can.c"), ("Clocks", "can.cpp")) else "true"
                 harness.write_text(f'''
 #include <hal/can/hal_can.h>
 #include <hal/spi/hal_spi.h>
@@ -74,7 +75,8 @@ hal_status_t hal_can_create_with_retry(const hal_can_config_t *cfg, uint8_t,
   assert(cfg->mcp2515.oscillator_hz == 16000000);
   assert(cfg->mcp2515.spi_bus == {bus});
   assert(cfg->mcp2515.cs_pin == {cs});
-  assert(cfg->mcp2515.one_shot_tx && cfg->mcp2515.sleep_wakeup);
+  assert(cfg->mcp2515.one_shot_tx == {one_shot});
+  assert(cfg->mcp2515.sleep_wakeup);
   std::exit(0); // The test ends at the HAL device creation boundary.
 }}
 }}

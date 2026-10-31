@@ -294,8 +294,7 @@ void VP37_updateDriveCorrection(VP37Pump *self, float dt) {
   // Healthy captures keep the retained estimate alive during a long supply
   // sweep, even while their electrical transient must not train resistance.
   self->thermal.driveObservedMs = hal_millis();
-  if (self->pid.fullRangePrototype &&
-      ((self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_DRIVE_MASK) !=
+  if (((self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_DRIVE_MASK) !=
        0U) &&
       self->thermal.driveResistanceReady) {
     // Observe valid current and refresh its age without training the estimate.
@@ -376,9 +375,8 @@ static void VP37_trackDriveSupply(VP37Pump *self) {
  */
 void HAL_RAM_FUNC(VP37_updateThermalScale)(VP37Pump *self, float dt,
                                            bool hold) {
-  if (self->pid.fullRangePrototype && self->thermal.scaleReady &&
-      ((self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_DRIVE_MASK) !=
-       0U)) {
+  if (self->thermal.scaleReady && ((self->pid.researchFreezeMask &
+                                    VP37_RESEARCH_FREEZE_DRIVE_MASK) != 0U)) {
     // Keep the applied multiplier too: holding only its source can still slew.
     return;
   }

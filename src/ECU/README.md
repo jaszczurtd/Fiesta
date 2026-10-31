@@ -32,7 +32,8 @@ grid instead of a burst of catch-up steps. Within `CORE1_VP37_GUARD_US` before
 a deadline core 1 starts no other work (turbo, RPM, the test demand) and waits
 for the deadline from RAM, so the step does not inherit the tail of that work.
 The bench tests record their step announcements on core 1 and core 0 prints
-them; a changed test demand waits for that print, at most
+them, together with acknowledgements of default resets. A changed test demand
+waits for its announcement, at most
 `STEP_EVENT_APPLY_TIMEOUT_MS`, so the log still shows the announcement before
 the move it announces. Every control step ends by publishing its state behind
 a sequence counter, and core 0 copies that snapshot without a lock. The published words are written and read only
@@ -92,11 +93,10 @@ the full assist for its first 25 ms and 0.3 of it afterwards. The
 upper-stroke rules follow the physical position whatever the limit: the
 upward-assist taper between 75% and 85%, the integral authority and dead-zone
 tapers from 75%, the slower upper slews (275%/s, standing 187.5%/s) and the
-settled-target damping, which reaches its full position weight between 85%
-and 90% with a default gain of 0.001 PWM·s/Hz, engages after the target
-settles and fades through a 50 ms blend when movement resumes. Without them a
-fast ramp overshoots the physical limit by a tenth of the stroke and the descent
-oscillates. The holding map and supply/temperature compensation remain shared
+optional settled-target damping (`H`, disabled by default). An explicitly
+configured derivative reaches its full position weight between 85% and 90%,
+engages after the target settles and fades through a 50 ms blend when movement
+resumes. The holding map and supply/temperature compensation remain shared
 across the stroke. Once the
 demand settles, the climb floor follows negative learned integral trim, so
 crossing below the target preserves the reduction needed to hold position.
@@ -104,7 +104,38 @@ Moving demands retain the original climb floor. Telemetry reports
 `mode:position` and a separate `test:<name|none>` field; it does not identify a
 potentiometer controller mode.
 
-At a settled target, 100 ms within ±12 Hz freezes the integral to avoid
+At a fixed target above 85% of the calibrated stroke, valid feedback and active
+current/resistance compensation qualify a holding profile. Its capture delay
+decreases with the existing upper blend, from three seconds at 85% to zero
+at 90%. Before capture, integration, dead zone and hold confirmation keep
+their ordinary rules. Capture halves integration, narrows the dead zone to
+±12 Hz and caps hold confirmation at 5 ms, confirmed on a control step. The
+legacy mean-error entry gate and offset release are bypassed in that phase.
+A large sustained error still releases the hold.
+
+After three qualifying seconds, continuous integration stops and P increases
+in quiet intervals at least 1.5 seconds apart,
+toward three times the configured gain at 90% stroke; its additional share
+tapers to zero at 85%. Each increase is at most 0.01 PWM/Hz and transfers at
+most 2.5 nominal PWM counts into I to preserve drive. The extra upper derivative
+fades as holding stiffness rises. A moving target restores ordinary P,
+including when the integral limit prevents full compensation of that transfer.
+
+A quiet update either transfers a gain change or corrects the integral bias.
+The paired gain transfer preserves drive; bias correction waits for a later
+interval with unchanged gain. Quiet means a position variance at most 225 Hz
+squared in the latest 0.3 to 0.6 seconds of feedback. Its statistics include the
+current sample and refresh every control step. Updates are at least
+1.5 seconds apart and use 5% of the configured Ki throughout the holding
+range. Each bias step
+is limited to three nominal PWM counts and uses the mean error outside
+±12 Hz. Continuous integration remains held; these separate bias steps still
+correct a settled offset within the integral and actuator limits. `uh`,
+`rkp`, `ierr` and `I` report profile qualification, effective gain, continuous
+integration input and retained bias. Research profiles keep their own rules.
+
+Outside the upper holding profile, 100 ms within ±12 Hz at a settled target
+freezes the integral to avoid
 building force against static friction; the error averaged over 0.3 s must be
 within ±12 Hz too, so a pass through the band during an arrival does not
 freeze it. An error beyond ±40 Hz starts a 500 ms release timer. Returning to
@@ -130,7 +161,8 @@ into stick-slip.
 
 Supply compensation scales the complete feedforward and PID command by
 `12 V / compensated voltage`. ADC scan blocks arrive independently of the position-control step. Core 1 copies them between position steps and tracks gate edges across
-block boundaries. Each ADC code is compensated once on arrival (RP2040
+block boundaries, including between turbo, RPM and test processing while
+outside the deadline guard. Each ADC code is compensated once on arrival (RP2040
 correction table; RP2350 codes pass unchanged); the 5 ms control step reduces
 each completed pulse once
 and refreshes the latest supply window at every step. The frames
@@ -314,6 +346,15 @@ itself. Select `Project: Build variant: BENCH` or
 `.build/rp2040/rp2040-plus/` for the RP2040-Plus assembly. Tasks without a
 variant build the car image. See the [build guide](../../doc/BUILDING.md)
 for CLI equivalents.
+
+DTC and KV one-shot actions run on core 0. The control core continues to
+service VP37 and advances the test sequence after the result is published.
+Stopping a test cancels an action that has not yet been dispatched.
+Read-only `list` and `params` also print on the console core, after the
+serial callback releases its temporary debug mute.
+Test start, stop and result messages use a bounded queue to that core.
+Their output never makes control wait for the debug mutex. A queue overflow is reported;
+stopping the actuator still takes effect.
 
 [`device_tree.json`](../../src/ECU/device_tree.json) assigns every pin and address.
 Its `rp2350-plus` assembly (Waveshare RP2350-Plus, the default) and

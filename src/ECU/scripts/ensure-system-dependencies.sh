@@ -18,6 +18,11 @@ else
 fi
 FIESTA_TEST_LOCALES_FILE="${FIESTA_TEST_LOCALES_FILE}/../../../scripts/test-locales.txt"
 
+# Debian's locale-gen, Raspberry Pi OS included, ignores its arguments and
+# builds only the locales this file enables; Ubuntu's builds its arguments.
+# Tests point it at a fixture.
+FIESTA_LOCALE_GEN_CONFIG="${FIESTA_LOCALE_GEN_CONFIG:-/etc/locale.gen}"
+
 dependency_info() {
     printf '[INFO] %s\n' "$*"
 }
@@ -88,6 +93,47 @@ print(" ".join(missing))
 PYLOCALE
 }
 
+# Enables the listed locales in the locale-gen configuration, when the host
+# has one, as "<locale> <charset>" entries. Uncomments an existing entry or
+# appends a new one; leaves the file untouched when all are enabled.
+enable_test_locales() {
+    local non_interactive="$1"
+    shift
+    [[ -f "$FIESTA_LOCALE_GEN_CONFIG" ]] || return 0
+    run_dependency_command_as_root "$non_interactive" python3 - \
+        "$FIESTA_LOCALE_GEN_CONFIG" "$@" <<'PYENABLE'
+import sys
+
+path, names = sys.argv[1], sys.argv[2:]
+with open(path, encoding="utf-8") as stream:
+    lines = stream.read().splitlines()
+
+
+def entry(line):
+    """The (locale, charset) pair of an entry line, commented or not."""
+    fields = line.strip().lstrip("#").split()
+    return tuple(fields) if len(fields) == 2 else None
+
+
+changed = False
+for name in names:
+    wanted = (name, name.partition(".")[2].partition("@")[0])
+    if not wanted[1] or wanted in (
+            entry(line) for line in lines if not line.lstrip().startswith("#")):
+        continue
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("#") and entry(line) == wanted:
+            lines[index] = " ".join(wanted)
+            break
+    else:
+        lines.append(" ".join(wanted))
+    changed = True
+if changed:
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write("\n".join(lines) + "\n")
+PYENABLE
+}
+
 ensure_test_locales() {
     local mode="$1" non_interactive="$2" missing
     local -a locales=()
@@ -102,6 +148,10 @@ ensure_test_locales() {
     fi
     if [[ "$mode" == 'check' ]]; then
         dependency_error "Missing GUI test locales: $missing"
+        return 1
+    fi
+    if ! enable_test_locales "$non_interactive" "${locales[@]}"; then
+        dependency_error "Could not enable the GUI test locales in $FIESTA_LOCALE_GEN_CONFIG"
         return 1
     fi
     run_dependency_command_as_root "$non_interactive" locale-gen "${locales[@]}" || return 1

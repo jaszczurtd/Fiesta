@@ -23,6 +23,7 @@
 #include "config.h"
 #include "ecuContext.h"
 #include "sensors.h"
+#include "seqlock.h"
 
 #include <errno.h>
 #include <math.h>
@@ -39,6 +40,93 @@ static char s_command[VP37_CMD_BUF_SIZE];
  * loop that releases every control step must not take a lock to learn that
  * nothing waits. */
 static uint8_t s_commandLength;
+/* Core 1 publishes one reply per reset; core 0 prints each reply once. */
+static uint32_t s_defaultsReplies;
+static uint32_t s_printedDefaultsReplies;
+typedef struct {
+  const ecu_test_t *entry; /* NULL for a sequence or idle message. */
+  const char *result;      /* NULL means started; otherwise stopped + result. */
+} tests_lifecycle_event_t;
+/* Core 1 publishes; core 0 drains without holding up position control. */
+static tests_lifecycle_event_t s_lifecycleEvents[4];
+static uint32_t s_lifecycleWritten;
+static uint32_t s_lifecycleRead;
+static uint32_t s_lifecycleDropped;
+
+static void recordLifecycle(const ecu_test_t *entry, const char *result) {
+  if (hal_debug_is_muted()) {
+    return;
+  }
+  const uint32_t written =
+      HAL_ATOMIC_LOAD(&s_lifecycleWritten, HAL_ATOMIC_RELAXED);
+  const uint32_t read = HAL_ATOMIC_LOAD(&s_lifecycleRead, HAL_ATOMIC_ACQUIRE);
+  if ((written - read) >= COUNTOF(s_lifecycleEvents)) {
+    (void)HAL_ATOMIC_FETCH_ADD(&s_lifecycleDropped, 1U, HAL_ATOMIC_RELAXED);
+    return;
+  }
+  s_lifecycleEvents[written % COUNTOF(s_lifecycleEvents)] =
+      (tests_lifecycle_event_t){.entry = entry, .result = result};
+  HAL_ATOMIC_STORE(&s_lifecycleWritten, written + 1U, HAL_ATOMIC_RELEASE);
+}
+
+static void printLifecycle(void) {
+  if (hal_debug_is_muted()) {
+    return;
+  }
+  for (size_t i = 0U; i < COUNTOF(s_lifecycleEvents); ++i) {
+    const uint32_t read = HAL_ATOMIC_LOAD(&s_lifecycleRead, HAL_ATOMIC_RELAXED);
+    if (read == HAL_ATOMIC_LOAD(&s_lifecycleWritten, HAL_ATOMIC_ACQUIRE)) {
+      break;
+    }
+    const tests_lifecycle_event_t event =
+        s_lifecycleEvents[read % COUNTOF(s_lifecycleEvents)];
+    HAL_ATOMIC_STORE(&s_lifecycleRead, read + 1U, HAL_ATOMIC_RELEASE);
+    if (event.entry == NULL) {
+      deb("TEST: %s", event.result);
+    } else if (event.result == NULL) {
+      deb("TEST: %s started", event.entry->name);
+    } else {
+      deb("TEST: %s stopped", event.entry->name);
+      deb("TEST: %s result: %s", event.entry->name, event.result);
+    }
+  }
+  const uint32_t dropped =
+      HAL_ATOMIC_EXCHANGE(&s_lifecycleDropped, 0U, HAL_ATOMIC_ACQ_REL);
+  if (dropped != 0U) {
+    derr("TEST: lifecycle log overflow: %lu", (unsigned long)dropped);
+  }
+}
+
+/* One-shot fixtures run on core 0. A new publication cancels an unclaimed
+ * request; the completion publishes its result back to the control core. */
+static ecu_seqlock_t s_fixtureLock;
+static const ecu_test_t *s_fixtureEntry;
+static uint32_t s_fixtureCompleted;
+
+static void recordFixture(const ecu_test_t *entry) {
+  const uint32_t begun = ecuSeqlockWriteBegin(&s_fixtureLock);
+  HAL_ATOMIC_STORE(&s_fixtureEntry, entry, HAL_ATOMIC_RELAXED);
+  ecuSeqlockWriteEnd(&s_fixtureLock, begun);
+}
+
+static void runPendingFixture(void) {
+  for (uint32_t attempt = 0U; attempt < ECU_SEQLOCK_READ_ATTEMPTS; ++attempt) {
+    const uint32_t sequence = ecuSeqlockReadBegin(&s_fixtureLock);
+    const ecu_test_t *entry =
+        HAL_ATOMIC_LOAD(&s_fixtureEntry, HAL_ATOMIC_RELAXED);
+    if (!ecuSeqlockReadConsistent(&s_fixtureLock, sequence)) {
+      continue;
+    }
+    if ((entry != NULL) && (sequence != HAL_ATOMIC_LOAD(&s_fixtureCompleted,
+                                                        HAL_ATOMIC_RELAXED))) {
+      // Fixture publication follows its start event on the control core.
+      printLifecycle();
+      entry->start();
+      HAL_ATOMIC_STORE(&s_fixtureCompleted, sequence, HAL_ATOMIC_RELEASE);
+    }
+    return;
+  }
+}
 
 //=============================================================================
 // Runtime parameters
@@ -154,6 +242,14 @@ static void testsHelpersParamsReset(void) {
 static bool testsHelpersReset(void) {
   HAL_ATOMIC_STORE(&s_commandLength, 0U, HAL_ATOMIC_RELEASE);
   s_command[0] = '\0';
+  HAL_ATOMIC_STORE(&s_defaultsReplies, 0U, HAL_ATOMIC_RELEASE);
+  s_printedDefaultsReplies = 0U;
+  HAL_ATOMIC_STORE(&s_lifecycleWritten, 0U, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_lifecycleRead, 0U, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_lifecycleDropped, 0U, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_fixtureLock.sequence, 0U, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_fixtureEntry, NULL, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_fixtureCompleted, 0U, HAL_ATOMIC_RELAXED);
 
   testsHelpersParamsReset();
   testsWorkersReset();
@@ -290,10 +386,7 @@ static void applyDefaults(VP37Pump *self) {
   testsWorkersSetFixedCyclicPeriod(0U);
   testsHelpersParamsReset();
   testsWorkersManualHoldSet(VP37_BENCH_HOLD_MS_DEFAULT);
-  deb(TEST_HIGHLIGHT_ON
-      "PID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
-      "TF=%.4f" TEST_HIGHLIGHT_OFF,
-      VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE, VP37_PID_TF);
+  (void)HAL_ATOMIC_FETCH_ADD(&s_defaultsReplies, 1U, HAL_ATOMIC_RELEASE);
 }
 
 /** @brief Set one pump parameter; true when the value was inside its range. */
@@ -753,6 +846,11 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
 typedef enum { TESTS_SOURCE_CONSOLE = 0, TESTS_SOURCE_SC } tests_source_t;
 
 static bool s_initialized = false;
+enum { TESTS_METADATA_LIST = 1U, TESTS_METADATA_PARAMS = 2U };
+/* Queued and drained on the console core, outside the muted RX callback. */
+static uint32_t s_consoleMetadata = 0U;
+static void printList(void);
+static void printParams(void);
 static ecu_test_id_t s_active = START_TEST_NONE;
 static tests_source_t s_activeSource = TESTS_SOURCE_CONSOLE;
 static uint32_t s_activeStartedMs = 0U;
@@ -993,9 +1091,11 @@ static void activate(const ecu_test_t *entry, tests_source_t source) {
   s_activeStartedMs = hal_millis();
   s_runs++;
   // Announce before arming, so whatever the fixture prints reads as its own.
-  deb("TEST: %s started", entry->name);
+  recordLifecycle(entry, NULL);
   resetDemandHold(getECUContext()->injectionPump.demand.requestedPercent);
-  if (entry->start != NULL) {
+  if ((entry->step == NULL) && (entry->start != NULL)) {
+    recordFixture(entry);
+  } else if (entry->start != NULL) {
     entry->start();
   }
   publishStatus(true);
@@ -1015,11 +1115,11 @@ static void deactivate(const char *result) {
     resetDemandHold(0.0f);
   }
   s_active = START_TEST_NONE;
+  recordFixture(NULL);
   s_lastTest = entry->id;
   s_lastResult = result;
   // Bench tools wait for the exact "stopped" line; the result follows it.
-  deb("TEST: %s stopped", entry->name);
-  deb("TEST: %s result: %s", entry->name, result);
+  recordLifecycle(entry, result);
   publishStatus(true);
 }
 
@@ -1036,7 +1136,7 @@ static void advanceSequence(tests_source_t source) {
     }
   }
   s_sequenceRunning = false;
-  deb("TEST: sequence finished");
+  recordLifecycle(NULL, "sequence finished");
   publishStatus(true);
 }
 
@@ -1045,7 +1145,7 @@ static void beginSequence(bool scOnly, tests_source_t source) {
   s_sequenceIndex = 0U;
   s_sequenceRunning = true;
   s_sequenceScOnly = scOnly;
-  deb("TEST: sequence started");
+  recordLifecycle(NULL, "sequence started");
   advanceSequence(source);
 }
 
@@ -1064,7 +1164,7 @@ static void stopAll(const char *result) {
   deactivate(result);
   s_sequenceRunning = false;
   if (!wasActive) {
-    deb("TEST: none running");
+    recordLifecycle(NULL, "none running");
   }
 }
 
@@ -1076,7 +1176,7 @@ static void skipOne(void) {
   if (s_sequenceRunning) {
     advanceSequence(source);
   } else if (!wasActive) {
-    deb("TEST: none running");
+    recordLifecycle(NULL, "none running");
   } else {
     // The stopped test already reported itself.
   }
@@ -1087,6 +1187,7 @@ static void skipOne(void) {
 //=============================================================================
 
 bool initTests(void) {
+  s_consoleMetadata = 0U;
   s_active = START_TEST_NONE;
   s_activeSource = TESTS_SOURCE_CONSOLE;
   s_sequenceRunning = false;
@@ -1151,7 +1252,30 @@ const char *testsActiveName(void) {
   return entry != NULL ? entry->name : NULL;
 }
 
-void testsPrintEvents(void) { testsWorkersPrintStepEvent(); }
+void testsPrintEvents(void) {
+  printLifecycle();
+  if (!hal_debug_is_muted()) {
+    const uint32_t metadata = s_consoleMetadata;
+    s_consoleMetadata = 0U;
+    if ((metadata & TESTS_METADATA_LIST) != 0U) {
+      printList();
+    }
+    if ((metadata & TESTS_METADATA_PARAMS) != 0U) {
+      printParams();
+    }
+  }
+  runPendingFixture();
+  if (s_printedDefaultsReplies !=
+      HAL_ATOMIC_LOAD(&s_defaultsReplies, HAL_ATOMIC_ACQUIRE)) {
+    deb(TEST_HIGHLIGHT_ON
+        "PID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
+        "TF=%.4f" TEST_HIGHLIGHT_OFF,
+        VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE,
+        VP37_PID_TF);
+    s_printedDefaultsReplies++;
+  }
+  testsWorkersPrintStepEvent();
+}
 
 uint32_t testsCyclicDelayMs(void) {
   return s_active == START_TEST_CYCLIC ? testsWorkersCyclicDelayMs() : 0U;
@@ -1172,14 +1296,18 @@ static void printHelp(void) {
 }
 
 static void printList(void) {
-  const char *active = testsActiveName();
+  ecu_test_id_t active = START_TEST_NONE;
+  if (scLock()) {
+    active = s_published.active;
+    hal_mutex_unlock(s_scMutex);
+  }
   size_t total = 0U;
   const ecu_test_t *suite = testsSuite(&total);
   for (size_t i = 0U; i < total; i++) {
     deb("TEST: %-7s %-42s %s%s%s", suite[i].name, suite[i].summary,
         suite[i].sequenced ? "in sequence" : "on request",
         suite[i].scSupported ? ", configurator" : "",
-        testsHelpersEquals(active, suite[i].name) ? ", running" : "");
+        active == suite[i].id ? ", running" : "");
   }
 }
 
@@ -1240,13 +1368,17 @@ static size_t commandPrefix(const char *cmd, const char *word) {
   return i;
 }
 
-static void dispatch(const char *line) {
+static const char *commandText(const char *line) {
   size_t skip = 0U;
-  while (line[skip] == ' ') {
+  while ((line != NULL) && (line[skip] == ' ')) {
     skip++;
   }
-  const char *cmd = &line[skip];
-  if (cmd[0] == '\0') {
+  return line != NULL ? &line[skip] : NULL;
+}
+
+static void dispatch(const char *line) {
+  const char *cmd = commandText(line);
+  if ((cmd == NULL) || (cmd[0] == '\0')) {
     return;
   }
 
@@ -1296,6 +1428,17 @@ static void dispatch(const char *line) {
 void tickTestsHandleSerialLine(const char *line) {
   if (!s_initialized) {
     return;
+  }
+  if ((line != NULL) && (strlen(line) < VP37_CMD_BUF_SIZE)) {
+    const char *cmd = commandText(line);
+    if (testsHelpersEquals(cmd, "list")) {
+      s_consoleMetadata |= TESTS_METADATA_LIST;
+      return;
+    }
+    if (testsHelpersEquals(cmd, "params")) {
+      s_consoleMetadata |= TESTS_METADATA_PARAMS;
+      return;
+    }
   }
   const hal_status_t status = testsHelpersQueueCommand(line);
   if (status == HAL_EBUSY) {
@@ -1385,6 +1528,13 @@ bool tickTests(void) {
   if (entry == NULL) {
     publishStatus(false);
     return false;
+  }
+
+  if ((entry->step == NULL) && (entry->start != NULL) &&
+      (HAL_ATOMIC_LOAD(&s_fixtureCompleted, HAL_ATOMIC_ACQUIRE) !=
+       HAL_ATOMIC_LOAD(&s_fixtureLock.sequence, HAL_ATOMIC_RELAXED))) {
+    publishStatus(false);
+    return entry->drivesDemand;
   }
 
   bool finished = true;

@@ -22,7 +22,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:149 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:194 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -243,6 +243,7 @@ static VP37TraceSample VP37_controlSample(const VP37Telemetry *view) {
       .mapTrim = view->feedforward.mapTrimApplied,
       .thermalScale = view->thermal.scale,
       .integralHold = view->pid.integralHold,
+      .upperHolding = view->pid.upperHoldingActive,
       .motionIntegralHold = view->pid.motionIntegralHold,
       .fuelTemp = view->thermal.lastFuelTemp,
       .temperatureCorrection = view->thermal.temperatureCorrection,
@@ -271,7 +272,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       "ff:%.1f P:%.1f I:%.1f D:%.1f raw:%.1f corr:%.1f lo:%.1f hi:%.1f "
       "sh:%d sl:%d sf:%d hw:%d rest:%d st:%u hzraw:%lu hz:%lu sn:%lu su:%lu "
       "age:%u io:%d ious:%lu retry:%u fresh:%d pdt:%lu V:%.1f Vl:%.2f "
-      "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d cg:%d vp:%d vhi:%d "
+      "Ve:%.2f Vc:%.3f vcor:%.4f ih:%d uh:%d cg:%d vp:%d vhi:%d "
       "ft:%.0f tcf:%.4f tsc:%.4f mff:%.1f cyms:%lu mtrim:%.1f",
       kind, (unsigned long)sample->us, (unsigned long)sample->dt,
       (unsigned long)sample->sequence, sample->requestedPercent, sample->target,
@@ -289,7 +290,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
       (unsigned int)sample->retries, sample->fresh,
       (unsigned long)sample->pidDtUs, sample->volts, sample->localVolts,
       sample->compensationInputVolts, sample->compensationVolts,
-      sample->voltageCorrection, sample->integralHold,
+      sample->voltageCorrection, sample->integralHold, sample->upperHolding,
       sample->motionIntegralHold, sample->cycleVoltageUsed,
       sample->voltageOverRange, sample->fuelTemp, sample->temperatureCorrection,
       sample->thermalScale, sample->motionFF,

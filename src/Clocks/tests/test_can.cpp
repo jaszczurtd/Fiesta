@@ -54,6 +54,22 @@ void setUp(void) {
 
 void tearDown(void) {}
 
+void test_pending_can_reads_the_level_and_clears_an_empty_edge(void) {
+  hal_mock_gpio_inject_level(JH_HW_NODE_CAN_PIN_INT, true);
+  canMainLoop();
+  TEST_ASSERT_FALSE(canRxPending());
+  receivedCanMessage();
+  TEST_ASSERT_TRUE(canRxPending());
+  canMainLoop();
+  TEST_ASSERT_FALSE(canRxPending());
+  hal_mock_gpio_inject_level(JH_HW_NODE_CAN_PIN_INT, false);
+  TEST_ASSERT_TRUE(canRxPending());
+  canMainLoop();
+  TEST_ASSERT_TRUE(canRxPending());
+  hal_mock_gpio_inject_level(JH_HW_NODE_CAN_PIN_INT, true);
+  TEST_ASSERT_FALSE(canRxPending());
+}
+
 // ── RX validation regression guards ──────────────────────────────────────────
 // Mirror the ECU's post-d6b8ffc CAN hardening: NULL/oversized frames and
 // per-case truncated frames must be rejected before the switch body
@@ -561,6 +577,13 @@ void test_gps_broadcast_sends_utc_and_the_position_frames(void) {
 /* A controller that does not come up: canInit() returns why at once, the loop
  * functions do nothing without a channel, and the core-0 loop tries again
  * every CAN_INIT_RETRY_INTERVAL until the channel is up. */
+void test_can_init_allows_hardware_arbitration_retry(void) {
+  hal_can_mode_t mode = HAL_CAN_MODE_ONE_SHOT;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_can_get_mode(clocksTestGetCanHandle(), &mode));
+  TEST_ASSERT_EQUAL(0u, mode & HAL_CAN_MODE_ONE_SHOT);
+}
+
 void test_can_init_reports_why_the_bus_stayed_off(void) {
   hal_can_destroy(clocksTestGetCanHandle());
   hal_mock_can_fail_creates(2u);
@@ -589,6 +612,7 @@ void test_can_init_reports_why_the_bus_stayed_off(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_pending_can_reads_the_level_and_clears_an_empty_edge);
   RUN_TEST(test_truncated_ecu_update_01_frame_is_ignored);
   RUN_TEST(test_truncated_ecu_update_02_frame_is_ignored);
   RUN_TEST(test_own_frames_from_another_node_change_nothing);
@@ -614,6 +638,7 @@ int main(void) {
   RUN_TEST(test_broadcast_timers_pace_the_periodic_frames);
   RUN_TEST(test_local_gps_survives_ecu_values_and_ecu_connection_loss);
   RUN_TEST(test_gps_broadcast_sends_utc_and_the_position_frames);
+  RUN_TEST(test_can_init_allows_hardware_arbitration_retry);
   RUN_TEST(test_can_init_reports_why_the_bus_stayed_off);
   return UNITY_END();
 }

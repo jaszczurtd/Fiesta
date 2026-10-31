@@ -98,6 +98,19 @@ Jego testy funkcjonalne opisuje [dokumentacja ECU](../src/ECU/README.pl.md#obraz
 Zmiana montażu lub wariantu zmienia ścieżkę plików wynikowych; przed wyborem
 obrazu do wgrania sprawdź ją przez `config-dump`.
 
+Fiesta_clock wybiera RTC w `src/Fiesta_clock/hal_project_config.h`:
+domyślny jest `RTC_pcf8563`; `RTC_ds3231` wybiera DS3231 pod jego stałym
+adresem I²C 0x68, na magistrali RTC montażu. Wybierz tylko jeden.
+Wariant `DS3231` definiuje `RTC_ds3231` bez edycji nagłówka:
+
+```bash
+src/JaszczurHAL/vscode/entry/jh-vscode build --project src/Fiesta_clock --variant DS3231
+```
+
+Oba korzystają z tej samej synchronizacji UTC i lokalnego czasu na ekranie.
+DS3231 nie ma timera odliczającego PCF8563; aplikacja odpytuje czas
+niezależnie od niego.
+
 ## Wgrywanie i monitor portu
 
 Te polecenia działają na podłączonym sprzęcie:
@@ -108,11 +121,16 @@ src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly r
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
 ```
 
-`upload` sprawdza tożsamość USB przed wgraniem, a `upload-uf2` używa dysku
-BOOTSEL. Monitor wybiera moduł według tożsamości USB, w Linuksie również przez
+`upload` sprawdza tożsamość USB i żąda przejścia do BOOTSEL przez port CDC
+działającego firmware'u. `upload-uf2` korzysta z istniejącego dysku BOOTSEL.
+Domyślne ID USB pochodzą z opisu wybranego targetu w JaszczurHAL.
+Manifesty modułów pozostawiają VID/PID tym metadanym, aby zmiana montażu
+wybierała również właściwą tożsamość USB.
+Monitor wybiera moduł według tożsamości USB,
+w Linuksie również przez
 stałe ścieżki `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`. Odpowiadają im zadania
 VS Code `Project: Upload`, `Project: Upload (UF2 / BOOTSEL)` i
-`Project: Serial Monitor`. Wzorcowe skróty to Ctrl+Shift+2 dla wgrywania
+`Project: Serial Monitor`. Wzorcowe skróty to Ctrl+Shift+1 dla kompilacji, Ctrl+Shift+2 dla wgrywania
 oraz Ctrl+Shift+3 dla monitora; skopiuj definicje modułu do ustawień skrótów użytkownika.
 
 ## Manifest dla konfiguratora

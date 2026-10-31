@@ -25,8 +25,6 @@ SCHEMA_VERSION = 1
 KINDS = ("firmware", "host-app", "inactive")
 ANALYSES = ("cppcheck",)
 SHARED_SOURCE_SETS = ("vp37",)
-USB_VID = "0x2e8a"
-USB_PID = "0x000a"
 USB_PRODUCT_PREFIX = "Fiesta "
 BY_ID_HINT_PREFIX = "Fiesta_"
 MODULE_KEYS = {
@@ -133,8 +131,8 @@ def _by_id_hint(repo_root: Path, name: str) -> str:
         raise RegistryError(f"{name}: cannot read identity from {path}: {error}")
     if not isinstance(identity, dict):
         raise RegistryError(f"{name}: identity in {path} is not an object")
-    if (identity.get("usbVid"), identity.get("usbPid")) != (USB_VID, USB_PID):
-        raise RegistryError(f"{name}: USB VID/PID must be {USB_VID}:{USB_PID}")
+    if {"usbVid", "usbPid"} & identity.keys():
+        raise RegistryError(f"{name}: USB VID/PID must be inherited from HAL target metadata")
     if not str(identity.get("usbProduct", "")).startswith(USB_PRODUCT_PREFIX):
         raise RegistryError(f"{name}: usbProduct must start with '{USB_PRODUCT_PREFIX}'")
     hint = str(identity.get("byIdHint", ""))

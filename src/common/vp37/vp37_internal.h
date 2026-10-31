@@ -68,6 +68,19 @@ hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
  * @param dt Control-step duration in seconds.
  * @return Whether this step must retain the existing integral bias. */
 bool VP37_motionIntegralHold(VP37Pump *self, bool settled, float dt);
+/** @brief Clear the upper-target integration mode.
+ * @param self Pump owned by the control core. */
+void VP37_resetUpperHolding(VP37Pump *self);
+/** @brief Select the integration mode at stationary upper targets.
+ * @param self Pump owned by the control core.
+ * @param settled The target and its demand ramp have both stopped.
+ * @param dt Current step duration [s].
+ * @param deadband Normal integration band [Hz].
+ * @return Effective band; stationary upper targets may narrow it. Moving
+ * targets, lower positions, invalid feedback and research profiles retain the
+ * input. */
+float VP37_prepareUpperHolding(VP37Pump *self, bool settled, float dt,
+                               float deadband);
 
 // ── vp37_feedback.c ─────────────────────────────────────────────────────────
 bool VP37_updateAdjustometerPosition(VP37Pump *self);

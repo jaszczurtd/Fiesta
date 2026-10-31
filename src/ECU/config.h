@@ -196,6 +196,12 @@ extern "C" {
 #if (CORE1_VP37_GUARD_US < 100u) || (CORE1_VP37_GUARD_US > 2000u)
 #error "CORE1_VP37_GUARD_US must be in 100..2000 us"
 #endif
+// Keep DMA retention running during the outer guard; only this final part
+// is a pure RAM spin. A non-due VP37_process() takes about 65 us on the bench.
+#define CORE1_VP37_SPIN_US 80u
+#if (CORE1_VP37_SPIN_US < 1u) || (CORE1_VP37_SPIN_US > CORE1_VP37_GUARD_US)
+#error "CORE1_VP37_SPIN_US must fit inside the work guard"
+#endif
 
 // min-max value for indicator
 #define VOLTS_MIN_VAL 11.6

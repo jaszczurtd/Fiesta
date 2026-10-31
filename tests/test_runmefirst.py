@@ -66,10 +66,13 @@ class RunmefirstTests(unittest.TestCase):
             python.write_text('#!/bin/sh\n[ -e "${0%/*}/root-call" ] && '
                               '[ ! -e "${0%/*}/broken" ] || echo pl_PL.UTF-8\n')
             python.chmod(0o755)
-            env = dict(os.environ, PATH=str(base))
+            # Raspberry Pi OS: Debian's locale-gen builds only enabled entries.
+            config = base / "locale.gen"
+            config.write_text("# en_US.UTF-8 UTF-8\npl_PL.UTF-8 UTF-8\n")
+            env = dict(os.environ, PATH=str(base), FIESTA_LOCALE_GEN_CONFIG=str(config))
             marker = base / "root-call"
             script = ('. "$1"\nmarker=$2\n'
-                      'run_dependency_command_as_root() { printf "%s" "$*" > "$marker"; }\n'
+                      'run_dependency_command_as_root() { printf "%s\\n" "$*" >> "$marker"; }\n'
                       'ensure_test_locales "$3" 1\n')
             command = [shutil.which("bash"), "-c", script, "locale-test", str(helper), str(marker)]
             result = subprocess.run([*command, "check"], env=env, capture_output=True, text=True)
@@ -78,7 +81,9 @@ class RunmefirstTests(unittest.TestCase):
             self.assertFalse(marker.exists())
             result = subprocess.run([*command, "install"], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(marker.read_text(), "1 locale-gen en_US.UTF-8 pl_PL.UTF-8")
+            self.assertEqual(marker.read_text().splitlines(), [
+                f"1 python3 - {config} en_US.UTF-8 pl_PL.UTF-8",
+                "1 locale-gen en_US.UTF-8 pl_PL.UTF-8"])
             # A locale-gen that exits 0 without the locale fails the setup.
             marker.unlink()
             (base / "broken").touch()

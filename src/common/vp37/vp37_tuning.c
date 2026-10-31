@@ -244,12 +244,10 @@ hal_status_t VP37_setTuning(VP37Pump *self, VP37TuningParam param,
     }
     if ((param == VP37_TUNING_RESEARCH_FREEZE) && (value != 0.0f)) {
       const uint8_t mask = (uint8_t)value;
-      if (!self->pid.fullRangePrototype ||
-          (((mask & VP37_RESEARCH_FREEZE_DRIVE_MASK) != 0U) &&
-           (!self->thermal.driveCompensationEnabled ||
-            !self->thermal.driveCompensationUsed ||
-            !self->thermal.driveResistanceReady ||
-            !self->thermal.scaleReady))) {
+      if (((mask & VP37_RESEARCH_FREEZE_DRIVE_MASK) != 0U) &&
+          (!self->thermal.driveCompensationEnabled ||
+           !self->thermal.driveCompensationUsed ||
+           !self->thermal.driveResistanceReady || !self->thermal.scaleReady)) {
         return HAL_ESTATE;
       }
     }
@@ -268,6 +266,7 @@ hal_status_t VP37_setTuning(VP37Pump *self, VP37TuningParam param,
       return HAL_ESTATE;
     }
     VP37_applyTuning(self, param, value);
+    VP37_resetUpperHolding(self);
     self->pid.holdingIntegralReady = false;
     self->pid.holdingIntegralElapsed = 0.0f;
     status = HAL_OK;
@@ -403,6 +402,7 @@ void VP37_resetTuning(VP37Pump *self) {
   VP37_resetMotionIntegralGate(self);
   VP37_resetSlowDamping(self);
   self->pid.fullRangePrototype = false;
+  VP37_resetUpperHolding(self);
   self->pid.septemberReference = false;
   VP37_setVP37PID(self, VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, true);
   self->pidTimeUpdate = VP37_PID_TIME_UPDATE;
@@ -433,6 +433,7 @@ void VP37_setVP37PID(VP37Pump *self, float kp, float ki, float kd,
   hal_pid_controller_set_kp(self->pid.controller, kp);
   hal_pid_controller_set_ki(self->pid.controller, ki);
   hal_pid_controller_set_kd(self->pid.controller, kd);
+  VP37_resetUpperHolding(self);
 
   if (shouldTriggerReset) {
     VP37_resetMotionIntegralGate(self);

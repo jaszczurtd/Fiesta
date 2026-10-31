@@ -23,8 +23,6 @@
         "enabled": true,
         "usbManufacturer": "Jaszczur",
         "usbProduct": "Fiesta Clocks",
-        "usbVid": "0x2e8a",
-        "usbPid": "0x000a",
         "byIdHint": "Fiesta_Clocks"
     },
     "artifacts": {

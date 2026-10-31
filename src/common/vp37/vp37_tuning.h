@@ -31,7 +31,8 @@ typedef enum {
                                     */
   VP37_TUNING_HOLD_CONFIRM_MS,     /**< Whole ms inside the band before the
                                         integral holds, to
-                                        VP37_INTEGRAL_HOLD_CONFIRM_MAX_MS. */
+                                        VP37_INTEGRAL_HOLD_CONFIRM_MAX_MS. Native
+                                      upper     holding caps capture at 5 ms. */
   VP37_TUNING_DEADBAND_TOP_HZ,     /**< Integral dead zone at the top, to
                                         VP37_PID_DEADBAND_TOP_MAX_HZ. */
   VP37_TUNING_MOTION_BOOST_UP,     /**< Rising motion assist [nominal PWM], to
@@ -62,8 +63,8 @@ typedef enum {
                                         where the offset release applies,
                                         VP37_INTEGRAL_HOLD_MEAN_ENTER_MIN_HZ to
                                         VP37_INTEGRAL_HOLD_ENTER_HZ [Hz]. */
-  VP37_TUNING_RESEARCH_FREEZE, /**< Whole mask0..3; full-range research only.
-                                  Bit0 holds I; bit1 holds ready R and scale. */
+  VP37_TUNING_RESEARCH_FREEZE,     /**< Diagnostic mask0..3 in either profile.
+                                      Bit0 holds I; bit1 holds ready R and scale. */
   VP37_TUNING_RESEARCH_MOTION_INTEGRAL,  /**< 0/1; conditional I, full profile
                                             only. */
   VP37_TUNING_RESEARCH_SLOW_DAMPING,     /**< 0/1, full profile at released zero
