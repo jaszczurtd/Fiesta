@@ -82,6 +82,13 @@ enabled_fixture_locales() {
     done < "$FIESTA_LOCALE_GEN_CONFIG"
 }
 
+# The fixture configuration, read through cat: bash 5.2 leaks the file name of
+# $(<file) in the current shell, and under memcheck every later subshell then
+# exits with Valgrind's error code.
+fixture_configuration() {
+    cat "$FIESTA_LOCALE_GEN_CONFIG"
+}
+
 locale-gen() {
     locale_calls+=("$*")
     case "$fixture_locale_gen" in
@@ -122,14 +129,14 @@ ensure_system_dependencies --check
 FIESTA_LOCALE_GEN_CONFIG="$fixture_dir/locale.gen"
 printf '# Locales to build\n# en_US.UTF-8 UTF-8\npl_PL.UTF-8 UTF-8\n' \
     > "$FIESTA_LOCALE_GEN_CONFIG"
-pi_configuration="$(<"$FIESTA_LOCALE_GEN_CONFIG")"
+pi_configuration="$(fixture_configuration)"
 fixture_generated='pl_PL.UTF-8'
 if ensure_system_dependencies --check 2>/dev/null; then
     fail 'check mode accepted missing test locales'
 fi
 [[ ${#apt_calls[@]} -eq 0 && ${#locale_calls[@]} -eq 0 ]] || \
     fail 'missing-locale check changed system state'
-[[ "$(<"$FIESTA_LOCALE_GEN_CONFIG")" == "$pi_configuration" ]] || \
+[[ "$(fixture_configuration)" == "$pi_configuration" ]] || \
     fail 'check mode edited the locale-gen configuration'
 
 # Debian's locale-gen ignores its arguments, so the entry has to be enabled.
@@ -137,7 +144,7 @@ fixture_locale_gen='config'
 ensure_system_dependencies --install --non-interactive || \
     fail 'install left a locale that Debian locale-gen ignores'
 [[ ${#locale_calls[@]} -eq 1 ]] || fail 'expected one locale generation call'
-[[ "$(<"$FIESTA_LOCALE_GEN_CONFIG")" == \
+[[ "$(fixture_configuration)" == \
     $'# Locales to build\nen_US.UTF-8 UTF-8\npl_PL.UTF-8 UTF-8' ]] || \
     fail 'the commented entry was not enabled in place'
 
@@ -147,7 +154,7 @@ fixture_generated='pl_PL.UTF-8'
 locale_calls=()
 ensure_system_dependencies --install --non-interactive || \
     fail 'install did not provide a locale missing from the configuration'
-[[ "$(<"$FIESTA_LOCALE_GEN_CONFIG")" == $'pl_PL.UTF-8 UTF-8\nen_US.UTF-8 UTF-8' ]] || \
+[[ "$(fixture_configuration)" == $'pl_PL.UTF-8 UTF-8\nen_US.UTF-8 UTF-8' ]] || \
     fail 'the missing entry was not appended once'
 ensure_system_dependencies --install --non-interactive
 [[ ${#locale_calls[@]} -eq 1 ]] || fail 'provided locales were generated again'
