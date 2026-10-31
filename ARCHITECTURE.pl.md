@@ -171,6 +171,10 @@ rozruchu napięcie potwierdzi ładowanie. Zapala się ponownie po zaniku
 i czasy potwierdzeń są w [config.h](src/Clocks/config.h); wskaźnik napięcia
 na TFT ma własny zakres.
 
+Kontrolka oleju świeci przy braku ciśnienia i miga z częstotliwością 1 Hz,
+gdy czujnik jest zwarty albo przerwany, czyli gdy wskaźnik oleju pokazuje ERR.
+Od włączenia zasilania do pierwszego odczytu świeci.
+
 | Plik | Zadanie |
 |---|---|
 | [Cluster.cpp](src/Clocks/Cluster.cpp) | Generuje sygnały fabrycznych wskaźników. |
@@ -183,6 +187,7 @@ na TFT ma własny zakres.
 | [egt.cpp](src/Clocks/egt.cpp) | Odczytuje oba MCP9600 i ponownie szuka brakującego układu. |
 | [gps.cpp](src/Clocks/gps.cpp) | Odczytuje lokalny GPS, kontroluje świeżość UTC i koduje ramki GPS. |
 | [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
+| [oilLamp.cpp](src/Clocks/oilLamp.cpp), [lampBlink.h](src/Clocks/lampBlink.h) | Wyznacza stan kontrolki oleju z czujnika ciśnienia; faza migania obu kontrolek. |
 | [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
 | [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT, pozycji GPS oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
 

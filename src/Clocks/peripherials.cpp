@@ -17,13 +17,6 @@ void initSPI(void) {
 
   hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
                JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
-
-  hal_gpio_set_mode(JH_HW_NODE_OIL_LAMP_PIN_OUT, HAL_GPIO_OUTPUT);
-  enableOilLamp(true);
-}
-
-void enableOilLamp(bool enable) {
-  hal_gpio_write(JH_HW_NODE_OIL_LAMP_PIN_OUT, enable);
 }
 
 void initBasicPIO(void) {

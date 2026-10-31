@@ -217,12 +217,15 @@ JB_STATIC_ASSERT(CHARGE_LAMP_LOW_MV % 100 == 0 &&
                  "charge lamp limits must be whole tenths of a volt");
 // how long a voltage condition must hold before the lamp follows it, and how
 // long the voltage is not judged after the engine starts, in miliseconds;
-// tune them to the alternator
+// tune them to the alternator. With charging voltage the lamp goes out
+// CHARGE_LAMP_START_SETTLE_MS + CHARGE_LAMP_CONFIRM_MS after the start, at
+// most CHARGE_LAMP_START_OUT_MS_MAX.
 #define CHARGE_LAMP_CONFIRM_MS 2000
 #define CHARGE_LAMP_OVERVOLTAGE_CONFIRM_MS 2000
-#define CHARGE_LAMP_START_SETTLE_MS 3000
+#define CHARGE_LAMP_START_SETTLE_MS 0
 #define CHARGE_LAMP_CONFIRM_MS_MIN 100
 #define CHARGE_LAMP_TIME_MS_MAX 10000
+#define CHARGE_LAMP_START_OUT_MS_MAX 2000
 JB_STATIC_ASSERT(CHARGE_LAMP_CONFIRM_MS >= CHARGE_LAMP_CONFIRM_MS_MIN &&
                      CHARGE_LAMP_CONFIRM_MS <= CHARGE_LAMP_TIME_MS_MAX,
                  "CHARGE_LAMP_CONFIRM_MS must be in 100..10000 ms");
@@ -234,6 +237,9 @@ JB_STATIC_ASSERT(CHARGE_LAMP_OVERVOLTAGE_CONFIRM_MS >=
 JB_STATIC_ASSERT(CHARGE_LAMP_START_SETTLE_MS >= 0 &&
                      CHARGE_LAMP_START_SETTLE_MS <= CHARGE_LAMP_TIME_MS_MAX,
                  "CHARGE_LAMP_START_SETTLE_MS must be in 0..10000 ms");
+JB_STATIC_ASSERT(CHARGE_LAMP_START_SETTLE_MS + CHARGE_LAMP_CONFIRM_MS <=
+                     CHARGE_LAMP_START_OUT_MS_MAX,
+                 "the lamp must go out at most 2000 ms after the start");
 // 2 Hz overvoltage blinking: 250 ms lit, 250 ms dark
 #define CHARGE_LAMP_BLINK_HALF_MS 250
 // RPM or voltage older than this lights the lamp, in miliseconds; at least
@@ -259,6 +265,15 @@ JB_STATIC_ASSERT(CAN_INIT_RETRY_INTERVAL >= 100 &&
                  "CAN_INIT_RETRY_INTERVAL must be in 100..10000 ms");
 
 #define MIN_OIL_PRESSURE 0.2
+
+// oil lamp (GP11): lit below MIN_OIL_PRESSURE, blinking at 1 Hz (500 ms lit,
+// 500 ms dark) while the sender is shorted or open; core 0 updates it every
+// OIL_LAMP_UPDATE_INTERVAL, in miliseconds
+#define OIL_LAMP_BLINK_HALF_MS 500
+#define OIL_LAMP_UPDATE_INTERVAL 50
+JB_STATIC_ASSERT(OIL_LAMP_UPDATE_INTERVAL > 0 &&
+                     OIL_LAMP_UPDATE_INTERVAL * 5 <= OIL_LAMP_BLINK_HALF_MS,
+                 "the oil lamp must be updated 5 times per blink half period");
 
 // in miliseconds, print values into serial
 #define DEBUG_UPDATE 3 * SECOND

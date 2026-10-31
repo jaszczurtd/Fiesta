@@ -25,6 +25,9 @@ static const int kRunning = RPM_MIN;
 static const int32_t kCharging = CHARGE_LAMP_CHARGING_MV + 1;
 static const int32_t kLow = CHARGE_LAMP_LOW_MV - 1;
 static const int32_t kOver = CHARGE_LAMP_OVERVOLTAGE_MV + 1;
+// The requirement config.h has to meet: with charging voltage the lamp is out
+// at most 2 s after the start. Kept apart from config.h on purpose.
+static const uint32_t kStartOutMaxMs = 2000u;
 
 static bool sample(int rpm, int32_t mv) {
   ChargeLampInput input;
@@ -64,6 +67,18 @@ static void startCharging(void) {
   TEST_ASSERT_FALSE(hold(kRunning, kCharging, CHARGE_LAMP_CONFIRM_MS));
 }
 
+// Milliseconds from the first sample with the engine running and charging
+// voltage until the lamp goes out; one more than kStartOutMaxMs when it is
+// still lit then.
+static uint32_t msUntilOut(void) {
+  uint32_t ms = 0u;
+  while (sample(kRunning, kCharging) && (ms <= kStartOutMaxMs)) {
+    s_now++;
+    ms++;
+  }
+  return ms;
+}
+
 void setUp(void) {
   lamp.reset();
   s_now = 1000u;
@@ -73,7 +88,8 @@ void tearDown(void) {}
 
 void test_lit_until_both_values_are_fresh(void) {
   ChargeLampInput input = {s_now, false, true, kRunning, kCharging};
-  for (uint32_t i = 0u; i < 2u * CHARGE_LAMP_START_SETTLE_MS; i++) {
+  for (uint32_t i = 0u;
+       i < 2u * (CHARGE_LAMP_START_SETTLE_MS + CHARGE_LAMP_CONFIRM_MS); i++) {
     input.nowMs = s_now + i;
     input.rpmFresh = false;
     input.voltsFresh = true;
@@ -196,6 +212,25 @@ void test_low_rpm_wins_over_overvoltage(void) {
   TEST_ASSERT_TRUE(hold(RPM_MIN - 1, kOver, 2u * CHARGE_LAMP_BLINK_HALF_MS));
 }
 
+void test_lamp_goes_out_within_2_s_after_the_start(void) {
+  TEST_ASSERT_TRUE(sample(0, kCharging));
+  s_now++;
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(kStartOutMaxMs, msUntilOut());
+
+  // RPM down to zero and back, as with the generator on the bench.
+  s_now++;
+  TEST_ASSERT_TRUE(sample(0, kCharging));
+  s_now++;
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(kStartOutMaxMs, msUntilOut());
+
+  // ECU values back after an outage with the engine running.
+  s_now++;
+  ChargeLampInput input = {s_now, false, true, kRunning, kCharging};
+  TEST_ASSERT_TRUE(lamp.process(input));
+  s_now++;
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(kStartOutMaxMs, msUntilOut());
+}
+
 void test_stopped_engine_must_confirm_charging_again(void) {
   startCharging();
   s_now++;
@@ -281,6 +316,7 @@ int main(void) {
   RUN_TEST(test_lamp_shows_charging_again_when_overvoltage_ends);
   RUN_TEST(test_overvoltage_from_the_start_confirms_charging_too);
   RUN_TEST(test_low_rpm_wins_over_overvoltage);
+  RUN_TEST(test_lamp_goes_out_within_2_s_after_the_start);
   RUN_TEST(test_stopped_engine_must_confirm_charging_again);
   RUN_TEST(test_lost_data_light_the_lamp_and_restart_the_confirmation);
   RUN_TEST(test_output_is_lit_from_init_and_follows_the_ecu_values);

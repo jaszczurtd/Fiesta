@@ -150,7 +150,12 @@ int SimpleGauge::getBaseY(void) {
   return -1;
 }
 
-void SimpleGauge::redraw(void) { drawOnce = true; }
+// The icon covers the texts, so the next pass draws them all again.
+void SimpleGauge::redraw(void) {
+  drawOnce = true;
+  lastShowedVal = C_INIT_VAL;
+  lastV1 = lastV2 = C_INIT_VAL;
+}
 
 void SimpleGauge::switchCurrentEGTMode(void) {
   currentIsDPF = !currentIsDPF;
@@ -171,7 +176,7 @@ void SimpleGauge::showSimpleGauge(void) {
   int x, y;
 
   float volts = valueFields[F_VOLTS];
-  int v1, v2;
+  int v1 = 0, v2 = 0;
   int color = TEXT_COLOR;
 
   switch (mode) {
@@ -443,7 +448,6 @@ void SimpleGauge::showSimpleGauge(void) {
       }
 
       hal_display_fill_circle(x, y, ECU_CONNECTION_RADIUS, color);
-      draw = false;
     }
 
     if (drawOnce) {

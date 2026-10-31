@@ -14,42 +14,31 @@ include(GNUInstallDirs)
 add_compile_options(-Wall -Wextra -Werror)
 add_compile_definitions(_POSIX_C_SOURCE=200809L)
 
-# Valgrind / CTest memcheck configuration (copied from JaszczurHAL pattern).
-# Host-only dynamic analysis for the unit-test suite:
-#   ctest --test-dir build -T memcheck --output-on-failure
-find_program(MEMORYCHECK_COMMAND NAMES valgrind)
-set(MEMORYCHECK_COMMAND_OPTIONS
-    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
-    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
-    set(MEMORYCHECK_SUPPRESSIONS_FILE
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
-    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_host_analysis.cmake")
 
-    # NVIDIA EGL noise uses suppression kinds (e.g. Memcheck:ReallocZero) that
-    # older Valgrind builds reject. Those entries live in their own file, added
-    # only when this Valgrind parses it.
-    set(_SC_VALGRIND_SUPP_NVIDIA
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind-nvidia.supp")
-    if(MEMORYCHECK_COMMAND)
-        execute_process(
-            COMMAND "${MEMORYCHECK_COMMAND}"
-                    "--tool=memcheck"
-                    "--leak-check=no"
-                    "--quiet"
-                    "--suppressions=${_SC_VALGRIND_SUPP_NVIDIA}"
-                    "${CMAKE_COMMAND}" -E true
-            RESULT_VARIABLE _SC_VALGRIND_SUPP_PROBE_RC
-            OUTPUT_QUIET
-            ERROR_QUIET
-        )
-        if(_SC_VALGRIND_SUPP_PROBE_RC EQUAL 0)
-            set(MEMORYCHECK_COMMAND_OPTIONS
-                "${MEMORYCHECK_COMMAND_OPTIONS} --suppressions=${_SC_VALGRIND_SUPP_NVIDIA}")
-        else()
-            message(STATUS
-                "Valgrind rejected tests/valgrind-nvidia.supp; memcheck runs without it")
-        endif()
+# NVIDIA EGL noise uses suppression kinds (e.g. Memcheck:ReallocZero) that
+# older Valgrind builds reject. Those entries live in their own file, added
+# only when this Valgrind parses it.
+set(_SC_VALGRIND_SUPP_NVIDIA
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind-nvidia.supp")
+if(MEMORYCHECK_COMMAND)
+    execute_process(
+        COMMAND "${MEMORYCHECK_COMMAND}"
+                "--tool=memcheck"
+                "--leak-check=no"
+                "--quiet"
+                "--suppressions=${_SC_VALGRIND_SUPP_NVIDIA}"
+                "${CMAKE_COMMAND}" -E true
+        RESULT_VARIABLE _SC_VALGRIND_SUPP_PROBE_RC
+        OUTPUT_QUIET
+        ERROR_QUIET
+    )
+    if(_SC_VALGRIND_SUPP_PROBE_RC EQUAL 0)
+        set(MEMORYCHECK_COMMAND_OPTIONS
+            "${MEMORYCHECK_COMMAND_OPTIONS} --suppressions=${_SC_VALGRIND_SUPP_NVIDIA}")
+    else()
+        message(STATUS
+            "Valgrind rejected tests/valgrind-nvidia.supp; memcheck runs without it")
     endif()
 endif()
 
@@ -679,27 +668,7 @@ if(BUILD_TESTING)
 endif()
 
 # Optional analysis helpers kept outside the default build.
-option(SERIALCONFIGURATOR_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
-if(SERIALCONFIGURATOR_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
-    add_custom_target(check-valgrind
-        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure
-        COMMENT "Running CTest memcheck (Valgrind) for SerialConfigurator"
-        VERBATIM
-    )
-endif()
-
-find_program(RUN_CLANG_TIDY_EXECUTABLE NAMES run-clang-tidy)
-option(SERIALCONFIGURATOR_ENABLE_CLANG_TIDY_TARGET "Enable check-clang-tidy custom target" ON)
-if(SERIALCONFIGURATOR_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
-    add_custom_target(check-clang-tidy
-        COMMAND ${RUN_CLANG_TIDY_EXECUTABLE}
-            -p ${CMAKE_BINARY_DIR}
-            -quiet
-            -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
-            "(^.*/src/SerialConfigurator/(src|tests)/.*\\.(c|cpp)$)|(^.*/src/common/scDefinitions/.*\\.c$)"
-        COMMENT "Running clang-tidy for SerialConfigurator host-compilable sources"
-        VERBATIM
-    )
-endif()
+fiesta_add_host_analysis_targets(SerialConfigurator SERIALCONFIGURATOR
+    CLANG_TIDY_FILES "(^.*/src/SerialConfigurator/(src|tests)/.*\\.(c|cpp)$)|(^.*/src/common/scDefinitions/.*\\.c$)")
 
 include(CPack)

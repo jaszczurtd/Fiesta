@@ -15,7 +15,6 @@
 void setupOnboardLed(void);
 void initSPI(void);
 void initBasicPIO(void);
-void enableOilLamp(bool enable);
 int getThrottlePercentage(void);
 void lcdBrightness(int val);
 /** @return Backlight level last set by lcdBrightness(). */

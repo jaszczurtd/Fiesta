@@ -5,6 +5,7 @@
 #include "chargeLamp.h"
 #include "egt.h"
 #include "gps.h"
+#include "oilLamp.h"
 #include "oilPressure.h"
 #include "speed.h"
 #include "timingDiag.h"
@@ -42,6 +43,7 @@ static BuzzerStrategy buzzerStrategy;
 
 static hal_soft_timer_t timerCANCheck = NULL;
 static hal_soft_timer_t timerAlerts = NULL;
+static hal_soft_timer_t timerOilLamp = NULL;
 
 static hal_soft_timer_t timerEverySecond = NULL;
 static hal_soft_timer_t timerHalfSecond = NULL;
@@ -56,7 +58,8 @@ static clocks_local_snapshot_t localMeasurements;
 
 static const hal_soft_timer_table_entry_t canTimerTable[] = {
     {&timerCANCheck, canCheckConnection, (uint32_t)CAN_CHECK_CONNECTION},
-    {&timerAlerts, processAlerts, (uint32_t)(SECOND / 2)}};
+    {&timerAlerts, processAlerts, (uint32_t)(SECOND / 2)},
+    {&timerOilLamp, updateOilLamp, (uint32_t)OIL_LAMP_UPDATE_INTERVAL}};
 
 static const hal_soft_timer_table_entry_t displayTimerTable[] = {
     {&timerEverySecond, callAtEverySecond, (uint32_t)SECOND},
@@ -93,6 +96,7 @@ static void initializeCore0(void) {
   setupOnboardLed();
   initBasicPIO();
   initChargeLamp();
+  initOilLamp();
   buzzerStrategy.reset();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
@@ -208,13 +212,11 @@ void callAtEveryHalfSecond(void) {
   drawMediumImportanceValues();
 }
 
-// Core 0: the oil lamp and the temperature buzzer follow the ECU state of
-// core 0 and the local measurements of core 1. A faulty oil sender keeps the
-// lamp on.
+// Core 0: the temperature buzzer follows the ECU state of core 0 and the
+// local measurements of core 1.
 void processAlerts(void) {
   clocks_local_snapshot_t local;
   clocksStateCopyLocal(&local);
-  enableOilLamp(!local.oilValid || local.oilBar < MIN_OIL_PRESSURE);
   processTemperatureBuzzerAlerts(&local);
 }
 
@@ -295,8 +297,11 @@ void drawHighImportanceValuesIfChanged(void) {
 // Core 1: one reading of the oil pressure sender.
 void readLocalOilPressure(void) {
   float bar = 0.0f;
-  const bool valid = (readOilPressure(&bar) == OIL_SENDER_OK);
+  const oil_sender_state_t state = readOilPressure(&bar);
+  const bool valid = (state == OIL_SENDER_OK);
   localMeasurements.oilValid = valid;
+  localMeasurements.oilSenderFault =
+      (state == OIL_SENDER_SHORT) || (state == OIL_SENDER_OPEN);
   localMeasurements.oilBar = valid ? bar : 0.0f;
   if (valid) {
     localMeasurements.oilUpdatedMs = hal_millis();

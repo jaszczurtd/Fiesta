@@ -1,5 +1,6 @@
 #include "chargeLamp.h"
 #include "can.h"
+#include "lampBlink.h"
 #include "timingDiag.h"
 
 #include <math.h>
@@ -69,9 +70,8 @@ bool ChargeLamp::process(const ChargeLampInput &input) {
   }
   overvoltage = overvoltageNow;
   if (overvoltage) {
-    const uint32_t halfPeriods = (uint32_t)(input.nowMs - overvoltageSinceMs) /
-                                 (uint32_t)CHARGE_LAMP_BLINK_HALF_MS;
-    return (halfPeriods % 2u) == 0u;
+    return lampBlinkLit(input.nowMs, overvoltageSinceMs,
+                        (uint32_t)CHARGE_LAMP_BLINK_HALF_MS);
   }
   return !charging;
 }

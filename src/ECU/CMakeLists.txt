@@ -4,23 +4,7 @@ project(ECU_Tests CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 
-# Valgrind / CTest memcheck configuration (copied from JaszczurHAL pattern).
-# Host-only dynamic analysis for the unit-test suite (NOT firmware):
-#   ctest --test-dir build_test -T memcheck --output-on-failure
-find_program(MEMORYCHECK_COMMAND NAMES valgrind)
-set(MEMORYCHECK_COMMAND_OPTIONS
-    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
-    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp")
-    set(MEMORYCHECK_SUPPRESSIONS_FILE
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
-    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
-else()
-    # Avoid stale cache values when the suppression file is removed.
-    set(MEMORYCHECK_SUPPRESSIONS_FILE
-        ""
-        CACHE FILEPATH "Valgrind suppressions for known third-party/system noise" FORCE)
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_host_analysis.cmake")
 
 include(CTest)
 
@@ -235,25 +219,6 @@ endif()
 add_subdirectory(tests)
 
 # Optional analysis helpers kept outside the default build.
-option(ECU_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
-if(ECU_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
-    add_custom_target(check-valgrind
-        COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck --output-on-failure -LE "static-analysis|sanitizer"
-        COMMENT "Running CTest memcheck (Valgrind) for ECU"
-        VERBATIM
-    )
-endif()
-
-find_program(RUN_CLANG_TIDY_EXECUTABLE NAMES run-clang-tidy)
-option(ECU_ENABLE_CLANG_TIDY_TARGET "Enable check-clang-tidy custom target" ON)
-if(ECU_ENABLE_CLANG_TIDY_TARGET AND RUN_CLANG_TIDY_EXECUTABLE)
-    add_custom_target(check-clang-tidy
-        COMMAND ${RUN_CLANG_TIDY_EXECUTABLE}
-            -p ${CMAKE_BINARY_DIR}
-            -quiet
-            -checks=-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
-            "^.*/src/(ECU|common/vp37|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
-        COMMENT "Running clang-tidy for ECU host-compilable sources"
-        VERBATIM
-    )
-endif()
+fiesta_add_host_analysis_targets(ECU ECU
+    CLANG_TIDY_FILES "^.*/src/(ECU|common/vp37|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
+    MEMCHECK_EXCLUDE_LABELS "static-analysis|sanitizer")

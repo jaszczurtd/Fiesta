@@ -67,6 +67,15 @@ add_executable(test_chargeLamp
 target_link_libraries(test_chargeLamp PRIVATE clocks_mock)
 add_test(NAME test_chargeLamp COMMAND test_chargeLamp)
 
+# The oil lamp from the oil pressure sender, and its GP11 output.
+add_executable(test_oilLamp
+    test_oilLamp.cpp
+    ${CLOCKS_SRC}/oilLamp.cpp
+    ${HAL_SRC}/hal/impl/.mock/hal_gpio.cpp
+)
+target_link_libraries(test_oilLamp PRIVATE clocks_mock)
+add_test(NAME test_oilLamp COMMAND test_oilLamp)
+
 # The oil and boost pressure gauges, drawn on the HAL display mock.
 add_executable(test_pressureGauge
     test_pressureGauge.cpp
@@ -78,6 +87,18 @@ add_executable(test_pressureGauge
 )
 target_link_libraries(test_pressureGauge PRIVATE clocks_mock)
 add_test(NAME test_pressureGauge COMMAND test_pressureGauge)
+
+# The small gauges under the big icons and the connection dots.
+add_executable(test_simpleGauge
+    test_simpleGauge.cpp
+    ${CLOCKS_SRC}/simpleGauge.cpp
+    ${HAL_SRC}/hal/display/hal_display.cpp
+    ${HAL_SRC}/hal/impl/.mock/hal_display.cpp
+    ${HAL_SRC}/hal/time/hal_time.cpp
+    ${HAL_SRC}/hal/time/jh_calendar.c
+)
+target_link_libraries(test_simpleGauge PRIVATE clocks_mock)
+add_test(NAME test_simpleGauge COMMAND test_simpleGauge)
 
 # Statistics of the TIMING variant, built with them on.
 add_executable(test_timingDiag

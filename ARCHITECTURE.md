@@ -172,6 +172,10 @@ stops and blinks at 2 Hz on overvoltage.
 The limits and confirmation times are in [`config.h`](src/Clocks/config.h);
 the TFT voltage gauge keeps its own range.
 
+The oil lamp is lit without oil pressure and blinks at 1 Hz while the sender
+is shorted or open, when the oil gauge shows ERR. From power-up to the first
+reading it stays lit.
+
 | File | Responsibility |
 |---|---|
 | [`Cluster.cpp`](src/Clocks/Cluster.cpp) | square waves for the factory gauges |
@@ -184,6 +188,7 @@ the TFT voltage gauge keeps its own range.
 | [`egt.cpp`](src/Clocks/egt.cpp) | both MCP9600 readings; a missing converter is looked for again |
 | [`gps.cpp`](src/Clocks/gps.cpp) | local GPS, fresh UTC and GPS frame encoding |
 | [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
+| [`oilLamp.cpp`](src/Clocks/oilLamp.cpp), [`lampBlink.h`](src/Clocks/lampBlink.h) | oil lamp state from the oil pressure sender; blink phase of both lamps |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
 | [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, GPS position and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
 

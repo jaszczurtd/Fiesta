@@ -27,6 +27,7 @@ enum { EGT_PRE_DPF, EGT_IN_DPF, EGT_CHANNELS };
 typedef struct {
   float oilBar;
   bool oilValid;
+  bool oilSenderFault;   // the last sample found the sender shorted or open
   uint32_t oilUpdatedMs; // hal_millis() of the last valid reading
   float egtC[EGT_CHANNELS];
   bool egtValid[EGT_CHANNELS];
