@@ -50,6 +50,8 @@ bool setupSpeedometer(void) {
   bool success =
       calculateCircumferenceMeters(TIRE_DIMENSIONS, TIRE_CORRECTION_FACTOR);
   if (success) {
+    hal_gpio_set_mode(JH_HW_NODE_ABS_SPEED_PIN_IN,
+                      JH_HW_NODE_ABS_SPEED_INPUT_MODE);
     hal_gpio_attach_interrupt(JH_HW_NODE_ABS_SPEED_PIN_IN, onImpulse,
                               HAL_GPIO_IRQ_RISING);
     return success;
