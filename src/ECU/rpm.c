@@ -1,17 +1,34 @@
 #include "rpm.h"
 #include "ecuContext.h"
 #include <hal/gpio/hal_gpio.h>
+#include <hal/system/hal_sync.h>
 #include <hal/timers/hal_soft_timer.h>
 
-// RPM formula (integer-only, no floats):
-// rpm = pulses * 60000 / (RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
-//       - RPM_CORRECTION_VAL
-// Keep this derived from RPM_REFRESH_INTERVAL so timing tuning cannot desync
-// RPM conversion scaling.
-#define RPM_PULSES_PER_REVOLUTION 32L
-#define RPM_NUMERATOR_PER_MINUTE 60000L
-#define RPM_DENOMINATOR                                                        \
-  ((int64_t)RPM_REFRESH_INTERVAL * RPM_PULSES_PER_REVOLUTION)
+#define RPM_MICROS_PER_MINUTE UINT64_C(60000000)
+#define RPM_CAPTURE_MAX_RPM 20000u
+#define RPM_MIN_PERIOD_US                                                      \
+  ((60000000u + (RPM_PULSES_PER_REVOLUTION * RPM_CAPTURE_MAX_RPM) - 1u) /      \
+   (RPM_PULSES_PER_REVOLUTION * RPM_CAPTURE_MAX_RPM))
+#define RPM_AVERAGING_WINDOW_US 25000u
+#define RPM_TIMEOUT_MIN_US 20000u
+#define RPM_TIMEOUT_MAX_US 500000u
+
+JB_STATIC_ASSERT(RPM_PULSES_PER_REVOLUTION > 0u, "RPM needs a pulse count");
+JB_STATIC_ASSERT((RPM_CAPTURE_SAMPLES > 1u) &&
+                     (RPM_CAPTURE_SAMPLES <= UINT8_MAX),
+                 "RPM capture index must fit uint8_t");
+
+static uint32_t RPM_signalTimeout(uint32_t periodUs) {
+  // periodUs is below the previous timeout, hence below 500000 us.
+  uint32_t timeout = periodUs * 3u;
+  if (timeout < RPM_TIMEOUT_MIN_US) {
+    timeout = RPM_TIMEOUT_MIN_US;
+  }
+  if (timeout > RPM_TIMEOUT_MAX_US) {
+    timeout = RPM_TIMEOUT_MAX_US;
+  }
+  return timeout;
+}
 
 #ifndef VP37
 static unsigned long s_lastPiStepAtMs = 0;
@@ -36,37 +53,37 @@ RPM *getRPMInstance(void) { return &getECUContext()->rpm; }
  * @brief Forward a Hall-sensor edge interrupt to the shared G28-like RPM
  * instance.
  */
-void countRPM(void) { RPM_interrupt(getRPMInstance()); }
+static void countRPM(void) { RPM_interrupt(getRPMInstance()); }
 
 void RPM_resetRPMCycle(RPM *self) { self->rpmCycle = false; }
 
-/*
- G28-like crank sensor ISR - called on every crankshaft pulse edge.
- The RPM_REFRESH_INTERVAL window check and pulse snapshot MUST stay inside
- the ISR.
- Moving them to main loop causes jitter because the main loop
- iteration time varies with CAN, OBD, turbo, etc. workload. That makes
- the counting window non-deterministic and RPM readings unstable.
- hal_millis() is just a timer register read - cheap enough for an ISR.
- Only the integer RPM math is deferred to process() via the rpmReady flag.
-*/
 void RPM_interrupt(RPM *self) {
-  unsigned long now = hal_micros();
-  unsigned long pulse = now - self->lastPulse;
-  self->lastPulse = now;
-
-  if ((pulse >> 1) > self->shortPulse) {
-    self->RPMpulses++;
+  const uint32_t now = hal_micros();
+  bool accepted = true;
+  if (self->capture.count != 0u) {
+    const uint32_t last = self->capture.timestamps[self->capture.latest];
+    if (hal_elapsed_u32(now, last, self->capture.timeoutUs)) {
+      self->capture.count = 0u;
+    } else if (hal_elapsed_u32(now, last, RPM_MIN_PERIOD_US)) {
+      self->capture.timeoutUs = RPM_signalTimeout(now - last);
+    } else {
+      accepted = false;
+    }
   }
-  self->shortPulse = pulse;
-
-  unsigned long ms = hal_millis();
-  self->rpmAliveTime = ms + RESET_RPM_WATCHDOG_TIME;
-  if (ms - self->previousMillis >= RPM_REFRESH_INTERVAL) {
-    self->previousMillis = ms;
-    self->snapshotPulses = self->RPMpulses;
-    self->RPMpulses = 0;
-    self->rpmReady = true;
+  if (accepted) {
+    if (self->capture.count == 0u) {
+      self->capture.latest = 0u;
+      self->capture.timeoutUs = RPM_TIMEOUT_MAX_US;
+    } else {
+      const uint8_t next = (uint8_t)(self->capture.latest + 1u);
+      self->capture.latest =
+          (next < COUNTOF(self->capture.timestamps)) ? next : 0u;
+    }
+    self->capture.timestamps[self->capture.latest] = now;
+    if (self->capture.count < COUNTOF(self->capture.timestamps)) {
+      ++self->capture.count;
+    }
+    ++self->capture.sequence;
   }
 }
 
@@ -77,14 +94,10 @@ hal_status_t RPM_init(RPM *self) {
 
   hal_gpio_set_mode(JH_HW_NODE_HALL_PIN_IN, HAL_GPIO_INPUT_PULLUP);
 
-  self->rpmValue = 0;
-  self->previousMillis = 0;
-  self->shortPulse = 0;
-  self->lastPulse = 0;
-  self->rpmAliveTime = 0;
-  self->RPMpulses = 0;
-  self->snapshotPulses = 0;
-  self->rpmReady = false;
+  HAL_ATOMIC_STORE(&self->rpmValue, 0, HAL_ATOMIC_RELAXED);
+  static const RPMCapture empty = {.timeoutUs = RPM_TIMEOUT_MAX_US};
+  self->capture = empty;
+  self->processedSequence = 0u;
 
   self->currentRPMSolenoid = 0;
   self->rpmCycle = false;
@@ -120,10 +133,10 @@ hal_status_t RPM_init(RPM *self) {
 #if HAL_TARGET_IS_RP
   const hal_status_t irqStatus =
       hal_gpio_attach_interrupt_ex(JH_HW_NODE_HALL_PIN_IN, countRPM,
-                                   HAL_GPIO_IRQ_CHANGE, RPM_IRQ_OWNER_CORE);
+                                   HAL_GPIO_IRQ_RISING, RPM_IRQ_OWNER_CORE);
 #else
   const hal_status_t irqStatus = hal_gpio_attach_interrupt_ex(
-      JH_HW_NODE_HALL_PIN_IN, countRPM, HAL_GPIO_IRQ_CHANGE, 0);
+      JH_HW_NODE_HALL_PIN_IN, countRPM, HAL_GPIO_IRQ_RISING, 0);
 #endif
 
   if (irqStatus != HAL_OK) {
@@ -165,22 +178,52 @@ static bool RPM_isEngineThrottlePressed(RPM *self) {
 }
 #endif
 
-int32_t RPM_getCurrentRPM(const RPM *self) { return self->rpmValue; }
+int32_t RPM_getCurrentRPM(const RPM *self) {
+  return HAL_ATOMIC_LOAD(&self->rpmValue, HAL_ATOMIC_RELAXED);
+}
 
 void RPM_process(RPM *self) {
-  if (self->rpmReady) {
-    self->rpmReady = false;
+  // The ISR is on this core: mask only while copying its small capture.
+  hal_critical_section_enter();
+  const uint32_t now = hal_micros();
+  if ((self->capture.count != 0u) &&
+      hal_elapsed_u32(now, self->capture.timestamps[self->capture.latest],
+                      self->capture.timeoutUs)) {
+    self->capture.count = 0u;
+  }
+  RPMCapture capture;
+  capture = self->capture;
+  hal_critical_section_exit();
 
-    int64_t scaled = ((int64_t)self->snapshotPulses * RPM_NUMERATOR_PER_MINUTE +
-                      (RPM_DENOMINATOR / 2)) /
-                     RPM_DENOMINATOR;
-    int32_t rpm = (int32_t)scaled - RPM_CORRECTION_VAL;
-    if (rpm < 0)
-      rpm = 0;
-    if (rpm > RPM_MAX_EVER)
-      rpm = RPM_MAX_EVER;
-
-    self->rpmValue = rpm;
+  if (capture.count < 2u) {
+    HAL_ATOMIC_STORE(&self->rpmValue, 0, HAL_ATOMIC_RELAXED);
+#ifndef VP37
+    self->rpmFiltered = 0;
+#endif
+  } else if (capture.sequence != self->processedSequence) {
+    const uint32_t latest = capture.timestamps[capture.latest];
+    uint32_t elapsed = 0u;
+    uint32_t periods = 0u;
+    uint8_t index = capture.latest;
+    for (uint8_t i = 1u; i < capture.count; ++i) {
+      index = (index == 0u) ? (uint8_t)(COUNTOF(capture.timestamps) - 1u)
+                            : (uint8_t)(index - 1u);
+      const uint32_t span = latest - capture.timestamps[index];
+      if ((i > 1u) && (span > RPM_AVERAGING_WINDOW_US)) {
+        break;
+      }
+      elapsed = span;
+      periods = i;
+    }
+    const uint64_t denominator = (uint64_t)elapsed * RPM_PULSES_PER_REVOLUTION;
+    const uint64_t numerator =
+        (RPM_MICROS_PER_MINUTE * periods) + (denominator / 2u);
+    int32_t rpm = 0;
+    if (denominator != 0u) {
+      const uint64_t scaled = numerator / denominator;
+      rpm = (int32_t)scaled;
+    }
+    HAL_ATOMIC_STORE(&self->rpmValue, rpm, HAL_ATOMIC_RELAXED);
 #ifndef VP37
     if (rpm == 0) {
       self->rpmFiltered = 0;
@@ -192,15 +235,11 @@ void RPM_process(RPM *self) {
           RPM_CONTROL_FILTER_WINDOW;
     }
 #endif
+  } else {
+    // No new accepted edge: retain the current measurement until timeout.
   }
 
-  if (self->rpmAliveTime < (long)hal_millis()) {
-    self->rpmAliveTime = hal_millis() + RESET_RPM_WATCHDOG_TIME;
-    self->rpmValue = 0;
-#ifndef VP37
-    self->rpmFiltered = 0;
-#endif
-  }
+  self->processedSequence = capture.sequence;
 
 #ifndef VP37
   hal_soft_timer_tick(self->rpmCycleTimer);

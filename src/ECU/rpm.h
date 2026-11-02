@@ -13,8 +13,19 @@
 extern "C" {
 #endif
 
-// is it really needed? To evaluate later
-#define RPM_CORRECTION_VAL 50
+/** Timestamp capacity: the latest edge and up to eight preceding periods. */
+#define RPM_CAPTURE_SAMPLES 9u
+
+/** ISR-owned capture; RPM_process copies or expires it with local IRQs masked.
+ * Both functions must execute on the IRQ owner core. Times are microseconds.
+ */
+typedef struct {
+  uint32_t timestamps[RPM_CAPTURE_SAMPLES];
+  uint32_t timeoutUs;
+  uint32_t sequence;
+  uint8_t latest;
+  uint8_t count;
+} RPMCapture;
 
 // tweakable value:
 // by how much percentage should the solenoid position change from RPM?
@@ -46,13 +57,8 @@ extern "C" {
 
 typedef struct {
   volatile int32_t rpmValue;
-  volatile unsigned long shortPulse;
-  volatile unsigned long lastPulse;
-  volatile unsigned long previousMillis;
-  volatile long rpmAliveTime;
-  volatile int32_t RPMpulses;
-  volatile int32_t snapshotPulses;
-  volatile bool rpmReady;
+  volatile RPMCapture capture;
+  uint32_t processedSequence;
 
   int32_t currentRPMSolenoid;
   bool rpmCycle;
@@ -82,7 +88,8 @@ hal_status_t RPM_init(RPM *self);
  * @brief Update RPM value and optional non-VP37 idle-control logic.
  * @param self RPM controller instance to process.
  * @note The underlying speed signal is derived from the project's G28-like
- * crank path.
+ * crank path: up to eight periods within 25 ms, or one longer period.
+ * Call on the IRQ owner core. The published RPM remains readable on core 0.
  */
 void RPM_process(RPM *self);
 
@@ -133,8 +140,10 @@ void RPM_setAccelRPMPercentage(RPM *self, int32_t percentage);
 int32_t RPM_getCurrentRPMSolenoid(const RPM *self);
 
 /**
- * @brief Handle one Hall-sensor edge for G28-like RPM measurement.
+ * @brief Capture one rising Hall-sensor edge for G28-like RPM measurement.
  * @param self RPM controller instance to update from the interrupt.
+ * @note Rejects intervals below the 20000 rpm capture ceiling. A rejected
+ * edge neither shifts the last accepted timestamp nor renews its timeout.
  */
 void RPM_interrupt(RPM *self);
 
@@ -148,7 +157,9 @@ void RPM_resetRPMCycle(RPM *self);
  * @brief Get the most recently calculated engine RPM.
  * @param self RPM controller instance to inspect.
  * @return Current RPM value.
- * @note The returned speed comes from the project's G28-like crank-signal path.
+ * @note Returns zero before two accepted edges or after signal loss. Otherwise
+ * the rounded value is not clamped to RPM_MAX_EVER, so overspeed protection
+ * sees actual RPM. Atomic scalar read, allowed on either core after init.
  */
 int32_t RPM_getCurrentRPM(const RPM *self);
 

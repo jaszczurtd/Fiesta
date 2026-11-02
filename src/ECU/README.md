@@ -51,6 +51,28 @@ engine state) live in one `ecu_context_t` in
 [`ecuContext.h`](../../src/ECU/ecuContext.h). CAN, sensors, DTC storage, RTC time, OBD,
 and the configurator session keep their state in file-local structs.
 
+## Engine speed
+
+The crank input supplies 32 equally spaced rising edges per revolution. The
+ISR records microsecond timestamps; it rejects periods shorter than 94 µs
+(the 20000 rpm capture ceiling) without moving the last accepted edge. This
+ceiling is separate from the engine's 5000 rpm protection threshold.
+
+On core 1, `RPM_process()` briefly masks local interrupts to copy nine
+timestamps. It calculates RPM from the newest one to eight periods within
+25 ms, using one period when it is longer than that window. The first edge
+starts acquisition and the second gives a measurement. Integer rounding has
+no additive correction, and the result is not clamped at the engine limit,
+so the VP37 interlock can detect overspeed. Core 0 reads the published RPM
+with an atomic scalar load.
+
+Signal loss expires after three times the latest accepted period, bounded
+to 20-500 ms. The first edge gets 500 ms for acquiring the second one. On
+expiry the result is zero and the history is discarded; restarting requires
+two new edges. Time differences handle the 32-bit microsecond counter wrap.
+This measures speed on an evenly spaced wheel; it does not decode crank
+phase or missing teeth.
+
 ## Position demand and input conditioning
 
 VP37 takes a position request in one of two units:

@@ -160,8 +160,8 @@ extern "C" {
 // for graphic gauge
 #define TURBO_MIN_PRESSURE_FOR_SPINNING 0.15
 
-// RPM refresh interval (in miliseconds)
-#define RPM_REFRESH_INTERVAL 100
+// Equal-spaced rising edges per crankshaft revolution.
+#define RPM_PULSES_PER_REVOLUTION 32u
 
 // maximum RPM for engine
 #define RPM_MAX_EVER 5000
@@ -175,7 +175,6 @@ extern "C" {
 #define MAX_RPM_PERCENT_VALUE 100
 #define MIN_RPM_PERCENT_VALUE 20
 #define MAX_RPM_DIFFERENCE 30 // max difference for engine nominal RPM
-#define RESET_RPM_WATCHDOG_TIME 2000
 
 // max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9

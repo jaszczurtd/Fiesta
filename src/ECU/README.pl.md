@@ -44,6 +44,28 @@ Główne sterowniki VP37, turbo, RPM, wentylatora, grzałki, świec, szyb i stan
 silnika znajdują się w `ecu_context_t` w [ecuContext.h](ecuContext.h).
 CAN, czujniki, DTC, czas RTC, OBD i sesja konfiguratora mają stan lokalny w plikach.
 
+## Obroty silnika
+
+Wejście wału dostarcza 32 równomiernie rozmieszczone zbocza narastające na
+obrót. ISR zapisuje znaczniki czasu w mikrosekundach. Odrzuca okresy krótsze
+niż 94 µs (granica pomiaru 20000 rpm), nie przesuwając ostatniego przyjętego
+zbocza. Ta granica jest oddzielna od progu ochrony silnika 5000 rpm.
+
+Na rdzeniu 1 `RPM_process()` na krótko maskuje lokalne przerwania, aby
+skopiować dziewięć znaczników czasu. Oblicza RPM z ostatnich od jednego do
+ośmiu okresów mieszczących się w 25 ms. Gdy pojedynczy okres jest dłuższy,
+używa go samodzielnie. Pierwsze zbocze rozpoczyna pomiar, a drugie daje
+wynik. Zaokrąglenie całkowitoliczbowe nie ma dodanej korekcji, a wynik nie
+jest przycinany do limitu silnika, więc blokada VP37 wykrywa nadobroty.
+Rdzeń 0 odczytuje opublikowane RPM atomowo.
+
+Sygnał wygasa po trzykrotności ostatniego przyjętego okresu, ograniczonej do
+20-500 ms. Po pierwszym zboczu jest 500 ms na odebranie drugiego. Wygaśnięcie
+zeruje wynik i odrzuca historię; ponowny pomiar wymaga dwóch nowych zboczy.
+Różnice czasu obsługują zawinięcie 32-bitowego licznika mikrosekund.
+To pomiar prędkości na równomiernym kole, bez dekodowania fazy wału lub
+brakujących zębów.
+
 ## Zadawanie położenia i przygotowanie wejścia
 
 `hal_status_t VP37_setPositionDemandPercentage(VP37Pump *pump, float percent)`
