@@ -1,4 +1,5 @@
 #include "can.h"
+#include "chargeLamp.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "unity.h"
 
@@ -11,7 +12,11 @@ float *clocksTestCanValues(void);
 // (backlight level). Provide stubs here so the test target doesn't need to
 // pull in the display + cluster graph.
 static unsigned int clusterUpdateCount = 0u;
-void updateCluster(void) { clusterUpdateCount++; }
+static float clusterRpm = 0.0f;
+void updateCluster(void) {
+  clusterUpdateCount++;
+  clusterRpm = canGetValue(F_RPM);
+}
 int getLcdBrightness(void) { return 0; }
 
 // Readings of core 1 taken now.
@@ -42,6 +47,7 @@ static void ensure_can_ready(void) {
 void setUp(void) {
   ensure_can_ready();
   clusterUpdateCount = 0u;
+  clusterRpm = 0.0f;
   clocksStateInit();
   for (int i = 0; i < F_LAST; i++) {
     canValues[i] = 0.0f;
@@ -207,6 +213,152 @@ static void injectFrame(uint32_t id, const uint8_t *frame) {
   hal_mock_can_inject(clocksTestGetCanHandle(), id, CAN_FRAME_MAX_LENGTH,
                       frame);
   canMainLoop();
+}
+
+static void injectRpm(uint16_t rpm) {
+  uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0};
+  frame[CAN_FRAME_RPM_UPDATE_HI] = MSB(rpm);
+  frame[CAN_FRAME_RPM_UPDATE_LO] = LSB(rpm);
+  injectFrame(CAN_ID_RPM, frame);
+}
+
+void test_rpm_expires_while_other_ecu_frames_continue(void) {
+  const uint32_t at = 100000u;
+  hal_mock_set_millis(at);
+  injectRpm(922u);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_TRUE(isEngineRpmValid());
+
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS - 1u);
+  uint8_t status[CAN_FRAME_MAX_LENGTH] = {0};
+  injectFrame(CAN_ID_ECU_UPDATE_01, status);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(922.0f, canGetValue(F_RPM));
+  TEST_ASSERT_EQUAL_UINT(1u, clusterUpdateCount);
+
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, clusterRpm);
+  TEST_ASSERT_EQUAL_UINT(2u, clusterUpdateCount);
+  TEST_ASSERT_FALSE(canValueFresh(F_RPM, hal_millis(), RPM_CAN_TIMEOUT_MS));
+  TEST_ASSERT_TRUE(isEngineRpmValid()); // core 1 has not copied the expiry
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEngineRpmValid());
+  TEST_ASSERT_EQUAL_INT(0, getEngineRPM());
+  TEST_ASSERT_TRUE(isEcuConnected());
+}
+
+void test_rpm_expires_once_on_a_silent_bus_and_same_value_recovers(void) {
+  const uint32_t at = 110000u;
+  hal_mock_set_millis(at);
+  injectRpm(922u);
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS);
+  canTickRpmTimeout();
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEngineRpmValid());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, clusterRpm);
+
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS + 1u);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_UINT(2u, clusterUpdateCount);
+  injectRpm(922u);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_UINT(3u, clusterUpdateCount);
+  TEST_ASSERT_EQUAL_FLOAT(922.0f, clusterRpm);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_TRUE(isEngineRpmValid());
+  TEST_ASSERT_EQUAL_INT(922, getEngineRPM());
+}
+
+void test_rpm_frame_drained_at_the_deadline_renews_the_measurement(void) {
+  const uint32_t at = 120000u;
+  hal_mock_set_millis(at);
+  injectRpm(922u);
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS);
+  injectRpm(922u);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(922.0f, clusterRpm);
+  TEST_ASSERT_EQUAL_UINT(2u, clusterUpdateCount);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_TRUE(isEngineRpmValid());
+}
+
+void test_truncated_rpm_does_not_postpone_expiry(void) {
+  const uint32_t at = 130000u;
+  hal_mock_set_millis(at);
+  injectRpm(922u);
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS - 1u);
+  uint8_t truncated[2] = {0u, 0u};
+  hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_RPM, COUNTOF(truncated),
+                      truncated);
+  canMainLoop();
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_UINT(2u, clusterUpdateCount);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, clusterRpm);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEngineRpmValid());
+}
+
+void test_zero_rpm_is_valid_and_applied_without_waiting_for_expiry(void) {
+  hal_mock_set_millis(140000u);
+  injectRpm(922u);
+  injectRpm(0u);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, clusterRpm);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_TRUE(isEngineRpmValid());
+  TEST_ASSERT_EQUAL_INT(0, getEngineRPM());
+}
+
+void test_rpm_timeout_crosses_millis_wrap(void) {
+  const uint32_t at = UINT32_MAX - 200u;
+  hal_mock_set_millis(at);
+  injectRpm(922u);
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS - 1u);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(922.0f, clusterRpm);
+  hal_mock_set_millis(at + RPM_CAN_TIMEOUT_MS);
+  canTickRpmTimeout();
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, clusterRpm);
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEngineRpmValid());
+}
+
+void test_ecu_disconnect_invalidates_rpm_before_its_timeout(void) {
+  hal_mock_set_millis(150000u);
+  injectRpm(922u);
+  canCheckConnection();
+  canCheckConnection();
+  (void)clocksStateRefreshView();
+  TEST_ASSERT_FALSE(isEcuConnected());
+  TEST_ASSERT_FALSE(isEngineRpmValid());
+  TEST_ASSERT_EQUAL_INT(0, getEngineRPM());
+}
+
+void test_rpm_expiry_lights_the_charge_lamp_and_recovery_confirms_again(void) {
+  const uint32_t at = 160000u;
+  hal_mock_set_millis(at);
+  initChargeLamp();
+  uint8_t status[CAN_FRAME_MAX_LENGTH] = {0};
+  status[CAN_FRAME_ECU_UPDATE_VOLTS_HI] = 14u;
+  for (uint32_t elapsed = 0u; elapsed <= CHARGE_LAMP_CONFIRM_MS;
+       elapsed += CAN_RPM_HEARTBEAT_INTERVAL_MS) {
+    hal_mock_set_millis(at + elapsed);
+    injectFrame(CAN_ID_ECU_UPDATE_01, status);
+    injectRpm(922u);
+    updateChargeLamp();
+  }
+  TEST_ASSERT_FALSE(hal_gpio_read(JH_HW_NODE_CHARGE_LAMP_PIN_OUT));
+  hal_mock_set_millis(hal_millis() + RPM_CAN_TIMEOUT_MS);
+  injectFrame(CAN_ID_ECU_UPDATE_01, status);
+  canTickRpmTimeout();
+  updateChargeLamp();
+  TEST_ASSERT_TRUE(hal_gpio_read(JH_HW_NODE_CHARGE_LAMP_PIN_OUT));
+
+  injectRpm(922u);
+  updateChargeLamp();
+  TEST_ASSERT_TRUE(hal_gpio_read(JH_HW_NODE_CHARGE_LAMP_PIN_OUT));
 }
 
 // ── Snapshot from core 0 to the display view of core 1 ──────────────────────
@@ -618,6 +770,14 @@ int main(void) {
   RUN_TEST(test_own_frames_from_another_node_change_nothing);
   RUN_TEST(test_full_ecu_update_02_frame_updates_state);
   RUN_TEST(test_rpm_frame_updates_cluster_in_same_can_drain);
+  RUN_TEST(test_rpm_expires_while_other_ecu_frames_continue);
+  RUN_TEST(test_rpm_expires_once_on_a_silent_bus_and_same_value_recovers);
+  RUN_TEST(test_rpm_frame_drained_at_the_deadline_renews_the_measurement);
+  RUN_TEST(test_truncated_rpm_does_not_postpone_expiry);
+  RUN_TEST(test_zero_rpm_is_valid_and_applied_without_waiting_for_expiry);
+  RUN_TEST(test_rpm_timeout_crosses_millis_wrap);
+  RUN_TEST(test_ecu_disconnect_invalidates_rpm_before_its_timeout);
+  RUN_TEST(test_rpm_expiry_lights_the_charge_lamp_and_recovery_confirms_again);
   RUN_TEST(test_non_fiesta_frame_is_rejected_by_acceptance_filters);
   RUN_TEST(test_unknown_can_id_does_not_update_state);
   RUN_TEST(test_fiesta_clock_frames_are_ignored_quietly);

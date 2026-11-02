@@ -25,6 +25,8 @@ void showEngineLoadGauge(void) { engineLoad_g.showSimpleGauge(); }
 
 void showGPSGauge(void) { gps_g.showSimpleGauge(); }
 
+void showRpmGauge(void) { rpm_g.showSimpleGauge(); }
+
 void showSimpleGauges(void) {
   intake_g.showSimpleGauge();
   rpm_g.showSimpleGauge();
@@ -257,7 +259,8 @@ void SimpleGauge::showSimpleGauge(void) {
     currentVal = int(valueFields[F_INTAKE_TEMP]);
     break;
   case SIMPLE_G_RPM:
-    currentVal = ((getEngineRPM() / 10) * 10);
+    currentVal =
+        isEngineRpmValid() ? ((getEngineRPM() / 10) * 10) : RPM_NOT_MEASURED;
     break;
   case SIMPLE_G_GPS:
     // Without communication there is no speed to show, as without a
@@ -283,7 +286,7 @@ void SimpleGauge::showSimpleGauge(void) {
       break;
 
     case SIMPLE_G_RPM:
-      format = "%d";
+      format = (currentVal == RPM_NOT_MEASURED) ? "N/A" : "%d";
       break;
 
     case SIMPLE_G_GPS:

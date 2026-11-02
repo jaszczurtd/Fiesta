@@ -27,6 +27,12 @@ hal_status_t canInit(void);
 bool canRetryInit(void);
 /** @brief Drain received frames and publish the changed ECU state. */
 void canMainLoop(void);
+/**
+ * @brief Core 0: expire RPM after RPM_CAN_TIMEOUT_MS without a correct frame.
+ * Call every loop pass after draining CAN. Expiry stops the tachometer and
+ * publishes an invalid, zero RPM without renewing its reception timestamp.
+ */
+void canTickRpmTimeout(void);
 void receivedCanMessage(void);
 /** @brief Send the brightness and the oil pressure and ABS speed frames. */
 void updateCANrecipients(void);

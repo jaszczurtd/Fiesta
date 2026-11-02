@@ -130,6 +130,14 @@ ramkę o tym samym ID.
 Szybkie odczyty czujników i okresowe migawki stanu zachowują ustaloną siatkę
 czasu po opóźnionym obiegu pętli. Zaległe terminy są pomijane.
 
+Clocks wygasza RPM po 300 ms bez poprawnej ramki `0x127`, niezależnie od
+pozostałego ruchu ECU. Rdzeń 0 zatrzymuje obrotomierz i publikuje zero ze
+skasowaną flagą ważności RPM. TFT pokazuje N/A do kolejnej poprawnej ramki
+RPM; odebrane zero pozostaje ważnym pomiarem. Utrata i powrót pomiaru
+przerysowują pole RPM w następnym obiegu pętli ekranu, a zwykłe aktualizacje
+liczby pozostają raz na sekundę. Wygaszenie zapala też kontrolkę ładowania,
+która po powrocie RPM ponownie potwierdza ładowanie.
+
 Clocks nadaje jasność ekranu, ciśnienie oleju i prędkość z ABS co 50 ms, a obie
 temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
 albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną

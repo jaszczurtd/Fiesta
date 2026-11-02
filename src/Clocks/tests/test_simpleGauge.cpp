@@ -15,10 +15,11 @@ extern SimpleGauge rpm_g;
 extern SimpleGauge gps_g;
 extern SimpleGauge ecu_g;
 
-static void publishEcu(bool connected, int rpm) {
+static void publishEcu(bool connected, int rpm, bool rpmValid = true) {
   clocks_ecu_snapshot_t ecu = {};
   ecu.ecuConnected = connected;
   ecu.values[F_RPM] = (float)rpm;
+  ecu.rpmValid = rpmValid;
   clocksStatePublishEcu(&ecu);
   (void)clocksStateRefreshView();
 }
@@ -57,6 +58,32 @@ void test_redraw_draws_an_unchanged_value_again(void) {
   TEST_ASSERT_EQUAL_STRING("800", hal_mock_display_last_print());
 }
 
+void test_rpm_loss_and_recovery_redraw_without_periodic_tick(void) {
+  publishEcu(true, 922);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("920", hal_mock_display_last_print());
+  publishEcu(true, 0, false);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("N/A", hal_mock_display_last_print());
+  drawCoverAndRedraw(rpm_g);
+  TEST_ASSERT_EQUAL_STRING("N/A", hal_mock_display_last_print());
+  publishEcu(true, 922);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("920", hal_mock_display_last_print());
+}
+
+void test_zero_rpm_and_no_rpm_have_different_readouts(void) {
+  publishEcu(true, 0);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("0", hal_mock_display_last_print());
+  publishEcu(true, 0, false);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("N/A", hal_mock_display_last_print());
+  publishEcu(true, 0);
+  showRpmGauge();
+  TEST_ASSERT_EQUAL_STRING("0", hal_mock_display_last_print());
+}
+
 // A redraw in the red half of the alert blinker left a red ECU dot while the
 // ECU was connected.
 void test_redraw_leaves_no_ecu_dot_while_connected(void) {
@@ -84,6 +111,8 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_redraw_draws_gps_na_again);
   RUN_TEST(test_redraw_draws_an_unchanged_value_again);
+  RUN_TEST(test_rpm_loss_and_recovery_redraw_without_periodic_tick);
+  RUN_TEST(test_zero_rpm_and_no_rpm_have_different_readouts);
   RUN_TEST(test_redraw_leaves_no_ecu_dot_while_connected);
   return UNITY_END();
 }

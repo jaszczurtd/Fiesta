@@ -33,7 +33,8 @@ set(CLOCKS_CAN_TEST_SOURCES
     ${HAL_SRC}/hal/timers/hal_soft_timer.cpp
     ${HAL_SRC}/hal/timers/smart_timers/SmartTimers.cpp
 )
-add_executable(test_can test_can.cpp ${CLOCKS_CAN_TEST_SOURCES})
+add_executable(test_can test_can.cpp ${CLOCKS_CAN_TEST_SOURCES}
+    ${CLOCKS_SRC}/chargeLamp.cpp)
 # Exercise ABS readiness through CAN publication and the real SC reply.
 target_sources(test_config_session PRIVATE ${CLOCKS_CAN_TEST_SOURCES})
 target_link_libraries(test_can PRIVATE clocks_mock)

@@ -102,6 +102,8 @@ bool isDPFConnected(void) { return s_view.dpfConnected; }
 
 bool isAbsSpeedValid(void) { return s_view.absReady; }
 
+bool isEngineRpmValid(void) { return s_view.rpmValid; }
+
 bool isOilPressureValid(void) { return s_local.oilValid; }
 
 bool isEgtValid(int channel) {

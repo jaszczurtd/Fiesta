@@ -31,6 +31,8 @@ enum { MODE_M_NORMAL, MODE_M_TEMP, MODE_M_KILOMETERS };
 #define EGT_NOT_MEASURED INT32_MIN
 // GPS gauge value while the receiver does not communicate
 #define GPS_NOT_LINKED INT32_MIN
+// RPM gauge value without a current CAN measurement
+#define RPM_NOT_MEASURED INT32_MIN
 
 #define VOLTS_OK_COLOR 0x4228
 #define VOLTS_LOW_ERROR_COLOR 0xA000
@@ -62,6 +64,8 @@ private:
 void redrawSimpleGauges(void);
 void showEngineLoadGauge(void);
 void showGPSGauge(void);
+/** @brief Core 1: draw the RPM value or N/A when its measurement expired. */
+void showRpmGauge(void);
 void showSimpleGauges(void);
 void showEGTGauge(void);
 void changeEGT(void);

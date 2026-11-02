@@ -17,6 +17,9 @@
 #define UNSYNCHRONIZE_TIME 15
 #define CORE_OPERATION_DELAY 1
 
+// Expire RPM after three missing ECU heartbeats.
+#define RPM_CAN_TIMEOUT_MS 300u
+
 // Preserve the ECU's location-age limit; UTC must come from a newer RMC.
 #define GPS_MAX_AGE_MS 4000u
 #define GPS_UTC_MAX_AGE_MS 2000u
@@ -245,6 +248,7 @@ JB_STATIC_ASSERT(CHARGE_LAMP_START_SETTLE_MS + CHARGE_LAMP_CONFIRM_MS <=
 // RPM or voltage older than this lights the lamp, in miliseconds; at least
 // two RPM heartbeats of the ECU (100 ms), at most the connection check
 // (CAN_CHECK_CONNECTION) that clears the ECU values
+// Missing RPM is cleared sooner, after RPM_CAN_TIMEOUT_MS.
 #define CHARGE_LAMP_DATA_TIMEOUT_MS 1000
 #define CHARGE_LAMP_DATA_TIMEOUT_MS_MIN 200
 #define CHARGE_LAMP_DATA_TIMEOUT_MS_MAX 1500

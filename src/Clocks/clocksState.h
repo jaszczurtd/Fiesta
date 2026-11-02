@@ -16,6 +16,7 @@
 typedef struct {
   float values[F_LAST]; // decoded ECU frames and the ABS speed, by F_*
   bool absReady; // ABS capture initialized; zero speed is a valid reading
+  bool rpmValid; // a correct RPM frame arrived within RPM_CAN_TIMEOUT_MS
   bool ecuConnected;
   bool dpfConnected;
   uint32_t redrawSeq; // bumped when a value drawn at once has changed
@@ -76,6 +77,8 @@ bool isDPFConnected(void);
 bool isOilPressureValid(void);
 /** @return True after core 0 initializes ABS capture successfully. */
 bool isAbsSpeedValid(void);
+/** @return True while the display view has a current RPM measurement. */
+bool isEngineRpmValid(void);
 /** @param channel EGT_PRE_DPF or EGT_IN_DPF. */
 bool isEgtValid(int channel);
 bool isFanEnabled(void);

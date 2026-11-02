@@ -131,6 +131,14 @@ send order; a newer snapshot replaces an unsent one of the same ID.
 High-rate sensor reads and periodic status snapshots retain their configured
 time grid after a late main-loop pass. Expired slots are skipped.
 
+Clocks expires RPM after 300 ms without a valid `0x127` frame, independently
+of other ECU traffic. Core 0 stops the tachometer and publishes zero with
+its RPM validity flag cleared. The TFT shows N/A until the next valid RPM
+frame; a received zero remains a valid reading. Loss and recovery redraw
+the RPM field on the next display loop pass, while regular numeric updates
+remain once a second. Expiry also lights the charge lamp, which confirms
+charging again when RPM returns.
+
 Clocks sends its display brightness, oil pressure, and ABS speed every 50 ms
 and both exhaust temperatures every 250 ms. Each measurement carries a
 validity flag. A missing thermocouple or a shorted or open oil sender goes

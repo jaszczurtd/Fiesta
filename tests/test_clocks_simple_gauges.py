@@ -43,6 +43,7 @@ bool isDPFRegenerating(void) { return s_dpfRegenerating; }
 bool isEcuConnected(void) { return true; }
 int getThrottlePercentage(void) { return 0; }
 int getEngineRPM(void) { return 0; }
+bool isEngineRpmValid(void) { return true; }
 
 // Only the display surface is replaced: the last text and the dot colour.
 static char s_text[32];

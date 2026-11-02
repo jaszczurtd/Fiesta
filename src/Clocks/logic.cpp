@@ -149,6 +149,7 @@ static void runCore0(void) {
                             &lastCanPollMs, CAN_MAIN_LOOP_READ_INTERVAL)) {
     canMainLoop();
   }
+  canTickRpmTimeout();
   phaseStart = timingDiagCanPhase(0u, phaseStart);
 
   hal_soft_timer_tick_table(canTimerTable, COUNTOF(canTimerTable));
@@ -383,9 +384,17 @@ static void runCore1(void) {
   const uint32_t loopStart = timingDiagLoopStart();
   readLocalGPS();
 
+  const bool rpmWasValid = isEngineRpmValid();
   if (clocksStateRefreshView()) {
     triggerDrawHighImportanceValue(true);
   }
+#ifndef DEBUG_SCREEN
+  if (rpmWasValid != isEngineRpmValid()) {
+    showRpmGauge();
+  }
+#else
+  (void)rpmWasValid;
+#endif
 
   hal_soft_timer_tick_table(displayTimerTable, COUNTOF(displayTimerTable));
   if (lastThreadSeconds < hal_get_seconds()) {

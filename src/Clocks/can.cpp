@@ -2,6 +2,9 @@
 #include "peripherials.h"
 #include "timingDiag.h"
 
+JB_STATIC_ASSERT(RPM_CAN_TIMEOUT_MS >= 3u * CAN_RPM_HEARTBEAT_INTERVAL_MS,
+                 "RPM timeout must cover three ECU heartbeats");
+
 // State of core 0: decoded ECU frames and the ABS speed. Core 1 reads it only
 // through the published snapshot.
 static float canValues[F_LAST];
@@ -25,6 +28,7 @@ static uint32_t lastInitAttemptMs = 0u;
 static uint32_t redrawSeq = 0u;
 static bool stateChanged = false;
 static bool absReady = false;
+static bool rpmValid = false;
 
 // hal_millis() of the last decode of each value; a value never decoded is not
 // fresh.
@@ -59,6 +63,7 @@ static void publishState(void) {
   static clocks_ecu_snapshot_t snapshot;
   memcpy(snapshot.values, canValues, sizeof(snapshot.values));
   snapshot.absReady = absReady;
+  snapshot.rpmValid = rpmValid;
   snapshot.ecuConnected = ecuConnected;
   snapshot.dpfConnected = dpfConnected;
   snapshot.redrawSeq = redrawSeq;
@@ -88,6 +93,9 @@ hal_status_t canInit(void) {
   dpfMessages = lastDPFMessages = 0;
   interrupt = false;
   memset(valueDecoded, 0, sizeof(valueDecoded));
+  rpmValid = false;
+  canValues[F_RPM] = 0.0f;
+  stateChanged = true;
   lastInitAttemptMs = hal_millis();
 
   hal_can_config_t canCfg = JH_HW_NODE_CAN_CONFIG_INIT;
@@ -287,6 +295,7 @@ static void onCanFrame(uint32_t canID, uint8_t len, const uint8_t *buf) {
 
     putValue(F_RPM, jh_u16_from_bytes(buf[CAN_FRAME_RPM_UPDATE_HI],
                                       buf[CAN_FRAME_RPM_UPDATE_LO]));
+    rpmValid = true;
     updateCluster();
     timingDiagRpmApplied();
   } break;
@@ -370,6 +379,16 @@ void canMainLoop(void) {
   publishState();
 }
 
+void canTickRpmTimeout(void) {
+  if (rpmValid && !canValueFresh(F_RPM, hal_millis(), RPM_CAN_TIMEOUT_MS)) {
+    rpmValid = false;
+    canValues[F_RPM] = 0.0f;
+    updateCluster();
+    stateChanged = true;
+    publishState();
+  }
+}
+
 bool canRxPending(void) {
   return canHandle != NULL &&
          (interrupt || !hal_gpio_read(JH_HW_NODE_CAN_PIN_INT));
@@ -433,6 +452,7 @@ void canCheckConnection(void) {
 
     // Losing the ECU clears its data; the ABS speed is measured here.
     if (!ecuConnected) {
+      rpmValid = false;
       for (int a = 0; a < F_LAST; a++) {
         if (a != F_ABS_CAR_SPEED) {
           canValues[a] = 0.0;
