@@ -62,9 +62,20 @@ bool setupSpeedometer(void) {
 
 void onImpulse(void) { impulseCount++; }
 
+#ifdef SPEED_PULSE_DEBUG
+static unsigned long lastImpulseCount_p = 0;
+#endif
+
 void onImpulseTranslating(void) {
   if (circumferenceMeters > 0) {
     unsigned long currentTime = hal_millis();
+
+#ifdef SPEED_PULSE_DEBUG
+    if (lastImpulseCount_p != lastImpulseCount) {
+      lastImpulseCount_p = impulseCount;
+      deb("impulse: %d", lastImpulseCount_p);
+    }
+#endif
 
     if (currentTime - lastCalcTime >= CALC_INTERVAL) {
       hal_critical_section_enter();
