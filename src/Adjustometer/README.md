@@ -69,9 +69,16 @@ each read; sequence markers and ECU freshness checks remain in use. Wire definit
 
 | Registers | Purpose |
 | --- | --- |
-| `0x00..0x04` | Original pulse (signed int16, big-endian), voltage, fuel temperature and status layout, retained for older readers. |
-| `0x05..0x16` | Optional coherent diagnostics: filtered frequency, baseline, signed delta, RP2040 temperature and validity flags. |
+| `0x00..0x04` | Reserved; no measurements. |
+| `0x05..0x12` | Version-2 coherent diagnostics: filtered frequency, baseline, RP2040 temperature and validity flags. |
+| `0x13..0x16` | Reserved. |
 | `0x17..0x34` | Coherent control feedback, including raw frequency and measurement freshness. |
+
+ECU and VP37TestBench read version-1 control feedback at its fixed address
+`0x17`. The five-byte reader is no longer supported. Diagnostic readers must
+use version 2 and derive signed deviation as filtered frequency minus baseline
+from the same read. A different diagnostic version is rejected without
+affecting control feedback.
 
 Voltage is encoded in 0.1 V and fuel temperature in whole degrees C. The
 `47k / 10k` divider limits ADC measurement to about 18.8 V at 3.3 V full scale,
@@ -92,8 +99,8 @@ measurements are valid. It is sampled independently of control feedback.
 
 ## Core split and LED
 
-Core 0 initializes sensors, drains hardware capture every 1 ms and publishes fast feedback
-and its legacy mirror. Core 1 reads auxiliary ADC inputs every 10 ms, publishes
+Core 0 initializes sensors, drains hardware capture every 1 ms and publishes
+fast feedback. Core 1 reads auxiliary ADC inputs every 10 ms, publishes
 the diagnostic extension, and handles LED and USB logging. Chip temperature and
 logs update every 250 ms. USB writes use a zero timeout and can drop text when
 the host does not receive it; fast publication runs independently.
@@ -108,7 +115,7 @@ active conditions: purple for fuel temperature, yellow for voltage, red after
 | Files | Responsibility |
 | --- | --- |
 | `sensors.c / sensors.h` | Frequency, EMA, baseline, zero hold, ADC and coherent in-memory measurement. |
-| `telemetry.c / telemetry.h` | Publication of coherent I2C blocks and legacy mirror. |
+| `telemetry.c / telemetry.h` | Publication of coherent feedback and diagnostic I2C blocks. |
 | `start.c / start.h` | Portable app entry and core scheduling. |
 | `led.c / led.h` | Status indication. |
 | `device_tree.json` | Board, pins, the ECU bus and the status LED. |

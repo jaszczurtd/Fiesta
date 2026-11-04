@@ -409,3 +409,13 @@ and edge tracking use `HAL_RAM_FUNC` to limit instruction fetches from flash.
 The bench trace retains 1024 complete control samples, with its boolean flags
 stored as bits. `VP37_TRACE_SAMPLES` controls capture length. Inspect both
 firmware variants' ELF memory maps when changing these buffers or RAM code.
+
+During startup calibration the bench image uses the same storage for every
+MIN/MAX qualification sample. After USB connects, `VP37 CAL` lines export
+the input position, raw and filtered frequencies, baseline, sample number,
+both clocks, freshness, status, applied PWM, supply voltage in 0.1 V and fuel
+temperature in degrees C. `VP37 CAL END` reports the sample count, qualified
+endpoints, validity and any buffer overflow. The current estimator's window
+and timeout settings are defined in `vp37_config.h`. The normal `VP37 C`
+stream shows the return to rest after calibration; calibration does not
+sample current. Normal RAM capture remains busy until this export finishes.

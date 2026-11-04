@@ -88,7 +88,6 @@ VP37InitStatus vp37BenchAdapterStart(VP37Pump *pump) {
            hal_status_to_string(scanStatus));
     }
     (void)VP37_setCallbacks(pump, &k_vp37BenchCallbacks);
-    (void)VP37_setAdjustometerFastFeedback(pump, true);
     status = VP37_init(pump);
   } else {
     derr("VP37 bench drive outputs are not initialized");

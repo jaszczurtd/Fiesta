@@ -34,6 +34,13 @@ static float expectedHoldingFF(float percent) {
 void setUp(void) { setUpVp37Fixture(); }
 
 void tearDown(void) {
+#if VP37_TELEMETRY_ENABLED
+  VP37CalibrationSample calibration;
+  VP37CalibrationResult result;
+  while (VP37_readCalibrationTrace(&calibration) == HAL_OK) {
+  }
+  (void)VP37_takeCalibrationResult(&result);
+#endif
   (void)VP37_currentScanStop();
   vp37AdjustometerTransferBusy(false);
   VP37Pump *pump = vp37TestPump();
@@ -295,6 +302,34 @@ void test_vp37_init_returns_ok_when_baseline_ready(void) {
   TEST_ASSERT_EQUAL_INT32(8200, pump->feedback.adjustMax);
   TEST_ASSERT_GREATER_OR_EQUAL_UINT32(2U * VP37_CALIBRATION_MIN_SETTLE_MS,
                                       hal_millis());
+#if VP37_TELEMETRY_ENABLED
+  hal_mock_usb_set_connected(false);
+  VP37_showCalibration(); // No host: retain the complete startup capture.
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, VP37_startTrace(pump));
+  VP37CalibrationSample calibration = {};
+  VP37CalibrationResult result = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, VP37_takeCalibrationResult(&result));
+  for (uint32_t i = 0U; i < 20U; ++i) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readCalibrationTrace(&calibration));
+    TEST_ASSERT_EQUAL_UINT32((i + 1U) * 20000U, calibration.us);
+    TEST_ASSERT_EQUAL_INT16(i < 10U ? 100 : 8200, calibration.reading.pulseHz);
+    TEST_ASSERT_EQUAL_UINT16(i < 10U ? 0U : 1637U, calibration.pwm);
+    TEST_ASSERT_EQUAL_UINT8(132U, calibration.reading.voltageRaw);
+    TEST_ASSERT_EQUAL_UINT8(40U, calibration.reading.fuelTempC);
+    TEST_ASSERT_TRUE(calibration.reading.commOk);
+    TEST_ASSERT_TRUE(calibration.reading.feedbackFresh);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, VP37_readCalibrationTrace(&calibration));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_takeCalibrationResult(&result));
+  TEST_ASSERT_EQUAL_UINT32(20U, result.samples);
+  TEST_ASSERT_EQUAL_UINT32(400000U, result.finishedUs - result.startedUs);
+  TEST_ASSERT_EQUAL_INT32(100, result.minimum);
+  TEST_ASSERT_EQUAL_INT32(8200, result.maximum);
+  TEST_ASSERT_TRUE(result.minSettled && result.maxSettled && result.valid);
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, VP37_takeCalibrationResult(&result));
+  TEST_ASSERT_EQUAL_INT32(0, s_vp37Board.lastQuantityPwm);
+#endif
 }
 
 void test_vp37_init_rejects_insufficient_calibration_travel(void) {
@@ -314,6 +349,16 @@ void test_vp37_init_rejects_insufficient_calibration_travel(void) {
   TEST_ASSERT_EQUAL_INT(VP37_INIT_CALIBRATION_FAILED, status);
   TEST_ASSERT_FALSE(pump->vp37Initialized);
   TEST_ASSERT_FALSE(pump->feedback.calibrationDone);
+#if VP37_TELEMETRY_ENABLED
+  VP37CalibrationSample calibration;
+  while (VP37_readCalibrationTrace(&calibration) == HAL_OK) {
+  }
+  VP37CalibrationResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_takeCalibrationResult(&result));
+  TEST_ASSERT_TRUE(result.minSettled && result.maxSettled);
+  TEST_ASSERT_FALSE(result.valid);
+  TEST_ASSERT_EQUAL_INT32(3000, result.maximum);
+#endif
 }
 
 void test_vp37_positive_limit_matches_hot_actuator_compensation(void) {
@@ -400,15 +445,15 @@ void test_vp37_process_disables_after_adj_comm_cutoff_timeout(void) {
   vp37AdjustometerTransferBusy(true);
 
   hal_mock_set_millis(100);
-  VP37_process(pump); // comm error #1 (commOk still true)
+  VP37_process(pump); // The first failed frame starts the cutoff.
   hal_mock_set_millis(105);
-  VP37_process(pump); // comm error #2 (commOk still true)
+  VP37_process(pump);
   hal_mock_set_millis(110);
-  VP37_process(pump); // comm error #3 (commOk false, timestamp starts)
+  VP37_process(pump);
   TEST_ASSERT_TRUE(pump->vp37Initialized);
-  TEST_ASSERT_EQUAL_UINT32(110, pump->feedback.commLostSince);
+  TEST_ASSERT_EQUAL_UINT32(100, pump->feedback.commLostSince);
 
-  hal_mock_set_millis(110 + VP37_ADJ_COMM_CUTOFF_MS);
+  hal_mock_set_millis(100 + VP37_ADJ_COMM_CUTOFF_MS);
   VP37_process(pump);
   TEST_ASSERT_FALSE(pump->vp37Initialized);
 }
@@ -704,7 +749,6 @@ void test_vp37_board_services_stay_fixed_after_init_and_stop(void) {
   VP37Pump *pump = vp37TestPump();
   memset(pump, 0, sizeof(*pump));
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setCallbacks(pump, vp37ModuleCallbacks()));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_setAdjustometerFastFeedback(pump, true));
   // No Adjustometer answers: the start fails, but it has taken the services.
   vp37AdjustometerTransferBusy(true);
   TEST_ASSERT_EQUAL_INT(VP37_INIT_BASELINE_NOT_READY, VP37_init(pump));
@@ -717,11 +761,6 @@ void test_vp37_board_services_stay_fixed_after_init_and_stop(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_setCallbacks(pump, &table));
   TEST_ASSERT_TRUE(pump->callbacks.writeQuantityPwm ==
                    vp37ModuleCallbacks()->writeQuantityPwm);
-  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
-                        VP37_setAdjustometerFastFeedback(pump, false));
-  TEST_ASSERT_TRUE(pump->adjustometer.fastFeedback);
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
-                        VP37_setAdjustometerFastFeedback(NULL, true));
 }
 
 static void runSupplyCycles(VP37Pump *pump, uint32_t &ms, uint32_t count,
@@ -2092,7 +2131,7 @@ void test_vp37_bench_cap_and_stop(void) {
 
 void test_vp37_invalid_feedback_stops_and_bus_failure_freezes_integral(void) {
   VP37Pump *pump = vp37TestPump();
-  setupPumpForProcessTests(pump, true);
+  setupPumpForProcessTests(pump);
   VP37_setPositionDemandPercentage(pump, 70);
   adjustometer_feedback_t sample = {};
   sample.number = 1;
@@ -5036,6 +5075,63 @@ void test_motion_integral_switch_is_profile_gated_and_resettable(void) {
 }
 
 #if VP37_TELEMETRY_ENABLED
+void test_calibration_trace_retains_errors_and_reports_overflow(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_calibrationTraceBegin());
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, VP37_calibrationTraceBegin());
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, VP37_startTrace(pump));
+  adjustometer_reading_t reading = {};
+  reading.rawHz = 30001U;
+  reading.signalHz = 30002U;
+  reading.baselineHz = 31000U;
+  reading.sampleNumber = 25U;
+  reading.measuredUs = 123456U;
+  reading.ageUs = 900U;
+  reading.pulseHz = 998;
+  reading.readStatus = HAL_EBUS;
+  reading.status = ADJ_STATUS_SIGNAL_LOST;
+  reading.voltageRaw = 138U;
+  reading.fuelTempC = 27U;
+  VP37CalibrationSample sample = {};
+  sample.us = 123U;
+  VP37_calibrationTraceRecord(&reading, 1637U);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, VP37_readCalibrationTrace(&sample));
+  TEST_ASSERT_EQUAL_UINT32(123U, sample.us);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, VP37_readCalibrationTrace(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, VP37_takeCalibrationResult(NULL));
+  // More than both endpoint timeouts can contain: retain the bounded prefix
+  // and report incompleteness instead of overwriting the union's neighbours.
+  for (uint32_t i = 0U; i < 110U; ++i) {
+    VP37_calibrationTraceRecord(&reading, 1637U);
+  }
+  pump->feedback.calibrationDone = false;
+  VP37_calibrationTraceEnd(pump, false, false);
+  uint32_t count = 0U;
+  while (VP37_readCalibrationTrace(&sample) == HAL_OK) {
+    TEST_ASSERT_EQUAL_UINT32(30001U, sample.reading.rawHz);
+    TEST_ASSERT_EQUAL_UINT32(30002U, sample.reading.signalHz);
+    TEST_ASSERT_EQUAL_UINT32(31000U, sample.reading.baselineHz);
+    TEST_ASSERT_EQUAL_UINT32(25U, sample.reading.sampleNumber);
+    TEST_ASSERT_EQUAL_UINT32(123456U, sample.reading.measuredUs);
+    TEST_ASSERT_EQUAL_UINT16(900U, sample.reading.ageUs);
+    TEST_ASSERT_EQUAL_INT(HAL_EBUS, sample.reading.readStatus);
+    TEST_ASSERT_FALSE(sample.reading.commOk);
+    TEST_ASSERT_EQUAL_UINT16(1637U, sample.pwm);
+    count++;
+  }
+  VP37CalibrationResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_takeCalibrationResult(&result));
+  TEST_ASSERT_EQUAL_UINT32(102U, count);
+  TEST_ASSERT_EQUAL_UINT32(count, result.samples);
+  TEST_ASSERT_TRUE(result.overflow);
+  TEST_ASSERT_FALSE(result.valid);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_startTrace(pump));
+  VP37_traceStop();
+  VP37TraceSample control;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, VP37_readTrace(&control));
+}
+
 static VP37Pump *prepareCalibrationProbe(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
@@ -7502,6 +7598,7 @@ int main(void) {
   RUN_TEST(test_motion_integral_switch_is_profile_gated_and_resettable);
 #if VP37_TELEMETRY_ENABLED
   RUN_TEST(test_calibration_probe_preserves_calibration_pid_and_zeroes_output);
+  RUN_TEST(test_calibration_trace_retains_errors_and_reports_overflow);
   RUN_TEST(test_calibration_probe_refuses_active_or_unreleased_state);
   RUN_TEST(test_calibration_probe_invalid_feedback_aborts_and_retains_result);
   RUN_TEST(test_calibration_probe_bus_failure_and_clock_wrap_release_output);

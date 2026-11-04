@@ -1,15 +1,11 @@
-// VP37 Adjustometer reader: the fast feedback frame, the legacy register
-// block, the diagnostic extension and the start-up baseline wait. The bus
+// VP37 Adjustometer reader: the fast feedback frame, the diagnostic
+// extension and the start-up baseline wait. The bus
 // transfer is the board's adjustometerTransfer service; everything the frames
 // mean is decided here.
 
 #include "vp37_internal.h"
 
 #include <hal/core/jh_endian.h>
-#include <string.h>
-
-/** Failed legacy reads in a row before commOk drops. */
-#define VP37_ADJ_COMM_ERROR_THRESHOLD 3U
 /** Transfers of a fast frame that arrived torn between two publications. */
 #define VP37_ADJ_FEEDBACK_ATTEMPTS 3U
 /** Transfers of the diagnostic extension before it is given up. */
@@ -23,30 +19,7 @@
 #error "Include vp37_hal_config.h from the board's hal_project_config.h"
 #endif
 
-hal_status_t VP37_setAdjustometerFastFeedback(VP37Pump *self, bool enabled) {
-  hal_status_t status = HAL_EINVAL;
-  if (self != NULL) {
-    status = HAL_ESTATE;
-    if (!self->vp37Initialized && !self->servicesFixed) {
-      (void)memset(&self->adjustometer, 0, sizeof(self->adjustometer));
-      self->adjustometer.last.status = ADJ_STATUS_SIGNAL_LOST;
-      self->adjustometer.last.readStatus = HAL_EAGAIN;
-      self->adjustometer.fastFeedback = enabled;
-      status = HAL_OK;
-    }
-  }
-  return status;
-}
-
-static adjustometer_reading_t VP37_adjustometerCommError(VP37Pump *self) {
-  self->adjustometer.commErrors++;
-  if (self->adjustometer.commErrors >= VP37_ADJ_COMM_ERROR_THRESHOLD) {
-    self->adjustometer.last.commOk = false;
-  }
-  return self->adjustometer.last;
-}
-
-static adjustometer_reading_t VP37_readFastFeedback(VP37Pump *self) {
+adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
   const uint32_t startedUs = hal_micros();
   uint8_t retries = 0U;
   uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
@@ -66,7 +39,6 @@ static adjustometer_reading_t VP37_readFastFeedback(VP37Pump *self) {
   }
   const uint32_t nowUs = hal_micros();
   adjustometer_reading_t snapshot = self->adjustometer.last;
-  snapshot.fastFeedback = true;
   snapshot.readStatus = status;
   snapshot.readUs = nowUs - startedUs;
   snapshot.readRetries = retries;
@@ -103,31 +75,6 @@ static adjustometer_reading_t VP37_readFastFeedback(VP37Pump *self) {
   return snapshot;
 }
 
-static adjustometer_reading_t VP37_readLegacyRegisters(VP37Pump *self) {
-  uint8_t buf[ADJUSTOMETER_LEGACY_REG_COUNT];
-  const hal_status_t status = self->callbacks.adjustometerTransfer(
-      ADJUSTOMETER_REG_PULSE_HI, buf, COUNTOF(buf));
-  if (status != HAL_OK) {
-    derr("Adjustometer I2C read error: %s", hal_status_to_string(status));
-    return VP37_adjustometerCommError(self);
-  }
-  adjustometer_reading_t snapshot = self->adjustometer.last;
-  snapshot.pulseHz = (int16_t)jh_load_be16(buf);
-  snapshot.voltageRaw = buf[2];
-  snapshot.fuelTempC = buf[3];
-  snapshot.status = buf[4];
-  snapshot.commOk = true;
-  snapshot.fastFeedback = false;
-  self->adjustometer.last = snapshot;
-  self->adjustometer.commErrors = 0U;
-  return snapshot;
-}
-
-adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
-  return self->adjustometer.fastFeedback ? VP37_readFastFeedback(self)
-                                         : VP37_readLegacyRegisters(self);
-}
-
 static bool VP37_readExtendedOnce(const VP37Pump *self,
                                   adjustometer_reading_t *out) {
   uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT];
@@ -151,8 +98,7 @@ static bool VP37_readExtendedOnce(const VP37Pump *self,
       &buf[ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START]);
   out->baselineHz = jh_load_be32(
       &buf[ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START]);
-  out->signedDeltaHz = (int32_t)jh_load_be32(
-      &buf[ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START]);
+  out->signedDeltaHz = (int32_t)out->signalHz - (int32_t)out->baselineHz;
   out->chipTempDeciC = (int16_t)jh_load_be16(
       &buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START]);
   out->extendedTelemetryValid = true;
@@ -180,7 +126,7 @@ bool VP37_waitForAdjustometerBaseline(VP37Pump *self) {
     if (r.commOk &&
         ((r.status & (ADJ_STATUS_BASELINE_PENDING | ADJ_STATUS_SIGNAL_LOST)) ==
          0U) &&
-        (!r.fastFeedback || r.feedbackFresh)) {
+        r.feedbackFresh) {
       deb("Adjustometer baseline ready (%lu ms)",
           (unsigned long)(hal_millis() - start));
       return true;

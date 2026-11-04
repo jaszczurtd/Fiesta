@@ -5,14 +5,27 @@
 #include "../vp37_internal.h"
 #include <string.h>
 
+/** @brief Fresh feedback for tests that supply only position and auxiliary
+ * data. */
+static inline adjustometer_feedback_t vp37TestFeedback(int16_t pulseHz,
+                                                       uint8_t voltage,
+                                                       uint8_t fuelTemp,
+                                                       uint8_t status) {
+  static uint32_t number = 0U;
+  adjustometer_feedback_t sample = {};
+  sample.pulseHz = pulseHz;
+  sample.voltage = voltage;
+  sample.fuelTemp = fuelTemp;
+  sample.status = status;
+  sample.number = ++number;
+  sample.measuredUs = hal_micros();
+  return sample;
+}
+
 static inline void vp37SetupCalibratedPump(VP37Pump *pump,
-                                           const VP37Callbacks *callbacks,
-                                           bool fastFrame) {
+                                           const VP37Callbacks *callbacks) {
   memset(pump, 0, sizeof(*pump));
   (void)VP37_setCallbacks(pump, callbacks);
-  if (fastFrame) {
-    (void)VP37_setAdjustometerFastFeedback(pump, true);
-  }
   pump->pid.controller = hal_pid_controller_create();
   pump->vp37Initialized = true;
   pump->feedback.calibrationDone = true;

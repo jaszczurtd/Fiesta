@@ -22,7 +22,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:194 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:207 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -305,11 +305,28 @@ enum {
   VP37_TRACE_IDLE = 0U,
   VP37_TRACE_RECORDING,
   VP37_TRACE_READY,
-  VP37_TRACE_ARMED
+  VP37_TRACE_ARMED,
+  VP37_TRACE_CAL_RECORDING,
+  VP37_TRACE_CAL_READY
 };
 
+/* Each endpoint samples at most timeout / interval + 1 times. */
+#define VP37_CAL_TRACE_SAMPLES                                                 \
+  (2U *                                                                        \
+   ((VP37_CALIBRATION_TIMEOUT_MS / VP37_CALIBRATION_SAMPLE_INTERVAL_MS) + 1U))
+typedef struct {
+  VP37CalibrationSample samples[VP37_CAL_TRACE_SAMPLES];
+  VP37CalibrationResult result;
+} VP37CalibrationTrace;
+JB_STATIC_ASSERT(sizeof(VP37CalibrationTrace) <=
+                     sizeof(VP37TraceSample) * VP37_TRACE_SAMPLES,
+                 "Calibration must fit the existing trace buffer");
+
 static struct {
-  VP37TraceSample samples[VP37_TRACE_SAMPLES];
+  union {
+    VP37TraceSample samples[VP37_TRACE_SAMPLES];
+    VP37CalibrationTrace calibration;
+  } storage;
   uint32_t count; /**< Samples recorded; the control core's while recording. */
   uint32_t next;  /**< Next sample to read; the reading core's. */
   uint8_t state;  /**< VP37_TRACE_*, changed atomically. */
@@ -319,6 +336,116 @@ static struct {
 
 static uint8_t VP37_traceState(void) {
   return HAL_ATOMIC_LOAD(&s_trace.state, HAL_ATOMIC_ACQUIRE);
+}
+
+hal_status_t VP37_calibrationTraceBegin(void) {
+  if (VP37_traceState() != VP37_TRACE_IDLE) {
+    return HAL_EBUSY;
+  }
+  s_trace.count = 0U;
+  s_trace.storage.calibration.result = (VP37CalibrationResult){0};
+  s_trace.storage.calibration.result.startedUs = hal_micros();
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_CAL_RECORDING,
+                   HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+void VP37_calibrationTraceRecord(const adjustometer_reading_t *reading,
+                                 uint16_t pwm) {
+  if (VP37_traceState() != VP37_TRACE_CAL_RECORDING) {
+    return;
+  }
+  if (s_trace.count < COUNTOF(s_trace.storage.calibration.samples)) {
+    VP37CalibrationSample *const sample =
+        &s_trace.storage.calibration.samples[s_trace.count];
+    sample->reading = *reading;
+    sample->us = hal_micros();
+    sample->pwm = pwm;
+    s_trace.count++;
+  } else {
+    s_trace.storage.calibration.result.overflow = true;
+  }
+}
+
+void VP37_calibrationTraceEnd(const VP37Pump *self, bool minSettled,
+                              bool maxSettled) {
+  if (VP37_traceState() == VP37_TRACE_CAL_RECORDING) {
+    VP37CalibrationResult *const result = &s_trace.storage.calibration.result;
+    result->finishedUs = hal_micros();
+    result->samples = s_trace.count;
+    result->minimum = self->feedback.adjustMin;
+    result->maximum = self->feedback.adjustMax;
+    result->minSettled = minSettled;
+    result->maxSettled = maxSettled;
+    result->valid = self->feedback.calibrationDone;
+    HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_CAL_READY,
+                     HAL_ATOMIC_RELEASE);
+  }
+}
+
+hal_status_t VP37_readCalibrationTrace(VP37CalibrationSample *sample) {
+  if (sample == NULL) {
+    return HAL_EINVAL;
+  }
+  const uint8_t state = VP37_traceState();
+  if (state == VP37_TRACE_CAL_RECORDING) {
+    return HAL_EAGAIN;
+  }
+  if ((state != VP37_TRACE_CAL_READY) || (s_trace.next >= s_trace.count)) {
+    return HAL_ENOENT;
+  }
+  *sample = s_trace.storage.calibration.samples[s_trace.next];
+  s_trace.next++;
+  return HAL_OK;
+}
+
+hal_status_t VP37_takeCalibrationResult(VP37CalibrationResult *result) {
+  if (result == NULL) {
+    return HAL_EINVAL;
+  }
+  if ((VP37_traceState() != VP37_TRACE_CAL_READY) ||
+      (s_trace.next < s_trace.count)) {
+    return HAL_EAGAIN;
+  }
+  *result = s_trace.storage.calibration.result;
+  s_trace.next = 0U;
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_IDLE,
+                   HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+void VP37_showCalibration(void) {
+  bool connected = false;
+  if ((hal_usb_cdc_is_connected(&connected) != HAL_OK) || !connected ||
+      hal_debug_is_muted()) {
+    return;
+  }
+  VP37CalibrationSample sample;
+  for (uint8_t i = 0U; i < 2U; ++i) {
+    if (VP37_readCalibrationTrace(&sample) != HAL_OK) {
+      break;
+    }
+    const adjustometer_reading_t *const r = &sample.reading;
+    deb("VP37 CAL us:%lu phase:%s pwm:%u adj:%d hzraw:%lu hz:%lu bl:%lu "
+        "sn:%lu su:%lu age:%u st:%u io:%d comm:%u fresh:%u v:%u ft:%u",
+        (unsigned long)sample.us, sample.pwm == 0U ? "MIN" : "MAX",
+        (unsigned int)sample.pwm, r->pulseHz, (unsigned long)r->rawHz,
+        (unsigned long)r->signalHz, (unsigned long)r->baselineHz,
+        (unsigned long)r->sampleNumber, (unsigned long)r->measuredUs,
+        (unsigned int)r->ageUs, (unsigned int)r->status, (int)r->readStatus,
+        r->commOk ? 1U : 0U, r->feedbackFresh ? 1U : 0U,
+        (unsigned int)r->voltageRaw, (unsigned int)r->fuelTempC);
+  }
+  VP37CalibrationResult result;
+  if (VP37_takeCalibrationResult(&result) == HAL_OK) {
+    deb("VP37 CAL END start:%lu end:%lu samples:%lu min:%ld max:%ld "
+        "minok:%u maxok:%u valid:%u overflow:%u pwm:0",
+        (unsigned long)result.startedUs, (unsigned long)result.finishedUs,
+        (unsigned long)result.samples, (long)result.minimum,
+        (long)result.maximum, result.minSettled ? 1U : 0U,
+        result.maxSettled ? 1U : 0U, result.valid ? 1U : 0U,
+        result.overflow ? 1U : 0U);
+  }
 }
 
 static hal_status_t VP37_startTraceMode(const VP37Pump *self, bool descent) {
@@ -366,7 +493,7 @@ hal_status_t VP37_readTrace(VP37TraceSample *sample) {
   hal_status_t status = HAL_ENOENT;
   if (state == VP37_TRACE_READY) {
     if (s_trace.next < s_trace.count) {
-      *sample = s_trace.samples[s_trace.next];
+      *sample = s_trace.storage.samples[s_trace.next];
       s_trace.next++;
       status = HAL_OK;
     }
@@ -415,7 +542,8 @@ void VP37_traceRecord(const VP37Pump *self) {
                         VP37_hasMeasuredDescent(self);
     if (!moving && self->vp37Initialized && !released) {
       // Keep the preceding step without allocating another trace buffer.
-      s_trace.samples[0] = VP37_controlSample(VP37_publishedTelemetry());
+      s_trace.storage.samples[0] =
+          VP37_controlSample(VP37_publishedTelemetry());
       s_trace.count = 1U;
       return;
     }
@@ -423,11 +551,11 @@ void VP37_traceRecord(const VP37Pump *self) {
                      HAL_ATOMIC_RELEASE);
   }
   if ((state == VP37_TRACE_RECORDING) || (state == VP37_TRACE_ARMED)) {
-    s_trace.samples[s_trace.count] =
+    s_trace.storage.samples[s_trace.count] =
         VP37_controlSample(VP37_publishedTelemetry());
     s_trace.count++;
-    if ((s_trace.count == COUNTOF(s_trace.samples)) || !self->vp37Initialized ||
-        released) {
+    if ((s_trace.count == COUNTOF(s_trace.storage.samples)) ||
+        !self->vp37Initialized || released) {
       VP37_traceStop();
     }
   }

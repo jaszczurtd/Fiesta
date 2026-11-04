@@ -85,31 +85,36 @@ void test_complete_frames_remain_valid_across_sequence_wrap(void) {
   }
 }
 
-void test_publisher_keeps_legacy_and_extension_registers(void) {
+void test_publisher_keeps_fast_address_and_compacts_extension(void) {
+  TEST_ASSERT_EQUAL_UINT8(0x17U, ADJUSTOMETER_FEEDBACK_START);
+  TEST_ASSERT_EQUAL_UINT8(30U, ADJUSTOMETER_FEEDBACK_BYTES);
+  TEST_ASSERT_EQUAL_UINT8(14U, ADJUSTOMETER_EXT_REG_COUNT);
   const adjustometer_feedback_t sample = makeSample(25U);
   publishAdjustometerFeedback(&sample);
   publishAdjustometerExtension(&sample, 350);
-  TEST_ASSERT_EQUAL_UINT16((uint16_t)sample.pulseHz,
-                           hal_i2c_slave_reg_read16(ADJUSTOMETER_REG_PULSE_HI));
-  TEST_ASSERT_EQUAL_UINT8(sample.voltage,
-                          hal_i2c_slave_reg_read8(ADJUSTOMETER_REG_VOLTAGE));
+  for (uint8_t reg = 0U; reg < 5U; ++reg) {
+    TEST_ASSERT_EQUAL_UINT8(0U, hal_i2c_slave_reg_read8(reg));
+  }
+  for (uint8_t reg = 0x13U; reg < 0x17U; ++reg) {
+    TEST_ASSERT_EQUAL_UINT8(0U, hal_i2c_slave_reg_read8(reg));
+  }
   const uint8_t start = ADJUSTOMETER_EXT_REG_START;
   uint8_t frame[ADJUSTOMETER_EXT_REG_COUNT];
   hal_mock_i2c_slave_simulate_receive(&start, 1);
   TEST_ASSERT_EQUAL_INT(COUNTOF(frame), hal_mock_i2c_slave_simulate_request(
                                             frame, COUNTOF(frame)));
-  TEST_ASSERT_EQUAL_UINT8(ADJUSTOMETER_EXT_VERSION, frame[0]);
+  TEST_ASSERT_EQUAL_UINT8(2U, frame[0]);
   TEST_ASSERT_EQUAL_UINT8(0U, frame[1] & 1U);
   TEST_ASSERT_EQUAL_UINT8(frame[1], frame[COUNTOF(frame) - 1U]);
   TEST_ASSERT_EQUAL_UINT32(sample.filteredHz, jh_load_be32(frame + 3));
   TEST_ASSERT_EQUAL_UINT32(sample.baselineHz, jh_load_be32(frame + 7));
-  TEST_ASSERT_EQUAL_UINT16(350U, jh_load_be16(frame + 15));
+  TEST_ASSERT_EQUAL_UINT16(350U, jh_load_be16(frame + 11));
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_reader_gets_one_publication_at_every_byte_boundary);
   RUN_TEST(test_complete_frames_remain_valid_across_sequence_wrap);
-  RUN_TEST(test_publisher_keeps_legacy_and_extension_registers);
+  RUN_TEST(test_publisher_keeps_fast_address_and_compacts_extension);
   return UNITY_END();
 }

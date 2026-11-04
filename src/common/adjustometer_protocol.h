@@ -5,21 +5,13 @@
 /*
  * Adjustometer I2C register map.
  *
- * Registers 0x00..0x04 are the original, control-path-compatible block and
- * must not change. Registers 0x05..0x16 provide optional diagnostics;
- * the current ECU selects the coherent feedback block at 0x17 for control.
+ * Registers 0x05..0x12 provide optional diagnostics. The coherent feedback
+ * block stays at 0x17 for control. Registers 0x00..0x04 and 0x13..0x16 are
+ * reserved; they carry no measurements.
  */
 #define ADJUSTOMETER_I2C_ADDR 0x57U
 
-/* Legacy block: retained for older readers. */
-#define ADJUSTOMETER_REG_PULSE_HI 0x00U
-#define ADJUSTOMETER_REG_PULSE_LO 0x01U
-#define ADJUSTOMETER_REG_VOLTAGE 0x02U
-#define ADJUSTOMETER_REG_FUEL_TEMP 0x03U
-#define ADJUSTOMETER_REG_STATUS 0x04U
-#define ADJUSTOMETER_LEGACY_REG_COUNT 5U
-
-/* STATUS register bitmask. */
+/* Feedback status bitmask. */
 #define ADJ_STATUS_OK 0x00U
 #define ADJ_STATUS_SIGNAL_LOST (1U << 0)
 #define ADJ_STATUS_FUEL_TEMP_BROKEN (1U << 1)
@@ -27,22 +19,20 @@
 #define ADJ_STATUS_VOLTAGE_BAD (1U << 3)
 
 /*
- * Optional extension, version 1.  Multi-byte values are big-endian.
+ * Optional extension, version 2. Multi-byte values are big-endian.
  *
- * A writer marks SEQ_END odd BEFORE replacing any payload or SEQ_BEGIN,
- * then marks SEQ_BEGIN odd. After the payload it publishes the same even
- * value in SEQ_BEGIN and finally SEQ_END. A reader accepts a snapshot
- * only when both sequence bytes match and are even.
+ * A writer publishes the complete block atomically with equal even sequence
+ * bytes. The HAL freezes it for each read. Readers check both sequence bytes.
+ * Signed deviation is derived from signal minus baseline at the receiver.
  */
-#define ADJUSTOMETER_EXT_VERSION 1U
+#define ADJUSTOMETER_EXT_VERSION 2U
 #define ADJUSTOMETER_REG_EXT_VERSION 0x05U
 #define ADJUSTOMETER_REG_EXT_SEQ_BEGIN 0x06U
 #define ADJUSTOMETER_REG_EXT_FLAGS 0x07U
 #define ADJUSTOMETER_REG_SIGNAL_HZ 0x08U        /* uint32_t */
 #define ADJUSTOMETER_REG_BASELINE_HZ 0x0CU      /* uint32_t */
-#define ADJUSTOMETER_REG_SIGNED_DELTA_HZ 0x10U  /* int32_t */
-#define ADJUSTOMETER_REG_CHIP_TEMP_DECI_C 0x14U /* int16_t */
-#define ADJUSTOMETER_REG_EXT_SEQ_END 0x16U
+#define ADJUSTOMETER_REG_CHIP_TEMP_DECI_C 0x10U /* int16_t */
+#define ADJUSTOMETER_REG_EXT_SEQ_END 0x12U
 
 #define ADJUSTOMETER_EXT_FLAG_SIGNAL_VALID (1U << 0)
 #define ADJUSTOMETER_EXT_FLAG_BASELINE_VALID (1U << 1)
@@ -52,9 +42,8 @@
 #define ADJUSTOMETER_EXT_REG_COUNT                                             \
   (ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START + 1U)
 
-/** @brief Versioned fast feedback, following the unchanged legacy/extension
- * blocks. */
-#define ADJUSTOMETER_FEEDBACK_START (ADJUSTOMETER_REG_EXT_SEQ_END + 1U)
+/** @brief Fast feedback address, independent of the diagnostic layout. */
+#define ADJUSTOMETER_FEEDBACK_START 0x17U
 #define ADJUSTOMETER_FEEDBACK_VERSION 1U
 #define ADJUSTOMETER_FEEDBACK_BYTES 30U
 #define ADJUSTOMETER_TOTAL_REG_COUNT                                           \

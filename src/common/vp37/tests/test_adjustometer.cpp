@@ -9,32 +9,21 @@ static adjustometer_reading_t readAdjustometer(void) {
   return VP37_readAdjustometer(&s_pump);
 }
 
-static void writeU32BE(uint8_t *buf, uint8_t offset, uint32_t value) {
-  buf[offset] = (uint8_t)(value >> 24);
-  buf[offset + 1U] = (uint8_t)(value >> 16);
-  buf[offset + 2U] = (uint8_t)(value >> 8);
-  buf[offset + 3U] = (uint8_t)value;
-}
-
 static void injectAdjExtendedData(uint8_t version, uint8_t seqBegin,
                                   uint8_t seqEnd, uint8_t flags,
                                   uint32_t signalHz, uint32_t baselineHz,
-                                  int32_t signedDeltaHz,
                                   int16_t chipTempDeciC) {
   uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT] = {0};
   buf[ADJUSTOMETER_REG_EXT_VERSION - ADJUSTOMETER_EXT_REG_START] = version;
   buf[ADJUSTOMETER_REG_EXT_SEQ_BEGIN - ADJUSTOMETER_EXT_REG_START] = seqBegin;
   buf[ADJUSTOMETER_REG_EXT_FLAGS - ADJUSTOMETER_EXT_REG_START] = flags;
-  writeU32BE(buf, ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START,
-             signalHz);
-  writeU32BE(buf, ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START,
-             baselineHz);
-  writeU32BE(buf, ADJUSTOMETER_REG_SIGNED_DELTA_HZ - ADJUSTOMETER_EXT_REG_START,
-             (uint32_t)signedDeltaHz);
-  buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START] =
-      (uint8_t)((uint16_t)chipTempDeciC >> 8);
-  buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START + 1U] =
-      (uint8_t)(uint16_t)chipTempDeciC;
+  jh_store_be32(buf + ADJUSTOMETER_REG_SIGNAL_HZ - ADJUSTOMETER_EXT_REG_START,
+                signalHz);
+  jh_store_be32(buf + ADJUSTOMETER_REG_BASELINE_HZ - ADJUSTOMETER_EXT_REG_START,
+                baselineHz);
+  jh_store_be16(buf + ADJUSTOMETER_REG_CHIP_TEMP_DECI_C -
+                    ADJUSTOMETER_EXT_REG_START,
+                (uint16_t)chipTempDeciC);
   buf[ADJUSTOMETER_REG_EXT_SEQ_END - ADJUSTOMETER_EXT_REG_START] = seqEnd;
   injectAdjustometerBytes(buf, ADJUSTOMETER_EXT_REG_COUNT);
 }
@@ -113,7 +102,7 @@ void test_adjustometer_fuel_temp_zero(void) {
   TEST_ASSERT_EQUAL_UINT8(0, r.fuelTempC);
 }
 
-void test_adjustometer_legacy_read_does_not_require_extension(void) {
+void test_adjustometer_feedback_does_not_require_extension(void) {
   injectAdjRegisterData(321, 137, 44, ADJ_STATUS_OK);
   adjustometer_reading_t r = readAdjustometer();
 
@@ -130,29 +119,40 @@ void test_adjustometer_extended_telemetry_decodes_coherent_snapshot(void) {
                         ADJUSTOMETER_EXT_FLAG_BASELINE_VALID |
                         ADJUSTOMETER_EXT_FLAG_CHIP_TEMP_VALID;
   injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 12U, 12U, flags, 3654321U,
-                        3620000U, -34321, 427);
+                        3620000U, 427);
 
   TEST_ASSERT_TRUE(VP37_readAdjustometerExtended(&s_pump, &r));
   TEST_ASSERT_TRUE(r.commOk);
   TEST_ASSERT_TRUE(r.extendedTelemetryValid);
   TEST_ASSERT_EQUAL_UINT32(3654321U, r.signalHz);
   TEST_ASSERT_EQUAL_UINT32(3620000U, r.baselineHz);
-  TEST_ASSERT_EQUAL_INT32(-34321, r.signedDeltaHz);
+  TEST_ASSERT_EQUAL_INT32(34321, r.signedDeltaHz);
   TEST_ASSERT_EQUAL_INT16(427, r.chipTempDeciC);
   TEST_ASSERT_EQUAL_UINT8(flags, r.extendedFlags);
+  injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 14U, 14U, flags, 3620000U,
+                        3654321U, -125);
+  TEST_ASSERT_TRUE(VP37_readAdjustometerExtended(&s_pump, &r));
+  TEST_ASSERT_EQUAL_INT32(-34321, r.signedDeltaHz);
+  TEST_ASSERT_EQUAL_INT16(-125, r.chipTempDeciC);
+  injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 16U, 16U, flags, 3620000U,
+                        3620000U, 0);
+  TEST_ASSERT_TRUE(VP37_readAdjustometerExtended(&s_pump, &r));
+  TEST_ASSERT_EQUAL_INT32(0, r.signedDeltaHz);
 }
 
 void test_adjustometer_extended_telemetry_rejects_unknown_version(void) {
-  adjustometer_reading_t r;
-  injectAdjExtendedData(0U, 2U, 2U, 0U, 36000U, 35000U, 1000, 250);
+  adjustometer_reading_t r = {};
+  r.signedDeltaHz = 123;
+  injectAdjExtendedData(1U, 2U, 2U, 0U, 36000U, 35000U, 250);
 
   TEST_ASSERT_FALSE(VP37_readAdjustometerExtended(&s_pump, &r));
+  TEST_ASSERT_EQUAL_INT32(123, r.signedDeltaHz);
 }
 
 void test_adjustometer_extended_telemetry_rejects_torn_snapshot(void) {
-  adjustometer_reading_t r;
+  adjustometer_reading_t r = {};
   injectAdjExtendedData(ADJUSTOMETER_EXT_VERSION, 4U, 6U, 0U, 36000U, 35000U,
-                        1000, 250);
+                        250);
 
   TEST_ASSERT_FALSE(VP37_readAdjustometerExtended(&s_pump, &r));
 }
@@ -178,18 +178,12 @@ void test_adjustometer_status_voltage_bad_is_reported_not_acted_on(void) {
 }
 
 void test_adjustometer_comm_lost_on_nack(void) {
-  // A busy bus fails the transfer. The legacy block keeps the last good
-  // reading for two failures and drops commOk on the third. That the ECU's
-  // supply reading does not depend on this bus is an adapter test.
+  // A failed transfer invalidates the reading but retains its last values.
   injectAdjRegisterData(700, 138, 40, ADJ_STATUS_OK);
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_TRUE(r.commOk);
   vp37AdjustometerTransferBusy(true);
-  r = readAdjustometer(); // error 1
-  r = readAdjustometer(); // error 2
-  TEST_ASSERT_TRUE(r.commOk);
-  TEST_ASSERT_EQUAL_INT32(700, r.pulseHz);
-  r = readAdjustometer(); // error 3 -> commOk = false
+  r = readAdjustometer();
   TEST_ASSERT_FALSE(r.commOk);
   TEST_ASSERT_EQUAL_INT32(700, r.pulseHz);
   vp37AdjustometerTransferBusy(false);
@@ -197,17 +191,13 @@ void test_adjustometer_comm_lost_on_nack(void) {
   TEST_ASSERT_TRUE(readAdjustometer().commOk);
 }
 
-void test_adjustometer_frame_selection_resets_the_reader(void) {
-  injectAdjRegisterData(700, 138, 40, ADJ_STATUS_OK);
-  TEST_ASSERT_TRUE(readAdjustometer().commOk);
-  VP37_setAdjustometerFastFeedback(&s_pump, true);
-  // Nothing on the bus: the first fast read fails on a reader that has not
-  // seen a baseline yet, not on the legacy reading before the switch.
-  vp37AdjustometerTransferBusy(true);
+void test_adjustometer_rejects_removed_legacy_frame(void) {
+  const uint8_t legacy[5] = {0x02, 0xbc, 138, 40, 0};
+  injectAdjustometerBytes(legacy, (int)COUNTOF(legacy));
   const adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_FALSE(r.commOk);
-  TEST_ASSERT_TRUE(r.fastFeedback);
-  TEST_ASSERT_EQUAL_UINT8(ADJ_STATUS_SIGNAL_LOST, r.status);
+  TEST_ASSERT_FALSE(r.feedbackFresh);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, r.readStatus);
   TEST_ASSERT_EQUAL_INT32(0, r.pulseHz);
 }
 
@@ -215,16 +205,18 @@ void test_adjustometer_frame_selection_resets_the_reader(void) {
 
 void test_adjustometer_big_endian_byte_order(void) {
   // Manually inject raw bytes: 0x01, 0x00 -> +256 Hz
-  uint8_t buf[5] = {0x01, 0x00, 130, 50, 0x00};
-  injectAdjustometerBytes(buf, 5);
+  uint8_t buf[30] = {1, 2, 0x01, 0x00, 130, 50, 0x00};
+  buf[29] = 2;
+  injectAdjustometerBytes(buf, (int)COUNTOF(buf));
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_INT32(256, r.pulseHz);
 }
 
 void test_adjustometer_big_endian_negative(void) {
   // 0xFF, 0x00 -> -256 in int16_t (0xFF00 = -256)
-  uint8_t buf[5] = {0xFF, 0x00, 130, 50, 0x00};
-  injectAdjustometerBytes(buf, 5);
+  uint8_t buf[30] = {1, 2, 0xFF, 0x00, 130, 50, 0x00};
+  buf[29] = 2;
+  injectAdjustometerBytes(buf, (int)COUNTOF(buf));
   adjustometer_reading_t r = readAdjustometer();
   TEST_ASSERT_EQUAL_INT32(-256, r.pulseHz);
 }
@@ -232,7 +224,6 @@ void test_adjustometer_big_endian_negative(void) {
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 void test_fast_feedback_age_sequence_and_clock_wrap(void) {
-  VP37_setAdjustometerFastFeedback(&s_pump, true);
   adjustometer_feedback_t sample = {};
   sample.number = 42U;
   sample.measuredUs = UINT32_MAX - 100U;
@@ -283,7 +274,6 @@ void test_fast_feedback_rejects_mixed_or_unknown_frames(void) {
   frames[ADJUSTOMETER_FEEDBACK_BYTES - 1U] = 5U;
   memcpy(frames + ADJUSTOMETER_FEEDBACK_BYTES, frames,
          ADJUSTOMETER_FEEDBACK_BYTES);
-  VP37_setAdjustometerFastFeedback(&s_pump, true);
   injectAdjustometerBytes(frames, (int)COUNTOF(frames));
   adjustometer_reading_t reading = readAdjustometer();
   TEST_ASSERT_FALSE(reading.commOk);
@@ -308,7 +298,7 @@ int main(void) {
   RUN_TEST(test_adjustometer_voltage_max);
   RUN_TEST(test_adjustometer_fuel_temp);
   RUN_TEST(test_adjustometer_fuel_temp_zero);
-  RUN_TEST(test_adjustometer_legacy_read_does_not_require_extension);
+  RUN_TEST(test_adjustometer_feedback_does_not_require_extension);
   RUN_TEST(test_adjustometer_extended_telemetry_decodes_coherent_snapshot);
   RUN_TEST(test_adjustometer_extended_telemetry_rejects_unknown_version);
   RUN_TEST(test_adjustometer_extended_telemetry_rejects_torn_snapshot);
@@ -322,7 +312,7 @@ int main(void) {
   RUN_TEST(test_adjustometer_status_fuel_temp_broken_is_reported_not_acted_on);
   RUN_TEST(test_adjustometer_status_voltage_bad_is_reported_not_acted_on);
   RUN_TEST(test_adjustometer_comm_lost_on_nack);
-  RUN_TEST(test_adjustometer_frame_selection_resets_the_reader);
+  RUN_TEST(test_adjustometer_rejects_removed_legacy_frame);
 
   return UNITY_END();
 }

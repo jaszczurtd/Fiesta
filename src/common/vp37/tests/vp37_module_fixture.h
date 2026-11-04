@@ -10,12 +10,12 @@
 
 /** @brief A scripted sequence of Adjustometer frames, served byte by byte. */
 typedef struct {
-  uint8_t bytes[255];
+  uint8_t bytes[51U * ADJUSTOMETER_FEEDBACK_BYTES];
   int length;
 } AdjustometerScript;
 
 static struct {
-  uint8_t script[512];
+  uint8_t script[102U * ADJUSTOMETER_FEEDBACK_BYTES];
   int scriptLength;
   int scriptPosition;
   bool busy;
@@ -41,7 +41,9 @@ static inline void vp37AdjustometerTransferBusy(bool busy) {
 
 static inline hal_status_t vp37FixtureTransfer(uint8_t reg, uint8_t *data,
                                                size_t length) {
-  (void)reg; /* The scripts already lie in read order. */
+  if (reg != ADJUSTOMETER_FEEDBACK_START && reg != ADJUSTOMETER_EXT_REG_START) {
+    return HAL_EINVAL;
+  }
   if (s_vp37Board.busy) {
     return HAL_EBUS;
   }
@@ -95,14 +97,14 @@ static inline void injectLocalSupplyVoltage(float volts) {
 static inline void appendAdjRegisterData(AdjustometerScript *script,
                                          int16_t pulseHz, uint8_t voltage,
                                          uint8_t fuelTemp, uint8_t status) {
-  if (script->length + 5 > (int)sizeof(script->bytes)) {
+  if (script->length + (int)ADJUSTOMETER_FEEDBACK_BYTES >
+      (int)COUNTOF(script->bytes)) {
     return;
   }
-  script->bytes[script->length++] = (uint8_t)((uint16_t)pulseHz >> 8);
-  script->bytes[script->length++] = (uint8_t)((uint16_t)pulseHz & 0xFF);
-  script->bytes[script->length++] = voltage;
-  script->bytes[script->length++] = fuelTemp;
-  script->bytes[script->length++] = status;
+  const adjustometer_feedback_t sample =
+      vp37TestFeedback(pulseHz, voltage, fuelTemp, status);
+  adjustometer_feedback_encode(script->bytes + script->length, &sample, 2U);
+  script->length += (int)ADJUSTOMETER_FEEDBACK_BYTES;
 }
 
 static inline void appendAdjRegisterDataRepeated(AdjustometerScript *script,
@@ -119,7 +121,7 @@ static inline void injectAdjustometerScript(const AdjustometerScript *script) {
   injectAdjustometerBytes(script->bytes, script->length);
 }
 
-/** @brief One legacy frame plus the matching local supply reading. */
+/** @brief One feedback frame plus the matching local supply reading. */
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
                                          uint8_t fuelTemp, uint8_t status) {
   AdjustometerScript script = {.bytes = {0}, .length = 0};
@@ -147,8 +149,7 @@ static inline void setUpVp37Fixture(void) {
 }
 
 /** @brief A calibrated pump ready for VP37_process(). */
-static inline void setupPumpForProcessTests(VP37Pump *pump,
-                                            bool fastFrame = false) {
-  vp37SetupCalibratedPump(pump, vp37ModuleCallbacks(), fastFrame);
+static inline void setupPumpForProcessTests(VP37Pump *pump) {
+  vp37SetupCalibratedPump(pump, vp37ModuleCallbacks());
   injectLocalSupplyVoltage(14.0f);
 }

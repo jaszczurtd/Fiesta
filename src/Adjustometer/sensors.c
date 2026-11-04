@@ -49,13 +49,11 @@ static void resetSensorsState(void);
 static bool isSignalLost(void);
 
 /**
- * @brief Initialize the I2C slave interface and default status register.
+ * @brief Initialize the I2C slave interface and unavailable diagnostics.
  */
 void initI2C(void) {
   hal_i2c_slave_init(JH_HW_BUS_ECU_PIN_SDA, JH_HW_BUS_ECU_PIN_SCL,
                      ADJUSTOMETER_I2C_ADDR);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS,
-                           ADJ_STATUS_BASELINE_PENDING);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_EXT_VERSION,
                            ADJUSTOMETER_EXT_VERSION);
   hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_EXT_SEQ_BEGIN, 0U);

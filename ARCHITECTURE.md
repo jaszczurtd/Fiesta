@@ -219,17 +219,19 @@ Core 0 drains capture data and publishes feedback. Core 1 handles auxiliary
 ADC readings, diagnostics, LED and USB logging. Adjustometer has its own
 RP2040 and usually sits on the ECU board.
 
-The I²C slave at `0x57` exposes three blocks:
+The I²C slave at `0x57` exposes two measurement blocks:
 
 | Registers | Meaning |
 |---|---|
-| `0x00..0x04` | Legacy pulse, supply voltage, fuel temperature and status. |
-| `0x05..0x16` | Frequency, baseline, signed deviation and chip-temperature diagnostics. |
+| `0x00..0x04` | Reserved; no measurements. |
+| `0x05..0x12` | Version-2 diagnostics: frequency, baseline, validity flags and chip temperature (14 bytes). |
+| `0x13..0x16` | Reserved. |
 | `0x17..0x34` | Versioned 30-byte control feedback with sample number, timestamp and age. |
 
 The active VP37 controller requires the control-feedback block. ECU checks
-frame coherence and freshness; old firmware exposing only the legacy block
-cannot provide this feedback. HAL freezes the register map for each I²C read.
+frame coherence and freshness. The five-byte reader has been removed.
+Diagnostic readers derive signed deviation from frequency minus baseline
+in the same version-2 frame. HAL freezes the register map for each I²C read.
 Status bits report signal loss (`0x01`), a broken fuel sensor (`0x02`), pending
 baseline (`0x04`) and supply outside its valid range (`0x08`).
 

@@ -192,6 +192,15 @@ const VP37Telemetry *VP37_publishedTelemetry(void);
 void VP37_traceRecord(const VP37Pump *self);
 /** @brief Complete a running trace without a sample; control core. */
 void VP37_traceStop(void);
+/** @brief Reserve the idle trace buffer before calibration; control core.
+ * @return HAL_OK, or HAL_EBUSY if an earlier capture is still owned. */
+hal_status_t VP37_calibrationTraceBegin(void);
+/** @brief Retain a non-NULL estimator input and applied PWM; control core. */
+void VP37_calibrationTraceRecord(const adjustometer_reading_t *reading,
+                                 uint16_t pwm);
+/** @brief Publish the outcome from a non-NULL pump; control core. */
+void VP37_calibrationTraceEnd(const VP37Pump *self, bool minSettled,
+                              bool maxSettled);
 #endif
 
 #ifdef __cplusplus

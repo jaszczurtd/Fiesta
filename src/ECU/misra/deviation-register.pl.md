@@ -232,9 +232,8 @@ Wyciszenie: `misra-c2012-2.5:*adjustometer_protocol.h` w obu skanach.
 
 Advisory, nieużywane makro. Nagłówek definiuje mapę rejestrów protokołu
 ECU-Adjustometer; każda strona używa tylko części, więc skan widzi pozostałe rejestry,
-flagi i liczniki jako nieużywane. Mapa celowo pozostaje pełna:
-`ADJUSTOMETER_REG_PULSE_LO` dokumentuje rejestr 0x01, choć czytający adresuje blok od
-pierwszego rejestru. Decyzja: 2026-09-30.
+flagi i liczniki jako nieużywane. Wspólna mapa zawiera ramkę sterowania
+oraz opcjonalne rozszerzenie diagnostyczne. Decyzja: 2026-09-30.
 
 ## DR-012
 

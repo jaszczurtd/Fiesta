@@ -243,9 +243,8 @@ Suppression: `misra-c2012-2.5:*adjustometer_protocol.h` in both scans.
 
 Advisory (unused macro). The header is the register map of the ECU-Adjustometer
 protocol: each side uses its half, so each scan sees the other side's registers, flags
-and counts as unused, and the map stays complete on purpose (`ADJUSTOMETER_REG_PULSE_LO`
-documents the register at 0x01 even though readers address the block by its first
-register). Decided 2026-09-30.
+and counts as unused. The shared map includes both the control frame and the
+optional diagnostic extension. Decided 2026-09-30.
 
 ## DR-012
 

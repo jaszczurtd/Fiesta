@@ -25,11 +25,6 @@ void publishAdjustometerFeedback(const adjustometer_feedback_t *sample) {
   adjustometer_feedback_encode(frame, sample, 0U);
   publishSequencedRegisters(ADJUSTOMETER_FEEDBACK_START, frame,
                             (uint8_t)COUNTOF(frame), &sequence);
-  hal_i2c_slave_reg_write16(ADJUSTOMETER_REG_PULSE_HI,
-                            (uint16_t)sample->pulseHz);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_VOLTAGE, sample->voltage);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_FUEL_TEMP, sample->fuelTemp);
-  hal_i2c_slave_reg_write8(ADJUSTOMETER_REG_STATUS, sample->status);
 }
 
 void publishAdjustometerExtension(const adjustometer_feedback_t *sample,
@@ -48,10 +43,7 @@ void publishAdjustometerExtension(const adjustometer_feedback_t *sample,
   }
   jh_store_be32(&frame[3], sample->filteredHz);
   jh_store_be32(&frame[7], sample->baselineHz);
-  const int32_t deltaHz =
-      (int32_t)sample->filteredHz - (int32_t)sample->baselineHz;
-  jh_store_be32(&frame[11], (uint32_t)deltaHz);
-  jh_store_be16(&frame[15], (uint16_t)chipTemp);
+  jh_store_be16(&frame[11], (uint16_t)chipTemp);
   publishSequencedRegisters(ADJUSTOMETER_EXT_REG_START, frame,
                             (uint8_t)COUNTOF(frame), &sequence);
 }

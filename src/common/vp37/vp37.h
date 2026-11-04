@@ -543,6 +543,22 @@ typedef struct {
 } VP37TraceSample;
 JB_STATIC_ASSERT(sizeof(VP37TraceSample) <= 148U,
                  "VP37 trace record exceeds its RP2040 RAM budget");
+
+/** @brief One MIN/MAX qualification sample, retained until USB export. */
+typedef struct {
+  adjustometer_reading_t reading; /**< Exact input used by the estimator. */
+  uint32_t us;                    /**< ECU timestamp [us]. */
+  uint16_t pwm;                   /**< Applied command; zero selects MIN. */
+} VP37CalibrationSample;
+
+/** @brief Calibration outcome paired with the retained samples. */
+typedef struct {
+  uint32_t startedUs, finishedUs; /**< ECU timestamps [us]. */
+  uint32_t samples;               /**< Retained qualification samples. */
+  int32_t minimum, maximum;       /**< Qualified endpoints [Hz]. */
+  bool minSettled, maxSettled, valid;
+  bool overflow; /**< True if any sample could not be retained. */
+} VP37CalibrationResult;
 #endif
 
 /**
@@ -603,6 +619,18 @@ hal_status_t VP37_takeTraceCompletion(uint32_t *count);
 bool VP37_traceCapturing(void);
 /** @brief Print a non-NULL captured sample. */
 void VP37_showTrace(const VP37TraceSample *sample);
+/** @brief Drain one calibration sample on the console core.
+ * @param sample Non-NULL output, unchanged on failure.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN during recording, or
+ * HAL_ENOENT when no unread sample remains. */
+hal_status_t VP37_readCalibrationTrace(VP37CalibrationSample *sample);
+/** @brief Consume the calibration outcome after draining its samples.
+ * @param result Non-NULL output, unchanged on failure.
+ * @return HAL_OK once, HAL_EINVAL for NULL, or HAL_EAGAIN until drained.
+ * Consuming the result releases the shared buffer for normal RAM traces. */
+hal_status_t VP37_takeCalibrationResult(VP37CalibrationResult *result);
+/** @brief Export a bounded batch after a USB host connects; console core. */
+void VP37_showCalibration(void);
 #endif
 
 typedef enum {
@@ -633,19 +661,9 @@ const char *VP37_initStatusName(VP37InitStatus status);
 hal_status_t VP37_setCallbacks(VP37Pump *self, const VP37Callbacks *callbacks);
 
 /**
- * @brief Select the Adjustometer frame and reset the reader.
- * @param self Pump before its first VP37_init().
- * @param enabled True for the versioned fast frame, false for the legacy
- * register block.
- * @return HAL_OK, HAL_EINVAL for NULL, or HAL_ESTATE once VP37_init() has
- * run, since the control core owns the reader from then on.
- */
-hal_status_t VP37_setAdjustometerFastFeedback(VP37Pump *self, bool enabled);
-
-/**
  * @brief Read the Adjustometer once through the adjustometerTransfer service.
  * @return The new reading; a failed read returns the previous values with
- * commOk cleared (fast frame) or cleared after three failures (legacy block).
+ * commOk cleared.
  */
 adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self);
 
@@ -655,7 +673,8 @@ adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self);
  * read or changed.
  * @param reading Reading, for example from a snapshot, whose extension fields
  * are filled on success and left alone otherwise.
- * @return True when a coherent version-1 extension was received.
+ * @return True when a coherent version-2 extension was received; signed
+ * deviation is calculated from its signal frequency and baseline.
  */
 bool VP37_readAdjustometerExtended(const VP37Pump *self,
                                    adjustometer_reading_t *reading);

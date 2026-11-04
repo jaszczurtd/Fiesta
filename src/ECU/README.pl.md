@@ -392,3 +392,13 @@ oraz śledzenie zboczy używają `HAL_RAM_FUNC`, ograniczając pobieranie kodu
 z flash. Ślad stanowiskowy mieści 1024 pełne próbki z flagami zapisanymi
 jako bity. Długość określa `VP37_TRACE_SAMPLES`. Po zmianie buforów lub kodu
 w RAM sprawdź mapy pamięci ELF obu wariantów firmware.
+
+Podczas kalibracji startowej obraz BENCH używa tej samej pamięci do zapisu
+każdej próbki kwalifikującej MIN/MAX. Po połączeniu USB linie `VP37 CAL`
+przekazują położenie, częstotliwość surową i filtrowaną, baseline, numer próbki,
+oba zegary, świeżość, status, zadane PWM, napięcie w 0,1 V i temperaturę paliwa
+w stopniach C. `VP37 CAL END` podaje liczbę próbek, zakwalifikowane końce,
+poprawność wyniku i ewentualne przepełnienie bufora. Parametry okna estymatora
+i timeoutu definiuje `vp37_config.h`. Zwykły strumień `VP37 C` pokazuje powrót
+do spoczynku po kalibracji; kalibracja nie próbkuje prądu. Zwykły zapis śladu
+RAM pozostaje zajęty do zakończenia tego eksportu.

@@ -172,7 +172,7 @@ void app_task1(void) {
 
 /** @brief The Clocks pattern for a device dot: the frame counter moving
  * since the last check means the Adjustometer talks. With the pump stopped
- * no frames flow, so core 1 probes the status register itself - it is the
+ * no frames flow, so core 1 probes the feedback version byte - it is the
  * bench bus's only user, which is why the adapter transfer has no mutex.
  * Runs on core 1, once per ADJ_CONNECTION_CHECK_MS. */
 static void updateAdjConnection(void) {
@@ -193,7 +193,7 @@ static void updateAdjConnection(void) {
   } else {
     uint8_t probe = 0;
     connected = vp37BenchCallbacks()->adjustometerTransfer(
-                    ADJUSTOMETER_REG_STATUS, &probe, 1U) == HAL_OK;
+                    ADJUSTOMETER_FEEDBACK_START, &probe, 1U) == HAL_OK;
   }
   HAL_ATOMIC_STORE(&s_adjConnectedWord, connected ? 1U : 0U,
                    HAL_ATOMIC_RELAXED);

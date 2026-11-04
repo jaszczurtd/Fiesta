@@ -30,7 +30,6 @@ typedef struct {
   int16_t chipTempDeciC;       /**< Adjustometer die temperature [0.1 C]. */
   uint8_t extendedFlags;       /**< Bitmask of ADJUSTOMETER_EXT_FLAG_*. */
   bool extendedTelemetryValid; /**< The versioned extension was coherent. */
-  bool fastFeedback;           /**< Read from the versioned fast frame. */
   bool feedbackFresh;          /**< The fast frame advanced in time. */
   uint32_t rawHz;
   uint32_t sampleNumber;
@@ -44,8 +43,6 @@ typedef struct {
 /** @brief Reader state kept in the pump. */
 typedef struct {
   adjustometer_reading_t last; /**< Newest reading, returned on failure. */
-  uint8_t commErrors;          /**< Failed legacy reads in a row. */
-  bool fastFeedback;           /**< Versioned fast frame selected. */
   bool sampleTracked;          /**< A fast sample number has been seen. */
   uint32_t sampleChangedUs;    /**< When the sample number last advanced. */
 } VP37AdjustometerReader;

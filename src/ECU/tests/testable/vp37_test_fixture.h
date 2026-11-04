@@ -20,19 +20,16 @@ static inline void injectLocalSupplyVoltage(float volts) {
 
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
                                          uint8_t fuelTemp, uint8_t status) {
-  uint8_t buf[5];
-  buf[0] = (uint8_t)((uint16_t)pulseHz >> 8);
-  buf[1] = (uint8_t)((uint16_t)pulseHz & 0xFF);
-  buf[2] = voltage;
-  buf[3] = fuelTemp;
-  buf[4] = status;
-  hal_mock_i2c_inject_rx(buf, 5);
+  uint8_t buf[ADJUSTOMETER_FEEDBACK_BYTES];
+  const adjustometer_feedback_t sample =
+      vp37TestFeedback(pulseHz, voltage, fuelTemp, status);
+  adjustometer_feedback_encode(buf, &sample, 2U);
+  hal_mock_i2c_inject_rx(buf, (int)COUNTOF(buf));
   injectLocalSupplyVoltage((float)voltage * 0.1f);
 }
 
-static inline void setupPumpForProcessTests(VP37Pump *pump,
-                                            bool fastFrame = false) {
-  vp37SetupCalibratedPump(pump, vp37AdapterCallbacks(), fastFrame);
+static inline void setupPumpForProcessTests(VP37Pump *pump) {
+  vp37SetupCalibratedPump(pump, vp37AdapterCallbacks());
   setGlobalValue(F_RPM, 1000.0f);
   setGlobalValue(F_VOLTS, 14.0f);
   injectLocalSupplyVoltage(14.0f);

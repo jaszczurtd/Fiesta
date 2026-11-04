@@ -77,10 +77,9 @@ VP37InitStatus vp37AdapterStart(VP37Pump *pump) {
   if (!outputs) {
     derr("VP37 drive outputs are not initialized");
   } else {
-    /* Both refuse only a pump started before, which keeps its services;
-     * VP37_init() reports the rest. */
+    /* A pump started before keeps its services; VP37_init() reports the rest.
+     */
     (void)VP37_setCallbacks(pump, &k_vp37AdapterCallbacks);
-    (void)VP37_setAdjustometerFastFeedback(pump, true);
     status = VP37_init(pump);
     vp37AdapterPublish(pump);
   }

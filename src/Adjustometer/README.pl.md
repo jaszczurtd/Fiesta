@@ -71,9 +71,16 @@ odczytu; znaczniki sekwencji i kontrola świeżości w ECU pozostają aktywne. W
 
 | Rejestry | Przeznaczenie |
 | --- | --- |
-| `0x00..0x04` | Pierwotny układ: pulse (signed int16, big-endian), napięcie, temperatura paliwa i status. Zachowany dla starszych odbiorców. |
-| `0x05..0x16` | Opcjonalna spójna diagnostyka: częstotliwość po filtrze, baseline, odchylenie ze znakiem, temperatura RP2040 i flagi poprawności. |
+| `0x00..0x04` | Zarezerwowane; bez danych pomiarowych. |
+| `0x05..0x12` | Spójna diagnostyka w wersji 2: częstotliwość po filtrze, baseline, temperatura RP2040 i flagi poprawności. |
+| `0x13..0x16` | Zarezerwowane. |
 | `0x17..0x34` | Spójne dane regulatora, w tym surowa częstotliwość i aktualność pomiaru. |
+
+ECU i VP37TestBench odczytują ramkę sterowania w wersji 1 pod stałym adresem
+`0x17`. Pięciobajtowy odczyt nie jest już obsługiwany. Czytnik diagnostyki
+wymaga wersji 2 i oblicza odchylenie ze znakiem jako częstotliwość po filtrze
+minus baseline z tego samego odczytu. Odrzucenie innej wersji diagnostyki
+nie wpływa na odczyt ramki sterowania.
 
 Napięcie jest kodowane w 0,1 V, temperatura paliwa w całych stopniach C.
 Dzielnik `47k / 10k` ogranicza pomiar ADC do około 18,8 V przy zakresie 3,3 V,
@@ -93,8 +100,8 @@ z trzema poprawnymi pomiarami. Ta próbka jest niezależna od odczytu regulatora
 
 ## Podział rdzeni i LED
 
-Core 0 inicjalizuje czujniki, odbiera dane pomiarowe co 1 ms i publikuje szybkie dane
-oraz ich kopię w pierwotnych rejestrach. Core 1 odczytuje ADC co 10 ms, publikuje
+Core 0 inicjalizuje czujniki, odbiera dane pomiarowe co 1 ms i publikuje szybkie
+dane. Core 1 odczytuje ADC co 10 ms, publikuje
 rozszerzenie diagnostyczne, obsługuje LED i USB. Temperaturę układu i logi
 odświeża co 250 ms. Zapis USB ma zerowy timeout i może pomijać tekst, jeśli host
 nie odbiera danych; publikacja pomiaru działa niezależnie.
@@ -109,7 +116,7 @@ czerwony po 2 sekundach bez transakcji I2C, a na końcu zielony heartbeat.
 | Pliki | Odpowiedzialność |
 | --- | --- |
 | `sensors.c / sensors.h` | Częstotliwość, EMA, baseline, zero hold, ADC i spójny pomiar w pamięci. |
-| `telemetry.c / telemetry.h` | Publikacja spójnych bloków I2C i pierwotnych rejestrów. |
+| `telemetry.c / telemetry.h` | Publikacja spójnych bloków pomiaru i diagnostyki I2C. |
 | `start.c / start.h` | Przenośny start aplikacji i praca rdzeni. |
 | `led.c / led.h` | Sygnalizacja statusu. |
 | `device_tree.json` | Płytka, piny, magistrala ECU i dioda statusu. |

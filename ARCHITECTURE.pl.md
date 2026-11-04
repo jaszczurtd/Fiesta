@@ -216,16 +216,18 @@ przelicza ją na położenie.
 Rdzeń 0 odbiera pomiary i publikuje wynik. Rdzeń 1 obsługuje pomocnicze ADC,
 diagnostykę, LED i logowanie USB. Moduł ma własny RP2040 i zwykle mieści się na PCB ECU.
 
-Slave I²C `0x57` udostępnia:
+Slave I²C `0x57` udostępnia dwa bloki pomiarowe:
 
 | Rejestry | Zawartość |
 |---|---|
-| `0x00..0x04` | Starszy format impulsu, napięcie, temperatura paliwa i status. |
-| `0x05..0x16` | Częstotliwość, poziom odniesienia, odchyłka ze znakiem i temperatura MCU. |
+| `0x00..0x04` | Zarezerwowane; bez danych pomiarowych. |
+| `0x05..0x12` | Diagnostyka w wersji 2: częstotliwość, baseline, flagi ważności i temperatura MCU (14 B). |
+| `0x13..0x16` | Zarezerwowane. |
 | `0x17..0x34` | Wersjonowany blok 30 B dla sterowania: numer próbki, czas i wiek pomiaru. |
 
-Aktywny sterownik VP37 wymaga ostatniego bloku. ECU sprawdza spójność i świeżość;
-starszy firmware z samym blokiem legacy nie dostarcza wymaganego sprzężenia.
+Aktywny sterownik VP37 wymaga ostatniego bloku. ECU sprawdza spójność i świeżość.
+Czytnik starego bloku 5 B został usunięty. Odbiorca diagnostyki wylicza
+odchyłkę ze znakiem jako częstotliwość minus baseline z tej samej ramki wersji 2.
 HAL zamraża mapę na czas odczytu I²C. Bity statusu oznaczają brak sygnału
 (`0x01`), uszkodzenie czujnika paliwa (`0x02`), oczekiwanie na poziom
 odniesienia (`0x04`) i niewłaściwe zasilanie (`0x08`).

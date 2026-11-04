@@ -4,7 +4,7 @@
 #include "vp37_internal.h"
 
 static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
-                                          bool probe);
+                                          bool probe, uint16_t pwm);
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
 
 /**
@@ -15,9 +15,7 @@ static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
  */
 bool VP37_updateAdjustometerPosition(VP37Pump *self) {
   const adjustometer_reading_t reading = VP37_readAdjustometer(self);
-  self->feedback.readStatus = reading.fastFeedback
-                                  ? reading.readStatus
-                                  : (reading.commOk ? HAL_OK : HAL_EBUS);
+  self->feedback.readStatus = reading.readStatus;
   self->feedback.readUs = reading.readUs;
   self->feedback.retries = reading.readRetries;
   if (reading.commOk) {
@@ -25,7 +23,7 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
     self->feedback.commLostSince = 0;
     self->feedback.commFailed = false;
     self->feedback.lastStatus = reading.status;
-    self->feedback.fresh = !reading.fastFeedback || reading.feedbackFresh;
+    self->feedback.fresh = reading.feedbackFresh;
     self->feedback.rawHz = reading.rawHz;
     self->feedback.filteredHz = reading.signalHz;
     self->feedback.sampleNumber = reading.sampleNumber;
@@ -52,6 +50,9 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
  * range, not an OEM mg/stroke model.
  */
 bool VP37_makeCalibration(VP37Pump *self) {
+#if VP37_TELEMETRY_ENABLED
+  (void)VP37_calibrationTraceBegin();
+#endif
   self->feedback.adjustMax = -1;
   self->feedback.adjustMiddle = -1;
   self->feedback.adjustMin = -1;
@@ -61,18 +62,22 @@ bool VP37_makeCalibration(VP37Pump *self) {
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
   self->callbacks.writeQuantityPwm(0);
   bool minSettled =
-      VP37_waitForCalibrationSettle(self, &self->feedback.adjustMin, false);
+      VP37_waitForCalibrationSettle(self, &self->feedback.adjustMin, false, 0U);
 
   bool maxSettled = false;
   if (minSettled) {
-    self->callbacks.writeQuantityPwm(VP37_getMaxAdjustometerPWMVal(self));
-    maxSettled =
-        VP37_waitForCalibrationSettle(self, &self->feedback.adjustMax, false);
+    const uint16_t pwm = (uint16_t)VP37_getMaxAdjustometerPWMVal(self);
+    self->callbacks.writeQuantityPwm(pwm);
+    maxSettled = VP37_waitForCalibrationSettle(self, &self->feedback.adjustMax,
+                                               false, pwm);
   }
   self->callbacks.writeQuantityPwm(0);
 
   if (!maxSettled || !minSettled) {
     self->feedback.calibrationDone = false;
+#if VP37_TELEMETRY_ENABLED
+    VP37_calibrationTraceEnd(self, minSettled, maxSettled);
+#endif
     derr("VP37 calibration timeout: maxSettled=%d minSettled=%d MAX=%d MIN=%d",
          maxSettled, minSettled, self->feedback.adjustMax,
          self->feedback.adjustMin);
@@ -87,6 +92,9 @@ bool VP37_makeCalibration(VP37Pump *self) {
   self->feedback.calibrationDone =
       (calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ) &&
       (self->feedback.adjustMiddle > 0);
+#if VP37_TELEMETRY_ENABLED
+  VP37_calibrationTraceEnd(self, minSettled, maxSettled);
+#endif
   if (!self->feedback.calibrationDone) {
     derr(
         "VP37 calibration range invalid: MIN=%d MAX=%d travel=%d (required=%d)",
@@ -111,7 +119,10 @@ bool VP37_makeCalibration(VP37Pump *self) {
  * @return True when a stable valid window is found before timeout.
  */
 static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
-                                          bool probe) {
+                                          bool probe, uint16_t pwm) {
+#if !VP37_TELEMETRY_ENABLED
+  (void)pwm;
+#endif
   int32_t samples[VP37_CALIBRATION_STABLE_SAMPLES] = {0};
   uint32_t sampleCount = 0U;
   uint32_t nextSample = 0U;
@@ -126,16 +137,20 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
       return false;
     }
     const adjustometer_reading_t reading = VP37_readAdjustometer(self);
+#if VP37_TELEMETRY_ENABLED
+    if (!probe) {
+      VP37_calibrationTraceRecord(&reading, pwm);
+    }
+#endif
     if (probe) {
       deb("VP37 CALPROBE sample us:%lu adj:%ld raw:%ld st:%u comm:%u fresh:%u "
           "age:%lu V:%.2f ft:%u",
           (unsigned long)hal_micros(), (long)reading.pulseHz,
           (long)reading.rawHz, reading.status, reading.commOk ? 1U : 0U,
-          (!reading.fastFeedback || reading.feedbackFresh) ? 1U : 0U,
-          (unsigned long)reading.ageUs, reading.voltageRaw * 0.1f,
-          (unsigned int)reading.fuelTempC);
+          reading.feedbackFresh ? 1U : 0U, (unsigned long)reading.ageUs,
+          reading.voltageRaw * 0.1f, (unsigned int)reading.fuelTempC);
     }
-    if (!reading.commOk || (reading.fastFeedback && !reading.feedbackFresh) ||
+    if (!reading.commOk || !reading.feedbackFresh ||
         (reading.status &
          (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) != 0U) {
       if (probe) {
@@ -218,7 +233,8 @@ hal_status_t VP37_probeCalibrationMaximum(VP37Pump *self, int32_t *maximum) {
       (unsigned long)hal_micros(), (long)pwm, (long)self->feedback.adjustMin,
       (long)self->feedback.adjustMax);
   self->callbacks.writeQuantityPwm(pwm);
-  const bool settled = VP37_waitForCalibrationSettle(self, &measured, true);
+  const bool settled = VP37_waitForCalibrationSettle(
+      self, &measured, true, (uint16_t)VP37_getMaxAdjustometerPWMVal(self));
   self->callbacks.writeQuantityPwm(0);
   self->controlStarted = false;
   self->pidStarted = false;

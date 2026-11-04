@@ -531,6 +531,7 @@ static void runCore0(void) {
 #endif
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
+  VP37_showCalibration();
   testsPrintEvents();
   // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
