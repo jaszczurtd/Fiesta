@@ -1,0 +1,12 @@
+{
+  "ecu": {
+    "path": "/recordings/vp37_implementation_tests/2026-10-15-hal-device-tree/firmware/ecu-bench/firmware.uf2",
+    "sha256": "1b9fb771925d6de570e40ed1bda27cf157c8bd54a79e4941ae62e44e4ae60334"
+  },
+  "adjustometer": {
+    "path": "/recordings/vp37_implementation_tests/2026-10-15-hal-device-tree/firmware/adj/firmware.uf2",
+    "sha256": "5293247e6f73bc1a3c067c0509608b41258c4d995bb192c7bcad47720b4dd87e"
+  },
+  "until_ft": 0,
+  "started": "2026-10-15 03:36:59"
+}

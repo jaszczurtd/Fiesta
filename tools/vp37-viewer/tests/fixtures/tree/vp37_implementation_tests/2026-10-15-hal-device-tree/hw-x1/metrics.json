@@ -1,0 +1,214 @@
+{
+  "source": "/recordings/vp37_implementation_tests/2026-10-15-hal-device-tree/hw-x1/hw-x1.log",
+  "control_samples": 32434,
+  "tests_seen": [
+    "cyclic",
+    "dtc",
+    "kv",
+    "manual",
+    "pot",
+    "random",
+    "top",
+    "topzero"
+  ],
+  "cyclic_profiles": {
+    "2ms": {
+      "n": 636,
+      "median_abs_err_hz": 187.0,
+      "p95_abs_err_hz": 662.5,
+      "max_abs_err_hz": 1048.0
+    },
+    "4ms": {
+      "n": 892,
+      "median_abs_err_hz": 95.0,
+      "p95_abs_err_hz": 331.4,
+      "max_abs_err_hz": 683.0
+    },
+    "6ms": {
+      "n": 1267,
+      "median_abs_err_hz": 83.0,
+      "p95_abs_err_hz": 260.0,
+      "max_abs_err_hz": 432.0
+    },
+    "12ms": {
+      "n": 2406,
+      "median_abs_err_hz": 53.0,
+      "p95_abs_err_hz": 171.0,
+      "max_abs_err_hz": 323.0
+    }
+  },
+  "top_steps": {
+    "75%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 233.7,
+      "late_ringing_error_rms_hz": 14.7,
+      "settled_error_rms_hz": 13.4
+    },
+    "85.5%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 69.7,
+      "late_ringing_error_rms_hz": 17.6,
+      "settled_error_rms_hz": 20.3
+    },
+    "90.5%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 56.1,
+      "late_ringing_error_rms_hz": 25.6,
+      "settled_error_rms_hz": 24.8
+    },
+    "95%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 92.0,
+      "late_ringing_error_rms_hz": 46.2,
+      "settled_error_rms_hz": 40.1
+    },
+    "0%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 355.2,
+      "late_ringing_error_rms_hz": 78.8,
+      "settled_error_rms_hz": 77.2
+    }
+  },
+  "topzero_steps": {
+    "75%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 214.8,
+      "late_ringing_error_rms_hz": 13.2,
+      "settled_error_rms_hz": 17.6
+    },
+    "0%": {
+      "steps": 20,
+      "early_ringing_error_rms_hz": 313.0,
+      "late_ringing_error_rms_hz": 81.8,
+      "settled_error_rms_hz": 79.8
+    },
+    "85.5%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 234.6,
+      "late_ringing_error_rms_hz": 27.9,
+      "settled_error_rms_hz": 32.1
+    },
+    "90.5%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 225.7,
+      "late_ringing_error_rms_hz": 26.9,
+      "settled_error_rms_hz": 36.7
+    },
+    "95%": {
+      "steps": 5,
+      "early_ringing_error_rms_hz": 234.0,
+      "late_ringing_error_rms_hz": 48.4,
+      "settled_error_rms_hz": 50.5
+    }
+  },
+  "manual_holds": {
+    "S20": {
+      "n": 994,
+      "tracking_error_hz": {
+        "n": 994,
+        "mean": 15.6,
+        "sd": 6.4,
+        "min": -8.0,
+        "max": 33.0,
+        "p95": 26.0,
+        "p99": 29.0
+      },
+      "absolute_error_hz": {
+        "n": 994,
+        "mean": 15.722334004024145,
+        "sd": 6.021036578028271,
+        "min": 0.0,
+        "max": 33.0,
+        "p95": 26.0,
+        "p99": 29.0
+      }
+    },
+    "S50": {
+      "n": 995,
+      "tracking_error_hz": {
+        "n": 995,
+        "mean": 30.6,
+        "sd": 6.5,
+        "min": 2.0,
+        "max": 49.0,
+        "p95": 40.0,
+        "p99": 45.0
+      },
+      "absolute_error_hz": {
+        "n": 995,
+        "mean": 30.608040201005025,
+        "sd": 6.5154733244484975,
+        "min": 2.0,
+        "max": 49.0,
+        "p95": 40.0,
+        "p99": 45.0
+      }
+    },
+    "S75": {
+      "n": 999,
+      "tracking_error_hz": {
+        "n": 999,
+        "mean": 15.1,
+        "sd": 14.5,
+        "min": -6.0,
+        "max": 66.0,
+        "p95": 50.0,
+        "p99": 56.0
+      },
+      "absolute_error_hz": {
+        "n": 999,
+        "mean": 15.306306306306306,
+        "sd": 14.219932374910131,
+        "min": 0.0,
+        "max": 66.0,
+        "p95": 50.0,
+        "p99": 56.0
+      }
+    },
+    "S90": {
+      "n": 997,
+      "tracking_error_hz": {
+        "n": 997,
+        "mean": 14.0,
+        "sd": 8.0,
+        "min": -10.0,
+        "max": 40.0,
+        "p95": 28.0,
+        "p99": 34.0
+      },
+      "absolute_error_hz": {
+        "n": 997,
+        "mean": 14.195586760280843,
+        "sd": 7.6855751103006895,
+        "min": 0.0,
+        "max": 40.0,
+        "p95": 28.0,
+        "p99": 34.0
+      }
+    }
+  },
+  "random": {
+    "n": 10989,
+    "median_abs_err_hz": 12.0,
+    "p95_abs_err_hz": 52.0,
+    "max_abs_err_hz": 975.0
+  },
+  "control_period_us": {
+    "median": 5055.0,
+    "p95": 5120.0,
+    "max": 9503.0
+  },
+  "feedback_age_us": {
+    "median": 578.0,
+    "p95": 1030.0,
+    "max": 1248.0
+  },
+  "warnings": [],
+  "analysis_window": {
+    "kind": "gate_markers",
+    "start_s": 69.462139,
+    "end_s": 945.181235,
+    "start_marker": "HOST TX gate-reset R",
+    "end_marker": "HOST TX gate-end T5.0"
+  }
+}

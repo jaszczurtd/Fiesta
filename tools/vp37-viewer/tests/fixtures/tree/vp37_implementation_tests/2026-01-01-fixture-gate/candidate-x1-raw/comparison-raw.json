@@ -1,0 +1,37 @@
+{
+  "sources": {
+    "before": "reference-a1-raw/reference-a1-raw.log",
+    "current": "candidate-x1-raw/candidate-x1-raw.log",
+    "reference_after": "reference-a2-raw/reference-a2-raw.log"
+  },
+  "threshold_percent": 0,
+  "automatic_acceptance": false,
+  "differences": [
+    {
+      "metric": "cyclic 2ms p95_abs_err_hz",
+      "references": [
+        100.0,
+        110.0
+      ],
+      "candidate": 105.0,
+      "deltas": [
+        5.0,
+        -5.0
+      ],
+      "status": "worse"
+    },
+    {
+      "metric": "control_period_us p95",
+      "references": [
+        5120.0,
+        5120.0
+      ],
+      "candidate": 5110.0,
+      "deltas": [
+        -10.0,
+        -10.0
+      ],
+      "status": "no_increase"
+    }
+  ]
+}

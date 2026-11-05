@@ -218,7 +218,11 @@ endif()
 
 add_subdirectory(tests)
 
+# The host viewer is tested here so the local gate and the ECU CI job run
+# the same parser/fixture checks. It is independent of the firmware targets.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../tools/vp37-viewer" vp37-viewer)
+
 # Optional analysis helpers kept outside the default build.
 fiesta_add_host_analysis_targets(ECU ECU
-    CLANG_TIDY_FILES "^.*/src/(ECU|common/vp37|common/scDefinitions|common/tests)/.*\\.(c|cpp)$"
+    CLANG_TIDY_FILES "^.*/(src/(ECU|common/vp37|common/scDefinitions|common/tests)|tools/vp37-viewer/src)/.*\\.(c|cpp)$"
     MEMCHECK_EXCLUDE_LABELS "static-analysis|sanitizer")

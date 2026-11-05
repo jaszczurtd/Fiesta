@@ -20,6 +20,10 @@ physical panel compatibility or measure hardware timing.
 VP37TestBench participates in local builds and tests, but its `ci: false`
 excludes it from the firmware CI matrix.
 
+The ECU host build also includes the [VP37 measurement viewer](../tools/vp37-viewer/README.md).
+Its parser and page tests use independent fixtures and run in CTest and
+Valgrind alongside the ECU tests. The viewer can also be built separately.
+
 ## Run local checks
 
 After [preparing the tools](BUILDING.md#prepare-linux-or-wsl), run from the root:
@@ -62,7 +66,7 @@ scope after documented suppressions; the rest of ECU remains a screening
 report. See the [scope and deviation policy](../MISRA.md).
 
 PMD CPD uses the version selected by HAL and thresholds of 100 tokens for
-C/C++ and 50 for Python. Production code is compared within each module;
+C/C++ and 50 for Python. Production code is compared within each module or tool;
 host tests and Python are compared across the repository. Any duplicate group
 fails the gate. Shared test helpers belong in [`src/common/tests/`](../src/common/tests/).
 

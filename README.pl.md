@@ -44,6 +44,7 @@ Skrypt zatrzyma się, jeśli HAL zawiera lokalne zmiany.
 - [Architektura i komunikacja](ARCHITECTURE.pl.md)
 - [Kompilacja, wgrywanie i debugowanie](doc/BUILDING.pl.md)
 - [Testy hostowe i CI](doc/TESTING.pl.md)
+- [Przeglądarka pomiarów VP37](tools/vp37-viewer/README.pl.md)
 - [Aktualizacja JaszczurHAL](DEPENDENCIES.pl.md)
 - [Protokół Serial Configuratora](src/common/scDefinitions/PROTOCOL.pl.md)
 - [Zakres MISRA i zasady przeglądu](MISRA.pl.md)

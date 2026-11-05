@@ -43,6 +43,7 @@ to select the HAL revision recorded by Fiesta; it stops if HAL has local changes
 - [Architecture and communication](ARCHITECTURE.md)
 - [Builds, upload and debugging](doc/BUILDING.md)
 - [Host tests and CI](doc/TESTING.md)
+- [VP37 measurement viewer](tools/vp37-viewer/README.md)
 - [Updating JaszczurHAL](DEPENDENCIES.md)
 - [Serial Configurator protocol](src/common/scDefinitions/PROTOCOL.md)
 - [MISRA scope and review policy](MISRA.md)

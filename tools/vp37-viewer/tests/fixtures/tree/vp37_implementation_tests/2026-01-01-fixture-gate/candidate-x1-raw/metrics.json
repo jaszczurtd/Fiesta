@@ -1,0 +1,36 @@
+{
+  "source": "candidate-x1-raw/candidate-x1-raw.log",
+  "cyclic_profiles": {
+    "2ms": {
+      "n": 10,
+      "median_abs_err_hz": 66.66666666666667,
+      "p95_abs_err_hz": 200.0,
+      "max_abs_err_hz": 400.0
+    }
+  },
+  "control_period_us": {
+    "median": 5050.0,
+    "p95": 5120.0,
+    "max": 9500.0
+  },
+  "manual_holds": {
+    "S20": {
+      "tracking_error_hz": {
+        "mean": -4.5,
+        "sd": 6.0,
+        "p95": -30.0
+      },
+      "absolute_error_hz": {
+        "p95": 31.0
+      }
+    }
+  },
+  "warnings": [],
+  "analysis_window": {
+    "kind": "gate_markers",
+    "start_s": 69.462139,
+    "end_s": 945.181235,
+    "start_marker": "HOST TX gate-reset R",
+    "end_marker": "HOST TX gate-end T5.0"
+  }
+}

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run the PMD CPD duplicate gate over Fiesta sources.
 
-Production code is scanned per module: every module in modules.json and every
-component directory under src/common gets its own scan, so modules are never
-compared with each other. Host tests are scanned together, across modules.
+Production code is scanned per module: every module in modules.json, every
+component directory under src/common and every tool under tools gets its own
+scan. Host tests are scanned together, across modules and tools.
 Python tooling is one more scan. PMD, the thresholds and the report parser come
 from the pinned JaszczurHAL submodule (scripts/run_cpd.py).
 """
@@ -68,13 +68,15 @@ def build_scopes(repo_root: Path, module_names: list[str], hal_cpd) -> list[Scop
         if suffix in hal_cpd.PYTHON_SOURCE_EXTENSIONS:
             python.append(name)
             continue
-        if suffix not in hal_cpd.CPP_SOURCE_EXTENSIONS or path.parts[0] != "src":
+        if suffix not in hal_cpd.CPP_SOURCE_EXTENSIONS or path.parts[0] not in ("src", "tools"):
             continue
         if TESTS_DIR in path.parts:
             tests.append(name)
             continue
         top = path.parts[1]
-        if top == COMMON_DIR:
+        if path.parts[0] == "tools":
+            label = f"tools_{top}"
+        elif top == COMMON_DIR:
             label = "common" if len(path.parts) == 3 else f"common_{path.parts[2]}"
         elif top in module_names:
             label = top

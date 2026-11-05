@@ -20,6 +20,10 @@ na hoście, bez podłączonej płytki. Nie potwierdzają zgodności fizycznego
 panelu ani nie mierzą czasu działania na sprzęcie. VP37TestBench uczestniczy w lokalnej kompilacji i testach,
 ale `ci: false` wyłącza go z macierzy firmware CI.
 
+Hostowy build ECU obejmuje także [przeglądarkę pomiarów VP37](../tools/vp37-viewer/README.pl.md).
+Jej testy parsera i stron czytają niezależne fixture'y i działają w CTest
+oraz Valgrindzie razem z testami ECU. Narzędzie można też budować osobno.
+
 ## Kontrole lokalne
 
 Po [przygotowaniu narzędzi](BUILDING.pl.md#przygotowanie-linuksa-lub-wsl)
@@ -62,7 +66,7 @@ i Adjustometera po uwzględnieniu udokumentowanych wyciszeń. Pozostała częś�
 ECU ma raport analizy. Zobacz [zakres i zasady odstępstw](../MISRA.pl.md).
 
 PMD CPD używa wersji wybranej przez HAL i progów 100 tokenów dla C/C++ oraz
-50 dla Pythona. Kod produkcyjny jest porównywany wewnątrz modułu, a testy
+50 dla Pythona. Kod produkcyjny jest porównywany wewnątrz modułu lub narzędzia, a testy
 hostowe i Python w całym repozytorium. Każda grupa duplikatów zatrzymuje
 bramkę. Współdzielone helpery testów należą do [`src/common/tests/`](../src/common/tests/).
 
