@@ -49,13 +49,17 @@ adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
     const bool advanced = !tracked || (decoded.number != snapshot.sampleNumber);
     const bool clockBackwards =
         tracked && ((decoded.measuredUs - snapshot.measuredUs) >= 0x80000000U);
-    if (advanced) {
-      self->adjustometer.sampleChangedUs = nowUs;
+    /* Charge publication age and the whole read to the same budget. Later
+     * publications may shorten that budget, but never renew the same sample. */
+    if (advanced ||
+        !hal_elapsed_u32(startedUs, self->adjustometer.sampleAgeOriginUs,
+                         decoded.ageUs)) {
+      self->adjustometer.sampleAgeOriginUs = startedUs - decoded.ageUs;
     }
     snapshot.feedbackFresh =
         !clockBackwards &&
         (decoded.ageUs <= ADJUSTOMETER_FEEDBACK_MAX_AGE_US) &&
-        !hal_elapsed_u32(nowUs, self->adjustometer.sampleChangedUs,
+        !hal_elapsed_u32(nowUs, self->adjustometer.sampleAgeOriginUs,
                          ADJUSTOMETER_FEEDBACK_MAX_AGE_US);
     self->adjustometer.sampleTracked = true;
     snapshot.pulseHz = decoded.pulseHz;

@@ -82,6 +82,13 @@ wymaga wersji 2 i oblicza odchylenie ze znakiem jako częstotliwość po filtrze
 minus baseline z tego samego odczytu. Odrzucenie innej wersji diagnostyki
 nie wpływa na odczyt ramki sterowania.
 
+Czytnik przyznaje próbce 20 ms ważności, uwzględniając zgłoszony wiek przy
+publikacji, cały odczyt I2C i dalszy upływ czasu ECU. Kolejne odczyty tej samej
+próbki nie odnawiają limitu; późniejsza publikacja z większym wiekiem może go
+skrócić. Pole `ageUs` nadal podaje wiek przy publikacji. Niezsynchronizowane
+zegary nie pozwalają ustalić opóźnienia między publikacją a pierwszym odczytem,
+więc ta kontrola nie mierzy całego czasu od pomiaru do użycia danych.
+
 Napięcie jest kodowane w 0,1 V, temperatura paliwa w całych stopniach C.
 Dzielnik `47k / 10k` ogranicza pomiar ADC do około 18,8 V przy zakresie 3,3 V,
 choć pole protokołu mieści 25,5 V. Osobny EMA dla ADC nadaje nowej próbce wagę 1/8.

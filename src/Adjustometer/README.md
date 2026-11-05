@@ -80,6 +80,13 @@ use version 2 and derive signed deviation as filtered frequency minus baseline
 from the same read. A different diagnostic version is rejected without
 affecting control feedback.
 
+The reader gives each sample a 20 ms age budget. It includes the reported
+publication age, the complete I2C read and time elapsed on the ECU clock.
+Repeated reads of the same sample cannot renew the budget; a later publication
+reporting greater age can shorten it. The wire `ageUs` remains the age at
+publication. Unsynchronized clocks cannot reveal the delay between publication
+and the first read, so this check does not measure the complete end-to-end latency.
+
 Voltage is encoded in 0.1 V and fuel temperature in whole degrees C. The
 `47k / 10k` divider limits ADC measurement to about 18.8 V at 3.3 V full scale,
 although the wire field can represent 25.5 V. ADC readings use a separate EMA

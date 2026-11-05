@@ -30,11 +30,11 @@ typedef struct {
   int16_t chipTempDeciC;       /**< Adjustometer die temperature [0.1 C]. */
   uint8_t extendedFlags;       /**< Bitmask of ADJUSTOMETER_EXT_FLAG_*. */
   bool extendedTelemetryValid; /**< The versioned extension was coherent. */
-  bool feedbackFresh;          /**< The fast frame advanced in time. */
+  bool feedbackFresh;          /**< The sample remains within its age budget. */
   uint32_t rawHz;
   uint32_t sampleNumber;
   uint32_t measuredUs;
-  uint16_t ageUs;
+  uint16_t ageUs; /**< Wire age at publication, without ECU elapsed time. */
   hal_status_t readStatus; /**< Result of the last transfer and decode. */
   uint32_t readUs;         /**< Duration of the last read [us]. */
   uint8_t readRetries;     /**< Repeated transfers after a torn frame. */
@@ -44,7 +44,7 @@ typedef struct {
 typedef struct {
   adjustometer_reading_t last; /**< Newest reading, returned on failure. */
   bool sampleTracked;          /**< A fast sample number has been seen. */
-  uint32_t sampleChangedUs;    /**< When the sample number last advanced. */
+  uint32_t sampleAgeOriginUs; /**< ECU read-start time minus publication age. */
 } VP37AdjustometerReader;
 
 #ifdef __cplusplus

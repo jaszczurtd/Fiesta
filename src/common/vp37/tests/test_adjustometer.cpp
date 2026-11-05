@@ -283,10 +283,123 @@ void test_fast_feedback_rejects_mixed_or_unknown_frames(void) {
   TEST_ASSERT_FALSE(reading.commOk);
 }
 
+void test_fast_feedback_frozen_publication_uses_remaining_age_budget(void) {
+  const uint32_t starts[] = {100000U, UINT32_MAX - 10000U, 1000U};
+  for (size_t i = 0U; i < COUNTOF(starts); ++i) {
+    setUp();
+    adjustometer_feedback_t sample = {};
+    sample.number = 42U;
+    sample.measuredUs = 700000U; // The sensor clock has a different origin.
+    sample.ageUs = 9000U;
+    hal_mock_set_micros(starts[i]);
+    injectFastAdjustometer(sample);
+    TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+
+    hal_mock_set_micros(starts[i] + 10999U);
+    injectFastAdjustometer(sample);
+    TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+    hal_mock_set_micros(starts[i] + 11000U);
+    injectFastAdjustometer(sample);
+    TEST_ASSERT_FALSE(readAdjustometer().feedbackFresh);
+
+    hal_mock_set_micros(starts[i] + 15000U);
+    injectFastAdjustometer(sample);
+    const adjustometer_reading_t stale = readAdjustometer();
+    TEST_ASSERT_TRUE(stale.commOk);
+    TEST_ASSERT_FALSE(stale.feedbackFresh);       // 9 ms + 15 ms exceeds 20 ms.
+    TEST_ASSERT_EQUAL_UINT16(9000U, stale.ageUs); // Keep the wire diagnostic.
+
+    sample.number++;
+    sample.measuredUs += 22000U;
+    sample.ageUs = 2000U;
+    injectFastAdjustometer(sample);
+    TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+  }
+}
+
+void test_fast_feedback_republication_only_shortens_remaining_budget(void) {
+  adjustometer_feedback_t sample = {};
+  sample.number = 42U;
+  sample.ageUs = 2000U;
+  hal_mock_set_micros(100000U);
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+
+  hal_mock_set_micros(110000U);
+  sample.ageUs = 12000U;
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_TRUE(
+      readAdjustometer().feedbackFresh); // Do not count 10 ms twice.
+
+  sample.ageUs = 18000U; // A later publication exposes previously hidden age.
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+  hal_mock_set_micros(111000U);
+  vp37AdjustometerTransferBusy(true);
+  TEST_ASSERT_FALSE(readAdjustometer().commOk);
+  vp37AdjustometerTransferBusy(false);
+
+  sample.ageUs = 1000U; // A lower reported age must not renew the same sample.
+  hal_mock_set_micros(111999U);
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh);
+  hal_mock_set_micros(112000U);
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_FALSE(readAdjustometer().feedbackFresh);
+}
+
+static hal_status_t delayedFeedbackTransfer(uint8_t reg, uint8_t *data,
+                                            size_t length) {
+  const hal_status_t status = vp37FixtureTransfer(reg, data, length);
+  hal_mock_set_micros(hal_micros() + 2000U);
+  return status;
+}
+
+void test_fast_feedback_age_includes_transfer_and_retry_time(void) {
+  s_pump.callbacks.adjustometerTransfer = delayedFeedbackTransfer;
+  adjustometer_feedback_t sample = {};
+  sample.number = 42U;
+  sample.ageUs = 17000U;
+  uint8_t frames[ADJUSTOMETER_FEEDBACK_BYTES * 2U];
+  adjustometer_feedback_encode(frames, &sample, 2U);
+  adjustometer_feedback_encode(frames + ADJUSTOMETER_FEEDBACK_BYTES, &sample,
+                               4U);
+  frames[ADJUSTOMETER_FEEDBACK_BYTES - 1U] = 4U; // Retry a torn first read.
+  hal_mock_set_micros(UINT32_MAX - 1000U);
+  injectAdjustometerBytes(frames, (int)COUNTOF(frames));
+  const adjustometer_reading_t stale = readAdjustometer();
+  TEST_ASSERT_TRUE(stale.commOk);
+  TEST_ASSERT_EQUAL_UINT32(4000U, stale.readUs);
+  TEST_ASSERT_EQUAL_UINT8(1U, stale.readRetries);
+  TEST_ASSERT_FALSE(stale.feedbackFresh); // 17 ms + two 2 ms transfers.
+
+  sample.number++;
+  sample.measuredUs++;
+  sample.ageUs = 17999U;
+  injectFastAdjustometer(sample);
+  TEST_ASSERT_TRUE(readAdjustometer().feedbackFresh); // 19,999 us at receipt.
+}
+
+void test_fast_feedback_rejects_exhausted_initial_age_budget(void) {
+  const uint16_t ages[] = {ADJUSTOMETER_FEEDBACK_MAX_AGE_US, UINT16_MAX};
+  for (size_t i = 0U; i < COUNTOF(ages); ++i) {
+    adjustometer_feedback_t sample = {};
+    sample.number = (uint32_t)i;
+    sample.ageUs = ages[i];
+    hal_mock_set_micros(1000U);
+    injectFastAdjustometer(sample);
+    TEST_ASSERT_FALSE(readAdjustometer().feedbackFresh);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_fast_feedback_age_sequence_and_clock_wrap);
   RUN_TEST(test_fast_feedback_rejects_mixed_or_unknown_frames);
+  RUN_TEST(test_fast_feedback_frozen_publication_uses_remaining_age_budget);
+  RUN_TEST(test_fast_feedback_republication_only_shortens_remaining_budget);
+  RUN_TEST(test_fast_feedback_age_includes_transfer_and_retry_time);
+  RUN_TEST(test_fast_feedback_rejects_exhausted_initial_age_budget);
 
   // Adjustometer readout
   RUN_TEST(test_adjustometer_positive_pulse);
