@@ -143,6 +143,16 @@ temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
 albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną
 flagą, więc odbiorca nie odczyta go jako zera.
 
+Log debugowania USB podaje częstotliwość impulsów ABS po każdym oknie
+trwającym co najmniej 1000 ms, także dla zera i niezmiennej częstotliwości:
+`ABS pulses: 1000.00 Hz, delta=1000, window_ms=1000, total=25000`.
+Hz to przyrost `impulseCount` podzielony przez rzeczywisty czas pomiaru;
+spóźniony obieg pętli wydłuża okno. Licznik zlicza zbocza narastające na GP15,
+po jednym na okres sygnału wejściowego. Odczyt należy porównać z generatorem
+ABS lub zewnętrznym pomiarem częstotliwości; impulsy pominięte przez
+przerwanie GPIO nie trafiają do licznika. Rozdzielczość zliczania wynosi
+jeden impuls na okno. Otwarta sesja konfiguratora wycisza log debugowania.
+
 Odczyt EGT na TFT pokazuje temperaturę przed DPF. Co 5 s zmienia się
 z temperaturą wewnątrz DPF tylko wtedy, gdy podłączony moduł DPF zgłasza
 regenerację w ramce `0x124`.

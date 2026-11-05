@@ -4,6 +4,7 @@
 
 #define IMPULSES_PER_ROTATION 43
 #define CALC_INTERVAL 125
+#define PULSE_REPORT_INTERVAL_MS 1000u
 
 void onImpulse(void);
 
@@ -11,6 +12,8 @@ static volatile unsigned long impulseCount = 0;
 static unsigned long lastImpulseCount = 0;
 static unsigned long lastCalcTime = 0;
 static double circumferenceMeters = 0.0f;
+static uint32_t lastPulseReportMs = 0u;
+static uint32_t lastPulseReportCount = 0u;
 
 double getCircumference(void) { return circumferenceMeters; }
 
@@ -52,6 +55,10 @@ bool setupSpeedometer(void) {
   if (success) {
     hal_gpio_set_mode(JH_HW_NODE_ABS_SPEED_PIN_IN,
                       JH_HW_NODE_ABS_SPEED_INPUT_MODE);
+    hal_critical_section_enter();
+    lastPulseReportMs = hal_millis();
+    lastPulseReportCount = (uint32_t)impulseCount;
+    hal_critical_section_exit();
     hal_gpio_attach_interrupt(JH_HW_NODE_ABS_SPEED_PIN_IN, onImpulse,
                               HAL_GPIO_IRQ_RISING);
     return success;
@@ -62,20 +69,31 @@ bool setupSpeedometer(void) {
 
 void onImpulse(void) { impulseCount++; }
 
-#ifdef SPEED_PULSE_DEBUG
-static unsigned long lastImpulseCount_p = 0;
-#endif
+static void reportPulseFrequency(void) {
+  if (!hal_millis_deadline_expired(lastPulseReportMs,
+                                   PULSE_REPORT_INTERVAL_MS)) {
+    return;
+  }
+
+  // Capture the time and the same counter the speed calculation reads.
+  // Both the GPIO interrupt and this snapshot run on core 0.
+  hal_critical_section_enter();
+  const uint32_t nowMs = hal_millis();
+  const uint32_t count = (uint32_t)impulseCount;
+  hal_critical_section_exit();
+
+  const uint32_t elapsedMs = nowMs - lastPulseReportMs;
+  const uint32_t pulses = count - lastPulseReportCount;
+  lastPulseReportMs = nowMs;
+  lastPulseReportCount = count;
+  const double hz = (double)pulses * 1000.0 / (double)elapsedMs;
+  deb("ABS pulses: %.2f Hz, delta=%lu, window_ms=%lu, total=%lu", hz,
+      (unsigned long)pulses, (unsigned long)elapsedMs, (unsigned long)count);
+}
 
 void onImpulseTranslating(void) {
   if (circumferenceMeters > 0) {
     unsigned long currentTime = hal_millis();
-
-#ifdef SPEED_PULSE_DEBUG
-    if (lastImpulseCount_p != lastImpulseCount) {
-      lastImpulseCount_p = impulseCount;
-      deb("impulse: %d", lastImpulseCount_p);
-    }
-#endif
 
     if (currentTime - lastCalcTime >= CALC_INTERVAL) {
       hal_critical_section_enter();
@@ -97,5 +115,6 @@ void onImpulseTranslating(void) {
         deb("Speed: %fkm/h %f %f", speed_kph, rotationsPerSecond, speed_mps);
       }
     }
+    reportPulseFrequency();
   }
 }

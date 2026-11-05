@@ -144,6 +144,16 @@ and both exhaust temperatures every 250 ms. Each measurement carries a
 validity flag. A missing thermocouple or a shorted or open oil sender goes
 out with its flag cleared, so receivers do not read it as zero.
 
+The USB debug log reports the ABS pulse frequency once a window reaches
+1000 ms, including zero and unchanged readings:
+`ABS pulses: 1000.00 Hz, delta=1000, window_ms=1000, total=25000`.
+Hz is the increase of `impulseCount` divided by the actual elapsed time;
+a late loop pass lengthens the window. The counter records rising edges on
+GP15, one per input period. Compare this reading with the ABS generator or
+an external frequency measurement; pulses missed by the GPIO interrupt do
+not reach the counter. The counting resolution is one pulse per window.
+An open configurator session mutes the debug log.
+
 The EGT readout on the TFT shows the temperature before the DPF. It takes
 turns every 5 s with the temperature inside the DPF only while a connected
 DPF module reports a regeneration in frame `0x124`.

@@ -3,6 +3,7 @@
 #include "unity.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 // The core-0 state of can.cpp, where speed.cpp stores the ABS speed.
@@ -132,6 +133,89 @@ void test_onImpulseTranslating_late_call_divides_by_the_fixed_window(void) {
                            getGlobalValue(F_ABS_CAR_SPEED));
 }
 
+static unsigned long expectPulseReport(float expectedHz, uint32_t pulses,
+                                       uint32_t windowMs) {
+  const char *report = strstr(hal_mock_serial_last_line(), "ABS pulses:");
+  TEST_ASSERT_NOT_NULL(report);
+  float hz = 0.0f;
+  unsigned long delta = 0, duration = 0, total = 0;
+  TEST_ASSERT_EQUAL_INT(
+      4,
+      sscanf(report, "ABS pulses: %f Hz, delta=%lu, window_ms=%lu, total=%lu",
+             &hz, &delta, &duration, &total));
+  TEST_ASSERT_FLOAT_WITHIN(0.005f, expectedHz, hz);
+  TEST_ASSERT_EQUAL_UINT32(pulses, delta);
+  TEST_ASSERT_EQUAL_UINT32(windowMs, duration);
+  return total;
+}
+
+void test_pulse_frequency_reports_unchanged_input_and_actual_elapsed_time(
+    void) {
+  hal_mock_set_millis(5000u);
+  TEST_ASSERT_TRUE(setupSpeedometer());
+
+  fireAbsImpulses(43);
+  hal_mock_set_millis(5999u);
+  onImpulseTranslating();
+  TEST_ASSERT_NULL(strstr(hal_mock_serial_last_line(), "ABS pulses:"));
+  hal_mock_set_millis(6000u);
+  onImpulseTranslating();
+  const unsigned long firstTotal = expectPulseReport(43.0f, 43u, 1000u);
+
+  fireAbsImpulses(43);
+  hal_mock_set_millis(7000u);
+  onImpulseTranslating();
+  TEST_ASSERT_EQUAL_UINT32(firstTotal + 43u,
+                           expectPulseReport(43.0f, 43u, 1000u));
+
+  fireAbsImpulses(86);
+  hal_mock_set_millis(9000u); // The loop missed its nominal reporting time.
+  onImpulseTranslating();
+  (void)expectPulseReport(43.0f, 86u, 2000u);
+}
+
+void test_pulse_frequency_reports_fractional_hz_and_zero_after_stop(void) {
+  hal_mock_set_millis(10000u);
+  TEST_ASSERT_TRUE(setupSpeedometer());
+  fireAbsImpulses(1);
+  hal_mock_set_millis(11250u);
+  onImpulseTranslating();
+  const unsigned long total = expectPulseReport(0.8f, 1u, 1250u);
+
+  hal_mock_set_millis(12250u);
+  onImpulseTranslating();
+  TEST_ASSERT_EQUAL_UINT32(total, expectPulseReport(0.0f, 0u, 1000u));
+}
+
+void test_pulse_frequency_setup_starts_a_new_window_without_resetting_count(
+    void) {
+  hal_mock_set_millis(13000u);
+  TEST_ASSERT_TRUE(setupSpeedometer());
+  hal_mock_set_millis(14000u);
+  onImpulseTranslating();
+  const unsigned long total = expectPulseReport(0.0f, 0u, 1000u);
+
+  fireAbsImpulses(7);
+  hal_mock_set_millis(14500u);
+  TEST_ASSERT_TRUE(setupSpeedometer());
+  fireAbsImpulses(50);
+  hal_mock_set_millis(15500u);
+  onImpulseTranslating();
+  TEST_ASSERT_EQUAL_UINT32(total + 57u, expectPulseReport(50.0f, 50u, 1000u));
+}
+
+void test_pulse_frequency_window_survives_millis_wrap(void) {
+  hal_mock_set_millis(UINT32_MAX - 499u);
+  TEST_ASSERT_TRUE(setupSpeedometer());
+  fireAbsImpulses(100);
+  hal_mock_set_millis(499u); // 999 ms since setup.
+  onImpulseTranslating();
+  TEST_ASSERT_NULL(strstr(hal_mock_serial_last_line(), "ABS pulses:"));
+  hal_mock_set_millis(500u);
+  onImpulseTranslating();
+  (void)expectPulseReport(100.0f, 100u, 1000u);
+}
+
 int main(void) {
   UNITY_BEGIN();
 
@@ -142,6 +226,12 @@ int main(void) {
       test_onImpulseTranslating_counts_only_impulses_of_the_current_window);
   RUN_TEST(test_onImpulseTranslating_reports_zero_without_impulses);
   RUN_TEST(test_onImpulseTranslating_late_call_divides_by_the_fixed_window);
+  RUN_TEST(
+      test_pulse_frequency_reports_unchanged_input_and_actual_elapsed_time);
+  RUN_TEST(test_pulse_frequency_reports_fractional_hz_and_zero_after_stop);
+  RUN_TEST(
+      test_pulse_frequency_setup_starts_a_new_window_without_resetting_count);
+  RUN_TEST(test_pulse_frequency_window_survives_millis_wrap);
 
   return UNITY_END();
 }

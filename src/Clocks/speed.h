@@ -5,14 +5,15 @@
 #include "can.h"
 #include "config.h"
 
-// console debug for ISR speed pulses
-// #define SPEED_PULSE_DEBUG 1
-
 // ABS speed from the wheel impulses on JH_HW_NODE_ABS_SPEED_PIN_IN, moved
 // with its existing algorithm unchanged. Core 0: the interrupt and
 // onImpulseTranslating() run there, the result goes to the core-0 state.
 
 bool setupSpeedometer(void);
+/** Update speed on core 0 and log the counted rising-edge frequency over
+ * each elapsed window of at least 1000 ms, including windows with no pulses.
+ * setupSpeedometer() starts the frequency window; Hz uses its actual duration.
+ */
 void onImpulseTranslating(void);
 bool calculateCircumferenceMeters(const char *tireString,
                                   double correctionFactor);
