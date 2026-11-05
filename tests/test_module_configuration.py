@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import sys
@@ -69,9 +68,8 @@ class ModuleConfigurationTests(unittest.TestCase):
         # The HAL build refuses variants and definitions in a manifest.
         for module in fiesta_modules.load().firmware():
             path = REPO_ROOT / "src" / module.name / ".vscode" / "jaszczurhal.project.json"
-            manifest = json.loads(path.read_text(encoding="utf-8"))
             with self.subTest(module=module.name):
-                self.assertEqual([], jh_vscode.manifest_configuration_findings(manifest))
+                self.assertEqual([], jh_vscode.manifest_configuration_findings(path))
 
     def test_ecu_bench_variant_enables_the_functional_tests(self) -> None:
         header = REPO_ROOT / "src" / "ECU" / project_config.HEADER_NAME

@@ -6,8 +6,7 @@
 
 /* Pins, buses and addresses come from the rp2040-zero assembly of
  * device_tree.json; the code reads the JH_HW_* macros of the generated
- * jh_hardware.h directly. The blue LED on GP16 shares the data line of the
- * board's WS2812 (net in device_tree.json). */
+ * jh_hardware.h directly. */
 
 /* Logic levels, from activeLow of the nodes */
 #define BUTTON_ACTIVE_LEVEL (JH_HW_NODE_BUTTON_SET_PROP_ACTIVE_LOW == 0)

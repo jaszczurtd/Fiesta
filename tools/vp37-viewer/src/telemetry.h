@@ -106,6 +106,16 @@ struct Recording {
 
 Recording parse_log(std::string_view text);
 
+// Borrowed for the duration of the callback. Numeric records have one row;
+// events (HOST, TEST, trace end, unknown kinds) carry text instead.
+struct TelemetryEvent {
+  std::string_view kind;
+  double t;
+  const Series *values;
+  std::string_view text;
+};
+using TelemetrySink = hal_status_t (*)(void *, const TelemetryEvent &);
+
 /**
  * Incremental reader using the same line parser as parse_log(). The output
  * must be empty and outlive the reader. Do not modify it while feeding.
@@ -118,6 +128,11 @@ Recording parse_log(std::string_view text);
 class TelemetryParser {
 public:
   explicit TelemetryParser(Recording &output, bool mcu_time = false);
+  /** Stream records without retaining history. sink must not be null.
+   * A numeric line supports at most 256 distinct fields. Callback failures
+   * terminate feed/finish. The callback must not reenter the parser.
+   */
+  TelemetryParser(TelemetrySink sink, void *user, bool mcu_time = true);
   ~TelemetryParser();
   TelemetryParser(const TelemetryParser &) = delete;
   TelemetryParser &operator=(const TelemetryParser &) = delete;

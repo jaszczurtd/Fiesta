@@ -58,7 +58,7 @@ static void setup_runtime(void) {
 
   helloMessage();
 
-  PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
+  rtc_Init(RTC_TIMER_INTERRUPT_ENABLE);
   (void)clockTimeInit(); /* logs the reason itself */
   (void)clockCanInit();  /* logs the reason itself */
   configSessionInit();

@@ -54,6 +54,7 @@ add_library(clocks_mock STATIC
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crypto.cpp
+    ${HAL_SRC}/hal/security/jh_sha256.c
     # HAL crypto wrappers call into shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20.c
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c

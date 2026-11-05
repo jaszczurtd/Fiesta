@@ -121,7 +121,7 @@ hal_status_t clockTimeReadUtc(uint32_t *outEpoch, bool *outTrusted) {
   *outTrusted = false;
 
   hal_rtc_datetime_t dt = {0};
-  const hal_status_t status = PCF_ReadDateTime(&dt);
+  const hal_status_t status = rtc_ReadDateTime(&dt);
   if (status == HAL_EPROTO) {
     /* The RTC answered without a valid date, e.g. after it lost its supply. */
     return HAL_OK;
@@ -138,17 +138,17 @@ hal_status_t clockTimeReadUtc(uint32_t *outEpoch, bool *outTrusted) {
   return HAL_OK;
 }
 
-hal_status_t clockTimeReadLocal(PCF_DateTime *outLocal, bool *outTrusted) {
+hal_status_t clockTimeReadLocal(RTC_DateTime *outLocal, bool *outTrusted) {
   if (outLocal == NULL) {
     return HAL_EINVAL;
   }
   hal_rtc_datetime_t dt = {0};
-  const hal_status_t status = PCF_ReadDateTime(&dt);
+  const hal_status_t status = rtc_ReadDateTime(&dt);
   if (status != HAL_OK) {
     return status;
   }
 
-  PCF_DateTime local = {.second = dt.second,
+  RTC_DateTime local = {.second = dt.second,
                         .minute = dt.minute,
                         .hour = dt.hour,
                         .day = dt.day,
@@ -180,7 +180,7 @@ hal_status_t clockTimeReadLocal(PCF_DateTime *outLocal, bool *outTrusted) {
 /* Read the RTC back right after it took these seconds. */
 static hal_status_t clockTimeCheckWrite(uint32_t seconds) {
   hal_rtc_datetime_t dt = {0};
-  hal_status_t status = PCF_ReadDateTime(&dt);
+  hal_status_t status = rtc_ReadDateTime(&dt);
   if (status == HAL_OK) {
     const uint32_t stored = clockTimeSecondsOf(&dt);
     if (!dt.clock_integrity || stored < seconds ||
@@ -199,7 +199,7 @@ static void clockTimeKeepLocal(uint32_t epoch) {
                             ? hal_time_utc_to_cet_cest_ex(epoch, &local)
                             : HAL_EINVAL;
   if (status == HAL_OK) {
-    status = PCF_WriteEpoch(epoch + (uint32_t)local.utc_offset_minutes * 60u);
+    status = rtc_WriteEpoch(epoch + (uint32_t)local.utc_offset_minutes * 60u);
   }
   if (status == HAL_OK) {
     s_rtc = CLOCK_RTC_LOCAL;
@@ -226,7 +226,7 @@ hal_status_t clockTimeWriteUtc(uint32_t epoch) {
   if (!clockTimeEpochInRange(epoch)) {
     return HAL_EINVAL;
   }
-  hal_status_t status = PCF_WriteEpoch(epoch);
+  hal_status_t status = rtc_WriteEpoch(epoch);
   if (status == HAL_OK) {
     s_rtc = CLOCK_RTC_UTC_UNCHECKED;
     status = clockTimeCheckWrite(epoch);
@@ -244,14 +244,14 @@ hal_status_t clockTimeSettle(void) {
     return HAL_OK;
   }
   hal_rtc_datetime_t dt = {0};
-  const hal_status_t status = PCF_ReadDateTime(&dt);
+  const hal_status_t status = rtc_ReadDateTime(&dt);
   if (status != HAL_OK) {
     return status;
   }
   return clockTimeFinish(HAL_OK, clockTimeSecondsOf(&dt));
 }
 
-hal_status_t clockTimeWriteLocal(const PCF_DateTime *local) {
+hal_status_t clockTimeWriteLocal(const RTC_DateTime *local) {
   if (local == NULL || local->year < CFG_RTC_MIN_YEAR ||
       local->year > CFG_RTC_MAX_YEAR) {
     return HAL_EINVAL;
@@ -274,7 +274,7 @@ hal_status_t clockTimeWriteLocal(const PCF_DateTime *local) {
   return clockTimeWriteUtc(localSeconds - offsetMin * 60u);
 }
 
-void clockTimeUpdateWeekday(PCF_DateTime *dt) {
+void clockTimeUpdateWeekday(RTC_DateTime *dt) {
   uint8_t sundayFirst = 0u;
   if (dt != NULL && dt->year >= (int)JH_CALENDAR_MIN_YEAR &&
       dt->year <= (int)JH_CALENDAR_MAX_YEAR &&

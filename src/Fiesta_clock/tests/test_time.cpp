@@ -417,7 +417,7 @@ bool setButtonPressed(void) {
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
 static void start(void) {
-  PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
+  rtc_Init(RTC_TIMER_INTERRUPT_ENABLE);
   assert(clockTimeInit() == HAL_OK || kv_broken);
   assert(clockCanInit() == HAL_OK);
 }
@@ -494,23 +494,23 @@ static uint32_t pack(int year, int month, int day, int hour, int minute) {
          ((uint32_t)day << 11) | ((uint32_t)hour << 6) | (uint32_t)minute;
 }
 
-static PCF_DateTime read_local(bool *trusted = nullptr) {
-  PCF_DateTime local = {};
+static RTC_DateTime read_local(bool *trusted = nullptr) {
+  RTC_DateTime local = {};
   assert(clockTimeReadLocal(&local, trusted) == HAL_OK);
   return local;
 }
 
 static void expect_local(int year, int month, int day, int hour, int minute,
                          int second, int weekday) {
-  const PCF_DateTime local = read_local();
+  const RTC_DateTime local = read_local();
   assert(local.year == year && local.month == month && local.day == day &&
          local.hour == hour && local.minute == minute &&
          local.second == second && local.weekday == weekday);
 }
 
-static PCF_DateTime local_time(int year, int month, int day, int hour,
+static RTC_DateTime local_time(int year, int month, int day, int hour,
                                int minute, int second) {
-  PCF_DateTime local = {};
+  RTC_DateTime local = {};
   local.second = (unsigned char)second;
   local.minute = (unsigned char)minute;
   local.hour = (unsigned char)hour;
@@ -522,7 +522,7 @@ static PCF_DateTime local_time(int year, int month, int day, int hour,
 
 static void write_local(int year, int month, int day, int hour, int minute,
                         int second) {
-  const PCF_DateTime local = local_time(year, month, day, hour, minute, second);
+  const RTC_DateTime local = local_time(year, month, day, hour, minute, second);
   assert(clockTimeWriteLocal(&local) == HAL_OK);
 }
 
@@ -540,7 +540,7 @@ static void test_local() {
   start();
   // The older firmware kept local time: shown as is, not trusted.
   bool trusted = true;
-  const PCF_DateTime legacy = read_local(&trusted);
+  const RTC_DateTime legacy = read_local(&trusted);
   assert(!trusted && legacy.hour == 21 && legacy.minute == 56 &&
          legacy.weekday == 3); // Thursday
   uint32_t epoch = 1u;
@@ -599,7 +599,7 @@ static void test_local() {
   assert(rtc_utc() == utc(2028, 2, 28, 23, 30, 0));
 
   const uint32_t kept = rtc_utc();
-  const PCF_DateTime invalid[] = {
+  const RTC_DateTime invalid[] = {
       local_time(2027, 2, 29, 12, 0, 0),
       local_time(2026, 4, 31, 12, 0, 0),
       local_time(2026, 13, 1, 12, 0, 0),
@@ -608,7 +608,7 @@ static void test_local() {
       local_time(CFG_RTC_MAX_YEAR + 1, 1, 1, 12, 0, 0),
       local_time(CFG_RTC_MAX_YEAR + 1, 1, 1, 0, 30, 0), // UTC still in range
       local_time(CFG_RTC_MIN_YEAR, 1, 1, 0, 30, 0)}; // UTC in the year before
-  for (const PCF_DateTime &value : invalid) {
+  for (const RTC_DateTime &value : invalid) {
     assert(clockTimeWriteLocal(&value) == HAL_EINVAL);
   }
   assert(clockTimeWriteLocal(nullptr) == HAL_EINVAL);
@@ -622,7 +622,7 @@ static void test_local() {
   assert(clockTimeWriteUtc(utc(CFG_RTC_MAX_YEAR, 12, 31, 23, 59, 59) + 1u) ==
          HAL_EINVAL);
 
-  PCF_DateTime weekday = local_time(2026, 10, 26, 0, 0, 0);
+  RTC_DateTime weekday = local_time(2026, 10, 26, 0, 0, 0);
   clockTimeUpdateWeekday(&weekday);
   assert(weekday.weekday == 0); // Monday
   weekday.weekday = 5;
@@ -649,7 +649,7 @@ static void test_marker() {
   assert(clockTimeWriteUtc(utc(2026, 10, 15, 19, 56, 0)) == HAL_EIO);
   assert(!clockTimeIsUtc() && rtc_utc() == utc(2026, 10, 15, 21, 56, 0));
   expect_local(2026, 10, 15, 21, 56, 0, 3);
-  const PCF_DateTime summer = local_time(2026, 7, 1, 14, 0, 0);
+  const RTC_DateTime summer = local_time(2026, 7, 1, 14, 0, 0);
   assert(clockTimeWriteLocal(&summer) == HAL_EIO);
   expect_local(2026, 7, 1, 14, 0, 0, 2);
   start();
@@ -698,7 +698,7 @@ static void test_marker() {
 // answers about the marker, and the time is trusted only with the marker.
 static void test_transition() {
   const uint32_t retryMs = CFG_RTC_SYNC_RETRY_MS;
-  const PCF_DateTime set = local_time(2026, 7, 1, 14, 0, 0);
+  const RTC_DateTime set = local_time(2026, 7, 1, 14, 0, 0);
   bool trusted = true;
   // The marker is written but its check fails: it may be in the flash, so
   // the RTC keeps UTC. A restart reads the marker; 14:00 stays 14:00.
@@ -738,7 +738,7 @@ static void test_transition() {
   kv.clear();
   rtc_fields(2026, 7, 1, 13, 0, 0);
   can_create_fails = true;
-  PCF_Init(PCF_TIMER_INTERRUPT_ENABLE);
+  rtc_Init(RTC_TIMER_INTERRUPT_ENABLE);
   assert(clockTimeInit() == HAL_OK);
   assert(clockCanInit() == HAL_EIO);
   kv_get_fails = 1000;
@@ -797,7 +797,7 @@ static void test_transition() {
   // With the marker the RTC is UTC either way.
   make_utc(utc(2026, 7, 1, 12, 0, 0));
   pcf.failTimeReads = 1;
-  const PCF_DateTime later = local_time(2026, 7, 1, 15, 0, 0);
+  const RTC_DateTime later = local_time(2026, 7, 1, 15, 0, 0);
   assert(clockTimeWriteLocal(&later) == HAL_EIO);
   assert(rtc_utc() == utc(2026, 7, 1, 13, 0, 0) && clockTimeIsUtc());
   expect_local(2026, 7, 1, 15, 0, 0, 2);

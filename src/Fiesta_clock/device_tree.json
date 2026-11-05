@@ -34,13 +34,6 @@
       "board": "rp2040-zero",
       "clock": { "tree": "default" },
       "statusLed": { "node": "ledRed" },
-      "releaseReservations": ["status-led"],
-      "nets": {
-        "ledBlue": {
-          "endpoint": { "domain": "soc-gpio", "id": 16 },
-          "owner": "ledBlue.out"
-        }
-      },
       "buses": {
         "spi": {
           "kind": "spi",
@@ -67,7 +60,7 @@
         "ignition": { "present": true, "pins": { "in": 13 } },
         "ledRed": { "present": true, "pins": { "out": 14 } },
         "ledOrange": { "present": true, "pins": { "out": 15 } },
-        "ledBlue": { "present": true, "pins": { "out": { "net": "ledBlue" } } },
+        "ledBlue": { "present": true, "pins": { "out": 5 } },
         "supplyVoltage": { "present": true, "pins": { "in": 26 } }
       }
     }

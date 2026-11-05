@@ -42,7 +42,57 @@ pomiarów `.tar.gz` trzeba wcześniej rozpakować. Metryki są wiązane po
 tożsamości logu i oknie analizy. Po przeniesieniu danych czytnik rozpoznaje
 katalog obszaru pomiarów, bez zależności od nazwy workspace.
 
-## Parser i przygotowanie trybu na żywo
+## Serwer rosnącego logu
+
+```sh
+vp37-viewer serve --log /path/to/collector.log --site /path/to/pages
+```
+
+Serwer czyta log od początku, śledzi dopisywane bajty i udostępnia wcześniej
+wygenerowane strony offline przez HTTP. Oba listenery działają wyłącznie na
+`127.0.0.1`: HTTP na porcie 8037, WebSocket na 8038. Porty zmieniają opcje
+`--port` i `--ws-port`. Ctrl+C zatrzymuje program. Log pozostaje tylko do odczytu;
+serwer nie otwiera portu szeregowego ani nie tworzy brakującego logu.
+
+Opcjonalne `--site` udostępnia strony pod `/`; bez niego `/` zwraca stan serwera.
+`/api/status` zawsze zwraca stan w JSON, a `/assets/` pliki interfejsu dostarczone
+z programem. Pliki statyczne muszą być mniejsze niż 512 KiB; pliki osiągające
+ten limit lub większe otrzymują HTTP 413. Ścieżki poza wskazanymi katalogami są odrzucane. HTTP i WebSocket
+obsługują po czterech klientów.
+
+Endpoint WebSocket to `ws://127.0.0.1:8038/ws`. Wersja 1 protokołu wysyła:
+
+| Wiadomość | Znaczenie |
+| --- | --- |
+| `hello` | `protocol`, bieżąca `epoch`, numer następnej paczki `next`, obecność logu `present` i `ws_port`. |
+| `reset` | Te same pola po pojawieniu się, zniknięciu, obcięciu lub podmianie logu. Klient odrzuca bufory poprzedniej epoki. |
+| `samples` | `epoch`, rosnący `seq` i `records`. Rekord zawiera `kind`, czas `t` w sekundach oraz liczbowe `values` albo tekst zdarzenia `text`. Brakujące i nieskończone wartości to JSON `null`. |
+
+Paczki wychodzą zwykle co 40 ms, a po osiągnięciu 32 KiB wcześniej. Rekordy
+korzystają z czasu MCU, gdy jest dostępny, według zasad poniżej. `HOST`, `TEST`
+i pozostałe komunikaty VP37, w tym koniec śladu, zachowują tekst. Nie oznacza
+to dodania interpretacji rekordów kalibracji.
+
+Nowe połączenie otrzymuje kolejne paczki, bez odtwarzania wcześniejszej historii.
+Numery paczek pozwalają wykryć luki. Po ponownym połączeniu klient zaczyna od
+`hello`; restart serwera rozpoczyna nowy strumień. Klient, który nie przyjmuje
+całej ramki, zostaje rozłączony. Serwer nie kolejkuje danych ani nie ponawia
+częściowo wysłanej ramki. Odrzuca wiadomości danych od klientów; endpoint służy
+wyłącznie do publikowania pomiarów.
+
+Czytnik zachowuje niepełną linię na końcu pliku i odrzuca ją po wykryciu zmiany
+logu. Rozpoznaje ją po tożsamości pliku, rozmiarze i ostatnich 64 odczytanych
+bajtach. Nadpisania, które między odczytami odtworzy te same bajty i rozmiar,
+nie da się odróżnić od zwykłego dopisywania. Przy rotacji używaj atomowej podmiany.
+Jedno wywołanie `poll` czyta najwyżej 64 KiB. Limit linii wynosi 64 KiB,
+rekordu liczbowego 256 różnych pól, a rekordu po zakodowaniu 32512 bajtów.
+Przekroczenie limitu lub błąd odczytu kończy program z błędem. Na brakujący plik
+serwer czeka. Historia parsera i kolejki klientów nie rosną z długością logu.
+
+Wykresy na żywo i integracja VS Code stanowią osobne etapy. Istniejące strony
+offline nadal działają przez `file://`.
+
+## Parser
 
 `src/telemetry.h` udostępnia `TelemetryParser::feed()` i `finish()`. Fragment
 wejścia może skończyć się w dowolnym miejscu linii; przed `finish()` parser
@@ -61,8 +111,12 @@ Pola numeryczne każdego `CFG` są przechowywane osobno od podsumowań rewizji.
 czasu są w C11; istniejący model nagrania i generator stron pozostają w C++17.
 Zmiana wersji parsera unieważnia starszy cache po zmianie jego wyników.
 
-Serwer na żywo, zapis z monitora, integracja VS Code i rekordy kalibracji
-(`CAL`) czekają na implementację. Viewer zgłasza nieznane pola i rodzaje linii.
+Konstruktor z callbackiem przekazuje pojedyncze rekordy bez zachowywania
+nagrania. Przekazane wartości są ważne tylko podczas callbacka; zwrócony błąd
+zatrzymuje czytnik. Parsowanie offline zachowuje dotychczasowe działanie.
+Zapis z monitora, wykresy na żywo, integracja VS Code i interpretacja rekordów
+kalibracji (`CAL`) czekają na implementację. Viewer offline zgłasza nieznane pola
+i rodzaje linii.
 
 Testy przeglądarki uruchamia również hostowy build ECU, w lokalnej bramce
 i CI. Czytają wyłącznie niezależne dane z `tests/fixtures/`.

@@ -18,7 +18,7 @@
  * be read at start shows the RTC as UTC too, without trust. */
 
 /**
- * @brief Open the KV store and read the UTC marker; call after PCF_Init().
+ * @brief Open the KV store and read the UTC marker; call after rtc_Init().
  * @return HAL_OK, or the storage error; without the marker every time write
  *         tries to store it again.
  */
@@ -68,7 +68,7 @@ hal_status_t clockTimeReadUtc(uint32_t *outEpoch, bool *outTrusted);
  * @return HAL_OK, HAL_EINVAL for a NULL @p outLocal, HAL_EPROTO when the RTC
  *         holds no valid date, or the read error, e.g. HAL_EIO for a bus error.
  */
-hal_status_t clockTimeReadLocal(PCF_DateTime *outLocal, bool *outTrusted);
+hal_status_t clockTimeReadLocal(RTC_DateTime *outLocal, bool *outTrusted);
 
 /**
  * @brief Write UTC seconds, check them by reading back, then store the marker.
@@ -94,12 +94,12 @@ hal_status_t clockTimeWriteUtc(uint32_t epoch);
  * @param local Local date and time.
  * @return As clockTimeWriteUtc(); HAL_EINVAL also for an invalid date.
  */
-hal_status_t clockTimeWriteLocal(const PCF_DateTime *local);
+hal_status_t clockTimeWriteLocal(const RTC_DateTime *local);
 
 /**
  * @brief Set the weekday (0 = Monday) from the date.
  * @param dt Date to update; an invalid date keeps its weekday.
  */
-void clockTimeUpdateWeekday(PCF_DateTime *dt);
+void clockTimeUpdateWeekday(RTC_DateTime *dt);
 
 #endif /* FIESTA_CLOCK_TIME_H_ */

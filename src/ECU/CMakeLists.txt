@@ -52,6 +52,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crypto.cpp
+    ${HAL_SRC}/hal/security/jh_sha256.c
     # HAL crypto wrappers call into the shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20.c
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c

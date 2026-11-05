@@ -24,7 +24,7 @@ static bool sc_edit_pending = false;
 static bool can_time_edit = false;
 static int ds18b20_polls = 0;
 static int bus_inits = 0;
-static PCF_DateTime now = {};
+static RTC_DateTime now = {};
 static std::array<uint8_t, 512> greeting;
 static std::array<hal_gpio_mode_t, 32> gpio_modes;
 
@@ -136,24 +136,24 @@ hal_status_t hal_spi_write(uint8_t, const uint8_t *, size_t) {
   return HAL_EIO;
 }
 
-void PCF_Init(unsigned char) {}
-unsigned char PCF_GetDateTime(PCF_DateTime *value) {
+void rtc_Init(unsigned char) {}
+unsigned char rtc_GetDateTime(RTC_DateTime *value) {
   *value = now;
   return 0;
 }
 hal_status_t clockTimeInit(void) { return HAL_OK; }
-hal_status_t clockTimeReadLocal(PCF_DateTime *value, bool *trusted) {
+hal_status_t clockTimeReadLocal(RTC_DateTime *value, bool *trusted) {
   *value = now;
   if (trusted) {
     *trusted = true;
   }
   return HAL_OK;
 }
-hal_status_t clockTimeWriteLocal(const PCF_DateTime *value) {
+hal_status_t clockTimeWriteLocal(const RTC_DateTime *value) {
   now = *value;
   return HAL_OK;
 }
-void clockTimeUpdateWeekday(PCF_DateTime *) {}
+void clockTimeUpdateWeekday(RTC_DateTime *) {}
 hal_status_t clockCanInit(void) { return HAL_OK; }
 void clockCanTick(bool timeEditActive) { can_time_edit = timeEditActive; }
 void configSessionInit(void) {}

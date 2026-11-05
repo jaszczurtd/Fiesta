@@ -7,7 +7,7 @@
 
 #include "clockPart.h"
 
-static PCF_DateTime pcfDateTime;
+static RTC_DateTime rtcDateTime;
 static bool clockSetMode = false;
 
 static unsigned char activeItem = 0;
@@ -36,14 +36,14 @@ static const char *items[CLOCK_SETTABLE_ITEMS] = {day,  month,  year,  weekday,
                                                   hour, minute, second};
 
 void printCurrentItemsState(void) {
-  snprintf(day, sizeof(day), "%02d", pcfDateTime.day);
-  snprintf(month, sizeof(month), "%02d", pcfDateTime.month);
-  snprintf(year, sizeof(year), "%d", pcfDateTime.year);
-  snprintf(hour, sizeof(hour), "%02d", pcfDateTime.hour);
-  snprintf(minute, sizeof(minute), "%02d", pcfDateTime.minute);
-  snprintf(second, sizeof(second), "%02d", pcfDateTime.second);
+  snprintf(day, sizeof(day), "%02d", rtcDateTime.day);
+  snprintf(month, sizeof(month), "%02d", rtcDateTime.month);
+  snprintf(year, sizeof(year), "%d", rtcDateTime.year);
+  snprintf(hour, sizeof(hour), "%02d", rtcDateTime.hour);
+  snprintf(minute, sizeof(minute), "%02d", rtcDateTime.minute);
+  snprintf(second, sizeof(second), "%02d", rtcDateTime.second);
 
-  switch (pcfDateTime.weekday) {
+  switch (rtcDateTime.weekday) {
   case 0:
     strcpy(weekday, "pon.");
     break;
@@ -106,102 +106,102 @@ void setItem(bool increase) {
   switch (activeItem) {
   case D_DAY:
     if (increase) {
-      if (pcfDateTime.day < 31) {
-        pcfDateTime.day++;
+      if (rtcDateTime.day < 31) {
+        rtcDateTime.day++;
       } else {
-        pcfDateTime.day = 1;
+        rtcDateTime.day = 1;
       }
     } else {
-      if (pcfDateTime.day > 1) {
-        pcfDateTime.day--;
+      if (rtcDateTime.day > 1) {
+        rtcDateTime.day--;
       } else {
-        pcfDateTime.day = 31;
+        rtcDateTime.day = 31;
       }
     }
     break;
 
   case D_MONTH:
     if (increase) {
-      if (pcfDateTime.month < 12) {
-        pcfDateTime.month++;
+      if (rtcDateTime.month < 12) {
+        rtcDateTime.month++;
       } else {
-        pcfDateTime.month = 1;
+        rtcDateTime.month = 1;
       }
     } else {
-      if (pcfDateTime.month > 1) {
-        pcfDateTime.month--;
+      if (rtcDateTime.month > 1) {
+        rtcDateTime.month--;
       } else {
-        pcfDateTime.month = 12;
+        rtcDateTime.month = 12;
       }
     }
     break;
 
   case D_YEAR:
     if (increase) {
-      if (pcfDateTime.year < CFG_RTC_MAX_YEAR) {
-        pcfDateTime.year++;
+      if (rtcDateTime.year < CFG_RTC_MAX_YEAR) {
+        rtcDateTime.year++;
       } else {
-        pcfDateTime.year = CFG_RTC_MIN_YEAR;
+        rtcDateTime.year = CFG_RTC_MIN_YEAR;
       }
     } else {
-      if (pcfDateTime.year > CFG_RTC_MIN_YEAR) {
-        pcfDateTime.year--;
+      if (rtcDateTime.year > CFG_RTC_MIN_YEAR) {
+        rtcDateTime.year--;
       } else {
-        pcfDateTime.year = CFG_RTC_MAX_YEAR;
+        rtcDateTime.year = CFG_RTC_MAX_YEAR;
       }
     }
     break;
 
   case D_HOUR:
     if (increase) {
-      if (pcfDateTime.hour < 23) {
-        pcfDateTime.hour++;
+      if (rtcDateTime.hour < 23) {
+        rtcDateTime.hour++;
       } else {
-        pcfDateTime.hour = 0;
+        rtcDateTime.hour = 0;
       }
     } else {
-      if (pcfDateTime.hour > 0) {
-        pcfDateTime.hour--;
+      if (rtcDateTime.hour > 0) {
+        rtcDateTime.hour--;
       } else {
-        pcfDateTime.hour = 23;
+        rtcDateTime.hour = 23;
       }
     }
     break;
 
   case D_MINUTE:
     if (increase) {
-      if (pcfDateTime.minute < 59) {
-        pcfDateTime.minute++;
+      if (rtcDateTime.minute < 59) {
+        rtcDateTime.minute++;
       } else {
-        pcfDateTime.minute = 0;
+        rtcDateTime.minute = 0;
       }
     } else {
-      if (pcfDateTime.minute > 0) {
-        pcfDateTime.minute--;
+      if (rtcDateTime.minute > 0) {
+        rtcDateTime.minute--;
       } else {
-        pcfDateTime.minute = 59;
+        rtcDateTime.minute = 59;
       }
     }
     break;
 
   case D_SECOND:
     if (increase) {
-      if (pcfDateTime.second < 59) {
-        pcfDateTime.second++;
+      if (rtcDateTime.second < 59) {
+        rtcDateTime.second++;
       } else {
-        pcfDateTime.second = 0;
+        rtcDateTime.second = 0;
       }
     } else {
-      if (pcfDateTime.second > 0) {
-        pcfDateTime.second--;
+      if (rtcDateTime.second > 0) {
+        rtcDateTime.second--;
       } else {
-        pcfDateTime.second = 59;
+        rtcDateTime.second = 59;
       }
     }
     break;
   }
   /* The weekday follows the date; it is shown but not set. */
-  clockTimeUpdateWeekday(&pcfDateTime);
+  clockTimeUpdateWeekday(&rtcDateTime);
   setItemVisible();
   pause();
 }
@@ -216,10 +216,10 @@ void setClockSetMode(bool enabled) {
 
 bool isClockSetMode(void) { return clockSetMode; }
 
-void getTime(void) { (void)clockTimeReadLocal(&pcfDateTime, NULL); }
+void getTime(void) { (void)clockTimeReadLocal(&rtcDateTime, NULL); }
 
 static void storeTime(void) {
-  const hal_status_t status = clockTimeWriteLocal(&pcfDateTime);
+  const hal_status_t status = clockTimeWriteLocal(&rtcDateTime);
   if (status != HAL_OK) {
     derr("RTC time not stored as UTC: %s", hal_status_to_string(status));
   }
@@ -350,7 +350,7 @@ void clockMainFunction(void) {
 
   char secondDivider = ' ';
   if (!clockSetMode) {
-    if (pcfDateTime.second % 2 == 0) {
+    if (rtcDateTime.second % 2 == 0) {
       secondDivider = ':';
     }
   } else {
@@ -381,8 +381,8 @@ bool checkIfTimerReached(void) {
   }
 
   /* Only the seconds count here; the shown and edited time stays intact. */
-  PCF_DateTime now = {0};
-  PCF_GetDateTime(&now);
+  RTC_DateTime now = {0};
+  rtc_GetDateTime(&now);
   if (lastSecondValue == -1) {
     lastSecondValue = now.second;
     return false;

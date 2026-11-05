@@ -29,6 +29,8 @@ fi
 # jhbase first: it supplies the pins of unity and other HAL components.
 SOURCE_DEPENDENCIES=(
     jhbase
+    utf8proc
+    pcre2
     bearssl
     cjson
     lodepng

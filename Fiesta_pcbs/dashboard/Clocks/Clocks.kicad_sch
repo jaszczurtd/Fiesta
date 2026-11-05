@@ -4587,6 +4587,16 @@
 		)
 		(uuid "fcc1dff1-bf8e-49c9-b227-68edff6fee85")
 	)
+	(text "ABS"
+		(exclude_from_sim no)
+		(at 101.092 91.694 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+		(uuid "fddd9888-8742-4cbf-96b2-3c6a27a3c61c")
+	)
 	(junction
 		(at 127 142.24)
 		(diameter 0)
@@ -4670,6 +4680,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "520e3867-e3eb-4c0b-a429-0935a1f00d07")
+	)
+	(junction
+		(at 102.87 107.95)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "54508ab6-de92-4740-a666-db5d00f1b920")
 	)
 	(junction
 		(at 142.24 69.85)
@@ -5523,7 +5539,7 @@
 	)
 	(wire
 		(pts
-			(xy 102.87 92.71) (xy 102.87 114.3)
+			(xy 102.87 92.71) (xy 102.87 107.95)
 		)
 		(stroke
 			(width 0)
@@ -5800,6 +5816,16 @@
 			(type default)
 		)
 		(uuid "7aa45981-118f-4e54-9b8e-9f94bcb605ab")
+	)
+	(wire
+		(pts
+			(xy 102.87 107.95) (xy 102.87 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7aad8f04-c7da-4f72-93ae-363646944684")
 	)
 	(wire
 		(pts
@@ -6760,6 +6786,16 @@
 			(type default)
 		)
 		(uuid "fcb873ea-ba67-4f47-894d-1821f2de32c1")
+	)
+	(wire
+		(pts
+			(xy 110.49 107.95) (xy 110.49 114.3)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fed7a570-e562-4fb7-815c-f5083b305457")
 	)
 	(wire
 		(pts
@@ -8434,6 +8470,76 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R")
+		(at 106.68 107.95 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "4e271ae6-bee4-476e-b80b-a3ce0bc4515c")
+		(property "Reference" "R19"
+			(at 105.4099 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+				(hide yes)
+			)
+		)
+		(property "Value" "4k7"
+			(at 107.9499 105.41 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 106.68 109.728 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 106.68 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 106.68 107.95 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "971c7d1e-37e1-4f11-9a05-4325af8b3b4d")
+		)
+		(pin "2"
+			(uuid "73934c6d-20a4-4de7-a5d4-351281c4f405")
+		)
+		(instances
+			(project "Clocks"
+				(path "/d7cff82a-6fa9-4f72-9c9c-4cac4f2ba6d5"
+					(reference "R19")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 110.49 121.92 0)
 		(unit 1)
@@ -9425,7 +9531,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "220R 0.5W"
+		(property "Value" "100R 0.5W"
 			(at 104.902 22.86 90)
 			(effects
 				(font

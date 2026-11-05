@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "builder.h"
+#include "live_server.h"
 #include "log_source.h"
 #include "recording_cache.h"
 #include "runs_model.h"
@@ -27,7 +28,9 @@ void usage() {
              "       vp37-viewer describe --root DIR --cache DIR "
              "--descriptions DIR [--write] "
              "[--overwrite] [ITERATION...]\n"
-             "       vp37-viewer parse LOG\n",
+             "       vp37-viewer parse LOG\n"
+             "       vp37-viewer serve --log FILE [--site DIR] [--port N] "
+             "[--ws-port N]\n",
              stderr);
 }
 
@@ -68,6 +71,14 @@ int main(int argc, char **argv) {
     return 2;
   }
   const std::string command = argv[1];
+  if (command == "serve") {
+    try {
+      return serve_command(argc, argv, VP37V_WEB_DIR);
+    } catch (const std::exception &error) {
+      std::fprintf(stderr, "vp37-viewer: %s\n", error.what());
+      return 1;
+    }
+  }
   BuildOptions options;
   options.web = VP37V_WEB_DIR;
   bool write = false, overwrite = false;

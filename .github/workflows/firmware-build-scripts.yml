@@ -52,6 +52,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup native RP toolchain
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build gcc-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
+          test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
+          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
+            src/JaszczurHAL rp
+
       - name: Validate HAL feature configuration
         if: matrix.module == 'ECU'
         run: |
@@ -70,17 +81,6 @@ jobs:
           name: fiesta-effective-feature-resolution
           path: ${{ runner.temp }}/fiesta-effective-feature-resolution.json
           if-no-files-found: error
-
-      - name: Setup native RP toolchain
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build gcc-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev pkg-config python3
-          test -f "$(arm-none-eabi-g++ -print-file-name=libstdc++.a)"
-          ./src/common/scripts/ensure-jaszczurhal-dependencies.sh \
-            src/JaszczurHAL rp
 
       - name: Verify release build
         working-directory: src/${{ matrix.module }}

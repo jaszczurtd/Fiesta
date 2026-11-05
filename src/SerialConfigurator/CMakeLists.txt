@@ -95,6 +95,7 @@ set(SC_JASZCZURHAL_SECURITY_DIR "${SC_JASZCZURHAL_DIR}/src/hal/security")
 set(SC_JASZCZURHAL_SOURCES
     "${SC_JASZCZURHAL_DIR}/src/hal/core/hal_text.cpp"
     "${SC_JASZCZURHAL_SECURITY_DIR}/hal_crypto.cpp"
+    "${SC_JASZCZURHAL_SECURITY_DIR}/jh_sha256.c"
     "${SC_JASZCZURHAL_SECURITY_DIR}/hal_sc_auth.cpp"
     "${SC_JASZCZURHAL_SECURITY_DIR}/jh_secure_random.cpp"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20.c"

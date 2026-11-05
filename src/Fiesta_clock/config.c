@@ -133,7 +133,7 @@ static bool clockValuesLoadFromRtc(clock_values_t *outValues) {
     return false;
   }
 
-  PCF_DateTime dt = {0};
+  RTC_DateTime dt = {0};
   bool trusted = false;
   if (clockTimeReadLocal(&dt, &trusted) != HAL_OK) {
     return false;
@@ -173,7 +173,7 @@ static bool clockValuesApplyToRtc(const clock_values_t *values) {
     return false;
   }
 
-  const PCF_DateTime dt = {
+  const RTC_DateTime dt = {
       .second = (unsigned char)values->rtc_second,
       .minute = (unsigned char)values->rtc_minute,
       .hour = (unsigned char)values->rtc_hour,

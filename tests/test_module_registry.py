@@ -349,7 +349,7 @@ class RepositoryRegistryTests(unittest.TestCase):
         # A fresh CI checkout has no JaszczurHAL third_party components (jhbase
         # and the rest); a developer tree usually has them, so only this check
         # catches a workflow that configures against HAL without fetching them.
-        build = re.compile(r"cmake -S src/|jh-vscode (?:build|clean)")
+        build = re.compile(r"cmake -S src/|jh-vscode (?:build|clean)|generate_hal_features\.py")
         for path in sorted(WORKFLOWS.glob("*.yml")):
             text = path.read_text(encoding="utf-8")
             first_build = build.search(text)

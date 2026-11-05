@@ -71,6 +71,15 @@ public:
     expected_ = 0;
   }
 
+  const Series &series() const { return series_; }
+  void clear() {
+    series_ = Series{};
+    index_.clear();
+    described_.clear();
+    seen_.clear();
+    expected_ = 0;
+  }
+
   void set(std::string_view key, double value) {
     size_t index;
     if (expected_ < series_.keys.size() && series_.keys[expected_] == key) {
@@ -120,6 +129,9 @@ struct Parser {
   double offset = 0;
   bool mcu_time;
   vp37_sample_clock_t clock{};
+  TelemetrySink sink = nullptr;
+  void *user = nullptr;
+  hal_status_t status = HAL_OK;
 
   explicit Parser(Recording &recording, bool use_mcu_time = false)
       : rec(recording), mcu_time(use_mcu_time) {}
@@ -152,11 +164,23 @@ struct Parser {
       if (colon == std::string_view::npos || colon == 0)
         continue;
       const std::string_view key = token.substr(0, colon);
+      if (sink && out.series().keys.size() >= 256 &&
+          out.series().column(key) < 0) {
+        status = HAL_EOVERFLOW;
+        return;
+      }
       double value;
       if (!parse_value(token.substr(colon + 1), value))
         value = kMissing;
       out.set(key, value);
     }
+  }
+
+  void emit(std::string_view kind, double t, SeriesBuilder *values,
+            std::string_view text) {
+    status = sink(user, {kind, t, values ? &values->series() : nullptr, text});
+    if (values)
+      values->clear();
   }
 
   void config(std::string_view body, double t) {
@@ -286,6 +310,10 @@ struct Parser {
     rec.last_t = t;
 
     if (consume(text, "HOST ")) {
+      if (sink) {
+        emit("HOST", t, nullptr, text);
+        return;
+      }
       HostEvent event;
       event.t = t;
       event.text = "HOST " + std::string(text);
@@ -299,25 +327,42 @@ struct Parser {
     if (consume(text, "ECU:"))
       text = trim(text);
     if (consume(text, "TEST: ")) {
+      if (sink) {
+        emit("TEST", t, nullptr, text);
+        return;
+      }
       test_line(text, t);
       return;
     }
     if (!consume(text, "VP37 "))
       return;
     const std::string_view kind = next_token(text);
-    if (kind == "C") {
-      key_values(text, control, sample_time(text, t, true));
-    } else if (kind == "IPULSE") {
-      key_values(text, pulse, sample_time(text, t, false));
-    } else if (kind == "IWAVE") {
-      key_values(text, wave, sample_time(text, t, false));
-    } else if (kind == "ADJ") {
-      key_values(text, adj, t);
-    } else if (kind == "T") {
-      key_values(text, trace, sample_time(text, t, false));
-    } else if (kind == "CFG") {
-      key_values(text, config_values, t);
-      config(text, t);
+    SeriesBuilder *values = nullptr;
+    if (kind == "C")
+      values = &control;
+    else if (kind == "IPULSE")
+      values = &pulse;
+    else if (kind == "IWAVE")
+      values = &wave;
+    else if (kind == "ADJ")
+      values = &adj;
+    else if (kind == "T")
+      values = &trace;
+    else if (kind == "CFG")
+      values = &config_values;
+    if (values) {
+      const double sample = (kind == "ADJ" || kind == "CFG")
+                                ? t
+                                : sample_time(text, t, kind == "C");
+      key_values(text, *values, sample);
+      if (status != HAL_OK)
+        return;
+      if (sink)
+        emit(kind, sample, values, {});
+      else if (kind == "CFG")
+        config(text, t);
+    } else if (sink) {
+      emit(kind, t, nullptr, text);
     } else if (!kind.empty() && kind.back() != ':') {
       // `VP37 demand: ...` is a plain message; an unknown kind with
       // key:value pairs is a new line type.
@@ -340,6 +385,7 @@ struct Parser {
 } // namespace
 
 struct TelemetryParser::State {
+  Recording streamed;
   Parser parser;
   char line[64 * 1024];
   vp37_line_stream_t stream{};
@@ -349,11 +395,20 @@ struct TelemetryParser::State {
     (void)vp37_line_stream_init(&stream, line, sizeof line, deliver, this);
   }
 
+  State(TelemetrySink sink, void *user, bool mcu_time)
+      : parser(streamed, mcu_time) {
+    if (!sink)
+      throw std::invalid_argument("telemetry sink is null");
+    parser.sink = sink;
+    parser.user = user;
+    (void)vp37_line_stream_init(&stream, line, sizeof line, deliver, this);
+  }
+
   static hal_status_t deliver(void *context, const char *text, size_t length) {
     auto &self = *static_cast<State *>(context);
     try {
       self.parser.line(std::string_view(text, length));
-      return HAL_OK;
+      return self.parser.status;
     } catch (const std::bad_alloc &) {
       return HAL_ENOMEM;
     } catch (...) {
@@ -364,6 +419,9 @@ struct TelemetryParser::State {
 
 TelemetryParser::TelemetryParser(Recording &output, bool mcu_time)
     : state_(new State(output, mcu_time)) {}
+
+TelemetryParser::TelemetryParser(TelemetrySink sink, void *user, bool mcu_time)
+    : state_(new State(sink, user, mcu_time)) {}
 
 TelemetryParser::~TelemetryParser() { delete state_; }
 
