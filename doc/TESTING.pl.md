@@ -86,6 +86,21 @@ odpowiedniego modułu. Aplikację desktopową opisuje
 Listę zarejestrowanych testów pokaże `ctest --test-dir src/ECU/build_test -N`.
 Samo wylistowanie nie uruchamia testów.
 
+Testy ECU można też budować natywnie w MSVC. Po zainstalowaniu Visual Studio
+Build Tools i CMake uruchom w PowerShell:
+
+```powershell
+cmake -S src/ECU -B .build/ecu-x64 -G "Visual Studio 18 2026" -A x64 -DECU_ENABLE_CPPCHECK_TARGET=OFF
+cmake --build .build/ecu-x64 --config Debug --parallel
+ctest --test-dir .build/ecu-x64 -C Debug --output-on-failure -LE static-analysis
+```
+
+Powtórz dla `Release`, a następnie z `-A Win32` w osobnym katalogu builda.
+MSVC używa `/W4 /WX /permissive-` dla bibliotek ECU i wspólnych modułów;
+kod C++ korzysta z C++17. Wrapper cppcheck wymaga powłoki Unix, dlatego
+ten natywny build wyłącza jego target. Analizę statyczną i pozostałe moduły
+hostowe sprawdza pełna bramka na Linuksie.
+
 Same testy wyświetlacza i czasu Fiesta_clock uruchomisz poleceniem:
 
 ```bash

@@ -57,7 +57,7 @@ set(ECU_VP37_SOURCES ${VP37_SOURCES})
 list(REMOVE_ITEM ECU_VP37_SOURCES
     ${VP37_SOURCE_DIR}/vp37_current.c ${VP37_SOURCE_DIR}/vp37_maps.c)
 set(ECU_TEST_FIXTURE_SOURCES ${ECU_VP37_SOURCES} ../tests.c ../tests_workers.c
-    ../tests_helpers.c)
+    ../tests_helpers.c ${TEST_RUNNER_SOURCES})
 # The tests-layer cases need the real test layer; the plain binary runs the
 # adapter cases against the stubs.
 add_executable(test_vp37_adapter_bench test_vp37_adapter.cpp
@@ -154,11 +154,25 @@ target_compile_definitions(test_vp37_hold_at_min
 target_link_libraries(test_vp37_hold_at_min PRIVATE ecu_mock)
 add_test(NAME test_vp37_hold_at_min COMMAND test_vp37_hold_at_min)
 add_test(NAME test_tests_registry COMMAND test_tests_registry)
+add_test(NAME test_tests_console COMMAND ${CMAKE_COMMAND}
+    "-DREGISTRY_TEST=$<TARGET_FILE:test_tests_registry>"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/check_tests_console.cmake")
 add_test(NAME test_tests_registry_no_interlock
     COMMAND test_tests_registry_no_interlock)
+add_executable(test_test_runner
+    ../../common/test_runner/tests/test_test_runner.cpp ${TEST_RUNNER_SOURCES})
+target_link_libraries(test_test_runner PRIVATE ecu_mock)
+add_test(NAME test_test_runner COMMAND test_test_runner)
 add_ecu_test(test_rpm)
 
 if(UNIX)
+    add_executable(misra_cppcheck_stub misra_cppcheck_stub.c)
+    add_test(NAME test_misra_inputs COMMAND ${CMAKE_COMMAND}
+        "-DMISRA_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/../misra/check_misra.sh"
+        "-DCPPCHECK_STUB=$<TARGET_FILE:misra_cppcheck_stub>"
+        "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_misra_inputs.cmake")
+    set_tests_properties(test_misra_inputs PROPERTIES LABELS "static-analysis")
     add_test(NAME test_bootstrap_dependencies
         COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/test_bootstrap_dependencies.sh")
 endif()

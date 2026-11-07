@@ -544,6 +544,29 @@ typedef struct {
 JB_STATIC_ASSERT(sizeof(VP37TraceSample) <= 148U,
                  "VP37 trace record exceeds its RP2040 RAM budget");
 
+/** @brief One consecutive control step for bench metrics. Times are MCU
+ * microseconds; position and frequencies are Hz. Latch timing belongs to the
+ * latest reduced current scan, which may precede this control step. */
+typedef struct {
+  uint32_t us, dt, sequence;
+  int32_t target, desired, measured, pwm;
+  uint32_t rawHz, filteredHz, sampleNumber, measuredUs, readUs, pidDtUs;
+  uint32_t cyclicDelayMs, driveSamples, latchUs, latchPeriodUs, commandUs;
+  float thermalScale, requestedPercent;
+  hal_status_t readStatus;
+  uint16_t ageUs;
+  uint8_t status;
+  bool fresh, driveUsed, latchValid, commandMatched, quantityAtRest;
+} VP37MetricSample;
+
+/** @brief Audit of a completed metric stream, including empty captures.
+ * A reader must receive every sample from firstSequence through lastSequence
+ * and reject overflow, gaps or a missing completion record. */
+typedef struct {
+  uint32_t startedUs, finishedUs, samples, firstSequence, lastSequence;
+  bool overflow;
+} VP37MetricResult;
+
 /** @brief One MIN/MAX qualification sample, retained until USB export. */
 typedef struct {
   adjustometer_reading_t reading; /**< Exact input used by the estimator. */
@@ -619,6 +642,38 @@ hal_status_t VP37_takeTraceCompletion(uint32_t *count);
 bool VP37_traceCapturing(void);
 /** @brief Print a non-NULL captured sample. */
 void VP37_showTrace(const VP37TraceSample *sample);
+
+/** @brief Start streaming consecutive steps on the control core.
+ * @param self Running pump, non-NULL.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN if stopped, or HAL_EBUSY
+ * while a trace, calibration or previous stream still owns the shared buffer.
+ * The producer never waits. A full buffer ends the stream with overflow. */
+hal_status_t VP37_startMetricStream(const VP37Pump *self);
+/** @brief End a stream on the control core, retaining samples for the reader.
+ * @return HAL_OK, or HAL_ENOENT when no stream is recording. */
+hal_status_t VP37_stopMetricStream(void);
+/** @brief Copy the next step on the single reading core, even during capture.
+ * @param sample Non-NULL destination, unchanged on failure.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN when temporarily empty,
+ * or HAL_ENOENT when inactive or completely drained. */
+hal_status_t VP37_readMetricSample(VP37MetricSample *sample);
+/** @brief Take the audit after draining a stopped stream, releasing its buffer.
+ * Call only on the reading core; NULL returns HAL_EINVAL, pending/inactive
+ * returns HAL_EAGAIN. The destination changes only on HAL_OK. */
+hal_status_t VP37_takeMetricResult(VP37MetricResult *result);
+/** @brief Format one VP37 N line including CRLF for a single serial write.
+ * @param sample Non-NULL recorded step.
+ * @param buffer Non-NULL destination; 480 bytes cover normal controller values.
+ * @param capacity Buffer size including the terminator, greater than zero.
+ * @return HAL_OK, HAL_EOVERFLOW when the line does not fit, or HAL_EINVAL for
+ * invalid arguments including nonfinite/out-of-range percent or scale
+ * (percent -1..100, scale 0..10). thr10 is percent times 10; tsc10000 is scale
+ * times 10000, rounded to the nearest integer. On HAL_OK, pass the buffer
+ * to hal_serial_print(); it has no debug prefix and needs no extra newline. */
+hal_status_t VP37_formatMetricSample(const VP37MetricSample *sample,
+                                     char *buffer, size_t capacity);
+/** @brief Print a completed stream audit as VP37 STREAM END. */
+void VP37_showMetricResult(const VP37MetricResult *result);
 /** @brief Drain one calibration sample on the console core.
  * @param sample Non-NULL output, unchanged on failure.
  * @return HAL_OK, HAL_EINVAL for NULL, HAL_EAGAIN during recording, or

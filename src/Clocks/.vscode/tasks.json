@@ -353,6 +353,23 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Project: Refresh IntelliSense variant: TIMING",
+      "detail": "Update IntelliSense data for the TIMING variant: Clocks with CAN, gauge and display timing statistics.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "refresh-intellisense",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "TIMING"
+      ],
+      "problemMatcher": []
+    },
+    {
       "label": "Project: Check device tree",
       "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
       "type": "shell",

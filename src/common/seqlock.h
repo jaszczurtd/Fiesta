@@ -14,26 +14,26 @@ extern "C" {
  * @file seqlock.h
  * @brief Single-writer sequence lock for a few words shared between the cores.
  *
- * The writer brackets its stores with ecuSeqlockWriteBegin() and
- * ecuSeqlockWriteEnd(); the sequence is odd in between. A reader loads the
+ * The writer brackets its stores with fiestaSeqlockWriteBegin() and
+ * fiestaSeqlockWriteEnd(); the sequence is odd in between. A reader loads the
  * sequence, copies the words, and accepts the copy only when
- * ecuSeqlockReadConsistent() confirms that no write began or completed in the
- * meantime. Neither side ever waits: a reader that keeps overlapping writes
+ * fiestaSeqlockReadConsistent() confirms that no write began or completed in
+ * the meantime. Neither side ever waits: a reader that keeps overlapping writes
  * gives up after a few attempts, which the caller decides.
  */
 typedef struct {
   uint32_t sequence; /**< Even between writes, odd during one. */
-} ecu_seqlock_t;
+} fiesta_seqlock_t;
 
 /** @brief Read attempts after which a reader gives up on a busy writer. */
-#define ECU_SEQLOCK_READ_ATTEMPTS 4u
+#define FIESTA_SEQLOCK_READ_ATTEMPTS 4u
 
 /**
  * @brief Begin a write on the single writer core.
  * @param lock Lock of the shared words.
- * @return Sequence before the write, to pass to ecuSeqlockWriteEnd().
+ * @return Sequence before the write, to pass to fiestaSeqlockWriteEnd().
  */
-static inline uint32_t ecuSeqlockWriteBegin(ecu_seqlock_t *lock) {
+static inline uint32_t fiestaSeqlockWriteBegin(fiesta_seqlock_t *lock) {
   const uint32_t sequence =
       HAL_ATOMIC_LOAD(&lock->sequence, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&lock->sequence, sequence + 1u, HAL_ATOMIC_RELAXED);
@@ -44,30 +44,31 @@ static inline uint32_t ecuSeqlockWriteBegin(ecu_seqlock_t *lock) {
 /**
  * @brief Complete a write: publishes the words stored since the begin.
  * @param lock Lock of the shared words.
- * @param begun Value returned by ecuSeqlockWriteBegin().
+ * @param begun Value returned by fiestaSeqlockWriteBegin().
  */
-static inline void ecuSeqlockWriteEnd(ecu_seqlock_t *lock, uint32_t begun) {
+static inline void fiestaSeqlockWriteEnd(fiesta_seqlock_t *lock,
+                                         uint32_t begun) {
   HAL_ATOMIC_STORE(&lock->sequence, begun + 2u, HAL_ATOMIC_RELEASE);
 }
 
 /**
  * @brief Begin a read attempt: load the sequence before copying the words.
  * @param lock Lock of the shared words.
- * @return Sequence to pass to ecuSeqlockReadConsistent().
+ * @return Sequence to pass to fiestaSeqlockReadConsistent().
  */
-static inline uint32_t ecuSeqlockReadBegin(ecu_seqlock_t *lock) {
+static inline uint32_t fiestaSeqlockReadBegin(fiesta_seqlock_t *lock) {
   return HAL_ATOMIC_LOAD(&lock->sequence, HAL_ATOMIC_ACQUIRE);
 }
 
 /**
  * @brief Tell whether the words copied since the begin form one write.
  * @param lock Lock of the shared words.
- * @param begun Value returned by ecuSeqlockReadBegin().
+ * @param begun Value returned by fiestaSeqlockReadBegin().
  * @return true when no write was in progress at the begin and none began
  *         since; the copy is then consistent.
  */
-static inline bool ecuSeqlockReadConsistent(ecu_seqlock_t *lock,
-                                            uint32_t begun) {
+static inline bool fiestaSeqlockReadConsistent(fiesta_seqlock_t *lock,
+                                               uint32_t begun) {
   HAL_ATOMIC_THREAD_FENCE(HAL_ATOMIC_ACQUIRE);
   return ((begun & 1u) == 0u) &&
          (HAL_ATOMIC_LOAD(&lock->sequence, HAL_ATOMIC_RELAXED) == begun);

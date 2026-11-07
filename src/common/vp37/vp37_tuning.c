@@ -213,8 +213,8 @@ hal_status_t VP37_setTuning(VP37Pump *self, VP37TuningParam param,
   hal_status_t status = HAL_EINVAL;
   if ((self != NULL) && VP37_tuningAccepts(param, value)) {
     if ((param == VP37_TUNING_RESEARCH_REFERENCE_WEIGHT) &&
-        (!self->demand.atRest || self->demand.requestedPercent != 0.0f ||
-         self->output.finalPWM != 0 ||
+        (!self->demand.atRest || (self->demand.requestedPercent != 0.0f) ||
+         (self->output.finalPWM != 0) ||
          ((value < 1.0f) &&
           (!self->pid.fullRangePrototype || !(self->pid.ki > 0.0f) ||
            ((self->pid.researchFreezeMask &

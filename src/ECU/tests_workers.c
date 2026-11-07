@@ -16,7 +16,7 @@
 #include "../common/scDefinitions/sc_command_handlers.h"
 #include "../common/scDefinitions/sc_protocol.h"
 
-#include "seqlock.h"
+#include "../common/seqlock.h"
 #include <hal/core/hal_compiler.h>
 #include <math.h>
 
@@ -321,7 +321,7 @@ typedef enum {
   STEP_EVENT_POT,
 } step_event_kind_t;
 
-static ecu_seqlock_t s_stepEventLock;
+static fiesta_seqlock_t s_stepEventLock;
 static uint32_t
     s_stepEventPrintedSeq; /* core 0 writes, the control core reads */
 static uint32_t s_stepEventKind;
@@ -336,13 +336,13 @@ void (*testsWorkersStepEventReadHookForTest)(void) = NULL;
 
 static void recordStepEvent(step_event_kind_t kind, int32_t value, int32_t rate,
                             uint32_t count, uint32_t total) {
-  const uint32_t begun = ecuSeqlockWriteBegin(&s_stepEventLock);
+  const uint32_t begun = fiestaSeqlockWriteBegin(&s_stepEventLock);
   HAL_ATOMIC_STORE(&s_stepEventKind, (uint32_t)kind, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventValue, value, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventRate, rate, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventCount, count, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventTotal, total, HAL_ATOMIC_RELAXED);
-  ecuSeqlockWriteEnd(&s_stepEventLock, begun);
+  fiestaSeqlockWriteEnd(&s_stepEventLock, begun);
 }
 
 static int32_t demandTenths(float demand) {
@@ -458,8 +458,9 @@ bool testsWorkersStepEventPending(void) {
 }
 
 void testsWorkersPrintStepEvent(void) {
-  for (uint32_t attempt = 0U; attempt < ECU_SEQLOCK_READ_ATTEMPTS; attempt++) {
-    const uint32_t sequence = ecuSeqlockReadBegin(&s_stepEventLock);
+  for (uint32_t attempt = 0U; attempt < FIESTA_SEQLOCK_READ_ATTEMPTS;
+       attempt++) {
+    const uint32_t sequence = fiestaSeqlockReadBegin(&s_stepEventLock);
     if (sequence ==
         HAL_ATOMIC_LOAD(&s_stepEventPrintedSeq, HAL_ATOMIC_RELAXED)) {
       return; /* nothing new */
@@ -477,7 +478,7 @@ void testsWorkersPrintStepEvent(void) {
         HAL_ATOMIC_LOAD(&s_stepEventCount, HAL_ATOMIC_RELAXED);
     const uint32_t total =
         HAL_ATOMIC_LOAD(&s_stepEventTotal, HAL_ATOMIC_RELAXED);
-    if (!ecuSeqlockReadConsistent(&s_stepEventLock, sequence)) {
+    if (!fiestaSeqlockReadConsistent(&s_stepEventLock, sequence)) {
       continue; /* the control core wrote meanwhile: read again */
     }
     if (kind == (uint32_t)STEP_EVENT_TOP) {

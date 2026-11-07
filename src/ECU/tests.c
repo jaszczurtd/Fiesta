@@ -5,7 +5,7 @@
  * the configurator, and the fixture behind it.
  *
  * What each test does lives in tests_workers.c; the runner that starts,
- * sequences and supervises them lives in tests_helpers.c.
+ * sequences and supervises them lives in ../common/test_runner/.
  */
 
 #include "tests.h"

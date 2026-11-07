@@ -1,7 +1,7 @@
 #include "rtcTime.h"
 
+#include "../common/seqlock.h"
 #include "config.h"
-#include "seqlock.h"
 #include <hal/core/hal_compiler.h>
 #include <hal/system/hal_system.h>
 
@@ -9,7 +9,7 @@
 #include <stddef.h>
 
 /* Odd while rtcTimeStore() changes the two words below. */
-static ecu_seqlock_t s_lock = {0u};
+static fiesta_seqlock_t s_lock = {0u};
 static uint32_t s_utc = 0u; /* 0 = no trusted time */
 static uint32_t s_receivedMs = 0u;
 
@@ -18,10 +18,10 @@ void (*rtcTimeReadHookForTest)(void) = NULL;
 #endif
 
 static void publish(uint32_t utc, uint32_t receivedMs) {
-  const uint32_t begun = ecuSeqlockWriteBegin(&s_lock);
+  const uint32_t begun = fiestaSeqlockWriteBegin(&s_lock);
   HAL_ATOMIC_STORE(&s_utc, utc, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_receivedMs, receivedMs, HAL_ATOMIC_RELAXED);
-  ecuSeqlockWriteEnd(&s_lock, begun);
+  fiestaSeqlockWriteEnd(&s_lock, begun);
 }
 
 void rtcTimeStore(uint32_t utc) { publish(utc, hal_millis()); }
@@ -40,8 +40,8 @@ uint32_t rtcTimeGetUtc(void) {
   uint32_t result = 0u;
   bool consistent = false;
   for (uint32_t attempt = 0u;
-       (attempt < ECU_SEQLOCK_READ_ATTEMPTS) && !consistent; attempt++) {
-    const uint32_t sequence = ecuSeqlockReadBegin(&s_lock);
+       (attempt < FIESTA_SEQLOCK_READ_ATTEMPTS) && !consistent; attempt++) {
+    const uint32_t sequence = fiestaSeqlockReadBegin(&s_lock);
     const uint32_t utc = HAL_ATOMIC_LOAD(&s_utc, HAL_ATOMIC_RELAXED);
 #ifdef UNIT_TEST
     if (rtcTimeReadHookForTest != NULL) {
@@ -50,7 +50,7 @@ uint32_t rtcTimeGetUtc(void) {
 #endif
     const uint32_t receivedMs =
         HAL_ATOMIC_LOAD(&s_receivedMs, HAL_ATOMIC_RELAXED);
-    consistent = ecuSeqlockReadConsistent(&s_lock, sequence);
+    consistent = fiestaSeqlockReadConsistent(&s_lock, sequence);
     if (consistent) {
       const uint32_t nowMs = hal_millis();
       if ((utc != 0u) &&

@@ -108,17 +108,24 @@ Rule: **8.7**. Type: `accepted-deviation`. Status: `open`.
 
 Scope: `src/ECU/engineMaps.c` and the VP37 module in `src/common/vp37`: `vp37.c`, `vp37_feedback.c`, `vp37_compensation.c`, `vp37_control.c`, `vp37_telemetry.c`, `vp37_current.c`.
 
-Suppression: `misra-c2012-8.7:*vp37/vp37.c`, `misra-c2012-8.7:*vp37/vp37_current.c`.
+Suppression: `misra-c2012-8.7:*vp37/vp37.c`, `misra-c2012-8.7:*vp37/vp37_current.c`,
+and inline rule 8.7 suppressions on `VP37_hasMeasuredDescent` and
+`VP37_updateSlowDamping` in `vp37_control.c`.
 
 Advisory. The engine maps are data with external linkage consumed by one module each by
 design, so one table can only be edited in one place. The VP37 module is split into
 thematic translation units whose step functions have a single caller in another unit;
-folding them back into the caller's file would undo the split. The screening runs over
-`src/ECU/*.c` and `src/common/vp37/*.c` only, so functions consumed by the host tests
-also read as referenced from one unit; a symbol a file defines without using it itself,
-as the maps and the split's step functions are, is not reported by this checker at all,
-so only the two units that still call their own external functions carry a suppression.
-Decided 2026-09-16.
+folding them back into the caller's file would undo the split. The screening excludes
+host tests, so functions consumed by those tests can appear to have one caller unit.
+A symbol defined without local calls, such as the maps and split step functions,
+is not reported by this checker.
+
+`VP37_updateSlowDamping` is tested directly in `tests/test_vp37.cpp`.
+`VP37_hasMeasuredDescent` is also called by `vp37_telemetry.c` when telemetry
+is enabled. Their inline suppressions cover only those declarations; they
+preserve both consumers and do not suppress other findings in the file.
+The deviation was accepted on 2026-09-16; these two applications were recorded
+on 2026-11-06 after restoring the shared-source scan.
 
 ## DR-006
 
@@ -172,7 +179,7 @@ ThreadSanitizer. Decided 2026-09-30.
 
 Rule: **21.25 (Amendment 4)**. Type: `accepted-deviation`. Status: `open`.
 
-Scope: JaszczurHAL `HAL_ATOMIC_*` with relaxed, acquire, release or acquire-release order in `src/common/vp37/vp37_snapshot.c` (publication of the VP37 snapshot), `src/common/vp37/vp37_telemetry.c` (hand-over of the bench trace buffer) and `src/ECU/tests_helpers.c` (console line queue, configurator request, contact time and session flag, test parameters).
+Scope: JaszczurHAL `HAL_ATOMIC_*` with relaxed, acquire, release or acquire-release order in `src/common/vp37/vp37_snapshot.c` (publication of the VP37 snapshot), `src/common/vp37/vp37_telemetry.c` (hand-over of the bench trace buffer), `src/common/test_runner/test_runner.c` (console line queue, configurator request, contact time and session flag, test parameters) and `src/ECU/tests_helpers.c` (pending replies to parameter resets).
 
 Suppression: none.
 

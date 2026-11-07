@@ -478,7 +478,7 @@ int32_t readThrottle(void) {
  */
 int32_t getThrottlePercentage(void) {
   int32_t currentVal = (int32_t)(getGlobalValue(F_THROTTLE_POS));
-  float percent = (currentVal * 100) / PWM_RESOLUTION;
+  float percent = (float)((currentVal * 100) / PWM_RESOLUTION);
   return hal_math_percent_to_value(percent, 100);
 }
 
@@ -728,7 +728,7 @@ void readThrottleValues(void) {
 }
 
 void readHighValues(void) {
-  setGlobalValue(F_RPM, RPM_getCurrentRPM(getRPMInstance()));
+  setGlobalValue(F_RPM, (float)RPM_getCurrentRPM(getRPMInstance()));
   setGlobalValue(F_PRESSURE, readBarPressure());
   setGlobalValue(F_CALCULATED_ENGINE_LOAD, (float)getPercentageEngineLoad());
 

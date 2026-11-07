@@ -89,7 +89,7 @@ float readFuel(void) {
   }
 #endif
 
-  return s_engineFuel.lastResult;
+  return (float)s_engineFuel.lastResult;
 }
 
 /**

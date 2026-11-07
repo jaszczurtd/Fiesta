@@ -477,8 +477,8 @@ bool HAL_RAM_FUNC(VP37_controlDueWithin)(const VP37Pump *self, uint32_t nowUs,
   if (self == NULL) {
     return false;
   }
-  return !self->controlStarted ||
-         ((int32_t)(self->controlDueUs - nowUs) <= (int32_t)marginUs);
+  const uint32_t remainingUs = self->controlDueUs - nowUs;
+  return !self->controlStarted || ((int32_t)remainingUs <= (int32_t)marginUs);
 }
 
 void VP37_process(VP37Pump *self) {
@@ -503,7 +503,8 @@ void VP37_process(VP37Pump *self) {
   if (!self->controlStarted) {
     self->controlDueUs = nowUs;
   }
-  const int32_t lateUs = (int32_t)(nowUs - self->controlDueUs);
+  const uint32_t elapsedUs = nowUs - self->controlDueUs;
+  const int32_t lateUs = (int32_t)elapsedUs;
   if (lateUs < 0) {
     return;
   }

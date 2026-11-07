@@ -1,6 +1,7 @@
 #ifndef T_TESTS_HELPERS
 #define T_TESTS_HELPERS
 
+#include "../common/test_runner/test_runner.h"
 #include "tests.h"
 
 #ifdef __cplusplus
@@ -9,10 +10,9 @@ extern "C" {
 
 /**
  * @file tests_helpers.h
- * @brief Everything around the suite of tests.c that is not a test itself:
- * the runtime parameters, the entry format of the suite and the runner behind
- * tests.h, which owns the console, the sequence and the configurator surface.
- * What the tests do lives in tests_workers.h.
+ * @brief ECU parameter IDs and adapter to the shared functional-test runner.
+ * VP37 commands and output policy stay in tests_helpers.c; the suite workers
+ * live in tests_workers.h. The common runner owns transport and sequencing.
  *
  * Everything here follows ECU_FUNCTIONAL_TESTS_ENABLED: with tests disabled
  * tests_helpers.c only provides the idle stubs of tests.h and nothing below
@@ -30,7 +30,7 @@ extern "C" {
   "[0m"
 
 /** @brief Longest console line the test layer accepts. */
-#define VP37_CMD_BUF_SIZE 64U
+#define VP37_CMD_BUF_SIZE FIESTA_TEST_COMMAND_SIZE
 
 /** @brief Full 0-100-0 cycles per profile, by default. */
 #ifndef CYCLIC_FULL_CYCLES
@@ -126,14 +126,7 @@ typedef enum {
 } test_param_id_t;
 
 /** @brief Fixed description of one runtime parameter. */
-typedef struct {
-  const char *id;     /**< Wire id, SC_TEST_PARAM_*. */
-  ecu_test_id_t test; /**< Test that reads it. */
-  const char *unit;   /**< Unit token, SC_TEST_UNIT_*. */
-  int32_t min;
-  int32_t max;
-  int32_t def; /**< Value after a restart or command R. */
-} test_param_desc_t;
+typedef fiesta_test_param_t test_param_desc_t;
 
 /**
  * @brief Description of one runtime parameter.
@@ -156,24 +149,7 @@ int32_t testsHelpersParam(test_param_id_t param);
 struct sc_command_test_field_s;
 
 /** @brief One test of the suite in tests.c. */
-typedef struct {
-  ecu_test_id_t id;
-  const char *name;    /**< Console name after "run". */
-  const char *summary; /**< One line for "list". */
-  bool drivesDemand;   /**< Owns the actuator demand while running. */
-  bool sequenced;      /**< Part of the "run all" sequence. */
-  bool scSupported;    /**< Offered to SerialConfigurator; a test that never
-                            ends or leaves a fault behind is not. */
-  void (*start)(void); /**< Optional initializer; one-shots run on core 0. */
-  float (*step)(bool *outFinished); /**< Demand per control step; NULL finishes
-                                       after start has run on core 0. */
-  const char *(*result)(void); /**< Result token once finished; NULL reports
-                                    SC_TEST_RESULT_DONE. */
-  size_t (*progress)(struct sc_command_test_field_s *fields,
-                     size_t capacity); /**< Progress values while running,
-                                            called on the controller core;
-                                            NULL reports none. */
-} ecu_test_t;
+typedef fiesta_test_t ecu_test_t;
 
 /**
  * @brief The suite defined in tests.c, in sequence order.

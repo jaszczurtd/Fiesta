@@ -78,7 +78,7 @@ void engineFan_process(engineFan *self) {
     self->fanEnabled = FAN_REASON_NONE;
   }
 
-  setGlobalValue(F_FAN_ENABLED, self->fanEnabled);
+  setGlobalValue(F_FAN_ENABLED, (float)self->fanEnabled);
   if (self->lastFanStatus != self->fanEnabled) {
     engineFan_fan(self, engineFan_isFanEnabled(self));
     self->lastFanStatus = self->fanEnabled;

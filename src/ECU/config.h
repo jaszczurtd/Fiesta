@@ -4,10 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Fiesta-project firmware identity for the configurator HELLO response. */
 #ifndef FW_VERSION
 #define FW_VERSION "0.1.0"
@@ -188,7 +184,9 @@ extern "C" {
 #endif
 
 // Core 1 starts no other work (Turbo, RPM, test demand) when the next VP37
-// step is due within this time [us]; it waits for the deadline instead. It has
+// step is due within this time [us]; it waits for the deadline instead. An
+// already due step still allows those services to avoid starving demand/stop
+// processing when the configured period is shorter than the work. The guard has
 // to cover the longest such piece of work: the `late` field of the VP37 CFG
 // line shows how far that work ran past a deadline with the value in use.
 #define CORE1_VP37_GUARD_US 400u
@@ -265,6 +263,10 @@ extern "C" {
 #define ecu_TotalDistanceKmDefault 200000u
 
 #include "hardwareConfig.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   int16_t fanCoolantStartC;

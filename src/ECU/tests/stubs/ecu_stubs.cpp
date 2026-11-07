@@ -10,6 +10,7 @@
 
 #include "ecuContext.h"
 #include "rpm.h"
+#include <hal/core/hal_compiler.h>
 
 #include <utils/multicoreWatchdog.h>
 
@@ -31,8 +32,7 @@ void watchdog_feed(void) {}
 static char s_lastForwardedLine[128] = {0};
 static unsigned s_forwardedCount = 0;
 
-extern "C" __attribute__((weak)) void
-tickTestsHandleSerialLine(const char *line) {
+HAL_WEAK_FUNCTION(void, tickTestsHandleSerialLine, (const char *line)) {
   s_forwardedCount++;
   if (line == nullptr) {
     s_lastForwardedLine[0] = '\0';
@@ -59,26 +59,19 @@ extern "C" void test_stubs_reset_forwarded_serial(void) {
   s_forwardedCount = 0;
 }
 
-extern "C" __attribute__((weak)) const char *testsActiveName(void) {
-  return nullptr;
-}
+HAL_WEAK_FUNCTION(const char *, testsActiveName, (void)) { return nullptr; }
 
-extern "C" __attribute__((weak)) uint32_t testsCyclicDelayMs(void) {
-  return 0u;
-}
+HAL_WEAK_FUNCTION(uint32_t, testsCyclicDelayMs, (void)) { return 0u; }
 
 // Without tests.c the configurator service gets no test operations, the same
 // surface as a module that has no functional tests.
-extern "C" __attribute__((weak)) const struct sc_command_test_ops_s *
-testsScOps(void) {
+HAL_WEAK_FUNCTION(const struct sc_command_test_ops_s *, testsScOps, (void)) {
   return nullptr;
 }
 
 static unsigned s_sessionEndedCount = 0;
 
-extern "C" __attribute__((weak)) void testsScSessionEnded(void) {
-  s_sessionEndedCount++;
-}
+HAL_WEAK_FUNCTION(void, testsScSessionEnded, (void)) { s_sessionEndedCount++; }
 
 extern "C" unsigned test_stubs_session_ended_count(void) {
   return s_sessionEndedCount;

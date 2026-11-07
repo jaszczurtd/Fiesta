@@ -7,7 +7,7 @@ usage() {
 Usage: check_misra.sh [options]
 
 Run a project-local MISRA screening pass using cppcheck's MISRA addon.
-The default project is src/ECU, whose scan also covers src/common/vp37.
+The default project is src/ECU, whose scan also covers VP37 and the test runner.
 
 Options:
   -c, --cppcheck <path>       cppcheck executable or absolute path; default:
@@ -45,7 +45,7 @@ json_escape() {
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project_root=$(cd "$script_dir/.." && pwd)
 suppressions_file="$script_dir/suppressions.txt"
-extra_source_globs=("../common/vp37/*.c")
+extra_source_dirs=("../common/vp37" "../common/test_runner")
 fail_paths=""
 out_dir="$script_dir/.results"
 addon_python="${CPPCHECK_ADDON_PYTHON:-python3}"
@@ -89,7 +89,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --project)
             project_root=$(cd "$2" && pwd)
-            extra_source_globs=()
+            extra_source_dirs=()
             if [[ -f "$project_root/misra/suppressions.txt" ]]; then
                 suppressions_file="$project_root/misra/suppressions.txt"
             fi
@@ -237,6 +237,19 @@ fi
 
 pushd "$project_root" >/dev/null
 
+# Expand each directory here: cppcheck silently skips literal wildcard paths
+# when other inputs exist. Reject an empty source directory instead.
+source_paths=()
+for directory in . "${extra_source_dirs[@]}"; do
+    for source in "$directory"/*.c; do
+        if [[ ! -f "$source" ]]; then
+            echo "No C sources found in $directory" >&2
+            exit 2
+        fi
+        source_paths+=("${source#./}")
+    done
+done
+
 set +e
 "$cppcheck_bin" \
     --addon="$addon_arg" \
@@ -256,8 +269,7 @@ set +e
     --suppress=knownConditionTrueFalse \
     --suppress=checkersReport \
     "${quiet_args[@]}" \
-    *.c \
-    "${extra_source_globs[@]}" \
+    "${source_paths[@]}" \
     2>&1 | tee "$results_file"
 cppcheck_status=${PIPESTATUS[0]}
 set -e

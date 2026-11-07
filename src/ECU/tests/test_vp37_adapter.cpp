@@ -15,6 +15,24 @@
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 
+void test_overdue_control_keeps_demand_and_stop_services_schedulable(void) {
+  VP37Pump *pump = &getECUContext()->injectionPump;
+  pump->controlDueUs = 1000U;
+  pump->controlStarted = false;
+  TEST_ASSERT_FALSE(vp37AdapterCanServiceCore1(pump, 0U));
+  pump->controlStarted = true;
+  TEST_ASSERT_TRUE(vp37AdapterCanServiceCore1(pump, 599U));
+  TEST_ASSERT_FALSE(vp37AdapterCanServiceCore1(pump, 600U));
+  TEST_ASSERT_FALSE(vp37AdapterCanServiceCore1(pump, 999U));
+  TEST_ASSERT_TRUE(vp37AdapterCanServiceCore1(pump, 1000U));
+  TEST_ASSERT_TRUE(vp37AdapterCanServiceCore1(pump, 2700U));
+  // The same guard and overdue recovery across the MCU clock wrap.
+  pump->controlDueUs = 200U;
+  TEST_ASSERT_FALSE(vp37AdapterCanServiceCore1(pump, UINT32_MAX - 100U));
+  TEST_ASSERT_TRUE(vp37AdapterCanServiceCore1(pump, 201U));
+  TEST_ASSERT_FALSE(vp37AdapterCanServiceCore1(nullptr, 201U));
+}
+
 void setUp(void) { setUpVp37Fixture(); }
 
 void tearDown(void) {
@@ -324,6 +342,7 @@ void test_vp37_reinitialization_does_not_exhaust_pwm_channels(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_overdue_control_keeps_demand_and_stop_services_schedulable);
   RUN_TEST(test_vp37_sensor_demand_uses_shared_ramp_and_motion_feedforward);
 
   RUN_TEST(test_vp37_process_disables_when_rpm_above_max);

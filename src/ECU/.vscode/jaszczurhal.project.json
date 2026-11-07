@@ -11,7 +11,7 @@
         "cache": {
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "ECU",
-            "JH_EXTRA_SOURCES": "../common/vp37/vp37.c;../common/vp37/vp37_adjustometer.c;../common/vp37/vp37_snapshot.c;../common/vp37/vp37_tuning.c;../common/vp37/vp37_feedback.c;../common/vp37/vp37_compensation.c;../common/vp37/vp37_control.c;../common/vp37/vp37_telemetry.c;../common/vp37/vp37_current.c;../common/vp37/vp37_current_control.c;../common/vp37/vp37_maps.c"
+            "JH_EXTRA_SOURCES": "../common/vp37/vp37.c;../common/vp37/vp37_adjustometer.c;../common/vp37/vp37_snapshot.c;../common/vp37/vp37_tuning.c;../common/vp37/vp37_feedback.c;../common/vp37/vp37_compensation.c;../common/vp37/vp37_control.c;../common/vp37/vp37_telemetry.c;../common/vp37/vp37_current.c;../common/vp37/vp37_current_control.c;../common/vp37/vp37_maps.c;../common/test_runner/test_runner.c"
         },
         "targets": {
             "build": "firmware",

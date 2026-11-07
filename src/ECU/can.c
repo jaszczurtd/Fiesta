@@ -279,10 +279,11 @@ void CAN_updaterecipients_01(void) {
 
     buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] =
-        getGlobalValue(F_PRESSURE_PERCENTAGE);
+        (uint8_t)getGlobalValue(F_PRESSURE_PERCENTAGE);
     buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] =
         hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
-    buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] = getGlobalValue(F_FAN_ENABLED);
+    buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] =
+        (uint8_t)getGlobalValue(F_FAN_ENABLED);
 
     canQueuePeriodic(2u, buf);
   }
@@ -335,11 +336,11 @@ void CAN_sendTurboUpdate(void) {
                                     &lo_d);
     uint8_t buf[CAN_FRAME_MAX_LENGTH] = {0};
 
-    s_canState.lastTurboLoSent = lo;
-    s_canState.lastTurboHiSent = hi;
+    s_canState.lastTurboLoSent = (float)lo;
+    s_canState.lastTurboHiSent = (float)hi;
 
-    s_canState.lastTurboLoDesiredSent = lo_d;
-    s_canState.lastTurboHiDesiredSent = hi_d;
+    s_canState.lastTurboLoDesiredSent = (float)lo_d;
+    s_canState.lastTurboHiDesiredSent = (float)hi_d;
 
     buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_HI] = (uint8_t)hi;

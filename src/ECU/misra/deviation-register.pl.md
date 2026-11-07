@@ -107,17 +107,24 @@ Reguła: **8.7**. Typ: `accepted-deviation`. Status: `open`.
 
 Zakres: `src/ECU/engineMaps.c` oraz `src/common/vp37`: `vp37.c`, `vp37_feedback.c`, `vp37_compensation.c`, `vp37_control.c`, `vp37_telemetry.c`, `vp37_current.c`.
 
-Wyciszenie: `misra-c2012-8.7:*vp37/vp37.c`, `misra-c2012-8.7:*vp37/vp37_current.c`.
+Wyciszenie: `misra-c2012-8.7:*vp37/vp37.c`, `misra-c2012-8.7:*vp37/vp37_current.c`
+oraz inline dla reguły 8.7 przy `VP37_hasMeasuredDescent` i
+`VP37_updateSlowDamping` w `vp37_control.c`.
 
 Advisory. Mapy silnika mają zewnętrzne wiązanie i po jednym module odbierającym, aby
 każda tabela miała jedno miejsce edycji. VP37 jest podzielony na tematyczne jednostki
 translacji, a funkcje kroku mają pojedynczych odbiorców w innych jednostkach;
-przeniesienie ich do plików wywołujących zniosłoby ten podział. Skan obejmuje tylko
-`src/ECU/*.c` i `src/common/vp37/*.c`, więc funkcje używane też przez testy hostowe
-wyglądają jak używane z jednej jednostki. Ten checker w ogóle nie zgłasza symbolu, który
-plik definiuje bez lokalnego użycia, jak mapy i funkcje wydzielonych kroków. Dlatego
-wyciszenia są tylko w dwóch jednostkach nadal wywołujących własne funkcje zewnętrzne.
-Decyzja: 2026-09-16.
+przeniesienie ich do plików wywołujących zniosłoby ten podział. Skan nie obejmuje
+testów hostowych, więc funkcje używane przez te testy mogą wyglądać na używane
+z jednej jednostki. Checker nie zgłasza symbolu zdefiniowanego bez lokalnego
+wywołania, jak mapy i funkcje wydzielonych kroków.
+
+`VP37_updateSlowDamping` jest testowany bezpośrednio w `tests/test_vp37.cpp`.
+`VP37_hasMeasuredDescent` wywołuje także `vp37_telemetry.c` przy włączonej
+telemetrii. Wyciszenia inline dotyczą tylko tych deklaracji: zachowują obu
+odbiorców i nie wyciszają pozostałych zgłoszeń w pliku. Odstępstwo przyjęto
+2026-09-16; te dwa zastosowania zapisano 2026-11-06 po przywróceniu skanu
+wspólnych źródeł.
 
 ## DR-006
 
@@ -165,7 +172,7 @@ odtworzenie wszystkich wartości, także z ThreadSanitizer. Decyzja: 2026-09-30.
 
 Reguła: **21.25 (Amendment 4)**. Typ: `accepted-deviation`. Status: `open`.
 
-Zakres: `HAL_ATOMIC_*` z relaxed, acquire, release lub acquire-release w `src/common/vp37/vp37_snapshot.c` (publikacja), `vp37_telemetry.c` (bufor śladu) i `src/ECU/tests_helpers.c` (kolejka konsoli, żądanie konfiguratora, czas kontaktu, flaga sesji i parametry testów).
+Zakres: `HAL_ATOMIC_*` z relaxed, acquire, release lub acquire-release w `src/common/vp37/vp37_snapshot.c` (publikacja), `vp37_telemetry.c` (bufor śladu), `src/common/test_runner/test_runner.c` (kolejka konsoli, żądanie konfiguratora, czas kontaktu, flaga sesji i parametry testów) i `src/ECU/tests_helpers.c` (oczekujące odpowiedzi na reset parametrów).
 
 Wyciszenie: brak.
 

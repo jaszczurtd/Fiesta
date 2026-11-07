@@ -37,7 +37,7 @@ static void glowPlugs_calculateGlowPlugLampTime(glowPlugs *self, float temp) {
     // Proportional reduction in time within the range -20 to 10 degrees
     float tempDiff = TEMP_MINIMUM_FOR_GLOW_PLUGS - temp;
     float scaleFactor = tempDiff / (TEMP_MINIMUM_FOR_GLOW_PLUGS * 2);
-    self->glowPlugsLampTime = MAX_LAMP_TIME * scaleFactor;
+    self->glowPlugsLampTime = (int32_t)(MAX_LAMP_TIME * scaleFactor);
   } else {
     // Minimum lamp time for higher temperatures
     self->glowPlugsLampTime = MIN_LAMP_TIME;

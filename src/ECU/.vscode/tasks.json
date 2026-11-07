@@ -354,6 +354,23 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Project: Refresh IntelliSense variant: BENCH",
+      "detail": "Update IntelliSense data for the BENCH variant: ECU with the functional test console.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "refresh-intellisense",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "BENCH"
+      ],
+      "problemMatcher": []
+    },
+    {
       "label": "Project: Check device tree",
       "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
       "type": "shell",

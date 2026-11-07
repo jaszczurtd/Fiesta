@@ -4,6 +4,8 @@
 // only: without VP37_TELEMETRY_ENABLED the unit is empty.
 
 #include "vp37_internal.h"
+#include <hal/core/hal_text.h>
+#include <math.h>
 
 #if VP37_TELEMETRY_ENABLED
 
@@ -22,7 +24,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:208 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:221 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -300,20 +302,25 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
 /* Who holds the trace buffer. Only the control core moves IDLE ->
  * ARMED/RECORDING
  * -> READY and only the reading core moves READY -> IDLE, so each side acts on
- * the buffer alone between two release/acquire hand-overs. */
+ * the buffer alone between two release/acquire hand-overs. Streaming uses
+ * count/next as SPSC indices: publish a slot, copy it, then release it. */
 enum {
   VP37_TRACE_IDLE = 0U,
   VP37_TRACE_RECORDING,
   VP37_TRACE_READY,
   VP37_TRACE_ARMED,
   VP37_TRACE_CAL_RECORDING,
-  VP37_TRACE_CAL_READY
+  VP37_TRACE_CAL_READY,
+  VP37_TRACE_STREAM_RECORDING,
+  VP37_TRACE_STREAM_READY
 };
 
 /* Each endpoint samples at most timeout / interval + 1 times. */
-#define VP37_CAL_TRACE_SAMPLES                                                 \
-  (2U *                                                                        \
-   ((VP37_CALIBRATION_TIMEOUT_MS / VP37_CALIBRATION_SAMPLE_INTERVAL_MS) + 1U))
+enum {
+  VP37_CAL_TRACE_SAMPLES =
+      2U *
+      ((VP37_CALIBRATION_TIMEOUT_MS / VP37_CALIBRATION_SAMPLE_INTERVAL_MS) + 1U)
+};
 typedef struct {
   VP37CalibrationSample samples[VP37_CAL_TRACE_SAMPLES];
   VP37CalibrationResult result;
@@ -321,11 +328,19 @@ typedef struct {
 JB_STATIC_ASSERT(sizeof(VP37CalibrationTrace) <=
                      sizeof(VP37TraceSample) * VP37_TRACE_SAMPLES,
                  "Calibration must fit the existing trace buffer");
+typedef struct {
+  VP37MetricSample samples[VP37_TRACE_SAMPLES];
+  VP37MetricResult result;
+} VP37MetricTrace;
+JB_STATIC_ASSERT(sizeof(VP37MetricTrace) <=
+                     sizeof(VP37TraceSample) * VP37_TRACE_SAMPLES,
+                 "Metrics must fit the existing trace buffer");
 
 static struct {
   union {
     VP37TraceSample samples[VP37_TRACE_SAMPLES];
     VP37CalibrationTrace calibration;
+    VP37MetricTrace metrics;
   } storage;
   uint32_t count; /**< Samples recorded; the control core's while recording. */
   uint32_t next;  /**< Next sample to read; the reading core's. */
@@ -336,6 +351,224 @@ static struct {
 
 static uint8_t VP37_traceState(void) {
   return HAL_ATOMIC_LOAD(&s_trace.state, HAL_ATOMIC_ACQUIRE);
+}
+
+hal_status_t VP37_startMetricStream(const VP37Pump *self) {
+  if (self == NULL) {
+    return HAL_EINVAL;
+  }
+  if (VP37_traceState() != VP37_TRACE_IDLE) {
+    return HAL_EBUSY;
+  }
+  if (!self->vp37Initialized) {
+    return HAL_EAGAIN;
+  }
+  s_trace.storage.metrics.result = (VP37MetricResult){0};
+  s_trace.storage.metrics.result.startedUs = hal_micros();
+  s_trace.count = 0U;
+  s_trace.next = 0U;
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_STREAM_RECORDING,
+                   HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+hal_status_t VP37_stopMetricStream(void) {
+  if (VP37_traceState() != VP37_TRACE_STREAM_RECORDING) {
+    return HAL_ENOENT;
+  }
+  s_trace.storage.metrics.result.finishedUs = hal_micros();
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_STREAM_READY,
+                   HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+hal_status_t VP37_readMetricSample(VP37MetricSample *sample) {
+  if (sample == NULL) {
+    return HAL_EINVAL;
+  }
+  const uint8_t state = VP37_traceState();
+  if ((state != VP37_TRACE_STREAM_RECORDING) &&
+      (state != VP37_TRACE_STREAM_READY)) {
+    return HAL_ENOENT;
+  }
+  const uint32_t next = HAL_ATOMIC_LOAD(&s_trace.next, HAL_ATOMIC_RELAXED);
+  const uint32_t count = HAL_ATOMIC_LOAD(&s_trace.count, HAL_ATOMIC_ACQUIRE);
+  if (next == count) {
+    return state == VP37_TRACE_STREAM_RECORDING ? HAL_EAGAIN : HAL_ENOENT;
+  }
+  *sample = s_trace.storage.metrics.samples[next % VP37_TRACE_SAMPLES];
+  HAL_ATOMIC_STORE(&s_trace.next, next + 1U, HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+hal_status_t VP37_takeMetricResult(VP37MetricResult *result) {
+  if (result == NULL) {
+    return HAL_EINVAL;
+  }
+  if (VP37_traceState() != VP37_TRACE_STREAM_READY) {
+    return HAL_EAGAIN;
+  }
+  if (HAL_ATOMIC_LOAD(&s_trace.next, HAL_ATOMIC_RELAXED) !=
+      HAL_ATOMIC_LOAD(&s_trace.count, HAL_ATOMIC_ACQUIRE)) {
+    return HAL_EAGAIN;
+  }
+  *result = s_trace.storage.metrics.result;
+  s_trace.next = 0U;
+  HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_IDLE,
+                   HAL_ATOMIC_RELEASE);
+  return HAL_OK;
+}
+
+static void VP37_recordMetricSample(void) {
+  const uint32_t count = HAL_ATOMIC_LOAD(&s_trace.count, HAL_ATOMIC_RELAXED);
+  const uint32_t next = HAL_ATOMIC_LOAD(&s_trace.next, HAL_ATOMIC_ACQUIRE);
+  // End rather than overwrite a sample the reader still owns. Also end before
+  // the audit's sample count could wrap (over 248 days at the default 200 Hz).
+  if (((count - next) >= VP37_TRACE_SAMPLES) || (count == UINT32_MAX)) {
+    s_trace.storage.metrics.result.overflow = true;
+    (void)VP37_stopMetricStream();
+    return;
+  }
+  const VP37Telemetry *const view = VP37_publishedTelemetry();
+  const VP37MetricSample sample = {
+      .us = view->controlLastUs,
+      .dt = view->controlDtUs,
+      .sequence = view->controlSequence,
+      .target = view->demand.target,
+      .desired = view->demand.desired,
+      .measured = view->feedback.position,
+      .pwm = view->output.finalPWM,
+      .rawHz = view->feedback.rawHz,
+      .filteredHz = view->feedback.filteredHz,
+      .sampleNumber = view->feedback.sampleNumber,
+      .measuredUs = view->feedback.sampleUs,
+      .readUs = view->feedback.readUs,
+      .pidDtUs = view->pidDtUs,
+      .cyclicDelayMs = view->cyclicDelayMs,
+      .driveSamples = view->thermal.driveSamples,
+      .latchUs = view->scan.cycleResult.latchUs,
+      .latchPeriodUs = view->scan.cycleResult.latchPeriodUs,
+      .commandUs = view->currentControl.matchedCommand.writtenUs,
+      .thermalScale = view->thermal.scale,
+      .requestedPercent = view->demand.requestedPercent,
+      .readStatus = view->feedback.readStatus,
+      .ageUs = view->feedback.ageUs,
+      .status = view->feedback.lastStatus,
+      .quantityAtRest = view->demand.atRest,
+      .fresh = view->feedback.fresh,
+      .driveUsed = view->thermal.driveCompensationUsed,
+      .latchValid = view->scan.cycleResult.latchValid,
+      .commandMatched = view->currentControl.matchFound &&
+                        (view->currentControl.matchedSampleSequence ==
+                         view->scan.cycleResultSequence)};
+  s_trace.storage.metrics.samples[count % VP37_TRACE_SAMPLES] = sample;
+  if (count == 0U) {
+    s_trace.storage.metrics.result.firstSequence = sample.sequence;
+  }
+  s_trace.storage.metrics.result.lastSequence = sample.sequence;
+  s_trace.storage.metrics.result.samples = count + 1U;
+  HAL_ATOMIC_STORE(&s_trace.count, count + 1U, HAL_ATOMIC_RELEASE);
+}
+
+typedef struct {
+  char *cursor;
+  size_t remaining;
+  hal_status_t status;
+} VP37MetricLine;
+
+static void VP37_metricAppend(VP37MetricLine *line, const char *text) {
+  if (line->status == HAL_OK) {
+    line->status = hal_text_concat_ex(line->cursor, line->remaining, "", text);
+    if (line->status == HAL_OK) {
+      const size_t length = strlen(text);
+      line->cursor += length;
+      line->remaining -= length;
+    }
+  }
+}
+
+static void VP37_metricField(VP37MetricLine *line, const char *name,
+                             const char *value, hal_status_t status) {
+  if (status != HAL_OK) {
+    line->status = status;
+  }
+  VP37_metricAppend(line, " ");
+  VP37_metricAppend(line, name);
+  VP37_metricAppend(line, ":");
+  VP37_metricAppend(line, value);
+}
+
+static void VP37_metricUnsigned(VP37MetricLine *line, const char *name,
+                                uint32_t value) {
+  char text[HAL_TEXT_U32_DECIMAL_SIZE];
+  const hal_status_t status = hal_text_format_u32_ex(value, text, sizeof(text));
+  VP37_metricField(line, name, text, status);
+}
+
+static void VP37_metricSigned(VP37MetricLine *line, const char *name,
+                              int32_t value) {
+  char text[HAL_TEXT_I32_DECIMAL_SIZE];
+  const hal_status_t status = hal_text_format_i32_ex(value, text, sizeof(text));
+  VP37_metricField(line, name, text, status);
+}
+
+hal_status_t VP37_formatMetricSample(const VP37MetricSample *sample,
+                                     char *buffer, size_t capacity) {
+  if ((sample == NULL) || (buffer == NULL) || (capacity == 0U)) {
+    return HAL_EINVAL;
+  }
+  if (!isfinite(sample->requestedPercent) ||
+      (sample->requestedPercent < -1.0f) ||
+      (sample->requestedPercent > 100.0f) || !isfinite(sample->thermalScale) ||
+      (sample->thermalScale < 0.0f) || (sample->thermalScale > 10.0f)) {
+    return HAL_EINVAL;
+  }
+  // Include CRLF for one serial write. Debug formatting would flush USB
+  // separately for the prefix, fields and line ending.
+  VP37MetricLine line = {
+      .cursor = buffer, .remaining = capacity, .status = HAL_OK};
+  buffer[0] = '\0';
+  VP37_metricAppend(&line, "VP37 N");
+  VP37_metricUnsigned(&line, "us", sample->us);
+  VP37_metricUnsigned(&line, "dt", sample->dt);
+  VP37_metricUnsigned(&line, "n", sample->sequence);
+  VP37_metricSigned(&line, "thr10",
+                    (int32_t)lroundf(sample->requestedPercent * 10.0f));
+  VP37_metricSigned(&line, "tar", sample->target);
+  VP37_metricSigned(&line, "des", sample->desired);
+  VP37_metricSigned(&line, "adj", sample->measured);
+  VP37_metricSigned(&line, "pwm", sample->pwm);
+  VP37_metricUnsigned(&line, "hzraw", sample->rawHz);
+  VP37_metricUnsigned(&line, "hz", sample->filteredHz);
+  VP37_metricUnsigned(&line, "sn", sample->sampleNumber);
+  VP37_metricUnsigned(&line, "su", sample->measuredUs);
+  VP37_metricUnsigned(&line, "age", sample->ageUs);
+  VP37_metricSigned(&line, "io", (int32_t)sample->readStatus);
+  VP37_metricUnsigned(&line, "ious", sample->readUs);
+  VP37_metricUnsigned(&line, "fresh", sample->fresh ? 1U : 0U);
+  VP37_metricUnsigned(&line, "st", sample->status);
+  VP37_metricUnsigned(&line, "rest", sample->quantityAtRest ? 1U : 0U);
+  VP37_metricUnsigned(&line, "pdt", sample->pidDtUs);
+  VP37_metricUnsigned(&line, "cyms", sample->cyclicDelayMs);
+  VP37_metricUnsigned(&line, "rn", sample->driveSamples);
+  VP37_metricUnsigned(&line, "ruse", sample->driveUsed ? 1U : 0U);
+  VP37_metricSigned(&line, "tsc10000",
+                    (int32_t)lroundf(sample->thermalScale * 10000.0f));
+  VP37_metricUnsigned(&line, "latch", sample->latchUs);
+  VP37_metricUnsigned(&line, "lp", sample->latchPeriodUs);
+  VP37_metricUnsigned(&line, "lv", sample->latchValid ? 1U : 0U);
+  VP37_metricUnsigned(&line, "cmd_us", sample->commandUs);
+  VP37_metricUnsigned(&line, "match", sample->commandMatched ? 1U : 0U);
+  VP37_metricAppend(&line, "\r\n");
+  return line.status;
+}
+
+void VP37_showMetricResult(const VP37MetricResult *result) {
+  deb("VP37 STREAM END start:%lu end:%lu samples:%lu first:%lu last:%lu "
+      "overflow:%u",
+      (unsigned long)result->startedUs, (unsigned long)result->finishedUs,
+      (unsigned long)result->samples, (unsigned long)result->firstSequence,
+      (unsigned long)result->lastSequence, result->overflow ? 1U : 0U);
 }
 
 hal_status_t VP37_calibrationTraceBegin(void) {
@@ -522,6 +755,7 @@ hal_status_t VP37_takeTraceCompletion(uint32_t *count) {
 }
 
 void VP37_traceStop(void) {
+  (void)VP37_stopMetricStream();
   if (VP37_traceCapturing()) {
     HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_READY,
                      HAL_ATOMIC_RELEASE);
@@ -535,6 +769,10 @@ void VP37_traceStop(void) {
  */
 void VP37_traceRecord(const VP37Pump *self) {
   const uint8_t state = VP37_traceState();
+  if (state == VP37_TRACE_STREAM_RECORDING) {
+    VP37_recordMetricSample();
+    return;
+  }
   const bool released = (state == VP37_TRACE_ARMED) && self->demand.atRest;
   if (state == VP37_TRACE_ARMED) {
     const bool moving = self->pid.motionIntegralHold && (self->pid.error < 0) &&

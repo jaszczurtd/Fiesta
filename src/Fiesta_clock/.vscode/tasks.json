@@ -353,6 +353,23 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Project: Refresh IntelliSense variant: DS3231",
+      "detail": "Update IntelliSense data for the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "type": "shell",
+      "command": "${config:jaszczurhal.vscodeEntry}",
+      "windows": {
+        "command": "${config:jaszczurhal.vscodeEntryWindows}"
+      },
+      "args": [
+        "refresh-intellisense",
+        "--project",
+        "${workspaceFolder}",
+        "--variant",
+        "DS3231"
+      ],
+      "problemMatcher": []
+    },
+    {
       "label": "Project: Check device tree",
       "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
       "type": "shell",

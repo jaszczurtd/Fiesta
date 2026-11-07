@@ -2019,6 +2019,124 @@ void test_vp37_target_ramp_uses_elapsed_time_and_preserves_overshoot(void) {
 }
 
 #if ECU_FUNCTIONAL_TESTS_ENABLED
+void test_vp37_metric_stream_preserves_steps_across_ring_and_sequence_wrap(
+    void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  pump->controlSequence = UINT32_MAX - 3U;
+  VP37MetricSample sample = {};
+  VP37MetricResult result = {};
+  TEST_ASSERT_EQUAL(HAL_EINVAL, VP37_startMetricStream(NULL));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, VP37_readMetricSample(NULL));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, VP37_takeMetricResult(NULL));
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_startMetricStream(pump));
+  TEST_ASSERT_EQUAL(HAL_EBUSY, VP37_startMetricStream(pump));
+  TEST_ASSERT_EQUAL(HAL_EBUSY, VP37_startTrace(pump));
+  TEST_ASSERT_EQUAL(HAL_EBUSY, VP37_calibrationTraceBegin());
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_readMetricSample(&sample));
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_takeMetricResult(&result));
+  const uint32_t steps = VP37_TRACE_SAMPLES * 3U;
+  for (uint32_t i = 1U; i <= steps; ++i) {
+    hal_mock_set_millis(i * 5U);
+    injectAdjRegisterData(4700, 144, 26, ADJ_STATUS_OK);
+    VP37_process(pump);
+    TEST_ASSERT_EQUAL(HAL_OK, VP37_readMetricSample(&sample));
+    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX - 3U + i, sample.sequence);
+    TEST_ASSERT_EQUAL_UINT32(i * 5000U, sample.us);
+    TEST_ASSERT_EQUAL_UINT32(5000U, sample.dt);
+    TEST_ASSERT_EQUAL_INT32(4700, sample.measured);
+    TEST_ASSERT_EQUAL_UINT32(pump->feedback.rawHz, sample.rawHz);
+    TEST_ASSERT_EQUAL_UINT32(pump->feedback.filteredHz, sample.filteredHz);
+    TEST_ASSERT_EQUAL_UINT32(pump->thermal.driveSamples, sample.driveSamples);
+    TEST_ASSERT_EQUAL(pump->thermal.driveCompensationUsed, sample.driveUsed);
+    TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_readMetricSample(&sample));
+  }
+  printf("METRIC_STREAM_C_BEGIN\n");
+  static VP37Snapshot snapshot;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_readSnapshot(pump, &snapshot));
+  VP37_showDebug(pump, &snapshot);
+  printf("METRIC_STREAM_C_END\n");
+  char line[480];
+  sample.requestedPercent = 50.0f;
+  sample.target = INT32_MIN;
+  sample.sequence = UINT32_MAX;
+  sample.desired = 456;
+  sample.pwm = 789;
+  sample.thermalScale = 1.125f;
+  sample.driveSamples = 16U;
+  sample.driveUsed = true;
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_formatMetricSample(&sample, line, sizeof(line)));
+  hal_serial_print(line);
+  TEST_ASSERT_NOT_NULL(strstr(
+      line, "n:4294967295 thr10:500 tar:-2147483648 des:456 adj:4700 pwm:789"));
+  TEST_ASSERT_NOT_NULL(strstr(line, "rn:16 ruse:1 tsc10000:11250"));
+  TEST_ASSERT_NOT_NULL(strstr(line, "match:0\r\n"));
+  TEST_ASSERT_EQUAL_MEMORY("VP37 N ", line, 7U);
+  const size_t frameLength = strlen(line);
+  TEST_ASSERT_EQUAL_STRING("\r\n", line + frameLength - 2U);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    VP37_formatMetricSample(&sample, line, frameLength + 1U));
+  TEST_ASSERT_EQUAL_UINT32(frameLength, strlen(line));
+  // Space for the body alone must not publish a partial serial frame.
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
+                    VP37_formatMetricSample(&sample, line, frameLength));
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
+                    VP37_formatMetricSample(&sample, line, frameLength - 1U));
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW, VP37_formatMetricSample(&sample, line, 4U));
+  TEST_ASSERT_EQUAL(HAL_EINVAL,
+                    VP37_formatMetricSample(NULL, line, sizeof(line)));
+  TEST_ASSERT_EQUAL(HAL_EINVAL,
+                    VP37_formatMetricSample(&sample, NULL, sizeof(line)));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, VP37_formatMetricSample(&sample, line, 0U));
+  sample.thermalScale = NAN;
+  TEST_ASSERT_EQUAL(HAL_EINVAL,
+                    VP37_formatMetricSample(&sample, line, sizeof(line)));
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_stopMetricStream());
+  TEST_ASSERT_EQUAL(HAL_ENOENT, VP37_stopMetricStream());
+  TEST_ASSERT_EQUAL(HAL_EBUSY, VP37_startMetricStream(pump));
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_takeMetricResult(&result));
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_UINT32(steps, result.samples);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_MAX - 2U, result.firstSequence);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_MAX - 3U + steps, result.lastSequence);
+  VP37_showMetricResult(&result);
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_takeMetricResult(&result));
+  TEST_ASSERT_EQUAL(HAL_ENOENT, VP37_readMetricSample(&sample));
+}
+
+void test_vp37_metric_stream_reports_overflow_without_overwriting(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_startMetricStream(pump));
+  for (uint32_t i = 1U; i <= VP37_TRACE_SAMPLES + 2U; ++i) {
+    hal_mock_set_millis(i * 5U);
+    injectAdjRegisterData(4700, 144, 26, ADJ_STATUS_OK);
+    VP37_process(pump);
+  }
+  VP37MetricResult result = {};
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_takeMetricResult(&result));
+  TEST_ASSERT_EQUAL(HAL_ENOENT, VP37_stopMetricStream());
+  VP37MetricSample sample = {};
+  for (uint32_t i = 1U; i <= VP37_TRACE_SAMPLES; ++i) {
+    TEST_ASSERT_EQUAL(HAL_OK, VP37_readMetricSample(&sample));
+    TEST_ASSERT_EQUAL_UINT32(i, sample.sequence);
+  }
+  TEST_ASSERT_EQUAL(HAL_ENOENT, VP37_readMetricSample(&sample));
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_takeMetricResult(&result));
+  TEST_ASSERT_TRUE(result.overflow);
+  TEST_ASSERT_EQUAL_UINT32(VP37_TRACE_SAMPLES, result.samples);
+  TEST_ASSERT_EQUAL_UINT32(1U, result.firstSequence);
+  TEST_ASSERT_EQUAL_UINT32(VP37_TRACE_SAMPLES, result.lastSequence);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_startMetricStream(pump));
+  VP37_stop(pump);
+  VP37_process(pump);
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_takeMetricResult(&result));
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_UINT32(0U, result.samples);
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_startMetricStream(pump));
+}
+
 void test_vp37_trace_preserves_consecutive_steps_until_drained(void) {
   static_assert(sizeof(VP37TraceSample) <= 148U,
                 "Trace padding must not consume the RAM function budget");
@@ -7559,6 +7677,9 @@ int main(void) {
   RUN_TEST(test_vp37_target_ramp_uses_elapsed_time_and_preserves_overshoot);
 #if ECU_FUNCTIONAL_TESTS_ENABLED
   RUN_TEST(test_vp37_trace_preserves_consecutive_steps_until_drained);
+  RUN_TEST(
+      test_vp37_metric_stream_preserves_steps_across_ring_and_sequence_wrap);
+  RUN_TEST(test_vp37_metric_stream_reports_overflow_without_overwriting);
   RUN_TEST(test_vp37_trace_stopped_before_a_sample_frees_the_buffer);
 #endif
   RUN_TEST(test_vp37_integral_authority_is_independent_of_ki);

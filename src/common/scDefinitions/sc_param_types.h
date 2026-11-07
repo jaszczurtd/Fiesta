@@ -92,15 +92,14 @@ typedef struct {
 #define SC_PARAM_SCALAR_I16(id_str, struct_t, field, min_v, max_v, default_v,  \
                             since, group_str)                                  \
   {                                                                            \
-    .id = (id_str), .kind = SC_PARAM_KIND_SCALAR_I16,                          \
-    .flags = (uint16_t)SC_PARAM_FLAG_NONE, .schema_since = (uint16_t)(since),  \
-    .group = (group_str),                                                      \
-    .as = {.scalar_i16 = {                                                     \
-               .value_offset = offsetof(struct_t, field),                      \
-               .min_value = (int16_t)(min_v),                                  \
-               .max_value = (int16_t)(max_v),                                  \
-               .default_value = (int16_t)(default_v),                          \
-           }},                                                                 \
+    (id_str), SC_PARAM_KIND_SCALAR_I16, (uint16_t)SC_PARAM_FLAG_NONE,          \
+        (uint16_t)(since), (group_str),                                        \
+        {{                                                                     \
+            offsetof(struct_t, field),                                         \
+            (int16_t)(min_v),                                                  \
+            (int16_t)(max_v),                                                  \
+            (int16_t)(default_v),                                              \
+        }},                                                                    \
   }
 
 /**
@@ -113,16 +112,15 @@ typedef struct {
 #define SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(                                  \
     id_str, struct_t, field, min_v, max_v, default_v, since, group_str)        \
   {                                                                            \
-    .id = (id_str), .kind = SC_PARAM_KIND_SCALAR_I16,                          \
-    .flags =                                                                   \
+    (id_str), SC_PARAM_KIND_SCALAR_I16,                                        \
         (uint16_t)(SC_PARAM_FLAG_READ_ONLY | SC_PARAM_FLAG_NOT_PERSISTED),     \
-    .schema_since = (uint16_t)(since), .group = (group_str),                   \
-    .as = {.scalar_i16 = {                                                     \
-               .value_offset = offsetof(struct_t, field),                      \
-               .min_value = (int16_t)(min_v),                                  \
-               .max_value = (int16_t)(max_v),                                  \
-               .default_value = (int16_t)(default_v),                          \
-           }},                                                                 \
+        (uint16_t)(since), (group_str),                                        \
+        {{                                                                     \
+            offsetof(struct_t, field),                                         \
+            (int16_t)(min_v),                                                  \
+            (int16_t)(max_v),                                                  \
+            (int16_t)(default_v),                                              \
+        }},                                                                    \
   }
 
 #ifdef __cplusplus

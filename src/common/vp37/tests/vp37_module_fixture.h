@@ -68,13 +68,15 @@ static inline bool vp37FixtureEnabled(void) { return s_vp37Board.driveEnabled; }
 
 /** @brief The fake board services every module test drives the pump with. */
 static inline const VP37Callbacks *vp37ModuleCallbacks(void) {
-  static const VP37Callbacks callbacks = {
-      .writeQuantityPwm = vp37FixtureWriteQuantity,
-      .writeTimingPwm = vp37FixtureWriteTiming,
-      .setDriveEnabled = vp37FixtureSetEnabled,
-      .driveEnabled = vp37FixtureEnabled,
-      .adjustometerTransfer = vp37FixtureTransfer,
-  };
+  static const VP37Callbacks callbacks = [] {
+    VP37Callbacks value = {};
+    value.writeQuantityPwm = vp37FixtureWriteQuantity;
+    value.writeTimingPwm = vp37FixtureWriteTiming;
+    value.setDriveEnabled = vp37FixtureSetEnabled;
+    value.driveEnabled = vp37FixtureEnabled;
+    value.adjustometerTransfer = vp37FixtureTransfer;
+    return value;
+  }();
   return &callbacks;
 }
 
@@ -124,7 +126,7 @@ static inline void injectAdjustometerScript(const AdjustometerScript *script) {
 /** @brief One feedback frame plus the matching local supply reading. */
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
                                          uint8_t fuelTemp, uint8_t status) {
-  AdjustometerScript script = {.bytes = {0}, .length = 0};
+  AdjustometerScript script = {};
   appendAdjRegisterData(&script, pulseHz, voltage, fuelTemp, status);
   injectAdjustometerScript(&script);
   injectLocalSupplyVoltage((float)voltage * 0.1f);

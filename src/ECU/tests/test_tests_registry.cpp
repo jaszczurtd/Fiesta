@@ -1267,7 +1267,7 @@ void test_descent_trace_command_requires_profile_and_arms_control_capture(
   console("B1");
   TEST_ASSERT_FALSE(VP37_traceCapturing());
   pump->pid.researchMotionIntegralGate = true;
-  console("B2");
+  console("B3");
   TEST_ASSERT_FALSE(VP37_traceCapturing());
   console("B1");
   TEST_ASSERT_TRUE(VP37_traceCapturing());
@@ -1300,11 +1300,64 @@ void test_descent_share_command_is_released_profile_gated_and_resettable(void) {
   TEST_ASSERT_EQUAL_FLOAT(.4f, pump->pid.descentIntegralRetainedShare);
 }
 
+void test_metric_stream_commands_do_not_start_a_test_or_change_demand(void) {
+  VP37Pump *pump = preparePump();
+  initTests();
+  const int32_t target = pump->demand.target;
+  console("B2");
+  VP37MetricSample sample = {};
+  VP37MetricResult result = {};
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, VP37_readMetricSample(&sample));
+  TEST_ASSERT_EQUAL(HAL_EBUSY, VP37_startTrace(pump));
+  TEST_ASSERT_EQUAL_INT32(target, pump->demand.target);
+  console("B0");
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_takeMetricResult(&result));
+  TEST_ASSERT_EQUAL_UINT32(0U, result.samples);
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_INT32(target, pump->demand.target);
+}
+
 /** @brief The console line core 0 printed last, without the debug prefix. */
 static const char *lastTestLine(void) {
   const char *line = hal_mock_deb_last_line();
   const char *found = (line != nullptr) ? strstr(line, "TEST: ") : nullptr;
   return (found != nullptr) ? found : "";
+}
+
+void test_console_stop_without_an_active_test_reports_none_running(void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_NULL(testsActiveName());
+  hal_mock_serial_reset();
+
+  console("stop");
+  TEST_ASSERT_FALSE(tickTests());
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_EQUAL_FLOAT(-1.0f, pump->demand.requestedPercent);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("TEST: none running", lastTestLine());
+
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+}
+
+void test_registry_console_sequence_completion_contract(void) {
+  VP37Pump *pump = preparePump();
+  pump->demand.requestedPercent = 0.0f;
+  TEST_ASSERT_TRUE(initTests());
+  TEST_ASSERT_EQUAL(HAL_OK, startTest(START_TEST_ALL));
+  const char *expected[] = {"dtc", "kv", "cyclic", "random", "top", "topzero"};
+  for (const char *name : expected) {
+    TEST_ASSERT_EQUAL_STRING(name, testsActiveName());
+    testsPrintEvents();
+    TEST_ASSERT_EQUAL(HAL_OK, stopTest());
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->demand.requestedPercent);
+  }
+  testsPrintEvents();
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_EQUAL_STRING("TEST: sequence finished", lastTestLine());
 }
 
 void test_registry_lifecycle_messages_wait_for_the_console_and_report_overflow(
@@ -1568,6 +1621,7 @@ int main(void) {
   RUN_TEST(test_descent_share_command_is_released_profile_gated_and_resettable);
   RUN_TEST(
       test_descent_trace_command_requires_profile_and_arms_control_capture);
+  RUN_TEST(test_metric_stream_commands_do_not_start_a_test_or_change_demand);
   RUN_TEST(test_upper_deadband_command_selects_the_mode_and_resets);
   RUN_TEST(test_ramp_damping_command_is_bounded_and_requires_released_zero);
   RUN_TEST(
@@ -1585,6 +1639,8 @@ int main(void) {
       test_registry_metadata_prints_on_console_without_occupying_control_mailbox);
   RUN_TEST(
       test_registry_lifecycle_messages_wait_for_the_console_and_report_overflow);
+  RUN_TEST(test_registry_console_sequence_completion_contract);
+  RUN_TEST(test_console_stop_without_an_active_test_reports_none_running);
   RUN_TEST(
       test_default_reset_applies_on_control_core_and_replies_once_per_command);
   RUN_TEST(

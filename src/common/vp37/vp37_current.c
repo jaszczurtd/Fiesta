@@ -6,6 +6,13 @@
 
 #include <string.h>
 
+/* Preserve the DMA buffer's four-byte alignment on both host compilers. */
+#if HAL_COMPILER_IS_MSVC
+#define VP37_SCAN_BUFFER_ALIGN __declspec(align(4))
+#else
+#define VP37_SCAN_BUFFER_ALIGN __attribute__((aligned(4)))
+#endif
+
 #define VP37_CURRENT_ZERO_SAMPLES 256U
 #define VP37_CURRENT_ZERO_MAX_RAW 128U
 #define VP37_CURRENT_SAMPLE_DELAY_US 20U
@@ -266,9 +273,9 @@ hal_status_t VP37_currentScanStart(void) {
   config.pin_count = VP37_CURRENT_SCAN_PINS;
   config.conversion_period_ns = VP37_CURRENT_SCAN_CONVERSION_NS;
   /* Both halves of the scan block; the scan owns them while it runs. */
-  static uint16_t
-      s_scanBuffer[2U * VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS]
-      __attribute__((aligned(4)));
+  VP37_SCAN_BUFFER_ALIGN static uint16_t
+      s_scanBuffer[2U * VP37_CURRENT_SCAN_BLOCK_FRAMES *
+                   VP37_CURRENT_SCAN_PINS];
   config.buffer = s_scanBuffer;
   config.block_frames = VP37_CURRENT_SCAN_BLOCK_FRAMES;
   const hal_status_t status = hal_adc_scan_start(&config);

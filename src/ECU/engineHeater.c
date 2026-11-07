@@ -17,7 +17,7 @@ void engineHeater_init(engineHeater *self) {
 
 void engineHeater_heater(engineHeater *self, bool enable, int32_t level) {
   (void)self;
-  pcf8574_write(level, enable);
+  pcf8574_write((uint8_t)level, enable);
 }
 
 void engineHeater_process(engineHeater *self) {

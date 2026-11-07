@@ -17,11 +17,13 @@ set(SCDEFS    ${CMAKE_CURRENT_SOURCE_DIR}/../common/scDefinitions)
 set(ECU_STUBS ${ECU_SRC}/tests/stubs)
 
 include(${HAL_LIB}/cmake/jh_managed_frameworks.cmake)
+include(${HAL_LIB}/cmake/jh_host_warnings.cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
+fiesta_shared_sources(TEST_RUNNER_SOURCES "${FIESTA_SHARED_ROOT}" test_runner)
 fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB}")
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -100,6 +102,7 @@ set(ECU_SOURCES
     ${ECU_SRC}/turbo.c
     # The VP37 module: the list in src/common/vp37/vp37_sources.txt.
     ${VP37_SOURCES}
+    ${TEST_RUNNER_SOURCES}
     ${ECU_SRC}/vp37_adapter.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
@@ -112,42 +115,40 @@ add_library(ecu_mock STATIC
     ${MOCK_SOURCES}
     ${HAL_UTIL_SOURCES}
     ${ECU_SOURCES}
-    ${ECU_STUBS}/ecu_stubs.cpp
 )
-
-target_include_directories(ecu_mock BEFORE PUBLIC
-    ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
-)
-fiesta_include_hardware_header("${ECU_HW_HEADER}" ecu_mock)
-target_include_directories(ecu_mock PUBLIC
-    ${HAL_MANAGED_INCLUDE_DIRS}
-    ${HAL_SRC}
-    ${HAL_SRC}/utils
-    ${ECU_SRC}
-    ${VP37_SOURCE_DIR}
-    ${CANDEFS}
-    ${SCDEFS}
-)
-
-# The host library keeps the default ECU_FUNCTIONAL_TESTS_ENABLED from
-# tests.h, which is off. Binaries that exercise the fixtures set it to 1
-# for their own copies of the sources; see tests/CMakeLists.txt.
-target_compile_definitions(ecu_mock PUBLIC
-    UNIT_TEST
-    UNITY_INCLUDE_CONFIG_H
-    HAL_TARGET_MOCK
-    SERIAL_7N1=2
-    SERIAL_8N1=6
-)
+add_library(ecu_test_stubs OBJECT ${ECU_STUBS}/ecu_stubs.cpp)
+# MSVC resolves weak fallbacks only after their object joins the link. Keep
+# stubs outside the archive and compile them with the host library's config.
+target_sources(ecu_mock INTERFACE $<TARGET_OBJECTS:ecu_test_stubs>)
 
 find_package(Threads REQUIRED)
-target_link_libraries(ecu_mock PUBLIC Threads::Threads)
+foreach(ECU_HOST_TARGET ecu_mock ecu_test_stubs)
+    target_include_directories(${ECU_HOST_TARGET} BEFORE PUBLIC
+        ${ECU_SRC}/tests/include   # test-only hal_project_config.h override
+    )
+    fiesta_include_hardware_header("${ECU_HW_HEADER}" ${ECU_HOST_TARGET})
+    target_include_directories(${ECU_HOST_TARGET} PUBLIC
+        ${HAL_MANAGED_INCLUDE_DIRS}
+        ${HAL_SRC}
+        ${HAL_SRC}/utils
+        ${ECU_SRC}
+        ${VP37_SOURCE_DIR}
+        ${CANDEFS}
+        ${SCDEFS}
+    )
 
-target_compile_options(ecu_mock PRIVATE
-    -Wall
-    -Wextra
-    -Werror
-)
+    # Keep the default ECU_FUNCTIONAL_TESTS_ENABLED from tests.h, which is
+    # off. Fixture binaries set it to 1 for their own copies of the sources.
+    target_compile_definitions(${ECU_HOST_TARGET} PUBLIC
+        UNIT_TEST
+        UNITY_INCLUDE_CONFIG_H
+        HAL_TARGET_MOCK
+        SERIAL_7N1=2
+        SERIAL_8N1=6
+    )
+    target_link_libraries(${ECU_HOST_TARGET} PUBLIC Threads::Threads)
+    jh_enable_host_warnings(${ECU_HOST_TARGET} ERRORS)
+endforeach()
 
 # The module's translation units compiled with the consumer's configuration
 # but WITHOUT the ECU's header directory: any include of an ECU header in
@@ -170,7 +171,16 @@ target_compile_definitions(vp37_standalone PRIVATE
     SERIAL_7N1=2
     SERIAL_8N1=6
 )
-target_compile_options(vp37_standalone PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(vp37_standalone ERRORS)
+
+# Compile the runner without any ECU include path or configuration. Runtime
+# tests link the shared HAL mock archive; no ECU/VP37 object is referenced.
+add_library(test_runner_standalone OBJECT ${TEST_RUNNER_SOURCES})
+target_include_directories(test_runner_standalone PRIVATE
+    ${ECU_SRC}/../common/test_runner/tests/include
+    ${HAL_MANAGED_INCLUDE_DIRS} ${HAL_SRC})
+target_compile_definitions(test_runner_standalone PRIVATE HAL_TARGET_MOCK)
+jh_enable_host_warnings(test_runner_standalone ERRORS)
 
 # Static-analysis integration with the cppcheck build pinned by JaszczurHAL;
 # its launcher names the repair command when that build is missing.
@@ -181,7 +191,8 @@ option(ECU_ENABLE_CPPCHECK_TARGET "Enable check-cppcheck custom target" ON)
 
 if(ECU_ENABLE_CPPCHECK_TARGET)
     file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC}
-        "${ECU_SRC}/*.c" "${VP37_SOURCE_DIR}/*.c")
+        "${ECU_SRC}/*.c" "${VP37_SOURCE_DIR}/*.c"
+        "${ECU_SRC}/../common/test_runner/*.c")
 
     set(ECU_CPPCHECK_ARGS
         --enable=all
@@ -225,5 +236,5 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../tools/vp37-viewer" vp37-view
 
 # Optional analysis helpers kept outside the default build.
 fiesta_add_host_analysis_targets(ECU ECU
-    CLANG_TIDY_FILES "^.*/(src/(ECU|common/vp37|common/scDefinitions|common/tests)|tools/vp37-viewer/src)/.*\\.(c|cpp)$"
+    CLANG_TIDY_FILES "^.*/(src/(ECU|common/vp37|common/test_runner|common/scDefinitions|common/tests)|tools/vp37-viewer/src)/.*\\.(c|cpp)$"
     MEMCHECK_EXCLUDE_LABELS "static-analysis|sanitizer")

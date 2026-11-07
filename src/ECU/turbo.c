@@ -116,9 +116,10 @@ void Turbo_process(Turbo *self) {
   pressurePercentage = Turbo_scaleTurboValues(self, pressurePercentage);
   pressurePercentage = hal_constrain(pressurePercentage, 0, 100);
 
-  setGlobalValue(F_PRESSURE_PERCENTAGE, pressurePercentage);
+  setGlobalValue(F_PRESSURE_PERCENTAGE, (float)pressurePercentage);
 
-  self->n75 = hal_math_percent_to_value(pressurePercentage, PWM_RESOLUTION);
+  self->n75 =
+      hal_math_percent_to_value((float)pressurePercentage, PWM_RESOLUTION);
 
 #endif
 

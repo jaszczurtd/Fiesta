@@ -25,7 +25,10 @@ siatce okresów `pidTimeUpdate`: spóźniony start nie przesuwa następnego
 terminu, a start spóźniony o cały okres zaczyna nową siatkę zamiast serii
 kroków nadrabiających. W oknie `CORE1_VP37_GUARD_US` przed terminem rdzeń 1
 nie zaczyna innej pracy (turbina, RPM, zadanie testu) i czeka na termin
-z RAM, więc krok nie dziedziczy ogona tej pracy. Testy stanowiskowe zapisują
+z RAM, więc krok nie dziedziczy ogona tej pracy. Po osiągnięciu terminu
+rdzeń obsługuje także zadanie i polecenia zatrzymania. Dzięki temu przeciążona
+pętla pozostaje dostępna, gdy zadany okres jest krótszy od wykonywanej pracy;
+nie oznacza to osiągnięcia tego okresu. Testy stanowiskowe zapisują
 ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0, razem z potwierdzeniami
 resetu nastaw. Zmienione zadanie testu czeka na swoje ogłoszenie, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
 ogłoszenie nadal poprzedza ruch, który zapowiada. Każdy krok publikuje
@@ -343,7 +346,7 @@ zwykłe ustawienia pracy.
 | [config.c](config.c) | Ustawienia i sesja konfiguratora. |
 | [tests.c](tests.c) | Rejestr testów, sterowane elementy, dostępność sekwencji i konfiguratora. |
 | [tests_workers.c](tests_workers.c) | Generatory żądań, czynności jednorazowe i postęp. |
-| [tests_helpers.c](tests_helpers.c) | Parametry i runner konsoli/konfiguratora z blokadą RPM i keepalive; bezczynne funkcje bez `ECU_FUNCTIONAL_TESTS_ENABLED`. |
+| [tests_helpers.c](tests_helpers.c) | Parametry ECU, komendy VP37, zadawanie demand i blokada RPM dla [wspólnego runnera](../common/test_runner/README.md); bezczynne funkcje bez `ECU_FUNCTIONAL_TESTS_ENABLED`. |
 
 ## Obraz stanowiskowy i sprzęt
 
@@ -402,3 +405,32 @@ poprawność wyniku i ewentualne przepełnienie bufora. Parametry okna estymator
 i timeoutu definiuje `vp37_config.h`. Zwykły strumień `VP37 C` pokazuje powrót
 do spoczynku po kalibracji; kalibracja nie próbkuje prądu. Zwykły zapis śladu
 RAM pozostaje zajęty do zakończenia tego eksportu.
+
+Do metryk całego przebiegu służą `B2`, które rozpoczyna strumień, oraz `B0`,
+które go kończy. Rdzeń sterowania zapisuje każdy krok w buforze śladu,
+a rdzeń konsoli odbiera go na bieżąco jako linie `VP37 N`. `B` i `B1`
+zachowują tryby skończonego nagrania; kalibracja i wszystkie tryby nagrywania
+korzystają z tej samej pamięci. Konsola nadal drukuje `VP37 C` do nadzoru.
+Odbiera `N` w każdym obiegu swojej pętli, niezależnie od interwału raportu C,
+z budżetem 20 ms na obieg. Rozpoczęty zapis USB może przekroczyć ten budżet.
+Każda linia `N` zawiera CRLF i trafia do jednego zapisu szeregowego bez
+prefiksu debugowego `ECU:`, co usuwa osobne transfery USB prefiksu i końca
+linii.
+
+Okna metryk wyznaczaj według czasu MCU `us` i kolejnych numerów kroków `n`,
+nie według chwili odbioru buforowanej linii na hoście. `VP37 STREAM END`
+podaje czasy nagrania, liczbę próbek, numery pierwszego i ostatniego kroku
+oraz `overflow`. Odrzucaj niekompletne nagrania, luki w numeracji,
+niezgodność liczby próbek i przepełnienie. Zapis nie czeka na USB: gdy
+odbiorca nie nadąża, nagranie kończy się z `overflow:1`. Zatrzymanie pompy
+również kończy strumień; `S0` zachowuje zapis kroków sterowania w spoczynku.
+Odbierz rekord końcowy przed kolejnym nagraniem lub zamknięciem collectora.
+
+Każda próbka `N` zawiera zadane i rampowane położenie, feedback, czasy,
+liczbę próbek R (`rn`), aktywność kompensacji R (`ruse`) oraz mnożnik
+termiczny (`tsc10000`, mnożnik razy 10000). `thr10` podaje żądanie w dziesiątych
+częściach procenta. Konsola składa całą linię N przed wysłaniem jej do USB.
+Ostatni skan prądu dostarcza `latch`, `lp` i `lv`;
+`cmd_us` ma znaczenie tylko przy `match:1`. Te obserwacje mogą poprzedzać
+zapisany krok i same nie identyfikują pierwszego zatrzasku PWM po komendzie.
+Przez całe nagranie utrzymuj dotychczasowe guardy oparte na C.

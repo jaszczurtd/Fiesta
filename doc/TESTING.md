@@ -86,6 +86,21 @@ or VP37TestBench. For the desktop application follow the
 List registered tests with `ctest --test-dir src/ECU/build_test -N`.
 Listing tests does not execute them.
 
+ECU tests also build with native MSVC. With Visual Studio Build Tools and
+CMake installed, run in PowerShell:
+
+```powershell
+cmake -S src/ECU -B .build/ecu-x64 -G "Visual Studio 18 2026" -A x64 -DECU_ENABLE_CPPCHECK_TARGET=OFF
+cmake --build .build/ecu-x64 --config Debug --parallel
+ctest --test-dir .build/ecu-x64 -C Debug --output-on-failure -LE static-analysis
+```
+
+Repeat with `Release`, then with `-A Win32` in a separate build directory.
+MSVC uses `/W4 /WX /permissive-` for the ECU and shared libraries; C++ code
+uses C++17. The cppcheck wrapper requires a Unix shell, so this native build
+disables that target. Run the complete Linux gate for static analysis and
+the other host modules.
+
 Run the Fiesta_clock display and time tests separately with:
 
 ```bash

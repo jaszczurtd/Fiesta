@@ -29,22 +29,22 @@ void tearDown(void) {}
 void test_ecu_params_init_uses_config_defaults_when_blob_missing(void) {
   ecuParamsInit();
 
-  ecu_params_values_t expected = {.fanCoolantStartC = TEMP_FAN_START,
-                                  .fanCoolantStopC = TEMP_FAN_STOP,
-                                  .fanAirStartC = AIR_TEMP_FAN_START,
-                                  .fanAirStopC = AIR_TEMP_FAN_STOP,
-                                  .heaterStopC = TEMP_HEATER_STOP,
-                                  .nominalRpm = NOMINAL_RPM_VALUE};
+  ecu_params_values_t expected = {/* fanCoolantStartC */ TEMP_FAN_START,
+                                  /* fanCoolantStopC */ TEMP_FAN_STOP,
+                                  /* fanAirStartC */ AIR_TEMP_FAN_START,
+                                  /* fanAirStopC */ AIR_TEMP_FAN_STOP,
+                                  /* heaterStopC */ TEMP_HEATER_STOP,
+                                  /* nominalRpm */ NOMINAL_RPM_VALUE};
   assertActiveEquals(&expected);
 }
 
 void test_ecu_params_init_loads_valid_persisted_blob(void) {
-  ecu_params_values_t candidate = {.fanCoolantStartC = 108,
-                                   .fanCoolantStopC = 96,
-                                   .fanAirStartC = 58,
-                                   .fanAirStopC = 44,
-                                   .heaterStopC = 79,
-                                   .nominalRpm = 930};
+  ecu_params_values_t candidate = {/* fanCoolantStartC */ 108,
+                                   /* fanCoolantStopC */ 96,
+                                   /* fanAirStartC */ 58,
+                                   /* fanAirStopC */ 44,
+                                   /* heaterStopC */ 79,
+                                   /* nominalRpm */ 930};
 
   TEST_ASSERT_TRUE(ecuParamsValidate(&candidate, NULL));
   TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&candidate));
@@ -61,22 +61,22 @@ void test_ecu_params_init_falls_back_to_defaults_on_malformed_blob(void) {
 
   ecuParamsInit();
 
-  ecu_params_values_t expected = {.fanCoolantStartC = TEMP_FAN_START,
-                                  .fanCoolantStopC = TEMP_FAN_STOP,
-                                  .fanAirStartC = AIR_TEMP_FAN_START,
-                                  .fanAirStopC = AIR_TEMP_FAN_STOP,
-                                  .heaterStopC = TEMP_HEATER_STOP,
-                                  .nominalRpm = NOMINAL_RPM_VALUE};
+  ecu_params_values_t expected = {/* fanCoolantStartC */ TEMP_FAN_START,
+                                  /* fanCoolantStopC */ TEMP_FAN_STOP,
+                                  /* fanAirStartC */ AIR_TEMP_FAN_START,
+                                  /* fanAirStopC */ AIR_TEMP_FAN_STOP,
+                                  /* heaterStopC */ TEMP_HEATER_STOP,
+                                  /* nominalRpm */ NOMINAL_RPM_VALUE};
   assertActiveEquals(&expected);
 }
 
 void test_ecu_params_poll_loads_blob_after_transient_read_failure(void) {
-  ecu_params_values_t candidate = {.fanCoolantStartC = 108,
-                                   .fanCoolantStopC = 96,
-                                   .fanAirStartC = 58,
-                                   .fanAirStopC = 44,
-                                   .heaterStopC = 79,
-                                   .nominalRpm = 930};
+  ecu_params_values_t candidate = {/* fanCoolantStartC */ 108,
+                                   /* fanCoolantStopC */ 96,
+                                   /* fanAirStartC */ 58,
+                                   /* fanAirStopC */ 44,
+                                   /* heaterStopC */ 79,
+                                   /* nominalRpm */ 930};
   TEST_ASSERT_EQUAL_INT(HAL_OK, ecuParamsPersist(&candidate));
 
   ecuParamsResetRuntimeStateForTest();
@@ -91,12 +91,12 @@ void test_ecu_params_poll_loads_blob_after_transient_read_failure(void) {
 }
 
 void test_ecu_params_validate_rejects_invalid_hysteresis(void) {
-  ecu_params_values_t candidate = {.fanCoolantStartC = TEMP_FAN_START,
-                                   .fanCoolantStopC = TEMP_FAN_START,
-                                   .fanAirStartC = AIR_TEMP_FAN_START,
-                                   .fanAirStopC = AIR_TEMP_FAN_STOP,
-                                   .heaterStopC = TEMP_HEATER_STOP,
-                                   .nominalRpm = NOMINAL_RPM_VALUE};
+  ecu_params_values_t candidate = {/* fanCoolantStartC */ TEMP_FAN_START,
+                                   /* fanCoolantStopC */ TEMP_FAN_START,
+                                   /* fanAirStartC */ AIR_TEMP_FAN_START,
+                                   /* fanAirStopC */ AIR_TEMP_FAN_STOP,
+                                   /* heaterStopC */ TEMP_HEATER_STOP,
+                                   /* nominalRpm */ NOMINAL_RPM_VALUE};
 
   const char *reason = NULL;
   TEST_ASSERT_FALSE(ecuParamsValidate(&candidate, &reason));
@@ -108,12 +108,12 @@ void test_ecu_params_stage_and_apply_updates_active_set(void) {
   const int16_t defaultHeaterStop = ecuParamsHeaterStop();
   const int16_t defaultNominalRpm = ecuParamsNominalRpm();
 
-  ecu_params_values_t candidate = {.fanCoolantStartC = 109,
-                                   .fanCoolantStopC = 95,
-                                   .fanAirStartC = 57,
-                                   .fanAirStopC = 43,
-                                   .heaterStopC = 78,
-                                   .nominalRpm = 920};
+  ecu_params_values_t candidate = {/* fanCoolantStartC */ 109,
+                                   /* fanCoolantStopC */ 95,
+                                   /* fanAirStartC */ 57,
+                                   /* fanAirStopC */ 43,
+                                   /* heaterStopC */ 78,
+                                   /* nominalRpm */ 920};
 
   TEST_ASSERT_TRUE(ecuParamsStage(&candidate, NULL));
   TEST_ASSERT_EQUAL_INT16(defaultHeaterStop, ecuParamsHeaterStop());
@@ -125,12 +125,12 @@ void test_ecu_params_stage_and_apply_updates_active_set(void) {
 
 void test_ecu_params_validate_rejects_nominal_rpm_out_of_range(void) {
   ecu_params_values_t candidate = {
-      .fanCoolantStartC = TEMP_FAN_START,
-      .fanCoolantStopC = TEMP_FAN_STOP,
-      .fanAirStartC = AIR_TEMP_FAN_START,
-      .fanAirStopC = AIR_TEMP_FAN_STOP,
-      .heaterStopC = TEMP_HEATER_STOP,
-      .nominalRpm = (int16_t)(ECU_PARAMS_NOMINAL_RPM_MAX + 1)};
+      /* fanCoolantStartC */ TEMP_FAN_START,
+      /* fanCoolantStopC */ TEMP_FAN_STOP,
+      /* fanAirStartC */ AIR_TEMP_FAN_START,
+      /* fanAirStopC */ AIR_TEMP_FAN_STOP,
+      /* heaterStopC */ TEMP_HEATER_STOP,
+      /* nominalRpm */ (int16_t)(ECU_PARAMS_NOMINAL_RPM_MAX + 1)};
 
   const char *reason = NULL;
   TEST_ASSERT_FALSE(ecuParamsValidate(&candidate, &reason));

@@ -31,6 +31,9 @@ does not move the next deadline, and a step a whole period late starts a new
 grid instead of a burst of catch-up steps. Within `CORE1_VP37_GUARD_US` before
 a deadline core 1 starts no other work (turbo, RPM, the test demand) and waits
 for the deadline from RAM, so the step does not inherit the tail of that work.
+Once the deadline is reached, core 1 also services demand and stop commands.
+This keeps an overloaded loop responsive when the requested period is shorter
+than the work; it does not make that period achievable.
 The bench tests record their step announcements on core 1 and core 0 prints
 them, together with acknowledgements of default resets. A changed test demand
 waits for its announcement, at most
@@ -353,7 +356,7 @@ normal operating defaults.
 | [`config.c`](../../src/ECU/config.c) | stored settings and the configurator session |
 | [`tests.c`](../../src/ECU/tests.c) | the functional test suite: each bench test, what it drives, and whether the sequence and the configurator include it |
 | [`tests_workers.c`](../../src/ECU/tests_workers.c) | what each test does: demand generators, one-shot actions and the progress they report |
-| [`tests_helpers.c`](../../src/ECU/tests_helpers.c) | test parameters and the runner behind the bench console and the configurator's test commands, with its engine-speed interlock and keepalive; idle stubs without `ECU_FUNCTIONAL_TESTS_ENABLED` |
+| [`tests_helpers.c`](../../src/ECU/tests_helpers.c) | ECU parameters, VP37 commands, demand policy and engine-speed interlock for the [shared functional-test runner](../common/test_runner/README.md); idle stubs without `ECU_FUNCTIONAL_TESTS_ENABLED` |
 
 ## Bench image and hardware
 
@@ -419,3 +422,32 @@ endpoints, validity and any buffer overflow. The current estimator's window
 and timeout settings are defined in `vp37_config.h`. The normal `VP37 C`
 stream shows the return to rest after calibration; calibration does not
 sample current. Normal RAM capture remains busy until this export finishes.
+
+For metrics covering a complete run, send `B2` to start a stream and `B0`
+to finish it. The control core records every step in the trace buffer while
+the console core drains it as `VP37 N` lines. `B` and `B1` retain their finite
+capture modes; calibration and all capture modes share the same memory.
+The console continues to print `VP37 C` for live supervision. It drains `N`
+on every console loop, independently of the C report interval, with a 20 ms
+budget per pass. A USB write already in progress can outlast that budget.
+Each `N` line includes CRLF and is sent in one serial write without the
+`ECU:` debug prefix, avoiding separate USB transfers for that prefix and
+the line ending.
+
+Use the MCU clock `us` and consecutive step numbers `n` for metric windows,
+not the time a buffered line reaches the host. `VP37 STREAM END` gives the
+capture times, sample count, first and last step numbers and `overflow`.
+Reject incomplete captures, sequence gaps, mismatched counts and overflow.
+The recorder never waits for USB: if the reader falls behind, recording ends
+with `overflow:1`. A stopped pump also ends the stream; sending `S0` keeps
+recording the control steps at rest. Drain the completion record before
+starting another capture or closing the collector.
+
+Each `N` sample includes the requested and ramped positions, feedback,
+timing, R sample count (`rn`), active R compensation (`ruse`) and thermal
+scale (`tsc10000`, scale times 10000). `thr10` gives demand in tenths of a
+percent. The console assembles each N line before sending it to USB.
+The latest current scan supplies `latch`, `lp` and `lv`;
+`cmd_us` is usable only with `match:1`. These observations can precede the
+recorded step and do not by themselves identify the first PWM latch after
+a command. Keep the normal C-based guards active throughout the recording.

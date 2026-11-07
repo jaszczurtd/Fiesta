@@ -35,7 +35,7 @@ static void heatedWindshields_disableHeatedWindows(heatedWindshields *self) {
 void heatedWindshields_heatedWindow(heatedWindshields *self, bool enable,
                                     int32_t side) {
   (void)self;
-  pcf8574_write(side, enable);
+  pcf8574_write((uint8_t)side, enable);
 }
 
 void heatedWindshields_init(heatedWindshields *self) {

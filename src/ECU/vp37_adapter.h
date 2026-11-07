@@ -40,6 +40,15 @@ VP37InitStatus vp37AdapterStart(VP37Pump *pump);
  */
 void vp37AdapterPublish(const VP37Pump *pump);
 
+/**
+ * @brief Allow core-1 services outside the upcoming VP37 deadline guard.
+ * @param pump Controller owned by core 1; NULL is rejected.
+ * @param nowUs Current MCU time in microseconds, modulo 2^32.
+ * @return True outside the guard or after a started controller is already due.
+ * @note An overloaded controller must still receive demand and stop commands.
+ */
+bool vp37AdapterCanServiceCore1(const VP37Pump *pump, uint32_t nowUs);
+
 #ifdef __cplusplus
 }
 #endif

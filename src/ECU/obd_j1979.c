@@ -112,8 +112,8 @@ static void encodeMode01FuelSysStatus(uint8_t *txData) {
  */
 static void encodeMode01EngineLoad(uint8_t *txData) {
   txData[0] = 0x03;
-  txData[3] =
-      hal_math_percent_to_value(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
+  txData[3] = (uint8_t)hal_math_percent_to_value(
+      getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
 }
 
 /**
@@ -124,7 +124,7 @@ static void encodeMode01AbsoluteLoad(uint8_t *txData) {
   txData[0] = 0x04;
   int l =
       hal_math_percent_to_value(getGlobalValue(F_CALCULATED_ENGINE_LOAD), 255);
-  jh_store_be16(&txData[3], l);
+  jh_store_be16(&txData[3], (uint16_t)l);
 }
 
 /**
@@ -174,7 +174,7 @@ static void encodeMode01FuelRailPressureAlt(uint8_t *txData) {
   txData[0] = 0x04;
   const RPM *rpm = getRPMInstance();
   int p = RPM_isEngineRunning(rpm) ? (DEFAULT_INJECTION_PRESSURE * 10) : 0;
-  jh_store_be16(&txData[3], p);
+  jh_store_be16(&txData[3], (uint16_t)p);
 }
 
 /**
@@ -188,7 +188,7 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
   if (fuelPercentage > 100) {
     fuelPercentage = 100;
   }
-  txData[3] = hal_math_percent_to_value(fuelPercentage, 255);
+  txData[3] = (uint8_t)hal_math_percent_to_value((float)fuelPercentage, 255);
 }
 
 /**
@@ -198,7 +198,7 @@ static void encodeMode01FuelLevel(uint8_t *txData) {
 static void encodeMode01EngineRpm(uint8_t *txData) {
   txData[0] = 0x04;
   int32_t engine_Rpm = (int32_t)(getGlobalValue(F_RPM) * 4.0f);
-  jh_store_be16(&txData[3], engine_Rpm);
+  jh_store_be16(&txData[3], (uint16_t)engine_Rpm);
 }
 
 /**
@@ -230,7 +230,7 @@ static void encodeMode01IntakeTemp(uint8_t *txData) {
 static void encodeMode01ThrottlePos(uint8_t *txData) {
   txData[0] = 0x03;
   float percent = (getGlobalValue(F_THROTTLE_POS) * 100) / PWM_RESOLUTION;
-  txData[3] = hal_math_percent_to_value(percent, 255);
+  txData[3] = (uint8_t)hal_math_percent_to_value(percent, 255);
 }
 
 /**
@@ -306,7 +306,7 @@ static void encodeMode01Pid_41_60(uint8_t *txData) {
 static void encodeMode01EcuVoltage(uint8_t *txData) {
   txData[0] = 0x04;
   int32_t volt = (int32_t)(getGlobalValue(F_VOLTS) * 1000.0f);
-  jh_store_be16(&txData[3], volt);
+  jh_store_be16(&txData[3], (uint16_t)volt);
 }
 
 /**

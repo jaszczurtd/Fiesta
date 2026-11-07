@@ -257,6 +257,73 @@ void test_wait_gives_up_on_a_pump_that_does_not_publish(void) {
 }
 #endif
 
+void test_metric_stream_crosses_cores_without_torn_or_missing_steps(void) {
+  s_pump.vp37Initialized = true;
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_startMetricStream(&s_pump));
+  constexpr uint32_t steps = VP37_TRACE_SAMPLES * 20U;
+  std::atomic<uint32_t> consumed{0U};
+  std::atomic<bool> done{false};
+  std::atomic<bool> cancel{false};
+  std::thread producer([&] {
+    for (uint32_t step = 1U; (step <= steps) && !cancel; ++step) {
+      // Pace the test producer; the production recorder itself never waits.
+      while ((step > consumed.load() + VP37_TRACE_SAMPLES / 2U) && !cancel) {
+        std::this_thread::yield();
+      }
+      markPump(step);
+      s_pump.controlLastUs = step * 5000U;
+      s_pump.thermal.driveSamples = step;
+      s_pump.scan.cycleResult.latchUs = step * 5000U - 2000U;
+      s_pump.scan.cycleResult.latchPeriodUs = 5000U;
+      s_pump.scan.cycleResult.latchValid = true;
+      s_pump.currentControl.matchedCommand.writtenUs = step;
+      s_pump.currentControl.matchFound = true;
+      s_pump.currentControl.matchedSampleSequence = step;
+      s_pump.scan.cycleResultSequence = step;
+      VP37_publish(&s_pump);
+      VP37_traceRecord(&s_pump);
+    }
+    (void)VP37_stopMetricStream();
+    done = true;
+  });
+  uint32_t count = 0U;
+  bool valid = true;
+  VP37MetricSample sample = {};
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(30);
+  for (;;) {
+    if (std::chrono::steady_clock::now() > deadline) {
+      cancel = true;
+      break;
+    }
+    const hal_status_t status = VP37_readMetricSample(&sample);
+    if (status == HAL_OK) {
+      ++count;
+      valid = valid && (sample.sequence == count) &&
+              (sample.pwm == (int32_t)count) && (sample.us == count * 5000U) &&
+              (sample.driveSamples == count) &&
+              (sample.latchUs == count * 5000U - 2000U) &&
+              (sample.latchPeriodUs == 5000U) && sample.latchValid &&
+              (sample.commandUs == count) && sample.commandMatched;
+      consumed = count;
+    } else if (done && (status == HAL_ENOENT)) {
+      break;
+    } else {
+      std::this_thread::yield();
+    }
+  }
+  producer.join();
+  TEST_ASSERT_FALSE(cancel);
+  TEST_ASSERT_TRUE(valid);
+  TEST_ASSERT_EQUAL_UINT32(steps, count);
+  VP37MetricResult result = {};
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_takeMetricResult(&result));
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_UINT32(steps, result.samples);
+  TEST_ASSERT_EQUAL_UINT32(1U, result.firstSequence);
+  TEST_ASSERT_EQUAL_UINT32(steps, result.lastSequence);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_publication_does_not_wait_for_a_copy_in_progress);
@@ -264,6 +331,7 @@ int main(void) {
   RUN_TEST(test_copy_gives_up_while_a_publication_stays_open);
   RUN_TEST(test_status_reads_back_exactly_what_the_step_published);
   RUN_TEST(test_sequence_wrap_never_reads_as_unpublished);
+  RUN_TEST(test_metric_stream_crosses_cores_without_torn_or_missing_steps);
 #ifdef VP37_TEST_DELAY_HOOK
   RUN_TEST(test_wait_returns_when_the_next_publication_ends);
   RUN_TEST(test_wait_ends_with_a_publication_not_at_its_start);

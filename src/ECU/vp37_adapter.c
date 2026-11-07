@@ -12,6 +12,12 @@
 
 #include <utils/multicoreWatchdog.h>
 
+bool vp37AdapterCanServiceCore1(const VP37Pump *pump, uint32_t nowUs) {
+  return (pump != NULL) &&
+         (!VP37_controlDueWithin(pump, nowUs, CORE1_VP37_GUARD_US) ||
+          (pump->controlStarted && VP37_controlDueWithin(pump, nowUs, 0U)));
+}
+
 static void vp37AdapterWriteQuantity(int32_t command) {
   (void)pwmWrite(JH_HW_NODE_VP37_PIN_QUANTITY_PWM, command);
 }

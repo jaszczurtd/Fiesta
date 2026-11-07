@@ -193,16 +193,17 @@ hal_status_t sendText(const test_service_t &fixture, const char *command,
                       const char *arguments, bool authenticated, char *out_body,
                       size_t out_size) {
   const hal_command_request_t request = {
-      .source = HAL_COMMAND_SOURCE_SERIAL_SESSION,
-      .encoding = HAL_COMMAND_ENCODING_TEXT,
-      .command = command,
-      .arguments = reinterpret_cast<const uint8_t *>(arguments),
-      .arguments_length = arguments != nullptr ? std::strlen(arguments) : 0u,
-      .request_id = 1u,
-      .peer_id = 0u,
-      .session_id = 1u,
-      .security_flags = authenticated ? HAL_COMMAND_SECURITY_AUTHENTICATED : 0u,
-      .source_context = nullptr,
+      /* source */ HAL_COMMAND_SOURCE_SERIAL_SESSION,
+      /* encoding */ HAL_COMMAND_ENCODING_TEXT,
+      /* command */ command,
+      /* arguments */ reinterpret_cast<const uint8_t *>(arguments),
+      /* arguments_length */ arguments != nullptr ? std::strlen(arguments) : 0u,
+      /* request_id */ 1u,
+      /* peer_id */ 0u,
+      /* session_id */ 1u,
+      /* security_flags */
+      authenticated ? HAL_COMMAND_SECURITY_AUTHENTICATED : 0u,
+      /* source_context */ nullptr,
   };
   hal_command_response_t response = {};
   const hal_status_t status =
@@ -241,17 +242,17 @@ void test_full_service_rolls_back_and_can_be_initialized_again(void) {
     (void)snprintf(k_dummy_names[index], sizeof(k_dummy_names[index]),
                    "DUMMY_%u", (unsigned)index);
     const hal_command_definition_t definition = {
-        .name = k_dummy_names[index],
-        .allowed_sources = HAL_COMMAND_SOURCE_MASK_ALL,
-        .required_security = 0u,
-        .handler = dummyHandler,
-        .user = nullptr,
+        /* name */ k_dummy_names[index],
+        /* allowed_sources */ HAL_COMMAND_SOURCE_MASK_ALL,
+        /* required_security */ 0u,
+        /* handler */ dummyHandler,
+        /* user */ nullptr,
     };
     TEST_ASSERT_EQUAL_INT(HAL_OK,
                           hal_command_router_register(router, &definition));
   }
 
-  test_values_t active = {.value = 1};
+  test_values_t active = {1, 0};
   test_values_t staging = active;
   const sc_command_service_config_t config = serviceConfig(&active, &staging);
   sc_command_service_t service = {};
@@ -278,16 +279,16 @@ void test_full_service_rolls_back_and_can_be_initialized_again(void) {
 
   static const uint8_t k_arguments[] = "value 5";
   const hal_command_request_t request = {
-      .source = HAL_COMMAND_SOURCE_SERIAL_SESSION,
-      .encoding = HAL_COMMAND_ENCODING_TEXT,
-      .command = SC_CMD_SET_PARAM,
-      .arguments = k_arguments,
-      .arguments_length = sizeof(k_arguments) - 1u,
-      .request_id = 1u,
-      .peer_id = 0u,
-      .session_id = 1u,
-      .security_flags = HAL_COMMAND_SECURITY_AUTHENTICATED,
-      .source_context = nullptr,
+      /* source */ HAL_COMMAND_SOURCE_SERIAL_SESSION,
+      /* encoding */ HAL_COMMAND_ENCODING_TEXT,
+      /* command */ SC_CMD_SET_PARAM,
+      /* arguments */ k_arguments,
+      /* arguments_length */ sizeof(k_arguments) - 1u,
+      /* request_id */ 1u,
+      /* peer_id */ 0u,
+      /* session_id */ 1u,
+      /* security_flags */ HAL_COMMAND_SECURITY_AUTHENTICATED,
+      /* source_context */ nullptr,
   };
   hal_command_response_t response = {};
   TEST_ASSERT_EQUAL_INT(
@@ -376,7 +377,7 @@ void test_service_rejects_incomplete_write_and_invalid_source_config(void) {
   hal_command_router_t router = nullptr;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_create(&router));
 
-  test_values_t active = {.value = 1};
+  test_values_t active = {1, 0};
   test_values_t staging = active;
   const sc_command_service_config_t complete = serviceConfig(&active, &staging);
 
@@ -421,16 +422,16 @@ void test_service_preserves_foreign_command_entries(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_create(&router));
 
   const hal_command_definition_t late_foreign = {
-      .name = SC_CMD_REBOOT_BOOTLOADER,
-      .allowed_sources = HAL_COMMAND_SOURCE_MASK_ALL,
-      .required_security = 0u,
-      .handler = foreignHandler,
-      .user = &s_foreign_call_count,
+      /* name */ SC_CMD_REBOOT_BOOTLOADER,
+      /* allowed_sources */ HAL_COMMAND_SOURCE_MASK_ALL,
+      /* required_security */ 0u,
+      /* handler */ foreignHandler,
+      /* user */ &s_foreign_call_count,
   };
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_command_router_register(router, &late_foreign));
 
-  test_values_t active = {.value = 1};
+  test_values_t active = {1, 0};
   test_values_t staging = active;
   const sc_command_service_config_t config = serviceConfig(&active, &staging);
   sc_command_service_t service = {};
@@ -444,16 +445,16 @@ void test_service_preserves_foreign_command_entries(void) {
   TEST_ASSERT_EQUAL_UINT(1u, command_count);
 
   const hal_command_request_t late_request = {
-      .source = HAL_COMMAND_SOURCE_SERIAL_SESSION,
-      .encoding = HAL_COMMAND_ENCODING_TEXT,
-      .command = SC_CMD_REBOOT_BOOTLOADER,
-      .arguments = nullptr,
-      .arguments_length = 0u,
-      .request_id = 1u,
-      .peer_id = 0u,
-      .session_id = 1u,
-      .security_flags = 0u,
-      .source_context = nullptr,
+      /* source */ HAL_COMMAND_SOURCE_SERIAL_SESSION,
+      /* encoding */ HAL_COMMAND_ENCODING_TEXT,
+      /* command */ SC_CMD_REBOOT_BOOTLOADER,
+      /* arguments */ nullptr,
+      /* arguments_length */ 0u,
+      /* request_id */ 1u,
+      /* peer_id */ 0u,
+      /* session_id */ 1u,
+      /* security_flags */ 0u,
+      /* source_context */ nullptr,
   };
   hal_command_response_t response = {};
   TEST_ASSERT_EQUAL_INT(
@@ -465,11 +466,11 @@ void test_service_preserves_foreign_command_entries(void) {
   s_foreign_call_count = 0u;
 
   const hal_command_definition_t foreign = {
-      .name = SC_CMD_GET_META,
-      .allowed_sources = HAL_COMMAND_SOURCE_MASK_ALL,
-      .required_security = 0u,
-      .handler = foreignHandler,
-      .user = &s_foreign_call_count,
+      /* name */ SC_CMD_GET_META,
+      /* allowed_sources */ HAL_COMMAND_SOURCE_MASK_ALL,
+      /* required_security */ 0u,
+      /* handler */ foreignHandler,
+      /* user */ &s_foreign_call_count,
   };
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_register(router, &foreign));
 
@@ -478,16 +479,16 @@ void test_service_preserves_foreign_command_entries(void) {
   TEST_ASSERT_FALSE(service.initialized);
 
   const hal_command_request_t request = {
-      .source = HAL_COMMAND_SOURCE_SERIAL_SESSION,
-      .encoding = HAL_COMMAND_ENCODING_TEXT,
-      .command = SC_CMD_GET_META,
-      .arguments = nullptr,
-      .arguments_length = 0u,
-      .request_id = 1u,
-      .peer_id = 0u,
-      .session_id = 1u,
-      .security_flags = 0u,
-      .source_context = nullptr,
+      /* source */ HAL_COMMAND_SOURCE_SERIAL_SESSION,
+      /* encoding */ HAL_COMMAND_ENCODING_TEXT,
+      /* command */ SC_CMD_GET_META,
+      /* arguments */ nullptr,
+      /* arguments_length */ 0u,
+      /* request_id */ 1u,
+      /* peer_id */ 0u,
+      /* session_id */ 1u,
+      /* security_flags */ 0u,
+      /* source_context */ nullptr,
   };
   std::memset(&response, 0, sizeof(response));
   TEST_ASSERT_EQUAL_INT(
@@ -531,7 +532,7 @@ void test_test_commands_are_registered_only_with_complete_operations(void) {
   TEST_ASSERT_EQUAL_UINT(0u, command_count);
 
   // A module that leaves out any operation gets no test command at all.
-  test_values_t active = {.value = 1};
+  test_values_t active = {1, 0};
   test_values_t staging = active;
   sc_command_service_config_t config = serviceConfig(&active, &staging);
   sc_command_test_ops_t incomplete = k_fake_ops;

@@ -67,10 +67,20 @@ typedef struct {
  * its ~70 arguments exhausted it once the USB IRQ nested on top (rev98,
  * 2026-09-25). */
 static VP37Snapshot s_vp37Snapshot;
-static VP37TraceSample s_vp37TraceSamples[4];
+static union {
+  VP37TraceSample trace[4];
+  struct {
+    VP37MetricSample sample;
+    char line[480];
+  } metric;
+} s_vp37ConsoleSamples;
 /* Longest wait of a reporter for the end of a control step: two 5 ms periods,
  * after which a stopped pump is reported as it is. */
 #define START_VP37_REPORT_WAIT_US 10000U
+/* Limit each drain pass so the console, CAN and C guards get serviced even
+ * when the producer records every millisecond. One USB write may outlast
+ * this budget; the transport has its own timeout. */
+#define START_VP37_STREAM_BUDGET_US 20000U
 #endif
 
 static start_runtime_state_t s_startRuntimeState = {
@@ -543,9 +553,10 @@ static void runCore0(void) {
     (void)VP37_waitForPublication(&s_ctx.injectionPump,
                                   START_VP37_REPORT_WAIT_US);
     size_t sampleCount = 0U;
-    while (!hal_debug_is_muted() &&
-           (sampleCount < COUNTOF(s_vp37TraceSamples)) &&
-           (VP37_readTrace(&s_vp37TraceSamples[sampleCount]) == HAL_OK)) {
+    while (
+        !hal_debug_is_muted() &&
+        (sampleCount < COUNTOF(s_vp37ConsoleSamples.trace)) &&
+        (VP37_readTrace(&s_vp37ConsoleSamples.trace[sampleCount]) == HAL_OK)) {
       sampleCount++;
     }
     // Host guards need fresh feedback while the RAM trace records too.
@@ -553,11 +564,37 @@ static void runCore0(void) {
       VP37_showDebug(&s_ctx.injectionPump, &s_vp37Snapshot);
     }
     for (size_t i = 0U; i < sampleCount; i++) {
-      VP37_showTrace(&s_vp37TraceSamples[i]);
+      VP37_showTrace(&s_vp37ConsoleSamples.trace[i]);
     }
     uint32_t completedCount = 0U;
     if (VP37_takeTraceCompletion(&completedCount) == HAL_OK) {
       deb("VP37 trace end samples:%lu", (unsigned long)completedCount);
+    }
+  }
+  bool connected = false;
+  if (!hal_debug_is_muted() &&
+      (hal_usb_cdc_is_connected(&connected) == HAL_OK) && connected) {
+    // Drain every core-0 iteration, independently of the 20 ms C report.
+    // The trace samples above are already printed, so the buffer is free.
+    const uint32_t startedUs = hal_micros();
+    while (!hal_elapsed_u32(hal_micros(), startedUs,
+                            START_VP37_STREAM_BUDGET_US)) {
+      if (VP37_readMetricSample(&s_vp37ConsoleSamples.metric.sample) !=
+          HAL_OK) {
+        break;
+      }
+      const hal_status_t status = VP37_formatMetricSample(
+          &s_vp37ConsoleSamples.metric.sample, s_vp37ConsoleSamples.metric.line,
+          sizeof(s_vp37ConsoleSamples.metric.line));
+      if (status == HAL_OK) {
+        hal_serial_print(s_vp37ConsoleSamples.metric.line);
+      } else {
+        derr("VP37 metric format: %s", hal_status_to_string(status));
+      }
+    }
+    VP37MetricResult metricResult;
+    if (VP37_takeMetricResult(&metricResult) == HAL_OK) {
+      VP37_showMetricResult(&metricResult);
     }
   }
 #endif
@@ -679,10 +716,9 @@ static void runCore1(void) {
   s_startPersistentState.statusVariable1Val = 1;
 #ifdef VP37
   start_takeOverVP37();
-  // Close to the next VP37 deadline core 1 starts nothing else, so the step
-  // does not wait for the tail of other work.
-  if (!VP37_controlDueWithin(&s_ctx.injectionPump, hal_micros(),
-                             CORE1_VP37_GUARD_US)) {
+  // Reserve the interval before a deadline, but service demand and stop
+  // commands when already late: an overloaded loop must not starve them.
+  if (vp37AdapterCanServiceCore1(&s_ctx.injectionPump, hal_micros())) {
 #endif
     hal_mutex_lock(turboStateMutex);
     Turbo_process(&s_ctx.turbo);

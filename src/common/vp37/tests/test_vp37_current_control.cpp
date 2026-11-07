@@ -1,10 +1,10 @@
-#include "../vp37_internal.h"
-#include "hal/impl/.mock/hal_mock.h"
-#include "unity.h"
-
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+
+#include "../vp37_internal.h"
+#include "hal/impl/.mock/hal_mock.h"
+#include "unity.h"
 
 static constexpr uint32_t kPeriodUs = 1000000U / VP37_PWM_FREQUENCY_HZ;
 static constexpr float kControlDt = 0.005f;
