@@ -360,9 +360,21 @@ lub `Project: Upload variant: BENCH`. Obraz trafia do
 RP2040-Plus pod `.build/rp2040/rp2040-plus/`. Zadania bez wariantu dają obraz
 samochodu. Odpowiedniki CLI podaje [instrukcja kompilacji](../../doc/BUILDING.pl.md).
 
+W `BENCH` opcja `ECU_SC_TESTS_RPM_INTERLOCK` ma domyślnie wartość `0`,
+więc testy konfiguratora mogą działać przy RPM podawanym z generatora.
+Ustawienie `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
+`ECU_SC_TESTS_RPM_LIMIT` rpm. Opcja nie dotyczy testów z konsoli;
+szczegóły podają [zasady testów funkcjonalnych](../common/scDefinitions/PROTOCOL.pl.md#testy-funkcjonalne).
+
 Jednorazowe czynności DTC i KV wykonuje rdzeń 0. Rdzeń sterowania nadal
 obsługuje VP37 i przesuwa sekwencję testów po publikacji wyniku.
 Zatrzymanie testu anuluje czynność, która jeszcze nie zaczęła się wykonywać.
+`run dtc` podaje `ok`, gdy U0073 (`DTC_CAN_BUS_FAULT`) jest aktywny
+z detalem transmisji RPM (`DTC_DETAIL_CAN_TX_RPM`), albo `failed`
+w pozostałych przypadkach. Wynik sprawdza stan w pamięci zaraz po
+wstrzyknięciu błędu; nie potwierdza zapisu trwałego po restarcie.
+Odczytaj kod przez OBD, po próbie skasuj DTC i ponów odczyt,
+aby potwierdzić skasowanie.
 Polecenia odczytu `list` i `params` również drukuje rdzeń konsoli, gdy
 callback portu szeregowego zwolni tymczasowe wyciszenie debug.
 Komunikaty startu, zatrzymania i wyniku testu trafiają tam przez ograniczoną

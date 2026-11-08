@@ -45,7 +45,9 @@ typedef struct {
   void (*start)(
       void); /**< Optional initializer; with no step, runs on session role. */
   float (*step)(bool *outFinished); /**< Controller step; NULL is a one-shot. */
-  const char *(*result)(void);      /**< Completion token; NULL means done. */
+  const char *(*result)(void);
+  /**< Completion token; NULL means done. Runs on the session role after a
+   * one-shot start, otherwise on the controller role after the final step. */
   size_t (*progress)(sc_command_test_field_t *fields, size_t capacity);
   /**< Optional controller-role status fields; must respect capacity. */
 } fiesta_test_t;

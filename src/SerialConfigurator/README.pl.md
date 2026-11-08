@@ -149,8 +149,11 @@ Parametry obowiązują do resetu ECU. Panel statusu pokazuje test, inicjatora,
 krok sekwencji, czas, zadane i zmierzone położenie, postęp i ostatni wynik.
 Odpytuje co 250 ms podczas swojego testu, również gdy użytkownik ogląda inną
 kartę. ECU zatrzymuje test po końcu sesji albo po 3 s bez poleceń testowych.
-Zamknięcie okna, rozłączenie lub nowe wykrywanie kończy więc test. Domyślna
-blokada RPM odrzuca lub zatrzymuje test powyżej skonfigurowanej granicy obrotów.
+Zamknięcie okna, rozłączenie lub nowe wykrywanie kończy więc test. Testy
+funkcjonalne ECU wymagają obrazu `BENCH`, w którym blokada RPM konfiguratora
+jest domyślnie wyłączona (`ECU_SC_TESTS_RPM_INTERLOCK=0`). Build ECU z opcją
+ustawioną na `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
+`ECU_SC_TESTS_RPM_LIMIT` rpm.
 
 ```bash
 ./build/serial-configurator-cli test-list --module ECU

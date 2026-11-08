@@ -193,11 +193,15 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
 
 ECU zatrzymuje test konfiguratora po końcu sesji (`SC_BYE`) albo po
 `ECU_SC_TESTS_KEEPALIVE_MS` (3 s) bez polecenia testowego, w tym statusu.
-Host musi odpytywać status do końca testu. Domyślnie włączony
-`ECU_SC_TESTS_RPM_INTERLOCK` odrzuca start i zatrzymuje test po przekroczeniu
-`ECU_SC_TESTS_RPM_LIMIT` rpm. Stanowisko podające RPM z generatora przy
-nieruchomym silniku buduje się z wyłączoną blokadą. Testy z konsoli należą
-do operatora i te zasady ich nie obejmują.
+Host musi odpytywać status do końca testu.
+
+Testy funkcjonalne są włączone tylko w wariancie ECU `BENCH`. Domyślne
+`ECU_SC_TESTS_RPM_INTERLOCK=0` wyłącza blokadę RPM dla testów konfiguratora,
+aby stanowisko mogło podawać RPM z generatora przy nieruchomym silniku.
+Build z `ECU_SC_TESTS_RPM_INTERLOCK=1` odrzuca start testu konfiguratora
+i zatrzymuje już działający test po przekroczeniu `ECU_SC_TESTS_RPM_LIMIT`
+rpm. Testy uruchomione z konsoli stanowiskowej należą do operatora;
+koniec sesji, timeout keepalive i ta blokada RPM ich nie zatrzymują.
 
 ECU bez testów odpowiada `count=0`; firmware bez poleceń zwraca
 `SC_UNKNOWN_CMD`. W obu przypadkach host pokazuje „No tests available".

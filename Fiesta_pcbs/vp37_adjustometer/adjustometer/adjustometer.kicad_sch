@@ -6,12 +6,12 @@
 	(paper "A4")
 	(title_block
 		(title "VP37 Adjustometer")
-		(date "2026-04-14")
-		(rev "1.0")
+		(date "2026-11-08")
+		(rev "1.1")
 		(company "Marcin Kielesiński PROFI-SOFT")
 	)
 	(lib_symbols
-		(symbol "Connector:Conn_01x04_Socket"
+		(symbol "Connector:Conn_01x05_Socket"
 			(pin_names
 				(offset 1.016)
 				(hide yes)
@@ -20,14 +20,14 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "J"
-				(at 0 5.08 0)
+				(at 0 7.62 0)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
 				)
 			)
-			(property "Value" "Conn_01x04_Socket"
+			(property "Value" "Conn_01x05_Socket"
 				(at 0 -7.62 0)
 				(effects
 					(font
@@ -53,7 +53,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Generic connector, single row, 01x04, script generated"
+			(property "Description" "Generic connector, single row, 01x05, script generated"
 				(at 0 0 0)
 				(effects
 					(font
@@ -88,7 +88,19 @@
 					(hide yes)
 				)
 			)
-			(symbol "Conn_01x04_Socket_1_1"
+			(symbol "Conn_01x05_Socket_1_1"
+				(polyline
+					(pts
+						(xy -1.27 5.08) (xy -0.508 5.08)
+					)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
 				(polyline
 					(pts
 						(xy -1.27 2.54) (xy -0.508 2.54)
@@ -129,6 +141,18 @@
 					(pts
 						(xy -1.27 -5.08) (xy -0.508 -5.08)
 					)
+					(stroke
+						(width 0.1524)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(arc
+					(start 0 4.572)
+					(mid -0.5058 5.08)
+					(end 0 5.588)
 					(stroke
 						(width 0.1524)
 						(type default)
@@ -186,7 +210,7 @@
 					)
 				)
 				(pin passive line
-					(at -5.08 2.54 0)
+					(at -5.08 5.08 0)
 					(length 3.81)
 					(name "Pin_1"
 						(effects
@@ -204,7 +228,7 @@
 					)
 				)
 				(pin passive line
-					(at -5.08 0 0)
+					(at -5.08 2.54 0)
 					(length 3.81)
 					(name "Pin_2"
 						(effects
@@ -222,7 +246,7 @@
 					)
 				)
 				(pin passive line
-					(at -5.08 -2.54 0)
+					(at -5.08 0 0)
 					(length 3.81)
 					(name "Pin_3"
 						(effects
@@ -240,7 +264,7 @@
 					)
 				)
 				(pin passive line
-					(at -5.08 -5.08 0)
+					(at -5.08 -2.54 0)
 					(length 3.81)
 					(name "Pin_4"
 						(effects
@@ -250,6 +274,24 @@
 						)
 					)
 					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at -5.08 -5.08 0)
+					(length 3.81)
+					(name "Pin_5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -1062,6 +1104,187 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "Device:Q_NJFET_DGS"
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "Q"
+				(at 5.08 1.27 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "Q_NJFET_DGS"
+				(at 5.08 -1.27 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" ""
+				(at 5.08 2.54 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "N-JFET transistor, drain/gate/source"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "transistor NJFET N-JFET"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "Q_NJFET_DGS_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy -1.016 0.381) (xy -1.016 -0.381) (xy 0 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+				(polyline
+					(pts
+						(xy 0.254 1.905) (xy 0.254 -1.905) (xy 0.254 -1.905)
+					)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(circle
+					(center 1.27 0)
+					(radius 2.8194)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 2.54) (xy 2.54 1.397) (xy 0.254 1.397)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.54 -2.54) (xy 2.54 -1.27) (xy 0.254 -1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "Q_NJFET_DGS_1_1"
+				(pin input line
+					(at -5.08 0 0)
+					(length 5.334)
+					(name "G"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 5.08 270)
+					(length 2.54)
+					(name "D"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 2.54 -5.08 90)
+					(length 2.54)
+					(name "S"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 		(symbol "Device:R_Small"
 			(pin_numbers
 				(hide yes)
@@ -1207,7 +1430,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Adjustometer:RP2040-Zero_THT"
 				(at -5.08 0 0)
 				(effects
 					(font
@@ -1284,7 +1507,7 @@
 						)
 					)
 				)
-				(pin power_in line
+				(pin power_out line
 					(at -15.24 0 0)
 					(length 2.54)
 					(name "3V3"
@@ -1804,216 +2027,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Simulation_SPICE:NJFET"
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "Q"
-				(at 5.08 1.27 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Value" "NJFET"
-				(at 5.08 -1.27 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify left)
-				)
-			)
-			(property "Footprint" ""
-				(at 5.08 2.54 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#cha_JFETs"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "N-JFET transistor, for simulation only"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Sim.Device" "NJFET"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Sim.Type" "SHICHMANHODGES"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Sim.Pins" "1=D 2=G 3=S"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "transistor NJFET N-JFET"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "NJFET_0_1"
-				(polyline
-					(pts
-						(xy 0 0) (xy -1.016 0.381) (xy -1.016 -0.381) (xy 0 0)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0.254 1.905) (xy 0.254 -1.905) (xy 0.254 -1.905)
-					)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(circle
-					(center 1.27 0)
-					(radius 2.8194)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 2.54 2.54) (xy 2.54 1.397) (xy 0.254 1.397)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 2.54 -2.54) (xy 2.54 -1.27) (xy 0.254 -1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "NJFET_1_1"
-				(pin input line
-					(at -5.08 0 0)
-					(length 5.334)
-					(name "G"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 5.08 270)
-					(length 2.54)
-					(name "D"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 2.54 -5.08 90)
-					(length 2.54)
-					(name "S"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Transistor_BJT:BC547"
 			(pin_names
 				(offset 0)
@@ -2463,6 +2476,107 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "power:PWR_FLAG"
+			(power)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "#FLG"
+				(at 0 1.905 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Value" "PWR_FLAG"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Special symbol for telling ERC where power comes from"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "flag power"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "PWR_FLAG_0_0"
+				(pin power_out line
+					(at 0 0 90)
+					(length 0)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "PWR_FLAG_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 1.27) (xy -1.016 1.905) (xy 0 2.54) (xy 1.016 1.905) (xy 0 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 	)
 	(text "82\n"
 		(exclude_from_sim no)
@@ -2484,15 +2598,16 @@
 		)
 		(uuid "82d65d96-d6b4-48df-acd6-ae0283b9bc67")
 	)
-	(text "SCL"
+	(text "J1: 1..10 map to the VP37 harness; unused pins are NC.\nJ2: 1=5V input, 2=GND, 3=SDA, 4=SCL, 5=12V input.\nUse a protected external 12V supply and regulated 5V.\nDisconnect external 5V when powering RP2040-Zero by USB.\nQ2 (Toshiba 2SK170): pins 1=D, 2=G, 3=S; TO-92.\n0805 resistors/ceramics; THT electrolytics/headers; U1 SOT-223."
 		(exclude_from_sim no)
-		(at 129.032 69.342 0)
+		(at 149.098 52.832 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
+			(justify left top)
 		)
-		(uuid "84ab2797-dcd8-41ed-8b14-c3bcd6d26ec0")
+		(uuid "c7c973c8-22ef-40fe-89a9-cec5e51add48")
 	)
 	(text "84\n"
 		(exclude_from_sim no)
@@ -2503,26 +2618,6 @@
 			)
 		)
 		(uuid "d68b162e-9b10-4cfd-b1af-ed5112c0154c")
-	)
-	(text "+5V\n"
-		(exclude_from_sim no)
-		(at 116.586 47.244 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-		)
-		(uuid "d7acb616-3807-4ede-b020-4bc63c5f13a3")
-	)
-	(text "SDA"
-		(exclude_from_sim no)
-		(at 122.428 69.088 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-		)
-		(uuid "dd9aa3d4-8b07-476e-9dd3-fe64d9db2907")
 	)
 	(junction
 		(at 110.49 68.58)
@@ -2597,6 +2692,12 @@
 		(uuid "5ff4423a-2faa-4d55-b0ba-253068e69870")
 	)
 	(junction
+		(at 134.62 50.8)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "715466bd-b2ed-451e-8425-b0205ab79851")
+	)
+	(junction
 		(at 127 60.96)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -2655,6 +2756,86 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "f8134e4f-1e5e-4950-ae98-8ff7bb6ea0cc")
+	)
+	(no_connect
+		(at 153.67 104.14)
+		(uuid "12fdd29e-498e-4e21-8cd9-b6d79a17a68c")
+	)
+	(no_connect
+		(at 170.18 91.44)
+		(uuid "26d5d238-c45c-436a-8872-0e7bf8cfb0e6")
+	)
+	(no_connect
+		(at 36.83 95.25)
+		(uuid "330b7389-5f94-4cec-883c-e2b587f6d732")
+	)
+	(no_connect
+		(at 161.29 104.14)
+		(uuid "361a9d18-d775-4627-8963-0095f3d6aa70")
+	)
+	(no_connect
+		(at 158.75 73.66)
+		(uuid "3ae18b22-3bb4-4274-b8a0-6fe02918ecb9")
+	)
+	(no_connect
+		(at 153.67 73.66)
+		(uuid "417841d7-8d27-41de-9ffb-b688f99b7a5f")
+	)
+	(no_connect
+		(at 148.59 73.66)
+		(uuid "435d68a4-67d8-4b1a-8248-665cd5e1aab3")
+	)
+	(no_connect
+		(at 170.18 83.82)
+		(uuid "487f64ee-3fee-4a9d-8702-2f872b685920")
+	)
+	(no_connect
+		(at 161.29 73.66)
+		(uuid "49cb284c-a7a8-4d03-9d07-9032fa3f1ba4")
+	)
+	(no_connect
+		(at 170.18 93.98)
+		(uuid "5cd69465-651a-4ab5-860f-7ff88372d2d2")
+	)
+	(no_connect
+		(at 36.83 87.63)
+		(uuid "5dd2039a-b0f3-408e-a3d5-2a6b1ad49ca8")
+	)
+	(no_connect
+		(at 158.75 104.14)
+		(uuid "60065a74-5831-47fb-89ea-3cf8bc922054")
+	)
+	(no_connect
+		(at 36.83 82.55)
+		(uuid "80e488ad-d9eb-40eb-a9d9-356191253947")
+	)
+	(no_connect
+		(at 156.21 104.14)
+		(uuid "8f8d61b2-a1a1-4a84-a7b0-99c975135283")
+	)
+	(no_connect
+		(at 156.21 73.66)
+		(uuid "9283adf3-8afe-4426-9e18-49be9edff817")
+	)
+	(no_connect
+		(at 36.83 92.71)
+		(uuid "a3eee859-2f84-482c-ad16-44b91e2300be")
+	)
+	(no_connect
+		(at 170.18 86.36)
+		(uuid "ab54d2d5-d82e-4646-b54e-50aa4f2f3bae")
+	)
+	(no_connect
+		(at 151.13 73.66)
+		(uuid "de673137-c1be-4982-b5f3-149840180090")
+	)
+	(no_connect
+		(at 170.18 88.9)
+		(uuid "de97f071-81b8-4fe6-9c82-8e827cc394c9")
+	)
+	(no_connect
+		(at 36.83 85.09)
+		(uuid "faa1e3d4-b0c9-4dda-bbcc-227151ac9a74")
 	)
 	(wire
 		(pts
@@ -2715,6 +2896,16 @@
 			(type default)
 		)
 		(uuid "17e6939b-dc6b-4d6c-9ac1-945770770bec")
+	)
+	(wire
+		(pts
+			(xy 129.54 50.8) (xy 134.62 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "17e90be1-8d92-4db9-9eab-08377e17fb01")
 	)
 	(wire
 		(pts
@@ -3028,6 +3219,16 @@
 	)
 	(wire
 		(pts
+			(xy 134.62 50.8) (xy 139.7 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "66f3d67e-cec5-4c54-8acb-74adb1fdf776")
+	)
+	(wire
+		(pts
 			(xy 110.49 68.58) (xy 105.41 68.58)
 		)
 		(stroke
@@ -3185,16 +3386,6 @@
 			(type default)
 		)
 		(uuid "8af97669-4f5a-4754-9bec-625cb735bc33")
-	)
-	(wire
-		(pts
-			(xy 87.63 67.31) (xy 91.44 67.31)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "8e43211b-dbf7-4e71-9e0a-3c74e5481158")
 	)
 	(wire
 		(pts
@@ -3498,6 +3689,26 @@
 	)
 	(wire
 		(pts
+			(xy 110.49 50.8) (xy 114.3 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dbe37fa5-15d9-4054-b202-19b4ede1db06")
+	)
+	(wire
+		(pts
+			(xy 85.09 67.31) (xy 90.17 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "dc5563bd-0438-42e0-819d-a28e063c5c95")
+	)
+	(wire
+		(pts
 			(xy 130.81 92.71) (xy 130.81 109.22)
 		)
 		(stroke
@@ -3616,6 +3827,66 @@
 		)
 		(uuid "fef36cb8-3ddb-4ef2-b3cc-1c0aca46ac1d")
 	)
+	(label "OSC_OUT"
+		(at 133.35 83.82 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "ad59e604-644c-446e-a31d-48a04b65548e")
+	)
+	(label "OSC_8V"
+		(at 72.39 80.01 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "bd68ba07-12a2-4a96-882a-11fdb06f0ca2")
+	)
+	(label "SDA"
+		(at 124.46 63.5 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "c034c31b-4fe7-45f4-a97b-4a34d2a52920")
+	)
+	(label "V5V"
+		(at 114.3 50.8 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "c6d8c4bc-eb90-4e9a-8afb-e1267f3d8ebc")
+	)
+	(label "SCL"
+		(at 127 60.96 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "dd04fcd9-85fc-4c5e-b6cb-10b056cc8900")
+	)
+	(label "V3V3"
+		(at 133.35 96.52 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "fc0b1f81-4f27-4ab7-abe1-f86aa8370ad5")
+	)
 	(symbol
 		(lib_id "power:GND")
 		(at 86.36 92.71 90)
@@ -3690,26 +3961,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "083628be-aec1-4ece-96a4-ae802d096e49")
-		(property "Reference" "10uF"
-			(at 116.586 98.806 0)
+		(property "Reference" "C8"
+			(at 119.6 101.1 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 125.73 103.2509 0)
+		(property "Value" "10uF"
+			(at 119.6 102.6 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 122.8852 106.68 0)
 			(effects
 				(font
@@ -3745,7 +4015,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10uF")
+					(reference "C8")
 					(unit 1)
 				)
 			)
@@ -3760,26 +4030,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0b89f16c-ee7b-4655-b87a-2851bbd4e8df")
-		(property "Reference" "10K"
-			(at 101.346 74.168 0)
+		(property "Reference" "R7"
+			(at 103.1 71.6 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 107.95 73.6599 0)
+		(property "Value" "10k"
+			(at 103.1 73.1 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 105.41 72.39 0)
 			(effects
 				(font
@@ -3815,7 +4084,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10K")
+					(reference "R7")
 					(unit 1)
 				)
 			)
@@ -3830,25 +4099,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "0d2079b2-35bd-4ffa-9548-8ace5490d251")
-		(property "Reference" "10K"
-			(at 82.042 107.188 90)
+		(property "Reference" "R5"
+			(at 80.01 101.6 90)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 81.2799 102.87 0)
+		(property "Value" "10k"
+			(at 80.01 103.1 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 80.01 105.41 0)
 			(effects
 				(font
@@ -3884,7 +4151,70 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10K")
+					(reference "R5")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 85.09 67.31 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "11182f1b-ad16-4632-bc74-8320ca237e76")
+		(property "Reference" "#FLG02"
+			(at 35.56 43.18 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 85.09 72.39 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 35.56 48.26 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 85.09 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 85.09 67.31 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "bc3efb9b-2825-4cd2-a4e1-ea6c142c62a4")
+		)
+		(instances
+			(project "adjustometer"
+				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
+					(reference "#FLG02")
 					(unit 1)
 				)
 			)
@@ -3964,26 +4294,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "2123175d-3ea1-43f2-9241-27db9a0483da")
-		(property "Reference" "10K"
-			(at 72.644 110.998 0)
+		(property "Reference" "R4"
+			(at 74.7 107.2 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 74.93 109.2199 0)
+		(property "Value" "10k"
+			(at 74.7 108.7 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 72.39 107.95 0)
 			(effects
 				(font
@@ -4019,7 +4348,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10K")
+					(reference "R4")
 					(unit 1)
 				)
 			)
@@ -4100,26 +4429,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "335aa8b9-762e-4f61-811b-aa8045bd978d")
-		(property "Reference" "10nF"
-			(at 54.864 99.822 0)
+		(property "Reference" "C1"
+			(at 56.9 100.8 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "~"
-			(at 57.15 102.8762 0)
+		(property "Value" "10nF"
+			(at 56.9 102.3 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 54.61 101.6 0)
 			(effects
 				(font
@@ -4155,7 +4483,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10nF")
+					(reference "C1")
 					(unit 1)
 				)
 			)
@@ -4170,26 +4498,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "3b08d2c1-c4dd-4483-abc9-e500d3272d7e")
-		(property "Reference" "100K"
-			(at 64.008 90.678 0)
+		(property "Reference" "R1"
+			(at 65.8 86.9 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 66.04 88.8999 0)
+		(property "Value" "100k"
+			(at 65.8 88.4 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 63.5 87.63 0)
 			(effects
 				(font
@@ -4225,7 +4552,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "100K")
+					(reference "R1")
 					(unit 1)
 				)
 			)
@@ -4240,26 +4567,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "3f896a76-d027-420c-ae25-514b5f801c2c")
-		(property "Reference" "10uF"
-			(at 53.848 81.026 0)
+		(property "Reference" "C3"
+			(at 56.1 83.3 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 62.23 85.4709 0)
+		(property "Value" "10uF"
+			(at 56.1 84.8 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 59.3852 88.9 0)
 			(effects
 				(font
@@ -4295,7 +4621,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10uF")
+					(reference "C3")
 					(unit 1)
 				)
 			)
@@ -4303,7 +4629,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 87.63 67.31 270)
+		(at 85.09 67.31 270)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -4311,7 +4637,7 @@
 		(dnp no)
 		(uuid "40014f59-096b-4b01-a42d-9aebd9f31091")
 		(property "Reference" "#PWR08"
-			(at 81.28 67.31 0)
+			(at 78.74 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4320,7 +4646,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 83.82 68.834 90)
+			(at 81.28 68.834 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4328,7 +4654,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 87.63 67.31 0)
+			(at 85.09 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4337,7 +4663,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 87.63 67.31 0)
+			(at 85.09 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4346,7 +4672,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 87.63 67.31 0)
+			(at 85.09 67.31 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4375,26 +4701,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "4310880f-9500-465e-b5f9-04509c881753")
-		(property "Reference" "1K"
-			(at 134.874 87.884 0)
+		(property "Reference" "R11"
+			(at 135.7 85.6 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 135.89 87.6299 0)
+		(property "Value" "1k"
+			(at 135.7 87.1 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 133.35 86.36 0)
 			(effects
 				(font
@@ -4430,7 +4755,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "1K")
+					(reference "R11")
 					(unit 1)
 				)
 			)
@@ -4445,26 +4770,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "54c4c140-63c1-4411-aece-31c6de6efdd6")
-		(property "Reference" "10nF"
-			(at 55.118 107.442 0)
+		(property "Reference" "C2"
+			(at 56.9 108.5 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "C_Small"
-			(at 57.15 110.4962 0)
+		(property "Value" "10nF"
+			(at 56.9 110 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 54.61 109.22 0)
 			(effects
 				(font
@@ -4500,7 +4824,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10nF")
+					(reference "C2")
 					(unit 1)
 				)
 			)
@@ -4515,26 +4839,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "566b466b-cad6-4fa2-8d79-0b8a202792d0")
-		(property "Reference" "100nF"
-			(at 65.024 60.198 0)
+		(property "Reference" "C4"
+			(at 67.1 61.5 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "C_Small"
-			(at 67.31 63.5062 0)
+		(property "Value" "100nF"
+			(at 67.1 63 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 64.77 62.23 0)
 			(effects
 				(font
@@ -4570,14 +4893,14 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "100nF")
+					(reference "C4")
 					(unit 1)
 				)
 			)
 		)
 	)
 	(symbol
-		(lib_id "Simulation_SPICE:NJFET")
+		(lib_id "Device:Q_NJFET_DGS")
 		(at 96.52 105.41 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -4595,7 +4918,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "2SK107"
+		(property "Value" "2SK170"
 			(at 101.6 106.6799 0)
 			(effects
 				(font
@@ -4604,7 +4927,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Package_TO_SOT_THT:TO-92_Inline"
 			(at 101.6 102.87 0)
 			(effects
 				(font
@@ -4613,7 +4936,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml#cha_JFETs"
+		(property "Datasheet" "https://radiotovar.kz/pdf/33702.pdf"
 			(at 96.52 105.41 0)
 			(effects
 				(font
@@ -4622,34 +4945,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "N-JFET transistor, for simulation only"
-			(at 96.52 105.41 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Device" "NJFET"
-			(at 96.52 105.41 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Type" "SHICHMANHODGES"
-			(at 96.52 105.41 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Sim.Pins" "1=D 2=G 3=S"
+		(property "Description" "Toshiba 2SK170 N-channel JFET, TO-92; pins 1=D, 2=G, 3=S"
 			(at 96.52 105.41 0)
 			(effects
 				(font
@@ -4685,26 +4981,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "5e6e1824-4cb7-4f29-b514-47e2ffd5748b")
-		(property "Reference" "10uF"
-			(at 80.772 90.932 90)
+		(property "Reference" "C5"
+			(at 79.5 89.4 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 82.9309 88.9 0)
+		(property "Value" "10uF"
+			(at 79.5 90.9 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 86.36 91.7448 0)
 			(effects
 				(font
@@ -4740,7 +5033,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10uF")
+					(reference "C5")
 					(unit 1)
 				)
 			)
@@ -4821,26 +5114,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "6e1457fb-fdaf-4cf5-a4df-5cbb9470bacf")
-		(property "Reference" "1uF"
-			(at 122.174 114.3 0)
+		(property "Reference" "C9"
+			(at 124.3 116.1 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 125.73 117.2209 0)
+		(property "Value" "1uF"
+			(at 124.3 117.6 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 122.8852 120.65 0)
 			(effects
 				(font
@@ -4876,7 +5168,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "1uF")
+					(reference "C9")
 					(unit 1)
 				)
 			)
@@ -4909,7 +5201,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Adjustometer:RP2040-Zero_THT"
 			(at 146.05 93.98 0)
 			(effects
 				(font
@@ -5022,25 +5314,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "6fb2dd41-75c5-45ce-90ff-b1e38c97acfc")
-		(property "Reference" "10K"
-			(at 129.54 72.644 0)
+		(property "Reference" "R10"
+			(at 130.048 71.12 0)
 			(effects
 				(font
-					(size 1.016 1.016)
-				)
-			)
-		)
-		(property "Value" "R_Small"
-			(at 124.46 72.3901 0)
-			(effects
-				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Value" "10k"
+			(at 130.556 72.898 0)
+			(effects
+				(font
+					(size 0.9 0.9)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 127 73.66 0)
 			(effects
 				(font
@@ -5076,7 +5368,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10K")
+					(reference "R10")
 					(unit 1)
 				)
 			)
@@ -5091,26 +5383,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "7104b183-c857-44de-a6a9-54d207847dfd")
-		(property "Reference" "10uF"
-			(at 109.22 52.578 0)
+		(property "Reference" "C7"
+			(at 112 55.2 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 118.11 57.5309 0)
+		(property "Value" "10uF"
+			(at 112 56.7 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 115.2652 60.96 0)
 			(effects
 				(font
@@ -5146,7 +5437,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10uF")
+					(reference "C7")
 					(unit 1)
 				)
 			)
@@ -5177,7 +5468,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x10_P2.54mm_Vertical"
 			(at 31.75 95.25 0)
 			(effects
 				(font
@@ -5252,26 +5543,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "779930a2-39d2-4c10-a0e3-3edfcc05342e")
-		(property "Reference" "1uF"
-			(at 110.744 71.12 0)
+		(property "Reference" "C6"
+			(at 112.8 72.9 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "C_Polarized"
-			(at 114.3 74.0409 0)
+		(property "Value" "1uF"
+			(at 112.8 74.4 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D5.0mm_P2.00mm"
 			(at 111.4552 77.47 0)
 			(effects
 				(font
@@ -5307,7 +5597,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "1uF")
+					(reference "C6")
 					(unit 1)
 				)
 			)
@@ -5444,6 +5734,69 @@
 		)
 	)
 	(symbol
+		(lib_id "power:+12V")
+		(at 139.7 50.8 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8940a51a-3cb3-4526-990f-c4c8eda5fecc")
+		(property "Reference" "#PWR019"
+			(at 40.64 35.56 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "+12V"
+			(at 139.7 46.99 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 40.64 40.64 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 139.7 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 139.7 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2a42be7b-070c-4fbf-a379-ce37d5e36a64")
+		)
+		(instances
+			(project "adjustometer"
+				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
+					(reference "#PWR019")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 58.42 88.9 0)
 		(unit 1)
@@ -5517,26 +5870,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "90e38179-fe61-4381-9e0b-5bdb3e2e8b3c")
-		(property "Reference" "1K"
-			(at 72.644 90.424 0)
+		(property "Reference" "R3"
+			(at 74.7 86.9 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 74.93 88.8999 0)
+		(property "Value" "1k"
+			(at 74.7 88.4 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 72.39 87.63 0)
 			(effects
 				(font
@@ -5572,7 +5924,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "1K")
+					(reference "R3")
 					(unit 1)
 				)
 			)
@@ -5638,6 +5990,69 @@
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
 					(reference "#PWR010")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 110.49 50.8 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a33cac8a-5e12-4954-9d0b-78e7df47f015")
+		(property "Reference" "#FLG03"
+			(at 119.38 45.72 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 110.49 46.99 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 110.49 50.8 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 110.49 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 110.49 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3afc6a57-b84f-48b5-aca5-1e4fe49ebd0e")
+		)
+		(instances
+			(project "adjustometer"
+				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
+					(reference "#FLG03")
 					(unit 1)
 				)
 			)
@@ -5783,26 +6198,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "bc294c52-cf93-44ba-929c-00a3f59e279e")
-		(property "Reference" "51K"
-			(at 64.008 108.458 0)
+		(property "Reference" "R2"
+			(at 65.8 104.7 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
 				(justify left)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 66.04 106.6799 0)
+		(property "Value" "51k"
+			(at 65.8 106.2 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 63.5 105.41 0)
 			(effects
 				(font
@@ -5838,7 +6252,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "51K")
+					(reference "R2")
 					(unit 1)
 				)
 			)
@@ -5919,25 +6333,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "bddff1e5-c9d1-42c9-9f3b-7d8cb3b337ca")
-		(property "Reference" "10K"
-			(at 121.666 72.644 0)
+		(property "Reference" "R9"
+			(at 121.666 71.12 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
+				(justify right)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 121.92 72.3901 0)
+		(property "Value" "10k"
+			(at 120.904 72.644 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 124.46 73.66 0)
 			(effects
 				(font
@@ -5973,7 +6387,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "10K")
+					(reference "R9")
 					(unit 1)
 				)
 			)
@@ -6053,26 +6467,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "c6e5959f-789c-457d-be87-a24c32741050")
-		(property "Reference" "47K"
-			(at 101.6 62.484 0)
+		(property "Reference" "R6"
+			(at 103.1 64 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 107.95 66.0399 0)
+		(property "Value" "47k"
+			(at 103.1 65.5 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 105.41 64.77 0)
 			(effects
 				(font
@@ -6108,7 +6521,70 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "47K")
+					(reference "R6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 134.62 50.8 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "cd1da407-7c03-49d0-bc4a-b23b773c92c3")
+		(property "Reference" "#FLG01"
+			(at 35.56 40.64 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 134.62 55.88 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 35.56 45.72 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 134.62 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 134.62 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "1d37ce0e-c93e-4ffd-ac91-15cff94b7034")
+		)
+		(instances
+			(project "adjustometer"
+				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
+					(reference "#FLG01")
 					(unit 1)
 				)
 			)
@@ -6348,26 +6824,25 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "df25f1df-2010-4fa6-b509-45dbd654a25d")
-		(property "Reference" "3.3K"
-			(at 112.014 106.172 0)
+		(property "Reference" "R8"
+			(at 109.4 102.1 0)
 			(effects
 				(font
-					(size 1.016 1.016)
+					(size 0.9 0.9)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
-		(property "Value" "R_Small"
-			(at 114.3 104.1399 0)
+		(property "Value" "3.3k"
+			(at 109.4 103.6 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 0.9 0.9)
 				)
-				(justify left)
-				(hide yes)
+				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 111.76 102.87 0)
 			(effects
 				(font
@@ -6403,7 +6878,7 @@
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
-					(reference "3.3K")
+					(reference "R8")
 					(unit 1)
 				)
 			)
@@ -6614,8 +7089,8 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector:Conn_01x04_Socket")
-		(at 121.92 45.72 90)
+		(lib_id "Connector:Conn_01x05_Socket")
+		(at 124.46 45.72 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -6624,22 +7099,22 @@
 		(fields_autoplaced yes)
 		(uuid "fdedf415-b6c7-4a90-9b58-7b8ce4eeb321")
 		(property "Reference" "J2"
-			(at 123.19 40.64 90)
+			(at 124.46 40.64 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Value" "Output"
-			(at 123.19 43.18 90)
+		(property "Value" "Power / I2C"
+			(at 124.46 43.18 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"
 			(at 121.92 45.72 0)
 			(effects
 				(font
@@ -6657,7 +7132,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Generic connector, single row, 01x04, script generated"
+		(property "Description" "Generic connector, single row, 01x05, script generated"
 			(at 121.92 45.72 0)
 			(effects
 				(font
@@ -6677,6 +7152,9 @@
 		)
 		(pin "4"
 			(uuid "94559e54-39c1-410a-826d-0d0bade1e326")
+		)
+		(pin "5"
+			(uuid "461f146e-edce-4e5b-91a0-150dd02d059d")
 		)
 		(instances
 			(project "adjustometer"

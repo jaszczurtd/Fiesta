@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "RP2040-Zero")(type "KiCad")(uri "${KIPRJMOD}/libraries/RP2040-Zero.kicad_sym")(options "")(descr "RP2040-Zero module; 3V3 is regulator output"))
+)

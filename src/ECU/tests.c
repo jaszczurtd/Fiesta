@@ -13,9 +13,24 @@
 #if ECU_FUNCTIONAL_TESTS_ENABLED
 
 #include "../common/scDefinitions/sc_protocol.h"
+#include "dtcManager.h"
 #include "tests_workers.h"
 
 #include <hal/core/hal_array.h>
+
+static const char *dtcResult(void) {
+  uint16_t activeCodes[16];
+  const uint8_t count = dtcManagerGetCodes(DTC_KIND_ACTIVE, activeCodes,
+                                           (uint8_t)COUNTOF(activeCodes));
+  for (uint8_t i = 0U; i < count; ++i) {
+    if (activeCodes[i] == DTC_CAN_BUS_FAULT) {
+      return dtcManagerGetDetail(DTC_CAN_BUS_FAULT) == DTC_DETAIL_CAN_TX_RPM
+                 ? SC_TEST_RESULT_OK
+                 : SC_TEST_RESULT_FAILED;
+    }
+  }
+  return SC_TEST_RESULT_FAILED;
+}
 
 static const char *kvResult(void) {
   return testsWorkersKvLastResult()->ok ? SC_TEST_RESULT_OK
@@ -33,7 +48,7 @@ static const ecu_test_t s_tests[] = {
      .scSupported = false,
      .start = testsWorkersDtcStart,
      .step = NULL,
-     .result = NULL,
+     .result = dtcResult,
      .progress = NULL},
     {.id = START_TEST_KV,
      .name = "kv",

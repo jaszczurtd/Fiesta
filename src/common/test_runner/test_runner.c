@@ -84,6 +84,9 @@ static void printLifecycle(void) {
 static fiesta_seqlock_t s_fixtureLock;
 static uint32_t s_fixtureId;
 static uint32_t s_fixtureCompleted;
+/* Published by the release/acquire on s_fixtureCompleted. The controller
+ * consumes it before publishing another fixture request. */
+static const char *s_fixtureResult;
 
 static void recordFixture(const fiesta_test_t *entry) {
   const uint32_t begun = fiestaSeqlockWriteBegin(&s_fixtureLock);
@@ -106,6 +109,9 @@ static void runPendingFixture(void) {
       // Fixture publication follows its start event on the control core.
       printLifecycle();
       entry->start();
+      const char *result =
+          entry->result != NULL ? entry->result() : SC_TEST_RESULT_DONE;
+      s_fixtureResult = result;
       HAL_ATOMIC_STORE(&s_fixtureCompleted, sequence, HAL_ATOMIC_RELEASE);
     }
     return;
@@ -925,7 +931,13 @@ bool fiesta_test_tick(void) {
   }
   if (finished) {
     const tests_source_t source = s_activeSource;
-    deactivate((entry->result != NULL) ? entry->result() : SC_TEST_RESULT_DONE);
+    const char *result = SC_TEST_RESULT_DONE;
+    if ((entry->step == NULL) && (entry->start != NULL)) {
+      result = s_fixtureResult;
+    } else if (entry->result != NULL) {
+      result = entry->result();
+    }
+    deactivate(result);
     if (s_sequenceRunning) {
       advanceSequence(source);
     }

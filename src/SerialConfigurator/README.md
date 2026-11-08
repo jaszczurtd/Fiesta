@@ -150,8 +150,10 @@ last until ECU reset. The status panel shows test, initiator, sequence step,
 elapsed time, demanded/measured position, test-specific progress and last result.
 It polls every 250 ms while its test runs, including when another tab is shown.
 ECU stops the test on session end or after 3 seconds without test commands.
-Closing, disconnecting or detecting again therefore stops it. The default RPM
-interlock refuses or stops a test while engine speed exceeds its configured limit.
+Closing, disconnecting or detecting again therefore stops it. ECU functional
+tests require the `BENCH` image, whose configurator RPM interlock is disabled
+by default (`ECU_SC_TESTS_RPM_INTERLOCK=0`). Building ECU with the option set
+to `1` refuses or stops configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
 
 ```bash
 ./build/serial-configurator-cli test-list --module ECU

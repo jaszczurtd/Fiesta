@@ -215,6 +215,58 @@ static void prepareStorage(void) {
   dtcManagerInit();
 }
 
+void test_dtc_one_shot_reports_the_injected_active_code(void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  prepareStorage();
+  TEST_ASSERT_TRUE(dtcManagerClearAll());
+  console("run dtc");
+  TEST_ASSERT_EQUAL_STRING("dtc", testsActiveName());
+  TEST_ASSERT_EQUAL_UINT8(0U, dtcManagerCount(DTC_KIND_ACTIVE));
+  testsPrintEvents();
+  TEST_ASSERT_EQUAL_UINT8(1U, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_TX_RPM,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+  TEST_ASSERT_FALSE(tickTests());
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_EQUAL_FLOAT(-1.0f, pump->demand.requestedPercent);
+  hal_mock_serial_reset();
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_deb_last_line(), "TEST: dtc result: ok"));
+  TEST_ASSERT_TRUE(dtcManagerClearAll());
+  TEST_ASSERT_EQUAL_UINT8(0U, dtcManagerCount(DTC_KIND_ACTIVE));
+  TEST_ASSERT_EQUAL_UINT8(0U, dtcManagerCount(DTC_KIND_STORED));
+}
+
+void test_dtc_result_requires_the_active_code_and_expected_detail(void) {
+  prepareStorage();
+  TEST_ASSERT_TRUE(dtcManagerClearAll());
+  size_t count = 0U;
+  const ecu_test_t *suite = testsSuite(&count);
+  const ecu_test_t *dtc = nullptr;
+  for (size_t i = 0U; i < count; ++i) {
+    if (suite[i].id == START_TEST_DTC) {
+      dtc = &suite[i];
+    }
+  }
+  TEST_ASSERT_NOT_NULL(dtc);
+  TEST_ASSERT_NOT_NULL(dtc->result);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_FAILED, dtc->result());
+  dtcManagerSetActiveDetail(DTC_PCF8574_COMM_FAIL, true, DTC_DETAIL_CAN_TX_RPM);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_FAILED, dtc->result());
+  dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_TX_RPM);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_OK, dtc->result());
+  // Stored codes retain their detail after becoming inactive.
+  dtcManagerSetActive(DTC_CAN_BUS_FAULT, false);
+  TEST_ASSERT_EQUAL_UINT8(DTC_DETAIL_CAN_TX_RPM,
+                          dtcManagerGetDetail(DTC_CAN_BUS_FAULT));
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_FAILED, dtc->result());
+  dtcManagerSetActiveDetail(DTC_CAN_BUS_FAULT, true, DTC_DETAIL_CAN_BUS_OFF);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_FAILED, dtc->result());
+  TEST_ASSERT_TRUE(dtcManagerClearAll());
+}
+
 void test_one_shot_work_is_deferred_to_console_and_cancelled_before_dispatch(
     void) {
   (void)preparePump();
@@ -1632,6 +1684,8 @@ int main(void) {
   RUN_TEST(
       test_one_shot_work_is_deferred_to_console_and_cancelled_before_dispatch);
   RUN_TEST(test_kv_one_shot_counts_up_and_reports_the_store);
+  RUN_TEST(test_dtc_one_shot_reports_the_injected_active_code);
+  RUN_TEST(test_dtc_result_requires_the_active_code_and_expected_detail);
   RUN_TEST(test_kv_one_shot_names_a_failed_write);
   RUN_TEST(test_top_steps_hold_every_setpoint_for_the_dwell);
   RUN_TEST(test_top_zero_returns_to_rest_between_thresholds);

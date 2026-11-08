@@ -11,6 +11,8 @@ static uint32_t s_cleanedId;
 static const char *s_reason;
 static float s_output;
 static bool s_finish, s_blocked;
+static unsigned s_fixtureResults, s_stepResults;
+static const char *s_fixtureToken;
 
 static void start() {
   TEST_ASSERT_EQUAL_UINT(s_controller, s_caller);
@@ -25,6 +27,16 @@ static float step(bool *finished) {
 static void fixture() {
   TEST_ASSERT_EQUAL_UINT(s_session, s_caller);
   ++s_fixtures;
+}
+static const char *fixtureResult() {
+  TEST_ASSERT_EQUAL_UINT(s_session, s_caller);
+  ++s_fixtureResults;
+  return s_fixtureToken;
+}
+static const char *stepResult() {
+  TEST_ASSERT_EQUAL_UINT(s_controller, s_caller);
+  ++s_stepResults;
+  return SC_TEST_RESULT_DONE;
 }
 static void cleanup(const fiesta_test_t *entry, const char *reason,
                     bool restart) {
@@ -46,8 +58,8 @@ static const char *blocked() { return s_blocked ? "module_blocked" : nullptr; }
 
 static const fiesta_test_t s_suite[] = {
     {1U, "fixture", "Session fixture", false, true, false, fixture, nullptr,
-     nullptr, nullptr},
-    {2U, "steps", "Stepped output", true, true, true, start, step, nullptr,
+     fixtureResult, nullptr},
+    {2U, "steps", "Stepped output", true, true, true, start, step, stepResult,
      nullptr},
     {3U, "manual", "Manual output", true, false, true, start, step, nullptr,
      nullptr},
@@ -82,6 +94,8 @@ static void initialize(unsigned controller) {
   s_reason = nullptr;
   s_output = 0.0f;
   s_finish = s_blocked = false;
+  s_fixtureResults = s_stepResults = 0U;
+  s_fixtureToken = SC_TEST_RESULT_DONE;
   hal_mock_set_millis(0U);
   hal_debug_set_muted(false);
   TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_init(&s_config));
@@ -131,6 +145,7 @@ static void stop_skip_replace_restart() {
   TEST_ASSERT_EQUAL_UINT32(1U, s_cleanedId);
   events(); // The skipped one-shot must never run.
   TEST_ASSERT_EQUAL_UINT(0U, s_fixtures);
+  TEST_ASSERT_EQUAL_UINT(0U, s_fixtureResults);
   TEST_ASSERT_TRUE(tick());
   TEST_ASSERT_EQUAL_UINT32(2U, fiesta_test_active_id());
   TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_start(2U));
@@ -149,6 +164,40 @@ static void stop_skip_replace_restart() {
   TEST_ASSERT_FALSE(tick());
   TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_stop());
   TEST_ASSERT_EQUAL_UINT(4U, s_cleanups);
+}
+
+static void results_follow_the_execution_role_and_fixture_publication() {
+  for (unsigned controller = 0U; controller < 2U; ++controller) {
+    initialize(controller);
+    s_fixtureToken = SC_TEST_RESULT_FAILED;
+    TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_start(1U));
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_UINT(0U, s_fixtureResults);
+    events();
+    TEST_ASSERT_EQUAL_UINT(1U, s_fixtureResults);
+    s_fixtureToken = SC_TEST_RESULT_OK;
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_FAILED, s_reason);
+    TEST_ASSERT_EQUAL_UINT(1U, s_fixtureResults);
+
+    TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_start(1U));
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_UINT32(1U, fiesta_test_active_id());
+    events();
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_OK, s_reason);
+    TEST_ASSERT_EQUAL_UINT(2U, s_fixtureResults);
+
+    TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_start(2U));
+    TEST_ASSERT_TRUE(tick());
+    TEST_ASSERT_EQUAL_UINT(0U, s_stepResults);
+    events();
+    TEST_ASSERT_EQUAL_UINT(0U, s_stepResults);
+    s_finish = true;
+    TEST_ASSERT_TRUE(tick());
+    TEST_ASSERT_EQUAL_UINT(1U, s_stepResults);
+    TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_DONE, s_reason);
+  }
 }
 
 static void sc_supervision() {
@@ -306,6 +355,7 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(sequence_roles);
   RUN_TEST(stop_skip_replace_restart);
+  RUN_TEST(results_follow_the_execution_role_and_fixture_publication);
   RUN_TEST(sc_supervision);
   RUN_TEST(sc_queue_and_interlock);
   RUN_TEST(parameters_and_console);

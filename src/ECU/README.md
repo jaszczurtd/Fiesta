@@ -372,9 +372,20 @@ itself. Select `Project: Build variant: BENCH` or
 variant build the car image. See the [build guide](../../doc/BUILDING.md)
 for CLI equivalents.
 
+In `BENCH`, `ECU_SC_TESTS_RPM_INTERLOCK` defaults to `0`, so configurator
+tests can run with RPM supplied by a signal generator. Set it to `1` to
+refuse or stop configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
+This option does not apply to console tests; see the
+[functional test rules](../common/scDefinitions/PROTOCOL.md#functional-tests).
+
 DTC and KV one-shot actions run on core 0. The control core continues to
 service VP37 and advances the test sequence after the result is published.
 Stopping a test cancels an action that has not yet been dispatched.
+`run dtc` reports `ok` when U0073 (`DTC_CAN_BUS_FAULT`) is active with
+the RPM transmit detail (`DTC_DETAIL_CAN_TX_RPM`), or `failed` otherwise.
+The result checks runtime state immediately after injection. It does not
+verify persistence across a reset. Read the code through OBD, clear the
+DTCs after the test and read them again to confirm the clear.
 Read-only `list` and `params` also print on the console core, after the
 serial callback releases its temporary debug mute.
 Test start, stop and result messages use a bounded queue to that core.

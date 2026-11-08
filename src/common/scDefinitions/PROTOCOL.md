@@ -211,12 +211,15 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
 The ECU does not leave a configurator test running unsupervised. It stops the
 test when the session ends (`SC_BYE`) or when no test command, `SC_TEST_STATUS`
 included, has arrived for `ECU_SC_TESTS_KEEPALIVE_MS` (3 s). A host that starts
-a test keeps polling the status until the test ends. With
-`ECU_SC_TESTS_RPM_INTERLOCK` set, which is the default, the ECU also refuses to
-start a test, and stops a running one, above `ECU_SC_TESTS_RPM_LIMIT` rpm. A
-bench whose signal generator feeds engine speed with no engine turning builds
-with the interlock off. Tests started from the bench console belong to the
-operator and none of these rules applies to them.
+a test keeps polling the status until the test ends.
+
+Functional tests are enabled only in the ECU `BENCH` variant. Its default
+`ECU_SC_TESTS_RPM_INTERLOCK=0` leaves the configurator's RPM interlock disabled,
+so a bench can use an RPM signal generator with the engine stationary.
+Building with `ECU_SC_TESTS_RPM_INTERLOCK=1` makes the ECU refuse to start a
+configurator test, and stop one already running, above `ECU_SC_TESTS_RPM_LIMIT`
+rpm. Tests started from the bench console belong to the operator; session
+end, the keepalive timeout and this RPM interlock do not stop them.
 
 An ECU built without tests answers `count=0`. Modules and firmware without
 the commands answer `SC_UNKNOWN_CMD`. The host shows "No tests available"

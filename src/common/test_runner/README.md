@@ -13,7 +13,10 @@ one caller. Read and write runtime parameters from either role.
 
 Tests with a `step` callback start and run on the controller role. A test with
 only `start` is a one-shot fixture: the session role first prints its start
-event, then runs it and publishes completion. Stopping it cancels an unclaimed
+event, then runs it, calls its `result` callback and publishes completion
+with that result. The controller consumes the published result; it does not
+repeat the callback. Stepped tests evaluate their result on the controller
+role after the final step. Stopping a one-shot cancels an unclaimed
 fixture; it cannot interrupt a fixture already executing. Such a fixture must
 not modify controller-owned outputs. Lifecycle messages use a bounded queue,
 so a stalled console cannot block control or stopping.
