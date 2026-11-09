@@ -1,21 +1,22 @@
-# Fiesta ECU PCB1
+# Fiesta ECU PCB2
 
 Open `ECU/ECU.kicad_pro` in KiCad 9. The project contains the ECU schematic and
-its first full two-layer PCB for the Ford EEC-V housing. `ECU/ECU.pdf` previews
+its revised two-layer PCB for the Ford EEC-V housing. `ECU/ECU.pdf` previews
 the schematic; the PCB previews and assembly files are beside the project.
 Relative library paths include the shared Adjustometer module library.
 
 The board carries 122 schematic parts and six chassis contacts. Review the
 [top](ECU/ECU-top.png), [bottom](ECU/ECU-bottom.png) and
 [angled view](ECU/ECU-3d.png), or use the [assembly drawing](ECU/ECU-assembly.pdf)
-and [copper layers](ECU/ECU-copper.pdf). The PDFs retain a 1:1 scale when printed
+and [copper layers](ECU/ECU-copper.pdf). The assembly PDF shows the top and bottom
+on separate pages. The PDFs retain a 1:1 scale when printed
 at actual size. `ECU-bom.csv` and `ECU-assembly.csv` beside the project list
 parts and positions. The previews have no solid models for J50, CAN,
 Adjustometer or R1; their outlines show the reserved space.
 
 The [mechanical baseline](baselines/README.md) preserves the layout accepted by
 the owner. The full PCB retains its outline, Ford connector, six chassis GND
-contacts, existing power-stage positions and wired resistor mounting. The
+contact holes, edge-mounted power stages and wired resistor mounting. The
 [placement example](layout_example/README.md) remains available separately.
 The Ford connector and board outline derive from rusEFI's EEC-V Blank Board;
 the [rusEFI hardware licence](layout_example/RUSEFI-LICENSE.txt) is included.
@@ -24,10 +25,13 @@ the [rusEFI hardware licence](layout_example/RUSEFI-LICENSE.txt) is included.
 vehicle connector, including all VP37 signals. The former individual pin
 symbols are net labels tied to J50. J42 is a separate two-pin GPIO header
 for the existing extension signals; it is not a VP37 connector.
+Pins 67 and 69 share `EECV_69`, Q20 drain and D25 anode 3. Both harness contacts
+must connect to the same VP37 coil terminal to share current. Pin 68 remains
+a separate output. The connector has 44 connected contacts and 60 NC contacts.
 
 [ECU-mechanical-fit.pdf](ECU-mechanical-fit.pdf) provides a 1:1 fit check for the
-CAN modules and power resistor. Print at actual size. PCB1 is a first layout
-for review; the checks below still apply before fabrication and use.
+CAN modules and power resistor. Print at actual size. The electrical and thermal
+checks below still apply before fabrication and use.
 
 ## Assembly choices
 
@@ -37,6 +41,8 @@ for review; the checks below still apply before fabrication and use.
 | Non-polarized capacitors | 0805 SMD |
 | Polarized capacitors | Radial THT, 25 V; 1/10 µF: Ø5 mm, pitch 2 mm; 100 µF: Ø6.3 mm, pitch 2.5 mm; 2200 µF: Ø16 mm, pitch 7.5 mm |
 | U6 CD4051B | SOIC-16, 3.9 × 9.9 mm, 1.27 mm pitch |
+| U1/U2 TC4427 | DIP-8, 7.62 mm row spacing; non-inverting |
+| Q3, Q5-Q12 2N6037 | TO-126-3, vertical; pins 1=E, 2=C, 3=B |
 | U3 L7805 | TO-220-3, vertical |
 | D25 MBR20100CTG | One TO-220-3 package; units A/B share cathode pin 2 |
 | A1 MCU | Pico-compatible module on two 1×20 THT headers/sockets |
@@ -58,6 +64,14 @@ D25 uses anodes 1/3 and common cathode 2, including the metal tab, according to 
 The CAN symbols describe SO as tri-state and INT as open-drain; this removes false
 output conflicts without suppressing ERC checks.
 
+The project symbol for 2N6037 uses the E-C-B pinout in the
+[Central Semiconductor datasheet](https://my.centralsemi.com/datasheets/2N6034-2N6039.PDF).
+These medium-power Darlingtons occupy the board interior. Only D21/D25,
+Q4/Q16/Q20 and U3/U4 require the accepted edge positions for spring clips.
+Their thermal design still depends on the actual loads and available cooling.
+C21/C40 are mounted on the bottom directly between the DIP driver supply and
+ground pins. C3/C10 are also on the bottom, beside the regulators.
+
 A1 uses the project symbol `Fiesta_Modules:RaspberryPi_Pico_ECU`, with AGND
 (pin 33) defined as a passive ground connection. Its pin positions, numbering
 and footprint match the original symbol. J32 chassis ground connects to GND;
@@ -71,7 +85,7 @@ level circuit. Firmware adaptation follows manufacture of the new PCB.
 
 ## Checks before fabrication
 
-PCB1 follows the selected schematic. Electrical and thermal qualification remains necessary:
+PCB2 follows the selected schematic. Electrical and thermal qualification remains necessary:
 
 - U1/U2 use GND on pin 3 and the existing `12V_PWR` power-stage rail on pin 6.
   C21/C22/C40 decouple that rail. TC4427 is deliberately non-inverting: LOW
@@ -100,21 +114,64 @@ PCB1 follows the selected schematic. Electrical and thermal qualification remain
 - Check R1 temperature and heat removal under the actual load. A PCB mounting
   pattern does not establish the dissipation available without a heatsink.
 
-The nominal routing widths are 0.3 mm for signals, 0.6 mm for low-voltage
-supplies and 1.2 mm for power/actuator nets. Local exits and constrained routes
-use smaller widths; the minimum trace width and copper clearance are 0.25 mm.
-The copper-to-edge rule remains 0.4 mm from the accepted mechanical baseline.
-Verify current capacity, voltage drop and temperature for the
-selected copper weight and actual duty cycles. Both outer layers carry GND
-pours with stitching vias. The ADC branch runs separately to the R1 terminal
-pad. The resistor's two connecting wires still contribute their resistance
-to the measurement; this is not a four-wire shunt connection.
+The PCB requires 70 µm finished copper on both outer layers and at least 25 µm
+plating in the current-sharing vias. Overall board thickness remains 1.6 mm.
+Do not substitute 35 µm copper without resizing the current paths.
+
+| Current path | Routing |
+| --- | --- |
+| J50.67/69 to Q20 drain | 4 mm trunk; each connector exit uses 1 mm on both layers, widening to 2 mm per layer before merging |
+| Q20 drain to D25.3 | Parallel 2 mm tracks on both layers |
+| Q20 source to R1.2 | 4 mm trunk; short 2 mm tracks on both layers at Q20 |
+| Q16 drain and D25.1 | 3 mm trunk, 2 mm terminal connections; connector escape uses 0.8 mm on both layers |
+| D25.2 supply and main GND return | 4 mm trunks; short paired terminal connections |
+
+The provisional allocation is 12 A for Q20, 6 A for Q16 and 18 A for their shared
+supply and return. These are design assumptions, not measured continuous-current
+ratings. Using the external-layer IPC-2221 estimate documented in the
+[KiCad calculator manual](https://docs.kicad.org/5.1/en/pcb_calculator/pcb_calculator.html#_track_width),
+4 mm of 70 µm copper gives approximately 13 °C rise at 12 A and 32 °C at 18 A.
+The estimate does not qualify an enclosed automotive assembly. Check total rail
+loading, current sharing, voltage drop and temperature on the prototype,
+including cold-coil startup calibration and the freewheel interval. The shunt
+telemetry measures the MOSFET on interval and does not establish full-cycle RMS
+current. Keep the existing harness protection; this allocation does not specify
+a replacement fuse rating.
+
+Layer transitions use groups of 1 mm / 0.5 mm vias, with six or eight vias at
+the relevant transitions. Q16 has a short 1 mm fan-out into its six-via row
+between the main power trunks. A single signal via is not a substitute. Critical
+tracks are locked; custom DRC rules protect the connector escape widths and
+separation of SENSOR_A/B from the Q20/Q16 current nets.
+
+Signal tracks use 0.25-0.3 mm and low-voltage supplies use 0.45-0.6 mm.
+The other actuator outputs use 0.45-1.2 mm, depending on the available routing
+space; qualify their current against each connected load. The Q20/Q16 power
+paths follow the wider dimensions listed above. The global minimum trace width
+and copper clearance are 0.25 mm; copper-to-edge clearance remains 0.4 mm.
+Both outer layers carry GND pours with stitching vias. The ADC branch runs
+separately to the R1 terminal pad. The resistor's two connecting wires still
+contribute their resistance to the measurement; this is not a four-wire shunt connection.
 ERC and DRC do not establish supply, reset or thermal behaviour.
+
+U9 is beside J50 pins 81/82. SENSOR_A/B have short front-layer routes with a
+continuous GND guard between them, joined to the ground plane by stitching vias
+and to U9 ground. Outside the immediate connector escape, the other actuator
+routes also stay at least 3 mm from the sensor pair on either layer. The fixed
+neighbouring connector pads limit separation within that escape. The high-current
+returns have their own wide paths.
+
+The front silkscreen identifies the project and author in two lines above the
+ground return near the bottom edge.
 
 Preserve electrical insulation between live TO-220 tabs and the grounded
 housing where required by the part pinout. Six chassis contacts expose GND
-copper on both PCB faces. The accepted spring-clip mounting does not add
-individual TO-220 screw holes.
+copper on both PCB faces, nominally Ø9.75 mm around unchanged plated Ø4.75 mm
+holes. H3 is clipped by 0.405 mm at the left edge and 0.025 mm at the bottom;
+H4 is clipped by 0.025 mm at the bottom and H5 by 0.055 mm at the left edge.
+These flats retain 0.4 mm copper-to-edge clearance without moving the holes or
+changing the outline. The mask openings follow the contact shapes on both sides.
+The accepted spring-clip mounting does not add individual TO-220 screw holes.
 
 ## Custom footprints
 

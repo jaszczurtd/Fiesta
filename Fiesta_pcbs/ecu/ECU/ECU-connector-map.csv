@@ -65,7 +65,7 @@ Ford pin,Previous schematic references,Net,PCB status
 64,,unconnected-(J50-Pad64),NC
 65,,unconnected-(J50-Pad65),NC
 66,J24,/EECV_66,connected
-67,,unconnected-(J50-Pad67),NC
+67,,/EECV_69,connected
 68,J3,/EECV_68,connected
 69,J30,/EECV_69,connected
 70,J11,/EECV_70,connected

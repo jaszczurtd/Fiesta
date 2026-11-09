@@ -1,0 +1,66 @@
+(footprint "ECU_Chassis_GND_D4.75_Pad9.75"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(descr "ECU chassis ground contact; plated 4.75mm hole; exposed 9.75mm copper on both sides; solid GND connection")
+	(property "Reference" "REF**"
+		(at 0 6 0)
+		(layer "F.SilkS")
+		(uuid "8ae70dd4-1ebe-42a1-a532-7150436e39f6")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "ECU_Chassis_GND_D4.75_Pad9.75"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "aac3e546-2b8f-4453-b1a3-365a1c7a6b1f")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "f01d4cb5-1287-4b37-887c-7ff192eb0b2c")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "081fbaf9-eb18-453d-89ca-b8433e353b24")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(pad "1" thru_hole circle
+		(at 0 0)
+		(size 9.75 9.75)
+		(drill 4.75)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(solder_mask_margin 0)
+		(zone_connect 2)
+		(uuid "99e942f0-1fb1-4311-aa9a-962831f5a28b")
+	)
+	(embedded_fonts no)
+)

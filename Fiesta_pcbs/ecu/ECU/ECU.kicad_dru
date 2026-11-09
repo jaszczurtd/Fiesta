@@ -1,0 +1,17 @@
+(version 1)
+
+(rule "VP37 drain routing"
+  (condition "A.NetName == '/EECV_69'")
+  (constraint track_width (min 1mm) (opt 4mm))
+  (constraint via_diameter (min 1mm))
+  (constraint hole_size (min 0.5mm)))
+
+(rule "Timing actuator routing"
+  (condition "A.NetName == '/EECV_34'")
+  (constraint track_width (min 0.8mm) (opt 3mm))
+  (constraint via_diameter (min 1mm))
+  (constraint hole_size (min 0.5mm)))
+
+(rule "Adjustometer input separation from actuator current"
+  (condition "(A.NetName == '/EECV_81' || A.NetName == '/EECV_82') && (B.NetName == '/EECV_69' || B.NetName == '/EECV_34' || B.NetName == '/12V_PWR' || B.NetName == 'Net-(A1-GPIO26_ADC0)')")
+  (constraint clearance (min 3mm)))

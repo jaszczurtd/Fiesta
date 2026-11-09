@@ -505,7 +505,25 @@
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "priority": 2147483647,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 1.2,
+        "track_width": 4.0,
+        "via_diameter": 1.0,
+        "via_drill": 0.5,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Sensor",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.3,
         "via_diameter": 0.8,
         "via_drill": 0.4,
         "wire_width": 6
@@ -526,6 +544,42 @@
         "track_width": 0.6,
         "via_diameter": 0.8,
         "via_drill": 0.4,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Timing",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 3.0,
+        "via_diameter": 1.0,
+        "via_drill": 0.5,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.25,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "VP37",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2147483647,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 4.0,
+        "via_diameter": 1.0,
+        "via_drill": 0.5,
         "wire_width": 6
       }
     ],
@@ -564,7 +618,7 @@
         "pattern": "/EECV_19"
       },
       {
-        "netclass": "Actuator",
+        "netclass": "Timing",
         "pattern": "/EECV_34"
       },
       {
@@ -576,7 +630,7 @@
         "pattern": "/EECV_68"
       },
       {
-        "netclass": "Actuator",
+        "netclass": "VP37",
         "pattern": "/EECV_69"
       },
       {
@@ -610,6 +664,14 @@
       {
         "netclass": "Supply",
         "pattern": "Net-(D2-K)"
+      },
+      {
+        "netclass": "Sensor",
+        "pattern": "/EECV_81"
+      },
+      {
+        "netclass": "Sensor",
+        "pattern": "/EECV_82"
       }
     ]
   },
@@ -740,6 +802,11 @@
     "subpart_first_id": 65,
     "subpart_id_separator": 0
   },
-  "sheets": [],
+  "sheets": [
+    [
+      "42a16386-b871-4bc5-81f0-9fdb5cf5a8a7",
+      "Root"
+    ]
+  ],
   "text_variables": {}
 }
