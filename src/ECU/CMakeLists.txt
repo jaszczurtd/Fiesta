@@ -24,6 +24,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
 fiesta_shared_sources(TEST_RUNNER_SOURCES "${FIESTA_SHARED_ROOT}" test_runner)
+fiesta_shared_sources(OBD_DTC_SOURCES "${FIESTA_SHARED_ROOT}" obdDefinitions)
 fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB}")
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
@@ -103,6 +104,8 @@ set(ECU_SOURCES
     # The VP37 module: the list in src/common/vp37/vp37_sources.txt.
     ${VP37_SOURCES}
     ${TEST_RUNNER_SOURCES}
+    # The DTC catalogue: the list in src/common/obdDefinitions/obdDefinitions_sources.txt.
+    ${OBD_DTC_SOURCES}
     ${ECU_SRC}/vp37_adapter.c
     # Shared SC parameter and router service implementations. The native
     # firmware source bridge includes the same files once.
@@ -192,7 +195,8 @@ option(ECU_ENABLE_CPPCHECK_TARGET "Enable check-cppcheck custom target" ON)
 if(ECU_ENABLE_CPPCHECK_TARGET)
     file(GLOB ECU_CPPCHECK_SOURCES RELATIVE ${ECU_SRC}
         "${ECU_SRC}/*.c" "${VP37_SOURCE_DIR}/*.c"
-        "${ECU_SRC}/../common/test_runner/*.c")
+        "${ECU_SRC}/../common/test_runner/*.c"
+        "${ECU_SRC}/../common/obdDefinitions/*.c")
 
     set(ECU_CPPCHECK_ARGS
         --enable=all
@@ -236,5 +240,5 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../tools/vp37-viewer" vp37-view
 
 # Optional analysis helpers kept outside the default build.
 fiesta_add_host_analysis_targets(ECU ECU
-    CLANG_TIDY_FILES "^.*/(src/(ECU|common/vp37|common/test_runner|common/scDefinitions|common/tests)|tools/vp37-viewer/src)/.*\\.(c|cpp)$"
+    CLANG_TIDY_FILES "^.*/(src/(ECU|common/vp37|common/test_runner|common/scDefinitions|common/obdDefinitions|common/tests)|tools/vp37-viewer/src)/.*\\.(c|cpp)$"
     MEMCHECK_EXCLUDE_LABELS "static-analysis|sanitizer")

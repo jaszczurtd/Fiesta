@@ -1,34 +1,36 @@
 #ifndef ECU_DTC_CODES_H
 #define ECU_DTC_CODES_H
 
+#include "../common/obdDefinitions/obd_dtc_catalog.h"
 #include <stdint.h>
 
 /** @name Project diagnostic trouble codes
- *  Values use the two-byte SAE J2012 wire representation.
+ *  Aliases of the shared catalogue in src/common/obdDefinitions: the two-byte
+ *  SAE J2012 wire value and the description of every code come from there.
  *  @{ */
-#define DTC_OBD_CAN_INIT_FAIL UINT16_C(0xD900)
-#define DTC_PCF8574_COMM_FAIL UINT16_C(0xD90D)
-#define DTC_CAN_BUS_FAULT UINT16_C(0xC073)
-#define DTC_PWM_CHANNEL_NOT_INIT UINT16_C(0x0657)
-#define DTC_DPF_COMM_LOST UINT16_C(0xC100)
-#define DTC_EGT_COMM_LOST UINT16_C(0xD902)
-#define DTC_CAN0_INIT_FAIL UINT16_C(0xD903)
-#define DTC_ISOTP_FC_TIMEOUT UINT16_C(0xD906)
-#define DTC_ISOTP_FC_ABORT UINT16_C(0xD907)
-#define DTC_ENGINE_OVERSPEED UINT16_C(0x0219)
-#define DTC_ECM_EEPROM_FAULT UINT16_C(0x062F)
-#define DTC_SYSTEM_VOLTAGE_LOW UINT16_C(0x0562)
-#define DTC_SYSTEM_VOLTAGE_HIGH UINT16_C(0x0563)
-#define DTC_THROTTLE_RANGE_PERF UINT16_C(0x0121)
-#define DTC_COOLANT_TEMP_RANGE UINT16_C(0x0116)
-#define DTC_INTAKE_TEMP_RANGE UINT16_C(0x0111)
-#define DTC_MAP_BARO_RANGE UINT16_C(0x0106)
-#define DTC_FUEL_LEVEL_RANGE UINT16_C(0x0460)
-#define DTC_ADJ_COMM_LOST UINT16_C(0xD908)
-#define DTC_ADJ_SIGNAL_LOST UINT16_C(0xD909)
-#define DTC_ADJ_FUEL_TEMP_BROKEN UINT16_C(0xD90A)
-#define DTC_ADJ_VOLTAGE_BAD UINT16_C(0xD90B)
-#define DTC_RPM_IRQ_INIT_FAIL UINT16_C(0xD90C)
+#define DTC_OBD_CAN_INIT_FAIL ((uint16_t)OBD_DTC_U1900)
+#define DTC_PCF8574_COMM_FAIL ((uint16_t)OBD_DTC_U190D)
+#define DTC_CAN_BUS_FAULT ((uint16_t)OBD_DTC_U0073)
+#define DTC_PWM_CHANNEL_NOT_INIT ((uint16_t)OBD_DTC_P0657)
+#define DTC_DPF_COMM_LOST ((uint16_t)OBD_DTC_U0100)
+#define DTC_EGT_COMM_LOST ((uint16_t)OBD_DTC_U1902)
+#define DTC_CAN0_INIT_FAIL ((uint16_t)OBD_DTC_U1903)
+#define DTC_ISOTP_FC_TIMEOUT ((uint16_t)OBD_DTC_U1906)
+#define DTC_ISOTP_FC_ABORT ((uint16_t)OBD_DTC_U1907)
+#define DTC_ENGINE_OVERSPEED ((uint16_t)OBD_DTC_P0219)
+#define DTC_ECM_EEPROM_FAULT ((uint16_t)OBD_DTC_P062F)
+#define DTC_SYSTEM_VOLTAGE_LOW ((uint16_t)OBD_DTC_P0562)
+#define DTC_SYSTEM_VOLTAGE_HIGH ((uint16_t)OBD_DTC_P0563)
+#define DTC_THROTTLE_RANGE_PERF ((uint16_t)OBD_DTC_P0121)
+#define DTC_COOLANT_TEMP_RANGE ((uint16_t)OBD_DTC_P0116)
+#define DTC_INTAKE_TEMP_RANGE ((uint16_t)OBD_DTC_P0111)
+#define DTC_MAP_BARO_RANGE ((uint16_t)OBD_DTC_P0106)
+#define DTC_FUEL_LEVEL_RANGE ((uint16_t)OBD_DTC_P0460)
+#define DTC_ADJ_COMM_LOST ((uint16_t)OBD_DTC_U1908)
+#define DTC_ADJ_SIGNAL_LOST ((uint16_t)OBD_DTC_U1909)
+#define DTC_ADJ_FUEL_TEMP_BROKEN ((uint16_t)OBD_DTC_U190A)
+#define DTC_ADJ_VOLTAGE_BAD ((uint16_t)OBD_DTC_U190B)
+#define DTC_RPM_IRQ_INIT_FAIL ((uint16_t)OBD_DTC_U190C)
 
 /** @name DTC detail (ISO 14229-1 failure type byte)
  *  Low byte of the three-byte UDS DTC. 0x88 is the ISO "bus off" type; the

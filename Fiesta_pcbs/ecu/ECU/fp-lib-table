@@ -1,0 +1,4 @@
+(fp_lib_table (version 7)
+ (lib (name "FiestaFootprints") (type "KiCad") (uri "${KIPRJMOD}/../footprints.pretty") (options "") (descr "ECU module footprints"))
+ (lib (name "Adjustometer") (type "KiCad") (uri "${KIPRJMOD}/../../vp37_adjustometer/adjustometer/libraries/Adjustometer.pretty") (options "") (descr "Adjustometer module footprints"))
+)

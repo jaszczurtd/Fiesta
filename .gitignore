@@ -11,6 +11,8 @@ Testing/*
 .DS_Store
 Thumbs.db
 *~*
+*.swp
+*.swo
 
 # Python cache
 __pycache__/
@@ -27,6 +29,7 @@ __pycache__/
 *.map
 *.o
 *.srec
+*.uf2
 
 # Module build outputs
 **/.build/
@@ -56,12 +59,22 @@ legacy/**/.build/
 legacy/**/build*/
 legacy/**/ArduinoOutput/
 
-# KiCad autosave/backups
+# KiCad local settings, locks, autosaves and backups
+Fiesta_pcbs/**/*.kicad_prl
+Fiesta_pcbs/**/*.kicad_*.lck
+Fiesta_pcbs/**/*.kicad_pcb-bak
+Fiesta_pcbs/**/*.kicad_sch-bak
+Fiesta_pcbs/**/*.pcb-bak
+Fiesta_pcbs/**/*.sch-bak
+Fiesta_pcbs/**/_autosave-*
 Fiesta_pcbs/**/~*.pcb
 Fiesta_pcbs/**/fp-info-cache
 Fiesta_pcbs/**/*-backups/
 Fiesta_pcbs/**/*#autosave*
 Fiesta_pcbs/**/*#auto_saved_files*
+
+# Local KiCad integration example
+/Fiesta_pcbs/vp37_adjustometer/module_example/
 
 # jh-vscode user-local active board and serial-port selection
 src/*/.vscode/jaszczurhal.local.json

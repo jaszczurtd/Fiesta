@@ -188,7 +188,7 @@ void test_rpm_irq_init_failure_is_reportable_and_persistent(void) {
       dtcManagerGetCodes(DTC_KIND_ACTIVE, codes, COUNTOF(codes));
   TEST_ASSERT_EQUAL_UINT8(1, activeCount);
   TEST_ASSERT_TRUE(containsCode(codes, activeCount, DTC_RPM_IRQ_INIT_FAIL));
-  TEST_ASSERT_EQUAL_STRING("U190C RPM interrupt core-affinity/init failure",
+  TEST_ASSERT_EQUAL_STRING("RPM interrupt core-affinity/init failure",
                            dtcManagerGetName(DTC_RPM_IRQ_INIT_FAIL));
 
   dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, false);

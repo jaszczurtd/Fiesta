@@ -7,7 +7,7 @@
 	(title_block
 		(title "VP37 Adjustometer")
 		(date "2026-11-08")
-		(rev "1.1")
+		(rev "1.3")
 		(company "Marcin Kielesiński PROFI-SOFT")
 	)
 	(lib_symbols
@@ -302,507 +302,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Connector:Conn_01x10_Socket"
-			(pin_names
-				(offset 1.016)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "J"
-				(at 0 12.7 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "Conn_01x10_Socket"
-				(at 0 -15.24 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "~"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Generic connector, single row, 01x10, script generated"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_locked" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "connector"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "Connector*:*_1x??_*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "Conn_01x10_Socket_1_1"
-				(polyline
-					(pts
-						(xy -1.27 10.16) (xy -0.508 10.16)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 7.62) (xy -0.508 7.62)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 5.08) (xy -0.508 5.08)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 2.54) (xy -0.508 2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 0) (xy -0.508 0)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 -2.54) (xy -0.508 -2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 -5.08) (xy -0.508 -5.08)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 -7.62) (xy -0.508 -7.62)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 -10.16) (xy -0.508 -10.16)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy -1.27 -12.7) (xy -0.508 -12.7)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 9.652)
-					(mid -0.5058 10.16)
-					(end 0 10.668)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 7.112)
-					(mid -0.5058 7.62)
-					(end 0 8.128)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 4.572)
-					(mid -0.5058 5.08)
-					(end 0 5.588)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 2.032)
-					(mid -0.5058 2.54)
-					(end 0 3.048)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -0.508)
-					(mid -0.5058 0)
-					(end 0 0.508)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -3.048)
-					(mid -0.5058 -2.54)
-					(end 0 -2.032)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -5.588)
-					(mid -0.5058 -5.08)
-					(end 0 -4.572)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -8.128)
-					(mid -0.5058 -7.62)
-					(end 0 -7.112)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -10.668)
-					(mid -0.5058 -10.16)
-					(end 0 -9.652)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start 0 -13.208)
-					(mid -0.5058 -12.7)
-					(end 0 -12.192)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(pin passive line
-					(at -5.08 10.16 0)
-					(length 3.81)
-					(name "Pin_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 7.62 0)
-					(length 3.81)
-					(name "Pin_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 5.08 0)
-					(length 3.81)
-					(name "Pin_3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 2.54 0)
-					(length 3.81)
-					(name "Pin_4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 0 0)
-					(length 3.81)
-					(name "Pin_5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 -2.54 0)
-					(length 3.81)
-					(name "Pin_6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 -5.08 0)
-					(length 3.81)
-					(name "Pin_7"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "7"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 -7.62 0)
-					(length 3.81)
-					(name "Pin_8"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "8"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 -10.16 0)
-					(length 3.81)
-					(name "Pin_9"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "9"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -5.08 -12.7 0)
-					(length 3.81)
-					(name "Pin_10"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "10"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
+
 		(symbol "Device:C_Polarized"
 			(pin_numbers
 				(hide yes)
@@ -2598,7 +2098,7 @@
 		)
 		(uuid "82d65d96-d6b4-48df-acd6-ae0283b9bc67")
 	)
-	(text "J1: 1..10 map to the VP37 harness; unused pins are NC.\nJ2: 1=5V input, 2=GND, 3=SDA, 4=SCL, 5=12V input.\nUse a protected external 12V supply and regulated 5V.\nDisconnect external 5V when powering RP2040-Zero by USB.\nQ2 (Toshiba 2SK170): pins 1=D, 2=G, 3=S; TO-92.\n0805 resistors/ceramics; THT electrolytics/headers; U1 SOT-223."
+	(text "J1: 1=A, 2=B, 3/4=GND, 5=temperature (pump harness pin 7).\nJ2: 1=5V input, 2=GND, 3=SDA, 4=SCL, 5=12V input.\nUse a protected external 12V supply and regulated 5V.\nDisconnect external 5V when powering RP2040-Zero by USB.\nQ2 (Toshiba 2SK170): pins 1=D, 2=G, 3=S; TO-92.\n0805 resistors/ceramics; THT electrolytics/headers; U1 SOT-223."
 		(exclude_from_sim no)
 		(at 149.098 52.832 0)
 		(effects
@@ -2611,7 +2111,7 @@
 	)
 	(text "84\n"
 		(exclude_from_sim no)
-		(at 47.498 89.408 0)
+		(at 47.498 94.488 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -2765,10 +2265,7 @@
 		(at 170.18 91.44)
 		(uuid "26d5d238-c45c-436a-8872-0e7bf8cfb0e6")
 	)
-	(no_connect
-		(at 36.83 95.25)
-		(uuid "330b7389-5f94-4cec-883c-e2b587f6d732")
-	)
+
 	(no_connect
 		(at 161.29 104.14)
 		(uuid "361a9d18-d775-4627-8963-0095f3d6aa70")
@@ -2797,18 +2294,12 @@
 		(at 170.18 93.98)
 		(uuid "5cd69465-651a-4ab5-860f-7ff88372d2d2")
 	)
-	(no_connect
-		(at 36.83 87.63)
-		(uuid "5dd2039a-b0f3-408e-a3d5-2a6b1ad49ca8")
-	)
+
 	(no_connect
 		(at 158.75 104.14)
 		(uuid "60065a74-5831-47fb-89ea-3cf8bc922054")
 	)
-	(no_connect
-		(at 36.83 82.55)
-		(uuid "80e488ad-d9eb-40eb-a9d9-356191253947")
-	)
+
 	(no_connect
 		(at 156.21 104.14)
 		(uuid "8f8d61b2-a1a1-4a84-a7b0-99c975135283")
@@ -2817,10 +2308,7 @@
 		(at 156.21 73.66)
 		(uuid "9283adf3-8afe-4426-9e18-49be9edff817")
 	)
-	(no_connect
-		(at 36.83 92.71)
-		(uuid "a3eee859-2f84-482c-ad16-44b91e2300be")
-	)
+
 	(no_connect
 		(at 170.18 86.36)
 		(uuid "ab54d2d5-d82e-4646-b54e-50aa4f2f3bae")
@@ -2833,10 +2321,7 @@
 		(at 170.18 88.9)
 		(uuid "de97f071-81b8-4fe6-9c82-8e827cc394c9")
 	)
-	(no_connect
-		(at 36.83 85.09)
-		(uuid "faa1e3d4-b0c9-4dda-bbcc-227151ac9a74")
-	)
+
 	(wire
 		(pts
 			(xy 143.51 73.66) (xy 143.51 60.96)
@@ -3109,7 +2594,7 @@
 	)
 	(wire
 		(pts
-			(xy 36.83 90.17) (xy 49.53 90.17)
+			(xy 36.83 95.25) (xy 49.53 95.25)
 		)
 		(stroke
 			(width 0)
@@ -3479,7 +2964,7 @@
 	)
 	(wire
 		(pts
-			(xy 49.53 90.17) (xy 49.53 123.19)
+			(xy 49.53 95.25) (xy 49.53 123.19)
 		)
 		(stroke
 			(width 0)
@@ -5444,8 +4929,8 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector:Conn_01x10_Socket")
-		(at 31.75 95.25 180)
+		(lib_id "Connector:Conn_01x05_Socket")
+		(at 31.75 100.33 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5453,7 +4938,7 @@
 		(dnp no)
 		(uuid "71689088-3471-4a41-8582-a832d38b96a0")
 		(property "Reference" "J1"
-			(at 34.036 75.946 0)
+			(at 34.036 90.17 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5461,14 +4946,14 @@
 			)
 		)
 		(property "Value" "VP37 connector"
-			(at 34.036 78.994 0)
+			(at 34.036 92.71 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x10_P2.54mm_Vertical"
+		(property "Footprint" "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical"
 			(at 31.75 95.25 0)
 			(effects
 				(font
@@ -5486,7 +4971,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Generic connector, single row, 01x10, script generated"
+		(property "Description" "Generic connector, single row, 01x05, script generated"
 			(at 31.75 95.25 0)
 			(effects
 				(font
@@ -5495,36 +4980,25 @@
 				(hide yes)
 			)
 		)
-		(pin "9"
-			(uuid "88f8461e-c085-4fdb-aa6f-906a8851de15")
-		)
-		(pin "10"
-			(uuid "cecd4936-986f-4dad-bc62-d929bf77cae3")
-		)
+
 		(pin "3"
 			(uuid "03c988e8-b1d5-4e66-9864-df5f164c8328")
 		)
-		(pin "6"
-			(uuid "a479668c-5653-4b0a-b25c-cfbc701a9895")
-		)
+
 		(pin "2"
 			(uuid "8b20aa3d-29fe-44a4-8d0f-d24b487772e6")
 		)
-		(pin "7"
+		(pin "5"
 			(uuid "6738119c-5667-4c3c-b3f9-ae58d64a0d4d")
 		)
-		(pin "8"
-			(uuid "e657a1ce-53e4-4737-85c7-68042548556a")
-		)
+
 		(pin "1"
 			(uuid "b3425b05-f0af-4275-ad99-a8abbb02e057")
 		)
 		(pin "4"
 			(uuid "a19aba48-a1f5-407f-a28b-f45918446969")
 		)
-		(pin "5"
-			(uuid "a4ae8b80-9840-420a-aa3e-c4a512f9dda5")
-		)
+
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"

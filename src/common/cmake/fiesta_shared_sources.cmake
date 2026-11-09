@@ -3,7 +3,7 @@
 if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE)
     cmake_minimum_required(VERSION 3.16)
 endif()
-set(FIESTA_SHARED_SOURCE_SETS vp37 test_runner)
+set(FIESTA_SHARED_SOURCE_SETS vp37 test_runner obdDefinitions)
 get_filename_component(FIESTA_SHARED_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 
 function(fiesta_shared_sources output root name)

@@ -1,5 +1,12 @@
 # Adjustometer libraries
 
+[The complete Adjustometer carrier](Adjustometer_Module.md) has its own
+revision-specific symbol and footprint for mounting on a host PCB. These
+use the carrier geometry in `../adjustometer.kicad_pcb` and are supplied
+under [CERN-OHL-P-2.0](CERN-OHL-P-2.0.txt).
+
+## RP2040-Zero
+
 `RP2040-Zero.kicad_sym` preserves the symbol embedded in the Adjustometer
 schematic. It matches the pin geometry and numbering of
 `RP2040-Zero-KiCAD-main.zip`, archive commit

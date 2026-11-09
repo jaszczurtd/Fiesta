@@ -324,7 +324,8 @@ zwykłe ustawienia pracy.
 | [obd-2.c](obd-2.c) | Wejście OBD CAN i odpowiedzi ISO-TP. |
 | [obd_j1979.c](obd_j1979.c) | Usługi SAE J1979 i PID Mode 01. |
 | [obd_ford_diag.c](obd_ford_diag.c) | Ford EEC-V UDS, KWP2000 i SCP. |
-| [dtcManager.c](dtcManager.c) | Katalog, zapis i odczyt diagnostyczny DTC. |
+| [dtcManager.c](dtcManager.c) | Zapis i odczyt diagnostyczny DTC. Rejestrowane kody to aliasy z [dtc_codes.h](dtc_codes.h), a ich opisy pochodzą ze wspólnego katalogu. |
+| [common/obdDefinitions](../common/obdDefinitions/) | Katalog DTC współdzielony przez moduły: ogólne kody SAE J2012 i kody projektu U19xx z opisami, wyszukiwanie opisu i postać drukowana (`P0116`). Listę [obdDefinitions_sources.txt](../common/obdDefinitions/obdDefinitions_sources.txt) buildy czytają tak jak listę VP37 niżej. |
 | [rpm.c](rpm.c) | Obroty z przerwania czujnika Halla. |
 | [common/vp37](../common/vp37/) | Sterownik współdzielony przez ECU i VP37TestBench. Listę [vp37_sources.txt](../common/vp37/vp37_sources.txt) czyta CMake testów, a generator VS Code wpisuje ją do manifestów modułów z `sharedSources`. |
 | [vp37.c](../common/vp37/vp37.c) | Start pompy, API żądania i cykl sterowania. |

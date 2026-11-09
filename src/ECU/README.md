@@ -333,7 +333,8 @@ normal operating defaults.
 | [`obd-2.c`](../../src/ECU/obd-2.c) | OBD CAN input and ISO-TP responses |
 | [`obd_j1979.c`](../../src/ECU/obd_j1979.c) | SAE J1979 services and Mode 01 PIDs |
 | [`obd_ford_diag.c`](../../src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
-| [`dtcManager.c`](../../src/ECU/dtcManager.c) | DTC catalogue, storage, and diagnostic reads |
+| [`dtcManager.c`](../../src/ECU/dtcManager.c) | DTC storage and diagnostic reads; the codes it registers are the aliases in [`dtc_codes.h`](../../src/ECU/dtc_codes.h), and their descriptions come from the shared catalogue |
+| [`src/common/obdDefinitions/`](../../src/common/obdDefinitions/) | the DTC catalogue shared by the modules: the generic SAE J2012 codes and the project's U19xx codes with their descriptions, the description lookup and the printed form (`P0116`); its translation units are the list in [`obdDefinitions_sources.txt`](../../src/common/obdDefinitions/obdDefinitions_sources.txt), read like the VP37 list below |
 | [`rpm.c`](../../src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
 | [`src/common/vp37/`](../../src/common/vp37/) | the VP37 module, shared by the ECU and VP37TestBench; its translation units are the list in [`vp37_sources.txt`](../../src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
 | [`vp37.c`](../../src/common/vp37/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |

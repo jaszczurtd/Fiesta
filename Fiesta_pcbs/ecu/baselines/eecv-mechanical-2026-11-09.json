@@ -1,0 +1,26 @@
+{
+  "baseline": "eecv-mechanical-2026-11-09",
+  "accepted_by_owner": "2026-11-09",
+  "scope": "Board outline, Ford connector, six chassis contacts, TO-220 and resistor placement; physical appearance and mounting accepted. Electrical/thermal qualification of a complete ECU is separate.",
+  "archive_sha256": "71fce3a26e305a6d1b1e51102dd86c3f8e5801ac5ea6e315fb72df9e01161b34",
+  "files": {
+    "footprints.pretty/ECU_Chassis_GND_D4.75_Pad8.75.kicad_mod": "fca84530c1520418d8d0d3021dd4dafc8434c3a7977f1d21798fd14eb31c3ed4",
+    "footprints.pretty/Ford_EEC-V_104pin.kicad_mod": "50be8d8e730fd63b82935a4cc5d93a96a809d07082b3ded3091a26ca860d9be9",
+    "footprints.pretty/GY_NEO6MV2_Module_4P254.kicad_mod": "28fa80e45becbff0efccc62779f84caf52abe3e3ce304cd4b44a6490e558aff8",
+    "footprints.pretty/MCP2515_CAN_Module_7P54.kicad_mod": "642d3be9774d1da23395dcafed2d9edef5b9ac4eb508190474084bbfc09b122f",
+    "footprints.pretty/MCP2515_TJA1050_Module_J3_40x27mm.kicad_mod": "6faf46b61796522358c267c3d18ecccd47e354e31464f2ae404128651bc81c90",
+    "footprints.pretty/OBD2_J1962_Female_16P_Generic.kicad_mod": "8b0ef3916f212d675aa679123ca62fc334c1ed06742d05184c9356f3e1f02696",
+    "footprints.pretty/R_Aluminium_50W_50x26mm_Mount40x20mm_Wired.kicad_mod": "6c0679911491fba50648d943d287c1df6a190318eb5b64601aa7b31e3c8b9f3b",
+    "layout_example/ECU-layout-3d.png": "fb52397c1f1ab81519b6ec4e9c50f2c2a58f7132c57a36d207afc3cc20b96890",
+    "layout_example/ECU-layout-bottom.svg": "21792369877694b3ead325d553a53c9fdc4216ccdac655892aabc8c440761596",
+    "layout_example/ECU-layout-example.kicad_pcb": "2d1bc2c00ce0a8440a9e0803653eea275629f995d0fa7ac261e9acc6f32a27a3",
+    "layout_example/ECU-layout-example.kicad_prl": "220b3347caffada940c4267a632cc66bc419bb8acf6c09d41d7e6b6ff1ac799b",
+    "layout_example/ECU-layout-example.kicad_pro": "0b1c8c26b6a1df06ec43a6b9b43a7c8335e86be1adc14cb4740fa9c101affb29",
+    "layout_example/ECU-layout-preview.png": "c5f75ea77eb3e895fd2f7ceee89fd9a0f019ee4feac733c562506a2dac6357f2",
+    "layout_example/ECU-layout-top.svg": "5d8ee1d6c4137441d8d35c5e52131aee8f2d6a3978ba23d393c87224a08f0534",
+    "layout_example/README.md": "d126996a00dd6bb4f577d4b7b92eb5875a4616a1fecc7871a8750a1b621765e5",
+    "layout_example/RUSEFI-LICENSE.txt": "3526ddea00b6418e0619055b088b1cb5eb5c3508c6664b08ca4510f6d884d7dc",
+    "layout_example/fp-info-cache": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "layout_example/fp-lib-table": "10c37b89602a32bd550accb5663f755229dbf3935ab8cf22e70fced224d4beb4"
+  }
+}

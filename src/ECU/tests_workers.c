@@ -654,9 +654,11 @@ size_t testsWorkersPotProgress(struct sc_command_test_field_s *fields,
 void testsWorkersDtcStart(void) {
   const uint16_t code = (uint16_t)DTC_CAN_BUS_FAULT;
   const uint8_t detail = DTC_DETAIL_CAN_TX_RPM;
+  char codeText[OBD_DTC_TEXT_SIZE];
   dtcManagerSetActiveDetail(code, true, detail);
-  deb("TEST: DTC injected: 0x%04X (%s) detail=0x%02X", (unsigned)code,
-      dtcManagerGetName(code), (unsigned)detail);
+  (void)obdDtcFormatCode(code, codeText, sizeof(codeText));
+  deb("TEST: DTC injected: %s (0x%04X, %s) detail=0x%02X", codeText,
+      (unsigned)code, dtcManagerGetName(code), (unsigned)detail);
 }
 
 /** @brief One deferred batch, the way every ECU storage write is made: the

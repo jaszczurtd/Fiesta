@@ -1,0 +1,8 @@
+# Translation units of the DTC catalogue, one per line, relative to this
+# directory. The single list every build reads:
+#   - src/ECU/CMakeLists.txt for the ECU host-test builds,
+#   - scripts/sync_vscode_projects.py, which writes JH_EXTRA_SOURCES into the
+#     jaszczurhal.project.json of every module the registry marks with
+#     "sharedSources": ["obdDefinitions"], so the firmware builds compile the
+#     same files. tests/test_module_registry.py keeps the manifests in step.
+obd_dtc_catalog.c

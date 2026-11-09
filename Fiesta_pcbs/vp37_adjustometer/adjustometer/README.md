@@ -1,4 +1,4 @@
-# Adjustometer schematic
+# Adjustometer prototype PCB
 
 Open `adjustometer.kicad_pro` in KiCad 9 with the standard symbol and
 footprint libraries installed. The project tables load the RP2040-Zero
@@ -6,12 +6,47 @@ symbol and footprint from `libraries/` through `${KIPRJMOD}`. No global
 library edits are needed. The circuit values and component assignments
 live in `adjustometer.kicad_sch`.
 
-The schematic uses 0805 resistors and ceramic capacitors, through-hole
-electrolytics and headers, TO-92 transistors, and a SOT-223 regulator. The PCB file is an
-empty starting point. In the schematic editor, run ERC, then **Tools ->
-Update PCB from Schematic** (`F8`). Place the footprints, define the board
-outline and mounting holes, route the nets, and run DRC with schematic
-parity before generating manufacturing files.
+To mount the complete carrier on another PCB, use the
+[Adjustometer module symbol and footprint](libraries/Adjustometer_Module.md).
+The module instructions describe the assembly variant with J1/J2 headers
+facing down.
+
+The two-layer PCB measures 45 x 36 mm and uses 0805 resistors and ceramic
+capacitors, through-hole electrolytics and headers, TO-92 transistors,
+and a SOT-223 regulator. It includes routed connections, ground planes on
+both copper layers and four M3 mounting holes. The RP2040-Zero's USB end
+faces the top edge; J1 sits along the bottom and J2 on the right.
+
+See the [PCB layers](../adjustometer-pcb.pdf), [3D preview](../adjustometer-pcb.png)
+and [fabrication package](../adjustometer-fabrication.zip). The 3D preview
+shows the carrier board and standard components; it has no model of the
+RP2040-Zero module. Its outline and mounting pads are visible.
+
+## Board geometry and fabrication
+
+- FR-4, nominal 1.6 mm thickness, two copper layers, nominal 35 um copper.
+- Four unplated 3.2 mm holes, with centres 3.5 mm from each adjacent edge;
+  their rectangular spacing is 38 x 29 mm.
+- Copper keepouts of 3.2 mm radius around the mounting-hole centres
+  reserve space for screw heads on both sides.
+- Signal tracks: 0.25 mm. Supply and ground tracks: 0.5 mm.
+  Minimum copper clearance: 0.2 mm; copper-to-board-edge clearance: 0.5 mm.
+- Through vias: 0.6 mm diameter with 0.3 mm drills. Ground planes use
+  thermal reliefs and stitching vias.
+- For standalone use, all components mount on the top. In the plug-in
+  variant, J1 and J2 mount from the underside as described in the module
+  instructions above. Fit the RP2040-Zero on headers with clearance for
+  its underside components; keep access to USB and buttons.
+
+The ZIP contains Gerber X2 files for copper, masks, silkscreen, top paste
+and outline, separate PTH/NPTH Excellon drills, drill maps and a BOM.
+Use both drill files. The outline and drill coordinates share the same
+absolute origin. Confirm the fabrication parameters with the chosen board
+manufacturer and check the physical parts before ordering a prototype.
+
+After schematic edits, run ERC, then **Tools -> Update PCB from Schematic**
+(`F8`). Review placement and tracks, refill zones with `B`, and run DRC
+with schematic parity before regenerating outputs.
 
 ## Connections and power
 
@@ -19,12 +54,18 @@ parity before generating manufacturing files.
 | --- | --- | --- |
 | J1 | 1, 2 | VP37 inductive sensor winding connections |
 | J1 | 3, 4 | GND |
-| J1 | 7 | Fuel temperature sensor |
-| J1 | 5, 6, 8, 9, 10 | Unused on this board |
+| J1 | 5 | Fuel temperature sensor (pump harness pin 7) |
 | J2 | 1, 2, 3, 4, 5 | Regulated 5 V input, GND, SDA, SCL, 12 V input |
 
-J1 is a 2.54 mm board header with numbers matching the pump harness.
-It does not represent the mechanical connector fitted to the pump.
+With USB at the top and the component side facing you, J1 pin 1 is on
+the left and J2 pin 1 is at the top. J1 pin numbers are printed on the
+back; the front labels A/B/G/T identify the winding, ground and temperature
+connections.
+
+J1 is a five-pin 2.54 mm board header. Its pins 1-5 connect to pump
+harness pins 1, 2, 3, 4 and 7, respectively. Fit the temperature wire
+to J1 pin 5. The header does not represent the mechanical connector
+fitted to the pump.
 J2 pins 1-4 retain their wiring; pin 5 supplies the oscillator regulator and
 the supply-voltage divider. The board needs both 12 V and 5 V, with a common
 return; U1 supplies only the 8 V oscillator rail. Use external supply
@@ -56,10 +97,9 @@ and GP29/supply divider. See the [firmware documentation](../../../src/Adjustome
   numbering; other RP2040-Zero libraries may number the same pads differently.
   Leave clearance for the underside components, USB plug and BOOT/RESET buttons.
 
-These package choices define the prototype BOM. Confirm the dimensions
-and pinout of the parts to be fitted before ordering the PCB. Layout,
-power protection, regulator decoupling and operation on hardware still
-need review as part of that board design.
+These package choices define the prototype BOM. The layout retains the
+schematic's circuit values. Power protection, regulator decoupling and
+operation on hardware still need electrical review and prototype testing.
 
 ## References
 
@@ -70,7 +110,17 @@ need review as part of that board design.
   page 1: package dimensions and lead identification.
 - [Local library provenance and licence](libraries/README.md).
 
-To regenerate the schematic preview from this directory:
+To check the project and regenerate fabrication files from this directory:
+
+```sh
+kicad-cli sch erc --exit-code-violations -o /tmp/adjustometer-erc.rpt adjustometer.kicad_sch
+kicad-cli pcb drc --schematic-parity --exit-code-violations -o /tmp/adjustometer-drc.rpt adjustometer.kicad_pcb
+kicad-cli pcb export gerbers -o /tmp/adjustometer-fabrication/ --layers F.Cu,B.Cu,F.Mask,B.Mask,F.SilkS,B.SilkS,F.Paste,Edge.Cuts adjustometer.kicad_pcb
+kicad-cli pcb export drill -o /tmp/adjustometer-fabrication/ --format excellon --excellon-separate-th --generate-map adjustometer.kicad_pcb
+kicad-cli sch export bom -o /tmp/adjustometer-fabrication/adjustometer-bom.csv adjustometer.kicad_sch
+```
+
+To regenerate the schematic preview:
 
 ```sh
 kicad-cli sch export pdf -o ../adjustometer.pdf adjustometer.kicad_sch
