@@ -52,10 +52,16 @@ z `scripts/test-locales.txt`; skrypt przygotowania środowiska generuje je
 i sprawdza, czy działają. Na Debianie i Raspberry Pi OS `locale-gen` buduje
 tylko wpisy włączone w `/etc/locale.gen`, więc skrypt najpierw je tam włącza.
 Ten sam runner otacza target Valgrinda SC, więc Valgrind sprawdza sam plik
-binarny testu. Suppressje obejmują opisane stosy systemowego GTK/fontconfig
-oraz loader glibc podczas startu GTK; błędy aplikacji nadal przerywają kontrolę.
+binarny testu. Suppressje obejmują opisane stosy systemowych bibliotek GTK,
+Mesa EGL, Pango i fontconfig oraz loader glibc podczas startu GTK; błędy
+aplikacji nadal przerywają kontrolę.
 Uruchomione bezpośrednio bez ekranu testy paska postępu i karty Tests są
 w CTest oznaczone jako pominięte.
+
+Po błędzie `check-valgrind` wypisuje pliki `MemoryChecker.*.log` z bieżącego
+przebiegu, wraz ze stosami alokacji. Job CI SerialConfiguratora zapisuje też
+katalog `Testing/` jako artefakt `serial-configurator-test-reports`, również
+po nieudanym teście.
 
 `--skip-cppcheck`, `--skip-valgrind` i `--skip-clang-tidy` pozwalają pomijać
 wybrane kontrole podczas pracy. Taki przebieg nie potwierdza przejścia pełnej
@@ -127,6 +133,10 @@ lokalnej walidacji firmware.
 | [windows-firmware.yml](../.github/workflows/windows-firmware.yml) | Kontrola generowania, buildy firmware i bazy komend kompilacji w Windows dla tego samego wyboru modułów. |
 | [ecu-cppcheck.yml](../.github/workflows/ecu-cppcheck.yml) | Ręczne porównanie cppcheck z bazą ECU. |
 | [ecu-misra.yml](../.github/workflows/ecu-misra.yml) | Ręczne wygenerowanie raportów MISRA. |
+
+Joby Linux działają na `ubuntu-24.04`. Przypięty obraz utrzymuje te same
+wersje systemowych GTK, Mesa i Valgrinda między przebiegami; przejście na
+nowsze wydanie Ubuntu wymaga zmiany `runs-on`.
 
 Filtry ścieżek w workflow wybierają przebiegi po zmianach modułu, kodu
 współdzielonego, narzędzi lub wskaźnika HAL.

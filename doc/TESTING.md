@@ -52,10 +52,15 @@ and checks that they work. On Debian and Raspberry Pi OS `locale-gen` builds
 only the entries enabled in `/etc/locale.gen`, so the script enables them
 there first.
 The same runner wraps the SC Valgrind target, so Valgrind checks the test
-binary itself. Suppressions cover the documented system GTK/fontconfig
-stacks and the glibc loader during GTK start-up; application errors remain
-failures. Started directly without a display, the progress-bar and Tests-tab
-tests report a skip in CTest.
+binary itself. Suppressions cover the documented system GTK, Mesa EGL, Pango
+and fontconfig stacks and the glibc loader during GTK start-up; application
+errors remain failures. Started directly without a display, the progress-bar
+and Tests-tab tests report a skip in CTest.
+
+When `check-valgrind` fails, it prints the current run's `MemoryChecker.*.log`
+files, including allocation stacks. The SerialConfigurator CI job also saves
+the `Testing/` directory as the `serial-configurator-test-reports` artifact,
+including after a failed test.
 
 `--skip-cppcheck`, `--skip-valgrind` and `--skip-clang-tidy` omit individual
 checks for development. Such a run does not establish that the complete gate
@@ -127,6 +132,10 @@ local firmware validation.
 | [windows-firmware.yml](../.github/workflows/windows-firmware.yml) | Generation checks, firmware builds and compile databases on Windows for the same CI selection. |
 | [ecu-cppcheck.yml](../.github/workflows/ecu-cppcheck.yml) | Manual cppcheck comparison with the ECU baseline. |
 | [ecu-misra.yml](../.github/workflows/ecu-misra.yml) | Manual MISRA screening artifacts. |
+
+The Linux jobs run on `ubuntu-24.04`. The pinned image keeps the system GTK,
+Mesa and Valgrind versions fixed between runs; moving to a newer Ubuntu
+release means changing `runs-on`.
 
 Path filters in the workflows select runs after module, shared-code, tooling
 or HAL-pointer changes. [`tests/test_module_registry.py`](../tests/test_module_registry.py)

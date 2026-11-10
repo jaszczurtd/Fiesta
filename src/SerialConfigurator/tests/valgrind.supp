@@ -41,6 +41,20 @@
    fun:gdk_x11_display_open
 }
 
+# EGL display that GTK 4.22 (ubuntu-26.04) initializes through Mesa while it
+# prepares GL on an X11 display such as Xvfb, and keeps until exit. Without
+# Mesa debug symbols both stacks fit the default 12 frames.
+{
+   gtk4-x11-egl-mesa-initialize
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   obj:*/libEGL_mesa.so*
+   ...
+   fun:gdk_display_prepare_gl
+   fun:gdk_x11_display_open
+}
+
 # glibc dependency list (l_initfini) of a module loaded by dlopen(); on the
 # GitHub ubuntu-24.04 runner gtk_init loads the dconf GIO module this way.
 # The default 12-frame stack ends in dlopen, so only the loader frames match.
@@ -74,4 +88,28 @@
   obj:*libfontconfig.so*
   obj:*libcairo.so*
   obj:*libpangocairo-1.0.so*
+}
+
+# Pango 1.57 (ubuntu-26.04) font map caches: the family list built through
+# FcFontSetList and the fontset-key patterns, which pangocairo now passes to
+# the fontconfig substitution without the libcairo frame of the entry above.
+{
+  sc_system_pango_fc_font_map_families
+  Memcheck:Leak
+  match-leak-kinds: definite
+  fun:malloc
+  obj:*libfontconfig.so*
+  ...
+  fun:FcFontSetList
+  obj:*libpangoft2-1.0.so*
+}
+{
+  sc_system_pango_cairo_fontset_key_substitution
+  Memcheck:Leak
+  match-leak-kinds: definite
+  fun:realloc
+  obj:*libfontconfig.so*
+  ...
+  obj:*libpangocairo-1.0.so*
+  obj:*libpangoft2-1.0.so*
 }

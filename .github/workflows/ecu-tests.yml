@@ -41,7 +41,7 @@ on:
 
 jobs:
   test-ecu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:

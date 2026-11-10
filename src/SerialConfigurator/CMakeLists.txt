@@ -666,6 +666,16 @@ if(BUILD_TESTING)
         NAME serial-configurator-flash-orchestrator-tests
         COMMAND serial-configurator-flash-orchestrator-tests
     )
+
+    if(MEMORYCHECK_COMMAND)
+        add_test(NAME serial-configurator-memcheck-report-tests
+            COMMAND ${CMAKE_COMMAND}
+                "-DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/../.."
+                "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/memcheck-report-test"
+                "-DC_COMPILER=${CMAKE_C_COMPILER}"
+                "-DGENERATOR=${CMAKE_GENERATOR}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/check_memcheck_reports.cmake")
+    endif()
 endif()
 
 # Optional analysis helpers kept outside the default build.

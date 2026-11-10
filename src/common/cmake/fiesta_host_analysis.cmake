@@ -19,6 +19,8 @@ set(MEMORYCHECK_SUPPRESSIONS_FILE "${_fiesta_valgrind_supp}"
 unset(_fiesta_valgrind_supp)
 
 find_program(RUN_CLANG_TIDY_EXECUTABLE NAMES run-clang-tidy)
+set_property(GLOBAL PROPERTY FIESTA_MEMCHECK_RUNNER
+    "${CMAKE_CURRENT_LIST_DIR}/fiesta_run_memcheck.cmake")
 
 # Adds check-valgrind, memcheck over the module tests except the labels that
 # match MEMCHECK_EXCLUDE_LABELS, and check-clang-tidy over the compiled sources
@@ -33,13 +35,13 @@ function(fiesta_add_host_analysis_targets MODULE PREFIX)
 
     option(${PREFIX}_ENABLE_VALGRIND_TARGET "Enable check-valgrind custom target" ON)
     if(${PREFIX}_ENABLE_VALGRIND_TARGET AND MEMORYCHECK_COMMAND)
-        set(exclude_labels "")
-        if(ARG_MEMCHECK_EXCLUDE_LABELS)
-            set(exclude_labels -LE "${ARG_MEMCHECK_EXCLUDE_LABELS}")
-        endif()
+        get_property(memcheck_runner GLOBAL PROPERTY FIESTA_MEMCHECK_RUNNER)
         add_custom_target(check-valgrind
-            COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} -T memcheck
-                --output-on-failure ${exclude_labels}
+            COMMAND ${CMAKE_COMMAND}
+                "-DCTEST_COMMAND=${CMAKE_CTEST_COMMAND}"
+                "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+                "-DEXCLUDE_LABELS=${ARG_MEMCHECK_EXCLUDE_LABELS}"
+                -P "${memcheck_runner}"
             COMMENT "Running CTest memcheck (Valgrind) for ${MODULE}"
             VERBATIM
         )

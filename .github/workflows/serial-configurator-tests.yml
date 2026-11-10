@@ -25,7 +25,7 @@ on:
 
 jobs:
   test-serial-configurator:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
@@ -66,6 +66,14 @@ jobs:
       - name: Run Valgrind memcheck target
         run: |
           bash scripts/sc-with-display.sh cmake --build src/SerialConfigurator/build_ci --target check-valgrind --parallel
+
+      - name: Preserve CTest and Valgrind reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serial-configurator-test-reports
+          path: src/SerialConfigurator/build_ci/Testing/
+          if-no-files-found: ignore
 
       - name: Run clang-tidy target
         run: |
