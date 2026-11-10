@@ -33,16 +33,23 @@ RP2040-Zero module. Its outline and mounting pads are visible.
   Minimum copper clearance: 0.2 mm; copper-to-board-edge clearance: 0.5 mm.
 - Through vias: 0.6 mm diameter with 0.3 mm drills. Ground planes use
   thermal reliefs and stitching vias.
+- PCBWay fabrication revision `1.3-PCBWay`: ENIG, green solder mask and
+  white silkscreen on both sides. Text height is at least 0.8 mm, with
+  0.15 mm strokes and spacing. Mask expansion is 0.055 mm, with a 0.11 mm
+  minimum web. The circuit and Rev1_3 module interface are unchanged.
 - For standalone use, all components mount on the top. In the plug-in
   variant, J1 and J2 mount from the underside as described in the module
   instructions above. Fit the RP2040-Zero on headers with clearance for
   its underside components; keep access to USB and buttons.
 
 The ZIP contains Gerber X2 files for copper, masks, silkscreen, top paste
-and outline, separate PTH/NPTH Excellon drills, drill maps and a BOM.
+and outline, separate PTH/NPTH Excellon drills, drill maps, a Gerber job,
+a mechanical drawing, an assembly-reference BOM and checksums.
 Use both drill files. The outline and drill coordinates share the same
-absolute origin. Confirm the fabrication parameters with the chosen board
-manufacturer and check the physical parts before ordering a prototype.
+absolute origin. Send the ZIP with the settings in the
+[PCBWay fabrication specification](PCBWay-fabrication.md).
+Resolve the manufacturer's DFM comments and check the physical parts
+before ordering a prototype.
 
 After schematic edits, run ERC, then **Tools -> Update PCB from Schematic**
 (`F8`). Review placement and tracks, refill zones with `B`, and run DRC
@@ -115,8 +122,8 @@ To check the project and regenerate fabrication files from this directory:
 ```sh
 kicad-cli sch erc --exit-code-violations -o /tmp/adjustometer-erc.rpt adjustometer.kicad_sch
 kicad-cli pcb drc --schematic-parity --exit-code-violations -o /tmp/adjustometer-drc.rpt adjustometer.kicad_pcb
-kicad-cli pcb export gerbers -o /tmp/adjustometer-fabrication/ --layers F.Cu,B.Cu,F.Mask,B.Mask,F.SilkS,B.SilkS,F.Paste,Edge.Cuts adjustometer.kicad_pcb
-kicad-cli pcb export drill -o /tmp/adjustometer-fabrication/ --format excellon --excellon-separate-th --generate-map adjustometer.kicad_pcb
+kicad-cli pcb export gerbers -o /tmp/adjustometer-fabrication/ --disable-aperture-macros --layers F.Cu,B.Cu,F.Mask,B.Mask,F.SilkS,B.SilkS,F.Paste,Edge.Cuts adjustometer.kicad_pcb
+kicad-cli pcb export drill -o /tmp/adjustometer-fabrication/ --format excellon --excellon-separate-th --excellon-units mm --drill-origin absolute --generate-map --map-format pdf adjustometer.kicad_pcb
 kicad-cli sch export bom -o /tmp/adjustometer-fabrication/adjustometer-bom.csv adjustometer.kicad_sch
 ```
 

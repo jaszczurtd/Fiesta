@@ -1,4 +1,4 @@
-# Fiesta ECU PCB2
+# Fiesta ECU PCB3
 
 Open `ECU/ECU.kicad_pro` in KiCad 9. The project contains the ECU schematic and
 its revised two-layer PCB for the Ford EEC-V housing. `ECU/ECU.pdf` previews
@@ -44,6 +44,7 @@ checks below still apply before fabrication and use.
 | U1/U2 TC4427 | DIP-8, 7.62 mm row spacing; non-inverting |
 | Q3, Q5-Q12 2N6037 | TO-126-3, vertical; pins 1=E, 2=C, 3=B |
 | U3 L7805 | TO-220-3, vertical |
+| D37 1N4728A, 3.3 V | DO-41 THT, vertical, cathode up; 2.54 mm pitch, 1.10 mm finished holes |
 | D25 MBR20100CTG | One TO-220-3 package; units A/B share cathode pin 2 |
 | A1 MCU | Pico-compatible module on two 1×20 THT headers/sockets |
 | U9 Adjustometer | Shared module footprint, revision 1.3 |
@@ -83,9 +84,29 @@ PCF8574 uses I2C1 on GP2/SDA and GP3/SCL, with R31/R32 pull-ups to 3.3 V.
 The injector input connects to GP4. R14 is 470 Ω, matching the physical fuel
 level circuit. Firmware adaptation follows manufacture of the new PCB.
 
+## PCBWay fabrication package
+
+[ECU-PCBWay.zip](ECU/ECU-PCBWay.zip) contains Gerber X2 layers, separate PTH/NPTH
+Excellon drills, a Gerber job, drill maps, a 1:1 mechanical drawing and a checksum
+manifest. The [fabrication requirements](ECU/ECU-fabrication.md) specify the
+quotation parameters and the six exposed chassis contacts. Submit the complete
+ZIP for bare-board quotation and DFM review. Confirm the minimum finished copper
+and hole-wall plating with PCBWay before releasing manufacture.
+
+The design uses at least 0.60/0.30 mm vias with a 0.15 mm annular ring. Silkscreen
+text uses at least 1.0 mm height and 0.15 mm strokes. Soldermask expansion is
+0.05 mm with a 0.15 mm minimum web; the chassis contact openings retain their
+exact shapes. The 0.25 mm track/space and 0.40 mm copper-to-edge limits remain.
+
+D37 uses the [1N4728A 3.3 V Zener](https://www.onsemi.com/download/data-sheet/pdf/1n4736at-d.pdf)
+in DO-41, with cathode pin 1 on the ADC/shunt net and anode pin 2 on GND.
+Its body stands over the anode pad, with the cathode lead bent back to pad 1.
+The diode sits on the ADC branch; the wide Q20 source path to R1 is retained.
+The schematic, PCB and BOM use this part and its DO-41 footprint.
+
 ## Checks before fabrication
 
-PCB2 follows the selected schematic. Electrical and thermal qualification remains necessary:
+PCB3 follows the selected schematic. Electrical and thermal qualification remains necessary:
 
 - U1/U2 use GND on pin 3 and the existing `12V_PWR` power-stage rail on pin 6.
   C21/C22/C40 decouple that rail. TC4427 is deliberately non-inverting: LOW

@@ -4,582 +4,13 @@
 	(generator_version "9.0")
 	(uuid "2a9267a6-dfb8-4d3a-9c69-4f0b69f86566")
 	(paper "A4")
+	(title_block
+		(title "Fiesta clock")
+		(date "2026-11-10")
+		(rev "1.0")
+		(company "Marcin Kielesiński PROFI-SOFT")
+	)
 	(lib_symbols
-		(symbol "Conn_01x04_Pin_1"
-			(pin_names
-				(offset 1.016)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "J8"
-				(at 3.81 -10.16 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify right)
-				)
-			)
-			(property "Value" "LEDs"
-				(at 5.334 -7.874 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify right)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "~"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Generic connector, single row, 01x04, script generated"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_locked" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "connector"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "Connector*:*_1x??_*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "Conn_01x04_Pin_1_1_1"
-				(rectangle
-					(start 0.8636 2.667)
-					(end 0 2.413)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 0.127)
-					(end 0 -0.127)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -2.413)
-					(end 0 -2.667)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -4.953)
-					(end 0 -5.207)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 2.54) (xy 0.8636 2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 0) (xy 0.8636 0)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 -2.54) (xy 0.8636 -2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 -5.08) (xy 0.8636 -5.08)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(pin passive line
-					(at 5.08 2.54 180)
-					(length 3.81)
-					(name "Pin_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 3.81)
-					(name "Pin_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -2.54 180)
-					(length 3.81)
-					(name "Pin_3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -5.08 180)
-					(length 3.81)
-					(name "Pin_4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
-		(symbol "Conn_01x06_Pin_1"
-			(pin_names
-				(offset 1.016)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "J5"
-				(at 2.286 6.858 90)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "Conn_01x06_Pin"
-				(at -5.08 -1.27 90)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" "~"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Generic connector, single row, 01x06, script generated"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_locked" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "connector"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_fp_filters" "Connector*:*_1x??_*"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "Conn_01x06_Pin_1_1_1"
-				(rectangle
-					(start 0.8636 5.207)
-					(end 0 4.953)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 2.667)
-					(end 0 2.413)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 0.127)
-					(end 0 -0.127)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -2.413)
-					(end 0 -2.667)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -4.953)
-					(end 0 -5.207)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(rectangle
-					(start 0.8636 -7.493)
-					(end 0 -7.747)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type outline)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 5.08) (xy 0.8636 5.08)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 2.54) (xy 0.8636 2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 0) (xy 0.8636 0)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 -2.54) (xy 0.8636 -2.54)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 -5.08) (xy 0.8636 -5.08)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 1.27 -7.62) (xy 0.8636 -7.62)
-					)
-					(stroke
-						(width 0.1524)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(pin passive line
-					(at 5.08 5.08 180)
-					(length 3.81)
-					(name "Pin_1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 2.54 180)
-					(length 3.81)
-					(name "Pin_2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 0 180)
-					(length 3.81)
-					(name "Pin_3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -2.54 180)
-					(length 3.81)
-					(name "Pin_4"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "3"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -5.08 180)
-					(length 3.81)
-					(name "Pin_5"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 5.08 -7.62 180)
-					(length 3.81)
-					(name "Pin_6"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "Connector:Conn_01x04_Pin"
 			(pin_names
 				(offset 1.016)
@@ -2363,11 +1794,168 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "MCP2515_CAN_Module_7P54_1"
+		(symbol "FiestaClock:DS3231_Mini"
+			(pin_names
+				(offset 0.5)
+			)
 			(exclude_from_sim no)
 			(in_bom yes)
 			(on_board yes)
-			(property "Reference" "U7"
+			(property "Reference" "J"
+				(at -4.445 8.89 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "DS3231 Mini"
+				(at -4.445 -8.89 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "FiestaClock:DS3231_Mini_13x14mm_1x05_P2.54mm"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "https://www.analog.com/media/en/technical-documentation/data-sheets/ds3231.pdf"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "DS3231 Mini module, 13x14mm; socket + D C NC -, male 2.54mm header on carrier"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "DS3231_Mini_0_1"
+				(rectangle
+					(start -10.16 6.35)
+					(end 1.27 -6.35)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "DS3231_Mini_1_1"
+				(pin passive line
+					(at 5.08 5.08 180)
+					(length 3.81)
+					(name "NC"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 5.08 2.54 180)
+					(length 3.81)
+					(name "GND"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 5.08 0 180)
+					(length 3.81)
+					(name "SDA"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at 5.08 -2.54 180)
+					(length 3.81)
+					(name "SCL"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 5.08 -5.08 180)
+					(length 3.81)
+					(name "VCC"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1 1)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "Fiesta_Modules:MCP2515_CAN_Module_7P54"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "U8"
 				(at 16.256 -7.112 90)
 				(effects
 					(font
@@ -2385,11 +1973,11 @@
 					(justify right)
 				)
 			)
-			(property "Footprint" "FiestaFootprints:MCP2515_CAN_Module_7P54"
+			(property "Footprint" "FiestaFootprints:MCP2515_TJA1050_Module_J3_40x27mm"
 				(at 0 0 0)
 				(effects
 					(font
-						(size 1.27 1.27)
+						(size 1.016 1.016)
 					)
 					(hide yes)
 				)
@@ -2403,27 +1991,29 @@
 					(hide yes)
 				)
 			)
-			(property "Description" ""
+			(property "Description" "MCP2515 and TJA1050 module, 8 MHz; SO is high impedance when CS is high; INT is open drain"
 				(at 0 0 0)
 				(effects
 					(font
-						(size 1.27 1.27)
+						(size 1.016 1.016)
 					)
 					(hide yes)
 				)
 			)
-			(symbol "MCP2515_CAN_Module_7P54_1_1_1"
+			(symbol "MCP2515_CAN_Module_7P54_0_1"
 				(rectangle
 					(start 2.54 10.16)
 					(end 17.78 -10.16)
 					(stroke
 						(width 0.254)
-						(type solid)
+						(type default)
 					)
 					(fill
 						(type background)
 					)
 				)
+			)
+			(symbol "MCP2515_CAN_Module_7P54_1_1"
 				(pin power_in line
 					(at 0 7.62 0)
 					(length 2.54)
@@ -2478,7 +2068,7 @@
 						)
 					)
 				)
-				(pin output line
+				(pin tri_state line
 					(at 0 0 0)
 					(length 2.54)
 					(name "SO"
@@ -2532,7 +2122,7 @@
 						)
 					)
 				)
-				(pin output line
+				(pin open_collector line
 					(at 0 -7.62 0)
 					(length 2.54)
 					(name "INT"
@@ -2609,7 +2199,7 @@
 					)
 				)
 			)
-			(property "Footprint" ""
+			(property "Footprint" "Adjustometer:RP2040-Zero_THT"
 				(at -5.08 0 0)
 				(effects
 					(font
@@ -2686,7 +2276,7 @@
 						)
 					)
 				)
-				(pin power_in line
+				(pin power_out line
 					(at -15.24 0 0)
 					(length 2.54)
 					(name "3V3"
@@ -4078,6 +3668,107 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "power:PWR_FLAG"
+			(power)
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+				(hide yes)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "#FLG"
+				(at 0 1.905 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Value" "PWR_FLAG"
+				(at 0 3.81 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" ""
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "~"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "Special symbol for telling ERC where power comes from"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_keywords" "flag power"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "PWR_FLAG_0_0"
+				(pin power_out line
+					(at 0 0 90)
+					(length 0)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(symbol "PWR_FLAG_0_1"
+				(polyline
+					(pts
+						(xy 0 0) (xy 0 1.27) (xy -1.016 1.905) (xy 0 2.54) (xy 1.016 1.905) (xy 0 1.27)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 	)
 	(text "3.3V"
 		(exclude_from_sim no)
@@ -4099,6 +3790,17 @@
 		)
 		(uuid "869cb0e1-791c-4e7b-9bca-d86521bdc9b2")
 	)
+	(text "J5/J8/J9 and their connected devices are off-board, excluded from PCB and board BOM."
+		(exclude_from_sim no)
+		(at 75 165 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "b523f12b-4f5f-4f71-b831-6361d0e52da8")
+	)
 	(text "+12V"
 		(exclude_from_sim no)
 		(at 93.98 91.694 0)
@@ -4109,6 +3811,17 @@
 		)
 		(uuid "c7392264-4ec1-47f7-b886-ee6464599b6c")
 	)
+	(text "POWER: Use USB OR vehicle supply; never both.\nVoltage divider: R9 = 47k, R10 = 10k.\nFirmware voltage scaling must match this divider."
+		(exclude_from_sim no)
+		(at 75 25 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left top)
+		)
+		(uuid "d21b9aec-5b9b-4d20-8ed0-a75de9597c53")
+	)
 	(text "+12V ignition"
 		(exclude_from_sim no)
 		(at 117.094 115.824 0)
@@ -4118,6 +3831,17 @@
 			)
 		)
 		(uuid "d7752252-0d29-4d27-8c2a-68edeedb0439")
+	)
+	(text "Power flags:\nsupply through\nJ4/J5 harness."
+		(exclude_from_sim no)
+		(at 219.71 151.13 0)
+		(effects
+			(font
+				(size 1 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "e7c04892-d339-49b4-9a24-1a5e323c6e52")
 	)
 	(text "CAN-LO"
 		(exclude_from_sim no)
@@ -4400,6 +4124,22 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "ff87ac0a-3f5e-4a93-9305-7916025e2a9a")
+	)
+	(no_connect
+		(at 135.89 77.47)
+		(uuid "645fe847-a0b1-43b0-ac62-42aaf4bb6b85")
+	)
+	(no_connect
+		(at 204.47 91.44)
+		(uuid "a1fb6771-edf1-4862-8774-e27a5891bc48")
+	)
+	(no_connect
+		(at 135.89 80.01)
+		(uuid "a2b55d24-4020-4670-8931-6d19954a7396")
+	)
+	(no_connect
+		(at 135.89 74.93)
+		(uuid "be600be5-2762-46fb-a7e5-6c4cbab8555f")
 	)
 	(wire
 		(pts
@@ -6554,8 +6294,8 @@
 		(at 160.02 139.7 90)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "02998b0f-105b-4822-9aa5-ddcb129a2fea")
 		(property "Reference" "SW1"
@@ -6702,19 +6442,19 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+				(hide yes)
 			)
 		)
-		(property "Value" "C"
+		(property "Value" "100nF"
 			(at 103.632 82.804 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 107.6452 83.82 0)
 			(effects
 				(font
@@ -6784,7 +6524,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 196.088 74.93 90)
 			(effects
 				(font
@@ -6854,7 +6594,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 166.37 104.902 90)
 			(effects
 				(font
@@ -6921,7 +6661,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 			(at 165.1 121.92 0)
 			(effects
 				(font
@@ -7247,8 +6987,8 @@
 		(at 205.74 144.78 90)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "1d3f0731-e6dc-484b-a7e9-511badb11062")
@@ -7318,8 +7058,8 @@
 		(at 187.96 144.78 90)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "24b6cb7c-9290-4756-a616-93d701bf8368")
@@ -7385,7 +7125,6 @@
 		)
 	)
 	(symbol
-		(lib_name "MCP2515_CAN_Module_7P54_1")
 		(lib_id "Fiesta_Modules:MCP2515_CAN_Module_7P54")
 		(at 179.07 60.96 90)
 		(unit 1)
@@ -7412,7 +7151,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "FiestaFootprints:MCP2515_CAN_Module_7P54"
+		(property "Footprint" "FiestaFootprints:MCP2515_TJA1050_Module_J3_40x27mm"
 			(at 179.07 60.96 0)
 			(effects
 				(font
@@ -7503,7 +7242,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm"
 			(at 118.11 48.26 0)
 			(effects
 				(font
@@ -7550,8 +7289,8 @@
 		(at 105.41 95.25 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "333743c2-d6ed-45fc-8412-4e57659f7163")
@@ -7633,26 +7372,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "34d01bed-96b8-4049-bcd3-f66b2e6bc22c")
-		(property "Reference" "100nF"
-			(at 187.706 110.744 90)
+		(property "Reference" "C5"
+			(at 177.7 111.1 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "C"
-			(at 183.134 116.078 0)
+		(property "Value" "100nF"
+			(at 183 111.1 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 184.15 112.0648 0)
 			(effects
 				(font
@@ -7688,7 +7424,7 @@
 		(instances
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
-					(reference "100nF")
+					(reference "C5")
 					(unit 1)
 				)
 			)
@@ -7703,26 +7439,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "3b2aad59-b834-45df-880f-acdec635314f")
-		(property "Reference" "100nF"
-			(at 183.642 126.746 90)
+		(property "Reference" "C7"
+			(at 177.7 121.26 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "C"
-			(at 183.134 126.238 0)
+		(property "Value" "100nF"
+			(at 183 121.26 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 184.15 122.2248 0)
 			(effects
 				(font
@@ -7758,7 +7491,7 @@
 		(instances
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
-					(reference "100nF")
+					(reference "C7")
 					(unit 1)
 				)
 			)
@@ -7860,7 +7593,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 128.27 112.522 90)
 			(effects
 				(font
@@ -7897,6 +7630,69 @@
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
 					(reference "R11")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 180.34 144.78 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "4102b03b-0f12-4379-abfb-15121ff1ae89")
+		(property "Reference" "#FLG0103"
+			(at 180.34 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 180.34 140.97 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 180.34 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 180.34 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 180.34 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "9d9a0b58-6cf7-418f-8bcb-f4535a79ef47")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0103")
 					(unit 1)
 				)
 			)
@@ -7998,7 +7794,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 185.928 85.09 90)
 			(effects
 				(font
@@ -8109,13 +7905,13 @@
 		)
 	)
 	(symbol
-		(lib_name "Conn_01x06_Pin_1")
 		(lib_id "Connector:Conn_01x06_Pin")
-		(at 196.85 123.19 270)
+		(at 194.31 123.19 90)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "5c54e010-1a20-425c-b759-6db80c04de8f")
 		(property "Reference" "J5"
@@ -8126,13 +7922,12 @@
 				)
 			)
 		)
-		(property "Value" "Conn_01x06_Pin"
-			(at 195.58 118.11 90)
+		(property "Value" "temp-sensors"
+			(at 216.535 125.476 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(hide yes)
 			)
 		)
 		(property "Footprint" ""
@@ -8274,16 +8069,15 @@
 				)
 			)
 		)
-		(property "Value" "Conn_01x06_Pin"
-			(at 195.58 127 90)
+		(property "Value" "temp-sensors"
+			(at 216.535 119.126 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_JST:JST_XH_B6B-XH-A_1x06_P2.50mm_Vertical"
 			(at 194.31 121.92 0)
 			(effects
 				(font
@@ -8432,7 +8226,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Adjustometer:RP2040-Zero_THT"
 			(at 146.05 72.39 0)
 			(effects
 				(font
@@ -8538,11 +8332,12 @@
 	)
 	(symbol
 		(lib_id "Connector:Conn_01x04_Pin")
-		(at 167.64 123.19 270)
+		(at 165.1 123.19 90)
+		(mirror x)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "7187b7c7-adc7-4ffc-8ae5-daa964262ce4")
 		(property "Reference" "J9"
@@ -8637,7 +8432,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 166.37 102.362 90)
 			(effects
 				(font
@@ -8707,7 +8502,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Package_TO_SOT_THT:TO-92_Inline"
+		(property "Footprint" "Package_TO_SOT_THT:TO-92_Inline_Wide"
 			(at 148.59 116.205 0)
 			(effects
 				(font
@@ -8778,8 +8573,8 @@
 		(at 105.41 99.06 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "73a1c5a5-febd-4815-8941-980bfbc10a20")
@@ -8870,7 +8665,7 @@
 				)
 			)
 		)
-		(property "Value" "LDO-3.3"
+		(property "Value" "LM2931-3.3"
 			(at 130.81 41.91 0)
 			(effects
 				(font
@@ -8878,7 +8673,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_TO_SOT_THT:TO-220-3_Vertical"
+		(property "Footprint" "FiestaClock:TO-220-3_Horizontal_TabDown_GND"
 			(at 130.81 40.005 0)
 			(effects
 				(font
@@ -8950,7 +8745,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 			(at 120.65 99.06 0)
 			(effects
 				(font
@@ -9026,7 +8821,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
 			(at 209.55 102.87 0)
 			(effects
 				(font
@@ -9211,6 +9006,68 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 60.96 104.14 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "8fd1b108-41d3-4130-abe8-b72dc2eaae71")
+		(property "Reference" "#FLG0102"
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 60.96 100.33 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c5c5674f-dd7d-4c3d-b9d1-65882f23e572")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0102")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R")
 		(at 111.76 80.01 0)
 		(unit 1)
@@ -9238,7 +9095,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 109.982 80.01 90)
 			(effects
 				(font
@@ -9308,7 +9165,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 131.572 120.65 90)
 			(effects
 				(font
@@ -9446,7 +9303,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 166.37 107.442 90)
 			(effects
 				(font
@@ -9489,12 +9346,75 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 198.12 144.78 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "9cfc749f-a039-4e7f-b67d-6a0a18f18ded")
+		(property "Reference" "#FLG0105"
+			(at 198.12 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 198.12 148.59 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 198.12 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 198.12 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 198.12 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "6495b238-84a6-44c0-ab32-424b96209d4e")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0105")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Switch:SW_Push")
 		(at 175.26 139.7 90)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "9ef079b6-48b4-4da3-931a-c254ca45c3a4")
 		(property "Reference" "SW3"
@@ -9626,6 +9546,69 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 213.36 144.78 180)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "9f7d4683-d1d5-4afe-b8da-a63c0f2fdc82")
+		(property "Reference" "#FLG0106"
+			(at 213.36 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 213.36 148.59 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 213.36 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 213.36 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 213.36 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "62884b74-b928-47c1-b1a4-46671948d147")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0106")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R")
 		(at 181.61 85.09 180)
 		(unit 1)
@@ -9653,7 +9636,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 183.388 85.09 90)
 			(effects
 				(font
@@ -9721,7 +9704,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Connector_JST:JST_XH_B5B-XH-A_1x05_P2.50mm_Vertical"
 			(at 74.93 99.06 0)
 			(effects
 				(font
@@ -9767,6 +9750,132 @@
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
 					(reference "J6")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 195.58 144.78 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "b679f2b4-85dc-47dc-aa49-b0b6a49f1ac2")
+		(property "Reference" "#FLG0104"
+			(at 195.58 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 195.58 140.97 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 195.58 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 195.58 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 195.58 144.78 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c497c663-29af-4dc2-8e7b-90768920ec22")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0104")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 60.96 104.14 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "b9e08529-4dac-4644-8b12-aaf509946041")
+		(property "Reference" "#PWR0101"
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 60.96 100.33 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 60.96 104.14 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4e656c00-305b-46c8-b9ba-2a43851b1743")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#PWR0101")
 					(unit 1)
 				)
 			)
@@ -9845,8 +9954,8 @@
 		(at 167.64 139.7 90)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "be1e1ac6-9155-45f0-b515-041b09e5ffe8")
 		(property "Reference" "SW2"
@@ -9910,7 +10019,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Connector:Conn_01x04_Pin")
+		(lib_id "FiestaClock:DS3231_Mini")
 		(at 209.55 86.36 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9920,7 +10029,7 @@
 		(fields_autoplaced yes)
 		(uuid "c30b1ccc-5fb0-4601-b486-6a546f9c2219")
 		(property "Reference" "J2"
-			(at 210.82 83.8199 0)
+			(at 214 77 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9928,8 +10037,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "DS3231 module"
-			(at 210.82 86.3599 0)
+		(property "Value" "DS3231 Mini"
+			(at 214 95.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9937,7 +10046,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "FiestaClock:DS3231_Mini_13x14mm_1x05_P2.54mm"
 			(at 209.55 86.36 0)
 			(effects
 				(font
@@ -9955,7 +10064,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Generic connector, single row, 01x04, script generated"
+		(property "Description" "DS3231 Mini module; + D C NC -, 13x14mm"
 			(at 209.55 86.36 0)
 			(effects
 				(font
@@ -9964,7 +10073,7 @@
 				(hide yes)
 			)
 		)
-		(pin "4"
+		(pin "1"
 			(uuid "3782e58b-ed27-4ba0-8eb6-9cc995458865")
 		)
 		(pin "3"
@@ -9973,8 +10082,11 @@
 		(pin "2"
 			(uuid "8fded18a-c410-4187-af0a-219959c152ab")
 		)
-		(pin "1"
+		(pin "5"
 			(uuid "56e366c4-5654-4344-b76f-1e120c9ede99")
+		)
+		(pin "4"
+			(uuid "5dc7b38a-603b-469d-a3ab-ac32bab7a627")
 		)
 		(instances
 			(project "Fiesta_clock"
@@ -10167,7 +10279,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 132.08 103.378 90)
 			(effects
 				(font
@@ -10237,7 +10349,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 166.37 99.822 90)
 			(effects
 				(font
@@ -10284,8 +10396,8 @@
 		(at 105.41 102.87 0)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "d535fb50-2e4d-4bee-a8ee-2a6d76785552")
@@ -10359,13 +10471,13 @@
 		)
 	)
 	(symbol
-		(lib_name "Conn_01x04_Pin_1")
 		(lib_id "Connector:Conn_01x04_Pin")
-		(at 118.11 101.6 180)
+		(at 118.11 99.06 0)
+		(mirror y)
 		(unit 1)
 		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
+		(in_bom no)
+		(on_board no)
 		(dnp no)
 		(uuid "d72ead54-2bff-4f57-b0a6-ee9d3a174440")
 		(property "Reference" "J8"
@@ -10435,6 +10547,69 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 100.33 45.72 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(dnp no)
+		(uuid "d79878f7-40b1-472d-8839-33089fb92001")
+		(property "Reference" "#FLG0101"
+			(at 100.33 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 100.33 41.91 0)
+			(effects
+				(font
+					(size 1 1)
+				)
+				(hide yes)
+			)
+		)
+		(property "Footprint" ""
+			(at 100.33 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 100.33 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 100.33 45.72 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c63a4719-5ede-46c0-94f7-445d81f97484")
+		)
+		(instances
+			(project "Fiesta_clock"
+				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
+					(reference "#FLG0101")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R")
 		(at 196.85 74.93 180)
 		(unit 1)
@@ -10462,7 +10637,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 198.628 74.93 90)
 			(effects
 				(font
@@ -10532,7 +10707,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 129.032 92.71 90)
 			(effects
 				(font
@@ -10602,7 +10777,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 104.902 67.31 90)
 			(effects
 				(font
@@ -10669,7 +10844,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "FiestaClock:TO-220-3_Horizontal_TabDown_GND"
 			(at 108.585 49.53 0)
 			(effects
 				(font
@@ -10812,7 +10987,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm"
 			(at 99.06 66.04 0)
 			(effects
 				(font
@@ -10863,26 +11038,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "ea64f6fb-0bc6-45fb-a585-7cec7fa396d4")
-		(property "Reference" "100nF"
-			(at 138.938 122.936 0)
+		(property "Reference" "C8"
+			(at 136 129 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "C"
-			(at 135.382 123.444 0)
+		(property "Value" "100nF"
+			(at 142 129 0)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 139.3952 124.46 0)
 			(effects
 				(font
@@ -10918,7 +11090,7 @@
 		(instances
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
-					(reference "100nF")
+					(reference "C8")
 					(unit 1)
 				)
 			)
@@ -11001,26 +11173,23 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "efd8c825-50b0-4997-a327-ce158f63f443")
-		(property "Reference" "100nF"
-			(at 187.452 116.078 90)
+		(property "Reference" "C6"
+			(at 177.7 116.18 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "C"
-			(at 183.134 121.158 0)
+		(property "Value" "100nF"
+			(at 183 116.18 90)
 			(effects
 				(font
-					(size 1.27 1.27)
+					(size 1 1)
 				)
-				(justify left)
-				(hide yes)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_SMD:C_0805_2012Metric"
 			(at 184.15 117.1448 0)
 			(effects
 				(font
@@ -11056,7 +11225,7 @@
 		(instances
 			(project "Fiesta_clock"
 				(path "/2a9267a6-dfb8-4d3a-9c69-4f0b69f86566"
-					(reference "100nF")
+					(reference "C6")
 					(unit 1)
 				)
 			)
@@ -11090,7 +11259,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
 			(at 132.842 92.71 90)
 			(effects
 				(font
@@ -11160,7 +11329,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm"
 			(at 160.02 52.07 0)
 			(effects
 				(font

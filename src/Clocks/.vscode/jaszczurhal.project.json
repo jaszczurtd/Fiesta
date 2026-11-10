@@ -10,7 +10,8 @@
         "sourceDir": "${project}/../JaszczurHAL/cmake/jh_firmware_project",
         "cache": {
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "Clocks"
+            "JH_MODULE_NAME": "Clocks",
+            "JH_EXTRA_SOURCES": "../common/test_runner/test_runner.c"
         },
         "targets": {
             "build": "firmware",

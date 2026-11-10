@@ -54,6 +54,10 @@ src/ECU/Strategy-Documents-main-Ford/
 src/ECU/LVCAN Protocol P145_20_40/
 src/ECU/ISO-15765-OBD2-Ford/
 
+#gerber & pcb production files
+Fiesta_pcbs/**/*.zip
+Fiesta_pcbs/**/*fabrication*
+
 # Legacy archive generated artifacts
 legacy/**/.build/
 legacy/**/build*/
