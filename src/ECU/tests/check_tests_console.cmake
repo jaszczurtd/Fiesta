@@ -13,7 +13,10 @@ foreach(record
         "TEST: manual result: stopped"
         "TEST: none running"
         "TEST: sequence started"
-        "TEST: sequence finished")
+        "TEST: sequence finished"
+        "TEST: watch 2000 ms"
+        "TEST: watch off"
+        "TEST: manual result: host_lost")
     string(FIND "${output}" "${record}\n" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "Missing exact console record: ${record}")

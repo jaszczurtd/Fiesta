@@ -17,6 +17,13 @@ extern "C" {
  * physical core may serve either role; neither role may have two callers.
  * Parameter reads/writes are atomic. Configuration and strings live for the
  * firmware lifetime. Initialization requires both roles to be quiescent.
+ *
+ * Console tests run unsupervised until the console arms the watch with
+ * "watch <ms>": from then on every console line counts as host contact, and a
+ * console test whose host stays silent for the limit stops with host_lost,
+ * releasing the module output. "watch" alone renews and reports the limit,
+ * "watch 0" disarms it; initialization leaves it off. SC tests keep their own
+ * keepalive.
  */
 
 /** @brief Reserved identifier for no active test. */
@@ -25,6 +32,10 @@ extern "C" {
 #define FIESTA_TEST_ALL UINT32_MAX
 /** @brief Console buffer size, including the terminating NUL. */
 #define FIESTA_TEST_COMMAND_SIZE 64U
+/** @brief Smallest console watch limit "watch <ms>" accepts [ms]. */
+#define FIESTA_TEST_WATCH_MIN_MS 1000U
+/** @brief Largest console watch limit "watch <ms>" accepts [ms]. */
+#define FIESTA_TEST_WATCH_MAX_MS 600000U
 /** @brief Console highlight start, also used by module-specific help. */
 #define TEST_HIGHLIGHT_ON                                                      \
   "\033"                                                                       \
@@ -55,7 +66,8 @@ typedef struct {
 /** @brief Runtime parameter metadata; storage is supplied separately. */
 typedef struct {
   const char *id;   /**< Wire name. */
-  uint32_t test;    /**< Owning test ID. */
+  uint32_t test;    /**< Owning test ID; FIESTA_TEST_ALL lists it with every
+                         test and names the owner SC_TEST_SEQUENCE. */
   const char *unit; /**< Wire unit token. */
   int32_t min;      /**< Minimum accepted value. */
   int32_t max;      /**< Maximum accepted value. */
@@ -133,7 +145,12 @@ const char *fiesta_test_active_name(void);
  * @return Current registry ID.
  */
 uint32_t fiesta_test_active_id(void);
-/** @brief End SC supervision. Session role; applied at the next tick. */
+/**
+ * @brief Report that the configurator session ended; session role.
+ * @note A configurator test whose run request was queued before this call
+ * stops with session_end at the next tick. A request queued afterwards, or
+ * refused as busy, does not undo it.
+ */
 void fiesta_test_session_ended(void);
 /** @brief SC operations for the session role; their user argument is ignored.
  * @return Static operations table.

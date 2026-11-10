@@ -23,7 +23,8 @@
                                     */
 #define HAL_ENABLE_CRYPTO          /* hal_crypto + hal_sc_auth (SC link) */
 #define HAL_ENABLE_SERIAL_COMMANDS
-#define HAL_COMMAND_ROUTER_MAX_COMMANDS 16u
+/* 6 module commands, 8 SC_TEST_* and the 3 parameter writes to come. */
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 32u
 #ifndef HAL_ENABLE_APP_TASK1
 #define HAL_ENABLE_APP_TASK1
 #endif

@@ -96,6 +96,12 @@ extern "C" {
 #define SC_TEST_NAME_TOP "top"
 #define SC_TEST_NAME_TOPZERO "topzero"
 #define SC_TEST_NAME_POT "pot"
+/* Clocks: tests of the factory cluster outputs. */
+#define SC_TEST_NAME_CHARGE "charge"
+#define SC_TEST_NAME_OIL "oil"
+#define SC_TEST_NAME_RPM "rpm"
+#define SC_TEST_NAME_SPEED "speed"
+#define SC_TEST_NAME_BUZZER "buzzer"
 
 /* Runtime parameter ids; unique across tests. */
 #define SC_TEST_PARAM_CYCLIC_PASSES "cyclic_passes"
@@ -110,6 +116,7 @@ extern "C" {
 #define SC_TEST_PARAM_POT_HOLD "pot_hold"
 #define SC_TEST_PARAM_POT_REST "pot_rest"
 #define SC_TEST_PARAM_POT_PASSES "pot_passes"
+#define SC_TEST_PARAM_STEP_MS "step_ms" /**< clocks: time of every step. */
 
 /* Parameter unit tokens. */
 #define SC_TEST_UNIT_COUNT "count"
@@ -147,7 +154,12 @@ extern "C" {
 #define SC_TEST_FIELD_SETPOINT_X10 "setpoint_x10" /**< top: step [% x10]. */
 #define SC_TEST_FIELD_SERIES "series" /**< top: series in progress. */
 #define SC_TEST_FIELD_SERIES_COUNT "series_count"
-#define SC_TEST_FIELD_PHASE "phase" /**< pot: one of SC_TEST_PHASE_*. */
+#define SC_TEST_FIELD_PHASE                                                    \
+  "phase"                           /**< pot: one of SC_TEST_PHASE_*;          \
+                                         clocks lamps and buzzer: step name. */
+#define SC_TEST_FIELD_STEP "step"   /**< clocks: step in progress, 1-based. */
+#define SC_TEST_FIELD_STEPS "steps" /**< clocks: steps in the test. */
+#define SC_TEST_FIELD_VALUE "value" /**< clocks: rpm or km/h of the step. */
 #define SC_TEST_PHASE_RISE "rise"
 #define SC_TEST_PHASE_HOLD "hold"
 #define SC_TEST_PHASE_FALL "fall"

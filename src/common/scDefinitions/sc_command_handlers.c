@@ -1266,6 +1266,21 @@ bool sc_config_session_poll(sc_config_session_t *session) {
     hal_serial_session_poll(&session->session);
     sc_command_service_process_deferred(&session->service);
     active = hal_serial_session_is_active(&session->session);
+    const uint32_t ends = hal_serial_session_end_count(&session->session);
+    if (session->seen_active && (!active || (ends != session->seen_ends))) {
+      session->session_ended = true;
+    }
+    session->seen_active = active;
+    session->seen_ends = ends;
   }
   return active;
+}
+
+bool sc_config_session_take_ended(sc_config_session_t *session) {
+  bool ended = false;
+  if (session != NULL) {
+    ended = session->session_ended;
+    session->session_ended = false;
+  }
+  return ended;
 }

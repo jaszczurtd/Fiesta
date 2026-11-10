@@ -31,8 +31,20 @@ strings must remain valid; progress must respect its buffer capacity.
 
 ECU keeps demand application, the 50 ms announcement wait, RPM policy and
 VP37 commands in `src/ECU/tests_helpers.c`. Its existing `tests.h` API and
-disabled-test stubs remain available. Console tests keep their existing
-operator supervision; SC keepalive and session end apply only to SC tests.
+disabled-test stubs remain available. SC keepalive and session end apply
+only to SC tests. Console tests run unsupervised until the console arms the
+watch with `watch <ms>` (1000 to 600000 ms): then every console line counts
+as host contact, a console test whose host stays silent for the limit stops
+with `host_lost` and releases the output, `watch` alone renews and reports
+the limit, and `watch 0` disarms it. Initialization leaves the watch off.
+
+A parameter owned by `FIESTA_TEST_ALL` belongs to every test: the SC
+parameter list of each test includes it, reported under the sequence name
+`all`. Clocks uses it for the step time of its five cluster tests
+(`src/Clocks/clocksTests.cpp`); they have no console and run only through
+the SC operations. The session role on core 1 prints their steps only while
+the debug log is audible; during a configurator session the log is muted,
+the steps are dropped and the SC status fields carry them.
 
 `test_runner_sources.txt` is read by the shared CMake source loader. Firmware
 manifests and host builds consume that same list. The ECU host suite includes

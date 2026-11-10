@@ -152,6 +152,9 @@ typedef struct {
   hal_serial_session_t session;
   sc_command_service_t service;
   hal_serial_commands_t commands;
+  bool seen_active;   /**< A host session was active at the last poll. */
+  uint32_t seen_ends; /**< Its hal_serial_session_end_count() then. */
+  bool session_ended; /**< See sc_config_session_take_ended(). */
 } sc_config_session_t;
 
 /**
@@ -238,9 +241,26 @@ hal_status_t sc_config_session_start(sc_config_session_t *session,
 
 /**
  * @brief Poll the serial session and run a reboot deferred by a command.
+ *
+ * Also notes when the host session seen at the previous poll ended. Only
+ * `SC_BYE` ends a session, also when the next `HELLO` arrives within the same
+ * poll: the session's end count moves although it is active before and after
+ * the poll. A `HELLO` into an active session keeps it, since the host starts
+ * every authentication with one.
+ *
  * @return Whether a host session is active after the poll; false for NULL.
  */
 bool sc_config_session_poll(sc_config_session_t *session);
+
+/**
+ * @brief Report once that the host session of an earlier poll ended.
+ *
+ * A module with configurator tests stops the running one when this returns
+ * true. Call from the session role after sc_config_session_poll().
+ *
+ * @return true once per ended session; false for NULL.
+ */
+bool sc_config_session_take_ended(sc_config_session_t *session);
 
 #ifdef __cplusplus
 }

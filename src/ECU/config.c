@@ -411,12 +411,11 @@ void configSessionInit(void) {
 }
 
 void configSessionTick(void) {
-  static bool s_sessionWasActive = false;
   const bool sessionActive = sc_config_session_poll(&s_sc);
-  if (s_sessionWasActive && !sessionActive) {
+  /* A configurator test stops when its session ends. */
+  if (sc_config_session_take_ended(&s_sc)) {
     testsScSessionEnded();
   }
-  s_sessionWasActive = sessionActive;
   /* Keep debug chatter off the same CDC channel while SC session is active.
    * Without this, async deb()/derr() logs can interleave with framed replies
    * from another core and corrupt host parsing. */

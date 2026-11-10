@@ -367,6 +367,16 @@ Ustawienie `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
 `ECU_SC_TESTS_RPM_LIMIT` rpm. Opcja nie dotyczy testów z konsoli;
 szczegóły podają [zasady testów funkcjonalnych](../common/scDefinitions/PROTOCOL.pl.md#testy-funkcjonalne).
 
+Testy z konsoli mają opcjonalny nadzór. `watch <ms>` uzbraja go z limitem
+1000-600000 ms: gdy przez ten czas nie przyjdzie żadna linia konsoli,
+działający test z konsoli zatrzymuje się z wynikiem `host_lost`, a zadanie
+wraca do zera, jak przy teście konfiguratora po utracie hosta. Każda linia
+konsoli odnawia nadzór, samo `watch` odnawia go i podaje limit, `watch 0`
+wyłącza, a po restarcie firmware jest wyłączony. Narzędzie stanowiska, które
+trzyma port, uzbraja nadzór na początku nagrania i odnawia go w czasie pracy;
+zabity collector lub odłączony kabel zostawia wtedy nastawnik na ostatnim
+zadaniu tylko do upływu limitu. `G` nadal auto-zeruje pojedynczy postój `S`.
+
 Jednorazowe czynności DTC i KV wykonuje rdzeń 0. Rdzeń sterowania nadal
 obsługuje VP37 i przesuwa sekwencję testów po publikacji wyniku.
 Zatrzymanie testu anuluje czynność, która jeszcze nie zaczęła się wykonywać.

@@ -20,6 +20,19 @@
 // Expire RPM after three missing ECU heartbeats.
 #define RPM_CAN_TIMEOUT_MS 300u
 
+// Functional tests of the cluster outputs, run from the configurator.
+// Configurator silence that stops its running test [ms].
+#define CLOCKS_SC_TESTS_KEEPALIVE_MS 3000u
+// Time every test step is shown [ms]; the minimum outlasts the longest
+// buzzer signal (BUZZER_LONGEST_SIGNAL_MS, checked in buzzer.h) with room for
+// the loop period at each of its transitions.
+#define CLOCKS_TEST_STEP_MS_DEFAULT 2000u
+#define CLOCKS_TEST_STEP_MS_MIN 1200u
+#define CLOCKS_TEST_STEP_MS_MAX 10000u
+JB_STATIC_ASSERT(CLOCKS_TEST_STEP_MS_MIN <= CLOCKS_TEST_STEP_MS_DEFAULT &&
+                     CLOCKS_TEST_STEP_MS_DEFAULT <= CLOCKS_TEST_STEP_MS_MAX,
+                 "the default test step must lie within its range");
+
 // Preserve the ECU's location-age limit; UTC must come from a newer RMC.
 #define GPS_MAX_AGE_MS 4000u
 #define GPS_UTC_MAX_AGE_MS 2000u

@@ -21,50 +21,6 @@ extern "C" unsigned test_stubs_forwarded_serial_count(void);
 extern "C" void test_stubs_reset_forwarded_serial(void);
 extern "C" unsigned test_stubs_session_ended_count(void);
 
-/* Drive the session through HELLO + AUTH_BEGIN + AUTH_PROVE so the
- * test starts from a fully authenticated state. Uses real HMAC-SHA256
- * crypto against the deterministic mock UID baked into hal_mock. */
-static void performAuth(void) {
-  performHello();
-
-  const char *challengeReply = sendSerialLine("SC_AUTH_BEGIN\n");
-  TEST_ASSERT_NOT_NULL(challengeReply);
-  const char *hexStart = strstr(challengeReply, "AUTH_CHALLENGE ");
-  TEST_ASSERT_NOT_NULL_MESSAGE(hexStart, "expected AUTH_CHALLENGE in reply");
-  hexStart += strlen("AUTH_CHALLENGE ");
-
-  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
-  for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
-    unsigned byte = 0u;
-    TEST_ASSERT_EQUAL_INT(1, sscanf(hexStart + i * 2u, "%2x", &byte));
-    challenge[i] = (uint8_t)byte;
-  }
-
-  uint8_t uid[HAL_DEVICE_UID_BYTES];
-  hal_get_device_uid(uid);
-  uint8_t key[HAL_SC_AUTH_KEY_BYTES];
-  TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(uid, sizeof(uid), key));
-
-  uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
-  TEST_ASSERT_TRUE(hal_sc_auth_compute_response(
-      key, challenge, sizeof(challenge), configSessionId(), mac));
-
-  char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
-  static const char kHex[] = "0123456789abcdef";
-  for (size_t i = 0u; i < sizeof(mac); ++i) {
-    hex[i * 2u] = kHex[(mac[i] >> 4) & 0x0Fu];
-    hex[i * 2u + 1u] = kHex[mac[i] & 0x0Fu];
-  }
-  hex[sizeof(mac) * 2u] = '\0';
-
-  char proveLine[256];
-  snprintf(proveLine, sizeof(proveLine), "SC_AUTH_PROVE %s\n", hex);
-  const char *proveReply = sendSerialLine(proveLine);
-  TEST_ASSERT_NOT_NULL(proveReply);
-  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(proveReply, "AUTH_OK"),
-                               "expected SC_OK AUTH_OK after PROVE");
-}
-
 void setUp(void) {
   hal_mock_set_millis(0);
   hal_mock_eeprom_set_io_status(HAL_OK);
@@ -448,8 +404,11 @@ void test_sc_writes_wait_for_parameter_storage_recovery(void) {
 void test_session_end_is_reported_to_the_test_registry(void) {
   performHello();
   const unsigned before = test_stubs_session_ended_count();
+  configSessionTick(); // an idle poll ends nothing
+  TEST_ASSERT_EQUAL_UINT(before, test_stubs_session_ended_count());
 
-  // A second HELLO keeps the session open: a configurator test goes on.
+  // A second HELLO keeps the session open, and a configurator test goes on:
+  // the host starts every authentication, Skip and Stop included, with one.
   performHello();
   TEST_ASSERT_EQUAL_UINT(before, test_stubs_session_ended_count());
 
@@ -462,6 +421,15 @@ void test_session_end_is_reported_to_the_test_registry(void) {
   // Reported once per session, not on every idle poll.
   configSessionTick();
   TEST_ASSERT_EQUAL_UINT(before + 1u, test_stubs_session_ended_count());
+
+  // SC_BYE and the next HELLO drained by one poll: a session is active before
+  // and after it, yet the one before has ended.
+  performHello();
+  const uint32_t owner = configSessionId();
+  (void)sendTwoLinesInOnePoll("SC_BYE", "HELLO");
+  TEST_ASSERT_TRUE(configSessionActive());
+  TEST_ASSERT_NOT_EQUAL(owner, configSessionId());
+  TEST_ASSERT_EQUAL_UINT(before + 2u, test_stubs_session_ended_count());
 }
 
 void test_test_commands_are_absent_without_the_test_registry(void) {

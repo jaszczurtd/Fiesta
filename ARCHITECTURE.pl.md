@@ -207,6 +207,10 @@ Od włączenia zasilania do pierwszego odczytu świeci.
 | [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
 | [oilLamp.cpp](src/Clocks/oilLamp.cpp), [lampBlink.h](src/Clocks/lampBlink.h) | Wyznacza stan kontrolki oleju z czujnika ciśnienia; faza migania obu kontrolek. |
 | [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
+| [alerts.cpp](src/Clocks/alerts.cpp) | Zgłasza ostrzeżenia temperaturowe przez strategię buzzera; milczy, gdy buzzer należy do testu zegarów. |
+| [clusterOutput.cpp](src/Clocks/clusterOutput.cpp) | Utrzymuje jedyny egzemplarz `Cluster` i podaje mu zmierzoną prędkość i obroty albo wartość trwającego testu. |
+| [testOutputs.cpp](src/Clocks/testOutputs.cpp) | Podstawia stany testowe na wyjścia wskaźników, kontrolek i buzzera; pomiary płyną dalej. |
+| [clocksTests.cpp](src/Clocks/clocksTests.cpp) | Pięć testów zegarów (`charge`, `oil`, `rpm`, `speed`, `buzzer`) na wspólnym runnerze, uruchamianych operacjami konfiguratora. |
 | [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT, pozycji GPS oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
 
 Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze

@@ -367,11 +367,24 @@ static hal_mutex_t s_scMutex = NULL;
 /* Written under the mutex, polled without it like the console queue. */
 static uint8_t s_scRequest = SC_REQUEST_NONE;
 static uint32_t s_scRequestTest = FIESTA_TEST_NONE;
+/* The session ends a run request saw when it was queued. */
+static uint32_t s_scRequestEnds = 0U;
 static tests_published_t s_published;
 static uint32_t s_publishedMs = 0U;
 /* Written by the session core, read by the controller core. */
 static uint32_t s_scContactMs = 0U;
-static bool s_scSessionEnded = false;
+/* Configurator sessions ended so far: written by the session role only, read
+ * by the controller role. A configurator test stops when it moves past the
+ * value its run request carried, so an end before the request never stops it
+ * and a refused request leaves a pending end alone. */
+static uint32_t s_scSessionEnds = 0U;
+/* Controller role: the session ends the running configurator test began at. */
+static uint32_t s_scRunEnds = 0U;
+/* Console watch: the inactivity limit the console chose (0 = off; controller
+ * role) and the time of the last console line (written by the session role,
+ * read by the controller role). */
+static uint32_t s_consoleWatchMs = 0U;
+static uint32_t s_consoleContactMs = 0U;
 
 static bool scLock(void) {
   if (jh_hal_mutex_try_create_once(&s_scMutex) == NULL) {
@@ -392,19 +405,22 @@ static hal_status_t scQueue(sc_request_kind_t kind, uint32_t test) {
   const bool busy = s_scRequest != SC_REQUEST_NONE;
   if (!busy) {
     s_scRequestTest = test;
+    /* The session role is the only writer of the count. */
+    s_scRequestEnds = HAL_ATOMIC_LOAD(&s_scSessionEnds, HAL_ATOMIC_ACQUIRE);
     HAL_ATOMIC_STORE(&s_scRequest, (uint8_t)kind, HAL_ATOMIC_RELEASE);
   }
   hal_mutex_unlock(s_scMutex);
   return busy ? HAL_EBUSY : HAL_OK;
 }
 
-static sc_request_kind_t scTake(uint32_t *outTest) {
+static sc_request_kind_t scTake(uint32_t *outTest, uint32_t *outEnds) {
   if ((HAL_ATOMIC_LOAD(&s_scRequest, HAL_ATOMIC_ACQUIRE) == SC_REQUEST_NONE) ||
       !scLock()) {
     return SC_REQUEST_NONE;
   }
   const sc_request_kind_t kind = (sc_request_kind_t)s_scRequest;
   *outTest = s_scRequestTest;
+  *outEnds = s_scRequestEnds;
   HAL_ATOMIC_STORE(&s_scRequest, SC_REQUEST_NONE, HAL_ATOMIC_RELEASE);
   hal_mutex_unlock(s_scMutex);
   return kind;
@@ -598,10 +614,13 @@ hal_status_t fiesta_test_init(const fiesta_test_config_t *config) {
   s_lastTest = FIESTA_TEST_NONE;
   s_lastResult = NULL;
   HAL_ATOMIC_STORE(&s_scRequest, SC_REQUEST_NONE, HAL_ATOMIC_RELEASE);
-  HAL_ATOMIC_STORE(&s_scSessionEnded, false, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_scSessionEnds, 0U, HAL_ATOMIC_RELEASE);
+  s_scRunEnds = 0U;
   /* No configurator is in contact until it calls in. */
   HAL_ATOMIC_STORE(&s_scContactMs, hal_millis() - s_config->keepalive_ms,
                    HAL_ATOMIC_RELEASE);
+  s_consoleWatchMs = 0U;
+  HAL_ATOMIC_STORE(&s_consoleContactMs, hal_millis(), HAL_ATOMIC_RELEASE);
   s_initialized = reset() && (jh_hal_mutex_try_create_once(&s_scMutex) != NULL);
   if (s_initialized) {
     publishStatus(true);
@@ -670,7 +689,7 @@ void fiesta_test_events(void) {
 uint32_t fiesta_test_active_id(void) { return s_active; }
 
 void fiesta_test_session_ended(void) {
-  HAL_ATOMIC_STORE(&s_scSessionEnded, true, HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_FETCH_ADD(&s_scSessionEnds, 1U, HAL_ATOMIC_RELEASE);
 }
 
 //=============================================================================
@@ -679,7 +698,8 @@ void fiesta_test_session_ended(void) {
 
 static void printHelp(void) {
   deb(TEST_HIGHLIGHT_ON "Tests: run <name> | run all | stop | skip | list | "
-                        "params | set <param> <value> | ?" TEST_HIGHLIGHT_OFF);
+                        "params | set <param> <value> | watch <ms>|0 | "
+                        "?" TEST_HIGHLIGHT_OFF);
   if (s_config->help != NULL) {
     s_config->help();
   }
@@ -765,6 +785,41 @@ static const char *commandText(const char *line) {
   return line != NULL ? &line[skip] : NULL;
 }
 
+/** @brief Report the console watch limit, or that it is off. */
+static void printWatch(void) {
+  if (s_consoleWatchMs == 0U) {
+    deb("TEST: watch off");
+  } else {
+    deb("TEST: watch %lu ms", (unsigned long)s_consoleWatchMs);
+  }
+}
+
+/**
+ * @brief Apply "watch [<ms>]": arm, renew or disarm the console watch.
+ * @param args Text after the word; empty renews (the line itself was contact)
+ * and reports, "0" disarms, a limit within the accepted range arms.
+ */
+static void dispatchWatch(const char *args) {
+  const char *text = commandText(args);
+  if (text[0] == '\0') {
+    printWatch();
+    return;
+  }
+  char *end = NULL;
+  const long value = strtol(text, &end, 10);
+  const bool inRange =
+      (value == 0L) || ((value >= (long)FIESTA_TEST_WATCH_MIN_MS) &&
+                        (value <= (long)FIESTA_TEST_WATCH_MAX_MS));
+  if ((end == text) || (*end != '\0') || !inRange) {
+    derr("TEST: watch rejected; send watch <%lu..%lu ms> or watch 0",
+         (unsigned long)FIESTA_TEST_WATCH_MIN_MS,
+         (unsigned long)FIESTA_TEST_WATCH_MAX_MS);
+    return;
+  }
+  s_consoleWatchMs = (uint32_t)value;
+  printWatch();
+}
+
 static void dispatch(const char *line) {
   const char *cmd = commandText(line);
   if ((cmd == NULL) || (cmd[0] == '\0')) {
@@ -801,6 +856,11 @@ static void dispatch(const char *line) {
     dispatchSet(&cmd[prefix]);
     return;
   }
+  prefix = commandPrefix(cmd, "watch");
+  if ((prefix != 0U) && ((cmd[prefix] == '\0') || (cmd[prefix] == ' '))) {
+    dispatchWatch(&cmd[prefix]);
+    return;
+  }
 
   uint32_t requested = FIESTA_TEST_NONE;
   if ((s_config->command == NULL) || !s_config->command(cmd, &requested)) {
@@ -816,6 +876,8 @@ void fiesta_test_console(const char *line) {
   if (!s_initialized) {
     return;
   }
+  /* Any line from the host renews the console watch. */
+  HAL_ATOMIC_STORE(&s_consoleContactMs, hal_millis(), HAL_ATOMIC_RELEASE);
   if ((line != NULL) && (strlen(line) < FIESTA_TEST_COMMAND_SIZE)) {
     const char *cmd = commandText(line);
     if (equals(cmd, "list")) {
@@ -844,15 +906,18 @@ void fiesta_test_console(const char *line) {
 /** @brief Apply the request the configurator queued, if any. */
 static void applyScRequest(void) {
   uint32_t test = FIESTA_TEST_NONE;
-  switch (scTake(&test)) {
+  uint32_t ends = 0U;
+  switch (scTake(&test, &ends)) {
   case SC_REQUEST_RUN: {
     const fiesta_test_t *entry = findById(test);
     if (entry != NULL) {
+      s_scRunEnds = ends;
       beginTest(entry, TESTS_SOURCE_SC);
     }
     break;
   }
   case SC_REQUEST_SEQUENCE:
+    s_scRunEnds = ends;
     beginSequence(true, TESTS_SOURCE_SC);
     break;
   case SC_REQUEST_STOP:
@@ -868,18 +933,18 @@ static void applyScRequest(void) {
 
 /**
  * @brief Stop a configurator test nobody supervises any more.
- * @note The session ended, the host went quiet for s_config->keepalive_ms,
- * or, with the interlock on, the engine started. Console tests are the
- * bench operator's and are left alone, and so is a session end seen while no
- * configurator test runs: scRun() clears it before queuing the next one.
+ * @note The session that queued it ended (the end count moved past the one
+ * its run request carried), the host went quiet for s_config->keepalive_ms,
+ * or, with the interlock on, the engine started. Console tests are the bench
+ * operator's and are left alone; a session end before a run request does not
+ * stop the test that request starts.
  */
 static void superviseScTest(void) {
   if ((s_active == FIESTA_TEST_NONE) || (s_activeSource != TESTS_SOURCE_SC)) {
     return;
   }
   const bool ended =
-      HAL_ATOMIC_LOAD(&s_scSessionEnded, HAL_ATOMIC_ACQUIRE) &&
-      HAL_ATOMIC_EXCHANGE(&s_scSessionEnded, false, HAL_ATOMIC_ACQ_REL);
+      HAL_ATOMIC_LOAD(&s_scSessionEnds, HAL_ATOMIC_ACQUIRE) != s_scRunEnds;
   uint32_t nowMs;
   const char *reason = NULL;
   if (ended) {
@@ -895,6 +960,24 @@ static void superviseScTest(void) {
   }
 }
 
+/**
+ * @brief Stop a console test whose watched host went quiet.
+ * @note Nothing happens until the console armed the watch; SC tests have the
+ * keepalive above. Firing leaves the watch armed for the next console test.
+ */
+static void superviseConsoleTest(void) {
+  if ((s_consoleWatchMs == 0U) || (s_active == FIESTA_TEST_NONE) ||
+      (s_activeSource != TESTS_SOURCE_CONSOLE)) {
+    return;
+  }
+  const uint32_t contactMs =
+      HAL_ATOMIC_LOAD(&s_consoleContactMs, HAL_ATOMIC_ACQUIRE);
+  if (hal_elapsed_u32(hal_millis(), contactMs, s_consoleWatchMs)) {
+    derr("TEST: console test stopped: %s", SC_TEST_RESULT_HOST_LOST);
+    stopAll(SC_TEST_RESULT_HOST_LOST);
+  }
+}
+
 bool fiesta_test_tick(void) {
   if (!s_initialized) {
     return false;
@@ -906,6 +989,7 @@ bool fiesta_test_tick(void) {
     dispatch(line);
   }
   superviseScTest();
+  superviseConsoleTest();
 
   const fiesta_test_t *entry = findById(s_active);
   if (entry == NULL) {
@@ -966,10 +1050,17 @@ static const fiesta_test_t *scTestAt(size_t index) {
   return NULL;
 }
 
+/** @brief Whether parameter @p param belongs to test @p test; a parameter of
+ * FIESTA_TEST_ALL belongs to every test. */
+static bool paramBelongsTo(size_t param, uint32_t test) {
+  const uint32_t owner = fiesta_test_param_desc(param)->test;
+  return (owner == test) || (owner == FIESTA_TEST_ALL);
+}
+
 static size_t scParamCount(uint32_t test) {
   size_t count = 0U;
   for (size_t i = 0U; i < (size_t)s_config->param_count; i++) {
-    if (fiesta_test_param_desc((size_t)i)->test == test) {
+    if (paramBelongsTo(i, test)) {
       count++;
     }
   }
@@ -979,11 +1070,12 @@ static size_t scParamCount(uint32_t test) {
 static void scFillParam(size_t param, sc_command_test_param_t *out) {
   const fiesta_test_param_t *desc = fiesta_test_param_desc(param);
   const fiesta_test_t *owner = findById(desc->test);
-  *out =
-      (sc_command_test_param_t){desc->id,   (owner != NULL) ? owner->name : "",
-                                desc->unit, fiesta_test_param(param),
-                                desc->min,  desc->max,
-                                desc->def};
+  const char *ownerName = (desc->test == FIESTA_TEST_ALL) ? SC_TEST_SEQUENCE
+                          : (owner != NULL)               ? owner->name
+                                                          : "";
+  *out = (sc_command_test_param_t){
+      desc->id,  ownerName, desc->unit, fiesta_test_param(param),
+      desc->min, desc->max, desc->def};
 }
 
 static size_t scCount(void *user) {
@@ -1013,7 +1105,7 @@ static bool scParamAt(void *user, size_t testIndex, size_t paramIndex,
   size_t seen = 0U;
   for (size_t i = 0U; (entry != NULL) && (i < (size_t)s_config->param_count);
        i++) {
-    if (fiesta_test_param_desc((size_t)i)->test == entry->id) {
+    if (paramBelongsTo(i, entry->id)) {
       if (seen == paramIndex) {
         scFillParam((size_t)i, out);
         return true;
@@ -1056,7 +1148,6 @@ static hal_status_t scRun(void *user, const char *name) {
   if ((s_config->sc_blocked != NULL) && (s_config->sc_blocked() != NULL)) {
     return HAL_EPERM;
   }
-  HAL_ATOMIC_STORE(&s_scSessionEnded, false, HAL_ATOMIC_RELEASE);
   return sequence ? scQueue(SC_REQUEST_SEQUENCE, FIESTA_TEST_NONE)
                   : scQueue(SC_REQUEST_RUN, entry->id);
 }

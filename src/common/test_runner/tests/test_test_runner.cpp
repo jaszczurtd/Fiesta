@@ -66,6 +66,8 @@ static const fiesta_test_t s_suite[] = {
 };
 static const fiesta_test_param_t s_params[] = {
     {"steps_n", 2U, "count", 1, 10, 3},
+    // Owned by every test: listed with each of them, named after the sequence.
+    {"shared_ms", FIESTA_TEST_ALL, "ms", 100, 5000, 1000},
 };
 static int32_t s_values[COUNTOF(s_params)];
 static const fiesta_test_t *suite(size_t *count) {
@@ -242,6 +244,38 @@ static void sc_supervision() {
   }
 }
 
+// A session end reaches the test its session started even while a request of
+// that session still waits and a later run request is refused as busy; an end
+// before a run request does not stop the test that request starts.
+static void sc_session_end_survives_a_refused_run() {
+  const auto *ops = fiesta_test_sc_ops();
+  for (unsigned controller = 0U; controller < 2U; ++controller) {
+    initialize(controller);
+    s_caller = s_session;
+    TEST_ASSERT_EQUAL(HAL_OK, ops->run(nullptr, "steps"));
+    TEST_ASSERT_TRUE(tick());
+    s_caller = s_session;
+    TEST_ASSERT_EQUAL(HAL_OK, ops->run(nullptr, "steps")); // waits for a tick
+    fiesta_test_session_ended();
+    TEST_ASSERT_EQUAL(HAL_EBUSY, ops->run(nullptr, "steps"));
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_SESSION_END, s_reason);
+
+    // The next session's run is not stopped by that end, or by idle ticks.
+    s_caller = s_session;
+    TEST_ASSERT_EQUAL(HAL_OK, ops->run(nullptr, "steps"));
+    TEST_ASSERT_TRUE(tick());
+    TEST_ASSERT_TRUE(tick());
+    // An end after a run request was queued stops the test it starts.
+    s_caller = s_session;
+    TEST_ASSERT_EQUAL(HAL_OK, ops->run(nullptr, "steps"));
+    fiesta_test_session_ended();
+    TEST_ASSERT_FALSE(tick());
+    TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_SESSION_END, s_reason);
+    events();
+  }
+}
+
 static void sc_queue_and_interlock() {
   const auto *ops = fiesta_test_sc_ops();
   s_blocked = true;
@@ -262,6 +296,76 @@ static void sc_queue_and_interlock() {
   TEST_ASSERT_EQUAL_UINT(2U, s_cleanups);
 }
 
+// The console watch is off until the console arms it; then every console line
+// is contact, silence for the limit stops a console run with host_lost and
+// releases the output, SC runs keep their own keepalive, and "watch 0" disarms.
+static void console_watch() {
+  const auto *ops = fiesta_test_sc_ops();
+  s_caller = s_session;
+  fiesta_test_console("run manual");
+  TEST_ASSERT_TRUE(tick());
+  TEST_ASSERT_EQUAL_FLOAT(25.0f, s_output);
+  hal_mock_advance_millis(100000U);
+  TEST_ASSERT_TRUE(tick()); // Off by default: silence keeps the run.
+
+  s_caller = s_session;
+  fiesta_test_console("watch 999"); // Below the accepted range: refused.
+  TEST_ASSERT_TRUE(tick());
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "watch rejected"));
+  hal_mock_advance_millis(5000U);
+  TEST_ASSERT_TRUE(tick());
+
+  s_caller = s_session;
+  fiesta_test_console("watch 1000");
+  TEST_ASSERT_TRUE(tick());
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: watch 1000 ms"));
+  hal_mock_advance_millis(999U);
+  s_caller = s_session;
+  fiesta_test_console("watch"); // Renewal, one millisecond before the limit.
+  TEST_ASSERT_TRUE(tick());
+  hal_mock_advance_millis(999U);
+  s_caller = s_session;
+  fiesta_test_console("params"); // Any line renews, also one the session
+  TEST_ASSERT_TRUE(tick());      // role answers without queueing it.
+  hal_mock_advance_millis(500U);
+  s_caller = s_session;
+  fiesta_test_console("set steps_n 4"); // Queued for the next tick...
+  fiesta_test_console("set steps_n 5"); // ...so this one is refused, yet it
+  TEST_ASSERT_NOT_NULL(                 // still counts as host contact.
+      strstr(hal_mock_serial_last_line(), "pending; retry"));
+  TEST_ASSERT_TRUE(tick());
+  hal_mock_advance_millis(999U);
+  TEST_ASSERT_TRUE(tick()); // Alive only because the refused line counted.
+  hal_mock_advance_millis(1U);
+  TEST_ASSERT_FALSE(tick());
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_HOST_LOST, s_reason);
+  TEST_ASSERT_EQUAL_UINT(1U, s_cleanups);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, s_output);
+
+  // An SC run answers to the SC keepalive, not to the console watch.
+  s_caller = s_session;
+  TEST_ASSERT_EQUAL(HAL_OK, ops->run(nullptr, "steps"));
+  TEST_ASSERT_TRUE(tick());
+  hal_mock_advance_millis(999U);
+  sc_command_test_status_t status = {};
+  s_caller = s_session;
+  ops->status(nullptr, &status);
+  hal_mock_advance_millis(999U);
+  TEST_ASSERT_TRUE(tick()); // Long past the console limit, no console line.
+  TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_stop());
+
+  s_caller = s_session;
+  fiesta_test_console("watch 0");
+  TEST_ASSERT_FALSE(tick());
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: watch off"));
+  s_caller = s_session;
+  fiesta_test_console("run manual");
+  TEST_ASSERT_TRUE(tick());
+  hal_mock_advance_millis(100000U);
+  TEST_ASSERT_TRUE(tick()); // Disarmed: silence keeps the run again.
+  TEST_ASSERT_EQUAL_UINT(2U, s_cleanups);
+}
+
 static void parameters_and_console() {
   const auto *ops = fiesta_test_sc_ops();
   TEST_ASSERT_EQUAL_UINT(2U, ops->count(nullptr));
@@ -269,6 +373,20 @@ static void parameters_and_console() {
   TEST_ASSERT_TRUE(ops->param_at(nullptr, 0U, 0U, &param));
   TEST_ASSERT_EQUAL_STRING("steps_n", param.id);
   TEST_ASSERT_EQUAL_INT32(3, param.value);
+  // The shared parameter follows the own one of "steps" and is the only one
+  // of "manual"; the configurator sees it under the sequence name.
+  sc_command_test_info_t info = {};
+  TEST_ASSERT_TRUE(ops->info(nullptr, 0U, &info));
+  TEST_ASSERT_EQUAL_UINT(2U, info.param_count);
+  TEST_ASSERT_TRUE(ops->param_at(nullptr, 0U, 1U, &param));
+  TEST_ASSERT_EQUAL_STRING("shared_ms", param.id);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_SEQUENCE, param.test);
+  TEST_ASSERT_TRUE(ops->info(nullptr, 1U, &info));
+  TEST_ASSERT_EQUAL_UINT(1U, info.param_count);
+  TEST_ASSERT_TRUE(ops->param_at(nullptr, 1U, 0U, &param));
+  TEST_ASSERT_EQUAL_STRING("shared_ms", param.id);
+  TEST_ASSERT_FALSE(ops->param_at(nullptr, 1U, 1U, &param));
+  TEST_ASSERT_EQUAL_INT32(1000, fiesta_test_param(1U));
   TEST_ASSERT_EQUAL(HAL_ENOENT, ops->set_param(nullptr, "absent", 1));
   TEST_ASSERT_EQUAL(HAL_EINVAL, ops->set_param(nullptr, "steps_n", 11));
   TEST_ASSERT_EQUAL_INT32(3, fiesta_test_param(0U));
@@ -358,7 +476,9 @@ int main() {
   RUN_TEST(results_follow_the_execution_role_and_fixture_publication);
   RUN_TEST(sc_supervision);
   RUN_TEST(sc_queue_and_interlock);
+  RUN_TEST(sc_session_end_survives_a_refused_run);
   RUN_TEST(parameters_and_console);
+  RUN_TEST(console_watch);
   RUN_TEST(seqlock_wrap_and_busy_writer);
   RUN_TEST(sequence_at_registry_limit);
   return UNITY_END();

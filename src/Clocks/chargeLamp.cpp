@@ -1,6 +1,7 @@
 #include "chargeLamp.h"
 #include "can.h"
 #include "lampBlink.h"
+#include "testOutputs.h"
 #include "timingDiag.h"
 
 #include <math.h>
@@ -93,7 +94,12 @@ void updateChargeLamp(void) {
       canValueFresh(F_VOLTS, input.nowMs, CHARGE_LAMP_DATA_TIMEOUT_MS);
   input.rpm = (int)canGetValue(F_RPM);
   input.millivolts = (int32_t)lroundf(canGetValue(F_VOLTS) * 1000.0f);
-  const bool lit = chargeLamp.process(input);
+  // The lamp logic keeps running; a test replaces only the output level.
+  bool lit = chargeLamp.process(input);
+  bool testLit = false;
+  if (testOutputsLamp(TEST_OUTPUT_CHARGE, input.nowMs, &testLit)) {
+    lit = testLit;
+  }
   hal_gpio_write(JH_HW_NODE_CHARGE_LAMP_PIN_OUT, lit);
   timingDiagChargeLamp(lit, input.millivolts);
 }

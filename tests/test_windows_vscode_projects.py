@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -74,14 +76,6 @@ class WindowsVscodeProjectTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_pre_commit_regenerates_and_stages_generated_files(self) -> None:
-        hook = (REPO_ROOT / ".githooks" / "pre-commit").read_text(encoding="utf-8")
-        self.assertIn("sync_vscode_projects.py --stage", hook)
-        self.assertLess(
-            hook.index("sync_vscode_projects.py --stage"),
-            hook.index("git diff --cached"),
-        )
 
     def test_module_tasks_are_unique_and_have_windows_commands(self) -> None:
         for module in MODULES:
@@ -198,6 +192,151 @@ class WindowsVscodeProjectTests(unittest.TestCase):
                 self.assertEqual(["interface/cmsis-dap.cfg", target],
                                  profile["configFiles"], name)
 
+
+
+class StageFromIndexTests(unittest.TestCase):
+    """The pre-commit mode commits generated files that match the staged
+    sources and never brings in unstaged working-tree changes (a PCB-only
+    commit once took a manifest generated from an unstaged modules.json)."""
+
+    MANIFEST = "src/Clocks/.vscode/jaszczurhal.project.json"
+    UNRELATED = "src/common/scDefinitions/PROTOCOL.md"
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # The fixture is a repository of the tracked generator inputs.
+        listing = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "ls-files", "-s", "-z", "--",
+             ".githooks", "scripts", "modules.json", "src", ".vscode"],
+            capture_output=True, check=False,
+        )
+        if listing.returncode != 0:
+            raise unittest.SkipTest("needs a git checkout of Fiesta")
+        cls._temporary = tempfile.TemporaryDirectory(prefix="fiesta-stage-")
+        cls.root = Path(cls._temporary.name) / "Fiesta"
+        for record in listing.stdout.split(b"\0"):
+            if not record:
+                continue
+            meta, name = record.split(b"\t", 1)
+            relative = name.decode("utf-8")
+            if meta.split()[0] == b"160000" or relative.startswith("src/JaszczurHAL/"):
+                continue  # the HAL submodule is linked below
+            target = cls.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / relative, target)
+        try:
+            (cls.root / "src" / "JaszczurHAL").symlink_to(
+                REPO_ROOT / "src" / "JaszczurHAL", target_is_directory=True)
+        except OSError as error:
+            cls._temporary.cleanup()
+            raise unittest.SkipTest(f"directory symlinks unavailable: {error}")
+        cls.git("init", "-q")
+        cls.git("add", "-A")
+        cls.commit("base")
+        cls.base = cls.git("rev-parse", "HEAD").strip()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._temporary.cleanup()
+
+    def setUp(self) -> None:
+        self.git("reset", "-q", "--hard", self.base)
+
+    @classmethod
+    def commit(cls, message: str) -> None:
+        cls.git("-c", "user.name=test", "-c", "user.email=test@example.invalid",
+                "commit", "-q", "--no-verify", "-m", message)
+
+    @classmethod
+    def git(cls, *args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(cls.root), *args],
+            capture_output=True, text=True, check=True,
+        ).stdout
+
+    def sync(self, *args: str) -> None:
+        result = subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "sync_vscode_projects.py"),
+             *args],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def staged(self) -> set[str]:
+        return set(self.git("diff", "--cached", "--name-only").split())
+
+    def toggle_clocks_shared_sources(self) -> bool:
+        """Flip the test runner of Clocks in the working modules.json; return
+        whether Clocks now compiles it."""
+        path = self.root / "modules.json"
+        registry = json.loads(path.read_text(encoding="utf-8"))
+        clocks = next(m for m in registry["modules"] if m["name"] == "Clocks")
+        if clocks.get("sharedSources"):
+            clocks.pop("sharedSources")
+        else:
+            clocks["sharedSources"] = ["test_runner"]
+        path.write_text(json.dumps(registry, indent=4) + "\n", encoding="utf-8")
+        return bool(clocks.get("sharedSources"))
+
+    def test_a_consistent_index_stages_nothing(self) -> None:
+        self.sync("--stage")
+        self.assertEqual(set(), self.staged())
+
+    def test_unstaged_sources_and_outputs_stay_out_of_the_commit(self) -> None:
+        self.toggle_clocks_shared_sources()
+        self.sync()  # the working-tree manifest follows the unstaged registry
+        working = (self.root / self.MANIFEST).read_text(encoding="utf-8")
+        self.assertNotEqual(self.git("show", f"HEAD:{self.MANIFEST}"), working)
+        with (self.root / self.UNRELATED).open("a", encoding="utf-8") as stream:
+            stream.write("\nunrelated staged change\n")
+        self.git("add", "--", self.UNRELATED)
+
+        self.sync("--stage")
+
+        self.assertEqual({self.UNRELATED}, self.staged())
+        self.assertEqual(self.git("show", f"HEAD:{self.MANIFEST}"),
+                         self.git("show", f":{self.MANIFEST}"))
+        self.assertEqual(working,
+                         (self.root / self.MANIFEST).read_text(encoding="utf-8"))
+
+    def test_staged_sources_bring_their_outputs(self) -> None:
+        compiles_runner = self.toggle_clocks_shared_sources()
+        self.git("add", "--", "modules.json")
+
+        self.sync("--stage")
+
+        self.assertEqual({"modules.json", self.MANIFEST}, self.staged())
+        staged = json.loads(self.git("show", f":{self.MANIFEST}"))
+        self.assertEqual(compiles_runner,
+                         "JH_EXTRA_SOURCES" in staged["cmake"]["cache"])
+        self.assertEqual(self.git("show", f":{self.MANIFEST}"),
+                         (self.root / self.MANIFEST).read_text(encoding="utf-8"))
+
+    def test_the_hook_commits_outputs_of_the_staged_sources(self) -> None:
+        if shutil.which("sh") is None or shutil.which("perl") is None:
+            self.skipTest("the hook needs sh and perl")
+        # A HEAD whose manifest disagrees with its registry, as after a
+        # commit that took the manifest without modules.json; the working
+        # tree keeps both changes, consistent with each other.
+        compiles_runner = self.toggle_clocks_shared_sources()
+        self.sync()
+        working = (self.root / self.MANIFEST).read_text(encoding="utf-8")
+        self.git("add", "--", self.MANIFEST)
+        self.commit("manifest without its registry")
+        with (self.root / self.UNRELATED).open("a", encoding="utf-8") as stream:
+            stream.write("\nunrelated staged change\n")
+        self.git("add", "--", self.UNRELATED)
+
+        hook = subprocess.run(["sh", ".githooks/pre-commit"], cwd=self.root,
+                              capture_output=True, text=True, check=False)
+
+        self.assertEqual(hook.returncode, 0, hook.stdout + hook.stderr)
+        staged = json.loads(self.git("show", f":{self.MANIFEST}"))
+        self.assertEqual(not compiles_runner,
+                         "JH_EXTRA_SOURCES" in staged["cmake"]["cache"])
+        self.assertEqual({self.UNRELATED, self.MANIFEST}, self.staged())
+        self.assertEqual(working,
+                         (self.root / self.MANIFEST).read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()

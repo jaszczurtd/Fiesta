@@ -191,9 +191,13 @@ python3 scripts/sync_vscode_projects.py --check
 ```
 
 Uruchomienie generatora bez `--check` odtwarza jego pliki wynikowe. Lokalny
-hook pre-commit uruchamia generator VS Code z `--stage` i dodaje zarządzane
-pliki do indeksu. `scripts/configure_git_hooks.py` konfiguruje ścieżkę hooka
-w Linuksie, macOS i Windows. Zmiany generatora utrzymuj razem z wymaganą przez
+hook pre-commit najpierw normalizuje pliki dodane do indeksu i dodaje je
+ponownie. Na końcu uruchamia generator VS Code z `--stage`. Ten odtwarza pliki
+w drzewie roboczym z jego zawartości, potem generuje je ponownie ze źródeł
+dodanych do indeksu i dodaje te, które się różnią. Commit zawiera więc
+pliki VS Code zgodne ze źródłami, które zatwierdza. Niedodane zmiany, na
+przykład w `modules.json`, zostają poza nim. `scripts/configure_git_hooks.py`
+konfiguruje ścieżkę hooka w Linuksie, macOS i Windows. Zmiany generatora utrzymuj razem z wymaganą przez
 nie wersją HAL; zobacz [aktualizację zależności](../DEPENDENCIES.pl.md).
 
 SerialConfigurator ma osobną [instrukcję kompilacji](../src/SerialConfigurator/README.pl.md#kompilacja).

@@ -1,6 +1,7 @@
 #include "config.h"
 #include "../common/scDefinitions/sc_clocks_measurements.h"
 #include "clocksState.h"
+#include "clocksTests.h"
 #include <hal/core/hal_math.h>
 #include <math.h>
 
@@ -154,6 +155,7 @@ void configSessionInit(void) {
   serviceConfig.active_values = &s_clocks_values;
   serviceConfig.read_gps = readGpsForSession;
   serviceConfig.refresh = refreshValues;
+  serviceConfig.tests = clocksTestsScOps();
   serviceConfig.allowed_sources =
       HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION);
   (void)sc_config_session_start(&s_sc, &serviceConfig, nullptr, nullptr,
@@ -161,7 +163,13 @@ void configSessionInit(void) {
 }
 
 void configSessionTick(void) {
-  hal_debug_set_muted(sc_config_session_poll(&s_sc));
+  const bool sessionActive = sc_config_session_poll(&s_sc);
+  // The runner stops a configurator test when its session ends, apart from
+  // the keepalive it keeps itself.
+  if (sc_config_session_take_ended(&s_sc)) {
+    clocksTestsScSessionEnded();
+  }
+  hal_debug_set_muted(sessionActive);
 }
 
 bool configSessionActive(void) {

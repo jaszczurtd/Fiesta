@@ -190,9 +190,13 @@ python3 scripts/sync_vscode_projects.py --check
 ```
 
 Run either generator without `--check` to regenerate its outputs. The local
-pre-commit hook runs the VS Code generator with `--stage` and stages managed
-outputs. `scripts/configure_git_hooks.py` configures that hook path on Linux,
-macOS or Windows. Keep generator changes and their required HAL revision
+pre-commit hook first normalizes the staged files and stages them again. Its
+last step runs the VS Code generator with `--stage`: it regenerates the
+working-tree outputs from the working tree, then generates the outputs again
+from the staged sources and stages those that differ. A commit therefore holds
+VS Code files that match the sources it commits; unstaged changes, such as an
+edited `modules.json`, stay out of it. `scripts/configure_git_hooks.py`
+configures that hook path on Linux, macOS or Windows. Keep generator changes and their required HAL revision
 together; see [dependency updates](../DEPENDENCIES.md).
 
 SerialConfigurator has a separate [desktop build guide](../src/SerialConfigurator/README.md#build).

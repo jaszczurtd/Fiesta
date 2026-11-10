@@ -4,6 +4,16 @@ set -eu
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+# The generated files come from the index a commit records (git commit -a or
+# with paths uses a temporary one); keep its path valid from the repository.
+case "${GIT_INDEX_FILE:-}" in
+    "" | /* | [A-Za-z]:[\\/]*) ;;
+    *)
+        GIT_INDEX_FILE="$repo_root/$GIT_INDEX_FILE"
+        export GIT_INDEX_FILE
+        ;;
+esac
+
 sync_vscode_projects() {
     if command -v python3 >/dev/null 2>&1; then
         python3 scripts/sync_vscode_projects.py --stage
@@ -17,11 +27,7 @@ sync_vscode_projects() {
     fi
 }
 
-echo "[pre-commit] Synchronizing generated VS Code files..."
-sync_vscode_projects
-
 staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
-[ -n "$staged_files" ] || exit 0
 
 fix_text_file() {
     file="$1"
@@ -72,12 +78,19 @@ format_cpp_file() {
     esac
 }
 
-echo "[pre-commit] Normalizing staged files..."
-echo "$staged_files" | while IFS= read -r file; do
-    [ -n "$file" ] || continue
-    fix_text_file "$file"
-    format_cpp_file "$file"
-    git add -- "$file"
-done
+if [ -n "$staged_files" ]; then
+    echo "[pre-commit] Normalizing staged files..."
+    echo "$staged_files" | while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        fix_text_file "$file"
+        format_cpp_file "$file"
+        git add -- "$file"
+    done
+fi
+
+# Last, so that adding normalized working-tree files cannot replace what it
+# stages: the generated files follow the staged sources.
+echo "[pre-commit] Synchronizing generated VS Code files..."
+sync_vscode_projects
 
 echo "[pre-commit] Done."

@@ -1,8 +1,10 @@
 
 #include "logic.h"
 #include "../common/scDefinitions/sc_fiesta_module_tokens.h"
-#include "buzzerStrategy.h"
+#include "alerts.h"
 #include "chargeLamp.h"
+#include "clocksTests.h"
+#include "clusterOutput.h"
 #include "egt.h"
 #include "gps.h"
 #include "oilLamp.h"
@@ -26,7 +28,6 @@ void callAtEveryHalfSecond(void);
 void callAtEveryHalfHalfSecond(void);
 void updateValsForDebug(void);
 void processAlerts(void);
-void processTemperatureBuzzerAlerts(const clocks_local_snapshot_t *local);
 void readLocalOilPressure(void);
 void readLocalEgt(void);
 
@@ -37,9 +38,6 @@ void drawHighImportanceValuesIfChanged(void);
 
 static unsigned long alertsStartSecond = 0;
 static unsigned long lastThreadSeconds = 0;
-static bool startBeepDone = false;
-static Cluster cluster;
-static BuzzerStrategy buzzerStrategy;
 
 static hal_soft_timer_t timerCANCheck = NULL;
 static hal_soft_timer_t timerAlerts = NULL;
@@ -97,7 +95,7 @@ static void initializeCore0(void) {
   initBasicPIO();
   initChargeLamp();
   initOilLamp();
-  buzzerStrategy.reset();
+  resetBuzzerAlerts();
 
   bool rebooted = setupWatchdog(executeByWatchdog, WATCHDOG_TIME);
   if (!rebooted) {
@@ -106,7 +104,7 @@ static void initializeCore0(void) {
 
   initSPI();
   clocksStateInit();
-  cluster.init();
+  initClusterOutput();
   const bool absReady = setupSpeedometer();
   canSetAbsReady(absReady);
   if (!absReady) {
@@ -121,6 +119,10 @@ static void initializeCore0(void) {
   hal_soft_timer_setup_table(canTimerTable, COUNTOF(canTimerTable),
                              hal_watchdog_feed, CORE_OPERATION_DELAY);
   (void)canSetupBroadcastTimers();
+  // Before core 1 serves the configurator: both runner roles are quiescent.
+  if (!initClocksTests()) {
+    derr("cannot initialize the cluster tests");
+  }
 
   setStartedCore0();
 }
@@ -143,7 +145,11 @@ static void runCore0(void) {
   updateWatchdogCore0();
   statusVariable0 = 1;
   const uint32_t loopStart = timingDiagLoopStart();
-  uint32_t phaseStart = loopStart;
+  // Test steps first: CAN, the timers and the gauges below write the outputs
+  // of this pass with the values a test chose. The loop time covers the
+  // tick; the receive section starts after it.
+  (void)tickClocksTests();
+  uint32_t phaseStart = timingDiagLoopStart();
 
   if (canRxPending() || hal_millis_interval_elapsed_now(
                             &lastCanPollMs, CAN_MAIN_LOOP_READ_INTERVAL)) {
@@ -161,10 +167,7 @@ static void runCore0(void) {
   }
   updateChargeLamp();
 
-  if (!startBeepDone && isEnvironmentStarted()) {
-    startBeepDone = true;
-    startBuzzer(BUZZER_SHORT);
-  }
+  processStartBeep(isEnvironmentStarted());
   loopBuzzers();
 
   onImpulseTranslating();
@@ -221,25 +224,6 @@ void processAlerts(void) {
   processTemperatureBuzzerAlerts(&local);
 }
 
-void processTemperatureBuzzerAlerts(const clocks_local_snapshot_t *local) {
-  BuzzerStrategyInput input;
-  input.engineRunning = (int(canGetValue(F_RPM)) != 0);
-  input.nowMs = hal_millis();
-  input.coolantTemp = int(canGetValue(F_COOLANT_TEMP));
-  input.oilTemp = int(canGetValue(F_OIL_TEMP));
-  input.egtTemp =
-      local->egtValid[EGT_PRE_DPF] ? int(local->egtC[EGT_PRE_DPF]) : 0;
-
-  switch (buzzerStrategy.process(input)) {
-  case BUZZER_STRATEGY_MIDDLE:
-    startBuzzer(BUZZER_MIDDLE);
-    break;
-  case BUZZER_STRATEGY_LONG:
-    startBuzzer(BUZZER_LONG);
-    break;
-  }
-}
-
 void callAtEveryHalfHalfSecond(void) {
   if (alertsStartSecond <= hal_get_seconds()) {
     seriousAlertsDrawFunctions();
@@ -250,12 +234,6 @@ void callAtEveryHalfHalfSecond(void) {
 static bool highImportanceValueChanged = false;
 void triggerDrawHighImportanceValue(bool state) {
   highImportanceValueChanged = state;
-}
-
-// Core 0: called from the RPM and speed frames and once per loop pass.
-void updateCluster(void) {
-  cluster.update((unsigned int)canGetValue(F_ABS_CAR_SPEED),
-                 (unsigned int)canGetValue(F_RPM));
 }
 
 void drawLowImportanceValues(void) {
@@ -406,6 +384,7 @@ static void runCore1(void) {
   drawHighImportanceValuesIfChanged();
   statusVariable1 = 3;
   configSessionTick();
+  clocksTestsEvents();
 
   if (isEcuConnected()) {
     hal_rgb_led_set_color(HAL_RGB_LED_GREEN);

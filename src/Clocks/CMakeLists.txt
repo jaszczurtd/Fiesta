@@ -19,6 +19,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_command_sources.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hal_helper_sources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_test_support.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_hardware.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/cmake/fiesta_shared_sources.cmake")
+fiesta_shared_sources(TEST_RUNNER_SOURCES "${FIESTA_SHARED_ROOT}" test_runner)
 # jh_hardware.h of the firmware assembly, loaded first like in the firmware.
 fiesta_hardware_header(CLOCKS_HW_HEADER "${CLOCKS_SRC}" "${HAL_LIB_EXTERNAL}")
 fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB_EXTERNAL}")

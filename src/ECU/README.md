@@ -379,6 +379,16 @@ refuse or stop configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
 This option does not apply to console tests; see the
 [functional test rules](../common/scDefinitions/PROTOCOL.md#functional-tests).
 
+Console tests have an optional watch. `watch <ms>` arms it with a limit of
+1000 to 600000 ms: when no console line arrives for that long, the running
+console test stops with `host_lost` and the demand returns to zero, as for a
+configurator test whose host went quiet. Every console line renews the watch,
+`watch` alone renews it and reports the limit, `watch 0` disarms it, and a
+firmware restart leaves it off. A bench tool that holds the port arms the
+watch when its recording starts and renews it while it runs; a killed
+collector or an unplugged cable then leaves the actuator at its last demand
+only until the limit runs out. `G` keeps its auto-zero of a single `S` hold.
+
 DTC and KV one-shot actions run on core 0. The control core continues to
 service VP37 and advances the test sequence after the result is published.
 Stopping a test cancels an action that has not yet been dispatched.

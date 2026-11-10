@@ -208,6 +208,10 @@ reading it stays lit.
 | [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
 | [`oilLamp.cpp`](src/Clocks/oilLamp.cpp), [`lampBlink.h`](src/Clocks/lampBlink.h) | oil lamp state from the oil pressure sender; blink phase of both lamps |
 | [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
+| [`alerts.cpp`](src/Clocks/alerts.cpp) | temperature warnings through the buzzer strategy; silent while a cluster test owns the buzzer |
+| [`clusterOutput.cpp`](src/Clocks/clusterOutput.cpp) | the one `Cluster` instance; feeds it the measured speed and RPM, or the value of a running cluster test |
+| [`testOutputs.cpp`](src/Clocks/testOutputs.cpp) | substitution of the gauge, lamp and buzzer outputs by the cluster tests; the measurements keep flowing underneath |
+| [`clocksTests.cpp`](src/Clocks/clocksTests.cpp) | the five cluster tests (`charge`, `oil`, `rpm`, `speed`, `buzzer`) on the shared test runner, run through the configurator operations |
 | [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, GPS position and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
 
 The CAN controller and the TFT share one SPI bus. The display writes in

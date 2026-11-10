@@ -69,10 +69,11 @@ and a new `HELLO` drops authentication. The firmware counts failed proofs in
 
 The session has no timeout and does not notice a closed port: only `SC_BYE`
 ends it. A `HELLO` while it is active starts a new session id and drops
-authentication, but the session stays active. The host sends `HELLO` again
-only after `SC_NOT_READY HELLO_REQUIRED`. The other `SC_NOT_READY` replies come
-from a live session, where a new `HELLO` would only drop the authentication
-the retry needs.
+authentication, but the session stays active, and so does a running
+configurator test: the host starts every authentication with `HELLO`. The
+host's retry sends `HELLO` again only after `SC_NOT_READY HELLO_REQUIRED`.
+The other `SC_NOT_READY` replies come from a live session, where a new
+`HELLO` would only drop the authentication the retry needs.
 
 `SC_BYE` answers `SC_OK BYE`, ends the session, and clears any pending
 challenge. It works without `HAL_ENABLE_CRYPTO`, so every build can close a
@@ -182,7 +183,7 @@ SC_TEST_INFO cyclic         -> SC_OK TEST_INFO name=cyclic seq=1 params=cyclic_p
 SC_TEST_PARAM cyclic_passes -> SC_OK TEST_PARAM id=cyclic_passes test=cyclic value=4 min=1 max=100 default=4 unit=count
 SC_TEST_SET cyclic_passes 2 -> SC_OK TEST_SET id=cyclic_passes value=2
 SC_TEST_RUN all             -> SC_OK TEST_RUN name=all
-SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=250 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
+SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=228 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
 ```
 
 - **Sequence.** `seq=1` marks a test that `SC_TEST_RUN all` runs, in list
@@ -197,6 +198,11 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   the most recent finished test. Every other key is a progress value of the
   running test, such as the cyclic profile and rate, the random target, the
   staircase setpoint, or the pot phase. A host shows unknown keys as they are.
+  The cyclic `rate` is the demand rate measured over the last full cycle of
+  the profile in progress (200 % of travel per cycle), not the nominal step
+  rate. It is absent until that profile completes its first cycle, so it
+  never carries the previous profile's value. The pot test reports its
+  configured rate.
   The ECU refreshes the position and progress values only while a host polls,
   because the refresh shares the loop that releases every control step. The
   first `SC_TEST_STATUS` after a pause can return the last published values; a later poll sees
@@ -209,8 +215,9 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   controller core, which takes one request per tick; retry it.
 
 The ECU does not leave a configurator test running unsupervised. It stops the
-test when the session ends (`SC_BYE`) or when no test command, `SC_TEST_STATUS`
-included, has arrived for `ECU_SC_TESTS_KEEPALIVE_MS` (3 s). A host that starts
+test when the session ends (`SC_BYE`, also when the next `HELLO` follows at
+once) or when no test command, `SC_TEST_STATUS` included, has arrived for
+`ECU_SC_TESTS_KEEPALIVE_MS` (3 s). A host that starts
 a test keeps polling the status until the test ends.
 
 Functional tests are enabled only in the ECU `BENCH` variant. Its default
@@ -219,7 +226,8 @@ so a bench can use an RPM signal generator with the engine stationary.
 Building with `ECU_SC_TESTS_RPM_INTERLOCK=1` makes the ECU refuse to start a
 configurator test, and stop one already running, above `ECU_SC_TESTS_RPM_LIMIT`
 rpm. Tests started from the bench console belong to the operator; session
-end, the keepalive timeout and this RPM interlock do not stop them.
+end, the keepalive timeout and this RPM interlock do not stop them. The
+console has its own optional watch (`watch <ms>`, see the ECU README).
 
 An ECU built without tests answers `count=0`. Modules and firmware without
 the commands answer `SC_UNKNOWN_CMD`. The host shows "No tests available"

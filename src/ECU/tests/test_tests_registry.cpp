@@ -843,9 +843,9 @@ void test_configurator_run_is_queued_and_reports_progress(void) {
   TEST_ASSERT_EQUAL_STRING(SC_TEST_SOURCE_SC, status.source);
   TEST_ASSERT_EQUAL_UINT8(0U, status.seq_count);
   TEST_ASSERT_EQUAL_UINT32(40U, status.elapsed_ms);
-  // Profile A steps 1 % every 4 ms: 250 %/s.
+  // The rate is measured over a full cycle; none has closed yet.
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
-  TEST_ASSERT_EQUAL_INT32(250, statusField(status, SC_TEST_FIELD_RATE));
+  TEST_ASSERT_EQUAL_INT32(INT32_MIN, statusField(status, SC_TEST_FIELD_RATE));
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
   TEST_ASSERT_EQUAL_INT32((int32_t)CYCLIC_FULL_CYCLES,
                           statusField(status, SC_TEST_FIELD_CYCLES));
@@ -866,6 +866,144 @@ void test_configurator_run_is_queued_and_reports_progress(void) {
   TEST_ASSERT_EQUAL_STRING(SC_TEST_NAME_CYCLIC, stopped.last);
   TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_STOPPED, stopped.result);
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->demand.requestedPercent);
+}
+
+/** @brief Tick the cyclic ramp once per @p tickMs for @p steps steps. */
+static uint32_t tickCyclic(uint32_t fromMs, uint32_t steps, uint32_t tickMs) {
+  uint32_t ms = fromMs;
+  for (uint32_t step = 0U; step < steps; step++) {
+    ms += tickMs;
+    hal_mock_set_millis(ms);
+    (void)tickTests();
+  }
+  return ms;
+}
+
+// E2: the console watch is off by default; `watch <ms>` arms it, every console
+// line renews it, and a host silent for the limit stops the console test with
+// host_lost, which releases the demand. `watch 0` restores the unsupervised
+// console. The configurator keepalive is separate.
+void test_console_watch_stops_a_quiet_console_test(void) {
+  VP37Pump *pump = preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  engineAtRest();
+  console("S90");
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+  TEST_ASSERT_EQUAL_FLOAT(90.0f, pump->demand.requestedPercent);
+
+  // Off by default: a long silence keeps the hold.
+  uint32_t ms = 10U * ECU_SC_TESTS_KEEPALIVE_MS;
+  hal_mock_set_millis(ms);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+
+  // Armed at 2 s; a renewal every 1.5 s keeps the hold through many limits.
+  console("watch 2000");
+  for (int i = 0; i < 6; i++) {
+    ms += 1500U;
+    hal_mock_set_millis(ms);
+    console("watch");
+  }
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+  TEST_ASSERT_EQUAL_FLOAT(90.0f, pump->demand.requestedPercent);
+
+  // Silence: still held one millisecond before the limit, released at it.
+  hal_mock_set_millis(ms + 1999U);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+  hal_mock_set_millis(ms + 2000U);
+  (void)tickTests();
+  testsPrintEvents(); // The console core prints the stop and its result.
+  TEST_ASSERT_NULL(testsActiveName());
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0.0f, pump->demand.requestedPercent);
+  const sc_command_test_status_t status = scStatus();
+  TEST_ASSERT_EQUAL_STRING("manual", status.last);
+  TEST_ASSERT_EQUAL_STRING(SC_TEST_RESULT_HOST_LOST, status.result);
+
+  // The watch stays armed for the next hold; a limit out of range is refused
+  // and leaves the armed one in force.
+  ms += 2000U;
+  hal_mock_set_millis(ms);
+  console("S90");
+  console("watch 5");
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+  hal_mock_set_millis(ms + 2000U);
+  (void)tickTests();
+  TEST_ASSERT_NULL(testsActiveName());
+
+  // watch 0: the console is unsupervised again.
+  ms += 2000U;
+  hal_mock_set_millis(ms);
+  console("watch 0");
+  console("S90");
+  hal_mock_set_millis(ms + 100000U);
+  (void)tickTests();
+  TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
+  console("stop");
+  TEST_ASSERT_NULL(testsActiveName());
+}
+
+// The cyclic rate is the demand rate the drive got: a loop that ticks less
+// often than the profile's step delay stretches every cycle, and the status
+// reports the rate measured over the last full cycle instead of the nominal
+// one. A new profile shows no rate until its own first cycle closes. Ticks of
+// 10 and 12 ms keep every closing step on the 20 ms refresh grid of the
+// published status, so each check reads the step that closed the cycle.
+void test_cyclic_rate_is_measured_from_the_last_full_cycle(void) {
+  // The ticks below suit the shipped step delays and keepalive window.
+  static_assert(CYCLIC_DELAYTIME_A <= 10U,
+                "profile A steps on every 10 ms tick");
+  static_assert(CYCLIC_DELAYTIME_B <= 12U,
+                "profile B steps on every 12 ms tick");
+  static_assert(ECU_SC_TESTS_KEEPALIVE_MS > 2400U,
+                "the refresh must outlive the longest gap between polls");
+  (void)preparePump();
+  TEST_ASSERT_TRUE(initTests());
+  const sc_command_test_ops_t *ops = scOps();
+  engineAtRest();
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, ops->set_param(nullptr, SC_TEST_PARAM_CYCLIC_CYCLES, 2));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ops->run(nullptr, SC_TEST_NAME_CYCLIC));
+  TEST_ASSERT_TRUE(tickTests());
+
+  // Ticks every 10 ms against the 4 ms step delay of profile A: the 200
+  // steps of a cycle take 2000 ms. Before the cycle closes there is no rate.
+  uint32_t ms = tickCyclic(0U, 190U, 10U);
+  sc_command_test_status_t status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
+  TEST_ASSERT_EQUAL_INT32(INT32_MIN, statusField(status, SC_TEST_FIELD_RATE));
+
+  // The closing step publishes the cycle: 200 % in 2000 ms is 100 %/s, well
+  // below the nominal 250 %/s of profile A.
+  ms = tickCyclic(ms, 10U, 10U);
+  status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
+  TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_CYCLE));
+  TEST_ASSERT_EQUAL_INT32(100, statusField(status, SC_TEST_FIELD_RATE));
+
+  // The second cycle of profile A, at 12 ms per step, closes the profile. Its
+  // 83 %/s belong to profile A, so profile B starts without a rate.
+  ms = tickCyclic(ms, 190U, 12U);
+  (void)scStatus(); // Contact: the refresh keeps running until the close.
+  ms = tickCyclic(ms, 10U, 12U);
+  status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_PROFILE));
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
+  TEST_ASSERT_EQUAL_INT32(INT32_MIN, statusField(status, SC_TEST_FIELD_RATE));
+
+  // Profile B steps every 6 ms nominally; at 12 ms per tick its first cycle
+  // takes 2400 ms, 83 %/s instead of 166 %/s.
+  ms = tickCyclic(ms, 190U, 12U);
+  (void)scStatus(); // Contact, as above.
+  (void)tickCyclic(ms, 10U, 12U);
+  status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_PROFILE));
+  TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_CYCLE));
+  TEST_ASSERT_EQUAL_INT32(83, statusField(status, SC_TEST_FIELD_RATE));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ops->stop(nullptr));
+  TEST_ASSERT_FALSE(tickTests());
 }
 
 // The periodic status refresh shares the loop that releases every control
@@ -1719,6 +1857,8 @@ int main(void) {
   RUN_TEST(test_runtime_params_are_bounded_shared_with_the_console_and_reset);
   RUN_TEST(test_runtime_params_shape_the_staircase);
   RUN_TEST(test_configurator_run_is_queued_and_reports_progress);
+  RUN_TEST(test_cyclic_rate_is_measured_from_the_last_full_cycle);
+  RUN_TEST(test_console_watch_stops_a_quiet_console_test);
   RUN_TEST(test_configurator_status_refreshes_only_while_polled);
 #ifdef ECU_TEST_CLOCK_INTERLEAVING
   RUN_TEST(test_configurator_contact_newer_than_clock_does_not_stop_test);

@@ -96,13 +96,13 @@ void testsWorkersManualHoldSet(uint32_t holdMs);
  */
 uint32_t testsWorkersManualHoldMs(void);
 
-/** @brief Arm the cyclic ramp generator at zero. */
 /**
  * @brief Select the research triangle period; zero keeps the registry profile.
  * @param periodMs Full cycle duration in milliseconds, set before starting.
  */
 void testsWorkersSetFixedCyclicPeriod(uint32_t periodMs);
 
+/** @brief Arm the cyclic ramp generator at zero. */
 void testsWorkersCyclicStart(void);
 
 /**
@@ -113,7 +113,11 @@ void testsWorkersCyclicStart(void);
 float testsWorkersCyclicStep(bool *outFinished);
 
 /**
- * @brief Progress of the cyclic test: profile, its rate, cycle and pass.
+ * @brief Progress of the cyclic test: profile, the demand rate measured over
+ * its last full cycle, cycle and pass.
+ * @note The rate appears once the profile in progress has completed a full
+ * cycle, so it never carries the previous profile's value; the research
+ * triangle reports the rate of its period instead.
  * @param fields Non-NULL destination for up to @p capacity values.
  * @param capacity Room in @p fields.
  * @return Values written.

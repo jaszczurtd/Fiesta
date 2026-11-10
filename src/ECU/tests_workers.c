@@ -30,12 +30,18 @@ static const uint32_t s_cyclicDelaysMs[] = {
 
 static struct {
   uint32_t previousMs;
+  uint32_t cycleStartMs; /* when the demand last left zero upwards */
+  uint32_t measuredRate; /* [%/s] of the last full cycle of the profile in
+                            progress; zero before its first one */
   int32_t value;
   int32_t increment;
   uint32_t profile;
   uint32_t cycles;
   uint32_t passes;
 } s_cyclic;
+
+/* Demand travelled in one full cycle of the ramp: up to 100 % and back. */
+#define CYCLIC_PERCENT_PER_CYCLE 200U
 
 static struct {
   uint32_t state;
@@ -180,11 +186,30 @@ void testsWorkersSetFixedCyclicPeriod(uint32_t periodMs) {
   HAL_ATOMIC_STORE(&s_fixedCyclicPeriodMs, periodMs, HAL_ATOMIC_RELEASE);
 }
 
+/**
+ * @brief Demand rate of one full cycle of the ramp.
+ * @param cycleMs Duration of the cycle; zero when it is not known.
+ * @return Rate in percent per second, at least 1 for a measured cycle, zero
+ * for an unknown one.
+ */
+static uint32_t cyclicRateFromCycleMs(uint32_t cycleMs) {
+  uint32_t rate = 0U;
+  if (cycleMs != 0U) {
+    rate = ((CYCLIC_PERCENT_PER_CYCLE * 1000U) + (cycleMs / 2U)) / cycleMs;
+    if (rate == 0U) {
+      rate = 1U;
+    }
+  }
+  return rate;
+}
+
 void testsWorkersCyclicStart(void) {
   s_fixedCyclicStartedMs = hal_millis();
   s_cyclic.value = 0;
   s_cyclic.increment = 1;
   s_cyclic.previousMs = hal_millis();
+  s_cyclic.cycleStartMs = s_cyclic.previousMs;
+  s_cyclic.measuredRate = 0U;
   s_cyclic.profile = 0U;
   s_cyclic.cycles = 0U;
   s_cyclic.passes = 0U;
@@ -193,7 +218,8 @@ void testsWorkersCyclicStart(void) {
 uint32_t testsWorkersCyclicDelayMs(void) {
   const uint32_t period =
       HAL_ATOMIC_LOAD(&s_fixedCyclicPeriodMs, HAL_ATOMIC_ACQUIRE);
-  return period != 0U ? period / 200U : s_cyclicDelaysMs[s_cyclic.profile];
+  return period != 0U ? period / CYCLIC_PERCENT_PER_CYCLE
+                      : s_cyclicDelaysMs[s_cyclic.profile];
 }
 
 float testsWorkersCyclicStep(bool *outFinished) {
@@ -209,7 +235,7 @@ float testsWorkersCyclicStep(bool *outFinished) {
     }
     const uint32_t phase = (nowMs - s_fixedCyclicStartedMs) % period;
     const uint32_t distance = phase <= period / 2U ? phase : period - phase;
-    return 200.0f * (float)distance / (float)period;
+    return (float)CYCLIC_PERCENT_PER_CYCLE * (float)distance / (float)period;
   }
   if (!hal_elapsed_u32(nowMs, s_cyclic.previousMs,
                        testsWorkersCyclicDelayMs())) {
@@ -224,10 +250,16 @@ float testsWorkersCyclicStep(bool *outFinished) {
   } else if (s_cyclic.value <= 0) {
     s_cyclic.value = 0;
     s_cyclic.increment = -s_cyclic.increment;
+    // The cycle that just closed gives the rate the drive really got.
+    s_cyclic.measuredRate =
+        cyclicRateFromCycleMs(nowMs - s_cyclic.cycleStartMs);
+    s_cyclic.cycleStartMs = nowMs;
     s_cyclic.cycles++;
     if (s_cyclic.cycles >= paramU32(TEST_PARAM_CYCLIC_CYCLES)) {
       s_cyclic.cycles = 0U;
       s_cyclic.profile++;
+      // A new profile begins: its rate is unknown until its first cycle.
+      s_cyclic.measuredRate = 0U;
       if (s_cyclic.profile >= COUNTOF(s_cyclicDelaysMs)) {
         s_cyclic.profile = 0U;
         s_cyclic.passes++;
@@ -575,11 +607,19 @@ static int32_t remainingMs(uint32_t startedMs, uint32_t intervalMs) {
 size_t testsWorkersCyclicProgress(struct sc_command_test_field_s *fields,
                                   size_t capacity) {
   size_t count = 0U;
-  // One percent per step: the step delay gives the demand rate.
   progressValue(fields, capacity, &count, SC_TEST_FIELD_PROFILE,
                 (int32_t)s_cyclic.profile + 1);
-  progressValue(fields, capacity, &count, SC_TEST_FIELD_RATE,
-                (int32_t)(1000U / testsWorkersCyclicDelayMs()));
+  // The registry profiles report the rate measured over their last full
+  // cycle; before the first one of the profile in progress there is none to
+  // show. The research triangle follows time, so its period gives the rate.
+  // The tick publishes this value together with the other progress fields.
+  const uint32_t period =
+      HAL_ATOMIC_LOAD(&s_fixedCyclicPeriodMs, HAL_ATOMIC_ACQUIRE);
+  const uint32_t rate =
+      (period != 0U) ? cyclicRateFromCycleMs(period) : s_cyclic.measuredRate;
+  if (rate != 0U) {
+    progressValue(fields, capacity, &count, SC_TEST_FIELD_RATE, (int32_t)rate);
+  }
   progressValue(fields, capacity, &count, SC_TEST_FIELD_CYCLE,
                 (int32_t)s_cyclic.cycles + 1);
   progressValue(fields, capacity, &count, SC_TEST_FIELD_CYCLES,

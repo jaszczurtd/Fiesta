@@ -2,7 +2,9 @@
 
 #include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/security/hal_sc_auth.h"
 #include "hal/serial/hal_serial_frame.h"
+#include "hal/system/hal_system.h"
 #include "unity.h"
 
 #include <stdio.h>
@@ -46,6 +48,17 @@ const char *sendRawSerialLine(const char *line) {
   return hal_mock_serial_last_line();
 }
 
+const char *sendTwoLinesInOnePoll(const char *first, const char *second) {
+  char frame_a[160];
+  char frame_b[160];
+  char both[320];
+  buildFrame(nextTestSeq(), first, frame_a, sizeof(frame_a));
+  buildFrame(nextTestSeq(), second, frame_b, sizeof(frame_b));
+  const int written = snprintf(both, sizeof(both), "%s%s", frame_a, frame_b);
+  TEST_ASSERT_TRUE(written > 0 && (size_t)written < sizeof(both));
+  return sendRawSerialLine(both);
+}
+
 const char *sendSerialLine(const char *inner_with_eol) {
   char inner[160];
   const size_t len = strcspn(inner_with_eol, "\r\n");
@@ -79,4 +92,48 @@ void performHello(void) {
   TEST_ASSERT_NOT_NULL(strstr(response, "OK HELLO"));
   TEST_ASSERT_TRUE(configSessionActive());
   TEST_ASSERT_NOT_EQUAL(0u, configSessionId());
+}
+
+/* Drive the session through HELLO + AUTH_BEGIN + AUTH_PROVE so the
+ * test starts from a fully authenticated state. Uses real HMAC-SHA256
+ * crypto against the deterministic mock UID baked into hal_mock. */
+void performAuth(void) {
+  performHello();
+
+  const char *challengeReply = sendSerialLine("SC_AUTH_BEGIN\n");
+  TEST_ASSERT_NOT_NULL(challengeReply);
+  const char *hexStart = strstr(challengeReply, "AUTH_CHALLENGE ");
+  TEST_ASSERT_NOT_NULL_MESSAGE(hexStart, "expected AUTH_CHALLENGE in reply");
+  hexStart += strlen("AUTH_CHALLENGE ");
+
+  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+  for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
+    unsigned byte = 0u;
+    TEST_ASSERT_EQUAL_INT(1, sscanf(hexStart + i * 2u, "%2x", &byte));
+    challenge[i] = (uint8_t)byte;
+  }
+
+  uint8_t uid[HAL_DEVICE_UID_BYTES];
+  hal_get_device_uid(uid);
+  uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+  TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(uid, sizeof(uid), key));
+
+  uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+  TEST_ASSERT_TRUE(hal_sc_auth_compute_response(
+      key, challenge, sizeof(challenge), configSessionId(), mac));
+
+  char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+  static const char kHex[] = "0123456789abcdef";
+  for (size_t i = 0u; i < sizeof(mac); ++i) {
+    hex[i * 2u] = kHex[(mac[i] >> 4) & 0x0Fu];
+    hex[i * 2u + 1u] = kHex[mac[i] & 0x0Fu];
+  }
+  hex[sizeof(mac) * 2u] = '\0';
+
+  char proveLine[256];
+  snprintf(proveLine, sizeof(proveLine), "SC_AUTH_PROVE %s\n", hex);
+  const char *proveReply = sendSerialLine(proveLine);
+  TEST_ASSERT_NOT_NULL(proveReply);
+  TEST_ASSERT_NOT_NULL_MESSAGE(strstr(proveReply, "AUTH_OK"),
+                               "expected SC_OK AUTH_OK after PROVE");
 }

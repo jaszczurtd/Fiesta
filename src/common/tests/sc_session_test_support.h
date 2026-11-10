@@ -28,6 +28,11 @@ void buildFrame(uint16_t seq, const char *payload, char *out, size_t out_size);
  *  line the firmware wrote. */
 const char *sendRawSerialLine(const char *line);
 
+/** Frames @p first and @p second (payloads without line ends) with
+ *  nextTestSeq() back to back into one receive buffer, drains both with a
+ *  single session tick and returns the last line the firmware wrote. */
+const char *sendTwoLinesInOnePoll(const char *first, const char *second);
+
 /** Frames @p inner_with_eol (trailing CR/LF dropped) with nextTestSeq(),
  *  sends it and returns the unwrapped payload of the reply, so substring
  *  assertions keep working. Asserts that the reply is a valid frame with the
@@ -36,3 +41,8 @@ const char *sendSerialLine(const char *inner_with_eol);
 
 /** Sends HELLO and asserts that the session is active with a non-zero id. */
 void performHello(void);
+
+/** HELLO, SC_AUTH_BEGIN and SC_AUTH_PROVE with real HMAC-SHA256 against the
+ *  mock device UID, as the host does before every authenticated command;
+ *  asserts that the session ends up authenticated. */
+void performAuth(void);

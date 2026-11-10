@@ -1,7 +1,9 @@
 #include "../../common/scDefinitions/sc_fiesta_module_tokens.h"
+#include "../../common/test_runner/test_runner.h"
 #include "../../common/tests/sc_session_test_support.h"
 #include "can.h"
 #include "clocksState.h"
+#include "clocksTests.h"
 #include "config.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/serial/hal_serial_frame.h"
@@ -10,14 +12,18 @@
 #include <stdio.h>
 #include <string.h>
 
-/* CAN publication is real; drawing and backlight are unrelated to SC. */
-void updateCluster(void) {}
+/* CAN publication and the cluster tests are real; the backlight is not. */
 int getLcdBrightness(void) { return 0; }
 
 void setUp(void) {
   configSessionInit();
   hal_mock_serial_reset();
   hal_mock_set_millis(0);
+  // Authentication challenges draw on the secure random source.
+  hal_mock_secure_random_reset();
+  hal_mock_secure_random_set_seed(0x0123456789ABCDEFull);
+  hal_mock_secure_random_set_status(HAL_OK);
+  TEST_ASSERT_TRUE(initClocksTests()); // core 0 registers the cluster tests
   clocksStateInit();
   const clocks_local_snapshot_t empty = {};
   clocksStatePublishLocal(&empty);
@@ -71,23 +77,11 @@ void test_clocks_hello_uses_current_millis_in_session_id(void) {
 void test_clocks_handles_multiple_hello_commands_in_one_rx_buffer(void) {
   /* Stream two framed HELLOs back-to-back to verify the byte parser keeps
    * the session active across boundaries and drains them in order. */
-  char frame_a[160];
-  char frame_b[160];
-  buildFrame(nextTestSeq(), "HELLO", frame_a, sizeof(frame_a));
-  buildFrame(nextTestSeq(), "HELLO", frame_b, sizeof(frame_b));
-
-  char both[400];
-  TEST_ASSERT_TRUE(strlen(frame_a) + strlen(frame_b) < sizeof(both));
-  snprintf(both, sizeof(both), "%s%s", frame_a, frame_b);
-
-  hal_mock_serial_reset();
-  hal_mock_serial_inject_rx(both, -1);
-  configSessionTick();
+  const char *raw = sendTwoLinesInOnePoll("HELLO", "HELLO");
 
   TEST_ASSERT_TRUE(configSessionActive());
   TEST_ASSERT_EQUAL_UINT32(((uint32_t)2u << 20), configSessionId());
 
-  const char *raw = hal_mock_serial_last_line();
   TEST_ASSERT_NOT_NULL(raw);
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "OK HELLO"));
   TEST_ASSERT_NOT_EQUAL(NULL, strstr(raw, "module=" SC_MODULE_TOKEN_CLOCKS));
@@ -319,8 +313,124 @@ void test_live_values_refresh_and_expire_without_the_ecu(void) {
   TEST_ASSERT_EQUAL_INT(0, scalar(response, "egt1_c"));
 }
 
+void test_clocks_offers_the_five_cluster_tests_behind_authentication(void) {
+  performHello();
+  const char *response = sendSerialLine("SC_TEST_LIST\n");
+  TEST_ASSERT_EQUAL_STRING(
+      "SC_OK TEST_LIST count=5 names=charge,oil,rpm,speed,buzzer", response);
+  // The step time is listed under every test, owned by the sequence.
+  response = sendSerialLine("SC_TEST_PARAM step_ms\n");
+  TEST_ASSERT_EQUAL_STRING("SC_OK TEST_PARAM id=step_ms test=all value=2000 "
+                           "min=1200 max=10000 default=2000 unit=ms",
+                           response);
+  // A run changes the outputs, so it needs the authenticated session.
+  response = sendSerialLine("SC_TEST_RUN charge\n");
+  TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", response);
+  TEST_ASSERT_NULL(clocksTestsActiveName());
+  // So do the other commands that change the test state.
+  static const char *const changing[] = {"SC_TEST_SET step_ms 3000\n",
+                                         "SC_TEST_STOP\n", "SC_TEST_SKIP\n"};
+  for (const char *line : changing) {
+    TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", sendSerialLine(line));
+  }
+  TEST_ASSERT_EQUAL_INT32(2000, fiesta_test_param(0u));
+}
+
+static void startChargeTest(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, clocksTestsScOps()->run(nullptr, "charge"));
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("charge", clocksTestsActiveName());
+}
+
+static void assertStoppedBySessionEnd(void) {
+  (void)tickClocksTests();
+  TEST_ASSERT_NULL(clocksTestsActiveName());
+  sc_command_test_status_t status = {};
+  clocksTestsScOps()->status(nullptr, &status);
+  TEST_ASSERT_EQUAL_STRING("session_end", status.result);
+}
+
+static const char *replyOf(const char *line) {
+  const char *reply = sendSerialLine(line);
+  TEST_ASSERT_NOT_NULL(reply);
+  return reply;
+}
+
+void test_clocks_host_controls_a_sequence_across_its_authentications(void) {
+  // The configurator authenticates before every control, HELLO first.
+  performAuth();
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_RUN all\n"), "SC_OK"));
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("charge", clocksTestsActiveName());
+  performAuth(); // Skip
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("charge", clocksTestsActiveName());
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_SKIP\n"), "SC_OK"));
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("oil", clocksTestsActiveName());
+  performAuth(); // Stop
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_STOP\n"), "SC_OK"));
+  (void)tickClocksTests();
+  TEST_ASSERT_NULL(clocksTestsActiveName());
+  sc_command_test_status_t status = {};
+  clocksTestsScOps()->status(nullptr, &status);
+  TEST_ASSERT_EQUAL_STRING("stopped", status.result);
+}
+
+void test_clocks_bye_and_hello_in_one_poll_stop_the_previous_test(void) {
+  performHello();
+  const uint32_t owner = configSessionId();
+  startChargeTest();
+  (void)sendTwoLinesInOnePoll("SC_BYE", "HELLO");
+  TEST_ASSERT_TRUE(configSessionActive());
+  TEST_ASSERT_NOT_EQUAL(owner, configSessionId());
+  assertStoppedBySessionEnd();
+}
+
+void test_clocks_a_refused_run_keeps_the_end_of_the_previous_session(void) {
+  // A sequence runs and its Skip still waits for core 0 when the session
+  // ends; the next session's run is refused as busy.
+  performAuth();
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_RUN all\n"), "SC_OK"));
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("charge", clocksTestsActiveName());
+  performAuth();
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_SKIP\n"), "SC_OK"));
+  (void)replyOf("SC_BYE\n");
+  performAuth();
+  TEST_ASSERT_NOT_NULL(strstr(replyOf("SC_TEST_RUN rpm\n"), "BUSY"));
+  // Core 0 takes the Skip, and the sequence stops instead of going on.
+  assertStoppedBySessionEnd();
+}
+
+void test_clocks_an_end_seen_without_a_test_spares_the_next_one(void) {
+  performHello();
+  (void)replyOf("SC_BYE\n"); // reported while nothing runs
+  performHello();
+  startChargeTest(); // the run clears the stale report
+  configSessionTick();
+  (void)tickClocksTests();
+  TEST_ASSERT_EQUAL_STRING("charge", clocksTestsActiveName());
+}
+
+void test_clocks_session_end_stops_a_running_cluster_test(void) {
+  performHello();
+  startChargeTest();
+  // The goodbye ends the session; configSessionTick() reports it to the
+  // runner, which stops the test on the next tick of core 0.
+  (void)replyOf("SC_BYE\n");
+  TEST_ASSERT_FALSE(configSessionActive());
+  assertStoppedBySessionEnd();
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_clocks_offers_the_five_cluster_tests_behind_authentication);
+  RUN_TEST(test_clocks_session_end_stops_a_running_cluster_test);
+  RUN_TEST(test_clocks_host_controls_a_sequence_across_its_authentications);
+  RUN_TEST(test_clocks_an_end_seen_without_a_test_spares_the_next_one);
+  RUN_TEST(test_clocks_a_refused_run_keeps_the_end_of_the_previous_session);
+  RUN_TEST(test_clocks_bye_and_hello_in_one_poll_stop_the_previous_test);
   RUN_TEST(test_clocks_config_session_init_resets_active_state);
   RUN_TEST(test_clocks_hello_uses_current_millis_in_session_id);
   RUN_TEST(test_clocks_handles_multiple_hello_commands_in_one_rx_buffer);

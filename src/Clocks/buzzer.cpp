@@ -1,7 +1,7 @@
 
 #include "buzzer.h"
 
-Buzzer *buzzers[BUZZER_COUNT] = { NULL, NULL, NULL };
+Buzzer *buzzers[BUZZER_COUNT] = {NULL, NULL, NULL};
 
 void initBuzzers(void) {
   buzzers[BUZZER_SHORT] = new Buzzer(BUZZER_SHORT);
@@ -10,55 +10,34 @@ void initBuzzers(void) {
 }
 
 void startBuzzer(int number) {
-  if(buzzers[number] != NULL) {
+  if (buzzers[number] != NULL) {
     buzzers[number]->start();
   }
 }
 
 BuzzerSignal buzzer_short[] = {
-  {BUZZER_DELAY, 10},
-  {BUZZER_ON, 20},
-  {BUZZER_OFF, 250}, 
-  {BUZZER_ON, 20},
-  {BUZZER_OFF, 250}, 
-  {BUZZER_ON, 20},
-  {BUZZER_DELAY, 50},
-  {-1, 0}
-};
+    {BUZZER_DELAY, 10}, {BUZZER_ON, 20}, {BUZZER_OFF, 250},  {BUZZER_ON, 20},
+    {BUZZER_OFF, 250},  {BUZZER_ON, 20}, {BUZZER_DELAY, 50}, {-1, 0}};
 
 BuzzerSignal buzzer_middle[] = {
-  {BUZZER_DELAY, 100},
-  {BUZZER_ON, 50},
-  {BUZZER_OFF, 100}, 
-  {BUZZER_ON, 50},
-  {BUZZER_OFF, 100}, 
-  {BUZZER_ON, 50},
-  {BUZZER_DELAY, 10},
-  {-1, 0}
-};
+    {BUZZER_DELAY, 100}, {BUZZER_ON, 50}, {BUZZER_OFF, 100},  {BUZZER_ON, 50},
+    {BUZZER_OFF, 100},   {BUZZER_ON, 50}, {BUZZER_DELAY, 10}, {-1, 0}};
 
 BuzzerSignal buzzer_long[] = {
-  {BUZZER_DELAY, 300},
-  {BUZZER_ON, 70},
-  {BUZZER_OFF, 100}, 
-  {BUZZER_ON, 70},
-  {BUZZER_OFF, 100}, 
-  {BUZZER_ON, 70},
-  {BUZZER_DELAY, 10},
-  {-1, 0}
-};
+    {BUZZER_DELAY, 300}, {BUZZER_ON, 70}, {BUZZER_OFF, 100},  {BUZZER_ON, 70},
+    {BUZZER_OFF, 100},   {BUZZER_ON, 70}, {BUZZER_DELAY, 10}, {-1, 0}};
 
 void loopBuzzers(void) {
-  for(int a = 0; a < BUZZER_COUNT; a++) {
-    if(buzzers[a] != NULL) {
+  for (int a = 0; a < BUZZER_COUNT; a++) {
+    if (buzzers[a] != NULL) {
       buzzers[a]->loop();
     }
   }
 }
 
 void stopAllBuzzers(void) {
-  for(int a = 0; a < BUZZER_COUNT; a++) {
-    if(buzzers[a] != NULL) {
+  for (int a = 0; a < BUZZER_COUNT; a++) {
+    if (buzzers[a] != NULL) {
       buzzers[a]->stop();
     }
   }
@@ -76,20 +55,16 @@ void Buzzer::initHardware(int pin) {
   Buzzer::disposal();
 }
 
-void Buzzer::acquire() {
-  Buzzer::buzzerActive++;
-}
+void Buzzer::acquire() { Buzzer::buzzerActive++; }
 
 void Buzzer::disposal() {
   Buzzer::buzzerActive--;
-  if(Buzzer::buzzerActive < 0) {
+  if (Buzzer::buzzerActive < 0) {
     Buzzer::buzzerActive = 0;
   }
 }
 
-bool Buzzer::isActive() {
-  return Buzzer::buzzerActive > 0;
-}
+bool Buzzer::isActive() { return Buzzer::buzzerActive > 0; }
 
 Buzzer::Buzzer(int type) {
   this->type = type;
@@ -99,32 +74,31 @@ Buzzer::Buzzer(int type) {
   buzzerOn(false);
 }
 
-void Buzzer::buzzerOn(bool state) {
-  hal_gpio_write(Buzzer::pin, !state);
-}
+void Buzzer::buzzerOn(bool state) { hal_gpio_write(Buzzer::pin, !state); }
 
 void Buzzer::start() {
-  if(Buzzer::isActive()) {
+  if (Buzzer::isActive()) {
     return;
   }
   Buzzer::acquire();
-  switch(type) {
-    case BUZZER_SHORT:
-      currentBuzzer = buzzer_short;
-      break;
-    case BUZZER_MIDDLE:
-      currentBuzzer = buzzer_middle;
-      break;
-    case BUZZER_LONG:
-      currentBuzzer = buzzer_long;
-      break;
-    default:
-      currentBuzzer = NULL;
-      break;
+  switch (type) {
+  case BUZZER_SHORT:
+    currentBuzzer = buzzer_short;
+    break;
+  case BUZZER_MIDDLE:
+    currentBuzzer = buzzer_middle;
+    break;
+  case BUZZER_LONG:
+    currentBuzzer = buzzer_long;
+    break;
+  default:
+    currentBuzzer = NULL;
+    break;
   }
-  if(currentBuzzer != NULL) {
+  if (currentBuzzer != NULL) {
     currentIndex = 0;
-    timeBuzzer = hal_millis() + currentBuzzer[currentIndex].duration;
+    phaseStartMs = hal_millis();
+    phaseMs = currentBuzzer[currentIndex].duration;
     started = true;
   }
 }
@@ -137,25 +111,27 @@ void Buzzer::stop() {
 }
 
 void Buzzer::loop() {
-  if(started) {
-    if(currentBuzzer == NULL) {
+  if (started) {
+    if (currentBuzzer == NULL) {
       derr("unknown buzzer!\n");
       stop();
       return;
     }
 
-    if(timeBuzzer <= hal_millis()) {
-      timeBuzzer = hal_millis() + currentBuzzer[currentIndex].duration;        
-      switch(currentBuzzer[currentIndex].type) {
-        case BUZZER_ON:
-          buzzerOn(true);
-          break;
-        case BUZZER_OFF:
-        case BUZZER_DELAY:
-          buzzerOn(false);
-          break;
+    const uint32_t nowMs = hal_millis();
+    if (hal_elapsed_u32(nowMs, phaseStartMs, phaseMs)) {
+      phaseStartMs = nowMs;
+      phaseMs = currentBuzzer[currentIndex].duration;
+      switch (currentBuzzer[currentIndex].type) {
+      case BUZZER_ON:
+        buzzerOn(true);
+        break;
+      case BUZZER_OFF:
+      case BUZZER_DELAY:
+        buzzerOn(false);
+        break;
       }
-      
+
       currentIndex++;
       if (currentBuzzer[currentIndex].type == -1) {
         stop();

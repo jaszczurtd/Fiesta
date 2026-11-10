@@ -61,9 +61,11 @@ obecnie nie blokuje dalszych prób.
 
 Sesja nie ma timeoutu i nie wykrywa zamknięcia portu; kończy ją `SC_BYE`.
 `HELLO` w aktywnej sesji nadaje nowy identyfikator i usuwa uwierzytelnienie,
-ale pozostawia sesję aktywną. Host ponawia `HELLO` tylko po
-`SC_NOT_READY HELLO_REQUIRED`. Pozostałe `SC_NOT_READY` pochodzą z aktywnej
-sesji, więc nowe `HELLO` usunęłoby uwierzytelnienie potrzebne do ponowienia.
+ale pozostawia sesję aktywną, a z nią trwający test konfiguratora: host
+zaczyna każde uwierzytelnienie od `HELLO`. Mechanizm ponowień hosta wysyła
+`HELLO` ponownie tylko po `SC_NOT_READY HELLO_REQUIRED`. Pozostałe
+`SC_NOT_READY` pochodzą z aktywnej sesji, więc nowe `HELLO` usunęłoby
+uwierzytelnienie potrzebne do ponowienia.
 
 `SC_BYE` odpowiada `SC_OK BYE`, kończy sesję i usuwa oczekujące wyzwanie.
 Działa także bez `HAL_ENABLE_CRYPTO`. GUI wysyła je do wykrytych modułów przy
@@ -167,7 +169,7 @@ SC_TEST_INFO cyclic         -> SC_OK TEST_INFO name=cyclic seq=1 params=cyclic_p
 SC_TEST_PARAM cyclic_passes -> SC_OK TEST_PARAM id=cyclic_passes test=cyclic value=4 min=1 max=100 default=4 unit=count
 SC_TEST_SET cyclic_passes 2 -> SC_OK TEST_SET id=cyclic_passes value=2
 SC_TEST_RUN all             -> SC_OK TEST_RUN name=all
-SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=250 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
+SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=228 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
 ```
 
 - **Sekwencja:** `seq=1` w opisie włącza test do `SC_TEST_RUN all` w kolejności
@@ -180,6 +182,10 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   w dziesiątych częściach procenta skoku oraz `last`/`result` ostatniego testu.
   Pozostałe klucze opisują postęp, np. profil, szybkość, losowy cel, schodek
   lub fazę potencjometru. Nieznane klucze host pokazuje bez interpretacji.
+  `rate` testu `cyclic` to tempo zadania zmierzone w ostatnim pełnym cyklu
+  bieżącego profilu (200 % skoku na cykl), nie tempo nominalne kroku. Klucz
+  pojawia się dopiero po pierwszym pełnym cyklu tego profilu, więc nigdy nie
+  przenosi wartości poprzedniego profilu. Test `pot` podaje tempo ustawione.
   ECU odświeża położenie i postęp tylko podczas odpytywania przez hosta,
   w pętli zwalniającej kolejne kroki sterowania. Pierwszy status po przerwie
   może zawierać ostatnio opublikowane dane; kolejne odczyty widzą aktualizację
@@ -191,8 +197,9 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   `SC_NOT_READY BUSY`, gdy poprzednie żądanie czeka na rdzeń sterujący.
   Rdzeń odbiera jedno żądanie na takt; zajęte żądanie należy ponowić.
 
-ECU zatrzymuje test konfiguratora po końcu sesji (`SC_BYE`) albo po
-`ECU_SC_TESTS_KEEPALIVE_MS` (3 s) bez polecenia testowego, w tym statusu.
+ECU zatrzymuje test konfiguratora po końcu sesji (`SC_BYE`, także gdy zaraz po
+nim przyjdzie nowe `HELLO`) albo po `ECU_SC_TESTS_KEEPALIVE_MS` (3 s) bez
+polecenia testowego, w tym statusu.
 Host musi odpytywać status do końca testu.
 
 Testy funkcjonalne są włączone tylko w wariancie ECU `BENCH`. Domyślne
@@ -201,7 +208,8 @@ aby stanowisko mogło podawać RPM z generatora przy nieruchomym silniku.
 Build z `ECU_SC_TESTS_RPM_INTERLOCK=1` odrzuca start testu konfiguratora
 i zatrzymuje już działający test po przekroczeniu `ECU_SC_TESTS_RPM_LIMIT`
 rpm. Testy uruchomione z konsoli stanowiskowej należą do operatora;
-koniec sesji, timeout keepalive i ta blokada RPM ich nie zatrzymują.
+koniec sesji, timeout keepalive i ta blokada RPM ich nie zatrzymują. Konsola
+ma własny, opcjonalny nadzór (`watch <ms>`, opis w README ECU).
 
 ECU bez testów odpowiada `count=0`; firmware bez poleceń zwraca
 `SC_UNKNOWN_CMD`. W obu przypadkach host pokazuje „No tests available".

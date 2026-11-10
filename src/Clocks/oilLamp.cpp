@@ -1,6 +1,7 @@
 #include "oilLamp.h"
 #include "clocksState.h"
 #include "lampBlink.h"
+#include "testOutputs.h"
 
 #include <JaszczurHAL.h>
 
@@ -42,5 +43,11 @@ void updateOilLamp(void) {
   input.senderFault = local.oilSenderFault;
   input.valid = local.oilValid;
   input.bar = local.oilBar;
-  hal_gpio_write(JH_HW_NODE_OIL_LAMP_PIN_OUT, oilLamp.process(input));
+  // The sender evaluation keeps running; a test replaces only the level.
+  bool lit = oilLamp.process(input);
+  bool testLit = false;
+  if (testOutputsLamp(TEST_OUTPUT_OIL, input.nowMs, &testLit)) {
+    lit = testLit;
+  }
+  hal_gpio_write(JH_HW_NODE_OIL_LAMP_PIN_OUT, lit);
 }
