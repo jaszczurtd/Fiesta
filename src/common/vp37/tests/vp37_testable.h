@@ -11,6 +11,9 @@ extern "C" {
 #endif
 
 float VP37_strokeTaper(const float *knots, size_t count, float percent);
+int32_t VP37_latchLockStep(VP37LatchLock *lock, uint32_t stepStartUs,
+                           uint32_t periodUs, bool latchFresh,
+                           uint32_t latchUs);
 uint32_t VP37_snapshotBegin(const VP37Pump *self);
 bool VP37_snapshotEnd(const VP37Pump *self, uint32_t sequence);
 

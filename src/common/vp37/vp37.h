@@ -401,6 +401,17 @@ typedef struct {
   float supplyVolts;  /**< Supply of the newest good frame [V]. */
 } VP37Status;
 
+/** @brief Phase lock of the control grid to the latch of the quantity PWM. */
+typedef struct {
+  int32_t trimQ16;        /**< Learned period correction [us / 65536 per
+                               step]; kept while no latch is measured. */
+  int32_t residualQ16;    /**< Part of the correction not applied yet. */
+  int32_t errorUs;        /**< Latest lead error, measured minus wanted [us]. */
+  uint32_t sequence;      /**< Scan block the lock used last. */
+  uint32_t writeOffsetUs; /**< Step start to PWM write of the latest driven
+                               step [us]; zero before the first one. */
+} VP37LatchLock;
+
 #if VP37_TELEMETRY_ENABLED
 /** @brief The pump as the bench telemetry prints it. */
 typedef struct {
@@ -478,6 +489,7 @@ typedef struct {
       controlExecUs; /**< Execution time of the latest control step [us]. */
   uint32_t controlSequence;
   bool controlStarted;
+  VP37LatchLock latchLock; /**< Grid phase against the quantity PWM latch. */
   bool pidStarted;
   uint32_t pidLastUs;
   uint32_t pidDtUs;

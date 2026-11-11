@@ -6,6 +6,7 @@
 #include "vp37_internal.h"
 
 #include "../fiesta_sensor_helpers.h"
+#include "../vp37_drive_config.h"
 #include <math.h>
 #include <string.h>
 
@@ -33,6 +34,10 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle);
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_writeQuantityPWM(VP37Pump *self, int32_t pwm);
+TESTABLE_STATIC int32_t VP37_latchLockStep(VP37LatchLock *lock,
+                                           uint32_t stepStartUs,
+                                           uint32_t periodUs, bool latchFresh,
+                                           uint32_t latchUs);
 
 static bool VP37_alwaysAllowDrive(void) { return true; }
 static void VP37_noWatchdog(void) {}
@@ -189,6 +194,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->controlLateWindowUs = 0U;
   self->controlLateMaxUs = 0U;
   self->controlOverruns = 0U;
+  (void)memset(&self->latchLock, 0, sizeof(self->latchLock));
   self->controlExecUs = 0U;
   self->pid.terms = (hal_pid_terms_t){0};
   self->pid.softFloorActive = false;
@@ -481,6 +487,60 @@ bool HAL_RAM_FUNC(VP37_controlDueWithin)(const VP37Pump *self, uint32_t nowUs,
   return !self->controlStarted || ((int32_t)remainingUs <= (int32_t)marginUs);
 }
 
+/**
+ * @brief Correction of the next control deadline that keeps the PWM write a
+ * fixed time ahead of the hardware latch.
+ * @param lock Lock state of the pump.
+ * @param stepStartUs Start of the step in progress [us, hal_micros()].
+ * @param periodUs Control period of the grid [us].
+ * @param latchFresh True when latchUs comes from a scan block the lock has
+ * not used yet.
+ * @param latchUs Measured latch of the quantity PWM [us, hal_micros()].
+ * @return Microseconds to add to the plain grid step; zero while the control
+ * period is not the PWM period or no driven step was written yet.
+ * @note The learned period trim keeps the phase while the actuator is
+ * released and the scan sees no latch.
+ */
+TESTABLE_STATIC int32_t VP37_latchLockStep(VP37LatchLock *lock,
+                                           uint32_t stepStartUs,
+                                           uint32_t periodUs, bool latchFresh,
+                                           uint32_t latchUs) {
+  if (periodUs != (1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ)) {
+    lock->trimQ16 = 0;
+    lock->residualQ16 = 0;
+    lock->errorUs = 0;
+    return 0;
+  }
+  const uint32_t ageUs = (stepStartUs + lock->writeOffsetUs) - latchUs;
+  if (latchFresh && (lock->writeOffsetUs > 0U) &&
+      (lock->writeOffsetUs < periodUs) &&
+      (ageUs < VP37_LATCH_LOCK_MAX_AGE_US)) {
+    // Time the write of this step would wait for the next latch.
+    const uint32_t leadUs = periodUs - (ageUs % periodUs);
+    const uint32_t halfUs = periodUs / 2U;
+    int32_t errorUs = (int32_t)leadUs - (int32_t)VP37_LATCH_LOCK_LEAD_US;
+    if (errorUs > (int32_t)halfUs) {
+      errorUs -= (int32_t)periodUs;
+    }
+    lock->errorUs = errorUs;
+    // A lead longer than wanted means the write comes too early. The share
+    // keeps its fraction, so a small error is corrected too and the learned
+    // trim settles on the period instead of on a rounding step.
+    const int32_t stepLimit = VP37_LATCH_LOCK_STEP_US * 65536;
+    lock->residualQ16 +=
+        hal_constrain(errorUs * (65536 / VP37_LATCH_LOCK_ERROR_DIVISOR),
+                      -stepLimit, stepLimit);
+    const int32_t trimLimit = VP37_LATCH_LOCK_TRIM_LIMIT_US * 65536;
+    lock->trimQ16 =
+        hal_constrain(lock->trimQ16 + (errorUs * VP37_LATCH_LOCK_TRIM_GAIN_Q16),
+                      -trimLimit, trimLimit);
+  }
+  lock->residualQ16 += lock->trimQ16;
+  const int32_t whole = lock->residualQ16 / 65536;
+  lock->residualQ16 -= whole * 65536;
+  return whole;
+}
+
 void VP37_process(VP37Pump *self) {
   if (!self->vp37Initialized) {
     // A stop outside the step: publish it once and complete a running trace.
@@ -514,7 +574,14 @@ void VP37_process(VP37Pump *self) {
     self->controlDueUs = nowUs + periodUs;
     self->controlOverruns++;
   } else {
-    self->controlDueUs += periodUs;
+    const bool latchFresh =
+        self->scan.cycleResult.latchValid &&
+        (self->scan.cycleResultSequence != self->latchLock.sequence);
+    self->latchLock.sequence = self->scan.cycleResultSequence;
+    self->controlDueUs +=
+        periodUs + (uint32_t)VP37_latchLockStep(&self->latchLock, nowUs,
+                                                periodUs, latchFresh,
+                                                self->scan.cycleResult.latchUs);
     // The window maximum sizes the guard of the control core; a stall of a
     // whole period (flash, start-up) is counted above instead.
     if ((uint32_t)lateUs > self->controlLateWindowUs) {
@@ -938,8 +1005,11 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   if (self->thermal.scaleHeld && self->thermal.scaleHoldCurrent) {
     currentNominal *= self->thermal.scale / VP37_thermalSource(self);
   }
+  const uint32_t writeUs = hal_micros();
+  // The latch lock places the next deadline by where this write fell.
+  self->latchLock.writeOffsetUs = writeUs - self->controlLastUs;
   VP37_recordCurrentCommand(self, currentNominal, self->output.finalPWM,
-                            hal_micros());
+                            writeUs);
   VP37_writeQuantityPWM(self, self->output.finalPWM);
 }
 

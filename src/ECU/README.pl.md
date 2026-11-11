@@ -37,6 +37,16 @@ i odczytywane atomowo z porządkiem relaxed, więc kopia nakładająca się na
 publikację zostaje odrzucona bez wyścigu danych. Sterowanie nie czeka na
 telemetrię ani aktualizację wartości globalnych.
 
+Sterownik PWM nie potrafi wytworzyć dokładnie okresu siatki sterowania, więc
+swobodna siatka przesuwałaby się przez cały okres PWM (około 40 µs na sekundę
+przy 200 Hz), a komenda czekałaby na zatrzask od zera do 5 ms. Siatka podąża
+więc za zatrzaskiem mierzonym w skanie prądu: każdy krok przesuwa następny
+termin najwyżej o `VP37_LATCH_LOCK_STEP_US`, tak aby zapis PWM wypadał
+`VP37_LATCH_LOCK_LEAD_US` przed zatrzaskiem. Blokada uczy się też różnicy
+okresów i stosuje ją dalej, gdy nastawnik jest zwolniony i zatrzasku nie widać.
+Działa tylko wtedy, gdy okres sterowania równa się okresowi PWM; przy innym
+okresie stanowiskowym albo wyłączonym skanie prądu siatka jest zwykła.
+
 Telemetria stanowiskowa czeka na rdzeniu 0 na zakończenie kroku przed
 formatowaniem raportu: pobieranie kodu z flash na tym rdzeniu wydłużało krok
 średnio o około 300 µs. Bufor śladu zmienia właściciela przez jeden atomowy

@@ -275,6 +275,40 @@ JB_STATIC_ASSERT((VP37_CONTROL_LATE_WINDOW_STEPS >= 10U) &&
 #define VP37_CURRENT_CONTROL_MAX_AGE_US 25000U
 /** PWM writes near a measured wrap have ambiguous latch ownership. */
 #define VP37_CURRENT_CONTROL_EDGE_GUARD_US 100U
+/** Wanted time from the PWM write of a control step to the hardware latch of
+ * the quantity PWM [us]. The backend period of the nominal PWM frequency is
+ * not exactly the control period, so a free grid walks through the whole PWM
+ * period and the write waits anything from nothing to a full period for its
+ * latch (bench 2026-11-11: 40 us per second, one turn in 123 s). The grid
+ * follows the measured latch instead and keeps the write this far ahead of
+ * it, clear of the edge guard and of the jitter of the step itself. */
+#define VP37_LATCH_LOCK_LEAD_US 700U
+/** Share of the measured lead error one step corrects, as a divisor. */
+#define VP37_LATCH_LOCK_ERROR_DIVISOR 8
+/** Largest correction of the grid in one step [us]. */
+#define VP37_LATCH_LOCK_STEP_US 20
+/** Period trim learned from one microsecond of lead error [us / 65536 per
+ * step]; it carries the lock through a released actuator, where no latch is
+ * measured. */
+#define VP37_LATCH_LOCK_TRIM_GAIN_Q16 33
+/** Bound of the learned period trim [us per step]. */
+#define VP37_LATCH_LOCK_TRIM_LIMIT_US 2
+/** Oldest measured latch a step still uses [us]. */
+#define VP37_LATCH_LOCK_MAX_AGE_US 100000U
+JB_STATIC_ASSERT((VP37_LATCH_LOCK_LEAD_US >
+                  (2U * VP37_CURRENT_CONTROL_EDGE_GUARD_US)) &&
+                     (VP37_LATCH_LOCK_LEAD_US <= 2000U),
+                 "VP37_LATCH_LOCK_LEAD_US clears the edge guard and stays a "
+                 "small part of the PWM period");
+JB_STATIC_ASSERT((VP37_LATCH_LOCK_ERROR_DIVISOR >= 1) &&
+                     (VP37_LATCH_LOCK_ERROR_DIVISOR <= 64) &&
+                     (VP37_LATCH_LOCK_STEP_US >= 1) &&
+                     (VP37_LATCH_LOCK_STEP_US <= 100) &&
+                     (VP37_LATCH_LOCK_TRIM_GAIN_Q16 >= 0) &&
+                     (VP37_LATCH_LOCK_TRIM_GAIN_Q16 <= 1024) &&
+                     (VP37_LATCH_LOCK_TRIM_LIMIT_US >= 1) &&
+                     (VP37_LATCH_LOCK_TRIM_LIMIT_US <= 10),
+                 "the latch lock moves the grid by a small share of a period");
 /** Allow scan quantization when matching observed and delivered duty. */
 #define VP37_CURRENT_CONTROL_DUTY_TOLERANCE 24
 /** Covers delayed observations at the normal 5 ms control period. */

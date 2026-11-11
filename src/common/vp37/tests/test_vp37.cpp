@@ -7273,6 +7273,153 @@ void test_vp37_control_grid_keeps_the_deadline_after_a_late_start(void) {
   TEST_ASSERT_EQUAL_UINT32(0U, pump->controlOverruns);
 }
 
+/** @brief Lock state after a driven step that wrote 1500 us into the step. */
+static VP37LatchLock latchLockAfterWrite(void) {
+  VP37LatchLock lock = {};
+  lock.writeOffsetUs = 1500U;
+  return lock;
+}
+
+/** @brief One lock step whose write would wait leadUs for its latch. */
+static int32_t latchLockStepWithLead(VP37LatchLock *lock, uint32_t leadUs) {
+  const uint32_t stepStartUs = 1000000U;
+  const uint32_t latchUs =
+      stepStartUs + lock->writeOffsetUs + leadUs - (3U * 5000U);
+  return VP37_latchLockStep(lock, stepStartUs, 5000U, true, latchUs);
+}
+
+void test_latch_lock_moves_the_grid_toward_the_wanted_lead(void) {
+  const uint32_t wanted = VP37_LATCH_LOCK_LEAD_US;
+  VP37LatchLock lock = latchLockAfterWrite();
+  // On the wanted lead nothing moves.
+  TEST_ASSERT_EQUAL_INT32(0, latchLockStepWithLead(&lock, wanted));
+  TEST_ASSERT_EQUAL_INT32(0, lock.errorUs);
+  // A write too early waits too long: the grid moves later, by a share of
+  // the error and at most one bounded step.
+  lock = latchLockAfterWrite();
+  TEST_ASSERT_EQUAL_INT32(
+      2, latchLockStepWithLead(&lock,
+                               wanted + 2U * VP37_LATCH_LOCK_ERROR_DIVISOR));
+  TEST_ASSERT_EQUAL_INT32(2 * VP37_LATCH_LOCK_ERROR_DIVISOR, lock.errorUs);
+  lock = latchLockAfterWrite();
+  TEST_ASSERT_EQUAL_INT32(VP37_LATCH_LOCK_STEP_US,
+                          latchLockStepWithLead(&lock, wanted + 1300U));
+  // A write too late moves the grid earlier.
+  lock = latchLockAfterWrite();
+  TEST_ASSERT_EQUAL_INT32(-VP37_LATCH_LOCK_STEP_US,
+                          latchLockStepWithLead(&lock, wanted - 500U));
+  TEST_ASSERT_EQUAL_INT32(-500, lock.errorUs);
+}
+
+void test_latch_lock_takes_the_short_way_around_the_pwm_period(void) {
+  VP37LatchLock lock = latchLockAfterWrite();
+  // A lead of nearly a whole period is a write just after the latch: moving
+  // earlier by a little reaches the wanted lead, not later by most of it.
+  TEST_ASSERT_EQUAL_INT32(-VP37_LATCH_LOCK_STEP_US,
+                          latchLockStepWithLead(&lock, 4900U));
+  TEST_ASSERT_EQUAL_INT32(4900 - (int32_t)VP37_LATCH_LOCK_LEAD_US - 5000,
+                          lock.errorUs);
+}
+
+void test_latch_lock_needs_a_fresh_recent_latch_and_a_driven_step(void) {
+  VP37LatchLock lock = latchLockAfterWrite();
+  // The same scan block twice is one measurement.
+  TEST_ASSERT_EQUAL_INT32(
+      0, VP37_latchLockStep(&lock, 1000000U, 5000U, false, 990000U));
+  // A latch older than the limit says nothing about the phase now.
+  TEST_ASSERT_EQUAL_INT32(
+      0, VP37_latchLockStep(&lock, 1000000U, 5000U, true,
+                            1000000U - VP37_LATCH_LOCK_MAX_AGE_US));
+  TEST_ASSERT_EQUAL_INT32(0, lock.trimQ16);
+  // Before the first driven step there is no write to place.
+  VP37LatchLock idle = {};
+  TEST_ASSERT_EQUAL_INT32(
+      0, VP37_latchLockStep(&idle, 1000000U, 5000U, true, 990000U));
+  TEST_ASSERT_EQUAL_INT32(0, idle.trimQ16);
+}
+
+void test_latch_lock_stays_off_when_the_control_period_is_not_the_pwm_period(
+    void) {
+  VP37LatchLock lock = latchLockAfterWrite();
+  lock.trimQ16 = 40000;
+  lock.residualQ16 = 30000;
+  // A bench period of 4 ms has no fixed phase against the PWM to keep.
+  TEST_ASSERT_EQUAL_INT32(
+      0, VP37_latchLockStep(&lock, 1000000U, 4000U, true, 998000U));
+  TEST_ASSERT_EQUAL_INT32(0, lock.trimQ16);
+  TEST_ASSERT_EQUAL_INT32(0, lock.residualQ16);
+}
+
+/** @brief Lead of a write at writeUs against a PWM that latched at zero and
+ * every pwmPeriodUs since. */
+static int32_t simulatedLead(uint64_t writeUs, uint32_t pwmPeriodUs) {
+  return (int32_t)(pwmPeriodUs - (uint32_t)(writeUs % pwmPeriodUs));
+}
+
+void test_latch_lock_learns_the_pwm_period_and_holds_the_phase_without_a_latch(
+    void) {
+  // A PWM period 1 us shorter than the control period, five times the drift
+  // of the real backend: a free grid would walk through the whole PWM period
+  // every 5000 steps.
+  const uint32_t pwmPeriodUs = 4999U;
+  const int32_t wanted = (int32_t)VP37_LATCH_LOCK_LEAD_US;
+  VP37LatchLock lock = latchLockAfterWrite();
+  uint64_t stepUs = 20000000U;
+  for (unsigned step = 0U; step < 4000U; ++step) {
+    const uint64_t writeUs = stepUs + lock.writeOffsetUs;
+    const uint64_t latchUs = (writeUs / pwmPeriodUs) * pwmPeriodUs;
+    stepUs +=
+        5000U + (uint64_t)(int64_t)VP37_latchLockStep(
+                    &lock, (uint32_t)stepUs, 5000U, true, (uint32_t)latchUs);
+  }
+  TEST_ASSERT_INT32_WITHIN(
+      8, wanted, simulatedLead(stepUs + lock.writeOffsetUs, pwmPeriodUs));
+  TEST_ASSERT_INT32_WITHIN(65536 / 8, -65536, lock.trimQ16);
+  // Released actuator: no latch for 20 s. The learned trim keeps the grid on
+  // the PWM period, where the free grid would have drifted 4 ms.
+  for (unsigned step = 0U; step < 4000U; ++step) {
+    stepUs += 5000U + (uint64_t)(int64_t)VP37_latchLockStep(
+                          &lock, (uint32_t)stepUs, 5000U, false, 0U);
+  }
+  TEST_ASSERT_INT32_WITHIN(
+      150, wanted, simulatedLead(stepUs + lock.writeOffsetUs, pwmPeriodUs));
+}
+
+void test_latch_lock_bounds_the_learned_trim(void) {
+  VP37LatchLock lock = latchLockAfterWrite();
+  const int32_t limit = VP37_LATCH_LOCK_TRIM_LIMIT_US * 65536;
+  for (unsigned step = 0U; step < 20000U; ++step) {
+    (void)latchLockStepWithLead(&lock, VP37_LATCH_LOCK_LEAD_US + 2000U);
+  }
+  TEST_ASSERT_EQUAL_INT32(limit, lock.trimQ16);
+  for (unsigned step = 0U; step < 40000U; ++step) {
+    (void)latchLockStepWithLead(&lock, 100U);
+  }
+  TEST_ASSERT_EQUAL_INT32(-limit, lock.trimQ16);
+}
+
+void test_vp37_control_grid_follows_the_measured_latch(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  controlStepAt(pump, 100000U);
+  TEST_ASSERT_EQUAL_UINT32(105000U, pump->controlDueUs);
+  // The step at 105000 would write 1500 us in; the latch 1300 us after that
+  // write is 600 us further than wanted, so the next deadline moves later.
+  pump->latchLock.writeOffsetUs = 1500U;
+  pump->scan.cycleResult.latchValid = true;
+  pump->scan.cycleResult.latchUs =
+      105000U + 1500U + VP37_LATCH_LOCK_LEAD_US + 600U - 5000U;
+  pump->scan.cycleResultSequence++;
+  controlStepAt(pump, 105000U);
+  TEST_ASSERT_EQUAL_INT32(600, pump->latchLock.errorUs);
+  TEST_ASSERT_EQUAL_UINT32(110000U + (uint32_t)VP37_LATCH_LOCK_STEP_US,
+                           pump->controlDueUs);
+  // The same scan block is not used twice.
+  const uint32_t due = pump->controlDueUs;
+  controlStepAt(pump, due);
+  TEST_ASSERT_EQUAL_UINT32(due + 5000U, pump->controlDueUs);
+}
+
 void test_vp37_control_grid_restarts_after_a_whole_period_late(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
@@ -7664,6 +7811,15 @@ int main(void) {
 
   RUN_TEST(test_vp37_period_skips_duplicate_updates_and_handles_wrap);
   RUN_TEST(test_vp37_control_grid_keeps_the_deadline_after_a_late_start);
+  RUN_TEST(test_latch_lock_moves_the_grid_toward_the_wanted_lead);
+  RUN_TEST(test_latch_lock_takes_the_short_way_around_the_pwm_period);
+  RUN_TEST(test_latch_lock_needs_a_fresh_recent_latch_and_a_driven_step);
+  RUN_TEST(
+      test_latch_lock_stays_off_when_the_control_period_is_not_the_pwm_period);
+  RUN_TEST(
+      test_latch_lock_learns_the_pwm_period_and_holds_the_phase_without_a_latch);
+  RUN_TEST(test_latch_lock_bounds_the_learned_trim);
+  RUN_TEST(test_vp37_control_grid_follows_the_measured_latch);
   RUN_TEST(test_vp37_control_grid_restarts_after_a_whole_period_late);
   RUN_TEST(test_vp37_control_grid_crosses_the_microsecond_wrap);
   RUN_TEST(test_vp37_control_grid_starts_afresh_after_a_stop_and_a_new_start);

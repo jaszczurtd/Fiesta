@@ -34,6 +34,18 @@ for the deadline from RAM, so the step does not inherit the tail of that work.
 Once the deadline is reached, core 1 also services demand and stop commands.
 This keeps an overloaded loop responsive when the requested period is shorter
 than the work; it does not make that period achievable.
+
+The PWM backend cannot produce exactly the period of the control grid, so a
+free grid would slide through the whole PWM period (about 40 µs per second at
+200 Hz) and a command would wait anything from nothing to 5 ms for its latch.
+The grid therefore follows the latch that the current scan measures: each step
+moves the next deadline by at most `VP37_LATCH_LOCK_STEP_US`, so that the PWM
+write lands `VP37_LATCH_LOCK_LEAD_US` before the latch. The lock also learns
+the period difference and keeps applying it while the actuator is released and
+no latch is measured. It works only while the control period equals the PWM
+period; with another bench period or with the current scan off the grid is
+plain.
+
 The bench tests record their step announcements on core 1 and core 0 prints
 them, together with acknowledgements of default resets. A changed test demand
 waits for its announcement, at most
