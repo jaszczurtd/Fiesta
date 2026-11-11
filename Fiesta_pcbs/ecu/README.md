@@ -54,9 +54,6 @@ checks below still apply before fabrication and use.
 | R1, 0.22 Ω / 50 W | Aluminium body screwed to PCB; solder lugs connected by wires |
 
 R23-R30 replace the eight 1 kΩ branches of the former RN1 bussed resistor array.
-The resistance values are unchanged. References and values occupy separate fields.
-The intended values behind `10K9`, `51K1`, `100nF1`, `100nF2` and `100uF1` are
-10 kΩ, 51 kΩ, 100 nF, 100 nF and 100 µF respectively.
 
 U6 retains the existing schematic pin positions in a project symbol. Replacing it
 with a stock 4051 symbol without checking pin positions can detach wires.
@@ -83,26 +80,6 @@ Adjustometer uses I2C0 on GP0/SDA and GP1/SCL, with pull-ups on its module.
 PCF8574 uses I2C1 on GP2/SDA and GP3/SCL, with R31/R32 pull-ups to 3.3 V.
 The injector input connects to GP4. R14 is 470 Ω, matching the physical fuel
 level circuit. Firmware adaptation follows manufacture of the new PCB.
-
-## PCBWay fabrication package
-
-[ECU-PCBWay.zip](ECU/ECU-PCBWay.zip) contains Gerber X2 layers, separate PTH/NPTH
-Excellon drills, a Gerber job, drill maps, a 1:1 mechanical drawing and a checksum
-manifest. The [fabrication requirements](ECU/ECU-fabrication.md) specify the
-quotation parameters and the six exposed chassis contacts. Submit the complete
-ZIP for bare-board quotation and DFM review. Confirm the minimum finished copper
-and hole-wall plating with PCBWay before releasing manufacture.
-
-The design uses at least 0.60/0.30 mm vias with a 0.15 mm annular ring. Silkscreen
-text uses at least 1.0 mm height and 0.15 mm strokes. Soldermask expansion is
-0.05 mm with a 0.15 mm minimum web; the chassis contact openings retain their
-exact shapes. The 0.25 mm track/space and 0.40 mm copper-to-edge limits remain.
-
-D37 uses the [1N4728A 3.3 V Zener](https://www.onsemi.com/download/data-sheet/pdf/1n4736at-d.pdf)
-in DO-41, with cathode pin 1 on the ADC/shunt net and anode pin 2 on GND.
-Its body stands over the anode pad, with the cathode lead bent back to pad 1.
-The diode sits on the ADC branch; the wide Q20 source path to R1 is retained.
-The schematic, PCB and BOM use this part and its DO-41 footprint.
 
 ## Checks before fabrication
 

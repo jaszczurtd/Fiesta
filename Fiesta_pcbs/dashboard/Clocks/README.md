@@ -50,7 +50,6 @@ tracks with local 0.25 mm escapes, and 0.80 mm supply tracks with local
 0.60 mm escapes. Ground pours on both sides are joined by vias. The ground
 pads of U3/U4/U8 and C3/C5/C10 connect directly to copper; use adequate heat
 when hand soldering them. The remaining ground pads use thermal reliefs.
-Review manufacturing constraints with the chosen fabricator before CAM export.
 
 ## Harness connectors
 
