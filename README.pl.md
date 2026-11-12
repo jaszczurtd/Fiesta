@@ -17,11 +17,11 @@ używane w samochodzie bez sterowania VP37.
 | Moduł | Przeznaczenie |
 |---|---|
 | [ECU](src/ECU/README.pl.md) | Sterowanie silnikiem, VP37 i doładowaniem, przekaźniki, diagnostyka i zapis DTC. |
-| [Clocks](src/Clocks/) | Fabryczne wskaźniki, dodatkowy ekran TFT i ostrzeżenia; pomiar ciśnienia oleju, prędkości i temperatur spalin. |
+| [Clocks](src/Clocks/) | Fabryczne wskaźniki, dodatkowy ekran TFT i ostrzeżenia; pomiar ciśnienia oleju, prędkości i temperatur spalin; testy wskaźników, kontrolek i buzzera. |
 | [Adjustometer](src/Adjustometer/README.pl.md) | Pomiar położenia nastawnika VP37 przekazywany do ECU przez I²C. |
 | [Fiesta_clock](src/Fiesta_clock/) | Publikacja czasu RTC i temperatur powietrza przez CAN oraz lokalny wyświetlacz. |
 | [VP37TestBench](src/VP37TestBench/) | Współdzielony sterownik VP37 na osobnym stanowisku pompy. |
-| [SerialConfigurator](src/SerialConfigurator/README.pl.md) | GUI i CLI dla Linuksa: wykrywanie USB, ustawienia i testy stanowiskowe ECU; GUI umożliwia też wgrywanie firmware. |
+| [SerialConfigurator](src/SerialConfigurator/README.pl.md) | GUI i CLI dla Linuksa: wykrywanie USB, ustawienia oraz testy funkcjonalne ECU i Clocks; GUI umożliwia też wgrywanie firmware. |
 
 DPF jest nieaktywną pozycją w SerialConfiguratorze. Nie ma firmware'u,
 wykrywania ani obsługi wgrywania.
@@ -60,7 +60,5 @@ odstępstwami. Testy hostowe używają mocków HAL i nie potwierdzają zachowani
 elektrycznego ani mechanicznego. Projekt ma stanowisko silnikowe, ale nie ma
 automatycznego stanowiska HIL.
 
-RP2040 i RP2350 nie mają kwalifikacji AEC-Q100. Pomiar obrotów silnika używa przerwań
-GPIO, a Adjustometer mierzy okresy przez PIO/DMA. Zmiany sterowania wymagają
-prób sprzętowych. Wyniki testów i CI dotyczą sprawdzanego przez nie zakresu;
-nie zastępują przeglądu ani walidacji całego pojazdu.
+RP2040 i RP2350 nie mają kwalifikacji AEC-Q100. Nic jednak nie stoi na
+przeszkodzie, by stworzyć wersję ECU z chipem który takową kwalifikację posiada.

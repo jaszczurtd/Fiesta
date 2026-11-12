@@ -66,13 +66,14 @@ int sc_cli_command_set_and_commit(int argc, char *argv[]);
 int sc_cli_command_get_gps(int argc, char *argv[]);
 
 /*
- * Functional tests of the ECU (SC_TEST_* commands). test-list and
- * test-status only read. test-set, test-run, test-stop and test-skip
- * authenticate first. test-run follows the test until the ECU reports it
- * finished, printing progress; the ECU stops a configurator test whose
- * host goes quiet, so the command keeps polling until the end and Ctrl-C
- * asks the ECU to stop instead of leaving the test behind. Exit codes:
- *   5 - status read failed, 6 - the ECU refused the request, the test did
+ * Functional tests of a module (SC_TEST_* commands; ECU and Clocks).
+ * test-list and test-status only read. test-set, test-run, test-stop and
+ * test-skip authenticate first. test-run follows the test until the module
+ * reports it finished, printing progress; the module stops a configurator
+ * test whose host goes quiet, so the command keeps polling until the end
+ * and Ctrl-C asks the module to stop instead of leaving the test behind.
+ * Exit codes:
+ *   5 - status read failed, 6 - the module refused the request, the test did
  *   not start, or a test ended with a result other than done/ok.
  */
 int sc_cli_command_test_list(int argc, char *argv[]);

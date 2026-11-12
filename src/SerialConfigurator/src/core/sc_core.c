@@ -27,10 +27,11 @@ typedef struct ScModuleDef {
   const char *display_name;
   const char *source_dir;
   bool tests;
+  bool tests_drive;
 } ScModuleDef;
 
-#define SC_MODULE_DEF_ROW(token, display_name, source_dir, tests)              \
-  {(token), (display_name), (source_dir), (tests)},
+#define SC_MODULE_DEF_ROW(token, display_name, source_dir, tests, tests_drive) \
+  {(token), (display_name), (source_dir), (tests), (tests_drive)},
 static const ScModuleDef k_module_defs[SC_MODULE_COUNT] = {
     SC_MODULE_TABLE(SC_MODULE_DEF_ROW)};
 #undef SC_MODULE_DEF_ROW
@@ -1004,6 +1005,10 @@ bool sc_core_module_inactive(size_t index) {
 
 bool sc_core_module_has_tests(size_t index) {
   return (index < SC_MODULE_COUNT) && k_module_defs[index].tests;
+}
+
+bool sc_core_module_tests_report_drive(size_t index) {
+  return (index < SC_MODULE_COUNT) && k_module_defs[index].tests_drive;
 }
 
 const ScModuleStatus *sc_core_module_status(const ScCore *core, size_t index) {

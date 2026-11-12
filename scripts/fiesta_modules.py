@@ -31,7 +31,7 @@ MODULE_KEYS = {
     "name", "kind", "token", "macro", "serialConfigurator",
     "hostTests", "analysis", "ci", "sharedSources",
 }
-SC_KEYS = {"index", "displayName", "tests"}
+SC_KEYS = {"index", "displayName", "tests", "testsDrive"}
 
 
 TOKENS_HEADER = Path("src/common/scDefinitions/sc_fiesta_module_tokens.h")
@@ -65,6 +65,7 @@ class ScEntry:
     index: int
     display_name: str
     tests: bool
+    tests_drive: bool
 
 
 @dataclass(frozen=True)
@@ -132,8 +133,12 @@ def _serial_configurator(raw: Any, where: str) -> ScEntry:
     index = raw.get("index")
     if not isinstance(index, int) or isinstance(index, bool) or index < 0:
         raise RegistryError(f"{where}.index: expected an integer >= 0")
+    tests = _flag(raw.get("tests", False), f"{where}.tests")
+    tests_drive = _flag(raw.get("testsDrive", False), f"{where}.testsDrive")
+    if tests_drive and not tests:
+        raise RegistryError(f"{where}.testsDrive: needs tests")
     return ScEntry(index, _text(raw.get("displayName"), f"{where}.displayName"),
-                   _flag(raw.get("tests", False), f"{where}.tests"))
+                   tests, tests_drive)
 
 
 def _by_id_hint(repo_root: Path, name: str) -> str:
@@ -318,7 +323,8 @@ def sc_table_header(registry: Registry) -> str:
     rows = [
         f"  X({('SC_MODULE_TOKEN_' + m.macro) if m.is_firmware else 'NULL'}, "
         f"SC_MODULE_{m.macro}, {_c_string(m.name) if m.is_firmware else 'NULL'}, "
-        f"{'true' if m.serial_configurator.tests else 'false'})"
+        f"{'true' if m.serial_configurator.tests else 'false'}, "
+        f"{'true' if m.serial_configurator.tests_drive else 'false'})"
         for m in registry.serial_configurator()
     ]
     skipped = [_c_string(m.by_id_hint) for m in registry.firmware()
@@ -333,8 +339,10 @@ def sc_table_header(registry: Registry) -> str:
         '#include "sc_fiesta_module_tokens.h"',
         "",
         "/* clang-format off */",
-        "/* One X(token, display_name, source_dir, tests) row per module, in module",
-        " * index order. The index is part of the saved flash-path schema. */",
+        "/* One X(token, display_name, source_dir, tests, tests_drive) row per module,",
+        " * in module index order. The index is part of the saved flash-path schema.",
+        " * tests: the firmware runs functional tests; tests_drive: their status",
+        " * carries the demanded and measured actuator position. */",
         "#define SC_MODULE_TABLE(X) \\",
         " \\\n".join(rows),
         "",

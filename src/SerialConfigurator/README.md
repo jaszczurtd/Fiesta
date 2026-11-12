@@ -137,23 +137,35 @@ Clocks reports availability, latitude, longitude, speed and UTC epoch through
 `SC_GET_GPS`. The GUI GPS View polls every 4 seconds. With libshumate it shows
 an OpenStreetMap marker and recenter control; otherwise it shows a placeholder.
 
-## Run ECU bench tests
+## Run functional tests
 
-The ECU Values page has Settings and Tests sub-tabs. Tests are discovered
-through `SC_TEST_LIST` and shown with descriptions, parameters, Defaults and
-Run controls. **Run sequence** starts tests marked for the sequence; **Skip**
-and **Stop** affect the running test. Firmware without tests or without the
-commands shows **No tests available**.
+The ECU and Clocks Values pages have Settings and Tests sub-tabs. The ECU
+offers its bench tests of the VP37 actuator. Clocks offers five tests of the
+factory cluster: the charge lamp, the oil pressure lamp, the tachometer, the
+speedometer and the buzzer.
+
+Tests are discovered through `SC_TEST_LIST` and shown with descriptions,
+parameters, Defaults and Run controls. A parameter that all tests share, such
+as the Clocks step time, has one field above the test cards. **Run sequence**
+starts tests marked for the sequence; **Skip** and **Stop** affect the running
+test. Firmware without tests or without the commands shows **No tests
+available**.
 
 Run authenticates, sends the edited parameters and starts the test. Parameters
-last until ECU reset. The status panel shows test, initiator, sequence step,
-elapsed time, demanded/measured position, test-specific progress and last result.
+last until the module resets. The status panel shows test, initiator, sequence
+step, elapsed time, test-specific progress and last result. For the ECU it
+also shows the demanded and measured actuator position; when the ECU cannot
+report them, the panel says so.
 It polls every 250 ms while its test runs, including when another tab is shown.
-ECU stops the test on session end or after 3 seconds without test commands.
-Closing, disconnecting or detecting again therefore stops it. ECU functional
-tests require the `BENCH` image, whose configurator RPM interlock is disabled
-by default (`ECU_SC_TESTS_RPM_INTERLOCK=0`). Building ECU with the option set
-to `1` refuses or stops configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
+The module stops the test on session end or after 3 seconds without test
+commands. Closing, disconnecting or detecting again therefore stops it; a
+Clocks output then returns to its measurement.
+
+ECU functional tests require the `BENCH` image, whose configurator RPM
+interlock is disabled by default (`ECU_SC_TESTS_RPM_INTERLOCK=0`). Building
+ECU with the option set to `1` refuses or stops configurator tests above
+`ECU_SC_TESTS_RPM_LIMIT` rpm. Clocks tests are part of every Clocks image and
+have no interlock.
 
 ```bash
 ./build/serial-configurator-cli test-list --module ECU
@@ -162,6 +174,8 @@ to `1` refuses or stops configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
 ./build/serial-configurator-cli test-status --module ECU
 ./build/serial-configurator-cli test-skip --module ECU
 ./build/serial-configurator-cli test-stop --module ECU
+./build/serial-configurator-cli test-set --id step_ms --value 3000 --module Clocks
+./build/serial-configurator-cli test-run rpm --module Clocks
 ```
 
 `test-run` follows progress once a second; Ctrl-C requests a stop. Exit status

@@ -2,18 +2,21 @@
 #define SC_TESTS_TAB_H
 
 /*
- * Values tab, ECU module: the "Tests" sub-tab.
+ * Values tab of a module with functional tests (ECU, Clocks): the "Tests"
+ * sub-tab.
  *
- * Built from what the ECU reports (SC_TEST_LIST / INFO / PARAM), so a
- * production image without functional tests shows "No tests available".
+ * Built from what the module reports (SC_TEST_LIST / INFO / PARAM), so a
+ * production ECU image without functional tests shows "No tests available".
  * Each test gets a card with its description, its runtime parameters and a
- * Run button; the header runs the whole sequence, skips or stops, and a
- * status panel shows the running test, its sequence step, the demanded and
- * measured actuator position and the test's own progress values.
+ * Run button; a parameter that all tests share is shown once, above the
+ * cards. The header runs the whole sequence, skips or stops, and a status
+ * panel shows the running test, its sequence step and the test's own
+ * progress values. A module whose tests move an actuator (the ECU) also
+ * gets the demanded and measured position there.
  *
  * The panel polls SC_TEST_STATUS while it is visible, and always while a
- * test started here runs: the ECU stops a configurator test whose host goes
- * quiet, so the polling is what keeps it alive.
+ * test started here runs: the module stops a configurator test whose host
+ * goes quiet, so the polling is what keeps it alive.
  */
 
 #include <gtk/gtk.h>

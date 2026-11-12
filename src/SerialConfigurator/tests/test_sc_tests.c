@@ -203,6 +203,71 @@ static int test_catalog_loads_tests_and_parameters(void) {
   TEST_ASSERT(cyclic->params[0].value == 4 && cyclic->params[0].max == 100,
               "param range");
   TEST_ASSERT(cyclic->params[1].default_value == 6, "second param");
+  TEST_ASSERT(!sc_tests_param_is_shared(&cyclic->params[0]),
+              "a parameter of one test");
+  TEST_ASSERT(!sc_tests_param_is_shared(NULL), "no parameter");
+  return 0;
+}
+
+static int test_clocks_catalog_has_five_tests_sharing_the_step_time(void) {
+  sc_mock_ecu_reset();
+  s_ecu.clocks = true;
+  ScCore core;
+  TEST_ASSERT(sc_mock_ecu_detected_core(&core), "detect");
+  const size_t index = sc_mock_ecu_module_index();
+  TEST_ASSERT(sc_core_module_has_tests(index) &&
+                  !sc_core_module_tests_report_drive(index),
+              "Clocks: tests without an actuator");
+  ScTestCatalog catalog;
+  char error[256] = {0};
+  TEST_ASSERT(
+      sc_tests_load_catalog(&core, index, &catalog, error, sizeof(error)),
+      error);
+  static const char *const k_names[] = {SC_TEST_NAME_CHARGE, SC_TEST_NAME_OIL,
+                                        SC_TEST_NAME_RPM, SC_TEST_NAME_SPEED,
+                                        SC_TEST_NAME_BUZZER};
+  TEST_ASSERT(catalog.supported && catalog.count == 5u, "five tests");
+  for (size_t i = 0u; i < catalog.count; ++i) {
+    const ScTestEntry *entry = &catalog.tests[i];
+    TEST_ASSERT_STR(entry->name, k_names[i], "catalog order");
+    TEST_ASSERT(entry->in_sequence && entry->param_count == 1u,
+                "sequenced, one parameter");
+    TEST_ASSERT_STR(entry->params[0].id, SC_TEST_PARAM_STEP_MS, "step time");
+    TEST_ASSERT_STR(entry->params[0].unit, SC_TEST_UNIT_MS, "unit");
+    TEST_ASSERT(sc_tests_param_is_shared(&entry->params[0]),
+                "owned by all tests");
+    TEST_ASSERT(entry->params[0].value == 2000 &&
+                    entry->params[0].min == 1200 &&
+                    entry->params[0].max == 10000,
+                "range");
+  }
+
+  /* A running cluster test: steps and a value, never the actuator keys. */
+  s_ecu.status_reply = "SC_OK TEST_STATUS state=running runs=1 test=speed "
+                       "src=sc elapsed_ms=4100 seq=4/5 step=3 steps=7 "
+                       "value=100";
+  ScTestStatus status;
+  TEST_ASSERT(sc_tests_get_status(&core, index, &status, error, sizeof(error)),
+              error);
+  int32_t value = 0;
+  TEST_ASSERT(status.running && !status.drive_valid, "no actuator reading");
+  TEST_ASSERT(sc_tests_status_field(&status, SC_TEST_FIELD_STEP, &value) &&
+                  value == 3,
+              "step");
+  TEST_ASSERT(sc_tests_status_field(&status, SC_TEST_FIELD_STEPS, &value) &&
+                  value == 7,
+              "steps");
+  TEST_ASSERT(sc_tests_status_field(&status, SC_TEST_FIELD_VALUE, &value) &&
+                  value == 100,
+              "value");
+
+  s_ecu.status_reply = "SC_OK TEST_STATUS state=running runs=2 test=oil "
+                       "src=sc elapsed_ms=10 step=3 steps=3 phase=blink";
+  TEST_ASSERT(sc_tests_get_status(&core, index, &status, error, sizeof(error)),
+              error);
+  TEST_ASSERT(status.field_count == 3u && status.fields[2].is_text,
+              "lamp step name is text");
+  TEST_ASSERT_STR(status.fields[2].text, SC_TEST_PHASE_BLINK, "step name");
   return 0;
 }
 
@@ -335,6 +400,7 @@ int main(void) {
   failures += test_status_rejects_malformed_replies();
   failures += test_list_info_and_param_parsers_check_their_shape();
   failures += test_catalog_loads_tests_and_parameters();
+  failures += test_clocks_catalog_has_five_tests_sharing_the_step_time();
   failures += test_catalog_without_tests_is_empty_or_unsupported();
   failures += test_status_is_read_through_the_core();
   failures += test_actions_map_every_firmware_answer();

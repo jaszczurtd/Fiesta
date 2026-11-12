@@ -1,6 +1,6 @@
 /**
  * @file sc_tests.c
- * @brief Host side of the ECU functional tests (SC_TEST_* commands).
+ * @brief Host side of the functional tests of a module (SC_TEST_* commands).
  *
  * Reads go through the core's command dispatcher, like the other read-only
  * endpoints. Actions go straight to the transport on the device path, like
@@ -402,6 +402,10 @@ bool sc_tests_status_field(const ScTestStatus *status, const char *key,
     }
   }
   return false;
+}
+
+bool sc_tests_param_is_shared(const ScTestParam *param) {
+  return (param != NULL) && (strcmp(param->test, SC_TEST_SEQUENCE) == 0);
 }
 
 /* ── Reads through the core ─────────────────────────────────────────────── */

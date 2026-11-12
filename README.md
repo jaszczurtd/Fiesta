@@ -17,11 +17,11 @@ have been used in the car without VP37 actuation.
 | Module | Purpose |
 |---|---|
 | [ECU](src/ECU/README.md) | Engine, VP37 and boost control, relay outputs, diagnostics and DTC storage. |
-| [Clocks](src/Clocks/) | Factory gauges, TFT readouts and warnings; oil pressure, vehicle speed and exhaust temperatures. |
+| [Clocks](src/Clocks/) | Factory gauges, TFT readouts and warnings; oil pressure, vehicle speed and exhaust temperatures; tests of the gauges, lamps and buzzer. |
 | [Adjustometer](src/Adjustometer/README.md) | VP37 position measurement, delivered to the ECU over I²C. |
 | [Fiesta_clock](src/Fiesta_clock/) | RTC time and air temperatures on CAN, local display. |
 | [VP37TestBench](src/VP37TestBench/) | The shared VP37 controller on a separate pump test stand. |
-| [SerialConfigurator](src/SerialConfigurator/README.md) | Linux GUI and CLI for USB discovery, settings and ECU bench tests; the GUI also flashes firmware. |
+| [SerialConfigurator](src/SerialConfigurator/README.md) | Linux GUI and CLI for USB discovery, settings and the ECU and Clocks functional tests; the GUI also flashes firmware. |
 
 DPF is an inactive entry in SerialConfigurator. It has no firmware, discovery
 or flashing support.
@@ -58,7 +58,6 @@ have a gate rejecting active findings outside recorded deviations. Host tests
 use HAL mocks and do not establish electrical or mechanical behaviour. The
 project has an engine test stand, but no automated HIL rig.
 
-Neither RP2040 nor RP2350 is AEC-Q100 qualified. Engine speed uses GPIO edge interrupts;
-Adjustometer uses PIO/DMA period capture. Hardware trials remain necessary
-when changing the control path. Test and CI results describe their checked
-scope; they do not replace review or validation of the whole vehicle.
+Neither RP2040 nor RP2350 is AEC-Q100 qualified. However, there is nothing
+preventing us from developing an ECU variant using a chip that has the
+required qualification.

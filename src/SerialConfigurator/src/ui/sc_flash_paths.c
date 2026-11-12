@@ -14,7 +14,8 @@
  * generated table as sc_core's k_module_defs[]. The index comes from
  * modules.json, so the on-disk schema does not depend on entry order there.
  * Adjustometer is intentionally absent (v1.32 policy lock). */
-#define SC_MODULE_NAME_ROW(token, display_name, source_dir, tests)             \
+#define SC_MODULE_NAME_ROW(token, display_name, source_dir, tests,             \
+                           tests_drive)                                        \
   ((source_dir) != NULL ? (display_name) : NULL),
 static const char *const k_module_names[SC_MODULE_COUNT] = {
     SC_MODULE_TABLE(SC_MODULE_NAME_ROW)};

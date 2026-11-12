@@ -72,8 +72,9 @@ the loom colours.
 | [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
 
 The list itself lives in [`modules.json`](modules.json): each module's
-kind, token, SerialConfigurator slot and host-test build. Adding a module
-starts there. [`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks
+kind, token, SerialConfigurator slot and host-test build. The slot also says
+whether the module gets a Tests sub-tab (`tests`) and whether its test status
+carries an actuator position (`testsDrive`). Adding a module starts there. [`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks
 the list and generates the token header in `src/common/scDefinitions`, the
 SerialConfigurator module table and a shell fragment; the VS Code generator,
 `runalltests.sh`, `runmefirst.sh`, the bootstrap and SerialConfigurator read
@@ -193,6 +194,16 @@ the TFT voltage gauge keeps its own range.
 The oil lamp is lit without oil pressure and blinks at 1 Hz while the sender
 is shorted or open, when the oil gauge shows ERR. From power-up to the first
 reading it stays lit.
+
+The configurator can run five tests of the factory cluster: each lamp lit,
+off and blinking, the tachometer and the speedometer stepped through fixed
+values and back to zero, and the three buzzer signals. A step lasts 2 s
+unless the configurator changes `step_ms`. A test replaces only the output
+it drives. The measurements, the CAN frames and the other outputs carry on,
+and the output returns to its measurement when the test ends, is stopped or
+loses the configurator. Every Clocks image has the tests; the
+[protocol description](src/common/scDefinitions/PROTOCOL.md#functional-tests)
+lists their commands and status keys.
 
 | File | Responsibility |
 |---|---|
@@ -337,8 +348,8 @@ temperature readings.
 
 The configurator is a desktop application for Linux, written in C with GTK-4.
 It finds Fiesta modules on USB, shows their identity, reads and writes their
-parameters, runs the functional tests of an ECU test build, and flashes
-firmware after checking the build manifest. The CLI provides discovery,
+parameters, runs the functional tests of an ECU test build and of Clocks,
+and flashes firmware after checking the build manifest. The CLI provides discovery,
 settings, GPS, functional tests and authenticated bootloader entry; the
 complete UF2 copy and reconnection flow is provided by the GUI.
 

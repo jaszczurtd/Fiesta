@@ -605,8 +605,8 @@ int sc_cli_command_test_set(int argc, char *argv[]) {
             sc_test_action_status_name(st), err);
     return 6;
   }
-  printf("[OK] %s=%ld on %s; it holds until the ECU resets.\n", param_id, value,
-         port_path);
+  printf("[OK] %s=%ld on %s; it holds until the module resets.\n", param_id,
+         value, port_path);
   return 0;
 }
 
@@ -662,9 +662,9 @@ static bool test_result_passed(const char *result) {
          strcmp(result, SC_TEST_RESULT_OK) == 0;
 }
 
-/* Follow a started test until the ECU reports it finished. Polling is what
+/* Follow a started test until the module reports it finished. Polling is what
  * keeps a configurator test alive, so this loop runs until the end; Ctrl-C
- * asks the ECU to stop and keeps following until it has. */
+ * asks the module to stop and keeps following until it has. */
 static int follow_test_run(ScCore *core, size_t index, const char *port_path,
                            const char *name, const ScTestStatus *before) {
   char previous_last[SC_TEST_ID_MAX];

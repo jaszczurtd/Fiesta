@@ -2,10 +2,11 @@
   "schemaVersion": 1,
   "modules": [
     {"name": "ECU", "kind": "firmware", "token": "ECU", "macro": "ECU",
-     "serialConfigurator": {"index": 0, "displayName": "ECU", "tests": true},
+     "serialConfigurator": {"index": 0, "displayName": "ECU", "tests": true,
+                            "testsDrive": true},
      "hostTests": "build_test", "analysis": ["cppcheck"], "sharedSources": ["vp37", "test_runner", "obdDefinitions"]},
     {"name": "Clocks", "kind": "firmware", "token": "CLOCKS", "macro": "CLOCKS",
-     "serialConfigurator": {"index": 1, "displayName": "Clocks"},
+     "serialConfigurator": {"index": 1, "displayName": "Clocks", "tests": true},
      "hostTests": "build_test", "sharedSources": ["test_runner"]},
     {"name": "dpfmodule", "kind": "inactive", "macro": "DPF",
      "serialConfigurator": {"index": 2, "displayName": "DPF"}},

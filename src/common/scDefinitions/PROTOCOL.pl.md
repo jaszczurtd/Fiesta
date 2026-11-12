@@ -39,8 +39,8 @@ Firmware i host kompilują ten sam kodek z HAL
 | Uwierzytelnianie | `SC_AUTH_BEGIN`, `SC_AUTH_PROVE` | Nie. |
 | Zapis parametrów | `SC_SET_PARAM`, `SC_COMMIT_PARAMS`, `SC_REVERT_PARAMS` | Tak. |
 | Wgrywanie | `SC_REBOOT_BOOTLOADER` | Tak. |
-| Odczyt testów funkcjonalnych ECU | `SC_TEST_LIST`, `SC_TEST_INFO`, `SC_TEST_PARAM`, `SC_TEST_STATUS` | Nie. |
-| Sterowanie testami ECU | `SC_TEST_SET`, `SC_TEST_RUN`, `SC_TEST_STOP`, `SC_TEST_SKIP` | Tak. |
+| Odczyt testów funkcjonalnych (ECU, Clocks) | `SC_TEST_LIST`, `SC_TEST_INFO`, `SC_TEST_PARAM`, `SC_TEST_STATUS` | Nie. |
+| Sterowanie testami (ECU, Clocks) | `SC_TEST_SET`, `SC_TEST_RUN`, `SC_TEST_STOP`, `SC_TEST_SKIP` | Tak. |
 
 `HELLO` zwraca moduł, wersję firmware, identyfikator buildu i UID urządzenia.
 UID pochodzi z `hal_get_device_uid_hex()`, pozostałe wartości z
@@ -157,11 +157,21 @@ są w [testach ECU](../../ECU/tests/test_ecu_params.cpp) i
 
 ## Testy funkcjonalne
 
+ECU i Clocks udostępniają konfiguratorowi testy funkcjonalne.
+
 ECU z `ECU_FUNCTIONAL_TESTS_ENABLED` udostępnia część testów stanowiskowych.
 Rejestr `src/ECU/tests.c` oznacza dostępne testy. `dtc`, który pozostawia
 usterkę, `kv`, który zapisuje flash, i niekończący się `manual` są tylko
-w konsoli. Host buduje widok z odpowiedzi, więc nowy test lub parametr
-nie wymaga zmiany aplikacji:
+w konsoli.
+
+Clocks ma w każdym obrazie pięć testów wyjść fabrycznych zegarów
+(`src/Clocks/clocksTests.cpp`). `charge` i `oil` zapalają i gaszą kontrolkę,
+a potem nią migają. `rpm` i `speed` ustawiają wskaźnik na kolejnych
+wartościach i wracają do zera, a `buzzer` odtwarza sygnał krótki, średni
+i długi.
+
+Host buduje widok z odpowiedzi, więc nowy test lub parametr nie wymaga zmiany
+aplikacji. Odpowiedzi ECU:
 
 ```text
 SC_TEST_LIST                -> SC_OK TEST_LIST count=5 names=cyclic,random,top,topzero,pot
@@ -172,16 +182,34 @@ SC_TEST_RUN all             -> SC_OK TEST_RUN name=all
 SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=228 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
 ```
 
+Odpowiedzi Clocks:
+
+```text
+SC_TEST_LIST          -> SC_OK TEST_LIST count=5 names=charge,oil,rpm,speed,buzzer
+SC_TEST_INFO rpm      -> SC_OK TEST_INFO name=rpm seq=1 params=step_ms
+SC_TEST_PARAM step_ms -> SC_OK TEST_PARAM id=step_ms test=all value=2000 min=1200 max=10000 default=2000 unit=ms
+SC_TEST_STATUS        -> SC_OK TEST_STATUS state=running runs=1 test=rpm src=sc elapsed_ms=2140 seq=3/5 step=2 steps=5 value=3000 last=oil result=done
+```
+
 - **Sekwencja:** `seq=1` w opisie włącza test do `SC_TEST_RUN all` w kolejności
   listy; `seq=i/n` w statusie oznacza bieżący krok sekwencji.
 - **Parametry:** liczby całkowite z jednostką `count`, `s`, `ms` lub
-  `pct_per_s`. Wartość obowiązuje do resetu ECU, potem wraca domyślna.
-  Konsola używa tych samych danych: `params`, `set <id> <value>`.
+  `pct_per_s`. Wartość obowiązuje do resetu modułu, potem wraca domyślna.
+  Konsola ECU używa tych samych danych: `params`, `set <id> <value>`.
+  Parametr zgłoszony z `test=all` należy do każdego testu i występuje
+  w `params` każdego z nich, ale ma jedną wartość. Clocks ma jeden taki
+  parametr: `step_ms`, czyli czas każdego kroku.
 - **Status:** `state`, `runs` (starty od uruchomienia, także jednorazowe),
-  `test`, `src` (`sc` lub `console`), `elapsed_ms`, położenie zadane i zmierzone
-  w dziesiątych częściach procenta skoku oraz `last`/`result` ostatniego testu.
+  `test`, `src` (`sc` lub `console`), `elapsed_ms` oraz `last`/`result`
+  ostatniego testu. ECU dodaje `demand_x10` i `position_x10`: położenie
+  zadane i zmierzone w dziesiątych częściach procenta skoku. Pomija oba
+  klucze, gdy kalibracja pompy albo odczyt położenia są nieważne. Testy
+  Clocks nie sterują nastawnikiem i nigdy ich nie wysyłają.
   Pozostałe klucze opisują postęp, np. profil, szybkość, losowy cel, schodek
-  lub fazę potencjometru. Nieznane klucze host pokazuje bez interpretacji.
+  lub fazę potencjometru. Test Clocks podaje `step` i `steps`, a dalej
+  `value` (obr/min albo km/h kroku) dla wskaźników lub `phase` dla reszty:
+  stan kontrolki `lit`, `off`, `blink` albo sygnał buzzera `short`, `middle`,
+  `long`. Nieznane klucze host pokazuje bez interpretacji.
   `rate` testu `cyclic` to tempo zadania zmierzone w ostatnim pełnym cyklu
   bieżącego profilu (200 % skoku na cykl), nie tempo nominalne kroku. Klucz
   pojawia się dopiero po pierwszym pełnym cyklu tego profilu, więc nigdy nie
@@ -197,10 +225,15 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   `SC_NOT_READY BUSY`, gdy poprzednie żądanie czeka na rdzeń sterujący.
   Rdzeń odbiera jedno żądanie na takt; zajęte żądanie należy ponowić.
 
-ECU zatrzymuje test konfiguratora po końcu sesji (`SC_BYE`, także gdy zaraz po
-nim przyjdzie nowe `HELLO`) albo po `ECU_SC_TESTS_KEEPALIVE_MS` (3 s) bez
-polecenia testowego, w tym statusu.
+Moduł zatrzymuje test konfiguratora po końcu sesji (`SC_BYE`, także gdy zaraz
+po nim przyjdzie nowe `HELLO`) albo po 3 s bez polecenia testowego, w tym
+statusu (`ECU_SC_TESTS_KEEPALIVE_MS`, `CLOCKS_SC_TESTS_KEEPALIVE_MS`).
 Host musi odpytywać status do końca testu.
+
+Test Clocks podstawia tylko jedno wyjście zegarów. Pomiar działa pod spodem
+dalej, ramki CAN niosą wartości zmierzone, a po każdym zakończeniu testu
+wyjście wraca do pomiaru. Clocks nie ma konsoli testów ani blokady RPM,
+więc jego testy uruchamia się wyłącznie tymi poleceniami.
 
 Testy funkcjonalne są włączone tylko w wariancie ECU `BENCH`. Domyślne
 `ECU_SC_TESTS_RPM_INTERLOCK=0` wyłącza blokadę RPM dla testów konfiguratora,
@@ -211,8 +244,8 @@ rpm. Testy uruchomione z konsoli stanowiskowej należą do operatora;
 koniec sesji, timeout keepalive i ta blokada RPM ich nie zatrzymują. Konsola
 ma własny, opcjonalny nadzór (`watch <ms>`, opis w README ECU).
 
-ECU bez testów odpowiada `count=0`; firmware bez poleceń zwraca
-`SC_UNKNOWN_CMD`. W obu przypadkach host pokazuje „No tests available".
+ECU bez testów odpowiada `count=0`; moduły i starszy firmware bez poleceń
+zwracają `SC_UNKNOWN_CMD`. W obu przypadkach host pokazuje „No tests available".
 
 ## Tożsamość urządzenia
 

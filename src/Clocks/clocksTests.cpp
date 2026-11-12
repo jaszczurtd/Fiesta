@@ -19,10 +19,12 @@ const unsigned int kSpeedSteps[] = {20u, 60u, 100u, 140u, 180u, 220u, 0u};
 const clocks_test_lamp_t kLampSteps[] = {TEST_LAMP_LIT, TEST_LAMP_OFF,
                                          TEST_LAMP_BLINK};
 const int kBuzzerSteps[] = {BUZZER_SHORT, BUZZER_MIDDLE, BUZZER_LONG};
-const char *const kLampNames[] = {"off", "lit", "blink"}; // clocks_test_lamp_t
+const char *const kLampNames[] = {SC_TEST_PHASE_OFF, SC_TEST_PHASE_LIT,
+                                  SC_TEST_PHASE_BLINK}; // clocks_test_lamp_t
 JB_STATIC_ASSERT(COUNTOF(kLampNames) == (size_t)TEST_LAMP_BLINK + 1u,
                  "one name per clocks_test_lamp_t state");
-const char *const kBuzzerNames[] = {"short", "middle", "long"}; // BUZZER_*
+const char *const kBuzzerNames[] = {SC_TEST_PHASE_SHORT, SC_TEST_PHASE_MIDDLE,
+                                    SC_TEST_PHASE_LONG}; // BUZZER_*
 JB_STATIC_ASSERT(COUNTOF(kBuzzerNames) == (size_t)BUZZER_COUNT,
                  "one name per buzzer signal");
 

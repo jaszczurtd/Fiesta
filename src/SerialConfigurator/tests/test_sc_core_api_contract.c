@@ -62,10 +62,13 @@ static int test_module_table(void) {
               "source dir should be NULL for out-of-range index");
   TEST_ASSERT(!sc_core_module_has_tests(SC_MODULE_COUNT),
               "out-of-range index has no tests");
+  TEST_ASSERT(!sc_core_module_tests_report_drive(SC_MODULE_COUNT),
+              "out-of-range index reports no actuator");
 
   ScCore core;
   sc_core_init(&core);
   size_t with_tests = 0u;
+  size_t with_drive = 0u;
   for (size_t i = 0u; i < sc_core_module_count(); ++i) {
     const char *name = sc_core_module_status(&core, i)->display_name;
     const char *dir = sc_core_module_source_dir(i);
@@ -78,6 +81,13 @@ static int test_module_table(void) {
     if (strcmp(name, SC_MODULE_ECU) == 0) {
       TEST_ASSERT(strcmp(dir, "ECU") == 0, "ECU source dir");
       TEST_ASSERT(sc_core_module_has_tests(i), "ECU reports tests");
+      TEST_ASSERT(sc_core_module_tests_report_drive(i),
+                  "ECU tests report the actuator");
+    }
+    if (strcmp(name, SC_MODULE_CLOCKS) == 0) {
+      TEST_ASSERT(sc_core_module_has_tests(i), "Clocks reports tests");
+      TEST_ASSERT(!sc_core_module_tests_report_drive(i),
+                  "Clocks tests have no actuator");
     }
     if (strcmp(name, SC_MODULE_CLOCK) == 0) {
       TEST_ASSERT(strcmp(dir, "Fiesta_clock") == 0,
@@ -86,8 +96,13 @@ static int test_module_table(void) {
     if (sc_core_module_has_tests(i)) {
       ++with_tests;
     }
+    if (sc_core_module_tests_report_drive(i)) {
+      TEST_ASSERT(sc_core_module_has_tests(i), "an actuator needs tests");
+      ++with_drive;
+    }
   }
-  TEST_ASSERT(with_tests == 1u, "only the ECU has a Tests tab");
+  TEST_ASSERT(with_tests == 2u, "ECU and Clocks have a Tests tab");
+  TEST_ASSERT(with_drive == 1u, "only the ECU reports an actuator");
   return 0;
 }
 

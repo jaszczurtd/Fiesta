@@ -1,9 +1,11 @@
 /*
- * sc_tests_tab: the Tests sub-tab of the ECU page, built against the mock
- * ECU. Covers what cannot be clicked through on the bench by a test run:
- * the empty-catalog message, one card per reported test, the status panel
- * in the operator's words, and the Run / Run sequence paths (edited
- * parameters first, then the start, refusals shown as text).
+ * sc_tests_tab: the Tests sub-tab of the ECU and Clocks pages, built against
+ * the mock module. Covers what cannot be clicked through on the bench by a
+ * test run: the empty-catalog message, one card per reported test, the
+ * status panel in the operator's words, and the Run / Run sequence paths
+ * (edited parameters first, then the start, refusals shown as text). For
+ * Clocks also: no actuator rows, and the shared step time shown and sent
+ * once.
  *
  * Like test_sc_progressbar.c it needs a display and skips without one; the
  * widgets are never realised. The source is embedded by #include so the
@@ -39,16 +41,41 @@
 
 static AppState s_state;
 
-/* Build the tab for the mock ECU; the caller owns the returned root. */
+/* Build the tab for the mock module; the caller owns the returned root. */
 static GtkWidget *build_tab(void) {
   memset(&s_state, 0, sizeof(s_state));
   if (!sc_mock_ecu_detected_core(&s_state.core)) {
     return NULL;
   }
   s_state.connected = true;
-  GtkWidget *root = sc_tests_tab_build(&s_state, 0u);
+  GtkWidget *root = sc_tests_tab_build(&s_state, sc_mock_ecu_module_index());
   g_object_ref_sink(root);
   return root;
+}
+
+/* Widgets of @p type below @p widget, itself included. */
+static unsigned count_widgets(GtkWidget *widget, GType type) {
+  unsigned count = G_TYPE_CHECK_INSTANCE_TYPE(widget, type) ? 1u : 0u;
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    count += count_widgets(child, type);
+  }
+  return count;
+}
+
+/* True when a label below @p widget shows exactly @p text. */
+static bool has_label(GtkWidget *widget, const char *text) {
+  if (GTK_IS_LABEL(widget) &&
+      strcmp(gtk_label_get_text(GTK_LABEL(widget)), text) == 0) {
+    return true;
+  }
+  for (GtkWidget *child = gtk_widget_get_first_child(widget); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    if (has_label(child, text)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static TestsTab *tab_of(GtkWidget *root) {
@@ -99,6 +126,11 @@ static int test_catalog_gives_one_card_per_test(void) {
   TEST_ASSERT(t->cards[1].first_param == 0u && t->cards[1].param_count == 2u,
               "cyclic owns both parameters");
   TEST_ASSERT(t->param_count == 2u, "two parameter rows");
+  TEST_ASSERT(t->shared.param_count == 0u, "the ECU shares no parameter");
+  TEST_ASSERT(!has_label(root, sc_i18n_string_get(SC_I18N_TESTS_SHARED_PARAMS)),
+              "no frame for shared parameters");
+  TEST_ASSERT(t->has_drive && count_widgets(root, GTK_TYPE_PROGRESS_BAR) == 2u,
+              "demand and position rows of the actuator");
   TEST_ASSERT(gtk_adjustment_get_value(t->params[0].adjustment) == 4.0,
               "value in force");
   TEST_ASSERT(gtk_adjustment_get_upper(t->params[0].adjustment) == 100.0,
@@ -156,9 +188,134 @@ static int test_status_panel_speaks_the_operator_language(void) {
                        "passes=3";
   TEST_ASSERT(refresh_status(t, &status), "status read");
   TEST_ASSERT_CONTAINS(t->status_progress, "phase: holding", "pot phase");
+  /* Keys left out, e.g. with an invalid calibration: the rows stay and say
+   * that the readings are missing. */
   TEST_ASSERT_CONTAINS(t->demand_label,
                        sc_i18n_string_get(SC_I18N_TESTS_DRIVE_UNKNOWN),
                        "no drive reading");
+  TEST_ASSERT(count_widgets(root, GTK_TYPE_PROGRESS_BAR) == 2u,
+              "the actuator rows stay without a reading");
+  g_object_unref(root);
+  return 0;
+}
+
+static int test_clocks_tab_has_five_cards_and_no_actuator_rows(void) {
+  sc_mock_ecu_reset();
+  s_ecu.clocks = true;
+  GtkWidget *root = build_tab();
+  TEST_ASSERT(root != NULL, "built");
+  TestsTab *t = tab_of(root);
+  static const char *const k_names[] = {"charge", "oil", "rpm", "speed",
+                                        "buzzer"};
+  static const char *const k_titles[] = {"Charge lamp", "Oil pressure lamp",
+                                         "Tachometer", "Speedometer", "Buzzer"};
+  TEST_ASSERT(t->card_count == 5u, "five cluster tests");
+  for (size_t i = 0u; i < 5u; ++i) {
+    TEST_ASSERT(strcmp(t->cards[i].name, k_names[i]) == 0, "catalog order");
+    TEST_ASSERT(t->cards[i].param_count == 0u, "no parameter of its own");
+    TEST_ASSERT(strcmp(test_title(k_names[i]), k_titles[i]) == 0, "title");
+  }
+  TEST_ASSERT(count_widgets(root, GTK_TYPE_FRAME) == 7u,
+              "status, shared parameters and five cards");
+
+  TEST_ASSERT(!t->has_drive, "Clocks reports no actuator");
+  TEST_ASSERT(t->demand_label == NULL && t->position_label == NULL &&
+                  count_widgets(root, GTK_TYPE_PROGRESS_BAR) == 0u,
+              "no demand or position row");
+  TEST_ASSERT(!has_label(root, sc_i18n_string_get(SC_I18N_TESTS_DRIVE_UNKNOWN)),
+              "no 'unavailable' text either");
+  TEST_ASSERT(has_label(root, sc_i18n_string_get(SC_I18N_TESTS_NOTE)) &&
+                  strstr(sc_i18n_string_get(SC_I18N_TESTS_NOTE), "ECU") == NULL,
+              "the lost-contact note does not name the ECU");
+
+  ScTestStatus status;
+  s_ecu.status_reply =
+      "SC_OK TEST_STATUS state=running runs=1 test=rpm src=sc elapsed_ms=2100 "
+      "seq=3/5 step=2 steps=5 value=3000 last=oil result=done";
+  TEST_ASSERT(refresh_status(t, &status), "status read");
+  TEST_ASSERT(!status.drive_valid, "status without actuator keys");
+  TEST_ASSERT_CONTAINS(t->status_title, "Tachometer", "test title");
+  TEST_ASSERT_CONTAINS(t->status_sequence, "test 3 of 5", "sequence step");
+  TEST_ASSERT_CONTAINS(t->status_progress, "step 2/5", "step of steps");
+  TEST_ASSERT_CONTAINS(t->status_progress, "3000 rpm", "tachometer value");
+  TEST_ASSERT(strstr(gtk_label_get_text(GTK_LABEL(t->status_progress)),
+                     "steps") == NULL,
+              "the step total is not shown twice");
+  TEST_ASSERT_CONTAINS(t->status_last, "Oil pressure lamp", "last test");
+
+  s_ecu.status_reply = "SC_OK TEST_STATUS state=running runs=2 test=speed "
+                       "src=sc elapsed_ms=10 step=3 steps=7 value=100";
+  TEST_ASSERT(refresh_status(t, &status), "status read");
+  TEST_ASSERT_CONTAINS(t->status_progress, "100 km/h", "speedometer value");
+
+  s_ecu.status_reply = "SC_OK TEST_STATUS state=running runs=3 test=charge "
+                       "src=sc elapsed_ms=10 step=3 steps=3 phase=blink";
+  TEST_ASSERT(refresh_status(t, &status), "status read");
+  TEST_ASSERT_CONTAINS(t->status_progress, "lamp blinking", "lamp step");
+  TEST_ASSERT(strstr(gtk_label_get_text(GTK_LABEL(t->status_progress)),
+                     "phase") == NULL,
+              "a step name reads on its own");
+
+  s_ecu.status_reply = "SC_OK TEST_STATUS state=running runs=4 test=buzzer "
+                       "src=sc elapsed_ms=10 step=3 steps=3 phase=long";
+  TEST_ASSERT(refresh_status(t, &status), "status read");
+  TEST_ASSERT_CONTAINS(t->status_progress, "long signal", "buzzer step");
+  g_object_unref(root);
+  return 0;
+}
+
+static int test_shared_parameter_is_shown_and_sent_once(void) {
+  sc_mock_ecu_reset();
+  s_ecu.clocks = true;
+  GtkWidget *root = build_tab();
+  TEST_ASSERT(root != NULL, "built");
+  TestsTab *t = tab_of(root);
+  TEST_ASSERT(t->shared.param_count == 1u && t->param_count == 1u,
+              "one row for the step time of five tests");
+  TEST_ASSERT(strcmp(t->params[0].id, "step_ms") == 0, "the step time");
+  TEST_ASSERT(has_label(root, sc_i18n_string_get(SC_I18N_TESTS_SHARED_PARAMS)),
+              "its own frame");
+  TEST_ASSERT(has_label(root, sc_i18n_string_get(SC_I18N_TEST_PARAM_STEP)) &&
+                  has_label(root, "ms"),
+              "name and unit");
+  TEST_ASSERT(gtk_adjustment_get_lower(t->params[0].adjustment) == 1200.0 &&
+                  gtk_adjustment_get_upper(t->params[0].adjustment) == 10000.0,
+              "range from the module");
+
+  /* Any card sends the edited value before its start. */
+  gtk_adjustment_set_value(t->params[0].adjustment, 3000.0);
+  on_run_clicked(NULL, &t->cards[2]);
+  TEST_ASSERT(strcmp(s_ecu.last_set, "step_ms 3000") == 0 && s_ecu.sets == 1u,
+              "edited step time sent");
+  TEST_ASSERT(strcmp(s_ecu.last_run, "rpm") == 0, "test started");
+  TEST_ASSERT_CONTAINS(t->message, "Started: Tachometer", "feedback");
+
+  /* The next card and the sequence find it already in force. */
+  on_run_clicked(NULL, &t->cards[3]);
+  TEST_ASSERT(strcmp(s_ecu.last_run, "speed") == 0 && s_ecu.sets == 1u,
+              "not sent again");
+  on_sequence_clicked(NULL, t);
+  TEST_ASSERT(strcmp(s_ecu.last_run, SC_TEST_SEQUENCE) == 0 && s_ecu.sets == 1u,
+              "sequence without a second write");
+
+  /* The sequence sends it too when it changed. */
+  on_defaults_clicked(NULL, &t->shared);
+  TEST_ASSERT(gtk_adjustment_get_value(t->params[0].adjustment) == 2000.0,
+              "default restored in the form");
+  on_sequence_clicked(NULL, t);
+  TEST_ASSERT(strcmp(s_ecu.last_set, "step_ms 2000") == 0 && s_ecu.sets == 2u,
+              "sequence sends the changed step time");
+
+  /* A refused value stops the start. */
+  s_ecu.last_run[0] = '\0';
+  gtk_adjustment_set_value(t->params[0].adjustment, 5000.0);
+  s_ecu.clocks = false; /* the module now refuses the id */
+  on_run_clicked(NULL, &t->cards[0]);
+  s_ecu.clocks = true;
+  TEST_ASSERT(s_ecu.last_run[0] == '\0' && s_ecu.sets == 2u,
+              "no start after a refused parameter");
+  TEST_ASSERT_CONTAINS(t->message, sc_i18n_string_get(SC_I18N_TEST_PARAM_STEP),
+                       "the refusal names the parameter");
   g_object_unref(root);
   return 0;
 }
@@ -194,6 +351,10 @@ static int test_run_sends_edited_parameters_then_starts(void) {
   on_defaults_clicked(NULL, &t->cards[1]);
   TEST_ASSERT(gtk_adjustment_get_value(t->params[0].adjustment) == 4.0,
               "defaults restored in the form");
+  /* The sequence sends every card's edited parameters. */
+  on_sequence_clicked(NULL, t);
+  TEST_ASSERT(strcmp(s_ecu.last_set, "cyclic_passes 4") == 0,
+              "sequence sends the restored default");
   g_object_unref(root);
   return 0;
 }
@@ -245,6 +406,8 @@ int main(int argc, char **argv) {
   failures += test_production_and_older_firmware_show_no_tests();
   failures += test_catalog_gives_one_card_per_test();
   failures += test_status_panel_speaks_the_operator_language();
+  failures += test_clocks_tab_has_five_cards_and_no_actuator_rows();
+  failures += test_shared_parameter_is_shown_and_sent_once();
   failures += test_run_sends_edited_parameters_then_starts();
   failures += test_refusals_are_explained();
   if (failures != 0) {

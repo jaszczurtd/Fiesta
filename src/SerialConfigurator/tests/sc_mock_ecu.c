@@ -1,5 +1,5 @@
 /*
- * Mock ECU for host tests; see sc_mock_ecu.h.
+ * Mock ECU or Clocks for host tests; see sc_mock_ecu.h.
  */
 
 #include "sc_mock_ecu.h"
@@ -15,6 +15,7 @@ void sc_mock_ecu_reset(void) {
   memset(&s_ecu, 0, sizeof(s_ecu));
   s_ecu.tests_compiled = true;
   s_ecu.cyclic_passes = 4;
+  s_ecu.step_ms = 2000;
   s_ecu.status_reply = "SC_OK TEST_STATUS state=idle runs=0";
 }
 
@@ -38,6 +39,29 @@ static bool mock_resolve(void *ctx, const char *candidate, char *out,
   return true;
 }
 
+static const char *module_token(void) {
+  return s_ecu.clocks ? SC_MODULE_TOKEN_CLOCKS : SC_MODULE_TOKEN_ECU;
+}
+
+/* Tests of the mocked module, in catalog order. */
+static const char *const k_ecu_tests[] = {"pot", "cyclic"};
+static const char *const k_clocks_tests[] = {
+    SC_TEST_NAME_CHARGE, SC_TEST_NAME_OIL, SC_TEST_NAME_RPM, SC_TEST_NAME_SPEED,
+    SC_TEST_NAME_BUZZER};
+
+static bool has_test(const char *name) {
+  const char *const *tests = s_ecu.clocks ? k_clocks_tests : k_ecu_tests;
+  const size_t count = s_ecu.clocks
+                           ? sizeof(k_clocks_tests) / sizeof(k_clocks_tests[0])
+                           : sizeof(k_ecu_tests) / sizeof(k_ecu_tests[0]);
+  for (size_t i = 0u; i < count; ++i) {
+    if (strcmp(tests[i], name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool mock_hello(void *ctx, const char *path, char *response,
                        size_t response_size, char *err, size_t err_size) {
   (void)ctx;
@@ -46,8 +70,9 @@ static bool mock_hello(void *ctx, const char *path, char *response,
   (void)err_size;
   s_ecu.authenticated = false; /* HELLO opens a new, unauthenticated session */
   (void)snprintf(response, response_size,
-                 "OK HELLO module=" SC_MODULE_TOKEN_ECU
-                 " proto=1 session=7 fw=v1 build=b1 uid=E661A4D1234567AB");
+                 "OK HELLO module=%s proto=1 session=7 fw=v1 build=b1 "
+                 "uid=E661A4D1234567AB",
+                 module_token());
   return true;
 }
 
@@ -83,9 +108,10 @@ static bool mock_command(void *ctx, const char *path, const char *command,
   (void)err_size;
   s_ecu.sent++;
   if (strcmp(command, SC_CMD_GET_META) == 0) {
-    reply(response, size,
-          "SC_OK META module=" SC_MODULE_TOKEN_ECU
-          " proto=1 session=7 fw=v1 build=b1 uid=E661A4");
+    (void)snprintf(response, size,
+                   "SC_OK META module=%s proto=1 session=7 fw=v1 build=b1 "
+                   "uid=E661A4",
+                   module_token());
     return true;
   }
   if (strcmp(command, SC_CMD_AUTH_BEGIN) == 0) {
@@ -105,7 +131,21 @@ static bool mock_command(void *ctx, const char *path, const char *command,
   if (strcmp(command, SC_CMD_TEST_LIST) == 0) {
     reply(response, size,
           s_ecu.production ? "SC_OK TEST_LIST count=0 names="
-                           : "SC_OK TEST_LIST count=2 names=pot,cyclic");
+          : s_ecu.clocks
+              ? "SC_OK TEST_LIST count=5 names=charge,oil,rpm,speed,buzzer"
+              : "SC_OK TEST_LIST count=2 names=pot,cyclic");
+  } else if (s_ecu.clocks && strncmp(command, SC_CMD_TEST_INFO " ", 13u) == 0 &&
+             has_test(command + 13)) {
+    /* The step time belongs to every test and is listed under each. */
+    (void)snprintf(response, size,
+                   "SC_OK TEST_INFO name=%s seq=1 params=step_ms",
+                   command + 13);
+  } else if (s_ecu.clocks &&
+             strcmp(command, SC_CMD_TEST_PARAM " step_ms") == 0) {
+    (void)snprintf(response, size,
+                   "SC_OK TEST_PARAM id=step_ms test=all value=%ld min=1200 "
+                   "max=10000 default=2000 unit=ms",
+                   (long)s_ecu.step_ms);
   } else if (strcmp(command, SC_CMD_TEST_INFO " cyclic") == 0) {
     reply(response, size,
           "SC_OK TEST_INFO name=cyclic seq=1 "
@@ -130,14 +170,19 @@ static bool mock_command(void *ctx, const char *path, const char *command,
     }
     char id[32] = {0};
     long value = 0;
+    const char *known = s_ecu.clocks ? "step_ms" : "cyclic_passes";
+    const long min = s_ecu.clocks ? 1200 : 1;
+    const long max = s_ecu.clocks ? 10000 : 100;
     if (sscanf(command + 12, "%31s %ld", id, &value) != 2 ||
-        strcmp(id, "cyclic_passes") != 0) {
+        strcmp(id, known) != 0) {
       (void)snprintf(response, size, "SC_INVALID_PARAM_ID id=%s", id);
-    } else if (value < 1 || value > 100) {
-      reply(response, size,
-            "SC_BAD_REQUEST out_of_range id=cyclic_passes min=1 max=100");
+    } else if (value < min || value > max) {
+      (void)snprintf(response, size,
+                     "SC_BAD_REQUEST out_of_range id=%s min=%ld max=%ld", id,
+                     min, max);
     } else {
-      s_ecu.cyclic_passes = (int32_t)value;
+      *(s_ecu.clocks ? &s_ecu.step_ms : &s_ecu.cyclic_passes) = (int32_t)value;
+      s_ecu.sets++;
       (void)snprintf(s_ecu.last_set, sizeof(s_ecu.last_set), "%s %ld", id,
                      value);
       (void)snprintf(response, size, "SC_OK TEST_SET id=%s value=%ld", id,
@@ -148,8 +193,7 @@ static bool mock_command(void *ctx, const char *path, const char *command,
     if (!gate(response, size)) {
       return true;
     }
-    if (strcmp(name, "cyclic") != 0 && strcmp(name, "pot") != 0 &&
-        strcmp(name, SC_TEST_SEQUENCE) != 0) {
+    if (!has_test(name) && strcmp(name, SC_TEST_SEQUENCE) != 0) {
       (void)snprintf(response, size, "SC_BAD_REQUEST unknown_test name=%s",
                      name);
     } else if (s_ecu.engine_running) {
@@ -181,7 +225,9 @@ const ScTransportOps k_mock_ecu_ops = {
     .send_sc_command = mock_command,
 };
 
-/** @brief Core with the mock ECU detected at module index 0. */
+size_t sc_mock_ecu_module_index(void) { return s_ecu.clocks ? 1u : 0u; }
+
+/** @brief Core with the mock detected at its module index. */
 bool sc_mock_ecu_detected_core(ScCore *core) {
   sc_core_init(core);
   ScTransport transport;
@@ -189,6 +235,7 @@ bool sc_mock_ecu_detected_core(ScCore *core) {
   sc_core_set_transport(core, &transport);
   char log[2048] = {0};
   sc_core_detect_modules(core, log, sizeof(log));
-  const ScModuleStatus *ecu = sc_core_module_status(core, 0u);
-  return ecu != NULL && ecu->detected;
+  const ScModuleStatus *module =
+      sc_core_module_status(core, sc_mock_ecu_module_index());
+  return module != NULL && module->detected;
 }

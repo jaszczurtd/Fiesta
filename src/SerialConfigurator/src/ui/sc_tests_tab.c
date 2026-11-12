@@ -30,6 +30,11 @@ static const TestLabel k_test_labels[] = {
     {SC_TEST_NAME_TOPZERO, SC_I18N_TEST_NAME_TOPZERO,
      SC_I18N_TEST_DESC_TOPZERO},
     {SC_TEST_NAME_POT, SC_I18N_TEST_NAME_POT, SC_I18N_TEST_DESC_POT},
+    {SC_TEST_NAME_CHARGE, SC_I18N_TEST_NAME_CHARGE, SC_I18N_TEST_DESC_CHARGE},
+    {SC_TEST_NAME_OIL, SC_I18N_TEST_NAME_OIL, SC_I18N_TEST_DESC_OIL},
+    {SC_TEST_NAME_RPM, SC_I18N_TEST_NAME_RPM, SC_I18N_TEST_DESC_RPM},
+    {SC_TEST_NAME_SPEED, SC_I18N_TEST_NAME_SPEED, SC_I18N_TEST_DESC_SPEED},
+    {SC_TEST_NAME_BUZZER, SC_I18N_TEST_NAME_BUZZER, SC_I18N_TEST_DESC_BUZZER},
 };
 
 static const TokenLabel k_param_labels[] = {
@@ -45,6 +50,7 @@ static const TokenLabel k_param_labels[] = {
     {SC_TEST_PARAM_POT_HOLD, SC_I18N_TEST_PARAM_HOLD_TOP},
     {SC_TEST_PARAM_POT_REST, SC_I18N_TEST_PARAM_REST},
     {SC_TEST_PARAM_POT_PASSES, SC_I18N_TEST_PARAM_PASSES},
+    {SC_TEST_PARAM_STEP_MS, SC_I18N_TEST_PARAM_STEP},
 };
 
 static const TokenLabel k_result_labels[] = {
@@ -64,15 +70,37 @@ static const TokenLabel k_phase_labels[] = {
     {SC_TEST_PHASE_REST, SC_I18N_TEST_PHASE_REST},
 };
 
+/* Step names of the Clocks lamp and buzzer tests; each reads on its own. */
+static const TokenLabel k_step_labels[] = {
+    {SC_TEST_PHASE_OFF, SC_I18N_TEST_STEP_LAMP_OFF},
+    {SC_TEST_PHASE_LIT, SC_I18N_TEST_STEP_LAMP_LIT},
+    {SC_TEST_PHASE_BLINK, SC_I18N_TEST_STEP_LAMP_BLINK},
+    {SC_TEST_PHASE_SHORT, SC_I18N_TEST_STEP_SIGNAL_SHORT},
+    {SC_TEST_PHASE_MIDDLE, SC_I18N_TEST_STEP_SIGNAL_MIDDLE},
+    {SC_TEST_PHASE_LONG, SC_I18N_TEST_STEP_SIGNAL_LONG},
+};
+
+/* Unit of the "value" progress key, by the test that reports it. */
+static const TokenLabel k_value_formats[] = {
+    {SC_TEST_NAME_RPM, SC_I18N_TEST_PROGRESS_RPM_FMT},
+    {SC_TEST_NAME_SPEED, SC_I18N_TEST_PROGRESS_SPEED_FMT},
+};
+
+static const TokenLabel *token_label(const TokenLabel *labels, size_t count,
+                                     const char *token) {
+  for (size_t i = 0u; i < count; ++i) {
+    if (strcmp(labels[i].token, token) == 0) {
+      return &labels[i];
+    }
+  }
+  return NULL;
+}
+
 /* Translated text of @p token, or the token itself when it is unknown. */
 static const char *token_text(const TokenLabel *labels, size_t count,
                               const char *token) {
-  for (size_t i = 0u; i < count; ++i) {
-    if (strcmp(labels[i].token, token) == 0) {
-      return sc_i18n_string_get(labels[i].key);
-    }
-  }
-  return token;
+  const TokenLabel *label = token_label(labels, count, token);
+  return (label != NULL) ? sc_i18n_string_get(label->key) : token;
 }
 
 static const TestLabel *test_label(const char *name) {
@@ -122,9 +150,15 @@ typedef struct {
 struct TestsTab {
   AppState *state;
   size_t module_index;
+  /* The module reports demand and position of an actuator; without it the
+   * status panel has no such rows. */
+  bool has_drive;
   ScTestCatalog catalog;
+  /* Parameters shared by all tests come first, each once, then every
+   * card's own. */
   ParamRow params[SC_TESTS_MAX * SC_TESTS_PARAMS_MAX];
   size_t param_count;
+  TestCard shared; /* rows [0, shared.param_count); no Run button */
   TestCard cards[SC_TESTS_MAX];
   size_t card_count;
   GtkWidget *root;
@@ -187,6 +221,7 @@ static const struct {
     {SC_TEST_FIELD_PASS, SC_TEST_FIELD_PASSES, SC_I18N_TEST_PROGRESS_PASS_FMT},
     {SC_TEST_FIELD_SERIES, SC_TEST_FIELD_SERIES_COUNT,
      SC_I18N_TEST_PROGRESS_SERIES_FMT},
+    {SC_TEST_FIELD_STEP, SC_TEST_FIELD_STEPS, SC_I18N_TEST_PROGRESS_STEP_FMT},
 };
 
 static bool is_total_key(const char *key) {
@@ -203,9 +238,15 @@ static void format_field(const ScTestStatus *status, const ScTestField *field,
                          char *out, size_t out_size) {
   const char *key = field->key;
   const int value = (int)field->value;
+  const TokenLabel *value_format =
+      token_label(k_value_formats, G_N_ELEMENTS(k_value_formats), status->test);
   out[0] = '\0';
   if (field->is_text) {
-    if (strcmp(key, SC_TEST_FIELD_PHASE) == 0) {
+    const TokenLabel *step =
+        token_label(k_step_labels, G_N_ELEMENTS(k_step_labels), field->text);
+    if (strcmp(key, SC_TEST_FIELD_PHASE) == 0 && step != NULL) {
+      (void)snprintf(out, out_size, "%s", sc_i18n_string_get(step->key));
+    } else if (strcmp(key, SC_TEST_FIELD_PHASE) == 0) {
       (void)snprintf(out, out_size,
                      sc_i18n_string_get(SC_I18N_TEST_PROGRESS_PHASE_FMT),
                      token_text(k_phase_labels, G_N_ELEMENTS(k_phase_labels),
@@ -247,6 +288,8 @@ static void format_field(const ScTestStatus *status, const ScTestField *field,
     (void)snprintf(out, out_size,
                    sc_i18n_string_get(SC_I18N_TEST_PROGRESS_SETPOINT_FMT),
                    (double)value / 10.0);
+  } else if (strcmp(key, SC_TEST_FIELD_VALUE) == 0 && value_format != NULL) {
+    (void)snprintf(out, out_size, sc_i18n_string_get(value_format->key), value);
   } else if (!is_total_key(key)) {
     (void)snprintf(out, out_size, "%s=%d", key, value);
   } else {
@@ -314,13 +357,15 @@ static void render_status(TestsTab *t, const ScTestStatus *status) {
   }
   gtk_label_set_text(GTK_LABEL(t->status_elapsed), text);
 
-  set_drive(t->demand_label, t->demand_bar, SC_I18N_TESTS_DEMAND_FMT,
-            status->drive_valid, status->demand_x10);
-  set_drive(t->position_label, t->position_bar, SC_I18N_TESTS_POSITION_FMT,
-            status->drive_valid, status->position_x10);
-  if (!status->drive_valid) {
-    gtk_label_set_text(GTK_LABEL(t->demand_label),
-                       sc_i18n_string_get(SC_I18N_TESTS_DRIVE_UNKNOWN));
+  if (t->has_drive) {
+    set_drive(t->demand_label, t->demand_bar, SC_I18N_TESTS_DEMAND_FMT,
+              status->drive_valid, status->demand_x10);
+    set_drive(t->position_label, t->position_bar, SC_I18N_TESTS_POSITION_FMT,
+              status->drive_valid, status->position_x10);
+    if (!status->drive_valid) {
+      gtk_label_set_text(GTK_LABEL(t->demand_label),
+                         sc_i18n_string_get(SC_I18N_TESTS_DRIVE_UNKNOWN));
+    }
   }
 
   char progress[512];
@@ -450,6 +495,7 @@ static void start_test(TestsTab *t, const char *name, const char *title,
   ScTestStatus before;
   char port[SC_PORT_PATH_MAX];
   if (!refresh_status(t, &before) || !authenticate(t, port, sizeof(port)) ||
+      !push_params(t, port, 0u, t->shared.param_count) ||
       !push_params(t, port, first_param, param_count)) {
     return;
   }
@@ -483,8 +529,8 @@ static void on_sequence_clicked(GtkButton *button, gpointer user_data) {
   (void)button;
   TestsTab *t = (TestsTab *)user_data;
   start_test(t, SC_TEST_SEQUENCE,
-             sc_i18n_string_get(SC_I18N_TESTS_BTN_RUN_SEQUENCE), 0u,
-             t->param_count);
+             sc_i18n_string_get(SC_I18N_TESTS_BTN_RUN_SEQUENCE),
+             t->shared.param_count, t->param_count - t->shared.param_count);
 }
 
 static void run_control(TestsTab *t,
@@ -578,26 +624,111 @@ static GtkWidget *build_status_panel(TestsTab *t) {
   t->status_elapsed = left_label("");
   gtk_grid_attach(GTK_GRID(grid), t->status_elapsed, 1, 1, 1, 1);
 
-  t->demand_label = left_label("");
-  gtk_widget_set_size_request(t->demand_label, 220, -1);
-  gtk_grid_attach(GTK_GRID(grid), t->demand_label, 0, 2, 1, 1);
-  t->demand_bar = gtk_progress_bar_new();
-  gtk_widget_set_hexpand(t->demand_bar, TRUE);
-  gtk_widget_set_valign(t->demand_bar, GTK_ALIGN_CENTER);
-  gtk_grid_attach(GTK_GRID(grid), t->demand_bar, 1, 2, 1, 1);
+  int row = 2;
+  if (t->has_drive) {
+    t->demand_label = left_label("");
+    gtk_widget_set_size_request(t->demand_label, 220, -1);
+    gtk_grid_attach(GTK_GRID(grid), t->demand_label, 0, row, 1, 1);
+    t->demand_bar = gtk_progress_bar_new();
+    gtk_widget_set_hexpand(t->demand_bar, TRUE);
+    gtk_widget_set_valign(t->demand_bar, GTK_ALIGN_CENTER);
+    gtk_grid_attach(GTK_GRID(grid), t->demand_bar, 1, row++, 1, 1);
 
-  t->position_label = left_label("");
-  gtk_grid_attach(GTK_GRID(grid), t->position_label, 0, 3, 1, 1);
-  t->position_bar = gtk_progress_bar_new();
-  gtk_widget_set_hexpand(t->position_bar, TRUE);
-  gtk_widget_set_valign(t->position_bar, GTK_ALIGN_CENTER);
-  gtk_grid_attach(GTK_GRID(grid), t->position_bar, 1, 3, 1, 1);
+    t->position_label = left_label("");
+    gtk_grid_attach(GTK_GRID(grid), t->position_label, 0, row, 1, 1);
+    t->position_bar = gtk_progress_bar_new();
+    gtk_widget_set_hexpand(t->position_bar, TRUE);
+    gtk_widget_set_valign(t->position_bar, GTK_ALIGN_CENTER);
+    gtk_grid_attach(GTK_GRID(grid), t->position_bar, 1, row++, 1, 1);
+  }
 
   t->status_progress = left_label("");
   gtk_label_set_wrap(GTK_LABEL(t->status_progress), TRUE);
-  gtk_grid_attach(GTK_GRID(grid), t->status_progress, 0, 4, 2, 1);
+  gtk_grid_attach(GTK_GRID(grid), t->status_progress, 0, row++, 2, 1);
   t->status_last = left_label("");
-  gtk_grid_attach(GTK_GRID(grid), t->status_last, 0, 5, 2, 1);
+  gtk_grid_attach(GTK_GRID(grid), t->status_last, 0, row, 2, 1);
+  return frame;
+}
+
+static const ParamRow *find_row(const TestsTab *t, size_t first, size_t count,
+                                const char *id) {
+  for (size_t i = first; i < first + count; ++i) {
+    if (strcmp(t->params[i].id, id) == 0) {
+      return &t->params[i];
+    }
+  }
+  return NULL;
+}
+
+/* Add the editable row of @p param to @p grid and to the tab's rows. */
+static void add_param_row(TestsTab *t, GtkWidget *grid, int grid_row,
+                          const ScTestParam *param) {
+  ParamRow *row = &t->params[t->param_count++];
+  sc_text_copy(row->id, sizeof(row->id), param->id);
+  row->applied = param->value;
+  row->default_value = param->default_value;
+  row->adjustment = gtk_adjustment_new((double)param->value, (double)param->min,
+                                       (double)param->max, 1.0, 10.0, 0.0);
+
+  GtkWidget *name = left_label(
+      token_text(k_param_labels, G_N_ELEMENTS(k_param_labels), param->id));
+  gtk_widget_set_size_request(name, 200, -1);
+  gtk_grid_attach(GTK_GRID(grid), name, 0, grid_row, 1, 1);
+  GtkWidget *spin = gtk_spin_button_new(row->adjustment, 1.0, 0);
+  gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
+  gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin), GTK_UPDATE_IF_VALID);
+  gtk_grid_attach(GTK_GRID(grid), spin, 1, grid_row, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), left_label(unit_text(param->unit)), 2,
+                  grid_row, 1, 1);
+}
+
+static GtkWidget *param_grid(void) {
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+  return grid;
+}
+
+static GtkWidget *defaults_button(TestCard *card) {
+  GtkWidget *defaults =
+      gtk_button_new_with_label(sc_i18n_string_get(SC_I18N_TESTS_BTN_DEFAULTS));
+  g_signal_connect(defaults, "clicked", G_CALLBACK(on_defaults_clicked), card);
+  return defaults;
+}
+
+/* Frame with the parameters every test uses, each shown once although the
+ * module lists it under every test; NULL when the catalog has none. */
+static GtkWidget *build_shared_params(TestsTab *t) {
+  TestCard *card = &t->shared;
+  card->tab = t;
+  GtkWidget *grid = param_grid();
+  for (size_t i = 0u; i < t->catalog.count; ++i) {
+    const ScTestEntry *entry = &t->catalog.tests[i];
+    for (size_t p = 0u; p < entry->param_count; ++p) {
+      const ScTestParam *param = &entry->params[p];
+      if (sc_tests_param_is_shared(param) &&
+          find_row(t, 0u, card->param_count, param->id) == NULL) {
+        add_param_row(t, grid, (int)card->param_count, param);
+        card->param_count++;
+      }
+    }
+  }
+  if (card->param_count == 0u) {
+    g_object_unref(g_object_ref_sink(grid));
+    return NULL;
+  }
+  GtkWidget *frame =
+      gtk_frame_new(sc_i18n_string_get(SC_I18N_TESTS_SHARED_PARAMS));
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_set_margin_start(box, 8);
+  gtk_widget_set_margin_end(box, 8);
+  gtk_widget_set_margin_top(box, 6);
+  gtk_widget_set_margin_bottom(box, 8);
+  gtk_frame_set_child(GTK_FRAME(frame), box);
+  gtk_box_append(GTK_BOX(box), grid);
+  GtkWidget *defaults = defaults_button(card);
+  gtk_widget_set_valign(defaults, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(box), defaults);
   return frame;
 }
 
@@ -606,7 +737,6 @@ static GtkWidget *build_card(TestsTab *t, const ScTestEntry *entry) {
   card->tab = t;
   sc_text_copy(card->name, sizeof(card->name), entry->name);
   card->first_param = t->param_count;
-  card->param_count = entry->param_count;
 
   const TestLabel *label = test_label(entry->name);
   GtkWidget *frame = gtk_frame_new(test_title(entry->name));
@@ -627,40 +757,19 @@ static GtkWidget *build_card(TestsTab *t, const ScTestEntry *entry) {
                                                   ? SC_I18N_TESTS_IN_SEQUENCE
                                                   : SC_I18N_TESTS_ON_REQUEST)));
 
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+  GtkWidget *grid = param_grid();
   gtk_box_append(GTK_BOX(box), grid);
   for (size_t p = 0u; p < entry->param_count; ++p) {
-    const ScTestParam *param = &entry->params[p];
-    ParamRow *row = &t->params[t->param_count++];
-    sc_text_copy(row->id, sizeof(row->id), param->id);
-    row->applied = param->value;
-    row->default_value = param->default_value;
-    row->adjustment =
-        gtk_adjustment_new((double)param->value, (double)param->min,
-                           (double)param->max, 1.0, 10.0, 0.0);
-
-    GtkWidget *name = left_label(
-        token_text(k_param_labels, G_N_ELEMENTS(k_param_labels), param->id));
-    gtk_widget_set_size_request(name, 200, -1);
-    gtk_grid_attach(GTK_GRID(grid), name, 0, (int)p, 1, 1);
-    GtkWidget *spin = gtk_spin_button_new(row->adjustment, 1.0, 0);
-    gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
-    gtk_spin_button_set_update_policy(GTK_SPIN_BUTTON(spin),
-                                      GTK_UPDATE_IF_VALID);
-    gtk_grid_attach(GTK_GRID(grid), spin, 1, (int)p, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), left_label(unit_text(param->unit)), 2,
-                    (int)p, 1, 1);
+    /* A shared parameter has its one row in the frame above the cards. */
+    if (!sc_tests_param_is_shared(&entry->params[p])) {
+      add_param_row(t, grid, (int)card->param_count, &entry->params[p]);
+      card->param_count++;
+    }
   }
 
   GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  if (entry->param_count != 0u) {
-    GtkWidget *defaults = gtk_button_new_with_label(
-        sc_i18n_string_get(SC_I18N_TESTS_BTN_DEFAULTS));
-    g_signal_connect(defaults, "clicked", G_CALLBACK(on_defaults_clicked),
-                     card);
-    gtk_box_append(GTK_BOX(buttons), defaults);
+  if (card->param_count != 0u) {
+    gtk_box_append(GTK_BOX(buttons), defaults_button(card));
   }
   card->run_button =
       gtk_button_new_with_label(sc_i18n_string_get(SC_I18N_TESTS_BTN_RUN));
@@ -694,6 +803,7 @@ GtkWidget *sc_tests_tab_build(AppState *state, size_t module_index) {
   TestsTab *t = g_new0(TestsTab, 1);
   t->state = state;
   t->module_index = module_index;
+  t->has_drive = sc_core_module_tests_report_drive(module_index);
 
   GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
   gtk_widget_set_margin_start(root, 12);
@@ -743,6 +853,11 @@ GtkWidget *sc_tests_tab_build(AppState *state, size_t module_index) {
   gtk_box_append(GTK_BOX(root), build_status_panel(t));
   gtk_box_append(GTK_BOX(root),
                  dim_label(sc_i18n_string_get(SC_I18N_TESTS_NOTE)));
+
+  GtkWidget *shared = build_shared_params(t);
+  if (shared != NULL) {
+    gtk_box_append(GTK_BOX(root), shared);
+  }
 
   GtkWidget *scroll = gtk_scrolled_window_new();
   gtk_widget_set_vexpand(scroll, TRUE);

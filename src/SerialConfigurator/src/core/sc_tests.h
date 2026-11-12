@@ -3,14 +3,15 @@
 
 /**
  * @file sc_tests.h
- * @brief Host side of the ECU functional tests (SC_TEST_* commands).
+ * @brief Host side of the functional tests of a module (SC_TEST_*
+ *        commands): the ECU bench tests and the Clocks cluster tests.
  *
  * The module reports its tests, their runtime parameters and the progress
  * of the one that runs. Reads need no authentication. Setting parameters,
  * starting, skipping and stopping do: run @ref sc_core_authenticate first,
  * as for @ref sc_core_set_param.
  *
- * A test started here belongs to this session. The ECU stops it when the
+ * A test started here belongs to this session. The module stops it when the
  * session ends or when test traffic stops for a few seconds, so a caller
  * that starts one keeps polling @ref sc_tests_get_status every
  * SC_TESTS_POLL_INTERVAL_MS until it ends.
@@ -37,9 +38,9 @@ extern "C" {
 
 typedef struct ScTestParam {
   char id[SC_TEST_ID_MAX];
-  char test[SC_TEST_ID_MAX];
+  char test[SC_TEST_ID_MAX]; /**< Owning test, or SC_TEST_SEQUENCE. */
   char unit[SC_TESTS_TOKEN_MAX];
-  int32_t value; /**< In force now; the default again after an ECU reset. */
+  int32_t value; /**< In force now; the default again after a reset. */
   int32_t min;
   int32_t max;
   int32_t default_value;
@@ -69,7 +70,7 @@ typedef struct ScTestField {
 
 typedef struct ScTestStatus {
   bool running;
-  uint32_t runs; /**< Tests started since the ECU booted. */
+  uint32_t runs; /**< Tests started since the module booted. */
   char test[SC_TEST_ID_MAX];
   char source[SC_TESTS_TOKEN_MAX]; /**< SC_TEST_SOURCE_SC or _CONSOLE. */
   uint32_t elapsed_ms;
@@ -125,7 +126,9 @@ bool sc_tests_parse_status(const ScCommandResult *result, ScTestStatus *out,
  *
  * A firmware without the commands (SC_UNKNOWN_CMD) gives a successful load
  * with @c supported false; a production ECU gives @c supported true and no
- * tests. Returns false on a transport or reply error.
+ * tests. A parameter that belongs to every test (see
+ * @ref sc_tests_param_is_shared) is listed under each of them. Returns false
+ * on a transport or reply error.
  */
 bool sc_tests_load_catalog(ScCore *core, size_t module_index,
                            ScTestCatalog *out, char *error, size_t error_size);
@@ -138,7 +141,16 @@ bool sc_tests_get_status(ScCore *core, size_t module_index, ScTestStatus *out,
 bool sc_tests_status_field(const ScTestStatus *status, const char *key,
                            int32_t *out_value);
 
-/** @brief Set one test parameter; it holds until the ECU resets. */
+/**
+ * @brief Whether @p param belongs to every test of the module.
+ *
+ * The module lists such a parameter under each test and names
+ * SC_TEST_SEQUENCE as its owner. It is one value: setting it changes it for
+ * all tests. False for NULL.
+ */
+bool sc_tests_param_is_shared(const ScTestParam *param);
+
+/** @brief Set one test parameter; it holds until the module resets. */
 ScTestActionStatus sc_tests_set_param(const ScTransport *transport,
                                       const char *device_path, const char *id,
                                       int32_t value, char *error,

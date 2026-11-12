@@ -47,8 +47,8 @@ through `SC_JASZCZURHAL_DIR`.
 | Authentication | `SC_AUTH_BEGIN`, `SC_AUTH_PROVE` | no |
 | Parameter writes | `SC_SET_PARAM`, `SC_COMMIT_PARAMS`, `SC_REVERT_PARAMS` | yes |
 | Flashing | `SC_REBOOT_BOOTLOADER` | yes |
-| Functional test reads (ECU only) | `SC_TEST_LIST`, `SC_TEST_INFO`, `SC_TEST_PARAM`, `SC_TEST_STATUS` | no |
-| Functional test control (ECU only) | `SC_TEST_SET`, `SC_TEST_RUN`, `SC_TEST_STOP`, `SC_TEST_SKIP` | yes |
+| Functional test reads (ECU, Clocks) | `SC_TEST_LIST`, `SC_TEST_INFO`, `SC_TEST_PARAM`, `SC_TEST_STATUS` | no |
+| Functional test control (ECU, Clocks) | `SC_TEST_SET`, `SC_TEST_RUN`, `SC_TEST_STOP`, `SC_TEST_SKIP` | yes |
 
 `HELLO` returns the module name, firmware version, build id, and the device
 UID. The UID comes from `hal_get_device_uid_hex()`; the other values are
@@ -171,11 +171,20 @@ See the [ECU parameter tests](../../ECU/tests/test_ecu_params.cpp) and the
 
 ## Functional tests
 
+The ECU and Clocks offer functional tests to the configurator.
+
 An ECU built with `ECU_FUNCTIONAL_TESTS_ENABLED` offers some of its bench
-tests to the configurator. The test list in `src/ECU/tests.c` marks each
-test that the configurator can run. Tests that leave a fault behind (`dtc`),
-write flash (`kv`) or never end (`manual`) stay console-only. The host builds its view from the
-replies, so a new test or parameter needs no host change:
+tests. The test list in `src/ECU/tests.c` marks each test that the
+configurator can run. Tests that leave a fault behind (`dtc`), write flash
+(`kv`) or never end (`manual`) stay console-only.
+
+Clocks offers five tests of the factory cluster outputs in every image
+(`src/Clocks/clocksTests.cpp`): `charge` and `oil` show each lamp lit, off and
+blinking, `rpm` and `speed` step the gauges through fixed values and back to
+zero, and `buzzer` plays the short, middle and long signal.
+
+The host builds its view from the replies, so a new test or parameter needs
+no host change. From the ECU:
 
 ```text
 SC_TEST_LIST                -> SC_OK TEST_LIST count=5 names=cyclic,random,top,topzero,pot
@@ -186,18 +195,35 @@ SC_TEST_RUN all             -> SC_OK TEST_RUN name=all
 SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cyclic src=sc elapsed_ms=4120 seq=1/4 demand_x10=412 position_x10=405 profile=1 rate=228 cycle=2 cycles=6 pass=1 passes=2 last=pot result=stopped
 ```
 
+From Clocks:
+
+```text
+SC_TEST_LIST          -> SC_OK TEST_LIST count=5 names=charge,oil,rpm,speed,buzzer
+SC_TEST_INFO rpm      -> SC_OK TEST_INFO name=rpm seq=1 params=step_ms
+SC_TEST_PARAM step_ms -> SC_OK TEST_PARAM id=step_ms test=all value=2000 min=1200 max=10000 default=2000 unit=ms
+SC_TEST_STATUS        -> SC_OK TEST_STATUS state=running runs=1 test=rpm src=sc elapsed_ms=2140 seq=3/5 step=2 steps=5 value=3000 last=oil result=done
+```
+
 - **Sequence.** `seq=1` marks a test that `SC_TEST_RUN all` runs, in list
   order. `seq=i/n` in the status is the step of a running sequence.
 - **Parameters.** Parameters are integers with a unit token (`count`, `s`,
-  `ms`, `pct_per_s`). A value set here holds until the ECU resets, then the
-  default comes back. The bench console reads and writes the same values
-  (`params`, `set <id> <value>`).
+  `ms`, `pct_per_s`). A value set here holds until the module resets, then the
+  default comes back. The ECU bench console reads and writes the same values
+  (`params`, `set <id> <value>`). A parameter reported with `test=all` belongs
+  to every test and appears in the `params` of each one. It is still one
+  value. Clocks has one such parameter: `step_ms`, the time of every step.
 - **Status.** `state`, `runs` (tests started since boot, one-shots included),
-  `test`, `src` (`sc` or `console`), `elapsed_ms`, the demanded and measured
-  actuator position in percent of the stroke times ten, and `last`/`result` of
-  the most recent finished test. Every other key is a progress value of the
-  running test, such as the cyclic profile and rate, the random target, the
-  staircase setpoint, or the pot phase. A host shows unknown keys as they are.
+  `test`, `src` (`sc` or `console`), `elapsed_ms`, and `last`/`result` of
+  the most recent finished test. The ECU adds `demand_x10` and
+  `position_x10`: the demanded and measured actuator position in percent of
+  the stroke times ten. It leaves both out while the pump calibration or the
+  position reading is invalid. Clocks tests move no actuator and never send
+  them. Every other key is a progress value of the running test, such as the
+  cyclic profile and rate, the random target, the staircase setpoint, or the
+  pot phase. A Clocks test reports `step` and `steps`, then `value` (the rpm
+  or km/h of the step) for the gauges or `phase` for the rest: the lamp
+  state `lit`, `off` or `blink`, or the buzzer signal `short`, `middle` or
+  `long`. A host shows unknown keys as they are.
   The cyclic `rate` is the demand rate measured over the last full cycle of
   the profile in progress (200 % of travel per cycle), not the nominal step
   rate. It is absent until that profile completes its first cycle, so it
@@ -214,11 +240,17 @@ SC_TEST_STATUS              -> SC_OK TEST_STATUS state=running runs=3 test=cycli
   refuses. `SC_NOT_READY BUSY` while an earlier request waits for the
   controller core, which takes one request per tick; retry it.
 
-The ECU does not leave a configurator test running unsupervised. It stops the
+A module does not leave a configurator test running unsupervised. It stops the
 test when the session ends (`SC_BYE`, also when the next `HELLO` follows at
 once) or when no test command, `SC_TEST_STATUS` included, has arrived for
-`ECU_SC_TESTS_KEEPALIVE_MS` (3 s). A host that starts
-a test keeps polling the status until the test ends.
+3 s (`ECU_SC_TESTS_KEEPALIVE_MS`, `CLOCKS_SC_TESTS_KEEPALIVE_MS`). A host
+that starts a test keeps polling the status until the test ends.
+
+A Clocks test replaces one output of the cluster and nothing else. The
+measurement behind it keeps running, the CAN frames carry measured values,
+and the output goes back to its measurement however the test ends. Clocks
+has no test console and no RPM interlock, so these commands are the only way
+to run its tests.
 
 Functional tests are enabled only in the ECU `BENCH` variant. Its default
 `ECU_SC_TESTS_RPM_INTERLOCK=0` leaves the configurator's RPM interlock disabled,
@@ -229,8 +261,8 @@ rpm. Tests started from the bench console belong to the operator; session
 end, the keepalive timeout and this RPM interlock do not stop them. The
 console has its own optional watch (`watch <ms>`, see the ECU README).
 
-An ECU built without tests answers `count=0`. Modules and firmware without
-the commands answer `SC_UNKNOWN_CMD`. The host shows "No tests available"
+An ECU built without tests answers `count=0`. Modules and older firmware
+without the commands answer `SC_UNKNOWN_CMD`. The host shows "No tests available"
 for both.
 
 ## Device identity

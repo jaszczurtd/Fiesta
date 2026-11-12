@@ -5,10 +5,20 @@
 #include <assert.h>
 #include <locale.h>
 
+static unsigned s_tests_tabs_built;
+static size_t s_tests_tab_index;
+
 GtkWidget *sc_tests_tab_build(AppState *state, size_t index) {
   (void)state;
-  (void)index;
+  ++s_tests_tabs_built;
+  s_tests_tab_index = index;
   return gtk_label_new("");
+}
+
+static const char *tab_text(GtkWidget *notebook, int page) {
+  return gtk_notebook_get_tab_label_text(
+      GTK_NOTEBOOK(notebook),
+      gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), page));
 }
 
 typedef struct {
@@ -205,6 +215,35 @@ int main(void) {
   assert(sc_map_state(&state) == 0 && state.map_tab_root == 0);
   sc_map_tab_dispose(&state); /* a second call does nothing */
   gtk_window_destroy(GTK_WINDOW(window));
+  /* The whole Values tab: Clocks runs functional tests, so its page splits
+   * into Settings and Tests; RTC_Clock has none and keeps the plain page. */
+  state.connected = true;
+  state.core.modules[3].detected = true;
+  snprintf(state.core.modules[3].port_path,
+           sizeof(state.core.modules[3].port_path), "/dev/clocks");
+  GtkWidget *values = sc_values_tab_build(&state);
+  g_object_ref_sink(values);
+  sc_values_tab_rebuild(&state, true);
+  GtkWidget *modules = gtk_widget_get_first_child(values);
+  assert(GTK_IS_NOTEBOOK(modules));
+  assert(gtk_notebook_get_n_pages(GTK_NOTEBOOK(modules)) == 2);
+  assert(strcmp(tab_text(modules, 0), SC_MODULE_CLOCKS) == 0);
+  assert(strcmp(tab_text(modules, 1), SC_MODULE_CLOCK) == 0);
+  GtkWidget *clocks = gtk_notebook_get_nth_page(GTK_NOTEBOOK(modules), 0);
+  assert(GTK_IS_NOTEBOOK(clocks));
+  assert(gtk_notebook_get_n_pages(GTK_NOTEBOOK(clocks)) == 2);
+  assert(strcmp(tab_text(clocks, 0),
+                sc_i18n_string_get(SC_I18N_VALUES_SUBTAB_SETTINGS)) == 0);
+  assert(strcmp(tab_text(clocks, 1),
+                sc_i18n_string_get(SC_I18N_VALUES_SUBTAB_TESTS)) == 0);
+  assert(s_tests_tabs_built == 1u && s_tests_tab_index == 1u);
+  assert(!GTK_IS_NOTEBOOK(gtk_notebook_get_nth_page(GTK_NOTEBOOK(modules), 1)));
+  g_object_unref(values);
+  state.values_tab_root = NULL;
+  state.core.modules[3].detected = false;
+  state.connected = false;
+  puts("PASS: Clocks page has the Settings and Tests sub-tabs");
+
   state.core.modules[1].display_name = NULL;
   GtkWidget *unnamed = build_module_subtab(&state, 1u);
   g_object_ref_sink(unnamed);

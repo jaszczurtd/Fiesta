@@ -107,7 +107,7 @@ class RegistryRulesTests(unittest.TestCase):
         self.assertNotIn("dpfmodule", [m.name for m in registry.firmware()])
         self.assertNotIn("dpfmodule", [m.name for m in registry.ci()])
         self.assertNotIn("SC_MODULE_TOKEN_DPF", fiesta_modules.tokens_header(registry))
-        self.assertIn("X(NULL, SC_MODULE_DPF, NULL, false)",
+        self.assertIn("X(NULL, SC_MODULE_DPF, NULL, false, false)",
                       fiesta_modules.sc_table_header(registry))
         for field, value in (("token", "OIL&SPD"), ("hostTests", "build"),
                              ("ci", True)):
@@ -240,6 +240,30 @@ class GeneratedOutputTests(unittest.TestCase):
         tokens = fiesta_modules.tokens_header(registry)
         self.assertLess(tokens.index('SC_MODULE_CLOCK "RTC_Clock"'),
                         tokens.index('SC_MODULE_ECU "ECU"'))
+
+    def test_table_tells_tests_from_tests_with_an_actuator(self) -> None:
+        drive = modified(0, serialConfigurator={
+            "index": 0, "displayName": "ECU", "tests": True, "testsDrive": True})
+        drive[1]["serialConfigurator"]["tests"] = True
+        repo = FixtureRepo(modules=drive)
+        self.addCleanup(repo.close)
+        table = fiesta_modules.sc_table_header(repo.load())
+        self.assertIn('X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true, true)', table)
+        self.assertIn('X(SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK, "Fiesta_clock", '
+                      'true, false)', table)
+        plain = FixtureRepo()
+        self.addCleanup(plain.close)
+        self.assertIn('X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true, false)',
+                      fiesta_modules.sc_table_header(plain.load()))
+
+    def test_actuator_status_needs_tests(self) -> None:
+        for entry in ({"index": 1, "displayName": "RTC_Clock", "testsDrive": True},
+                      {"index": 1, "displayName": "RTC_Clock", "tests": True,
+                       "testsDrive": 1}):
+            repo = FixtureRepo(modules=modified(1, serialConfigurator=entry))
+            self.addCleanup(repo.close)
+            with self.assertRaisesRegex(RegistryError, "testsDrive"):
+                repo.load()
 
     def test_modules_outside_serial_configurator(self) -> None:
         repo = FixtureRepo()

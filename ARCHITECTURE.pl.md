@@ -71,7 +71,9 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 | [SerialConfigurator](src/SerialConfigurator/) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
 
 [`modules.json`](modules.json) określa rodzaj, token, pozycję konfiguratora
-i katalog testów każdego modułu. Dodawanie modułu zaczyna się od tego rejestru.
+i katalog testów każdego modułu. Pozycja konfiguratora mówi też, czy moduł
+dostaje podzakładkę Tests (`tests`) i czy status jego testów niesie położenie
+nastawnika (`testsDrive`). Dodawanie modułu zaczyna się od tego rejestru.
 [`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) sprawdza go i generuje
 nagłówek tokenów w `src/common/scDefinitions`, tabelę konfiguratora oraz listy
 dla skryptów powłoki. Korzystają z nich generator VS Code, `runalltests.sh`,
@@ -192,6 +194,16 @@ na TFT ma własny zakres.
 Kontrolka oleju świeci przy braku ciśnienia i miga z częstotliwością 1 Hz,
 gdy czujnik jest zwarty albo przerwany, czyli gdy wskaźnik oleju pokazuje ERR.
 Od włączenia zasilania do pierwszego odczytu świeci.
+
+Konfigurator uruchamia pięć testów fabrycznych zegarów: każda kontrolka
+świeci, gaśnie i miga, obrotomierz i prędkościomierz przechodzą przez
+ustalone wartości i wracają do zera, a buzzer odtwarza trzy sygnały. Krok
+trwa 2 s, o ile konfigurator nie zmieni `step_ms`. Test podstawia tylko
+wyjście, którym steruje. Pomiary, ramki CAN i pozostałe wyjścia działają
+dalej, a wyjście wraca do pomiaru, gdy test się skończy, zostanie zatrzymany
+albo straci kontakt z konfiguratorem. Testy są w każdym obrazie Clocks;
+polecenia i klucze statusu podaje
+[opis protokołu](src/common/scDefinitions/PROTOCOL.pl.md#testy-funkcjonalne).
 
 | Plik | Zadanie |
 |---|---|
@@ -330,7 +342,7 @@ Po początkowym odczycie temperatur powitanie jest kasowane na ekranie.
 
 Aplikacja C/GTK4 dla Linuksa wykrywa moduły USB, pokazuje tożsamość,
 odczytuje i zmienia parametry, uruchamia testy obrazu stanowiskowego ECU
-oraz wgrywa firmware po sprawdzeniu manifestu. CLI obsługuje wykrywanie,
+i testy Clocks oraz wgrywa firmware po sprawdzeniu manifestu. CLI obsługuje wykrywanie,
 ustawienia, GPS, testy i uwierzytelnione wejście do bootloadera.
 Pełne kopiowanie UF2 i ponowne połączenie zapewnia GUI.
 

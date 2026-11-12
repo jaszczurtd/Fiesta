@@ -137,6 +137,10 @@ const char *sc_core_module_source_dir(size_t index);
 bool sc_core_module_inactive(size_t index);
 /* True when the module firmware reports functional tests (Tests tab). */
 bool sc_core_module_has_tests(size_t index);
+/* True when the test status of the module carries the demanded and measured
+ * actuator position (the ECU). A single status may still lack both, e.g.
+ * with an invalid calibration. */
+bool sc_core_module_tests_report_drive(size_t index);
 const char *sc_command_status_name(ScCommandStatus status);
 const char *sc_value_type_name(ScValueType type);
 

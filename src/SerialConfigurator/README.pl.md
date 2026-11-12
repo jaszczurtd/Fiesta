@@ -137,23 +137,34 @@ Clocks raportuje dostępność, szerokość i długość geograficzną, prędko�
 czas UTC przez `SC_GET_GPS`. Karta GPS View odpytuje co 4 s. Z libshumate
 pokazuje znacznik OpenStreetMap i centrowanie; bez niego informację zastępczą.
 
-## Testy stanowiskowe ECU
+## Testy funkcjonalne
 
-Strona ECU na karcie Values zawiera Settings i Tests. `SC_TEST_LIST`
-dostarcza testy z opisami, parametrami, Defaults i Run. **Run sequence**
-uruchamia testy należące do sekwencji; **Skip** i **Stop** działają na
-bieżący test. Firmware bez testów lub poleceń pokazuje **No tests available**.
+Strony ECU i Clocks na karcie Values zawierają Settings i Tests. ECU
+udostępnia testy stanowiskowe nastawnika VP37. Clocks ma pięć testów
+fabrycznych zegarów: kontrolki ładowania, kontrolki ciśnienia oleju,
+obrotomierza, prędkościomierza i buzzera.
+
+`SC_TEST_LIST` dostarcza testy z opisami, parametrami, Defaults i Run.
+Parametr wspólny dla wszystkich testów, np. czas kroku w Clocks, ma jedno
+pole nad kartami testów. **Run sequence** uruchamia testy należące do
+sekwencji; **Skip** i **Stop** działają na bieżący test. Firmware bez testów
+lub poleceń pokazuje **No tests available**.
 
 Run uwierzytelnia sesję, wysyła edytowane parametry i uruchamia test.
-Parametry obowiązują do resetu ECU. Panel statusu pokazuje test, inicjatora,
-krok sekwencji, czas, zadane i zmierzone położenie, postęp i ostatni wynik.
+Parametry obowiązują do resetu modułu. Panel statusu pokazuje test,
+inicjatora, krok sekwencji, czas, postęp i ostatni wynik. Dla ECU pokazuje
+też zadane i zmierzone położenie nastawnika, a gdy ECU ich nie podaje,
+informuje o tym.
 Odpytuje co 250 ms podczas swojego testu, również gdy użytkownik ogląda inną
-kartę. ECU zatrzymuje test po końcu sesji albo po 3 s bez poleceń testowych.
-Zamknięcie okna, rozłączenie lub nowe wykrywanie kończy więc test. Testy
-funkcjonalne ECU wymagają obrazu `BENCH`, w którym blokada RPM konfiguratora
-jest domyślnie wyłączona (`ECU_SC_TESTS_RPM_INTERLOCK=0`). Build ECU z opcją
-ustawioną na `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
-`ECU_SC_TESTS_RPM_LIMIT` rpm.
+kartę. Moduł zatrzymuje test po końcu sesji albo po 3 s bez poleceń
+testowych. Zamknięcie okna, rozłączenie lub nowe wykrywanie kończy więc test;
+wyjście Clocks wraca wtedy do pomiaru.
+
+Testy funkcjonalne ECU wymagają obrazu `BENCH`, w którym blokada RPM
+konfiguratora jest domyślnie wyłączona (`ECU_SC_TESTS_RPM_INTERLOCK=0`).
+Build ECU z opcją ustawioną na `1` odrzuca lub zatrzymuje testy konfiguratora
+powyżej `ECU_SC_TESTS_RPM_LIMIT` rpm. Testy Clocks są w każdym obrazie Clocks
+i nie mają blokady.
 
 ```bash
 ./build/serial-configurator-cli test-list --module ECU
@@ -162,6 +173,8 @@ ustawioną na `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
 ./build/serial-configurator-cli test-status --module ECU
 ./build/serial-configurator-cli test-skip --module ECU
 ./build/serial-configurator-cli test-stop --module ECU
+./build/serial-configurator-cli test-set --id step_ms --value 3000 --module Clocks
+./build/serial-configurator-cli test-run rpm --module Clocks
 ```
 
 `test-run` pokazuje postęp co sekundę; Ctrl-C prosi o zatrzymanie. Kod wyjścia

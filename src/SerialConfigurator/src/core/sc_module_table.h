@@ -7,13 +7,15 @@
 #include "sc_fiesta_module_tokens.h"
 
 /* clang-format off */
-/* One X(token, display_name, source_dir, tests) row per module, in module
- * index order. The index is part of the saved flash-path schema. */
+/* One X(token, display_name, source_dir, tests, tests_drive) row per module,
+ * in module index order. The index is part of the saved flash-path schema.
+ * tests: the firmware runs functional tests; tests_drive: their status
+ * carries the demanded and measured actuator position. */
 #define SC_MODULE_TABLE(X) \
-  X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true) \
-  X(SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS, "Clocks", false) \
-  X(NULL, SC_MODULE_DPF, NULL, false) \
-  X(SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK, "Fiesta_clock", false)
+  X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true, true) \
+  X(SC_MODULE_TOKEN_CLOCKS, SC_MODULE_CLOCKS, "Clocks", true, false) \
+  X(NULL, SC_MODULE_DPF, NULL, false, false) \
+  X(SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK, "Fiesta_clock", false, false)
 
 /* NULL-terminated by-id name fragments of Fiesta boards that
  * SerialConfigurator does not talk to. */

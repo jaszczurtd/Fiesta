@@ -164,6 +164,13 @@ extern "C" {
 #define SC_TEST_PHASE_HOLD "hold"
 #define SC_TEST_PHASE_FALL "fall"
 #define SC_TEST_PHASE_REST "rest"
+/* Clocks: step names of the lamp tests and of the buzzer test. */
+#define SC_TEST_PHASE_OFF "off"
+#define SC_TEST_PHASE_LIT "lit"
+#define SC_TEST_PHASE_BLINK "blink"
+#define SC_TEST_PHASE_SHORT "short"
+#define SC_TEST_PHASE_MIDDLE "middle"
+#define SC_TEST_PHASE_LONG "long"
 
 /* Result of the most recent finished test. */
 #define SC_TEST_RESULT_DONE "done"
@@ -381,8 +388,10 @@ extern "C" {
 /* "SC_OK TEST_STATUS state=<idle|running> ..." followed by key=value
  * tokens: test, src (sc|console), seq (<i>/<n>, only in a sequence),
  * elapsed_ms, demand_x10 and position_x10 (percent of the usable stroke
- * times ten), the running test's own progress keys, and last/result for
- * the most recent finished test. Unknown keys are ignored by the host. */
+ * times ten; only from a module with an actuator, and only while both
+ * readings are valid), the running test's own progress keys, and
+ * last/result for the most recent finished test. Unknown keys are ignored
+ * by the host. */
 #define SC_REPLY_TEST_STATUS_HEAD SC_STATUS_OK " " SC_REPLY_TAG_TEST_STATUS
 
 /* "SC_BAD_REQUEST unknown_test name=<test>" */
