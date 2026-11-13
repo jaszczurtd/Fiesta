@@ -383,10 +383,10 @@ typedef struct {
   uint32_t (*cyclicDelayMs)(void);
 } VP37Callbacks;
 
-/** @brief What each published status word holds: the run flag as 0 or 1, the
- * good-frame count, and the bit patterns of the two floats. */
+/** @brief What each published status word holds: run and sensor-valid flags,
+ * the good-frame count, and the bit patterns of the two floats. */
 enum {
-  VP37_STATUS_WORD_INITIALIZED = 0,
+  VP37_STATUS_WORD_FLAGS = 0,
   VP37_STATUS_WORD_READ_COUNT,
   VP37_STATUS_WORD_FUEL_TEMP,
   VP37_STATUS_WORD_SUPPLY,
@@ -396,6 +396,7 @@ enum {
 /** @brief What every build reads of a pump from another core. */
 typedef struct {
   bool initialized;   /**< The pump runs; false again after a stop. */
+  bool fuelTempValid; /**< Successful feedback with a valid fuel sensor. */
   uint32_t readCount; /**< Good Adjustometer frames so far. */
   float fuelTempC;    /**< Fuel temperature of the newest good frame [C]. */
   float supplyVolts;  /**< Supply of the newest good frame [V]. */

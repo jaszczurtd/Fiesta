@@ -198,13 +198,17 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
   return resultVolts;
 }
 
-void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
+bool VP37_temperatureControlAvailable(float fuelTempC, uint8_t status) {
   const uint8_t invalid = ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_FUEL_TEMP_BROKEN |
                           ADJ_STATUS_BASELINE_PENDING;
-  if (!isfinite(self->thermal.lastFuelTemp) ||
-      (self->thermal.lastFuelTemp < 0.0f) ||
-      (self->thermal.lastFuelTemp > VP37_THERMAL_TEMP_VALID_MAX_C) ||
-      ((self->feedback.lastStatus & invalid) != 0U)) {
+  return isfinite(fuelTempC) && (fuelTempC > 0.0f) &&
+         (fuelTempC <= VP37_THERMAL_TEMP_VALID_MAX_C) &&
+         ((status & invalid) == 0U);
+}
+
+void VP37_updateTemperatureCorrection(VP37Pump *self, float dt) {
+  if (!VP37_temperatureControlAvailable(self->thermal.lastFuelTemp,
+                                        self->feedback.lastStatus)) {
     return; // Keep the last valid factor; initialization uses unity.
   }
   const float reference =

@@ -144,6 +144,15 @@ into stick-slip.
 
 ## Supply and resistance compensation
 
+Fuel temperature is a signed measurement; a valid zero or negative reading
+does not indicate a sensor failure. The existing control model uses valid
+readings above 0 C and up to 120 C. Outside that range, or on a sensor fault,
+it retains the last temperature factor (1 after startup) and the lower limit
+of positive PID correction. The measured-resistance path and factor limits
+remain unchanged. Supporting a negative reading in telemetry does not qualify
+operation of a cold pump; that requires measurements on a cooled assembly.
+
+
 Supply compensation scales the complete feedforward and PID command by `12 V / compensated
 voltage`. ADC scan blocks arrive independently of the position-control step. Core 1 copies
 them between position steps and tracks gate edges across block boundaries, including between

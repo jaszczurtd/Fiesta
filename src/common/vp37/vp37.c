@@ -797,7 +797,9 @@ static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle) {
  */
 static void VP37_updateAuthority(VP37Pump *self, VP37Cycle *cycle) {
   self->pid.positiveLimit = VP37_PID_CORR_LIMIT_POSITIVE_COLD;
-  if (self->feedback.commLostSince == 0U) {
+  if ((self->feedback.commLostSince == 0U) &&
+      VP37_temperatureControlAvailable(self->feedback.fuelTempC,
+                                       self->feedback.lastStatus)) {
     self->pid.positiveLimit = VP37_computePositiveCorrectionLimit(
         VP37_PWM_REFERENCE_TEMP_C, self->feedback.lastStatus,
         self->feedforward.pwm);

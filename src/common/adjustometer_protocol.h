@@ -44,7 +44,13 @@
 
 /** @brief Fast feedback address, independent of the diagnostic layout. */
 #define ADJUSTOMETER_FEEDBACK_START 0x17U
-#define ADJUSTOMETER_FEEDBACK_VERSION 1U
+#define ADJUSTOMETER_FEEDBACK_LEGACY_VERSION 1U
+#define ADJUSTOMETER_FEEDBACK_VERSION 2U
+/** @brief Version 2 stores Celsius plus this offset in byte 5. */
+#define ADJUSTOMETER_FUEL_TEMP_OFFSET_C 40
+/** @brief Accepted sensor range; separate from the control model's range. */
+#define ADJUSTOMETER_FUEL_TEMP_MIN_C (-40)
+#define ADJUSTOMETER_FUEL_TEMP_MAX_C 120
 #define ADJUSTOMETER_FEEDBACK_BYTES 30U
 #define ADJUSTOMETER_TOTAL_REG_COUNT                                           \
   (ADJUSTOMETER_FEEDBACK_START + ADJUSTOMETER_FEEDBACK_BYTES)

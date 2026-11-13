@@ -2461,7 +2461,8 @@ void test_vp37_temperature_bounds_and_physical_ceiling_reject_windup(void) {
 
   pump->thermal.temperatureReady = false;
   hal_mock_set_millis(1005);
-  injectAdjRegisterData(1000, 144, 0, ADJ_STATUS_OK);
+  // One degree was the lowest valid rounded reading from the v1 producer.
+  injectAdjRegisterData(1000, 144, 1, ADJ_STATUS_OK);
   VP37_process(pump);
   TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(VP37_TEMPERATURE_FACTOR_MIN,
                                      pump->thermal.temperatureCorrection);

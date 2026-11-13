@@ -97,8 +97,12 @@ each read; sequence markers and ECU freshness checks remain in use. Wire definit
 | `0x13..0x16` | Reserved. |
 | `0x17..0x34` | Coherent control feedback, including raw frequency and measurement freshness. |
 
-ECU and VP37TestBench read version-1 control feedback at its fixed address
-`0x17`. The five-byte reader is no longer supported. Diagnostic readers must
+ECU and VP37TestBench accept control feedback versions 1 and 2 at `0x17`.
+Adjustometer sends version 2. Update the ECU or VP37TestBench first: an older
+receiver rejects the new frame. Version 2 keeps the 30-byte layout and stores
+fuel temperature as Celsius plus 40 in byte 5 (`-20 C` becomes `20`). Version 1
+stores unsigned Celsius. The five-byte reader is no longer supported.
+Diagnostic readers must
 use version 2 and derive signed deviation as filtered frequency minus baseline
 from the same read. A different diagnostic version is rejected without
 affecting control feedback.
@@ -110,7 +114,15 @@ reporting greater age can shorten it. The wire `ageUs` remains the age at
 publication. Unsynchronized clocks cannot reveal the delay between publication
 and the first read, so this check does not measure the complete end-to-end latency.
 
-Voltage is encoded in 0.1 V and fuel temperature in whole degrees C. The
+Fuel temperature accepts readings from -40 to 120 C, including zero. The
+`FUEL_TEMP_BROKEN` bit indicates failed or out-of-range readings immediately.
+The numeric field retains the last valid temperature (zero before the first
+valid sample); always check the status. Recovery starts the filter from the
+first valid reading. This measurement range does not qualify cold-pump control.
+The existing ECU compensation holds its last factor at 0 C and below, using
+1 after startup, and retains the lower positive-correction limit.
+
+Voltage is encoded in 0.1 V. The
 `47k / 10k` divider limits ADC measurement to about 18.8 V at 3.3 V full scale,
 although the wire field can represent 25.5 V. ADC readings use a separate EMA
 with new-sample weight 1/8.

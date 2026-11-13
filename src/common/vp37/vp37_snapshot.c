@@ -12,6 +12,8 @@
 
 /** Copies a reader attempts before it reports HAL_EAGAIN. */
 #define VP37_SNAPSHOT_READ_ATTEMPTS 4U
+#define VP37_STATUS_INITIALIZED (1U << 0)
+#define VP37_STATUS_FUEL_TEMP_VALID (1U << 1)
 
 /* A copy starts at the sequence the first returns and stands when the second
  * accepts it; host tests interleave publications between the two. */
@@ -104,9 +106,14 @@ static void VP37_buildTelemetry(const VP37Pump *self,
 #endif
 
 void VP37_publish(VP37Pump *self) {
+  const bool fuelTempValid =
+      (self->feedback.readCount != 0U) && !self->feedback.commFailed &&
+      ((self->feedback.lastStatus & ADJ_STATUS_FUEL_TEMP_BROKEN) == 0U);
   // Built from the fields alone: a struct copy would carry its padding.
   const uint32_t statusWords[VP37_STATUS_WORDS] = {
-      [VP37_STATUS_WORD_INITIALIZED] = self->vp37Initialized ? 1U : 0U,
+      [VP37_STATUS_WORD_FLAGS] =
+          (self->vp37Initialized ? VP37_STATUS_INITIALIZED : 0U) |
+          (fuelTempValid ? VP37_STATUS_FUEL_TEMP_VALID : 0U),
       [VP37_STATUS_WORD_READ_COUNT] = self->feedback.readCount,
       [VP37_STATUS_WORD_FUEL_TEMP] = VP37_floatBits(self->feedback.fuelTempC),
       [VP37_STATUS_WORD_SUPPLY] = VP37_floatBits(self->feedback.supplyVolts)};
@@ -133,8 +140,9 @@ void VP37_publish(VP37Pump *self) {
 }
 
 void VP37_publishStop(VP37Pump *self) {
-  if (HAL_ATOMIC_LOAD(&self->published[VP37_STATUS_WORD_INITIALIZED],
-                      HAL_ATOMIC_RELAXED) != 0U) {
+  if ((HAL_ATOMIC_LOAD(&self->published[VP37_STATUS_WORD_FLAGS],
+                       HAL_ATOMIC_RELAXED) &
+       VP37_STATUS_INITIALIZED) != 0U) {
     VP37_publish(self);
   }
 }
@@ -191,9 +199,12 @@ static hal_status_t VP37_copyPublished(const VP37Pump *self,
 
 /** @brief The status the published words describe. */
 static void VP37_decodeStatus(const uint32_t *words, VP37Status *out) {
-  out->initialized = words[VP37_STATUS_WORD_INITIALIZED] != 0U;
+  out->initialized =
+      (words[VP37_STATUS_WORD_FLAGS] & VP37_STATUS_INITIALIZED) != 0U;
   out->readCount = words[VP37_STATUS_WORD_READ_COUNT];
   out->fuelTempC = VP37_bitsFloat(words[VP37_STATUS_WORD_FUEL_TEMP]);
+  out->fuelTempValid =
+      (words[VP37_STATUS_WORD_FLAGS] & VP37_STATUS_FUEL_TEMP_VALID) != 0U;
   out->supplyVolts = VP37_bitsFloat(words[VP37_STATUS_WORD_SUPPLY]);
 }
 

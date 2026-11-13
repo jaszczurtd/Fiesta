@@ -27,6 +27,7 @@ extern "C" void adj_test_sensors_get_state(adj_sensors_test_state_t *state) {
   state->zeroCandidateSign = adjustometerZeroCandidateSign;
   state->zeroCandidateWindows = adjustometerZeroCandidateWindows;
   state->filteredFuelTemp = filteredFuelTemp;
+  state->fuelTempFilterReady = fuelTempFilterReady;
   state->filteredVoltage = filteredVoltage;
 }
 
@@ -55,6 +56,7 @@ adj_test_sensors_set_state(const adj_sensors_test_state_t *state) {
   adjustometerZeroCandidateSign = state->zeroCandidateSign;
   adjustometerZeroCandidateWindows = state->zeroCandidateWindows;
   filteredFuelTemp = state->filteredFuelTemp;
+  fuelTempFilterReady = state->fuelTempFilterReady;
   filteredVoltage = state->filteredVoltage;
 }
 

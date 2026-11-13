@@ -98,7 +98,7 @@ static inline void injectLocalSupplyVoltage(float volts) {
 
 static inline void appendAdjRegisterData(AdjustometerScript *script,
                                          int16_t pulseHz, uint8_t voltage,
-                                         uint8_t fuelTemp, uint8_t status) {
+                                         int16_t fuelTemp, uint8_t status) {
   if (script->length + (int)ADJUSTOMETER_FEEDBACK_BYTES >
       (int)COUNTOF(script->bytes)) {
     return;
@@ -112,7 +112,7 @@ static inline void appendAdjRegisterData(AdjustometerScript *script,
 static inline void appendAdjRegisterDataRepeated(AdjustometerScript *script,
                                                  int count, int16_t pulseHz,
                                                  uint8_t voltage,
-                                                 uint8_t fuelTemp,
+                                                 int16_t fuelTemp,
                                                  uint8_t status) {
   for (int i = 0; i < count; i++) {
     appendAdjRegisterData(script, pulseHz, voltage, fuelTemp, status);
@@ -125,7 +125,7 @@ static inline void injectAdjustometerScript(const AdjustometerScript *script) {
 
 /** @brief One feedback frame plus the matching local supply reading. */
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
-                                         uint8_t fuelTemp, uint8_t status) {
+                                         int16_t fuelTemp, uint8_t status) {
   AdjustometerScript script = {};
   appendAdjRegisterData(&script, pulseHz, voltage, fuelTemp, status);
   injectAdjustometerScript(&script);

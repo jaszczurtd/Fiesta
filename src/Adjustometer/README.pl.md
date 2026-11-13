@@ -98,8 +98,12 @@ odczytu; znaczniki sekwencji i kontrola świeżości w ECU pozostają aktywne. W
 | `0x13..0x16` | Zarezerwowane. |
 | `0x17..0x34` | Spójne dane regulatora, w tym surowa częstotliwość i aktualność pomiaru. |
 
-ECU i VP37TestBench odczytują ramkę sterowania w wersji 1 pod stałym adresem
-`0x17`. Pięciobajtowy odczyt nie jest już obsługiwany. Czytnik diagnostyki
+ECU i VP37TestBench przyjmują ramki sterowania w wersjach 1 i 2 pod `0x17`.
+Adjustometer wysyła wersję 2. Najpierw zaktualizuj ECU lub VP37TestBench:
+starszy odbiornik odrzuca nową ramkę. Wersja 2 zachowuje układ 30 bajtów,
+a w bajcie 5 zapisuje temperaturę w stopniach C plus 40 (`-20 C` daje `20`).
+Wersja 1 przechowuje stopnie C bez znaku. Pięciobajtowy odczyt nie jest już
+obsługiwany. Czytnik diagnostyki
 wymaga wersji 2 i oblicza odchylenie ze znakiem jako częstotliwość po filtrze
 minus baseline z tego samego odczytu. Odrzucenie innej wersji diagnostyki
 nie wpływa na odczyt ramki sterowania.
@@ -111,7 +115,15 @@ skrócić. Pole `ageUs` nadal podaje wiek przy publikacji. Niezsynchronizowane
 zegary nie pozwalają ustalić opóźnienia między publikacją a pierwszym odczytem,
 więc ta kontrola nie mierzy całego czasu od pomiaru do użycia danych.
 
-Napięcie jest kodowane w 0,1 V, temperatura paliwa w całych stopniach C.
+Pomiar temperatury paliwa obejmuje od -40 do 120 C, również zero. Bit
+`FUEL_TEMP_BROKEN` natychmiast oznacza błąd odczytu lub wartość poza zakresem.
+Pole liczbowe zachowuje ostatnią poprawną temperaturę (zero przed pierwszą
+poprawną próbką), więc zawsze sprawdzaj status. Po odzyskaniu pomiaru filtr
+zaczyna od pierwszej poprawnej próbki. Zakres pomiaru nie potwierdza działania
+regulatora na zimnej pompie. Przy 0 C i poniżej ECU zachowuje ostatni mnożnik
+kompensacji, po starcie równy 1, oraz niższy limit dodatniej korekty regulatora.
+
+Napięcie jest kodowane w 0,1 V.
 Dzielnik `47k / 10k` ogranicza pomiar ADC do około 18,8 V przy zakresie 3,3 V,
 choć pole protokołu mieści 25,5 V. Osobny EMA dla ADC nadaje nowej próbce wagę 1/8.
 

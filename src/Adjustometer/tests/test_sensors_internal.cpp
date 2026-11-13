@@ -34,9 +34,9 @@ void test_adjustometer_ema_uses_minimum_negative_step(void) {
       999U, adj_test_sensors_apply_adjustometer_ema(999U, 1000U));
 }
 
-void test_adc_ema_initializes_from_negative_previous(void) {
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 12.5f,
-                           adj_test_sensors_apply_adc_ema(12.5f, -1.0f));
+void test_adc_ema_filters_negative_previous(void) {
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -19.0f,
+                           adj_test_sensors_apply_adc_ema(-12.0f, -20.0f));
 }
 
 void test_internal_state_round_trip(void) {
@@ -124,7 +124,8 @@ void test_reset_state_clears_internal_runtime(void) {
   TEST_ASSERT_TRUE(actual.zeroHold);
   TEST_ASSERT_EQUAL_INT8(0, actual.zeroCandidateSign);
   TEST_ASSERT_EQUAL_UINT8(0U, actual.zeroCandidateWindows);
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, actual.filteredFuelTemp);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, actual.filteredFuelTemp);
+  TEST_ASSERT_FALSE(actual.fuelTempFilterReady);
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, actual.filteredVoltage);
 }
 
@@ -300,7 +301,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_adjustometer_ema_uses_minimum_positive_step);
   RUN_TEST(test_adjustometer_ema_uses_minimum_negative_step);
-  RUN_TEST(test_adc_ema_initializes_from_negative_previous);
+  RUN_TEST(test_adc_ema_filters_negative_previous);
   RUN_TEST(test_internal_state_round_trip);
   RUN_TEST(test_reset_state_clears_internal_runtime);
   RUN_TEST(test_signal_loss_uses_minimum_timeout_clamp);

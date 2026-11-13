@@ -245,14 +245,14 @@ void test_thermal_comp_skipped_when_sensor_broken(void) {
 void test_nan_recovery_after_broken_sensor(void) {
   injectFuelTemp(true); /* ADC=4090 -> compensated value exceeds 4095. */
   settleAdcFilters();
-  uint8_t broken = getFuelTemperatureRaw();
-  TEST_ASSERT_EQUAL_UINT8(ADJ_FUEL_TEMP_SENSOR_BROKEN, broken);
+  int16_t temperature = 99;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, getFuelTemperatureRaw(&temperature));
+  TEST_ASSERT_EQUAL_INT16(99, temperature);
 
   injectFuelTemp(false); /* ADC=2000 -> approximately 13 degrees C. */
   for (int i = 0; i < 30; i++)
-    getFuelTemperatureRaw();
-  uint8_t recovered = getFuelTemperatureRaw();
-  TEST_ASSERT_TRUE(recovered > 0); /* Must escape NaN trap */
+    TEST_ASSERT_EQUAL_INT(HAL_OK, getFuelTemperatureRaw(&temperature));
+  TEST_ASSERT_TRUE(temperature > 0); /* Must escape NaN trap */
 }
 
 /* ── getAdjustometerStatus must not mutate temperature EMA ───────────────────
@@ -270,7 +270,8 @@ void test_nan_recovery_after_broken_sensor(void) {
 void test_status_does_not_mutate_fuel_temp_ema(void) {
   injectFuelTemp(false); /* ADC=2000 -> ~13°C */
   settleAdcFilters();
-  uint8_t tempBefore = getFuelTemperatureRaw();
+  int16_t tempBefore;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, getFuelTemperatureRaw(&tempBefore));
   TEST_ASSERT_TRUE(tempBefore > 0);
 
   /* Shift ADC to a significantly different (but valid) value */
@@ -281,7 +282,8 @@ void test_status_does_not_mutate_fuel_temp_ema(void) {
 
   /* First getFuelTemperatureRaw after 50 status calls:
    * only 1 EMA step should happen, so the shift must be small. */
-  uint8_t tempAfter = getFuelTemperatureRaw();
+  int16_t tempAfter;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, getFuelTemperatureRaw(&tempAfter));
   /* With the old side-effect bug: tempAfter would be far from tempBefore
    * (50 EMA steps toward the new ADC value). Fixed: only 1 step. */
   TEST_ASSERT_INT_WITHIN(5, tempBefore, tempAfter);

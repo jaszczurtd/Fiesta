@@ -9,10 +9,10 @@
  * data. */
 static inline adjustometer_feedback_t vp37TestFeedback(int16_t pulseHz,
                                                        uint8_t voltage,
-                                                       uint8_t fuelTemp,
+                                                       int16_t fuelTemp,
                                                        uint8_t status) {
   static uint32_t number = 0U;
-  adjustometer_feedback_t sample = {};
+  adjustometer_feedback_t sample = {0};
   sample.pulseHz = pulseHz;
   sample.voltage = voltage;
   sample.fuelTemp = fuelTemp;

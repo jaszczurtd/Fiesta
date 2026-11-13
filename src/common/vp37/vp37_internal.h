@@ -109,6 +109,10 @@ bool VP37_waitForAdjustometerBaseline(VP37Pump *self);
  * @return Scan poll status; updates acquisition counters without reduction. */
 hal_status_t VP37_acquireCurrentScan(VP37Pump *self);
 void VP37_updateVoltageCorrection(VP37Pump *self, float dt);
+/** @brief Whether a valid fuel reading may affect the existing control model.
+ * Zero and negative Celsius remain outside its admitted range, independently
+ * of sensor validity. This does not qualify cold actuator operation. */
+bool VP37_temperatureControlAvailable(float fuelTempC, uint8_t status);
 void VP37_updateTemperatureCorrection(VP37Pump *self, float dt);
 void VP37_updateDriveCorrection(VP37Pump *self, float dt);
 void VP37_updateThermalScale(VP37Pump *self, float dt, bool hold);

@@ -19,25 +19,25 @@ extern "C" {
 
 /** @brief One Adjustometer reading; failed reads keep the previous values. */
 typedef struct {
-  int16_t pulseHz;             /**< Deviation from the baseline [Hz]. */
-  uint8_t voltageRaw;          /**< Supply voltage in 0.1 V units. */
-  uint8_t fuelTempC;           /**< Fuel temperature [C]. */
-  uint8_t status;              /**< Bitmask of ADJ_STATUS_*. */
-  bool commOk;                 /**< The last transfer succeeded. */
-  uint32_t signalHz;           /**< Filtered absolute frequency [Hz]. */
-  uint32_t baselineHz;         /**< Locked zero reference [Hz]. */
-  int32_t signedDeltaHz;       /**< signalHz - baselineHz, no zero hold. */
-  int16_t chipTempDeciC;       /**< Adjustometer die temperature [0.1 C]. */
-  uint8_t extendedFlags;       /**< Bitmask of ADJUSTOMETER_EXT_FLAG_*. */
-  bool extendedTelemetryValid; /**< The versioned extension was coherent. */
-  bool feedbackFresh;          /**< The sample remains within its age budget. */
+  uint32_t signalHz;     /**< Filtered absolute frequency [Hz]. */
+  uint32_t baselineHz;   /**< Locked zero reference [Hz]. */
+  int32_t signedDeltaHz; /**< signalHz - baselineHz, no zero hold. */
   uint32_t rawHz;
   uint32_t sampleNumber;
   uint32_t measuredUs;
-  uint16_t ageUs; /**< Wire age at publication, without ECU elapsed time. */
   hal_status_t readStatus; /**< Result of the last transfer and decode. */
   uint32_t readUs;         /**< Duration of the last read [us]. */
-  uint8_t readRetries;     /**< Repeated transfers after a torn frame. */
+  int16_t pulseHz;         /**< Deviation from the baseline [Hz]. */
+  int16_t fuelTempC;       /**< Celsius; valid unless FUEL_TEMP_BROKEN. */
+  int16_t chipTempDeciC;   /**< Adjustometer die temperature [0.1 C]. */
+  uint16_t ageUs;     /**< Wire age at publication, without ECU elapsed time. */
+  uint8_t voltageRaw; /**< Supply voltage in 0.1 V units. */
+  uint8_t status;     /**< Bitmask of ADJ_STATUS_*. */
+  bool commOk;        /**< The last transfer succeeded. */
+  uint8_t extendedFlags;       /**< Bitmask of ADJUSTOMETER_EXT_FLAG_*. */
+  bool extendedTelemetryValid; /**< The versioned extension was coherent. */
+  bool feedbackFresh;          /**< The sample remains within its age budget. */
+  uint8_t readRetries;         /**< Repeated transfers after a torn frame. */
 } adjustometer_reading_t;
 
 /** @brief Reader state kept in the pump. */

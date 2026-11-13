@@ -24,6 +24,7 @@ typedef struct {
   int8_t zeroCandidateSign;
   uint8_t zeroCandidateWindows;
   float filteredFuelTemp;
+  bool fuelTempFilterReady;
   float filteredVoltage;
 } adj_sensors_test_state_t;
 

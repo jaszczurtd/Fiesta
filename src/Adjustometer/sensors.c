@@ -107,7 +107,8 @@ static int32_t slidingEmaFraction;
 
 // ADC EMA filter state for fuel-temp and supply-voltage readings.
 // Used by Core1 only - no atomics needed.
-static float filteredFuelTemp = -1.0f;
+static float filteredFuelTemp = 0.0f;
+static bool fuelTempFilterReady = false;
 static float filteredVoltage = -1.0f;
 
 // JaszczurHAL defines SECOND in milliseconds, so convert to microseconds for Hz
@@ -527,7 +528,7 @@ uint8_t getAdjustometerStatus(void) {
     status |= ADJ_STATUS_BASELINE_PENDING;
   }
   status |=
-      (uint8_t)(HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE) >> 16);
+      (uint8_t)(HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE) >> 24);
 
   return status;
 }
@@ -564,7 +565,7 @@ static void resetSensorsState(void) {
   adjustometerSampleSequence = 0;
   const uint32_t brokenStatus =
       (uint32_t)ADJ_STATUS_FUEL_TEMP_BROKEN | (uint32_t)ADJ_STATUS_VOLTAGE_BAD;
-  auxiliaryTelemetry = brokenStatus << 16;
+  auxiliaryTelemetry = brokenStatus << 24;
   adjustometerPulse = 0;
   adjustometerLastEdgeUs = 0;
   adjustometerSignalHz = 0;
@@ -585,7 +586,8 @@ static void resetSensorsState(void) {
 #if ADJUSTOMETER_SLIDING_WINDOW
   slidingEmaFraction = 0;
 #endif
-  filteredFuelTemp = -1.0f;
+  filteredFuelTemp = 0.0f;
+  fuelTempFilterReady = false;
   filteredVoltage = -1.0f;
 }
 
@@ -596,9 +598,6 @@ static void resetSensorsState(void) {
  * @return Updated filtered value.
  */
 static float adcEma(float raw, float prev) {
-  if (prev < 0.0f) {
-    return raw;
-  }
   const uint32_t weight = 1UL << ADC_EMA_SHIFT;
   return prev + ((raw - prev) / (float)weight);
 }
@@ -616,7 +615,8 @@ TESTABLE_STATIC uint8_t getSupplyVoltageRaw(void) {
                                 (float)VDIV_R2_KOHM, &volts) != HAL_OK)) {
     volts = 0.0f;
   }
-  filteredVoltage = adcEma(volts, filteredVoltage);
+  filteredVoltage =
+      (filteredVoltage < 0.0f) ? volts : adcEma(volts, filteredVoltage);
   if (isnan(filteredVoltage) || (filteredVoltage < 0.0f)) {
     filteredVoltage = 0.0f;
   }
@@ -630,41 +630,47 @@ TESTABLE_STATIC uint8_t getSupplyVoltageRaw(void) {
 
 /**
  * @brief Read and filter the fuel temperature sensor.
- * @return Rounded fuel temperature in degrees Celsius as an 8-bit value.
+ * @param out Non-NULL destination in Celsius, unchanged on error.
+ * @return HAL_OK, conversion error, or HAL_EIO outside the sensor range.
  * @note This is the module's G81-like fuel-temperature input.
  */
-TESTABLE_STATIC uint8_t getFuelTemperatureRaw(void) {
+TESTABLE_STATIC hal_status_t getFuelTemperatureRaw(int16_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
   float tempC = 0.0f;
-  if (fiesta_ntc_read_temperature_ex(JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN,
-                                     R_VP37_FUEL_A, R_VP37_FUEL_B,
-                                     &tempC) != HAL_OK) {
-    tempC = 0.0f;
+  hal_status_t status = fiesta_ntc_read_temperature_ex(
+      JH_HW_NODE_FUEL_TEMPERATURE_PIN_IN, R_VP37_FUEL_A, R_VP37_FUEL_B, &tempC);
+  if ((status == HAL_OK) &&
+      (!isfinite(tempC) || (tempC < (float)ADJUSTOMETER_FUEL_TEMP_MIN_C) ||
+       (tempC > (float)ADJUSTOMETER_FUEL_TEMP_MAX_C))) {
+    status = HAL_EIO;
   }
-  if (isnan(tempC) != 0) {
-    tempC = 0.0f;
+  if (status != HAL_OK) {
+    fuelTempFilterReady = false;
+    return status;
   }
-  filteredFuelTemp = adcEma(tempC, filteredFuelTemp);
-  if (isnan(filteredFuelTemp) || (filteredFuelTemp < 0.0f)) {
-    filteredFuelTemp = 0.0f;
-  }
-  if (filteredFuelTemp > 255.0f) {
-    filteredFuelTemp = 255.0f;
-  }
-  return (uint8_t)(filteredFuelTemp + 0.5f);
+  filteredFuelTemp =
+      fuelTempFilterReady ? adcEma(tempC, filteredFuelTemp) : tempC;
+  fuelTempFilterReady = true;
+  *out = (int16_t)roundf(filteredFuelTemp);
+  return HAL_OK;
 }
 
 void updateAuxiliarySensors(void) {
   const uint8_t voltage = getSupplyVoltageRaw();
-  const uint8_t fuelTemp = getFuelTemperatureRaw();
+  const uint32_t previous =
+      HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE);
+  int16_t fuelTemp = (int16_t)(uint16_t)(previous >> 8);
   uint8_t status = 0U;
-  if (fuelTemp == ADJ_FUEL_TEMP_SENSOR_BROKEN) {
+  if (getFuelTemperatureRaw(&fuelTemp) != HAL_OK) {
     status |= ADJ_STATUS_FUEL_TEMP_BROKEN;
   }
   if ((voltage < ADJ_VOLTAGE_MIN_TV) || (voltage > ADJ_VOLTAGE_MAX_TV)) {
     status |= ADJ_STATUS_VOLTAGE_BAD;
   }
   const uint32_t packed =
-      voltage | ((uint32_t)fuelTemp << 8) | ((uint32_t)status << 16);
+      voltage | ((uint32_t)(uint16_t)fuelTemp << 8) | ((uint32_t)status << 24);
   HAL_ATOMIC_STORE(&auxiliaryTelemetry, packed, HAL_ATOMIC_RELEASE);
 }
 
@@ -693,9 +699,9 @@ hal_status_t getAdjustometerFeedback(adjustometer_feedback_t *out) {
                     (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING);
     const uint32_t auxiliary =
         HAL_ATOMIC_LOAD(&auxiliaryTelemetry, HAL_ATOMIC_ACQUIRE);
-    sample.status |= (uint8_t)(auxiliary >> 16);
+    sample.status |= (uint8_t)(auxiliary >> 24);
     sample.voltage = (uint8_t)auxiliary;
-    sample.fuelTemp = (uint8_t)(auxiliary >> 8);
+    sample.fuelTemp = (int16_t)(uint16_t)(auxiliary >> 8);
     HAL_ATOMIC_THREAD_FENCE(HAL_ATOMIC_SEQ_CST);
     if (before !=
         HAL_ATOMIC_LOAD(&adjustometerSampleSequence, HAL_ATOMIC_ACQUIRE)) {

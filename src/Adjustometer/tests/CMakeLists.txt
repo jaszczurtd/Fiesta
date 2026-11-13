@@ -21,6 +21,10 @@ endfunction()
 add_adj_test(test_sensors)
 add_adj_test(test_led)
 add_adj_test(test_telemetry)
+add_executable(test_fuel_temperature test_fuel_temperature.c
+    ../../common/tests/hal_mock_c_bridge.cpp)
+target_link_libraries(test_fuel_temperature PRIVATE adj_mock)
+add_test(NAME test_fuel_temperature COMMAND test_fuel_temperature)
 add_adj_internal_test(test_sensors_internal)
 target_compile_definitions(test_sensors_internal PRIVATE
     ADJUSTOMETER_SLIDING_WINDOW=0 ADJUSTOMETER_PWM_FILTER_US=0)

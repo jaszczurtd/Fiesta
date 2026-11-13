@@ -264,7 +264,11 @@ static void updateDisplay(void) {
   (void)snprintf(text, sizeof(text), "%lu",
                  (unsigned long)(fresh ? status.readCount : 0U));
   displayLine(2, "frames", text);
-  (void)snprintf(text, sizeof(text), "%.1f C", fresh ? status.fuelTempC : 0.0);
+  if (fresh && status.fuelTempValid) {
+    (void)snprintf(text, sizeof(text), "%.1f C", status.fuelTempC);
+  } else {
+    (void)snprintf(text, sizeof(text), "unavailable");
+  }
   displayLine(3, "fuel temp", text);
   (void)snprintf(text, sizeof(text), "%.1f V",
                  fresh ? status.supplyVolts : 0.0);

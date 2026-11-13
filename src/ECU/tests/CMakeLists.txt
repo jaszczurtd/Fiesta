@@ -72,6 +72,19 @@ add_executable(test_vp37_bench ${VP37_SOURCE_DIR}/tests/test_vp37.cpp
 target_compile_definitions(test_vp37_bench PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
 target_link_libraries(test_vp37_bench PRIVATE ecu_mock)
 add_test(NAME test_vp37_bench COMMAND test_vp37_bench)
+foreach(fuel_variant IN ITEMS normal bench)
+    add_executable(test_fuel_temperature_${fuel_variant}
+        ${VP37_SOURCE_DIR}/tests/test_fuel_temperature.c
+        ../../common/tests/hal_mock_c_bridge.cpp)
+    if(fuel_variant STREQUAL "bench")
+        target_sources(test_fuel_temperature_${fuel_variant} PRIVATE ${ECU_VP37_SOURCES})
+        target_compile_definitions(test_fuel_temperature_${fuel_variant} PRIVATE
+            ECU_FUNCTIONAL_TESTS_ENABLED=1)
+    endif()
+    target_link_libraries(test_fuel_temperature_${fuel_variant} PRIVATE ecu_mock)
+    add_test(NAME test_fuel_temperature_${fuel_variant}
+        COMMAND test_fuel_temperature_${fuel_variant})
+endforeach()
 # The snapshot with its telemetry part, copied while another thread publishes.
 add_executable(test_vp37_snapshot
     ${VP37_SOURCE_DIR}/tests/test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})

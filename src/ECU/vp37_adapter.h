@@ -33,7 +33,8 @@ VP37InitStatus vp37AdapterStart(VP37Pump *pump);
 
 /**
  * @brief Copy the fuel temperature and supply of a new Adjustometer frame from
- * the published status into F_FUEL_TEMP and F_VOLTS.
+ * the published status into F_FUEL_TEMP and F_VOLTS. Invalid fuel readings
+ * retain the previous global value; VP37Status carries sensor validity.
  * @param pump Pump; only its published status is read.
  * @note Core 0, every loop pass: the control core never waits on the global
  * values.

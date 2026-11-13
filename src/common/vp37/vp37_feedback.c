@@ -144,11 +144,11 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
 #endif
     if (probe) {
       deb("VP37 CALPROBE sample us:%lu adj:%ld raw:%ld st:%u comm:%u fresh:%u "
-          "age:%lu V:%.2f ft:%u",
+          "age:%lu V:%.2f ft:%d",
           (unsigned long)hal_micros(), (long)reading.pulseHz,
           (long)reading.rawHz, reading.status, reading.commOk ? 1U : 0U,
           reading.feedbackFresh ? 1U : 0U, (unsigned long)reading.ageUs,
-          reading.voltageRaw * 0.1f, (unsigned int)reading.fuelTempC);
+          reading.voltageRaw * 0.1f, (int)reading.fuelTempC);
     }
     if (!reading.commOk || !reading.feedbackFresh ||
         (reading.status &

@@ -144,6 +144,15 @@ wyłączone: tam prowadziły długie postoje do zrywów tarcia.
 
 ## Kompensacja napięcia i rezystancji
 
+Temperatura paliwa jest pomiarem ze znakiem; prawidłowe zero i wartość ujemna
+nie oznaczają awarii czujnika. Obecny model sterowania korzysta z poprawnych
+odczytów powyżej 0 C i do 120 C. Poza tym zakresem lub przy błędzie czujnika
+zachowuje ostatni mnożnik temperatury (po starcie równy 1) i niższy limit
+dodatniej korekty PID. Tor zmierzonej rezystancji oraz ograniczenia mnożnika
+pozostają bez zmian. Obsługa ujemnej temperatury w telemetrii nie potwierdza
+działania zimnej pompy; to wymaga pomiarów na wychłodzonym układzie.
+
+
 Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`. Bloki skanu
 ADC docierają niezależnie od kroku regulacji pozycji. Rdzeń 1 odbiera je między krokami
 położenia, także między obsługą turbo, RPM i testów poza osłoną terminu, oraz śledzi zbocza

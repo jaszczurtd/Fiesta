@@ -24,7 +24,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:222 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:223 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -118,14 +118,13 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         view->pid.descentUnwindUsesHolding ? 1U : 0U);
     adjustometer_reading_t telemetry = view->adjustometer;
     const bool extendedFresh = VP37_readAdjustometerExtended(self, &telemetry);
-    deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%u tc:%.1f s:%u bl:%lu ext:%d "
+    deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%d tc:%.1f s:%u bl:%lu ext:%d "
         "fl:0x%02x",
         telemetry.pulseHz, (unsigned long)telemetry.signalHz,
         (long)telemetry.signedDeltaHz, (unsigned int)telemetry.voltageRaw,
-        (unsigned int)telemetry.fuelTempC,
-        (double)telemetry.chipTempDeciC * 0.1, (unsigned int)telemetry.status,
-        (unsigned long)telemetry.baselineHz, extendedFresh,
-        (unsigned int)telemetry.extendedFlags);
+        (int)telemetry.fuelTempC, (double)telemetry.chipTempDeciC * 0.1,
+        (unsigned int)telemetry.status, (unsigned long)telemetry.baselineHz,
+        extendedFresh, (unsigned int)telemetry.extendedFlags);
   }
 }
 
@@ -660,14 +659,14 @@ void VP37_showCalibration(void) {
     }
     const adjustometer_reading_t *const r = &sample.reading;
     deb("VP37 CAL us:%lu phase:%s pwm:%u adj:%d hzraw:%lu hz:%lu bl:%lu "
-        "sn:%lu su:%lu age:%u st:%u io:%d comm:%u fresh:%u v:%u ft:%u",
+        "sn:%lu su:%lu age:%u st:%u io:%d comm:%u fresh:%u v:%u ft:%d",
         (unsigned long)sample.us, sample.pwm == 0U ? "MIN" : "MAX",
         (unsigned int)sample.pwm, r->pulseHz, (unsigned long)r->rawHz,
         (unsigned long)r->signalHz, (unsigned long)r->baselineHz,
         (unsigned long)r->sampleNumber, (unsigned long)r->measuredUs,
         (unsigned int)r->ageUs, (unsigned int)r->status, (int)r->readStatus,
         r->commOk ? 1U : 0U, r->feedbackFresh ? 1U : 0U,
-        (unsigned int)r->voltageRaw, (unsigned int)r->fuelTempC);
+        (unsigned int)r->voltageRaw, (int)r->fuelTempC);
   }
   VP37CalibrationResult result;
   if (VP37_takeCalibrationResult(&result) == HAL_OK) {

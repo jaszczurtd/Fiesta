@@ -16,7 +16,8 @@ typedef struct {
   uint16_t ageUs;      /**< Age at publication, saturated at UINT16_MAX. */
   int16_t pulseHz;     /**< Filtered deviation magnitude after zero hold. */
   uint8_t voltage;
-  uint8_t fuelTemp;
+  int16_t
+      fuelTemp; /**< Celsius; check ADJ_STATUS_FUEL_TEMP_BROKEN before use. */
   uint8_t status;
 } adjustometer_feedback_t;
 
@@ -28,8 +29,15 @@ static inline void adjustometer_feedback_encode(
   frame[1] = sequence;
   jh_store_be16(&frame[2], (uint16_t)sample->pulseHz);
   frame[4] = sample->voltage;
-  frame[5] = sample->fuelTemp;
   frame[6] = sample->status;
+  const int32_t temperature =
+      (int32_t)sample->fuelTemp + ADJUSTOMETER_FUEL_TEMP_OFFSET_C;
+  if ((temperature < 0) || (temperature > (int32_t)UINT8_MAX)) {
+    frame[5] = ADJUSTOMETER_FUEL_TEMP_OFFSET_C;
+    frame[6] |= ADJ_STATUS_FUEL_TEMP_BROKEN;
+  } else {
+    frame[5] = (uint8_t)temperature;
+  }
   jh_store_be32(&frame[7], sample->rawHz);
   jh_store_be32(&frame[11], sample->filteredHz);
   jh_store_be32(&frame[15], sample->baselineHz);
@@ -50,7 +58,8 @@ adjustometer_feedback_decode(const uint8_t *frame,
   if ((frame == NULL) || (sample == NULL)) {
     return HAL_EINVAL;
   }
-  if (frame[0] != ADJUSTOMETER_FEEDBACK_VERSION) {
+  if ((frame[0] != ADJUSTOMETER_FEEDBACK_VERSION) &&
+      (frame[0] != ADJUSTOMETER_FEEDBACK_LEGACY_VERSION)) {
     return HAL_EUNSUPPORTED;
   }
   if (((frame[1] & 1U) != 0U) || (frame[1] != frame[29])) {
@@ -59,7 +68,10 @@ adjustometer_feedback_decode(const uint8_t *frame,
   adjustometer_feedback_t decoded;
   decoded.pulseHz = (int16_t)jh_load_be16(&frame[2]);
   decoded.voltage = frame[4];
-  decoded.fuelTemp = frame[5];
+  decoded.fuelTemp = (int16_t)frame[5];
+  if (frame[0] == ADJUSTOMETER_FEEDBACK_VERSION) {
+    decoded.fuelTemp -= ADJUSTOMETER_FUEL_TEMP_OFFSET_C;
+  }
   decoded.status = frame[6];
   decoded.rawHz = jh_load_be32(&frame[7]);
   decoded.filteredHz = jh_load_be32(&frame[11]);

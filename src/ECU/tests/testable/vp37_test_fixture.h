@@ -19,7 +19,7 @@ static inline void injectLocalSupplyVoltage(float volts) {
 }
 
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
-                                         uint8_t fuelTemp, uint8_t status) {
+                                         int16_t fuelTemp, uint8_t status) {
   uint8_t buf[ADJUSTOMETER_FEEDBACK_BYTES];
   const adjustometer_feedback_t sample =
       vp37TestFeedback(pulseHz, voltage, fuelTemp, status);

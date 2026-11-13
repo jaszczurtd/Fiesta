@@ -29,10 +29,6 @@ extern "C" {
 #define ADJ_VOLTAGE_MIN_TV 80U  // 8.0 V
 #define ADJ_VOLTAGE_MAX_TV 150U // 15.0 V
 
-// Fuel temp raw == 0 means the sensor conversion failed or returned a
-// negative value.
-#define ADJ_FUEL_TEMP_SENSOR_BROKEN 0U
-
 /**
  * @brief Initialize the I2C slave interface and default registers.
  */
@@ -101,10 +97,11 @@ uint8_t getSupplyVoltageRaw(void);
 
 /**
  * @brief Read the filtered fuel temperature in degrees Celsius.
- * @return Raw fuel-temperature register value.
+ * @param out Non-NULL destination in Celsius; errors leave it unchanged.
+ * @return HAL_OK, HAL_EINVAL, HAL_EIO or the ADC/conversion error.
  * @note This is the module's G81-like fuel-temperature input.
  */
-uint8_t getFuelTemperatureRaw(void);
+hal_status_t getFuelTemperatureRaw(int16_t *out);
 #endif
 
 /**

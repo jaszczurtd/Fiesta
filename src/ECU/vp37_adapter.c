@@ -66,7 +66,9 @@ void vp37AdapterPublish(const VP37Pump *pump) {
   if ((VP37_readStatus(pump, &status) == HAL_OK) &&
       (status.readCount != s_vp37PublishedReads)) {
     s_vp37PublishedReads = status.readCount;
-    setGlobalValue(F_FUEL_TEMP, status.fuelTempC);
+    if (status.fuelTempValid) {
+      setGlobalValue(F_FUEL_TEMP, status.fuelTempC);
+    }
     setGlobalValue(F_VOLTS, status.supplyVolts);
   }
 }
