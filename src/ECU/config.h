@@ -175,6 +175,16 @@
 // max BAR turbo pressure
 #define MAX_BOOST_PRESSURE 1.9
 
+// The Adjustometer flags one failed or out-of-range fuel temperature
+// conversion at once (10 ms auxiliary update). DTC_ADJ_FUEL_TEMP_BROKEN rises
+// once every good frame reported the fault for this long [ms], so a single
+// glitch never becomes a stored code; a good frame without the fault clears it.
+#define ECU_FUEL_TEMP_FAULT_CONFIRM_MS 1000u
+#if (ECU_FUEL_TEMP_FAULT_CONFIRM_MS < 100u) ||                                 \
+    (ECU_FUEL_TEMP_FAULT_CONFIRM_MS > 10000u)
+#error "ECU_FUEL_TEMP_FAULT_CONFIRM_MS must be in 100..10000 ms"
+#endif
+
 // Fiesta_clock sends its RTC time (0x130) every second; a received time stays
 // usable for DTC timestamps this long.
 #define RTC_TIME_MAX_AGE_MS 3000u

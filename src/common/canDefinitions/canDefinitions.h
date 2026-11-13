@@ -93,7 +93,10 @@ enum {
   CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE = 1,
   CAN_FRAME_ECU_UPDATE_FUEL_TEMP,
   CAN_FRAME_ECU_UPDATE_FAN_ENABLED,
+  CAN_FRAME_ECU_UPDATE_03_STATUS, // CAN_ECU_UPDATE_03_STATUS_* bits
 };
+// Without its bit the fuel temperature has no measurement and carries 0.
+#define CAN_ECU_UPDATE_03_STATUS_FUEL_TEMP_VALID 0x01u
 
 #define CAN_ID_TURBO_PRESSURE 0x12c
 enum {

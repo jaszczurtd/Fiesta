@@ -176,7 +176,9 @@ src/<Module>/
 | CAN0 „main" | ECU, Clocks, Fiesta_clock | Komunikacja między modułami. |
 | CAN1 „OBD-2" | ECU, gniazdo OBD-II | Zewnętrzna diagnostyka. |
 
-ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie i paliwo.
+ECU publikuje na CAN0 stan silnika, RPM, przepustnicę, doładowanie, poziom
+i temperaturę paliwa. Ramka `0x12B` oznacza temperaturę paliwa bitem ważności,
+a bez niego wysyła 0.
 Odbiera olej, prędkość i EGT z Clocks, stan DPF z `0x124` oraz czas RTC
 z Fiesta_clock (`0x130`), którym oznacza nowe DTC. DTC są odczytywane przez CAN1 i nie trafiają na CAN0.
 Clocks nadaje jasność ekranu (`0x126`), ciśnienie oleju z prędkością z ABS
@@ -186,7 +188,11 @@ Fiesta_clock nadaje czas UTC (`0x130`) i temperatury powietrza (`0x132`)
 oraz odbiera tylko UTC z GPS w Clocks. Na CAN1 ECU odpowiada na OBD-II i UDS. PID temperatur spalin i DPF oraz DID
 ciśnienia oleju dostają odpowiedź negatywną (`0x22`, conditions not correct),
 gdy Clocks oznacza tę wartość jako nieważną albo jego ramki przestają
-przychodzić.
+przychodzić. Tak samo odpowiada DID temperatury paliwa `DD02`, gdy Adjustometer
+zgłasza awarię czujnika albo przestaje odpowiadać. Jeśli każda dobra ramka
+Adjustometera zgłasza awarię przez `ECU_FUEL_TEMP_FAULT_CONFIRM_MS`
+(`src/ECU/config.h`), ECU zgłasza U190A; pierwsza ramka bez awarii zdejmuje
+aktywny kod.
 Bus-off lub odrzucone nadanie zgłasza U0073; `DTC_DETAIL_*` wskazuje ramkę,
 a rekord UDS zawiera tę informację jako trzeci bajt DTC.
 

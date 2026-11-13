@@ -2,6 +2,7 @@
 
 #include "dtcManager.h"
 #include "rtcTime.h"
+#include "vp37_adapter.h"
 #include <utils/multicoreWatchdog.h>
 #include <utils/tools_common_defs.h>
 
@@ -277,11 +278,17 @@ void CAN_updaterecipients_01(void) {
 
     canQueuePeriodic(1u, buf);
 
+    (void)memset(buf, 0, sizeof(buf));
     buf[CAN_FRAME_NUMBER] = 0u;
     buf[CAN_FRAME_ECU_UPDATE_PRESSURE_PERCENTAGE] =
         (uint8_t)getGlobalValue(F_PRESSURE_PERCENTAGE);
-    buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] =
-        hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
+    /* A failed fuel sensor or a silent Adjustometer sends no temperature. */
+    if (isFuelTempValid()) {
+      buf[CAN_FRAME_ECU_UPDATE_FUEL_TEMP] =
+          hal_can_encode_temp_i8(getGlobalValue(F_FUEL_TEMP));
+      buf[CAN_FRAME_ECU_UPDATE_03_STATUS] =
+          CAN_ECU_UPDATE_03_STATUS_FUEL_TEMP_VALID;
+    }
     buf[CAN_FRAME_ECU_UPDATE_FAN_ENABLED] =
         (uint8_t)getGlobalValue(F_FAN_ENABLED);
 

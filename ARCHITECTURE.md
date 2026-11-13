@@ -189,7 +189,9 @@ The ECU sits on two separate CAN buses:
 | CAN0 "main" | ECU, Clocks, Fiesta_clock | traffic between modules |
 | CAN1 "OBD-2" | ECU, OBD-II port | external diagnostic tools |
 
-On CAN0 the ECU publishes engine state, RPM, throttle, boost, and fuel. It
+On CAN0 the ECU publishes engine state, RPM, throttle, boost, fuel level, and
+fuel temperature. Frame `0x12B` marks the fuel temperature with a valid bit and
+carries 0 without it. It
 reads oil pressure, wheel speed, and EGT from Clocks, the DPF state from frame
 `0x124`, and the RTC time of Fiesta_clock (`0x130`), which dates new DTCs. DTCs never go out on CAN0;
 diagnostic tools read them over CAN1. Clocks sends its display brightness
@@ -201,7 +203,11 @@ of Clocks. On CAN1 the ECU answers
 OBD-II and UDS requests from whatever tool is connected. The exhaust and DPF
 temperature PIDs and the oil pressure DID answer with a negative response
 (`0x22`, conditions not correct) while Clocks marks that value invalid or its
-frames stop. A bus-off controller or a refused
+frames stop. The fuel temperature DID `DD02` answers the same way while the
+Adjustometer reports a fuel sensor fault or stops answering. A sensor fault that
+every good Adjustometer frame reports for `ECU_FUEL_TEMP_FAULT_CONFIRM_MS`
+(`src/ECU/config.h`) raises U190A; the first frame without it clears the active
+code. A bus-off controller or a refused
 transmit raises U0073; its failure type byte (`DTC_DETAIL_*`) names the frame
 that failed, and the UDS DTC record carries it as the third DTC byte.
 

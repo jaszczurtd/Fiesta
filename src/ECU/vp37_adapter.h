@@ -33,13 +33,30 @@ VP37InitStatus vp37AdapterStart(VP37Pump *pump);
 
 /**
  * @brief Copy the fuel temperature and supply of a new Adjustometer frame from
- * the published status into F_FUEL_TEMP and F_VOLTS. Invalid fuel readings
- * retain the previous global value; VP37Status carries sensor validity.
+ * the published status into F_FUEL_TEMP and F_VOLTS, and report a lasting fuel
+ * sensor fault.
  * @param pump Pump; only its published status is read.
  * @note Core 0, every loop pass: the control core never waits on the global
- * values.
+ * values. Without a valid fuel temperature (sensor fault, lost link, no frame
+ * yet) F_FUEL_TEMP is 0 and isFuelTempValid() false. A fault reported by every
+ * good frame for ECU_FUEL_TEMP_FAULT_CONFIRM_MS raises
+ * DTC_ADJ_FUEL_TEMP_BROKEN; the first good frame without it clears the active
+ * flag.
  */
 void vp37AdapterPublish(const VP37Pump *pump);
+
+/**
+ * @brief Whether F_FUEL_TEMP holds a measurement.
+ * @return False after a fuel sensor fault, a lost Adjustometer link or before
+ * the first good frame; CAN and OBD then send no fuel temperature.
+ * @note Core 0, like vp37AdapterPublish().
+ */
+bool isFuelTempValid(void);
+
+#ifdef UNIT_TEST
+/** @brief Forget what earlier tests published. */
+void vp37AdapterResetForTest(void);
+#endif
 
 /**
  * @brief Allow core-1 services outside the upcoming VP37 deadline guard.

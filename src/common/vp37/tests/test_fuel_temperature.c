@@ -1,5 +1,10 @@
-#include "../../tests/hal_mock_c_bridge.h"
+#include "can.h"
+#include "config.h"
+#include "dtcManager.h"
+#include "obd-2.h"
+#include "obd_protocol.h"
 #include "sensors.h"
+#include "tests/testable/obd2_testable.h"
 #include "unity.h"
 #include "vp37_adapter.h"
 #include "vp37_pump_setup.h"
@@ -7,15 +12,20 @@
 #include <math.h>
 #include <string.h>
 
+/* After the HAL configuration: the CAN part of the bridge needs it. */
+#include "../../tests/hal_mock_c_bridge.h"
+
 static VP37Pump pump;
 static uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
 static int32_t writtenPwm;
+static bool transferFails;
 
 static void writePwm(int32_t value) { writtenPwm = value; }
 static void enableDrive(bool enabled) { (void)enabled; }
 static bool driveEnabled(void) { return true; }
 static hal_status_t transfer(uint8_t reg, uint8_t *out, size_t length) {
-  if ((reg != ADJUSTOMETER_FEEDBACK_START) || (length != COUNTOF(frame))) {
+  if (transferFails || (reg != ADJUSTOMETER_FEEDBACK_START) ||
+      (length != COUNTOF(frame))) {
     return HAL_EBUS;
   }
   memcpy(out, frame, length);
@@ -24,6 +34,9 @@ static hal_status_t transfer(uint8_t reg, uint8_t *out, size_t length) {
 
 void setUp(void) {
   fiesta_test_set_millis(0U);
+  transferFails = false;
+  vp37AdapterResetForTest();
+  dtcManagerClearAll();
   initSensors();
   static const VP37Callbacks callbacks = {
       .writeQuantityPwm = writePwm,
@@ -48,6 +61,7 @@ void tearDown(void) {
 
 static void processTemperature(int16_t temperature, uint8_t status,
                                uint8_t version) {
+  transferFails = false;
   fiesta_test_set_millis(hal_millis() + 5U);
   adjustometer_feedback_t sample =
       vp37TestFeedback(4500, 144, temperature, status);
@@ -80,6 +94,7 @@ static void test_cold_data_preserves_legacy_drive_policy(void) {
     VP37Status status;
     TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readStatus(&pump, &status));
     TEST_ASSERT_TRUE(status.fuelTempValid);
+    TEST_ASSERT_FALSE(status.fuelTempFault);
     TEST_ASSERT_EQUAL_FLOAT(temperatures[i], status.fuelTempC);
   }
 }
@@ -117,6 +132,7 @@ test_cold_and_invalid_hold_correction_but_report_distinct_status(void) {
     VP37Status status;
     TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_readStatus(&pump, &status));
     TEST_ASSERT_EQUAL_INT(i != 2U, status.fuelTempValid);
+    TEST_ASSERT_EQUAL_INT(i == 2U, status.fuelTempFault);
   }
   processTemperature(49, ADJ_STATUS_OK, 2U);
   TEST_ASSERT_GREATER_THAN_FLOAT(factor, pump.thermal.temperatureCorrection);
@@ -125,17 +141,185 @@ test_cold_and_invalid_hold_correction_but_report_distinct_status(void) {
                                  pump.pid.positiveLimit);
 }
 
-static void test_ecu_globals_keep_last_valid_temperature(void) {
-  pump.feedback.readCount = 1000U;
-  processTemperature(-20, ADJ_STATUS_OK, 2U);
+/* One v2 frame through the pump and what core 0 takes from it. */
+static void publishTemperature(int16_t temperature, uint8_t status) {
+  processTemperature(temperature, status, 2U);
   vp37AdapterPublish(&pump);
-  TEST_ASSERT_EQUAL_FLOAT(-20.0f, getGlobalValue(F_FUEL_TEMP));
-  processTemperature(0, ADJ_STATUS_FUEL_TEMP_BROKEN, 2U);
+}
+
+/* One control step without an answer from the Adjustometer. */
+static void publishLostFrame(void) {
+  transferFails = true;
+  fiesta_test_set_millis(hal_millis() + 5U);
+  VP37_process(&pump);
   vp37AdapterPublish(&pump);
-  TEST_ASSERT_EQUAL_FLOAT(-20.0f, getGlobalValue(F_FUEL_TEMP));
-  processTemperature(0, ADJ_STATUS_OK, 2U);
+}
+
+static bool fuelSensorCodeIs(dtc_kind_t kind) {
+  uint16_t codes[16];
+  const uint8_t count =
+      dtcManagerGetCodes(kind, codes, (uint8_t)COUNTOF(codes));
+  for (uint8_t i = 0U; i < count; i++) {
+    if (codes[i] == DTC_ADJ_FUEL_TEMP_BROKEN) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void test_ecu_globals_drop_invalid_temperature(void) {
   vp37AdapterPublish(&pump);
+  TEST_ASSERT_FALSE(isFuelTempValid()); /* No frame yet. */
   TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_FUEL_TEMP));
+  publishTemperature(-20, ADJ_STATUS_OK);
+  TEST_ASSERT_TRUE(isFuelTempValid());
+  TEST_ASSERT_EQUAL_FLOAT(-20.0f, getGlobalValue(F_FUEL_TEMP));
+  /* The frame still carries a number; the sensor status makes it invalid. */
+  publishTemperature(25, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  TEST_ASSERT_FALSE(isFuelTempValid());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_FUEL_TEMP));
+  publishTemperature(31, ADJ_STATUS_OK);
+  TEST_ASSERT_TRUE(isFuelTempValid());
+  TEST_ASSERT_EQUAL_FLOAT(31.0f, getGlobalValue(F_FUEL_TEMP));
+  /* A lost link invalidates the value at once, without a new frame. */
+  publishLostFrame();
+  TEST_ASSERT_FALSE(isFuelTempValid());
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, getGlobalValue(F_FUEL_TEMP));
+}
+
+static void test_fuel_sensor_code_confirms_after_window_and_clears(void) {
+  publishTemperature(30, ADJ_STATUS_OK);
+  /* One faulty frame between good ones never becomes a stored code. */
+  publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  publishTemperature(30, ADJ_STATUS_OK);
+  TEST_ASSERT_FALSE(fuelSensorCodeIs(DTC_KIND_STORED));
+
+  publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  const uint32_t startedMs = hal_millis();
+  while (!hal_elapsed_u32(hal_millis() + 5U, startedMs,
+                          ECU_FUEL_TEMP_FAULT_CONFIRM_MS)) {
+    publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+    TEST_ASSERT_FALSE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+  }
+  publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  TEST_ASSERT_TRUE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+  TEST_ASSERT_TRUE(fuelSensorCodeIs(DTC_KIND_STORED));
+
+  publishTemperature(30, ADJ_STATUS_OK);
+  TEST_ASSERT_FALSE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+  TEST_ASSERT_TRUE(fuelSensorCodeIs(DTC_KIND_STORED));
+}
+
+static void test_lost_link_does_not_raise_fuel_sensor_code(void) {
+  publishTemperature(30, ADJ_STATUS_OK);
+  /* An intermittent link: core 0 first sees each good frame in a status
+   * published after a later failed read. The sensor stays healthy. */
+  const uint32_t goodFrames = (2U * ECU_FUEL_TEMP_FAULT_CONFIRM_MS) / 10U;
+  const uint32_t readsBefore = pump.feedback.readCount;
+  for (uint32_t i = 0U; i < goodFrames; i++) {
+    processTemperature(30, ADJ_STATUS_OK, 2U);
+    publishLostFrame();
+    TEST_ASSERT_FALSE(isFuelTempValid());
+  }
+  TEST_ASSERT_EQUAL_UINT32(goodFrames, pump.feedback.readCount - readsBefore);
+  /* Then a link lost for longer than the confirmation time. */
+  for (uint32_t i = 0U; i < (2U * ECU_FUEL_TEMP_FAULT_CONFIRM_MS) / 5U; i++) {
+    publishLostFrame();
+  }
+  TEST_ASSERT_FALSE(isFuelTempValid());
+  TEST_ASSERT_FALSE(fuelSensorCodeIs(DTC_KIND_STORED));
+}
+
+static void test_cleared_fuel_sensor_code_returns_while_fault_lasts(void) {
+  publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  for (uint32_t i = 0U; (i <= ECU_FUEL_TEMP_FAULT_CONFIRM_MS / 5U) &&
+                        !fuelSensorCodeIs(DTC_KIND_ACTIVE);
+       i++) {
+    publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  }
+  TEST_ASSERT_TRUE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+  (void)dtcManagerClearAll();
+  TEST_ASSERT_FALSE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+  publishTemperature(30, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  TEST_ASSERT_TRUE(fuelSensorCodeIs(DTC_KIND_ACTIVE));
+}
+
+/* The next 0x12B frame of the periodic CAN0 group. */
+static void sendEcuUpdate03(uint8_t *out) {
+  if (canTestGetCanHandle() == NULL) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, canInit(1));
+  }
+  fiesta_test_can_reset(canTestGetCanHandle());
+  CAN_updaterecipients_01();
+  bool found = false;
+  for (unsigned step = 0U; (step < 8U) && !found; step++) {
+    fiesta_test_set_millis(hal_millis() + 2U);
+    canMainLoop();
+    uint32_t id = 0U;
+    uint8_t length = 0U;
+    uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+    while (fiesta_test_can_pop_sent(canTestGetCanHandle(), &id, &length,
+                                    data) == HAL_OK) {
+      if (id == CAN_ID_ECU_UPDATE_03) {
+        TEST_ASSERT_EQUAL_UINT8(CAN_FRAME_MAX_LENGTH, length);
+        memcpy(out, data, CAN_FRAME_MAX_LENGTH);
+        found = true;
+      }
+    }
+  }
+  TEST_ASSERT_TRUE(found);
+}
+
+static void test_can_frame_carries_fuel_temperature_validity(void) {
+  /* A fuel level with a non-zero high byte shares the buffer of 0x129. */
+  setGlobalValue(F_FUEL, 4660.0f);
+  uint8_t data[CAN_FRAME_MAX_LENGTH] = {0};
+  publishTemperature(-20, ADJ_STATUS_OK);
+  sendEcuUpdate03(data);
+  TEST_ASSERT_EQUAL_HEX8(CAN_ECU_UPDATE_03_STATUS_FUEL_TEMP_VALID,
+                         data[CAN_FRAME_ECU_UPDATE_03_STATUS]);
+  TEST_ASSERT_EQUAL_INT8(-20, (int8_t)data[CAN_FRAME_ECU_UPDATE_FUEL_TEMP]);
+  publishTemperature(25, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  sendEcuUpdate03(data);
+  TEST_ASSERT_EQUAL_HEX8(0U, data[CAN_FRAME_ECU_UPDATE_03_STATUS]);
+  TEST_ASSERT_EQUAL_HEX8(0U, data[CAN_FRAME_ECU_UPDATE_FUEL_TEMP]);
+}
+
+/* The reply to UDS 0x22 DD02 on the OBD-II bus. */
+static void readFuelTemperatureDid(uint8_t *reply) {
+  if (obdTestGetCanHandle() == NULL) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, obdInit(1));
+  }
+  fiesta_test_can_reset(obdTestGetCanHandle());
+  fiesta_test_can_set_state(obdTestGetCanHandle(), HAL_CAN_STATE_ERROR_ACTIVE);
+  obdTestResetTransport();
+  const uint8_t request[8] = {0x03U,
+                              UDS_SVC_READ_DATA_BY_ID,
+                              MSB(DID_FORD_FUEL_TEMP),
+                              LSB(DID_FORD_FUEL_TEMP),
+                              0U,
+                              0U,
+                              0U,
+                              0U};
+  obdReq(LISTEN_ID, request);
+  uint32_t id = 0U;
+  uint8_t length = 0U;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, fiesta_test_can_pop_sent(obdTestGetCanHandle(),
+                                                         &id, &length, reply));
+  TEST_ASSERT_EQUAL_UINT32(REPLY_ID, id);
+}
+
+static void test_obd_fuel_temperature_did_follows_validity(void) {
+  uint8_t reply[8] = {0};
+  publishTemperature(-20, ADJ_STATUS_OK);
+  readFuelTemperatureDid(reply);
+  TEST_ASSERT_EQUAL_HEX8(UDS_RSP_READ_DATA_BY_ID, reply[1]);
+  TEST_ASSERT_EQUAL_HEX8(20U, reply[4]); /* -20 C + 40 */
+  publishTemperature(25, ADJ_STATUS_FUEL_TEMP_BROKEN);
+  readFuelTemperatureDid(reply);
+  TEST_ASSERT_EQUAL_HEX8(UDS_RSP_NEGATIVE, reply[1]);
+  TEST_ASSERT_EQUAL_HEX8(UDS_SVC_READ_DATA_BY_ID, reply[2]);
+  TEST_ASSERT_EQUAL_HEX8(NRC_CONDITIONS_NOT_CORRECT, reply[3]);
 }
 
 #if VP37_TELEMETRY_ENABLED
@@ -173,7 +357,12 @@ int main(void) {
   RUN_TEST(test_cold_data_preserves_legacy_drive_policy);
   RUN_TEST(test_positive_readings_match_both_protocols);
   RUN_TEST(test_cold_and_invalid_hold_correction_but_report_distinct_status);
-  RUN_TEST(test_ecu_globals_keep_last_valid_temperature);
+  RUN_TEST(test_ecu_globals_drop_invalid_temperature);
+  RUN_TEST(test_fuel_sensor_code_confirms_after_window_and_clears);
+  RUN_TEST(test_lost_link_does_not_raise_fuel_sensor_code);
+  RUN_TEST(test_cleared_fuel_sensor_code_returns_while_fault_lasts);
+  RUN_TEST(test_can_frame_carries_fuel_temperature_validity);
+  RUN_TEST(test_obd_fuel_temperature_did_follows_validity);
 #if VP37_TELEMETRY_ENABLED
   RUN_TEST(test_native_adj_telemetry_prints_signed_celsius);
 #endif

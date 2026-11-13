@@ -16,6 +16,7 @@
 #include "rpm.h"
 #include "sensors.h"
 #include "tests.h"
+#include "vp37_adapter.h"
 
 #ifdef UNIT_TEST
 #include "tests/testable/obd2_testable.h"
@@ -1058,13 +1059,18 @@ static void handleUdsReadDataById(uint32_t requestId, uint8_t mode,
         getGlobalValue(F_INTAKE_TEMP));
     obdResponseSetPayload(response, sizeof(payload), payload);
   } else if (did == (uint16_t)DID_FORD_FUEL_TEMP) {
-    // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C.
-    uint8_t raw = obd_encodeTempByte(getGlobalValue(F_FUEL_TEMP));
-    uint8_t payload[4];
-    (void)memset(payload, 0, sizeof(payload));
-    initReadDidPayload(payload, did);
-    payload[3] = raw;
-    obdResponseSetPayload(response, sizeof(payload), payload);
+    // DD02: Fuel temperature, 1 byte unsigned, value = raw - 40 °C; a failed
+    // sensor or a silent Adjustometer leaves no measurement to send.
+    if (isFuelTempValid()) {
+      uint8_t raw = obd_encodeTempByte(getGlobalValue(F_FUEL_TEMP));
+      uint8_t payload[4];
+      (void)memset(payload, 0, sizeof(payload));
+      initReadDidPayload(payload, did);
+      payload[3] = raw;
+      obdResponseSetPayload(response, sizeof(payload), payload);
+    } else {
+      obdResponseSetNegative(response, mode, NRC_CONDITIONS_NOT_CORRECT);
+    }
   } else if (did == (uint16_t)DID_FORD_OIL_PRESSURE) {
     // DD03: Oil pressure, 2 bytes big-endian, kPa × 10; a faulty sender
     // leaves no measurement to send.

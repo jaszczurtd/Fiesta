@@ -10,6 +10,7 @@
 #include "sensors.h"
 #include "tests.h"
 
+#include <string.h>
 #include <utils/multicoreWatchdog.h>
 
 bool vp37AdapterCanServiceCore1(const VP37Pump *pump, uint32_t nowUs) {
@@ -59,19 +60,65 @@ static const VP37Callbacks k_vp37AdapterCallbacks = {
     .cyclicDelayMs = testsCyclicDelayMs,
 };
 
+/* What core 0 took from the published status; no other core touches it. */
+typedef struct {
+  uint32_t reads;        /* good Adjustometer frames already copied */
+  uint32_t faultSinceMs; /* first good frame of the current fault run */
+  bool fuelTempValid;    /* F_FUEL_TEMP holds a measurement */
+  bool faultRun;         /* every good frame since faultSinceMs had the fault */
+  bool faultConfirmed;   /* DTC_ADJ_FUEL_TEMP_BROKEN is reported active */
+} VP37AdapterPublished;
+
+static VP37AdapterPublished s_vp37Published;
+
+/**
+ * @brief Raise or clear DTC_ADJ_FUEL_TEMP_BROKEN from one new good frame.
+ * @param fault The frame reported a fuel temperature sensor fault.
+ * @param nowMs Current time [ms].
+ * @note Frames lost on the bus neither confirm nor clear the fault. A
+ * confirmed fault is asserted again with every faulty frame, so it returns
+ * after a diagnostic clear while the sensor stays broken.
+ */
+static void vp37AdapterTrackFuelTempFault(bool fault, uint32_t nowMs) {
+  if (fault && !s_vp37Published.faultRun) {
+    s_vp37Published.faultSinceMs = nowMs;
+  }
+  s_vp37Published.faultRun = fault;
+  const bool confirmed =
+      fault && hal_elapsed_u32(nowMs, s_vp37Published.faultSinceMs,
+                               ECU_FUEL_TEMP_FAULT_CONFIRM_MS);
+  if (confirmed || s_vp37Published.faultConfirmed) {
+    dtcManagerSetActive(DTC_ADJ_FUEL_TEMP_BROKEN, confirmed);
+  }
+  s_vp37Published.faultConfirmed = confirmed;
+}
+
 void vp37AdapterPublish(const VP37Pump *pump) {
-  /* Good Adjustometer frames already copied to the global values; core 0. */
-  static uint32_t s_vp37PublishedReads = 0U;
   VP37Status status;
-  if ((VP37_readStatus(pump, &status) == HAL_OK) &&
-      (status.readCount != s_vp37PublishedReads)) {
-    s_vp37PublishedReads = status.readCount;
-    if (status.fuelTempValid) {
-      setGlobalValue(F_FUEL_TEMP, status.fuelTempC);
-    }
+  if (VP37_readStatus(pump, &status) != HAL_OK) {
+    return;
+  }
+  /* A lost link invalidates the fuel temperature at once, without a frame. */
+  bool fuelTempChanged = status.fuelTempValid != s_vp37Published.fuelTempValid;
+  if (status.readCount != s_vp37Published.reads) {
+    s_vp37Published.reads = status.readCount;
+    vp37AdapterTrackFuelTempFault(status.fuelTempFault, hal_millis());
     setGlobalValue(F_VOLTS, status.supplyVolts);
+    fuelTempChanged = true;
+  }
+  if (fuelTempChanged) {
+    s_vp37Published.fuelTempValid = status.fuelTempValid;
+    setGlobalValue(F_FUEL_TEMP, status.fuelTempValid ? status.fuelTempC : 0.0f);
   }
 }
+
+bool isFuelTempValid(void) { return s_vp37Published.fuelTempValid; }
+
+#ifdef UNIT_TEST
+void vp37AdapterResetForTest(void) {
+  (void)memset(&s_vp37Published, 0, sizeof(s_vp37Published));
+}
+#endif
 
 const VP37Callbacks *vp37AdapterCallbacks(void) {
   return &k_vp37AdapterCallbacks;

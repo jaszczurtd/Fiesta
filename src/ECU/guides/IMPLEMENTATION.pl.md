@@ -93,7 +93,7 @@ w RAM sprawdź mapy pamięci ELF obu wariantów firmware.
 | [rpm.c](../rpm.c) | Obroty z przerwania czujnika Halla. |
 | [common/vp37](../../common/vp37/) | Sterownik współdzielony przez ECU i VP37TestBench. Listę [vp37_sources.txt](../../common/vp37/vp37_sources.txt) czyta CMake testów, a generator VS Code wpisuje ją do manifestów modułów z `sharedSources`. |
 | [vp37.c](../../common/vp37/vp37.c) | Start pompy, API żądania i cykl sterowania. |
-| [vp37_adapter.c](../vp37_adapter.c) | PWM ECU, enable PCF8574, blokada RPM, I²C Adjustometera, start i wartości `F_FUEL_TEMP`/`F_VOLTS` ze stanu publikowanego. |
+| [vp37_adapter.c](../vp37_adapter.c) | PWM ECU, enable PCF8574, blokada RPM, I²C Adjustometera, start, wartości `F_FUEL_TEMP`/`F_VOLTS` ze stanu publikowanego, ważność temperatury paliwa dla CAN i OBD oraz U190A po trwałej awarii czujnika paliwa. |
 | [vp37_adjustometer.c](../../common/vp37/vp37_adjustometer.c) | Ramki, diagnostyka i oczekiwanie na poziom odniesienia. |
 | [vp37_snapshot.c](../../common/vp37/vp37_snapshot.c) | Publikowanie i kopiowanie stanu bez blokady. |
 | [vp37_feedback.c](../../common/vp37/vp37_feedback.c) | Położenie i kalibracja skoku. |

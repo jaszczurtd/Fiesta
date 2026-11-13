@@ -100,7 +100,7 @@ firmware variants' ELF memory maps when changing these buffers or RAM code.
 | [`rpm.c`](../../../src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
 | [`src/common/vp37/`](../../../src/common/vp37/) | the VP37 module, shared by the ECU and VP37TestBench; its translation units are the list in [`vp37_sources.txt`](../../../src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
 | [`vp37.c`](../../../src/common/vp37/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
-| [`vp37_adapter.c`](../../../src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, and `F_FUEL_TEMP`/`F_VOLTS` from the published status |
+| [`vp37_adapter.c`](../../../src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, `F_FUEL_TEMP`/`F_VOLTS` from the published status, the fuel temperature validity for CAN and OBD, and U190A after a lasting fuel sensor fault |
 | [`vp37_adjustometer.c`](../../../src/common/vp37/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
 | [`vp37_snapshot.c`](../../../src/common/vp37/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
 | [`vp37_feedback.c`](../../../src/common/vp37/vp37_feedback.c) | Adjustometer position and the calibration sweep |
