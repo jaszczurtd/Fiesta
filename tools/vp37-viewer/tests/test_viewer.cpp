@@ -81,10 +81,16 @@ const MetricsFile *metrics_file(const Index &index, const std::string &rel) {
 }
 
 std::string page_json(const std::string &html) {
-  static const std::regex data(R"(VP37\.page=([\s\S]*?);</script>)");
-  std::smatch match;
-  return std::regex_search(html, match, data) ? std::string(match[1])
-                                              : std::string();
+  // libstdc++ regex recurses per character and overflows the Debug stack on
+  // pages with the bilingual field catalog. The generator escapes </script>.
+  const std::string prefix = "VP37.page=";
+  const size_t marker = html.find(prefix);
+  if (marker == std::string::npos)
+    return {};
+  const size_t begin = marker + prefix.size();
+  const size_t end = html.find(";</script>", begin);
+  return end == std::string::npos ? std::string()
+                                  : html.substr(begin, end - begin);
 }
 
 void test_rev82_gz() {

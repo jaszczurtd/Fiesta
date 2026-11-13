@@ -1,0 +1,9 @@
+100 ECU: VP37 C us:1000000 tar:1100 des:1090 adj:1080 hzraw:33079 hz:33080 err:10 pwm:100 ff:90 P:6 I:3 D:1 corr:10 lo:20 hi:200 ih:0 cg:1 sf:0 hw:1 rest:0 V:13.8 Vc:13.6 vcor:1.02 tsc:1.1 ft:30 pdt:5000 age:1200 ious:80
+100 ECU: VP37 IPULSE us:1000000 Ion:2.1 I95:2.4 ctar:2.3 cerr:0.2 cpwm:4
+100 ECU: VP37 CFG scanus:600 execus:50
+100 ECU: VP37 ADJ f:1080 d:80 v:200 ft:31 s:5
+100.02 ECU: TEST: independent fixture
+100.05 ECU: VP37 C us:1050000 tar:1100 des:1100 adj:1095 hzraw:33094 hz:33095 err:5 pwm:101 ff:91 P:5 I:4 D:1 corr:10 lo:20 hi:200 ih:1 cg:0 sf:1 hw:0 rest:1 V:13.7 Vc:13.5 vcor:1.03 tsc:1.2 ft:31 pdt:5001 age:1201 ious:81
+100.05 ECU: VP37 IPULSE us:1050000 Ion:2.2 I95:2.5 ctar:2.4 cerr:0.2 cpwm:5
+100.05 ECU: VP37 CFG scanus:601 execus:51
+100.05 ECU: VP37 ADJ f:1095 d:95 v:201 ft:32 s:2

@@ -35,6 +35,8 @@ The ECU is the hub. It is the only module that controls the engine. The
 MISRA-C requirements cover it, the shared VP37 module and the Adjustometer;
 the other modules either feed the ECU data or display what it publishes.
 
+See [project status](doc/STATUS.md) for board/firmware compatibility and remaining integration work.
+
 ## Hardware platform
 
 ECU runs on a Waveshare RP2350-Plus. Its PCB also takes the RP2040-Plus,
@@ -64,22 +66,22 @@ the loom colours.
 
 | Module | Language | Role | MISRA |
 |---|---|---|---|
-| [`ECU`](src/ECU/) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
-| [`Clocks`](src/Clocks/) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
-| [`Fiesta_clock`](src/Fiesta_clock/) (`RTC_Clock`) | C | real-time clock set from GPS UTC; time and air temperatures on CAN | no |
-| [`Adjustometer`](src/Adjustometer/) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
-| [`VP37TestBench`](src/VP37TestBench/) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
-| [`SerialConfigurator`](src/SerialConfigurator/) | C, GTK-4 | desktop configuration and flashing | no |
+| [`ECU`](src/ECU/README.md) | C | engine control, diagnostics, actuators | required; `src/common/vp37` gated at zero findings, the rest a screening snapshot |
+| [`Clocks`](src/Clocks/README.md) | C++ | instrument cluster; oil pressure, wheel speed, exhaust gas temperature, GPS | no |
+| [`Fiesta_clock`](src/Fiesta_clock/README.md) (`RTC_Clock`) | C | real-time clock set from GPS UTC; time and air temperatures on CAN | no |
+| [`Adjustometer`](src/Adjustometer/README.md) | C | VP37 pump position feedback, I²C slave | required; gated at zero findings |
+| [`VP37TestBench`](src/VP37TestBench/README.md) | C, C++ | VP37 pump test stand: the shared drive module on bench hardware | the shared `src/common/vp37` code is gated; the bench's own files are not scanned |
+| [`SerialConfigurator`](src/SerialConfigurator/README.md) | C, GTK-4 | desktop configuration and flashing | no |
 
-The list itself lives in [`modules.json`](modules.json): each module's
-kind, token, SerialConfigurator slot and host-test build. The slot also says
-whether the module gets a Tests sub-tab (`tests`) and whether its test status
-carries an actuator position (`testsDrive`). Adding a module starts there. [`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks
-the list and generates the token header in `src/common/scDefinitions`, the
-SerialConfigurator module table and a shell fragment; the VS Code generator,
-`runalltests.sh`, `runmefirst.sh`, the bootstrap and SerialConfigurator read
-those instead of keeping their own lists. The SerialConfigurator slot index is
-explicit because the saved flash paths are keyed by it. CI workflow lists stay
+The list itself lives in [`modules.json`](modules.json): each module's kind, token,
+SerialConfigurator slot and host-test build. The slot also says whether the module gets a
+Tests sub-tab (`tests`) and whether its test status carries an actuator position
+(`testsDrive`). Adding a module starts there.
+[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks the list and generates the
+token header in `src/common/scDefinitions`, the SerialConfigurator module table and a shell
+fragment; the VS Code generator, `runalltests.sh`, `runmefirst.sh`, the bootstrap and
+SerialConfigurator read those instead of keeping their own lists. The SerialConfigurator slot
+index is explicit because the saved flash paths are keyed by it. CI workflow lists stay
 literal, and a test checks them against the registry.
 
 [`legacy/`](legacy/) keeps the retired `DPF_main`, `AdaptiveLights`, and
@@ -87,262 +89,33 @@ literal, and a test checks them against the registry.
 
 ### ECU
 
-ECU controls the VP37 injection pump, N75 boost valve, glow plugs, fan,
-block heater and heated windshield. It stores DTCs and answers OBD-II requests
-as a Ford Fiesta 1.8 DI EEC-V ECU.
-
-Core 0 handles timers, CAN, diagnostics, relays, storage and USB sessions;
-core 1 runs the VP37 control cycle, RPM interrupt and turbo control. There is
-no RTOS. The control core publishes atomic snapshots for core 0, while I²C
-output-latch access and DTC storage use mutexes. Flash writes stay on core 0.
-
-The [ECU guide](src/ECU/README.md) describes synchronization, position demand,
-current feedback, compensation, telemetry, RAM use and the BENCH image. The
-[Adjustometer guide](src/Adjustometer/README.md) describes position measurement.
-
-ECU shares a 400 kHz I²C bus between Adjustometer (`0x57`) and the PCF8574A
-relay expander (`0x38`). PCF8574A is rated for 100 kHz: this wiring operates
-outside its specification until the expander is replaced or moved to a
-separate bus. The local binding limits the configured bus to 400 kHz.
+Core 0 handles communication, diagnostics, storage and auxiliary outputs. Core 1 runs VP37
+control, RPM and turbo. There is no RTOS. The [ECU guide](src/ECU/README.md) leads to setup,
+control behaviour and synchronization details.
 
 ### Clocks
 
-Clocks drives the instrument cluster and measures what the ECU does not read
-itself. It produces square waves for the factory speedometer, tachometer, and
-oil gauge, switches the oil and charge lamps, draws extra readouts on a TFT
-display, and sounds the buzzer. It reads oil pressure from a resistive sender,
-vehicle speed from the ABS pulse line, and exhaust gas temperature before and
-inside the DPF through two MCP9600 amplifiers on its own I²C bus.
-
-The two RP2040 cores split the work. Core 0 receives and sends CAN, measures
-the ABS speed, and drives the gauges, lamps, and buzzer. Core 1 draws the TFT,
-reads the oil sender and both thermocouples, and serves the configurator
-session. The cores exchange copies of their state under a short lock. CAN
-and TFT share SPI; display transfers release it between bounded pixel bands.
-When the CAN controller does not answer at start, core 0 tries again every
-second while the display and the gauges run.
-
-ECU and Clocks use normal retransmission on the main CAN bus, so losing
-arbitration does not discard an update. The HAL bounds each synchronous send
-with a timeout and aborts a transmission that did not finish. ECU retains the
-latest snapshot of each periodic status, throttle and turbo frame and sends
-one pending frame per turn, at least 2 ms after its preceding transmission
-attempt. The core-0 loop gives RPM priority. Sequence numbers follow the actual
-send order; a newer snapshot replaces an unsent one of the same ID.
-High-rate sensor reads and periodic status snapshots retain their configured
-time grid after a late main-loop pass. Expired slots are skipped.
-
-Clocks expires RPM after 300 ms without a valid `0x127` frame, independently
-of other ECU traffic. Core 0 stops the tachometer and publishes zero with
-its RPM validity flag cleared. The TFT shows N/A until the next valid RPM
-frame; a received zero remains a valid reading. Loss and recovery redraw
-the RPM field on the next display loop pass, while regular numeric updates
-remain once a second. Expiry also lights the charge lamp, which confirms
-charging again when RPM returns.
-
-Clocks sends its display brightness, oil pressure, and ABS speed every 50 ms
-and both exhaust temperatures every 250 ms. Each measurement carries a
-validity flag. A missing thermocouple or a shorted or open oil sender goes
-out with its flag cleared, so receivers do not read it as zero.
-
-The USB debug log reports the ABS pulse frequency once a window reaches
-1000 ms, including zero and unchanged readings:
-`ABS pulses: 1000.00 Hz, delta=1000, window_ms=1000, total=25000`.
-Hz is the increase of `impulseCount` divided by the actual elapsed time;
-a late loop pass lengthens the window. The counter records rising edges on
-GP15, one per input period. Compare this reading with the ABS generator or
-an external frequency measurement; pulses missed by the GPIO interrupt do
-not reach the counter. The counting resolution is one pulse per window.
-An open configurator session mutes the debug log.
-
-The EGT readout on the TFT shows the temperature before the DPF. It takes
-turns every 5 s with the temperature inside the DPF only while a connected
-DPF module reports a regeneration in frame `0x124`.
-
-Core 1 polls GPS through PIO/software serial: receiver TX connects to GP27
-and receiver RX to GP28, at 9600 baud. Clocks starts normally without the
-receiver or a fix.
-
-Coordinates remain `double` until conversion to microdegrees for `SC_GET_GPS`
-and CAN. They survive loss of ECU communication. The ECU sends the old GPS
-fields of frame `0x129` as zero, and Clocks does not read them. Polling runs every pass; GPS changes
-and validity transitions trigger a new snapshot. Display refresh reuses
-the converted speed.
-
-The last position expires after 4 s. UTC comes from one RMC sentence with a
-fix and expires after 2 s. Clocks keeps UTC for CAN and SC and publishes it
-with seconds and validity in `0x131` every second, moved on by the age of the
-sentence to the time of sending.
-
-The GPS icon on the TFT has a green dot with a fix and a red one blinking
-once a second without it. The receiver sends NMEA also without a fix; when
-no sentence with a valid checksum has arrived for 3 s, Clocks treats it as
-missing. The speed then reads N/A, as for a missing thermocouple, and the dot
-blinks twice as fast.
-
-Once a second Clocks also sends the position with GPS speed (`0x12D`) and the
-position with the date and time to the minute in UTC (`0x12E`). Its device
-tree refers to the GPS binding in `src/common/bindings/`.
-
-The charge lamp follows engine RPM and battery voltage from the ECU. It stays
-lit while the engine is stopped or those values are stale, and goes out once
-the voltage confirms charging after the start. It lights again when charging
-stops and blinks at 2 Hz on overvoltage.
-The limits and confirmation times are in [`config.h`](src/Clocks/config.h);
-the TFT voltage gauge keeps its own range.
-
-The oil lamp is lit without oil pressure and blinks at 1 Hz while the sender
-is shorted or open, when the oil gauge shows ERR. From power-up to the first
-reading it stays lit.
-
-The configurator can run five tests of the factory cluster: each lamp lit,
-off and blinking, the tachometer and the speedometer stepped through fixed
-values and back to zero, and the three buzzer signals. A step lasts 2 s
-unless the configurator changes `step_ms`. A test replaces only the output
-it drives. The measurements, the CAN frames and the other outputs carry on,
-and the output returns to its measurement when the test ends, is stopped or
-loses the configurator. Every Clocks image has the tests; the
-[protocol description](src/common/scDefinitions/PROTOCOL.md#functional-tests)
-lists their commands and status keys.
-
-| File | Responsibility |
-|---|---|
-| [`Cluster.cpp`](src/Clocks/Cluster.cpp) | square waves for the factory gauges |
-| [`Gauge.h`](src/Clocks/Gauge.h), [`simpleGauge.cpp`](src/Clocks/simpleGauge.cpp), [`tempGauge.cpp`](src/Clocks/tempGauge.cpp), [`pressureGauge.cpp`](src/Clocks/pressureGauge.cpp) | gauge scaling |
-| [`TFTExtension.cpp`](src/Clocks/TFTExtension.cpp) | TFT drawing |
-| [`logic.cpp`](src/Clocks/logic.cpp) | start-up and loops of both cores; turns CAN signals into gauge, display, and buzzer state |
-| [`clocksState.cpp`](src/Clocks/clocksState.cpp) | state copies passed between the cores |
-| [`speed.cpp`](src/Clocks/speed.cpp) | ABS pulse frequency to speed |
-| [`oilPressure.cpp`](src/Clocks/oilPressure.cpp) | ADC reading to bar, sender short and open detection |
-| [`egt.cpp`](src/Clocks/egt.cpp) | both MCP9600 readings; a missing converter is looked for again |
-| [`gps.cpp`](src/Clocks/gps.cpp) | local GPS, fresh UTC and GPS frame encoding |
-| [`chargeLamp.cpp`](src/Clocks/chargeLamp.cpp) | charge lamp state from RPM and voltage |
-| [`oilLamp.cpp`](src/Clocks/oilLamp.cpp), [`lampBlink.h`](src/Clocks/lampBlink.h) | oil lamp state from the oil pressure sender; blink phase of both lamps |
-| [`buzzer.cpp`](src/Clocks/buzzer.cpp), [`buzzerStrategy.cpp`](src/Clocks/buzzerStrategy.cpp) | tones and warning patterns |
-| [`alerts.cpp`](src/Clocks/alerts.cpp) | temperature warnings through the buzzer strategy; silent while a cluster test owns the buzzer |
-| [`clusterOutput.cpp`](src/Clocks/clusterOutput.cpp) | the one `Cluster` instance; feeds it the measured speed and RPM, or the value of a running cluster test |
-| [`testOutputs.cpp`](src/Clocks/testOutputs.cpp) | substitution of the gauge, lamp and buzzer outputs by the cluster tests; the measurements keep flowing underneath |
-| [`clocksTests.cpp`](src/Clocks/clocksTests.cpp) | the five cluster tests (`charge`, `oil`, `rpm`, `speed`, `buzzer`) on the shared test runner, run through the configurator operations |
-| [`can.cpp`](src/Clocks/can.cpp) | CAN reception and the brightness, oil and speed, EGT, GPS position and GPS UTC frames; the MCP2515 filters admit only Fiesta IDs |
-
-The CAN controller and the TFT share one SPI bus. The display writes in
-bands of `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES`, set in
-[`hal_project_config.h`](src/Clocks/hal_project_config.h), so CAN gets the
-bus between two bands.
+Drives the factory gauges, lamps, TFT and buzzer. It measures oil pressure, ABS speed and
+EGT, receives GPS, and obtains engine data from the ECU over CAN. The [Clocks
+guide](src/Clocks/README.md) covers readings, data loss, output tests and execution.
 
 ### Adjustometer
 
-Adjustometer measures the VP37 actuator position through the frequency of a
-Hartley oscillator connected to the pump sensor coils, roughly 22-37 kHz.
-JaszczurHAL captures blocks of 32 periods through RP2040 PIO and DMA.
-The measurement combines four blocks into a 128-period window that slides by
-32 periods and averages the raw windows over one VP37 drive period, so the PWM
-ripple cancels without a filter lag. The exported deviation from a calibrated
-baseline is measured in Hz; ECU calibration maps it to actuator position.
-
-Core 0 drains capture data and publishes feedback. Core 1 handles auxiliary
-ADC readings, diagnostics, LED and USB logging. Adjustometer has its own
-RP2040 and usually sits on the ECU board.
-
-The I²C slave at `0x57` exposes two measurement blocks:
-
-| Registers | Meaning |
-|---|---|
-| `0x00..0x04` | Reserved; no measurements. |
-| `0x05..0x12` | Version-2 diagnostics: frequency, baseline, validity flags and chip temperature (14 bytes). |
-| `0x13..0x16` | Reserved. |
-| `0x17..0x34` | Versioned 30-byte control feedback with sample number, timestamp and age. |
-
-The active VP37 controller requires the control-feedback block. ECU checks
-frame coherence and freshness. The five-byte reader has been removed.
-Diagnostic readers derive signed deviation from frequency minus baseline
-in the same version-2 frame. HAL freezes the register map for each I²C read.
-Status bits report signal loss (`0x01`), a broken fuel sensor (`0x02`), pending
-baseline (`0x04`) and supply outside its valid range (`0x08`).
-
-Startup includes 500 ms of warm-up, baseline convergence (80 ms minimum,
-250 ms force-lock), and 1000 ms of drift verification. ECU waits up to
-`VP37_ADJUSTOMETER_BASELINE_WAIT_MS` (8 s) before calibrating travel. Measurement,
-startup and reset details are in the
-[Adjustometer README](src/Adjustometer/README.md).
-Adjustometer does not take part in the configurator protocol.
+Measures actuator position through oscillator frequency and publishes it over I²C at `0x57`.
+ECU requires fresh, coherent feedback and waits up to 8 s for the baseline before calibrating
+travel (`VP37_ADJUSTOMETER_BASELINE_WAIT_MS`). The [sensor guide](src/Adjustometer/README.md)
+covers startup, LED and registers. It does not support the configurator protocol.
 
 ### VP37TestBench
 
-VP37TestBench runs the shared VP37 drive module (`src/common/vp37`) on the
-pump test stand: its own RP2040 with an ST7796S display, a power stage of the
-same type as the ECU one (parts and values from
-[`fiesta-vp37-power-stage.json`](src/common/vp37/fiesta-vp37-power-stage.json),
-pins from its own `device_tree.json`, read through
-[`vp37_power_stage.h`](src/common/vp37/vp37_power_stage.h)) and the
-Adjustometer on the same I²C protocol. The bench adapter
-([`vp37_bench_adapter.c`](src/VP37TestBench/vp37_bench_adapter.c)) provides
-the board services: the two PWM channels written active low like on the ECU,
-the drive enable on a plain GPIO instead of the ECU's PCF8574, and the
-Adjustometer transfer without a bus mutex, because the bench I²C has one
-user. Like the ECU (through
-[`ecu_hal_config.h`](src/ECU/ecu_hal_config.h)), it includes
-[`vp37_hal_config.h`](src/common/vp37/vp37_hal_config.h) from its
-`hal_project_config.h`: each I²C phase is bounded to 2 ms, so a hung bus
-cannot hold a control step past the 20 ms feedback cutoff, and the module
-stops the build when the bound is missing. The demand comes from a potentiometer on the auxiliary scan input.
-Core 0 runs the timers, the display and debug output; core 1 starts the pump
-and runs `VP37_process()`. The screen redraws a value only when it changes,
-and a corner dot shows the Adjustometer connection the way Clocks shows its
-CAN devices: steady green while frames flow, blinking red while they do not
-(with the pump stopped, core 1 probes the status register once a second). Without a pump attached the start ends after the
-baseline timeout and the bench keeps running, which is also its bring-up
-smoke test. VP37TestBench does not take part in the configurator protocol.
+A separate bench board uses the shared VP37 controller with its own hardware adapter and
+display. Its [guide](src/VP37TestBench/README.md) explains the distinction from ECU BENCH.
 
 ### Fiesta_clock
 
-Fiesta_clock keeps UTC in a PCF8563 or DS3231 and sends it once a second as
-`CAN_ID_RTC_UPDATE` (`0x130`). The frame has integrity 1 only for trusted UTC;
-otherwise its date and time bytes are zero. A marker in the HAL key-value store
-records that this firmware has set the RTC to UTC. Until then the RTC holds the
-local time written by older firmware: the display shows it unchanged, and the
-frame reports no integrity. The marker is stored only after the RTC reads back
-the new UTC. If the read-back or the marker fails and the flash answers that
-the marker is missing, the clock writes the same moment back as local time, so
-the display and the next start read it right. If the flash gives no answer,
-the marker may be there: the RTC keeps UTC, shown right but not trusted, and
-the clock confirms the marker every 30 s. A start that cannot read the flash
-shows the RTC as UTC without trust, as most clocks have the marker by then.
-
-The clock sets the RTC from the GPS UTC frame of Clocks (`0x131`), the only ID
-its MCP2515 filters accept. The first valid frame sets an RTC without trusted
-UTC, also one whose registers hold no valid date. A running RTC is corrected
-only when it is more than 2 s off, at most once in 10 minutes; after an RTC
-error, a failed read included, or a flash error the next attempt waits 30 s.
-Every write is read back and checked. Frames read after a main-loop pause longer
-than 500 ms, or while the buttons or the configurator edit the time, are
-dropped. Without GPS or CAN the RTC keeps running on its own.
-
-The clock also sends the inside and outside air temperatures from its two
-DS18B20 sensors as `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), in 0.1 °C. The frame
-goes out with the time once a second, and at once when a reading or its
-validity changes. Both sensors keep converting in every display mode; a
-12-bit conversion takes 750 ms. A sensor whose newest reading is 3 s old or
-more loses its valid bit and sends 0. A sensor missing when the clock opens it
-stays without a reading until the next opening, which the temperature screen
-and an ignition change perform.
-
-The display, the buttons and the configurator use CET/CEST, converted with
-`hal_time`. Setting the time converts it to UTC. A local time skipped by the
-spring change counts as CET; the repeated autumn hour counts as its first,
-CEST pass. The weekday follows the date, so the buttons do not set it. The
-configurator can read and set the date and time; a commit is rejected unless
-the whole date is valid, leap years included.
-
-The module also shows the time, temperatures from two DS18B20 sensors, and the
-supply voltage on a 128×32 SSD1306 OLED driven by JaszczurHAL. The OLED and RTC share the
-I²C bus described in `device_tree.json`. HAL writes text directly to panel
-RAM, without a framebuffer. The clock retains its original 6×8 font
-(including Polish ś), scales 1 and 2, and panel settings, including contrast
-0x3f. Idle mode suspends the panel while retaining controller RAM. An ignition
-change reapplies the panel
-configuration. The greeting is cleared on the panel after the initial
-temperature readings.
+Keeps RTC time, synchronizes it with GPS time from Clocks, and publishes UTC and temperatures
+over CAN. Display and time editing use CET/CEST. The [clock
+guide](src/Fiesta_clock/README.md) covers RTC variants, readings and recovery.
 
 ### Serial Configurator
 

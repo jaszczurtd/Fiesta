@@ -12,19 +12,16 @@ as an integrated installation in a road-going car. ECU and VP37 trials use a
 separate engine on a steel frame. Clocks and the ECU's supervisory functions
 have been used in the car without VP37 actuation.
 
-## Modules
+## Choose a task
 
-| Module | Purpose |
-|---|---|
-| [ECU](src/ECU/README.md) | Engine, VP37 and boost control, relay outputs, diagnostics and DTC storage. |
-| [Clocks](src/Clocks/) | Factory gauges, TFT readouts and warnings; oil pressure, vehicle speed and exhaust temperatures; tests of the gauges, lamps and buzzer. |
-| [Adjustometer](src/Adjustometer/README.md) | VP37 position measurement, delivered to the ECU over I²C. |
-| [Fiesta_clock](src/Fiesta_clock/) | RTC time and air temperatures on CAN, local display. |
-| [VP37TestBench](src/VP37TestBench/) | The shared VP37 controller on a separate pump test stand. |
-| [SerialConfigurator](src/SerialConfigurator/README.md) | Linux GUI and CLI for USB discovery, settings and the ECU and Clocks functional tests; the GUI also flashes firmware. |
-
-DPF is an inactive entry in SerialConfigurator. It has no firmware, discovery
-or flashing support.
+| I want to... | Start here |
+| --- | --- |
+| Understand project readiness, limits and remaining work | [Project and hardware status](doc/STATUS.md) |
+| Run the ECU and see measurements | [ECU first use](src/ECU/README.md) |
+| View or compare saved measurements | [VP37 viewer](tools/vp37-viewer/README.md) |
+| Build and upload firmware | [Builds and debugging](doc/BUILDING.md) |
+| Understand modules and their connections | [Architecture](ARCHITECTURE.md) |
+| Change settings or test outputs | [SerialConfigurator](src/SerialConfigurator/README.md) |
 
 ## Getting started
 
@@ -50,14 +47,4 @@ to select the HAL revision recorded by Fiesta; it stops if HAL has local changes
 - [Daily systemd build](src/ECU/scripts/systemd/README.md)
 - [Gallery and bench photos](doc/GALLERY.md)
 
-## Validation scope
-
-The project does not claim ISO 26262, AUTOSAR or formal MISRA compliance.
-MISRA screening covers ECU, shared VP37 code and Adjustometer; the latter two
-have a gate rejecting active findings outside recorded deviations. Host tests
-use HAL mocks and do not establish electrical or mechanical behaviour. The
-project has an engine test stand, but no automated HIL rig.
-
-Neither RP2040 nor RP2350 is AEC-Q100 qualified. However, there is nothing
-preventing us from developing an ECU variant using a chip that has the
-required qualification.
+See [project status](doc/STATUS.md) for hardware compatibility and validation limits.

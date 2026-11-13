@@ -2,42 +2,57 @@
 
 [English](GALLERY.md) · [O projekcie](../README.pl.md)
 
-## Galeria
+Zdjęcia pokazują sprzęt i zastosowanie narzędzi. Wygląd aplikacji oraz warianty sprzętu mogą
+różnić się od bieżących; zakres działania opisuje [stan projektu](STATUS.pl.md).
 
-https://postimg.cc/gallery/pHF4jy2
+[Dodatkowe zdjęcia](https://postimg.cc/gallery/pHF4jy2)
 
-## Zdjęcia
+## Prototyp ECU
 
-Prototyp ECU do prób silnika poza samochodem:
+ECU używane z silnikiem poza samochodem.
 
-![ECU](../materials/imgs/ecu.jpg)
+![Prototyp ECU (ecu)](../materials/imgs/ecu.jpg)
 
-Bootstrap i parametry USB:
+## Przygotowanie środowiska
 
-![Bootstrap](../materials/imgs/bootstrap.png)
+Wynik bootstrapu i parametry USB; bieżące polecenia opisuje instrukcja builda.
 
-Silnik testowy:
+![Przygotowanie środowiska (bootstrap)](../materials/imgs/bootstrap.png)
 
-![Engine](../materials/imgs/test_engine.jpg)
+## Stanowisko silnikowe
 
-SerialConfigurator:
+Osobny silnik używany do prac nad sterowaniem i prób VP37.
 
-![Main](../materials/imgs/SC1.png)
+![Stanowisko silnikowe (test_engine)](../materials/imgs/test_engine.jpg)
 
-![Flash](../materials/imgs/SC2.png)
+## SerialConfigurator
 
-![Values](../materials/imgs/SC3.png)
+Przegląd aplikacji, wgrywanie firmware i widok parametrów.
 
-Obsługa diagnostyki ISO 14229, ISO 14230 i ISO 15765 OBD-2 współpracująca z narzędziem Fordiag:
+![SerialConfigurator (SC1)](../materials/imgs/SC1.png)
 
-![Main](../materials/imgs/fordiag1.png)
+![SerialConfigurator (SC2)](../materials/imgs/SC2.png)
 
-![Main](../materials/imgs/fordiag2.png)
+![SerialConfigurator (SC3)](../materials/imgs/SC3.png)
 
-![Display](../materials/imgs/display.JPG)
+## Diagnostyka OBD
 
-![In-car](../materials/imgs/incar.jpg)
+Diagnostyka Fiesty w Fordiag, z interfejsami ISO 14229, ISO 14230 i ISO 15765.
 
-Stanowisko testowe:
+![Diagnostyka OBD (fordiag1)](../materials/imgs/fordiag1.png)
 
-![Workbench](../materials/imgs/workplace.jpg)
+![Diagnostyka OBD (fordiag2)](../materials/imgs/fordiag2.png)
+
+## Wyświetlacz i montaż w samochodzie
+
+Zdjęcia wyświetlacza i montażu. Nie potwierdzają walidacji kompletnej instalacji VP37.
+
+![Wyświetlacz i montaż w samochodzie (display)](../materials/imgs/display.JPG)
+
+![Wyświetlacz i montaż w samochodzie (incar)](../materials/imgs/incar.jpg)
+
+## Warsztat
+
+Miejsce pracy nad prototypami.
+
+![Warsztat (workplace)](../materials/imgs/workplace.jpg)

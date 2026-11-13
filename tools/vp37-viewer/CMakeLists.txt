@@ -15,6 +15,8 @@ jh_add_jhbase()
 include("${VP37V_HAL_ROOT}/cmake/jh_host_network.cmake")
 jh_add_host_network_library(vp37v_network)
 target_compile_definitions(vp37v_network PUBLIC
+  HAL_HTTP_SERVER_REQUEST_BUFFER_SIZE=4096
+  HAL_WEBSOCKET_REQUEST_BUFFER_SIZE=4096
   HAL_WEBSOCKET_MAX_PAYLOAD_SIZE=32768
   HAL_WEBSOCKET_MAX_CLIENTS=4
   HAL_HTTP_SERVER_MAX_CLIENTS=4
@@ -44,8 +46,10 @@ target_include_directories(vp37v_core PUBLIC src)
 target_link_libraries(vp37v_core PUBLIC jb::host PRIVATE vp37v_hal)
 add_library(vp37v_file STATIC src/live_file.cpp)
 target_link_libraries(vp37v_file PRIVATE jb::status)
-add_library(vp37v_live STATIC src/live_server.cpp)
+add_library(vp37v_live STATIC src/live_server.cpp src/monitor_capture.cpp src/console_stream.c)
 target_link_libraries(vp37v_live PUBLIC vp37v_core vp37v_network PRIVATE vp37v_file)
+target_compile_definitions(vp37v_live PRIVATE VP37V_CMAKE="${CMAKE_COMMAND}"
+  VP37V_MONITOR_SCRIPT="${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_monitor.cmake")
 if(MSVC)
   # jhbase exports /OPT:REF, which is incompatible with incremental linking.
   target_link_options(vp37v_core INTERFACE /INCREMENTAL:NO)
@@ -71,7 +75,8 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
-  add_executable(vp37v_live_tests tests/test_live.cpp)
+  add_executable(vp37v_live_tests tests/test_live.cpp tests/browser_requests.c tests/browser_view.c
+    tests/console_capture.c)
   target_link_libraries(vp37v_live_tests PRIVATE vp37v_live)
   target_compile_definitions(vp37v_live_tests PRIVATE
     VP37V_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
@@ -84,6 +89,16 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME vp37v_live_tests COMMAND vp37v_live_tests)
   set_tests_properties(vp37v_live_tests PROPERTIES TIMEOUT 120)
+  find_program(VP37V_BROWSER NAMES google-chrome chromium chromium-browser msedge chrome
+    PATHS "C:/Program Files (x86)/Microsoft/Edge/Application"
+      "C:/Program Files/Microsoft/Edge/Application" "C:/Program Files/Google/Chrome/Application"
+      "/Applications/Google Chrome.app/Contents/MacOS"
+    DOC "Chromium browser for the viewer regression test" REQUIRED)
+  add_test(NAME vp37v_browser COMMAND "${CMAKE_COMMAND}"
+    "-DFIXTURE=$<TARGET_FILE:vp37v_live_tests>" "-DBROWSER=${VP37V_BROWSER}"
+    "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/browser-work"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_browser.cmake")
+  set_tests_properties(vp37v_browser PROPERTIES TIMEOUT 90 LABELS "tooling")
   add_executable(vp37v_tests tests/test_viewer.cpp)
   target_link_libraries(vp37v_tests PRIVATE vp37v_core vp37v_hal)
   set_target_properties(vp37v_tests PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
@@ -99,6 +114,7 @@ if(BUILD_TESTING)
   add_test(NAME vp37v_tests COMMAND vp37v_tests)
   add_test(NAME vp37v_cli COMMAND "${CMAKE_COMMAND}"
     "-DVIEWER=$<TARGET_FILE:vp37-viewer>"
+    "-DMONITOR=$<TARGET_FILE:vp37v_live_tests>"
     "-DFIXTURES=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
     "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/cli-work"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_cli.cmake")

@@ -2,11 +2,81 @@
 
 [Polski](README.pl.md)
 
-Build offline HTML pages from VP37 collector logs, recorded metrics and run
-descriptions. Pages include individual recordings, iterations and comparisons.
-They open through `file://` without a server or external chart libraries.
+The viewer displays live VP37 telemetry and builds pages for saved measurements and
+comparisons. Offline pages work through `file://`, without a server or external chart
+libraries.
 
-## Build and run
+- **My ECU is connected over USB:** follow the VS Code steps below.
+- **I have saved recordings:** use the [offline build workflow](#build-and-use-offline-pages).
+- **Another program is already recording a log:** [serve that growing log](#serve-a-growing-log).
+
+## Live ECU measurements in VS Code
+
+Prepare the hardware using the [ECU guide](../../src/ECU/README.md). The uploaded firmware
+calibrates the actuator during startup.
+
+1. Open **`src/ECU`** as the folder. You need CMake and a native C/C++ compiler; on Windows use MSVC Build Tools.
+2. Run **Tasks: Run Task -> `VP37: Live viewer`**. It builds the viewer, then rebuilds and uploads **ECU BENCH** for the selected assembly.
+3. After `Connected to ...`, read the URL in the terminal. Its default is **<http://127.0.0.1:8037/live>**.
+4. Open that address in a web browser or through **Open Integrated Browser** in VS Code. Leave the task running.
+
+The recording goes to `src/ECU/.build/vp37.log`. A later start appends a session and repeats
+the build/upload. The view shows new samples; a connection does not replay earlier history.
+
+**Ctrl+C** or **Tasks: Terminate Task** ends capture and the server. Closing the tab only
+closes the view. Neither action commands the actuator to stop; the ECU guide explains how to
+end a test.
+
+## Live view
+
+Live and offline pages default to English. The **EN -> PL / PL -> EN** button
+switches language and remembers the choice when browser storage is available.
+Links also carry the language choice, including when storage is blocked.
+Switching a live view preserves reception, pause, zoom and the selected trace.
+Offline pages reload in the selected language.
+
+Each chart has a short explanation and a color legend beside it, or above it
+in a narrow window. Hover over a parameter name to see its log key, unit and
+description; focus it with Tab or click to expand the description. Incoming
+samples keep these descriptions open. Raw sensor frequency has its own chart,
+as does PID correction, so their scales do not obscure position or PWM output.
+CSV keeps the original field identifiers. PNG uses the selected language and
+wraps the legend labels. Recorded reports and log messages retain their source
+text. Adjustometer supply readings use decivolts (`dV`); PWM counts are not
+percentages.
+
+Panels show position and error, PWM and PID terms, control state bands,
+current, voltage and temperature, loop timings, and Adjustometer values and
+status bits. Units and descriptions come from `field_catalog()`; legends mark
+missing fields. Hover for the shared cursor, drag for shared zoom, and
+double-click to restore the retained range. Offline pages and their controls
+still work through `file://`.
+
+The rolling window spans 60 seconds. Pause and zoom freeze one snapshot while
+reception continues; Resume returns to the newest samples. Reception redraws
+at most ten times per second, with no drawing in hidden tabs. CSV exports
+numeric records and events in the viewed range, including source time and
+segment identifiers. CSV prefixes text cells starting with a spreadsheet
+formula marker with an apostrophe. PNG captures the displayed panels and range.
+Returning with the browser's Back button reconnects reception and preserves
+the cached view, including a paused range.
+
+Reconnect, file changes, sequence gaps and MCU clock resets separate segments.
+Their boundaries are marked; curves do not bridge them, missing values or
+sample intervals longer than two seconds. Live time starts at zero; a new
+segment starts 0.1 seconds after the previous one. This visual separator does
+not measure outage duration. CSV retains original parser timestamps.
+Reconnect never recovers missed samples, even if the server reuses an epoch.
+
+`T` samples are collected separately. `trace end samples:N` opens a trace view
+unless another range is paused. Select retained traces from the dropdown.
+Trace axes show seconds from the first MCU sample; CSV also retains parser
+timestamps. A successful `trace: HAL_OK samples:N` acknowledgement closes any
+unfinished previous dump as incomplete. A count mismatch, interruption,
+missing `us`, non-increasing sample time or capacity overflow marks a dump
+incomplete. A selected trace stays available while newer dumps arrive.
+
+## Build and use offline pages
 
 From the Fiesta root, with its pinned HAL dependencies installed:
 
@@ -21,6 +91,13 @@ configuration directory with a multi-configuration generator).
 
 With a Visual Studio generator, configure with `-A x64` or `-A Win32`,
 pass `--config Release` to the build command and `-C Release` to CTest.
+Tests require Chrome, Chromium or Edge, detected by CMake or selected with
+`-DVP37V_BROWSER=/path/to/browser`. A C harness runs the production scripts
+in headless mode, without Node or npm. `-DBUILD_TESTING=OFF` builds only the
+tool and requires no browser.
+
+Use dedicated output directories: `build` replaces generated files and removes obsolete
+outputs in the site and cache directories. Input recordings remain read-only.
 
 ```sh
 vp37-viewer parse /path/to/recording.log.gz
@@ -32,8 +109,6 @@ vp37-viewer describe --root /path/to/recordings --cache /path/to/cache \
 
 All data and output directories are explicit. The recording root contains
 `vp37_implementation_tests/`, `measurements/` or `archive/measurements/`.
-Input recordings remain read-only. Use dedicated site and cache directories:
-`build` replaces generated files and removes obsolete outputs there.
 `describe` prints proposed descriptions; `--write` saves them and
 `--overwrite` permits replacing existing descriptions.
 
@@ -54,68 +129,10 @@ previously generated offline pages through HTTP. Both listeners bind only to
 `--port` and `--ws-port`. Stop with Ctrl+C. The source log is read-only; the
 server neither opens the serial port nor creates a missing log.
 
-`--site` is optional. With it, `/` serves the generated pages; without it,
-`/` returns server status. `/api/status` always returns status JSON, and
-`/assets/` serves the bundled web assets. Static files must be smaller than
-512 KiB; files at or above this limit return HTTP 413. Paths outside the selected roots are
-rejected. HTTP and WebSocket each allow four clients.
+Open `http://127.0.0.1:8037/live` for the oscilloscope. `--site` is optional:
+with it, `/` serves generated pages; without it, `/` opens the oscilloscope.
 
-The WebSocket endpoint is `ws://127.0.0.1:8038/ws`. Protocol version 1 sends:
+## Configuration and limits
 
-| Message | Meaning |
-| --- | --- |
-| `hello` | `protocol`, current `epoch`, next batch number `next`, log `present` and `ws_port`. |
-| `reset` | The same fields after the log appears, disappears, is truncated or replaced. Discard the previous epoch's display buffers. |
-| `samples` | `epoch`, increasing `seq` and `records`. Each record has `kind`, `t` in seconds, and numeric `values` or event `text`. Missing/non-finite numbers are JSON `null`. |
-
-Batches normally leave every 40 ms, or earlier when they reach 32 KiB. Records
-use MCU time where available, with the mapping described below. `HOST`, `TEST`
-and other VP37 messages, including trace completion, retain their text. This
-does not add interpretation of calibration records.
-
-A connection receives subsequent batches, without replaying earlier history.
-Batch numbers expose gaps. On reconnect, start from `hello`; a stopped server
-starts a new stream. A client that cannot accept a complete frame is disconnected
-without queuing or retrying a partial frame. Client data messages are rejected;
-the endpoint only publishes measurements.
-
-The reader preserves incomplete lines at EOF and discards them on a detected
-file change. Detection uses file identity, size and the last 64 consumed bytes.
-An in-place rewrite that restores the same bytes and size between polls cannot
-be distinguished from append-only input. Use atomic replacement for log rotation.
-Each poll reads at most 64 KiB. Lines are limited to 64 KiB, numeric records to
-256 distinct fields, and encoded records to 32512 bytes. Exceeding a limit or
-encountering a read error terminates the command with an error. A missing file
-is waited for. Parser history and client queues do not grow with log length.
-
-Live charts and VS Code integration are separate from this transport. Existing
-offline pages continue to work through `file://`.
-
-## Parser
-
-`src/telemetry.h` exposes `TelemetryParser::feed()` and `finish()`. Chunks may
-end anywhere in a line; only complete lines are delivered before `finish()`.
-The limit is 64 KiB per line. Errors terminate that reader; discard its partial
-output and create another reader after a file replacement or truncation.
-
-The default time axis retains collector timestamps for compatibility with
-recorded metric windows. The optional MCU mode unwraps `us` and places delayed
-`T`, `IPULSE` and `IWAVE` samples relative to control records. Backward control
-timestamps start a new epoch; consecutive control observations must be less
-than 2^31 microseconds apart. A reset near counter rollover is ambiguous without
-an explicit restart marker. Lines without `us` retain collector time.
-Numeric fields from every `CFG` are retained separately from revision summaries.
-
-`parse_log()` uses the same reader. The line splitter and timestamp arithmetic
-are C11; the existing recording model and page generator remain C++17. The
-parser version invalidates older caches when its output changes.
-
-The callback constructor streams one record at a time without retaining a
-recording. Its borrowed values are valid only during the callback; an error
-returned by the callback terminates the reader. Offline parsing is unchanged.
-Monitor capture, live charts, VS Code integration and interpretation of
-calibration records (`CAL`) are not implemented yet. Existing unknown fields
-and line kinds are reported by the offline viewer.
-
-The viewer tests also run through the ECU host-test build, including its local
-gate and CI. They use only the independent files in `tests/fixtures/`.
+The [technical reference](REFERENCE.md) covers log paths and ports, keyboard shortcuts,
+capture rules, buffer limits, the WebSocket protocol and parser.

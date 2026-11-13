@@ -2,42 +2,57 @@
 
 [Polski](GALLERY.pl.md) · [Project overview](../README.md)
 
-## Gallery
+These photos illustrate the hardware and tools. Application appearance and hardware variants
+may differ from the current versions; see [project status](STATUS.md) for their scope.
 
-https://postimg.cc/gallery/pHF4jy2
+[More photos](https://postimg.cc/gallery/pHF4jy2)
 
-## Photos
+## ECU prototype
 
-This is a test prototype used to test the engine when it is not installed in the car:
+ECU used with the engine outside the car.
 
-![ECU](../materials/imgs/ecu.jpg)
+![ECU prototype (ecu)](../materials/imgs/ecu.jpg)
 
-Bootstrap script + USB parameters:
+## Development setup
 
-![Bootstrap](../materials/imgs/bootstrap.png)
+Bootstrap output and USB parameters; follow the build guide for current commands.
 
-Test engine:
+![Development setup (bootstrap)](../materials/imgs/bootstrap.png)
 
-![Engine](../materials/imgs/test_engine.jpg)
+## Engine stand
 
-Serial (Fiesta) Configurator:
+The separate engine used for development and VP37 trials.
 
-![Main](../materials/imgs/SC1.png)
+![Engine stand (test_engine)](../materials/imgs/test_engine.jpg)
 
-![Flash](../materials/imgs/SC2.png)
+## SerialConfigurator
 
-![Values](../materials/imgs/SC3.png)
+Application overview, firmware upload and parameter views.
 
-ISO 14229, ISO 14230, and ISO 15765 OBD-2 implementation running with Fordiag diagnostic tool:
+![SerialConfigurator (SC1)](../materials/imgs/SC1.png)
 
-![Main](../materials/imgs/fordiag1.png)
+![SerialConfigurator (SC2)](../materials/imgs/SC2.png)
 
-![Main](../materials/imgs/fordiag2.png)
+![SerialConfigurator (SC3)](../materials/imgs/SC3.png)
 
-![Display](../materials/imgs/display.JPG)
+## OBD diagnostics
 
-![In-car](../materials/imgs/incar.jpg)
+Fiesta diagnostics used with Fordiag, covering ISO 14229, ISO 14230 and ISO 15765 interfaces.
 
-Testing bench:
+![OBD diagnostics (fordiag1)](../materials/imgs/fordiag1.png)
 
-![Workbench](../materials/imgs/workplace.jpg)
+![OBD diagnostics (fordiag2)](../materials/imgs/fordiag2.png)
+
+## Display and car installation
+
+Display and installation photos. These do not establish validation of the complete VP37 installation.
+
+![Display and car installation (display)](../materials/imgs/display.JPG)
+
+![Display and car installation (incar)](../materials/imgs/incar.jpg)
+
+## Workbench
+
+The workspace used for prototype development.
+
+![Workbench (workplace)](../materials/imgs/workplace.jpg)

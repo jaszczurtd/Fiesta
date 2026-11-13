@@ -30,7 +30,7 @@ void usage() {
              "[--overwrite] [ITERATION...]\n"
              "       vp37-viewer parse LOG\n"
              "       vp37-viewer serve --log FILE [--site DIR] [--port N] "
-             "[--ws-port N]\n",
+             "[--ws-port N] [--monitor-project DIR]\n",
              stderr);
 }
 

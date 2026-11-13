@@ -35,13 +35,15 @@ ECU jako jedyny moduł steruje silnikiem. Wymagania MISRA-C obejmują ECU,
 współdzielony moduł VP37 i Adjustometer. Pozostałe moduły dostarczają dane
 lub prezentują to, co publikuje ECU.
 
+Dobór płytki do firmware i pozostałe prace integracyjne opisuje [stan projektu](doc/STATUS.pl.md).
+
 ## Sprzęt
 
-ECU pracuje na Waveshare RP2350-Plus. Jego PCB przyjmuje też RP2040-Plus
-o tym samym układzie złączy; `device_tree.json` zawiera oba montaże
-z identycznym okablowaniem, domyślny jest `rp2350-plus`. Pozostałe moduły
-używają płytek RP2040: Raspberry Pi Pico i RP2040-Zero. Każdy moduł opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje
-z niego `jh_hardware.h`, a kod czyta makra `JH_HW_*`.
+ECU pracuje na Waveshare RP2350-Plus. Jego PCB przyjmuje też RP2040-Plus o tym samym układzie
+złączy; `device_tree.json` zawiera oba montaże z identycznym okablowaniem, domyślny jest
+`rp2350-plus`. Pozostałe moduły używają płytek RP2040: Raspberry Pi Pico i RP2040-Zero. Każdy
+moduł opisuje płytkę, urządzenia i piny w `device_tree.json`. Build generuje z niego
+`jh_hardware.h`, a kod czyta makra `JH_HW_*`.
 
 Inicjalizacja MCP2515 używa wygenerowanej konfiguracji każdego węzła,
 w tym magistrali SPI, chip select, bitrate i częstotliwości oscylatora.
@@ -63,12 +65,12 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 
 | Moduł | Język | Zadania | MISRA |
 |---|---|---|---|
-| [ECU](src/ECU/) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
-| [Clocks](src/Clocks/) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
-| [Fiesta_clock](src/Fiesta_clock/) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS; czas i temperatury powietrza przez CAN. | Poza zakresem. |
-| [Adjustometer](src/Adjustometer/) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
-| [VP37TestBench](src/VP37TestBench/) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
-| [SerialConfigurator](src/SerialConfigurator/) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
+| [ECU](src/ECU/README.pl.md) | C | Silnik, diagnostyka i elementy wykonawcze. | Wymagany; VP37 ma bramkę bez aktywnych znalezisk, reszta raport analizy. |
+| [Clocks](src/Clocks/README.pl.md) | C++ | Zestaw wskaźników; olej, prędkość, temperatury spalin i GPS. | Poza zakresem. |
+| [Fiesta_clock](src/Fiesta_clock/README.pl.md) (`RTC_Clock`) | C | RTC ustawiany według UTC z GPS; czas i temperatury powietrza przez CAN. | Poza zakresem. |
+| [Adjustometer](src/Adjustometer/README.pl.md) | C | Pomiar położenia VP37, slave I²C. | Wymagany, bramka bez aktywnych znalezisk. |
+| [VP37TestBench](src/VP37TestBench/README.pl.md) | C, C++ | Współdzielony napęd VP37 na stanowisku. | Bramka obejmuje współdzielony VP37, własne pliki stanowiska są poza zakresem. |
+| [SerialConfigurator](src/SerialConfigurator/README.pl.md) | C, GTK4 | Konfiguracja i wgrywanie firmware. | Poza zakresem. |
 
 [`modules.json`](modules.json) określa rodzaj, token, pozycję konfiguratora
 i katalog testów każdego modułu. Pozycja konfiguratora mówi też, czy moduł
@@ -86,257 +88,36 @@ Nie są kompilowane ani testowane.
 
 ### ECU
 
-ECU steruje pompą wtryskową VP37, zaworem doładowania N75, świecami żarowymi,
-wentylatorem, grzałką bloku i ogrzewaną szybą. Przechowuje DTC i odpowiada na
-OBD-II jako Ford Fiesta 1.8 DI EEC-V ECU.
-
-Rdzeń 0 obsługuje timery, CAN, diagnostykę, przekaźniki, pamięć i sesje USB.
-Rdzeń 1 wykonuje cykl VP37, przerwanie pomiaru RPM i sterowanie turbiną.
-Nie ma RTOS. Rdzeń sterujący publikuje atomowe kopie stanu dla rdzenia 0;
-dostęp do zatrzasku wyjść I²C i pamięci DTC chronią muteksy. Flash zapisuje rdzeń 0.
-
-[Dokumentacja ECU](src/ECU/README.pl.md) opisuje synchronizację, zadawanie
-położenia, sprzężenie prądowe, kompensację, telemetrię, RAM i obraz BENCH.
-[Dokumentacja Adjustometera](src/Adjustometer/README.pl.md) opisuje pomiar położenia.
-
-ECU współdzieli I²C 400 kHz między Adjustometer (`0x57`) i ekspander
-przekaźników PCF8574A (`0x38`). PCF8574A jest przeznaczony do 100 kHz,
-więc pracuje poza specyfikacją do czasu wymiany albo wydzielenia magistrali.
-Lokalna definicja urządzenia ogranicza konfigurację magistrali do 400 kHz.
+Rdzeń 0 obsługuje komunikację, diagnostykę, pamięć i wyjścia pomocnicze. Rdzeń 1 prowadzi
+regulację VP37, RPM i turbo. Nie ma RTOS. [Przewodnik ECU](src/ECU/README.pl.md) prowadzi do
+uruchomienia, opisu regulatora i szczegółów synchronizacji.
 
 ### Clocks
 
-Clocks obsługuje zestaw wskaźników i mierzy to, czego nie odczytuje ECU.
-Generuje przebiegi prostokątne dla fabrycznego prędkościomierza, obrotomierza
-i wskaźnika oleju, steruje kontrolkami oleju i ładowania, rysuje dodatkowe
-wskazania na TFT i obsługuje buzzer. Mierzy ciśnienie oleju czujnikiem
-rezystancyjnym, prędkość przez impulsy ABS oraz temperatury spalin przed DPF
-i wewnątrz niego przez dwa MCP9600 na własnym I²C.
-
-Pracę dzielą dwa rdzenie RP2040. Rdzeń 0 odbiera i nadaje CAN, mierzy prędkość
-z ABS oraz steruje wskaźnikami, kontrolkami i buzzerem. Rdzeń 1 rysuje TFT,
-odczytuje czujnik oleju i obie termopary oraz obsługuje sesję konfiguratora.
-Rdzenie wymieniają kopie swojego stanu pod krótką blokadą. CAN i TFT dzielą
-SPI; ekran zwalnia magistralę między pasmami pikseli o ograniczonej wielkości.
-Gdy sterownik CAN nie odpowiada przy starcie, rdzeń 0 ponawia próbę co sekundę,
-a ekran i wskaźniki działają.
-
-ECU i Clocks używają automatycznej retransmisji na głównej magistrali CAN,
-więc przegrany arbitraż nie porzuca aktualizacji. HAL ogranicza czas każdego
-synchronicznego nadania i przerywa transmisję, która nie zakończyła się w tym czasie.
-ECU przechowuje najnowszą migawkę każdej okresowej ramki stanu, pedału i turbo.
-Nadaje po jednej oczekującej ramce, z odstępem co najmniej 2 ms od swojej
-poprzedniej próby nadania. Pętla rdzenia 0 daje pierwszeństwo RPM. Numery sekwencji
-odpowiadają faktycznej kolejności nadawania; nowsza migawka zastępuje niewysłaną
-ramkę o tym samym ID.
-Szybkie odczyty czujników i okresowe migawki stanu zachowują ustaloną siatkę
-czasu po opóźnionym obiegu pętli. Zaległe terminy są pomijane.
-
-Clocks wygasza RPM po 300 ms bez poprawnej ramki `0x127`, niezależnie od
-pozostałego ruchu ECU. Rdzeń 0 zatrzymuje obrotomierz i publikuje zero ze
-skasowaną flagą ważności RPM. TFT pokazuje N/A do kolejnej poprawnej ramki
-RPM; odebrane zero pozostaje ważnym pomiarem. Utrata i powrót pomiaru
-przerysowują pole RPM w następnym obiegu pętli ekranu, a zwykłe aktualizacje
-liczby pozostają raz na sekundę. Wygaszenie zapala też kontrolkę ładowania,
-która po powrocie RPM ponownie potwierdza ładowanie.
-
-Clocks nadaje jasność ekranu, ciśnienie oleju i prędkość z ABS co 50 ms, a obie
-temperatury spalin co 250 ms. Każdy pomiar ma flagę ważności. Brak termopary
-albo zwarty lub przerwany czujnik oleju trafia na magistralę ze skasowaną
-flagą, więc odbiorca nie odczyta go jako zera.
-
-Log debugowania USB podaje częstotliwość impulsów ABS po każdym oknie
-trwającym co najmniej 1000 ms, także dla zera i niezmiennej częstotliwości:
-`ABS pulses: 1000.00 Hz, delta=1000, window_ms=1000, total=25000`.
-Hz to przyrost `impulseCount` podzielony przez rzeczywisty czas pomiaru;
-spóźniony obieg pętli wydłuża okno. Licznik zlicza zbocza narastające na GP15,
-po jednym na okres sygnału wejściowego. Odczyt należy porównać z generatorem
-ABS lub zewnętrznym pomiarem częstotliwości; impulsy pominięte przez
-przerwanie GPIO nie trafiają do licznika. Rozdzielczość zliczania wynosi
-jeden impuls na okno. Otwarta sesja konfiguratora wycisza log debugowania.
-
-Odczyt EGT na TFT pokazuje temperaturę przed DPF. Co 5 s zmienia się
-z temperaturą wewnątrz DPF tylko wtedy, gdy podłączony moduł DPF zgłasza
-regenerację w ramce `0x124`.
-
-Rdzeń 1 odczytuje GPS przez PIO/software serial: TX odbiornika łączy się
-z GP27, a RX z GP28, przy 9600 baud. Clocks uruchamia się normalnie bez
-odbiornika i fixa.
-
-Współrzędne pozostają w `double` do przeliczenia na mikrostopnie dla
-`SC_GET_GPS` i CAN. Lokalny GPS pozostaje dostępny po utracie komunikacji
-z ECU. ECU wysyła dawne pola GPS ramki `0x129` jako zera, a Clocks ich
-nie odczytuje. Odczyt działa w każdym
-obiegu, a nowe dane i zmiany ważności wyzwalają publikację migawki.
-Odświeżanie ekranu korzysta z przeliczonej wcześniej prędkości.
-
-Ostatnia pozycja wygasa po 4 s. UTC pochodzi z jednego zdania RMC z fixem
-i wygasa po 2 s. Clocks zachowuje UTC dla CAN i SC oraz nadaje go z sekundami
-i ważnością w `0x131` co sekundę, przesunięty o wiek zdania do chwili nadania.
-
-Piktogram GPS na TFT ma zieloną kropkę przy fixie, a bez niego czerwoną,
-migającą raz na sekundę. Odbiornik nadaje NMEA także bez fixa. Gdy przez 3 s
-nie przyjdzie żadne zdanie z poprawną sumą kontrolną, Clocks uznaje go za
-nieobecny: zamiast prędkości pojawia się N/A, jak przy brakującej termoparze,
-a kropka miga dwa razy szybciej.
-
-Co sekundę Clocks wysyła też pozycję z prędkością GPS (`0x12D`) oraz pozycję
-z datą i czasem UTC z dokładnością do minuty (`0x12E`). Jego device tree
-odwołuje się do bindingu GPS w `src/common/bindings/`.
-
-Kontrolka ładowania korzysta z obrotów silnika i napięcia akumulatora z ECU.
-Świeci, gdy silnik stoi albo te dane są nieaktualne, i gaśnie, gdy po
-rozruchu napięcie potwierdzi ładowanie. Zapala się ponownie po zaniku
-ładowania i miga z częstotliwością 2 Hz przy zbyt wysokim napięciu. Progi
-i czasy potwierdzeń są w [config.h](src/Clocks/config.h); wskaźnik napięcia
-na TFT ma własny zakres.
-
-Kontrolka oleju świeci przy braku ciśnienia i miga z częstotliwością 1 Hz,
-gdy czujnik jest zwarty albo przerwany, czyli gdy wskaźnik oleju pokazuje ERR.
-Od włączenia zasilania do pierwszego odczytu świeci.
-
-Konfigurator uruchamia pięć testów fabrycznych zegarów: każda kontrolka
-świeci, gaśnie i miga, obrotomierz i prędkościomierz przechodzą przez
-ustalone wartości i wracają do zera, a buzzer odtwarza trzy sygnały. Krok
-trwa 2 s, o ile konfigurator nie zmieni `step_ms`. Test podstawia tylko
-wyjście, którym steruje. Pomiary, ramki CAN i pozostałe wyjścia działają
-dalej, a wyjście wraca do pomiaru, gdy test się skończy, zostanie zatrzymany
-albo straci kontakt z konfiguratorem. Testy są w każdym obrazie Clocks;
-polecenia i klucze statusu podaje
-[opis protokołu](src/common/scDefinitions/PROTOCOL.pl.md#testy-funkcjonalne).
-
-| Plik | Zadanie |
-|---|---|
-| [Cluster.cpp](src/Clocks/Cluster.cpp) | Generuje sygnały fabrycznych wskaźników. |
-| [Gauge.h](src/Clocks/Gauge.h), [simpleGauge.cpp](src/Clocks/simpleGauge.cpp), [tempGauge.cpp](src/Clocks/tempGauge.cpp), [pressureGauge.cpp](src/Clocks/pressureGauge.cpp) | Przeliczają wskazania. |
-| [TFTExtension.cpp](src/Clocks/TFTExtension.cpp) | Rysuje ekran TFT. |
-| [logic.cpp](src/Clocks/logic.cpp) | Uruchamia oba rdzenie i ich pętle; zamienia dane CAN na stan wskaźników, ekranu i buzzera. |
-| [clocksState.cpp](src/Clocks/clocksState.cpp) | Przekazuje kopie stanu między rdzeniami. |
-| [speed.cpp](src/Clocks/speed.cpp) | Przelicza częstotliwość impulsów ABS na prędkość. |
-| [oilPressure.cpp](src/Clocks/oilPressure.cpp) | Przelicza ADC na bary i wykrywa zwarcie lub przerwę czujnika. |
-| [egt.cpp](src/Clocks/egt.cpp) | Odczytuje oba MCP9600 i ponownie szuka brakującego układu. |
-| [gps.cpp](src/Clocks/gps.cpp) | Odczytuje lokalny GPS, kontroluje świeżość UTC i koduje ramki GPS. |
-| [chargeLamp.cpp](src/Clocks/chargeLamp.cpp) | Wyznacza stan kontrolki ładowania z obrotów i napięcia. |
-| [oilLamp.cpp](src/Clocks/oilLamp.cpp), [lampBlink.h](src/Clocks/lampBlink.h) | Wyznacza stan kontrolki oleju z czujnika ciśnienia; faza migania obu kontrolek. |
-| [buzzer.cpp](src/Clocks/buzzer.cpp), [buzzerStrategy.cpp](src/Clocks/buzzerStrategy.cpp) | Generują tony i ostrzeżenia. |
-| [alerts.cpp](src/Clocks/alerts.cpp) | Zgłasza ostrzeżenia temperaturowe przez strategię buzzera; milczy, gdy buzzer należy do testu zegarów. |
-| [clusterOutput.cpp](src/Clocks/clusterOutput.cpp) | Utrzymuje jedyny egzemplarz `Cluster` i podaje mu zmierzoną prędkość i obroty albo wartość trwającego testu. |
-| [testOutputs.cpp](src/Clocks/testOutputs.cpp) | Podstawia stany testowe na wyjścia wskaźników, kontrolek i buzzera; pomiary płyną dalej. |
-| [clocksTests.cpp](src/Clocks/clocksTests.cpp) | Pięć testów zegarów (`charge`, `oil`, `rpm`, `speed`, `buzzer`) na wspólnym runnerze, uruchamianych operacjami konfiguratora. |
-| [can.cpp](src/Clocks/can.cpp) | Odbiera CAN i wysyła ramki jasności, oleju z prędkością, EGT, pozycji GPS oraz UTC z GPS; filtry MCP2515 przepuszczają identyfikatory Fiesty. |
-
-Kontroler CAN i TFT współdzielą SPI. Ekran zapisuje dane pasami o rozmiarze
-`HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` z
-[hal_project_config.h](src/Clocks/hal_project_config.h), więc CAN dostaje
-magistralę między dwoma pasami.
+Steruje fabrycznymi zegarami, lampkami, TFT i buzzerem. Mierzy olej, prędkość ABS i EGT,
+odbiera GPS; dane silnika otrzymuje z ECU przez CAN. [Instrukcja
+Clocks](src/Clocks/README.pl.md) opisuje wskazania, utratę danych, testy wyjść i podział
+pracy.
 
 ### Adjustometer
 
-Adjustometer mierzy częstotliwość oscylatora Hartleya połączonego z cewkami
-czujnika pompy, około 22-37 kHz. HAL zbiera bloki 32 okresów przez PIO i DMA.
-Cztery bloki tworzą okno 128 okresów przesuwane o 32; surowe okna są uśredniane
-przez okres napędu VP37, co usuwa tętnienia PWM bez opóźnienia dodatkowego filtra.
-Publikowana odchyłka od poziomu odniesienia ma jednostkę Hz; kalibracja ECU
-przelicza ją na położenie.
-
-Rdzeń 0 odbiera pomiary i publikuje wynik. Rdzeń 1 obsługuje pomocnicze ADC,
-diagnostykę, LED i logowanie USB. Moduł ma własny RP2040 i zwykle mieści się na PCB ECU.
-
-Slave I²C `0x57` udostępnia dwa bloki pomiarowe:
-
-| Rejestry | Zawartość |
-|---|---|
-| `0x00..0x04` | Zarezerwowane; bez danych pomiarowych. |
-| `0x05..0x12` | Diagnostyka w wersji 2: częstotliwość, baseline, flagi ważności i temperatura MCU (14 B). |
-| `0x13..0x16` | Zarezerwowane. |
-| `0x17..0x34` | Wersjonowany blok 30 B dla sterowania: numer próbki, czas i wiek pomiaru. |
-
-Aktywny sterownik VP37 wymaga ostatniego bloku. ECU sprawdza spójność i świeżość.
-Czytnik starego bloku 5 B został usunięty. Odbiorca diagnostyki wylicza
-odchyłkę ze znakiem jako częstotliwość minus baseline z tej samej ramki wersji 2.
-HAL zamraża mapę na czas odczytu I²C. Bity statusu oznaczają brak sygnału
-(`0x01`), uszkodzenie czujnika paliwa (`0x02`), oczekiwanie na poziom
-odniesienia (`0x04`) i niewłaściwe zasilanie (`0x08`).
-
-Start obejmuje 500 ms rozgrzewania, ustalenie poziomu odniesienia (minimum
-80 ms, wymuszone po 250 ms) i 1000 ms kontroli dryftu. ECU czeka do
-`VP37_ADJUSTOMETER_BASELINE_WAIT_MS` (8 s), zanim kalibruje skok. Szczegóły
-pomiaru, startu i resetu opisuje [README](src/Adjustometer/README.pl.md).
-Adjustometer nie obsługuje protokołu konfiguratora.
+Mierzy położenie nastawnika przez częstotliwość oscylatora i przekazuje je przez I²C pod
+adresem `0x57`. ECU wymaga świeżego, spójnego bloku sprzężenia; przed kalibracją czeka na
+pomiar bazowy do 8 s (`VP37_ADJUSTOMETER_BASELINE_WAIT_MS`). [Instrukcja
+czujnika](src/Adjustometer/README.pl.md) opisuje start, LED i rejestry. Moduł nie obsługuje
+protokołu configuratora.
 
 ### VP37TestBench
 
-VP37TestBench uruchamia `src/common/vp37` na stanowisku pompy: RP2040,
-wyświetlacz ST7796S, stopień mocy tego samego typu co ECU i Adjustometer
-z tym samym protokołem I²C. Elementy i wartości stopnia opisuje
-[fiesta-vp37-power-stage.json](src/common/vp37/fiesta-vp37-power-stage.json),
-a piny własny `device_tree.json`; odczytuje je
-[vp37_power_stage.h](src/common/vp37/vp37_power_stage.h).
-
-[vp37_bench_adapter.c](src/VP37TestBench/vp37_bench_adapter.c) obsługuje dwa
-kanały PWM aktywne stanem niskim, włączenie napędu przez GPIO zamiast PCF8574
-oraz I²C bez muteksu, bo magistrala ma jednego użytkownika. Zarówno stanowisko,
-jak ECU przez [ecu_hal_config.h](src/ECU/ecu_hal_config.h), dołączają
-[vp37_hal_config.h](src/common/vp37/vp37_hal_config.h). Każda faza I²C ma limit
-2 ms, aby zablokowana magistrala nie przekroczyła granicy świeżości sprzężenia
-20 ms. Brak limitu zatrzymuje kompilację.
-
-Położenie zadaje potencjometr na pomocniczym wejściu skanu. Rdzeń 0 obsługuje
-timery, ekran i logowanie; rdzeń 1 uruchamia pompę i `VP37_process()`.
-Ekran odświeża wartości po zmianie. Kropka w rogu świeci stale na zielono,
-gdy napływają ramki Adjustometera, i miga na czerwono przy ich braku.
-Po zatrzymaniu pompy rdzeń 1 odpytuje status raz na sekundę. Bez pompy start
-kończy się timeoutem poziomu odniesienia, a stanowisko nadal działa; pozwala
-to sprawdzić podstawowe uruchomienie. Moduł nie obsługuje protokołu konfiguratora.
+Osobna płytka stanowiska używa wspólnego regulatora VP37 z własnym adapterem sprzętowym i
+wyświetlaczem. [Przewodnik](src/VP37TestBench/README.pl.md) wyjaśnia różnicę względem BENCH
+ECU.
 
 ### Fiesta_clock
 
-Fiesta_clock przechowuje w PCF8563 lub DS3231 czas UTC i co sekundę nadaje go jako
-`CAN_ID_RTC_UPDATE` (`0x130`). Integralność 1 ramka ma tylko przy zaufanym
-UTC; w pozostałych przypadkach bajty daty i czasu są zerowe. Znacznik w KV
-JaszczurHAL zapisuje, że ten firmware ustawił RTC na UTC. Do tego momentu RTC
-zawiera czas lokalny zapisany przez starszy firmware: ekran pokazuje go bez
-zmian, a ramka nie zgłasza integralności. Znacznik powstaje dopiero wtedy,
-gdy odczyt RTC potwierdzi nowy czas UTC. Gdy odczyt kontrolny albo zapis
-znacznika zawiedzie, a flash odpowie, że znacznika nie ma, zegar zapisuje
-tę samą chwilę z powrotem jako czas lokalny, więc ekran i kolejny start
-odczytują ją poprawnie. Gdy flash nie odpowiada, znacznik może tam być: RTC
-zostaje przy UTC, wyświetlanym poprawnie, ale niezaufanym, a zegar co 30 s
-próbuje potwierdzić znacznik. Start, przy którym flash jest nieczytelny,
-pokazuje RTC jako UTC bez zaufania, bo większość zegarów ma już wtedy znacznik.
-
-Zegar ustawia RTC według ramki UTC z GPS w Clocks (`0x131`). Filtry MCP2515
-przepuszczają tylko ten identyfikator. RTC bez zaufanego UTC ustawia pierwsza
-poprawna ramka, także gdy rejestry RTC nie zawierają poprawnej daty. Działający
-RTC jest korygowany dopiero przy odchyłce większej niż 2 s i nie częściej niż
-raz na 10 minut; po błędzie RTC, także nieudanym odczycie, albo błędzie flasha
-kolejna próba następuje po 30 s. Każdy zapis jest sprawdzany odczytem. Ramki
-odczytane po przerwie pętli głównej dłuższej niż 500 ms albo w czasie edycji
-czasu przyciskami lub konfiguratorem są odrzucane. Bez GPS i CAN RTC pracuje
-samodzielnie.
-
-Zegar nadaje też temperatury powietrza wewnątrz i na zewnątrz z dwóch
-czujników DS18B20 jako `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), w 0,1 °C. Ramka
-wychodzi razem z czasem co sekundę oraz od razu po zmianie odczytu lub jego
-ważności. Oba czujniki mierzą w każdym trybie ekranu; pomiar 12-bitowy trwa
-750 ms. Czujnik, którego najnowszy odczyt ma 3 s lub więcej, traci bit
-ważności i nadaje 0. Czujnik nieobecny przy otwarciu pozostaje bez odczytu do
-kolejnego otwarcia, które wykonują ekran temperatur i zmiana stanu zapłonu.
-
-Ekran, przyciski i konfigurator używają czasu CET/CEST przeliczanego przez
-`hal_time`. Ustawiony czas jest zamieniany na UTC. Godzina pominięta przy
-wiosennej zmianie czasu liczy się jako CET, a godzina powtórzona jesienią
-jako jej pierwsze, letnie wystąpienie. Dzień tygodnia wynika z daty, więc
-przyciski go nie ustawiają. Konfigurator odczytuje i ustawia czas; commit
-odrzuca niepoprawną datę, uwzględniając lata przestępne.
-
-Lokalny ekran pokazuje czas, temperatury dwóch DS18B20 i napięcie zasilania. OLED SSD1306 128×32 obsługuje sterownik
-JaszczurHAL. Ekran i RTC współdzielą I²C opisane w `device_tree.json`.
-HAL zapisuje napisy bezpośrednio do pamięci panelu, bez bufora obrazu.
-Zegar zachowuje pierwotny font 6×8 (w tym „ś"), skalę 1 i 2 oraz ustawienia
-panelu, w tym kontrast 0x3f. Tryb bezczynności usypia panel, zachowując
-pamięć kontrolera. Zmiana stanu zapłonu ponownie ustawia konfigurację panelu.
-Po początkowym odczycie temperatur powitanie jest kasowane na ekranie.
+Utrzymuje RTC, synchronizuje go z czasem GPS otrzymanym od Clocks i publikuje czas UTC oraz
+temperatury przez CAN. Ekran i ustawianie czasu używają CET/CEST. [Instrukcja
+zegara](src/Fiesta_clock/README.pl.md) opisuje warianty RTC, wskazania i odzyskiwanie czasu.
 
 ### Serial Configurator
 

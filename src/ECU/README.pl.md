@@ -1,469 +1,90 @@
-# ECU i sterowanie VP37
-
-[English](README.md) · [Architektura systemu](../../ARCHITECTURE.pl.md)
-
-ECU steruje wtryskiem przez pompę VP37, doładowaniem przez N75, świecami
-żarowymi, wentylatorem, grzałką bloku i ogrzewaną szybą. Zapisuje DTC
-i odpowiada na OBD-II jako Ford Fiesta 1.8 DI EEC-V ECU. Migracja MISRA-C
-obejmuje ECU, współdzielony VP37 i Adjustometer; dla dwóch ostatnich bramka
-wymaga braku aktywnych znalezisk. Zakres opisuje [MISRA](../../MISRA.pl.md).
-
-Przytoczone obserwacje stanowiskowe wyjaśniają dobór strojenia. Nie są wynikiem
-odbioru dowolnego nowego obrazu firmware. Zmiany sterowania wymagają nowych
-pomiarów mechanicznego zachowania układu.
-
-## Wykonanie i synchronizacja
-
-- **Rdzeń 0** wykonuje pętlę główną: timery programowe, CAN, OBD-II,
-  przekaźniki, zapis DTC i sesję konfiguratora.
-- **Rdzeń 1** obsługuje sterowanie VP37, przerwanie RPM i turbinę.
-
-Nie ma RTOS. `start.c` instaluje tabelę par `(period, callback)`, wykonywanych
-przez rdzeń 0 od około 10 ms dla szybkich odczytów do sekundy dla obsługi
-okresowej. VP37 należy do rdzenia 1. Kroki sterowania biegną po stałej
-siatce okresów `pidTimeUpdate`: spóźniony start nie przesuwa następnego
-terminu, a start spóźniony o cały okres zaczyna nową siatkę zamiast serii
-kroków nadrabiających. W oknie `CORE1_VP37_GUARD_US` przed terminem rdzeń 1
-nie zaczyna innej pracy (turbina, RPM, zadanie testu) i czeka na termin
-z RAM, więc krok nie dziedziczy ogona tej pracy. Po osiągnięciu terminu
-rdzeń obsługuje także zadanie i polecenia zatrzymania. Dzięki temu przeciążona
-pętla pozostaje dostępna, gdy zadany okres jest krótszy od wykonywanej pracy;
-nie oznacza to osiągnięcia tego okresu. Testy stanowiskowe zapisują
-ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0, razem z potwierdzeniami
-resetu nastaw. Zmienione zadanie testu czeka na swoje ogłoszenie, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
-ogłoszenie nadal poprzedza ruch, który zapowiada. Każdy krok publikuje
-stan za licznikiem sekwencji; rdzeń 0 kopiuje go bez blokady. Słowa danych są zapisywane
-i odczytywane atomowo z porządkiem relaxed, więc kopia nakładająca się na
-publikację zostaje odrzucona bez wyścigu danych. Sterowanie nie czeka na
-telemetrię ani aktualizację wartości globalnych.
-
-Sterownik PWM nie potrafi wytworzyć dokładnie okresu siatki sterowania, więc
-swobodna siatka przesuwałaby się przez cały okres PWM (około 40 µs na sekundę
-przy 200 Hz), a komenda czekałaby na zatrzask od zera do 5 ms. Siatka podąża
-więc za zatrzaskiem mierzonym w skanie prądu: każdy krok przesuwa następny
-termin najwyżej o `VP37_LATCH_LOCK_STEP_US`, tak aby zapis PWM wypadał
-`VP37_LATCH_LOCK_LEAD_US` przed zatrzaskiem. Blokada uczy się też różnicy
-okresów i stosuje ją dalej, gdy nastawnik jest zwolniony i zatrzasku nie widać.
-Działa tylko wtedy, gdy okres sterowania równa się okresowi PWM; przy innym
-okresie stanowiskowym albo wyłączonym skanie prądu siatka jest zwykła.
-
-Telemetria stanowiskowa czeka na rdzeniu 0 na zakończenie kroku przed
-formatowaniem raportu: pobieranie kodu z flash na tym rdzeniu wydłużało krok
-średnio o około 300 µs. Bufor śladu zmienia właściciela przez jeden atomowy
-stan. Magistralę I²C z zatrzaskiem PCF8574 i menedżer DTC z pamięcią chronią
-muteksy. Flash zapisuje rdzeń 0.
-
-Główne sterowniki VP37, turbo, RPM, wentylatora, grzałki, świec, szyb i stanu
-silnika znajdują się w `ecu_context_t` w [ecuContext.h](ecuContext.h).
-CAN, czujniki, DTC, czas RTC, OBD i sesja konfiguratora mają stan lokalny w plikach.
-
-## Obroty silnika
-
-Wejście wału dostarcza 32 równomiernie rozmieszczone zbocza narastające na
-obrót. ISR zapisuje znaczniki czasu w mikrosekundach. Odrzuca okresy krótsze
-niż 94 µs (granica pomiaru 20000 rpm), nie przesuwając ostatniego przyjętego
-zbocza. Ta granica jest oddzielna od progu ochrony silnika 5000 rpm.
-
-Na rdzeniu 1 `RPM_process()` na krótko maskuje lokalne przerwania, aby
-skopiować dziewięć znaczników czasu. Oblicza RPM z ostatnich od jednego do
-ośmiu okresów mieszczących się w 25 ms. Gdy pojedynczy okres jest dłuższy,
-używa go samodzielnie. Pierwsze zbocze rozpoczyna pomiar, a drugie daje
-wynik. Zaokrąglenie całkowitoliczbowe nie ma dodanej korekcji, a wynik nie
-jest przycinany do limitu silnika, więc blokada VP37 wykrywa nadobroty.
-Rdzeń 0 odczytuje opublikowane RPM atomowo.
-
-Sygnał wygasa po trzykrotności ostatniego przyjętego okresu, ograniczonej do
-20-500 ms. Po pierwszym zboczu jest 500 ms na odebranie drugiego. Wygaśnięcie
-zeruje wynik i odrzuca historię; ponowny pomiar wymaga dwóch nowych zboczy.
-Różnice czasu obsługują zawinięcie 32-bitowego licznika mikrosekund.
-To pomiar prędkości na równomiernym kole, bez dekodowania fazy wału lub
-brakujących zębów.
-
-## Zadawanie położenia i przygotowanie wejścia
-
-`hal_status_t VP37_setPositionDemandPercentage(VP37Pump *pump, float percent)`
-przyjmuje 0-100% użytecznego skoku.
-`hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)`
-przyjmuje surowe jednostki sprzężenia w granicach
-`VP37_getPositionDemandMinValue()` i `VP37_getPositionDemandMaxValue()`.
-Użyteczny skok kończy się przy `VP37_PHYSICAL_LIMIT_PERCENT`
-skalibrowanego zakresu. Ograniczenie utrzymuje nastawnik poniżej obszarów
-ujemnej sztywności u góry, kosztem największych dawek. Wartość 100 przywraca
-pełny skok. Limit jest udziałem skoku: powyżej zera i najwyżej 100; pilnuje
-tego kompilacja i tak samo komenda stanowiska `X13`.
-
-Martwa strefa całkowania rośnie silnie powyżej 82% skoku, więc postój przy
-pełnym żądaniu ustala się poniżej limitu. Oba API zapisują to samo
-żądanie: wejście kierowcy, sterowanie silnikiem i testy używają jednej rampy,
-feedforward i PID. Różnią się tylko jednostką. Nie ma osobnego trybu źródła,
-flagi filtra ani alternatywnej ścieżki położenia. Awaryjny stop i kalibracja
-pozostają osobnymi operacjami.
-
-`sensors.c` przygotowuje wejście analogowe co 10 ms: zachowuje ułamkowe
-procenty, stosuje filtr 30 ms i martwą strefę 0,1 punktu procentowego,
-a wynik udostępnia przez `getDriverDemandPercent()`. Zero trafia do wyniku
-bez opóźnienia filtra. Odczytują go bezpośrednie żądanie kierowcy
-oraz `engineOperation`; aplikacja wybiera żądanie przekazane VP37.
-Opcjonalne sterowanie silnikiem włącza `ECU_ENGINE_CONTROL_ENABLED` w `config.h`.
-
-## Regulacja położenia
-
-VP37 używa PWM 200 Hz, wspólnego z filtrem okresu sterowania Adjustometera. Pojedynczy skok w górę od pierwszego cyklu jest
-traktowany jako nieruchomy cel: rampa rośnie 225%/s ze wspomaganiem ruchu
-0,6 i hamuje przed celem 750%/s². Nastawnik podąża za rampą i dojeżdża wolniej,
-ograniczając przeregulowanie i oscylacje. Cel zmieniony ponownie w ciągu
-25 ms jest śledzony do 300%/s bez hamowania. Wspomaganie w górę rośnie
-z rampą do 250%/s, a dalej pozostaje stałe.
-
-Zejście zachowuje 300%/s. Pojedynczy skok w dół ma pełne wspomaganie przez
-25 ms, potem 0,3. Reguły górnego zakresu zależą od fizycznego położenia:
-wspomaganie w górę maleje między 75% a 85%; od 75% zmieniają się zakres
-całkowania i martwa strefa. Górne szybkości to 275%/s i 187,5%/s dla celu
-nieruchomego. Tłumienie ustalonego celu jest opcjonalne (`H`, domyślnie
-wyłączone). Jawnie ustawiona pochodna osiąga pełną wagę położenia między
-85% a 90%, włącza się po ustaleniu celu i zanika przez 50 ms po wznowieniu ruchu.
-
-Mapa podtrzymania i kompensacja napięcia/temperatury obowiązują w całym
-zakresie. Po ustaleniu żądania dolna granica wspomagania wznoszenia podąża
-za ujemną wyuczoną korektą całki; zejście poniżej celu zachowuje ograniczenie
-potrzebne do postoju. Ruchome żądania zachowują pierwotną granicę.
-Telemetria podaje `mode:position` i osobne `test:<name|none>`;
-nie oznacza potencjometru jako osobnego trybu regulatora.
-
-Przy stałym celu powyżej 85% skalibrowanego skoku poprawne sprzężenie oraz
-aktywne kompensacje prądu i rezystancji pozwalają włączyć profil postoju.
-Opóźnienie fazy przechwycenia maleje według istniejącego przejścia górnego
-zakresu: od trzech sekund przy 85% do zera przy 90%. Wcześniej całkowanie,
-strefa martwa i potwierdzanie blokady zachowują zwykłe reguły. W fazie
-przechwycenia całkowanie zwalnia o połowę, strefa zwęża się do ±12 Hz,
-a potwierdzenie blokady ma najwyżej 5 ms i następuje w kroku regulatora.
-Pomijane są wtedy starsza bramka średniego błędu i zwolnienie przez uchyb
-średni. Duży utrzymujący się błąd nadal zwalnia blokadę.
-
-Po trzech sekundach spełniania warunków ciągłe całkowanie ustaje,
-a P zwiększa się w spokojnych oknach, nie częściej niż co
-1,5 s, do trzykrotności ustawionego wzmocnienia przy 90% skoku. Dodatkowy
-udział maleje do zera przy 85%. Jeden przyrost nie przekracza 0,01 PWM/Hz,
-a równoczesne przesunięcie do I najwyżej 2,5 nominalnego counta PWM zachowuje
-sterowanie. Dodatkowa górna pochodna maleje wraz ze wzrostem sztywności.
-Ruchomy cel przywraca zwykłe P, także gdy limit całki nie pozwala w pełni
-skompensować tej zmiany.
-
-Jedna aktualizacja przy spokojnej pozycji albo przenosi zmianę wzmocnienia,
-albo koryguje bias całki. Parowane przeniesienie zachowuje napęd; korekta
-bias czeka na późniejszy przedział bez zmiany wzmocnienia.
-Spokojna pozycja oznacza wariancję najwyżej 225 Hz²
-w aktualnym oknie od 0,3 do 0,6 s, z bieżącą próbką sprzężenia. Statystyka
-odświeża się w każdym kroku regulacji. Aktualizacje następują nie częściej
-niż co 1,5 s i używają 5% ustawionego Ki w całym zakresie postoju.
-Krok korekty nie przekracza trzech
-nominalnych countów PWM i wynika z uśrednionego błędu poza ±12 Hz.
-Ciągłe całkowanie pozostaje zablokowane; osobne kroki korekty usuwają ustalony
-uchyb w granicach limitów całki i sterowania. Pola `uh`, `rkp`, `ierr`
-oraz `I` pokazują spełnienie warunków profilu, efektywne wzmocnienie, wejście ciągłego
-całkowania i zachowaną korektę. Profile badawcze zachowują własne reguły.
-
-Poza górnym profilem postoju 100 ms przy ustalonym celu w paśmie ±12 Hz
-zamraża całkę, aby nie zwiększać
-siły przeciw tarciu statycznemu; w paśmie ±12 Hz musi być też błąd uśredniony
-z 0,3 s, więc przejście przez pasmo w trakcie dojazdu jej nie zamraża. Błąd
-przekraczający ±40 Hz rozpoczyna odliczanie 500 ms do zwolnienia całki. Powrót
-do ±12 Hz je kasuje; wahania wokół ±40 Hz nie rozpoczynają go od nowa, więc
-utrzymujący się dryf zwalnia całkę. Poniżej 75% skoku, gdzie strefa martwa
-całki ma bazową szerokość, blokada wchodzi dopiero przy uśrednionym błędzie
-w ±6 Hz (nastawa `X8=<Hz>`, 1-12), a uśredniony błąd poza ±12 Hz przez 1 s ją
-zwalnia (nastawa `X6=<ms>`, 0 wyłącza).
-
-Gdy pozycja po raz pierwszy znajdzie się w ±40 Hz od ustalonego celu poniżej
-75% skoku, mnożnik termiczny nie spada poniżej wartości, z którą nastawnik
-dojechał, do zmiany celu (nastawa `X7=0|1`). Dojazd w górę podnosi estymatę
-rezystancji toru sterowania, a jej późniejsza relaksacja ściągałaby ustaloną
-pozycję poniżej celu przy zamrożonej całce. Nagrzewanie cewki podnosi potem
-estymatę i mnożnik idzie za tym wzrostem. Gdy mnożnik jest trzymany, cel pętli
-prądu ma tę samą nadwyżkę ponad estymatę, więc pętla nie odbiera dodatkowego
-napędu (nastawa `X9=0|1`). Przy zmianie celu mnożnik od razu wraca do
-estymaty. Powyżej 75% skoku obie reguły są
-wyłączone: tam prowadziły długie postoje do zrywów tarcia.
-
-## Kompensacja napięcia i rezystancji
-
-Kompensacja skaluje całe feedforward i PID przez `12 V / compensated voltage`.
-Bloki skanu ADC docierają niezależnie od kroku regulacji pozycji. Rdzeń 1 odbiera je między
-krokami położenia, także między obsługą turbo, RPM i testów poza osłoną
-terminu, oraz śledzi zbocza bramki przez granice bloków. Każdy kod ADC
-jest kompensowany raz przy odbiorze (tablica korekcji RP2040; kody RP2350 bez zmian). Krok 5 ms redukuje każdy zakończony impuls
-raz i odświeża ostatnie okno napięcia w każdym kroku.
-
-Średnia obejmuje ostatni okres PWM bez oczekiwania na zbocze prądu.
-Gdy ma mniej niż 20 ms, ograniczona predykcja uwzględnia wiek środka okna
-w chwili kroku i pół okresu PWM do zatrzaśnięcia wyjścia. Nachylenie napięcia
-narasta przez filtr 20 ms, nie przekracza ostatniego zmierzonego nachylenia
-i szybko maleje przy zwolnieniu lub odwróceniu rampy. Przesunięcie predykcji
-jest ograniczone do ±0,5 V i zmienia tylko skalowanie polecenia. Lokalny
-odczyt ADC używany zastępczo ma filtr 50 ms bez predykcji. Pomiar prądu
-oraz estymacja rezystancji używają osobnej średniej z tego samego okresu PWM co prąd.
-
-Estymator rezystancji używa historycznego dopasowania do zatrzaśniętego PWM,
-tak jak pętla prądowa. Każde polecenie zapisuje, czy położenie, podane PWM
-i zasilanie pozostawały spokojne przez 150 ms po końcu rampy żądania.
-Nauka wymaga tej kwalifikacji historycznej i nadal spokojnego stanu obecnego.
-Opóźniona obserwacja z dojazdu nie staje się poprawna tylko dlatego, że dotarła później.
-
-Pierwszą estymatę tworzą wyłącznie spokojne pomiary. Po uzyskaniu gotowości
-również dopasowane pomiary podczas ruchu aktualizują ją z tą samą stałą 2 s.
-Obserwowana rezystancja odzwierciedla opóźnienie prądu względem PWM podczas
-przemiatania, więc estymata śledzi nagrzewanie cewki i pełni rolę feedforward
-ruchu. Wolniejsza lub ograniczana aktualizacja zwiększała błąd cykliczny na stanowisku.
-
-Okno spokoju dopuszcza zmianę położenia o 60 Hz i PWM o 8 od wartości
-odniesienia; przekroczenie ponawia okno. Każdy okres prądu aktualizuje powolną
-estymatę najwyżej raz. Filtr używa odstępów obserwacji, ograniczonych do 50 ms
-po przerwie. Łączna zmiana napięcia ponad 0,1 V wstrzymuje estymację na 100 ms.
-Zdrowe nowe pomiary podtrzymują ostatnią gotową korektę podczas długich zmian
-napięcia; ich utrata wygasza ją po 10 s. Zmiana zasilania jest wykrywana
-z napięcia zmierzonego przed predykcją.
-
-Telemetria pokazuje `vage` (wiek środka okna w µs), `vlead` (przesunięcie
-predykcji w V przed dolną granicą 7 V), `vdot` (V/s), `rhold` (wstrzymanie
-nauki przez zmianę zasilania lub napędu), `Robs` (ostatnia dopasowana
-rezystancja w omach), `rmatch` (dopasowany pomiar), `rquiet` (kwalifikacja
-historyczna), `rlearn` (aktualizacja w kroku) i `rlcnt` (licznik aktualizacji).
-Niedopasowane obserwacje podtrzymują gotową estymatę bez zmiany jej wartości.
-`scanus` mierzy odbiór i redukcję ADC, a `execus` cały krok sterowania;
-oba w µs, bez oczekiwania na następny krok. `late` to największe spóźnienie
-startu po terminie w ostatnim pełnym oknie 100 kroków, w µs, bez kroków
-spóźnionych o cały okres; `ovr` liczy takie kroki od startu. Osłona rdzenia 1
-ma pokrywać wartości `late` widziane na stanowisku.
-
-## Sprzężenie prądowe
-
-Ograniczona pętla proporcjonalna koryguje polecenie położenia przed mnożnikami
-napięcia i temperatury. Celem jest nominalne feedforward plus PID położenia
-wyrażone jako prąd fazy ON z pominięciem marginesów przy zboczach. Przeliczenie
-zachowuje odniesienie estymatora rezystancji do surowego napięcia i kalibrację
-dzielnika. Bocznik źródłowy nie mierzy recyrkulacji przy wyłączonym MOSFET,
-więc cel nie oznacza średniego prądu cewki z całego okresu.
-
-Odwrócony napęd przewodzi na końcu okresu PWM. Obserwacja jest dopasowywana
-do polecenia zapisanego przed poprzednim opadającym zboczem prądu, gdy licznik
-PWM się zawija i zatrzaskuje compare. Śledzone żądanie zatrzymane na szczycie
-(np. pełny pedał) dojeżdża z pełną szybkością. Wspomaganie w górę rośnie do
-`VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S` (250%/s, nastawa `X5`), potem
-pozostaje stałe. Przy wspomaganiu dla 300%/s nastawnik wyprzedzał rampę
-u góry o 260-500 Hz i oscylował po rozgrzaniu; przy 250%/s wyprzedzenie
-wynosiło około 150 Hz i ruch się uspokajał. Z filtrem okresu napędu
-Adjustometera przeregulowanie dojazdu wynosiło 100-200 Hz i pozostawało
-poniżej obszarów ujemnej sztywności.
-
-Opcjonalny hamulec u góry `VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2` (`X2`)
-jest wyłączony. Przy 750%/s² spowalniał ostatnie 70% zakresu, a przy 3000%/s²
-nadal opóźniał dojazd o 100 ms i pogłębiał późniejsze opadnięcie. Zwolnienie
-samej rampy zwiększało wyprzedzenie. Pierwsze żądanie po starcie rozpoczyna
-rampę od skalibrowanego dołu, gdzie kalibracja pozostawia nastawnik.
-
-Historia ADC obejmuje 3,25 okresu PWM. Pomiar prądu zamyka się po potwierdzeniu
-zbocza opadającego, bez czekania na następne ON. Prąd, wypełnienie i napięcie
-używają tego samego przedziału między zboczami opadającymi, niezależnego od
-zmiany wypełnienia. Zapisy w odległości do 100 µs od zbocza są niejednoznaczne
-i odrzucane, podobnie jak niezgodne wypełnienie, błędne pomiary i wiek środka
-ON co najmniej 25 ms.
-
-Wzmocnienie wynosi 0,35 w jednostkach równoważnego nominalnego polecenia.
-Korekta jest ograniczona do ±40 jednostek PWM i zmienia się najwyżej
-1000 jednostek/s. Granice PID położenia uwzględniają ją przed krokiem PID.
-Powtórzone obserwacje nie przeliczają błędu; brak sprzężenia sprowadza korektę
-stopniowo do zera, a spoczynek lub stop zeruje ją od razu. Nie ma dodatkowej całki prądu.
-
-## Telemetria
-
-Pola pętli prądowej: `cen` (włączenie), `cuse` (świeży dopasowany pomiar),
-`ctar` (ostatni cel w A), `cref` (cel historyczny w A), `cerr` (historyczny
-cel minus prąd ON w A), `cpwm` (nominalna korekta) i `cage` (wiek środka ON
-w µs). Występują też w IPULSE z `latch`, `lp`, `lduty` i `lv`: odtworzonym
-czasem zatrzaśnięcia, okresem, wypełnieniem i poprawnością. `dma`, `take`
-i `reduce` to czasy MCU zakończenia DMA, zachowania i redukcji;
-`reduce - (us + on)` określa opóźnienie dostarczenia po końcu ON.
-
-Stanowiskowe IWAVE, najwyżej co 100 ms, używają identyfikatora `us` IPULSE
-i podają osiem średnich ON w kolejności czasowej z czasami próbek.
-Pomijają marginesy przy zboczach i nie mierzą zaniku prądu swobodnego.
-`gl` zlicza odrzucone zakłócenia bramki od resetu historii. Obraz stanowiskowy
-przyjmuje `C0`/`C1` do porównania sprzężenia wyłączonego i włączonego przez
-jedno API położenia. Test modelu elektrycznego nie potwierdza stabilności
-mechanicznej; postoje u góry i ruch wymagają walidacji sprzętowej.
-
-Wspomaganie w górę ma pełną wartość do 75% skalibrowanego skoku, liniowo
-zanika do 85% i pozostaje wyłączone wyżej, ograniczając przyspieszenie
-w wrażliwym obszarze. Mapa podtrzymania, wspomaganie w dół, rampa i API
-zachowują swoje zadania.
-
-
-## Badawczy profil regulacji
-
-Rewizja 148 zawiera opcjonalny profil pełnej kalibracji do badań na stanowisku.
-Zwykły start i reset nastaw zachowują domyślny limit skoku; wgranie tej rewizji
-nie włącza profilu badawczego.
-
-Komendy stanowiska wybierają fizyczny limit skoku (`X13`), blokadę całki
-zależną od ruchu (`X18`), wagę zadania (`X21`), górne pasmo całki (`X23`),
-hamowanie rampy (`X24`) oraz pomoc podczas zejścia (`X25`, domyślnie wyłączona).
-`X26` wybiera pozostawiany udział korekty zejścia od 0,25 do 0,75, domyślnie
-0,4. Opcje korzystają ze wspólnej ścieżki zadawania pozycji i zachowują limity
-wyjścia oraz całki.
-
-Przy zejściu pomoc zaczyna działać po zmierzonym ruchu o 0,3 punktu
-procentowego. Wycofuje nadmiar ujemnej całki do korekty podtrzymania i kończy
-się przy pierwszym wejściu w pasmo całki lub przekroczeniu celu. Dla tego
-samego celu wewnątrz skoku można użyć wcześniej zmierzonej korekty po dwóch
-sekundach stabilnego postoju bez nasycenia. Końce zakresu nie uczą tej
-korekty. Stop, reset i przyjęte zmiany nastaw unieważniają obserwację.
-Dla nieznanego celu pozostaje wybrany udział korekty.
-
-Telemetria pokazuje `ibias`, `ianchor`, `ipart` i `iphase` dla zejścia oraz
-`ihvalid`, `ihtar`, `ihbias` i `ireuse` dla zapamiętanej korekty postoju.
-Profil badawczy wymaga osobnego odbioru sprzętowego przed użyciem jako
-zwykłe ustawienia pracy.
-
-## Mapa źródeł
-
-| Plik | Zadanie |
-|---|---|
-| [start.c](start.c) | Kolejność startu, timery, watchdog i pętle rdzeni. |
-| [sensors.c](sensors.c) | Wejścia analogowe, filtrowane żądanie kierowcy, PCF8574 i odczyty I²C. |
-| [can.c](can.c) | Główne ramki CAN, w tym publikacja RPM. |
-| [obd-2.c](obd-2.c) | Wejście OBD CAN i odpowiedzi ISO-TP. |
-| [obd_j1979.c](obd_j1979.c) | Usługi SAE J1979 i PID Mode 01. |
-| [obd_ford_diag.c](obd_ford_diag.c) | Ford EEC-V UDS, KWP2000 i SCP. |
-| [dtcManager.c](dtcManager.c) | Zapis i odczyt diagnostyczny DTC. Rejestrowane kody to aliasy z [dtc_codes.h](dtc_codes.h), a ich opisy pochodzą ze wspólnego katalogu. |
-| [common/obdDefinitions](../common/obdDefinitions/) | Katalog DTC współdzielony przez moduły: ogólne kody SAE J2012 i kody projektu U19xx z opisami, wyszukiwanie opisu i postać drukowana (`P0116`). Listę [obdDefinitions_sources.txt](../common/obdDefinitions/obdDefinitions_sources.txt) buildy czytają tak jak listę VP37 niżej. |
-| [rpm.c](rpm.c) | Obroty z przerwania czujnika Halla. |
-| [common/vp37](../common/vp37/) | Sterownik współdzielony przez ECU i VP37TestBench. Listę [vp37_sources.txt](../common/vp37/vp37_sources.txt) czyta CMake testów, a generator VS Code wpisuje ją do manifestów modułów z `sharedSources`. |
-| [vp37.c](../common/vp37/vp37.c) | Start pompy, API żądania i cykl sterowania. |
-| [vp37_adapter.c](vp37_adapter.c) | PWM ECU, enable PCF8574, blokada RPM, I²C Adjustometera, start i wartości `F_FUEL_TEMP`/`F_VOLTS` ze stanu publikowanego. |
-| [vp37_adjustometer.c](../common/vp37/vp37_adjustometer.c) | Ramki, diagnostyka i oczekiwanie na poziom odniesienia. |
-| [vp37_snapshot.c](../common/vp37/vp37_snapshot.c) | Publikowanie i kopiowanie stanu bez blokady. |
-| [vp37_feedback.c](../common/vp37/vp37_feedback.c) | Położenie i kalibracja skoku. |
-| [vp37_compensation.c](../common/vp37/vp37_compensation.c) | Napięcie, temperatura paliwa i rezystancja cewki. |
-| [vp37_control.c](../common/vp37/vp37_control.c) | Mapa podtrzymania, wyuczona korekta, PID, martwa strefa i postój. |
-| [vp37_current.c](../common/vp37/vp37_current.c) | Pomiar prądu na boczniku. |
-| [vp37_current_control.c](../common/vp37/vp37_current_control.c) | Sprzężenie ON i historia PWM. |
-| [vp37_tuning.c](../common/vp37/vp37_tuning.c) | Sprawdzane zakresy nastaw stanowiska. |
-| [vp37_telemetry.c](../common/vp37/vp37_telemetry.c) | Próbki sterowania i ślady na rdzeniu 0, tylko obraz stanowiskowy. |
-| [turbo.c](turbo.c), [engineMaps.c](engineMaps.c) | Sterowanie doładowaniem i tabela N75. |
-| [vp37_maps.c](../common/vp37/vp37_maps.c) | Mapa podtrzymania i zmiany całki oraz martwej strefy. |
-| [engineFan.c](engineFan.c), [engineHeater.c](engineHeater.c), [glowPlugs.c](glowPlugs.c), [heatedWindshield.c](heatedWindshield.c) | Wyjścia przekaźnikowe. |
-| [engineFuel.c](engineFuel.c) | Poziom paliwa. |
-| [rtcTime.c](rtcTime.c) | Czas UTC z ramki `0x130` Fiesta_clock. Oznacza pierwsze wystąpienie DTC i raport restartu przez watchdog; po 3 s bez zaufanej ramki czas jest nieznany. |
-| [config.c](config.c) | Ustawienia i sesja konfiguratora. |
-| [tests.c](tests.c) | Rejestr testów, sterowane elementy, dostępność sekwencji i konfiguratora. |
-| [tests_workers.c](tests_workers.c) | Generatory żądań, czynności jednorazowe i postęp. |
-| [tests_helpers.c](tests_helpers.c) | Parametry ECU, komendy VP37, zadawanie demand i blokada RPM dla [wspólnego runnera](../common/test_runner/README.md); bezczynne funkcje bez `ECU_FUNCTIONAL_TESTS_ENABLED`. |
-
-## Obraz stanowiskowy i sprzęt
-
-Testy istnieją tylko w obrazie BENCH zadeklarowanym w
-[hal_project_config.h](hal_project_config.h) przez `ECU_FUNCTIONAL_TESTS_ENABLED=1`.
-Konfiguracja HAL współdzielona z testami hostowymi jest w
-[ecu_hal_config.h](ecu_hal_config.h); deklarację wariantu HAL czyta wyłącznie
-z `hal_project_config.h`. W VS Code wybierz `Project: Build variant: BENCH`
-lub `Project: Upload variant: BENCH`. Obraz trafia do
-`src/ECU/.build/rp2350-arm/rp2350-plus/variants/BENCH/`, a dla montażu
-RP2040-Plus pod `.build/rp2040/rp2040-plus/`. Zadania bez wariantu dają obraz
-samochodu. Odpowiedniki CLI podaje [instrukcja kompilacji](../../doc/BUILDING.pl.md).
-
-W `BENCH` opcja `ECU_SC_TESTS_RPM_INTERLOCK` ma domyślnie wartość `0`,
-więc testy konfiguratora mogą działać przy RPM podawanym z generatora.
-Ustawienie `1` odrzuca lub zatrzymuje testy konfiguratora powyżej
-`ECU_SC_TESTS_RPM_LIMIT` rpm. Opcja nie dotyczy testów z konsoli;
-szczegóły podają [zasady testów funkcjonalnych](../common/scDefinitions/PROTOCOL.pl.md#testy-funkcjonalne).
-
-Testy z konsoli mają opcjonalny nadzór. `watch <ms>` uzbraja go z limitem
-1000-600000 ms: gdy przez ten czas nie przyjdzie żadna linia konsoli,
-działający test z konsoli zatrzymuje się z wynikiem `host_lost`, a zadanie
-wraca do zera, jak przy teście konfiguratora po utracie hosta. Każda linia
-konsoli odnawia nadzór, samo `watch` odnawia go i podaje limit, `watch 0`
-wyłącza, a po restarcie firmware jest wyłączony. Narzędzie stanowiska, które
-trzyma port, uzbraja nadzór na początku nagrania i odnawia go w czasie pracy;
-zabity collector lub odłączony kabel zostawia wtedy nastawnik na ostatnim
-zadaniu tylko do upływu limitu. `G` nadal auto-zeruje pojedynczy postój `S`.
-
-Jednorazowe czynności DTC i KV wykonuje rdzeń 0. Rdzeń sterowania nadal
-obsługuje VP37 i przesuwa sekwencję testów po publikacji wyniku.
-Zatrzymanie testu anuluje czynność, która jeszcze nie zaczęła się wykonywać.
-`run dtc` podaje `ok`, gdy U0073 (`DTC_CAN_BUS_FAULT`) jest aktywny
-z detalem transmisji RPM (`DTC_DETAIL_CAN_TX_RPM`), albo `failed`
-w pozostałych przypadkach. Wynik sprawdza stan w pamięci zaraz po
-wstrzyknięciu błędu; nie potwierdza zapisu trwałego po restarcie.
-Odczytaj kod przez OBD, po próbie skasuj DTC i ponów odczyt,
-aby potwierdzić skasowanie.
-Polecenia odczytu `list` i `params` również drukuje rdzeń konsoli, gdy
-callback portu szeregowego zwolni tymczasowe wyciszenie debug.
-Komunikaty startu, zatrzymania i wyniku testu trafiają tam przez ograniczoną
-kolejkę. Ich wydruk nie blokuje sterowania na mutex debug. Przepełnienie jest
-zgłaszane; zatrzymanie nastawnika nadal działa.
-
-[device_tree.json](device_tree.json) przypisuje piny i adresy. Montaże
-`rp2350-plus` (Waveshare RP2350-Plus, domyślny) i `rp2040-plus` (Waveshare
-RP2040-Plus) mają wspólne PCB i okablowanie; wybiera je `--assembly` lub
-wybór montażu w VS Code. Interfejsy:
-
-- **I²C 400 kHz:** ECU master, Adjustometer `0x57`, PCF8574A `0x38`.
-  PCF8574A dopuszcza 100 kHz, więc pracuje poza specyfikacją do wymiany na
-  PCA8574A lub wydzielenia magistrali. Typ lokalny w `bindings/` ogranicza
-  magistralę do 400 kHz; szybsza konfiguracja nie przejdzie kontroli drzewa.
-- **SPI:** dwa MCP2515, CAN0 dla samochodu, CAN1 dla OBD-II.
-- **ADC:** sześć wejść przez HC4051 (temperatury płynu, oleju i powietrza,
-  przepustnica, paliwo, ciśnienie dolotu), zasilanie oraz bocznik VP37 na
-  GPIO26 zarezerwowanym dla tego pomiaru. Skan prądu VP37 zajmuje ADC;
-  pozostałe odczyty analogowe korzystają wtedy z jego bufora.
-- **PWM:** VP37 i N75; **GPIO:** kontrolka DPF; **przerwanie GPIO:** Hall
-  silnika.
-- **EEPROM emulowany we flash:** DTC i ustawienia.
-
-## Budżet RAM sterowania
-
-ECU zachowuje prąd i napięcie w pierścieniu dwóch kanałów; multiplekser
-czujników pozostaje częścią skanu DMA z trzema kanałami. Redukcja prądu
-oraz śledzenie zboczy używają `HAL_RAM_FUNC`, ograniczając pobieranie kodu
-z flash. Ślad stanowiskowy mieści 1024 pełne próbki z flagami zapisanymi
-jako bity. Długość określa `VP37_TRACE_SAMPLES`. Po zmianie buforów lub kodu
-w RAM sprawdź mapy pamięci ELF obu wariantów firmware.
-
-Podczas kalibracji startowej obraz BENCH używa tej samej pamięci do zapisu
-każdej próbki kwalifikującej MIN/MAX. Po połączeniu USB linie `VP37 CAL`
-przekazują położenie, częstotliwość surową i filtrowaną, baseline, numer próbki,
-oba zegary, świeżość, status, zadane PWM, napięcie w 0,1 V i temperaturę paliwa
-w stopniach C. `VP37 CAL END` podaje liczbę próbek, zakwalifikowane końce,
-poprawność wyniku i ewentualne przepełnienie bufora. Parametry okna estymatora
-i timeoutu definiuje `vp37_config.h`. Zwykły strumień `VP37 C` pokazuje powrót
-do spoczynku po kalibracji; kalibracja nie próbkuje prądu. Zwykły zapis śladu
-RAM pozostaje zajęty do zakończenia tego eksportu.
-
-Do metryk całego przebiegu służą `B2`, które rozpoczyna strumień, oraz `B0`,
-które go kończy. Rdzeń sterowania zapisuje każdy krok w buforze śladu,
-a rdzeń konsoli odbiera go na bieżąco jako linie `VP37 N`. `B` i `B1`
-zachowują tryby skończonego nagrania; kalibracja i wszystkie tryby nagrywania
-korzystają z tej samej pamięci. Konsola nadal drukuje `VP37 C` do nadzoru.
-Odbiera `N` w każdym obiegu swojej pętli, niezależnie od interwału raportu C,
-z budżetem 20 ms na obieg. Rozpoczęty zapis USB może przekroczyć ten budżet.
-Każda linia `N` zawiera CRLF i trafia do jednego zapisu szeregowego bez
-prefiksu debugowego `ECU:`, co usuwa osobne transfery USB prefiksu i końca
-linii.
-
-Okna metryk wyznaczaj według czasu MCU `us` i kolejnych numerów kroków `n`,
-nie według chwili odbioru buforowanej linii na hoście. `VP37 STREAM END`
-podaje czasy nagrania, liczbę próbek, numery pierwszego i ostatniego kroku
-oraz `overflow`. Odrzucaj niekompletne nagrania, luki w numeracji,
-niezgodność liczby próbek i przepełnienie. Zapis nie czeka na USB: gdy
-odbiorca nie nadąża, nagranie kończy się z `overflow:1`. Zatrzymanie pompy
-również kończy strumień; `S0` zachowuje zapis kroków sterowania w spoczynku.
-Odbierz rekord końcowy przed kolejnym nagraniem lub zamknięciem collectora.
-
-Każda próbka `N` zawiera zadane i rampowane położenie, feedback, czasy,
-liczbę próbek R (`rn`), aktywność kompensacji R (`ruse`) oraz mnożnik
-termiczny (`tsc10000`, mnożnik razy 10000). `thr10` podaje żądanie w dziesiątych
-częściach procenta. Konsola składa całą linię N przed wysłaniem jej do USB.
-Ostatni skan prądu dostarcza `latch`, `lp` i `lv`;
-`cmd_us` ma znaczenie tylko przy `match:1`. Te obserwacje mogą poprzedzać
-zapisany krok i same nie identyfikują pierwszego zatrzasku PWM po komendzie.
-Przez całe nagranie utrzymuj dotychczasowe guardy oparte na C.
+# ECU: przygotowanie i pierwsze uruchomienie
+
+[English](README.md) · [Stan projektu](../../doc/STATUS.pl.md)
+
+ECU steruje nastawnikiem pompy VP37, doładowaniem, świecami żarowymi,
+wentylatorem, grzałką bloku i ogrzewaniem przedniej szyby. Zapisuje też DTC
+i odpowiada na OBD-II jako Ford Fiesta 1.8 DI EEC-V. Projekt jest prototypem;
+prace nad silnikiem i VP37 odbywają się na osobnym stanowisku silnikowym.
+
+Ten przewodnik prowadzi przez uruchomienie istniejącego stanowiska i podgląd
+pomiarów. Algorytm opisuje strona [jak działa regulacja VP37](guides/CONTROL.pl.md).
+
+## Przed włączeniem stanowiska
+
+- Ustal wersję płytki i połączenia. Obecne warianty `rp2350-plus` i
+  `rp2040-plus` używają tego samego okablowania ECU. Nowsza PCB 3 wymaga
+  dostosowania magistral I²C i polaryzacji wyjść w firmware; zobacz
+  [zgodność sprzętu z firmware](../../doc/STATUS.pl.md#sprzęt-i-firmware).
+- Przygotuj repozytorium i toolchain według [instrukcji kompilacji](../../doc/BUILDING.pl.md).
+  Otwórz w VS Code folder **`src/ECU`** i wybierz assembly odpowiadające
+  zamontowanej płytce procesora.
+- Sprawdź [zasilanie i uruchomienie Adjustometera](../Adjustometer/README.pl.md).
+  Pomiar bazowy musi powstać przy wyłączonym napędzie i nieruchomym mechanizmie.
+  Po jego zakończeniu zrestartuj ECU. Kalibracja przy starcie ECU może
+  przemieścić nastawnik przez jego zakres.
+
+## Otwórz pomiary na żywo
+
+1. W VS Code wybierz **Terminal -> Run Task -> `VP37: Live viewer`**.
+   Zadanie buduje viewer, przebudowuje wariant **BENCH** ECU i wgrywa go do
+   wybranego assembly. Każde uruchomienie powtarza build i upload.
+2. Zaczekaj na połączenie szeregowe i adres strony w terminalu.
+3. Otwórz **<http://127.0.0.1:8037/live>** w przeglądarce www albo uruchom
+   **`Open Integrated Browser`** w VS Code i wpisz ten adres.
+4. Pozostaw zadanie uruchomione. Sprawdź połączenie strony i napływ nowych
+   próbek sterowania. Widok startuje po angielsku; przycisk **EN / PL**
+   przełącza język.
+
+Ta procedura używa wariantu BENCH projektu ECU. Osobny projekt
+[VP37TestBench](../VP37TestBench/README.pl.md) ma własny sprzęt i nie jest
+obrazem używanym przez to zadanie.
+
+Domyślny build ECU przekazuje żądanie kierowcy do regulatora położenia.
+Nadzorca rozruchu i biegu jałowego jest opcjonalny i domyślnie wyłączony
+(`ECU_ENGINE_CONTROL_ENABLED=0`). Wykres położenia nie potwierdza więc
+włączenia ani walidacji całej strategii sterowania silnikiem.
+
+## Zakończ sesję
+
+Zamknięcie karty przeglądarki zamyka tylko widok. **Ctrl+C** lub
+**Terminate Task** zatrzymuje serwer i zapis portu, ale nie zatrzymuje nastawnika.
+Zakończ aktywny test przez konsolę albo configurator, który nim steruje,
+zanim zamkniesz sesję. Konsolowe `stop` kończy test i zeruje jego żądanie;
+`X` zatrzymuje sam VP37, a ponowna inicjalizacja wymaga restartu ECU.
+Po zakończeniu testu może wrócić zwykłe żądanie kierowcy. Użyj `X`,
+jeśli sam VP37 ma pozostać zatrzymany. Zobacz [zasady sesji i zapisu](guides/BENCH.pl.md).
+Nie otwieraj drugiego programu na porcie zajętym przez zadanie viewera.
+
+## Gdy nie widać pomiarów
+
+| Objaw | Co sprawdzić |
+| --- | --- |
+| Zadanie kończy się przed połączeniem | Wynik builda, zainstalowany kompilator hostowy i wybrane assembly firmware. |
+| Brak połączenia szeregowego | Właściwe urządzenie USB ECU oraz monitor lub configurator zajmujący port. |
+| Strona nie może się połączyć | Czy zadanie nadal działa i czy adres zgadza się z URL wypisanym przez zadanie. |
+| Jest połączenie, brak nowych próbek sterowania | Czy terminal pokazuje nowe rekordy `VP37 C` i czy wgrany obraz to BENCH. Samo połączenie portu nie potwierdza napływu telemetrii. |
+| Niepoprawna pozycja lub kalibracja | Zasilanie, pomiar bazowy i sprzężenie Adjustometera; wykonaj jego procedurę startu przed restartem ECU. |
+
+Zapisane logi, obsługę CLI, wykresów i błędów przechwytywania opisuje
+[instrukcja viewera](../../tools/vp37-viewer/README.pl.md).
+
+<a id="wykonanie-i-synchronizacja"></a>
+<a id="obroty-silnika"></a>
+<a id="zadawanie-położenia-i-przygotowanie-wejścia"></a>
+<a id="regulacja-położenia"></a>
+<a id="kompensacja-napięcia-i-rezystancji"></a>
+<a id="sprzężenie-prądowe"></a>
+<a id="telemetria"></a>
+<a id="badawczy-profil-regulacji"></a>
+<a id="mapa-źródeł"></a>
+<a id="obraz-stanowiskowy-i-sprzęt"></a>
+<a id="budżet-ram-sterowania"></a>
+
+## Dalsza praca
+
+- [Zrozumienie żądania, położenia i kompensacji](guides/CONTROL.pl.md).
+- [Polecenia stanowiska i zapis pełnego przebiegu](guides/BENCH.pl.md).
+- [Zmiana harmonogramu, buforów lub kodu](guides/IMPLEMENTATION.pl.md).
+- [Kompilacja, wgrywanie i debugowanie bez viewera](../../doc/BUILDING.pl.md).
+- [Testy hostowe](../../doc/TESTING.pl.md) i [zakres MISRA](../../MISRA.pl.md).

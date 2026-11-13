@@ -18,7 +18,7 @@
 
 namespace vp37 {
 
-constexpr int kParserVersion = 6;
+constexpr int kParserVersion = 7;
 
 // Description of one telemetry field. Fields that firmware stopped printing
 // stay here, so older logs keep their meaning.
@@ -26,12 +26,20 @@ struct FieldInfo {
   const char *kind; // line kind: "C", "IPULSE", "IWAVE", "CFG", "ADJ"
   const char *key;
   const char *unit; // empty for counts, flags and codes
+  const char *label;
+  const char *label_pl;
   const char *description;
+  const char *description_pl;
 };
 
 // nullptr when the key is not described for this line kind ("nieopisane").
 const FieldInfo *find_field(std::string_view kind, std::string_view key);
 const std::vector<FieldInfo> &field_catalog();
+struct FieldBit {
+  const char *label;
+  const char *label_pl;
+};
+const std::vector<FieldBit> &adj_status_bits();
 
 // One line kind as columns. Every row has a value in every column; a key
 // missing on a row (field added or removed mid-log) reads as NaN.
@@ -113,6 +121,7 @@ struct TelemetryEvent {
   double t;
   const Series *values;
   std::string_view text;
+  bool restart = false;
 };
 using TelemetrySink = hal_status_t (*)(void *, const TelemetryEvent &);
 

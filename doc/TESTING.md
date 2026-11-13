@@ -2,27 +2,8 @@
 
 [Polski](TESTING.pl.md) · [Setup](BUILDING.md) · [MISRA](../MISRA.md)
 
-The module registry in [`modules.json`](../modules.json) determines local
-firmware and host-test lists. Firmware modules with `hostTests` use the HAL
-mock and C++ test targets; SerialConfigurator has its own C test project.
-Fiesta_clock has firmware builds and a display test launched by the root
-Python test suite. It compiles the production UI, HAL renderer and SSD1306
-driver against simulated board I/O. A controller RAM model interprets I²C
-addressing and data writes; glyph images in both sizes are compared against
-recordings from the original driver. Tests also cover sleep/wake commands.
-A second test compiles the clock's time and CAN code with the HAL RTC driver
-against a PCF8563 register model, a DS18B20 model and simulated CAN, flash and
-configurator calls. It checks the UTC marker, CET/CEST conversion, setting the
-RTC from GPS UTC, the `0x130` and `0x132` frames, and time edits from the
-buttons and the configurator.
-They need a host C/C++ compiler and no connected board. They do not establish
-physical panel compatibility or measure hardware timing.
-VP37TestBench participates in local builds and tests, but its `ci: false`
-excludes it from the firmware CI matrix.
-
-The ECU host build also includes the [VP37 measurement viewer](../tools/vp37-viewer/README.md).
-Its parser and page tests use independent fixtures and run in CTest and
-Valgrind alongside the ECU tests. The viewer can also be built separately.
+Host tests run the code with HAL mocks and need no connected board. They check software
+behaviour; electrical, mechanical and hardware timing checks require separate validation.
 
 ## Run local checks
 
@@ -120,6 +101,30 @@ including VP37TestBench, and check declared variants such as ECU BENCH.
 The [build guide](BUILDING.md#maintain-generated-configuration) gives the
 registry and VS Code generation checks. CI's selection is narrower than this
 local firmware validation.
+
+## Model coverage
+
+The module registry in [`modules.json`](../modules.json) determines local
+firmware and host-test lists. Firmware modules with `hostTests` use the HAL
+mock and C++ test targets; SerialConfigurator has its own C test project.
+Fiesta_clock has firmware builds and a display test launched by the root
+Python test suite. It compiles the production UI, HAL renderer and SSD1306
+driver against simulated board I/O. A controller RAM model interprets I²C
+addressing and data writes; glyph images in both sizes are compared against
+recordings from the original driver. Tests also cover sleep/wake commands.
+A second test compiles the clock's time and CAN code with the HAL RTC driver
+against a PCF8563 register model, a DS18B20 model and simulated CAN, flash and
+configurator calls. It checks the UTC marker, CET/CEST conversion, setting the
+RTC from GPS UTC, the `0x130` and `0x132` frames, and time edits from the
+buttons and the configurator.
+They need a host C/C++ compiler and no connected board. They do not establish
+physical panel compatibility or measure hardware timing.
+VP37TestBench participates in local builds and tests, but its `ci: false`
+excludes it from the firmware CI matrix.
+
+The ECU host build also includes the [VP37 measurement viewer](../tools/vp37-viewer/README.md).
+Its parser and page tests use independent fixtures and run in CTest and
+Valgrind alongside the ECU tests. The viewer can also be built separately.
 
 ## CI scope
 

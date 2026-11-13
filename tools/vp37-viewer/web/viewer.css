@@ -103,6 +103,9 @@ section.panel {
   margin: 12px 0;
 }
 .muted { color: var(--muted); }
+.live-events { max-height: 130px; overflow: auto; white-space: pre-wrap; color: var(--warn); }
+.live-cursor { min-height: 2em; max-height: 5em; overflow: auto; }
+.live-controls { position: sticky; top: 44px; z-index: 4; background: var(--panel); padding: 8px; }
 .small { font-size: 12px; }
 .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
 .kpis { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -176,4 +179,27 @@ details summary { cursor: pointer; color: var(--accent); margin: 6px 0; }
 @media (max-width: 640px) {
   main { padding: 10px 16px; }
   h1 { font-size: 19px; }
+}
+
+/* One guide stays with its plot; the same legend moves above narrow plots. */
+section.panel { container-type: inline-size; }
+.chart.explained { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 18px; align-items: start; }
+.chart-plot { min-width: 0; }
+.chart-guide h3 { margin: 0 0 6px; color: var(--text); }
+.chart-explanation { margin: 0 0 10px; }
+.chart.explained .legend { display: block; }
+.field-legend { min-width: 0; }
+.field-legend summary { color: var(--text); margin: 3px 0; padding: 2px; }
+.field-legend summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.field-legend summary i { height: 4px; }
+.field-description { white-space: pre-line; overflow-wrap: anywhere; padding: 2px 4px 8px 18px; }
+.language-switch { margin-left: auto; white-space: nowrap; }
+.tip { max-width: min(480px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+@container (max-width: 700px) {
+  .chart.explained { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .chart.explained .legend { display: flex; gap: 4px 14px; }
+}
+@media (max-width: 640px) {
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .live-controls { position: static; }
 }

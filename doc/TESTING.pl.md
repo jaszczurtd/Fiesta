@@ -2,27 +2,8 @@
 
 [English](TESTING.md) · [Przygotowanie środowiska](BUILDING.pl.md) · [MISRA](../MISRA.pl.md)
 
-Rejestr [`modules.json`](../modules.json) wyznacza listy lokalnych buildów
-firmware i testów hostowych. Moduły firmware z polem `hostTests` używają mocka
-HAL i testów kompilowanych jako C++; SerialConfigurator ma własny projekt
-w C. Fiesta_clock ma buildy firmware oraz test wyświetlacza uruchamiany
-przez główny zestaw testów Pythona. Kompiluje on kod ekranów, renderer HAL
-i sterownik SSD1306 z symulowaną obsługą wejść/wyjść. Model pamięci
-kontrolera interpretuje adresowanie i zapis danych I²C, a obrazy znaków
-w obu rozmiarach są porównywane z zapisami ze starego sterownika. Testy
-obejmują też komendy usypiania i budzenia. Drugi test kompiluje kod obsługi
-czasu i CAN zegara ze sterownikiem RTC z HAL, modelem rejestrów PCF8563,
-modelem DS18B20 i symulowanymi wywołaniami CAN, flasha oraz konfiguratora.
-Sprawdza znacznik UTC, przeliczanie CET/CEST, ustawianie RTC według UTC
-z GPS, ramki `0x130` i `0x132` oraz zmianę czasu przyciskami
-i konfiguratorem. Testy wymagają kompilatora C/C++
-na hoście, bez podłączonej płytki. Nie potwierdzają zgodności fizycznego
-panelu ani nie mierzą czasu działania na sprzęcie. VP37TestBench uczestniczy w lokalnej kompilacji i testach,
-ale `ci: false` wyłącza go z macierzy firmware CI.
-
-Hostowy build ECU obejmuje także [przeglądarkę pomiarów VP37](../tools/vp37-viewer/README.pl.md).
-Jej testy parsera i stron czytają niezależne fixture'y i działają w CTest
-oraz Valgrindzie razem z testami ECU. Narzędzie można też budować osobno.
+Testy hostowe uruchamiają kod z mockami HAL, bez podłączonej płytki. Sprawdzają logikę
+programu; pomiary elektryczne, mechanika i czasy sprzętowe wymagają osobnej walidacji.
 
 ## Kontrole lokalne
 
@@ -121,6 +102,30 @@ w tym VP37TestBench, oraz sprawdź zadeklarowane warianty, takie jak ECU BENCH.
 [Instrukcja kompilacji](BUILDING.pl.md#generowane-pliki-konfiguracji) podaje
 kontrole rejestru i plików VS Code. Wybór modułów CI jest węższy od tej
 lokalnej walidacji firmware.
+
+## Co obejmują modele
+
+Rejestr [`modules.json`](../modules.json) wyznacza listy lokalnych buildów
+firmware i testów hostowych. Moduły firmware z polem `hostTests` używają mocka
+HAL i testów kompilowanych jako C++; SerialConfigurator ma własny projekt
+w C. Fiesta_clock ma buildy firmware oraz test wyświetlacza uruchamiany
+przez główny zestaw testów Pythona. Kompiluje on kod ekranów, renderer HAL
+i sterownik SSD1306 z symulowaną obsługą wejść/wyjść. Model pamięci
+kontrolera interpretuje adresowanie i zapis danych I²C, a obrazy znaków
+w obu rozmiarach są porównywane z zapisami ze starego sterownika. Testy
+obejmują też komendy usypiania i budzenia. Drugi test kompiluje kod obsługi
+czasu i CAN zegara ze sterownikiem RTC z HAL, modelem rejestrów PCF8563,
+modelem DS18B20 i symulowanymi wywołaniami CAN, flasha oraz konfiguratora.
+Sprawdza znacznik UTC, przeliczanie CET/CEST, ustawianie RTC według UTC
+z GPS, ramki `0x130` i `0x132` oraz zmianę czasu przyciskami
+i konfiguratorem. Testy wymagają kompilatora C/C++
+na hoście, bez podłączonej płytki. Nie potwierdzają zgodności fizycznego
+panelu ani nie mierzą czasu działania na sprzęcie. VP37TestBench uczestniczy w lokalnej kompilacji i testach,
+ale `ci: false` wyłącza go z macierzy firmware CI.
+
+Hostowy build ECU obejmuje także [przeglądarkę pomiarów VP37](../tools/vp37-viewer/README.pl.md).
+Jej testy parsera i stron czytają niezależne fixture'y i działają w CTest
+oraz Valgrindzie razem z testami ECU. Narzędzie można też budować osobno.
 
 ## Zakres CI
 

@@ -5,6 +5,34 @@
 Czujnik położenia nastawnika pompy VP37, przekazujący do ECU pomiar oparty
 na częstotliwości przez I2C.
 
+## Zasilanie i kolejność startu
+
+1. Sprawdź [połączenia płytki](../../Fiesta_pcbs/vp37_adjustometer/adjustometer/README.pl.md). Potrzebne są 5 V i 12 V ze wspólną masą; regulator 8 V zasila tylko oscylator. Odłącz zewnętrzne 5 V przed zasileniem RP2040-Zero przez USB.
+2. Wyłącz napęd ECU i zaczekaj na zatrzymanie mechanizmu. Uruchom lub zresetuj Adjustometer.
+3. Zaczekaj na ważny pomiar bazowy przy położeniu bliskim zera. Dopiero wtedy zresetuj ECU, które rozpocznie kalibrację skoku.
+
+Otwarcie lub zamknięcie USB CDC może zresetować płytkę; wtedy zachowaj tę samą kolejność.
+Brak sygnału zeruje publikowany pomiar, więc samo zero nie potwierdza poprawnego sprzężenia.
+Sprawdzaj również status i świeżość.
+
+## Odczyt LED
+
+Utrata sygnału ma pierwszeństwo: LED miga czerwono z częstotliwością 4 Hz.
+Bez błędów świeci zielono z połową jasności. Przy błędach co 500 ms przechodzi
+przez aktywne warunki: fiolet dla temperatury paliwa, żółty dla napięcia,
+czerwony po 2 sekundach bez transakcji I2C, a na końcu zielony heartbeat.
+
+## Build firmware
+
+Przygotuj środowisko według [instrukcji kompilacji](../../doc/BUILDING.pl.md), a następnie
+otwórz folder `src/Adjustometer`. Zadanie `Project: Build` buduje firmware, a `Project:
+Upload` sprawdza tożsamość modułu i wgrywa obraz. Dla płytki już w BOOTSEL wybierz zamiast
+niego `Project: Upload (UF2 / BOOTSEL)`.
+
+Przy zmianie częstotliwości PWM zbuduj zgodne obrazy ECU i Adjustometera. Manifest dla
+SerialConfiguratora przygotuj osobno według instrukcji builda. Monitor portu używa USB CDC;
+pamiętaj o kolejności resetów powyżej.
+
 ## Pomiar
 
 Cewki czujnika pompy są elementem rezonansowym zmodyfikowanego generatora
@@ -17,19 +45,18 @@ z histerezą w pobliżu zera. Kalibracja położenia i kompensacja sterowania
 należą do ECU.
 
 Po ustaleniu poziomu odniesienia (baseline) okno przesuwa się co 32 okresy
-(`ADJUSTOMETER_SLIDING_WINDOW`, domyślnie 1), a publikowana częstotliwość to
-średnia ważona czasem z surowych okien z dokładnie jednego okresu PWM
-nastawnika (`ADJUSTOMETER_PWM_FILTER_US`, domyślnie okres
-`VP37_PWM_FREQUENCY_HZ` z `src/common/vp37_drive_config.h`, wspólnego z ECU).
-Uśrednienie po jednym okresie PWM znosi tętnienie, wywołane przez napęd PWM, bez opóźnienia filtru rekurencyjnego: skok ustala się w jednym
-okresie, a rampa spóźnia się o pół okresu, 2,5 ms przy domyślnych 200 Hz. Zmianę
-częstotliwości PWM trzeba podać obu firmware'om. `ADJUSTOMETER_PWM_FILTER_US=0`
-przywraca ułamkowy EMA przesuwanego okna (waga 71/1024, wyjście z zera po ośmiu
-krótkich aktualizacjach). Ustalanie baseline zachowuje pierwotne tempo
-i całkowitoliczbowy EMA.
-`ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` pozwala ustalić minimalny odstęp
-publikacji I2C; domyślnie wynosi zero, a zmiany statusu są publikowane od razu.
-Snapshot w HAL zapewnia spójność odczytu I2C podczas publikacji nowych pomiarów.
+(`ADJUSTOMETER_SLIDING_WINDOW`, domyślnie 1), a publikowana częstotliwość to średnia ważona
+czasem z surowych okien z dokładnie jednego okresu PWM nastawnika
+(`ADJUSTOMETER_PWM_FILTER_US`, domyślnie okres `VP37_PWM_FREQUENCY_HZ` z
+`src/common/vp37_drive_config.h`, wspólnego z ECU). Uśrednienie po jednym okresie PWM znosi
+tętnienie, wywołane przez napęd PWM, bez opóźnienia filtru rekurencyjnego: skok ustala się w
+jednym okresie, a rampa spóźnia się o pół okresu, 2,5 ms przy domyślnych 200 Hz. Zmianę
+częstotliwości PWM trzeba podać obu firmware'om. `ADJUSTOMETER_PWM_FILTER_US=0` przywraca
+ułamkowy EMA przesuwanego okna (waga 71/1024, wyjście z zera po ośmiu krótkich
+aktualizacjach). Ustalanie baseline zachowuje pierwotne tempo i całkowitoliczbowy EMA.
+`ADJUSTOMETER_FEEDBACK_MIN_PUBLISH_MS` pozwala ustalić minimalny odstęp publikacji I2C;
+domyślnie wynosi zero, a zmiany statusu są publikowane od razu. Snapshot w HAL zapewnia
+spójność odczytu I2C podczas publikacji nowych pomiarów.
 
 Układ wykorzystuje ideę pomiaru rezonansowego znaną z VP37/EDC15, z zewnętrznym
 RP2040 i cyfrowym I2C. Nie odwzorowuje elektroniki OEM ani nie podaje dawki
@@ -56,11 +83,6 @@ po 100 ms. Ustalony baseline zostaje zachowany; przerwana weryfikacja
 podczas startu rozpoczyna się ponownie. Przy utracie sygnału pulse
 wynosi zero i ustawiany jest `SIGNAL_LOST`; odbiorca musi sprawdzać status
 oraz aktualność pomiaru.
-
-Resetuj Adjustometer po wyłączeniu napędu ECU i ustaleniu pozycji spoczynkowej.
-Poczekaj na poprawny baseline i odchylenie bliskie zeru, następnie zresetuj ECU.
-Otwarcie lub zamknięcie USB CDC może resetować urządzenie; dla Adjustometera
-obowiązuje wtedy ta sama kolejność.
 
 ## I2C i czujniki pomocnicze
 
@@ -105,18 +127,13 @@ poprawny sygnał, baseline/odchylenie ze znakiem i temperaturę układu. W logu 
 `VP37 ADJ` zapis `ext:1 fl:0x07` oznacza udany spójny odczyt rozszerzenia
 z trzema poprawnymi pomiarami. Ta próbka jest niezależna od odczytu regulatora.
 
-## Podział rdzeni i LED
+## Podział pracy między rdzenie
 
 Core 0 inicjalizuje czujniki, odbiera dane pomiarowe co 1 ms i publikuje szybkie
 dane. Core 1 odczytuje ADC co 10 ms, publikuje
 rozszerzenie diagnostyczne, obsługuje LED i USB. Temperaturę układu i logi
 odświeża co 250 ms. Zapis USB ma zerowy timeout i może pomijać tekst, jeśli host
 nie odbiera danych; publikacja pomiaru działa niezależnie.
-
-Utrata sygnału ma pierwszeństwo: LED miga czerwono z częstotliwością 4 Hz.
-Bez błędów świeci zielono z połową jasności. Przy błędach co 500 ms przechodzi
-przez aktywne warunki: fiolet dla temperatury paliwa, żółty dla napięcia,
-czerwony po 2 sekundach bez transakcji I2C, a na końcu zielony heartbeat.
 
 ## Kod i testy
 
@@ -140,38 +157,26 @@ cmake --build src/Adjustometer/build_test --parallel
 ctest --test-dir src/Adjustometer/build_test --output-on-failure
 ```
 
-## Build firmware
-
-Przygotuj toolchain Arm i przypięty Pico SDK przez `runmefirst.sh`.
-JaszczurHAL jest przypięty w `src/JaszczurHAL`. Z katalogu głównego Fiesty
-uruchom `./scripts/init_hal_submodule.sh`, aby przygotować submoduł.
-
-```bash
-cd src/Adjustometer
-JH=../JaszczurHAL/vscode/entry/jh-vscode
-"$JH" build --project "$PWD"
-"$JH" build-debug --project "$PWD"
-"$JH" upload --project "$PWD"
-"$JH" upload-uf2 --project "$PWD"
-"$JH" refresh-intellisense --project "$PWD"
-```
-
-`upload` odpowiada zadaniu VS Code (`Ctrl+Shift+2`), a `upload-uf2` używa BOOTSEL.
-`monitor` otwiera USB CDC (`Ctrl+Shift+3`). Wybór portu (`Ctrl+Shift+9`) zmienia
-lokalne ustawienia; upload nadal sprawdza tożsamość modułu. Manifest Fiesty przygotowuje osobny krok opisany w
-[instrukcji kompilacji](../../doc/BUILDING.pl.md#manifest-dla-konfiguratora).
-Tożsamość USB sprawdza narzędzie `jh-vscode` w HAL.
-
 ## Licencja
 
 Copyright (c) 2026 Marcin Jaszczur Kielesiński (jaszczurtd), jaszczurtd(at)tlen.pl
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software, hardware designs, and associated documentation files (the "Project"), to deal in the Project without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Project, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software, hardware designs, and associated documentation files (the "Project"), to deal in
+the Project without restriction, including without limitation the rights to use, copy,
+modify, merge, publish, distribute, sublicense, and/or sell copies of the Project, subject to
+the following conditions:
 
-**Attribution requirement:** All copies, modified versions, and redistributions of the Project - in whole or in part - must prominently include the following attribution in all source files, documentation, and any accompanying materials:
+**Attribution requirement:** All copies, modified versions, and redistributions of the
+Project - in whole or in part - must prominently include the following attribution in all
+source files, documentation, and any accompanying materials:
 
 > Original author: **Marcin Jaszczur Kielesiński** (jaszczurtd), jaszczurtd(at)tlen.pl
 
 This attribution must not be removed, obscured, or altered in any way.
 
-THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE PROJECT OR THE USE OR OTHER DEALINGS IN THE PROJECT.
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE PROJECT OR THE USE OR OTHER DEALINGS IN THE PROJECT.

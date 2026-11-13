@@ -4,6 +4,7 @@
   'use strict';
 
   const VP37 = (window.VP37 = window.VP37 || {});
+  const { t: tr } = VP37.i18n;
   VP37.base = VP37.base || '';
   const parts = {};
   const waiting = {};
@@ -27,7 +28,7 @@
       loading[key] = true;
       const script = document.createElement('script');
       script.src = VP37.base + (slug ? 'data/' + slug + '/' + part + '.js' : 'data/' + part + '.js');
-      script.onerror = () => reject(new Error('brak pliku danych ' + script.src));
+      script.onerror = () => reject(new Error(tr("Missing data file ") + script.src));
       document.head.appendChild(script);
     });
   }
@@ -60,7 +61,7 @@
   function fmt(value, digits) {
     if (value === null || value === undefined || !isFinite(value)) return '-';
     const d = digits === undefined ? (Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2) : digits;
-    return value.toLocaleString('pl-PL', { maximumFractionDigits: d, minimumFractionDigits: 0 });
+    return value.toLocaleString(VP37.i18n.language === 'pl' ? 'pl-PL' : 'en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 });
   }
   function pct(value) {
     if (value === null || value === undefined || !isFinite(value)) return '-';
@@ -80,11 +81,11 @@
     const m = Math.floor(t / 60);
     return m ? m + ' min ' + fmt(t - m * 60, 0) + ' s' : fmt(t, 1) + ' s';
   }
-  function runHref(slug) { return VP37.base + 'run/' + slug + '.html'; }
-  function iterationHref(slug) { return VP37.base + 'it/' + slug + '.html'; }
+  function runHref(slug) { return VP37.i18n.href(VP37.base + 'run/' + slug + '.html'); }
+  function iterationHref(slug) { return VP37.i18n.href(VP37.base + 'it/' + slug + '.html'); }
   function compareHref(a, b, extra) {
     const q = new URLSearchParams(Object.assign({ a: a || '', b: b || '' }, extra || {}));
-    return VP37.base + 'compare.html#' + q.toString();
+    return VP37.i18n.href(VP37.base + 'compare.html#' + q.toString());
   }
   function lastPart(path) { return path.split('/').pop(); }
   function short(sha) { return sha ? sha.slice(0, 12) : '-'; }
@@ -96,7 +97,7 @@
     tip.style.display = 'block';
     const x = Math.min(event.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
     tip.style.left = Math.max(4, x) + 'px';
-    tip.style.top = event.clientY + 14 + 'px';
+    tip.style.top = Math.max(4, Math.min(event.clientY + 14, window.innerHeight - tip.offsetHeight - 8)) + 'px';
   }
   function hideTip() { tip.style.display = 'none'; }
 
@@ -107,9 +108,9 @@
     if (label.startsWith('top ')) return 'top';
     if (label.startsWith('random')) return 'random';
     if (/^S\d+ /.test(label)) return 'manual';
-    if (label.startsWith('control_period_us')) return 'okres pętli';
-    if (label.startsWith('feedback_age_us')) return 'wiek feedbacku';
-    return 'inne';
+    if (label.startsWith('control_period_us')) return tr("loop period");
+    if (label.startsWith('feedback_age_us')) return tr("feedback age");
+    return tr("other");
   }
   const CORE = [
     'cyclic 2ms p95_abs_err_hz', 'cyclic 4ms p95_abs_err_hz', 'cyclic 6ms p95_abs_err_hz', 'cyclic 12ms p95_abs_err_hz',
@@ -126,7 +127,12 @@
     const mag = Math.pow(10, Math.floor(Math.log10(raw)));
     const step = [1, 2, 5, 10].map((s) => s * mag).find((s) => s >= raw) || raw;
     const out = [];
-    for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toPrecision(12));
+    const first = Math.ceil(lo / step) * step;
+    for (let i = 0; i <= count + 1; i++) {
+      const v = first + i * step;
+      if (v > hi + step * 1e-9) break;
+      if (!out.length || v > out[out.length - 1]) out.push(v);
+    }
     return out;
   }
 
@@ -139,8 +145,12 @@
       this.marks = [];
       this.root = el('div', { class: 'chart' });
       this.legend = el('div', { class: 'legend' });
+      this.legendEntries = new Map();
+      this.heading = el('h3');
+      this.explanation = el('p', { class: 'small muted chart-explanation' });
+      this.sidebar = el('div', { class: 'chart-guide' }, this.heading, this.explanation, this.legend);
       this.canvas = el('canvas');
-      add(this.root, this.legend, this.canvas);
+      add(this.root, this.sidebar, el('div', { class: 'chart-plot' }, this.canvas));
       parent.appendChild(this.root);
       this.margin = { l: 58, r: 12, t: 8, b: this.opts.xTicks === false ? 6 : 24 };
       this.drag = null;
@@ -154,24 +164,67 @@
           this.draw();
         }
         this.tooltip(e);
+        if (this.opts.onCursor) this.opts.onCursor(this.xOf(e.offsetX));
       });
-      this.canvas.addEventListener('mouseleave', hideTip);
-      window.addEventListener('mouseup', () => {
+      this.canvas.addEventListener('mouseleave', () => {
+        hideTip();
+        if (this.opts.onCursor) this.opts.onCursor(null);
+      });
+      this.mouseup = () => {
         if (!this.drag) return;
         const { from, to } = this.drag;
         this.drag = null;
         if (Math.abs(to - from) > 6) this.opts.onZoom(this.xOf(Math.min(from, to)), this.xOf(Math.max(from, to)));
         else this.draw();
-      });
+      };
+      window.addEventListener('mouseup', this.mouseup);
       this.canvas.addEventListener('dblclick', () => this.opts.onReset && this.opts.onReset());
-      window.addEventListener('resize', () => this.draw());
+      this.resize = () => this.draw();
+      window.addEventListener('resize', this.resize);
+    }
+    destroy() {
+      window.removeEventListener('mouseup', this.mouseup);
+      window.removeEventListener('resize', this.resize);
+      this.root.remove();
     }
     set(layers, x0, x1) {
       this.layers = layers;
       this.x0 = x0;
       this.x1 = x1;
-      this.legend.replaceChildren(...layers.filter((l) => l.name && !l.noLegend).map((l) =>
-        el('span', {}, el('i', { style: 'background:' + l.color }), l.name)));
+      this.root.classList.toggle('explained', !!this.opts.title);
+      this.heading.textContent = this.opts.title || '';
+      this.heading.hidden = !this.opts.title;
+      this.explanation.textContent = this.opts.explanation || '';
+      this.explanation.hidden = !this.opts.explanation;
+      const used = new Set();
+      layers.filter((l) => l.name && !l.noLegend).forEach((l, index) => {
+        const id = l.id || String(index);
+        used.add(id);
+        let entry = this.legendEntries.get(id);
+        if (!entry) {
+          const swatch = el('i', { 'aria-hidden': 'true' }), label = el('span');
+          const summary = el('summary', {}, swatch, label);
+          const text = el('div', { class: 'field-description' });
+          const node = el('details', { class: 'field-legend', 'data-field': id }, summary, text);
+          summary.addEventListener('focus', () => {
+            const box = summary.getBoundingClientRect();
+            showTip({ clientX: box.left, clientY: box.bottom }, text.textContent);
+          });
+          summary.addEventListener('blur', hideTip);
+          summary.addEventListener('click', hideTip);
+          add(this.legend, node);
+          entry = { node, swatch, label, summary, text };
+          this.legendEntries.set(id, entry);
+        }
+        if (entry.label.textContent !== l.name) entry.label.textContent = l.name;
+        entry.swatch.style.background = l.color;
+        const description = l.description || l.name;
+        if (entry.summary.title !== description) entry.summary.title = description;
+        if (entry.text.textContent !== description) entry.text.textContent = description;
+      });
+      for (const [id, entry] of this.legendEntries) if (!used.has(id)) {
+        entry.node.remove(); this.legendEntries.delete(id);
+      }
       this.draw();
     }
     px(x) { return this.margin.l + ((x - this.x0) / (this.x1 - this.x0 || 1)) * this.w; }
@@ -239,6 +292,12 @@
         g.globalAlpha = 1;
       }
       for (const l of this.layers) this.drawLayer(g, l);
+      if (Number.isFinite(this.cursor)) {
+        g.strokeStyle = css('--text'); g.lineWidth = 1;
+        g.setLineDash([3, 3]); g.beginPath();
+        g.moveTo(this.px(this.cursor), this.margin.t);
+        g.lineTo(this.px(this.cursor), this.margin.t + this.h); g.stroke(); g.setLineDash([]);
+      }
       if (this.drag) {
         g.fillStyle = css('--accent'); g.globalAlpha = 0.15;
         const a = Math.min(this.drag.from, this.drag.to), b = Math.max(this.drag.from, this.drag.to);
@@ -260,6 +319,16 @@
           const y0 = this.py(l.hi[i]), y1 = this.py(l.lo[i]);
           g.fillRect(x - l.halfWidthPx, y0, Math.max(1, 2 * l.halfWidthPx), Math.max(1, y1 - y0));
         }
+        g.globalAlpha = 1;
+      } else if (l.kind === 'state') {
+        l.x.forEach((x, i) => {
+          if (!Number.isFinite(l.y[i])) return;
+          const end = l.end[i];
+          if (!(end > x)) return;
+          g.globalAlpha = l.y[i] ? 0.8 : 0.15;
+          g.fillRect(this.px(x), this.py(l.row + 0.8),
+            Math.max(1, this.px(end) - this.px(x)), this.py(l.row) - this.py(l.row + 0.8));
+        });
         g.globalAlpha = 1;
       } else if (l.kind === 'bars') {
         const half = l.halfWidth;
@@ -285,6 +354,8 @@
           const y = l.y[i];
           if (y === null || y === undefined || !isFinite(y)) { pen = false; continue; }
           const px = this.px(l.x[i]), py = this.py(y);
+          if (l.segment && i && l.segment[i] !== l.segment[i - 1]) pen = false;
+          if (l.maxGap && i && l.x[i] - l.x[i - 1] > l.maxGap) pen = false;
           if (pen) g.lineTo(px, py); else g.moveTo(px, py);
           pen = true;
         }
@@ -302,8 +373,8 @@
         while (lo < hi) { const mid = (lo + hi) >> 1; if (l.x[mid] < x) lo = mid + 1; else hi = mid; }
         if (lo > 0 && Math.abs(l.x[lo - 1] - x) < Math.abs(l.x[lo] - x)) lo--;
         if (l.tip) lines.push(l.tip(lo));
-        else if (l.kind === 'band') lines.push(l.name + ': ' + fmt(l.lo[lo]) + ' ... ' + fmt(l.hi[lo]));
-        else lines.push(l.name + ': ' + fmt(l.y[lo]));
+        else if (l.kind === 'band') lines.push(l.name + ': ' + fmt(l.lo[lo]) + ' ... ' + fmt(l.hi[lo]) + (l.unit ? ' ' + l.unit : ''));
+        else lines.push(l.name + ': ' + fmt(l.y[lo]) + (l.unit ? ' ' + l.unit : ''));
       }
       showTip(e, lines.join('\n'));
     }
@@ -376,14 +447,14 @@
     return 'hsl(' + h + ',45%,50%)';
   }
   const EXTRA = [
-    ['thr', 'zadanie thr', '%'], ['pwm', 'pwm', ''], ['ff', 'ff', ''], ['P', 'P', ''], ['I', 'I', ''], ['D', 'D', ''],
-    ['current', 'prąd Ion/I95', 'A'], ['pdt', 'okres pętli pdt', 'µs'], ['age', 'wiek feedbacku age', 'µs'],
-    ['hz', 'hz / hzraw', 'Hz'], ['V', 'napięcie V', 'V'], ['ft', 'temperatura ft', '°C']];
+    ['thr', tr("Requested dose"), '%'], ['pwm', 'pwm', ''], ['ff', 'ff', ''], ['P', 'P', ''], ['I', 'I', ''], ['D', 'D', ''],
+    ['current', tr("ON current"), 'A'], ['pdt', tr("Loop period"), 'µs'], ['age', tr("Feedback age"), 'µs'],
+    ['hz', tr('Sensor frequency'), 'Hz'], ['V', tr("Supply voltage"), 'V'], ['ft', tr("Fuel temperature"), '°C']];
   const FULL_SPAN = 120; // seconds; narrower views load the full-rate fragments
 
   function metricsTable(values, compareTo) {
     const labels = Object.keys(values || {});
-    if (!labels.length) return el('p', { class: 'muted' }, 'Plik nie ma metryk w znanych sekcjach.');
+    if (!labels.length) return el('p', { class: 'muted' }, tr("No metrics in recognized sections of this file."));
     const groups = {};
     labels.forEach((l) => (groups[family(l)] = groups[family(l)] || []).push(l));
     return el('div', { class: 'grid2' }, Object.entries(groups).map(([name, list]) =>
@@ -394,118 +465,120 @@
   function histogramBlock(parent, h, stats) {
     const box = el('div', {});
     parent.appendChild(box);
-    const title = h.key === 'pdt' ? 'Okres pętli pdt' : 'Wiek feedbacku age';
+    const title = h.key === 'pdt' ? tr("Loop period") : tr("Feedback age");
     box.appendChild(el('h3', {}, title + ' [' + (h.unit === 'us' ? 'µs' : h.unit) + ']'));
     if (!h.n) {
-      box.appendChild(el('p', { class: 'muted' }, 'Brak próbek w oknie.'));
+      box.appendChild(el('p', { class: 'muted' }, tr("No samples in this window.")));
       return;
     }
     const width = (h.hi - h.lo) / h.bins.length;
     const plot = new Plot(box, { height: 170, yZero: true, xFormat: (v) => fmt(v, 0) });
-    plot.set([{ kind: 'bars', name: 'próbki', color: css('--accent'), x: h.bins.map((_, i) => h.lo + (i + 0.5) * width),
-      y: h.bins, halfWidth: width / 2, tip: (i) => 'próbek: ' + h.bins[i] + '\n' + fmt(h.lo + i * width, 0) + '...' + fmt(h.lo + (i + 1) * width, 0) }], h.lo, h.hi);
+    plot.set([{ kind: 'bars', name: tr("samples"), color: css('--accent'), x: h.bins.map((_, i) => h.lo + (i + 0.5) * width),
+      y: h.bins, halfWidth: width / 2, tip: (i) => tr("samples: ") + h.bins[i] + '\n' + fmt(h.lo + i * width, 0) + '...' + fmt(h.lo + (i + 1) * width, 0) }], h.lo, h.hi);
     const outside = h.below + h.above;
     box.appendChild(el('p', { class: 'small' },
-      'Próbek w oknie: ' + h.n + '. Oś ' + fmt(h.lo, 0) + '...' + fmt(h.hi, 0) + '; poza osią: ',
-      el('strong', {}, String(outside)), ' (poniżej ' + h.below + ', powyżej ' + h.above + '). Minimum ' + fmt(h.min, 0) +
-      ', maksimum ', el('strong', {}, fmt(h.max, 0)), '.' + (h.missing ? ' Wierszy bez wartości: ' + h.missing + '.' : '')));
+      tr("Samples in window: ") + h.n + tr(". Axis ") + fmt(h.lo, 0) + '...' + fmt(h.hi, 0) + tr("; outside axis: "),
+      el('strong', {}, String(outside)), tr(" (below ") + h.below + tr(", above ") + h.above + tr("). Minimum ") + fmt(h.min, 0) +
+      tr(", maximum "), el('strong', {}, fmt(h.max, 0)), '.' + (h.missing ? tr(" Rows without a value: ") + h.missing + '.' : '')));
     if (stats) {
-      box.appendChild(el('p', { class: 'small muted' }, 'Z pliku metryk (' + stats.file + '): mediana ' + fmt(stats.v.median) +
-        ', p95 ' + fmt(stats.v.p95) + ', max ' + fmt(stats.v.max) + '. Te liczby policzyła bramka; strona ich nie liczy.'));
+      box.appendChild(el('p', { class: 'small muted' }, tr("From metrics file (") + stats.file + tr("): median ") + fmt(stats.v.median) +
+        ', p95 ' + fmt(stats.v.p95) + ', max ' + fmt(stats.v.max) + tr(". These values were calculated by the gate.")));
     }
   }
 
   async function runPage(p) {
     const root = app();
     root.replaceChildren();
+    const fields = new Map(p.fields.map((f) => [f.line + '.' + f.key, f]));
+    const field = (kind, key) => VP37.i18n.field(fields.get(kind + '.' + key), kind, key);
     const iterationLink = el('a', { href: iterationHref(p.series_slug) }, p.series);
-    add(root, el('h1', {}, p.name), el('p', {}, 'Iteracja/seria: ', iterationLink,
-      p.raw_of ? el('span', {}, ' · log pozycji surowej przebiegu ', el('a', { href: runHref(p.raw_of_slug) }, lastPart(p.raw_of))) : null,
-      p.raw_children.length ? el('span', {}, ' · pozycja surowa: ', p.raw_children.map((s) => el('a', { href: runHref(s) }, lastPart(s.split('~').join('/'))))) : null));
+    add(root, el('h1', {}, p.name), el('p', {}, tr("Iteration/series: "), iterationLink,
+      p.raw_of ? el('span', {}, tr(" · raw position log for "), el('a', { href: runHref(p.raw_of_slug) }, lastPart(p.raw_of))) : null,
+      p.raw_children.length ? el('span', {}, tr(" · raw position: "), p.raw_children.map((s) => el('a', { href: runHref(s) }, lastPart(s.split('~').join('/'))))) : null));
 
     const role = p.role;
     add(root, el('p', {}, role
-      ? [el('span', { class: 'badge ' + role.kind }, role.kind || 'rola nieopisana'), role.repeat !== null ? el('span', { class: 'badge' }, 'powtórzenie ' + role.repeat) : null,
-        role.variant ? el('span', { class: 'badge' }, 'wariant ' + role.variant) : null, el('span', { class: 'small muted' }, ' opis: ' + role.origin)]
-      : el('span', { class: 'badge' }, 'rola nieopisana (brak runs.json iteracji)')));
+      ? [el('span', { class: 'badge ' + role.kind }, role.kind || tr("role unspecified")), role.repeat !== null ? el('span', { class: 'badge' }, tr("repeat ") + role.repeat) : null,
+        role.variant ? el('span', { class: 'badge' }, tr("variant ") + role.variant) : null, el('span', { class: 'small muted' }, tr(" description: ") + role.origin)]
+      : el('span', { class: 'badge' }, tr("role unspecified (iteration has no runs.json)"))));
 
     const warnings = [];
-    if (p.time_reversals) warnings.push('Czas w logu cofa się ' + p.time_reversals + ' raz(y); dalsze linie przesunięto, by czas rósł.');
+    if (p.time_reversals) warnings.push(tr("Log time moves backwards ") + p.time_reversals + tr(" time(s); subsequent lines were offset to keep time increasing."));
     const undescribed = Object.entries(p.undescribed);
-    if (undescribed.length) warnings.push('Pola nieopisane w katalogu parsera: ' + undescribed.map(([k, n]) => k + ' (' + n + ')').join(', ') + '.');
+    if (undescribed.length) warnings.push(tr("Fields missing from the parser catalog: ") + undescribed.map(([k, n]) => k + ' (' + n + ')').join(', ') + '.');
     const kinds = Object.entries(p.unknown_kinds);
-    if (kinds.length) warnings.push('Nieznane rodzaje linii VP37: ' + kinds.map(([k, n]) => k + ' (' + n + ')').join(', ') + '.');
+    if (kinds.length) warnings.push(tr("Unknown VP37 line types: ") + kinds.map(([k, n]) => k + ' (' + n + ')').join(', ') + '.');
     warnings.forEach((w) => add(root, el('div', { class: 'warn' }, w)));
 
     const image = p.image || {};
     const meta = [
-      ['Rewizja (pierwsza linia CFG)', p.revision >= 0 ? 'rev' + p.revision + (p.revisions.length > 1 ? ' (zmiany: ' + p.revisions.join(' -> ') + ')' : '') : 'brak linii CFG'],
+      [tr("Revision (first CFG line)"), p.revision >= 0 ? 'rev' + p.revision + (p.revisions.length > 1 ? tr(" (changes: ") + p.revisions.join(' -> ') + ')' : '') : tr("no CFG line")],
       ['Log', el('span', { class: 'mono' }, p.log.rel)],
-      ['SHA-256 logu (tekst po rozpakowaniu)', el('span', { class: 'mono' }, p.log.sha256)],
-      ['Kopie tego samego logu', p.log.duplicates.length ? el('span', { class: 'mono' }, p.log.duplicates.join(', ')) : 'brak'],
-      ['Długość nagrania', seconds(p.last_t - p.first_t) + ' (' + fmt(p.first_t, 3) + ' ... ' + fmt(p.last_t, 3) + ' s)'],
-      ['Linie VP37 C / IPULSE', p.control_rows + ' / ' + p.pulse_rows],
-      ['Start (image.json)', image.started || 'brak image.json'],
-      ['Obraz ECU (SHA-256)', el('span', { class: 'mono' }, (image.ecu && image.ecu.sha256) || '-')],
-      ['Obraz Adjustometera (SHA-256)', el('span', { class: 'mono' }, (image.adjustometer && image.adjustometer.sha256) || '-')],
-      ['Commit Fiesty / HAL', (image.base_commit || '-') + ' / ' + (image.hal_commit || '-')],
-      ['Definicje i tryb', [image.JH_EXTRA_DEFINES, image.mode, image.pre_commands && 'pre: ' + image.pre_commands.join(' ')].filter(Boolean).join(' · ') || '-']];
+      [tr("Log SHA-256 (decompressed text)"), el('span', { class: 'mono' }, p.log.sha256)],
+      [tr("Copies of this log"), p.log.duplicates.length ? el('span', { class: 'mono' }, p.log.duplicates.join(', ')) : tr("missing")],
+      [tr("Recording duration"), seconds(p.last_t - p.first_t) + ' (' + fmt(p.first_t, 3) + ' ... ' + fmt(p.last_t, 3) + ' s)'],
+      [tr("VP37 C / IPULSE lines"), p.control_rows + ' / ' + p.pulse_rows],
+      ['Start (image.json)', image.started || tr("no image.json")],
+      [tr("ECU image (SHA-256)"), el('span', { class: 'mono' }, (image.ecu && image.ecu.sha256) || '-')],
+      [tr("Adjustometer image (SHA-256)"), el('span', { class: 'mono' }, (image.adjustometer && image.adjustometer.sha256) || '-')],
+      [tr("Fiesta / HAL commit"), (image.base_commit || '-') + ' / ' + (image.hal_commit || '-')],
+      [tr("Definitions and mode"), [image.JH_EXTRA_DEFINES, image.mode, image.pre_commands && 'pre: ' + image.pre_commands.join(' ')].filter(Boolean).join(' · ') || '-']];
     add(root, el('section', { class: 'panel' }, el('table', {}, meta.map(([k, v]) => el('tr', {}, el('th', {}, k), el('td', {}, v))))));
-    if (p.base_commit) add(root, el('details', {}, el('summary', {}, 'base-commit.txt iteracji'), el('pre', { class: 'mono' }, p.base_commit)));
+    if (p.base_commit) add(root, el('details', {}, el('summary', {}, tr("Iteration base-commit.txt")), el('pre', { class: 'mono' }, p.base_commit)));
 
     // Metrics: only bound files, never computed here.
-    const metricsBox = el('section', { class: 'panel' }, el('h2', {}, 'Metryki z pliku metryk'));
+    const metricsBox = el('section', { class: 'panel' }, el('h2', {}, tr("Metrics from recorded files")));
     add(root, metricsBox);
     if (!p.metrics.length) {
-      add(metricsBox, el('p', { class: 'muted' }, 'Brak przypisanych plików metryk. Przeglądarka nie liczy metryk; liczy je skrypt bramki (analyze_gate.py).'));
+      add(metricsBox, el('p', { class: 'muted' }, tr("No metrics files assigned. Metrics are calculated by the gate script (analyze_gate.py).")));
     }
     for (const m of p.metrics) {
       const w = m.window;
-      add(metricsBox, el('h3', {}, el('span', { class: 'mono' }, m.rel), ' ', el('span', { class: 'badge' }, m.basis), el('span', { class: 'badge ' + (m.status === 'bound' ? 'good' : 'bad') }, m.status_text)),
-        el('p', { class: 'small' }, w ? 'Okno analizy: ' + w.kind + ' ' + fmt(w.start_s, 3) + ' ... ' + fmt(w.end_s, 3) + ' s' + (w.start_marker ? ' (' + w.start_marker + ' -> ' + w.end_marker + ')' : '') : 'Plik nie zapisał okna analizy.'),
-        m.warnings && m.warnings.length ? el('div', { class: 'warn' }, 'Ostrzeżenia analizatora: ' + JSON.stringify(m.warnings)) : null,
+      add(metricsBox, el('h3', {}, el('span', { class: 'mono' }, m.rel), ' ', el('span', { class: 'badge' }, m.basis), el('span', { class: 'badge ' + (m.status === 'bound' ? 'good' : 'bad') }, VP37.i18n.diagnostic(m.status_text))),
+        el('p', { class: 'small' }, w ? tr("Analysis window: ") + w.kind + ' ' + fmt(w.start_s, 3) + ' ... ' + fmt(w.end_s, 3) + ' s' + (w.start_marker ? ' (' + w.start_marker + ' -> ' + w.end_marker + ')' : '') : tr("The file did not record an analysis window.")),
+        m.warnings && m.warnings.length ? el('div', { class: 'warn' }, tr("Analyzer warnings: ") + JSON.stringify(m.warnings)) : null,
         metricsTable(m.values));
     }
     if (p.near_metrics.length) {
-      add(metricsBox, el('h3', {}, 'Pliki metryk obok, które nie należą do tego przebiegu'),
-        el('table', {}, p.near_metrics.map((m) => el('tr', {}, el('td', { class: 'mono' }, m.rel), el('td', {}, m.status_text),
-          el('td', { class: 'mono small' }, m.run ? 'należy do ' + m.run : m.reason || m.source)))));
+      add(metricsBox, el('h3', {}, tr("Nearby metrics files belonging to other runs")),
+        el('table', {}, p.near_metrics.map((m) => el('tr', {}, el('td', { class: 'mono' }, m.rel), el('td', {}, VP37.i18n.diagnostic(m.status_text)),
+          el('td', { class: 'mono small' }, m.run ? tr("belongs to ") + m.run : VP37.i18n.diagnostic(m.reason) || m.source)))));
     }
 
     // Timeline of tests.
     const t0 = p.first_t, t1 = p.last_t;
-    const timelineBox = el('section', { class: 'panel' }, el('h2', {}, 'Oś testów'));
+    const timelineBox = el('section', { class: 'panel' }, el('h2', {}, tr("Test timeline")));
     add(root, timelineBox);
-    const timeline = el('div', { class: 'timeline', title: 'kliknij test, aby powiększyć' });
+    const timeline = el('div', { class: 'timeline', title: tr("Click a test to zoom in") });
     const legend = {};
     const pos = (t) => ((t - t0) / (t1 - t0 || 1)) * 100 + '%';
     for (const t of p.tests) {
       if (t.test === 'sequence' || t.test === 'none') continue;
       legend[t.test] = testColor(t.test);
       const seg = el('div', { class: 'seg', style: 'left:' + pos(t.start) + ';width:calc(' + pos(t.end) + ' - ' + pos(t.start) + ' + 1px);background:' + testColor(t.test),
-        title: t.test + ' ' + fmt(t.start, 1) + '...' + fmt(t.end, 1) + ' s' + (t.result ? ' (' + t.result + ')' : '') + (t.closed ? '' : ' (bez końca w logu)') });
+        title: t.test + ' ' + fmt(t.start, 1) + '...' + fmt(t.end, 1) + ' s' + (t.result ? ' (' + t.result + ')' : '') + (t.closed ? '' : tr(" (no end recorded)")) });
       seg.addEventListener('click', (e) => { e.stopPropagation(); zoom(t.start - 1, t.end + 1); });
       add(timeline, seg);
     }
     p.steps.forEach((s) => add(timeline, el('div', { class: 'step', style: 'left:' + pos(s.t), title: s.test + ' ' + s.percent + ' % (' + s.index + '/' + s.count + ')' })));
-    add(timeline, el('div', { class: 'win', style: 'left:' + pos(p.window.start) + ';width:calc(' + pos(p.window.end) + ' - ' + pos(p.window.start) + ')', title: p.window.text }));
+    add(timeline, el('div', { class: 'win', style: 'left:' + pos(p.window.start) + ';width:calc(' + pos(p.window.end) + ' - ' + pos(p.window.start) + ')', title: VP37.i18n.diagnostic(p.window.text) }));
     add(timelineBox, timeline, el('div', { class: 'chart' }, el('div', { class: 'legend' },
       Object.entries(legend).map(([k, c]) => el('span', {}, el('i', { style: 'background:' + c + ';height:8px' }), k)),
-      el('span', {}, el('i', { style: 'background:var(--accent);height:8px' }), 'okno: ' + p.window.text))));
+      el('span', {}, el('i', { style: 'background:var(--accent);height:8px' }), tr("window: ") + VP37.i18n.diagnostic(p.window.text)))));
 
     // Charts.
-    const chartsBox = el('section', { class: 'panel' }, el('h2', {}, 'Przebiegi'));
+    const chartsBox = el('section', { class: 'panel' }, el('h2', {}, tr("Traces")));
     add(root, chartsBox);
     const status = el('span', { class: 'small muted' });
     const extras = new Set();
     const controls = el('div', { class: 'controls' },
-      el('button', { onclick: () => zoom(t0, t1) }, 'Cały log'),
-      el('button', { onclick: () => zoom(p.window.start, p.window.end) }, 'Okno analizy'),
+      el('button', { onclick: () => zoom(t0, t1) }, tr("Full log")),
+      el('button', { onclick: () => zoom(p.window.start, p.window.end) }, tr("Analysis window")),
       el('button', { onclick: () => pan(-0.5) }, '←'), el('button', { onclick: () => pan(0.5) }, '->'),
-      el('button', { onclick: () => scale(2) }, 'oddal ×2'), status);
-    const extraControls = el('div', { class: 'controls' }, el('span', { class: 'muted small' }, 'Dodatkowe serie:'),
-      EXTRA.map(([key, label]) => el('label', {}, el('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) extras.add(key); else extras.delete(key); rebuildCharts(); } }), label)));
-    add(chartsBox, controls, extraControls, el('p', { class: 'small muted' }, 'Przeciągnij po wykresie, aby powiększyć; dwuklik wraca do całości. Widok węższy niż ' + FULL_SPAN + ' s pokazuje wszystkie próbki, szerszy minimum i maksimum każdego przedziału.'));
+      el('button', { onclick: () => scale(2) }, tr("Zoom out ×2")), status);
+    const extraControls = el('div', { class: 'controls' }, el('span', { class: 'muted small' }, tr("Additional series:")),
+      EXTRA.map(([key, label]) => el('label', {}, el('input', { type: 'checkbox', onchange: (e) => { if (e.target.checked) extras.add(key); else extras.delete(key); rebuildCharts(); } }), ['current', 'hz'].includes(key) ? label : field('C', key).name)));
+    add(chartsBox, controls, extraControls, el('p', { class: 'small muted' }, tr("Drag on a chart to zoom in; double-click to reset. Views shorter than ") + FULL_SPAN + tr(" s show all samples; wider views show each interval's minimum and maximum.")));
     const chartArea = el('div', {});
     add(chartsBox, chartArea);
 
@@ -521,13 +594,14 @@
     function scale(f) { const c = (view.x0 + view.x1) / 2, s = (view.x1 - view.x0) * f / 2; zoom(c - s, c + s); }
     const opts = (yLabel, height) => ({ height: height || 170, yLabel, onZoom: zoom, onReset: () => zoom(t0, t1), xFormat: (v) => fmt(v, 1), tipX: (v) => 't = ' + fmt(v, 3) + ' s' });
     function rebuildCharts() {
+      charts.forEach((c) => c.plot.destroy());
       chartArea.replaceChildren();
-      charts = [{ keys: [['tar', '--tar'], ['des', '--des'], ['adj', '--adj']], plot: new Plot(chartArea, opts('Hz', 260)) },
-        { keys: [['err', '--err']], plot: new Plot(chartArea, opts('err Hz', 140)) }];
+      charts = [{ keys: [['tar', '--tar'], ['des', '--des'], ['adj', '--adj']], plot: new Plot(chartArea, { ...opts('Hz', 260), title: tr('Position'), explanation: tr('Compare the requested target, slew-limited target and measured position relative to the sensor baseline.') }) },
+        { keys: [['err', '--err']], plot: new Plot(chartArea, { ...opts('Hz', 140), title: tr('Position error'), explanation: tr('Positive error means the measured position is below the control target.') }) }];
       for (const [key, label, unit] of EXTRA) {
         if (!extras.has(key)) continue;
         const keys = key === 'current' ? [['Ion', '--des', 'IPULSE'], ['I95', '--adj', 'IPULSE']] : key === 'hz' ? [['hz', '--des'], ['hzraw', '--adj']] : [[key, '--err']];
-        charts.push({ keys, plot: new Plot(chartArea, opts(label + (unit ? ' [' + unit + ']' : ''), 130)) });
+        charts.push({ keys, plot: new Plot(chartArea, { ...opts(unit, 160), title: ['current', 'hz'].includes(key) ? label : field('C', key).name }) });
       }
       update();
     }
@@ -539,14 +613,14 @@
       if (span <= FULL_SPAN && overview.fragments) {
         const first = Math.max(0, Math.floor((view.x0 - overview.fragment_t0) / overview.fragment_s));
         const last = Math.min(overview.fragments - 1, Math.floor((view.x1 - overview.fragment_t0) / overview.fragment_s));
-        status.textContent = 'wczytywanie pełnych próbek...';
+        status.textContent = tr("Loading full samples...");
         const list = [];
         for (let k = first; k <= last; k++) list.push(need(p.slug, 'frag-' + k));
         source = await Promise.all(list);
         if (my !== generation) return;
-        status.textContent = 'pełne próbki (' + (last - first + 1) + ' fragm.)';
+        status.textContent = tr("Full samples (") + (last - first + 1) + tr(" fragments)");
       } else {
-        status.textContent = 'przerzedzenie: min/max w ' + overview.bucket.toFixed(2).replace('.', ',') + ' s';
+        status.textContent = tr("Downsampled: min/max over ") + fmt(overview.bucket, 2) + ' s';
       }
       for (const c of charts) {
         const layers = [];
@@ -559,13 +633,13 @@
               if (!g || !g[key]) continue;
               for (let i = 0; i < g.t.length; i++) { x.push(frag.t0 + g.t[i] / 1000); y.push(g[key][i]); }
             }
-            layers.push({ kind: 'line', name: key, color: css(color), x, y });
+            layers.push({ ...field(group, key), kind: 'line', color: css(color), x, y });
           } else {
             const band = overview[group] && overview[group][key];
             if (!band) continue;
             const x = band.lo.map((_, i) => overview.t0 + (i + 0.5) * overview.bucket);
             const half = Math.max(0.6, (c.plot.root.clientWidth - 70) / band.lo.length / 2);
-            layers.push({ kind: 'band', name: key, color: css(color), x, lo: band.lo, hi: band.hi, halfWidthPx: half, alpha: 0.55 });
+            layers.push({ ...field(group, key), kind: 'band', color: css(color), x, lo: band.lo, hi: band.hi, halfWidthPx: half, alpha: 0.55 });
           }
         }
         c.plot.marks = p.steps.filter((s) => s.t >= view.x0 && s.t <= view.x1).map((s) => ({ from: s.t, color: css('--text'), alpha: 0.25 }));
@@ -577,23 +651,23 @@
     if (range) view = { x0: +range[1], x1: +range[2] };
     rebuildCharts();
 
-    const histBox = el('section', { class: 'panel' }, el('h2', {}, 'Histogramy w oknie analizy'), el('p', { class: 'small muted' }, 'Okno: ' + p.window.text + ' (' + fmt(p.window.start, 3) + ' ... ' + fmt(p.window.end, 3) + ' s). Wszystkie próbki wchodzą do liczb; oś może być węższa.'));
+    const histBox = el('section', { class: 'panel' }, el('h2', {}, tr("Histograms in the analysis window")), el('p', { class: 'small muted' }, tr("Window: ") + VP37.i18n.diagnostic(p.window.text) + ' (' + fmt(p.window.start, 3) + ' ... ' + fmt(p.window.end, 3) + tr(" s). Counts include all samples; the axis may cover a smaller range.")));
     add(root, histBox);
     const grid = el('div', { class: 'grid2' });
     add(histBox, grid);
     const bound = p.metrics.find((m) => m.status === 'bound' && m.basis === 'filtered') || p.metrics.find((m) => m.status === 'bound');
     p.histograms.forEach((h) => histogramBlock(grid, h, bound && bound[h.key === 'pdt' ? 'control_period_us' : 'feedback_age_us'] ? { file: bound.rel, v: bound[h.key === 'pdt' ? 'control_period_us' : 'feedback_age_us'] } : null));
 
-    add(root, el('details', {}, el('summary', {}, 'Pola telemetrii w tym logu (' + p.fields.length + ')'),
+    add(root, el('details', {}, el('summary', {}, tr("Telemetry fields in this log (") + p.fields.length + ')'),
       el('table', {}, p.fields.map((f) => el('tr', {}, el('td', {}, f.line), el('td', { class: 'mono' }, f.key), el('td', {}, f.unit),
-        el('td', {}, f.described ? f.description : el('span', { class: 'badge bad' }, 'nieopisane')))))));
+        el('td', {}, f.described ? (VP37.i18n.language === 'pl' ? f.description_pl : f.description) : el('span', { class: 'badge bad' }, tr("undocumented"))))))));
     if (p.config.length) {
-      add(root, el('details', {}, el('summary', {}, 'Pierwsza linia CFG'), el('p', { class: 'mono' }, p.config.map(([k, v]) => k + ':' + v).join(' '))));
+      add(root, el('details', {}, el('summary', {}, tr("First CFG line")), el('p', { class: 'mono' }, p.config.map(([k, v]) => k + ':' + v).join(' '))));
     }
     if (p.report.markdown) {
-      add(root, el('h2', {}, 'report.md iteracji'));
-      if (p.report.verdict) add(root, el('div', { class: 'verdict', html: markdown(p.report.verdict) }), el('p', { class: 'small muted' }, 'Sekcja: ' + p.report.section));
-      add(root, el('details', {}, el('summary', {}, 'Cały report.md'), el('div', { class: 'md', html: markdown(p.report.markdown) })));
+      add(root, el('h2', {}, tr("Iteration report.md")));
+      if (p.report.verdict) add(root, el('div', { class: 'verdict', html: markdown(p.report.verdict) }), el('p', { class: 'small muted' }, tr("Section: ") + VP37.i18n.diagnostic(p.report.section)));
+      add(root, el('details', {}, el('summary', {}, tr("Full report.md")), el('div', { class: 'md', html: markdown(p.report.markdown) })));
     }
   }
 
@@ -604,7 +678,7 @@
     return 'cell missing';
   }
   function comparisonLabel(c) {
-    return c.candidates.map((x) => x.name).join(', ') + ' wobec ' + c.references.map((r) => r.name + (r.position ? ' (' + (r.position === 'before' ? 'przed' : 'po') + ')' : '')).join(', ');
+    return c.candidates.map((x) => x.name).join(', ') + tr(" versus ") + c.references.map((r) => r.name + (r.position ? ' (' + (r.position === 'before' ? tr("before") : tr("after")) + ')' : '')).join(', ');
   }
   function worseCount(c) { return c.rows.filter((r) => r.s === 'worse').length; }
   function worstChange(c) {
@@ -615,18 +689,18 @@
   function comparisonTable(c) {
     const box = el('section', { class: 'panel' });
     add(box, el('h3', {}, comparisonLabel(c)), el('p', { class: 'small' },
-      el('span', { class: 'badge' }, c.basis === 'raw' ? 'pozycja surowa' : 'po filtrze'), el('span', { class: 'badge' }, 'źródło: ' + c.described_from),
+      el('span', { class: 'badge' }, c.basis === 'raw' ? tr("raw position") : tr("filtered")), el('span', { class: 'badge' }, tr("source: ") + VP37.i18n.diagnostic(c.described_from)),
       c.result_file ? el('span', { class: 'mono' }, c.result_file) : null));
-    if (c.problem) add(box, el('div', { class: 'warn' }, c.problem));
+    if (VP37.i18n.diagnostic(c.problem)) add(box, el('div', { class: 'warn' }, VP37.i18n.diagnostic(c.problem)));
     if (!c.rows.length) return box;
-    add(box, el('p', {}, 'Metryk gorszych od referencji (próg 0): ', el('strong', { class: 'status-worse' }, String(worseCount(c))), ' z ' + c.rows.length + '; najgorsza zmiana ' + pct(worstChange(c)) + '.'));
+    add(box, el('p', {}, tr("Metrics worse than references (threshold 0): "), el('strong', { class: 'status-worse' }, String(worseCount(c))), tr(" of ") + c.rows.length + tr("; worst change ") + pct(worstChange(c)) + '.'));
     const a = c.references[0] && c.references[0].id, b = c.candidates[0] && c.candidates[0].id;
-    if (a && b) add(box, el('p', {}, el('a', { href: compareHref(a, b, { basis: c.basis }) }, 'Porównanie A/B: ' + c.references[0].name + ' -> ' + c.candidates[0].name)));
-    add(box, el('details', {}, el('summary', {}, 'Wszystkie metryki porównania'), el('div', { class: 'scroll' }, el('table', {},
-      el('tr', {}, el('th', {}, 'metryka'), c.references.map((r) => el('th', { class: 'num' }, r.name)), el('th', { class: 'num' }, 'kandydat'), el('th', { class: 'num' }, 'zmiana'), el('th', {}, 'ocena bramki')),
+    if (a && b) add(box, el('p', {}, el('a', { href: compareHref(a, b, { basis: c.basis }) }, tr("A/B comparison: ") + c.references[0].name + ' -> ' + c.candidates[0].name)));
+    add(box, el('details', {}, el('summary', {}, tr("All comparison metrics")), el('div', { class: 'scroll' }, el('table', {},
+      el('tr', {}, el('th', {}, tr("metric")), c.references.map((r) => el('th', { class: 'num' }, r.name)), el('th', { class: 'num' }, tr("candidate")), el('th', { class: 'num' }, tr("change")), el('th', {}, tr("gate assessment"))),
       c.rows.map((r) => el('tr', {}, el('td', { class: 'mono' }, r.m), r.r.map((v) => el('td', { class: 'num' }, fmt(v))), el('td', { class: 'num' }, fmt(r.c)),
-        el('td', { class: 'num' }, pct(r.p)), el('td', { class: 'status-' + r.s }, r.s === 'worse' ? 'gorzej' : r.s === 'no_increase' ? 'bez wzrostu' : 'brak',
-          r.p !== null && Math.abs(r.p) < SMALL_CHANGE && r.s !== 'missing' ? el('span', { class: 'soft-note' }, ' (mała zmiana)') : null)))))));
+        el('td', { class: 'num' }, pct(r.p)), el('td', { class: 'status-' + r.s }, r.s === 'worse' ? tr("worse") : r.s === 'no_increase' ? tr("no increase") : tr("missing"),
+          r.p !== null && Math.abs(r.p) < SMALL_CHANGE && r.s !== 'missing' ? el('span', { class: 'soft-note' }, tr(" (small change)")) : null)))))));
     return box;
   }
 
@@ -636,37 +710,37 @@
     const root = app();
     root.replaceChildren();
     add(root, el('h1', {}, lastPart(it.series)), el('p', { class: 'muted' }, it.title || it.series));
-    if (it.verdict) add(root, el('div', { class: 'verdict', html: markdown(it.verdict) }), el('p', { class: 'small muted' }, 'report.md, sekcja: ' + it.verdict_section));
+    if (it.verdict) add(root, el('div', { class: 'verdict', html: markdown(it.verdict) }), el('p', { class: 'small muted' }, tr("report.md, section: ") + VP37.i18n.diagnostic(it.verdict_section)));
     if (it.described) {
-      add(root, el('p', { class: 'small' }, 'Opis przebiegów i porównań: ', el('span', { class: 'mono' }, it.origin)));
+      add(root, el('p', { class: 'small' }, tr("Run and comparison descriptions: "), el('span', { class: 'mono' }, it.origin)));
       it.notes.forEach((n) => add(root, el('p', { class: 'small muted' }, n)));
     } else {
-      add(root, el('div', { class: 'warn' }, 'Iteracja nie ma opisu przebiegów i porównań (runs.json). Role przebiegów nie są zgadywane.' + (it.description_error ? ' Błąd opisu: ' + it.description_error : '')));
+      add(root, el('div', { class: 'warn' }, tr("This iteration has no run and comparison description (runs.json). Run roles are unspecified.") + (it.description_error ? tr(" Description error: ") + it.description_error : '')));
     }
     const ids = it.runs.filter((id) => !runs[id].raw_of);
     const key = ['cyclic 2ms p95_abs_err_hz', 'topzero 95% early_ringing_error_rms_hz', 'random p95_abs_err_hz', 'control_period_us p95'];
-    add(root, el('h2', {}, 'Przebiegi (' + ids.length + ')'), el('div', { class: 'scroll' }, el('table', {},
-      el('tr', {}, ['przebieg', 'rodzaj', 'powt.', 'wariant', 'rev', 'długość', 'testy', 'metryki'].map((h) => el('th', {}, h)), key.map((k) => el('th', { class: 'num mono' }, k))),
+    add(root, el('h2', {}, tr("Runs (") + ids.length + ')'), el('div', { class: 'scroll' }, el('table', {},
+      el('tr', {}, [tr("run"), tr("kind"), tr("repeat"), tr("variant"), 'rev', tr("duration"), tr("tests"), tr("metrics")].map((h) => el('th', {}, h)), key.map((k) => el('th', { class: 'num mono' }, k))),
       ids.map((id) => {
         const r = runs[id];
         const m = r.metrics.filtered || r.metrics.raw;
         return el('tr', {}, el('td', {}, el('a', { href: runHref(r.slug) }, r.name)), el('td', {}, r.kind ? el('span', { class: 'badge ' + r.kind }, r.kind) : el('span', { class: 'muted' }, '-')),
           el('td', {}, r.repeat === null ? '-' : String(r.repeat)), el('td', { class: 'mono small' }, r.variant || '-'), el('td', {}, r.revision >= 0 ? String(r.revision) : '-'),
           el('td', {}, seconds(r.duration)), el('td', { class: 'small' }, r.tests.filter((t) => t !== 'sequence' && t !== 'none').join(' ')),
-          el('td', { class: 'small' }, Object.keys(r.metrics).join(' + ') || el('span', { class: 'muted' }, 'brak')),
+          el('td', { class: 'small' }, Object.keys(r.metrics).join(' + ') || el('span', { class: 'muted' }, tr("missing"))),
           key.map((k) => el('td', { class: 'num' }, fmt(m && m.values[k]))));
       }))));
 
     // All runs relative to the median of the references, per metric.
     const refs = ids.filter((id) => runs[id].kind === 'reference');
-    add(root, el('h2', {}, 'Przebiegi względem mediany referencji'));
+    add(root, el('h2', {}, tr("Runs relative to the reference median")));
     if (!refs.length) {
-      add(root, el('p', { class: 'muted' }, 'Brak opisanych referencji: wykres wymaga ról z runs.json.'));
+      add(root, el('p', { class: 'muted' }, tr("No described references: this chart requires roles from runs.json.")));
     } else {
-      const famSel = el('select', {}, ['podstawowe', 'cyclic', 'top', 'topzero', 'random', 'manual', 'okres pętli', 'wiek feedbacku'].map((f) => el('option', { value: f }, f)));
+      const famSel = el('select', {}, [tr("core"), 'cyclic', 'top', 'topzero', 'random', 'manual', tr("loop period"), tr("feedback age")].map((f) => el('option', { value: f }, f)));
       const box = el('div', {});
-      add(root, el('div', { class: 'controls' }, el('label', {}, 'Metryki: ', famSel),
-        el('span', { class: 'small muted' }, 'pełny znacznik: po filtrze, pusty: pozycja surowa wobec surowych referencji; szary: referencja, kolor: wariant kandydata')), box);
+      add(root, el('div', { class: 'controls' }, el('label', {}, tr("Metrics: "), famSel),
+        el('span', { class: 'small muted' }, tr("Filled marker: filtered; hollow: raw position versus raw references. Gray: reference; color: candidate variant."))), box);
       const variants = [...new Set(ids.map((id) => runs[id].variant))];
       const palette = ['#d9731a', '#7b3fb5', '#c62f2f', '#2b8a4b', '#b58a00', '#0f8a8a'];
       const draw = () => {
@@ -674,7 +748,7 @@
         const labels = new Set();
         ids.forEach((id) => ['filtered', 'raw'].forEach((b) => runs[id].metrics[b] && Object.keys(runs[id].metrics[b].values).forEach((l) => labels.add(l))));
         let list = [...labels];
-        list = famSel.value === 'podstawowe' ? CORE.filter((l) => labels.has(l)) : list.filter((l) => family(l) === famSel.value);
+        list = famSel.value === tr("core") ? CORE.filter((l) => labels.has(l)) : list.filter((l) => family(l) === famSel.value);
         const x = [], y = [], colors = [], hollow = [], tips = [];
         list.forEach((label, i) => {
           for (const basis of ['filtered', 'raw']) {
@@ -688,30 +762,30 @@
               y.push((v / base) * 100);
               colors.push(runs[id].kind === 'reference' ? css('--tar') : palette[Math.max(0, variants.indexOf(runs[id].variant)) % palette.length]);
               hollow.push(basis === 'raw');
-              tips.push(runs[id].name + ' (' + basis + '): ' + fmt(v) + ' = ' + fmt((v / base) * 100, 1) + ' % mediany ref.');
+              tips.push(runs[id].name + ' (' + basis + '): ' + fmt(v) + ' = ' + fmt((v / base) * 100, 1) + tr(" % of reference median"));
             });
           }
         });
-        if (!list.length) { add(box, el('p', { class: 'muted' }, 'Brak metryk tej rodziny.')); return; }
+        if (!list.length) { add(box, el('p', { class: 'muted' }, tr("No metrics in this family."))); return; }
         const order = x.map((_, i) => i).sort((a, b) => x[a] - x[b]);
-        const plot = new Plot(box, { height: 300, yLabel: '% mediany referencji', xFormat: (v) => '', xTicks: true,
+        const plot = new Plot(box, { height: 300, yLabel: tr("% of reference median"), xFormat: (v) => '', xTicks: true,
           xTickValues: () => [], yFormat: (v) => fmt(v, 0) });
         plot.set([{ kind: 'line', name: '', color: css('--muted'), x: [-0.5, list.length - 0.5], y: [100, 100], noTip: true, alpha: 0.6 },
-          { kind: 'points', name: 'przebiegi', color: css('--accent'), x: order.map((i) => x[i]), y: order.map((i) => y[i]), colors: order.map((i) => colors[i]), hollow: order.map((i) => hollow[i]), tip: (i) => tips[order[i]] }], -0.5, list.length - 0.5);
+          { kind: 'points', name: tr("runs"), color: css('--accent'), x: order.map((i) => x[i]), y: order.map((i) => y[i]), colors: order.map((i) => colors[i]), hollow: order.map((i) => hollow[i]), tip: (i) => tips[order[i]] }], -0.5, list.length - 0.5);
         add(box, el('ol', { class: 'small mono', start: '0' }, list.map((l) => el('li', {}, l))));
       };
       famSel.addEventListener('change', draw);
       draw();
     }
 
-    add(root, el('h2', {}, 'Porównania (' + it.comparisons.length + ')'));
-    if (!it.comparisons.length) add(root, el('p', { class: 'muted' }, 'Brak opisanych porównań.'));
+    add(root, el('h2', {}, tr("Comparisons (") + it.comparisons.length + ')'));
+    if (!it.comparisons.length) add(root, el('p', { class: 'muted' }, tr("No described comparisons.")));
     it.comparisons.forEach((c) => add(root, comparisonTable(c)));
 
-    add(root, el('h2', {}, 'Pliki metryk w iteracji'), el('div', { class: 'scroll' }, el('table', {},
+    add(root, el('h2', {}, tr("Metrics files in this iteration")), el('div', { class: 'scroll' }, el('table', {},
       it.metrics_files.map((m) => el('tr', {}, el('td', { class: 'mono' }, m.rel), el('td', {}, m.basis || '-'),
-        el('td', { class: m.status === 'bound' ? 'status-no_increase' : 'status-worse' }, m.status_text),
-        el('td', { class: 'mono small' }, m.run ? lastPart(m.run) : m.reason || m.source))))));
+        el('td', { class: m.status === 'bound' ? 'status-no_increase' : 'status-worse' }, VP37.i18n.diagnostic(m.status_text)),
+        el('td', { class: 'mono small' }, m.run ? lastPart(m.run) : VP37.i18n.diagnostic(m.reason) || m.source))))));
     if (it.base_commit) add(root, el('details', {}, el('summary', {}, 'base-commit.txt'), el('pre', { class: 'mono' }, it.base_commit)));
     if (it.report) add(root, el('h2', {}, 'report.md'), el('div', { class: 'md', html: markdown(it.report) }));
   }
@@ -724,23 +798,23 @@
     const its = cat.iterations.slice().sort((a, b) => (b.date + b.series).localeCompare(a.date + a.series));
     const gate = its.filter((i) => i.area === 'vp37_implementation_tests');
     const runCount = Object.values(cat.runs).filter((r) => !r.raw_of).length;
-    add(root, el('h1', {}, 'Pomiary VP37'), el('div', { class: 'kpis' },
-      [['iteracje bramki', gate.length], ['serie pomiarów', its.length - gate.length], ['przebiegi', runCount],
-        ['iteracje bez opisu porównań', gate.filter((i) => !i.described).length], ['obowiązująca baza', cat.baseline || '-'],
-        ['logi bez telemetrii VP37', cat.skipped]].map(([l, v]) => el('div', { class: 'kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l)))));
+    add(root, el('h1', {}, tr("VP37 measurements")), el('div', { class: 'kpis' },
+      [[tr("gate iterations"), gate.length], [tr("measurement series"), its.length - gate.length], [tr("runs"), runCount],
+        [tr("iterations without comparison descriptions"), gate.filter((i) => !i.described).length], [tr("current baseline"), cat.baseline || '-'],
+        [tr("logs without VP37 telemetry"), cat.skipped]].map(([l, v]) => el('div', { class: 'kpi' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'l' }, l)))));
 
-    const areaSel = el('select', {}, [['vp37_implementation_tests', 'iteracje bramki'], ['all', 'wszystkie serie']].map(([v, l]) => el('option', { value: v }, l)));
-    const famSel = el('select', {}, ['podstawowe', 'cyclic', 'top', 'topzero', 'random', 'manual', 'okres pętli', 'wiek feedbacku', 'wszystkie'].map((f) => el('option', { value: f }, f)));
+    const areaSel = el('select', {}, [['vp37_implementation_tests', tr("gate iterations")], ['all', tr("all series")]].map(([v, l]) => el('option', { value: v }, l)));
+    const famSel = el('select', {}, [tr("core"), 'cyclic', 'top', 'topzero', 'random', 'manual', tr("loop period"), tr("feedback age"), tr("all")].map((f) => el('option', { value: f }, f)));
     const revisions = [...new Set(Object.values(cat.runs).map((r) => r.revision).filter((r) => r >= 0))].sort((a, b) => a - b);
-    const revSel = el('select', {}, el('option', { value: '' }, 'każda'), revisions.map((r) => el('option', { value: r }, 'rev' + r)));
+    const revSel = el('select', {}, el('option', { value: '' }, tr("any")), revisions.map((r) => el('option', { value: r }, 'rev' + r)));
     const from = el('input', { type: 'date' }), to = el('input', { type: 'date' });
-    const text = el('input', { type: 'search', placeholder: 'seria...' });
-    add(root, el('h2', {}, 'Mapa porównań'), el('p', { class: 'small muted' }, 'Wiersz to jedno porównanie kandydata z jego referencjami. Kolor: ocena bramki przy progu 0 (czerwony: metryka wzrosła wobec którejkolwiek referencji). Blady odcień: zmiana poniżej ' + SMALL_CHANGE + ' %, tylko wizualnie. Kliknięcie komórki otwiera porównanie A/B.'),
-      el('div', { class: 'controls' }, el('label', {}, 'Zakres ', areaSel), el('label', {}, 'Metryki ', famSel), el('label', {}, 'Rewizja ', revSel), el('label', {}, 'Od ', from), el('label', {}, 'Do ', to), text));
+    const text = el('input', { type: 'search', placeholder: tr("series...") });
+    add(root, el('h2', {}, tr("Comparison map")), el('p', { class: 'small muted' }, tr("Each row compares a candidate to its references. Color shows the gate assessment at threshold 0 (red: an increase against any reference). A pale shade indicates a change below ") + SMALL_CHANGE + tr(" %, for display only. Click a cell to open the A/B comparison.")),
+      el('div', { class: 'controls' }, el('label', {}, tr("Scope "), areaSel), el('label', {}, tr("Metrics "), famSel), el('label', {}, tr("Revision "), revSel), el('label', {}, tr("From "), from), el('label', {}, tr("To "), to), text));
     const mapBox = el('div', { class: 'scroll' });
     const lineBox = el('div', {});
     const metricSel = el('select', {});
-    add(root, mapBox, el('h2', {}, 'Linia referencji'), el('p', { class: 'small muted' }, 'Jeden punkt na iterację: mediana jej referencji (po filtrze) dla wybranej metryki.'), el('div', { class: 'controls' }, el('label', {}, 'Metryka ', metricSel)), lineBox);
+    add(root, mapBox, el('h2', {}, tr("Reference trend")), el('p', { class: 'small muted' }, tr("One point per iteration: the median of its filtered references for the selected metric.")), el('div', { class: 'controls' }, el('label', {}, tr("Metric "), metricSel)), lineBox);
     const allLabels = new Set();
     Object.values(cat.runs).forEach((r) => r.metrics.filtered && Object.keys(r.metrics.filtered.values).forEach((l) => allLabels.add(l)));
     [...CORE.filter((l) => allLabels.has(l)), ...[...allLabels].filter((l) => !CORE.includes(l)).sort()].forEach((l) => add(metricSel, el('option', { value: l }, l)));
@@ -754,20 +828,20 @@
       const list = visible();
       const labels = new Set();
       list.forEach((i) => i.comparisons.forEach((c) => c.rows.forEach((r) => labels.add(r.m))));
-      let cols = famSel.value === 'podstawowe' ? CORE.filter((l) => labels.has(l)) : famSel.value === 'wszystkie' ? [...labels].sort() : [...labels].filter((l) => family(l) === famSel.value).sort();
-      const table = el('table', { class: 'map' }, el('tr', {}, el('th', {}, 'porównanie'), el('th', { class: 'num' }, 'gorszych'), el('th', { class: 'num' }, 'najgorsza'), cols.map((c) => el('th', { class: 'metric mono' }, c))));
+      let cols = famSel.value === tr("core") ? CORE.filter((l) => labels.has(l)) : famSel.value === tr("all") ? [...labels].sort() : [...labels].filter((l) => family(l) === famSel.value).sort();
+      const table = el('table', { class: 'map' }, el('tr', {}, el('th', {}, tr("comparison")), el('th', { class: 'num' }, tr("worse metrics")), el('th', { class: 'num' }, tr("worst")), cols.map((c) => el('th', { class: 'metric mono' }, c))));
       for (const i of list) {
         add(table, el('tr', { class: 'iter' }, el('td', { colspan: 3 + cols.length }, el('a', { href: iterationHref(i.slug) }, lastPart(i.series)),
-          i.described ? null : el('span', { class: 'badge bad' }, 'brak opisu porównań'))));
+          i.described ? null : el('span', { class: 'badge bad' }, tr("no comparison description")))));
         for (const c of i.comparisons) {
           const rows = Object.fromEntries(c.rows.map((r) => [r.m, r]));
           const a = c.references[0] && c.references[0].id, b = c.candidates[0] && c.candidates[0].id;
-          add(table, el('tr', {}, el('td', { class: 'label small' }, comparisonLabel(c), ' ', el('span', { class: 'badge' }, c.basis === 'raw' ? 'surowa' : 'filtr'), c.problem ? el('span', { class: 'badge bad', title: c.problem }, '!') : null),
+          add(table, el('tr', {}, el('td', { class: 'label small' }, comparisonLabel(c), ' ', el('span', { class: 'badge' }, c.basis === 'raw' ? tr("raw") : tr("filtered")), VP37.i18n.diagnostic(c.problem) ? el('span', { class: 'badge bad', title: VP37.i18n.diagnostic(c.problem) }, '!') : null),
             el('td', { class: 'num status-worse' }, c.rows.length ? String(worseCount(c)) : '-'), el('td', { class: 'num' }, pct(worstChange(c))),
             cols.map((m) => {
               const r = rows[m];
               if (!r) return el('td', { class: 'cell missing' }, '');
-              return el('td', { class: cellClass(r.s, r.p), title: m + '\nkandydat ' + fmt(r.c) + '\nreferencje ' + r.r.map((v) => fmt(v)).join(', ') + '\n' + r.s,
+              return el('td', { class: cellClass(r.s, r.p), title: m + tr("\ncandidate ") + fmt(r.c) + tr("\nreferences ") + r.r.map((v) => fmt(v)).join(', ') + '\n' + r.s,
                 onclick: () => a && b && (location.href = compareHref(a, b, { basis: c.basis, metric: m })) }, pct(r.p));
             })));
         }
@@ -781,10 +855,10 @@
         const refs = i.runs.filter((id) => cat.runs[id].kind === 'reference');
         return { i, v: median(refs.map((id) => cat.runs[id].metrics.filtered && cat.runs[id].metrics.filtered.values[label])) };
       }).filter((pt) => pt.v !== null);
-      if (!points.length) { add(lineBox, el('p', { class: 'muted' }, 'Brak opisanych referencji z tą metryką.')); return; }
+      if (!points.length) { add(lineBox, el('p', { class: 'muted' }, tr("No described references with this metric."))); return; }
       const plot = new Plot(lineBox, { height: 240, yLabel: label, xFormat: (v) => (points[Math.round(v)] ? points[Math.round(v)].i.date.slice(5) : ''),
         xTickValues: (a, b) => points.map((_, k) => k).filter((k) => k >= a && k <= b), tipX: (v) => (points[Math.round(v)] ? lastPart(points[Math.round(v)].i.series) : '') });
-      plot.set([{ kind: 'line', name: 'mediana referencji', color: css('--accent'), x: points.map((_, k) => k), y: points.map((pt) => pt.v) },
+      plot.set([{ kind: 'line', name: tr("reference median"), color: css('--accent'), x: points.map((_, k) => k), y: points.map((pt) => pt.v) },
         { kind: 'points', name: '', noTip: true, color: css('--accent'), x: points.map((_, k) => k), y: points.map((pt) => pt.v) }], -0.5, points.length - 0.5);
     };
     [areaSel, famSel, revSel, from, to, text].forEach((c) => c.addEventListener('input', () => { drawMap(); drawLine(); }));
@@ -801,7 +875,7 @@
     const params = new URLSearchParams(location.hash.slice(1));
     const ids = Object.keys(cat.runs).sort();
     const runSelect = (value) => {
-      const s = el('select', {}, el('option', { value: '' }, '- wybierz przebieg -'));
+      const s = el('select', {}, el('option', { value: '' }, tr("- select a run -")));
       const groups = {};
       ids.forEach((id) => (groups[cat.runs[id].series] = groups[cat.runs[id].series] || []).push(id));
       Object.keys(groups).sort().reverse().forEach((g) => add(s, el('optgroup', { label: g }, groups[g].map((id) =>
@@ -809,11 +883,11 @@
       return s;
     };
     const aSel = runSelect(params.get('a')), bSel = runSelect(params.get('b'));
-    const testSel = el('select', {}), basisSel = el('select', {}, ['filtered', 'raw'].map((b) => el('option', { value: b, selected: b === (params.get('basis') || 'filtered') }, b === 'raw' ? 'pozycja surowa' : 'po filtrze')));
+    const testSel = el('select', {}), basisSel = el('select', {}, ['filtered', 'raw'].map((b) => el('option', { value: b, selected: b === (params.get('basis') || 'filtered') }, b === 'raw' ? tr("raw position") : tr("filtered"))));
     const norm = el('input', { type: 'checkbox', checked: true });
-    add(root, el('h1', {}, 'Porównanie A/B'), el('div', { class: 'controls' }, el('label', {}, el('strong', { style: 'color:var(--a)' }, 'A'), aSel), el('label', {}, el('strong', { style: 'color:var(--b)' }, 'B'), bSel)),
-      el('div', { class: 'controls' }, el('label', {}, 'Skoki: ', testSel), el('label', {}, norm, 'położenie w % skoku'), el('label', {}, 'Metryki: ', basisSel)),
-      el('p', { class: 'small muted' }, 'Strona pokazuje liczby; werdykt bramki wydaje report.md iteracji (AGENTS.md §12).'));
+    add(root, el('h1', {}, tr("A/B comparison")), el('div', { class: 'controls' }, el('label', {}, el('strong', { style: 'color:var(--a)' }, 'A'), aSel), el('label', {}, el('strong', { style: 'color:var(--b)' }, 'B'), bSel)),
+      el('div', { class: 'controls' }, el('label', {}, tr("Steps: "), testSel), el('label', {}, norm, tr("position as % of step")), el('label', {}, tr("Metrics: "), basisSel)),
+      el('p', { class: 'small muted' }, tr("The iteration's report.md records the gate verdict.")));
     const chartBox = el('section', { class: 'panel' }), tableBox = el('section', { class: 'panel' });
     add(root, chartBox, tableBox);
     let steps = { a: [], b: [] };
@@ -824,9 +898,9 @@
       history.replaceState(null, '', '#' + q.toString());
     };
     const drawSteps = () => {
-      chartBox.replaceChildren(el('h2', {}, 'Skoki nałożone, wyrównane do chwili skoku'));
+      chartBox.replaceChildren(el('h2', {}, tr("Overlaid steps, aligned to the step start")));
       const key = testSel.value;
-      if (!key) { add(chartBox, el('p', { class: 'muted' }, 'Brak wspólnych skoków (testy top/topzero) w obu przebiegach.')); return; }
+      if (!key) { add(chartBox, el('p', { class: 'muted' }, tr("No matching steps (top/topzero tests) in both runs."))); return; }
       const layers = [];
       for (const [side, color] of [['a', '--a'], ['b', '--b']]) {
         steps[side].filter((s) => s.test + ' ' + s.percent === key).forEach((s, k) => {
@@ -839,16 +913,16 @@
           layers.push({ kind: 'line', name: side.toUpperCase() + ' ' + (s.index || k + 1) + '/' + (s.count || '?'), color: css(color), x, y, alpha: 0.85, noLegend: k > 0 });
         });
       }
-      const plot = new Plot(chartBox, { height: 320, yLabel: norm.checked ? '% skoku' : 'adj Hz', xFormat: (v) => fmt(v, 0) + ' ms' });
+      const plot = new Plot(chartBox, { height: 320, yLabel: norm.checked ? tr("% of step") : tr("Position [Hz]"), xFormat: (v) => fmt(v, 0) + ' ms' });
       plot.set(layers, -300, 2500);
-      add(chartBox, el('p', { class: 'small muted' }, 'Skoki A: ' + steps.a.filter((s) => s.test + ' ' + s.percent === key).length + ', B: ' + steps.b.filter((s) => s.test + ' ' + s.percent === key).length + '. Położenie adj względem chwili linii TEST (oś w ms).'));
+      add(chartBox, el('p', { class: 'small muted' }, tr("Steps A: ") + steps.a.filter((s) => s.test + ' ' + s.percent === key).length + ', B: ' + steps.b.filter((s) => s.test + ' ' + s.percent === key).length + tr(". Measured position relative to the TEST line timestamp (axis in ms).")));
     };
     const drawTable = () => {
-      tableBox.replaceChildren(el('h2', {}, 'Metryki A -> B'));
+      tableBox.replaceChildren(el('h2', {}, tr("Metrics A -> B")));
       const a = cat.runs[aSel.value], b = cat.runs[bSel.value];
-      if (!a || !b) { add(tableBox, el('p', { class: 'muted' }, 'Wybierz dwa przebiegi.')); return; }
+      if (!a || !b) { add(tableBox, el('p', { class: 'muted' }, tr("Select two runs."))); return; }
       const ma = a.metrics[basisSel.value], mb = b.metrics[basisSel.value];
-      if (!ma || !mb) { add(tableBox, el('p', { class: 'warn' }, 'Brak przypisanych metryk (' + basisSel.value + ') dla ' + (!ma ? 'A' : 'B') + '. Strona ich nie liczy.')); return; }
+      if (!ma || !mb) { add(tableBox, el('p', { class: 'warn' }, tr("No assigned metrics (") + basisSel.value + tr(") for ") + (!ma ? 'A' : 'B') + tr(". This page does not calculate them."))); return; }
       add(tableBox, el('p', { class: 'small mono' }, 'A: ' + ma.file + ' · B: ' + mb.file));
       const labels = [...new Set([...Object.keys(ma.values), ...Object.keys(mb.values)])];
       const focus = params.get('metric');
@@ -860,11 +934,11 @@
         const status = missing ? 'missing' : vb - va > 0 ? 'worse' : 'no_increase';
         if (status === 'worse') worse++;
         return el('tr', { style: l === focus ? 'outline:2px solid var(--accent)' : null }, el('td', { class: 'mono' }, l), el('td', { class: 'num' }, fmt(va)), el('td', { class: 'num' }, fmt(vb)),
-          el('td', { class: 'num' }, pct(change)), el('td', { class: 'status-' + status }, status === 'worse' ? 'gorzej' : status === 'no_increase' ? 'bez wzrostu' : 'brak',
-            change !== null && Math.abs(change) < SMALL_CHANGE && status !== 'missing' ? el('span', { class: 'soft-note' }, ' (mała zmiana)') : null));
+          el('td', { class: 'num' }, pct(change)), el('td', { class: 'status-' + status }, status === 'worse' ? tr("worse") : status === 'no_increase' ? tr("no increase") : tr("missing"),
+            change !== null && Math.abs(change) < SMALL_CHANGE && status !== 'missing' ? el('span', { class: 'soft-note' }, tr(" (small change)")) : null));
       });
-      add(tableBox, el('p', {}, 'Metryk B gorszych od A (próg 0): ', el('strong', { class: 'status-worse' }, String(worse)), ' z ' + labels.length + '.'),
-        el('div', { class: 'scroll' }, el('table', {}, el('tr', {}, el('th', {}, 'metryka'), el('th', { class: 'num' }, 'A'), el('th', { class: 'num' }, 'B'), el('th', { class: 'num' }, 'zmiana'), el('th', {}, 'ocena (próg 0)')), rows)));
+      add(tableBox, el('p', {}, tr("B metrics worse than A (threshold 0): "), el('strong', { class: 'status-worse' }, String(worse)), tr(" of ") + labels.length + '.'),
+        el('div', { class: 'scroll' }, el('table', {}, el('tr', {}, el('th', {}, tr("metric")), el('th', { class: 'num' }, 'A'), el('th', { class: 'num' }, 'B'), el('th', { class: 'num' }, tr("change")), el('th', {}, tr("assessment (threshold 0)"))), rows)));
     };
     const reload = async () => {
       save();
@@ -889,7 +963,14 @@
     const page = VP37.page || {};
     const run = { run: () => runPage(page), iteration: () => iterationPage(page), overview: overviewPage, compare: comparePage }[page.kind];
     if (!run) return;
-    Promise.resolve(run()).catch((error) => app().append(el('div', { class: 'warn' }, 'Błąd strony: ' + error.message)));
+    VP37.i18n.mount(document.querySelector('header.top') || app());
+    window.addEventListener('vp37-language', () => {
+      const target = VP37.i18n.href(location.href);
+      if (target === location.href) location.reload();
+      else location.assign(target); // history.replaceState may be unavailable.
+    }, { once: true });
+    Promise.resolve(run()).catch((error) => app().append(el('div', { class: 'warn' }, tr("Page error: ") + error.message)));
   };
   VP37.markdown = markdown;
+  VP37.ui = { Plot, el, add, fmt, css };
 })();

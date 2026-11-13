@@ -2,23 +2,37 @@
 
 [English](BUILDING.md) · [O projekcie](../README.pl.md) · [Testy i CI](TESTING.pl.md)
 
-Polecenia wykonuj z katalogu głównego Fiesty, chyba że rozdział wskazuje inaczej.
-Firmware używa funkcji wejściowych HAL `app_start()` i `app_task0()`,
-a dla drugiego kontekstu wykonania także `app_task1()`.
+Polecenia wykonuj z katalogu głównego Fiesty, chyba że rozdział wskazuje inaczej. Do podglądu
+ECU wystarczy po przygotowaniu środowiska [uruchomić zadanie
+viewera](../src/ECU/README.pl.md). Poniższe polecenia służą również do osobnego budowania,
+wgrywania i debugowania.
+
+## Środowiska programistyczne
+
+- **Linux** jest podstawowym środowiskiem firmware, aplikacji desktopowej i kontroli jakości.
+- **WSL2** korzysta z procedur linuksowych, ale wgrywanie wymaga dostępu do USB
+  lub dysku BOOTSEL. Jeśli WSL go nie widzi, użyj powłoki po stronie Windows.
+- **Windows** obsługuje rozwój firmware modułów z rejestru. Uruchom
+  `src/JaszczurHAL/runmefirst.ps1`, a następnie zadania VS Code lub
+  `src/JaszczurHAL/vscode/entry/jh-vscode.cmd`. Testy hostowe, cppcheck, MISRA,
+  Valgrind i aplikacja desktopowa pozostają przeznaczone głównie dla Linuksa.
+- **macOS** nie został sprawdzony. Nie ma potwierdzonej pełnej procedury
+  przygotowania środowiska i pracy ze sprzętem.
 
 ## Przygotowanie Linuksa lub WSL
 
 Pobierz projekt z submodułami według [wprowadzenia](../README.pl.md#pierwsze-kroki).
-Na Linuksie zgodnym z Debianem lub Raspberry Pi OS uruchom jako zwykły użytkownik:
+Na Linuksie zgodnym z Debianem lub Raspberry Pi OS użyj `runmefirst.sh` jako zwykły użytkownik.
+Skrypt **przed przygotowaniem środowiska** usuwa katalogi `build_test` i `.build`
+wszystkich modułów firmware oraz `build` SerialConfiguratora, także przy
+pomijaniu kompilacji lub testów. Zachowuje katalogi kompilacji HAL, źródła
+i lokalne ustawienia VS Code.
 
 ```bash
 bash runmefirst.sh
 ```
 
-Skrypt **przed przygotowaniem środowiska** usuwa katalogi `build_test` i `.build`
-wszystkich modułów firmware oraz `build` SerialConfiguratora, także przy
-pomijaniu kompilacji lub testów. Zachowuje katalogi kompilacji HAL, źródła
-i lokalne ustawienia VS Code. Następnie:
+Następnie:
 
 1. Instaluje pakiety apt i sprawdza Python 3 oraz bibliotekę uruchomieniową C++ dla Arm.
 2. Inicjalizuje commit HAL zapisany w Fieście; lokalne zmiany HAL zatrzymują ten krok.
@@ -51,18 +65,6 @@ Opcje nie wyłączają początkowego czyszczenia. Kontrole hostowe same obejmuj�
 SerialConfigurator; `SKIP_DESKTOP` nie filtruje ich listy. Uruchamianie bez
 nadzoru opisuje [instrukcja systemd](../src/ECU/scripts/systemd/README.pl.md).
 
-## Środowiska programistyczne
-
-- **Linux** jest podstawowym środowiskiem firmware, aplikacji desktopowej i kontroli jakości.
-- **WSL2** korzysta z procedur linuksowych, ale wgrywanie wymaga dostępu do USB
-  lub dysku BOOTSEL. Jeśli WSL go nie widzi, użyj powłoki po stronie Windows.
-- **Windows** obsługuje rozwój firmware modułów z rejestru. Uruchom
-  `src/JaszczurHAL/runmefirst.ps1`, a następnie zadania VS Code lub
-  `src/JaszczurHAL/vscode/entry/jh-vscode.cmd`. Testy hostowe, cppcheck, MISRA,
-  Valgrind i aplikacja desktopowa pozostają przeznaczone głównie dla Linuksa.
-- **macOS** nie został sprawdzony. Nie ma potwierdzonej pełnej procedury
-  przygotowania środowiska i pracy ze sprzętem.
-
 ## Kompilacja modułu
 
 Przykład jawnie wybiera ECU i jego domyślny montaż `rp2350-plus`;
@@ -70,6 +72,11 @@ Przykład jawnie wybiera ECU i jego domyślny montaż `rp2350-plus`;
 
 ```bash
 src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus
+```
+
+Opcjonalnie zbuduj wariant debug albo odśwież IntelliSense:
+
+```bash
 src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2350-plus
 ```
@@ -94,7 +101,7 @@ src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350
 ```
 
 Ten obraz trafia do podkatalogu `variants/BENCH/` w katalogu montażu.
-Jego testy funkcjonalne opisuje [dokumentacja ECU](../src/ECU/README.pl.md#obraz-stanowiskowy-i-sprzęt).
+Jego testy funkcjonalne opisuje [dokumentacja ECU](../src/ECU/guides/BENCH.pl.md#obraz-stanowiskowy-i-sprzęt).
 Zmiana montażu lub wariantu zmienia ścieżkę plików wynikowych; przed wyborem
 obrazu do wgrania sprawdź ją przez `config-dump`.
 
@@ -117,8 +124,13 @@ Te polecenia działają na podłączonym sprzęcie:
 
 ```bash
 src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2350-plus
-src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
+```
+
+Jeśli urządzenie jest już w BOOTSEL, zamiast `upload` użyj:
+
+```bash
+src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 ```
 
 `upload` sprawdza tożsamość USB i żąda przejścia do BOOTSEL przez port CDC

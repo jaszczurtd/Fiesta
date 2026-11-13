@@ -2,23 +2,35 @@
 
 [Polski](BUILDING.pl.md) · [Project overview](../README.md) · [Tests and CI](TESTING.md)
 
-Run commands from the Fiesta repository root unless a section says otherwise.
-Each firmware module uses the HAL application entry points `app_start()` and
-`app_task0()`, with `app_task1()` for a second execution context.
+Run commands from the Fiesta repository root unless a section says otherwise. For ECU
+measurements, prepare the environment and then [run the viewer task](../src/ECU/README.md).
+The commands below also support separate builds, uploads and debugging.
+
+## Development platforms
+
+- **Linux** is the primary environment for firmware, desktop tools and quality checks.
+- **WSL2** uses the Linux workflows, but upload needs access to the USB device
+  or BOOTSEL drive. Use a Windows-side shell when that device is unavailable in WSL.
+- **Windows** supports firmware development for the registered modules. Run
+  `src/JaszczurHAL/runmefirst.ps1`, then use VS Code tasks or
+  `src/JaszczurHAL/vscode/entry/jh-vscode.cmd`. Host tests, cppcheck, MISRA,
+  Valgrind and the desktop application remain Linux-oriented.
+- **macOS** is untested. No complete setup or hardware workflow is validated there.
 
 ## Prepare Linux or WSL
 
 Clone with submodules as shown in the [overview](../README.md#getting-started).
-On Debian-compatible Linux or Raspberry Pi OS, run as a regular user:
+On Debian-compatible Linux or Raspberry Pi OS, use `runmefirst.sh` as a regular user.
+It removes every firmware module's `build_test` and `.build` directories
+and SerialConfigurator's `build` **before setup**, even when compilation or
+tests are skipped. HAL build directories, source files and local VS Code
+settings are preserved.
 
 ```bash
 bash runmefirst.sh
 ```
 
-This removes every firmware module's `build_test` and `.build` directories
-and SerialConfigurator's `build` **before setup**, even when compilation or
-tests are skipped. HAL build directories, source files and local VS Code
-settings are preserved. The script then:
+The script then:
 
 1. Installs apt dependencies and checks Python 3 and the Arm C++ runtime.
 2. Initializes the HAL revision recorded by Fiesta; local HAL changes stop it.
@@ -52,17 +64,6 @@ These options do not disable the initial cleanup. Host checks themselves
 include SerialConfigurator; `SKIP_DESKTOP` is not a filter on the host matrix.
 For unattended builds see the [systemd guide](../src/ECU/scripts/systemd/README.md).
 
-## Development platforms
-
-- **Linux** is the primary environment for firmware, desktop tools and quality checks.
-- **WSL2** uses the Linux workflows, but upload needs access to the USB device
-  or BOOTSEL drive. Use a Windows-side shell when that device is unavailable in WSL.
-- **Windows** supports firmware development for the registered modules. Run
-  `src/JaszczurHAL/runmefirst.ps1`, then use VS Code tasks or
-  `src/JaszczurHAL/vscode/entry/jh-vscode.cmd`. Host tests, cppcheck, MISRA,
-  Valgrind and the desktop application remain Linux-oriented.
-- **macOS** is untested. No complete setup or hardware workflow is validated there.
-
 ## Build one module
 
 This example selects ECU and its default `rp2350-plus` assembly explicitly;
@@ -70,6 +71,11 @@ This example selects ECU and its default `rp2350-plus` assembly explicitly;
 
 ```bash
 src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350-plus
+```
+
+Optionally build for debugging or refresh IntelliSense:
+
+```bash
 src/JaszczurHAL/vscode/entry/jh-vscode build-debug --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project src/ECU --assembly rp2350-plus
 ```
@@ -94,7 +100,7 @@ src/JaszczurHAL/vscode/entry/jh-vscode build --project src/ECU --assembly rp2350
 ```
 
 That image goes under `variants/BENCH/` inside the assembly directory.
-The [ECU guide](../src/ECU/README.md#bench-image-and-hardware) describes its
+The [ECU guide](../src/ECU/guides/BENCH.md#bench-image-and-hardware) describes its
 functional tests. Changing assembly or variant changes the artifact path;
 use `config-dump` to confirm the file before selecting it for upload.
 
@@ -116,8 +122,13 @@ These commands act on connected hardware:
 
 ```bash
 src/JaszczurHAL/vscode/entry/jh-vscode upload --project src/ECU --assembly rp2350-plus
-src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 src/JaszczurHAL/vscode/entry/jh-vscode monitor --project src/ECU
+```
+
+If the device is already in BOOTSEL, use this instead of `upload`:
+
+```bash
+src/JaszczurHAL/vscode/entry/jh-vscode upload-uf2 --project src/ECU --assembly rp2350-plus
 ```
 
 `upload` checks the USB identity and requests BOOTSEL over the running

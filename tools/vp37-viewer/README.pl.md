@@ -2,11 +2,83 @@
 
 [English](README.md)
 
-Narzędzie tworzy strony HTML z logów collectora VP37, zapisanych metryk
-i opisów przebiegów. Pokazuje pojedyncze nagrania, iteracje i porównania.
-Strony działają przez `file://`, bez serwera i zewnętrznych bibliotek wykresów.
+Viewer pokazuje telemetrię VP37 na żywo oraz tworzy strony z zapisanych pomiarów i porównań.
+Strony offline działają przez `file://`, bez serwera i zewnętrznych bibliotek wykresów.
 
-## Build i uruchomienie
+- **Mam ECU podłączone przez USB:** wykonaj poniższe kroki w VS Code.
+- **Mam zapisane pomiary:** przejdź do [builda i pracy offline](#build-i-praca-offline).
+- **Inny program już zapisuje log:** użyj [serwera rosnącego logu](#serwer-rosnącego-logu).
+
+## Podgląd ECU w VS Code
+
+Najpierw przygotuj sprzęt według [instrukcji ECU](../../src/ECU/README.pl.md). Wgrywany
+firmware wykonuje kalibrację nastawnika przy starcie.
+
+1. Otwórz folder **`src/ECU`**. Potrzebujesz CMake i kompilatora C/C++ dla hosta; na Windows MSVC Build Tools.
+2. Uruchom **Tasks: Run Task -> `VP37: Live viewer`**. Zadanie buduje viewer oraz przebudowuje i wgrywa **BENCH ECU** dla wybranego assembly.
+3. Po komunikacie `Connected to ...` odczytaj URL w terminalu. Domyślnie jest to **<http://127.0.0.1:8037/live>**.
+4. Otwórz adres w przeglądarce www albo przez **Open Integrated Browser** w VS Code. Pozostaw zadanie uruchomione.
+
+Zapis trafia do `src/ECU/.build/vp37.log`. Kolejne uruchomienie dopisuje nową sesję i
+ponownie wykonuje build/upload. Widok pokazuje nowe próbki; połączenie nie odtwarza
+wcześniejszej historii.
+
+**Ctrl+C** lub **Tasks: Terminate Task** kończy przechwytywanie i serwer. Zamknięcie karty
+kończy tylko podgląd. Żadna z tych czynności nie jest poleceniem zatrzymania nastawnika;
+zakończenie testu opisuje instrukcja ECU.
+
+## Widok na żywo
+
+Strony live i offline domyślnie używają angielskiego. Przycisk
+**EN -> PL / PL -> EN** przełącza język i zapamiętuje wybór, gdy przeglądarka
+udostępnia pamięć ustawień. Linki również przenoszą wybór języka, także przy
+zablokowanej pamięci. Przełączenie widoku live zachowuje odbiór, pauzę, zoom
+i wybrany ślad. Strony offline wczytują się ponownie w wybranym języku.
+
+Każdy wykres ma krótki opis i kolorową legendę obok, a w wąskim oknie - nad
+wykresem. Najedź na nazwę parametru, aby zobaczyć klucz z logu, jednostkę
+i objaśnienie; wybierz ją klawiszem Tab lub kliknij, aby rozwinąć opis.
+Napływ próbek pozostawia te opisy otwarte. Surowa częstotliwość czujnika
+i korekta PID mają osobne wykresy, aby ich skale nie utrudniały odczytu
+położenia i wyjścia PWM. CSV zachowuje identyfikatory pól. PNG używa wybranego
+języka i zawija nazwy w legendzie. Zapisane raporty i komunikaty logu zachowują
+tekst źródłowy. Napięcie Adjustometera ma jednostkę decywolt (`dV`); jednostki
+PWM nie oznaczają procentów.
+
+Panele pokazują położenie i uchyb, PWM i człony PID, pasy stanów regulatora,
+prąd, napięcia i temperaturę, czasy pętli oraz wartości i bity statusu
+Adjustometera. Jednostki i opisy pochodzą z `field_catalog()`, a legenda
+oznacza brakujące pola. Ruch myszy pokazuje wspólny kursor, przeciągnięcie
+ustawia wspólny zoom, dwuklik przywraca zachowany zakres. Strony offline
+i ich kontrolki nadal działają przez `file://`.
+
+Przesuwające się okno obejmuje 60 sekund. Pauza i zoom zachowują jedną
+migawkę zakresu przy dalszym odbiorze; Wznów wraca do najnowszych próbek.
+Podczas odbioru wykresy odświeżają się najwyżej dziesięć razy na sekundę;
+ukryta karta nie rysuje. CSV zawiera rekordy liczbowe i zdarzenia z oglądanego
+zakresu, razem z czasem źródłowym i numerami segmentów. CSV poprzedza apostrofem
+komórki tekstowe rozpoczynające się od znacznika formuły arkusza. PNG zapisuje
+wyświetlane panele i zakres. Powrót przyciskiem Wstecz ponownie łączy odbiór
+i zachowuje widok z pamięci przeglądarki, w tym zatrzymany zakres.
+
+Ponowne połączenie, zmiana pliku, luka w sekwencji i restart zegara MCU
+rozdzielają segmenty. Ich granice mają znaczniki; krzywe nie łączą segmentów,
+brakujących wartości ani próbek odległych o ponad dwie sekundy.
+Czas live zaczyna się od zera, a nowy segment 0,1 sekundy po poprzednim.
+Ten separator graficzny nie mierzy czasu rozłączenia. CSV zachowuje
+oryginalny czas parsera. Ponowne połączenie nie odzyskuje opuszczonych próbek,
+także gdy serwer powtórzy numer epoki.
+
+Próbki `T` są zbierane oddzielnie. `trace end samples:N` otwiera widok śladu,
+jeśli użytkownik nie zatrzymał innego zakresu. Zachowane ślady wybiera się
+z listy. Oś śladu pokazuje sekundy od pierwszej próbki MCU; CSV zachowuje
+także czas parsera. Potwierdzenie `trace: HAL_OK samples:N` zamyka niedokończony
+poprzedni zrzut jako niekompletny.
+Niezgodna liczba próbek, przerwanie, brak `us`, niemonotoniczny czas lub
+przekroczenie pojemności oznaczają niekompletny zrzut. Wybrany ślad pozostaje
+dostępny podczas odbierania następnych.
+
+## Build i praca offline
 
 Z katalogu Fiesty, po przygotowaniu przypiętych zależności HAL:
 
@@ -21,6 +93,13 @@ z wieloma konfiguracjami umieszcza go w katalogu wybranej konfiguracji.
 
 Dla generatora Visual Studio podaj przy konfiguracji `-A x64` lub `-A Win32`,
 przy budowaniu `--config Release`, a przy uruchamianiu CTest `-C Release`.
+Testy wymagają Chrome, Chromium albo Edge. CMake wykrywa przeglądarkę;
+można ją też wskazać przez `-DVP37V_BROWSER=/path/to/browser`. Harness w C
+uruchamia skrypty produkcyjne w trybie headless, bez Node i npm.
+`-DBUILD_TESTING=OFF` buduje samo narzędzie i nie wymaga przeglądarki.
+
+Użyj osobnych katalogów wyjściowych: `build` zastępuje wygenerowane pliki i usuwa nieaktualne
+wyniki z katalogów site i cache. Logi wejściowe pozostają tylko do odczytu.
 
 ```sh
 vp37-viewer parse /path/to/recording.log.gz
@@ -32,9 +111,7 @@ vp37-viewer describe --root /path/to/recordings --cache /path/to/cache \
 
 Wszystkie katalogi danych i wyników trzeba podać jawnie. Pod katalogiem
 nagrań znajdują się `vp37_implementation_tests/`, `measurements/` lub
-`archive/measurements/`. Nagrania są tylko do odczytu. Na strony i cache
-przeznacz osobne katalogi: `build` zastępuje wygenerowane pliki i usuwa
-z nich nieaktualne wyniki. `describe` wypisuje proponowane opisy;
+`archive/measurements/`. `describe` wypisuje proponowane opisy;
 `--write` je zapisuje, a `--overwrite` pozwala zastąpić istniejące opisy.
 
 Czytnik obsługuje `.log` i pliki `.log.gz` z jednym członem gzip. Archiwa
@@ -54,69 +131,10 @@ wygenerowane strony offline przez HTTP. Oba listenery działają wyłącznie na
 `--port` i `--ws-port`. Ctrl+C zatrzymuje program. Log pozostaje tylko do odczytu;
 serwer nie otwiera portu szeregowego ani nie tworzy brakującego logu.
 
-Opcjonalne `--site` udostępnia strony pod `/`; bez niego `/` zwraca stan serwera.
-`/api/status` zawsze zwraca stan w JSON, a `/assets/` pliki interfejsu dostarczone
-z programem. Pliki statyczne muszą być mniejsze niż 512 KiB; pliki osiągające
-ten limit lub większe otrzymują HTTP 413. Ścieżki poza wskazanymi katalogami są odrzucane. HTTP i WebSocket
-obsługują po czterech klientów.
+Oscyloskop otwiera się pod `http://127.0.0.1:8037/live`. Opcjonalne `--site`
+udostępnia strony offline pod `/`; bez niego `/` otwiera oscyloskop.
 
-Endpoint WebSocket to `ws://127.0.0.1:8038/ws`. Wersja 1 protokołu wysyła:
+## Konfiguracja i ograniczenia
 
-| Wiadomość | Znaczenie |
-| --- | --- |
-| `hello` | `protocol`, bieżąca `epoch`, numer następnej paczki `next`, obecność logu `present` i `ws_port`. |
-| `reset` | Te same pola po pojawieniu się, zniknięciu, obcięciu lub podmianie logu. Klient odrzuca bufory poprzedniej epoki. |
-| `samples` | `epoch`, rosnący `seq` i `records`. Rekord zawiera `kind`, czas `t` w sekundach oraz liczbowe `values` albo tekst zdarzenia `text`. Brakujące i nieskończone wartości to JSON `null`. |
-
-Paczki wychodzą zwykle co 40 ms, a po osiągnięciu 32 KiB wcześniej. Rekordy
-korzystają z czasu MCU, gdy jest dostępny, według zasad poniżej. `HOST`, `TEST`
-i pozostałe komunikaty VP37, w tym koniec śladu, zachowują tekst. Nie oznacza
-to dodania interpretacji rekordów kalibracji.
-
-Nowe połączenie otrzymuje kolejne paczki, bez odtwarzania wcześniejszej historii.
-Numery paczek pozwalają wykryć luki. Po ponownym połączeniu klient zaczyna od
-`hello`; restart serwera rozpoczyna nowy strumień. Klient, który nie przyjmuje
-całej ramki, zostaje rozłączony. Serwer nie kolejkuje danych ani nie ponawia
-częściowo wysłanej ramki. Odrzuca wiadomości danych od klientów; endpoint służy
-wyłącznie do publikowania pomiarów.
-
-Czytnik zachowuje niepełną linię na końcu pliku i odrzuca ją po wykryciu zmiany
-logu. Rozpoznaje ją po tożsamości pliku, rozmiarze i ostatnich 64 odczytanych
-bajtach. Nadpisania, które między odczytami odtworzy te same bajty i rozmiar,
-nie da się odróżnić od zwykłego dopisywania. Przy rotacji używaj atomowej podmiany.
-Jedno wywołanie `poll` czyta najwyżej 64 KiB. Limit linii wynosi 64 KiB,
-rekordu liczbowego 256 różnych pól, a rekordu po zakodowaniu 32512 bajtów.
-Przekroczenie limitu lub błąd odczytu kończy program z błędem. Na brakujący plik
-serwer czeka. Historia parsera i kolejki klientów nie rosną z długością logu.
-
-Wykresy na żywo i integracja VS Code stanowią osobne etapy. Istniejące strony
-offline nadal działają przez `file://`.
-
-## Parser
-
-`src/telemetry.h` udostępnia `TelemetryParser::feed()` i `finish()`. Fragment
-wejścia może skończyć się w dowolnym miejscu linii; przed `finish()` parser
-oddaje tylko kompletne linie. Limit linii to 64 KiB. Błąd zatrzymuje dany
-czytnik; po obcięciu lub podmianie pliku odrzuć częściowy wynik i utwórz nowy.
-
-Domyślna oś zachowuje czas collectora, zgodnie z oknami zapisanych metryk.
-Opcjonalny tryb MCU obsługuje przepełnienie `us` i umieszcza opóźnione próbki
-`T`, `IPULSE` i `IWAVE` względem rekordów sterowania. Cofnięcie czasu
-sterowania rozpoczyna nową epokę; kolejne obserwacje sterowania muszą dzielić
-odstępy mniejsze niż 2^31 mikrosekund. Bez jawnego znacznika nie da się odróżnić
-restartu blisko przepełnienia od przepełnienia. Linie bez `us` zachowują czas collectora.
-Pola numeryczne każdego `CFG` są przechowywane osobno od podsumowań rewizji.
-
-`parse_log()` korzysta z tego samego czytnika. Dzielenie na linie i obliczenia
-czasu są w C11; istniejący model nagrania i generator stron pozostają w C++17.
-Zmiana wersji parsera unieważnia starszy cache po zmianie jego wyników.
-
-Konstruktor z callbackiem przekazuje pojedyncze rekordy bez zachowywania
-nagrania. Przekazane wartości są ważne tylko podczas callbacka; zwrócony błąd
-zatrzymuje czytnik. Parsowanie offline zachowuje dotychczasowe działanie.
-Zapis z monitora, wykresy na żywo, integracja VS Code i interpretacja rekordów
-kalibracji (`CAL`) czekają na implementację. Viewer offline zgłasza nieznane pola
-i rodzaje linii.
-
-Testy przeglądarki uruchamia również hostowy build ECU, w lokalnej bramce
-i CI. Czytają wyłącznie niezależne dane z `tests/fixtures/`.
+[Opis techniczny](REFERENCE.pl.md) zawiera zmianę ścieżki logu i portów, skróty klawiaturowe,
+zasady przechwytywania, limity buforów, protokół WebSocket i parser.

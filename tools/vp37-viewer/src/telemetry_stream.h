@@ -55,13 +55,18 @@ typedef struct {
   uint32_t last_us;
   double time;
   bool initialized;
+  bool
+      restarted; /**< True only for the observation that reanchors the clock. */
 } vp37_sample_clock_t;
 
 /**
  * Map a 32-bit MCU timestamp into seconds, anchored to the first host time.
  * Ordered control observations pass advance=true. A backward control timestamp
  * starts a new epoch at host_time; forward wrapping advances the existing
- * epoch. Delayed trace/current samples pass advance=false and use the nearest
+ * epoch. An ordered sample more than 5 s away from host time also starts a
+ * new epoch (a restart can resemble a forward wrap). This tolerance allows
+ * serial buffering without accepting a minutes-long clock discontinuity.
+ * Delayed trace/current samples pass advance=false and use the nearest
  * epoch. Consecutive ordered observations must be less than 2^31 us apart.
  * Returns HAL_EINVAL for NULL state/output or a non-finite host time.
  */

@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.22)
+
+file(READ "${PROJECT}/.vscode/settings.json" settings)
+if(WIN32)
+  set(key jaszczurhal.vscodeEntryWindows)
+else()
+  set(key jaszczurhal.vscodeEntry)
+endif()
+string(JSON entry GET "${settings}" "${key}")
+get_filename_component(entry "${entry}" ABSOLUTE BASE_DIR "${PROJECT}")
+if(NOT EXISTS "${entry}")
+  message(FATAL_ERROR "Monitor entry does not exist: ${entry}")
+endif()
+set(ENV{PYTHONUNBUFFERED} 1)
+execute_process(COMMAND "${entry}" monitor --project "${PROJECT}"
+  --lock-policy replace-own WORKING_DIRECTORY "${PROJECT}"
+  RESULT_VARIABLE result)
+if(NOT result STREQUAL "0")
+  message(FATAL_ERROR "Monitor failed (${result})")
+endif()

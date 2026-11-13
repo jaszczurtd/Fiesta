@@ -82,6 +82,32 @@ void write_fragment_group(JsonWriter &out, const Recording &recording,
 
 } // namespace
 
+void write_field_metadata(JsonWriter &out, const FieldInfo *info) {
+  out.key("unit").string(info ? info->unit : "");
+  out.key("description").string(info ? info->description : "");
+  out.key("label").string(info ? info->label : "");
+  out.key("label_pl").string(info ? info->label_pl : "");
+  out.key("description_pl").string(info ? info->description_pl : "");
+  if (info && std::string_view(info->kind) == "ADJ" &&
+      std::string_view(info->key) == "s") {
+    // Bit order is defined by common/adjustometer_protocol.h. Keep the
+    // remaining bits numeric; older/newer firmware may assign them meanings.
+    out.key("bits").begin_array();
+    for (const auto &bit : adj_status_bits())
+      out.begin_object()
+          .key("label")
+          .string(bit.label)
+          .key("label_pl")
+          .string(bit.label_pl)
+          .key("description")
+          .string(bit.label)
+          .key("description_pl")
+          .string(bit.label_pl)
+          .end_object();
+    out.end_array();
+  }
+}
+
 const std::vector<ExportSeries> &export_series() {
   static const std::vector<ExportSeries> series = {
       {"C", "tar", 0}, {"C", "des", 0},      {"C", "adj", 0},

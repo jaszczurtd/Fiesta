@@ -577,6 +577,91 @@
       }
     },
     {
+      "label": "VP37: Configure viewer",
+      "hide": true,
+      "type": "process",
+      "command": "cmake",
+      "windows": {
+        "command": "cmake",
+        "args": [
+          "-S",
+          "${workspaceFolder}/../../tools/vp37-viewer",
+          "-B",
+          "${workspaceFolder}/.build/vp37-viewer",
+          "-DBUILD_TESTING=OFF",
+          "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${workspaceFolder}/.build/vp37-viewer/bin",
+          "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${workspaceFolder}/.build/vp37-viewer/bin"
+        ]
+      },
+      "args": [
+        "-S",
+        "${workspaceFolder}/../../tools/vp37-viewer",
+        "-B",
+        "${workspaceFolder}/.build/vp37-viewer",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DBUILD_TESTING=OFF",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${workspaceFolder}/.build/vp37-viewer/bin",
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${workspaceFolder}/.build/vp37-viewer/bin"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "VP37: Build viewer",
+      "hide": true,
+      "type": "process",
+      "command": "cmake",
+      "windows": {
+        "command": "cmake"
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/.build/vp37-viewer",
+        "--config",
+        "Release",
+        "--target",
+        "vp37-viewer",
+        "--parallel",
+        "4"
+      ],
+      "dependsOn": "VP37: Configure viewer",
+      "problemMatcher": []
+    },
+    {
+      "label": "VP37: Live viewer",
+      "detail": "Build and upload ECU BENCH, capture telemetry and serve http://127.0.0.1:8037/live",
+      "type": "process",
+      "command": "${workspaceFolder}/.build/vp37-viewer/bin/vp37-viewer",
+      "windows": {
+        "command": "${workspaceFolder}/.build/vp37-viewer/bin/vp37-viewer.exe"
+      },
+      "args": [
+        "serve",
+        "--log",
+        "${workspaceFolder}/.build/vp37.log",
+        "--monitor-project",
+        "${workspaceFolder}",
+        "--port",
+        "8037",
+        "--ws-port",
+        "8038"
+      ],
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "VP37: Build viewer",
+        "Project: Upload variant: BENCH"
+      ],
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "presentation": {
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Project: Configure Git hooks",
       "detail": "Auto-run on folder open - set core.hooksPath to repo .githooks",
       "type": "process",

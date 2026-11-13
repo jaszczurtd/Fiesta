@@ -127,6 +127,20 @@ CLI może uwierzytelnić sesję i zażądać wejścia do bootloadera:
 
 To polecenie nie wykonuje kopiowania UF2 i ponownego połączenia z sekwencji GUI.
 
+## Odczyty Clocks i mapa
+
+Otwarta zakładka wartości Clocks odświeża wskazania co sekundę. Prędkość ABS jest podana
+w km/h, ciśnienie oleju w barach, a oba kanały EGT w °C. Brakujący lub
+nieaktualny pomiar jest oznaczony `--`; błąd transmisji również czyści
+wskazania. Podczas wykrywania i wgrywania wskazania gasną, a odpytywanie
+jest wstrzymane. Ukryte zakładki nie odpytują modułu. Format liczb zależy od locale.
+Parametry Clocks są tylko do odczytu. Mapa korzysta z GPS Clocks i usuwa
+stary znacznik po utracie fixa, modułu lub USB; odpytywanie wraca po wykryciu.
+
+DPF jest widoczny jako nieaktywny. Nie można go wykryć, wybrać do wgrywania
+ani przypisać mu ścieżki firmware'u. Stare ścieżki wycofanego modułu są odrzucane.
+
+
 ## Odczyt GPS
 
 ```bash
@@ -236,14 +250,3 @@ porty POSIX. `sc_flash.c`, `sc_manifest.c`, `sc_gps.c` i `sc_tests.c`
 implementują odpowiednie operacje, a `sc_text.c` i `sc_time.c` współdzielone
 funkcje tekstowe i czasowe. `src/cli/sc_cli_main.c` kieruje polecenia do
 sąsiednich modułów obsługi poleceń, wyboru urządzenia i formatowania wyników.
-
-Otwarta zakładka wartości Clocks odświeża wskazania co sekundę. Prędkość ABS jest podana
-w km/h, ciśnienie oleju w barach, a oba kanały EGT w °C. Brakujący lub
-nieaktualny pomiar jest oznaczony `--`; błąd transmisji również czyści
-wskazania. Podczas wykrywania i wgrywania wskazania gasną, a odpytywanie
-jest wstrzymane. Ukryte zakładki nie odpytują modułu. Format liczb zależy od locale.
-Parametry Clocks są tylko do odczytu. Mapa korzysta z GPS Clocks i usuwa
-stary znacznik po utracie fixa, modułu lub USB; odpytywanie wraca po wykryciu.
-
-DPF jest widoczny jako nieaktywny. Nie można go wykryć, wybrać do wgrywania
-ani przypisać mu ścieżki firmware'u. Stare ścieżki wycofanego modułu są odrzucane.

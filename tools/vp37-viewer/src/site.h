@@ -18,7 +18,7 @@ namespace vp37 {
 
 // Raised whenever page output changes for the same inputs; part of every
 // page stamp.
-constexpr int kGeneratorVersion = 2;
+constexpr int kGeneratorVersion = 5;
 
 struct IterationView {
   std::string series, slug, area, date, title;

@@ -20,6 +20,8 @@ struct ExportSeries {
   int decimals;
 };
 const std::vector<ExportSeries> &export_series();
+// Shared presentation metadata for the live API and static pages.
+void write_field_metadata(JsonWriter &out, const FieldInfo *info);
 
 constexpr int kOverviewBuckets = 1500;
 constexpr double kFragmentSeconds = 10.0;

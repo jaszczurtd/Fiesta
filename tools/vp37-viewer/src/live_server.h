@@ -22,6 +22,9 @@ public:
   LiveServer &operator=(const LiveServer &) = delete;
   hal_status_t start();
   hal_status_t poll();
+  // Begin a new capture at the current EOF. Call while holding the log lock,
+  // before appending the session marker; subsequent replacements start at zero.
+  hal_status_t begin_capture();
 
 private:
   struct State;

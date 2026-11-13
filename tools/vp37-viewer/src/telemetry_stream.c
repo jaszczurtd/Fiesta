@@ -68,6 +68,7 @@ hal_status_t vp37_sample_clock_time(vp37_sample_clock_t *clock, uint32_t us,
                                     double *time) {
   if (clock == NULL || time == NULL || !isfinite(host_time))
     return HAL_EINVAL;
+  clock->restarted = false;
   if (!clock->initialized) {
     clock->last_us = us;
     clock->time = host_time;
@@ -80,7 +81,8 @@ hal_status_t vp37_sample_clock_time(vp37_sample_clock_t *clock, uint32_t us,
   const double mapped = clock->time + (double)delta / 1000000.0;
   if (advance) {
     clock->last_us = us;
-    clock->time = delta < 0 ? host_time : mapped;
+    clock->restarted = delta < 0 || fabs(mapped - host_time) > 5.0;
+    clock->time = clock->restarted ? host_time : mapped;
   }
   *time = advance ? clock->time : mapped;
   return HAL_OK;

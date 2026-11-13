@@ -1,487 +1,89 @@
-# ECU and VP37 control
+# ECU: setup and first use
 
-[Polski](README.pl.md) · [System architecture](../../ARCHITECTURE.md)
+[Polski](README.pl.md) · [Project status](../../doc/STATUS.md)
 
+The ECU controls the VP37 pump actuator, boost, glow plugs, fan, block heater
+and heated windshield. It also stores DTCs and answers OBD-II requests as a
+Ford Fiesta 1.8 DI EEC-V ECU. The project is a prototype; engine and VP37 work
+uses a separate engine test stand.
 
-The ECU controls fuel injection through the VP37 pump, boost through the N75
-solenoid, glow plugs, the fan, the block heater, and the heated windshield. It
-also stores DTCs and answers OBD-II requests, presenting itself as a Ford
-Fiesta 1.8 DI EEC-V ECU. It is the MISRA-C migration target, together with the shared VP37 module
-and the Adjustometer, both gated at zero findings; [`MISRA.md`](../../MISRA.md)
-describes the current state.
+Start here to run the existing bench setup and see its measurements. For the
+control algorithm, read [how VP37 control works](guides/CONTROL.md).
 
-Bench observations quoted below explain tuning choices. They are not
-acceptance results for an arbitrary new firmware image. Control changes
-require new measurements of the mechanical system.
+## Before powering the bench
 
-## Execution and synchronization
+- Identify the board and wiring. The current `rp2350-plus` and `rp2040-plus`
+  assemblies share the existing ECU wiring. The newer PCB 3 requires firmware
+  changes to its I²C buses and output polarity; see [hardware compatibility](../../doc/STATUS.md#hardware-and-firmware).
+- Prepare the checkout and toolchain using the [build guide](../../doc/BUILDING.md).
+  Open **`src/ECU`** as the VS Code folder, then select the assembly that matches
+  the installed processor board.
+- Check the [Adjustometer power and startup procedure](../Adjustometer/README.md).
+  It must establish its baseline with the actuator drive off and the mechanism
+  settled. Restart the ECU after the baseline is ready. ECU startup calibrates
+  the actuator and can move it through its travel.
 
-The work is split between the cores:
+## Open the live measurements
 
-- **Core 0** runs the main loop: a soft-timer table, CAN traffic, OBD-II, the
-  relay outputs, DTC storage, and the Serial Configurator session.
-- **Core 1** runs the time-critical engine path: the VP37 control cycle, the
-  RPM interrupt, and turbo control.
+1. In VS Code, choose **Terminal -> Run Task -> `VP37: Live viewer`**.
+   The task builds the viewer, rebuilds the ECU **BENCH** variant and uploads it
+   to the selected assembly. It repeats the build and upload on each start.
+2. Wait for the serial connection and the viewer URL in the terminal.
+3. Open **<http://127.0.0.1:8037/live>** in a web browser, or run
+   **`Open Integrated Browser`** in VS Code and enter that address.
+4. Leave the task running. Check that the page is connected and new control
+   samples arrive. The interface starts in English; the **EN / PL** button
+   changes the language.
 
-There is no RTOS. `start.c` installs a table of `(period, callback)` pairs
-that the core-0 loop calls when due, from about 10 ms for fast sensor reads to
-one second for housekeeping. The VP37 pump belongs to core 1. Its control
-steps run on a fixed grid of `pidTimeUpdate` periods: a step that starts late
-does not move the next deadline, and a step a whole period late starts a new
-grid instead of a burst of catch-up steps. Within `CORE1_VP37_GUARD_US` before
-a deadline core 1 starts no other work (turbo, RPM, the test demand) and waits
-for the deadline from RAM, so the step does not inherit the tail of that work.
-Once the deadline is reached, core 1 also services demand and stop commands.
-This keeps an overloaded loop responsive when the requested period is shorter
-than the work; it does not make that period achievable.
+This task uses the ECU's BENCH variant. The separate
+[VP37TestBench project](../VP37TestBench/README.md) has its own hardware and
+is not the image used by this procedure.
 
-The PWM backend cannot produce exactly the period of the control grid, so a
-free grid would slide through the whole PWM period (about 40 µs per second at
-200 Hz) and a command would wait anything from nothing to 5 ms for its latch.
-The grid therefore follows the latch that the current scan measures: each step
-moves the next deadline by at most `VP37_LATCH_LOCK_STEP_US`, so that the PWM
-write lands `VP37_LATCH_LOCK_LEAD_US` before the latch. The lock also learns
-the period difference and keeps applying it while the actuator is released and
-no latch is measured. It works only while the control period equals the PWM
-period; with another bench period or with the current scan off the grid is
-plain.
+The default ECU build forwards driver demand to the position controller.
+The start/idle supervisor is optional and disabled by default
+(`ECU_ENGINE_CONTROL_ENABLED=0`). A live position plot therefore does not
+establish that the complete engine-control strategy is enabled or validated.
 
-The bench tests record their step announcements on core 1 and core 0 prints
-them, together with acknowledgements of default resets. A changed test demand
-waits for its announcement, at most
-`STEP_EVENT_APPLY_TIMEOUT_MS`, so the log still shows the announcement before
-the move it announces. Every control step ends by publishing its state behind
-a sequence counter, and core 0 copies that snapshot without a lock. The published words are written and read only
-with relaxed atomic accesses, so an overlapping copy is discarded, never a
-data race, and the control loop never waits for the
-telemetry or for the global values it feeds. The bench telemetry waits on core
-0 for the end of a step before it formats a report: code fetched from flash
-by core 0 during a step made the step about 300 µs longer on average. The
-bench trace buffer changes hands through one atomic state. The I²C bus with the PCF8574 output latch and
-the DTC manager with its storage sit behind mutexes. Flash writes stay on
-core 0.
+## Finish the session
 
-The main controllers (VP37, turbo, RPM, fan, heater, glow plugs, windows, and
-engine state) live in one `ecu_context_t` in
-[`ecuContext.h`](../../src/ECU/ecuContext.h). CAN, sensors, DTC storage, RTC time, OBD,
-and the configurator session keep their state in file-local structs.
+Closing a browser tab only closes the view. **Ctrl+C** or **Terminate Task**
+stops the server and serial capture; it does not stop the actuator.
+Finish an active bench test through its controlling console or configurator
+before closing that session. Console `stop` ends the test and returns its
+demand to zero; `X` stops VP37 itself and requires an ECU restart to initialize
+it again. After a test ends, the ordinary driver-demand path can resume. Use `X` when
+you need VP37 itself to remain stopped. See the [session and recording rules](guides/BENCH.md).
+Do not open a second serial owner while the viewer task owns the port.
 
-## Engine speed
+## If no measurements appear
 
-The crank input supplies 32 equally spaced rising edges per revolution. The
-ISR records microsecond timestamps; it rejects periods shorter than 94 µs
-(the 20000 rpm capture ceiling) without moving the last accepted edge. This
-ceiling is separate from the engine's 5000 rpm protection threshold.
+| What you see | What to check |
+| --- | --- |
+| The task fails before connecting | Build output, installed native compiler and selected firmware assembly. |
+| Serial connection fails | Correct ECU USB device and another monitor or configurator holding its port. |
+| The page cannot connect | The task is still running and the address matches the URL printed by that task. |
+| Connected, but no new control samples | The terminal contains new `VP37 C` records and the flashed image is BENCH. A serial connection alone does not prove telemetry is arriving. |
+| Invalid position or calibration | Adjustometer power, baseline and feedback; follow its startup procedure before restarting the ECU. |
 
-On core 1, `RPM_process()` briefly masks local interrupts to copy nine
-timestamps. It calculates RPM from the newest one to eight periods within
-25 ms, using one period when it is longer than that window. The first edge
-starts acquisition and the second gives a measurement. Integer rounding has
-no additive correction, and the result is not clamped at the engine limit,
-so the VP37 interlock can detect overspeed. Core 0 reads the published RPM
-with an atomic scalar load.
+For saved logs, command-line use, chart controls and capture errors, see the
+[viewer guide](../../tools/vp37-viewer/README.md).
 
-Signal loss expires after three times the latest accepted period, bounded
-to 20-500 ms. The first edge gets 500 ms for acquiring the second one. On
-expiry the result is zero and the history is discarded; restarting requires
-two new edges. Time differences handle the 32-bit microsecond counter wrap.
-This measures speed on an evenly spaced wheel; it does not decode crank
-phase or missing teeth.
+<a id="execution-and-synchronization"></a>
+<a id="engine-speed"></a>
+<a id="position-demand-and-input-conditioning"></a>
+<a id="position-control"></a>
+<a id="supply-and-resistance-compensation"></a>
+<a id="current-feedback"></a>
+<a id="telemetry"></a>
+<a id="research-control-profile"></a>
+<a id="source-map"></a>
+<a id="bench-image-and-hardware"></a>
+<a id="control-loop-ram-budget"></a>
 
-## Position demand and input conditioning
+## Continue by task
 
-VP37 takes a position request in one of two units:
-`hal_status_t VP37_setPositionDemandPercentage(VP37Pump *pump, float percent)`
-for a 0-100% demand across the usable stroke, and
-`hal_status_t VP37_setPositionDemandValue(VP37Pump *pump, int32_t value)` for
-raw feedback counts, bounded by `VP37_getPositionDemandMinValue()` and
-`VP37_getPositionDemandMaxValue()`. The usable stroke ends at
-`VP37_PHYSICAL_LIMIT_PERCENT` of the calibrated travel. This keeps the
-actuator below the negative-stiffness steps of the upper stroke, at the cost
-of the largest fuel quantities; 100 restores the full travel. The limit is a
-share of the stroke, above zero and at most 100, checked at compile time and
-by the bench knob `X13` alike. The integration dead zone widens steeply above
-82% of the travel, so a full-demand hold settles short of the limit instead
-of creeping up to it. Both write the same
-demand, so driver input, engine control, and bench tests share one position
-ramp, feedforward, and PID. The unit is the only difference: the controller
-has no input-source mode, source-specific behaviour, filter-mode flag, or
-alternate position path.
-Emergency stop and calibration remain separate operations.
-
-Analog input conditioning belongs to `sensors.c`. A 10 ms update preserves
-fractional percentages, applies a 30 ms filter with a 0.1 percentage-point
-deadband, and caches the result for `getDriverDemandPercent()`. Zero input
-reaches the cache without filter delay. Both direct driver demand and
-`engineOperation` read this output; the application selects which request to
-send to VP37. Optional engine control is enabled by
-`ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
-
-## Position control
-
-VP37 uses 200 Hz PWM, shared with the Adjustometer drive-period filter. A lone rising demand step is approached as a standing
-target from its first cycle: the ramp rises at 225%/s with 0.6 of the motion
-assist and brakes before the target at 750%/s², so the actuator follows the
-ramp closely and arrives slowly instead of overshooting and ringing. A target
-that changes again within 25 ms is tracked at up to 300%/s without a brake;
-its upward assist grows with the ramp rate up to 250%/s and stays there.
-Descent always keeps 300%/s; a lone falling step keeps
-the full assist for its first 25 ms and 0.3 of it afterwards. The
-upper-stroke rules follow the physical position whatever the limit: the
-upward-assist taper between 75% and 85%, the integral authority and dead-zone
-tapers from 75%, the slower upper slews (275%/s, standing 187.5%/s) and the
-optional settled-target damping (`H`, disabled by default). An explicitly
-configured derivative reaches its full position weight between 85% and 90%,
-engages after the target settles and fades through a 50 ms blend when movement
-resumes. The holding map and supply/temperature compensation remain shared
-across the stroke. Once the
-demand settles, the climb floor follows negative learned integral trim, so
-crossing below the target preserves the reduction needed to hold position.
-Moving demands retain the original climb floor. Telemetry reports
-`mode:position` and a separate `test:<name|none>` field; it does not identify a
-potentiometer controller mode.
-
-At a fixed target above 85% of the calibrated stroke, valid feedback and active
-current/resistance compensation qualify a holding profile. Its capture delay
-decreases with the existing upper blend, from three seconds at 85% to zero
-at 90%. Before capture, integration, dead zone and hold confirmation keep
-their ordinary rules. Capture halves integration, narrows the dead zone to
-±12 Hz and caps hold confirmation at 5 ms, confirmed on a control step. The
-legacy mean-error entry gate and offset release are bypassed in that phase.
-A large sustained error still releases the hold.
-
-After three qualifying seconds, continuous integration stops and P increases
-in quiet intervals at least 1.5 seconds apart,
-toward three times the configured gain at 90% stroke; its additional share
-tapers to zero at 85%. Each increase is at most 0.01 PWM/Hz and transfers at
-most 2.5 nominal PWM counts into I to preserve drive. The extra upper derivative
-fades as holding stiffness rises. A moving target restores ordinary P,
-including when the integral limit prevents full compensation of that transfer.
-
-A quiet update either transfers a gain change or corrects the integral bias.
-The paired gain transfer preserves drive; bias correction waits for a later
-interval with unchanged gain. Quiet means a position variance at most 225 Hz
-squared in the latest 0.3 to 0.6 seconds of feedback. Its statistics include the
-current sample and refresh every control step. Updates are at least
-1.5 seconds apart and use 5% of the configured Ki throughout the holding
-range. Each bias step
-is limited to three nominal PWM counts and uses the mean error outside
-±12 Hz. Continuous integration remains held; these separate bias steps still
-correct a settled offset within the integral and actuator limits. `uh`,
-`rkp`, `ierr` and `I` report profile qualification, effective gain, continuous
-integration input and retained bias. Research profiles keep their own rules.
-
-Outside the upper holding profile, 100 ms within ±12 Hz at a settled target
-freezes the integral to avoid
-building force against static friction; the error averaged over 0.3 s must be
-within ±12 Hz too, so a pass through the band during an arrival does not
-freeze it. An error beyond ±40 Hz starts a 500 ms release timer. Returning to
-±12 Hz cancels it; fluctuations around ±40 Hz do not restart it, so persistent
-drift releases the integral. Below 75 % of the stroke, where the integral dead
-zone has its base width, the hold engages only once the averaged error is
-within ±6 Hz (bench knob `X8=<Hz>`, 1-12), and an averaged error outside
-±12 Hz for 1 s releases it (bench knob `X6=<ms>`, 0 off).
-
-After the position first comes within ±40 Hz of a settled target below 75 % of
-the stroke, the thermal multiplier does not fall below the value the actuator
-arrived with until the target moves (bench knob `X7=0|1`). A rising approach
-raises the drive-resistance estimate, and its later relaxation would otherwise
-pull the settled position below the target while the integral is held. Coil
-heating raises the estimate afterwards, and the multiplier follows that rise.
-While the multiplier is held, the current loop aims at the same excess over
-the estimate, so it does not take the extra drive back (bench knob `X9=0|1`).
-When the target moves, the multiplier returns to the estimate at once.
-Above 75 % of the stroke both rules stay off: there they walked long holds
-into stick-slip.
-
-## Supply and resistance compensation
-
-Supply compensation scales the complete feedforward and PID command by
-`12 V / compensated voltage`. ADC scan blocks arrive independently of the position-control step. Core 1 copies them between position steps and tracks gate edges across
-block boundaries, including between turbo, RPM and test processing while
-outside the deadline guard. Each ADC code is compensated once on arrival (RP2040
-correction table; RP2350 codes pass unchanged); the 5 ms control step reduces
-each completed pulse once
-and refreshes the latest supply window at every step. The frames
-provide a mean over the latest PWM-period window without waiting for a current
-edge. While the mean is less than 20 ms old, a bounded voltage prediction
-accounts for its midpoint age at the control step and half a PWM period for
-output latching. The voltage slope grows through a 20 ms filter, stays within
-the latest measured slope, and drops promptly when the ramp slows or reverses.
-The predicted offset is limited to ±0.5 V and affects only the command scale.
-The local ADC fallback retains its 50 ms filter without prediction. Current
-and resistance estimation use a separate voltage mean from the same PWM period
-as the current capture.
-
-Resistance estimation uses the same historical PWM-latch matching as the
-current loop. Each command records whether position, delivered PWM and supply
-have remained quiet for 150 ms after the demand ramp finishes. Learning requires
-both that historical qualification and a still-quiet present state, so a delayed
-observation from an approach cannot become eligible just by arriving later.
-Those quiet captures alone build the first estimate. Once it is ready, matched
-captures taken in motion keep updating it at the same 2 s rate: the observed
-resistance rides the current lag behind the duty during a sweep, so the
-estimate follows coil self-heating and at the same time acts as motion
-feedforward. Slowing or capping that update raised the cyclic tracking error
-on the bench.
-The quiet window permits 60 Hz of position movement and 8 PWM counts from its
-anchors; exceeding either restarts it. Each current period can update the
-slow resistance estimate once. Its filter uses observation intervals, capped
-at 50 ms after gaps. A cumulative supply
-change over 0.1 V pauses estimation for 100 ms. Healthy new current captures
-keep the last ready correction active during long supply changes; losing
-those captures still expires it after 10 s. Supply-change detection uses the
-measured voltage before prediction. Telemetry exposes `vage` (window midpoint
-age at the control step, in microseconds), `vlead` (prediction offset in volts
-before the 7 V floor), `vdot` (voltage slope in V/s), and `rhold` (resistance
-estimation paused by supply or drive movement). `Robs` is the latest matched
-resistance observation in ohms; `rmatch` reports a matched capture, `rquiet` its
-historical qualification, `rlearn` an update in this control step, and `rlcnt`
-the cumulative update count. Unmatched observations keep the last ready
-estimate alive without changing its value. `scanus` measures ADC collection
-and reduction time; `execus` measures execution of the complete control step.
-Both durations are in microseconds and exclude the wait for the next step.
-`late` is the largest start after a deadline among the last completed window
-of 100 steps, in microseconds and without the steps a whole period late;
-`ovr` counts those steps since the start. The guard of core 1 has to cover
-the `late` values seen on the bench.
-
-## Current feedback
-
-A bounded proportional current loop corrects the position command before
-the supply and thermal multipliers. Its target is the nominal feedforward
-plus position-PID output expressed as guarded ON-phase current. The conversion
-preserves the resistance estimator's raw-voltage reference and the local
-divider calibration. The source shunt does not measure recirculation current
-while the MOSFET is off, so this target is not full-period coil current.
-
-The inverted drive conducts at the end of each hardware PWM period. Each
-observation is matched to the command written before the preceding current
-falling edge, where the PWM counter wraps and latches its compare register.
-A tracked demand that stops at the top of the range (pedal on the floor)
-arrives at the full rate. The upward motion assist follows the ramp rate up
-to `VP37_PWM_FF_MOTION_RATE_CAP_PERCENT_PER_S` (250 %/s, bench knob `X5`)
-and stays there for faster ramps: with the assist of the 300 %/s slew the
-actuator led the ramp by 260-500 Hz into the top and rang when hot, while a
-250 %/s ramp led by about 150 Hz and settled. With the Adjustometer's
-drive-period filter the arrival overshoots by 100-200 Hz and stays below the
-negative-stiffness steps. The optional brake into the top
-(`VP37_TOP_ARRIVAL_DECEL_PERCENT_PER_S2`, bench knob `X2`) is off: at 750 %/s²
-it slowed the last 70 % of the range and at 3000 %/s² it still delayed the
-arrival by 100 ms and deepened the sag after it; slowing only the ramp widens
-the actuator's lead instead of removing it. The first demand after start
-ramps from the calibrated bottom, where calibration leaves the actuator.
-The ADC history retains 3.25 PWM periods. A current capture closes when its
-falling edge is confirmed, without waiting for the next ON phase. Current,
-duty and paired supply use the same fall-to-fall interval, whose duration does
-not change when the duty changes.
-Writes within 100 us of that edge are ambiguous and rejected, as are
-duty mismatches, invalid captures and ON-midpoint ages of 25 ms or more.
-The proportional gain is 0.35 in equivalent nominal-command units; correction
-is limited to ±40 nominal PWM counts and changes at most 1000 counts/s.
-Position-PID limits account for this correction before stepping the PID.
-Repeated observations do not recompute the error; unavailable feedback slews
-the correction to zero, and rest or stop clears it immediately. There is no
-additional current integrator.
-
-## Telemetry
-
-Current-loop telemetry exposes `cen` (enabled), `cuse` (matched fresh capture),
-`ctar` (latest current target, A), `cref` (historical target, A), `cerr`
-(historical target minus measured ON current, A), `cpwm` (applied nominal
-correction), and `cage` (ON-midpoint age, us). The current fields are also
-reported with IPULSE, alongside `latch`, `lp`, `lduty` and `lv` for the
-reconstructed latch time, period, duty and validity. `dma`, `take` and `reduce`
-are MCU timestamps for DMA completion, retention and reduction; `reduce -
-(us + on)` measures delivery delay after ON ends. Bench `IWAVE` lines, emitted
-at most every 100 ms, share the IPULSE `us` identifier and report eight
-time-ordered ON-phase means with their sample times. They exclude the edge
-guards and cannot measure freewheel
-decay. `gl` counts rejected gate excursions since the last history reset.
-Bench builds accept
-`C0`/`C1` to compare feedback off/on
-through the same position API. Electrical-model tests do not establish
-mechanical stability; upper-position holds and motion need hardware validation.
-
-Upward motion assistance retains its full value through 75% of the calibrated
-stroke, fades linearly to zero at 85%, and remains off above that point.
-This limits acceleration into the sensitive upper region. The holding map,
-downward assistance, demand ramp and position API retain their existing roles.
-
-
-## Research control profile
-
-Revision 148 includes an optional full-calibration profile for bench research.
-The normal startup and tuning reset retain the default travel limit; installing
-this revision does not enable the research profile.
-
-Bench controls select the physical travel limit (`X13`), motion-dependent
-integral hold (`X18`), reference weight (`X21`), upper integral deadband
-(`X23`), ramp braking (`X24`) and descent assistance (`X25`, disabled by
-default). `X26` selects the retained fraction of descent correction, from
-0.25 to 0.75, with a default of 0.4. These options use the shared position
-demand path and remain subject to output and integral limits.
-
-During a descending approach, assistance begins after a measured 0.3
-percentage-point movement. It reduces excess negative integral toward a
-holding correction and ends on the first integral-band entry or target
-crossing. A previously measured correction can be reused for the same
-interior target after two seconds of stable, unsaturated holding. Endpoints
-cannot teach this correction. Stop, reset and accepted tuning changes
-invalidate it. Unknown targets use the retained-fraction fallback.
-
-Telemetry reports `ibias`, `ianchor`, `ipart` and `iphase` for the descent,
-and `ihvalid`, `ihtar`, `ihbias` and `ireuse` for the learned holding correction.
-The research profile requires separate hardware qualification before use as
-normal operating defaults.
-
-## Source map
-
-| File | Responsibility |
-|---|---|
-| [`start.c`](../../src/ECU/start.c) | start-up order, soft-timer table, watchdog, both core loops |
-| [`sensors.c`](../../src/ECU/sensors.c) | analog inputs and filtered driver-demand cache, PCF8574 outputs, I²C register reads |
-| [`can.c`](../../src/ECU/can.c) | main CAN frames, including the RPM publisher |
-| [`obd-2.c`](../../src/ECU/obd-2.c) | OBD CAN input and ISO-TP responses |
-| [`obd_j1979.c`](../../src/ECU/obd_j1979.c) | SAE J1979 services and Mode 01 PIDs |
-| [`obd_ford_diag.c`](../../src/ECU/obd_ford_diag.c) | Ford EEC-V UDS, KWP2000, and SCP services |
-| [`dtcManager.c`](../../src/ECU/dtcManager.c) | DTC storage and diagnostic reads; the codes it registers are the aliases in [`dtc_codes.h`](../../src/ECU/dtc_codes.h), and their descriptions come from the shared catalogue |
-| [`src/common/obdDefinitions/`](../../src/common/obdDefinitions/) | the DTC catalogue shared by the modules: the generic SAE J2012 codes and the project's U19xx codes with their descriptions, the description lookup and the printed form (`P0116`); its translation units are the list in [`obdDefinitions_sources.txt`](../../src/common/obdDefinitions/obdDefinitions_sources.txt), read like the VP37 list below |
-| [`rpm.c`](../../src/ECU/rpm.c) | engine speed from the Hall sensor interrupt |
-| [`src/common/vp37/`](../../src/common/vp37/) | the VP37 module, shared by the ECU and VP37TestBench; its translation units are the list in [`vp37_sources.txt`](../../src/common/vp37/vp37_sources.txt), which the host-test build reads through CMake and `sync_vscode_projects.py` writes into the firmware manifests of the modules the registry marks with `sharedSources` |
-| [`vp37.c`](../../src/common/vp37/vp37.c) | VP37 pump: start-up, the position-demand entry points, and the control cycle that calls the units below |
-| [`vp37_adapter.c`](../../src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, and `F_FUEL_TEMP`/`F_VOLTS` from the published status |
-| [`vp37_adjustometer.c`](../../src/common/vp37/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
-| [`vp37_snapshot.c`](../../src/common/vp37/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
-| [`vp37_feedback.c`](../../src/common/vp37/vp37_feedback.c) | Adjustometer position and the calibration sweep |
-| [`vp37_compensation.c`](../../src/common/vp37/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
-| [`vp37_control.c`](../../src/common/vp37/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
-| [`vp37_current.c`](../../src/common/vp37/vp37_current.c) | coil current measured on the shunt |
-| [`vp37_current_control.c`](../../src/common/vp37/vp37_current_control.c) | bounded ON-current feedback and PWM command history |
-| [`vp37_tuning.c`](../../src/common/vp37/vp37_tuning.c) | gains, limits, and switches the bench may change, each checked against its range |
-| [`vp37_telemetry.c`](../../src/common/vp37/vp37_telemetry.c) | control samples and bench traces, printed on core 0; bench image only |
-| [`turbo.c`](../../src/ECU/turbo.c) | boost control from manifold pressure |
-| [`engineMaps.c`](../../src/ECU/engineMaps.c) | N75 duty table |
-| [`vp37_maps.c`](../../src/common/vp37/vp37_maps.c) | VP37 holding map, integral and dead-zone tapers |
-| [`engineFan.c`](../../src/ECU/engineFan.c), [`engineHeater.c`](../../src/ECU/engineHeater.c), [`glowPlugs.c`](../../src/ECU/glowPlugs.c), [`heatedWindshield.c`](../../src/ECU/heatedWindshield.c) | relay outputs |
-| [`engineFuel.c`](../../src/ECU/engineFuel.c) | fuel level |
-| [`rtcTime.c`](../../src/ECU/rtcTime.c) | UTC from the `0x130` frame of Fiesta_clock: it dates the first occurrence of a DTC and the watchdog reboot report, and counts as unknown after 3 s without a trusted frame |
-| [`config.c`](../../src/ECU/config.c) | stored settings and the configurator session |
-| [`tests.c`](../../src/ECU/tests.c) | the functional test suite: each bench test, what it drives, and whether the sequence and the configurator include it |
-| [`tests_workers.c`](../../src/ECU/tests_workers.c) | what each test does: demand generators, one-shot actions and the progress they report |
-| [`tests_helpers.c`](../../src/ECU/tests_helpers.c) | ECU parameters, VP37 commands, demand policy and engine-speed interlock for the [shared functional-test runner](../common/test_runner/README.md); idle stubs without `ECU_FUNCTIONAL_TESTS_ENABLED` |
-
-## Bench image and hardware
-
-The tests exist only in the bench image, the `BENCH` variant that
-[`hal_project_config.h`](../../src/ECU/hal_project_config.h) declares with
-`ECU_FUNCTIONAL_TESTS_ENABLED=1`. The HAL modules and settings it shares with
-the host tests are in [`ecu_hal_config.h`](../../src/ECU/ecu_hal_config.h), because
-JaszczurHAL reads the variant declaration only from `hal_project_config.h`
-itself. Select `Project: Build variant: BENCH` or
-`Project: Upload variant: BENCH` in VS Code. Artifacts go to
-`src/ECU/.build/rp2350-arm/rp2350-plus/variants/BENCH/`, or under
-`.build/rp2040/rp2040-plus/` for the RP2040-Plus assembly. Tasks without a
-variant build the car image. See the [build guide](../../doc/BUILDING.md)
-for CLI equivalents.
-
-In `BENCH`, `ECU_SC_TESTS_RPM_INTERLOCK` defaults to `0`, so configurator
-tests can run with RPM supplied by a signal generator. Set it to `1` to
-refuse or stop configurator tests above `ECU_SC_TESTS_RPM_LIMIT` rpm.
-This option does not apply to console tests; see the
-[functional test rules](../common/scDefinitions/PROTOCOL.md#functional-tests).
-
-Console tests have an optional watch. `watch <ms>` arms it with a limit of
-1000 to 600000 ms: when no console line arrives for that long, the running
-console test stops with `host_lost` and the demand returns to zero, as for a
-configurator test whose host went quiet. Every console line renews the watch,
-`watch` alone renews it and reports the limit, `watch 0` disarms it, and a
-firmware restart leaves it off. A bench tool that holds the port arms the
-watch when its recording starts and renews it while it runs; a killed
-collector or an unplugged cable then leaves the actuator at its last demand
-only until the limit runs out. `G` keeps its auto-zero of a single `S` hold.
-
-DTC and KV one-shot actions run on core 0. The control core continues to
-service VP37 and advances the test sequence after the result is published.
-Stopping a test cancels an action that has not yet been dispatched.
-`run dtc` reports `ok` when U0073 (`DTC_CAN_BUS_FAULT`) is active with
-the RPM transmit detail (`DTC_DETAIL_CAN_TX_RPM`), or `failed` otherwise.
-The result checks runtime state immediately after injection. It does not
-verify persistence across a reset. Read the code through OBD, clear the
-DTCs after the test and read them again to confirm the clear.
-Read-only `list` and `params` also print on the console core, after the
-serial callback releases its temporary debug mute.
-Test start, stop and result messages use a bounded queue to that core.
-Their output never makes control wait for the debug mutex. A queue overflow is reported;
-stopping the actuator still takes effect.
-
-[`device_tree.json`](../../src/ECU/device_tree.json) assigns every pin and address.
-Its `rp2350-plus` assembly (Waveshare RP2350-Plus, the default) and
-`rp2040-plus` assembly (Waveshare RP2040-Plus) share the PCB and the wiring;
-`--assembly` or the VS Code assembly picker selects one. The interfaces are:
-
-- **I²C** at 400 kHz, ECU as master: Adjustometer at `0x57`, PCF8574A relay
-  expander at `0x38`. The PCF8574A is rated for 100 kHz, so it runs outside
-  its datasheet until it is replaced by a PCA8574A or gets its own bus. Its
-  local type in `src/ECU/bindings/` caps the bus at 400 kHz, so a faster
-  I²C clock fails the device tree check.
-- **SPI** shared by two MCP2515 CAN controllers, CAN0 for the car and CAN1 for
-  the OBD-II port.
-- **ADC**: six analog inputs through the HC4051 multiplexer (coolant, oil and
-  air temperature, throttle, fuel level, manifold pressure), the supply
-  voltage, and the VP37 shunt on GPIO26, which no other peripheral may use.
-  While the VP37 current scan runs it owns the converter, and the other analog
-  reads come from its buffer.
-- **PWM** for the VP37 and N75 outputs; **GPIO** for the DPF lamp;
-  **GPIO interrupt** for the engine Hall sensor.
-- **Flash-backed EEPROM** for DTCs and settings.
-
-
-## Control-loop RAM budget
-
-
-The ECU retains current and supply samples in a two-channel ring; the sensor
-multiplexer remains part of the three-channel DMA scan. Current reduction
-and edge tracking use `HAL_RAM_FUNC` to limit instruction fetches from flash.
-The bench trace retains 1024 complete control samples, with its boolean flags
-stored as bits. `VP37_TRACE_SAMPLES` controls capture length. Inspect both
-firmware variants' ELF memory maps when changing these buffers or RAM code.
-
-During startup calibration the bench image uses the same storage for every
-MIN/MAX qualification sample. After USB connects, `VP37 CAL` lines export
-the input position, raw and filtered frequencies, baseline, sample number,
-both clocks, freshness, status, applied PWM, supply voltage in 0.1 V and fuel
-temperature in degrees C. `VP37 CAL END` reports the sample count, qualified
-endpoints, validity and any buffer overflow. The current estimator's window
-and timeout settings are defined in `vp37_config.h`. The normal `VP37 C`
-stream shows the return to rest after calibration; calibration does not
-sample current. Normal RAM capture remains busy until this export finishes.
-
-For metrics covering a complete run, send `B2` to start a stream and `B0`
-to finish it. The control core records every step in the trace buffer while
-the console core drains it as `VP37 N` lines. `B` and `B1` retain their finite
-capture modes; calibration and all capture modes share the same memory.
-The console continues to print `VP37 C` for live supervision. It drains `N`
-on every console loop, independently of the C report interval, with a 20 ms
-budget per pass. A USB write already in progress can outlast that budget.
-Each `N` line includes CRLF and is sent in one serial write without the
-`ECU:` debug prefix, avoiding separate USB transfers for that prefix and
-the line ending.
-
-Use the MCU clock `us` and consecutive step numbers `n` for metric windows,
-not the time a buffered line reaches the host. `VP37 STREAM END` gives the
-capture times, sample count, first and last step numbers and `overflow`.
-Reject incomplete captures, sequence gaps, mismatched counts and overflow.
-The recorder never waits for USB: if the reader falls behind, recording ends
-with `overflow:1`. A stopped pump also ends the stream; sending `S0` keeps
-recording the control steps at rest. Drain the completion record before
-starting another capture or closing the collector.
-
-Each `N` sample includes the requested and ramped positions, feedback,
-timing, R sample count (`rn`), active R compensation (`ruse`) and thermal
-scale (`tsc10000`, scale times 10000). `thr10` gives demand in tenths of a
-percent. The console assembles each N line before sending it to USB.
-The latest current scan supplies `latch`, `lp` and `lv`;
-`cmd_us` is usable only with `match:1`. These observations can precede the
-recorded step and do not by themselves identify the first PWM latch after
-a command. Keep the normal C-based guards active throughout the recording.
+- [Understand demand, position and compensation](guides/CONTROL.md).
+- [Use bench commands and record a complete run](guides/BENCH.md).
+- [Change scheduling, buffers or source code](guides/IMPLEMENTATION.md).
+- [Build, upload or debug without the viewer](../../doc/BUILDING.md).
+- [Run host tests](../../doc/TESTING.md) or read the [MISRA scope](../../MISRA.md).

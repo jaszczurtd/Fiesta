@@ -137,6 +137,7 @@ struct Parser {
       : rec(recording), mcu_time(use_mcu_time) {}
 
   double sample_time(std::string_view body, double host, bool advance) {
+    clock.restarted = false;
     if (!mcu_time)
       return host;
     while (!body.empty()) {
@@ -178,7 +179,8 @@ struct Parser {
 
   void emit(std::string_view kind, double t, SeriesBuilder *values,
             std::string_view text) {
-    status = sink(user, {kind, t, values ? &values->series() : nullptr, text});
+    status = sink(user, {kind, t, values ? &values->series() : nullptr, text,
+                         kind == "C" && clock.restarted});
     if (values)
       values->clear();
   }

@@ -5,6 +5,33 @@
 Actuator position transducer for the VP37 diesel injection pump, providing
 frequency-derived feedback to the ECU over I2C.
 
+## Power and startup order
+
+1. Check the [board connections](../../Fiesta_pcbs/vp37_adjustometer/adjustometer/README.md). Both 5 V and 12 V are required, with a common ground; the 8 V regulator supplies only the oscillator. Disconnect external 5 V before powering RP2040-Zero through USB.
+2. Turn off the ECU actuator drive and wait for the mechanism to settle. Start or reset Adjustometer.
+3. Wait for a valid baseline near zero. Then reset the ECU to start travel calibration.
+
+Opening or closing USB CDC may reset a board; use the same order afterwards. Signal loss
+publishes zero, so zero alone does not prove valid feedback. Check status and freshness too.
+
+## Read the LED
+
+Signal loss takes precedence with red blinking at 4 Hz. With no fault the LED
+is steady green at half brightness. Otherwise it advances every 500 ms through
+active conditions: purple for fuel temperature, yellow for voltage, red after
+2 seconds without an I2C transaction, followed by a green heartbeat.
+
+## Firmware build
+
+Prepare the environment with the [build guide](../../doc/BUILDING.md), then open
+`src/Adjustometer`. `Project: Build` builds firmware; `Project: Upload` checks module
+identity and uploads it. For a board already in BOOTSEL, use `Project: Upload (UF2 /
+BOOTSEL)` instead.
+
+When changing PWM frequency, build matching ECU and Adjustometer images. Prepare a
+SerialConfigurator manifest separately as described in the build guide. The serial monitor
+uses USB CDC; observe the reset order above.
+
 ## Measurement
 
 The pump sensor coils form the resonant element of a modified Hartley oscillator.
@@ -56,10 +83,6 @@ to restart after 100 ms. A locked baseline is retained; interrupted startup
 verification starts again. A lost signal produces zero pulse
 and sets `SIGNAL_LOST`; consumers must inspect status and freshness.
 
-Reset Adjustometer with ECU actuator drive off and the mechanism settled.
-Wait for its baseline to become valid near zero, then reset ECU. Opening or
-closing USB CDC may reset a board; follow the same sequence for Adjustometer.
-
 ## I2C and auxiliary sensors
 
 The slave address is `0x57`; ECU uses 400 kHz. Feedback and diagnostic blocks
@@ -104,18 +127,13 @@ baseline/signed delta and chip temperature, respectively. ECU `VP37 ADJ`
 `ext:1 fl:0x07` means the extension read passed coherence checks and all three
 measurements are valid. It is sampled independently of control feedback.
 
-## Core split and LED
+## Core responsibilities
 
 Core 0 initializes sensors, drains hardware capture every 1 ms and publishes
 fast feedback. Core 1 reads auxiliary ADC inputs every 10 ms, publishes
 the diagnostic extension, and handles LED and USB logging. Chip temperature and
 logs update every 250 ms. USB writes use a zero timeout and can drop text when
 the host does not receive it; fast publication runs independently.
-
-Signal loss takes precedence with red blinking at 4 Hz. With no fault the LED
-is steady green at half brightness. Otherwise it advances every 500 ms through
-active conditions: purple for fuel temperature, yellow for voltage, red after
-2 seconds without an I2C transaction, followed by a green heartbeat.
 
 ## Sources and tests
 
@@ -139,37 +157,26 @@ cmake --build src/Adjustometer/build_test --parallel
 ctest --test-dir src/Adjustometer/build_test --output-on-failure
 ```
 
-## Firmware build
-
-Prepare the Arm toolchain and pinned Pico SDK with `runmefirst.sh`.
-JaszczurHAL is pinned in `src/JaszczurHAL`. Initialize it from the Fiesta
-root with `./scripts/init_hal_submodule.sh`.
-
-```bash
-cd src/Adjustometer
-JH=../JaszczurHAL/vscode/entry/jh-vscode
-"$JH" build --project "$PWD"
-"$JH" build-debug --project "$PWD"
-"$JH" upload --project "$PWD"
-"$JH" upload-uf2 --project "$PWD"
-"$JH" refresh-intellisense --project "$PWD"
-```
-
-`upload` matches the VS Code task (`Ctrl+Shift+2`); `upload-uf2` uses BOOTSEL.
-`monitor` opens USB CDC (`Ctrl+Shift+3`). Port selection (`Ctrl+Shift+9`) updates
-local settings; upload still verifies the module identity. The [build guide](../../doc/BUILDING.md#prepare-a-configurator-manifest)
-describes separate Fiesta manifest preparation. HAL jh-vscode checks USB identity.
-
 ## License
 
 Copyright (c) 2026 Marcin Jaszczur Kielesiński (jaszczurtd), jaszczurtd(at)tlen.pl
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software, hardware designs, and associated documentation files (the "Project"), to deal in the Project without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Project, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software, hardware designs, and associated documentation files (the "Project"), to deal in
+the Project without restriction, including without limitation the rights to use, copy,
+modify, merge, publish, distribute, sublicense, and/or sell copies of the Project, subject to
+the following conditions:
 
-**Attribution requirement:** All copies, modified versions, and redistributions of the Project - in whole or in part - must prominently include the following attribution in all source files, documentation, and any accompanying materials:
+**Attribution requirement:** All copies, modified versions, and redistributions of the
+Project - in whole or in part - must prominently include the following attribution in all
+source files, documentation, and any accompanying materials:
 
 > Original author: **Marcin Jaszczur Kielesiński** (jaszczurtd), jaszczurtd(at)tlen.pl
 
 This attribution must not be removed, obscured, or altered in any way.
 
-THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE PROJECT OR THE USE OR OTHER DEALINGS IN THE PROJECT.
+THE PROJECT IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE PROJECT OR THE USE OR OTHER DEALINGS IN THE PROJECT.

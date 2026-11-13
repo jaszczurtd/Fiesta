@@ -127,6 +127,20 @@ The CLI can authenticate and request bootloader entry:
 
 This command does not perform the GUI's UF2 copy and reconnection sequence.
 
+## Clocks readings and map
+
+The visible Clocks Values page polls once a second. ABS speed is shown in km/h, oil
+pressure in bar and both EGT channels in °C. An unavailable or expired
+measurement is shown as `--`; a transport failure also clears the readings.
+Polling pauses and readings clear during detection and flashing. Hidden pages
+do not poll. Numeric output follows the desktop locale. Clocks parameters are read-only.
+The map reads GPS from Clocks and clears its old marker when the fix, module
+or USB connection disappears; polling resumes after detection.
+
+DPF is visible as inactive. It cannot be detected, selected for flashing or
+given a firmware path. Existing saved paths for the retired module are discarded.
+
+
 ## Read GPS
 
 ```bash
@@ -238,14 +252,3 @@ handles POSIX serial I/O. `sc_flash.c`, `sc_manifest.c`, `sc_gps.c` and
 `sc_tests.c` implement the corresponding operations; `sc_text.c` and
 `sc_time.c` provide shared text and timing helpers. `src/cli/sc_cli_main.c`
 dispatches commands to the adjacent command, selector and output modules.
-
-The visible Clocks Values page polls once a second. ABS speed is shown in km/h, oil
-pressure in bar and both EGT channels in °C. An unavailable or expired
-measurement is shown as `--`; a transport failure also clears the readings.
-Polling pauses and readings clear during detection and flashing. Hidden pages
-do not poll. Numeric output follows the desktop locale. Clocks parameters are read-only.
-The map reads GPS from Clocks and clears its old marker when the fix, module
-or USB connection disappears; polling resumes after detection.
-
-DPF is visible as inactive. It cannot be detected, selected for flashing or
-given a firmware path. Existing saved paths for the retired module are discarded.

@@ -1,4 +1,5 @@
 #include "live_server.h"
+#include "export.h"
 #include "hal/network/http/hal_http_files.h"
 #include "hal/network/websocket/hal_websocket.h"
 #include "hal/system/hal_system.h"
@@ -6,6 +7,7 @@
 #include "json_io.h"
 #include "live_file.h"
 #include "log_source.h"
+#include "monitor_capture.h"
 #include "telemetry.h"
 #include <algorithm>
 #include <array>
@@ -176,6 +178,8 @@ struct LiveServer::State {
     auto &self = *static_cast<State *>(user);
     JsonWriter json(512);
     json.begin_object().key("kind").string(event.kind).key("t").number(event.t);
+    if (event.restart)
+      json.key("restart").boolean(true);
     if (event.values) {
       json.key("values").begin_object();
       for (size_t i = 0; i < event.values->keys.size(); ++i)
@@ -278,6 +282,62 @@ struct LiveServer::State {
       return HAL_ENOMEM;
     }
   }
+  static hal_status_t fields_route(const hal_http_request_t *,
+                                   hal_http_response_t *response, void *) {
+    try {
+      JsonWriter json(4096);
+      json.begin_array();
+      for (const auto &field : field_catalog()) {
+        json.begin_object()
+            .key("kind")
+            .string(field.kind)
+            .key("key")
+            .string(field.key);
+        write_field_metadata(json, &field);
+        json.end_object();
+      }
+      const auto text = json.end_array().finish();
+      const auto status =
+          hal_http_response_set_content_type(response, "application/json");
+      return status == HAL_OK
+                 ? hal_http_response_write_str(response, text.c_str())
+                 : status;
+    } catch (...) {
+      return HAL_ENOMEM;
+    }
+  }
+  static hal_status_t live_route(const hal_http_request_t *,
+                                 hal_http_response_t *response, void *user) {
+    try {
+      const auto &self = *static_cast<State *>(user);
+      const auto status = hal_http_response_set_content_type(
+          response, "text/html; charset=utf-8");
+      if (status != HAL_OK)
+        return status;
+      const std::string html =
+          "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\">"
+          "<meta name=\"viewport\" "
+          "content=\"width=device-width,initial-scale=1\">"
+          "<title>VP37 - live</title><link rel=\"stylesheet\" "
+          "href=\"/live-assets/viewer.css\">"
+          "<header class=\"top\"><strong data-i18n=\"VP37 - live\">VP37 - "
+          "live</strong>" +
+          (self.options.site.empty()
+               ? std::string()
+               : "<a href=\"/index.html\" data-i18n=\"Saved "
+                 "measurements\">Saved measurements</a>") +
+          "</header><main id=\"app\"><noscript>This page requires "
+          "JavaScript.</noscript></main>"
+          "<script src=\"/live-assets/i18n.js\"></script>"
+          "<script src=\"/live-assets/viewer.js\"></script>"
+          "<script "
+          "src=\"/live-assets/live.js\"></script><script>VP37.startLive();</"
+          "script></html>";
+      return hal_http_response_write_str(response, html.c_str());
+    } catch (...) {
+      return HAL_ENOMEM;
+    }
+  }
 };
 
 LiveServer::LiveServer(ServeOptions options)
@@ -296,15 +356,21 @@ hal_status_t LiveServer::start() {
   s.started = true;
   hal_http_server_clear_routes();
   hal_http_files_clear();
-  hal_status_t status = s.assets.mount("/assets", s.options.web);
+  hal_status_t status = s.assets.mount("/live-assets", s.options.web);
   if (status == HAL_OK && !s.options.site.empty())
     status = s.pages.mount("/", s.options.site);
   if (status == HAL_OK)
     status = hal_http_server_route(HAL_HTTP_METHOD_GET, "/api/status",
                                    State::status_route, &s);
   if (status == HAL_OK && s.options.site.empty())
-    status = hal_http_server_route(HAL_HTTP_METHOD_GET, "/",
-                                   State::status_route, &s);
+    status =
+        hal_http_server_route(HAL_HTTP_METHOD_GET, "/", State::live_route, &s);
+  if (status == HAL_OK)
+    status = hal_http_server_route(HAL_HTTP_METHOD_GET, "/live",
+                                   State::live_route, &s);
+  if (status == HAL_OK)
+    status = hal_http_server_route(HAL_HTTP_METHOD_GET, "/api/fields",
+                                   State::fields_route, &s);
   hal_websocket_callbacks_t callbacks{};
   callbacks.on_connect = State::connected;
   callbacks.on_message = State::received;
@@ -331,8 +397,28 @@ hal_status_t LiveServer::poll() {
   return status;
 }
 
+hal_status_t LiveServer::begin_capture() {
+  auto &s = *state_;
+  if (!s.started)
+    return HAL_ESTATE;
+  LiveFile file;
+  auto status = file.open(s.options.log);
+  if (status != HAL_OK)
+    return status;
+  s.reset(true);
+  s.device = file.device;
+  s.identity = file.identity;
+  s.offset = file.size;
+  const size_t length =
+      static_cast<size_t>(std::min<uint64_t>(file.size, s.anchor.size()));
+  status =
+      file.read(file.size - length, s.anchor.data(), length, s.anchor_size);
+  return status == HAL_OK && s.anchor_size != length ? HAL_EIO : status;
+}
+
 int serve_command(int argc, char **argv, const std::string &web) {
   ServeOptions options;
+  std::string monitor_project;
   options.web = web;
   for (int i = 2; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -341,6 +427,8 @@ int serve_command(int argc, char **argv, const std::string &web) {
     const std::string value = argv[++i];
     if (arg == "--log")
       options.log = value;
+    else if (arg == "--monitor-project")
+      monitor_project = value;
     else if (arg == "--site")
       options.site = value;
     else if (arg == "--port" || arg == "--ws-port") {
@@ -369,9 +457,22 @@ int serve_command(int argc, char **argv, const std::string &web) {
               unsigned(options.http_port), unsigned(options.websocket_port));
   std::fflush(stdout);
   hal_status_t result = HAL_OK;
-  while (!stopped && result == HAL_OK) {
-    result = server.poll();
-    hal_delay_ms(5);
+  try {
+    if (!monitor_project.empty()) {
+      result = capture_monitor(server, monitor_project, options.log,
+                               options.http_port, &stopped);
+      if (result == HAL_ECANCELED && stopped)
+        result = HAL_OK;
+    } else {
+      while (!stopped && result == HAL_OK) {
+        result = server.poll();
+        hal_delay_ms(5);
+      }
+    }
+  } catch (...) {
+    (void)std::signal(SIGINT, previous_int);
+    (void)std::signal(SIGTERM, previous_term);
+    throw;
   }
   (void)std::signal(SIGINT, previous_int);
   (void)std::signal(SIGTERM, previous_term);

@@ -179,20 +179,24 @@ std::string page(const std::string &title, const std::string &base,
                  const std::string &kind, const std::string &data_json,
                  const std::vector<std::string> &scripts) {
   std::string html =
-      "<!doctype html>\n<html lang=\"pl\">\n<head>\n<meta charset=\"utf-8\">\n"
+      "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
       "<meta name=\"viewport\" content=\"width=device-width, "
       "initial-scale=1\">\n"
       "<title>" +
       html_escape(title) + "</title>\n<link rel=\"stylesheet\" href=\"" + base +
       "assets/viewer.css\">\n</head>\n<body data-page=\"" + kind +
       "\">\n<header class=\"top\"><a href=\"" + base +
-      "index.html\">Przegląd porównań</a><a href=\"" + base +
-      "compare.html\">Porównanie A/B</a><span class=\"title\">" +
+      "index.html\" data-i18n=\"Comparison overview\">Comparison "
+      "overview</a><a href=\"" +
+      base +
+      "compare.html\" data-i18n=\"A/B comparison\">A/B comparison</a><span "
+      "class=\"title\">" +
       html_escape(title) +
-      "</span></header>\n<main id=\"app\"><noscript>Strona wymaga "
+      "</span></header>\n<main id=\"app\"><noscript>This page requires "
       "JavaScript.</noscript></main>\n"
       "<script src=\"" +
-      base + "assets/viewer.js\"></script>\n<script>VP37.base=\"" + base +
+      base + "assets/i18n.js\"></script>\n<script src=\"" + base +
+      "assets/viewer.js\"></script>\n<script>VP37.base=\"" + base +
       "\";VP37.page=" + script_safe(data_json) + ";</script>\n";
   for (const std::string &script : scripts) {
     html += "<script src=\"" + base + script + "\"></script>\n";
@@ -484,8 +488,7 @@ void write_run_pages(const Model &model, const Run &run, const Recording &rec,
       out.begin_object();
       out.key("line").string(line);
       out.key("key").string(key);
-      out.key("unit").string(info ? info->unit : "");
-      out.key("description").string(info ? info->description : "");
+      write_field_metadata(out, info);
       out.key("described").boolean(info != nullptr);
       out.end_object();
     }
@@ -793,7 +796,7 @@ void write_run_entry(JsonWriter &out, const Model &model, const Run &run) {
 
 void write_shared_pages(const Model &model, const std::string &site_dir,
                         const std::string &web_dir) {
-  for (const char *asset : {"viewer.js", "viewer.css"}) {
+  for (const char *asset : {"viewer.js", "viewer.css", "i18n.js"}) {
     write_output(site_dir + "/assets/" + asset,
                  read_file(web_dir + "/" + asset, size_t(16) << 20));
   }
@@ -819,10 +822,10 @@ void write_shared_pages(const Model &model, const std::string &site_dir,
                js_put("", "catalog", catalog.finish()));
 
   write_output(site_dir + "/index.html",
-               page("Pomiary VP37", "", "overview", "{\"kind\":\"overview\"}",
-                    {"data/catalog.js"}));
+               page("VP37 measurements", "", "overview",
+                    "{\"kind\":\"overview\"}", {"data/catalog.js"}));
   write_output(site_dir + "/compare.html",
-               page("Porównanie A/B", "", "compare", "{\"kind\":\"compare\"}",
+               page("A/B comparison", "", "compare", "{\"kind\":\"compare\"}",
                     {"data/catalog.js"}));
 
   std::set<std::string> keep;
