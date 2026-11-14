@@ -9,14 +9,24 @@ FIESTA_APT_PACKAGES=(
     clang-format clang-tidy clang-tools valgrind default-jre-headless
 )
 
-# The locales the GUI tests need, one per line; CI and the SerialConfigurator
-# tests read the same file. Builtins only: callers may run without PATH.
+# The lists in the repository's scripts/ directory. Builtins only: callers may
+# run without PATH.
 if [[ "${BASH_SOURCE[0]}" == */* ]]; then
-    FIESTA_TEST_LOCALES_FILE="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
+    FIESTA_LISTS_DIR="$(cd "${BASH_SOURCE[0]%/*}" && pwd)"
 else
-    FIESTA_TEST_LOCALES_FILE="$PWD"
+    FIESTA_LISTS_DIR="$PWD"
 fi
-FIESTA_TEST_LOCALES_FILE="${FIESTA_TEST_LOCALES_FILE}/../../../scripts/test-locales.txt"
+FIESTA_LISTS_DIR="${FIESTA_LISTS_DIR}/../../../scripts"
+
+# The locales the GUI tests need, one per line; CI and the SerialConfigurator
+# tests read the same file.
+FIESTA_TEST_LOCALES_FILE="${FIESTA_LISTS_DIR}/test-locales.txt"
+
+# The browsers the VP37 viewer test accepts, one per line; the viewer CMake
+# reads the same file. Any of them in PATH is enough; without one the setup
+# installs this package, which provides the listed `chromium`.
+FIESTA_TEST_BROWSERS_FILE="${FIESTA_LISTS_DIR}/test-browsers.txt"
+FIESTA_TEST_BROWSER_PACKAGE='chromium'
 
 # Debian's locale-gen, Raspberry Pi OS included, ignores its arguments and
 # builds only the locales this file enables; Ubuntu's builds its arguments.
@@ -50,6 +60,32 @@ list_missing_system_packages() {
             MISSING_SYSTEM_PACKAGES+=("$package")
         fi
     done
+
+    status=0
+    test_browser_available || status=$?
+    case "$status" in
+        0) ;;
+        1) MISSING_SYSTEM_PACKAGES+=("$FIESTA_TEST_BROWSER_PACKAGE") ;;
+        *) return 1 ;;
+    esac
+}
+
+# Returns 0 when PATH provides a browser the viewer test accepts, 1 when it
+# does not, and 2 when the list cannot be read.
+test_browser_available() {
+    local browser
+    local -a browsers=()
+    if ! mapfile -t browsers < "$FIESTA_TEST_BROWSERS_FILE" ||
+        [[ ${#browsers[@]} -eq 0 ]]; then
+        dependency_error "No test browsers in $FIESTA_TEST_BROWSERS_FILE"
+        return 2
+    fi
+    for browser in "${browsers[@]}"; do
+        if command -v "$browser" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 run_dependency_command_as_root() {
@@ -190,7 +226,8 @@ ensure_system_dependencies() {
         shift
     done
 
-    list_missing_system_packages
+    # Explicit returns: callers in a condition run without errexit.
+    list_missing_system_packages || return 1
     if [[ ${#MISSING_SYSTEM_PACKAGES[@]} -eq 0 ]]; then
         dependency_ok 'All required system packages are installed.'
         ensure_test_locales "$mode" "$non_interactive"
@@ -207,7 +244,7 @@ ensure_system_dependencies() {
     run_dependency_command_as_root "$non_interactive" \
         apt-get install -y --no-install-recommends "${MISSING_SYSTEM_PACKAGES[@]}"
 
-    list_missing_system_packages
+    list_missing_system_packages || return 1
     if [[ ${#MISSING_SYSTEM_PACKAGES[@]} -ne 0 ]]; then
         dependency_error "Packages remain missing after apt: ${MISSING_SYSTEM_PACKAGES[*]}"
         return 1

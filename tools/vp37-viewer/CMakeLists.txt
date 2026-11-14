@@ -89,7 +89,11 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME vp37v_live_tests COMMAND vp37v_live_tests)
   set_tests_properties(vp37v_live_tests PROPERTIES TIMEOUT 120)
-  find_program(VP37V_BROWSER NAMES google-chrome chromium chromium-browser msedge chrome
+  # The setup script reads the same names and installs a browser when none is present.
+  set(_vp37v_browsers_file "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/test-browsers.txt")
+  file(STRINGS "${_vp37v_browsers_file}" _vp37v_browser_names)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_vp37v_browsers_file}")
+  find_program(VP37V_BROWSER NAMES ${_vp37v_browser_names}
     PATHS "C:/Program Files (x86)/Microsoft/Edge/Application"
       "C:/Program Files/Microsoft/Edge/Application" "C:/Program Files/Google/Chrome/Application"
       "/Applications/Google Chrome.app/Contents/MacOS"

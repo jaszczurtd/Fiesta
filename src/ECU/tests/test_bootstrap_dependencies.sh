@@ -27,6 +27,9 @@ grep -Fq '"$SYSTEM_DEPENDENCY_SCRIPT" "${arguments[@]}"' "$BOOTSTRAP_SCRIPT" || 
     fail 'bootstrap does not invoke the system dependency helper'
 grep -Fq 'SKIP_APT=0 APT_NONINTERACTIVE=1' "$DAILY_RUNNER" || \
     fail 'daily runner does not enable unattended package installation'
+# The package installed for a missing browser must provide a listed one.
+grep -qx "$FIESTA_TEST_BROWSER_PACKAGE" "$FIESTA_TEST_BROWSERS_FILE" || \
+    fail 'the browser package is not in the shared browser list'
 
 fixture_installed=0
 # Locales the fixture system provides, and how its locale-gen works: from its
@@ -37,8 +40,21 @@ fixture_dir="$(mktemp -d)"
 trap 'rm -rf "$fixture_dir"' EXIT
 # Locale checks, edits and generation must never use the host configuration.
 FIESTA_LOCALE_GEN_CONFIG="$fixture_dir/absent.gen"
+# Browser names no host provides; a function stands in for an installed one,
+# and apt provides it with the browser package unless told otherwise.
+FIESTA_TEST_BROWSERS_FILE="$fixture_dir/browsers.txt"
+printf 'fiesta-absent-browser\nfiesta-fixture-browser\n' > "$FIESTA_TEST_BROWSERS_FILE"
+fixture_apt_browser=1
 declare -a apt_calls=()
 declare -a locale_calls=()
+
+add_fixture_browser() {
+    fiesta-fixture-browser() { :; }
+}
+
+remove_fixture_browser() {
+    unset -f fiesta-fixture-browser
+}
 
 dpkg-query() {
     if [[ "$fixture_installed" == '1' ]]; then
@@ -52,6 +68,10 @@ apt-get() {
     apt_calls+=("$*")
     if [[ "$1" == 'install' ]]; then
         fixture_installed=1
+        if [[ "$fixture_apt_browser" == '1' &&
+            " $* " == *" $FIESTA_TEST_BROWSER_PACKAGE "* ]]; then
+            add_fixture_browser
+        fi
     fi
 }
 
@@ -115,6 +135,8 @@ ensure_system_dependencies --install --non-interactive
 [[ "${apt_calls[0]}" == 'update' ]] || fail 'apt update was not first'
 [[ "${apt_calls[1]}" == *'ninja-build'* ]] || fail 'Ninja was not installed'
 [[ "${apt_calls[1]}" == *'gcc-arm-none-eabi'* ]] || fail 'GNU Arm was not installed'
+[[ " ${apt_calls[1]} " == *" $FIESTA_TEST_BROWSER_PACKAGE "* ]] || \
+    fail 'the missing browser was not installed'
 
 [[ ${#locale_calls[@]} -eq 1 ]] || fail 'expected one locale generation call'
 [[ "${locale_calls[0]}" == 'en_US.UTF-8 pl_PL.UTF-8' ]] || fail 'wrong test locales'
@@ -168,6 +190,44 @@ if ensure_system_dependencies --install --non-interactive 2>/dev/null; then
 fi
 [[ ${#locale_calls[@]} -eq 1 ]] || fail 'expected one locale generation call'
 fixture_generated='en_US.UTF-8 pl_PL.UTF-8'
+
+# Any listed browser in PATH is enough; no second one is installed.
+fixture_installed=0
+apt_calls=()
+ensure_system_dependencies --install --non-interactive
+[[ ${#apt_calls[@]} -eq 2 ]] || fail 'expected apt update and install calls'
+[[ " ${apt_calls[1]} " != *" $FIESTA_TEST_BROWSER_PACKAGE "* ]] || \
+    fail 'a browser was installed next to an available one'
+
+# Without one, check mode fails and leaves the packages alone.
+remove_fixture_browser
+apt_calls=()
+if ensure_system_dependencies --check 2>/dev/null; then
+    fail 'check mode accepted a missing browser'
+fi
+[[ ${#apt_calls[@]} -eq 0 ]] || fail 'missing-browser check changed package state'
+
+# A browser package that provides no listed browser fails the setup.
+fixture_apt_browser=0
+if ensure_system_dependencies --install --non-interactive 2>/dev/null; then
+    fail 'install accepted a package without a listed browser'
+fi
+[[ ${#apt_calls[@]} -eq 2 &&
+    "${apt_calls[1]}" == *" $FIESTA_TEST_BROWSER_PACKAGE" ]] || \
+    fail 'the missing browser was not requested from apt'
+fixture_apt_browser=1
+
+# A missing or empty browser list stops the setup before apt.
+: > "$fixture_dir/empty.txt"
+for FIESTA_TEST_BROWSERS_FILE in "$fixture_dir/absent.txt" "$fixture_dir/empty.txt"; do
+    apt_calls=()
+    if ensure_system_dependencies --install --non-interactive 2>/dev/null; then
+        fail "install accepted the browser list $FIESTA_TEST_BROWSERS_FILE"
+    fi
+    [[ ${#apt_calls[@]} -eq 0 ]] || fail 'an unreadable browser list reached apt'
+done
+FIESTA_TEST_BROWSERS_FILE="$fixture_dir/browsers.txt"
+add_fixture_browser
 
 fixture_installed=0
 sudo() { return 1; }

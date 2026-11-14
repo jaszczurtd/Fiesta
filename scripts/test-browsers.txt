@@ -1,0 +1,5 @@
+google-chrome
+chromium
+chromium-browser
+msedge
+chrome

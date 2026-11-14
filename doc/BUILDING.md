@@ -44,6 +44,10 @@ The package list is maintained in
 It includes the C/C++ and Arm toolchains, CMake, Ninja, Python, Git, curl,
 CA certificates, Perl, libusb, pkg-config, GTK4, dpkg-dev, libshumate,
 Xvfb, xauth, locales, Valgrind, clang-format, clang-tidy, clang-tools and Java for PMD.
+The VP37 viewer tests also need Chrome or Chromium. When `PATH` has none of
+the programs listed in `scripts/test-browsers.txt`, the script installs the
+`chromium` package, available on Debian, Raspberry Pi OS and Linux Mint.
+Ubuntu has no such package, so install Google Chrome there first.
 The setup builds the cppcheck version selected by HAL; distribution versions
 can produce different findings.
 

@@ -45,8 +45,13 @@ Lista pakietów znajduje się w
 [`ensure-system-dependencies.sh`](../src/ECU/scripts/ensure-system-dependencies.sh).
 Obejmuje toolchainy C/C++ i Arm, CMake, Ninja, Python, Git, curl, certyfikaty CA,
 Perl, libusb, pkg-config, GTK4, dpkg-dev, libshumate, Xvfb, xauth, locales, Valgrind, clang-format,
-clang-tidy, clang-tools i Javę dla PMD. Setup buduje cppcheck w wersji wybranej
-przez HAL; wersje z dystrybucji mogą dawać inne wyniki analizy.
+clang-tidy, clang-tools i Javę dla PMD. Testy przeglądarki pomiarów VP37
+potrzebują dodatkowo Chrome albo Chromium. Jeśli w `PATH` nie ma żadnego
+programu z listy `scripts/test-browsers.txt`, skrypt instaluje pakiet
+`chromium`, dostępny w Debianie, Raspberry Pi OS i Linux Mint. Ubuntu nie ma
+takiego pakietu, więc tam najpierw zainstaluj Google Chrome.
+Setup buduje cppcheck w wersji wybranej przez HAL; wersje z dystrybucji mogą
+dawać inne wyniki analizy.
 
 Skrypt używa `sudo` do apt. Uruchomienie całości jako root jest odrzucane,
 ponieważ pozostawia katalogi kompilacji należące do roota. `ALLOW_ROOT=1`
