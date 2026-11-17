@@ -164,6 +164,7 @@ states and readers interleaving with register publication. ECU tests cover
 frame decoding, freshness, timestamp wrap, retries and control shutdown.
 
 ```bash
+src/JaszczurHAL/scripts/jh --version
 cmake -S src/Adjustometer -B src/Adjustometer/build_test
 cmake --build src/Adjustometer/build_test --parallel
 ctest --test-dir src/Adjustometer/build_test --output-on-failure

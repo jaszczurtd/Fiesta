@@ -85,16 +85,40 @@ hal_status_t clockTimeReadLocal(RTC_DateTime *outLocal, bool *outTrusted);
 hal_status_t clockTimeWriteUtc(uint32_t epoch);
 
 /**
- * @brief Write a CET/CEST date and time as UTC.
+ * @brief Convert a CET/CEST date and time to the UTC seconds the RTC keeps.
  *
  * The weekday field is ignored. A local time skipped by the spring change is
  * taken as CET and shows one hour later as CEST; the repeated autumn hour is
- * taken as its first, CEST pass.
+ * taken as its first, CEST pass. A local time before 01:00 on 1 January of
+ * CFG_RTC_MIN_YEAR lies before the RTC range in UTC; a DS3231 that lost its
+ * supply restarts at exactly that date.
  *
  * @param local Local date and time.
- * @return As clockTimeWriteUtc(); HAL_EINVAL also for an invalid date.
+ * @param[out] outEpoch UTC seconds; unchanged on error.
+ * @return HAL_OK, or HAL_EINVAL for NULL, an invalid date or UTC outside
+ *         clockTimeEpochInRange().
+ */
+hal_status_t clockTimeLocalToUtc(const RTC_DateTime *local, uint32_t *outEpoch);
+
+/**
+ * @brief Write a CET/CEST date and time as UTC.
+ *
+ * Converts the time as clockTimeLocalToUtc() does.
+ *
+ * @param local Local date and time.
+ * @return As clockTimeWriteUtc(); HAL_EINVAL also for an invalid date or a
+ *         local time outside the RTC range in UTC.
  */
 hal_status_t clockTimeWriteLocal(const RTC_DateTime *local);
+
+/**
+ * @brief Log the local date and time once every CFG_TIME_LOG_INTERVAL_MS.
+ *
+ * Call from every pass of the main loop. The line shows the time as
+ * clockTimeReadLocal() gives it, marked "(not trusted)" without trusted UTC.
+ * A failed RTC read goes to the rate-limited "rtc" error log instead.
+ */
+void clockTimeLogTick(void);
 
 /**
  * @brief Set the weekday (0 = Monday) from the date.

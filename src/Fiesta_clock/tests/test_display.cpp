@@ -23,6 +23,7 @@ static bool hour_down = false;
 static bool sc_edit_pending = false;
 static bool can_time_edit = false;
 static int ds18b20_polls = 0;
+static int time_log_ticks = 0;
 static int bus_inits = 0;
 static RTC_DateTime now = {};
 static std::array<uint8_t, 512> greeting;
@@ -108,6 +109,7 @@ void hal_debug_init_default(void) {}
 void hal_debug_set_module_prefix(const char *) {}
 void hal_deb(const char *, ...) {}
 void hal_derr(const char *, ...) {}
+void hal_derr_limited(const char *, const char *, ...) {}
 struct hal_mutex_impl_t {
   int unused;
 };
@@ -154,6 +156,7 @@ hal_status_t clockTimeWriteLocal(const RTC_DateTime *value) {
   return HAL_OK;
 }
 void clockTimeUpdateWeekday(RTC_DateTime *) {}
+void clockTimeLogTick(void) { ++time_log_ticks; }
 hal_status_t clockCanInit(void) { return HAL_OK; }
 void clockCanTick(bool timeEditActive) { can_time_edit = timeEditActive; }
 void configSessionInit(void) {}
@@ -260,10 +263,13 @@ static void test_app() {
   const auto asleep = frames.size();
   const auto sleeping_image = image();
   const int polls = ds18b20_polls;
+  const int timeLogs = time_log_ticks;
   app_task0();
   assert(frames.size() == asleep + 1);
-  // The sensors convert for CAN also with the panel asleep.
+  // The sensors convert for CAN and the time goes to the log also with the
+  // panel asleep.
   assert(ds18b20_polls == polls + 1);
+  assert(time_log_ticks == timeLogs + 1);
   assert(frames.back() == (std::vector<uint8_t>{0, 0xae}));
   assert(image() == sleeping_image);
   const auto wakes = command_count(0xaf);

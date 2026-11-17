@@ -9,8 +9,7 @@ include_guard(GLOBAL)
 # configuration. A change of the device tree, a binding or the HAL registries
 # it read reconfigures the build.
 function(fiesta_hardware_header OUT_VAR MODULE_DIR HAL_ROOT)
-    include("${HAL_ROOT}/cmake/jh_python.cmake")
-    jh_find_python(_fiesta_hw_python)
+    include("${HAL_ROOT}/cmake/jh_hardware_config.cmake")
     set(_fiesta_hw_root "${CMAKE_BINARY_DIR}/.build")
     set(_fiesta_hw_out "${_fiesta_hw_root}/hardware")
     # A module with several assemblies resolves the one its manifest selects,
@@ -23,41 +22,16 @@ function(fiesta_hardware_header OUT_VAR MODULE_DIR HAL_ROOT)
         string(JSON _fiesta_hw_assembly ERROR_VARIABLE _fiesta_hw_no_assembly
             GET "${_fiesta_hw_manifest_text}" assembly)
         if(NOT _fiesta_hw_no_assembly)
-            set(_fiesta_hw_assembly_args --assembly "${_fiesta_hw_assembly}")
+            set(_fiesta_hw_assembly_args ASSEMBLY "${_fiesta_hw_assembly}")
         endif()
     endif()
-    execute_process(
-        COMMAND "${_fiesta_hw_python}" "${HAL_ROOT}/scripts/generate_hardware_config.py"
-            resolve --config-dir "${MODULE_DIR}" ${_fiesta_hw_assembly_args}
-            --output-root "${_fiesta_hw_root}" --output-dir "${_fiesta_hw_out}"
-        RESULT_VARIABLE _fiesta_hw_result
-        ERROR_VARIABLE _fiesta_hw_error)
-    if(NOT _fiesta_hw_result EQUAL 0)
-        string(STRIP "${_fiesta_hw_error}" _fiesta_hw_error)
-        message(FATAL_ERROR "Hardware configuration of ${MODULE_DIR} failed: ${_fiesta_hw_error}")
-    endif()
-
-    # The model lists every file it read, relative to the module or, with
-    # the hal: prefix, to the HAL root; the generator scripts count too.
-    file(READ "${_fiesta_hw_out}/jh_hardware_resolved.json" _fiesta_hw_model)
-    string(JSON _fiesta_hw_count LENGTH "${_fiesta_hw_model}" dependencies)
-    math(EXPR _fiesta_hw_last "${_fiesta_hw_count} - 1")
-    file(GLOB _fiesta_hw_inputs "${HAL_ROOT}/scripts/generate_hardware_config.py"
-        "${HAL_ROOT}/scripts/hardware_*.py")
-    foreach(_fiesta_hw_index RANGE ${_fiesta_hw_last})
-        string(JSON _fiesta_hw_path GET "${_fiesta_hw_model}"
-            dependencies ${_fiesta_hw_index} path)
-        if(_fiesta_hw_path MATCHES "^hal:(.*)$")
-            list(APPEND _fiesta_hw_inputs "${HAL_ROOT}/${CMAKE_MATCH_1}")
-        else()
-            list(APPEND _fiesta_hw_inputs "${MODULE_DIR}/${_fiesta_hw_path}")
-        endif()
-    endforeach()
+    jh_resolve_hardware_header(_fiesta_hw_header ROOT "${HAL_ROOT}"
+        CONFIG_DIR "${MODULE_DIR}" ${_fiesta_hw_assembly_args}
+        OUTPUT_ROOT "${_fiesta_hw_root}" OUTPUT_DIR "${_fiesta_hw_out}")
     if(EXISTS "${_fiesta_hw_manifest}")
-        list(APPEND _fiesta_hw_inputs "${_fiesta_hw_manifest}")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_fiesta_hw_manifest}")
     endif()
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_fiesta_hw_inputs})
-    set(${OUT_VAR} "${_fiesta_hw_out}/jh_hardware.h" PARENT_SCOPE)
+    set(${OUT_VAR} "${_fiesta_hw_header}" PARENT_SCOPE)
 endfunction()
 
 # fiesta_include_hardware_header(<header> <target>...)

@@ -2,13 +2,12 @@
 
 [English](README.md)
 
-Płytka 70 × 70 mm dla RP2040-Zero, CAN i DS3231 Mini. Firmware domyślnie używa innego RTC,
-dlatego trzeba jawnie wybrać właściwy wariant.
+Płytka 70 × 70 mm dla RP2040-Zero, CAN i DS3231 Mini. Domyślny firmware obsługuje ten RTC.
 
 ## Przed podłączeniem
 
 - Zasilaj z USB albo instalacji samochodu, nigdy jednocześnie.
-- Dla tej płytki wybierz wariant firmware DS3231. Domyślny firmware wybiera PCF8563.
+- Dla tej płytki użyj domyślnego firmware. Wariant PCF8563 jest przeznaczony dla starszej płytki.
 - R9/R10 mają 47 kΩ / 10 kΩ; przeliczenie napięcia w firmware nadal wymaga dostosowania.
 - Na prototypie sprawdź temperaturę regulatorów, stabilność zasilania, orientację złącza RTC i układ baterii.
 

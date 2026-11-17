@@ -3,9 +3,8 @@
 import json
 import os
 from pathlib import Path
-import sys
 
-from native_build import compile_sources, run_command
+from native_build import compile_sources, hardware_command, run_command
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "src/Fiesta_clock"
@@ -18,7 +17,6 @@ def build_clock_binary(build, name, sources, tree=None, defines=()):
     ``tree`` replaces the module's device_tree.json, e.g. to try other pull
     modes; the module's hal_project_config.h is used as it is.
     """
-    generator = [sys.executable, str(HAL / "scripts/generate_hardware_config.py")]
     output = build / "hardware"
     config = build / "config"
     config.mkdir(parents=True, exist_ok=True)
@@ -29,9 +27,9 @@ def build_clock_binary(build, name, sources, tree=None, defines=()):
         (MODULE / "hal_project_config.h").read_text())
     common = ["--config-dir", str(config), "--output-root", str(build),
               "--output-dir", str(output)]
-    run_command([*generator, "resolve", *common])
+    run_command([*hardware_command(HAL, "resolve"), *common])
     definition_args = [arg for value in defines for arg in ("--define", value)]
-    run_command([*generator, "finalize", *common, *definition_args,
+    run_command([*hardware_command(HAL, "finalize"), *common, *definition_args,
                  "--hardware", str(output / "jh_hardware_resolved.json"),
                  "--hardware-header", str(output / "jh_hardware.h")])
     flags = [*("-D" + value for value in defines),

@@ -9,6 +9,7 @@ on:
       - "scripts/**"
       - "tests/**"
       - "tools/vp37-viewer/**"
+      - "tools/modules/**"
       - "modules.json"
       - "runalltests.sh"
       - "runmefirst.sh"
@@ -27,6 +28,7 @@ on:
       - "scripts/**"
       - "tests/**"
       - "tools/vp37-viewer/**"
+      - "tools/modules/**"
       - "modules.json"
       - "runalltests.sh"
       - "runmefirst.sh"
@@ -83,6 +85,7 @@ jobs:
 
       - name: Run Valgrind memcheck target
         run: |
+          cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake
           cmake --build src/ECU/build_test --target check-valgrind --parallel
 
       - name: Run clang-tidy target

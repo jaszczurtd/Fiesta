@@ -29,7 +29,7 @@ Check the board revision as well as the processor assembly before uploading.
 | --- | --- | --- |
 | Existing ECU wiring with Waveshare RP2350-Plus or RP2040-Plus | Current `rp2350-plus` and `rp2040-plus` assemblies. Adjustometer and expander share I²C0. | The PCF8574A runs at the configured 400 kHz despite its 100 kHz rating. See [ECU interfaces](../src/ECU/guides/BENCH.md#bench-image-and-hardware). |
 | [ECU PCB 3](../Fiesta_pcbs/ecu/README.md) | New layout separates Adjustometer and expander buses and uses non-inverting TC4427 drive. | Adapt bus assignments and output polarity, then validate on the manufactured board. Current firmware must not be assumed to match it. |
-| [Fiesta_clock PCB](../Fiesta_pcbs/clock/README.md) | New board uses DS3231 Mini; firmware defaults to PCF8563 and offers a DS3231 variant. | Select the RTC variant and adapt/check the new voltage divider conversion. |
+| [Fiesta_clock PCB](../Fiesta_pcbs/clock/README.md) | New board uses DS3231 Mini, which the default firmware selects; a PCF8563 variant serves the older board. | Adapt and check the new voltage divider conversion. |
 | [Clocks PCB](../Fiesta_pcbs/dashboard/Clocks/README.md) | Dashboard hardware and its assembly instructions. | Use USB or vehicle power, never both. |
 | [Adjustometer PCB](../Fiesta_pcbs/vp37_adjustometer/adjustometer/README.md) | Position sensor used by the ECU and separate VP37TestBench. | Check both power rails, common ground and baseline startup order. |
 | Separate VP37TestBench | Dedicated project with its own display and power-stage enable wiring. | Use its [module guide](../src/VP37TestBench/README.md); do not substitute it for the ECU BENCH variant. |

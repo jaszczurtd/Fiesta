@@ -45,7 +45,7 @@
           }
         },
         "vp37ScanAux": { "present": true, "pins": { "in": 27 } },
-        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "adjustometer": { "present": true, "bus": "i2c", "address": "0x57" },
         "tft": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
         "tftDc": { "present": true, "pins": { "out": 15 } },
         "tftReset": { "present": true, "pins": { "out": 20 } }

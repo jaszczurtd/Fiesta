@@ -3,11 +3,10 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 
-from native_build import compile_sources, run_command
+from native_build import compile_sources, hardware_command, run_command
 
 ROOT = Path(__file__).resolve().parents[1]
 HAL = ROOT / "src/JaszczurHAL"
@@ -19,8 +18,8 @@ class StartCadenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="fiesta-cadence-") as temporary:
             build = Path(temporary) / ".build"
             build.mkdir()
-            run_command([sys.executable, str(HAL / "scripts/generate_hardware_config.py"),
-                         "resolve", "--config-dir", str(module), "--assembly", "rp2350-plus",
+            run_command([*hardware_command(HAL, "resolve"),
+                         "--config-dir", str(module), "--assembly", "rp2350-plus",
                          "--output-root", str(build), "--output-dir", str(build)])
             source = build / "cadence.c"
             source.write_text('''

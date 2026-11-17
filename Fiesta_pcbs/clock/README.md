@@ -2,13 +2,13 @@
 
 [Polski](README.pl.md)
 
-A 70 × 70 mm carrier for RP2040-Zero, CAN and DS3231 Mini. Firmware defaults to a different
-RTC, so select the board variant deliberately.
+A 70 × 70 mm carrier for RP2040-Zero, CAN and DS3231 Mini. The default firmware selects this
+RTC.
 
 ## Before connecting
 
 - Use USB or vehicle power, never both at once.
-- Select the DS3231 firmware variant for this board. The default firmware selects PCF8563.
+- Use the default firmware for this board. The PCF8563 variant belongs to the older board.
 - R9/R10 are 47 kΩ / 10 kΩ; the firmware voltage conversion still needs the corresponding update.
 - Check regulator temperature, supply stability, RTC header orientation and battery arrangement on the prototype.
 

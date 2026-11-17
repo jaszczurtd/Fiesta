@@ -12,11 +12,12 @@
 
 /* ── Modules used by Fiesta_clock ────────────────────────────────────── */
 
-/* Select one RTC. An external RTC_ds3231 definition overrides the default. */
+/* Select one RTC. The default DS3231 fits the new board; an external
+ * RTC_pcf8563 definition selects the PCF8563 of the older one. */
 #define JH_PROJECT_VARIANTS(X)                                                 \
-  X(DS3231, "Fiesta_clock with a DS3231 RTC", RTC_ds3231 = 1)
+  X(PCF8563, "Fiesta_clock with a PCF8563 RTC", RTC_pcf8563 = 1)
 #if !defined(RTC_pcf8563) && !defined(RTC_ds3231)
-#define RTC_pcf8563
+#define RTC_ds3231
 #endif
 #if defined(RTC_pcf8563) && defined(RTC_ds3231)
 #error "Select exactly one Fiesta_clock RTC"

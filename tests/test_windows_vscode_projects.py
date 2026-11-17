@@ -50,9 +50,9 @@ DEBUG_PROFILES = {
         "Project: Debug rp2040-zero (RP2040)":
             ("rp2040/rp2040-zero", "Project: Build (Debug) rp2040-zero",
              "target/rp2040.cfg"),
-        "Project: Debug rp2040-zero variant: DS3231 (RP2040)":
-            ("rp2040/rp2040-zero/variants/DS3231",
-             "Project: Build (Debug) rp2040-zero variant: DS3231",
+        "Project: Debug rp2040-zero variant: PCF8563 (RP2040)":
+            ("rp2040/rp2040-zero/variants/PCF8563",
+             "Project: Build (Debug) rp2040-zero variant: PCF8563",
              "target/rp2040.cfg"),
     },
     "Adjustometer": {"Project: Debug rp2040-zero (RP2040)":
@@ -204,10 +204,12 @@ class StageFromIndexTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        # The fixture is a repository of the tracked generator inputs.
+        # The fixture commits the worktree generator inputs, including new
+        # files of a migration; the scenarios then exercise its own index.
         listing = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "ls-files", "-s", "-z", "--",
-             ".githooks", "scripts", "modules.json", "src", ".vscode"],
+            ["git", "-C", str(REPO_ROOT), "ls-files", "-s", "-z", "--cached",
+             "--others", "--exclude-standard", "--", ".githooks", "scripts",
+             "tools/modules", "modules.json", "src", ".vscode"],
             capture_output=True, check=False,
         )
         if listing.returncode != 0:
@@ -217,7 +219,7 @@ class StageFromIndexTests(unittest.TestCase):
         for record in listing.stdout.split(b"\0"):
             if not record:
                 continue
-            meta, name = record.split(b"\t", 1)
+            meta, name = record.split(b"\t", 1) if b"\t" in record else (b"100644", record)
             relative = name.decode("utf-8")
             if meta.split()[0] == b"160000" or relative.startswith("src/JaszczurHAL/"):
                 continue  # the HAL submodule is linked below

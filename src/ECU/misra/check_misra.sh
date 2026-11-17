@@ -226,7 +226,7 @@ if [[ -f "$project_root/device_tree.json" ]]; then
             assembly_args=(--assembly "$assembly")
         fi
     fi
-    if ! python3 "$hal_root/scripts/generate_hardware_config.py" resolve \
+    if ! "$hal_root/scripts/jh" hardware resolve --root "$hal_root" \
         --config-dir "$project_root" "${assembly_args[@]}" --output-root "$hardware_root" \
         --output-dir "$hardware_root/hardware"; then
         echo "Hardware configuration of $project_root failed." >&2

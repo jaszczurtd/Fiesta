@@ -76,12 +76,17 @@ a [`wirings.txt`](Fiesta_pcbs/wirings.txt) kolory przewodów wiązki.
 i katalog testów każdego modułu. Pozycja konfiguratora mówi też, czy moduł
 dostaje podzakładkę Tests (`tests`) i czy status jego testów niesie położenie
 nastawnika (`testsDrive`). Dodawanie modułu zaczyna się od tego rejestru.
-[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) sprawdza go i generuje
+Narzędzie C w [`tools/modules`](tools/modules) sprawdza rejestr i generuje
 nagłówek tokenów w `src/common/scDefinitions`, tabelę konfiguratora oraz listy
 dla skryptów powłoki. Korzystają z nich generator VS Code, `runalltests.sh`,
 `runmefirst.sh`, bootstrap i konfigurator. Indeks pozycji konfiguratora jest
 jawny, ponieważ wiąże zapisane ścieżki obrazów z modułem. Listy w workflow CI
 są zapisane bezpośrednio, a test porównuje je z rejestrem.
+[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) udostępnia jego wynik JSON
+narzędziom Pythona. Rejestr korzysta z jhbase przypiętego HAL, a listy wspólnych
+źródeł nadal czyta `src/common/cmake/fiesta_shared_sources.cmake`. Narzędzie C
+ustawia też `JH_EXTRA_SOURCES` i usuwa ten wpis, gdy moduł przestaje korzystać
+ze wspólnych źródeł.
 
 [`legacy/`](legacy/) zawiera wycofane DPF_main, AdaptiveLights i Fading.
 Nie są kompilowane ani testowane.

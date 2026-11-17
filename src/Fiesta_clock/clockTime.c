@@ -251,8 +251,9 @@ hal_status_t clockTimeSettle(void) {
   return clockTimeFinish(HAL_OK, clockTimeSecondsOf(&dt));
 }
 
-hal_status_t clockTimeWriteLocal(const RTC_DateTime *local) {
-  if (local == NULL || local->year < CFG_RTC_MIN_YEAR ||
+hal_status_t clockTimeLocalToUtc(const RTC_DateTime *local,
+                                 uint32_t *outEpoch) {
+  if (local == NULL || outEpoch == NULL || local->year < CFG_RTC_MIN_YEAR ||
       local->year > CFG_RTC_MAX_YEAR) {
     return HAL_EINVAL;
   }
@@ -271,7 +272,18 @@ hal_status_t clockTimeWriteLocal(const RTC_DateTime *local) {
       check.utc_offset_minutes == CLOCK_CEST_OFFSET_MIN) {
     offsetMin = CLOCK_CEST_OFFSET_MIN;
   }
-  return clockTimeWriteUtc(localSeconds - offsetMin * 60u);
+  const uint32_t epoch = localSeconds - offsetMin * 60u;
+  if (!clockTimeEpochInRange(epoch)) {
+    return HAL_EINVAL;
+  }
+  *outEpoch = epoch;
+  return HAL_OK;
+}
+
+hal_status_t clockTimeWriteLocal(const RTC_DateTime *local) {
+  uint32_t epoch = 0u;
+  const hal_status_t status = clockTimeLocalToUtc(local, &epoch);
+  return status == HAL_OK ? clockTimeWriteUtc(epoch) : status;
 }
 
 void clockTimeUpdateWeekday(RTC_DateTime *dt) {
@@ -282,4 +294,24 @@ void clockTimeUpdateWeekday(RTC_DateTime *dt) {
                               &sundayFirst) == HAL_OK) {
     dt->weekday = (unsigned char)((sundayFirst + 6u) % 7u);
   }
+}
+
+// logs the current time into console
+void clockTimeLogTick(void) {
+  static uint32_t lastLogMs = 0u;
+  if (!hal_millis_interval_elapsed(hal_millis(), &lastLogMs,
+                                   CFG_TIME_LOG_INTERVAL_MS)) {
+    return;
+  }
+
+  RTC_DateTime local = {0};
+  bool trusted = false;
+  const hal_status_t status = clockTimeReadLocal(&local, &trusted);
+  if (status != HAL_OK) {
+    derr_limited("rtc", "RTC time not read: %s", hal_status_to_string(status));
+    return;
+  }
+  deb("Time: %04d-%02d-%02d %02d:%02d:%02d%s", local.year, local.month,
+      local.day, local.hour, local.minute, local.second,
+      trusted ? "" : " (not trusted)");
 }

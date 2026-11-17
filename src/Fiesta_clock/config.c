@@ -168,11 +168,8 @@ static void clockValuesRefreshActiveFromRtc(void) {
   }
 }
 
-static bool clockValuesApplyToRtc(const clock_values_t *values) {
-  if (!clockValuesValidate(values, NULL)) {
-    return false;
-  }
-
+/* Values already passed clockValuesValidate(). */
+static RTC_DateTime clockValuesToLocal(const clock_values_t *values) {
   const RTC_DateTime dt = {
       .second = (unsigned char)values->rtc_second,
       .minute = (unsigned char)values->rtc_minute,
@@ -182,7 +179,7 @@ static bool clockValuesApplyToRtc(const clock_values_t *values) {
       .month = (unsigned char)values->rtc_month,
       .year = values->rtc_year,
   };
-  return clockTimeWriteLocal(&dt) == HAL_OK;
+  return dt;
 }
 
 static void configSessionRefresh(void *user) {
@@ -210,7 +207,15 @@ static hal_status_t configSessionCommit(void *user, const char **outReason,
     }
     return HAL_EINVAL;
   }
-  if (!clockValuesApplyToRtc(&s_staging)) {
+  /* A fresh DS3231 shows 2000-01-01 00:xx, which SC reads and stages as is;
+   * that local hour has no UTC in the RTC range. */
+  const RTC_DateTime local = clockValuesToLocal(&s_staging);
+  uint32_t epoch = 0u;
+  if (clockTimeLocalToUtc(&local, &epoch) != HAL_OK) {
+    *outReason = "utc_range";
+    return HAL_EINVAL;
+  }
+  if (clockTimeWriteUtc(epoch) != HAL_OK) {
     *outReason = "rtc_set_failed";
     return HAL_EIO;
   }

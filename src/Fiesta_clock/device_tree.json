@@ -50,8 +50,8 @@
       },
       "nodes": {
         "can": { "present": true, "bus": "spi", "pins": { "cs": 1, "int": 4 } },
-        "rtc": { "present": true, "bus": "i2c", "address": 81 },
-        "oled": { "present": true, "bus": "i2c", "address": 60 },
+        "rtc": { "present": true, "bus": "i2c", "address": "0x68" },
+        "oled": { "present": true, "bus": "i2c", "address": "0x3c" },
         "tempInside": { "present": true, "pins": { "data": 6 } },
         "tempOutside": { "present": true, "pins": { "data": 7 } },
         "buttonHour": { "present": true, "pins": { "in": 10 } },

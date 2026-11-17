@@ -302,7 +302,6 @@
 			)
 			(embedded_fonts no)
 		)
-
 		(symbol "Device:C_Polarized"
 			(pin_numbers
 				(hide yes)
@@ -2265,7 +2264,6 @@
 		(at 170.18 91.44)
 		(uuid "26d5d238-c45c-436a-8872-0e7bf8cfb0e6")
 	)
-
 	(no_connect
 		(at 161.29 104.14)
 		(uuid "361a9d18-d775-4627-8963-0095f3d6aa70")
@@ -2294,12 +2292,10 @@
 		(at 170.18 93.98)
 		(uuid "5cd69465-651a-4ab5-860f-7ff88372d2d2")
 	)
-
 	(no_connect
 		(at 158.75 104.14)
 		(uuid "60065a74-5831-47fb-89ea-3cf8bc922054")
 	)
-
 	(no_connect
 		(at 156.21 104.14)
 		(uuid "8f8d61b2-a1a1-4a84-a7b0-99c975135283")
@@ -2308,7 +2304,6 @@
 		(at 156.21 73.66)
 		(uuid "9283adf3-8afe-4426-9e18-49be9edff817")
 	)
-
 	(no_connect
 		(at 170.18 86.36)
 		(uuid "ab54d2d5-d82e-4646-b54e-50aa4f2f3bae")
@@ -2321,7 +2316,6 @@
 		(at 170.18 88.9)
 		(uuid "de97f071-81b8-4fe6-9c82-8e827cc394c9")
 	)
-
 	(wire
 		(pts
 			(xy 143.51 73.66) (xy 143.51 60.96)
@@ -4980,25 +4974,21 @@
 				(hide yes)
 			)
 		)
-
 		(pin "3"
 			(uuid "03c988e8-b1d5-4e66-9864-df5f164c8328")
 		)
-
 		(pin "2"
 			(uuid "8b20aa3d-29fe-44a4-8d0f-d24b487772e6")
 		)
 		(pin "5"
 			(uuid "6738119c-5667-4c3c-b3f9-ae58d64a0d4d")
 		)
-
 		(pin "1"
 			(uuid "b3425b05-f0af-4275-ad99-a8abbb02e057")
 		)
 		(pin "4"
 			(uuid "a19aba48-a1f5-407f-a28b-f45918446969")
 		)
-
 		(instances
 			(project "adjustometer"
 				(path "/fafb50fe-c55c-4e36-9cb1-32c8028ef92e"
@@ -5026,7 +5016,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "1uF"
+		(property "Value" "0.33uF"
 			(at 112.8 74.4 0)
 			(effects
 				(font

@@ -8,9 +8,9 @@ and temperatures to the other modules over CAN. The RTC keeps time without GPS.
 ## Prepare and start
 
 Check the [board revision](../../Fiesta_pcbs/clock/README.md) and RTC type. Firmware defaults
-to PCF8563; the new board has a DS3231 Mini and a different voltage divider. Select the
-DS3231 variant and adapt the voltage conversion before assessing its readings. Use USB or
-vehicle power, never both.
+to the DS3231 Mini of the new board; for the older board with a PCF8563, select the PCF8563
+variant. The new board also has a different voltage divider, so adapt the voltage conversion
+before assessing its readings. Use USB or vehicle power, never both.
 
 Open `src/Fiesta_clock` and follow the [build and upload guide](../../doc/BUILDING.md). Set
 the time using the buttons or [SerialConfigurator](../SerialConfigurator/README.md). Check
@@ -23,7 +23,12 @@ The display, the buttons and the configurator use CET/CEST, converted with
 spring change counts as CET; the repeated autumn hour counts as its first,
 CEST pass. The weekday follows the date, so the buttons do not set it. The
 configurator can read and set the date and time; a commit is rejected unless
-the whole date is valid, leap years included.
+the whole date is valid, leap years included. A local time before 01:00 on
+1 January 2000 has no UTC the RTC can hold, so the commit fails with
+`utc_range`. A DS3231 that lost its supply restarts at exactly that date, so
+set the whole date before you commit. Once a second the debug log
+shows the date and time from the display, marked `(not trusted)` without
+trusted UTC.
 
 The clock also sends the inside and outside air temperatures from its two
 DS18B20 sensors as `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), in 0.1 °C. The frame

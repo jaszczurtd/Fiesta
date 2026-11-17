@@ -62,8 +62,8 @@
         "chargeLamp": { "present": true, "pins": { "out": 26 } },
         "absSpeed": { "present": true, "pins": { "in": 15 } },
         "oilPressure": { "present": true, "pins": { "in": 29 } },
-        "egtPreDpf": { "present": true, "bus": "i2c", "address": 96 },
-        "egtMidDpf": { "present": true, "bus": "i2c", "address": 103 },
+        "egtPreDpf": { "present": true, "bus": "i2c", "address": "0x60" },
+        "egtMidDpf": { "present": true, "bus": "i2c", "address": "0x67" },
         "gps": { "present": true, "pins": { "rx": 27, "tx": 28 } }
       }
     }

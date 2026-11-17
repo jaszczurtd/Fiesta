@@ -318,8 +318,8 @@
       "problemMatcher": []
     },
     {
-      "label": "Project: Build variant: DS3231",
-      "detail": "Build the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "label": "Project: Build variant: PCF8563",
+      "detail": "Build the PCF8563 variant: Fiesta_clock with a PCF8563 RTC.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -330,14 +330,14 @@
         "--project",
         "${workspaceFolder}",
         "--variant",
-        "DS3231"
+        "PCF8563"
       ],
       "group": "build",
       "problemMatcher": "$gcc"
     },
     {
-      "label": "Project: Upload variant: DS3231",
-      "detail": "Build and upload the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "label": "Project: Upload variant: PCF8563",
+      "detail": "Build and upload the PCF8563 variant: Fiesta_clock with a PCF8563 RTC.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -348,13 +348,13 @@
         "--project",
         "${workspaceFolder}",
         "--variant",
-        "DS3231"
+        "PCF8563"
       ],
       "problemMatcher": "$gcc"
     },
     {
-      "label": "Project: Refresh IntelliSense variant: DS3231",
-      "detail": "Update IntelliSense data for the DS3231 variant: Fiesta_clock with a DS3231 RTC.",
+      "label": "Project: Refresh IntelliSense variant: PCF8563",
+      "detail": "Update IntelliSense data for the PCF8563 variant: Fiesta_clock with a PCF8563 RTC.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -365,7 +365,7 @@
         "--project",
         "${workspaceFolder}",
         "--variant",
-        "DS3231"
+        "PCF8563"
       ],
       "problemMatcher": []
     },
@@ -434,8 +434,8 @@
       "problemMatcher": "$gcc"
     },
     {
-      "label": "Project: Build (Debug) rp2040-zero variant: DS3231",
-      "detail": "Build the rp2040-zero assembly, variant DS3231, with debug settings for its debug profile.",
+      "label": "Project: Build (Debug) rp2040-zero variant: PCF8563",
+      "detail": "Build the rp2040-zero assembly, variant PCF8563, with debug settings for its debug profile.",
       "type": "shell",
       "command": "${config:jaszczurhal.vscodeEntry}",
       "windows": {
@@ -448,7 +448,7 @@
         "--assembly",
         "rp2040-zero",
         "--variant",
-        "DS3231"
+        "PCF8563"
       ],
       "hide": true,
       "problemMatcher": "$gcc"

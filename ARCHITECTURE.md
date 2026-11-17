@@ -77,12 +77,16 @@ The list itself lives in [`modules.json`](modules.json): each module's kind, tok
 SerialConfigurator slot and host-test build. The slot also says whether the module gets a
 Tests sub-tab (`tests`) and whether its test status carries an actuator position
 (`testsDrive`). Adding a module starts there.
-[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) checks the list and generates the
+The C tool in [`tools/modules`](tools/modules) checks the list and generates the
 token header in `src/common/scDefinitions`, the SerialConfigurator module table and a shell
 fragment; the VS Code generator, `runalltests.sh`, `runmefirst.sh`, the bootstrap and
 SerialConfigurator read those instead of keeping their own lists. The SerialConfigurator slot
 index is explicit because the saved flash paths are keyed by it. CI workflow lists stay
 literal, and a test checks them against the registry.
+[`scripts/fiesta_modules.py`](scripts/fiesta_modules.py) adapts its JSON result for the
+Python tools. The registry uses jhbase from the pinned HAL; shared source lists remain in
+`src/common/cmake/fiesta_shared_sources.cmake`. The C tool also updates
+`JH_EXTRA_SOURCES` and removes that setting when a module no longer uses shared sources.
 
 [`legacy/`](legacy/) keeps the retired `DPF_main`, `AdaptiveLights`, and
 `Fading` sources for reference. They are not built or tested.

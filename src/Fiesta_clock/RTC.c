@@ -6,9 +6,16 @@
 
 static hal_rtc_t s_rtc = NULL;
 
+/* device_tree.json describes the DS3231 of the new board; the PCF8563 of the
+ * older board keeps its fixed address. */
+#if defined(RTC_ds3231) &&                                                     \
+    (JH_HW_NODE_RTC_ADDRESS != HAL_RTC_DS3231_DEFAULT_I2C_ADDR)
+#error "the DS3231 answers only at its fixed I2C address"
+#endif
+
 static uint8_t rtc_i2c_address(void) {
-#if defined(RTC_ds3231)
-  return HAL_RTC_DS3231_DEFAULT_I2C_ADDR;
+#if defined(RTC_pcf8563)
+  return HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
 #else
   return JH_HW_NODE_RTC_ADDRESS;
 #endif

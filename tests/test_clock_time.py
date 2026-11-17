@@ -1,4 +1,4 @@
-"""Exercise the Fiesta_clock time code over the HAL RTC stack and a PCF8563 model."""
+"""Exercise the Fiesta_clock time code over the HAL RTC stack and RTC register models."""
 
 from pathlib import Path
 import tempfile
@@ -64,6 +64,9 @@ class ClockTimeTests(unittest.TestCase):
     def test_configurator_uses_local_time(self):
         self.run_scenario("sc")
 
+    def test_configurator_rejects_local_time_before_the_rtc_range(self):
+        self.run_scenario("sc_fresh_rtc")
+
     def test_buttons_use_local_time(self):
         self.run_scenario("buttons")
 
@@ -73,9 +76,12 @@ class ClockTimeTests(unittest.TestCase):
     def test_air_temperature_of_a_missing_sensor(self):
         self.run_scenario("air_temp_missing")
 
+    def test_time_is_logged_once_a_second(self):
+        self.run_scenario("time_log")
 
-class Ds3231TimeTests(ClockTimeTests):
-    defines = ("RTC_ds3231",)
+
+class Pcf8563TimeTests(ClockTimeTests):
+    defines = ("RTC_pcf8563",)
 
 
 if __name__ == "__main__":

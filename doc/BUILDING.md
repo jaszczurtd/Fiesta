@@ -195,7 +195,7 @@ project, tests or CI build. Their saved flash paths are ignored and omitted
 when saving configuration.
 
 [`modules.json`](../modules.json) lists module kinds, tokens, host tests and
-CI selection. `scripts/fiesta_modules.py` generates the token header,
+CI selection. `scripts/fiesta_modules.py` calls the C generator for the token header,
 SerialConfigurator table and shell module lists. The VS Code generator reads
 that registry, HAL registries and the assemblies. Check both from the root:
 
@@ -203,6 +203,23 @@ that registry, HAL registries and the assemblies. Check both from the root:
 python3 scripts/fiesta_modules.py --check
 python3 scripts/sync_vscode_projects.py --check
 ```
+
+Before configuring a host build directly with CMake, prepare the HAL tool with `src/JaszczurHAL/scripts/jh --version` (Windows: `src/JaszczurHAL/scripts/jh.ps1 --version`). CMake verifies the prepared tool and uses it to generate the early hardware header.
+
+The module adapter builds `tools/modules` in `.build/tools/modules` through
+`scripts/fiesta_tool.cmake`. It needs CMake 3.22, a host C11/C++17 toolchain and
+the pinned HAL's jhbase sources. `--check` leaves generated files unchanged;
+regeneration writes LF and keeps current files untouched. To build and run
+the native registry tests separately:
+
+```bash
+cmake -DFIESTA_TOOL_TESTS=ON -P scripts/fiesta_tool.cmake
+```
+
+The tool's `--json` result has `schemaVersion: 1`, validated module definitions,
+USB hints and generated text. `--extra-sources MODULE` returns its source list;
+adding `--manifest FILE` returns the manifest with `JH_EXTRA_SOURCES` updated,
+without changing the input file.
 
 Run either generator without `--check` to regenerate its outputs. The local
 pre-commit hook first normalizes the staged files and stages them again. Its

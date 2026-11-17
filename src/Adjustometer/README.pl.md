@@ -164,6 +164,7 @@ i przeplatanie odczytów z publikacją rejestrów. Testy ECU obejmują dekodowan
 aktualność próbek, zawijanie czasu, ponowienia i wyłączenie sterowania.
 
 ```bash
+src/JaszczurHAL/scripts/jh --version
 cmake -S src/Adjustometer -B src/Adjustometer/build_test
 cmake --build src/Adjustometer/build_test --parallel
 ctest --test-dir src/Adjustometer/build_test --output-on-failure

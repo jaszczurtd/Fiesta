@@ -25,6 +25,10 @@ Release as CI does, under `<build dir>/release` (for example
 and the compiler's enabled libc hardening. The Valgrind and clang-tidy stages
 check both builds of every module.
 
+The gate and ECU CI also check the native module registry under Valgrind.
+Run that check separately with
+`cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake`.
+
 GUI tests run with the current display or Xvfb through
 `scripts/sc-with-display.sh`. A missing display/Xvfb is an error. The live
 Clocks view runs in the current locale and explicitly in `C` and every
@@ -58,9 +62,11 @@ fails the gate. Shared test helpers belong in [`src/common/tests/`](../src/commo
 
 ## Test one module
 
-Example for ECU, from the repository root:
+Example for ECU, from the repository root. Prepare `jh` before CMake resolves
+the assembly's hardware:
 
 ```bash
+src/JaszczurHAL/scripts/jh --version
 cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release
 cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure -LE static-analysis
@@ -76,6 +82,7 @@ ECU tests also build with native MSVC. With Visual Studio Build Tools and
 CMake installed, run in PowerShell:
 
 ```powershell
+& src/JaszczurHAL/scripts/jh.ps1 --version
 cmake -S src/ECU -B .build/ecu-x64 -G "Visual Studio 18 2026" -A x64 -DECU_ENABLE_CPPCHECK_TARGET=OFF
 cmake --build .build/ecu-x64 --config Debug --parallel
 ctest --test-dir .build/ecu-x64 -C Debug --output-on-failure -LE static-analysis

@@ -8,9 +8,9 @@ temperatury do pozostałych modułów przez CAN. RTC podtrzymuje czas także bez
 ## Przygotowanie i uruchomienie
 
 Sprawdź [wersję płytki](../../Fiesta_pcbs/clock/README.pl.md) i typ RTC. Firmware domyślnie
-wybiera PCF8563, a nowa płytka ma DS3231 Mini i zmieniony dzielnik napięcia. Wybierz wariant
-DS3231 i dostosuj przeliczenie napięcia przed oceną wskazań. Zasilaj moduł z USB albo
-samochodu, nigdy jednocześnie.
+obsługuje DS3231 Mini z nowej płytki; dla starszej płytki z PCF8563 wybierz wariant PCF8563.
+Nowa płytka ma też zmieniony dzielnik napięcia, więc przed oceną wskazań dostosuj
+przeliczenie napięcia. Zasilaj moduł z USB albo samochodu, nigdy jednocześnie.
 
 Otwórz `src/Fiesta_clock` i wykonaj [build oraz upload](../../doc/BUILDING.pl.md). Czas
 ustawisz przyciskami lub przez [SerialConfigurator](../SerialConfigurator/README.pl.md).
@@ -23,7 +23,12 @@ Ekran, przyciski i konfigurator używają czasu CET/CEST przeliczanego przez
 wiosennej zmianie czasu liczy się jako CET, a godzina powtórzona jesienią
 jako jej pierwsze, letnie wystąpienie. Dzień tygodnia wynika z daty, więc
 przyciski go nie ustawiają. Konfigurator odczytuje i ustawia czas; commit
-odrzuca niepoprawną datę, uwzględniając lata przestępne.
+odrzuca niepoprawną datę, uwzględniając lata przestępne. Czas lokalny sprzed
+godziny 01:00 1 stycznia 2000 nie ma odpowiednika UTC w zakresie RTC, więc
+commit kończy się błędem `utc_range`. DS3231 po utracie zasilania startuje
+właśnie od tej daty, dlatego przed commitem ustaw całą datę. Co sekundę log
+debugowania pokazuje datę i godzinę z ekranu, z dopiskiem `(not trusted)`,
+gdy zegar nie ma zaufanego UTC.
 
 Zegar nadaje też temperatury powietrza wewnątrz i na zewnątrz z dwóch
 czujników DS18B20 jako `CAN_ID_AIR_TEMP_UPDATE` (`0x132`), w 0,1 °C. Ramka

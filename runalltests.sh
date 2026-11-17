@@ -255,6 +255,8 @@ pass "PMD CPD found no duplicate groups."
 
 if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
     header "Gate 6/7: Valgrind memcheck targets"
+    run_logged "/tmp/fiesta_modules_valgrind.log" \
+        cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"
         run_module_target "${name}" "${build_rel}" "check-valgrind"

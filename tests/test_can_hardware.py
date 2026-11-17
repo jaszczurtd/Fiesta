@@ -4,11 +4,10 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import unittest
 
-from native_build import compile_sources
+from native_build import compile_sources, hardware_command
 
 ROOT = Path(__file__).resolve().parents[1]
 HAL = ROOT / "src/JaszczurHAL"
@@ -41,8 +40,8 @@ class CanHardwareTests(unittest.TestCase):
                 # The assembly the module's manifest selects by default.
                 manifest = json.loads((source_dir / ".vscode/jaszczurhal.project.json").read_text())
                 name = manifest["assembly"]
-                self.run_command([sys.executable, str(HAL / "scripts/generate_hardware_config.py"),
-                                  "resolve", "--config-dir", str(build), "--assembly", name,
+                self.run_command([*hardware_command(HAL, "resolve"),
+                                  "--config-dir", str(build), "--assembly", name,
                                   "--output-dir", str(build), "--output-root", str(build)])
                 assembly = tree["assemblies"][name]
                 cs = assembly["nodes"][node]["pins"]["cs"]

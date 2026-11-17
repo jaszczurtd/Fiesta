@@ -2,6 +2,14 @@
 
 import os
 import subprocess
+import sys
+
+
+def hardware_command(hal, action):
+    """Use the pinned HAL's bootstrap and native hardware command."""
+    sys.path.insert(0, str(hal / "scripts"))
+    from project_config import jh_executable
+    return [jh_executable(), "hardware", action, "--root", str(hal)]
 
 
 def compiler_for_source(source):

@@ -79,203 +79,19 @@ def modified(index: int, **changes) -> list:
     return modules
 
 
-class RegistryRulesTests(unittest.TestCase):
-    def assert_rejected(self, pattern: str, **fixture) -> None:
-        repo = FixtureRepo(**fixture)
-        self.addCleanup(repo.close)
-        with self.assertRaisesRegex(RegistryError, pattern):
-            repo.load()
-
-    def test_valid_fixture_loads(self) -> None:
-        repo = FixtureRepo()
-        self.addCleanup(repo.close)
-        registry = repo.load()
-        self.assertEqual([m.name for m in registry.firmware()],
-                         ["ECU", "Fiesta_clock", "Adjustometer"])
-        self.assertEqual([m.name for m in registry.host_tests()],
-                         ["ECU", "Adjustometer", "SerialConfigurator"])
-
-    def test_inactive_entry_needs_no_project_and_has_no_firmware_identity(self):
-        modules = copy.deepcopy(BASE_MODULES)
-        modules.append({"name": "dpfmodule", "kind": "inactive", "macro": "DPF",
-                        "serialConfigurator": {"index": 2, "displayName": "DPF"}})
-        repo = FixtureRepo(modules=modules)
-        self.addCleanup(repo.close)
-        shutil.rmtree(repo.root / "src/dpfmodule")
-        registry = repo.load()
-        self.assertEqual(registry.serial_configurator()[2].name, "dpfmodule")
-        self.assertNotIn("dpfmodule", [m.name for m in registry.firmware()])
-        self.assertNotIn("dpfmodule", [m.name for m in registry.ci()])
-        self.assertNotIn("SC_MODULE_TOKEN_DPF", fiesta_modules.tokens_header(registry))
-        self.assertIn("X(NULL, SC_MODULE_DPF, NULL, false, false)",
-                      fiesta_modules.sc_table_header(registry))
-        for field, value in (("token", "OIL&SPD"), ("hostTests", "build"),
-                             ("ci", True)):
-            bad = copy.deepcopy(modules)
-            bad[-1][field] = value
-            rejected = FixtureRepo(modules=bad)
-            self.addCleanup(rejected.close)
-            with self.assertRaises(RegistryError):
-                rejected.load()
-
-    def test_rejects_wrong_schema(self) -> None:
-        self.assert_rejected("schemaVersion", schema=2)
-
-    def test_rejects_duplicate_names_tokens_and_macros(self) -> None:
-        self.assert_rejected("duplicate token", modules=modified(1, token="ECU"))
-        self.assert_rejected("duplicate macro", modules=modified(1, macro="ECU"))
-        inactive = {"name": "dpfmodule", "kind": "inactive", "macro": "ECU",
-                    "serialConfigurator": {"index": 2, "displayName": "DPF"}}
-        self.assert_rejected("duplicate macro", modules=[*BASE_MODULES, inactive])
-        duplicate = copy.deepcopy(BASE_MODULES) + [copy.deepcopy(BASE_MODULES[3])]
-        self.assert_rejected("duplicate module name", modules=duplicate)
-
-    def test_rejects_missing_module_directory(self) -> None:
-        repo = FixtureRepo()
-        self.addCleanup(repo.close)
-        shutil.rmtree(repo.root / "src" / "SerialConfigurator")
-        with self.assertRaisesRegex(RegistryError, "not a module directory"):
-            repo.load()
-
-    def test_rejects_unknown_keys_and_kinds(self) -> None:
-        self.assert_rejected("unknown keys", modules=modified(0, board="x"))
-        self.assert_rejected("kind must be", modules=modified(3, kind="library"))
-        self.assert_rejected("only firmware modules",
-                             modules=modified(3, token="SC"))
-
-    def test_serial_configurator_indices_must_be_contiguous(self) -> None:
-        gap = modified(1, serialConfigurator={"index": 2, "displayName": "RTC_Clock"})
-        self.assert_rejected("without gaps", modules=gap)
-        twice = modified(1, serialConfigurator={"index": 0, "displayName": "RTC_Clock"})
-        self.assert_rejected("without gaps", modules=twice)
-
-    def test_analysis_needs_host_tests(self) -> None:
-        self.assert_rejected("needs hostTests",
-                             modules=modified(0, hostTests=None))
-        self.assert_rejected("allowed values", modules=modified(0, analysis=["lint"]))
-
-    def test_shared_sources_rules(self) -> None:
-        self.assert_rejected("sharedSources",
-                             modules=modified(0, sharedSources=["engine"]))
-        self.assert_rejected("only firmware",
-                             modules=modified(-1, sharedSources=["vp37"]))
-
-    def shared_vp37_repo(self, listing: str) -> tuple:
-        """A repository whose ECU compiles the vp37 set with this listing."""
-        repo = FixtureRepo(modules=modified(0, sharedSources=["vp37"]))
-        self.addCleanup(repo.close)
-        directory = repo.root / "src" / "common" / "vp37"
-        directory.mkdir(parents=True)
-        (directory / "vp37_sources.txt").write_text(listing, encoding="utf-8")
-        return repo, directory
-
-    def test_shared_source_list_checks_the_directory(self) -> None:
-        repo, directory = self.shared_vp37_repo("# comment\nvp37.c\n")
-        with self.assertRaisesRegex(RegistryError, "missing"):
-            fiesta_modules.shared_source_files("vp37", repo.root)
-        (directory / "vp37.c").write_text("int a;\n", encoding="utf-8")
-        module = [m for m in repo.load().firmware() if m.name == "ECU"][0]
-        self.assertEqual(
-            fiesta_modules.shared_extra_sources(module, repo.root),
-            "../common/vp37/vp37.c")
-        (directory / "vp37_extra.c").write_text("int b;\n", encoding="utf-8")
-        with self.assertRaisesRegex(RegistryError, "unlisted"):
-            fiesta_modules.shared_source_files("vp37", repo.root)
-
-    def test_manifests_follow_the_shared_sources_field(self) -> None:
-        repo, directory = self.shared_vp37_repo("vp37.c\n")
-        (directory / "vp37.c").write_text("int a;\n", encoding="utf-8")
-        modules = {m.name: m for m in repo.load().firmware()}
-
-        manifest = {"cmake": {"cache": {"JH_MODULE_NAME": "ECU"}}}
-        fiesta_modules.apply_shared_sources(manifest, modules["ECU"], repo.root)
-        self.assertEqual(manifest["cmake"]["cache"]["JH_EXTRA_SOURCES"],
-                         "../common/vp37/vp37.c")
-
-        # A module dropped from sharedSources loses the stale value.
-        stale = {"cmake": {"cache": {"JH_EXTRA_SOURCES": "../common/vp37/x.c"}}}
-        fiesta_modules.apply_shared_sources(stale, modules["Fiesta_clock"],
-                                            repo.root)
-        self.assertNotIn("JH_EXTRA_SOURCES", stale["cmake"]["cache"])
-        fiesta_modules.apply_shared_sources({}, modules["Fiesta_clock"],
-                                            repo.root)
-
-        with self.assertRaisesRegex(RegistryError, "cmake.cache"):
-            fiesta_modules.apply_shared_sources({}, modules["ECU"], repo.root)
-
-    def test_usb_identity_rules(self) -> None:
-        for field, value, pattern in (
-            ("usbVid", "0x1234", "VID/PID"),
-            ("usbVid", "0x2e8a", "inherited from HAL"),
-            ("usbPid", "0x000a", "inherited from HAL"),
-            ("usbProduct", "ECU", "usbProduct"),
-            ("byIdHint", "ECU", "byIdHint must start"),
-        ):
-            identities = copy.deepcopy(BASE_IDENTITIES)
-            identities["ECU"][field] = value
-            self.assert_rejected(pattern, identities=identities)
-
-    def test_rejects_non_ascii_text(self) -> None:
-        self.assert_rejected("ASCII", modules=modified(
-            1, serialConfigurator={"index": 1, "displayName": "RTC\u2013Clock"}))
-
-    def test_by_id_hints_must_not_match_each_other(self) -> None:
-        identities = copy.deepcopy(BASE_IDENTITIES)
-        identities["Fiesta_clock"]["byIdHint"] = "Fiesta_ECU_Clock"
-        self.assert_rejected("also matches", identities=identities)
-        identities["Fiesta_clock"]["byIdHint"] = "Fiesta_ECU"
-        self.assert_rejected("duplicate byIdHint", identities=identities)
+class NativeRegistryTests(unittest.TestCase):
+    def test_native_registry_cases(self) -> None:
+        for path in (REPO_ROOT / "runalltests.sh", WORKFLOWS / "ecu-tests.yml"):
+            self.assertIn("cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake",
+                          path.read_text(encoding="utf-8"))
+        result = subprocess.run(
+            ["cmake", "-DFIESTA_TOOL_TESTS=ON", "-P",
+             str(REPO_ROOT / "scripts/fiesta_tool.cmake")],
+            capture_output=True, text=True, check=False, timeout=180)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class GeneratedOutputTests(unittest.TestCase):
-    def test_serial_configurator_table_follows_index_not_json_order(self) -> None:
-        swapped = copy.deepcopy(BASE_MODULES)
-        swapped[0]["serialConfigurator"]["index"] = 1
-        swapped[1]["serialConfigurator"]["index"] = 0
-        repo = FixtureRepo(modules=swapped)
-        self.addCleanup(repo.close)
-        registry = repo.load()
-        table = fiesta_modules.sc_table_header(registry)
-        self.assertLess(table.index("SC_MODULE_CLOCK,"), table.index("SC_MODULE_ECU,"))
-        tokens = fiesta_modules.tokens_header(registry)
-        self.assertLess(tokens.index('SC_MODULE_CLOCK "RTC_Clock"'),
-                        tokens.index('SC_MODULE_ECU "ECU"'))
-
-    def test_table_tells_tests_from_tests_with_an_actuator(self) -> None:
-        drive = modified(0, serialConfigurator={
-            "index": 0, "displayName": "ECU", "tests": True, "testsDrive": True})
-        drive[1]["serialConfigurator"]["tests"] = True
-        repo = FixtureRepo(modules=drive)
-        self.addCleanup(repo.close)
-        table = fiesta_modules.sc_table_header(repo.load())
-        self.assertIn('X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true, true)', table)
-        self.assertIn('X(SC_MODULE_TOKEN_CLOCK, SC_MODULE_CLOCK, "Fiesta_clock", '
-                      'true, false)', table)
-        plain = FixtureRepo()
-        self.addCleanup(plain.close)
-        self.assertIn('X(SC_MODULE_TOKEN_ECU, SC_MODULE_ECU, "ECU", true, false)',
-                      fiesta_modules.sc_table_header(plain.load()))
-
-    def test_actuator_status_needs_tests(self) -> None:
-        for entry in ({"index": 1, "displayName": "RTC_Clock", "testsDrive": True},
-                      {"index": 1, "displayName": "RTC_Clock", "tests": True,
-                       "testsDrive": 1}):
-            repo = FixtureRepo(modules=modified(1, serialConfigurator=entry))
-            self.addCleanup(repo.close)
-            with self.assertRaisesRegex(RegistryError, "testsDrive"):
-                repo.load()
-
-    def test_modules_outside_serial_configurator(self) -> None:
-        repo = FixtureRepo()
-        self.addCleanup(repo.close)
-        registry = repo.load()
-        tokens = fiesta_modules.tokens_header(registry)
-        self.assertIn("#define SC_MODULE_COUNT 2u", tokens)
-        self.assertIn('#define SC_MODULE_TOKEN_ADJUSTOMETER "ADJ"', tokens)
-        self.assertNotIn("SC_MODULE_ADJUSTOMETER ", tokens)
-        self.assertIn('{"Fiesta_Adjustometer", NULL}',
-                      fiesta_modules.sc_table_header(registry))
-
     @unittest.skipUnless(shutil.which("bash"), "the shell fragment is Bash")
     def test_shell_fragment_as_seen_by_bash(self) -> None:
         repo = FixtureRepo(modules=modified(2, token="A&D"))
@@ -373,6 +189,9 @@ class RepositoryRegistryTests(unittest.TestCase):
         # A fresh CI checkout has no JaszczurHAL third_party components (jhbase
         # and the rest); a developer tree usually has them, so only this check
         # catches a workflow that configures against HAL without fetching them.
+        preparation = (REPO_ROOT / "src/common/scripts/ensure-jaszczurhal-dependencies.sh").read_text(
+            encoding="utf-8")
+        self.assertIn('"$JASZCZURHAL_DIR/scripts/jh" --version', preparation)
         build = re.compile(r"cmake -S src/|jh-vscode (?:build|clean)|generate_hal_features\.py")
         for path in sorted(WORKFLOWS.glob("*.yml")):
             text = path.read_text(encoding="utf-8")
@@ -383,6 +202,9 @@ class RepositoryRegistryTests(unittest.TestCase):
                 fetch = text.find("ensure-jaszczurhal-dependencies.sh")
                 self.assertNotEqual(-1, fetch)
                 self.assertLess(fetch, first_build.start())
+                if "cmake -S src/" in first_build.group():
+                    self.assertIn("ensure-jaszczurhal-dependencies.sh src/JaszczurHAL host",
+                                  text[:first_build.start()])
 
 
 if __name__ == "__main__":

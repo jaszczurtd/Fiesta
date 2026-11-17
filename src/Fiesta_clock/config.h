@@ -27,6 +27,9 @@
 #define CFG_CLOCK_ITEM_VISIBILITY_CYCLES 10
 #define CFG_CLOCK_SET_MODE_DELAY_LOOPS 80
 
+/* The main loop logs the shown date and time this often. */
+#define CFG_TIME_LOG_INTERVAL_MS 1000u
+
 #define CFG_TEMP_DELAY_LOOPS 20
 /* CAN 0x132 sends a DS18B20 reading while its newest 12-bit conversion
  * (750 ms each, back to back) is younger than this. */

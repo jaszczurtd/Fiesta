@@ -16,6 +16,7 @@ HAL_ROOT = REPO_ROOT / "src" / "JaszczurHAL"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import fiesta_modules  # noqa: E402
+from native_build import hardware_command  # noqa: E402
 
 MODULES = tuple(module.name for module in fiesta_modules.load().firmware())
 POWER_STAGE = "fiesta,vp37-power-stage"
@@ -59,9 +60,8 @@ class ModuleHardwareTests(unittest.TestCase):
                 for assembly in tree["assemblies"]:
                     with self.subTest(module=module, assembly=assembly):
                         result = subprocess.run(
-                            [sys.executable,
-                             str(HAL_ROOT / "scripts" / "generate_hardware_config.py"),
-                             "resolve", "--config-dir", str(REPO_ROOT / "src" / module),
+                            [*hardware_command(HAL_ROOT, "resolve"),
+                             "--config-dir", str(REPO_ROOT / "src" / module),
                              "--assembly", assembly, "--output-root", str(root),
                              "--output-dir", str(root / module / assembly)],
                             capture_output=True, text=True, check=False)

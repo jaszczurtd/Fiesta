@@ -26,6 +26,10 @@ oraz w Release, tak jak w CI, w `<katalog buildu>/release` (np.
 i włączone przez kompilator mechanizmy ochrony libc. Etapy Valgrinda
 i clang-tidy sprawdzają oba buildy każdego modułu.
 
+Bramka i CI ECU sprawdzają pod Valgrindem również natywny rejestr modułów.
+Osobno uruchomisz tę kontrolę poleceniem
+`cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake`.
+
 Testy GUI korzystają z bieżącego ekranu albo Xvfb przez
 `scripts/sc-with-display.sh`. Brak ekranu i Xvfb jest błędem. Widok pomiarów
 Clocks jest sprawdzany w bieżącym locale oraz jawnie w `C` i każdym locale
@@ -59,9 +63,11 @@ bramkę. Współdzielone helpery testów należą do [`src/common/tests/`](../sr
 
 ## Testy pojedynczego modułu
 
-Przykład ECU, wykonywany z katalogu głównego:
+Przykład ECU, wykonywany z katalogu głównego. Przygotuj `jh`, zanim CMake
+rozwiąże konfigurację sprzętu montażu:
 
 ```bash
+src/JaszczurHAL/scripts/jh --version
 cmake -S src/ECU -B src/ECU/build_test -DCMAKE_BUILD_TYPE=Release
 cmake --build src/ECU/build_test --parallel
 ctest --test-dir src/ECU/build_test --output-on-failure -LE static-analysis
@@ -77,6 +83,7 @@ Testy ECU można też budować natywnie w MSVC. Po zainstalowaniu Visual Studio
 Build Tools i CMake uruchom w PowerShell:
 
 ```powershell
+& src/JaszczurHAL/scripts/jh.ps1 --version
 cmake -S src/ECU -B .build/ecu-x64 -G "Visual Studio 18 2026" -A x64 -DECU_ENABLE_CPPCHECK_TARGET=OFF
 cmake --build .build/ecu-x64 --config Debug --parallel
 ctest --test-dir .build/ecu-x64 -C Debug --output-on-failure -LE static-analysis

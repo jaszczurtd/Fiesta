@@ -61,6 +61,8 @@ done
 if [[ "$PROFILE" == "rp" ]]; then
     ensure_component pico_sdk --enable
     ensure_component picotool --enable
+else
+    "$JASZCZURHAL_DIR/scripts/jh" --version
 fi
 
 echo "JaszczurHAL dependencies are ready for the $PROFILE profile."

@@ -28,7 +28,7 @@ Przed wgraniem sprawdź rewizję płytki oraz assembly procesora.
 | --- | --- | --- |
 | Obecne okablowanie ECU z Waveshare RP2350-Plus lub RP2040-Plus | Bieżące assembly `rp2350-plus` i `rp2040-plus`. Adjustometer i ekspander współdzielą I²C0. | PCF8574A pracuje z ustawionymi 400 kHz mimo znamionowych 100 kHz. Zobacz [interfejsy ECU](../src/ECU/guides/BENCH.pl.md#obraz-stanowiskowy-i-sprzęt). |
 | [ECU PCB 3](../Fiesta_pcbs/ecu/README.pl.md) | Nowa płytka rozdziela magistrale Adjustometera i ekspandera oraz używa nieodwracającego TC4427. | Dostosowanie magistral i polaryzacji wyjść, potem walidacja na wykonanej płytce. Nie należy zakładać zgodności z obecnym firmware. |
-| [Płytka Fiesta_clock](../Fiesta_pcbs/clock/README.pl.md) | Nowy projekt używa DS3231 Mini; firmware domyślnie wybiera PCF8563 i udostępnia wariant DS3231. | Wybór wariantu RTC oraz dostosowanie i sprawdzenie przeliczenia nowego dzielnika napięcia. |
+| [Płytka Fiesta_clock](../Fiesta_pcbs/clock/README.pl.md) | Nowy projekt używa DS3231 Mini, który obsługuje domyślny firmware; wariant PCF8563 służy starszej płytce. | Dostosowanie i sprawdzenie przeliczenia nowego dzielnika napięcia. |
 | [Płytka Clocks](../Fiesta_pcbs/dashboard/Clocks/README.pl.md) | Sprzęt zestawu wskaźników i jego instrukcja montażu. | Zasilanie z USB albo samochodu, nigdy jednocześnie. |
 | [Płytka Adjustometera](../Fiesta_pcbs/vp37_adjustometer/adjustometer/README.pl.md) | Czujnik położenia dla ECU i osobnego VP37TestBench. | Sprawdzenie obu zasilań, wspólnej masy i kolejności pomiaru bazowego. |
 | Osobny VP37TestBench | Własny projekt, wyświetlacz i połączenie załączania stopnia mocy. | Korzystaj z [instrukcji modułu](../src/VP37TestBench/README.pl.md); nie zastępuje wariantu BENCH ECU. |

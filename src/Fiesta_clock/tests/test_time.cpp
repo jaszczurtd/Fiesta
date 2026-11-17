@@ -1,5 +1,6 @@
 /* Production time code of the clock (RTC, UTC model, GPS sync, CAN, SC and
- * the button editor) over the HAL RTC stack and a PCF8563 register model. */
+ * the button editor) over the HAL RTC stack and a register model of the RTC
+ * the build selects (DS3231 by default, PCF8563 with RTC_pcf8563). */
 extern "C" {
 #include "main.h"
 #include "rtcSync.h"
@@ -13,6 +14,7 @@ extern "C" {
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -139,6 +141,14 @@ struct ClockValues {
 };
 
 static std::vector<std::string> texts;
+static std::vector<std::string> deb_lines, derr_limited_lines;
+
+static void log_line(std::vector<std::string> *lines, const char *format,
+                     va_list args) {
+  char line[160];
+  std::vsnprintf(line, sizeof(line), format, args);
+  lines->emplace_back(line);
+}
 static bool button_set = false, button_hour = false;
 static int set_presses = 0;
 
@@ -169,9 +179,20 @@ char s[BUF_L + 1];
 uint32_t hal_millis(void) { return now_ms; }
 void hal_delay_ms(uint32_t) {}
 void hal_watchdog_feed(void) {}
-void hal_deb(const char *, ...) {}
+void hal_deb(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  log_line(&deb_lines, format, args);
+  va_end(args);
+}
 void hal_derr(const char *, ...) {}
-void hal_derr_limited(const char *, const char *, ...) {}
+void hal_derr_limited(const char *source, const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  log_line(&derr_limited_lines, format, args);
+  va_end(args);
+  derr_limited_lines.back().insert(0, std::string("[") + source + "] ");
+}
 void hal_debug_set_muted(bool) {}
 void hal_critical_section_enter(void) {}
 void hal_critical_section_exit(void) {}
@@ -1167,6 +1188,26 @@ static void test_sc() {
   assert(active->integrity == 1);
 }
 
+// A DS3231 that lost its supply restarts at 2000-01-01 00:00. Without the UTC
+// marker SC shows and stages that time as is, but its first local hour lies
+// before the RTC range in UTC.
+static void test_sc_fresh_rtc() {
+  rtc_fields(CFG_RTC_MIN_YEAR, 1, 1, 0, 41, 42, true);
+  start();
+  configSessionInit();
+  sc_active = true;
+  ClockValues *active = sc_values(false);
+  assert(active->year == CFG_RTC_MIN_YEAR && active->hour == 0 &&
+         active->minute == 41 && active->integrity == 0);
+  const char *reason = nullptr;
+  assert(sc_commit(*active, &reason) == HAL_EINVAL &&
+         std::strcmp(reason, "utc_range") == 0);
+  assert(pcf.timeWrites == 0 && !clockTimeIsUtc());
+  assert(sc_commit({CFG_RTC_MIN_YEAR, 1, 1, 1, 0, 0, 0}, &reason) == HAL_OK);
+  assert(rtc_utc() == utc(CFG_RTC_MIN_YEAR, 1, 1, 0, 0, 0) &&
+         !rtc_integrity_lost() && clockTimeIsUtc());
+}
+
 static void set_mode_pass(bool hour, int presses) {
   button_hour = hour;
   set_presses = presses;
@@ -1354,6 +1395,39 @@ static void test_air_temp_missing() {
          air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 200);
 }
 
+// The main loop logs the shown date and time once a second; a failed RTC read
+// goes to the rate-limited error log instead.
+static void test_time_log() {
+  rtc_fields(2026, 10, 15, 21, 56, 7);
+  start();
+  deb_lines.clear();
+  clockTimeLogTick();
+  assert(deb_lines.size() == 1u &&
+         deb_lines[0] == "Time: 2026-10-15 21:56:07 (not trusted)");
+  now_ms += CFG_TIME_LOG_INTERVAL_MS - 1u;
+  clockTimeLogTick();
+  assert(deb_lines.size() == 1u);
+  now_ms += 1u;
+  rtc_set_utc(rtc_utc() + 1u);
+  clockTimeLogTick();
+  assert(deb_lines.size() == 2u &&
+         deb_lines[1] == "Time: 2026-10-15 21:56:08 (not trusted)");
+
+  make_utc(utc(2026, 1, 15, 12, 0, 0));
+  deb_lines.clear();
+  run_for(1u);
+  clockTimeLogTick();
+  assert(deb_lines.size() == 1u && deb_lines[0] == "Time: 2026-01-15 13:00:01");
+
+  pcf.busError = true;
+  deb_lines.clear();
+  derr_limited_lines.clear();
+  run_for(1u);
+  clockTimeLogTick();
+  assert(deb_lines.empty() && derr_limited_lines.size() == 1u &&
+         derr_limited_lines[0] == "[rtc] RTC time not read: HAL_EIO");
+}
+
 int main(int argc, char **argv) {
   assert(argc == 2);
   const struct {
@@ -1370,9 +1444,11 @@ int main(int argc, char **argv) {
       {"sync_errors", test_sync_errors},
       {"sync_rejects", test_sync_rejects},
       {"sc", test_sc},
+      {"sc_fresh_rtc", test_sc_fresh_rtc},
       {"buttons", test_buttons},
       {"air_temp", test_air_temp},
       {"air_temp_missing", test_air_temp_missing},
+      {"time_log", test_time_log},
   };
   for (const auto &scenario : scenarios) {
     if (std::strcmp(argv[1], scenario.name) == 0) {

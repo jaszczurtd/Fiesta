@@ -59,8 +59,8 @@
       "nodes": {
         "canMain": { "present": true, "bus": "spi", "pins": { "cs": 17, "int": 15 } },
         "canObd": { "present": true, "bus": "spi", "pins": { "cs": 6, "int": 14 } },
-        "expander": { "present": true, "bus": "i2c", "address": 56 },
-        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "expander": { "present": true, "bus": "i2c", "address": "0x38" },
+        "adjustometer": { "present": true, "bus": "i2c", "address": "0x57" },
         "glowPlugs": {
           "present": true,
           "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 0 } }
@@ -131,8 +131,8 @@
       "nodes": {
         "canMain": { "present": true, "bus": "spi", "pins": { "cs": 17, "int": 15 } },
         "canObd": { "present": true, "bus": "spi", "pins": { "cs": 6, "int": 14 } },
-        "expander": { "present": true, "bus": "i2c", "address": 56 },
-        "adjustometer": { "present": true, "bus": "i2c", "address": 87 },
+        "expander": { "present": true, "bus": "i2c", "address": "0x38" },
+        "adjustometer": { "present": true, "bus": "i2c", "address": "0x57" },
         "glowPlugs": {
           "present": true,
           "pins": { "out": { "domain": "device-pin", "node": "expander", "index": 0 } }
