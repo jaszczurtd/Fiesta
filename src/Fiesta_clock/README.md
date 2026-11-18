@@ -25,8 +25,9 @@ CEST pass. The weekday follows the date, so the buttons do not set it. The
 configurator can read and set the date and time; a commit is rejected unless
 the whole date is valid, leap years included. A local time before 01:00 on
 1 January 2000 has no UTC the RTC can hold, so the commit fails with
-`utc_range`. A DS3231 that lost its supply restarts at exactly that date, so
-set the whole date before you commit. Once a second the debug log
+`utc_range`. A DS3231 that lost its supply restarts at exactly that date.
+The SerialConfigurator page always writes the whole date and time; with the
+CLI, set every field before you commit. Once a second the debug log
 shows the date and time from the display, marked `(not trusted)` without
 trusted UTC.
 

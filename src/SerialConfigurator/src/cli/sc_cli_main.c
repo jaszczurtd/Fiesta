@@ -82,7 +82,7 @@ static void print_usage(const char *program_name) {
           program_name);
 }
 
-int main(int argc, char *argv[]) {
+static int run_command(int argc, char *argv[]) {
   if (argc < 2) {
     print_usage(argv[0]);
     return 1;
@@ -170,4 +170,10 @@ int main(int argc, char *argv[]) {
   fprintf(stderr, "[ERROR] Unknown command: %s\n", command);
   print_usage(argv[0]);
   return 1;
+}
+
+int main(int argc, char *argv[]) {
+  const int rc = run_command(argc, argv);
+  sc_cli_end_sessions();
+  return rc;
 }

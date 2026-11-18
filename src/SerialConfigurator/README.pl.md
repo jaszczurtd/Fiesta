@@ -37,13 +37,19 @@ i to samo uwierzytelnianie przez UID co firmware, przez `sc_crypto.h` i `sc_auth
 
 ## Wykrywanie i wybór modułu
 
-Kliknij **Detect Fiesta Modules**. Skan w tle wysyła `HELLO` do urządzeń
+Kliknij **Wykryj moduły Fiesta**. Skan w tle wysyła `HELLO` do urządzeń
 `/dev/serial/by-id/usb-Jaszczur_Fiesta_*`, odczytuje metadane i katalogi
 parametrów oraz sprawdza każdy `SC_GET_PARAM` względem zakresu i wartości
-domyślnej. Okno pokazuje `Detecting...`. Poprawna odpowiedź zmienia wskaźnik
+domyślnej. Okno pokazuje `Wykrywanie...`. Poprawna odpowiedź zmienia wskaźnik
 modułu na zielony; log pokazuje szczegóły. Skan sprawdza wszystkich kandydatów,
 aby zgłosić niejednoznaczny wybór przy powtórzonych modułach.
-**Disconnect** usuwa wykryty stan i ustawia wskaźniki na czerwono.
+Dwuklik na wykrytym module otwiera jego stronę na karcie Wartości.
+
+W aktywnej sesji konfiguratora moduł wycisza log debugowania, a sesja nie ma
+limitu czasu. **Rozłącz** wysyła `SC_BYE` do wykrytych modułów, usuwa wykryty
+stan i ustawia wskaźniki na czerwono. Zamknięcie okna, a także Ctrl-C i SIGTERM,
+kończy sesje tak samo; podczas wykrywania lub wgrywania okno zamyka się po ich
+zakończeniu. CLI wysyła `SC_BYE` po każdym poleceniu.
 
 Rejestr wybiera do protokołu ECU, Clocks i RTC_Clock.
 Adjustometer i VP37TestBench nie są obsługiwane przez konfigurator.
@@ -71,8 +77,8 @@ gdy RTC zawiera zaufany czas UTC. Commit sprawdza pełną datę, w tym lata
 przestępne. Clocks
 pokazuje progi tylko do odczytu, bez utrwalania.
 
-Na karcie Values edytuj pola, wybierz **Apply staged**, a potem **Commit**,
-aby sprawdzić i zastosować zmiany. **Revert** przywraca kopię roboczą
+Na karcie Wartości edytuj pola ECU, wybierz **Użyj**, a potem **Zapisz**,
+aby sprawdzić i zastosować zmiany. **Cofnij** przywraca kopię roboczą
 z aktywnych wartości. Zapis wymaga uwierzytelnienia. CLI obsługuje te same kroki:
 
 ```bash
@@ -90,6 +96,21 @@ Pojedynczą zmianę w jednej uwierzytelnionej sesji wykonasz tak:
 Po błędzie commita `set-and-commit` próbuje wycofać kopię roboczą.
 [Opis protokołu](../common/scDefinitions/PROTOCOL.pl.md#parametry) wyjaśnia
 schematy zapisu i rozszerzanie katalogu bez utraty zapisanych wartości.
+
+### Data i godzina RTC_Clock
+
+Strona RTC_Clock pokazuje kalendarz z datą i trzy pola czasu CET/CEST.
+Strefa czasowa komputera nie zmienia wpisanych wartości. Kalendarz pozwala
+wybrać tylko lata zgłaszane przez moduł, w obecnym firmware 2000-2099.
+Wiersz nad formularzem informuje, czy zegar ma zaufany czas.
+
+**Ustaw datę i godzinę** wysyła wszystkie sześć wartości, także gdy zmieniła
+się tylko minuta, a potem wykonuje commit. Pierwszy błąd przerywa zapis,
+a strona prosi moduł o wycofanie kopii roboczej. Wiersz stanu pod formularzem
+pokazuje, co się nie powiodło, także nieudane wycofanie. Po udanym zapisie
+strona ponownie odczytuje zegar. **Odczytaj z urządzenia** pokazuje czas,
+który zegar ma w tej chwili, i nie wymaga uwierzytelnienia. Ustawianie jest
+niedostępne do pierwszego udanego odczytu.
 
 ## Wgrywanie firmware
 
@@ -209,7 +230,9 @@ uwierzytelnianie/kryptografię, manifesty, transakcje parametrów, GPS, testy
 funkcjonalne, terminy odpowiedzi i odtwarzanie sesji po `HELLO_REQUIRED`.
 Testy wgrywania używają mocka transportu i tymczasowych katalogów BOOTSEL/by-id;
 nie potwierdzają wgrywania przez fizyczne USB. GTK dodaje testy paska postępu,
-karty Tests i bieżących pomiarów Clocks, także w locale C i polskim.
+karty Tests, bieżących pomiarów Clocks, formularza daty i godziny RTC_Clock,
+końca sesji przy zamknięciu okna i dwukliku na module, także w locale C
+i polskim.
 Skrypt desktopowy, pełna bramka i CI używają tego samego runnera ekranu,
 który przy braku ekranu uruchamia Xvfb. Brak Xvfb lub wymaganego locale
 przerywa testy wskazań zamiast je pomijać.

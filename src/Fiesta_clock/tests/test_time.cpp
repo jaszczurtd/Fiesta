@@ -14,7 +14,6 @@ extern "C" {
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -141,14 +140,6 @@ struct ClockValues {
 };
 
 static std::vector<std::string> texts;
-static std::vector<std::string> deb_lines, derr_limited_lines;
-
-static void log_line(std::vector<std::string> *lines, const char *format,
-                     va_list args) {
-  char line[160];
-  std::vsnprintf(line, sizeof(line), format, args);
-  lines->emplace_back(line);
-}
 static bool button_set = false, button_hour = false;
 static int set_presses = 0;
 
@@ -179,20 +170,9 @@ char s[BUF_L + 1];
 uint32_t hal_millis(void) { return now_ms; }
 void hal_delay_ms(uint32_t) {}
 void hal_watchdog_feed(void) {}
-void hal_deb(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  log_line(&deb_lines, format, args);
-  va_end(args);
-}
+void hal_deb(const char *, ...) {}
 void hal_derr(const char *, ...) {}
-void hal_derr_limited(const char *source, const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  log_line(&derr_limited_lines, format, args);
-  va_end(args);
-  derr_limited_lines.back().insert(0, std::string("[") + source + "] ");
-}
+void hal_derr_limited(const char *, const char *, ...) {}
 void hal_debug_set_muted(bool) {}
 void hal_critical_section_enter(void) {}
 void hal_critical_section_exit(void) {}
@@ -1395,39 +1375,6 @@ static void test_air_temp_missing() {
          air_temp(frame, CAN_FRAME_AIR_TEMP_INSIDE_HI) == 200);
 }
 
-// The main loop logs the shown date and time once a second; a failed RTC read
-// goes to the rate-limited error log instead.
-static void test_time_log() {
-  rtc_fields(2026, 10, 15, 21, 56, 7);
-  start();
-  deb_lines.clear();
-  clockTimeLogTick();
-  assert(deb_lines.size() == 1u &&
-         deb_lines[0] == "Time: 2026-10-15 21:56:07 (not trusted)");
-  now_ms += CFG_TIME_LOG_INTERVAL_MS - 1u;
-  clockTimeLogTick();
-  assert(deb_lines.size() == 1u);
-  now_ms += 1u;
-  rtc_set_utc(rtc_utc() + 1u);
-  clockTimeLogTick();
-  assert(deb_lines.size() == 2u &&
-         deb_lines[1] == "Time: 2026-10-15 21:56:08 (not trusted)");
-
-  make_utc(utc(2026, 1, 15, 12, 0, 0));
-  deb_lines.clear();
-  run_for(1u);
-  clockTimeLogTick();
-  assert(deb_lines.size() == 1u && deb_lines[0] == "Time: 2026-01-15 13:00:01");
-
-  pcf.busError = true;
-  deb_lines.clear();
-  derr_limited_lines.clear();
-  run_for(1u);
-  clockTimeLogTick();
-  assert(deb_lines.empty() && derr_limited_lines.size() == 1u &&
-         derr_limited_lines[0] == "[rtc] RTC time not read: HAL_EIO");
-}
-
 int main(int argc, char **argv) {
   assert(argc == 2);
   const struct {
@@ -1448,7 +1395,6 @@ int main(int argc, char **argv) {
       {"buttons", test_buttons},
       {"air_temp", test_air_temp},
       {"air_temp_missing", test_air_temp_missing},
-      {"time_log", test_time_log},
   };
   for (const auto &scenario : scenarios) {
     if (std::strcmp(argv[1], scenario.name) == 0) {

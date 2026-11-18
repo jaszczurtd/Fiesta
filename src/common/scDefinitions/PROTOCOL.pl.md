@@ -69,7 +69,7 @@ uwierzytelnienie potrzebne do ponowienia.
 
 `SC_BYE` odpowiada `SC_OK BYE`, kończy sesję i usuwa oczekujące wyzwanie.
 Działa także bez `HAL_ENABLE_CRYPTO`. GUI wysyła je do wykrytych modułów przy
-rozłączeniu; starszy firmware odpowiada `ERR UNKNOWN`, co host zapisuje jako ostrzeżenie.
+rozłączeniu i zamknięciu okna, a CLI po każdym poleceniu; starszy firmware odpowiada `ERR UNKNOWN`, co host zapisuje jako ostrzeżenie.
 
 W aktywnej sesji `configSessionTick()` wycisza asynchroniczne logi przez
 `hal_debug_set_muted()`. Po zakończeniu sesji logi wracają. Samo wyciszenie

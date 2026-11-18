@@ -747,8 +747,11 @@ static gboolean flash_idle_apply(gpointer user_data) {
 
     /* On success, kick off a full re-detection so all sections see
      * the new fw_version / build_id. The detection worker raises
-     * its own lock independently. */
-    if (ev->status == SC_FLASH_STATUS_OK) {
+     * its own lock independently. A close request that waited for
+     * the flash ends the sessions and closes the window instead. */
+    if (ev->state->close_pending) {
+      sc_detection_close_if_pending(ev->state);
+    } else if (ev->status == SC_FLASH_STATUS_OK) {
       sc_detection_start_async(ev->state);
     }
   }

@@ -28,6 +28,8 @@ typedef struct MockDevice {
 typedef struct MockTransportContext {
   const MockDevice *devices;
   size_t device_count;
+  char byes[256];        /* device paths that received SC_BYE, one per line */
+  const char *bye_reply; /* NULL: SC_OK BYE */
 } MockTransportContext;
 
 static const MockDevice *
@@ -146,7 +148,12 @@ static bool mock_send_sc_command(void *context_ptr, const char *device_path,
   }
 
   if (strcmp(command, SC_CMD_BYE) == 0) {
-    (void)snprintf(response, response_size, "%s", SC_REPLY_BYE_OK);
+    const size_t used = strlen(context->byes);
+    (void)snprintf(context->byes + used, sizeof(context->byes) - used, "%s\n",
+                   device_path);
+    (void)snprintf(response, response_size, "%s",
+                   context->bye_reply != 0 ? context->bye_reply
+                                           : SC_REPLY_BYE_OK);
     return true;
   }
 
@@ -186,6 +193,8 @@ static void detect_mock_devices(ScCore *core, MockTransportContext *context,
                                 char *log, size_t log_size) {
   context->devices = devices;
   context->device_count = count;
+  context->byes[0] = '\0';
+  context->bye_reply = 0;
   sc_core_init(core);
   const ScTransport transport = make_mock_transport(context);
   sc_core_set_transport(core, &transport);
@@ -725,6 +734,53 @@ static int test_param_values_parser_tolerates_noise_tokens(void) {
   return 0;
 }
 
+/* Ending the sessions sends SC_BYE once to each detected module; a module
+ * that does not confirm it, or a target on several ports, counts as open. */
+static int test_end_sessions_says_bye_to_each_detected_module(void) {
+#define END_DEVICE(path, port, token, uid)                                     \
+  {                                                                            \
+    .candidate_path = "/dev/mock/by-id/" path, .device_path = port,            \
+    .hello_response = "OK HELLO module=" token                                 \
+                      " proto=1 session=5 fw=v1 build=YjE= uid=" uid,          \
+    .meta_response = "SC_OK META module=" token                                \
+                     " proto=1 session=5 fw=v1 build=YjE= uid=" uid            \
+  }
+  const MockDevice two[] = {
+      END_DEVICE("ecu", "/dev/mock/ttyACM20", SC_MODULE_TOKEN_ECU, "AAA"),
+      END_DEVICE("clocks", "/dev/mock/ttyACM21", SC_MODULE_TOKEN_CLOCKS,
+                 "BBB")};
+  MockTransportContext context;
+  ScCore core;
+  char log[4096] = {0};
+  detect_mock_devices(&core, &context, two, COUNTOF(two), log, sizeof(log));
+  TEST_ASSERT(sc_core_end_sessions(&core, log, sizeof(log)) == 0u,
+              "both sessions end");
+  TEST_ASSERT(
+      strcmp(context.byes, "/dev/mock/ttyACM20\n/dev/mock/ttyACM21\n") == 0,
+      "SC_BYE goes once to each detected module");
+
+  context.byes[0] = '\0';
+  context.bye_reply = "ERR UNKNOWN";
+  TEST_ASSERT(sc_core_end_sessions(&core, log, sizeof(log)) == 2u,
+              "firmware without SC_BYE leaves both sessions open");
+
+  const MockDevice ambiguous[] = {
+      END_DEVICE("ecu-1", "/dev/mock/ttyACM22", SC_MODULE_TOKEN_ECU, "AAA"),
+      END_DEVICE("ecu-2", "/dev/mock/ttyACM23", SC_MODULE_TOKEN_ECU, "CCC"),
+      END_DEVICE("clocks", "/dev/mock/ttyACM24", SC_MODULE_TOKEN_CLOCKS,
+                 "BBB")};
+#undef END_DEVICE
+  detect_mock_devices(&core, &context, ambiguous, COUNTOF(ambiguous), log,
+                      sizeof(log));
+  TEST_ASSERT(sc_core_end_sessions(&core, log, sizeof(log)) == 1u,
+              "an ambiguous target counts as open");
+  TEST_ASSERT(strcmp(context.byes, "/dev/mock/ttyACM24\n") == 0,
+              "only the unambiguous module gets SC_BYE");
+  TEST_ASSERT(sc_core_end_sessions(0, log, sizeof(log)) == 0u,
+              "NULL core: nothing to end");
+  return 0;
+}
+
 static int test_sc_bye_command_is_sent_and_parsed(void) {
   const MockDevice devices[] = {{
       .candidate_path = "/dev/mock/by-id/ecu-bye",
@@ -853,6 +909,10 @@ int main(void) {
   }
 
   if (test_sc_bye_command_is_sent_and_parsed() != 0) {
+    return 1;
+  }
+
+  if (test_end_sessions_says_bye_to_each_detected_module() != 0) {
     return 1;
   }
 

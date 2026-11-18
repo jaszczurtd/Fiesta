@@ -11,6 +11,7 @@
 #include "../common/scDefinitions/sc_param_handlers.h"
 #include "../common/scDefinitions/sc_param_types.h"
 #include "../common/scDefinitions/sc_protocol.h"
+#include "../common/scDefinitions/sc_rtc_clock_params.h"
 
 /* CET/CEST date and time; the RTC keeps UTC. */
 typedef struct {
@@ -24,18 +25,19 @@ typedef struct {
 } clock_values_t;
 
 static const sc_param_descriptor_t k_clock_params[] = {
-    SC_PARAM_SCALAR_I16("rtc_year", clock_values_t, rtc_year, CFG_RTC_MIN_YEAR,
-                        CFG_RTC_MAX_YEAR, 2026, 1, "rtc"),
-    SC_PARAM_SCALAR_I16("rtc_month", clock_values_t, rtc_month, 1, 12, 1, 1,
+    SC_PARAM_SCALAR_I16(SC_RTC_YEAR_ID, clock_values_t, rtc_year,
+                        CFG_RTC_MIN_YEAR, CFG_RTC_MAX_YEAR, 2026, 1, "rtc"),
+    SC_PARAM_SCALAR_I16(SC_RTC_MONTH_ID, clock_values_t, rtc_month, 1, 12, 1, 1,
                         "rtc"),
-    SC_PARAM_SCALAR_I16("rtc_day", clock_values_t, rtc_day, 1, 31, 1, 1, "rtc"),
-    SC_PARAM_SCALAR_I16("rtc_hour", clock_values_t, rtc_hour, 0, 23, 0, 1,
+    SC_PARAM_SCALAR_I16(SC_RTC_DAY_ID, clock_values_t, rtc_day, 1, 31, 1, 1,
                         "rtc"),
-    SC_PARAM_SCALAR_I16("rtc_minute", clock_values_t, rtc_minute, 0, 59, 0, 1,
+    SC_PARAM_SCALAR_I16(SC_RTC_HOUR_ID, clock_values_t, rtc_hour, 0, 23, 0, 1,
                         "rtc"),
-    SC_PARAM_SCALAR_I16("rtc_second", clock_values_t, rtc_second, 0, 59, 0, 1,
-                        "rtc"),
-    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED("rtc_integrity", clock_values_t,
+    SC_PARAM_SCALAR_I16(SC_RTC_MINUTE_ID, clock_values_t, rtc_minute, 0, 59, 0,
+                        1, "rtc"),
+    SC_PARAM_SCALAR_I16(SC_RTC_SECOND_ID, clock_values_t, rtc_second, 0, 59, 0,
+                        1, "rtc"),
+    SC_PARAM_SCALAR_I16_RO_NOT_PERSISTED(SC_RTC_INTEGRITY_ID, clock_values_t,
                                          rtc_integrity, 0, 1, 1, 1, "rtc"),
 };
 

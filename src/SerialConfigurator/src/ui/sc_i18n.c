@@ -40,6 +40,8 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_LOG_NO_TARGETS] =
         "[INFO] No detected module eligible for metadata refresh.\n",
     [SC_I18N_LOG_WARN_PREFIX] = "[WARN] ",
+    [SC_I18N_LOG_CLOSE_PENDING] =
+        "[INFO] Closing once detection or flashing finishes.",
 
     [SC_I18N_PLACEHOLDER_INITIAL] = "Run detection to populate module details.",
     [SC_I18N_PLACEHOLDER_DETECTING] = "Detecting modules...",
@@ -150,6 +152,29 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_COMMIT_FAILED_FMT] = "Save failed: %s",
     [SC_I18N_VALUES_REVERT_OK] = "Reverted.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT] = "Revert failed: %s",
+    [SC_I18N_RTC_DATE] = "Date",
+    [SC_I18N_RTC_YEARS_FMT] = "Years %d-%d",
+    [SC_I18N_RTC_LOCAL_TIME] = "Local time CET/CEST",
+    [SC_I18N_RTC_HOUR] = "Hour",
+    [SC_I18N_RTC_MINUTE] = "Minute",
+    [SC_I18N_RTC_SECOND] = "Second",
+    [SC_I18N_RTC_STATE_TRUSTED] = "Clock state: OK",
+    [SC_I18N_RTC_STATE_UNTRUSTED] =
+        "Clock state: time not trusted - set the date and time",
+    [SC_I18N_RTC_STATE_UNKNOWN] = "Clock state: unknown",
+    [SC_I18N_RTC_BTN_SET] = "Set date and time",
+    [SC_I18N_RTC_BTN_READ] = "Read from device",
+    [SC_I18N_RTC_BUSY] = "Wait until detection or flashing finishes.",
+    [SC_I18N_RTC_RANGE_FMT] = "%s %d is outside %d-%d.",
+    [SC_I18N_RTC_SET_OK] = "Date and time set.",
+    [SC_I18N_RTC_SET_FAILED_FMT] = "Setting the date and time failed: %s",
+    [SC_I18N_RTC_SET_REVERT_FAILED_FMT] =
+        "Setting the date and time failed: %s. Clearing the staged values "
+        "also failed: %s",
+    [SC_I18N_RTC_SET_READ_FAILED_FMT] =
+        "Date and time set, but reading them back failed: %s",
+    [SC_I18N_RTC_READ_OK] = "Read from the device.",
+    [SC_I18N_RTC_READ_FAILED_FMT] = "Reading the device failed: %s",
 
     [SC_I18N_MODULE_INACTIVE] = "inactive",
     [SC_I18N_TAB_MAP] = "GPS View",
@@ -298,6 +323,8 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_LOG_NO_TARGETS] = "[INFO] Brak wykrytych modułów kwalifikujących "
                                "się do odświeżenia metadanych.\n",
     [SC_I18N_LOG_WARN_PREFIX] = "[WARN] ",
+    [SC_I18N_LOG_CLOSE_PENDING] =
+        "[INFO] Zamknięcie po zakończeniu wykrywania lub wgrywania.",
 
     [SC_I18N_PLACEHOLDER_INITIAL] =
         "Uruchom wykrywanie, aby wypełnić szczegóły modułu.",
@@ -426,6 +453,30 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_VALUES_COMMIT_FAILED_FMT] = "Zapis nie powiódł się: %s",
     [SC_I18N_VALUES_REVERT_OK] = "Cofnięto.",
     [SC_I18N_VALUES_REVERT_FAILED_FMT] = "Cofnięcie nie powiodło się: %s",
+    [SC_I18N_RTC_DATE] = "Data",
+    [SC_I18N_RTC_YEARS_FMT] = "Lata %d-%d",
+    [SC_I18N_RTC_LOCAL_TIME] = "Czas lokalny CET/CEST",
+    [SC_I18N_RTC_HOUR] = "Godzina",
+    [SC_I18N_RTC_MINUTE] = "Minuta",
+    [SC_I18N_RTC_SECOND] = "Sekunda",
+    [SC_I18N_RTC_STATE_TRUSTED] = "Stan zegara: OK",
+    [SC_I18N_RTC_STATE_UNTRUSTED] =
+        "Stan zegara: czas niepewny - ustaw datę i godzinę",
+    [SC_I18N_RTC_STATE_UNKNOWN] = "Stan zegara: nieznany",
+    [SC_I18N_RTC_BTN_SET] = "Ustaw datę i godzinę",
+    [SC_I18N_RTC_BTN_READ] = "Odczytaj z urządzenia",
+    [SC_I18N_RTC_BUSY] = "Zaczekaj na koniec wykrywania lub wgrywania.",
+    [SC_I18N_RTC_RANGE_FMT] = "%s %d leży poza zakresem %d-%d.",
+    [SC_I18N_RTC_SET_OK] = "Ustawiono datę i godzinę.",
+    [SC_I18N_RTC_SET_FAILED_FMT] =
+        "Ustawienie daty i godziny nie powiodło się: %s",
+    [SC_I18N_RTC_SET_REVERT_FAILED_FMT] =
+        "Ustawienie daty i godziny nie powiodło się: %s. Wycofanie wartości "
+        "z bufora staging też się nie powiodło: %s",
+    [SC_I18N_RTC_SET_READ_FAILED_FMT] =
+        "Ustawiono datę i godzinę, ale ponowny odczyt nie powiódł się: %s",
+    [SC_I18N_RTC_READ_OK] = "Odczytano z urządzenia.",
+    [SC_I18N_RTC_READ_FAILED_FMT] = "Odczyt z urządzenia nie powiódł się: %s",
 
     [SC_I18N_MODULE_INACTIVE] = "nieaktywny",
     [SC_I18N_TAB_MAP] = "Widok GPS",

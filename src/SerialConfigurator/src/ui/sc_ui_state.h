@@ -30,50 +30,54 @@ extern "C" {
 #define UI_AUTO_REFRESH_PARAM_PROBE SC_UI_AUTO_REFRESH_PARAM_PROBE
 
 typedef struct AppState {
-    ScCore core;
-    GtkTextBuffer *log_buffer;
-    GtkWidget *detect_button;
-    GtkWidget *module_list;
-    GtkWidget *module_rows[SC_MODULE_COUNT];
-    GtkWidget *module_lamps[SC_MODULE_COUNT];
-    GtkWidget *module_name_labels[SC_MODULE_COUNT];
-    ScModuleDetailsView details_view;
-    /* Phase 6.1+: notebook tab 2 root widget. Sensitive iff at least
-     * one in-scope module is detected. Phase 6.2 populates the body
-     * with per-module sections at every detection cycle. */
-    GtkWidget *flash_tab_root;
-    /* Phase 8.6: notebook tab 3 root widget for the Values tab. The
-     * tab content is wholly rebuilt on every detection cycle - the
-     * inner per-module notebook tracks the detected set automatically. */
-    GtkWidget *values_tab_root;
-    /* Phase 8.7: notebook tab 4 root widget for the Map tab plus an
-     * opaque pointer to its internal state (ShumateSimpleMap, marker
-     * layer, poll timeout id). Kept as `void *` so sc_ui_state.h does
-     * not have to include shumate headers - only sc_map_tab.c casts. */
-    GtkWidget *map_tab_root;
-    void *map_tab_state;
-    /* Phase 6.2: per-module flash UI substate (paths persisted to
-     * flash-paths.json + global flash-in-progress lock flag). */
-    ScFlashPaths flash_paths;
-    bool flash_in_progress;
-    bool connected;
-    bool detection_in_progress;
-    bool selection_valid;
-    size_t selected_module_index;
-    char placeholder_status[SC_UI_STATUS_TEXT_MAX];
-    char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  ScCore core;
+  GtkTextBuffer *log_buffer;
+  GtkWidget *detect_button;
+  GtkWidget *module_list;
+  GtkWidget *module_rows[SC_MODULE_COUNT];
+  GtkWidget *module_lamps[SC_MODULE_COUNT];
+  GtkWidget *module_name_labels[SC_MODULE_COUNT];
+  ScModuleDetailsView details_view;
+  /* Phase 6.1+: notebook tab 2 root widget. Sensitive iff at least
+   * one in-scope module is detected. Phase 6.2 populates the body
+   * with per-module sections at every detection cycle. */
+  GtkWidget *flash_tab_root;
+  /* Phase 8.6: notebook tab 3 root widget for the Values tab. The
+   * tab content is wholly rebuilt on every detection cycle - the
+   * inner per-module notebook tracks the detected set automatically. */
+  GtkWidget *values_tab_root;
+  /* Phase 8.7: notebook tab 4 root widget for the Map tab plus an
+   * opaque pointer to its internal state (ShumateSimpleMap, marker
+   * layer, poll timeout id). Kept as `void *` so sc_ui_state.h does
+   * not have to include shumate headers - only sc_map_tab.c casts. */
+  GtkWidget *map_tab_root;
+  void *map_tab_state;
+  /* Phase 6.2: per-module flash UI substate (paths persisted to
+   * flash-paths.json + global flash-in-progress lock flag). */
+  ScFlashPaths flash_paths;
+  bool flash_in_progress;
+  /* The main window, and a close request that waits for detection or
+   * flashing to release the serial ports (sc_detection.h). */
+  GtkWidget *window;
+  bool close_pending;
+  bool connected;
+  bool detection_in_progress;
+  bool selection_valid;
+  size_t selected_module_index;
+  char placeholder_status[SC_UI_STATUS_TEXT_MAX];
+  char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
 } AppState;
 
 typedef struct DetectionResult {
-    ScCore core;
-    char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
-    char *log_text;
+  ScCore core;
+  char module_meta_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_catalog_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_values_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char module_param_probe_status[SC_MODULE_COUNT][SC_UI_STATUS_TEXT_MAX];
+  char *log_text;
 } DetectionResult;
 
 /* All user-facing strings live in sc_i18n.{h,c}. Subviews call

@@ -235,6 +235,8 @@ void sc_modules_view_build(AppState *state, GtkWidget *parent_box) {
   GtkWidget *module_list = gtk_list_box_new();
   gtk_list_box_set_selection_mode(GTK_LIST_BOX(module_list),
                                   GTK_SELECTION_SINGLE);
+  /* A click selects; a double-click activates the row (sc_app.c). */
+  gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(module_list), FALSE);
   gtk_frame_set_child(GTK_FRAME(modules_frame), module_list);
   state->module_list = module_list;
   g_signal_connect(module_list, "row-selected",

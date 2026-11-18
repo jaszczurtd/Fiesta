@@ -155,6 +155,30 @@ bool sc_core_sc_get_values(ScCore *core, size_t module_index,
                            size_t log_output_size);
 bool sc_core_sc_bye(ScCore *core, size_t module_index, ScCommandResult *result,
                     char *log_output, size_t log_output_size);
+
+/**
+ * @brief End the configurator session of every detected module with SC_BYE.
+ *
+ * A module mutes its debug log while a session is active, and the session has
+ * no timeout: a host that leaves without SC_BYE keeps the log muted until the
+ * module restarts. Each exchange is logged like the other sc_core_sc_* calls,
+ * including the refusal for a target detected on several ports (the core
+ * keeps only one of its ports). A reply other than SC_OK BYE, ERR UNKNOWN
+ * from firmware without SC_BYE included, adds a warning.
+ *
+ * @param core             Core of the detection that opened the sessions.
+ * @param log_output       Log the exchanges and warnings are appended to;
+ *                         NULL allowed.
+ * @param log_output_size  Size of @p log_output.
+ * @return Number of detected modules whose session end was not confirmed;
+ *         0 also for a NULL @p core.
+ */
+size_t sc_core_end_sessions(ScCore *core, char *log_output,
+                            size_t log_output_size);
+
+/** @brief True for SC_UNKNOWN_CMD and the ERR UNKNOWN reply of older firmware.
+ */
+bool sc_core_result_is_unknown_command(const ScCommandResult *result);
 bool sc_core_sc_get_param(ScCore *core, size_t module_index,
                           const char *param_id, ScCommandResult *result,
                           char *log_output, size_t log_output_size);

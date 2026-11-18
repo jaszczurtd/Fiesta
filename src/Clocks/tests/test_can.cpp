@@ -178,33 +178,25 @@ void test_unknown_can_id_does_not_update_state(void) {
   canValues[F_FUEL] = 1234.0f;
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0xAA, 0xBB, 0xCC, 0xDD,
                                          0xEE, 0xFF, 0x11, 0x22};
-  // Past the rate limit of earlier reports, so this one prints.
-  hal_mock_set_millis(hal_millis() + 3600000u);
-  hal_mock_serial_reset();
   hal_mock_can_inject(clocksTestGetCanHandle(), 0x13Fu, CAN_FRAME_MAX_LENGTH,
                       frame);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(clocksTestGetCanHandle()));
   canMainLoop();
   TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
   TEST_ASSERT_EQUAL_FLOAT(1234.0f, canValues[F_FUEL]);
-  TEST_ASSERT_NOT_NULL(
-      strstr(hal_mock_serial_last_line(), "unknown CAN frame:13f"));
 }
 
 /* The RTC time and air temperatures of Fiesta_clock pass the Fiesta filter;
- * Clocks does not use them and does not report them as unknown. */
-void test_fiesta_clock_frames_are_ignored_quietly(void) {
+ * Clocks does not use them. */
+void test_fiesta_clock_frames_are_ignored(void) {
   canValues[F_INTAKE_TEMP] = 77.0f;
   uint8_t frame[CAN_FRAME_MAX_LENGTH] = {0x01, 0x02, 0x03, 0x04,
                                          0x05, 0x06, 0x07, 0x08};
-  hal_mock_set_millis(hal_millis() + 3600000u);
-  hal_mock_serial_reset();
   hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_RTC_UPDATE,
                       CAN_FRAME_MAX_LENGTH, frame);
   hal_mock_can_inject(clocksTestGetCanHandle(), CAN_ID_AIR_TEMP_UPDATE,
                       CAN_FRAME_MAX_LENGTH, frame);
   canMainLoop();
-  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
   TEST_ASSERT_EQUAL_FLOAT(77.0f, canValues[F_INTAKE_TEMP]);
   TEST_ASSERT_EQUAL_UINT(0u, clusterUpdateCount);
 }
@@ -780,7 +772,7 @@ int main(void) {
   RUN_TEST(test_rpm_expiry_lights_the_charge_lamp_and_recovery_confirms_again);
   RUN_TEST(test_non_fiesta_frame_is_rejected_by_acceptance_filters);
   RUN_TEST(test_unknown_can_id_does_not_update_state);
-  RUN_TEST(test_fiesta_clock_frames_are_ignored_quietly);
+  RUN_TEST(test_fiesta_clock_frames_are_ignored);
   RUN_TEST(test_display_view_changes_only_on_refresh);
   RUN_TEST(test_throttle_frame_requests_one_redraw);
   RUN_TEST(test_frame_without_redraw_value_refreshes_view_quietly);

@@ -77,7 +77,8 @@ The other `SC_NOT_READY` replies come from a live session, where a new
 
 `SC_BYE` answers `SC_OK BYE`, ends the session, and clears any pending
 challenge. It works without `HAL_ENABLE_CRYPTO`, so every build can close a
-session. The GUI sends it to every detected module when it disconnects;
+session. The GUI sends it to every detected module when it disconnects or
+its window closes, and the CLI after every command;
 older firmware answers `ERR UNKNOWN`, and the host logs a warning.
 
 While a session is active, each module's `configSessionTick()` mutes the

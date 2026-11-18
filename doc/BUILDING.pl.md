@@ -200,7 +200,9 @@ przy zapisie konfiguracji.
 [`modules.json`](../modules.json) zawiera rodzaje modułów, tokeny, testy hostowe
 i wybór modułów CI. `scripts/fiesta_modules.py` wywołuje generator C nagłówka tokenów,
 tabelę SerialConfiguratora i listy dla skryptów powłoki. Generator VS Code
-czyta ten rejestr, rejestry HAL i montaże. Sprawdź oba z katalogu głównego:
+czyta ten rejestr, rejestry HAL i montaże. Zachowuje własne taski
+użytkownika i usuwa wygenerowane, których już nie tworzy, np. taski usuniętego wariantu.
+Sprawdź oba z katalogu głównego:
 
 ```bash
 python3 scripts/fiesta_modules.py --check

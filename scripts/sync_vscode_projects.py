@@ -99,6 +99,7 @@ def desired_project_files(
     current_tasks = load_json(vscode_dir / "tasks.json")
 
     from vscode_task_config import (
+        VSCODE_ENTRY_CONFIG,
         apply_project_view_settings,
         assembly_debug_builds,
         assembly_launch_document,
@@ -136,6 +137,11 @@ def desired_project_files(
             continue
         label = str(task.get("label") or "")
         if label in shared_labels:
+            continue
+        # Tasks running the jh-vscode entry come from the JaszczurHAL
+        # generator; one it no longer produces (a removed variant or
+        # assembly) is stale, not a custom task.
+        if task.get("command") == VSCODE_ENTRY_CONFIG:
             continue
         if label == HOOK_TASK_LABEL:
             custom_tasks.append(hook_task("${workspaceFolder}/../../scripts/configure_git_hooks.py"))

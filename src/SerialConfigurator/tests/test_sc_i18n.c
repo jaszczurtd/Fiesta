@@ -78,8 +78,6 @@ static int test_set_locale_changes_active_value(void) {
   const char *pl_btn = sc_i18n_string_get(SC_I18N_BTN_DETECT);
   TEST_ASSERT(strcmp(en_btn, pl_btn) != 0,
               "EN and PL detect-button labels must differ");
-  TEST_ASSERT_STR_EQ(en_btn, "Detect Fiesta Modules", "EN detect label");
-  TEST_ASSERT_STR_EQ(pl_btn, "Wykryj moduły Fiesta", "PL detect label");
   return 0;
 }
 

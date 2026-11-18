@@ -17,8 +17,10 @@
  * as a private cross-subview header. All subview files include it.
  */
 
+#include <glib-unix.h>
 #include <gtk/gtk.h>
 
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,6 +45,10 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   sc_gfx_install_css();
 
   GtkWidget *window = gtk_application_window_new(app);
+  state->window = window;
+  /* Closing ends the module sessions with SC_BYE (sc_detection.h). */
+  g_signal_connect(window, "close-request",
+                   G_CALLBACK(sc_detection_on_close_request), state);
   gtk_window_set_title(GTK_WINDOW(window),
                        sc_i18n_string_get(SC_I18N_APP_TITLE));
   gtk_window_set_default_size(GTK_WINDOW(window), SC_APP_WINDOW_DEFAULT_WIDTH,
@@ -72,6 +78,11 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   if (state->detect_button != 0) {
     g_signal_connect(state->detect_button, "clicked",
                      G_CALLBACK(sc_detection_on_detect_clicked), state);
+  }
+  /* A double-click on a module row opens its sub-tab of the Values tab. */
+  if (state->module_list != 0) {
+    g_signal_connect(state->module_list, "row-activated",
+                     G_CALLBACK(sc_values_tab_on_module_activated), state);
   }
 
   /* Page 2 - Flash. Built before reset_connection so that
@@ -104,6 +115,15 @@ static void on_activate(GtkApplication *app, gpointer user_data) {
   gtk_window_present(GTK_WINDOW(window));
 }
 
+/* Ctrl-C or SIGTERM closes the window, which ends the module sessions. */
+static gboolean on_quit_signal(gpointer user_data) {
+  AppState *state = (AppState *)user_data;
+  if (state->window != 0) {
+    gtk_window_close(GTK_WINDOW(state->window));
+  }
+  return G_SOURCE_CONTINUE;
+}
+
 int sc_app_run(int argc, char *argv[]) {
   AppState state;
   sc_core_init(&state.core);
@@ -116,6 +136,8 @@ int sc_app_run(int argc, char *argv[]) {
   state.map_tab_state = 0;
   sc_flash_paths_init(&state.flash_paths);
   state.flash_in_progress = false;
+  state.window = 0;
+  state.close_pending = false;
   state.connected = false;
   state.detection_in_progress = false;
   state.selection_valid = false;
@@ -145,8 +167,13 @@ int sc_app_run(int argc, char *argv[]) {
       "pl.jaszczur.fiesta.serialconfigurator", (GApplicationFlags)0);
 
   g_signal_connect(app, "activate", G_CALLBACK(on_activate), &state);
+  const guint sigint_source = g_unix_signal_add(SIGINT, on_quit_signal, &state);
+  const guint sigterm_source =
+      g_unix_signal_add(SIGTERM, on_quit_signal, &state);
 
   const int status = g_application_run(G_APPLICATION(app), argc, argv);
+  g_source_remove(sigint_source);
+  g_source_remove(sigterm_source);
   g_object_unref(app);
   return status;
 }

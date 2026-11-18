@@ -1403,6 +1403,52 @@ bool sc_core_sc_bye(ScCore *core, size_t module_index, ScCommandResult *result,
                                           result, log_output, log_output_size);
 }
 
+bool sc_core_result_is_unknown_command(const ScCommandResult *result) {
+  if (result == 0) {
+    return false;
+  }
+  return result->status == SC_COMMAND_STATUS_UNKNOWN_CMD ||
+         strcmp(result->response, "ERR UNKNOWN") == 0;
+}
+
+size_t sc_core_end_sessions(ScCore *core, char *log_output,
+                            size_t log_output_size) {
+  if (core == 0) {
+    return 0u;
+  }
+
+  size_t not_ended = 0u;
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    const ScModuleStatus *status = &core->modules[i];
+    if (!status->detected) {
+      continue;
+    }
+    ScCommandResult result;
+    if (!sc_core_sc_bye(core, i, &result, log_output, log_output_size)) {
+      ++not_ended;
+      continue;
+    }
+    if (result.status == SC_COMMAND_STATUS_OK &&
+        strcmp(result.topic, SC_REPLY_TAG_BYE) == 0) {
+      continue;
+    }
+
+    ++not_ended;
+    if (sc_core_result_is_unknown_command(&result)) {
+      log_append(log_output, log_output_size,
+                 "[WARN] %.64s on %.200s: firmware does not support " SC_CMD_BYE
+                 " yet (%.120s)\n",
+                 status->display_name, status->port_path, result.response);
+    } else {
+      log_append(log_output, log_output_size,
+                 "[WARN] %.64s on %.200s: unexpected " SC_CMD_BYE
+                 " reply: %.120s\n",
+                 status->display_name, status->port_path, result.response);
+    }
+  }
+  return not_ended;
+}
+
 bool sc_core_sc_get_param(ScCore *core, size_t module_index,
                           const char *param_id, ScCommandResult *result,
                           char *log_output, size_t log_output_size) {

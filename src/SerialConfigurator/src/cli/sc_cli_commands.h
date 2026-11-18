@@ -18,6 +18,10 @@
  *        meta_values_or_catalog: device returned non-OK status)
  *   6  - the device refused the operation (reboot ACK, parameter
  *        staging, functional tests)
+ *
+ * After every command the CLI ends the sessions its detection opened
+ * (@ref sc_cli_end_sessions); a module that does not confirm it adds a
+ * warning but no exit code.
  */
 
 #include "../config.h"
@@ -82,6 +86,13 @@ int sc_cli_command_test_set(int argc, char *argv[]);
 int sc_cli_command_test_run(int argc, char *argv[]);
 int sc_cli_command_test_stop(int argc, char *argv[]);
 int sc_cli_command_test_skip(int argc, char *argv[]);
+
+/**
+ * @brief Send SC_BYE to every module the last detection found, so the
+ *        modules unmute their debug logs; warnings go to stderr. Call once
+ *        when the command has finished; later calls do nothing.
+ */
+void sc_cli_end_sessions(void);
 
 #ifdef __cplusplus
 }

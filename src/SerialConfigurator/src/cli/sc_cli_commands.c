@@ -13,6 +13,12 @@
 #include "sc_text.h"
 #include "sc_time.h"
 
+/* Detection opens a session on every module it finds (HELLO), and a module
+ * mutes its debug log until SC_BYE. The last detection is kept here for
+ * sc_cli_end_sessions(). */
+static ScCore s_session_core;
+static bool s_sessions_open = false;
+
 static bool run_detection(ScCore *core, char *log, size_t log_size) {
   if (core == 0 || log == 0 || log_size == 0u) {
     return false;
@@ -20,7 +26,24 @@ static bool run_detection(ScCore *core, char *log, size_t log_size) {
 
   sc_core_init(core);
   sc_core_detect_modules(core, log, log_size);
+  s_session_core = *core;
+  s_sessions_open = true;
   return true;
+}
+
+void sc_cli_end_sessions(void) {
+  if (!s_sessions_open) {
+    return;
+  }
+  s_sessions_open = false;
+  static char log[CLI_DETECTION_LOG_MAX];
+  log[0] = '\0';
+  if (sc_core_end_sessions(&s_session_core, log, sizeof(log)) != 0u) {
+    fprintf(stderr,
+            "[WARN] Not every session ended; such a module keeps its debug "
+            "log muted until SC_BYE or a restart.\n%s",
+            log);
+  }
 }
 
 /* Detect modules and resolve the single target. Returns 0 with the module
@@ -292,6 +315,8 @@ int sc_cli_command_reboot_bootloader(int argc, char *argv[]) {
     return 6;
   }
 
+  /* The module restarts into the boot ROM: no session left to end. */
+  s_session_core.modules[idx].detected = false;
   printf("[OK] firmware acknowledged SC_REBOOT_BOOTLOADER on %s.\n",
          target->port_path);
   printf("Port should disappear shortly; pick up the BOOTSEL/UF2 device "

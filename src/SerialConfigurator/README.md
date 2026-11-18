@@ -43,7 +43,14 @@ catalogues, and probes each `SC_GET_PARAM` value against its range/default
 metadata. The window shows `Detecting...` while scanning. A valid response
 turns the corresponding module indicator green; the log shows discovery details.
 All candidates are checked so duplicate instances can be reported as ambiguous.
-**Disconnect** clears detected state and returns indicators to red.
+Double-click a detected module to open its page in the Values tab.
+
+A module mutes its debug log while a configurator session is active, and the
+session has no timeout. **Disconnect** sends `SC_BYE` to the detected modules,
+clears detected state and returns indicators to red. Closing the window, or
+Ctrl-C and SIGTERM, ends the sessions the same way; while detection or
+flashing runs, the window closes once it finishes. The CLI sends `SC_BYE`
+after every command.
 
 The module registry selects ECU, Clocks and RTC_Clock for this
 protocol. Adjustometer and VP37TestBench are not configurator targets.
@@ -71,7 +78,7 @@ its RTC as UTC. Read-only `rtc_integrity` is 1 only while the RTC holds trusted
 UTC. Commit validates the whole date, including leap years.
 Clocks expose read-only, non-persisted thresholds.
 
-In the GUI Values tab, edit fields and choose **Apply staged**, then **Commit**
+In the GUI Values tab, edit the ECU fields and choose **Use**, then **Save**
 to validate and apply them. **Revert** restores staging from active values.
 Writing requires authentication. The CLI supports the same steps:
 
@@ -90,6 +97,21 @@ For a single change in one authenticated session:
 On commit failure, `set-and-commit` attempts to revert staging.
 [The protocol guide](../common/scDefinitions/PROTOCOL.md#parameters) explains
 storage schemas and how to extend the catalogue without losing saved values.
+
+### RTC_Clock date and time
+
+The RTC_Clock page shows a calendar for the date and three fields for the
+CET/CEST time. The computer's time zone does not change what you enter. The
+calendar keeps to the years the module reports, 2000-2099 in the current
+firmware. A line above the form tells whether the clock keeps trusted time.
+
+**Set date and time** sends all six values, even when you changed only the
+minute, and then commits them. The first error stops the write, and the page
+asks the module to drop the staged values; the status line under the form
+shows what failed, including a failed drop. After a successful write the
+page reads the clock again. **Read from device** shows the time the clock
+keeps now and needs no authentication. Setting stays unavailable until the
+first successful read.
 
 ## Flash firmware
 
@@ -210,7 +232,9 @@ and reply parsing, authentication/crypto, manifests, parameter transactions,
 GPS, functional tests, serial deadlines and `HELLO_REQUIRED` recovery.
 Flash tests use mock transport and temporary BOOTSEL/by-id directories;
 they do not demonstrate physical USB upload. GTK adds checks for the progress
-bar, Tests tab and live Clocks readings, including C and Polish locales.
+bar, Tests tab, live Clocks readings, the RTC_Clock date and time form,
+the session end on window close and the module double-click, including C and
+Polish locales.
 The desktop helper, full gate and CI use the same display runner, which
 starts Xvfb when no display is available. Missing Xvfb or a required locale
 fails the live-view tests instead of skipping them.

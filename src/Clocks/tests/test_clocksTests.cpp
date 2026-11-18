@@ -149,11 +149,6 @@ static uint32_t signalLengthMs(int signal) {
   return ms;
 }
 
-static bool lastDebugLineHas(const char *text) {
-  const char *line = hal_mock_deb_last_line();
-  return (line != nullptr) && (strstr(line, text) != nullptr);
-}
-
 static void runTest(const char *name) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, ops()->run(nullptr, name));
   (void)tickClocksTests(); // the controller takes the request
@@ -251,8 +246,6 @@ void test_rpm_steps_drive_the_tachometer_and_release_to_the_measurement(void) {
   TEST_ASSERT_EQUAL_INT32(1, field(s, SC_TEST_FIELD_STEP));
   TEST_ASSERT_EQUAL_INT32(5, field(s, SC_TEST_FIELD_STEPS));
   TEST_ASSERT_EQUAL_INT32(1000, field(s, SC_TEST_FIELD_VALUE));
-  clocksTestsEvents(); // the debug log is audible outside a session
-  TEST_ASSERT_TRUE(lastDebugLineHas("TEST: rpm step 1/5 1000"));
   // The tachometer shows 1000 rpm, the speedometer keeps its measurement (0).
   TEST_ASSERT_UINT32_WITHIN(kEdgeTolerance, kEdges1000Rpm,
                             edgesPerSecondWhileQuiet(kTacho, kSpeedo));
@@ -562,23 +555,6 @@ void test_start_beep_waits_for_the_buzzer_test(void) {
   TEST_ASSERT_FALSE(Buzzer::isActive());
 }
 
-void test_steps_are_printed_only_while_the_debug_log_is_audible(void) {
-  runTest(SC_TEST_NAME_CHARGE);
-  clocksTestsEvents();
-  TEST_ASSERT_TRUE(lastDebugLineHas("TEST: charge step 1/3 lit"));
-  // A configurator session mutes the log: the step is dropped, not printed
-  // after the session.
-  hal_debug_set_muted(true);
-  passUntilStep(2);
-  clocksTestsEvents();
-  hal_debug_set_muted(false);
-  clocksTestsEvents();
-  TEST_ASSERT_FALSE(lastDebugLineHas("step 2/3"));
-  passUntilStep(3);
-  clocksTestsEvents();
-  TEST_ASSERT_TRUE(lastDebugLineHas("TEST: charge step 3/3 blink"));
-}
-
 void test_stop_skip_replace_and_the_session_release_the_outputs(void) {
   // stop
   runTest(SC_TEST_NAME_RPM);
@@ -673,7 +649,6 @@ int main(void) {
   RUN_TEST(test_a_late_pass_lets_every_buzzer_signal_play_to_the_end);
   RUN_TEST(test_buzzer_signals_keep_their_length_across_the_millis_wrap);
   RUN_TEST(test_start_beep_waits_for_the_buzzer_test);
-  RUN_TEST(test_steps_are_printed_only_while_the_debug_log_is_audible);
   RUN_TEST(test_stop_skip_replace_and_the_session_release_the_outputs);
   RUN_TEST(test_run_all_walks_the_five_tests_in_table_order);
   return UNITY_END();

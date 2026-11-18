@@ -2,10 +2,13 @@
 
 #include "config.h"
 
+#include "ds18b20.h"
+
 #include <hal/storage/hal_eeprom.h>
 #include <hal/storage/hal_kv.h>
 #include <hal/time/hal_time.h>
 #include <hal/time/jh_calendar.h>
+#include <math.h>
 
 /* The value names the time model, so a later change of meaning gets a new
  * one instead of reusing this marker. */
@@ -296,6 +299,21 @@ void clockTimeUpdateWeekday(RTC_DateTime *dt) {
   }
 }
 
+#ifndef _LOCAL_BUFSIZE
+#define _LOCAL_BUFSIZE 6
+#endif
+
+static void prepare_temp(unsigned char pin, char *buf) {
+  if (buf != NULL) {
+    float t = ds18b20_fresh_temp(pin, CFG_TEMP_MAX_AGE_MS);
+    if (t < NAN) {
+      snprintf(buf, _LOCAL_BUFSIZE, "%.1f", t);
+    } else {
+      snprintf(buf, _LOCAL_BUFSIZE, "n/a");
+    }
+  }
+}
+
 // logs the current time into console
 void clockTimeLogTick(void) {
   static uint32_t lastLogMs = 0u;
@@ -304,6 +322,10 @@ void clockTimeLogTick(void) {
     return;
   }
 
+  char in[_LOCAL_BUFSIZE], out[_LOCAL_BUFSIZE];
+  prepare_temp(JH_HW_NODE_TEMP_INSIDE_PIN_DATA, in);
+  prepare_temp(JH_HW_NODE_TEMP_OUTSIDE_PIN_DATA, out);
+
   RTC_DateTime local = {0};
   bool trusted = false;
   const hal_status_t status = clockTimeReadLocal(&local, &trusted);
@@ -311,7 +333,7 @@ void clockTimeLogTick(void) {
     derr_limited("rtc", "RTC time not read: %s", hal_status_to_string(status));
     return;
   }
-  deb("Time: %04d-%02d-%02d %02d:%02d:%02d%s", local.year, local.month,
-      local.day, local.hour, local.minute, local.second,
-      trusted ? "" : " (not trusted)");
+  deb("Time: %04d-%02d-%02d %02d:%02d:%02d%s temp in:%s out:%s", local.year,
+      local.month, local.day, local.hour, local.minute, local.second,
+      trusted ? "" : " (not trusted)", in, out);
 }

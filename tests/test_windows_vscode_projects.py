@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -192,6 +193,41 @@ class WindowsVscodeProjectTests(unittest.TestCase):
                 self.assertEqual(["interface/cmsis-dap.cfg", target],
                                  profile["configFiles"], name)
 
+
+
+class StaleGeneratedTaskTests(unittest.TestCase):
+    """A task the JaszczurHAL generator no longer produces goes on the next
+    sync; a custom task stays (the sync once kept the tasks of a removed
+    variant as if they were custom)."""
+
+    def test_tasks_of_a_removed_variant_go_and_custom_tasks_stay(self) -> None:
+        jh_root = REPO_ROOT / "src" / "JaszczurHAL"
+        sys.path.insert(0, str(jh_root / "scripts"))
+        import sync_vscode_projects as sync  # noqa: E402
+        from board_registry import tooling_target_registry  # noqa: E402
+
+        module = next(m for m in fiesta_modules.load().firmware() if m.name == "ECU")
+        tasks_path = REPO_ROOT / "src" / "ECU" / ".vscode" / "tasks.json"
+        load_json = sync.load_json
+        generated = load_json(tasks_path)["tasks"]
+        # The BENCH variant renamed to REMOVED: its tasks and debug build.
+        removed = [json.loads(json.dumps(task).replace("BENCH", "REMOVED"))
+                   for task in generated if "BENCH" in task.get("label", "")]
+        self.assertGreaterEqual(len(removed), 3)
+        custom = {"label": "Custom: echo", "type": "shell", "command": "echo",
+                  "args": ["custom"]}
+
+        def with_stale_tasks(path: Path):
+            data = load_json(path)
+            if Path(path) == tasks_path:
+                data["tasks"] = data["tasks"] + removed + [custom]
+            return data
+
+        with mock.patch.object(sync, "load_json", with_stale_tasks):
+            outputs = sync.desired_project_files(
+                module, tooling_target_registry(jh_root), jh_root)
+        synced = json.loads(outputs[tasks_path])["tasks"]
+        self.assertEqual(synced, generated + [custom])
 
 
 class StageFromIndexTests(unittest.TestCase):

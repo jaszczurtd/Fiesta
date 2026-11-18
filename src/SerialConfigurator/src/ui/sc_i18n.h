@@ -67,6 +67,7 @@ typedef enum ScI18nKey {
   SC_I18N_LOG_AUTO_REFRESH_FOR_FMT, /* "[INFO] Automatic refresh for %s..." */
   SC_I18N_LOG_NO_TARGETS,           /* "[INFO] No detected module..." */
   SC_I18N_LOG_WARN_PREFIX,          /* "[WARN] " */
+  SC_I18N_LOG_CLOSE_PENDING, /* window closes once detection or flashing ends */
 
   /* ── Module-details placeholders ───────────────────────────────── */
   SC_I18N_PLACEHOLDER_INITIAL,
@@ -177,6 +178,27 @@ typedef enum ScI18nKey {
   SC_I18N_VALUES_COMMIT_FAILED_FMT, /* "Commit failed: %s" */
   SC_I18N_VALUES_REVERT_OK,
   SC_I18N_VALUES_REVERT_FAILED_FMT, /* "Revert failed: %s" */
+
+  /* ── Values tab: RTC_Clock date and time form ──────────────────── */
+  SC_I18N_RTC_DATE,
+  SC_I18N_RTC_YEARS_FMT, /* "Years %d-%d" - range from the device metadata */
+  SC_I18N_RTC_LOCAL_TIME,
+  SC_I18N_RTC_HOUR,
+  SC_I18N_RTC_MINUTE,
+  SC_I18N_RTC_SECOND,
+  SC_I18N_RTC_STATE_TRUSTED,
+  SC_I18N_RTC_STATE_UNTRUSTED,
+  SC_I18N_RTC_STATE_UNKNOWN,
+  SC_I18N_RTC_BTN_SET,
+  SC_I18N_RTC_BTN_READ,
+  SC_I18N_RTC_BUSY,
+  SC_I18N_RTC_RANGE_FMT, /* "%s %d is outside %d-%d." - id, value, range */
+  SC_I18N_RTC_SET_OK,
+  SC_I18N_RTC_SET_FAILED_FMT,        /* "Setting ... failed: %s" */
+  SC_I18N_RTC_SET_REVERT_FAILED_FMT, /* reason, then the revert error */
+  SC_I18N_RTC_SET_READ_FAILED_FMT,   /* "Set, but reading back failed: %s" */
+  SC_I18N_RTC_READ_OK,
+  SC_I18N_RTC_READ_FAILED_FMT, /* "Reading the device failed: %s" */
 
   /* ── Phase 8.7: Map tab (libshumate GPS view) ──────────────────── */
   SC_I18N_TAB_MAP,

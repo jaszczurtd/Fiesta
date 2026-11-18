@@ -8,736 +8,672 @@
 #include "sc_i18n.h"
 #include "sc_modules_view.h"
 
-static void detection_result_free(DetectionResult *result)
-{
-    if (result == 0) {
-        return;
-    }
+static void detection_result_free(DetectionResult *result) {
+  if (result == 0) {
+    return;
+  }
 
-    g_free(result->log_text);
-    g_free(result);
+  g_free(result->log_text);
+  g_free(result);
 }
 
-static void append_text(char *dst, size_t dst_size, const char *text)
-{
-    if (dst == 0 || dst_size == 0u || text == 0 || text[0] == '\0') {
-        return;
-    }
+static void append_text(char *dst, size_t dst_size, const char *text) {
+  if (dst == 0 || dst_size == 0u || text == 0 || text[0] == '\0') {
+    return;
+  }
 
-    const size_t used = strlen(dst);
-    if (used >= dst_size - 1u) {
-        return;
-    }
+  const size_t used = strlen(dst);
+  if (used >= dst_size - 1u) {
+    return;
+  }
 
-    (void)snprintf(dst + used, dst_size - used, "%s", text);
+  (void)snprintf(dst + used, dst_size - used, "%s", text);
 }
 
-static bool command_result_is_unknown(const ScCommandResult *result)
-{
-    if (result == 0) {
-        return false;
-    }
+static void send_bye_to_detected_modules(AppState *state, char *log_output,
+                                         size_t log_output_size) {
+  if (state == 0 || log_output == 0 || log_output_size == 0u) {
+    return;
+  }
 
-    if (result->status == SC_COMMAND_STATUS_UNKNOWN_CMD) {
-        return true;
-    }
-
-    return strcmp(result->response, "ERR UNKNOWN") == 0;
-}
-
-static void send_bye_to_detected_modules(
-    AppState *state,
-    char *log_output,
-    size_t log_output_size
-)
-{
-    if (state == 0 || log_output == 0 || log_output_size == 0u) {
-        return;
-    }
-
-    bool had_target = false;
+  bool had_target = false;
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    const ScModuleStatus *status = sc_core_module_status(&state->core, i);
+    had_target = had_target || (status != 0 && status->detected);
+  }
+  append_text(log_output, log_output_size,
+              "Disconnect: sending " SC_CMD_BYE " to detected modules...\n");
+  (void)sc_core_end_sessions(&state->core, log_output, log_output_size);
+  if (!had_target) {
     append_text(log_output, log_output_size,
-                "Disconnect: sending " SC_CMD_BYE " to detected modules...\n");
-
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        const ScModuleStatus *status = sc_core_module_status(&state->core, i);
-        if (status == 0 || !status->detected) {
-            continue;
-        }
-
-        had_target = true;
-        if (status->target_ambiguous) {
-            char line[256];
-            (void)snprintf(
-                line, sizeof(line),
-                "[WARN] %s: skipped (" SC_CMD_BYE " target ambiguous: %zu instances)\n",
-                status->display_name,
-                status->detected_instances
-            );
-            append_text(log_output, log_output_size, line);
-            continue;
-        }
-
-        ScCommandResult result;
-        if (!sc_core_sc_bye(&state->core, i, &result,
-                            log_output, log_output_size)) {
-            continue;
-        }
-
-        if (result.status == SC_COMMAND_STATUS_OK &&
-            strcmp(result.topic, SC_REPLY_TAG_BYE) == 0) {
-            continue;
-        }
-
-        char line[512];
-        if (command_result_is_unknown(&result)) {
-            (void)snprintf(
-                line, sizeof(line),
-                "[WARN] %.64s on %.200s: firmware does not support " SC_CMD_BYE
-                " yet (%.120s)\n",
-                status->display_name,
-                status->port_path,
-                result.response
-            );
-        } else {
-            (void)snprintf(
-                line, sizeof(line),
-                "[WARN] %.64s on %.200s: unexpected " SC_CMD_BYE " reply: %.120s\n",
-                status->display_name,
-                status->port_path,
-                result.response
-            );
-        }
-        append_text(log_output, log_output_size, line);
-    }
-
-    if (!had_target) {
-        append_text(log_output, log_output_size,
-                    "Disconnect: no detected modules required " SC_CMD_BYE ".\n");
-    }
+                "Disconnect: no detected modules required " SC_CMD_BYE ".\n");
+  }
 }
 
-static size_t collect_values_via_get_param(
-    ScCore *core,
-    size_t module_index,
-    const ScParamListData *list,
-    ScParamValuesData *out_values,
-    size_t *out_fail_count,
-    char *log_output,
-    size_t log_output_size)
-{
-    if (core == 0 || list == 0 || out_values == 0) {
-        return 0u;
+static size_t collect_values_via_get_param(ScCore *core, size_t module_index,
+                                           const ScParamListData *list,
+                                           ScParamValuesData *out_values,
+                                           size_t *out_fail_count,
+                                           char *log_output,
+                                           size_t log_output_size) {
+  if (core == 0 || list == 0 || out_values == 0) {
+    return 0u;
+  }
+
+  memset(out_values, 0, sizeof(*out_values));
+  if (out_fail_count != 0) {
+    *out_fail_count = 0u;
+  }
+
+  char parse_error[256];
+  for (size_t p = 0u; p < list->count; ++p) {
+    const char *param_id = list->ids[p];
+    ScCommandResult param_result;
+    if (!sc_core_sc_get_param(core, module_index, param_id, &param_result,
+                              log_output, log_output_size)) {
+      if (out_fail_count != 0) {
+        (*out_fail_count)++;
+      }
+      continue;
     }
 
-    memset(out_values, 0, sizeof(*out_values));
-    if (out_fail_count != 0) {
-        *out_fail_count = 0u;
+    ScParamDetailData parsed_param;
+    if (!sc_core_parse_param_result(&param_result, &parsed_param, parse_error,
+                                    sizeof(parse_error))) {
+      if (out_fail_count != 0) {
+        (*out_fail_count)++;
+      }
+      continue;
     }
 
-    char parse_error[256];
-    for (size_t p = 0u; p < list->count; ++p) {
-        const char *param_id = list->ids[p];
-        ScCommandResult param_result;
-        if (!sc_core_sc_get_param(
-                core,
-                module_index,
-                param_id,
-                &param_result,
-                log_output,
-                log_output_size
-            )) {
-            if (out_fail_count != 0) {
-                (*out_fail_count)++;
-            }
-            continue;
-        }
-
-        ScParamDetailData parsed_param;
-        if (!sc_core_parse_param_result(&param_result, &parsed_param,
-                                        parse_error, sizeof(parse_error))) {
-            if (out_fail_count != 0) {
-                (*out_fail_count)++;
-            }
-            continue;
-        }
-
-        if (out_values->count >= SC_PARAM_ITEMS_MAX) {
-            out_values->truncated = true;
-            break;
-        }
-
-        const size_t idx = out_values->count++;
-        (void)snprintf(out_values->entries[idx].id,
-                       sizeof(out_values->entries[idx].id),
-                       "%s", parsed_param.id);
-        out_values->entries[idx].value = parsed_param.value;
+    if (out_values->count >= SC_PARAM_ITEMS_MAX) {
+      out_values->truncated = true;
+      break;
     }
 
-    return out_values->count;
+    const size_t idx = out_values->count++;
+    (void)snprintf(out_values->entries[idx].id,
+                   sizeof(out_values->entries[idx].id), "%s", parsed_param.id);
+    out_values->entries[idx].value = parsed_param.value;
+  }
+
+  return out_values->count;
 }
 
 #if UI_AUTO_REFRESH_PARAM_PROBE
-static const ScParamValueEntry *find_value_entry_by_id(
-    const ScParamValuesData *values,
-    const char *id
-)
-{
-    if (values == 0 || id == 0) {
-        return 0;
-    }
-
-    for (size_t i = 0u; i < values->count; ++i) {
-        if (strcmp(values->entries[i].id, id) == 0) {
-            return &values->entries[i];
-        }
-    }
-
+static const ScParamValueEntry *
+find_value_entry_by_id(const ScParamValuesData *values, const char *id) {
+  if (values == 0 || id == 0) {
     return 0;
+  }
+
+  for (size_t i = 0u; i < values->count; ++i) {
+    if (strcmp(values->entries[i].id, id) == 0) {
+      return &values->entries[i];
+    }
+  }
+
+  return 0;
 }
 
-static bool typed_values_equal(const ScTypedValue *a, const ScTypedValue *b)
-{
-    if (a == 0 || b == 0) {
-        return false;
-    }
+static bool typed_values_equal(const ScTypedValue *a, const ScTypedValue *b) {
+  if (a == 0 || b == 0) {
+    return false;
+  }
 
-    if (a->type != b->type) {
-        return strcmp(a->raw, b->raw) == 0;
-    }
+  if (a->type != b->type) {
+    return strcmp(a->raw, b->raw) == 0;
+  }
 
-    switch (a->type) {
-        case SC_VALUE_TYPE_BOOL:
-            return a->bool_value == b->bool_value;
-        case SC_VALUE_TYPE_INT:
-            return a->int_value == b->int_value;
-        case SC_VALUE_TYPE_UINT:
-            return a->uint_value == b->uint_value;
-        case SC_VALUE_TYPE_FLOAT:
-            return a->float_value == b->float_value;
-        case SC_VALUE_TYPE_TEXT:
-        case SC_VALUE_TYPE_UNKNOWN:
-        default:
-            return strcmp(a->raw, b->raw) == 0;
-    }
+  switch (a->type) {
+  case SC_VALUE_TYPE_BOOL:
+    return a->bool_value == b->bool_value;
+  case SC_VALUE_TYPE_INT:
+    return a->int_value == b->int_value;
+  case SC_VALUE_TYPE_UINT:
+    return a->uint_value == b->uint_value;
+  case SC_VALUE_TYPE_FLOAT:
+    return a->float_value == b->float_value;
+  case SC_VALUE_TYPE_TEXT:
+  case SC_VALUE_TYPE_UNKNOWN:
+  default:
+    return strcmp(a->raw, b->raw) == 0;
+  }
 }
 #endif
 
-static void run_detection_worker(
-    GTask *task,
-    gpointer source_object,
-    gpointer task_data,
-    GCancellable *cancellable
-)
-{
-    (void)source_object;
-    (void)task_data;
-    (void)cancellable;
+static void run_detection_worker(GTask *task, gpointer source_object,
+                                 gpointer task_data,
+                                 GCancellable *cancellable) {
+  (void)source_object;
+  (void)task_data;
+  (void)cancellable;
 
-    DetectionResult *result = g_new0(DetectionResult, 1u);
-    result->log_text = g_malloc0(UI_DETECTION_LOG_MAX);
+  DetectionResult *result = g_new0(DetectionResult, 1u);
+  result->log_text = g_malloc0(UI_DETECTION_LOG_MAX);
 
-    sc_core_init(&result->core);
-    sc_core_detect_modules(&result->core, result->log_text, UI_DETECTION_LOG_MAX);
-    append_text(
-        result->log_text,
-        UI_DETECTION_LOG_MAX,
-        sc_i18n_string_get(SC_I18N_LOG_AUTO_REFRESH_HEADER)
-    );
+  sc_core_init(&result->core);
+  sc_core_detect_modules(&result->core, result->log_text, UI_DETECTION_LOG_MAX);
+  append_text(result->log_text, UI_DETECTION_LOG_MAX,
+              sc_i18n_string_get(SC_I18N_LOG_AUTO_REFRESH_HEADER));
 
-    bool has_any_target = false;
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        const ScModuleStatus *status = sc_core_module_status(&result->core, i);
-        if (status == 0) {
-            const char *unavailable = sc_i18n_string_get(SC_I18N_STATUS_MODULE_UNAVAILABLE);
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]), "%s", unavailable);
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]), "%s", unavailable);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", unavailable);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", unavailable);
-            continue;
-        }
+  bool has_any_target = false;
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    const ScModuleStatus *status = sc_core_module_status(&result->core, i);
+    if (status == 0) {
+      const char *unavailable =
+          sc_i18n_string_get(SC_I18N_STATUS_MODULE_UNAVAILABLE);
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]), "%s", unavailable);
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     unavailable);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     unavailable);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     unavailable);
+      continue;
+    }
 
-        if (!status->detected) {
-            const char *not_detected = sc_i18n_string_get(SC_I18N_STATUS_NOT_DETECTED);
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]), "%s", not_detected);
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]), "%s", not_detected);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", not_detected);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", not_detected);
-            continue;
-        }
+    if (!status->detected) {
+      const char *not_detected =
+          sc_i18n_string_get(SC_I18N_STATUS_NOT_DETECTED);
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]), "%s", not_detected);
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     not_detected);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     not_detected);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     not_detected);
+      continue;
+    }
 
-        if (status->target_ambiguous) {
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_META));
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_CATALOG));
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_VALUES));
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_PROBE));
-            continue;
-        }
+    if (status->target_ambiguous) {
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_META));
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_CATALOG));
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_VALUES));
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_AMBIGUOUS_PROBE));
+      continue;
+    }
 
-        has_any_target = true;
-        char auto_line[256];
-        (void)snprintf(auto_line, sizeof(auto_line),
-                       sc_i18n_string_get(SC_I18N_LOG_AUTO_REFRESH_FOR_FMT),
-                       status->display_name);
-        append_text(result->log_text, UI_DETECTION_LOG_MAX, auto_line);
+    has_any_target = true;
+    char auto_line[256];
+    (void)snprintf(auto_line, sizeof(auto_line),
+                   sc_i18n_string_get(SC_I18N_LOG_AUTO_REFRESH_FOR_FMT),
+                   status->display_name);
+    append_text(result->log_text, UI_DETECTION_LOG_MAX, auto_line);
 
-        ScCommandResult meta_result;
-        const bool meta_ok = sc_core_sc_get_meta(
-            &result->core,
-            i,
-            &meta_result,
-            result->log_text,
-            UI_DETECTION_LOG_MAX
-        );
-        if (!meta_ok) {
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_META_TRANSPORT_ERR));
-            const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_META_TRANSPORT);
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]), "%s", skip);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", skip);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", skip);
-            continue;
-        }
+    ScCommandResult meta_result;
+    const bool meta_ok = sc_core_sc_get_meta(
+        &result->core, i, &meta_result, result->log_text, UI_DETECTION_LOG_MAX);
+    if (!meta_ok) {
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_META_TRANSPORT_ERR));
+      const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_META_TRANSPORT);
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s", skip);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s", skip);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s", skip);
+      continue;
+    }
 
-        if (command_result_is_unknown(&meta_result)) {
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_PROTOCOL_UNSUPPORTED));
-            const char *short_unsupported =
-                sc_i18n_string_get(SC_I18N_STATUS_PROTOCOL_UNSUPPORTED_SHORT);
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]),
-                           "%s", short_unsupported);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]),
-                           "%s", short_unsupported);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", short_unsupported);
-            continue;
-        }
+    if (sc_core_result_is_unknown_command(&meta_result)) {
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_PROTOCOL_UNSUPPORTED));
+      const char *short_unsupported =
+          sc_i18n_string_get(SC_I18N_STATUS_PROTOCOL_UNSUPPORTED_SHORT);
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     short_unsupported);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     short_unsupported);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     short_unsupported);
+      continue;
+    }
 
-        if (meta_result.status != SC_COMMAND_STATUS_OK) {
-            (void)snprintf(result->module_meta_status[i],
-                           sizeof(result->module_meta_status[i]),
-                           sc_i18n_string_get(SC_I18N_STATUS_META_FAILED_FMT),
-                           sc_command_status_name(meta_result.status));
-            const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_META_FAILED);
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]), "%s", skip);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", skip);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", skip);
-            continue;
-        }
+    if (meta_result.status != SC_COMMAND_STATUS_OK) {
+      (void)snprintf(result->module_meta_status[i],
+                     sizeof(result->module_meta_status[i]),
+                     sc_i18n_string_get(SC_I18N_STATUS_META_FAILED_FMT),
+                     sc_command_status_name(meta_result.status));
+      const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_META_FAILED);
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s", skip);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s", skip);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s", skip);
+      continue;
+    }
 
-        (void)snprintf(result->module_meta_status[i],
-                       sizeof(result->module_meta_status[i]),
-                       "%s", sc_i18n_string_get(SC_I18N_STATUS_META_REFRESHED));
+    (void)snprintf(result->module_meta_status[i],
+                   sizeof(result->module_meta_status[i]), "%s",
+                   sc_i18n_string_get(SC_I18N_STATUS_META_REFRESHED));
 
-        ScCommandResult list_result;
-        ScParamListData parsed_list;
-        char parse_error[256];
-        bool list_ok = sc_core_sc_get_param_list(
-            &result->core,
-            i,
-            &list_result,
-            result->log_text,
-            UI_DETECTION_LOG_MAX
-        );
+    ScCommandResult list_result;
+    ScParamListData parsed_list;
+    char parse_error[256];
+    bool list_ok = sc_core_sc_get_param_list(
+        &result->core, i, &list_result, result->log_text, UI_DETECTION_LOG_MAX);
 
-        if (!list_ok) {
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_CATALOG_TRANSPORT_ERR));
-            const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_CATALOG_TRANSPORT);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", skip);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", skip);
-            continue;
-        }
+    if (!list_ok) {
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_CATALOG_TRANSPORT_ERR));
+      const char *skip =
+          sc_i18n_string_get(SC_I18N_STATUS_SKIP_CATALOG_TRANSPORT);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s", skip);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s", skip);
+      continue;
+    }
 
-        if (!sc_core_parse_param_list_result(&list_result, &parsed_list, parse_error, sizeof(parse_error))) {
-            (void)snprintf(result->module_catalog_status[i],
-                           sizeof(result->module_catalog_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_CATALOG_PARSE_FAILED));
-            const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_CATALOG_PARSE);
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]), "%s", skip);
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]), "%s", skip);
-            append_text(result->log_text, UI_DETECTION_LOG_MAX,
-                        sc_i18n_string_get(SC_I18N_LOG_WARN_PREFIX));
-            append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
-            append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
-            continue;
-        }
+    if (!sc_core_parse_param_list_result(&list_result, &parsed_list,
+                                         parse_error, sizeof(parse_error))) {
+      (void)snprintf(result->module_catalog_status[i],
+                     sizeof(result->module_catalog_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_CATALOG_PARSE_FAILED));
+      const char *skip = sc_i18n_string_get(SC_I18N_STATUS_SKIP_CATALOG_PARSE);
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s", skip);
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s", skip);
+      append_text(result->log_text, UI_DETECTION_LOG_MAX,
+                  sc_i18n_string_get(SC_I18N_LOG_WARN_PREFIX));
+      append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
+      append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
+      continue;
+    }
 
-        (void)snprintf(result->module_catalog_status[i],
-                       sizeof(result->module_catalog_status[i]),
-                       sc_i18n_string_get(SC_I18N_STATUS_CATALOG_READ_FMT),
-                       parsed_list.count,
-                       parsed_list.truncated
-                           ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
-                           : "");
+    (void)snprintf(result->module_catalog_status[i],
+                   sizeof(result->module_catalog_status[i]),
+                   sc_i18n_string_get(SC_I18N_STATUS_CATALOG_READ_FMT),
+                   parsed_list.count,
+                   parsed_list.truncated
+                       ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
+                       : "");
 
-        ScCommandResult values_result;
-        ScParamValuesData parsed_values;
-        memset(&parsed_values, 0, sizeof(parsed_values));
-        bool values_from_fallback = false;
-        bool values_ok = sc_core_sc_get_values(
-            &result->core,
-            i,
-            &values_result,
-            result->log_text,
-            UI_DETECTION_LOG_MAX
-        );
-        if (values_ok &&
-            sc_core_parse_param_values_result(&values_result, &parsed_values,
-                                              parse_error, sizeof(parse_error))) {
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]),
-                           sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
-                           parsed_values.count,
-                           parsed_values.truncated
-                               ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
-                               : "");
-        } else if (!values_ok) {
-            /* Transport failed: device is unresponsive on the framed link;
-             * a per-id SC_GET_PARAM fallback would multiply the timeout
-             * cost by N parameters with no expected gain. Skip straight
-             * to the next module. */
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_VALUES_TRANSPORT_ERR));
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_SKIP_VALUES_TRANSPORT));
-            continue;
-        } else {
-            /* Transport OK but parse failed: device responded with
-             * something we can't decode. Fall back to per-id
-             * SC_GET_PARAM probes - each round-trip is short and we may
-             * still recover most of the snapshot. */
-            (void)snprintf(result->module_values_status[i],
-                           sizeof(result->module_values_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_VALUES_PARSE_FAILED));
-            append_text(result->log_text, UI_DETECTION_LOG_MAX,
-                        sc_i18n_string_get(SC_I18N_LOG_WARN_PREFIX));
-            append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
-            append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
+    ScCommandResult values_result;
+    ScParamValuesData parsed_values;
+    memset(&parsed_values, 0, sizeof(parsed_values));
+    bool values_from_fallback = false;
+    bool values_ok =
+        sc_core_sc_get_values(&result->core, i, &values_result,
+                              result->log_text, UI_DETECTION_LOG_MAX);
+    if (values_ok &&
+        sc_core_parse_param_values_result(&values_result, &parsed_values,
+                                          parse_error, sizeof(parse_error))) {
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]),
+                     sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
+                     parsed_values.count,
+                     parsed_values.truncated
+                         ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
+                         : "");
+    } else if (!values_ok) {
+      /* Transport failed: device is unresponsive on the framed link;
+       * a per-id SC_GET_PARAM fallback would multiply the timeout
+       * cost by N parameters with no expected gain. Skip straight
+       * to the next module. */
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_VALUES_TRANSPORT_ERR));
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_SKIP_VALUES_TRANSPORT));
+      continue;
+    } else {
+      /* Transport OK but parse failed: device responded with
+       * something we can't decode. Fall back to per-id
+       * SC_GET_PARAM probes - each round-trip is short and we may
+       * still recover most of the snapshot. */
+      (void)snprintf(result->module_values_status[i],
+                     sizeof(result->module_values_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_VALUES_PARSE_FAILED));
+      append_text(result->log_text, UI_DETECTION_LOG_MAX,
+                  sc_i18n_string_get(SC_I18N_LOG_WARN_PREFIX));
+      append_text(result->log_text, UI_DETECTION_LOG_MAX, parse_error);
+      append_text(result->log_text, UI_DETECTION_LOG_MAX, "\n");
 
-            size_t fallback_fail = 0u;
-            const size_t fallback_ok = collect_values_via_get_param(
-                &result->core, i, &parsed_list, &parsed_values,
-                &fallback_fail, result->log_text, UI_DETECTION_LOG_MAX);
-            if (fallback_ok > 0u) {
-                values_from_fallback = true;
-                const bool partial = parsed_values.truncated ||
-                                     fallback_ok < parsed_list.count ||
-                                     fallback_fail > 0u;
-                (void)snprintf(result->module_values_status[i],
-                               sizeof(result->module_values_status[i]),
-                               sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
-                               parsed_values.count,
-                               partial
-                                   ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX)
-                                   : "");
-                char warn_line[256];
-                (void)snprintf(warn_line, sizeof(warn_line),
-                               "[WARN] " SC_CMD_GET_VALUES
-                               " failed; fallback " SC_CMD_GET_PARAM
-                               " ok=%zu fail=%zu\n",
-                               fallback_ok, fallback_fail);
-                append_text(result->log_text, UI_DETECTION_LOG_MAX, warn_line);
-            }
-        }
+      size_t fallback_fail = 0u;
+      const size_t fallback_ok = collect_values_via_get_param(
+          &result->core, i, &parsed_list, &parsed_values, &fallback_fail,
+          result->log_text, UI_DETECTION_LOG_MAX);
+      if (fallback_ok > 0u) {
+        values_from_fallback = true;
+        const bool partial = parsed_values.truncated ||
+                             fallback_ok < parsed_list.count ||
+                             fallback_fail > 0u;
+        (void)snprintf(
+            result->module_values_status[i],
+            sizeof(result->module_values_status[i]),
+            sc_i18n_string_get(SC_I18N_STATUS_VALUES_READ_FMT),
+            parsed_values.count,
+            partial ? sc_i18n_string_get(SC_I18N_STATUS_TRUNCATED_SUFFIX) : "");
+        char warn_line[256];
+        (void)snprintf(warn_line, sizeof(warn_line),
+                       "[WARN] " SC_CMD_GET_VALUES
+                       " failed; fallback " SC_CMD_GET_PARAM
+                       " ok=%zu fail=%zu\n",
+                       fallback_ok, fallback_fail);
+        append_text(result->log_text, UI_DETECTION_LOG_MAX, warn_line);
+      }
+    }
 
 #if UI_AUTO_REFRESH_PARAM_PROBE
-        size_t probe_ok_count = 0u;
-        size_t probe_fail_count = 0u;
-        size_t cross_mismatch_count = 0u;
+    size_t probe_ok_count = 0u;
+    size_t probe_fail_count = 0u;
+    size_t cross_mismatch_count = 0u;
 
-        for (size_t p = 0u; p < parsed_list.count; ++p) {
-            const char *param_id = parsed_list.ids[p];
-            ScCommandResult param_result;
-            if (!sc_core_sc_get_param(
-                    &result->core,
-                    i,
-                    param_id,
-                    &param_result,
-                    result->log_text,
-                    UI_DETECTION_LOG_MAX
-                )) {
-                probe_fail_count++;
-                continue;
-            }
+    for (size_t p = 0u; p < parsed_list.count; ++p) {
+      const char *param_id = parsed_list.ids[p];
+      ScCommandResult param_result;
+      if (!sc_core_sc_get_param(&result->core, i, param_id, &param_result,
+                                result->log_text, UI_DETECTION_LOG_MAX)) {
+        probe_fail_count++;
+        continue;
+      }
 
-            ScParamDetailData parsed_param;
-            if (!sc_core_parse_param_result(&param_result, &parsed_param, parse_error, sizeof(parse_error))) {
-                probe_fail_count++;
-                continue;
-            }
+      ScParamDetailData parsed_param;
+      if (!sc_core_parse_param_result(&param_result, &parsed_param, parse_error,
+                                      sizeof(parse_error))) {
+        probe_fail_count++;
+        continue;
+      }
 
-            probe_ok_count++;
-            const ScParamValueEntry *snapshot =
-                find_value_entry_by_id(&parsed_values, parsed_param.id);
-            if (snapshot != 0 && !typed_values_equal(&snapshot->value, &parsed_param.value)) {
-                cross_mismatch_count++;
-            }
-        }
+      probe_ok_count++;
+      const ScParamValueEntry *snapshot =
+          find_value_entry_by_id(&parsed_values, parsed_param.id);
+      if (snapshot != 0 &&
+          !typed_values_equal(&snapshot->value, &parsed_param.value)) {
+        cross_mismatch_count++;
+      }
+    }
 
-        if (parsed_list.count == 0u) {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_NO_IDS_TO_PROBE));
-        } else if (probe_fail_count > 0u) {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           sc_i18n_string_get(SC_I18N_STATUS_PROBE_PARTIAL_FMT),
-                           probe_ok_count,
-                           probe_fail_count,
-                           cross_mismatch_count);
-        } else {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           sc_i18n_string_get(SC_I18N_STATUS_PROBE_OK_FMT),
-                           probe_ok_count,
-                           cross_mismatch_count);
-        }
+    if (parsed_list.count == 0u) {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_NO_IDS_TO_PROBE));
+    } else if (probe_fail_count > 0u) {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]),
+                     sc_i18n_string_get(SC_I18N_STATUS_PROBE_PARTIAL_FMT),
+                     probe_ok_count, probe_fail_count, cross_mismatch_count);
+    } else {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]),
+                     sc_i18n_string_get(SC_I18N_STATUS_PROBE_OK_FMT),
+                     probe_ok_count, cross_mismatch_count);
+    }
 #else
-        if (parsed_list.count == 0u) {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_NO_IDS_TO_PROBE));
-        } else if (values_from_fallback) {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_PROBE_SKIPPED));
-        } else {
-            (void)snprintf(result->module_param_probe_status[i],
-                           sizeof(result->module_param_probe_status[i]),
-                           "%s", sc_i18n_string_get(SC_I18N_STATUS_PROBE_SKIPPED));
-        }
+    if (parsed_list.count == 0u) {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_NO_IDS_TO_PROBE));
+    } else if (values_from_fallback) {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_PROBE_SKIPPED));
+    } else {
+      (void)snprintf(result->module_param_probe_status[i],
+                     sizeof(result->module_param_probe_status[i]), "%s",
+                     sc_i18n_string_get(SC_I18N_STATUS_PROBE_SKIPPED));
+    }
 #endif
-    }
+  }
 
-    if (!has_any_target) {
-        append_text(result->log_text, UI_DETECTION_LOG_MAX,
-                    sc_i18n_string_get(SC_I18N_LOG_NO_TARGETS));
-    }
+  if (!has_any_target) {
+    append_text(result->log_text, UI_DETECTION_LOG_MAX,
+                sc_i18n_string_get(SC_I18N_LOG_NO_TARGETS));
+  }
 
-    g_task_return_pointer(task, result, (GDestroyNotify)detection_result_free);
+  g_task_return_pointer(task, result, (GDestroyNotify)detection_result_free);
 }
 
 static void on_detection_finished(GObject *source_object,
                                   GAsyncResult *async_result,
-                                  gpointer user_data)
-{
-    (void)source_object;
+                                  gpointer user_data) {
+  (void)source_object;
 
-    AppState *state = (AppState *)user_data;
-    if (state == 0) {
-        return;
-    }
+  AppState *state = (AppState *)user_data;
+  if (state == 0) {
+    return;
+  }
 
-    DetectionResult *result = g_task_propagate_pointer(G_TASK(async_result), 0);
-    state->detection_in_progress = false;
+  DetectionResult *result = g_task_propagate_pointer(G_TASK(async_result), 0);
+  state->detection_in_progress = false;
 
-    if (result == 0) {
-        if (state->detect_button != 0) {
-            gtk_widget_set_sensitive(state->detect_button, TRUE);
-            gtk_button_set_label(GTK_BUTTON(state->detect_button),
-                                 sc_i18n_string_get(SC_I18N_BTN_DETECT));
-        }
-        if (state->log_buffer != 0) {
-            gtk_text_buffer_set_text(state->log_buffer,
-                                     sc_i18n_string_get(SC_I18N_LOG_DETECTION_FAILED),
-                                     -1);
-        }
-        state->connected = false;
-        sc_modules_view_refresh_lamps(state);
-        sc_modules_view_set_placeholder(state,
-            sc_i18n_string_get(SC_I18N_PLACEHOLDER_FAILED));
-        sc_modules_view_refresh_details(state);
-        sc_values_tab_rebuild(state, false);
-        return;
-    }
-
-    state->core = result->core;
-    state->connected = true;
-    sc_modules_view_refresh_lamps(state);
-    sc_map_tab_set_connected(state, true);
-
-    if (state->log_buffer != 0 && result->log_text != 0) {
-        gtk_text_buffer_set_text(state->log_buffer, result->log_text, -1);
-    }
-
+  if (result == 0) {
     if (state->detect_button != 0) {
-        gtk_widget_set_sensitive(state->detect_button, TRUE);
-        gtk_button_set_label(GTK_BUTTON(state->detect_button),
-                             sc_i18n_string_get(SC_I18N_BTN_DISCONNECT));
+      gtk_widget_set_sensitive(state->detect_button, TRUE);
+      gtk_button_set_label(GTK_BUTTON(state->detect_button),
+                           sc_i18n_string_get(SC_I18N_BTN_DETECT));
     }
-
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        sc_modules_view_set_meta_status(state, i, result->module_meta_status[i]);
-        sc_modules_view_set_catalog_status(state, i, result->module_catalog_status[i]);
-        sc_modules_view_set_values_status(state, i, result->module_values_status[i]);
-        sc_modules_view_set_param_probe_status(state, i, result->module_param_probe_status[i]);
-    }
-
-    sc_modules_view_set_placeholder(state,
-        sc_i18n_string_get(SC_I18N_PLACEHOLDER_FINISHED));
-    sc_modules_view_select_first_detected(state);
-    sc_modules_view_refresh_details(state);
-    /* Phase 8.6: rebuild the Values tab content from the fresh
-     * detection cache. Sub-tabs only appear for modules that came
-     * back; modules that disappeared this cycle drop out cleanly. */
-    sc_values_tab_rebuild(state, true);
-    detection_result_free(result);
-}
-
-void sc_detection_start_async(AppState *state)
-{
-    if (state == 0 || state->detection_in_progress) {
-        return;
-    }
-
-    state->detection_in_progress = true;
-    state->connected = false;
-    state->selection_valid = false;
-    state->selected_module_index = 0u;
-    sc_modules_view_set_placeholder(state,
-        sc_i18n_string_get(SC_I18N_PLACEHOLDER_DETECTING));
-    const char *waiting = sc_i18n_string_get(SC_I18N_STATUS_WAITING);
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        sc_modules_view_set_meta_status(state, i, waiting);
-        sc_modules_view_set_catalog_status(state, i, waiting);
-        sc_modules_view_set_values_status(state, i, waiting);
-        sc_modules_view_set_param_probe_status(state, i, waiting);
-    }
-
-    sc_core_reset_detection(&state->core);
-    sc_modules_view_refresh_lamps(state);
-    sc_modules_view_refresh_details(state);
-
-    if (state->module_list != 0) {
-        gtk_list_box_unselect_all(GTK_LIST_BOX(state->module_list));
-    }
-
     if (state->log_buffer != 0) {
-        gtk_text_buffer_set_text(state->log_buffer,
-                                 sc_i18n_string_get(SC_I18N_LOG_DETECTING),
-                                 -1);
+      gtk_text_buffer_set_text(state->log_buffer,
+                               sc_i18n_string_get(SC_I18N_LOG_DETECTION_FAILED),
+                               -1);
     }
-
-    if (state->detect_button != 0) {
-        gtk_button_set_label(GTK_BUTTON(state->detect_button),
-                             sc_i18n_string_get(SC_I18N_BTN_DETECTING));
-        gtk_widget_set_sensitive(state->detect_button, FALSE);
-    }
-
-    GTask *task = g_task_new(0, 0, on_detection_finished, state);
-    g_task_run_in_thread(task, run_detection_worker);
-    g_object_unref(task);
-}
-
-void sc_detection_reset_connection(AppState *state, bool by_user_request)
-{
-    if (state == 0) {
-        return;
-    }
-
-    char disconnect_log[UI_DETECTION_LOG_MAX] = {0};
-    if (by_user_request) {
-        send_bye_to_detected_modules(state, disconnect_log, sizeof(disconnect_log));
-    }
-
-    sc_core_reset_detection(&state->core);
-    sc_modules_view_refresh_lamps(state);
-
     state->connected = false;
-    state->detection_in_progress = false;
-    state->selection_valid = false;
-    state->selected_module_index = 0u;
-    sc_modules_view_set_placeholder(state,
-        sc_i18n_string_get(SC_I18N_PLACEHOLDER_INITIAL));
-    for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
-        sc_modules_view_set_meta_status(state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_META));
-        sc_modules_view_set_catalog_status(state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_CATALOG));
-        sc_modules_view_set_values_status(state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_VALUES));
-        sc_modules_view_set_param_probe_status(state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_PROBE));
-    }
-
-    if (state->module_list != 0) {
-        gtk_list_box_unselect_all(GTK_LIST_BOX(state->module_list));
-    }
-
-    if (state->detect_button != 0) {
-        gtk_widget_set_sensitive(state->detect_button, TRUE);
-        gtk_button_set_label(GTK_BUTTON(state->detect_button),
-                             sc_i18n_string_get(SC_I18N_BTN_DETECT));
-    }
-
-    if (state->log_buffer != 0) {
-        char ui_log[UI_DETECTION_LOG_MAX] = {0};
-        append_text(
-            ui_log, sizeof(ui_log),
-            sc_i18n_string_get(by_user_request
-                        ? SC_I18N_LOG_DISCONNECTED
-                        : SC_I18N_LOG_IDLE)
-        );
-        if (by_user_request && disconnect_log[0] != '\0') {
-            append_text(ui_log, sizeof(ui_log), "\n");
-            append_text(ui_log, sizeof(ui_log), disconnect_log);
-        }
-        gtk_text_buffer_set_text(state->log_buffer, ui_log, -1);
-    }
-
+    sc_modules_view_refresh_lamps(state);
+    sc_modules_view_set_placeholder(
+        state, sc_i18n_string_get(SC_I18N_PLACEHOLDER_FAILED));
     sc_modules_view_refresh_details(state);
-    /* Phase 8.6: collapse the Values tab back to the placeholder
-     * when the operator disconnects or boot-time idle is reasserted. */
     sc_values_tab_rebuild(state, false);
-    /* Phase 8.7: hide the GPS marker and freeze the status label so
-     * the operator gets immediate visual feedback that polling is
-     * paused; the timer itself stays armed (see sc_map_tab.c). */
-    sc_map_tab_set_connected(state, false);
+    sc_detection_close_if_pending(state);
+    return;
+  }
+
+  state->core = result->core;
+  state->connected = true;
+  sc_modules_view_refresh_lamps(state);
+  sc_map_tab_set_connected(state, true);
+
+  if (state->log_buffer != 0 && result->log_text != 0) {
+    gtk_text_buffer_set_text(state->log_buffer, result->log_text, -1);
+  }
+
+  if (state->detect_button != 0) {
+    gtk_widget_set_sensitive(state->detect_button, TRUE);
+    gtk_button_set_label(GTK_BUTTON(state->detect_button),
+                         sc_i18n_string_get(SC_I18N_BTN_DISCONNECT));
+  }
+
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    sc_modules_view_set_meta_status(state, i, result->module_meta_status[i]);
+    sc_modules_view_set_catalog_status(state, i,
+                                       result->module_catalog_status[i]);
+    sc_modules_view_set_values_status(state, i,
+                                      result->module_values_status[i]);
+    sc_modules_view_set_param_probe_status(
+        state, i, result->module_param_probe_status[i]);
+  }
+
+  sc_modules_view_set_placeholder(
+      state, sc_i18n_string_get(SC_I18N_PLACEHOLDER_FINISHED));
+  sc_modules_view_select_first_detected(state);
+  sc_modules_view_refresh_details(state);
+  /* Phase 8.6: rebuild the Values tab content from the fresh
+   * detection cache. Sub-tabs only appear for modules that came
+   * back; modules that disappeared this cycle drop out cleanly. */
+  sc_values_tab_rebuild(state, true);
+  detection_result_free(result);
+  sc_detection_close_if_pending(state);
 }
 
-void sc_detection_on_detect_clicked(GtkButton *button, gpointer user_data)
-{
-    AppState *state = (AppState *)user_data;
-    if (state == 0 || state->log_buffer == 0) {
-        return;
-    }
+void sc_detection_start_async(AppState *state) {
+  if (state == 0 || state->detection_in_progress) {
+    return;
+  }
 
-    if (state->connected) {
-        sc_detection_reset_connection(state, true);
-        return;
-    }
+  state->detection_in_progress = true;
+  state->connected = false;
+  state->selection_valid = false;
+  state->selected_module_index = 0u;
+  sc_modules_view_set_placeholder(
+      state, sc_i18n_string_get(SC_I18N_PLACEHOLDER_DETECTING));
+  const char *waiting = sc_i18n_string_get(SC_I18N_STATUS_WAITING);
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    sc_modules_view_set_meta_status(state, i, waiting);
+    sc_modules_view_set_catalog_status(state, i, waiting);
+    sc_modules_view_set_values_status(state, i, waiting);
+    sc_modules_view_set_param_probe_status(state, i, waiting);
+  }
 
-    (void)button;
-    sc_detection_start_async(state);
+  sc_core_reset_detection(&state->core);
+  sc_modules_view_refresh_lamps(state);
+  sc_modules_view_refresh_details(state);
+
+  if (state->module_list != 0) {
+    gtk_list_box_unselect_all(GTK_LIST_BOX(state->module_list));
+  }
+
+  if (state->log_buffer != 0) {
+    gtk_text_buffer_set_text(state->log_buffer,
+                             sc_i18n_string_get(SC_I18N_LOG_DETECTING), -1);
+  }
+
+  if (state->detect_button != 0) {
+    gtk_button_set_label(GTK_BUTTON(state->detect_button),
+                         sc_i18n_string_get(SC_I18N_BTN_DETECTING));
+    gtk_widget_set_sensitive(state->detect_button, FALSE);
+  }
+
+  GTask *task = g_task_new(0, 0, on_detection_finished, state);
+  g_task_run_in_thread(task, run_detection_worker);
+  g_object_unref(task);
+}
+
+void sc_detection_reset_connection(AppState *state, bool by_user_request) {
+  if (state == 0) {
+    return;
+  }
+
+  char disconnect_log[UI_DETECTION_LOG_MAX] = {0};
+  if (by_user_request) {
+    send_bye_to_detected_modules(state, disconnect_log, sizeof(disconnect_log));
+  }
+
+  sc_core_reset_detection(&state->core);
+  sc_modules_view_refresh_lamps(state);
+
+  state->connected = false;
+  state->detection_in_progress = false;
+  state->selection_valid = false;
+  state->selected_module_index = 0u;
+  sc_modules_view_set_placeholder(
+      state, sc_i18n_string_get(SC_I18N_PLACEHOLDER_INITIAL));
+  for (size_t i = 0u; i < SC_MODULE_COUNT; ++i) {
+    sc_modules_view_set_meta_status(state, i,
+                                    sc_i18n_string_get(SC_I18N_STATUS_NO_META));
+    sc_modules_view_set_catalog_status(
+        state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_CATALOG));
+    sc_modules_view_set_values_status(
+        state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_VALUES));
+    sc_modules_view_set_param_probe_status(
+        state, i, sc_i18n_string_get(SC_I18N_STATUS_NO_PROBE));
+  }
+
+  if (state->module_list != 0) {
+    gtk_list_box_unselect_all(GTK_LIST_BOX(state->module_list));
+  }
+
+  if (state->detect_button != 0) {
+    gtk_widget_set_sensitive(state->detect_button, TRUE);
+    gtk_button_set_label(GTK_BUTTON(state->detect_button),
+                         sc_i18n_string_get(SC_I18N_BTN_DETECT));
+  }
+
+  if (state->log_buffer != 0) {
+    char ui_log[UI_DETECTION_LOG_MAX] = {0};
+    append_text(ui_log, sizeof(ui_log),
+                sc_i18n_string_get(by_user_request ? SC_I18N_LOG_DISCONNECTED
+                                                   : SC_I18N_LOG_IDLE));
+    if (by_user_request && disconnect_log[0] != '\0') {
+      append_text(ui_log, sizeof(ui_log), "\n");
+      append_text(ui_log, sizeof(ui_log), disconnect_log);
+    }
+    gtk_text_buffer_set_text(state->log_buffer, ui_log, -1);
+  }
+
+  sc_modules_view_refresh_details(state);
+  /* Phase 8.6: collapse the Values tab back to the placeholder
+   * when the operator disconnects or boot-time idle is reasserted. */
+  sc_values_tab_rebuild(state, false);
+  /* Phase 8.7: hide the GPS marker and freeze the status label so
+   * the operator gets immediate visual feedback that polling is
+   * paused; the timer itself stays armed (see sc_map_tab.c). */
+  sc_map_tab_set_connected(state, false);
+}
+
+gboolean sc_detection_on_close_request(GtkWindow *window, gpointer user_data) {
+  (void)window;
+  AppState *state = (AppState *)user_data;
+  if (state == 0) {
+    return FALSE;
+  }
+
+  /* Detection and flashing use the serial ports from a worker thread. */
+  if (state->detection_in_progress || state->flash_in_progress) {
+    if (!state->close_pending && state->log_buffer != 0) {
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter(state->log_buffer, &end);
+      gtk_text_buffer_insert(state->log_buffer, &end, "\n", -1);
+      gtk_text_buffer_insert(state->log_buffer, &end,
+                             sc_i18n_string_get(SC_I18N_LOG_CLOSE_PENDING), -1);
+    }
+    state->close_pending = true;
+    return TRUE;
+  }
+
+  if (state->connected) {
+    char bye_log[UI_DETECTION_LOG_MAX] = {0};
+    (void)sc_core_end_sessions(&state->core, bye_log, sizeof(bye_log));
+    state->connected = false;
+  }
+  return FALSE;
+}
+
+void sc_detection_close_if_pending(AppState *state) {
+  /* The close-request handler still waits while the ports are busy. */
+  if (state != 0 && state->close_pending && state->window != 0) {
+    gtk_window_close(GTK_WINDOW(state->window));
+  }
+}
+
+void sc_detection_on_detect_clicked(GtkButton *button, gpointer user_data) {
+  AppState *state = (AppState *)user_data;
+  if (state == 0 || state->log_buffer == 0) {
+    return;
+  }
+
+  if (state->connected) {
+    sc_detection_reset_connection(state, true);
+    return;
+  }
+
+  (void)button;
+  sc_detection_start_async(state);
 }

@@ -21,9 +21,17 @@
  * widget level is the first line of defence (the firmware enforces
  * the same bounds at SET_PARAM time).
  *
- * Footer per sub-tab: [Apply staged] [Commit] [Revert]. One COMMIT
- * for the whole module is the firmware-natural granularity (cross-
- * field validation runs over the whole staging mirror at once).
+ * Footer per sub-tab: [Use] [Save] [Revert] (SET_PARAM, COMMIT,
+ * REVERT). One COMMIT for the whole module is the firmware-natural
+ * granularity (cross-field validation runs over the whole staging
+ * mirror at once).
+ *
+ * RTC_Clock gets one date and time form instead of the rows: a
+ * calendar limited to the years from the metadata, HH : MM : SS spin
+ * buttons in CET/CEST and the rtc_integrity state. [Set date and
+ * time] stages all six values and commits them, reverting staging
+ * after the first error, then reads the clock back; [Read from device]
+ * fills the form from one SC_GET_VALUES snapshot.
  *
  * The ECU sub-tab holds two pages of its own: "Settings" (the form
  * above) and "Tests" (sc_tests_tab.h), the functional tests the
@@ -51,6 +59,21 @@ GtkWidget *sc_values_tab_build(AppState *state);
  *        the disconnected-reset path with @p detected_any = false).
  */
 void sc_values_tab_rebuild(AppState *state, bool detected_any);
+
+/**
+ * @brief Bring the Values tab and the sub-tab of @p module_index to the
+ *        front.
+ * @return true when the module has a sub-tab (it is detected and not
+ *         ambiguous); otherwise nothing changes.
+ */
+bool sc_values_tab_show_module(AppState *state, size_t module_index);
+
+/**
+ * @brief `row-activated` handler of the module list (a double-click on a
+ *        row): shows that module's sub-tab of the Values tab.
+ */
+void sc_values_tab_on_module_activated(GtkListBox *box, GtkListBoxRow *row,
+                                       gpointer user_data);
 
 #ifdef __cplusplus
 }

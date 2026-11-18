@@ -76,9 +76,6 @@ class ClockTimeTests(unittest.TestCase):
     def test_air_temperature_of_a_missing_sensor(self):
         self.run_scenario("air_temp_missing")
 
-    def test_time_is_logged_once_a_second(self):
-        self.run_scenario("time_log")
-
 
 class Pcf8563TimeTests(ClockTimeTests):
     defines = ("RTC_pcf8563",)

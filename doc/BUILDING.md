@@ -197,7 +197,9 @@ when saving configuration.
 [`modules.json`](../modules.json) lists module kinds, tokens, host tests and
 CI selection. `scripts/fiesta_modules.py` calls the C generator for the token header,
 SerialConfigurator table and shell module lists. The VS Code generator reads
-that registry, HAL registries and the assemblies. Check both from the root:
+that registry, HAL registries and the assemblies. It keeps custom tasks and
+drops generated ones it no longer produces, such as the tasks of a removed
+variant. Check both from the root:
 
 ```bash
 python3 scripts/fiesta_modules.py --check

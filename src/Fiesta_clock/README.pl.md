@@ -26,7 +26,8 @@ przyciski go nie ustawiają. Konfigurator odczytuje i ustawia czas; commit
 odrzuca niepoprawną datę, uwzględniając lata przestępne. Czas lokalny sprzed
 godziny 01:00 1 stycznia 2000 nie ma odpowiednika UTC w zakresie RTC, więc
 commit kończy się błędem `utc_range`. DS3231 po utracie zasilania startuje
-właśnie od tej daty, dlatego przed commitem ustaw całą datę. Co sekundę log
+właśnie od tej daty. Strona SerialConfiguratora zawsze zapisuje całą datę
+i godzinę; w CLI przed commitem ustaw wszystkie pola. Co sekundę log
 debugowania pokazuje datę i godzinę z ekranu, z dopiskiem `(not trusted)`,
 gdy zegar nie ma zaufanego UTC.
 

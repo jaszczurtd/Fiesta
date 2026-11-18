@@ -45,6 +45,25 @@ void sc_detection_start_async(AppState *state);
  */
 void sc_detection_on_detect_clicked(GtkButton *button, gpointer user_data);
 
+/**
+ * @brief `close-request` handler of the main window: closing ends the
+ *        session of every detected module with `SC_BYE`, as Disconnect
+ *        does, so the modules unmute their debug logs.
+ *
+ * While detection or flashing uses the serial ports from its worker
+ * thread, the window stays open, the log notes the pending close and
+ * @ref sc_detection_close_if_pending closes it once the work finishes.
+ *
+ * @return TRUE to keep the window open for the pending close.
+ */
+gboolean sc_detection_on_close_request(GtkWindow *window, gpointer user_data);
+
+/**
+ * @brief Repeat a waiting close request once detection or flashing has
+ *        finished; without one nothing happens.
+ */
+void sc_detection_close_if_pending(AppState *state);
+
 #ifdef __cplusplus
 }
 #endif
