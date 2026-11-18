@@ -9,10 +9,6 @@ temperatury do pozostałych modułów przez CAN. RTC podtrzymuje czas także bez
 
 Sprawdź [wersję płytki](../../Fiesta_pcbs/clock/README.pl.md) i typ RTC. Firmware domyślnie
 obsługuje DS3231 Mini z nowej płytki; dla starszej płytki z PCF8563 wybierz wariant PCF8563.
-Nowa płytka ma też zmieniony dzielnik napięcia, więc przed oceną wskazań dostosuj
-przeliczenie napięcia. Przyciski i wejście zapłonu korzystają z rezystorów podciągających
-na płytce; firmware nie włącza wewnętrznych podciągnięć MCU. Zasilaj moduł z USB albo
-samochodu, nigdy jednocześnie.
 
 Otwórz `src/Fiesta_clock` i wykonaj [build oraz upload](../../doc/BUILDING.pl.md). Czas
 ustawisz przyciskami lub przez [SerialConfigurator](../SerialConfigurator/README.pl.md).

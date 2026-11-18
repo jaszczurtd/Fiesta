@@ -19,7 +19,7 @@ static double compute_voltage(unsigned char adc_channel) {
   const double divider_scale =
       (VOLT_DIVIDER_R_TOP_OHMS + VOLT_DIVIDER_R_BOTTOM_OHMS) /
       VOLT_DIVIDER_R_BOTTOM_OHMS;
-  return adc_voltage * divider_scale;
+  return adc_voltage * divider_scale + VOLT_INPUT_DIODE_DROP_VOLTS;
 }
 
 void voltMainFunction(void) {

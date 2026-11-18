@@ -28,5 +28,7 @@
 /* Voltage divider constants */
 #define VOLT_DIVIDER_R_TOP_OHMS 47000.0
 #define VOLT_DIVIDER_R_BOTTOM_OHMS 10000.0
+/* D1 (1N4007) is before the divider; calibrate with the board powered. */
+#define VOLT_INPUT_DIODE_DROP_VOLTS 0.7
 
 #endif /* HARDWARECONFIG_H_ */
