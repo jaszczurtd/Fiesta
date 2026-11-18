@@ -9,24 +9,68 @@ static unsigned char mode_ignition = MODE_CLOCK;
 
 static bool lastIgnition = false;
 static bool idleTimer = false;
+/* The panel was put to sleep by the idle timer and needs a wake-up. */
+static bool displayAsleep = false;
 static bool blinkLED = false;
-static int idleLEDCycles = 0;
+static bool idleLEDOn = false;
+static uint32_t idleLEDChangeMs = 0u;
 static int changeModeCycles = 0;
+static bool passStarted = false;
+static uint32_t passStartMs = 0u;
+/* The greeting stays on the panel until CFG_GREETING_MS after it was drawn. */
+static bool greetingShown = false;
+static uint32_t greetingStartMs = 0u;
 
 static void setDisplaytMode(void);
 static void setup_runtime(void);
 
+static void displaySleep(void) {
+  if (!displayAsleep && hal_display_suspend_ex() == HAL_OK) {
+    displayAsleep = true;
+  }
+}
+
+/* The panel can lose its settings or its RAM while asleep, so waking it
+ * configures and clears it instead of only switching it on. */
+static void displayWake(void) {
+  if (displayAsleep) {
+    (void)clock_display_restart();
+    displayAsleep = false;
+  }
+}
+
+/* Draw the greeting. It stays for CFG_GREETING_MS while the main loop keeps
+ * running (start-up, sensors, CAN, configurator); greetingActive() then clears
+ * the panel for the first screen. */
 static void helloMessage(void) {
   const hal_status_t status = clock_display_init();
+  displayAsleep = false; /* the init switches the panel on */
+  greetingShown = false;
   if (hal_status_is_error(status)) {
     derr("OLED init failed: %d", (int)status);
     return;
   }
-  (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+  (void)clock_display_clear();
   (void)clock_display_text(8, 0, 1, "FORD");
   (void)clock_display_text(4, 2, 2, "FIESTA");
-  /* Temperature conversion blocks; show the greeting before starting it. */
   (void)hal_display_flush_ex();
+  greetingShown = true;
+  greetingStartMs = hal_millis();
+}
+
+/* Whether the greeting still holds the panel; when its time is over, clear
+ * the panel once for the first screen. */
+static bool greetingActive(void) {
+  if (!greetingShown) {
+    return false;
+  }
+  if (!hal_elapsed_u32(hal_millis(), greetingStartMs, CFG_GREETING_MS)) {
+    return true;
+  }
+  greetingShown = false;
+  (void)clock_display_restart();
+  (void)hal_display_flush_ex();
+  return false;
 }
 
 static void setup_runtime(void) {
@@ -52,7 +96,7 @@ static void setup_runtime(void) {
 
   idleTimer = false;
   blinkLED = false;
-  idleLEDCycles = 0;
+  idleLEDOn = false;
   changeModeCycles = 0;
   mode_ignition = MODE_CLOCK;
 
@@ -64,9 +108,6 @@ static void setup_runtime(void) {
   configSessionInit();
 
   temp_initial_read();
-
-  (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
-  (void)hal_display_flush_ex();
 }
 
 void app_start(void) {
@@ -78,8 +119,39 @@ void app_start(void) {
   setup_runtime();
 }
 
+/* The sleeping panel's blue LED follows hal_millis() on every call, not only
+ * on main loop passes. */
+static void idleLEDTick(void) {
+  if (!blinkLED) {
+    return;
+  }
+  const uint32_t phase = idleLEDOn
+                             ? CFG_IDLE_LED_ON_MS
+                             : CFG_IDLE_LED_PERIOD_MS - CFG_IDLE_LED_ON_MS;
+  if (hal_millis_interval_elapsed(hal_millis(), &idleLEDChangeMs, phase)) {
+    idleLEDOn = !idleLEDOn;
+  }
+  blueLED(idleLEDOn);
+}
+
+/* One pass per CFG_MAIN_PASS_MS; a pass that took longer (a held button)
+ * is followed by the next one at once, without catching up. */
+static bool mainPassDue(void) {
+  const uint32_t nowMs = hal_millis();
+  if (passStarted && nowMs - passStartMs < CFG_MAIN_PASS_MS) {
+    return false;
+  }
+  passStarted = true;
+  passStartMs = nowMs;
+  return true;
+}
+
 void app_task0(void) {
   hal_watchdog_feed();
+  idleLEDTick();
+  if (!mainPassDue()) {
+    return;
+  }
   clockTimeLogTick();
   /* Conversions run in every display mode, so CAN gets fresh readings. */
   ds18b20_poll();
@@ -96,28 +168,28 @@ void app_task0(void) {
     helloMessage();
 
     temp_initial_read();
-
-    (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
-    (void)hal_display_flush_ex();
+  }
+  if (greetingActive()) {
+    return; /* no screen, button or idle handling under the greeting */
   }
 
   if (idleTimer) {
     if (checkIfTimerReached()) {
-      (void)hal_display_suspend_ex();
+      displaySleep();
+      if (!blinkLED) {
+        idleLEDOn = true;
+        idleLEDChangeMs = hal_millis();
+      }
       blinkLED = true;
     }
 
-    if (blinkLED) {
-      if (idleLEDCycles++ >
-          (CFG_IDLE_LED_OFF_CYCLES + CFG_IDLE_LED_ON_CYCLES)) {
-        idleLEDCycles = 0;
-      }
-
-      blueLED(idleLEDCycles < CFG_IDLE_LED_ON_CYCLES);
-    }
+    idleLEDTick();
 
   } else {
-    (void)hal_display_resume_ex();
+    displayWake();
+  }
+  if (!displayAsleep) {
+    clock_display_service();
   }
 
   if (!ig) {
@@ -133,6 +205,7 @@ void app_task0(void) {
       idleTimer = false;
       blinkLED = false;
       blueLED(false);
+      displayWake(); /* before this pass draws */
     }
 
     if (!blinkLED) {
@@ -172,7 +245,7 @@ static void setDisplaytMode(void) {
       if (mode_ignition > MODE_VOLT) {
         mode_ignition = MODE_CLOCK;
       }
-      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+      (void)clock_display_restart();
     }
 
     int countVal = CFG_CHANGE_MODE_CYCLES;
@@ -193,7 +266,7 @@ static void setDisplaytMode(void) {
       if (mode_ignition > MODE_VOLT) {
         mode_ignition = MODE_CLOCK;
       }
-      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+      (void)clock_display_restart();
     }
   }
 }

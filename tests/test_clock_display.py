@@ -28,6 +28,7 @@ class ClockDisplayTests(unittest.TestCase):
         sources += [HAL / "src/hal/display" / name for name in
                     ("hal_display.cpp", "drivers/hal_display.cpp",
                      "drivers/ssd1306_driver.cpp", "drivers/jh_gfx.cpp")]
+        sources.append(HAL / "src/hal/time/jh_calendar.c")
         sources.append(MODULE / "tests/test_display.cpp")
         cls.binary = build_clock_binary(build, "clock_display", sources, tree)
 
@@ -42,6 +43,30 @@ class ClockDisplayTests(unittest.TestCase):
 
     def test_release_prompt_reaches_panel_before_button_wait(self):
         run_command([str(self.binary), "prompt"])
+
+    def test_failed_panel_write_reinitialises_once_a_second(self):
+        run_command([str(self.binary), "recover"])
+
+    def test_shorter_weekday_leaves_no_trace(self):
+        run_command([str(self.binary), "weekday"])
+
+    def test_edited_day_stays_inside_the_month(self):
+        run_command([str(self.binary), "dates"])
+
+    def test_unchanged_text_is_not_sent_again(self):
+        run_command([str(self.binary), "unchanged"])
+
+    def test_periodic_refresh_repairs_the_panel(self):
+        run_command([str(self.binary), "refresh"])
+
+    def test_main_loop_runs_one_pass_per_period(self):
+        run_command([str(self.binary), "pace"])
+
+    def test_greeting_stays_for_its_time(self):
+        run_command([str(self.binary), "greeting"])
+
+    def test_held_button_repeats_after_a_delay(self):
+        run_command([str(self.binary), "repeat"])
 
     def test_all_original_glyphs_in_both_sizes(self):
         expected = json.loads((MODULE / "tests/glyph_sha256.json").read_text())

@@ -399,7 +399,12 @@ hal_status_t clock_display_text(uint8_t, uint8_t, uint8_t, const char *text) {
   texts.emplace_back(text);
   return HAL_OK;
 }
-hal_status_t hal_display_fill_screen_ex(uint16_t) { return HAL_OK; }
+hal_status_t clock_display_field(uint8_t, uint8_t, uint8_t, uint8_t,
+                                 const char *text) {
+  texts.emplace_back(text);
+  return HAL_OK;
+}
+hal_status_t clock_display_restart(void) { return HAL_OK; }
 hal_status_t hal_display_flush_ex(void) { return HAL_OK; }
 bool setButton(void) { return button_set; }
 bool setHour(void) { return button_hour; }

@@ -6307,8 +6307,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "SW_Push"
-			(at 155.194 136.144 0)
+		(property "Value" "buttonSet"
+			(at 155.194 136.906 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -7287,7 +7287,6 @@
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "333743c2-d6ed-45fc-8412-4e57659f7163")
 		(property "Reference" "D3"
 			(at 103.8225 88.9 0)
@@ -7298,13 +7297,12 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "LED"
-			(at 103.8225 91.44 0)
+		(property "Value" "ledOrange"
+			(at 104.902 91.948 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 		(property "Footprint" ""
@@ -8568,7 +8566,6 @@
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "73a1c5a5-febd-4815-8941-980bfbc10a20")
 		(property "Reference" "D4"
 			(at 103.8225 92.71 0)
@@ -8579,13 +8576,12 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "LED"
-			(at 103.8225 95.25 0)
+		(property "Value" "ledRed"
+			(at 109.982 98.298 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 		(property "Footprint" ""
@@ -9415,7 +9411,7 @@
 				(justify right)
 			)
 		)
-		(property "Value" "SW_Push"
+		(property "Value" "buttonHour"
 			(at 170.434 136.144 0)
 			(effects
 				(font
@@ -9947,7 +9943,7 @@
 		(dnp no)
 		(uuid "be1e1ac6-9155-45f0-b515-041b09e5ffe8")
 		(property "Reference" "SW2"
-			(at 162.052 133.096 90)
+			(at 163.068 133.096 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9955,8 +9951,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "SW_Push"
-			(at 162.814 136.144 0)
+		(property "Value" "buttonMinute"
+			(at 162.814 135.128 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10257,7 +10253,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470R"
+		(property "Value" "330R"
 			(at 135.636 104.14 90)
 			(effects
 				(font
@@ -10385,7 +10381,6 @@
 		(in_bom no)
 		(on_board no)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "d535fb50-2e4d-4bee-a8ee-2a6d76785552")
 		(property "Reference" "D5"
 			(at 103.8225 96.52 0)
@@ -10396,13 +10391,12 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "LED"
-			(at 103.8225 99.06 0)
+		(property "Value" "ledBlue"
+			(at 107.442 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(hide yes)
 			)
 		)
 		(property "Footprint" ""
@@ -10682,7 +10676,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470R"
+		(property "Value" "330R"
 			(at 124.46 90.424 0)
 			(effects
 				(font
@@ -11231,7 +11225,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470R"
+		(property "Value" "330R"
 			(at 136.144 95.25 0)
 			(effects
 				(font

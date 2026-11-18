@@ -10,7 +10,9 @@ and temperatures to the other modules over CAN. The RTC keeps time without GPS.
 Check the [board revision](../../Fiesta_pcbs/clock/README.md) and RTC type. Firmware defaults
 to the DS3231 Mini of the new board; for the older board with a PCF8563, select the PCF8563
 variant. The new board also has a different voltage divider, so adapt the voltage conversion
-before assessing its readings. Use USB or vehicle power, never both.
+before assessing its readings. The buttons and the ignition input use the board's pull-up
+resistors; the firmware leaves the MCU's internal pull-ups off. Use USB or vehicle power,
+never both.
 
 Open `src/Fiesta_clock` and follow the [build and upload guide](../../doc/BUILDING.md). Set
 the time using the buttons or [SerialConfigurator](../SerialConfigurator/README.md). Check

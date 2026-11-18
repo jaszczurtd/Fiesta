@@ -65,26 +65,18 @@ void temp_read_display(void) {
     check_temp_for_leds();
   }
 
-  unsigned char x, y = 2;
+  const unsigned char y = 2;
+  const unsigned char in_x = temp_in_hi < 0 ? 0u : 1u;
+  const unsigned char out_x = temp_in_hi < 0 ? 11u : 12u;
 
+  /* Each value fills its field, so a shorter value erases a longer one. */
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%d.%d ", temp_in_hi, temp_in_lo);
-
-  if (temp_in_hi < 0) {
-    x = 0;
-  } else {
-    x = 1;
-  }
-  (void)clock_display_text(x, y, 2, s);
+  (void)clock_display_field(in_x, y, 2, out_x, s);
 
   memset(s, 0, BUF_L);
   snprintf(s, BUF_L, "%d.%d ", temp_out_hi, temp_out_lo);
-  if (temp_in_hi < 0) {
-    x = 11;
-  } else {
-    x = 12;
-  }
-  (void)clock_display_text(x, y, 2, s);
+  (void)clock_display_field(out_x, y, 2, CLOCK_DISPLAY_COLUMNS, s);
 
   (void)clock_display_text(2, 0, 1, "wewn.");
   (void)clock_display_text(13, 0, 1, "zewn.");

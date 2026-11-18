@@ -42,7 +42,7 @@ void voltMainFunction(void) {
     }
 
     if (clear) {
-      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+      (void)clock_display_restart();
       clear = false;
     }
   }
@@ -61,7 +61,8 @@ void voltMainFunction(void) {
     snprintf(s, BUF_L, "%d.%dV ", hi, lo);
     scale = 2;
   }
-  (void)clock_display_text(x, y, scale, s);
+  /* The value fills the rest of the row, so a shorter one erases a longer. */
+  (void)clock_display_field(x, y, scale, CLOCK_DISPLAY_COLUMNS, s);
 
   (void)clock_display_text(2, 0, 1, "Zasilanie:");
 }

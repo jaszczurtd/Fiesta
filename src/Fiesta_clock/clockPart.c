@@ -7,6 +7,8 @@
 
 #include "clockPart.h"
 
+#include <hal/time/jh_calendar.h>
+
 static RTC_DateTime rtcDateTime;
 static bool clockSetMode = false;
 
@@ -102,11 +104,22 @@ void setItemVisible(void) {
 
 void pause(void) { hal_delay_ms(CFG_CLOCK_OPERATION_DELAY_MS); }
 
+/* Days of the edited month; the year limits keep it inside the calendar. */
+static unsigned char daysInMonth(void) {
+  uint8_t days = 31u;
+  if (rtcDateTime.year < 0 || rtcDateTime.year > (int)UINT16_MAX ||
+      jh_calendar_days_in_month((uint16_t)rtcDateTime.year, rtcDateTime.month,
+                                &days) != HAL_OK) {
+    days = 31u;
+  }
+  return days;
+}
+
 void setItem(bool increase) {
   switch (activeItem) {
   case D_DAY:
     if (increase) {
-      if (rtcDateTime.day < 31) {
+      if (rtcDateTime.day < daysInMonth()) {
         rtcDateTime.day++;
       } else {
         rtcDateTime.day = 1;
@@ -115,7 +128,7 @@ void setItem(bool increase) {
       if (rtcDateTime.day > 1) {
         rtcDateTime.day--;
       } else {
-        rtcDateTime.day = 31;
+        rtcDateTime.day = daysInMonth();
       }
     }
     break;
@@ -200,14 +213,44 @@ void setItem(bool increase) {
     }
     break;
   }
+  /* A shorter month or a common year moves the day to the last valid one, so
+   * the stored date always exists. */
+  if (rtcDateTime.day > daysInMonth()) {
+    rtcDateTime.day = daysInMonth();
+  }
   /* The weekday follows the date; it is shown but not set. */
   clockTimeUpdateWeekday(&rtcDateTime);
   setItemVisible();
-  pause();
+}
+
+/* Set mode: the button that steps the edited item (0 none, 1 hour = up,
+ * 2 minute = down), since when it is held and when it last stepped. */
+static uint8_t heldButton = 0u;
+static uint32_t heldSinceMs = 0u;
+static uint32_t lastStepMs = 0u;
+
+/* One step when a button goes down; held, it steps again every
+ * CFG_CLOCK_REPEAT_INTERVAL_MS once it was held CFG_CLOCK_REPEAT_DELAY_MS, so
+ * a short press always gives exactly one step. Timed by hal_millis(). */
+static bool buttonStep(uint8_t button) {
+  const uint32_t nowMs = hal_millis();
+  if (button != heldButton) {
+    heldButton = button;
+    heldSinceMs = nowMs;
+    lastStepMs = nowMs;
+    return button != 0u;
+  }
+  if (button == 0u || nowMs - heldSinceMs < CFG_CLOCK_REPEAT_DELAY_MS ||
+      nowMs - lastStepMs < CFG_CLOCK_REPEAT_INTERVAL_MS) {
+    return false;
+  }
+  lastStepMs = nowMs;
+  return true;
 }
 
 void setClockSetMode(bool enabled) {
   clockSetMode = enabled;
+  heldButton = 0u; /* a button held across the change starts a new press */
   if (clockSetMode) {
     activeItem = 0;
     setItemVisible();
@@ -237,7 +280,7 @@ void manageSetMode(void) {
       clockSetModeDelayLoops = 0;
       activeItem = 0;
 
-      (void)hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+      (void)clock_display_restart();
       (void)clock_display_text(6, 2, 2, "PUSC");
       (void)hal_display_flush_ex();
 
@@ -281,6 +324,7 @@ void clockMainFunction(void) {
 
         activeItem = D_HOUR;
         setItem(true);
+        pause();
         storeTime();
         hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
       } else {
@@ -299,6 +343,7 @@ void clockMainFunction(void) {
 
         activeItem = D_MINUTE;
         setItem(true);
+        pause();
         storeTime();
         hal_delay_ms(CFG_CLOCK_SET_STEP_DELAY_MS);
       } else {
@@ -318,12 +363,15 @@ void clockMainFunction(void) {
         setClockSetMode(false);
 
         storeTime();
+        (void)clock_display_restart();
         return;
       }
-    } else if (setHour()) {
-      setItem(true);
-    } else if (setMinute()) {
-      setItem(false);
+    } else {
+      /* Hour steps the item up, minute down; hour wins when both are held. */
+      const uint8_t button = setHour() ? 1u : setMinute() ? 2u : 0u;
+      if (buttonStep(button)) {
+        setItem(button == 1u);
+      }
     }
 
     if (itemVisibilityCounter++ > CFG_CLOCK_ITEM_VISIBILITY_CYCLES) {
@@ -343,7 +391,8 @@ void clockMainFunction(void) {
   snprintf(s, BUF_L, "%s-%s %s, %s ", getItem(D_DAY), getItem(D_MONTH),
            getItem(D_YEAR), getItem(D_WEEKDAY));
 
-  (void)clock_display_text(0, 0, 1, s);
+  /* The weekday name varies in length: erase the rest of the row. */
+  (void)clock_display_field(0, 0, 1, CLOCK_DISPLAY_COLUMNS, s);
 
   unsigned char x = 4;
   unsigned char y = 2;

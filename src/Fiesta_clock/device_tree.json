@@ -9,19 +9,19 @@
     "tempOutside": { "compatible": "jaszczurhal,onewire-device" },
     "buttonHour": {
       "compatible": "jaszczurhal,gpio-input",
-      "properties": { "activeLow": true, "pull": "up" }
+      "properties": { "activeLow": true, "pull": "none" }
     },
     "buttonMinute": {
       "compatible": "jaszczurhal,gpio-input",
-      "properties": { "activeLow": true, "pull": "up" }
+      "properties": { "activeLow": true, "pull": "none" }
     },
     "buttonSet": {
       "compatible": "jaszczurhal,gpio-input",
-      "properties": { "activeLow": true, "pull": "up" }
+      "properties": { "activeLow": true, "pull": "none" }
     },
     "ignition": {
       "compatible": "jaszczurhal,gpio-input",
-      "properties": { "activeLow": true, "pull": "up" }
+      "properties": { "activeLow": true, "pull": "none" }
     },
     "ledRed": { "compatible": "jaszczurhal,gpio-output" },
     "ledOrange": { "compatible": "jaszczurhal,gpio-output" },

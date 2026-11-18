@@ -14,16 +14,56 @@
 #define BUILD_ID (__DATE__ " " __TIME__)
 #endif
 
-#define CFG_WATCHDOG_TIMEOUT_MS 2000u
+#define CFG_WATCHDOG_TIMEOUT_MS 4000u
 
 #define CFG_IDLE_SECONDS 60u
 
+/* The main loop runs one pass every CFG_MAIN_PASS_MS. Screens send only text
+ * that changed, so a pass takes a few ms; this pace keeps the counts below
+ * that are given in passes (screen rotation, set-mode blink, SET hold,
+ * sensor reads) at the timing they had when every pass redrew the whole
+ * screen (about 39-40 ms). */
+#define CFG_MAIN_PASS_MS 40u
+JB_STATIC_ASSERT(CFG_MAIN_PASS_MS >= 20u && CFG_MAIN_PASS_MS <= 100u,
+                 "CFG_MAIN_PASS_MS must be in 20..100 ms");
+
+/* The panel's whole content is sent again this often, which repairs text
+ * that changed on the panel without a reported write error. */
+#define CFG_DISPLAY_REFRESH_MS 10000u
+JB_STATIC_ASSERT(CFG_DISPLAY_REFRESH_MS >= 1000u &&
+                     CFG_DISPLAY_REFRESH_MS <= 60000u,
+                 "CFG_DISPLAY_REFRESH_MS must be in 1..60 s");
+
+/* The greeting stays on the panel this long after start-up and after every
+ * ignition change; the main loop keeps running meanwhile. */
+#define CFG_GREETING_MS 1500u
+JB_STATIC_ASSERT(CFG_GREETING_MS >= 500u && CFG_GREETING_MS <= 5000u,
+                 "CFG_GREETING_MS must be in 500..5000 ms");
+
 #define CFG_CHANGE_MODE_CYCLES 400
-#define CFG_IDLE_LED_ON_CYCLES 400
-#define CFG_IDLE_LED_OFF_CYCLES 2800
+/* While the panel sleeps the blue LED lights for the first part of each
+ * period. hal_millis() times it, so the cadence does not depend on how long
+ * a main loop pass takes. */
+#define CFG_IDLE_LED_PERIOD_MS 1000u
+#define CFG_IDLE_LED_ON_MS 125u
+JB_STATIC_ASSERT(CFG_IDLE_LED_ON_MS >= 20u &&
+                     CFG_IDLE_LED_ON_MS < CFG_IDLE_LED_PERIOD_MS &&
+                     CFG_IDLE_LED_PERIOD_MS <= 10000u,
+                 "CFG_IDLE_LED_ON_MS must be 20 ms or more and shorter than "
+                 "CFG_IDLE_LED_PERIOD_MS, at most 10 s");
 
 #define CFG_CLOCK_SET_STEP_DELAY_MS 80u
 #define CFG_CLOCK_OPERATION_DELAY_MS 120u
+/* Set mode: a held hour/minute button steps again after this delay, then at
+ * this interval; a shorter press gives one step. */
+#define CFG_CLOCK_REPEAT_DELAY_MS 500u
+#define CFG_CLOCK_REPEAT_INTERVAL_MS 160u
+JB_STATIC_ASSERT(CFG_CLOCK_REPEAT_INTERVAL_MS >= 50u &&
+                     CFG_CLOCK_REPEAT_INTERVAL_MS <=
+                         CFG_CLOCK_REPEAT_DELAY_MS &&
+                     CFG_CLOCK_REPEAT_DELAY_MS <= 2000u,
+                 "CFG_CLOCK_REPEAT_INTERVAL_MS must be 50 ms to "
+                 "CFG_CLOCK_REPEAT_DELAY_MS, at most 2 s");
 #define CFG_CLOCK_ITEM_VISIBILITY_CYCLES 10
 #define CFG_CLOCK_SET_MODE_DELAY_LOOPS 80
 

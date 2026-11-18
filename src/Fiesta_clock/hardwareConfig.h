@@ -27,6 +27,6 @@
 
 /* Voltage divider constants */
 #define VOLT_DIVIDER_R_TOP_OHMS 47000.0
-#define VOLT_DIVIDER_R_BOTTOM_OHMS 3300.0
+#define VOLT_DIVIDER_R_BOTTOM_OHMS 10000.0
 
 #endif /* HARDWARECONFIG_H_ */
