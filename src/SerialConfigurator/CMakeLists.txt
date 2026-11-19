@@ -53,6 +53,8 @@ set(SC_JASZCZURHAL_INCLUDE_DIR "${SC_JASZCZURHAL_DIR}/src")
 # hal/core/hal_status.h and hal_array.h include jhbase headers.
 include("${SC_JASZCZURHAL_DIR}/cmake/jh_jhbase.cmake")
 jh_jhbase_include_dir(SC_JHBASE_INCLUDE_DIR)
+# The SHA-256 core behind hal_crypto.cpp comes from jhbase.
+jh_jhbase_sha256_sources(SC_JHBASE_SHA256_SOURCES)
 set(SC_JASZCZURHAL_INCLUDE_DIRS "${SC_JASZCZURHAL_INCLUDE_DIR}" "${SC_JHBASE_INCLUDE_DIR}")
 set(
     SC_JASZCZURHAL_SERIAL_FRAME_HEADER
@@ -88,14 +90,15 @@ unset(_SC_LOCAL_COPY)
 
 # JaszczurHAL is the only crypto backend. Base64, MD5, SHA-256/HMAC-SHA256,
 # ChaCha20-Poly1305, the authentication key derivation shared with the
-# firmware and the hex field decoder come from the HAL sources below,
+# firmware and the hex field decoder come from the HAL sources below (the
+# SHA-256 core from jhbase, which HAL builds the same way),
 # compiled into serial_configurator_core. hal_crypto is opt-in via
 # HAL_ENABLE_CRYPTO, so the flag is a PUBLIC definition of the core library.
 set(SC_JASZCZURHAL_SECURITY_DIR "${SC_JASZCZURHAL_DIR}/src/hal/security")
 set(SC_JASZCZURHAL_SOURCES
     "${SC_JASZCZURHAL_DIR}/src/hal/core/hal_text.cpp"
     "${SC_JASZCZURHAL_SECURITY_DIR}/hal_crypto.cpp"
-    "${SC_JASZCZURHAL_SECURITY_DIR}/jh_sha256.c"
+    ${SC_JHBASE_SHA256_SOURCES}
     "${SC_JASZCZURHAL_SECURITY_DIR}/hal_sc_auth.cpp"
     "${SC_JASZCZURHAL_SECURITY_DIR}/jh_secure_random.cpp"
     "${SC_JASZCZURHAL_DIR}/src/hal/network/wireguard/core/crypto/chacha20.c"

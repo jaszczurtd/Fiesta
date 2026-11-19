@@ -11,6 +11,7 @@ endif()
 include("${VP37V_HAL_ROOT}/cmake/jh_jhbase.cmake")
 set(JHBASE_HOST ON CACHE BOOL "Build host file operations" FORCE)
 jh_add_jhbase()
+jh_jhbase_sha256_sources(_vp37v_sha256_sources)
 
 include("${VP37V_HAL_ROOT}/cmake/jh_host_network.cmake")
 jh_add_host_network_library(vp37v_network)
@@ -28,7 +29,7 @@ target_compile_definitions(vp37v_network PUBLIC
 set(_vp37v_crypto "${VP37V_HAL_ROOT}/src/hal/network/wireguard/core/crypto")
 add_library(vp37v_hal STATIC
   "${VP37V_HAL_ROOT}/src/hal/security/hal_crypto.cpp"
-  "${VP37V_HAL_ROOT}/src/hal/security/jh_sha256.c"
+  ${_vp37v_sha256_sources}
   "${VP37V_HAL_ROOT}/src/hal/core/hal_text.cpp"
   "${_vp37v_crypto}/chacha20.c" "${_vp37v_crypto}/chacha20poly1305.c"
   "${_vp37v_crypto}/crypto.c" "${_vp37v_crypto}/poly1305-donna.c"

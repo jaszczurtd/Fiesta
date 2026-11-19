@@ -24,6 +24,8 @@ fiesta_shared_sources(TEST_RUNNER_SOURCES "${FIESTA_SHARED_ROOT}" test_runner)
 # jh_hardware.h of the firmware assembly, loaded first like in the firmware.
 fiesta_hardware_header(CLOCKS_HW_HEADER "${CLOCKS_SRC}" "${HAL_LIB_EXTERNAL}")
 fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB_EXTERNAL}")
+# The SHA-256 core behind hal_crypto.cpp comes from jhbase.
+jh_jhbase_sha256_sources(HAL_SHA256_SOURCES)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 
@@ -56,7 +58,7 @@ add_library(clocks_mock STATIC
     ${HAL_SRC}/hal/debug/hal_debug_format.cpp
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crypto.cpp
-    ${HAL_SRC}/hal/security/jh_sha256.c
+    ${HAL_SHA256_SOURCES}
     # HAL crypto wrappers call into shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20.c
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c

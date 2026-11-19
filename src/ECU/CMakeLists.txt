@@ -26,6 +26,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/vp37/vp37_sources.cmake")
 fiesta_shared_sources(TEST_RUNNER_SOURCES "${FIESTA_SHARED_ROOT}" test_runner)
 fiesta_shared_sources(OBD_DTC_SOURCES "${FIESTA_SHARED_ROOT}" obdDefinitions)
 fiesta_hal_include_dirs(HAL_MANAGED_INCLUDE_DIRS "${HAL_LIB}")
+# The SHA-256 core behind hal_crypto.cpp comes from jhbase.
+jh_jhbase_sha256_sources(HAL_SHA256_SOURCES)
 fiesta_hal_command_sources(HAL_COMMAND_SOURCES "${HAL_SRC}")
 fiesta_hal_helper_sources(HAL_HELPER_SOURCES "${HAL_SRC}")
 # jh_hardware.h of the firmware assembly, loaded first like in the firmware.
@@ -55,7 +57,7 @@ set(HAL_UTIL_SOURCES
     ${HAL_SRC}/hal/time/jh_calendar.c
     ${HAL_SRC}/hal/security/jh_secure_random.cpp
     ${HAL_SRC}/hal/security/hal_crypto.cpp
-    ${HAL_SRC}/hal/security/jh_sha256.c
+    ${HAL_SHA256_SOURCES}
     # HAL crypto wrappers call into the shared WireGuard crypto primitives.
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20.c
     ${HAL_SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c
