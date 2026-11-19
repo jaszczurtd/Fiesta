@@ -26,7 +26,9 @@ Na Linuksie zgodnym z Debianem lub Raspberry Pi OS użyj `runmefirst.sh` jako zw
 Skrypt **przed przygotowaniem środowiska** usuwa katalogi `build_test` i `.build`
 wszystkich modułów firmware oraz `build` SerialConfiguratora, także przy
 pomijaniu kompilacji lub testów. Zachowuje katalogi kompilacji HAL, źródła
-i lokalne ustawienia VS Code.
+i lokalne ustawienia VS Code. W jednym checkoucie działa jeden przebieg:
+drugie `runmefirst.sh` lub `bootstrap.sh` uruchomione w trakcie pierwszego
+kończy się od razu błędem i niczego nie usuwa.
 
 ```bash
 bash runmefirst.sh

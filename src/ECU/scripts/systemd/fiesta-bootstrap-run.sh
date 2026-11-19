@@ -7,12 +7,20 @@
 #      origin/$BRANCH otherwise - this runner is unattended and expects no
 #      local changes on the Pi).
 #   2. Run runmefirst.sh to clean module builds and bootstrap with unattended
-#      package provisioning and the pinned HAL submodule.
-#   3. Compose a status email and hand it to send-status.py.
+#      package provisioning and the pinned HAL submodule. The sync and the
+#      bootstrap hold the checkout lock (a manual run makes this one fail
+#      instead of losing its build directories) and stop after
+#      FIESTA_BOOTSTRAP_TIMEOUT.
+#   3. Compose a status email and hand it to send-status.py, also after a
+#      timeout.
 #
 # Config comes from fiesta-bootstrap.env (loaded by the systemd unit):
-#   FIESTA_DIR, FIESTA_REPO_URL, BRANCH, SMTP_*, MAIL_FROM, MAIL_TO
+#   FIESTA_DIR, FIESTA_REPO_URL, BRANCH, FIESTA_BOOTSTRAP_TIMEOUT, SMTP_*,
+#   MAIL_FROM, MAIL_TO
 # =============================================================================
+# Bash parses the braced body whole before running it: the sync below may
+# replace this file.
+{
 set -u
 umask 022
 
@@ -22,6 +30,9 @@ FIESTA_DIR="${FIESTA_DIR:-$HOME/Documents/Fiesta}"
 FIESTA_REPO_URL="${FIESTA_REPO_URL:-https://github.com/jaszczurtd/Fiesta.git}"
 BRANCH="${BRANCH:-main}"
 LOG_DIR="${FIESTA_LOG_DIR:-$HOME/.cache/fiesta-bootstrap}"
+# Below the unit's TimeoutStartSec, so a slow or hung run still reports.
+BOOTSTRAP_TIMEOUT="${FIESTA_BOOTSTRAP_TIMEOUT:-80m}"
+LOCK_SCRIPT="$SCRIPT_DIR/../../../common/scripts/fiesta-bootstrap-lock.sh"
 
 # systemd's EnvironmentFile= does not expand %h / %u / $HOME / ~. Catch the
 # common mistake early - otherwise the literal specifier leaks into every
@@ -43,6 +54,11 @@ case "$FIESTA_DIR" in
         exit 2
         ;;
 esac
+if [[ ! "$BOOTSTRAP_TIMEOUT" =~ ^[0-9]+[smh]?$ ]]; then
+    echo "[ERROR] FIESTA_BOOTSTRAP_TIMEOUT must be a number with an optional" \
+        "s, m or h suffix, got: '$BOOTSTRAP_TIMEOUT'" >&2
+    exit 2
+fi
 
 mkdir -p "$LOG_DIR"
 STAMP="$(date -u +'%Y%m%dT%H%M%SZ')"
@@ -61,25 +77,41 @@ echo "Branch:        $BRANCH"
 echo
 
 # -----------------------------------------------------------------------------
-# 1. Repo sync
+# 1. Repo sync and 2. clean + bootstrap with non-interactive provisioning
 # -----------------------------------------------------------------------------
-sync_rc=0
+# Updates the checkout and bootstraps it; runs under the checkout lock.
+sync_and_bootstrap() {
+    echo "[INFO] Updating existing checkout at $FIESTA_DIR"
+    if ! git -C "$FIESTA_DIR" fetch --prune origin ||
+        ! git -C "$FIESTA_DIR" checkout "$BRANCH" ||
+        ! git -C "$FIESTA_DIR" reset --hard "origin/$BRANCH"; then
+        echo "[ERROR] Skipping bootstrap because repo sync failed"
+        return 1
+    fi
+    echo "[INFO] Running runmefirst.sh with unattended apt provisioning" \
+        "(limit $BOOTSTRAP_TIMEOUT)"
+    # timeout stops the whole process group; KILL follows 2 min after TERM.
+    SKIP_APT=0 APT_NONINTERACTIVE=1 \
+        timeout --kill-after=2m "$BOOTSTRAP_TIMEOUT" bash "$FIESTA_DIR/runmefirst.sh"
+}
+
+bootstrap_rc=0
 if [[ ! -d "$FIESTA_DIR/.git" ]]; then
     echo "[INFO] Cloning $FIESTA_REPO_URL into $FIESTA_DIR"
     mkdir -p "$(dirname "$FIESTA_DIR")"
     if ! git clone --branch "$BRANCH" "$FIESTA_REPO_URL" "$FIESTA_DIR"; then
-        sync_rc=1
-    fi
-else
-    echo "[INFO] Updating existing checkout at $FIESTA_DIR"
-    if ! git -C "$FIESTA_DIR" fetch --prune origin; then sync_rc=1; fi
-    if [[ $sync_rc -eq 0 ]]; then
-        if ! git -C "$FIESTA_DIR" checkout "$BRANCH"; then sync_rc=1; fi
-    fi
-    if [[ $sync_rc -eq 0 ]]; then
-        if ! git -C "$FIESTA_DIR" reset --hard "origin/$BRANCH"; then sync_rc=1; fi
+        echo "[ERROR] Skipping bootstrap because the clone failed"
+        bootstrap_rc=1
     fi
 fi
+if [[ $bootstrap_rc -eq 0 ]]; then
+    # shellcheck source=../../../common/scripts/fiesta-bootstrap-lock.sh
+    source "$LOCK_SCRIPT" || bootstrap_rc=1
+fi
+if [[ $bootstrap_rc -eq 0 ]]; then
+    fiesta_bootstrap_locked "$FIESTA_DIR" sync_and_bootstrap || bootstrap_rc=$?
+fi
+echo "[INFO] Bootstrap exit: $bootstrap_rc"
 
 HEAD_SHA="unknown"
 HEAD_SUBJ="unknown"
@@ -90,27 +122,18 @@ fi
 echo "[INFO] HEAD: $HEAD_SHA - $HEAD_SUBJ"
 
 # -----------------------------------------------------------------------------
-# 2. Clean and bootstrap with non-interactive package provisioning
-# -----------------------------------------------------------------------------
-bootstrap_rc=0
-if [[ $sync_rc -ne 0 ]]; then
-    echo "[ERROR] Skipping bootstrap because repo sync failed (rc=$sync_rc)"
-    bootstrap_rc=$sync_rc
-else
-    echo "[INFO] Running runmefirst.sh with unattended apt provisioning"
-    SKIP_APT=0 APT_NONINTERACTIVE=1 \
-        bash "$FIESTA_DIR/runmefirst.sh"
-    bootstrap_rc=$?
-fi
-echo "[INFO] Bootstrap exit: $bootstrap_rc"
-
-# -----------------------------------------------------------------------------
 # 3. Compose status email
 # -----------------------------------------------------------------------------
+REASON=""
+case "$bootstrap_rc" in
+    124) REASON="timeout" ;;
+    137) REASON="killed" ;;
+    "${FIESTA_BOOTSTRAP_BUSY_RC:-75}") REASON="busy" ;;
+esac
 if [[ $bootstrap_rc -eq 0 ]]; then
     STATUS="PASS"
 else
-    STATUS="FAIL"
+    STATUS="FAIL${REASON:+ ($REASON)}"
 fi
 
 SHORT_SHA="${HEAD_SHA:0:10}"
@@ -127,6 +150,11 @@ SUBJECT="[Fiesta] daily bootstrap $STATUS - $SHORT_SHA"
     echo "HEAD:        $HEAD_SHA"
     echo "Subject:     $HEAD_SUBJ"
     echo "Log file:    $LOG_FILE"
+    case "$REASON" in
+        timeout) echo "Reason:      stopped after $BOOTSTRAP_TIMEOUT (FIESTA_BOOTSTRAP_TIMEOUT)" ;;
+        killed) echo "Reason:      killed (SIGKILL after the timeout, or the OOM killer)" ;;
+        busy) echo "Reason:      another bootstrap was running in $FIESTA_DIR" ;;
+    esac
     echo
     echo "── last 80 lines of log ──────────────────────────────────────────"
     tail -n 80 "$LOG_FILE" \
@@ -144,3 +172,4 @@ else
 fi
 
 exit "$bootstrap_rc"
+}

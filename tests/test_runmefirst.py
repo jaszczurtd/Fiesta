@@ -1,7 +1,10 @@
 """Check bootstrap cleanup without installing packages or building firmware."""
+from contextlib import contextmanager
+import fcntl
 from pathlib import Path
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -13,6 +16,28 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import fiesta_modules  # noqa: E402
 
 MODULE_FRAGMENT = "src/common/scripts/fiesta-modules.sh"
+LOCK_HELPER = "src/common/scripts/fiesta-bootstrap-lock.sh"
+
+
+@contextmanager
+def held_checkout_lock(repo):
+    """Hold the bootstrap lock of a checkout like another running bootstrap."""
+    lock = repo.resolve() / ".build/bootstrap.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock, "a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+def lock_is_free(repo):
+    lock = repo.resolve() / ".build/bootstrap.lock"
+    with open(lock, "a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return True
 
 
 @unittest.skipUnless(shutil.which("bash"), "runmefirst requires Bash")
@@ -99,6 +124,7 @@ class RunmefirstTests(unittest.TestCase):
             shutil.copy2(ROOT / "runmefirst.sh", repo)
             (repo / MODULE_FRAGMENT).parent.mkdir(parents=True)
             shutil.copy2(ROOT / MODULE_FRAGMENT, repo / MODULE_FRAGMENT)
+            shutil.copy2(ROOT / LOCK_HELPER, repo / LOCK_HELPER)
             registry = fiesta_modules.load(ROOT)
             removed = [f"src/{module.name}/{module.host_tests}"
                        for module in registry.host_tests()]
@@ -143,6 +169,63 @@ class RunmefirstTests(unittest.TestCase):
                 for relative in kept:
                     self.assertEqual((repo / relative).read_text(), "keep")
                 self.assertEqual((outside / "keep").read_text(), "keep")
+
+                # The lock is released after the run.
+                self.assertTrue(lock_is_free(repo))
+
+    def test_running_bootstrap_stops_a_second_run_before_cleanup(self):
+        with tempfile.TemporaryDirectory(prefix="fiesta-busy-") as temporary:
+            repo = Path(temporary) / "Fiesta checkout"
+            for relative in ("runmefirst.sh", MODULE_FRAGMENT, LOCK_HELPER,
+                             "src/ECU/scripts/bootstrap.sh"):
+                (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, repo / relative)
+            artifact = repo / "src/ECU/build_test/artifact"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("in use")
+            # The copied bootstrap.sh lacks its helpers: past the lock it fails
+            # with another status.
+            with held_checkout_lock(repo):
+                for script in ("runmefirst.sh", "src/ECU/scripts/bootstrap.sh"):
+                    result = subprocess.run(["bash", str(repo / script)], cwd=temporary,
+                                            capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 75, result.stderr)
+                    self.assertIn("Another Fiesta bootstrap is running", result.stderr)
+                    self.assertEqual(artifact.read_text(), "in use")
+            # Without another run both pass the lock, also through a symlinked
+            # checkout: bootstrap.sh started by runmefirst.sh reuses its lock.
+            link = Path(temporary) / "link"
+            link.symlink_to(repo, target_is_directory=True)
+            for script in (link / "runmefirst.sh", repo / "src/ECU/scripts/bootstrap.sh"):
+                result = subprocess.run(["bash", str(script)], cwd=temporary,
+                                        capture_output=True, text=True, timeout=30)
+                self.assertNotIn(result.returncode, (0, 75), result.stderr)
+                self.assertNotIn("Another Fiesta bootstrap", result.stderr)
+                self.assertIn("fiesta-firmware-common.sh", result.stderr)
+            self.assertFalse(artifact.exists())
+
+    def test_lock_is_reentrant_and_not_kept_by_leftover_processes(self):
+        with tempfile.TemporaryDirectory(prefix="fiesta-lock-") as temporary:
+            repo = Path(temporary) / "Fiesta checkout"
+            (repo / LOCK_HELPER).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / LOCK_HELPER, repo / LOCK_HELPER)
+            leftover = Path(temporary) / "leftover.pid"
+            inner = ('source "$1"; sleep 60 >/dev/null 2>&1 & echo $! > "$2"\n'
+                     'fiesta_bootstrap_locked "$3" true || exit 9\n'
+                     'fiesta_bootstrap_lock_held "$3" || exit 8\n'
+                     'exit 23\n')
+            outer = ('source "$1"\n'
+                     'fiesta_bootstrap_locked "$3/." bash -c "$4" inner "$1" "$2" "$3"\n')
+            result = subprocess.run(
+                ["bash", "-c", outer, "outer", str(repo / LOCK_HELPER), str(leftover),
+                 str(repo), inner], capture_output=True, text=True, timeout=30)
+            try:
+                # The command status passes through and a nested call reuses the lock.
+                self.assertEqual(result.returncode, 23, result.stderr)
+                # A process started by the run does not inherit the lock.
+                self.assertTrue(lock_is_free(repo))
+            finally:
+                os.kill(int(leftover.read_text()), signal.SIGTERM)
 
 
 if __name__ == "__main__":

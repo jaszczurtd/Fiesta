@@ -24,7 +24,9 @@ On Debian-compatible Linux or Raspberry Pi OS, use `runmefirst.sh` as a regular 
 It removes every firmware module's `build_test` and `.build` directories
 and SerialConfigurator's `build` **before setup**, even when compilation or
 tests are skipped. HAL build directories, source files and local VS Code
-settings are preserved.
+settings are preserved. One run per checkout: a second `runmefirst.sh` or
+`bootstrap.sh` started while another one works stops at once with an error
+and removes nothing.
 
 ```bash
 bash runmefirst.sh

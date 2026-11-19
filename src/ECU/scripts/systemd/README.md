@@ -13,7 +13,9 @@ HAL revision, installs missing packages through non-interactive sudo and runs
 tests/builds. Local HAL changes stop submodule initialization. HAL build
 directories and local VS Code settings are preserved.
 
-The runner emails PASS/FAIL, HEAD SHA, commit subject and the last 80 log lines.
+The runner emails PASS/FAIL (a failure caused by the time limit, a kill or
+another running bootstrap says so in brackets), HEAD SHA, commit subject and
+the last 80 log lines.
 The attachment is limited to the last 512 KB; the complete log stays in
 `$FIESTA_LOG_DIR` (default `$HOME/.cache/fiesta-bootstrap/`), with `last.log`
 pointing to the latest run.
@@ -105,8 +107,15 @@ less ~/.cache/fiesta-bootstrap/last.log
 ```
 
 Use your configured log path if it differs from the default.
-`TimeoutStartSec=30min` bounds the service run; adjust the unit if the machine
-needs longer, then reload the user manager.
+The runner stops the build after `FIESTA_BOOTSTRAP_TIMEOUT` (default `80m`)
+and still sends a status marked `FAIL (timeout)`. `TimeoutStartSec=90min` in
+the unit is only a backstop: when systemd stops the service, no status goes
+out. Raise both together if the machine needs longer, copy the unit again and
+reload the user manager.
+
+The run and a manual `runmefirst.sh` or `bootstrap.sh` in the same checkout
+share one lock. A run that finds the lock taken stops before it touches the
+checkout; the daily run then reports `FAIL (busy)`.
 
 ## SMTP configuration
 
@@ -127,5 +136,6 @@ or supply an absolute path such as `FIESTA_DIR=/home/pi/Documents/Fiesta`.
 Replace `pi` with the actual account's path. The runner rejects unexpanded
 `%...`, `~` and `$...` tokens in `FIESTA_DIR`, `FIESTA_REPO_URL`,
 `FIESTA_LOG_DIR` and `BRANCH`, and rejects a relative `FIESTA_DIR` before any
-checkout or build. If an older runner created a literal `%h` directory,
+checkout or build. `FIESTA_BOOTSTRAP_TIMEOUT` takes a number with an optional
+`s`, `m` or `h` suffix; any other value stops the runner the same way. If an older runner created a literal `%h` directory,
 inspect its contents before removing that mistaken checkout.

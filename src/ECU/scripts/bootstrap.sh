@@ -27,6 +27,16 @@ SRC_ROOT="$(dirname "$PROJECT_DIR")"   # repo_root/src
 COMMON_SCRIPT="$SRC_ROOT/common/scripts/fiesta-firmware-common.sh"
 DEPENDENCY_SCRIPT="$SRC_ROOT/common/scripts/ensure-jaszczurhal-dependencies.sh"
 SYSTEM_DEPENDENCY_SCRIPT="$SCRIPT_DIR/ensure-system-dependencies.sh"
+REPO_ROOT="$(dirname "$SRC_ROOT")"
+
+# shellcheck source=/dev/null
+source "$SRC_ROOT/common/scripts/fiesta-bootstrap-lock.sh"
+# A direct run takes the checkout lock; under runmefirst.sh it is held already.
+if ! fiesta_bootstrap_lock_held "$REPO_ROOT"; then
+    status=0
+    fiesta_bootstrap_locked "$REPO_ROOT" bash "${BASH_SOURCE[0]}" "$@" || status=$?
+    exit "$status"
+fi
 
 # shellcheck source=/dev/null
 source "$COMMON_SCRIPT"

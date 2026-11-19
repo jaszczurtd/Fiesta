@@ -13,8 +13,9 @@ modułów, inicjalizuje zapisaną rewizję HAL, instaluje brakujące pakiety prz
 sudo bez interakcji i wykonuje testy oraz buildy. Lokalne zmiany HAL zatrzymują
 inicjalizację submodułu. Katalogi kompilacji HAL i lokalne ustawienia VS Code pozostają.
 
-Runner wysyła e-mail z PASS/FAIL, SHA HEAD, tytułem commita i ostatnimi
-80 liniami logu. Załącznik zawiera najwyżej końcowe 512 KB; pełny log zostaje
+Runner wysyła e-mail z PASS/FAIL (porażkę z powodu limitu czasu, zabicia
+procesu albo innego trwającego bootstrapu opisuje dopisek w nawiasie), SHA
+HEAD, tytułem commita i ostatnimi 80 liniami logu. Załącznik zawiera najwyżej końcowe 512 KB; pełny log zostaje
 w `$FIESTA_LOG_DIR` (domyślnie `$HOME/.cache/fiesta-bootstrap/`), a `last.log`
 wskazuje ostatni przebieg.
 
@@ -104,9 +105,17 @@ systemctl --user list-timers --all
 less ~/.cache/fiesta-bootstrap/last.log
 ```
 
-Jeśli zmieniono katalog logów, użyj własnej ścieżki. `TimeoutStartSec=30min`
-ogranicza czas usługi; gdy maszyna potrzebuje więcej, zmień jednostkę
-i przeładuj menedżera użytkownika.
+Jeśli zmieniono katalog logów, użyj własnej ścieżki. Runner przerywa build
+po `FIESTA_BOOTSTRAP_TIMEOUT` (domyślnie `80m`) i mimo to wysyła status
+`FAIL (timeout)`. `TimeoutStartSec=90min` w jednostce to tylko zabezpieczenie:
+gdy usługę zatrzyma systemd, status nie wychodzi. Gdy maszyna potrzebuje
+więcej czasu, podnieś oba limity, skopiuj jednostkę ponownie i przeładuj
+menedżera użytkownika.
+
+Przebieg dzienny oraz ręczne `runmefirst.sh` lub `bootstrap.sh` w tym samym
+checkoucie korzystają z jednej blokady. Przebieg, który zastanie ją zajętą,
+kończy się przed dotknięciem checkoutu; przebieg dzienny zgłasza wtedy
+`FAIL (busy)`.
 
 ## Konfiguracja SMTP
 
@@ -126,6 +135,8 @@ Pozostaw `FIESTA_DIR` nieustawione, aby runner użył `$HOME/Documents/Fiesta`,
 albo podaj ścieżkę bezwzględną, np. `FIESTA_DIR=/home/pi/Documents/Fiesta`.
 Zastąp `pi` ścieżką właściwego konta. Runner odrzuca nierozwinięte `%...`,
 `~` i `$...` w `FIESTA_DIR`, `FIESTA_REPO_URL`, `FIESTA_LOG_DIR` i `BRANCH`
-oraz względne `FIESTA_DIR` przed pobieraniem i kompilacją. Jeśli starszy runner
+oraz względne `FIESTA_DIR` przed pobieraniem i kompilacją.
+`FIESTA_BOOTSTRAP_TIMEOUT` przyjmuje liczbę z opcjonalnym przyrostkiem `s`,
+`m` lub `h`; inna wartość zatrzymuje runner tak samo. Jeśli starszy runner
 utworzył dosłowny katalog `%h`, sprawdź jego zawartość przed usunięciem
 błędnego checkoutu.
