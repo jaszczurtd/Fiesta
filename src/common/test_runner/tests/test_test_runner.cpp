@@ -75,8 +75,9 @@ static const fiesta_test_t *suite(size_t *count) {
   return s_suite;
 }
 static const fiesta_test_config_t s_config = {
-    suite,   s_params, s_values, COUNTOF(s_params), 1000U,   nullptr, nullptr,
-    cleanup, apply,    nullptr,  blocked,           nullptr, nullptr, nullptr,
+    suite,   s_params, s_values, COUNTOF(s_params), 1000U,   nullptr,
+    nullptr, cleanup,  apply,    nullptr,           blocked, nullptr,
+    nullptr, nullptr,  nullptr,
 };
 
 static bool tick() {
@@ -311,6 +312,7 @@ static void console_watch() {
   s_caller = s_session;
   fiesta_test_console("watch 999"); // Below the accepted range: refused.
   TEST_ASSERT_TRUE(tick());
+  events();
   TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "watch rejected"));
   hal_mock_advance_millis(5000U);
   TEST_ASSERT_TRUE(tick());
@@ -318,11 +320,13 @@ static void console_watch() {
   s_caller = s_session;
   fiesta_test_console("watch 1000");
   TEST_ASSERT_TRUE(tick());
+  events();
   TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: watch 1000 ms"));
   hal_mock_advance_millis(999U);
   s_caller = s_session;
   fiesta_test_console("watch"); // Renewal, one millisecond before the limit.
   TEST_ASSERT_TRUE(tick());
+  events();
   hal_mock_advance_millis(999U);
   s_caller = s_session;
   fiesta_test_console("params"); // Any line renews, also one the session
@@ -353,10 +357,12 @@ static void console_watch() {
   hal_mock_advance_millis(999U);
   TEST_ASSERT_TRUE(tick()); // Long past the console limit, no console line.
   TEST_ASSERT_EQUAL(HAL_OK, fiesta_test_stop());
+  events();
 
   s_caller = s_session;
   fiesta_test_console("watch 0");
   TEST_ASSERT_FALSE(tick());
+  events();
   TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "TEST: watch off"));
   s_caller = s_session;
   fiesta_test_console("run manual");
@@ -440,8 +446,8 @@ static const fiesta_test_t *limitSuite(size_t *count) {
 
 static void sequence_at_registry_limit() {
   static const fiesta_test_config_t config = {
-      limitSuite, nullptr, nullptr, 0U,      1000U,   nullptr, nullptr,
-      cleanup,    apply,   nullptr, nullptr, nullptr, nullptr, nullptr,
+      limitSuite, nullptr, nullptr, 0U,      1000U,   nullptr, nullptr, cleanup,
+      apply,      nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
   };
   for (size_t i = 0U; i < COUNTOF(s_limitSuite); ++i) {
     s_limitSuite[i] = s_suite[1];

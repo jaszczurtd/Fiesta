@@ -13,7 +13,7 @@ dostosowuje wynik do warunków elektrycznych.
 | --- | --- |
 | Żądane położenie, % | Udział użytecznego skoku. Domyślnie 100% żądania odpowiada 90% skalibrowanego skoku; granicę zmienia limit skoku fizycznego (`X13`). Nie jest to pomiar dawki paliwa w mg/skok. |
 | Położenie fizyczne, % | Udział pełnego skoku między skalibrowanym minimum a maksimum. Mapy i reguły górnego zakresu używają tej skali. |
-| Sygnał położenia i uchyb, Hz | Wielkość z czujnika częstotliwościowego Adjustometera. Próg uchybu w Hz nie jest częstotliwością pracy regulatora. |
+| Sygnał położenia i uchyb, Hz | Wielkość z czujnika częstotliwościowego Adjustometera: zablokowany baseline minus filtrowana częstotliwość. Rośnie, gdy nastawnik się podnosi, i może być ujemna. Próg uchybu w Hz nie jest częstotliwością pracy regulatora. |
 | PWM, Hz | Częstotliwość przełączania stopnia mocy: 200 Hz. |
 | PWM, counts | Wysterowanie w jednostkach regulatora; nie należy czytać go bezpośrednio jako procentu wypełnienia. |
 | P / Kp | P to bieżący wkład proporcjonalny do wysterowania, Kp to jego wzmocnienie. Analogicznie I jest stanem korekcji, a Ki jej nastawą. |
@@ -48,6 +48,49 @@ a wynik udostępnia przez `getDriverDemandPercent()`. Zero trafia do wyniku
 bez opóźnienia filtra. Odczytują go bezpośrednie żądanie kierowcy
 oraz `engineOperation`; aplikacja wybiera żądanie przekazane VP37.
 Opcjonalne sterowanie silnikiem włącza `ECU_ENGINE_CONTROL_ENABLED` w `config.h`.
+
+## Skalibrowany skok i temperatura paliwa
+
+VP37 liczy położenie z szybkiej ramki Adjustometera jako zablokowany baseline
+minus filtrowaną częstotliwość. Częstotliwość spada, gdy nastawnik się
+podnosi, więc położenie wtedy rośnie. Adjustometer publikuje też `PULSE`,
+czyli wartość bezwzględną tego samego odchylenia z podtrzymaniem zera
+40/50 Hz; regulacja z niego nie korzysta. Baseline powstaje przy starcie
+Adjustometera, więc spoczynek w innej temperaturze może leżeć nad nim.
+Położenie ze znakiem umieszcza wtedy dół poniżej zera, podczas gdy wartość
+bezwzględna zawinęłaby go w górę i skróciła oś. Odczyt z utratą sygnału albo
+z niegotowym baseline zostawia poprzednie położenie, a każdy z tych statusów
+zatrzymuje regulator.
+
+Kalibracja przy starcie mierzy dół przy wyłączonym wysterowaniu i górę przy
+80% PWM. Każdy koniec to średnia ze stabilnego okna sześciu odczytów po
+odrzuceniu skrajnych, a skok między nimi musi sięgać 6000 Hz. Kalibracja
+zapisuje też jako odniesienie średnią temperaturę paliwa z odczytów obu okien.
+
+Oba końce przesuwają się z temperaturą paliwa: w danych ze stanowiska
+częstotliwość spoczynku spada o około 16 Hz/°C, a góry o około 9 Hz/°C,
+podczas gdy baseline zostaje na miejscu. Granice, których używa regulator,
+podążają więc za temperaturą paliwa od tego odniesienia: dół o 16,1 Hz/°C,
+góra o 8,8 Hz/°C. Czujnik podaje całe stopnie, a w pobliżu granicy stopnia
+odczyt przeskakuje tam i z powrotem między dwiema wartościami. Korekta
+podąża więc za temperaturą przefiltrowaną dolnoprzepustowo ze stałą
+czasową 60 s (`VP37_LIMIT_FT_FILTER_TAU_S`). Filtr startuje od odniesienia
+po zakończeniu kalibracji; rzeczywista zmiana o stopień dociera wtedy do
+granic w ciągu minut, a przeskoki się uśredniają. Różnicę od odniesienia
+ogranicza ±15 °C, mniej więcej zakres objęty danymi, a zastosowana korekta
+zmienia się najwyżej o 1 Hz na krok regulacji jako zabezpieczenie.
+Uszkodzony czujnik temperatury paliwa zatrzymuje filtr i korektę na bieżących
+wartościach, a bez ważnego odniesienia z kalibracji granice zostają przy
+wartościach skalibrowanych. Ustawienie `VP37_LIMIT_FT_CORRECTION_ENABLED` na 0
+w `vp37_config.h` zostawia granice skalibrowane.
+
+Wszystko, co wynika z granic, korzysta z granic obowiązujących: użyteczny
+skok, skala położenia fizycznego, reguły górnego zakresu i spoczynek na dole.
+Żądanie procentowe zachowuje swoje miejsce na skoku, więc jego cel podąża
+za granicami i nie jest traktowany jak nowe żądanie. Żądanie w countach
+zachowuje swoją wartość; granice tylko ją ograniczają, a procent wynika
+z tej wartości. Zero procent zwalnia wysterowanie na dole niezależnie od położenia
+granic.
 
 ## Regulacja położenia
 

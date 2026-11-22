@@ -16,6 +16,10 @@ const char *fiesta_test_debug_last_line(void) {
   return hal_mock_deb_last_line();
 }
 
+const char *fiesta_test_serial_last_line(void) {
+  return hal_mock_serial_last_line();
+}
+
 #ifdef HAL_ENABLE_CAN
 void fiesta_test_can_reset(hal_can_t handle) { hal_mock_can_reset(handle); }
 

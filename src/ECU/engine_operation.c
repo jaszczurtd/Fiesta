@@ -184,11 +184,30 @@ engineOperation *getEngineOperationInstance(void) {
   return &getECUContext()->engineOp;
 }
 
+typedef struct {
+  uint32_t timeUs;
+  int32_t rpm;
+  float demand;
+  engine_operation_state_t state;
+  bool cranking;
+  bool afterstart;
+} engine_debug_event_t;
+
+static engine_debug_event_t s_debugRecords[2];
+static hal_debug_events_t s_debugQueue;
+static uint32_t s_debugLastMs;
+static uint32_t s_debugReportedDrops;
+
 void engineOperation_init(engineOperation *self) {
   if (self == NULL) {
     return;
   }
   engineOperation_reset(self, hal_millis());
+  (void)hal_debug_events_init(&s_debugQueue, s_debugRecords,
+                              sizeof(s_debugRecords[0]),
+                              COUNTOF(s_debugRecords));
+  s_debugLastMs = 0U;
+  s_debugReportedDrops = 0U;
 }
 
 void engineOperation_process(engineOperation *self) {
@@ -254,19 +273,47 @@ void engineOperation_process(engineOperation *self) {
   (void)VP37_setPositionDemandPercentage(pump, demand);
 }
 
-void engineOperation_showDebug(const engineOperation *self) {
-  static uint32_t lastPeriodicLogMs = 0;
+void engineOperation_recordDebug(const engineOperation *self) {
   if (self == NULL) {
     return;
   }
 
   uint32_t now = hal_millis();
-  if (now - lastPeriodicLogMs >= ENGINE_OP_DEBUG_UPDATE_MS) {
-    lastPeriodicLogMs = now;
+  if (hal_elapsed_u32(now, s_debugLastMs, ENGINE_OP_DEBUG_UPDATE_MS)) {
+    s_debugLastMs = now;
     int32_t rpm = RPM_getCurrentRPM(getRPMInstance());
     bool crankingDetected =
         (rpm > ENGINE_OP_CRANKING_RPM_MIN) && (rpm < RPM_MIN);
-    deb("engineOp state:%d crank:%d ase:%d rpm:%d demand:%.1f", self->state,
-        crankingDetected, self->afterstartActive, rpm, self->lastDemand);
+    const engine_debug_event_t event = {.timeUs = hal_micros(),
+                                        .rpm = rpm,
+                                        .demand = self->lastDemand,
+                                        .state = self->state,
+                                        .cranking = crankingDetected,
+                                        .afterstart = self->afterstartActive};
+    (void)hal_debug_events_publish(&s_debugQueue, &event);
+  }
+}
+
+static hal_status_t engineOperation_printDebug(const void *record,
+                                               void *context) {
+  (void)context;
+  const engine_debug_event_t *const event = record;
+  deb("engineOp state:%d crank:%d ase:%d rpm:%d demand:%.1f us:%lu",
+      event->state, event->cranking, event->afterstart, event->rpm,
+      event->demand, (unsigned long)event->timeUs);
+  return HAL_OK;
+}
+
+void engineOperation_showDebug(const engineOperation *self) {
+  if (self == NULL || hal_debug_is_muted()) {
+    return;
+  }
+  (void)hal_debug_events_poll(&s_debugQueue, COUNTOF(s_debugRecords),
+                              engineOperation_printDebug, NULL);
+  const uint32_t total = hal_debug_events_dropped(&s_debugQueue);
+  const uint32_t dropped = total - s_debugReportedDrops;
+  s_debugReportedDrops = total;
+  if (dropped != 0U) {
+    derr("engineOp diagnostic log overflow: %lu", (unsigned long)dropped);
   }
 }

@@ -3,6 +3,7 @@
 #include "../scDefinitions/sc_protocol.h"
 #include "../seqlock.h"
 #include <hal/core/hal_mutex_once.h>
+#include <hal/debug/hal_debug_events.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,56 +25,117 @@ static char s_command[FIESTA_TEST_COMMAND_SIZE];
  * loop that releases every control step must not take a lock to learn that
  * nothing waits. */
 static uint8_t s_commandLength;
+typedef enum {
+  TEST_EVENT_LIFECYCLE,
+  TEST_EVENT_WATCH,
+  TEST_EVENT_WATCH_REJECTED,
+  TEST_EVENT_SET_OK,
+  TEST_EVENT_SET_REJECTED,
+  TEST_EVENT_UNKNOWN_TEST,
+  TEST_EVENT_UNKNOWN_COMMAND,
+  TEST_EVENT_SC_STOP,
+  TEST_EVENT_CONSOLE_STOP,
+  TEST_EVENT_MODULE_REPLY = 256
+} tests_event_kind_t;
 typedef struct {
-  const fiesta_test_t *entry; /* NULL for a sequence or idle message. */
-  const char *result; /* NULL means started; otherwise stopped + result. */
-} tests_lifecycle_event_t;
+  union {
+    char text[FIESTA_TEST_COMMAND_SIZE];
+    struct {
+      const fiesta_test_t *entry; /* NULL for a sequence or idle message. */
+      const char *result; /* NULL means started; otherwise stopped + result. */
+    } lifecycle;
+    struct {
+      uint32_t value;
+      uint32_t detail;
+    } reply;
+  } data;
+  uint32_t kind; /* Built-in kind, or MODULE_REPLY plus the module's code. */
+} tests_event_t;
 /* Controller core publishes; session core drains without holding up position
  * control. */
-static tests_lifecycle_event_t s_lifecycleEvents[4];
-static uint32_t s_lifecycleWritten;
-static uint32_t s_lifecycleRead;
-static uint32_t s_lifecycleDropped;
+static tests_event_t s_events[4];
+static hal_debug_events_t s_eventQueue;
+static uint32_t s_reportedDrops;
 
-static void recordLifecycle(const fiesta_test_t *entry, const char *result) {
+static void printWatch(uint32_t limitMs);
+
+static void recordEvent(tests_event_t event) {
   if (hal_debug_is_muted()) {
     return;
   }
-  const uint32_t written =
-      HAL_ATOMIC_LOAD(&s_lifecycleWritten, HAL_ATOMIC_RELAXED);
-  const uint32_t read = HAL_ATOMIC_LOAD(&s_lifecycleRead, HAL_ATOMIC_ACQUIRE);
-  if ((written - read) >= COUNTOF(s_lifecycleEvents)) {
-    (void)HAL_ATOMIC_FETCH_ADD(&s_lifecycleDropped, 1U, HAL_ATOMIC_RELAXED);
-    return;
-  }
-  s_lifecycleEvents[written % COUNTOF(s_lifecycleEvents)] =
-      (tests_lifecycle_event_t){.entry = entry, .result = result};
-  HAL_ATOMIC_STORE(&s_lifecycleWritten, written + 1U, HAL_ATOMIC_RELEASE);
+  (void)hal_debug_events_publish(&s_eventQueue, &event);
 }
 
-static void printLifecycle(void) {
+static void recordLifecycle(const fiesta_test_t *entry, const char *result) {
+  recordEvent(
+      (tests_event_t){.data.lifecycle = {.entry = entry, .result = result},
+                      .kind = TEST_EVENT_LIFECYCLE});
+}
+
+static void recordText(tests_event_kind_t kind, const char *text) {
+  tests_event_t event = {.kind = (uint32_t)kind};
+  /* All callers supply a command shorter than the mailbox or a registry
+   * constant. Keep a bounded copy even if a future caller violates that. */
+  size_t length = 0U;
+  while (length + 1U < COUNTOF(event.data.text) && text[length] != '\0') {
+    event.data.text[length] = text[length];
+    ++length;
+  }
+  event.data.text[length] = '\0';
+  recordEvent(event);
+}
+
+static hal_status_t printEvent(const void *record, void *context) {
+  (void)context;
+  const tests_event_t event = *(const tests_event_t *)record;
+  if (event.kind == TEST_EVENT_WATCH) {
+    printWatch(event.data.reply.value);
+  } else if (event.kind == TEST_EVENT_WATCH_REJECTED) {
+    derr("TEST: watch rejected; send watch <%lu..%lu ms> or watch 0",
+         (unsigned long)FIESTA_TEST_WATCH_MIN_MS,
+         (unsigned long)FIESTA_TEST_WATCH_MAX_MS);
+  } else if (event.kind == TEST_EVENT_SET_OK) {
+    const fiesta_test_param_t *desc =
+        fiesta_test_param_desc(event.data.reply.detail);
+    deb("TEST: set %s = %ld ok", desc->id,
+        (long)(int32_t)event.data.reply.value);
+  } else if (event.kind == TEST_EVENT_SET_REJECTED) {
+    derr("TEST: set %s rejected; send params for ids and ranges",
+         event.data.text);
+  } else if (event.kind == TEST_EVENT_UNKNOWN_TEST) {
+    derr("Unknown test: '%s'. Send list for the registry.", event.data.text);
+  } else if (event.kind == TEST_EVENT_UNKNOWN_COMMAND) {
+    derr("Unknown command: '%s'. Send ? for help.", event.data.text);
+  } else if (event.kind == TEST_EVENT_SC_STOP) {
+    derr("TEST: configurator test stopped: %s", event.data.text);
+  } else if (event.kind == TEST_EVENT_CONSOLE_STOP) {
+    derr("TEST: console test stopped: %s", event.data.text);
+  } else if (event.kind >= TEST_EVENT_MODULE_REPLY) {
+    if (s_config->reply != NULL) {
+      s_config->reply((uint8_t)(event.kind - TEST_EVENT_MODULE_REPLY),
+                      event.data.reply.value, event.data.reply.detail);
+    }
+  } else if (event.data.lifecycle.entry == NULL) {
+    deb("TEST: %s", event.data.lifecycle.result);
+  } else if (event.data.lifecycle.result == NULL) {
+    deb("TEST: %s started", event.data.lifecycle.entry->name);
+  } else {
+    deb("TEST: %s stopped", event.data.lifecycle.entry->name);
+    deb("TEST: %s result: %s", event.data.lifecycle.entry->name,
+        event.data.lifecycle.result);
+  }
+  return HAL_OK;
+}
+
+static void printEventQueue(void) {
   if (hal_debug_is_muted()) {
     return;
   }
-  for (size_t i = 0U; i < COUNTOF(s_lifecycleEvents); ++i) {
-    const uint32_t read = HAL_ATOMIC_LOAD(&s_lifecycleRead, HAL_ATOMIC_RELAXED);
-    if (read == HAL_ATOMIC_LOAD(&s_lifecycleWritten, HAL_ATOMIC_ACQUIRE)) {
-      break;
-    }
-    const tests_lifecycle_event_t event =
-        s_lifecycleEvents[read % COUNTOF(s_lifecycleEvents)];
-    HAL_ATOMIC_STORE(&s_lifecycleRead, read + 1U, HAL_ATOMIC_RELEASE);
-    if (event.entry == NULL) {
-      deb("TEST: %s", event.result);
-    } else if (event.result == NULL) {
-      deb("TEST: %s started", event.entry->name);
-    } else {
-      deb("TEST: %s stopped", event.entry->name);
-      deb("TEST: %s result: %s", event.entry->name, event.result);
-    }
-  }
-  const uint32_t dropped =
-      HAL_ATOMIC_EXCHANGE(&s_lifecycleDropped, 0U, HAL_ATOMIC_ACQ_REL);
+  (void)hal_debug_events_poll(&s_eventQueue, COUNTOF(s_events), printEvent,
+                              NULL);
+  const uint32_t total = hal_debug_events_dropped(&s_eventQueue);
+  const uint32_t dropped = total - s_reportedDrops;
+  s_reportedDrops = total;
   if (dropped != 0U) {
     derr("TEST: lifecycle log overflow: %lu", (unsigned long)dropped);
   }
@@ -107,7 +169,7 @@ static void runPendingFixture(void) {
     if ((entry != NULL) && (sequence != HAL_ATOMIC_LOAD(&s_fixtureCompleted,
                                                         HAL_ATOMIC_RELAXED))) {
       // Fixture publication follows its start event on the control core.
-      printLifecycle();
+      printEventQueue();
       entry->start();
       const char *result =
           entry->result != NULL ? entry->result() : SC_TEST_RESULT_DONE;
@@ -187,9 +249,9 @@ void fiesta_test_params_reset(void) {
 static bool reset(void) {
   HAL_ATOMIC_STORE(&s_commandLength, 0U, HAL_ATOMIC_RELEASE);
   s_command[0] = '\0';
-  HAL_ATOMIC_STORE(&s_lifecycleWritten, 0U, HAL_ATOMIC_RELAXED);
-  HAL_ATOMIC_STORE(&s_lifecycleRead, 0U, HAL_ATOMIC_RELAXED);
-  HAL_ATOMIC_STORE(&s_lifecycleDropped, 0U, HAL_ATOMIC_RELAXED);
+  (void)hal_debug_events_init(&s_eventQueue, s_events, sizeof(s_events[0]),
+                              COUNTOF(s_events));
+  s_reportedDrops = 0U;
   HAL_ATOMIC_STORE(&s_fixtureLock.sequence, 0U, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_fixtureId, FIESTA_TEST_NONE, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_fixtureCompleted, 0U, HAL_ATOMIC_RELAXED);
@@ -238,10 +300,9 @@ static hal_status_t queueCommand(const char *line) {
 static bool takeCommand(char *out) {
   if ((out == NULL) ||
       (HAL_ATOMIC_LOAD(&s_commandLength, HAL_ATOMIC_ACQUIRE) == 0U) ||
-      (jh_hal_mutex_try_create_once(&s_commandMutex) == NULL)) {
+      (s_commandMutex == NULL) || !hal_mutex_try_lock(s_commandMutex)) {
     return false;
   }
-  hal_mutex_lock(s_commandMutex);
   const uint8_t length = s_commandLength;
   if (length != 0U) {
     (void)memcpy(out, s_command, (size_t)length + 1U);
@@ -289,11 +350,16 @@ static bool equals(const char *text, const char *word) {
 typedef enum { TESTS_SOURCE_CONSOLE = 0, TESTS_SOURCE_SC } tests_source_t;
 
 static bool s_initialized = false;
-enum { TESTS_METADATA_LIST = 1U, TESTS_METADATA_PARAMS = 2U };
+enum {
+  TESTS_METADATA_LIST = 1U,
+  TESTS_METADATA_PARAMS = 2U,
+  TESTS_METADATA_HELP = 4U
+};
 /* Queued and drained on the console core, outside the muted RX callback. */
 static uint8_t s_consoleMetadata = 0U;
 static void printList(void);
 static void printParams(void);
+static void printHelp(void);
 static uint32_t s_active = FIESTA_TEST_NONE;
 static tests_source_t s_activeSource = TESTS_SOURCE_CONSOLE;
 static uint32_t s_activeStartedMs = 0U;
@@ -669,7 +735,7 @@ const char *fiesta_test_active_name(void) {
 }
 
 void fiesta_test_events(void) {
-  printLifecycle();
+  printEventQueue();
   if (!hal_debug_is_muted()) {
     const uint32_t metadata = s_consoleMetadata;
     s_consoleMetadata = 0U;
@@ -679,10 +745,21 @@ void fiesta_test_events(void) {
     if ((metadata & TESTS_METADATA_PARAMS) != 0U) {
       printParams();
     }
+    if ((metadata & TESTS_METADATA_HELP) != 0U) {
+      printHelp();
+    }
   }
   runPendingFixture();
   if (s_config->events != NULL) {
     s_config->events();
+  }
+}
+
+void fiesta_test_reply(uint8_t code, uint32_t value, uint32_t detail) {
+  if (s_initialized && (s_config->reply != NULL)) {
+    recordEvent(
+        (tests_event_t){.data.reply = {.value = value, .detail = detail},
+                        .kind = TEST_EVENT_MODULE_REPLY + (uint32_t)code});
   }
 }
 
@@ -744,10 +821,13 @@ static void dispatchSet(const char *args) {
   const long value = strtol(&args[length], &end, 10);
   if (!paramFind(id, &param) || (end == &args[length]) || (*end != '\0') ||
       (fiesta_test_param_set(param, (int32_t)value) != HAL_OK)) {
-    derr("TEST: set %s rejected; send params for ids and ranges", id);
+    recordText(TEST_EVENT_SET_REJECTED, id);
     return;
   }
-  deb("TEST: set %s = %ld ok", id, (long)fiesta_test_param(param));
+  recordEvent((tests_event_t){
+      .kind = TEST_EVENT_SET_OK,
+      .data.reply = {.value = (uint32_t)fiesta_test_param(param),
+                     .detail = (uint32_t)param}});
   publishStatus(true);
 }
 
@@ -759,7 +839,7 @@ static void dispatchRun(const char *name) {
   }
   const fiesta_test_t *entry = findByName(name);
   if (entry == NULL) {
-    derr("Unknown test: '%s'. Send list for the registry.", name);
+    recordText(TEST_EVENT_UNKNOWN_TEST, name);
     return;
   }
   (void)fiesta_test_start(entry->id);
@@ -786,12 +866,18 @@ static const char *commandText(const char *line) {
 }
 
 /** @brief Report the console watch limit, or that it is off. */
-static void printWatch(void) {
-  if (s_consoleWatchMs == 0U) {
+static void printWatch(uint32_t limitMs) {
+  if (limitMs == 0U) {
     deb("TEST: watch off");
   } else {
-    deb("TEST: watch %lu ms", (unsigned long)s_consoleWatchMs);
+    deb("TEST: watch %lu ms", (unsigned long)limitMs);
   }
+}
+
+static void recordWatch(void) {
+  recordEvent(
+      (tests_event_t){.data.reply = {.value = s_consoleWatchMs, .detail = 0U},
+                      .kind = TEST_EVENT_WATCH});
 }
 
 /**
@@ -802,7 +888,7 @@ static void printWatch(void) {
 static void dispatchWatch(const char *args) {
   const char *text = commandText(args);
   if (text[0] == '\0') {
-    printWatch();
+    recordWatch();
     return;
   }
   char *end = NULL;
@@ -811,13 +897,11 @@ static void dispatchWatch(const char *args) {
       (value == 0L) || ((value >= (long)FIESTA_TEST_WATCH_MIN_MS) &&
                         (value <= (long)FIESTA_TEST_WATCH_MAX_MS));
   if ((end == text) || (*end != '\0') || !inRange) {
-    derr("TEST: watch rejected; send watch <%lu..%lu ms> or watch 0",
-         (unsigned long)FIESTA_TEST_WATCH_MIN_MS,
-         (unsigned long)FIESTA_TEST_WATCH_MAX_MS);
+    recordEvent((tests_event_t){.kind = TEST_EVENT_WATCH_REJECTED});
     return;
   }
   s_consoleWatchMs = (uint32_t)value;
-  printWatch();
+  recordWatch();
 }
 
 static void dispatch(const char *line) {
@@ -826,18 +910,6 @@ static void dispatch(const char *line) {
     return;
   }
 
-  if (((cmd[0] == '?') && (cmd[1] == '\0')) || equals(cmd, "help")) {
-    printHelp();
-    return;
-  }
-  if (equals(cmd, "list")) {
-    printList();
-    return;
-  }
-  if (equals(cmd, "params")) {
-    printParams();
-    return;
-  }
   if (equals(cmd, "stop")) {
     (void)fiesta_test_stop();
     return;
@@ -864,7 +936,7 @@ static void dispatch(const char *line) {
 
   uint32_t requested = FIESTA_TEST_NONE;
   if ((s_config->command == NULL) || !s_config->command(cmd, &requested)) {
-    derr("Unknown command: '%s'. Send ? for help.", cmd);
+    recordText(TEST_EVENT_UNKNOWN_COMMAND, cmd);
     return;
   }
   if (requested != FIESTA_TEST_NONE) {
@@ -880,6 +952,10 @@ void fiesta_test_console(const char *line) {
   HAL_ATOMIC_STORE(&s_consoleContactMs, hal_millis(), HAL_ATOMIC_RELEASE);
   if ((line != NULL) && (strlen(line) < FIESTA_TEST_COMMAND_SIZE)) {
     const char *cmd = commandText(line);
+    if (equals(cmd, "?") || equals(cmd, "help")) {
+      s_consoleMetadata |= TESTS_METADATA_HELP;
+      return;
+    }
     if (equals(cmd, "list")) {
       s_consoleMetadata |= TESTS_METADATA_LIST;
       return;
@@ -955,7 +1031,7 @@ static void superviseScTest(void) {
     reason = s_config->sc_blocked();
   }
   if (reason != NULL) {
-    derr("TEST: configurator test stopped: %s", reason);
+    recordText(TEST_EVENT_SC_STOP, reason);
     stopAll(reason);
   }
 }
@@ -973,7 +1049,7 @@ static void superviseConsoleTest(void) {
   const uint32_t contactMs =
       HAL_ATOMIC_LOAD(&s_consoleContactMs, HAL_ATOMIC_ACQUIRE);
   if (hal_elapsed_u32(hal_millis(), contactMs, s_consoleWatchMs)) {
-    derr("TEST: console test stopped: %s", SC_TEST_RESULT_HOST_LOST);
+    recordText(TEST_EVENT_CONSOLE_STOP, SC_TEST_RESULT_HOST_LOST);
     stopAll(SC_TEST_RESULT_HOST_LOST);
   }
 }

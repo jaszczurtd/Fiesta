@@ -157,6 +157,24 @@ void test_authenticated_reboot_replies_before_deferred_bootloader_entry(void) {
   const char *response = sendSerialLine("SC_REBOOT_BOOTLOADER\n");
   TEST_ASSERT_EQUAL_STRING("SC_OK REBOOT", response);
   TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
+
+  static uint8_t tx[512];
+  hal_mock_bootloader_reset_flag();
+  TEST_ASSERT_EQUAL(HAL_OK, hal_serial_buffered_init(tx, sizeof(tx)));
+  response = sendSerialLine("SC_REBOOT_BOOTLOADER\n");
+  TEST_ASSERT_EQUAL_STRING("", response);
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+  hal_mock_serial_set_tx_limit(0U);
+  size_t written = 0U;
+  TEST_ASSERT_EQUAL(HAL_EAGAIN, hal_serial_buffered_poll(sizeof(tx), &written));
+  configSessionTick();
+  TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+  hal_mock_serial_set_tx_limit(SIZE_MAX);
+  TEST_ASSERT_EQUAL(HAL_OK, hal_serial_buffered_poll(sizeof(tx), &written));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), ",SC_OK REBOOT*"));
+  configSessionTick();
+  TEST_ASSERT_EQUAL(HAL_OK, hal_serial_buffered_init(NULL, 0U));
+  TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
 }
 
 void test_framed_non_sc_payload_is_forwarded_to_pid_fallback(void) {

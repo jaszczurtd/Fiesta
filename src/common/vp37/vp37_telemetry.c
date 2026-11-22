@@ -14,6 +14,7 @@ static void VP37_showControlSample(const VP37TraceSample *sample,
                                    const char *kind);
 
 void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
+  (void)self;
   const VP37Telemetry *const view = &snapshot->telemetry;
   const VP37TraceSample sample = VP37_controlSample(view);
   VP37_showControlSample(&sample, "C");
@@ -24,7 +25,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:223 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:224 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -44,7 +45,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         "slowd:%u sd:%.3f beta:%.3f rkp:%.5f ierr:%.3f dramp:%u udb:%u "
         "rbrake:%u ileak:%u ibias:%.3f iphase:%u ipart:%.3f istart:%ld "
         "itau:%.3f ishare:%.3f ianchor:%.3f ihvalid:%u ihtar:%ld ihbias:%.3f "
-        "ireuse:%u",
+        "ireuse:%u calmin:%ld calmax:%ld calft:%.1f calftok:%u ftlim:%u "
+        "mincor:%d maxcor:%d ftf:%.2f",
         view->pid.kp, view->pid.ki, view->pid.kd, view->pid.topKd,
         view->pid.effectiveKd, view->pid.tf, view->pidTimeUpdate,
         view->feedback.adjustMin, view->feedback.adjustMax,
@@ -115,16 +117,23 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         view->pid.motionIntegralAnchor,
         view->pid.holdingIntegralReady ? 1U : 0U,
         (long)view->pid.holdingIntegralTarget, view->pid.holdingIntegralBias,
-        view->pid.descentUnwindUsesHolding ? 1U : 0U);
-    adjustometer_reading_t telemetry = view->adjustometer;
-    const bool extendedFresh = VP37_readAdjustometerExtended(self, &telemetry);
+        view->pid.descentUnwindUsesHolding ? 1U : 0U,
+        (long)view->feedback.calibratedMin, (long)view->feedback.calibratedMax,
+        (double)view->feedback.calibrationFtDeciC * 0.1,
+        view->feedback.calibrationFtValid ? 1U : 0U,
+        (unsigned)VP37_LIMIT_FT_CORRECTION_ENABLED,
+        (int)view->feedback.limitCorrectionMin,
+        (int)view->feedback.limitCorrectionMax,
+        (double)view->feedback.fuelTempFilteredC);
+    const adjustometer_reading_t telemetry = view->adjustometer;
     deb("VP37 ADJ p:%d f:%luHz d:%ld v:%u ft:%d tc:%.1f s:%u bl:%lu ext:%d "
         "fl:0x%02x",
         telemetry.pulseHz, (unsigned long)telemetry.signalHz,
         (long)telemetry.signedDeltaHz, (unsigned int)telemetry.voltageRaw,
         (int)telemetry.fuelTempC, (double)telemetry.chipTempDeciC * 0.1,
         (unsigned int)telemetry.status, (unsigned long)telemetry.baselineHz,
-        extendedFresh, (unsigned int)telemetry.extendedFlags);
+        telemetry.extendedTelemetryValid,
+        (unsigned int)telemetry.extendedFlags);
   }
 }
 
@@ -605,13 +614,28 @@ void VP37_calibrationTraceEnd(const VP37Pump *self, bool minSettled,
     VP37CalibrationResult *const result = &s_trace.storage.calibration.result;
     result->finishedUs = hal_micros();
     result->samples = s_trace.count;
-    result->minimum = self->feedback.adjustMin;
-    result->maximum = self->feedback.adjustMax;
+    result->minimum =
+        result->probe ? self->feedback.adjustMin : self->feedback.calibratedMin;
+    result->maximum =
+        result->probe ? self->feedback.adjustMax : self->feedback.calibratedMax;
+    result->fuelTempDeciC = self->feedback.calibrationFtDeciC;
+    result->fuelTempValid = self->feedback.calibrationFtValid;
     result->minSettled = minSettled;
     result->maxSettled = maxSettled;
-    result->valid = self->feedback.calibrationDone;
+    result->valid = result->probe ? maxSettled : self->feedback.calibrationDone;
     HAL_ATOMIC_STORE(&s_trace.state, (uint8_t)VP37_TRACE_CAL_READY,
                      HAL_ATOMIC_RELEASE);
+  }
+}
+
+void VP37_calibrationProbeEnd(const VP37Pump *self, uint16_t pwm, bool settled,
+                              int32_t maximum) {
+  if (VP37_traceState() == VP37_TRACE_CAL_RECORDING) {
+    VP37CalibrationResult *const result = &s_trace.storage.calibration.result;
+    result->probe = true;
+    result->probePwm = pwm;
+    result->probeMaximum = maximum;
+    VP37_calibrationTraceEnd(self, false, settled);
   }
 }
 
@@ -652,31 +676,64 @@ void VP37_showCalibration(void) {
       hal_debug_is_muted()) {
     return;
   }
+  if (VP37_traceState() != VP37_TRACE_CAL_READY) {
+    return;
+  }
+  const VP37CalibrationResult *const retained =
+      &s_trace.storage.calibration.result;
+  const bool probe = retained->probe;
+  if (probe && s_trace.next == 0U) {
+    deb("VP37 CALPROBE begin us:%lu pwm:%u min:%ld max:%ld",
+        (unsigned long)retained->startedUs, (unsigned)retained->probePwm,
+        (long)retained->minimum, (long)retained->maximum);
+  }
   VP37CalibrationSample sample;
   for (uint8_t i = 0U; i < 2U; ++i) {
     if (VP37_readCalibrationTrace(&sample) != HAL_OK) {
       break;
     }
     const adjustometer_reading_t *const r = &sample.reading;
-    deb("VP37 CAL us:%lu phase:%s pwm:%u adj:%d hzraw:%lu hz:%lu bl:%lu "
-        "sn:%lu su:%lu age:%u st:%u io:%d comm:%u fresh:%u v:%u ft:%d",
+    if (probe) {
+      deb("VP37 CALPROBE sample us:%lu adj:%ld raw:%ld st:%u comm:%u fresh:%u "
+          "age:%lu V:%.2f ft:%d",
+          (unsigned long)sample.us, (long)VP37_readingPosition(r),
+          (long)r->rawHz, r->status, r->commOk ? 1U : 0U,
+          r->feedbackFresh ? 1U : 0U, (unsigned long)r->ageUs,
+          r->voltageRaw * 0.1f, (int)r->fuelTempC);
+      continue;
+    }
+    // adj is the signed position the estimator uses; p is the Adjustometer's
+    // own magnitude after its zero hold.
+    deb("VP37 CAL us:%lu phase:%s pwm:%u adj:%ld hzraw:%lu hz:%lu bl:%lu "
+        "sn:%lu su:%lu age:%u st:%u io:%d comm:%u fresh:%u v:%u ft:%d p:%d",
         (unsigned long)sample.us, sample.pwm == 0U ? "MIN" : "MAX",
-        (unsigned int)sample.pwm, r->pulseHz, (unsigned long)r->rawHz,
-        (unsigned long)r->signalHz, (unsigned long)r->baselineHz,
-        (unsigned long)r->sampleNumber, (unsigned long)r->measuredUs,
-        (unsigned int)r->ageUs, (unsigned int)r->status, (int)r->readStatus,
-        r->commOk ? 1U : 0U, r->feedbackFresh ? 1U : 0U,
-        (unsigned int)r->voltageRaw, (int)r->fuelTempC);
+        (unsigned int)sample.pwm, (long)VP37_readingPosition(r),
+        (unsigned long)r->rawHz, (unsigned long)r->signalHz,
+        (unsigned long)r->baselineHz, (unsigned long)r->sampleNumber,
+        (unsigned long)r->measuredUs, (unsigned int)r->ageUs,
+        (unsigned int)r->status, (int)r->readStatus, r->commOk ? 1U : 0U,
+        r->feedbackFresh ? 1U : 0U, (unsigned int)r->voltageRaw,
+        (int)r->fuelTempC, (int)r->pulseHz);
   }
   VP37CalibrationResult result;
   if (VP37_takeCalibrationResult(&result) == HAL_OK) {
+    if (result.probe) {
+      deb("VP37 CALPROBE end us:%lu settled:%u measured:%ld pwm:0 min:%ld "
+          "max:%ld "
+          "samples:%lu overflow:%u",
+          (unsigned long)result.finishedUs, result.maxSettled ? 1U : 0U,
+          (long)result.probeMaximum, (long)result.minimum, (long)result.maximum,
+          (unsigned long)result.samples, result.overflow ? 1U : 0U);
+      return;
+    }
     deb("VP37 CAL END start:%lu end:%lu samples:%lu min:%ld max:%ld "
-        "minok:%u maxok:%u valid:%u overflow:%u pwm:0",
+        "minok:%u maxok:%u valid:%u overflow:%u pwm:0 calft:%.1f calftok:%u",
         (unsigned long)result.startedUs, (unsigned long)result.finishedUs,
         (unsigned long)result.samples, (long)result.minimum,
         (long)result.maximum, result.minSettled ? 1U : 0U,
         result.maxSettled ? 1U : 0U, result.valid ? 1U : 0U,
-        result.overflow ? 1U : 0U);
+        result.overflow ? 1U : 0U, (double)result.fuelTempDeciC * 0.1,
+        result.fuelTempValid ? 1U : 0U);
   }
 }
 

@@ -85,6 +85,23 @@ foreach(fuel_variant IN ITEMS normal bench)
     add_test(NAME test_fuel_temperature_${fuel_variant}
         COMMAND test_fuel_temperature_${fuel_variant})
 endforeach()
+# The signed position axis and the limits that follow the fuel temperature;
+# the second binary compiles the VP37 units with that correction switched off.
+foreach(axis_variant IN ITEMS ft_on ft_off)
+    add_executable(test_vp37_position_axis_${axis_variant}
+        ${VP37_SOURCE_DIR}/tests/test_vp37_position_axis.c
+        ../../common/tests/hal_mock_c_bridge.cpp ${ECU_VP37_SOURCES})
+    target_compile_definitions(test_vp37_position_axis_${axis_variant}
+        PRIVATE ECU_FUNCTIONAL_TESTS_ENABLED=1)
+    if(axis_variant STREQUAL "ft_off")
+        target_compile_definitions(test_vp37_position_axis_${axis_variant}
+            PRIVATE VP37_LIMIT_FT_CORRECTION_ENABLED=0)
+    endif()
+    target_link_libraries(test_vp37_position_axis_${axis_variant}
+        PRIVATE ecu_mock)
+    add_test(NAME test_vp37_position_axis_${axis_variant}
+        COMMAND test_vp37_position_axis_${axis_variant})
+endforeach()
 # The snapshot with its telemetry part, copied while another thread publishes.
 add_executable(test_vp37_snapshot
     ${VP37_SOURCE_DIR}/tests/test_vp37_snapshot.cpp ${ECU_VP37_SOURCES})
@@ -177,6 +194,12 @@ add_executable(test_test_runner
     ../../common/test_runner/tests/test_test_runner.cpp ${TEST_RUNNER_SOURCES})
 target_link_libraries(test_test_runner PRIVATE ecu_mock)
 add_test(NAME test_test_runner COMMAND test_test_runner)
+add_executable(test_tests_replies test_tests_replies.c
+    ../../common/tests/hal_mock_c_bridge.cpp ${ECU_TEST_FIXTURE_SOURCES})
+target_compile_definitions(test_tests_replies PRIVATE
+    ECU_FUNCTIONAL_TESTS_ENABLED=1)
+target_link_libraries(test_tests_replies PRIVATE ecu_mock)
+add_test(NAME test_tests_replies COMMAND test_tests_replies)
 add_ecu_test(test_rpm)
 
 if(UNIX)

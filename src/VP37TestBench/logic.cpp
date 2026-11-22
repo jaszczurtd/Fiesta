@@ -113,6 +113,7 @@ void app_task0(void) {
   }
 
   statusVariable0 = 1;
+  VP37_printEvents(&s_pump);
 
   timerSecond.tick();
   timerDisplay.tick();

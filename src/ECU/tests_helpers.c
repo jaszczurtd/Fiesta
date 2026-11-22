@@ -27,8 +27,10 @@
 #include <string.h>
 
 //=============================================================================
-/* Pending replies: controller adds, session consumes one per event poll. */
-static uint32_t s_defaultsReplies;
+/* Reply codes 1..26 are X commands; ASCII letters are ordinary commands. */
+static void replyFloat(uint8_t code, float value) {
+  fiesta_test_reply(code, hal_math_float_to_u32(value), 0U);
+}
 static const test_param_desc_t s_params[TEST_PARAM_COUNT] = {
     [TEST_PARAM_CYCLIC_PASSES] = {SC_TEST_PARAM_CYCLIC_PASSES,
                                   START_TEST_CYCLIC, SC_TEST_UNIT_COUNT, 1,
@@ -143,7 +145,7 @@ static void applyDefaults(VP37Pump *self) {
   testsWorkersSetFixedCyclicPeriod(0U);
   fiesta_test_params_reset();
   testsWorkersManualHoldSet(VP37_BENCH_HOLD_MS_DEFAULT);
-  (void)HAL_ATOMIC_FETCH_ADD(&s_defaultsReplies, 1U, HAL_ATOMIC_RELEASE);
+  fiesta_test_reply('R', 0U, 0U);
 }
 
 /** @brief Set one pump parameter; true when the value was inside its range. */
@@ -162,89 +164,88 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
   case 'P':
     applied = tune(self, VP37_TUNING_KP, value);
     if (applied) {
-      deb(TEST_HIGHLIGHT_ON "Kp = %.4f" TEST_HIGHLIGHT_OFF, value);
+      replyFloat('P', value);
     }
     break;
   case 'I':
     applied = tune(self, VP37_TUNING_KI, value);
     if (applied) {
-      deb(TEST_HIGHLIGHT_ON "Ki = %.4f" TEST_HIGHLIGHT_OFF, value);
+      replyFloat('I', value);
     }
     break;
   case 'D':
     applied = tune(self, VP37_TUNING_KD, value);
     if (applied) {
-      deb(TEST_HIGHLIGHT_ON "Kd = %.4f" TEST_HIGHLIGHT_OFF, value);
+      replyFloat('D', value);
     }
     break;
   case 'H':
     applied = tune(self, VP37_TUNING_TOP_KD, value);
     if (applied) {
-      deb("VP37 upper derivative gain: %.5f", value);
+      replyFloat('H', value);
     }
     break;
   case 'T':
     applied = tune(self, VP37_TUNING_PERIOD_MS, value);
     if (applied) {
-      deb(TEST_HIGHLIGHT_ON "TU = %.1f" TEST_HIGHLIGHT_OFF, value);
+      replyFloat('T', value);
     }
     break;
   case 'F':
     applied = tune(self, VP37_TUNING_DERIVATIVE_FILTER, value);
     if (applied) {
-      deb(TEST_HIGHLIGHT_ON "TF = %.4f" TEST_HIGHLIGHT_OFF, value);
+      replyFloat('F', value);
     }
     break;
   case 'L':
     applied = tune(self, VP37_TUNING_INTEGRAL_CAP, value);
     if (applied) {
-      deb("VP37 integral cap: %.1f (0=position profile)", value);
+      replyFloat('L', value);
     }
     break;
   case 'W':
     applied = tune(self, VP37_TUNING_TEMPERATURE_WEIGHT, value);
     if (applied) {
-      deb("VP37 thermal weight: %.2f", value);
+      replyFloat('W', value);
     }
     break;
   case 'E':
     applied = tune(self, VP37_TUNING_HOLD_CONFIRM_MS, value);
     if (applied) {
-      deb("VP37 hold confirmation: %lu ms", (unsigned long)value);
+      fiesta_test_reply('E', (uint32_t)value, 0U);
     }
     break;
   case 'N':
     applied = tune(self, VP37_TUNING_DEADBAND_TOP_HZ, value);
     if (applied) {
-      deb("VP37 integral deadband top: %.0f Hz", value);
+      replyFloat('N', value);
     }
     break;
   case 'U':
     applied = tune(self, VP37_TUNING_MOTION_BOOST_UP, value);
     if (applied) {
-      deb("VP37 motion boost up: %.0f", value);
+      replyFloat('U', value);
     }
     break;
   case 'J':
     applied = tune(self, VP37_TUNING_MOTION_BOOST_DOWN, value);
     if (applied) {
-      deb("VP37 motion boost down: %.0f", value);
+      replyFloat('J', value);
     }
     break;
   case 'S':
     if (value <= 100.0f) {
       testsWorkersManualSet(value);
       *outStart = START_TEST_MANUAL;
-      deb("VP37 demand: %.1f auto-zero:%lu ms", value,
-          (unsigned long)testsWorkersManualHoldMs());
+      fiesta_test_reply('S', hal_math_float_to_u32(value),
+                        testsWorkersManualHoldMs());
       applied = true;
     }
     break;
   case 'G':
     if (value <= VP37_BENCH_HOLD_MS_MAX) {
       testsWorkersManualHoldSet((uint32_t)value);
-      deb("VP37 demand auto-zero: %lu ms (0=hold)",
-          (unsigned long)testsWorkersManualHoldMs());
+      fiesta_test_reply('G', testsWorkersManualHoldMs(), 0U);
       applied = true;
     }
     break;
@@ -252,24 +253,24 @@ static bool applyValue(VP37Pump *self, char prefix, float value,
     applied = fiesta_test_param_set(TEST_PARAM_CYCLIC_PASSES, (int32_t)value) ==
               HAL_OK;
     if (applied) {
-      deb("VP37 cyclic passes: %lu",
-          (unsigned long)testsHelpersParam(TEST_PARAM_CYCLIC_PASSES));
+      fiesta_test_reply(
+          'Z', (uint32_t)testsHelpersParam(TEST_PARAM_CYCLIC_PASSES), 0U);
     }
     break;
   case 'Y':
     applied = fiesta_test_param_set(TEST_PARAM_RANDOM_DURATION,
                                     (int32_t)value) == HAL_OK;
     if (applied) {
-      deb("VP37 random duration: %lu s",
-          (unsigned long)testsHelpersParam(TEST_PARAM_RANDOM_DURATION));
+      fiesta_test_reply(
+          'Y', (uint32_t)testsHelpersParam(TEST_PARAM_RANDOM_DURATION), 0U);
     }
     break;
   case 'A':
     applied =
         fiesta_test_param_set(TEST_PARAM_RANDOM_HOLD, (int32_t)value) == HAL_OK;
     if (applied) {
-      deb("VP37 random hold: %lu s",
-          (unsigned long)testsHelpersParam(TEST_PARAM_RANDOM_HOLD));
+      fiesta_test_reply(
+          'A', (uint32_t)testsHelpersParam(TEST_PARAM_RANDOM_HOLD), 0U);
     }
     break;
   default:
@@ -313,7 +314,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       (cmd[2] == '\0')) {
     const hal_status_t status = (cmd[1] == '2') ? VP37_startMetricStream(self)
                                                 : VP37_stopMetricStream();
-    deb("VP37 stream: %s", hal_status_to_string(status));
+    fiesta_test_reply('B', (uint32_t)status, 0U);
     return true;
   }
 
@@ -322,13 +323,12 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
   if ((prefix == 'B') && ((cmd[1] == '\0') || descentTrace)) {
     const hal_status_t status =
         descentTrace ? VP37_startTraceOnDescent(self) : VP37_startTrace(self);
-    deb("VP37 trace: %s samples:%u", hal_status_to_string(status),
-        (unsigned int)VP37_TRACE_SAMPLES);
+    fiesta_test_reply('b', (uint32_t)status, VP37_TRACE_SAMPLES);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '\0')) {
     VP37_stop(self);
-    deb("VP37 stopped; restart ECU to initialize");
+    fiesta_test_reply('X', 0U, 0U);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '1') && (cmd[2] == '=')) {
@@ -338,8 +338,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
          HAL_OK)) {
       return false;
     }
-    deb("VP37 pot rate X1: %ld ok",
-        (long)testsHelpersParam(TEST_PARAM_POT_RATE));
+    fiesta_test_reply(1U, (uint32_t)testsHelpersParam(TEST_PARAM_POT_RATE), 0U);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '2') && (cmd[2] == '=')) {
@@ -348,7 +347,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_TOP_ARRIVAL_DECEL, decel)) {
       return false;
     }
-    deb("VP37 top arrival decel X2: %.0f ok", decel);
+    replyFloat(2U, decel);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '5') && (cmd[2] == '=')) {
@@ -357,7 +356,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_MOTION_RATE_CAP, cap)) {
       return false;
     }
-    deb("VP37 assist rate cap X5: %.0f ok", cap);
+    replyFloat(5U, cap);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '6') && (cmd[2] == '=')) {
@@ -366,7 +365,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_HOLD_OFFSET_MS, offsetMs)) {
       return false;
     }
-    deb("VP37 hold offset release X6: %.0f ms ok", offsetMs);
+    replyFloat(6U, offsetMs);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '7') && (cmd[2] == '=')) {
@@ -375,7 +374,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_THERMAL_HOLD, mode)) {
       return false;
     }
-    deb("VP37 thermal hold X7: %.0f ok", mode);
+    replyFloat(7U, mode);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '8') && (cmd[2] == '=')) {
@@ -384,7 +383,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_HOLD_MEAN_ENTER_HZ, band)) {
       return false;
     }
-    deb("VP37 hold mean entry X8: %.1f Hz ok", band);
+    replyFloat(8U, band);
     return true;
   }
   if ((prefix == 'X') && (cmd[1] == '9') && (cmd[2] == '=')) {
@@ -393,7 +392,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_HOLD_CURRENT, on)) {
       return false;
     }
-    deb("VP37 hold current X9: %.0f ok", on);
+    replyFloat(9U, on);
     return true;
   }
   if ((strncmp(cmd, "X15=", 4U) == 0) || (strncmp(cmd, "X16=", 4U) == 0)) {
@@ -424,9 +423,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       self->pid.integralDeadbandTopHz = 0.0f;
       self->thermal.scaleHoldEnabled = false;
     }
-    deb("VP37 research %s X%u: %c ok",
-        referenceCommand ? "reference" : "prototype",
-        referenceCommand ? 15U : 16U, enabled);
+    fiesta_test_reply(referenceCommand ? 15U : 16U, (uint32_t)enabled, 0U);
     return true;
   }
   if (strcmp(cmd, "X19=1") == 0) {
@@ -435,8 +432,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
     }
     int32_t maximum = 0;
     const hal_status_t status = VP37_probeCalibrationMaximum(self, &maximum);
-    deb("VP37 research calibration probe X19: status:%d measured:%ld done",
-        status, (long)maximum);
+    fiesta_test_reply(19U, (uint32_t)status, (uint32_t)maximum);
     return true;
   }
   if (strncmp(cmd, "X23=", 4U) == 0) {
@@ -445,7 +441,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_UPPER_DEADBAND, enabled)) {
       return false;
     }
-    deb("VP37 research upper deadband X23: %.0f ok", enabled);
+    replyFloat(23U, enabled);
     return true;
   }
   if (strncmp(cmd, "X26=", 4U) == 0) {
@@ -454,7 +450,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_DESCENT_SHARE, share)) {
       return false;
     }
-    deb("VP37 research descent share X26: %.3f ok", share);
+    replyFloat(26U, share);
     return true;
   }
   if (strncmp(cmd, "X25=", 4U) == 0) {
@@ -463,7 +459,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_DESCENT_UNWIND, enabled)) {
       return false;
     }
-    deb("VP37 research descent unwind X25: %.0f ok", enabled);
+    replyFloat(25U, enabled);
     return true;
   }
   if (strncmp(cmd, "X24=", 4U) == 0) {
@@ -472,7 +468,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_RAMP_BRAKING, enabled)) {
       return false;
     }
-    deb("VP37 research ramp braking X24: %.0f ok", enabled);
+    replyFloat(24U, enabled);
     return true;
   }
   if (strncmp(cmd, "X22=", 4U) == 0) {
@@ -481,7 +477,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_RAMP_DAMPING, enabled)) {
       return false;
     }
-    deb("VP37 research ramp damping X22: %.0f ok", enabled);
+    replyFloat(22U, enabled);
     return true;
   }
   if (strncmp(cmd, "X21=", 4U) == 0) {
@@ -490,7 +486,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_REFERENCE_WEIGHT, weight)) {
       return false;
     }
-    deb("VP37 research reference weight X21: %.3f ok", weight);
+    replyFloat(21U, weight);
     return true;
   }
   if (strncmp(cmd, "X20=", 4U) == 0) {
@@ -499,7 +495,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_SLOW_DAMPING, enabled)) {
       return false;
     }
-    deb("VP37 research slow damping X20: %.0f ok", enabled);
+    replyFloat(20U, enabled);
     return true;
   }
   if (strncmp(cmd, "X18=", 4U) == 0) {
@@ -508,7 +504,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_MOTION_INTEGRAL, enabled)) {
       return false;
     }
-    deb("VP37 research motion integral X18: %.0f ok", enabled);
+    replyFloat(18U, enabled);
     return true;
   }
   if (strncmp(cmd, "X17=", 4U) == 0) {
@@ -517,7 +513,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         !tune(self, VP37_TUNING_RESEARCH_FREEZE, mask)) {
       return false;
     }
-    deb("VP37 research freeze X17: %.0f ok", mask);
+    replyFloat(17U, mask);
     return true;
   }
   if (strncmp(cmd, "X12=", 4U) == 0) {
@@ -542,7 +538,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
     self->scan.cycleResult.profileValid = false;
     self->thermal.cycleValid = false;
     self->currentControl.matchFound = false;
-    deb("VP37 research scan X12: %c ok", enabled);
+    fiesta_test_reply(12U, (uint32_t)enabled, 0U);
     return true;
   }
   if (strncmp(cmd, "X13=", 4U) == 0) {
@@ -553,7 +549,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       return false;
     }
     self->demand.physicalLimitPercent = limit;
-    deb("VP37 research limit X13: %.2f ok", limit);
+    replyFloat(13U, limit);
     return true;
   }
   if (strncmp(cmd, "X14=", 4U) == 0) {
@@ -564,7 +560,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       return false;
     }
     testsWorkersSetFixedCyclicPeriod((uint32_t)period);
-    deb("VP37 research triangle X14: %.0f ms ok", period);
+    replyFloat(14U, period);
     return true;
   }
   if ((prefix == 'R') && (cmd[1] == '\0')) {
@@ -576,7 +572,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
         parseSwitch(cmd, &digit)) {
       const VP37TuningParam param = k_testsHelpersSwitches[i].param;
       (void)tune(self, param, (digit == '1') ? 1.0f : 0.0f);
-      deb("VP37 %s: %u", k_testsHelpersSwitches[i].name, switchOn(self, param));
+      fiesta_test_reply((uint8_t)prefix, switchOn(self, param), 0U);
       return true;
     }
   }
@@ -590,9 +586,8 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
       (void)tune(self, VP37_TUNING_CYCLE_VOLTAGE,
                  (cmd[1] == '1') ? 1.0f : 0.0f);
     }
-    deb("VP37 cycle voltage: %u frozen:%u",
-        switchOn(self, VP37_TUNING_CYCLE_VOLTAGE),
-        switchOn(self, VP37_TUNING_SUPPLY_FROZEN));
+    fiesta_test_reply('V', switchOn(self, VP37_TUNING_CYCLE_VOLTAGE),
+                      switchOn(self, VP37_TUNING_SUPPLY_FROZEN));
     return true;
   }
 
@@ -602,61 +597,7 @@ static bool testsHelpersApplyCommand(VP37Pump *self, const char *cmd,
   }
   return false;
 }
-/* How long a changed demand waits for core 0 to print the announcement of
- * its step before it is applied regardless [ms]. */
-#define STEP_EVENT_APPLY_TIMEOUT_MS 50U
-#if (STEP_EVENT_APPLY_TIMEOUT_MS < 10U) || (STEP_EVENT_APPLY_TIMEOUT_MS > 500U)
-#error "STEP_EVENT_APPLY_TIMEOUT_MS must be in 10..500 ms"
-#endif
-
-/* The demand applied last and, while a changed one waits for its announcement
- * to be printed, when the wait began. */
-static float s_appliedDemand;
-static bool s_holdingDemand;
-static uint32_t s_holdStartedMs;
-
-/**
- * @brief Keep the previous demand while the announcement of a new step waits
- * for core 0 to print it, so the log shows the step before the move.
- * @param demand Demand the running test produced this tick.
- * @return Demand to apply: the previous one during the wait, bounded by
- *         STEP_EVENT_APPLY_TIMEOUT_MS, the new one afterwards.
- */
-static float holdDemandUntilAnnounced(float demand) {
-  if (demand == s_appliedDemand) {
-    s_holdingDemand = false;
-  } else if (!testsWorkersStepEventPending()) {
-    s_holdingDemand = false;
-    s_appliedDemand = demand;
-  } else {
-    const uint32_t nowMs = hal_millis();
-    if (!s_holdingDemand) {
-      s_holdingDemand = true;
-      s_holdStartedMs = nowMs;
-    }
-    if (hal_elapsed_u32(nowMs, s_holdStartedMs, STEP_EVENT_APPLY_TIMEOUT_MS)) {
-      s_holdingDemand = false;
-      s_appliedDemand = demand;
-    }
-  }
-  return s_appliedDemand;
-}
-
-/** @brief Forget any wait: the demand just applied is the reference again. */
-static void resetDemandHold(float applied) {
-  s_appliedDemand = applied;
-  s_holdingDemand = false;
-}
-
-static void moduleReset(void) {
-  HAL_ATOMIC_STORE(&s_defaultsReplies, 0U, HAL_ATOMIC_RELEASE);
-  testsWorkersReset();
-}
-
-static void modulePrepare(const fiesta_test_t *entry) {
-  (void)entry;
-  resetDemandHold(getECUContext()->injectionPump.demand.requestedPercent);
-}
+static void moduleReset(void) { testsWorkersReset(); }
 
 static void moduleCleanup(const fiesta_test_t *entry, const char *result,
                           bool restart) {
@@ -664,13 +605,12 @@ static void moduleCleanup(const fiesta_test_t *entry, const char *result,
   if (entry->drivesDemand && !restart) {
     (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
                                            0.0f);
-    resetDemandHold(0.0f);
   }
 }
 
 static void moduleApplyOutput(float demand) {
   (void)VP37_setPositionDemandPercentage(&getECUContext()->injectionPump,
-                                         holdDemandUntilAnnounced(demand));
+                                         demand);
 }
 
 static void moduleReadDrive(fiesta_test_drive_t *out) {
@@ -678,7 +618,7 @@ static void moduleReadDrive(fiesta_test_drive_t *out) {
   const int32_t bottom = VP37_getPositionDemandMinValue(pump);
   const int32_t top = VP37_getPositionDemandMaxValue(pump);
   out->valid = pump->feedback.calibrationDone && (top > bottom) &&
-               (pump->feedback.position >= 0);
+               pump->feedback.positionValid;
   if (out->valid) {
     const float span = (float)(top - bottom);
     out->demand_x10 =
@@ -705,17 +645,113 @@ static bool moduleCommand(const char *line, uint32_t *requested) {
   return accepted;
 }
 
-static void moduleEvents(void) {
-  if (HAL_ATOMIC_LOAD(&s_defaultsReplies, HAL_ATOMIC_ACQUIRE) != 0U) {
+static void moduleReply(uint8_t code, uint32_t value, uint32_t detail) {
+  static const struct {
+    uint8_t code;
+    const char *format;
+  } floats[] = {
+      {'P', TEST_HIGHLIGHT_ON "Kp = %.4f" TEST_HIGHLIGHT_OFF},
+      {'I', TEST_HIGHLIGHT_ON "Ki = %.4f" TEST_HIGHLIGHT_OFF},
+      {'D', TEST_HIGHLIGHT_ON "Kd = %.4f" TEST_HIGHLIGHT_OFF},
+      {'T', TEST_HIGHLIGHT_ON "TU = %.1f" TEST_HIGHLIGHT_OFF},
+      {'F', TEST_HIGHLIGHT_ON "TF = %.4f" TEST_HIGHLIGHT_OFF},
+      {'H', "VP37 upper derivative gain: %.5f"},
+      {'L', "VP37 integral cap: %.1f (0=position profile)"},
+      {'W', "VP37 thermal weight: %.2f"},
+      {'N', "VP37 integral deadband top: %.0f Hz"},
+      {'U', "VP37 motion boost up: %.0f"},
+      {'J', "VP37 motion boost down: %.0f"},
+      {2U, "VP37 top arrival decel X2: %.0f ok"},
+      {5U, "VP37 assist rate cap X5: %.0f ok"},
+      {6U, "VP37 hold offset release X6: %.0f ms ok"},
+      {7U, "VP37 thermal hold X7: %.0f ok"},
+      {8U, "VP37 hold mean entry X8: %.1f Hz ok"},
+      {9U, "VP37 hold current X9: %.0f ok"},
+      {13U, "VP37 research limit X13: %.2f ok"},
+      {14U, "VP37 research triangle X14: %.0f ms ok"},
+      {17U, "VP37 research freeze X17: %.0f ok"},
+      {18U, "VP37 research motion integral X18: %.0f ok"},
+      {20U, "VP37 research slow damping X20: %.0f ok"},
+      {21U, "VP37 research reference weight X21: %.3f ok"},
+      {22U, "VP37 research ramp damping X22: %.0f ok"},
+      {23U, "VP37 research upper deadband X23: %.0f ok"},
+      {24U, "VP37 research ramp braking X24: %.0f ok"},
+      {25U, "VP37 research descent unwind X25: %.0f ok"},
+      {26U, "VP37 research descent share X26: %.3f ok"},
+  };
+  for (size_t i = 0U; i < COUNTOF(floats); ++i) {
+    if (code == floats[i].code) {
+      deb(floats[i].format, (double)hal_math_u32_to_float(value));
+      return;
+    }
+  }
+  for (size_t i = 0U; i < COUNTOF(k_testsHelpersSwitches); ++i) {
+    if (code == (uint8_t)k_testsHelpersSwitches[i].prefix) {
+      deb("VP37 %s: %u", k_testsHelpersSwitches[i].name, (unsigned)value);
+      return;
+    }
+  }
+  switch (code) {
+  case 'S':
+    deb("VP37 demand: %.1f auto-zero:%lu ms", hal_math_u32_to_float(value),
+        (unsigned long)detail);
+    break;
+  case 'E':
+    deb("VP37 hold confirmation: %lu ms", (unsigned long)value);
+    break;
+  case 'G':
+    deb("VP37 demand auto-zero: %lu ms (0=hold)", (unsigned long)value);
+    break;
+  case 'Z':
+    deb("VP37 cyclic passes: %lu", (unsigned long)value);
+    break;
+  case 'Y':
+    deb("VP37 random duration: %lu s", (unsigned long)value);
+    break;
+  case 'A':
+    deb("VP37 random hold: %lu s", (unsigned long)value);
+    break;
+  case 'B':
+    deb("VP37 stream: %s", hal_status_to_string((hal_status_t)value));
+    break;
+  case 'b':
+    deb("VP37 trace: %s samples:%u", hal_status_to_string((hal_status_t)value),
+        (unsigned)detail);
+    break;
+  case 'X':
+    deb("VP37 stopped; restart ECU to initialize");
+    break;
+  case 1U:
+    deb("VP37 pot rate X1: %ld ok", (long)(int32_t)value);
+    break;
+  case 12U:
+    deb("VP37 research scan X12: %c ok", (int)value);
+    break;
+  case 15U:
+  case 16U:
+    deb("VP37 research %s X%u: %c ok", code == 15U ? "reference" : "prototype",
+        (unsigned)code, (int)value);
+    break;
+  case 19U:
+    deb("VP37 research calibration probe X19: status:%d measured:%ld done",
+        (int)(hal_status_t)value, (long)(int32_t)detail);
+    break;
+  case 'V':
+    deb("VP37 cycle voltage: %u frozen:%u", (unsigned)value, (unsigned)detail);
+    break;
+  case 'R':
     deb(TEST_HIGHLIGHT_ON
         "PID reset to defaults: Kp=%.4f Ki=%.4f Kd=%.4f TU=%.1f "
         "TF=%.4f" TEST_HIGHLIGHT_OFF,
         VP37_PID_KP, VP37_PID_KI, VP37_PID_KD, VP37_PID_TIME_UPDATE,
         VP37_PID_TF);
-    (void)HAL_ATOMIC_FETCH_SUB(&s_defaultsReplies, 1U, HAL_ATOMIC_RELAXED);
+    break;
+  default:
+    break;
   }
-  testsWorkersPrintStepEvent();
 }
+
+static void moduleEvents(void) { testsWorkersPrintStepEvent(); }
 
 bool initTests(void) {
   static const fiesta_test_config_t config = {
@@ -725,7 +761,7 @@ bool initTests(void) {
       .param_count = COUNTOF(s_params),
       .keepalive_ms = ECU_SC_TESTS_KEEPALIVE_MS,
       .reset = moduleReset,
-      .prepare = modulePrepare,
+      .prepare = NULL,
       .cleanup = moduleCleanup,
       .apply_output = moduleApplyOutput,
       .read_drive = moduleReadDrive,
@@ -733,6 +769,7 @@ bool initTests(void) {
       .command = moduleCommand,
       .help = testsHelpersPrintParameters,
       .events = moduleEvents,
+      .reply = moduleReply,
   };
   return fiesta_test_init(&config) == HAL_OK;
 }

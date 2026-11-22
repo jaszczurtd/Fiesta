@@ -3,6 +3,7 @@
 
 #include <JaszczurHAL.h>
 #include <hal/control/hal_pid_controller.h>
+#include <hal/debug/hal_debug_events.h>
 #include <hal/serial/hal_serial.h>
 
 #include "../adjustometer_protocol.h"
@@ -14,30 +15,59 @@
 extern "C" {
 #endif
 
-/** @brief Adjustometer position feedback and the calibrated range. */
+/**
+ * @brief Value of the position limit getters for NULL and an uncalibrated
+ * pump. Positions are signed, so no ordinary value can mark "none"; this one
+ * lies far outside any Adjustometer displacement.
+ */
+#define VP37_POSITION_NONE INT32_MIN
+
+/** @brief Adjustometer position feedback and the calibrated range.
+ *
+ * Positions are the Adjustometer baseline minus its filtered frequency [Hz]:
+ * positive as the actuator lifts, negative when the frequency lies above a
+ * baseline taken at a colder or lower rest. */
 typedef struct {
+  /* Narrow fields first and together: the snapshot copies this struct four
+   * times in the bench image, so padding costs RAM. */
   bool calibrationDone;
-  int32_t position; /**< Newest quantity position, in adjustometer Hz. */
-  int stabilityTable[STABILITY_ADJUSTOMETER_TAB_SIZE];
-  int32_t adjustMin;      /**< Calibrated bottom of the stroke. */
-  int32_t adjustMiddle;   /**< Calibrated middle of the stroke. */
-  int32_t adjustMax;      /**< Calibrated top of the stroke. */
-  int32_t operateMax;     /**< Highest position the controller may request. */
-  uint32_t commLostSince; /**< hal_millis() when the adjustometer went quiet,
-                             0 while it answers. */
-  uint8_t lastStatus;     /**< Status byte of the last adjustometer frame. */
-  bool fresh;             /**< A new sample arrived since the previous cycle. */
-  uint32_t rawHz;         /**< Unfiltered position sample. */
-  uint32_t filteredHz;    /**< Adjustometer-filtered position sample. */
-  uint32_t sampleNumber;  /**< Sequence number of the newest sample. */
-  uint32_t sampleUs;      /**< Adjustometer time stamp of the newest sample. */
-  uint16_t ageUs;         /**< Age of the newest sample when the adjustometer
-                               published it. */
-  hal_status_t readStatus; /**< Result of the last adjustometer read. */
-  uint32_t readUs;         /**< Duration of the last adjustometer read. */
+  bool positionValid;      /**< position holds a reading: one came without
+                              signal loss or a pending baseline. */
+  bool calibrationFtValid; /**< Every reading of both calibration windows had a
+                              working fuel sensor; without it the limits keep
+                              the calibrated values. */
+  bool fresh; /**< A new sample arrived since the previous cycle. */
+  int16_t calibrationFtDeciC; /**< Reference fuel temperature [0.1 C]: mean of
+                                 the readings of the accepted MIN and MAX
+                                 windows. */
+  int16_t limitCorrectionMin; /**< Fuel-temperature correction applied to the
+                                 bottom of the stroke [Hz]. */
+  int16_t limitCorrectionMax; /**< The same for the top [Hz]. */
+  uint16_t ageUs;             /**< Age of the newest sample when the
+                                 adjustometer published it. */
+  int32_t position;           /**< Newest quantity position [Hz]. */
+  int32_t calibratedMin; /**< Bottom of the stroke the calibration measured. */
+  int32_t calibratedMax; /**< Top of the stroke the calibration measured. */
+  int32_t adjustMin;     /**< Bottom of the stroke in effect: calibratedMin plus
+                            limitCorrectionMin. */
+  int32_t adjustMiddle;  /**< Middle of the stroke in effect. */
+  int32_t adjustMax;     /**< Top of the stroke in effect: calibratedMax plus
+                            limitCorrectionMax. */
+  uint32_t commLostSince;  /**< hal_millis() when the adjustometer went quiet,
+                              0 while it answers. */
+  uint8_t lastStatus;      /**< Status byte of the last adjustometer frame. */
   uint8_t retries;         /**< Retries the last adjustometer read needed. */
   bool commFailed;         /**< Adjustometer silent for longer than allowed. */
+  uint32_t rawHz;          /**< Unfiltered position sample. */
+  uint32_t filteredHz;     /**< Adjustometer-filtered position sample. */
+  uint32_t sampleNumber;   /**< Sequence number of the newest sample. */
+  uint32_t sampleUs;       /**< Adjustometer time stamp of the newest sample. */
+  hal_status_t readStatus; /**< Result of the last adjustometer read. */
+  uint32_t readUs;         /**< Duration of the last adjustometer read. */
   float fuelTempC;         /**< Fuel temperature from the last good frame. */
+  float fuelTempFilteredC; /**< Fuel temperature the limit correction follows,
+                              low-passed with VP37_LIMIT_FT_FILTER_TAU_S [C];
+                              starts at the calibration reference. */
   float supplyVolts;       /**< Supply measured by the Adjustometer [V]. */
   uint32_t readCount;      /**< Good frames since start, wrapping; the board
                                 publishes temperature and supply when it
@@ -54,13 +84,18 @@ typedef struct {
                                always one VP37_physicalLimitValid() accepts. */
   float topArrivalDecel;    /**< Brake of every rising ramp into the top of
                                the range [% of travel/s^2]; 0 = off. */
-  int32_t target;           /**< Calibrated position target [Hz]. */
-  int32_t desired;          /**< Ramped target sent to the PID [Hz]. */
-  float desiredPosition;    /**< Fractional ramp state [Hz]. */
+  int32_t target;  /**< Position target [Hz]; meaningful once targetValid. */
+  int32_t desired; /**< Ramped target sent to the PID [Hz]; meaningful once
+                      desiredValid. */
+  float desiredPosition; /**< Fractional ramp state [Hz]. */
   uint32_t targetChangedMs;
   bool targetMoving; /**< The last target change came within
                         VP37_TARGET_STABLE_MS of the one before it. */
   bool atRest;       /**< Zero demand after slew: PWM off, PID state cleared. */
+  bool targetValid;  /**< A demand has been accepted since start. */
+  bool desiredValid; /**< The ramp has a position to start from. */
+  bool countsDemand; /**< The last demand came in counts: moving limits keep
+                        its counts, not its percent. */
 } VP37Demand;
 
 /** @brief Holding command from the map, the motion terms and the learned
@@ -460,6 +495,23 @@ typedef struct {
   uint32_t count; /**< Samples accumulated in this window. */
 } VP37HoldingWindow;
 
+/** @brief A diagnostic captured by the controller, never a live-state pointer.
+ */
+typedef struct {
+  uint32_t code;   /**< Private diagnostic kind. */
+  uint32_t timeUs; /**< Occurrence time from hal_micros(). */
+  uint32_t value;  /**< First captured value. */
+  uint32_t detail; /**< Second captured value. */
+} VP37DiagnosticEvent;
+
+/** @brief One controller producer and one console consumer per pump. */
+typedef struct {
+  hal_debug_events_t queue;       /**< Queue over the embedded storage. */
+  VP37DiagnosticEvent records[4]; /**< Bounded storage; overflow drops logs. */
+  uint32_t reportedDrops;         /**< Console-owned count already reported. */
+  bool ready; /**< Producer publishes initialization before console access. */
+} VP37Diagnostics;
+
 /**
  * @brief One VP37 injection pump: lifecycle and timing, then one member per
  * unit of the module. The members are embedded, not pointed to, because the
@@ -468,11 +520,12 @@ typedef struct {
  */
 typedef struct {
   bool vp37Initialized;
-  VP37Callbacks callbacks; /**< Board services; optional ones filled with
-                              defaults by VP37_setCallbacks(). */
-  bool servicesFixed;      /**< VP37_init() has run: the board services and the
-                              Adjustometer frame stay as they are, also after a
-                              stop. */
+  VP37Diagnostics diagnostics; /**< Deferred faults, excluded from snapshots. */
+  VP37Callbacks callbacks;     /**< Board services; optional ones filled with
+                                  defaults by VP37_setCallbacks(). */
+  bool servicesFixed; /**< VP37_init() has run: the board services and the
+                         Adjustometer frame stay as they are, also after a
+                         stop. */
   VP37AdjustometerReader adjustometer; /**< Last reading, reader state. */
   float pidTimeUpdate;
   uint32_t controlLastUs;
@@ -593,9 +646,17 @@ typedef struct {
 typedef struct {
   uint32_t startedUs, finishedUs; /**< ECU timestamps [us]. */
   uint32_t samples;               /**< Retained qualification samples. */
-  int32_t minimum, maximum;       /**< Qualified endpoints [Hz]. */
+  int32_t minimum, maximum; /**< Qualified endpoints [Hz]; zero for an endpoint
+                               that did not settle. */
+  int16_t fuelTempDeciC;    /**< Reference fuel temperature [0.1 C]. */
+  bool fuelTempValid;       /**< The reference fuel temperature is usable. */
   bool minSettled, maxSettled, valid;
   bool overflow; /**< True if any sample could not be retained. */
+  bool
+      probe; /**< True for a diagnostic pulse that leaves calibration intact. */
+  uint16_t probePwm; /**< Command of the diagnostic pulse. */
+  int32_t
+      probeMaximum; /**< Measured probe position [Hz]; valid if maxSettled. */
 } VP37CalibrationResult;
 #endif
 
@@ -620,10 +681,9 @@ hal_status_t VP37_readSnapshot(const VP37Pump *self, VP37Snapshot *out);
  * @param self Pump; only its publication counter is read.
  * @param timeoutUs Longest wait [us].
  * @return True when a publication ended during the wait.
- * @note The control core idles from a publication to its next period, so
- * telemetry formatted right after one does not compete with the control step
- * for the XIP cache; formatted during a step it made the step ~300 us longer
- * on average. The control core never waits for the caller.
+ * @note This prefers the interval between control steps for formatting, but
+ * cannot guarantee that formatting ends before the next step. Both cores
+ * share XIP bandwidth. The control core never waits for the caller.
  */
 bool VP37_waitForPublication(const VP37Pump *self, uint32_t timeoutUs);
 
@@ -725,13 +785,15 @@ const char *VP37_initStatusName(VP37InitStatus status);
  * functions and the Adjustometer transfer; it is copied, and missing optional
  * entries get defaults.
  * @return HAL_OK, HAL_EINVAL for NULL or a missing required entry, HAL_ESTATE
- * once VP37_init() has run, also after a stop: another core reads the
- * Adjustometer transfer without a lock.
+ * once VP37_init() has run, also after a stop: the control core uses them
+ * without a lock.
  */
 hal_status_t VP37_setCallbacks(VP37Pump *self, const VP37Callbacks *callbacks);
 
 /**
  * @brief Read the Adjustometer once through the adjustometerTransfer service.
+ * @note One transaction reads the diagnostic extension and fast feedback.
+ * Invalid optional diagnostics do not invalidate or retry valid feedback.
  * @return The new reading; a failed read returns the previous values with
  * commOk cleared.
  */
@@ -832,6 +894,13 @@ void VP37_stop(VP37Pump *self);
  * demand; control core. */
 bool VP37_isReady(const VP37Pump *self);
 
+/** @brief Print a bounded batch of captured diagnostics on the console core.
+ * @param self Pump with a single control producer and this console consumer.
+ * @note May wait for the console transport. Never call from the control loop.
+ * Stalling this function only fills the queue; it cannot delay a safety stop.
+ */
+void VP37_printEvents(VP37Pump *self);
+
 /**
  * @brief Read back the current VP37 enable output state.
  * @return True when VP37 output is enabled, otherwise false.
@@ -843,10 +912,10 @@ bool VP37_isVP37Enabled(VP37Pump *self);
 #if VP37_TELEMETRY_ENABLED
 /**
  * @brief Print VP37 controller state for diagnostics.
- * @param self Pump whose Adjustometer transfer reads the diagnostic extension;
- * nothing else of it is used.
+ * @param self Unused; retained for source compatibility, may be NULL.
  * @param snapshot Snapshot from VP37_readSnapshot().
- * @note Performs serial and I2C I/O. Bench telemetry; absent without
+ * @note Formats only the published snapshot; no sensor I/O. Bench telemetry;
+ * absent without
  * VP37_TELEMETRY_ENABLED.
  */
 void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot);
@@ -870,18 +939,20 @@ void VP37_setInjectionTiming(VP37Pump *self, int32_t angle);
  * @return HAL_OK on acceptance, HAL_ESTATE before calibration, or HAL_EINVAL
  * for NULL/non-finite input. A non-finite value requests zero when calibrated.
  * @note This is the unit engine control works in: the percentage is mapped
- * onto the usable part of the calibrated stroke, so the same number means the
- * same position whatever the calibration produced. Every source then shares one
- * ramp, feedforward, PID and set of limits. Analog sensor conditioning belongs
- * to the sensor layer. Call on the control core. Zero
- * follows the shared descent and release policy.
+ * onto the usable part of the stroke in effect, so the same number means the
+ * same position whatever the calibration produced. When the limits follow the
+ * fuel temperature (VP37_LIMIT_FT_CORRECTION_ENABLED), each step maps the
+ * stored percentage again, without restarting the settle time of the demand.
+ * Every source then shares one ramp, feedforward, PID and set of limits.
+ * Analog sensor conditioning belongs to the sensor layer. Call on the control
+ * core. Zero follows the shared descent and release policy.
  */
 hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent);
 
 /**
  * @brief Set the quantity actuator's position in raw feedback counts.
  * @param self Controller instance; NULL returns HAL_EINVAL.
- * @param value Position in feedback counts, clamped to the calibrated range
+ * @param value Position in feedback counts, clamped to the range in effect
  * between VP37_getPositionDemandMinValue() and
  * VP37_getPositionDemandMaxValue().
  * @return HAL_OK on acceptance, HAL_EINVAL for NULL, or HAL_ESTATE before
@@ -890,15 +961,18 @@ hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent);
  * measured or recorded position hits it exactly instead of through a
  * percentage that rounds. Everything past the entry point is shared with
  * VP37_setPositionDemandPercentage(), including the percent the telemetry
- * reports.
+ * reports. When the limits follow the fuel temperature, a counts demand keeps
+ * its counts: the moving limits only clamp it, and its percent, with the rest
+ * decision that reads it, follows from the counts. Zero percent, not the
+ * bottom in counts, releases the drive whatever the limits do.
  */
 hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value);
 
 /**
  * @brief Lowest position VP37_setPositionDemandValue() accepts.
  * @param self Controller instance to inspect.
- * @return Calibrated bottom of the stroke in feedback counts, or -1 for NULL
- * and before calibration.
+ * @return Bottom of the stroke in effect in feedback counts, which may be
+ * negative, or VP37_POSITION_NONE for NULL and before calibration.
  */
 int32_t VP37_getPositionDemandMinValue(const VP37Pump *self);
 
@@ -906,8 +980,8 @@ int32_t VP37_getPositionDemandMinValue(const VP37Pump *self);
  * @brief Highest position VP37_setPositionDemandValue() accepts.
  * @param self Controller instance to inspect.
  * @return The physical limit of the stroke (VP37_PHYSICAL_LIMIT_PERCENT of the
- * calibrated travel) in feedback counts, or -1 for NULL and before
- * calibration.
+ * travel in effect) in feedback counts, or VP37_POSITION_NONE for NULL and
+ * before calibration.
  */
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self);
 

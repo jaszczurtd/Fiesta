@@ -40,8 +40,10 @@ period capture in JaszczurHAL supplies blocks of 32 complete periods; the
 Adjustometer combines four blocks into a 128-period window. RP2040 captures
 timestamps through PIO and DMA, without a GPIO interrupt for each edge. The
 exported `PULSE` is the absolute filtered deviation from the locked baseline,
-with near-zero hysteresis. It is a position observable in Hz; calibration and
-actuator-drive compensation belong to the ECU.
+with near-zero hysteresis. Calibration and actuator-drive compensation belong
+to the ECU. The ECU and VP37TestBench take the position from the filtered
+frequency and the baseline of the same frame, as baseline minus frequency,
+which keeps its sign and has no zero hold; `PULSE` stays a diagnostic value.
 
 After baseline acquisition the window slides by 32 periods
 (`ADJUSTOMETER_SLIDING_WINDOW`, default 1) and the published frequency is the
@@ -106,6 +108,11 @@ Diagnostic readers must
 use version 2 and derive signed deviation as filtered frequency minus baseline
 from the same read. A different diagnostic version is rejected without
 affecting control feedback.
+
+The VP37 reader fetches `0x05..0x34` in one 48-byte transaction and caches
+the diagnostic fields alongside the fast feedback. Console reports use that
+cache. Only the fast block supplies position, frequencies, status and freshness;
+an invalid diagnostic block does not trigger another transfer.
 
 The reader gives each sample a 20 ms age budget. It includes the reported
 publication age, the complete I2C read and time elapsed on the ECU clock.

@@ -24,11 +24,14 @@ static void writePwm(int32_t value) { writtenPwm = value; }
 static void enableDrive(bool enabled) { (void)enabled; }
 static bool driveEnabled(void) { return true; }
 static hal_status_t transfer(uint8_t reg, uint8_t *out, size_t length) {
-  if (transferFails || (reg != ADJUSTOMETER_FEEDBACK_START) ||
-      (length != COUNTOF(frame))) {
+  const size_t prefix =
+      ADJUSTOMETER_FEEDBACK_START - ADJUSTOMETER_EXT_REG_START;
+  if (transferFails || (reg != ADJUSTOMETER_EXT_REG_START) ||
+      (length != prefix + COUNTOF(frame))) {
     return HAL_EBUS;
   }
-  memcpy(out, frame, length);
+  memset(out, 0, prefix);
+  memcpy(out + prefix, frame, COUNTOF(frame));
   return HAL_OK;
 }
 

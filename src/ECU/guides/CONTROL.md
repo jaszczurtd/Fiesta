@@ -13,7 +13,7 @@ the electrical conditions.
 | --- | --- |
 | Requested position, % | Share of the usable stroke. By default, 100% demand corresponds to 90% of calibrated travel; the physical travel limit (`X13`) changes that boundary. This is not a fuel measurement in mg/stroke. |
 | Physical position, % | Share of the full travel between the calibrated endpoints. Maps and upper-stroke rules use this scale. |
-| Position signal and error, Hz | Feedback from the Adjustometer frequency sensor. An error threshold in Hz is not the controller update frequency. |
+| Position signal and error, Hz | Feedback from the Adjustometer frequency sensor: its locked baseline minus the filtered frequency. It grows as the actuator lifts and may be negative. An error threshold in Hz is not the controller update frequency. |
 | PWM, Hz | Power-stage switching frequency: 200 Hz. |
 | PWM, counts | Drive in controller units; do not read it directly as duty percentage. |
 | P / Kp | P is the current proportional contribution to drive; Kp is its gain. Likewise, I is the retained correction and Ki is its tuning value. |
@@ -50,6 +50,47 @@ reaches the cache without filter delay. Both direct driver demand and
 `engineOperation` read this output; the application selects which request to
 send to VP37. Optional engine control is enabled by
 `ECU_ENGINE_CONTROL_ENABLED` in `config.h`.
+
+## Calibrated stroke and fuel temperature
+
+VP37 reads the position from the fast Adjustometer frame as the locked
+baseline minus the filtered frequency. The frequency falls as the actuator
+lifts, so the position rises with it. The Adjustometer also publishes `PULSE`,
+the magnitude of the same deviation with a zero hold of 40/50 Hz; control does
+not use it. The baseline comes from the Adjustometer's power-up, so a colder
+or warmer rest can lie above it. The signed position then puts the bottom
+below zero, where the magnitude would fold it back up and shorten the axis.
+A reading with signal loss or a pending baseline keeps the previous position,
+and the controller stops on either status.
+
+Startup calibration measures the bottom with the drive off and the top at
+80% PWM. Each end is the trimmed mean of a stable window of six readings, and
+the travel between them must reach 6000 Hz. Calibration also stores the mean
+fuel temperature of the readings in both windows as its reference.
+
+Both ends move with the fuel temperature: in bench data the rest frequency
+falls about 16 Hz/°C and the top about 9 Hz/°C, while the baseline stays
+where it was. The limits the controller uses therefore follow the fuel
+temperature from that reference: the bottom by 16.1 Hz/°C and the top by
+8.8 Hz/°C. The sensor reports whole degrees and near a boundary its reading
+flips back and forth between two values, so the correction follows a
+low-passed temperature with a 60 s time constant
+(`VP37_LIMIT_FT_FILTER_TAU_S`). The filter starts at the reference when a
+calibration finishes; a real one-degree change then reaches the limits over
+minutes, while the flipping averages out. The difference from the reference
+is clamped to ±15 °C, about the range the data covers, and the applied
+correction moves at most 1 Hz per control step as a guard. A broken fuel
+sensor freezes the filter and the correction, and without a valid reference
+at calibration the limits keep the calibrated values. Set
+`VP37_LIMIT_FT_CORRECTION_ENABLED` to 0 in `vp37_config.h` to keep the
+calibrated limits.
+
+Everything derived from the limits uses the limits in effect: the usable
+stroke, the physical position scale, the upper-stroke rules and the rest at
+the bottom. A percent demand keeps its place on the stroke, so its target
+follows the moving limits without counting as a new demand. A demand in
+counts keeps its counts; the limits only clamp it, and its percent follows.
+Zero percent releases the drive at the bottom wherever the limits are.
 
 ## Position control
 

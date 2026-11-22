@@ -6,6 +6,7 @@
 #     "sharedSources": ["vp37"], so the firmware builds compile the same
 #     files. tests/test_module_registry.py keeps the manifests in step.
 vp37.c
+vp37_diagnostics.c
 vp37_adjustometer.c
 vp37_snapshot.c
 vp37_tuning.c

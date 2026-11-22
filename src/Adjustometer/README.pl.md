@@ -42,7 +42,10 @@ z położeniem nastawnika. Sprzętowy pomiar okresów w JaszczurHAL dostarcza bl
 znaczniki czasu przez PIO i DMA, bez przerwania GPIO na każde zbocze. Wartość
 `PULSE` jest modułem odchylenia filtrowanej częstotliwości od ustalonego zera,
 z histerezą w pobliżu zera. Kalibracja położenia i kompensacja sterowania
-należą do ECU.
+należą do ECU. ECU i VP37TestBench biorą położenie z filtrowanej
+częstotliwości i baseline tej samej ramki, jako baseline minus częstotliwość:
+zachowuje ono znak i nie ma podtrzymania zera. `PULSE` pozostaje wartością
+diagnostyczną.
 
 Po ustaleniu poziomu odniesienia (baseline) okno przesuwa się co 32 okresy
 (`ADJUSTOMETER_SLIDING_WINDOW`, domyślnie 1), a publikowana częstotliwość to średnia ważona
@@ -107,6 +110,11 @@ obsługiwany. Czytnik diagnostyki
 wymaga wersji 2 i oblicza odchylenie ze znakiem jako częstotliwość po filtrze
 minus baseline z tego samego odczytu. Odrzucenie innej wersji diagnostyki
 nie wpływa na odczyt ramki sterowania.
+
+Czytnik VP37 pobiera `0x05..0x34` w jednej transakcji obejmującej 48 bajtów
+i zachowuje pola diagnostyczne obok szybkiego sprzężenia. Raporty konsoli
+korzystają z tych zapisanych danych. Pozycję, częstotliwości, status i świeżość
+dostarcza wyłącznie szybka ramka; błędna diagnostyka nie ponawia transferu.
 
 Czytnik przyznaje próbce 20 ms ważności, uwzględniając zgłoszony wiek przy
 publikacji, cały odczyt I2C i dalszy upływ czasu ECU. Kolejne odczyty tej samej

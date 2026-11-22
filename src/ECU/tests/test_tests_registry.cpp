@@ -20,10 +20,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The wait of tests_helpers.c for a printed announcement; the test states the
- * value it expects instead of reading it back. */
-#define STEP_EVENT_APPLY_TIMEOUT_MS 50U
-
 #ifdef ECU_TEST_CLOCK_INTERLEAVING
 static void (*s_clockHook)(void);
 static bool s_finishManual;
@@ -72,6 +68,8 @@ static VP37Pump *preparePump(void) {
   pump->vp37Initialized = true;
   pump->feedback.adjustMin = 100;
   pump->feedback.adjustMax = 9100;
+  // The tests below place the drive by writing the position itself.
+  pump->feedback.positionValid = true;
   pump->demand.requestedPercent = -1.0f;
   pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;
   hal_mock_set_millis(0U);
@@ -365,16 +363,12 @@ void test_kv_one_shot_names_a_failed_write(void) {
   TEST_ASSERT_NOT_NULL_MESSAGE(strstr(line, "write=HAL_EIO"), line);
 }
 
-/** @brief Hold the mock clock at ms, run one tick and report the demand. */
-/** @brief One control tick at the given time with core 0 printing a recorded
- * step announcement at once, so a changed demand applies in the same tick
- * sequence; the hold itself is tested with bare tickTests() calls below. */
+/** @brief One control tick and one independent diagnostic drain. */
 static float tickAt(uint32_t ms) {
   hal_mock_set_millis(ms);
   (void)tickTests();
   if (testsWorkersStepEventPending()) {
     testsPrintEvents();
-    (void)tickTests();
   }
   return getECUContext()->injectionPump.demand.requestedPercent;
 }
@@ -899,10 +893,12 @@ void test_console_watch_stops_a_quiet_console_test(void) {
 
   // Armed at 2 s; a renewal every 1.5 s keeps the hold through many limits.
   console("watch 2000");
+  testsPrintEvents();
   for (int i = 0; i < 6; i++) {
     ms += 1500U;
     hal_mock_set_millis(ms);
     console("watch");
+    testsPrintEvents();
   }
   TEST_ASSERT_EQUAL_STRING("manual", testsActiveName());
   TEST_ASSERT_EQUAL_FLOAT(90.0f, pump->demand.requestedPercent);
@@ -932,9 +928,11 @@ void test_console_watch_stops_a_quiet_console_test(void) {
   TEST_ASSERT_NULL(testsActiveName());
 
   // watch 0: the console is unsupervised again.
+  testsPrintEvents();
   ms += 2000U;
   hal_mock_set_millis(ms);
   console("watch 0");
+  testsPrintEvents();
   console("S90");
   hal_mock_set_millis(ms + 100000U);
   (void)tickTests();
@@ -1603,6 +1601,8 @@ void test_registry_metadata_prints_on_console_without_occupying_control_mailbox(
   TEST_ASSERT_EQUAL_FLOAT(previousKp, pump->pid.kp);
   (void)tickTests();
   TEST_ASSERT_EQUAL_FLOAT(.025f, pump->pid.kp);
+  testsPrintEvents();
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "Kp = 0.0250"));
   hal_mock_serial_reset();
   (void)tickTests();
   testsPrintEvents();
@@ -1627,8 +1627,6 @@ void test_default_reset_applies_on_control_core_and_replies_once_per_command(
     TEST_ASSERT_EQUAL_FLOAT(VP37_PID_KP, pump->pid.kp);
     TEST_ASSERT_NULL(
         strstr(hal_mock_deb_last_line(), "PID reset to defaults:"));
-  }
-  for (unsigned i = 0U; i < 2U; ++i) {
     testsPrintEvents();
     TEST_ASSERT_NOT_NULL(
         strstr(hal_mock_deb_last_line(), "PID reset to defaults:"));
@@ -1643,6 +1641,20 @@ void test_default_reset_applies_on_control_core_and_replies_once_per_command(
   TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
 }
 
+static void assertStepLine(const char *prefix, uint32_t occurrenceUs) {
+  const char *line = lastTestLine();
+  const size_t length = strlen(prefix);
+  TEST_ASSERT_EQUAL_INT(0, strncmp(prefix, line, length));
+  unsigned long time = 0U;
+  unsigned long sequence = 0U;
+  int consumed = 0;
+  TEST_ASSERT_EQUAL_INT(2, sscanf(line + length, " us:%lu seq:%lu%n", &time,
+                                  &sequence, &consumed));
+  TEST_ASSERT_EQUAL_CHAR('\0', line[length + (size_t)consumed]);
+  TEST_ASSERT_EQUAL_UINT32(occurrenceUs, time);
+  TEST_ASSERT_NOT_EQUAL(0U, sequence);
+}
+
 void test_step_announcements_are_recorded_by_the_control_core_and_printed_once(
     void) {
   (void)preparePump();
@@ -1654,8 +1666,9 @@ void test_step_announcements_are_recorded_by_the_control_core_and_printed_once(
   (void)bareTickAt(0U);
   TEST_ASSERT_EQUAL_STRING("", lastTestLine());
   // Core 0 prints it in the line the bench tools cut the logs with ...
+  hal_mock_set_millis(123U); // Delivery time is not occurrence time.
   testsPrintEvents();
-  TEST_ASSERT_EQUAL_STRING("TEST: top 75.0 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: top 75.0 % (series 1/5)", 0U);
   // ... once: the same record is not printed again.
   hal_mock_serial_reset();
   testsPrintEvents();
@@ -1664,13 +1677,14 @@ void test_step_announcements_are_recorded_by_the_control_core_and_printed_once(
   (void)bareTickAt(TOP_STEPS_DWELL_MS);
   TEST_ASSERT_EQUAL_STRING("", lastTestLine());
   testsPrintEvents();
-  TEST_ASSERT_EQUAL_STRING("TEST: top 85.5 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: top 85.5 % (series 1/5)", TOP_STEPS_DWELL_MS * 1000U);
   // A record that core 0 missed is replaced by the newer one.
   hal_mock_serial_reset();
   (void)bareTickAt(2U * TOP_STEPS_DWELL_MS);
   (void)bareTickAt(3U * TOP_STEPS_DWELL_MS);
   testsPrintEvents();
-  TEST_ASSERT_EQUAL_STRING("TEST: top 95.0 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: top 95.0 % (series 1/5)",
+                 3U * TOP_STEPS_DWELL_MS * 1000U);
 }
 
 void test_topzero_and_pot_announcements_keep_their_lines(void) {
@@ -1680,7 +1694,7 @@ void test_topzero_and_pot_announcements_keep_their_lines(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
   (void)bareTickAt(0U);
   testsPrintEvents();
-  TEST_ASSERT_EQUAL_STRING("TEST: topzero 75.0 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: topzero 75.0 % (series 1/5)", 0U);
   console("stop");
   hal_mock_serial_reset();
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_POT));
@@ -1690,7 +1704,7 @@ void test_topzero_and_pot_announcements_keep_their_lines(void) {
   (void)snprintf(expected, sizeof(expected),
                  "TEST: pot rise %ld %%/s (pass 1/3)",
                  (long)testsHelpersParam(TEST_PARAM_POT_RATE));
-  TEST_ASSERT_EQUAL_STRING(expected, lastTestLine());
+  assertStepLine(expected, 0U);
 }
 
 static uint32_t s_stepEventHookCalls;
@@ -1714,7 +1728,7 @@ void test_step_announcement_read_retries_after_a_concurrent_record(void) {
   testsWorkersStepEventReadHookForTest = nullptr;
   // The torn pair (the first demand with the second record) never prints;
   // the second attempt prints the step in progress.
-  TEST_ASSERT_EQUAL_STRING("TEST: top 85.5 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: top 85.5 % (series 1/5)", TOP_STEPS_DWELL_MS * 1000U);
   TEST_ASSERT_EQUAL_UINT32(2U, s_stepEventHookCalls);
 }
 
@@ -1738,38 +1752,34 @@ void test_step_announcement_read_gives_up_while_the_control_core_records(void) {
   TEST_ASSERT_GREATER_THAN_UINT32(1U, s_stepEventHookCalls);
   // ... and prints the latest record on its next pass.
   testsPrintEvents();
-  TEST_ASSERT_EQUAL_STRING("TEST: top 0.0 % (series 1/5)", lastTestLine());
+  assertStepLine("TEST: top 0.0 % (series 1/5)",
+                 s_stepEventHookCalls * TOP_STEPS_DWELL_MS * 1000U);
 }
 
-void test_changed_demand_waits_for_its_announcement_to_be_printed(void) {
+void test_changed_demand_applies_before_its_announcement_is_printed(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
-  // The first step is recorded; until core 0 prints it the actuator keeps
-  // the previous demand, so the log carries the announcement before the move.
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(0U));
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(5U));
+  // Console scheduling must not shift a control input.
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(0U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(5U));
   TEST_ASSERT_TRUE(testsWorkersStepEventPending());
   testsPrintEvents();
   TEST_ASSERT_FALSE(testsWorkersStepEventPending());
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(10U));
-  // The next step of the staircase waits the same way.
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(TOP_STEPS_DWELL_MS));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 85.5f, bareTickAt(TOP_STEPS_DWELL_MS));
   testsPrintEvents();
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 85.5f, bareTickAt(TOP_STEPS_DWELL_MS + 5U));
 }
 
-void test_changed_demand_applies_after_the_print_timeout(void) {
+void test_changed_demand_progresses_when_the_console_never_drains(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
-  // Core 0 never prints (console muted, for instance): the move is delayed
-  // by the timeout at most, never lost.
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(0U));
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f,
-                           bareTickAt(STEP_EVENT_APPLY_TIMEOUT_MS - 1U));
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f,
-                           bareTickAt(STEP_EVENT_APPLY_TIMEOUT_MS));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(0U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(49U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(50U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 85.5f, bareTickAt(TOP_STEPS_DWELL_MS));
   TEST_ASSERT_TRUE(testsWorkersStepEventPending());
 }
 
@@ -1790,17 +1800,17 @@ void test_demands_without_an_announcement_apply_at_once(void) {
   TEST_ASSERT_FALSE(testsWorkersStepEventPending());
 }
 
-void test_demand_hold_starts_from_the_stopped_actuator(void) {
+void test_new_test_applies_its_first_demand_after_a_stop(void) {
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPSTEPS));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, tickAt(0U));
-  // Stopping commands zero; the next test holds at zero, not at the old step.
+  // Stop commands zero; the next test applies its own demand immediately.
   console("stop");
   TEST_ASSERT_FLOAT_WITHIN(
       0.001f, 0.0f, getECUContext()->injectionPump.demand.requestedPercent);
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, bareTickAt(10U));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(10U));
   testsPrintEvents();
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 75.0f, bareTickAt(15U));
 }
@@ -1840,10 +1850,10 @@ int main(void) {
   RUN_TEST(test_topzero_and_pot_announcements_keep_their_lines);
   RUN_TEST(test_step_announcement_read_retries_after_a_concurrent_record);
   RUN_TEST(test_step_announcement_read_gives_up_while_the_control_core_records);
-  RUN_TEST(test_changed_demand_waits_for_its_announcement_to_be_printed);
-  RUN_TEST(test_changed_demand_applies_after_the_print_timeout);
+  RUN_TEST(test_changed_demand_applies_before_its_announcement_is_printed);
+  RUN_TEST(test_changed_demand_progresses_when_the_console_never_drains);
   RUN_TEST(test_demands_without_an_announcement_apply_at_once);
-  RUN_TEST(test_demand_hold_starts_from_the_stopped_actuator);
+  RUN_TEST(test_new_test_applies_its_first_demand_after_a_stop);
   RUN_TEST(
       test_pot_turns_to_full_demand_as_a_tracked_target_then_holds_and_returns);
   RUN_TEST(test_pot_rate_command_is_bounded_and_reset_restores_the_default);

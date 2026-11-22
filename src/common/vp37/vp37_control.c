@@ -805,9 +805,7 @@ hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
     const float potential =
         VP37_referencePotential(self, (float)self->demand.desired, &weight);
     const float previous =
-        (previousDesired >= 0)
-            ? VP37_referencePotential(self, (float)previousDesired, NULL)
-            : potential;
+        VP37_referencePotential(self, (float)previousDesired, NULL);
     const float reduction =
         self->pid.kp * (1.0f - self->pid.researchReferenceWeight);
     // Shift the physical bias only when the reference moves. At a fixed

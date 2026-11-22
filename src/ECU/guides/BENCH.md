@@ -76,6 +76,17 @@ Test start, stop and result messages use a bounded queue to that core.
 Their output never makes control wait for the debug mutex. A queue overflow is reported;
 stopping the actuator still takes effect.
 
+VP37 diagnostics and command replies cross to core 0 as fixed-size records,
+without formatting or waiting for the serial port on core 1. Core 0 formats
+them into a 4096-byte HAL transmit buffer and polls it with a byte budget.
+A poll attempts only the immediately available transport capacity; a partial
+write keeps its offset for the next poll. The controller never waits for a
+USB reader. Queue overflow counters expose discarded diagnostics. Calibration
+and finite trace exports retain their samples until the console has room;
+their delivery may therefore lag behind live control. Test step lines carry
+MCU `us` and `seq`, so analysis must use occurrence time even when the host
+receives a step announcement after its telemetry.
+
 [`device_tree.json`](../../../src/ECU/device_tree.json) assigns every pin and address.
 Its `rp2350-plus` assembly (Waveshare RP2350-Plus, the default) and
 `rp2040-plus` assembly (Waveshare RP2040-Plus) share the PCB and the wiring;
@@ -116,14 +127,27 @@ Bench builds accept
 through the same position API. Electrical-model tests do not establish
 mechanical stability; upper-position holds and motion need hardware validation.
 
+`min` and `max` in `VP37 CFG` are the stroke limits in effect, after the
+fuel-temperature correction described in the [control guide](CONTROL.md#calibrated-stroke-and-fuel-temperature).
+`calmin` and `calmax` give the endpoints the calibration measured, `calft`
+its reference fuel temperature in °C (meaningful with `calftok:1`), `ftf`
+the low-passed fuel temperature the correction follows, in °C, and `mincor`
+and `maxcor` the corrections in effect, in Hz. `ftlim:1` means the
+image follows the fuel temperature; with `ftlim:0` both corrections stay at
+zero. Positions in Hz (`tar`, `des`, `adj` and the limits) are signed.
+
 ## Recording calibration and control steps
 
 During startup calibration the bench image uses the same storage for every
 MIN/MAX qualification sample. After USB connects, `VP37 CAL` lines export
-the input position, raw and filtered frequencies, baseline, sample number,
-both clocks, freshness, status, applied PWM, supply voltage in 0.1 V and fuel
-temperature in degrees C. `VP37 CAL END` reports the sample count, qualified
-endpoints, validity and any buffer overflow. The current estimator's window
+the signed position the estimator uses (`adj`, baseline minus filtered
+frequency), raw and filtered frequencies, baseline, sample number,
+both clocks, freshness, status, applied PWM, supply voltage in 0.1 V, fuel
+temperature in degrees C and the Adjustometer's zero-held magnitude (`p`).
+`VP37 CAL END` reports the sample count, the measured endpoints (zero for an
+endpoint that did not settle, so read `minok` and `maxok`), validity, any
+buffer overflow and the reference fuel temperature (`calft`, `calftok`).
+The current estimator's window
 and timeout settings are defined in `vp37_config.h`. The normal `VP37 C`
 stream shows the return to rest after calibration; calibration does not
 sample current. Normal RAM capture remains busy until this export finishes.
@@ -134,8 +158,10 @@ the console core drains it as `VP37 N` lines. `B` and `B1` retain their finite
 capture modes; calibration and all capture modes share the same memory.
 The console continues to print `VP37 C` for live supervision. It drains `N`
 on every console loop, independently of the C report interval, with a 20 ms
-budget per pass. A USB write already in progress can outlast that budget.
-Each `N` line includes CRLF and is sent in one serial write without the
+formatting budget per pass. It reserves TX room for command replies and retains
+an assembled line until the queue accepts it. The serial poll sends available
+bytes without waiting for USB capacity.
+Each `N` line includes CRLF and enters the queue in one write without the
 `ECU:` debug prefix, avoiding separate USB transfers for that prefix and
 the line ending.
 

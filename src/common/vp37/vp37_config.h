@@ -425,8 +425,6 @@ JB_STATIC_ASSERT((VP37_LATCH_LOCK_ERROR_DIVISOR >= 1) &&
 
 // calibration / stabilization values
 
-#define STABILITY_ADJUSTOMETER_TAB_SIZE 4U
-
 #define VP37_CALIBRATION_MAX_PERCENTAGE 80
 
 #define VP37_PWM_MIN 378
@@ -441,6 +439,100 @@ JB_STATIC_ASSERT((VP37_LATCH_LOCK_ERROR_DIVISOR >= 1) &&
 #define VP37_CALIBRATION_STABLE_SAMPLES 6U
 #define VP37_CALIBRATION_STABLE_SPAN_HZ 40
 #define VP37_CALIBRATION_MIN_TRAVEL_HZ 6000
+
+/**
+ * @brief Whether the calibrated limits follow the fuel temperature: 1 on,
+ * 0 keeps the limits where the calibration put them.
+ *
+ * The Adjustometer frequency of both ends of the stroke falls as the fuel
+ * warms, while the baseline it subtracts stays where its power-up put it. In
+ * position units (Hz of displacement) both ends therefore rise with the fuel
+ * temperature. Each control step sets the limits in effect from the slopes
+ * below times the difference between the low-passed fuel temperature
+ * (VP37_LIMIT_FT_FILTER_TAU_S) and the one at calibration, so a percent
+ * demand keeps its place on the stroke. Host tests build the module with 0
+ * as well.
+ */
+#ifndef VP37_LIMIT_FT_CORRECTION_ENABLED
+#define VP37_LIMIT_FT_CORRECTION_ENABLED 1
+#endif
+JB_STATIC_ASSERT((VP37_LIMIT_FT_CORRECTION_ENABLED == 0) ||
+                     (VP37_LIMIT_FT_CORRECTION_ENABLED == 1),
+                 "VP37_LIMIT_FT_CORRECTION_ENABLED is a 0/1 switch");
+/**
+ * @brief Rise of the bottom of the stroke with the fuel temperature
+ * [0.1 Hz of position per C].
+ *
+ * Common within-session slope of the rest frequency over 182 of 208 archived
+ * start calibrations (bench, one pump, fuel 20..33 C, analysis of
+ * 2026-11-20): -16.06 Hz/C, residual sd 14.7 Hz. Position is the baseline
+ * minus the frequency, hence the positive sign.
+ */
+#define VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C 161
+/**
+ * @brief Rise of the top of the stroke with the fuel temperature
+ * [0.1 Hz of position per C].
+ *
+ * Same analysis as the rest slope: the frequency at the calibration command
+ * falls -8.82 Hz/C within one Adjustometer baseline, residual sd 11.2 Hz.
+ */
+#define VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C 88
+/**
+ * @brief Largest fuel-temperature difference from calibration the correction
+ * follows [C]; beyond it the correction stays at its limit.
+ *
+ * The bench data covers about 13 C within one session; the correction does
+ * not extrapolate much past what was measured.
+ */
+#define VP37_LIMIT_FT_MAX_DELTA_C 15
+/**
+ * @brief Time constant of the low-pass filter on the fuel temperature the
+ * limits follow [s].
+ *
+ * The Adjustometer sends whole degrees, and near a degree boundary the
+ * reading toggles: a bench log of 995 s (2026-11-20) changed it 71 times,
+ * 70 of them straight back, 28/29 C for about 100 s while the fuel warmed by
+ * one degree. Followed directly, every toggle would move the bottom by 16 Hz
+ * and every percent target near it with it. Through a 60 s filter that series
+ * moves the correction by at most 6.3 Hz in any 60 s window (p95 5.7 Hz), and
+ * the 16 Hz of a real degree arrive over minutes, as fast as the fuel warms.
+ */
+#define VP37_LIMIT_FT_FILTER_TAU_S 60
+/**
+ * @brief Largest change of the applied correction of each limit in one
+ * control step [Hz].
+ *
+ * A guard behind the filter, which normally moves the correction far slower:
+ * whatever the filtered temperature does, the limits move at most 200 Hz/s at
+ * the 5 ms period, far slower than any demand ramp.
+ */
+#define VP37_LIMIT_FT_RATE_HZ_PER_STEP 1
+JB_STATIC_ASSERT((VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C >= 50) &&
+                     (VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C <= 400),
+                 "VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C stays a positive rest "
+                 "slope of 5..40 Hz/C");
+JB_STATIC_ASSERT((VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C >= 20) &&
+                     (VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C <= 300) &&
+                     (VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C <=
+                      VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C),
+                 "VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C stays positive and below "
+                 "the rest slope");
+JB_STATIC_ASSERT((VP37_LIMIT_FT_MAX_DELTA_C >= 1) &&
+                     (VP37_LIMIT_FT_MAX_DELTA_C <= 40),
+                 "VP37_LIMIT_FT_MAX_DELTA_C bounds the correction near the "
+                 "measured range");
+JB_STATIC_ASSERT((VP37_LIMIT_FT_FILTER_TAU_S >= 5) &&
+                     (VP37_LIMIT_FT_FILTER_TAU_S <= 600),
+                 "VP37_LIMIT_FT_FILTER_TAU_S averages degree toggles without "
+                 "lagging the fuel by more than minutes");
+JB_STATIC_ASSERT((VP37_LIMIT_FT_RATE_HZ_PER_STEP >= 1) &&
+                     (VP37_LIMIT_FT_RATE_HZ_PER_STEP <= 16),
+                 "VP37_LIMIT_FT_RATE_HZ_PER_STEP spreads a degree over steps");
+/* The largest correction must fit the int16_t fields that carry it. */
+JB_STATIC_ASSERT(((VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C *
+                   VP37_LIMIT_FT_MAX_DELTA_C) /
+                  10) < 32767,
+                 "the limit correction fits an int16_t");
 
 // Maximum wait for Adjustometer baseline calibration at startup [ms].
 // Must accommodate the oscillator warm-up period (ADJUSTOMETER_WARMUP_MS

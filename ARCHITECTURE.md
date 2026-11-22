@@ -97,6 +97,13 @@ Core 0 handles communication, diagnostics, storage and auxiliary outputs. Core 1
 control, RPM and turbo. There is no RTOS. The [ECU guide](src/ECU/README.md) leads to setup,
 control behaviour and synchronization details.
 
+VP37 captures diagnostic values in bounded queues; core 0 formats them and
+polls the HAL serial TX buffer. A full diagnostic queue drops records and counts
+them without delaying control. Test demands never wait for announcements;
+step messages carry their occurrence timestamp and sequence. Calibration
+captures remain in RAM until the console has space to export them. Formatting
+still shares XIP bandwidth with control, so timing requires hardware validation.
+
 ### Clocks
 
 Drives the factory gauges, lamps, TFT and buzzer. It measures oil pressure, ABS speed and

@@ -2,6 +2,7 @@
 // Pump fixture shared by the VP37 test binaries: a calibrated pump ready for
 // VP37_process() and Adjustometer register data fed through the I2C mock.
 #include "../../common/vp37/tests/vp37_pump_setup.h"
+#include "adjustometer_test_helpers.h"
 #include "dtcManager.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "sensors.h"
@@ -20,11 +21,9 @@ static inline void injectLocalSupplyVoltage(float volts) {
 
 static inline void injectAdjRegisterData(int16_t pulseHz, uint8_t voltage,
                                          int16_t fuelTemp, uint8_t status) {
-  uint8_t buf[ADJUSTOMETER_FEEDBACK_BYTES];
   const adjustometer_feedback_t sample =
       vp37TestFeedback(pulseHz, voltage, fuelTemp, status);
-  adjustometer_feedback_encode(buf, &sample, 2U);
-  hal_mock_i2c_inject_rx(buf, (int)COUNTOF(buf));
+  injectFastAdjustometer(sample);
   injectLocalSupplyVoltage((float)voltage * 0.1f);
 }
 

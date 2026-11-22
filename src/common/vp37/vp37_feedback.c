@@ -3,9 +3,23 @@
 
 #include "vp37_internal.h"
 
-static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
+#include <math.h>
+
+/** @brief What a settled calibration window yields. */
+typedef struct {
+  int32_t position;     /**< Trimmed mean of the window's positions [Hz]. */
+  int32_t fuelTempSumC; /**< Sum of the window's fuel temperatures [C]. */
+  bool fuelTempValid;   /**< No reading of the window had a broken sensor. */
+} VP37CalibrationWindow;
+
+static bool VP37_waitForCalibrationSettle(VP37Pump *self,
+                                          VP37CalibrationWindow *window,
                                           bool probe, uint16_t pwm);
+/* The settle window keeps one bit per slot of its fuel-sensor state. */
+JB_STATIC_ASSERT(VP37_CALIBRATION_STABLE_SAMPLES <= 32U,
+                 "one bit per calibration window slot");
 static int32_t VP37_getMaxAdjustometerPWMVal(VP37Pump *self);
+static int32_t VP37_divideRounded(int32_t numerator, int32_t denominator);
 
 /**
  * @brief Refresh cached Adjustometer position and telemetry values.
@@ -19,7 +33,12 @@ bool VP37_updateAdjustometerPosition(VP37Pump *self) {
   self->feedback.readUs = reading.readUs;
   self->feedback.retries = reading.readRetries;
   if (reading.commOk) {
-    self->feedback.position = reading.pulseHz;
+    // A lost signal or a pending baseline leaves no position to read; the
+    // step stops on that status, so the last position stays for telemetry.
+    if (VP37_readingHasPosition(&reading)) {
+      self->feedback.position = VP37_readingPosition(&reading);
+      self->feedback.positionValid = true;
+    }
     self->feedback.commLostSince = 0;
     self->feedback.commFailed = false;
     self->feedback.lastStatus = reading.status;
@@ -53,52 +72,78 @@ bool VP37_makeCalibration(VP37Pump *self) {
 #if VP37_TELEMETRY_ENABLED
   (void)VP37_calibrationTraceBegin();
 #endif
-  self->feedback.adjustMax = -1;
-  self->feedback.adjustMiddle = -1;
-  self->feedback.adjustMin = -1;
-  self->feedback.operateMax = -1;
+  VP37Feedback *const feedback = &self->feedback;
+  // Positions are signed, so no value marks an endpoint as missing: until
+  // both settle the range is zero and calibrationDone says it is not usable.
+  feedback->calibrationDone = false;
+  feedback->calibrationFtValid = false;
+  feedback->calibrationFtDeciC = 0;
+  feedback->fuelTempFilteredC = 0.0f;
+  feedback->limitCorrectionMin = 0;
+  feedback->limitCorrectionMax = 0;
+  feedback->calibratedMin = 0;
+  feedback->calibratedMax = 0;
+  feedback->adjustMin = 0;
+  feedback->adjustMiddle = 0;
+  feedback->adjustMax = 0;
+  VP37CalibrationWindow minWindow = {0};
+  VP37CalibrationWindow maxWindow = {0};
 
   // Capture the natural/resting endpoint first.  Measuring MIN after a strong
   // MAX pulse biases it with actuator hysteresis and oscillator thermal drift.
   self->callbacks.writeQuantityPwm(0);
-  bool minSettled =
-      VP37_waitForCalibrationSettle(self, &self->feedback.adjustMin, false, 0U);
+  bool minSettled = VP37_waitForCalibrationSettle(self, &minWindow, false, 0U);
+  if (minSettled) {
+    feedback->calibratedMin = minWindow.position;
+  }
 
   bool maxSettled = false;
   if (minSettled) {
     const uint16_t pwm = (uint16_t)VP37_getMaxAdjustometerPWMVal(self);
     self->callbacks.writeQuantityPwm(pwm);
-    maxSettled = VP37_waitForCalibrationSettle(self, &self->feedback.adjustMax,
-                                               false, pwm);
+    maxSettled = VP37_waitForCalibrationSettle(self, &maxWindow, false, pwm);
+    if (maxSettled) {
+      feedback->calibratedMax = maxWindow.position;
+    }
   }
   self->callbacks.writeQuantityPwm(0);
+  feedback->adjustMin = feedback->calibratedMin;
+  feedback->adjustMax = feedback->calibratedMax;
 
   if (!maxSettled || !minSettled) {
-    self->feedback.calibrationDone = false;
 #if VP37_TELEMETRY_ENABLED
     VP37_calibrationTraceEnd(self, minSettled, maxSettled);
 #endif
     derr("VP37 calibration timeout: maxSettled=%d minSettled=%d MAX=%d MIN=%d",
-         maxSettled, minSettled, self->feedback.adjustMax,
-         self->feedback.adjustMin);
+         maxSettled, minSettled, feedback->adjustMax, feedback->adjustMin);
     return false;
   }
 
-  self->feedback.adjustMiddle =
-      ((self->feedback.adjustMax - self->feedback.adjustMin) / 2) +
-      self->feedback.adjustMin;
-  const int32_t calibrationTravel =
-      self->feedback.adjustMax - self->feedback.adjustMin;
-  self->feedback.calibrationDone =
-      (calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ) &&
-      (self->feedback.adjustMiddle > 0);
+  // The reference of the fuel-temperature correction: the mean temperature
+  // of the readings that gave both endpoints.
+  feedback->calibrationFtValid =
+      minWindow.fuelTempValid && maxWindow.fuelTempValid;
+  if (feedback->calibrationFtValid) {
+    feedback->calibrationFtDeciC = (int16_t)VP37_divideRounded(
+        (minWindow.fuelTempSumC + maxWindow.fuelTempSumC) * 10,
+        (int32_t)VP37_CALIBRATION_STABLE_SAMPLES * 2);
+    // The filter starts where the limits were measured: no correction yet.
+    feedback->fuelTempFilteredC = (float)feedback->calibrationFtDeciC * 0.1f;
+  }
+  feedback->adjustMiddle =
+      ((feedback->adjustMax - feedback->adjustMin) / 2) + feedback->adjustMin;
+  const int32_t calibrationTravel = feedback->adjustMax - feedback->adjustMin;
+  // The signed axis may put the whole stroke on either side of zero, so the
+  // travel alone qualifies the range.
+  feedback->calibrationDone =
+      calibrationTravel >= VP37_CALIBRATION_MIN_TRAVEL_HZ;
 #if VP37_TELEMETRY_ENABLED
   VP37_calibrationTraceEnd(self, minSettled, maxSettled);
 #endif
-  if (!self->feedback.calibrationDone) {
+  if (!feedback->calibrationDone) {
     derr(
         "VP37 calibration range invalid: MIN=%d MAX=%d travel=%d (required=%d)",
-        self->feedback.adjustMin, self->feedback.adjustMax, calibrationTravel,
+        feedback->adjustMin, feedback->adjustMax, calibrationTravel,
         VP37_CALIBRATION_MIN_TRAVEL_HZ);
   }
 
@@ -106,24 +151,105 @@ bool VP37_makeCalibration(VP37Pump *self) {
                                        -VP37_PID_CORR_LIMIT_NEGATIVE,
                                        VP37_PID_CORR_LIMIT_POSITIVE_COLD);
   hal_pid_controller_reset(self->pid.controller);
-  deb("VP37 calibration: MIN=%d MIDDLE=%d MAX=%d OPERATE_MAX=%d",
-      self->feedback.adjustMin, self->feedback.adjustMiddle,
-      self->feedback.adjustMax, self->feedback.operateMax);
-  return self->feedback.calibrationDone;
+  deb("VP37 calibration: MIN=%d MIDDLE=%d MAX=%d FT=%d/10 valid=%d",
+      feedback->adjustMin, feedback->adjustMiddle, feedback->adjustMax,
+      (int)feedback->calibrationFtDeciC, feedback->calibrationFtValid);
+  return feedback->calibrationDone;
+}
+
+#if VP37_LIMIT_FT_CORRECTION_ENABLED
+/**
+ * @brief One step of the applied correction toward its target.
+ * @param applied Correction in effect [Hz].
+ * @param target Correction the present fuel temperature asks for [Hz].
+ * @return The correction after this step, at most
+ * VP37_LIMIT_FT_RATE_HZ_PER_STEP from @p applied.
+ */
+static int16_t VP37_limitCorrectionStep(int16_t applied, int32_t target) {
+  const int32_t step =
+      hal_constrain(target - (int32_t)applied, -VP37_LIMIT_FT_RATE_HZ_PER_STEP,
+                    VP37_LIMIT_FT_RATE_HZ_PER_STEP);
+  return (int16_t)((int32_t)applied + step);
+}
+#endif
+
+bool VP37_followFuelTemperature(VP37Pump *self) {
+  bool changed = false;
+#if VP37_LIMIT_FT_CORRECTION_ENABLED
+  VP37Feedback *const feedback = &self->feedback;
+  // Without a reference there is nothing to correct from; with the sensor
+  // broken now the filter and the correction keep the values they have.
+  if (feedback->calibrationDone && feedback->calibrationFtValid &&
+      ((feedback->lastStatus & ADJ_STATUS_FUEL_TEMP_BROKEN) == 0U)) {
+    // Whole-degree readings toggle at a boundary; the filter averages them.
+    const float dt = (float)self->pidDtUs * 0.000001f;
+    feedback->fuelTempFilteredC =
+        hal_math_low_pass(dt / ((float)VP37_LIMIT_FT_FILTER_TAU_S + dt),
+                          feedback->fuelTempC, feedback->fuelTempFilteredC);
+    const float maxDeltaC = (float)VP37_LIMIT_FT_MAX_DELTA_C;
+    const float deltaC =
+        hal_constrain(feedback->fuelTempFilteredC -
+                          ((float)feedback->calibrationFtDeciC * 0.1f),
+                      -maxDeltaC, maxDeltaC);
+    // Slopes in 0.1 Hz/C.
+    const int16_t minCorrection = VP37_limitCorrectionStep(
+        feedback->limitCorrectionMin,
+        (int32_t)lroundf((float)VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C * 0.1f *
+                         deltaC));
+    const int16_t maxCorrection = VP37_limitCorrectionStep(
+        feedback->limitCorrectionMax,
+        (int32_t)lroundf((float)VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C * 0.1f *
+                         deltaC));
+    changed = (minCorrection != feedback->limitCorrectionMin) ||
+              (maxCorrection != feedback->limitCorrectionMax);
+    if (changed) {
+      feedback->limitCorrectionMin = minCorrection;
+      feedback->limitCorrectionMax = maxCorrection;
+      feedback->adjustMin = feedback->calibratedMin + (int32_t)minCorrection;
+      feedback->adjustMax = feedback->calibratedMax + (int32_t)maxCorrection;
+      feedback->adjustMiddle =
+          ((feedback->adjustMax - feedback->adjustMin) / 2) +
+          feedback->adjustMin;
+    }
+  }
+#else
+  (void)self;
+#endif
+  return changed;
+}
+
+/**
+ * @brief Divide and round half away from zero.
+ * @param numerator Any value whose magnitude leaves room for half of
+ * @p denominator.
+ * @param denominator Positive divisor.
+ * @return The quotient rounded to the nearest integer.
+ */
+static int32_t VP37_divideRounded(int32_t numerator, int32_t denominator) {
+  const int32_t half = denominator / 2;
+  return (numerator >= 0) ? ((numerator + half) / denominator)
+                          : -((half - numerator) / denominator);
 }
 
 /**
  * @brief Wait until a calibration endpoint is mechanically stable.
- * @param self VP37 controller instance storing diagnostic samples.
- * @param settledValue Output receiving a trimmed mean of the stable window.
+ * @param self VP37 controller instance supplying the board services.
+ * @param window Output receiving the trimmed mean position of the stable
+ * window and the fuel temperature of its readings; changed only on success.
+ * @param probe True for the bench probe, which gives up on the first invalid
+ * reading. Both modes retain samples without formatting in this loop.
+ * @param pwm Command applied while waiting, for the calibration trace.
  * @return True when a stable valid window is found before timeout.
  */
-static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
+static bool VP37_waitForCalibrationSettle(VP37Pump *self,
+                                          VP37CalibrationWindow *window,
                                           bool probe, uint16_t pwm) {
 #if !VP37_TELEMETRY_ENABLED
   (void)pwm;
 #endif
   int32_t samples[VP37_CALIBRATION_STABLE_SAMPLES] = {0};
+  int16_t fuelTemps[VP37_CALIBRATION_STABLE_SAMPLES] = {0};
+  uint32_t fuelTempBroken = 0U; /* Bit per window slot: sensor broken. */
   uint32_t sampleCount = 0U;
   uint32_t nextSample = 0U;
   const uint32_t startMs = hal_millis();
@@ -138,18 +264,8 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
     }
     const adjustometer_reading_t reading = VP37_readAdjustometer(self);
 #if VP37_TELEMETRY_ENABLED
-    if (!probe) {
-      VP37_calibrationTraceRecord(&reading, pwm);
-    }
+    VP37_calibrationTraceRecord(&reading, pwm);
 #endif
-    if (probe) {
-      deb("VP37 CALPROBE sample us:%lu adj:%ld raw:%ld st:%u comm:%u fresh:%u "
-          "age:%lu V:%.2f ft:%d",
-          (unsigned long)hal_micros(), (long)reading.pulseHz,
-          (long)reading.rawHz, reading.status, reading.commOk ? 1U : 0U,
-          reading.feedbackFresh ? 1U : 0U, (unsigned long)reading.ageUs,
-          reading.voltageRaw * 0.1f, (int)reading.fuelTempC);
-    }
     if (!reading.commOk || !reading.feedbackFresh ||
         (reading.status &
          (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) != 0U) {
@@ -161,7 +277,13 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
       continue;
     }
 
-    samples[nextSample] = reading.pulseHz;
+    samples[nextSample] = VP37_readingPosition(&reading);
+    fuelTemps[nextSample] = reading.fuelTempC;
+    if ((reading.status & ADJ_STATUS_FUEL_TEMP_BROKEN) != 0U) {
+      fuelTempBroken |= 1U << nextSample;
+    } else {
+      fuelTempBroken &= ~(1U << nextSample);
+    }
     nextSample = (nextSample + 1U) % VP37_CALIBRATION_STABLE_SAMPLES;
     if (sampleCount < VP37_CALIBRATION_STABLE_SAMPLES) {
       sampleCount++;
@@ -190,13 +312,12 @@ static bool VP37_waitForCalibrationSettle(VP37Pump *self, int32_t *settledValue,
       sum -= minValue;
       sum -= maxValue;
       const uint32_t kept = VP37_CALIBRATION_STABLE_SAMPLES - 2U;
-      *settledValue = sum / (int32_t)kept;
-
-      for (uint32_t i = 0U; !probe && (i < STABILITY_ADJUSTOMETER_TAB_SIZE) &&
-                            (i < VP37_CALIBRATION_STABLE_SAMPLES);
-           i++) {
-        self->feedback.stabilityTable[i] = samples[i];
+      window->position = sum / (int32_t)kept;
+      window->fuelTempSumC = 0;
+      for (uint32_t i = 0U; i < VP37_CALIBRATION_STABLE_SAMPLES; i++) {
+        window->fuelTempSumC += (int32_t)fuelTemps[i];
       }
+      window->fuelTempValid = fuelTempBroken == 0U;
       return true;
     }
   }
@@ -220,6 +341,7 @@ hal_status_t VP37_probeCalibrationMaximum(VP37Pump *self, int32_t *maximum) {
     return HAL_EINVAL;
   }
   if (!VP37_isReady(self) || !self->demand.atRest ||
+      !self->demand.targetValid || !self->demand.desiredValid ||
       self->demand.requestedPercent != 0.0f || self->output.finalPWM != 0 ||
       self->demand.target != self->feedback.adjustMin ||
       self->demand.desired != self->feedback.adjustMin ||
@@ -228,22 +350,21 @@ hal_status_t VP37_probeCalibrationMaximum(VP37Pump *self, int32_t *maximum) {
     return HAL_ESTATE;
   }
   const int32_t pwm = VP37_getMaxAdjustometerPWMVal(self);
-  int32_t measured = 0;
-  deb("VP37 CALPROBE begin us:%lu pwm:%ld min:%ld max:%ld",
-      (unsigned long)hal_micros(), (long)pwm, (long)self->feedback.adjustMin,
-      (long)self->feedback.adjustMax);
+  VP37CalibrationWindow window = {0};
+  const hal_status_t capture = VP37_calibrationTraceBegin();
+  if (capture != HAL_OK) {
+    return capture;
+  }
   self->callbacks.writeQuantityPwm(pwm);
   const bool settled = VP37_waitForCalibrationSettle(
-      self, &measured, true, (uint16_t)VP37_getMaxAdjustometerPWMVal(self));
+      self, &window, true, (uint16_t)VP37_getMaxAdjustometerPWMVal(self));
   self->callbacks.writeQuantityPwm(0);
   self->controlStarted = false;
   self->pidStarted = false;
   if (settled) {
-    *maximum = measured;
+    *maximum = window.position;
   }
-  deb("VP37 CALPROBE end us:%lu settled:%u measured:%ld pwm:0 min:%ld max:%ld",
-      (unsigned long)hal_micros(), settled ? 1U : 0U, (long)measured,
-      (long)self->feedback.adjustMin, (long)self->feedback.adjustMax);
+  VP37_calibrationProbeEnd(self, (uint16_t)pwm, settled, window.position);
   return settled ? HAL_OK : HAL_ETIMEOUT;
 }
 #endif

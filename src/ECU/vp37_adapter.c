@@ -41,11 +41,7 @@ static hal_status_t vp37AdapterAdjustometerTransfer(uint8_t reg, uint8_t *data,
 }
 
 static bool vp37AdapterDriveAllowed(void) {
-  const bool allowed = (int32_t)getGlobalValue(F_RPM) <= RPM_MAX_EVER;
-  if (!allowed) {
-    derr("VP37 disabled: RPM too high");
-  }
-  return allowed;
+  return (int32_t)getGlobalValue(F_RPM) <= RPM_MAX_EVER;
 }
 
 static const VP37Callbacks k_vp37AdapterCallbacks = {

@@ -15,6 +15,7 @@ void fiesta_test_set_micros(uint32_t value);
 void fiesta_test_set_millis(uint32_t value);
 void fiesta_test_usb_connected(bool connected);
 const char *fiesta_test_debug_last_line(void);
+const char *fiesta_test_serial_last_line(void);
 #ifdef HAL_ENABLE_CAN
 void fiesta_test_can_reset(hal_can_t handle);
 void fiesta_test_can_set_state(hal_can_t handle, hal_can_state_t state);

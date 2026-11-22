@@ -21,6 +21,13 @@ fixture; it cannot interrupt a fixture already executing. Such a fixture must
 not modify controller-owned outputs. Lifecycle messages use a bounded queue,
 so a stalled console cannot block control or stopping.
 
+The same queue carries console-watch acknowledgements and module replies.
+The controller calls `fiesta_test_reply(code, value, detail)` to capture a code and two payload
+words; the session invokes the module's `reply` callback in queue order.
+Formatting and transport writes belong in that callback. Muted replies are
+dropped, overflow is reported by the session, and initialization clears the
+queue.
+
 The module provides its suite, parameter metadata/storage and optional policy
 callbacks. `cleanup(entry, result, restart)` runs on every active-test exit,
 including completion, stop, skip, replacement, loss of SC supervision and
@@ -29,9 +36,12 @@ continuous output on same-test restart can retain it when `restart` is true.
 The runner does not write hardware itself. Callback strings and progress field
 strings must remain valid; progress must respect its buffer capacity.
 
-ECU keeps demand application, the 50 ms announcement wait, RPM policy and
+ECU keeps demand application, RPM policy and
 VP37 commands in `src/ECU/tests_helpers.c`. Its existing `tests.h` API and
-disabled-test stubs remain available. SC keepalive and session end apply
+disabled-test stubs remain available. Demand changes take effect without
+waiting for a log. Step messages carry their occurrence time (`us`) and
+sequence (`seq`); gaps expose announcements lost while the console stalls.
+SC keepalive and session end apply
 only to SC tests. Console tests run unsupervised until the console arms the
 watch with `watch <ms>` (1000 to 600000 ms): then every console line counts
 as host contact, a console test whose host stays silent for the limit stops

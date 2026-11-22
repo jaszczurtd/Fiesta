@@ -26,8 +26,8 @@ static void trackDemand(VP37Pump *pump, uint32_t *ms, uint32_t steps) {
     *ms += 5U;
     hal_mock_set_millis(*ms);
     const int16_t position =
-        (int16_t)(pump->demand.desired < 0 ? pump->feedback.adjustMin
-                                           : pump->demand.desired);
+        (int16_t)(pump->demand.desiredValid ? pump->demand.desired
+                                            : pump->feedback.adjustMin);
     injectAdjRegisterData(position, 144, 29, ADJ_STATUS_OK);
     VP37_process(pump);
   }

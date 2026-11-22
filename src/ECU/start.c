@@ -77,9 +77,8 @@ static union {
 /* Longest wait of a reporter for the end of a control step: two 5 ms periods,
  * after which a stopped pump is reported as it is. */
 #define START_VP37_REPORT_WAIT_US 10000U
-/* Limit each drain pass so the console, CAN and C guards get serviced even
- * when the producer records every millisecond. One USB write may outlast
- * this budget; the transport has its own timeout. */
+/* Limit formatting per pass so console input, CAN and C guards get serviced
+ * even when the producer records every millisecond. TX enqueue never waits. */
 #define START_VP37_STREAM_BUDGET_US 20000U
 #endif
 
@@ -100,6 +99,8 @@ static start_runtime_state_t s_startRuntimeState = {
 
 NOINIT static start_persistent_state_t s_startPersistentState;
 static hal_mutex_t turboStateMutex = NULL;
+static uint8_t s_consoleTxBuffer[4096];
+static uint32_t s_consoleReportedDrops;
 #ifdef VP37
 static hal_mutex_t vp37StateMutex = NULL;
 #endif
@@ -138,7 +139,6 @@ static void start_reportCore1InitError(void) {
   dtcManagerSetActive(DTC_RPM_IRQ_INIT_FAIL, true);
 }
 
-#ifdef VP37
 /**
  * @brief Stop feeding the watchdog and blink LED until reset occurs.
  * @param reason Human-readable reason logged before forcing reset.
@@ -154,7 +154,6 @@ static void start_forceWatchdogReset(const char *reason) {
     hal_delay_ms(150);
   }
 }
-#endif
 
 static const hal_soft_timer_table_entry_t startTimerInitTable[] = {
     {&s_startRuntimeState.timerThrottleHandle, readThrottleValues,
@@ -440,6 +439,12 @@ static void initializeCore0(void) {
 
   deb("System temperature:%.1fC", hal_math_round_tenth(hal_read_chip_temp()));
 
+  const hal_status_t consoleStatus =
+      hal_serial_buffered_init(s_consoleTxBuffer, sizeof(s_consoleTxBuffer));
+  HAL_ASSERT(consoleStatus == HAL_OK, "Cannot initialize buffered console");
+  if (consoleStatus != HAL_OK) {
+    start_forceWatchdogReset("Cannot initialize buffered console");
+  }
   setStartedCore0();
 
   start_reportCore1InitError();
@@ -498,9 +503,40 @@ static void start_reportVP37Current(void) {
 #endif
 
 /**
- * @brief Run one core-0 scheduler iteration for I/O and service tasks.
+ * @brief Drain a bounded batch of console bytes from core 0.
  */
+static void start_pollConsole(void) {
+  for (unsigned i = 0U; i < 4U; ++i) {
+    size_t written = 0U;
+    (void)hal_serial_buffered_poll(512U, &written);
+    if (written == 0U) {
+      break;
+    }
+  }
+  size_t pending;
+  uint32_t dropped;
+  if (hal_serial_buffered_status(&pending, &dropped) == HAL_OK &&
+      dropped != s_consoleReportedDrops &&
+      pending < sizeof(s_consoleTxBuffer) - 256U) {
+    const uint32_t delta = dropped - s_consoleReportedDrops;
+    s_consoleReportedDrops = dropped;
+    derr("Console TX dropped:%lu total:%lu", (unsigned long)delta,
+         (unsigned long)dropped);
+  }
+}
+
+/** @brief Reserve room by admission for a bounded core-0 formatter batch.
+ * @note All runtime formatters run sequentially on this core during control. */
+static bool start_consoleHasRoom(size_t bytes) {
+  size_t pending = 0U;
+  uint32_t dropped = 0U;
+  return (bytes <= sizeof(s_consoleTxBuffer)) &&
+         (hal_serial_buffered_status(&pending, &dropped) == HAL_OK) &&
+         (pending <= sizeof(s_consoleTxBuffer) - bytes);
+}
+
 static void runCore0(void) {
+  start_pollConsole();
   s_startPersistentState.statusVariable0Val = 0;
   updateWatchdogCore0();
   start_reportCore1InitError();
@@ -538,37 +574,50 @@ static void runCore0(void) {
   s_startPersistentState.statusVariable0Val = 9;
 #ifdef VP37
   vp37AdapterPublish(&s_ctx.injectionPump);
+  if (start_consoleHasRoom(512U)) {
+    VP37_printEvents(&s_ctx.injectionPump);
+  }
+#if ECU_ENGINE_CONTROL_ENABLED
+  engineOperation_showDebug(&s_ctx.engineOp);
+#endif
 #endif
 
 #if defined(VP37) && ECU_FUNCTIONAL_TESTS_ENABLED
-  VP37_showCalibration();
-  testsPrintEvents();
+  // Retain calibration samples until its bounded batch fits the TX queue.
+  // Core 0 is the only formatter once control has taken over the pump.
+  if (start_consoleHasRoom(1024U)) {
+    VP37_showCalibration();
+  }
+  if (start_consoleHasRoom(1024U)) {
+    testsPrintEvents();
+  }
   // VP37 telemetry is bench output; the car image keeps the console quiet.
   start_reportVP37Current();
   canServicePeriodic();
+  static bool metricPending = false;
   if (hal_millis_interval_elapsed_now(&s_startRuntimeState.vp37DebugLastMs,
                                       VP37_DEBUG_UPDATE)) {
-    // Format right after a step, never during one (see
-    // VP37_waitForPublication()).
+    // Prefer the interval after publication; the formatter runs on core 0.
     (void)VP37_waitForPublication(&s_ctx.injectionPump,
                                   START_VP37_REPORT_WAIT_US);
     size_t sampleCount = 0U;
     while (
-        !hal_debug_is_muted() &&
+        !metricPending && !hal_debug_is_muted() &&
         (sampleCount < COUNTOF(s_vp37ConsoleSamples.trace)) &&
+        start_consoleHasRoom(2048U) &&
         (VP37_readTrace(&s_vp37ConsoleSamples.trace[sampleCount]) == HAL_OK)) {
+      // Export before taking another sample; a stalled USB retains the rest.
+      VP37_showTrace(&s_vp37ConsoleSamples.trace[sampleCount]);
       sampleCount++;
+    }
+    uint32_t completedCount = 0U;
+    if (start_consoleHasRoom(128U) &&
+        (VP37_takeTraceCompletion(&completedCount) == HAL_OK)) {
+      deb("VP37 trace end samples:%lu", (unsigned long)completedCount);
     }
     // Host guards need fresh feedback while the RAM trace records too.
     if (VP37_readSnapshot(&s_ctx.injectionPump, &s_vp37Snapshot) == HAL_OK) {
       VP37_showDebug(&s_ctx.injectionPump, &s_vp37Snapshot);
-    }
-    for (size_t i = 0U; i < sampleCount; i++) {
-      VP37_showTrace(&s_vp37ConsoleSamples.trace[i]);
-    }
-    uint32_t completedCount = 0U;
-    if (VP37_takeTraceCompletion(&completedCount) == HAL_OK) {
-      deb("VP37 trace end samples:%lu", (unsigned long)completedCount);
     }
   }
   bool connected = false;
@@ -579,29 +628,54 @@ static void runCore0(void) {
     const uint32_t startedUs = hal_micros();
     while (!hal_elapsed_u32(hal_micros(), startedUs,
                             START_VP37_STREAM_BUDGET_US)) {
-      if (VP37_readMetricSample(&s_vp37ConsoleSamples.metric.sample) !=
+      // Keep the next event batch admissible even under a continuous stream.
+      // Otherwise every pass refills TX before queued command replies fit.
+      if (!start_consoleHasRoom(1024U +
+                                sizeof(s_vp37ConsoleSamples.metric.line))) {
+        break;
+      }
+      if (!metricPending) {
+        if (VP37_readMetricSample(&s_vp37ConsoleSamples.metric.sample) !=
+            HAL_OK) {
+          break;
+        }
+        const hal_status_t status =
+            VP37_formatMetricSample(&s_vp37ConsoleSamples.metric.sample,
+                                    s_vp37ConsoleSamples.metric.line,
+                                    sizeof(s_vp37ConsoleSamples.metric.line));
+        if (status != HAL_OK) {
+          derr("VP37 metric format: %s", hal_status_to_string(status));
+          break;
+        }
+        metricPending = true;
+      }
+      if (hal_serial_buffered_write(s_vp37ConsoleSamples.metric.line,
+                                    strlen(s_vp37ConsoleSamples.metric.line)) !=
           HAL_OK) {
         break;
       }
-      const hal_status_t status = VP37_formatMetricSample(
-          &s_vp37ConsoleSamples.metric.sample, s_vp37ConsoleSamples.metric.line,
-          sizeof(s_vp37ConsoleSamples.metric.line));
-      if (status == HAL_OK) {
-        hal_serial_print(s_vp37ConsoleSamples.metric.line);
-      } else {
-        derr("VP37 metric format: %s", hal_status_to_string(status));
-      }
+      metricPending = false;
+      // Service transport between records instead of waiting for this batch
+      // to finish. The poll never waits for USB space or a connected host.
+      start_pollConsole();
     }
     VP37MetricResult metricResult;
-    if (VP37_takeMetricResult(&metricResult) == HAL_OK) {
+    if (!metricPending && VP37_takeMetricResult(&metricResult) == HAL_OK) {
       VP37_showMetricResult(&metricResult);
     }
   }
 #endif
   canServicePeriodic();
+  /* Keep the formatter and USB transport outside the control core's mutex.
+   * The remaining fields of this view are console-owned change detectors. */
+  static Turbo turboDebugView;
   m_mutex_enter_blocking(turboStateMutex);
-  Turbo_showDebug(&s_ctx.turbo);
+  turboDebugView.posThrottle = s_ctx.turbo.posThrottle;
+  turboDebugView.RPM_index = s_ctx.turbo.RPM_index;
+  turboDebugView.n75 = s_ctx.turbo.n75;
   m_mutex_exit(turboStateMutex);
+  Turbo_showDebug(&turboDebugView);
+  start_pollConsole();
 
   // Bench formatting can outlast a periodic TX slot. Service CAN again
   // before idling so status frames keep their rate without a wire burst.
@@ -735,7 +809,7 @@ static void runCore1(void) {
     if (!tickTests()) {
 #if ECU_ENGINE_CONTROL_ENABLED
       engineOperation_process(&s_ctx.engineOp);
-      engineOperation_showDebug(&s_ctx.engineOp);
+      engineOperation_recordDebug(&s_ctx.engineOp);
 #else
       (void)VP37_setPositionDemandPercentage(&s_ctx.injectionPump,
                                              getDriverDemandPercent());

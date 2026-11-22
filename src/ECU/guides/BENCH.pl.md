@@ -75,6 +75,18 @@ Komunikaty startu, zatrzymania i wyniku testu trafiają tam przez ograniczoną
 kolejkę. Ich wydruk nie blokuje sterowania na mutex debug. Przepełnienie jest
 zgłaszane; zatrzymanie nastawnika nadal działa.
 
+Diagnostyka VP37 i odpowiedzi na polecenia przechodzą na rdzeń 0 jako rekordy
+o stałym rozmiarze, bez formatowania i oczekiwania na port na rdzeniu 1.
+Rdzeń 0 formatuje je do bufora nadawczego HAL o pojemności 4096 bajtów
+i opróżnia go z limitem bajtów. Pojedyncza próba wykorzystuje tylko dostępną
+od razu pojemność transportu; częściowy zapis zachowuje pozycję do następnej
+próby. Sterowanie nie czeka na odbiorcę USB. Liczniki przepełnień wskazują
+odrzuconą diagnostykę. Eksport kalibracji i skończonego śladu zachowuje próbki,
+dopóki konsola nie ma miejsca, więc ich dostarczenie może opóźniać się względem
+sterowania. Linie kroków testu mają czas MCU `us` i sekwencję `seq`; analiza
+używa czasu zdarzenia również wtedy, gdy host odbierze ogłoszenie kroku po
+jego telemetrii.
+
 [device_tree.json](../device_tree.json) przypisuje piny i adresy. Montaże
 `rp2350-plus` (Waveshare RP2350-Plus, domyślny) i `rp2040-plus` (Waveshare
 RP2040-Plus) mają wspólne PCB i okablowanie; wybiera je `--assembly` lub
@@ -111,14 +123,27 @@ przyjmuje `C0`/`C1` do porównania sprzężenia wyłączonego i włączonego prz
 jedno API położenia. Test modelu elektrycznego nie potwierdza stabilności
 mechanicznej; postoje u góry i ruch wymagają walidacji sprzętowej.
 
+`min` i `max` w `VP37 CFG` to obowiązujące granice skoku po korekcie
+temperatury paliwa opisanej w [opisie sterowania](CONTROL.pl.md#skalibrowany-skok-i-temperatura-paliwa).
+`calmin` i `calmax` podają końce zmierzone w kalibracji, `calft` jej
+temperaturę odniesienia w °C (ma znaczenie przy `calftok:1`), `ftf`
+przefiltrowaną temperaturę paliwa, za którą podąża korekta, w °C, a `mincor`
+i `maxcor` obowiązujące korekty w Hz. `ftlim:1` oznacza, że obraz podąża
+za temperaturą paliwa; przy `ftlim:0` obie korekty pozostają zerowe.
+Położenia w Hz (`tar`, `des`, `adj` i granice) mają znak.
+
 ## Zapis kalibracji i przebiegu
 
 Podczas kalibracji startowej obraz BENCH używa tej samej pamięci do zapisu
 każdej próbki kwalifikującej MIN/MAX. Po połączeniu USB linie `VP37 CAL`
-przekazują położenie, częstotliwość surową i filtrowaną, baseline, numer próbki,
-oba zegary, świeżość, status, zadane PWM, napięcie w 0,1 V i temperaturę paliwa
-w stopniach C. `VP37 CAL END` podaje liczbę próbek, zakwalifikowane końce,
-poprawność wyniku i ewentualne przepełnienie bufora. Parametry okna estymatora
+przekazują położenie ze znakiem, którego używa estymator (`adj`, baseline minus
+częstotliwość filtrowana), częstotliwość surową i filtrowaną, baseline, numer
+próbki, oba zegary, świeżość, status, zadane PWM, napięcie w 0,1 V,
+temperaturę paliwa w stopniach C oraz wartość bezwzględną z podtrzymaniem
+zera publikowaną przez Adjustometer (`p`). `VP37 CAL END` podaje liczbę
+próbek, zmierzone końce (zero dla końca, który się nie ustalił, więc czytaj
+`minok` i `maxok`), poprawność wyniku, ewentualne przepełnienie bufora
+i temperaturę odniesienia (`calft`, `calftok`). Parametry okna estymatora
 i timeoutu definiuje `vp37_config.h`. Zwykły strumień `VP37 C` pokazuje powrót
 do spoczynku po kalibracji; kalibracja nie próbkuje prądu. Zwykły zapis śladu
 RAM pozostaje zajęty do zakończenia tego eksportu.
@@ -129,8 +154,10 @@ a rdzeń konsoli odbiera go na bieżąco jako linie `VP37 N`. `B` i `B1`
 zachowują tryby skończonego nagrania; kalibracja i wszystkie tryby nagrywania
 korzystają z tej samej pamięci. Konsola nadal drukuje `VP37 C` do nadzoru.
 Odbiera `N` w każdym obiegu swojej pętli, niezależnie od interwału raportu C,
-z budżetem 20 ms na obieg. Rozpoczęty zapis USB może przekroczyć ten budżet.
-Każda linia `N` zawiera CRLF i trafia do jednego zapisu szeregowego bez
+z budżetem formatowania 20 ms na obieg. Zostawia w TX miejsce na odpowiedzi
+na komendy i zachowuje złożoną linię, aż kolejka ją przyjmie. Poll portu
+wysyła dostępne bajty bez czekania na miejsce w USB.
+Każda linia `N` zawiera CRLF i trafia do kolejki w jednym zapisie bez
 prefiksu debugowego `ECU:`, co usuwa osobne transfery USB prefiksu i końca
 linii.
 

@@ -20,8 +20,12 @@ rdzeń obsługuje także zadanie i polecenia zatrzymania. Dzięki temu przecią�
 pętla pozostaje dostępna, gdy zadany okres jest krótszy od wykonywanej pracy;
 nie oznacza to osiągnięcia tego okresu. Testy stanowiskowe zapisują
 ogłoszenia kroków na rdzeniu 1, a drukuje je rdzeń 0, razem z potwierdzeniami
-resetu nastaw. Zmienione zadanie testu czeka na swoje ogłoszenie, najwyżej `STEP_EVENT_APPLY_TIMEOUT_MS`, więc w logu
-ogłoszenie nadal poprzedza ruch, który zapowiada. Każdy krok publikuje
+resetu nastaw, ręcznego zadania i nadzoru konsoli. Odpowiedzi na ręczne zadanie
+i `watch` zachowują wartości przyjęte przez sterowanie; formatowanie i zapis
+USB wykonuje rdzeń 0. Zadanie testu działa bez oczekiwania na ogłoszenie.
+Ogłoszenie zawiera czas zdarzenia `us` i sekwencję `seq`; opóźniony wydruk
+należy wiązać z telemetrią według czasu MCU, a nie chwili odbioru przez hosta.
+Każdy krok publikuje
 stan za licznikiem sekwencji; rdzeń 0 kopiuje go bez blokady. Słowa danych są zapisywane
 i odczytywane atomowo z porządkiem relaxed, więc kopia nakładająca się na
 publikację zostaje odrzucona bez wyścigu danych. Sterowanie nie czeka na
@@ -42,6 +46,12 @@ formatowaniem raportu: pobieranie kodu z flash na tym rdzeniu wydłużało krok
 średnio o około 300 µs. Bufor śladu zmienia właściciela przez jeden atomowy
 stan. Magistralę I²C z zatrzaskiem PCF8574 i menedżer DTC z pamięcią chronią
 muteksy. Flash zapisuje rdzeń 0.
+
+Rdzeń 1 odczytuje rejestry Adjustometera `0x05..0x34` w jednej transakcji I2C
+obejmującej 48 bajtów. Szybka ramka dostarcza wszystkie pola sterowania,
+a opcjonalna diagnostyka temperaturę układu i flagi poprawności. Rdzeń 0
+drukuje te zapisane wartości bez dostępu do magistrali sprzężenia. Strumień
+metryk zostawia w kolejce TX miejsce na kolejną partię odpowiedzi na komendy.
 
 Główne sterowniki VP37, turbo, RPM, wentylatora, grzałki, świec, szyb i stanu
 silnika znajdują się w `ecu_context_t` w [ecuContext.h](../ecuContext.h).
@@ -96,7 +106,7 @@ w RAM sprawdź mapy pamięci ELF obu wariantów firmware.
 | [vp37_adapter.c](../vp37_adapter.c) | PWM ECU, enable PCF8574, blokada RPM, I²C Adjustometera, start, wartości `F_FUEL_TEMP`/`F_VOLTS` ze stanu publikowanego, ważność temperatury paliwa dla CAN i OBD oraz U190A po trwałej awarii czujnika paliwa. |
 | [vp37_adjustometer.c](../../common/vp37/vp37_adjustometer.c) | Ramki, diagnostyka i oczekiwanie na poziom odniesienia. |
 | [vp37_snapshot.c](../../common/vp37/vp37_snapshot.c) | Publikowanie i kopiowanie stanu bez blokady. |
-| [vp37_feedback.c](../../common/vp37/vp37_feedback.c) | Położenie i kalibracja skoku. |
+| [vp37_feedback.c](../../common/vp37/vp37_feedback.c) | Położenie ze znakiem, kalibracja skoku i granice podążające za temperaturą paliwa. |
 | [vp37_compensation.c](../../common/vp37/vp37_compensation.c) | Napięcie, temperatura paliwa i rezystancja cewki. |
 | [vp37_control.c](../../common/vp37/vp37_control.c) | Mapa podtrzymania, wyuczona korekta, PID, martwa strefa i postój. |
 | [vp37_current.c](../../common/vp37/vp37_current.c) | Pomiar prądu na boczniku. |

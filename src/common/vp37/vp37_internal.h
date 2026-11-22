@@ -31,6 +31,18 @@
 extern "C" {
 #endif
 
+typedef enum {
+  VP37_DIAG_ENABLED,
+  VP37_DIAG_COMM_TIMEOUT,
+  VP37_DIAG_INVALID_FEEDBACK,
+  VP37_DIAG_DRIVE_FORBIDDEN,
+  VP37_DIAG_PID_FAILURE
+} VP37DiagnosticCode;
+
+/** @brief Capture a diagnostic without calling the formatter or transport. */
+void VP37_recordDiagnostic(VP37Pump *self, VP37DiagnosticCode code,
+                           uint32_t value, uint32_t detail);
+
 // ── vp37.c ──────────────────────────────────────────────────────────────────
 bool VP37_demandAtRest(const VP37Pump *self);
 /** @brief Forget conditional-integration motion history, keeping its switch. */
@@ -57,7 +69,8 @@ float VP37_updateSlowDamping(VP37Pump *self, float dt);
  * @param self Control-core pump with nominal correction bounds and gains set.
  * @param dt Position-step duration in seconds.
  * @param deadband Integration deadband in Hz, including any hold decision.
- * @param previousDesired Preceding ramp reference in Hz; negative primes it.
+ * @param previousDesired Preceding ramp reference in Hz; the present reference
+ * when there is none, which shifts nothing.
  * @return The HAL PID status; terms change only on a successful step.
  */
 hal_status_t VP37_stepDampedCorrection(VP37Pump *self, float dt, float deadband,
@@ -83,8 +96,32 @@ float VP37_prepareUpperHolding(VP37Pump *self, bool settled, float dt,
                                float deadband);
 
 // ── vp37_feedback.c ─────────────────────────────────────────────────────────
+/** @brief Position a reading measures: the baseline minus the filtered
+ * frequency [Hz], signed, without the Adjustometer's magnitude and zero hold.
+ * @param reading Non-NULL reading from the fast frame. */
+static inline int32_t
+VP37_readingPosition(const adjustometer_reading_t *reading) {
+  return (int32_t)reading->baselineHz - (int32_t)reading->signalHz;
+}
+/** @brief Whether a reading measures a position at all: its frequency and
+ * baseline mean nothing during signal loss or before the baseline locks.
+ * @param reading Non-NULL reading from the fast frame. */
+static inline bool
+VP37_readingHasPosition(const adjustometer_reading_t *reading) {
+  return (reading->status &
+          (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) == 0U;
+}
 bool VP37_updateAdjustometerPosition(VP37Pump *self);
 bool VP37_makeCalibration(VP37Pump *self);
+/** @brief Advance the fuel-temperature filter by this step's period and move
+ * the limits in effect one step toward the correction it asks for.
+ * @param self Control-core pump; feedback and pidDtUs of this step already
+ * set.
+ * @return True when adjustMin or adjustMax changed in this step.
+ * @note Holds the filter and the correction while the fuel sensor is broken,
+ * never moves without a calibration whose reference temperature is valid,
+ * and does nothing with VP37_LIMIT_FT_CORRECTION_ENABLED at 0. */
+bool VP37_followFuelTemperature(VP37Pump *self);
 #if VP37_TELEMETRY_ENABLED
 /** @brief Measure the upper endpoint without committing a new calibration.
  * @param self Calibrated control-core pump, released at zero demand and I=0.
@@ -205,6 +242,13 @@ void VP37_calibrationTraceRecord(const adjustometer_reading_t *reading,
 /** @brief Publish the outcome from a non-NULL pump; control core. */
 void VP37_calibrationTraceEnd(const VP37Pump *self, bool minSettled,
                               bool maxSettled);
+/** @brief Publish a probe capture after PWM is zero; control core.
+ * @param self Non-NULL pump whose calibration remains unchanged.
+ * @param pwm Applied probe command.
+ * @param settled Whether the probe qualified a stable endpoint.
+ * @param maximum Measured endpoint [Hz], meaningful only when settled. */
+void VP37_calibrationProbeEnd(const VP37Pump *self, uint16_t pwm, bool settled,
+                              int32_t maximum);
 #endif
 
 #ifdef __cplusplus

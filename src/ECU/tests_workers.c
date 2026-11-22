@@ -345,8 +345,8 @@ float testsWorkersManualStep(bool *outFinished) {
 
 /* A step change on the control core must not wait for the serial port, so it
  * only records the step; testsWorkersPrintStepEvent() prints it on core 0.
- * One slot is enough: a step lasts at least a dwell, core 0 prints within a
- * loop pass. The lock is odd while the control core writes. */
+ * A blocked console may miss steps: timestamp and sequence expose this without
+ * delaying the demand. The lock is odd while the control core writes. */
 typedef enum {
   STEP_EVENT_TOP = 1,
   STEP_EVENT_TOPZERO,
@@ -361,6 +361,7 @@ static int32_t s_stepEventValue;  /* demand x10 [%], or the pot phase index */
 static int32_t s_stepEventRate;   /* pot rate [%/s] */
 static uint32_t s_stepEventCount; /* series or pass in progress, from 1 */
 static uint32_t s_stepEventTotal;
+static uint32_t s_stepEventTimeUs;
 
 #ifdef UNIT_TEST
 void (*testsWorkersStepEventReadHookForTest)(void) = NULL;
@@ -374,6 +375,7 @@ static void recordStepEvent(step_event_kind_t kind, int32_t value, int32_t rate,
   HAL_ATOMIC_STORE(&s_stepEventRate, rate, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventCount, count, HAL_ATOMIC_RELAXED);
   HAL_ATOMIC_STORE(&s_stepEventTotal, total, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_stepEventTimeUs, hal_micros(), HAL_ATOMIC_RELAXED);
   fiestaSeqlockWriteEnd(&s_stepEventLock, begun);
 }
 
@@ -510,23 +512,29 @@ void testsWorkersPrintStepEvent(void) {
         HAL_ATOMIC_LOAD(&s_stepEventCount, HAL_ATOMIC_RELAXED);
     const uint32_t total =
         HAL_ATOMIC_LOAD(&s_stepEventTotal, HAL_ATOMIC_RELAXED);
+    const uint32_t timeUs =
+        HAL_ATOMIC_LOAD(&s_stepEventTimeUs, HAL_ATOMIC_RELAXED);
     if (!fiestaSeqlockReadConsistent(&s_stepEventLock, sequence)) {
       continue; /* the control core wrote meanwhile: read again */
     }
     if (kind == (uint32_t)STEP_EVENT_TOP) {
-      deb("TEST: top %.1f %% (series %lu/%lu)", (double)value / 10.0,
-          (unsigned long)count, (unsigned long)total);
+      deb("TEST: top %.1f %% (series %lu/%lu) us:%lu seq:%lu",
+          (double)value / 10.0, (unsigned long)count, (unsigned long)total,
+          (unsigned long)timeUs, (unsigned long)(sequence / 2U));
     } else if (kind == (uint32_t)STEP_EVENT_TOPZERO) {
-      deb("TEST: topzero %.1f %% (series %lu/%lu)", (double)value / 10.0,
-          (unsigned long)count, (unsigned long)total);
+      deb("TEST: topzero %.1f %% (series %lu/%lu) us:%lu seq:%lu",
+          (double)value / 10.0, (unsigned long)count, (unsigned long)total,
+          (unsigned long)timeUs, (unsigned long)(sequence / 2U));
     } else if ((kind == (uint32_t)STEP_EVENT_POT) && (value >= 0) &&
                ((size_t)value < COUNTOF(s_potPhaseNames))) {
-      deb("TEST: pot %s %ld %%/s (pass %lu/%lu)", s_potPhaseNames[value],
-          (long)rate, (unsigned long)count, (unsigned long)total);
+      deb("TEST: pot %s %ld %%/s (pass %lu/%lu) us:%lu seq:%lu",
+          s_potPhaseNames[value], (long)rate, (unsigned long)count,
+          (unsigned long)total, (unsigned long)timeUs,
+          (unsigned long)(sequence / 2U));
     } else {
       /* unknown kind: nothing to print */
     }
-    /* Printed: the control core may apply the demand of this step now. */
+    /* Acknowledge delivery only; control never waits for this value. */
     HAL_ATOMIC_STORE(&s_stepEventPrintedSeq, sequence, HAL_ATOMIC_RELEASE);
     return;
   }

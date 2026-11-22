@@ -45,7 +45,15 @@ void engineOperation_init(engineOperation *self);
 void engineOperation_process(engineOperation *self);
 
 /**
- * @brief Print engine-operation state for diagnostics.
+ * @brief Capture periodic diagnostics on the control core without printing.
+ * @param self Engine-operation state owned by the control core.
+ */
+void engineOperation_recordDebug(const engineOperation *self);
+
+/**
+ * @brief Print captured engine-operation diagnostics on the console core.
+ * @param self Engine-operation instance; NULL skips delivery.
+ * @note Does not read live control state. A blocked console only drops logs.
  */
 void engineOperation_showDebug(const engineOperation *self);
 

@@ -117,7 +117,7 @@ void test_vp37_position_demand_validates_input_and_calibration(void) {
   TEST_ASSERT_EQUAL(HAL_EINVAL, VP37_setPositionDemandPercentage(NULL, 50.0f));
   pump->feedback.calibrationDone = false;
   TEST_ASSERT_EQUAL(HAL_ESTATE, VP37_setPositionDemandPercentage(pump, 50.0f));
-  TEST_ASSERT_EQUAL_INT32(-1, pump->demand.target);
+  TEST_ASSERT_FALSE(pump->demand.targetValid);
   pump->feedback.calibrationDone = true;
 
   const float invalid[] = {NAN, INFINITY, -INFINITY};
@@ -159,8 +159,10 @@ void test_vp37_position_demand_in_counts_matches_the_percentage_entry(void) {
   const int32_t max = VP37_getPositionDemandMaxValue(pump);
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMin, min);
   TEST_ASSERT_EQUAL_INT32(pump->feedback.adjustMax, max);
-  TEST_ASSERT_EQUAL_INT32(-1, VP37_getPositionDemandMinValue(NULL));
-  TEST_ASSERT_EQUAL_INT32(-1, VP37_getPositionDemandMaxValue(NULL));
+  TEST_ASSERT_EQUAL_INT32(VP37_POSITION_NONE,
+                          VP37_getPositionDemandMinValue(NULL));
+  TEST_ASSERT_EQUAL_INT32(VP37_POSITION_NONE,
+                          VP37_getPositionDemandMaxValue(NULL));
 
   // Counts land on the target exactly and still report a percentage.
   const int32_t middle = min + ((max - min) / 2);
@@ -2478,7 +2480,7 @@ void test_vp37_feedforward_is_nonlinear_and_calibration_independent(void) {
     pump->feedback.adjustMin = range == 0U ? 100 : 400;
     pump->feedback.adjustMax = range == 0U ? 9100 : 7400;
     for (size_t i = 0; i < COUNTOF(demand); ++i) {
-      pump->demand.desired = -1;
+      pump->demand.desiredValid = false;
       VP37_setPositionDemandPercentage(pump, demand[i]);
       hal_mock_set_millis(hal_millis() + 5U);
       injectAdjRegisterData((int16_t)pump->demand.target, 144, 49,
@@ -3274,7 +3276,7 @@ void test_vp37_upper_feedforward_flattens_without_changing_position_target(
   VP37_setVP37PID(pump, 0, 0, 0, true);
   const float demand[] = {90, 92.5f, 95, 100};
   for (size_t i = 0; i < COUNTOF(demand); ++i) {
-    pump->demand.desired = -1;
+    pump->demand.desiredValid = false;
     VP37_setPositionDemandPercentage(pump, demand[i]);
     hal_mock_set_millis((uint32_t)(i + 1U) * 5U);
     injectAdjRegisterData((int16_t)pump->demand.target, 144, 49, ADJ_STATUS_OK);
@@ -5257,7 +5259,9 @@ static VP37Pump *prepareCalibrationProbe(void) {
   pump->demand.atRest = true;
   pump->demand.requestedPercent = 0.0f;
   pump->demand.target = pump->feedback.adjustMin;
+  pump->demand.targetValid = true;
   pump->demand.desired = pump->feedback.adjustMin;
+  pump->demand.desiredValid = true;
   pump->output.finalPWM = 0;
   pump->callbacks.setDriveEnabled(true);
   return pump;
@@ -5272,6 +5276,7 @@ void test_calibration_probe_preserves_calibration_pid_and_zeroes_output(void) {
   appendAdjRegisterDataRepeated(&script, 10, 8300, 132, 40, ADJ_STATUS_OK);
   injectAdjustometerScript(&script);
   int32_t maximum = -1;
+  deb("probe capture sentinel");
   TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_probeCalibrationMaximum(pump, &maximum));
   TEST_ASSERT_EQUAL_INT32(8300, maximum);
   TEST_ASSERT_EQUAL_INT32(0, s_vp37Board.lastQuantityPwm);
@@ -5280,6 +5285,26 @@ void test_calibration_probe_preserves_calibration_pid_and_zeroes_output(void) {
   TEST_ASSERT_EQUAL_FLOAT(ki, pump->pid.ki);
   TEST_ASSERT_EQUAL_FLOAT(0.0f, pump->pid.terms.integral);
   TEST_ASSERT_EQUAL_UINT32(200U, hal_millis());
+  TEST_ASSERT_EQUAL_STRING("probe capture sentinel", hal_mock_deb_last_line());
+  // An unread capture owns the buffer; another pulse must not overwrite it.
+  const uint32_t finished = hal_millis();
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY,
+                        VP37_probeCalibrationMaximum(pump, &maximum));
+  TEST_ASSERT_EQUAL_UINT32(finished, hal_millis());
+  VP37CalibrationSample sample;
+  unsigned count = 0U;
+  while (VP37_readCalibrationTrace(&sample) == HAL_OK) {
+    ++count;
+    TEST_ASSERT_EQUAL_UINT32(count * 20000U, sample.us);
+  }
+  VP37CalibrationResult result;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_takeCalibrationResult(&result));
+  TEST_ASSERT_TRUE(result.probe);
+  TEST_ASSERT_TRUE(result.maxSettled);
+  TEST_ASSERT_FALSE(result.overflow);
+  TEST_ASSERT_EQUAL_UINT32(10U, count);
+  TEST_ASSERT_EQUAL_UINT32(count, result.samples);
+  TEST_ASSERT_EQUAL_INT32(maximum, result.probeMaximum);
 }
 
 void test_calibration_probe_refuses_active_or_unreleased_state(void) {

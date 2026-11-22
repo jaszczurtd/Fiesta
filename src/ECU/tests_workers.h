@@ -60,9 +60,8 @@ void testsWorkersPrintStepEvent(void);
 /**
  * @brief Tell whether a recorded step announcement still awaits its print.
  * @return true from the record until core 0 printed it.
- * @note The control core holds a changed demand back while this is true, so
- *       the announcement reaches the log before the move it announces, as it
- *       did when the control core printed it itself.
+ * @note Diagnostic state only; it never gates a demand change. A newer event
+ * replaces an unread event, with sequence gaps exposing skipped announcements.
  */
 bool testsWorkersStepEventPending(void);
 

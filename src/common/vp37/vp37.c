@@ -12,17 +12,19 @@
 
 /** @brief What one control step carries between its stages. */
 typedef struct {
-  float dt;              /**< Control period [s]. */
-  bool stationaryTarget; /**< A single step, or a tracked target that has
-                            stood for VP37_TARGET_STABLE_MS. */
-  int32_t
-      previousDesired; /**< Desired position before this step, -1 at start. */
-  float previousPosition; /**< Slewed position before this step. */
-  float ki;               /**< Integral gain in force this step. */
-  float outputScale;      /**< Supply multiplier times thermal multiplier. */
+  float dt;                  /**< Control period [s]. */
+  bool stationaryTarget;     /**< A single step, or a tracked target that has
+                                stood for VP37_TARGET_STABLE_MS. */
+  bool previousDesiredValid; /**< The ramp had a position before this step. */
+  int32_t previousDesired;   /**< Desired position before this step [Hz];
+                                meaningful with previousDesiredValid. */
+  float previousPosition;    /**< Slewed position before this step. */
+  float ki;                  /**< Integral gain in force this step. */
+  float outputScale;         /**< Supply multiplier times thermal multiplier. */
 } VP37Cycle;
 
 static void VP37_positionCycle(VP37Pump *self);
+static void VP37_followLimits(VP37Pump *self);
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle);
 static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle);
 static void VP37_blendMotion(VP37Pump *self, const VP37Cycle *cycle);
@@ -143,9 +145,15 @@ VP37InitStatus VP37_init(VP37Pump *self) {
   self->currentControl.enabled = true;
   VP37_resetCurrentControl(self);
   self->feedback.calibrationDone = false;
-  self->demand.target = -1;
-  self->demand.desired = -1;
-  self->feedback.position = -1;
+  // Positions are signed: validity flags, not values, say what is missing.
+  self->demand.target = 0;
+  self->demand.targetValid = false;
+  self->demand.countsDemand = false;
+  self->demand.desired = 0;
+  self->demand.desiredPosition = 0.0f;
+  self->demand.desiredValid = false;
+  self->feedback.position = 0;
+  self->feedback.positionValid = false;
   self->feedback.commLostSince = 0;
   self->feedback.commFailed = false;
   self->pid.error = 0;
@@ -297,13 +305,14 @@ VP37InitStatus VP37_init(VP37Pump *self) {
     return VP37_INIT_CALIBRATION_FAILED;
   }
   (void)VP37_updateAdjustometerPosition(self);
-  self->demand.target = -1;
+  self->demand.targetValid = false;
   // Calibration leaves the actuator at the bottom, so the first demand ramps
   // from there. It used to jump straight to its target: a pedal already
   // pressed at start threw the actuator across the stroke with no ramp and
   // no arrival brake.
   self->demand.desired = self->feedback.adjustMin;
   self->demand.desiredPosition = (float)self->feedback.adjustMin;
+  self->demand.desiredValid = true;
 
   VP37_enableVP37(self, self->feedback.calibrationDone);
 
@@ -315,7 +324,7 @@ VP37InitStatus VP37_init(VP37Pump *self) {
 void VP37_enableVP37(VP37Pump *self, bool enable) {
   if (VP37_hasCallbacks(self)) {
     self->callbacks.setDriveEnabled(enable);
-    deb("vp37 enabled: %d", VP37_isVP37Enabled(self));
+    VP37_recordDiagnostic(self, VP37_DIAG_ENABLED, enable ? 1U : 0U, 0U);
   }
 }
 
@@ -390,19 +399,22 @@ static int32_t VP37_demandTop(const VP37Pump *self) {
  * @param self Controller instance, already checked and calibrated.
  * @param percent Position in percent of the calibrated stroke.
  * @param target The same position in feedback counts.
+ * @param counts True when the caller gave the position in counts.
  * @note Both entry points end here, so the loop sees one demand whichever
  * unit the caller works in, and the settle timer restarts only when the
  * target really moves.
  */
 
-static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target) {
+static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target,
+                               bool counts) {
   self->demand.requestedPercent = percent;
-  if (target != self->demand.target) {
+  self->demand.countsDemand = counts;
+  if (!self->demand.targetValid || (target != self->demand.target)) {
     // A target that changes again within the settle time is being tracked;
     // a lone rising step is a standing target from its first cycle. A lone
     // falling step keeps the moving assist for the settle time: the descent
     // is not braked, and it started slower without it.
-    const bool falling = (self->demand.desired >= 0) &&
+    const bool falling = self->demand.desiredValid &&
                          ((float)target < self->demand.desiredPosition);
     self->demand.targetMoving =
         falling || !hal_millis_deadline_expired(self->demand.targetChangedMs,
@@ -410,6 +422,31 @@ static void VP37_publishDemand(VP37Pump *self, float percent, int32_t target) {
     self->demand.targetChangedMs = hal_millis();
   }
   self->demand.target = target;
+  self->demand.targetValid = true;
+}
+
+/**
+ * @brief Position a percent demand stands for on the stroke in effect.
+ * @param self Calibrated controller instance.
+ * @param percent Demand already clamped to 0..100 %.
+ * @return The position between the bottom and the physical limit [Hz].
+ */
+static int32_t VP37_percentTarget(const VP37Pump *self, float percent) {
+  return (int32_t)hal_math_map_f32(percent, 0.0f, 100.0f,
+                                   (float)self->feedback.adjustMin,
+                                   (float)VP37_demandTop(self));
+}
+
+/**
+ * @brief Percent a counts target stands for on the stroke in effect.
+ * @param self Calibrated controller instance.
+ * @param target Position already clamped to the bottom and the physical
+ * limit [Hz].
+ * @return The demand in percent of the usable stroke.
+ */
+static float VP37_targetPercent(const VP37Pump *self, int32_t target) {
+  return hal_math_map_f32((float)target, (float)self->feedback.adjustMin,
+                          (float)VP37_demandTop(self), 0.0f, 100.0f);
 }
 
 hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
@@ -417,11 +454,8 @@ hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
   if (status == HAL_OK) {
     const bool valid = isfinite(percent);
     const float requested = valid ? hal_constrain(percent, 0.0f, 100.0f) : 0.0f;
-    VP37_publishDemand(
-        self, requested,
-        (int32_t)hal_math_map_f32(requested, 0.0f, 100.0f,
-                                  (float)self->feedback.adjustMin,
-                                  (float)VP37_demandTop(self)));
+    VP37_publishDemand(self, requested, VP37_percentTarget(self, requested),
+                       false);
     status = valid ? HAL_OK : HAL_EINVAL;
   }
   return status;
@@ -430,25 +464,25 @@ hal_status_t VP37_setPositionDemandPercentage(VP37Pump *self, float percent) {
 hal_status_t VP37_setPositionDemandValue(VP37Pump *self, int32_t value) {
   hal_status_t status = VP37_demandAcceptance(self);
   if (status == HAL_OK) {
-    const int32_t top = VP37_demandTop(self);
-    const int32_t target = hal_constrain(value, self->feedback.adjustMin, top);
+    const int32_t target =
+        hal_constrain(value, self->feedback.adjustMin, VP37_demandTop(self));
     // Percent follows the counts, so telemetry and the rest policy read the
     // same demand whichever entry point set it.
-    VP37_publishDemand(self,
-                       hal_math_map_f32((float)target,
-                                        (float)self->feedback.adjustMin,
-                                        (float)top, 0.0f, 100.0f),
-                       target);
+    VP37_publishDemand(self, VP37_targetPercent(self, target), target, true);
   }
   return status;
 }
 
 int32_t VP37_getPositionDemandMinValue(const VP37Pump *self) {
-  return (self != NULL) ? self->feedback.adjustMin : -1;
+  return ((self != NULL) && self->feedback.calibrationDone)
+             ? self->feedback.adjustMin
+             : VP37_POSITION_NONE;
 }
 
 int32_t VP37_getPositionDemandMaxValue(const VP37Pump *self) {
-  return (self != NULL) ? VP37_demandTop(self) : -1;
+  return ((self != NULL) && self->feedback.calibrationDone)
+             ? VP37_demandTop(self)
+             : VP37_POSITION_NONE;
 }
 
 /**
@@ -611,17 +645,18 @@ void VP37_process(VP37Pump *self) {
     if (hal_elapsed_u32(hal_millis(), self->feedback.commLostSince,
                         VP37_ADJ_COMM_CUTOFF_MS)) {
       VP37_stop(self);
-      derr("VP37 disabled: feedback communication timeout");
+      VP37_recordDiagnostic(self, VP37_DIAG_COMM_TIMEOUT, 0U, 0U);
     }
   } else if (!self->feedback.fresh ||
              (self->feedback.lastStatus &
               (ADJ_STATUS_SIGNAL_LOST | ADJ_STATUS_BASELINE_PENDING)) != 0U) {
     VP37_stop(self);
-    derr("VP37 disabled: invalid feedback status:%u fresh:%d",
-         self->feedback.lastStatus, self->feedback.fresh);
+    VP37_recordDiagnostic(self, VP37_DIAG_INVALID_FEEDBACK,
+                          self->feedback.lastStatus,
+                          self->feedback.fresh ? 1U : 0U);
   } else if (!self->callbacks.driveAllowed()) {
     VP37_stop(self);
-    derr("VP37 disabled: drive not allowed");
+    VP37_recordDiagnostic(self, VP37_DIAG_DRIVE_FORBIDDEN, 0U, 0U);
   } else {
     self->pidDtUs = self->pidStarted ? (nowUs - self->pidLastUs) : periodUs;
     self->pidLastUs = nowUs;
@@ -646,7 +681,10 @@ void VP37_process(VP37Pump *self) {
  * is a source-independent position demand for the N146/G149-like inner loop.
  */
 static void VP37_positionCycle(VP37Pump *self) {
-  if (self->demand.target < 0) {
+  if (VP37_followFuelTemperature(self)) {
+    VP37_followLimits(self);
+  }
+  if (!self->demand.targetValid) {
     return;
   }
   VP37Cycle cycle;
@@ -671,15 +709,40 @@ static void VP37_positionCycle(VP37Pump *self) {
 }
 
 /**
+ * @brief Carry the demand over to limits that have just moved.
+ * @param self VP37 controller instance to update.
+ * @note A percent demand keeps its place on the stroke, so its target is
+ * mapped again from the stored percent. A counts demand keeps its counts,
+ * clamped to the new range, and its percent follows. Neither counts as a new
+ * demand: the settle time and the tracking state stay as they are, so the
+ * correction moves a standing target without disturbing the hold.
+ */
+static void VP37_followLimits(VP37Pump *self) {
+  if (!self->demand.targetValid) {
+    return;
+  }
+  if (self->demand.countsDemand) {
+    self->demand.target = hal_constrain(
+        self->demand.target, self->feedback.adjustMin, VP37_demandTop(self));
+    self->demand.requestedPercent =
+        VP37_targetPercent(self, self->demand.target);
+  } else {
+    self->demand.target =
+        VP37_percentTarget(self, self->demand.requestedPercent);
+  }
+}
+
+/**
  * @brief Capture what this step needs to know about the previous one.
  * @param self VP37 controller instance to read.
  * @param cycle Step context to fill.
  */
 static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
+  cycle->previousDesiredValid = self->demand.desiredValid;
   cycle->previousDesired = self->demand.desired;
-  cycle->previousPosition = (cycle->previousDesired < 0)
-                                ? (float)self->demand.target
-                                : self->demand.desiredPosition;
+  cycle->previousPosition = cycle->previousDesiredValid
+                                ? self->demand.desiredPosition
+                                : (float)self->demand.target;
   cycle->dt = (float)self->pidDtUs * 0.000001f;
   cycle->stationaryTarget =
       (!self->pid.septemberReference && !self->demand.targetMoving) ||
@@ -700,7 +763,7 @@ static void VP37_beginCycle(const VP37Pump *self, VP37Cycle *cycle) {
  * error to the measured position follows from the result.
  */
 static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
-  if (self->demand.desired < 0) {
+  if (!self->demand.desiredValid) {
     self->demand.desiredPosition = (float)self->demand.target;
   } else {
     const float travel =
@@ -739,6 +802,7 @@ static void VP37_rampDemand(VP37Pump *self, const VP37Cycle *cycle) {
     self->demand.desiredPosition += hal_constrain(delta, -step, step);
   }
   self->demand.desired = (int32_t)self->demand.desiredPosition;
+  self->demand.desiredValid = true;
   self->pid.error = self->demand.desired - self->feedback.position;
 }
 
@@ -943,12 +1007,13 @@ static void VP37_boundCorrection(VP37Pump *self, const VP37Cycle *cycle) {
 static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   // A plant ahead of a moving reference needs braking, not a lag freeze.
   const bool leadingRamp =
-      self->pid.fullRangePrototype && self->pid.researchRampBraking &&
+      cycle->previousDesiredValid && self->pid.fullRangePrototype &&
+      self->pid.researchRampBraking &&
       (((float)self->demand.desired - (float)cycle->previousDesired) *
            (float)self->pid.error <
        0.0f);
   const bool rampWindup =
-      (cycle->previousDesired >= 0) && !leadingRamp &&
+      cycle->previousDesiredValid && !leadingRamp &&
       (self->demand.desired != cycle->previousDesired) &&
       ((self->pid.terms.integral * cycle->ki * (float)self->pid.error) >= 0.0f);
   const bool targetSettled =
@@ -960,18 +1025,23 @@ static bool VP37_stepCorrection(VP37Pump *self, const VP37Cycle *cycle) {
   const bool diagnosticHold =
       (self->pid.researchFreezeMask & VP37_RESEARCH_FREEZE_INTEGRAL_MASK) != 0U;
   const bool motionHold = VP37_motionIntegralHold(
-      self, targetSettled && (cycle->previousDesired == self->demand.desired),
+      self,
+      targetSettled && cycle->previousDesiredValid &&
+          (cycle->previousDesired == self->demand.desired),
       cycle->dt);
   const bool freezeIntegral =
       rampWindup || self->pid.integralHold || diagnosticHold || motionHold;
   const float integralDeadband = freezeIntegral ? fabsf((float)self->pid.error)
                                                 : self->pid.integralDeadbandHz;
+  // Without a preceding reference the present one shifts nothing.
   const hal_status_t pidStatus = VP37_stepDampedCorrection(
-      self, cycle->dt, integralDeadband, cycle->previousDesired);
+      self, cycle->dt, integralDeadband,
+      cycle->previousDesiredValid ? cycle->previousDesired
+                                  : self->demand.desired);
   bool stepped = true;
   if (pidStatus != HAL_OK) {
     VP37_stop(self);
-    derr("VP37 PID step failed: %s", hal_status_to_string(pidStatus));
+    VP37_recordDiagnostic(self, VP37_DIAG_PID_FAILURE, (uint32_t)pidStatus, 0U);
     stepped = false;
   }
   return stepped;

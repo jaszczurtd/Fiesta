@@ -5,15 +5,22 @@
 #include "../vp37_internal.h"
 #include <string.h>
 
+/** Baseline frequency the test frames carry [Hz]; any locked value works. */
+#define VP37_TEST_BASELINE_HZ 400000U
+
 /** @brief Fresh feedback for tests that supply only position and auxiliary
- * data. */
-static inline adjustometer_feedback_t vp37TestFeedback(int16_t pulseHz,
+ * data. The frame measures @p position the way the VP37 module reads it,
+ * baseline minus filtered frequency, and carries the same number in pulseHz,
+ * the field the reader tests decode. */
+static inline adjustometer_feedback_t vp37TestFeedback(int16_t position,
                                                        uint8_t voltage,
                                                        int16_t fuelTemp,
                                                        uint8_t status) {
   static uint32_t number = 0U;
   adjustometer_feedback_t sample = {0};
-  sample.pulseHz = pulseHz;
+  sample.pulseHz = position;
+  sample.baselineHz = VP37_TEST_BASELINE_HZ;
+  sample.filteredHz = (uint32_t)((int32_t)VP37_TEST_BASELINE_HZ - position);
   sample.voltage = voltage;
   sample.fuelTemp = fuelTemp;
   sample.status = status;
@@ -29,12 +36,13 @@ static inline void vp37SetupCalibratedPump(VP37Pump *pump,
   pump->pid.controller = hal_pid_controller_create();
   pump->vp37Initialized = true;
   pump->feedback.calibrationDone = true;
-  pump->feedback.adjustMin = 100;
-  pump->feedback.adjustMax = 9100;
+  pump->feedback.calibratedMin = 100;
+  pump->feedback.calibratedMax = 9100;
+  pump->feedback.adjustMin = pump->feedback.calibratedMin;
+  pump->feedback.adjustMax = pump->feedback.calibratedMax;
   pump->feedback.adjustMiddle =
       (pump->feedback.adjustMax + pump->feedback.adjustMin) / 2;
-  pump->demand.target = -1;
-  pump->demand.desired = -1;
+  // No demand and no ramp yet; the flags of the zeroed pump say so.
   pump->demand.requestedPercent = -1.0f;
   // The tests address the whole calibrated travel; the limit has its own.
   pump->demand.physicalLimitPercent = (float)VP37_PERCENT_MAX;

@@ -14,7 +14,7 @@ static float VP37_currentCountsPerAmp(float voltageScale) {
 
 static bool VP37_driveCanSettle(const VP37Pump *self, int32_t pwm) {
   return self->feedback.fresh && !self->demand.atRest &&
-         (self->demand.desired >= 0) &&
+         self->demand.desiredValid &&
          (self->demand.desired == self->demand.target) &&
          self->thermal.driveVoltageSettled && (pwm >= VP37_DRIVE_MIN_PWM) &&
          (pwm <= VP37_PWM_MAX);

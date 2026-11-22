@@ -47,6 +47,16 @@ static inline hal_status_t vp37FixtureTransfer(uint8_t reg, uint8_t *data,
   if (s_vp37Board.busy) {
     return HAL_EBUS;
   }
+  /* Feedback scripts omit optional registers. Model their absence without
+   * consuming the next scripted fast frame. Explicit extension reads still
+   * consume their own byte script. */
+  if ((reg == ADJUSTOMETER_EXT_REG_START) &&
+      (length == ADJUSTOMETER_TOTAL_REG_COUNT - ADJUSTOMETER_EXT_REG_START)) {
+    const size_t prefix = ADJUSTOMETER_FEEDBACK_START - reg;
+    memset(data, 0, prefix);
+    data += prefix;
+    length -= prefix;
+  }
   for (size_t i = 0U; i < length; i++) {
     data[i] = (s_vp37Board.scriptPosition < s_vp37Board.scriptLength)
                   ? s_vp37Board.script[s_vp37Board.scriptPosition++]

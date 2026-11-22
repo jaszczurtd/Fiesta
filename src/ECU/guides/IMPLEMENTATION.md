@@ -34,10 +34,13 @@ no latch is measured. It works only while the control period equals the PWM
 period; with another bench period or with the current scan off the grid runs without latch synchronization.
 
 The bench tests record their step announcements on core 1 and core 0 prints
-them, together with acknowledgements of default resets. A changed test demand
-waits for its announcement, at most
-`STEP_EVENT_APPLY_TIMEOUT_MS`, so the log still shows the announcement before
-the move it announces. Every control step ends by publishing its state behind
+them, together with acknowledgements of default resets, manual demands and
+the console watch. Manual and watch replies retain the values accepted by
+the controller; formatting and USB writes take place on core 0. Test demands
+take effect without waiting for their announcements. Each announcement carries
+the occurrence time `us` and sequence `seq`; delayed output must be matched to
+telemetry using MCU time, not the time at which the host receives the line.
+Every control step ends by publishing its state behind
 a sequence counter, and core 0 copies that snapshot without a lock. The published words are written and read only
 with relaxed atomic accesses, so an overlapping copy is discarded, never a
 data race, and the control loop never waits for the
@@ -48,6 +51,12 @@ bench trace buffer uses one atomic state to transfer ownership between capture
 and output. The I²C bus with the PCF8574 output latch and
 the DTC manager with its storage sit behind mutexes. Flash writes stay on
 core 0.
+
+Core 1 reads the Adjustometer registers `0x05..0x34` in one 48-byte I2C
+transaction. The fast feedback block supplies all control fields; the optional
+diagnostic block contributes chip temperature and validity flags. Core 0 prints
+these cached values without accessing the feedback bus. The metric stream
+leaves room in the TX queue for the next batch of command replies.
 
 The main controllers (VP37, turbo, RPM, fan, heater, glow plugs, windows, and
 engine state) live in one `ecu_context_t` in
@@ -103,7 +112,7 @@ firmware variants' ELF memory maps when changing these buffers or RAM code.
 | [`vp37_adapter.c`](../../../src/ECU/vp37_adapter.c) | the ECU's board services for VP37 (PWM channels, PCF8574 enable, engine-speed guard, Adjustometer bus transfer), its start-up, `F_FUEL_TEMP`/`F_VOLTS` from the published status, the fuel temperature validity for CAN and OBD, and U190A after a lasting fuel sensor fault |
 | [`vp37_adjustometer.c`](../../../src/common/vp37/vp37_adjustometer.c) | Adjustometer frames, the diagnostic extension, and the start-up baseline wait |
 | [`vp37_snapshot.c`](../../../src/common/vp37/vp37_snapshot.c) | state published at the end of each control step and the lock-free copies of it |
-| [`vp37_feedback.c`](../../../src/common/vp37/vp37_feedback.c) | Adjustometer position and the calibration sweep |
+| [`vp37_feedback.c`](../../../src/common/vp37/vp37_feedback.c) | signed Adjustometer position, the calibration sweep, and the limits that follow the fuel temperature |
 | [`vp37_compensation.c`](../../../src/common/vp37/vp37_compensation.c) | corrections for supply voltage, fuel temperature, and coil resistance |
 | [`vp37_control.c`](../../../src/common/vp37/vp37_control.c) | feedforward from the holding map, learned trim, PID, dead zone, and hold |
 | [`vp37_current.c`](../../../src/common/vp37/vp37_current.c) | coil current measured on the shunt |

@@ -106,6 +106,8 @@ typedef struct {
   /**< Controller, module command; optionally requests a test ID. */
   void (*help)(void);   /**< Controller, module console help. */
   void (*events)(void); /**< Session, module events after lifecycle/fixtures. */
+  void (*reply)(uint8_t code, uint32_t value, uint32_t detail);
+  /**< Session, a module reply recorded by fiesta_test_reply(). */
 } fiesta_test_config_t;
 
 /** @brief Initialize the singleton with lifetime configuration.
@@ -137,6 +139,15 @@ bool fiesta_test_tick(void);
 void fiesta_test_console(const char *line);
 /** @brief Drain events and run pending one-shot fixtures. Session role. */
 void fiesta_test_events(void);
+/** @brief Record a module reply without printing on the controller role.
+ * @param code Module-defined reply type, captured with its values.
+ * @param value First payload word, copied into the bounded event queue.
+ * @param detail Second payload word, copied with value.
+ * @note Session events invoke the configured reply callback in queue order.
+ * Muted replies are dropped; queue overflow is reported by the session role,
+ * as for lifecycle events. Initialization discards pending replies.
+ */
+void fiesta_test_reply(uint8_t code, uint32_t value, uint32_t detail);
 /** @brief Active name, or NULL; controller role only.
  * @return Registry string, valid for the firmware lifetime.
  */

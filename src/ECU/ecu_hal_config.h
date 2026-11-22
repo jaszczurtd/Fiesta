@@ -33,6 +33,10 @@
 #define HAL_COMMAND_ROUTER_MAX_COMMANDS 24u /* SC surface (17) + headroom */
 #define HAL_ENABLE_APP_TASK1
 
+/* Fund the 4 KiB console TX buffer and control events from ISR log storage;
+ * retain the full VP37 trace and both core stacks. */
+#define HAL_DEBUG_ISR_SLOT_COUNT 32u
+
 /* The VP37 module's bench telemetry and RAM trace follow the functional-test
  * image, so a bench build needs no second flag. */
 #if defined(ECU_FUNCTIONAL_TESTS_ENABLED) && (ECU_FUNCTIONAL_TESTS_ENABLED != 0)

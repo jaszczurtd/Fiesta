@@ -12,6 +12,13 @@
 #define VP37_ADJ_EXTENDED_ATTEMPTS 2U
 /** Pause between two baseline polls [ms]. */
 #define VP37_ADJ_BASELINE_POLL_MS 10U
+/* Read both published blocks in one transaction. The console never owns
+ * the feedback bus; optional diagnostics cannot add transfers or retries. */
+#define VP37_ADJ_READ_BYTES                                                    \
+  (ADJUSTOMETER_TOTAL_REG_COUNT - ADJUSTOMETER_EXT_REG_START)
+
+static bool VP37_decodeExtended(const uint8_t *buf,
+                                adjustometer_reading_t *out);
 
 /* A failed transfer (write and read phase) blocks the control step; it must
  * end within the communication cutoff, which the HAL default does not. */
@@ -22,18 +29,20 @@
 adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
   const uint32_t startedUs = hal_micros();
   uint8_t retries = 0U;
-  uint8_t frame[ADJUSTOMETER_FEEDBACK_BYTES];
+  uint8_t frame[VP37_ADJ_READ_BYTES];
   adjustometer_feedback_t decoded = {0};
   hal_status_t status = HAL_EBUS;
   bool tornFrame = true;
   for (uint8_t attempt = 0U;
        (attempt < VP37_ADJ_FEEDBACK_ATTEMPTS) && tornFrame; attempt++) {
     retries = attempt;
-    status = self->callbacks.adjustometerTransfer(ADJUSTOMETER_FEEDBACK_START,
+    status = self->callbacks.adjustometerTransfer(ADJUSTOMETER_EXT_REG_START,
                                                   frame, COUNTOF(frame));
     tornFrame = false;
     if (status == HAL_OK) {
-      status = adjustometer_feedback_decode(frame, &decoded);
+      status = adjustometer_feedback_decode(
+          &frame[ADJUSTOMETER_FEEDBACK_START - ADJUSTOMETER_EXT_REG_START],
+          &decoded);
       tornFrame = (status == HAL_EAGAIN);
     }
   }
@@ -43,8 +52,12 @@ adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
   snapshot.readUs = nowUs - startedUs;
   snapshot.readRetries = retries;
   snapshot.feedbackFresh = false;
+  snapshot.extendedTelemetryValid = false;
   snapshot.commOk = status == HAL_OK;
   if (status == HAL_OK) {
+    /* The fast frame below owns all control fields. The older diagnostic
+     * publication contributes only its temperature and validity flags. */
+    (void)VP37_decodeExtended(frame, &snapshot);
     const bool tracked = self->adjustometer.sampleTracked;
     const bool advanced = !tracked || (decoded.number != snapshot.sampleNumber);
     const bool clockBackwards =
@@ -79,13 +92,8 @@ adjustometer_reading_t VP37_readAdjustometer(VP37Pump *self) {
   return snapshot;
 }
 
-static bool VP37_readExtendedOnce(const VP37Pump *self,
-                                  adjustometer_reading_t *out) {
-  uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT];
-  if (self->callbacks.adjustometerTransfer(ADJUSTOMETER_EXT_REG_START, buf,
-                                           COUNTOF(buf)) != HAL_OK) {
-    return false;
-  }
+static bool VP37_decodeExtended(const uint8_t *buf,
+                                adjustometer_reading_t *out) {
   const uint8_t version =
       buf[ADJUSTOMETER_REG_EXT_VERSION - ADJUSTOMETER_EXT_REG_START];
   const uint8_t seqBegin =
@@ -107,6 +115,14 @@ static bool VP37_readExtendedOnce(const VP37Pump *self,
       &buf[ADJUSTOMETER_REG_CHIP_TEMP_DECI_C - ADJUSTOMETER_EXT_REG_START]);
   out->extendedTelemetryValid = true;
   return true;
+}
+
+static bool VP37_readExtendedOnce(const VP37Pump *self,
+                                  adjustometer_reading_t *out) {
+  uint8_t buf[ADJUSTOMETER_EXT_REG_COUNT];
+  return (self->callbacks.adjustometerTransfer(ADJUSTOMETER_EXT_REG_START, buf,
+                                               COUNTOF(buf)) == HAL_OK) &&
+         VP37_decodeExtended(buf, out);
 }
 
 bool VP37_readAdjustometerExtended(const VP37Pump *self,

@@ -309,7 +309,7 @@ void moduleEvents() {
 }
 
 // suite, params, values, param_count, keepalive_ms, reset, prepare, cleanup,
-// apply_output, read_drive, sc_blocked, command, help, events.
+// apply_output, read_drive, sc_blocked, command, help, events, reply.
 const fiesta_test_config_t kConfig = {
     suite,
     kParams,
@@ -325,6 +325,7 @@ const fiesta_test_config_t kConfig = {
     nullptr,
     nullptr,
     moduleEvents,
+    nullptr,
 };
 } // namespace
 
