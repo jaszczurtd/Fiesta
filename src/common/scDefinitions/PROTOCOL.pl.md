@@ -211,9 +211,12 @@ SC_TEST_STATUS        -> SC_OK TEST_STATUS state=running runs=1 test=rpm src=sc 
   stan kontrolki `lit`, `off`, `blink` albo sygnał buzzera `short`, `middle`,
   `long`. Nieznane klucze host pokazuje bez interpretacji.
   `rate` testu `cyclic` to tempo zadania zmierzone w ostatnim pełnym cyklu
-  bieżącego profilu (200 % skoku na cykl), nie tempo nominalne kroku. Klucz
-  pojawia się dopiero po pierwszym pełnym cyklu tego profilu, więc nigdy nie
-  przenosi wartości poprzedniego profilu. Test `pot` podaje tempo ustawione.
+  bieżącego profilu (200 % skoku na cykl). Profile krokowe trzymają się
+  nominalnej siatki swojego opóźnienia i pominięte kroki wykonują przy
+  następnym wywołaniu, więc tempo odpowiada nominalnemu niezależnie od tego,
+  jak często pętla sterowania wywołuje test. Klucz pojawia się dopiero po
+  pierwszym pełnym cyklu tego profilu, więc nigdy nie przenosi wartości
+  poprzedniego profilu. Test `pot` podaje tempo ustawione.
   ECU odświeża położenie i postęp tylko podczas odpytywania przez hosta,
   w pętli zwalniającej kolejne kroki sterowania. Pierwszy status po przerwie
   może zawierać ostatnio opublikowane dane; kolejne odczyty widzą aktualizację

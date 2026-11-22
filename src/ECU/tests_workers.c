@@ -222,6 +222,46 @@ uint32_t testsWorkersCyclicDelayMs(void) {
                       : s_cyclicDelaysMs[s_cyclic.profile];
 }
 
+/** @brief Step delay of the profile in progress, at least 1 ms. */
+static uint32_t cyclicStepDelayMs(void) {
+  const uint32_t delayMs = testsWorkersCyclicDelayMs();
+  return delayMs != 0U ? delayMs : 1U;
+}
+
+/**
+ * @brief Take one 1 % step of the stepping ramp.
+ * @param stepMs Nominal time of the step, which closes a cycle at its end.
+ * @param outFinished Set when the step completes the last pass.
+ */
+static void cyclicTakeStep(uint32_t stepMs, bool *outFinished) {
+  s_cyclic.value += s_cyclic.increment;
+  if (s_cyclic.value >= 100) {
+    s_cyclic.value = 100;
+    s_cyclic.increment = -s_cyclic.increment;
+  } else if (s_cyclic.value <= 0) {
+    s_cyclic.value = 0;
+    s_cyclic.increment = -s_cyclic.increment;
+    // The cycle that just closed gives the rate the drive really got.
+    s_cyclic.measuredRate =
+        cyclicRateFromCycleMs(stepMs - s_cyclic.cycleStartMs);
+    s_cyclic.cycleStartMs = stepMs;
+    s_cyclic.cycles++;
+    if (s_cyclic.cycles >= paramU32(TEST_PARAM_CYCLIC_CYCLES)) {
+      s_cyclic.cycles = 0U;
+      s_cyclic.profile++;
+      // A new profile begins: its rate is unknown until its first cycle.
+      s_cyclic.measuredRate = 0U;
+      if (s_cyclic.profile >= COUNTOF(s_cyclicDelaysMs)) {
+        s_cyclic.profile = 0U;
+        s_cyclic.passes++;
+        *outFinished = s_cyclic.passes >= paramU32(TEST_PARAM_CYCLIC_PASSES);
+      }
+    }
+  } else {
+    // Mid-ramp: nothing to account for.
+  }
+}
+
 float testsWorkersCyclicStep(bool *outFinished) {
   *outFinished = false;
   const uint32_t nowMs = hal_millis();
@@ -237,37 +277,20 @@ float testsWorkersCyclicStep(bool *outFinished) {
     const uint32_t distance = phase <= period / 2U ? phase : period - phase;
     return (float)CYCLIC_PERCENT_PER_CYCLE * (float)distance / (float)period;
   }
-  if (!hal_elapsed_u32(nowMs, s_cyclic.previousMs,
-                       testsWorkersCyclicDelayMs())) {
-    return (float)s_cyclic.value;
+  // Steps fall due on the nominal grid of the profile's delay, and a late
+  // call takes every step it missed: the demand rate does not depend on how
+  // often the loop gets here. A stall longer than a whole cycle restarts the
+  // grid instead of replaying it.
+  uint32_t delayMs = cyclicStepDelayMs();
+  if (hal_elapsed_u32(nowMs, s_cyclic.previousMs,
+                      delayMs * CYCLIC_PERCENT_PER_CYCLE)) {
+    s_cyclic.previousMs = nowMs - delayMs;
   }
-  s_cyclic.previousMs = nowMs;
-  s_cyclic.value += s_cyclic.increment;
-
-  if (s_cyclic.value >= 100) {
-    s_cyclic.value = 100;
-    s_cyclic.increment = -s_cyclic.increment;
-  } else if (s_cyclic.value <= 0) {
-    s_cyclic.value = 0;
-    s_cyclic.increment = -s_cyclic.increment;
-    // The cycle that just closed gives the rate the drive really got.
-    s_cyclic.measuredRate =
-        cyclicRateFromCycleMs(nowMs - s_cyclic.cycleStartMs);
-    s_cyclic.cycleStartMs = nowMs;
-    s_cyclic.cycles++;
-    if (s_cyclic.cycles >= paramU32(TEST_PARAM_CYCLIC_CYCLES)) {
-      s_cyclic.cycles = 0U;
-      s_cyclic.profile++;
-      // A new profile begins: its rate is unknown until its first cycle.
-      s_cyclic.measuredRate = 0U;
-      if (s_cyclic.profile >= COUNTOF(s_cyclicDelaysMs)) {
-        s_cyclic.profile = 0U;
-        s_cyclic.passes++;
-        *outFinished = s_cyclic.passes >= paramU32(TEST_PARAM_CYCLIC_PASSES);
-      }
-    }
-  } else {
-    // Mid-ramp: nothing to account for.
+  while (!*outFinished &&
+         hal_elapsed_u32(nowMs, s_cyclic.previousMs, delayMs)) {
+    s_cyclic.previousMs += delayMs;
+    cyclicTakeStep(s_cyclic.previousMs, outFinished);
+    delayMs = cyclicStepDelayMs();
   }
   return (float)s_cyclic.value;
 }

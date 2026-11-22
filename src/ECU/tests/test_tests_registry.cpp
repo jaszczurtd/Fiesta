@@ -941,19 +941,17 @@ void test_console_watch_stops_a_quiet_console_test(void) {
   TEST_ASSERT_NULL(testsActiveName());
 }
 
-// The cyclic rate is the demand rate the drive got: a loop that ticks less
-// often than the profile's step delay stretches every cycle, and the status
-// reports the rate measured over the last full cycle instead of the nominal
-// one. A new profile shows no rate until its own first cycle closes. Ticks of
-// 10 and 12 ms keep every closing step on the 20 ms refresh grid of the
+// The stepping cyclic ramp follows the nominal grid of the profile's step
+// delay: a loop that ticks less often takes the missed steps on its next tick,
+// so a cycle lasts 200 nominal steps whatever the tick interval, and the
+// status reports that rate. A new profile shows no rate until its own first
+// cycle closes. Every closing step falls on the 20 ms refresh grid of the
 // published status, so each check reads the step that closed the cycle.
-void test_cyclic_rate_is_measured_from_the_last_full_cycle(void) {
-  // The ticks below suit the shipped step delays and keepalive window.
-  static_assert(CYCLIC_DELAYTIME_A <= 10U,
-                "profile A steps on every 10 ms tick");
-  static_assert(CYCLIC_DELAYTIME_B <= 12U,
-                "profile B steps on every 12 ms tick");
-  static_assert(ECU_SC_TESTS_KEEPALIVE_MS > 2400U,
+void test_cyclic_rate_follows_the_nominal_step_delay(void) {
+  // The checks below suit the shipped step delays and keepalive window.
+  static_assert(CYCLIC_DELAYTIME_A == 4U, "profile A cycles in 800 ms");
+  static_assert(CYCLIC_DELAYTIME_B == 6U, "profile B cycles in 1200 ms");
+  static_assert(ECU_SC_TESTS_KEEPALIVE_MS > 1200U,
                 "the refresh must outlive the longest gap between polls");
   (void)preparePump();
   TEST_ASSERT_TRUE(initTests());
@@ -964,41 +962,44 @@ void test_cyclic_rate_is_measured_from_the_last_full_cycle(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, ops->run(nullptr, SC_TEST_NAME_CYCLIC));
   TEST_ASSERT_TRUE(tickTests());
 
-  // Ticks every 10 ms against the 4 ms step delay of profile A: the 200
-  // steps of a cycle take 2000 ms. Before the cycle closes there is no rate.
-  uint32_t ms = tickCyclic(0U, 190U, 10U);
+  // Ticks every 10 ms against the 4 ms step delay of profile A: the 200 steps
+  // of a cycle still take 800 ms. Before the cycle closes there is no rate.
+  uint32_t ms = tickCyclic(0U, 79U, 10U);
   sc_command_test_status_t status = scStatus();
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
   TEST_ASSERT_EQUAL_INT32(INT32_MIN, statusField(status, SC_TEST_FIELD_RATE));
 
-  // The closing step publishes the cycle: 200 % in 2000 ms is 100 %/s, well
-  // below the nominal 250 %/s of profile A.
-  ms = tickCyclic(ms, 10U, 10U);
+  // The closing step publishes the cycle: 200 % in 800 ms, the nominal
+  // 250 %/s of profile A.
+  ms = tickCyclic(ms, 1U, 10U);
   status = scStatus();
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
   TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_CYCLE));
-  TEST_ASSERT_EQUAL_INT32(100, statusField(status, SC_TEST_FIELD_RATE));
+  TEST_ASSERT_EQUAL_INT32(250, statusField(status, SC_TEST_FIELD_RATE));
 
-  // The second cycle of profile A, at 12 ms per step, closes the profile. Its
-  // 83 %/s belong to profile A, so profile B starts without a rate.
-  ms = tickCyclic(ms, 190U, 12U);
-  (void)scStatus(); // Contact: the refresh keeps running until the close.
-  ms = tickCyclic(ms, 10U, 12U);
+  // Ticks every 20 ms close the second cycle at 1600 ms all the same. The
+  // profile ends with it, so profile B starts without a rate.
+  ms = tickCyclic(ms, 39U, 20U);
+  status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_PROFILE));
+  TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_CYCLE));
+  ms = tickCyclic(ms, 1U, 20U);
   status = scStatus();
   TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_PROFILE));
   TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
   TEST_ASSERT_EQUAL_INT32(INT32_MIN, statusField(status, SC_TEST_FIELD_RATE));
 
-  // Profile B steps every 6 ms nominally; at 12 ms per tick its first cycle
-  // takes 2400 ms, 83 %/s instead of 166 %/s.
-  ms = tickCyclic(ms, 190U, 12U);
-  (void)scStatus(); // Contact, as above.
-  (void)tickCyclic(ms, 10U, 12U);
+  // Profile B steps every 6 ms: its first cycle closes 1200 ms later, at
+  // 167 %/s, again with 10 ms ticks.
+  ms = tickCyclic(ms, 119U, 10U);
+  status = scStatus();
+  TEST_ASSERT_EQUAL_INT32(1, statusField(status, SC_TEST_FIELD_CYCLE));
+  (void)tickCyclic(ms, 1U, 10U);
   status = scStatus();
   TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_PROFILE));
   TEST_ASSERT_EQUAL_INT32(2, statusField(status, SC_TEST_FIELD_CYCLE));
-  TEST_ASSERT_EQUAL_INT32(83, statusField(status, SC_TEST_FIELD_RATE));
+  TEST_ASSERT_EQUAL_INT32(167, statusField(status, SC_TEST_FIELD_RATE));
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, ops->stop(nullptr));
   TEST_ASSERT_FALSE(tickTests());
@@ -1867,7 +1868,7 @@ int main(void) {
   RUN_TEST(test_runtime_params_are_bounded_shared_with_the_console_and_reset);
   RUN_TEST(test_runtime_params_shape_the_staircase);
   RUN_TEST(test_configurator_run_is_queued_and_reports_progress);
-  RUN_TEST(test_cyclic_rate_is_measured_from_the_last_full_cycle);
+  RUN_TEST(test_cyclic_rate_follows_the_nominal_step_delay);
   RUN_TEST(test_console_watch_stops_a_quiet_console_test);
   RUN_TEST(test_configurator_status_refreshes_only_while_polled);
 #ifdef ECU_TEST_CLOCK_INTERLEAVING

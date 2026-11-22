@@ -226,9 +226,11 @@ SC_TEST_STATUS        -> SC_OK TEST_STATUS state=running runs=1 test=rpm src=sc 
   state `lit`, `off` or `blink`, or the buzzer signal `short`, `middle` or
   `long`. A host shows unknown keys as they are.
   The cyclic `rate` is the demand rate measured over the last full cycle of
-  the profile in progress (200 % of travel per cycle), not the nominal step
-  rate. It is absent until that profile completes its first cycle, so it
-  never carries the previous profile's value. The pot test reports its
+  the profile in progress (200 % of travel per cycle). The stepping profiles
+  follow the nominal grid of their step delay and take missed steps on the
+  next tick, so it matches the nominal rate however often the control loop
+  ticks the test. It is absent until that profile completes its first cycle,
+  so it never carries the previous profile's value. The pot test reports its
   configured rate.
   The ECU refreshes the position and progress values only while a host polls,
   because the refresh shares the loop that releases every control step. The
