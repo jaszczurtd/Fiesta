@@ -275,14 +275,48 @@ JB_STATIC_ASSERT((VP37_CONTROL_LATE_WINDOW_STEPS >= 10U) &&
 #define VP37_CURRENT_CONTROL_MAX_AGE_US 25000U
 /** PWM writes near a measured wrap have ambiguous latch ownership. */
 #define VP37_CURRENT_CONTROL_EDGE_GUARD_US 100U
-/** Wanted time from the PWM write of a control step to the hardware latch of
- * the quantity PWM [us]. The backend period of the nominal PWM frequency is
- * not exactly the control period, so a free grid walks through the whole PWM
- * period and the write waits anything from nothing to a full period for its
- * latch (bench 2026-11-11: 40 us per second, one turn in 123 s). The grid
- * follows the measured latch instead and keeps the write this far ahead of
- * it, clear of the edge guard and of the jitter of the step itself. */
+/** Time constant of the shunt zero learned at rest [s]. The startup median
+ * runs before the control code, in whole ADC codes, and its result depends on
+ * what the cores do at that moment: 8-12 codes by code layout on the bench
+ * (2026-11-22/23), about 20-27 Hz of top overshoot per code. While the
+ * actuator is released the scan reads the shunt with the control code
+ * running; those window means stayed at 9.6-10.7 codes across layouts. */
+#define VP37_CURRENT_ZERO_LEARN_S 1.0f
+/** Longest time step of one zero update [s]: a rest that resumes after a
+ * drive starts from the held zero instead of jumping to the window. */
+#define VP37_CURRENT_ZERO_LEARN_MAX_DT_S 0.02f
+/** Released time before a scan window may train the zero [us]: the newest
+ * window spans one PWM period, so this keeps the last latched ON phase and
+ * its edge guards out of it. */
+#define VP37_CURRENT_ZERO_LEARN_DELAY_US 50000U
+JB_STATIC_ASSERT((VP37_CURRENT_ZERO_LEARN_DELAY_US >=
+                  (3U * (1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ))),
+                 "the zero waits more than the newest window and one latch");
+/** Shortest wanted time from the PWM write of a control step to the hardware
+ * latch of the quantity PWM [us]. The backend period of the nominal PWM
+ * frequency is not exactly the control period, so a free grid walks through
+ * the whole PWM period and the write waits anything from nothing to a full
+ * period for its latch (bench 2026-11-11: 40 us per second, one turn in
+ * 123 s). The grid follows the measured latch instead and keeps the write at
+ * least this far ahead of it, clear of the edge guard and of the jitter of the
+ * step itself. */
 #define VP37_LATCH_LOCK_LEAD_US 700U
+/** Wanted time from the start of the position read of a control step to the
+ * latch of its PWM write [us]. The gains hold for this feedback delay: a step
+ * that runs faster, such as code in SRAM, would otherwise start later against
+ * the latch and act on a fresher position (bench 2026-11-22: 445 us shorter
+ * step, fewer overshoots on top arrivals, more holds at the integral dead
+ * band). The lock keeps this distance while the write stays at least
+ * VP37_LATCH_LOCK_LEAD_US ahead of the latch. 2880 us is the distance of the
+ * flash build on the RP2350 bench: the 700 us lead and a mean of 2179 us from
+ * the read to the write (bench 2026-11-22, lkproc of that build). */
+#define VP37_LATCH_LOCK_SAMPLE_LEAD_US 2880U
+/** Longest wanted time from the PWM write to the latch [us]; it stays below
+ * half the PWM period, so the shorter way around the period is unambiguous. */
+#define VP37_LATCH_LOCK_MAX_LEAD_US 2000U
+/** Smoothing of the read-to-write time of driven steps: the average moves by
+ * one share of this divisor of each new difference. */
+#define VP37_LATCH_LOCK_PROCESS_DIVISOR 16U
 /** Share of the measured lead error one step corrects, as a divisor. */
 #define VP37_LATCH_LOCK_ERROR_DIVISOR 8
 /** Largest correction of the grid in one step [us]. */
@@ -300,6 +334,16 @@ JB_STATIC_ASSERT((VP37_LATCH_LOCK_LEAD_US >
                      (VP37_LATCH_LOCK_LEAD_US <= 2000U),
                  "VP37_LATCH_LOCK_LEAD_US clears the edge guard and stays a "
                  "small part of the PWM period");
+JB_STATIC_ASSERT((VP37_LATCH_LOCK_MAX_LEAD_US >= VP37_LATCH_LOCK_LEAD_US) &&
+                     (VP37_LATCH_LOCK_MAX_LEAD_US <= 2000U) &&
+                     (VP37_LATCH_LOCK_SAMPLE_LEAD_US >
+                      VP37_LATCH_LOCK_LEAD_US) &&
+                     (VP37_LATCH_LOCK_SAMPLE_LEAD_US < 5000U),
+                 "the latch lock leads fit the 5 ms PWM period the lock runs "
+                 "on, the write lead below half of it");
+JB_STATIC_ASSERT((VP37_LATCH_LOCK_PROCESS_DIVISOR >= 1U) &&
+                     (VP37_LATCH_LOCK_PROCESS_DIVISOR <= 256U),
+                 "VP37_LATCH_LOCK_PROCESS_DIVISOR is a usable smoothing share");
 JB_STATIC_ASSERT((VP37_LATCH_LOCK_ERROR_DIVISOR >= 1) &&
                      (VP37_LATCH_LOCK_ERROR_DIVISOR <= 64) &&
                      (VP37_LATCH_LOCK_STEP_US >= 1) &&

@@ -227,7 +227,7 @@ static const char *const k_strings_en[SC_I18N_KEY_COUNT] = {
         "Random positions, each held for the given time.",
     [SC_I18N_TEST_NAME_TOP] = "Upper staircase",
     [SC_I18N_TEST_DESC_TOP] =
-        "Steps 75, 85.5, 90.5 and 95 %, then 0 %, each held for the dwell.",
+        "Steps 75, 85.5, 88 and 95 %, then 0 %, each held for the dwell.",
     [SC_I18N_TEST_NAME_TOPZERO] = "Upper steps from rest",
     [SC_I18N_TEST_DESC_TOPZERO] =
         "The same thresholds, each approached from 0 %.",
@@ -528,7 +528,7 @@ static const char *const k_strings_pl[SC_I18N_KEY_COUNT] = {
     [SC_I18N_TEST_DESC_RANDOM] =
         "Losowe położenia, każde utrzymywane przez zadany czas.",
     [SC_I18N_TEST_NAME_TOP] = "Schody górne",
-    [SC_I18N_TEST_DESC_TOP] = "Stopnie 75, 85,5, 90,5 i 95 %, potem 0 %, każdy "
+    [SC_I18N_TEST_DESC_TOP] = "Stopnie 75, 85,5, 88 i 95 %, potem 0 %, każdy "
                               "utrzymywany przez czas postoju.",
     [SC_I18N_TEST_NAME_TOPZERO] = "Górne progi od zera",
     [SC_I18N_TEST_DESC_TOPZERO] = "Te same progi, każdy osiągany od 0 %.",

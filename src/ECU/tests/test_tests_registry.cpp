@@ -387,7 +387,7 @@ void test_top_steps_hold_every_setpoint_for_the_dwell(void) {
 
   // The series the bench expects, written out instead of read back from the
   // fixture, so a reordered or retuned staircase fails here.
-  static const float setpoints[] = {75.0f, 85.5f, 90.5f, 95.0f, 0.0f};
+  static const float setpoints[] = {75.0f, 85.5f, 88.0f, 95.0f, 0.0f};
   uint32_t ms = 0U;
   for (uint32_t series = 0U; series < TOP_STEPS_SERIES; series++) {
     for (size_t i = 0U; i < COUNTOF(setpoints); i++) {
@@ -412,7 +412,7 @@ void test_top_zero_returns_to_rest_between_thresholds(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, startTest(START_TEST_TOPZERO));
 
   // Same thresholds as the "top" ladder, but each one is reached from zero.
-  static const float thresholds[] = {75.0f, 85.5f, 90.5f, 95.0f};
+  static const float thresholds[] = {75.0f, 85.5f, 88.0f, 95.0f};
   uint32_t ms = 0U;
   for (uint32_t series = 0U; series < TOP_STEPS_SERIES; series++) {
     for (size_t i = 0U; i < COUNTOF(thresholds); i++) {

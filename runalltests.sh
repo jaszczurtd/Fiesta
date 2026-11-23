@@ -18,6 +18,9 @@
 #
 # Covered modules: every module with "hostTests" in modules.json.
 #
+# Logs: .build/gate/<step>.log. Each run empties the directory first, so the
+# logs of the last run stay there for inspection.
+#
 # Usage:
 #   ./runalltests.sh
 #   ./runalltests.sh -j8
@@ -100,6 +103,10 @@ done
 
 SECONDS=0
 
+GATE_LOG_DIR="${SCRIPT_DIR}/.build/gate"
+mkdir -p "${GATE_LOG_DIR}"
+rm -f "${GATE_LOG_DIR}"/*.log
+
 # shellcheck source=src/common/scripts/fiesta-modules.sh
 source "${SCRIPT_DIR}/src/common/scripts/fiesta-modules.sh"
 
@@ -140,13 +147,13 @@ configure_build_and_test_module() {
     local build_abs="${SCRIPT_DIR}/${build_rel}"
 
     info "[${name}/${build_type}] configuring"
-    run_logged "/tmp/fiesta_${log_name}_configure.log" \
+    run_logged "${GATE_LOG_DIR}/${log_name}_configure.log" \
         cmake -S "${src_abs}" -B "${build_abs}" \
             -DCMAKE_BUILD_TYPE="${build_type}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     info "[${name}/${build_type}] building"
-    run_logged "/tmp/fiesta_${log_name}_build.log" \
+    run_logged "${GATE_LOG_DIR}/${log_name}_build.log" \
         cmake --build "${build_abs}" --parallel "${JOBS}"
 
     info "[${name}/${build_type}] running ctest (runtime-only, static-analysis label excluded)"
@@ -154,7 +161,7 @@ configure_build_and_test_module() {
     if [[ "${name}" == "SerialConfigurator" ]]; then
         gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
     fi
-    run_logged "/tmp/fiesta_${log_name}_ctest.log" \
+    run_logged "${GATE_LOG_DIR}/${log_name}_ctest.log" \
         "${gui_runner[@]}" ctest --test-dir "${build_abs}" --progress --output-on-failure -LE static-analysis
 
     pass "[${name}/${build_type}] host tests passed"
@@ -174,7 +181,7 @@ run_module_target() {
     if [[ "${name}" == "SerialConfigurator" && "${target}" == "check-valgrind" ]]; then
         gui_runner=(bash "${SCRIPT_DIR}/scripts/sc-with-display.sh")
     fi
-    run_logged "/tmp/fiesta_${log_name}_${target}.log" \
+    run_logged "${GATE_LOG_DIR}/${log_name}_${target}.log" \
         "${gui_runner[@]}" cmake --build "${build_abs}" --target "${target}" --parallel "${JOBS}"
     pass "[${name}/${build_type}] ${target} passed"
 }
@@ -215,7 +222,7 @@ fi
 
 pass "All required tools present."
 
-run_logged "/tmp/fiesta_tooling_tests.log" \
+run_logged "${GATE_LOG_DIR}/tooling_tests.log" \
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 header "Gate 2/7: Host runtime tests for all modules"
@@ -241,21 +248,21 @@ fi
 # findings; anything outside the deviation register stops the gate. The rest
 # of src/ECU stays a screening snapshot (MISRA.md).
 header "Gate 4/7: MISRA - src/common/vp37 and src/Adjustometer"
-run_logged "/tmp/fiesta_misra_vp37.log" \
+run_logged "${GATE_LOG_DIR}/misra_vp37.log" \
     bash src/ECU/misra/check_misra.sh -q \
     --fail-paths '^\.\./common/(vp37/|adjustometer_|fiesta_|vp37_drive_config)'
-run_logged "/tmp/fiesta_misra_adjustometer.log" \
+run_logged "${GATE_LOG_DIR}/misra_adjustometer.log" \
     bash src/ECU/misra/check_misra.sh -q --project src/Adjustometer \
     --fail-paths '^[^.]|^/|^\.\./common/(vp37/|adjustometer_|fiesta_|vp37_drive_config)'
 pass "MISRA gate passed: no findings outside the deviation register."
 
 header "Gate 5/7: Duplicate detection - PMD CPD"
-run_logged "/tmp/fiesta_cpd.log" python3 scripts/fiesta_cpd.py
+run_logged "${GATE_LOG_DIR}/cpd.log" python3 scripts/fiesta_cpd.py
 pass "PMD CPD found no duplicate groups."
 
 if [[ "${SKIP_VALGRIND}" -eq 0 ]]; then
     header "Gate 6/7: Valgrind memcheck targets"
-    run_logged "/tmp/fiesta_modules_valgrind.log" \
+    run_logged "${GATE_LOG_DIR}/modules_valgrind.log" \
         cmake -DFIESTA_TOOL_MEMCHECK=ON -P scripts/fiesta_tool.cmake
     for entry in "${MODULE_MATRIX[@]}"; do
         IFS=':' read -r name _ build_rel <<< "${entry}"

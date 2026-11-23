@@ -27,8 +27,16 @@ The PWM backend cannot produce exactly the period of the control grid, so a
 free grid would slide through the whole PWM period (about 40 µs per second at
 200 Hz) and a command would wait anything from nothing to 5 ms for its latch.
 The grid therefore follows the latch that the current scan measures: each step
-moves the next deadline by at most `VP37_LATCH_LOCK_STEP_US`, so that the PWM
-write lands `VP37_LATCH_LOCK_LEAD_US` before the latch. The lock also learns
+moves the next deadline by at most `VP37_LATCH_LOCK_STEP_US`. The lock keeps
+the start of the position read `VP37_LATCH_LOCK_SAMPLE_LEAD_US` before the
+latch, the feedback delay the gains were tuned for, and the PWM write at least
+`VP37_LATCH_LOCK_LEAD_US` before it. A faster step, such as the SRAM build,
+therefore writes earlier instead of reading later; a step too slow for the
+read distance keeps the shortest write lead and still meets its latch. The
+read-to-write time is a running average of driven steps, so one slow step moves
+the phase only a little. Bench telemetry prints the wanted write lead, the
+averaged read-to-write time and the last lead error as `lklead`, `lkproc` and
+`lkerr` in the `CFG` line. The lock also learns
 the period difference and keeps applying it while the actuator is released and
 no latch is measured. It works only while the control period equals the PWM
 period; with another bench period or with the current scan off the grid runs without latch synchronization.
@@ -90,6 +98,13 @@ phase or missing teeth.
 The ECU retains current and supply samples in a two-channel ring; the sensor
 multiplexer remains part of the three-channel DMA scan. Current reduction
 and edge tracking use `HAL_RAM_FUNC` to limit instruction fetches from flash.
+The rest of the VP37 code runs from flash on both targets. Whole VP37 units
+in SRAM (`HAL_RAM_CODE_SOURCES`) shorten the control step on RP2350, but on
+the bench they moved where the actuator stops inside the integral dead band
+near the top of the stroke: with the current and feedback units in SRAM it
+settled lower at 90.5 %, with only the step in SRAM it held the 90 % hold
+above the target in half of the holds. The build therefore leaves them in
+flash; the RP2040 bench image has no SRAM left for them anyway.
 The bench trace retains 1024 complete control samples, with its boolean flags
 stored as bits. `VP37_TRACE_SAMPLES` controls capture length. Inspect both
 firmware variants' ELF memory maps when changing these buffers or RAM code.

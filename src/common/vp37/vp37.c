@@ -40,6 +40,10 @@ TESTABLE_STATIC int32_t VP37_latchLockStep(VP37LatchLock *lock,
                                            uint32_t stepStartUs,
                                            uint32_t periodUs, bool latchFresh,
                                            uint32_t latchUs);
+TESTABLE_STATIC uint32_t VP37_latchLockWantedLead(const VP37LatchLock *lock,
+                                                  uint32_t periodUs);
+TESTABLE_STATIC void VP37_latchLockNoteWrite(VP37LatchLock *lock,
+                                             uint32_t writeOffsetUs);
 
 static bool VP37_alwaysAllowDrive(void) { return true; }
 static void VP37_noWatchdog(void) {}
@@ -522,8 +526,65 @@ bool HAL_RAM_FUNC(VP37_controlDueWithin)(const VP37Pump *self, uint32_t nowUs,
 }
 
 /**
- * @brief Correction of the next control deadline that keeps the PWM write a
- * fixed time ahead of the hardware latch.
+ * @brief Lead of the PWM write before the latch that keeps the position read
+ * VP37_LATCH_LOCK_SAMPLE_LEAD_US ahead of the latch.
+ * @param lock Lock state of the pump.
+ * @param periodUs Control period of the grid, equal to the PWM period [us].
+ * @return Wanted lead [us]: VP37_LATCH_LOCK_LEAD_US while no read-to-write time
+ * is known or the step needs the whole distance, else the rest of the
+ * distance, at most VP37_LATCH_LOCK_MAX_LEAD_US and below half the period.
+ * @note A slow step keeps the shortest lead and so its write still meets the
+ * latch; its read then lies further ahead, as before the read was locked.
+ */
+TESTABLE_STATIC uint32_t VP37_latchLockWantedLead(const VP37LatchLock *lock,
+                                                  uint32_t periodUs) {
+  const uint32_t processUs =
+      lock->processScaled / VP37_LATCH_LOCK_PROCESS_DIVISOR;
+  uint32_t wantedUs = VP37_LATCH_LOCK_LEAD_US;
+  if ((processUs > 0U) && (processUs < VP37_LATCH_LOCK_SAMPLE_LEAD_US)) {
+    const uint32_t restUs = VP37_LATCH_LOCK_SAMPLE_LEAD_US - processUs;
+    if (restUs > wantedUs) {
+      wantedUs = restUs;
+    }
+  }
+  if (wantedUs > VP37_LATCH_LOCK_MAX_LEAD_US) {
+    wantedUs = VP37_LATCH_LOCK_MAX_LEAD_US;
+  }
+  const uint32_t halfUs = periodUs / 2U;
+  if ((halfUs > 0U) && (wantedUs >= halfUs)) {
+    wantedUs = halfUs - 1U;
+  }
+  return wantedUs;
+}
+
+/**
+ * @brief Record the PWM write of a driven step for the latch lock.
+ * @param lock Lock state of the pump.
+ * @param writeOffsetUs Step start to the PWM write [us].
+ * @note The read-to-write time joins a running average, so a single slow step
+ * (flash cache, a long scan) moves the wanted lead only by a share.
+ */
+TESTABLE_STATIC void VP37_latchLockNoteWrite(VP37LatchLock *lock,
+                                             uint32_t writeOffsetUs) {
+  lock->writeOffsetUs = writeOffsetUs;
+  if (writeOffsetUs <= lock->readOffsetUs) {
+    return;
+  }
+  const uint32_t processUs = writeOffsetUs - lock->readOffsetUs;
+  if (lock->processScaled == 0U) {
+    lock->processScaled = processUs * VP37_LATCH_LOCK_PROCESS_DIVISOR;
+  } else {
+    // The scaled sum keeps the fraction, so the average settles on the mean
+    // instead of stopping within a divisor of it.
+    lock->processScaled =
+        (lock->processScaled + processUs) -
+        (lock->processScaled / VP37_LATCH_LOCK_PROCESS_DIVISOR);
+  }
+}
+
+/**
+ * @brief Correction of the next control deadline that keeps the PWM write the
+ * wanted time ahead of the hardware latch.
  * @param lock Lock state of the pump.
  * @param stepStartUs Start of the step in progress [us, hal_micros()].
  * @param periodUs Control period of the grid [us].
@@ -543,8 +604,11 @@ TESTABLE_STATIC int32_t VP37_latchLockStep(VP37LatchLock *lock,
     lock->trimQ16 = 0;
     lock->residualQ16 = 0;
     lock->errorUs = 0;
+    lock->wantedLeadUs = 0U;
     return 0;
   }
+  const uint32_t wantedUs = VP37_latchLockWantedLead(lock, periodUs);
+  lock->wantedLeadUs = wantedUs;
   const uint32_t ageUs = (stepStartUs + lock->writeOffsetUs) - latchUs;
   if (latchFresh && (lock->writeOffsetUs > 0U) &&
       (lock->writeOffsetUs < periodUs) &&
@@ -552,7 +616,7 @@ TESTABLE_STATIC int32_t VP37_latchLockStep(VP37LatchLock *lock,
     // Time the write of this step would wait for the next latch.
     const uint32_t leadUs = periodUs - (ageUs % periodUs);
     const uint32_t halfUs = periodUs / 2U;
-    int32_t errorUs = (int32_t)leadUs - (int32_t)VP37_LATCH_LOCK_LEAD_US;
+    int32_t errorUs = (int32_t)leadUs - (int32_t)wantedUs;
     if (errorUs > (int32_t)halfUs) {
       errorUs -= (int32_t)periodUs;
     }
@@ -639,6 +703,8 @@ void VP37_process(VP37Pump *self) {
   self->scan.collectUs = hal_micros() - collectStartedUs;
   (void)VP37_acquireCurrentScan(self);
 
+  // The latch lock keeps the distance from this read to the latch.
+  self->latchLock.readOffsetUs = hal_micros() - nowUs;
   const bool feedbackOk = VP37_updateAdjustometerPosition(self);
   (void)VP37_acquireCurrentScan(self);
   if (!feedbackOk) {
@@ -1079,7 +1145,7 @@ static void VP37_composeCommand(VP37Pump *self, const VP37Cycle *cycle) {
   }
   const uint32_t writeUs = hal_micros();
   // The latch lock places the next deadline by where this write fell.
-  self->latchLock.writeOffsetUs = writeUs - self->controlLastUs;
+  VP37_latchLockNoteWrite(&self->latchLock, writeUs - self->controlLastUs);
   VP37_recordCurrentCommand(self, currentNominal, self->output.finalPWM,
                             writeUs);
   VP37_writeQuantityPWM(self, self->output.finalPWM);

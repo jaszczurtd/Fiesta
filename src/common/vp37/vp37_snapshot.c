@@ -103,6 +103,11 @@ static void VP37_buildTelemetry(const VP37Pump *self,
   telemetry->scan = self->scan;
   telemetry->currentControl = self->currentControl;
   telemetry->output = self->output;
+  // Leads and errors stay within one 5 ms period, so 16 bits hold them.
+  telemetry->latchLeadUs = (uint16_t)self->latchLock.wantedLeadUs;
+  telemetry->latchProcessUs = (uint16_t)(self->latchLock.processScaled /
+                                         VP37_LATCH_LOCK_PROCESS_DIVISOR);
+  telemetry->latchErrorUs = (int16_t)self->latchLock.errorUs;
 }
 #endif
 

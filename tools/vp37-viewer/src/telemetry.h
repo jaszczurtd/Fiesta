@@ -18,7 +18,7 @@
 
 namespace vp37 {
 
-constexpr int kParserVersion = 7;
+constexpr int kParserVersion = 8;
 
 // Description of one telemetry field. Fields that firmware stopped printing
 // stay here, so older logs keep their meaning.

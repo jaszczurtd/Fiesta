@@ -35,8 +35,17 @@ Sterownik PWM nie potrafi wytworzyć dokładnie okresu siatki sterowania, więc
 swobodna siatka przesuwałaby się przez cały okres PWM (około 40 µs na sekundę
 przy 200 Hz), a komenda czekałaby na zatrzask od zera do 5 ms. Siatka podąża
 więc za zatrzaskiem mierzonym w skanie prądu: każdy krok przesuwa następny
-termin najwyżej o `VP37_LATCH_LOCK_STEP_US`, tak aby zapis PWM wypadał
-`VP37_LATCH_LOCK_LEAD_US` przed zatrzaskiem. Blokada uczy się też różnicy
+termin najwyżej o `VP37_LATCH_LOCK_STEP_US`. Blokada trzyma początek odczytu
+położenia `VP37_LATCH_LOCK_SAMPLE_LEAD_US` przed zatrzaskiem, czyli przy
+opóźnieniu sprzężenia, dla którego dobrano nastawy, a zapis PWM co najmniej
+`VP37_LATCH_LOCK_LEAD_US` przed nim. Szybszy krok, na przykład z kodem w SRAM,
+zapisuje więc wcześniej, zamiast później czytać. Krok zbyt wolny na tę
+odległość zachowuje najkrótsze wyprzedzenie zapisu i nadal trafia w swój
+zatrzask. Czas od odczytu do zapisu to średnia krocząca z kroków z napędem,
+więc pojedynczy wolny krok przesuwa fazę tylko trochę. Telemetria
+stanowiskowa podaje wymagane wyprzedzenie zapisu, uśredniony czas od odczytu
+do zapisu i ostatni błąd wyprzedzenia jako `lklead`, `lkproc` i `lkerr`
+w linii `CFG`. Blokada uczy się też różnicy
 okresów i stosuje ją dalej, gdy nastawnik jest zwolniony i zatrzasku nie widać.
 Działa tylko wtedy, gdy okres sterowania równa się okresowi PWM; przy innym
 okresie stanowiskowym albo wyłączonym skanie prądu siatka działa bez synchronizacji z zatrzaskiem PWM.
@@ -84,7 +93,13 @@ brakujących zębów.
 ECU zachowuje prąd i napięcie w pierścieniu dwóch kanałów; multiplekser
 czujników pozostaje częścią skanu DMA z trzema kanałami. Redukcja prądu
 oraz śledzenie zboczy używają `HAL_RAM_FUNC`, ograniczając pobieranie kodu
-z flash. Ślad stanowiskowy mieści 1024 pełne próbki z flagami zapisanymi
+z flash. Pozostały kod VP37 działa z flasha na obu targetach. Całe jednostki
+VP37 w SRAM (`HAL_RAM_CODE_SOURCES`) skracają krok sterowania na RP2350, ale
+na stanowisku przesuwały miejsce, w którym nastawnik zatrzymuje się w paśmie
+martwym całki przy górze skoku: z jednostkami prądu i sprzężenia w SRAM
+ustalał się niżej przy 90,5 %, z samym krokiem w SRAM w połowie postojów
+90 % trzymał pozycję nad celem. Build zostawia je więc we flashu; w obrazie
+stanowiskowym RP2040 i tak brakuje na nie SRAM. Ślad stanowiskowy mieści 1024 pełne próbki z flagami zapisanymi
 jako bity. Długość określa `VP37_TRACE_SAMPLES`. Po zmianie buforów lub kodu
 w RAM sprawdź mapy pamięci ELF obu wariantów firmware.
 

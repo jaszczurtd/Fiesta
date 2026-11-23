@@ -212,6 +212,14 @@ jest ograniczone do ±0,5 V i zmienia tylko skalowanie polecenia. Lokalny
 odczyt ADC używany zastępczo ma filtr 50 ms bez predykcji. Pomiar prądu
 oraz estymacja rezystancji używają osobnej średniej z tego samego okresu PWM co prąd.
 
+Lokalny dzielnik dostaje poziom bezwzględny z pomiaru zasilania w Adjustometerze.
+W spoczynku skala między nimi podąża za tą samą średnią z okresu PWM, którą mnoży
+tor napędu, więc nie zależy od chwili kroku, w której odczytywany jest ADC. Krótki
+odczyt lokalny łapie zakłócenia płytki przesuwające się razem z czasem wykonania
+kodu (30 mV między buildem z flasha i z SRAM tego samego sterowania). Gdy skan działa,
+a średnia jest nieaktualna, skala się nie zmienia; bez działającego skanu jej źródłem
+pozostaje odczyt lokalny.
+
 ### Wyznaczanie rezystancji cewki
 
 Estymator rezystancji używa historycznego dopasowania do zatrzaśniętego PWM,
@@ -254,6 +262,17 @@ wyrażone jako prąd fazy ON z pominięciem marginesów przy zboczach. Przelicze
 zachowuje odniesienie estymatora rezystancji do surowego napięcia i kalibrację
 dzielnika. Bocznik źródłowy nie mierzy recyrkulacji przy wyłączonym MOSFET,
 więc cel nie oznacza średniego prądu cewki z całego okresu.
+
+Zero bocznika zaczyna od mediany 256 odczytów przy starcie, zanim ruszy kod
+sterowania. Ta mediana wypada na 8-12 pełnych kodach ADC, zależnie od tego,
+co w tej chwili robią rdzenie, a każdy kod przesuwa przeregulowanie u góry
+o około 20 Hz. Dlatego przy zwolnionym nastawniku skan dalej uczy zera:
+50 ms po ostatnim zadaniu lub wyjściu PWM każde najnowsze okno jednego okresu,
+w którym wszystkie próbki bocznika zostają poniżej progu wyłączenia bramki,
+przesuwa je ze stałą czasową 1 s, z zachowaniem ułamka kodu. Każde zadanie
+zatrzymuje zero. Próbki tracą jego pełne kody, a wyniki w amperach pozostały
+ułamek. `IPULSE` podaje zero w użyciu jako `zero`, a liczbę wyuczonych
+aktualizacji jako `zn`.
 
 Odwrócony napęd przewodzi na końcu okresu PWM. Obserwacja jest dopasowywana
 do polecenia zapisanego przed poprzednim opadającym zboczem prądu, gdy licznik

@@ -337,6 +337,9 @@ typedef struct {
   uint32_t blocks;       /**< Blocks retained since start. */
   uint32_t gaps;         /**< Blocks the control loop never saw. */
   uint32_t frameNs;      /**< Frame period reported by the scan. */
+  float zeroCounts;      /**< Shunt zero in effect after the latest
+                              reduction [ADC code, with its fraction]. */
+  uint32_t zeroLearns;   /**< Shunt-zero updates learned at rest. */
   bool running;
 } VP37Scan;
 
@@ -448,6 +451,14 @@ typedef struct {
   uint32_t sequence;      /**< Scan block the lock used last. */
   uint32_t writeOffsetUs; /**< Step start to PWM write of the latest driven
                                step [us]; zero before the first one. */
+  uint32_t readOffsetUs;  /**< Step start to the start of the position read of
+                               the step in progress [us]. */
+  uint32_t processScaled; /**< Smoothed time from the position read to the PWM
+                               write of driven steps, times
+                               VP37_LATCH_LOCK_PROCESS_DIVISOR [us]; zero
+                               before the first one. */
+  uint32_t wantedLeadUs;  /**< Lead of the write before the latch the latest
+                               step aimed at [us]. */
 } VP37LatchLock;
 
 #if VP37_TELEMETRY_ENABLED
@@ -473,6 +484,9 @@ typedef struct {
   VP37Scan scan;
   VP37CurrentControl currentControl;
   VP37Output output;
+  uint16_t latchLeadUs;    /**< Wanted lead of the write before the latch. */
+  uint16_t latchProcessUs; /**< Smoothed read-to-write time [us]. */
+  int16_t latchErrorUs;    /**< Latest lead error, measured minus wanted. */
 } VP37Telemetry;
 
 /**

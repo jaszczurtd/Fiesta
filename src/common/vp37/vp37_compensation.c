@@ -47,6 +47,12 @@ hal_status_t VP37_serviceCurrentScan(VP37Pump *self) {
   if (sequence == 0U) {
     return status;
   }
+  // The shunt zero learns while the actuator is released: the startup median
+  // runs before the control code and its board noise follows the code layout.
+  VP37_currentZeroUpdate(self->demand.atRest && (self->output.finalPWM <= 0),
+                         hal_micros(), &result);
+  self->scan.zeroCounts = VP37_currentZero();
+  self->scan.zeroLearns = VP37_currentZeroLearns();
   self->scan.cycleResult = result;
   self->scan.cycleResultStatus = status;
   self->scan.cycleResultSequence++;
@@ -147,12 +153,24 @@ static float VP37_predictSupplyVoltage(VP37Pump *self, float measuredVolts) {
 
 static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
   const bool quantityAtRest = VP37_demandAtRest(self);
+  const uint32_t nowUs = hal_micros();
+  const bool cycleSource =
+      self->supply.cycleEnabled && self->thermal.observationEnabled;
   self->supply.cycleUsed =
-      self->supply.cycleEnabled && self->thermal.observationEnabled &&
-      !quantityAtRest && self->supply.cycleValid &&
+      cycleSource && !quantityAtRest && self->supply.cycleValid &&
       isfinite(self->supply.cycleVolts) &&
       (self->supply.cycleVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
-      !hal_elapsed_u32(hal_micros(), self->supply.cycleUs,
+      !hal_elapsed_u32(nowUs, self->supply.cycleUs,
+                       VP37_CYCLE_VOLTAGE_MAX_AGE_US);
+  // The scan reduces the one-period supply mean on every block, also at rest
+  // where the drive path keeps no copy of it.
+  const VP37CurrentPulseResult *const scanned = &self->scan.cycleResult;
+  const bool scanSupply = cycleSource && self->scan.running;
+  const bool scanMeanFresh =
+      scanSupply && scanned->supplyLatestValid &&
+      isfinite(scanned->supplyLatestVolts) &&
+      (scanned->supplyLatestVolts >= VP37_LOCAL_VOLTAGE_VALID_MIN_V) &&
+      !hal_elapsed_u32(nowUs, scanned->supplyLatestUs,
                        VP37_CYCLE_VOLTAGE_MAX_AGE_US);
   const float localVolts = self->supply.cycleUsed ? self->supply.cycleVolts
                                                   : self->supply.localVolts;
@@ -174,7 +192,15 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
     // leave the scale alone; the Adjustometer flags its own reading bad here.
     resultVolts = localVolts * self->supply.localScale;
   } else {
-    const float scaleTarget = hal_constrain(self->supply.lastVolts / localVolts,
+    // The scale relates the Adjustometer rail to the scan's one-period mean,
+    // the value the drive path multiplies. A single snapshot carries the board
+    // noise of the moment the step reads it, and that moment moves with the
+    // code timing (bench 2026-11-22: 30 mV at rest between the flash and the
+    // SRAM build, the same period mean). Without a running scan the snapshot
+    // is the only local value and stays the source.
+    const float learnVolts =
+        scanMeanFresh ? scanned->supplyLatestVolts : localVolts;
+    const float scaleTarget = hal_constrain(self->supply.lastVolts / learnVolts,
                                             VP37_LOCAL_VOLTAGE_SCALE_MIN,
                                             VP37_LOCAL_VOLTAGE_SCALE_MAX);
     if (!self->supply.localReady) {
@@ -185,7 +211,10 @@ static float VP37_getCompensationInputVoltage(VP37Pump *self, float dt) {
     } else {
       const float localDelta =
           fabsf(localVolts - self->supply.previousLocalVolts);
-      if (quantityAtRest && adjustometerVoltageValid &&
+      // With a running scan a missing mean pauses learning instead of
+      // mixing in the snapshot.
+      const bool learnSourceReady = scanMeanFresh || !scanSupply;
+      if (quantityAtRest && adjustometerVoltageValid && learnSourceReady &&
           (localDelta <= VP37_LOCAL_VOLTAGE_STABLE_DELTA_V)) {
         self->supply.localScale += (scaleTarget - self->supply.localScale) *
                                    dt /

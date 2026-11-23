@@ -5,6 +5,8 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "unity.h"
 
+#include <cmath>
+
 void setUp(void) {
   hal_mock_set_micros(0U);
   hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 0);
@@ -752,6 +754,151 @@ void test_scan_history_publishes_fresh_supply_each_block_across_time_wrap(
   }
 }
 
+void test_zero_learns_a_fraction_and_the_update_takes_it_off_the_amperes(void) {
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 12);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_currentZero());
+  // A first update has no time step yet and keeps the startup zero.
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentZeroLearn(9.6f, 0.0f));
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_currentZero());
+  // One bounded step: a long gap moves the zero by one 20 ms share only.
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentZeroLearn(9.6f, 10.0f));
+  const float share =
+      VP37_CURRENT_ZERO_LEARN_MAX_DT_S /
+      (VP37_CURRENT_ZERO_LEARN_S + VP37_CURRENT_ZERO_LEARN_MAX_DT_S);
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 12.0f - (2.4f * share), VP37_currentZero());
+  // Ten seconds of 5 ms windows settle on the window mean.
+  for (uint32_t i = 0U; i < 2000U; i++) {
+    (void)VP37_currentZeroLearn(9.6f, 0.005f);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(.005f, 9.6f, VP37_currentZero());
+
+  // The reducers subtract the whole 9 codes per sample.
+  fillBlock({0U, 9U, 3000U, 3100U, true});
+  const VP37CurrentScanBlock view = blockView(1000U);
+  VP37CurrentPulseResult reduced;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanReduce(&view, &reduced));
+  TEST_ASSERT_EQUAL_UINT16(9U, reduced.zeroRaw);
+  // The update takes the remaining fraction off every ampere field, and a
+  // held zero (actuator driven) still applies it.
+  VP37CurrentPulseResult updated = reduced;
+  VP37_currentZeroUpdate(false, 2000U, &updated);
+  TEST_ASSERT_FLOAT_WITHIN(.005f, 9.6f, VP37_currentZero());
+  const float fractionAmps =
+      (VP37_currentZero() - 9.0f) * VP37_currentRawToAmps(1000U) / 1000.0f;
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, reduced.meanAmps - fractionAmps,
+                           updated.meanAmps);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, reduced.p95Amps - fractionAmps,
+                           updated.p95Amps);
+  TEST_ASSERT_FLOAT_WITHIN(1e-5f, reduced.peakAmps - fractionAmps,
+                           updated.peakAmps);
+  for (uint32_t bin = 0U; bin < VP37_CURRENT_PROFILE_BINS; ++bin) {
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, reduced.profileAmps[bin] - fractionAmps,
+                             updated.profileAmps[bin]);
+  }
+  VP37_currentZeroUpdate(false, 2000U, nullptr);
+}
+
+void test_zero_learning_stays_in_range_and_ignores_bad_input(void) {
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 12);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, VP37_currentZeroLearn(NAN, 0.005f));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, VP37_currentZeroLearn(9.0f, NAN));
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_currentZero());
+  for (uint32_t i = 0U; i < 2000U; i++) {
+    (void)VP37_currentZeroLearn(500.0f, 0.02f);
+  }
+  TEST_ASSERT_EQUAL_FLOAT(128.0f, VP37_currentZero());
+  for (uint32_t i = 0U; i < 2000U; i++) {
+    (void)VP37_currentZeroLearn(-5.0f, 0.02f);
+  }
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, VP37_currentZero());
+  // An implausible startup zero is not repaired by learning.
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 160);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, VP37_currentZeroLearn(10.0f, 0.02f));
+  TEST_ASSERT_EQUAL_FLOAT(160.0f, VP37_currentZero());
+}
+
+/* One released block of the stream: the shunt reads `shunt` in every frame,
+   then the update runs with the given released state. */
+static void updateReleasedBlock(uint32_t index, uint16_t shunt, bool released,
+                                uint32_t start) {
+  fillFrames({0U, shunt, 3000U, 3000U, false}, kDmaFrames, index * kDmaFrames);
+  const uint32_t completedUs = start + framesToUs((index + 1U) * kDmaFrames);
+  VP37CurrentPulseResult result;
+  (void)completeBlock(completedUs, &result);
+  VP37_currentZeroUpdate(released, completedUs, &result);
+}
+
+void test_zero_update_learns_quiet_windows_only_after_the_release_delay(void) {
+  const uint32_t start = 500000U;
+  hal_mock_set_micros(start);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 12);
+  VP37_currentSenseInit();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, VP37_currentScanStart());
+  const uint32_t blockUs = framesToUs(kDmaFrames);
+  const uint32_t delayBlocks =
+      (VP37_CURRENT_ZERO_LEARN_DELAY_US + blockUs - 1U) / blockUs;
+  uint32_t index = 0U;
+  // The startup counts as the last drive: nothing within the delay.
+  for (; index + 1U < delayBlocks; index++) {
+    updateReleasedBlock(index, 9U, true, start);
+  }
+  TEST_ASSERT_EQUAL_UINT32(0U, VP37_currentZeroLearns());
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_currentZero());
+  // The first quiet window past the delay only starts the time step, so it
+  // is not counted; the next one is the first update.
+  updateReleasedBlock(index++, 9U, true, start);
+  TEST_ASSERT_EQUAL_UINT32(0U, VP37_currentZeroLearns());
+  TEST_ASSERT_EQUAL_FLOAT(12.0f, VP37_currentZero());
+  updateReleasedBlock(index++, 9U, true, start);
+  TEST_ASSERT_EQUAL_UINT32(1U, VP37_currentZeroLearns());
+  TEST_ASSERT_TRUE(VP37_currentZero() < 12.0f);
+  // Three seconds of quiet released blocks pull the zero to the rest mean.
+  const uint32_t learnBlocks = 3000000U / blockUs;
+  for (const uint32_t end = index + learnBlocks; index < end; index++) {
+    updateReleasedBlock(index, 9U, true, start);
+  }
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, VP37_currentZeroLearns());
+  TEST_ASSERT_FLOAT_WITHIN(.2f, 9.0f, VP37_currentZero());
+  // A drive holds the zero and restarts the delay.
+  const uint32_t learns = VP37_currentZeroLearns();
+  const float held = VP37_currentZero();
+  updateReleasedBlock(index++, 5U, false, start);
+  for (uint32_t i = 0U; i + 1U < delayBlocks; i++) {
+    updateReleasedBlock(index++, 5U, true, start);
+  }
+  TEST_ASSERT_EQUAL_UINT32(learns, VP37_currentZeroLearns());
+  TEST_ASSERT_EQUAL_FLOAT(held, VP37_currentZero());
+  // A window with a sample at the gate OFF level does not train the zero.
+  fillFrames({0U, 5U, 3000U, 3000U, false}, kDmaFrames, index * kDmaFrames);
+  s_block[((kDmaFrames - 1U) * kScanPins) + kShuntPosition] =
+      (uint16_t)(VP37_currentZero() +
+                 VP37_currentAmpsToRaw(VP37_CURRENT_GATE_OFF_AMPS) + 4.0f);
+  const uint32_t completedUs = start + framesToUs((index + 1U) * kDmaFrames);
+  VP37CurrentPulseResult result;
+  (void)completeBlock(completedUs, &result);
+  VP37_currentZeroUpdate(true, completedUs, &result);
+  index++;
+  TEST_ASSERT_EQUAL_UINT32(learns, VP37_currentZeroLearns());
+  // Quiet windows after the delay train it again.
+  for (const uint32_t end = index + learnBlocks; index < end; index++) {
+    updateReleasedBlock(index, 5U, true, start);
+  }
+  TEST_ASSERT_GREATER_THAN_UINT32(learns, VP37_currentZeroLearns());
+  TEST_ASSERT_FLOAT_WITHIN(.3f, 5.0f, VP37_currentZero());
+
+  // An invalid startup zero never learns, so quiet windows count nothing.
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 160);
+  VP37_currentSenseInit();
+  for (const uint32_t end = index + delayBlocks + 10U; index < end; index++) {
+    updateReleasedBlock(index, 160U, true, start);
+  }
+  TEST_ASSERT_EQUAL_UINT32(0U, VP37_currentZeroLearns());
+  TEST_ASSERT_EQUAL_FLOAT(160.0f, VP37_currentZero());
+}
+
 static uint32_t primeCurrentHistory(void) {
   uint32_t completedUs = 0U;
   const uint32_t blocks = (kBlockFrames + kDmaFrames - 1U) / kDmaFrames;
@@ -937,6 +1084,9 @@ int main(void) {
       test_latest_supply_tracks_the_end_of_history_and_its_center_timestamp);
   RUN_TEST(test_latest_supply_uses_measured_period_and_rejects_phase_ripple);
   RUN_TEST(test_latest_supply_does_not_require_current_edges_or_shunt_zero);
+  RUN_TEST(test_zero_learns_a_fraction_and_the_update_takes_it_off_the_amperes);
+  RUN_TEST(test_zero_learning_stays_in_range_and_ignores_bad_input);
+  RUN_TEST(test_zero_update_learns_quiet_windows_only_after_the_release_delay);
   RUN_TEST(
       test_scan_history_publishes_fresh_supply_each_block_across_time_wrap);
   RUN_TEST(test_scan_history_discards_missing_blocks_and_timestamp_gaps);

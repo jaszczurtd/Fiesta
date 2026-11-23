@@ -1145,7 +1145,8 @@ static float scanRailVolts(const SupplyScanFixture &fixture, uint32_t us) {
 
 static void completeSupplyScan(const SupplyScanFixture &fixture,
                                uint32_t completedUs, float currentAmps = 4.0f,
-                               int32_t pwm = -1, bool lateOn = false) {
+                               int32_t pwm = -1, bool lateOn = false,
+                               uint16_t offShunt = 0U) {
   uint16_t samples[VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_PINS];
   const uint32_t blockUs =
       VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
@@ -1164,7 +1165,7 @@ static void completeSupplyScan(const SupplyScanFixture &fixture,
     samples[i * VP37_CURRENT_SCAN_PINS] =
         on ? (fixture.clippedCurrent ? 4095U
                                      : VP37_currentAmpsToRaw(currentAmps))
-           : 0U;
+           : offShunt;
     samples[i * VP37_CURRENT_SCAN_PINS + 1U] = 1234U;
     samples[i * VP37_CURRENT_SCAN_PINS + 2U] =
         supplyScanRaw(scanRailVolts(fixture, sampleUs) + ripple);
@@ -1597,6 +1598,113 @@ void test_vp37_scanned_supply_expires_and_recovers_without_recalibration(void) {
     }
   }
   TEST_ASSERT_FLOAT_WITHIN(.03f, 14.0f, pump->supply.heldVolts);
+}
+
+void test_vp37_supply_scale_learns_on_the_scan_mean_not_the_snapshot(void) {
+  // A snapshot taken at one moment of the step carries the board noise of
+  // that moment; the period mean of the scan does not. The rest-learned
+  // scale must follow the mean, or code timing alone moves the command.
+  VP37Pump *pump = vp37TestPump();
+  const SupplyScanFixture fixture = {100000U, false, false, false, true};
+  setupSupplyScan(pump, fixture.startUs);
+  VP37_setPositionDemandPercentage(pump, 0);
+  pump->demand.desiredPosition = (float)pump->feedback.adjustMin;
+  pump->demand.desired = pump->feedback.adjustMin;
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  uint32_t nextBlockUs = blockUs;
+  uint32_t us = 0U;
+  for (; us <= 3000000U; us += 5000U) {
+    while (nextBlockUs <= us) {
+      completeSupplyScan(fixture, nextBlockUs);
+      nextBlockUs += blockUs;
+    }
+    hal_mock_set_micros(fixture.startUs + us);
+    injectAdjRegisterData(100, 120U, 49U, ADJ_STATUS_OK);
+    injectLocalSupplyVoltage(12.6f);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->demand.atRest);
+  TEST_ASSERT_TRUE(pump->scan.running);
+  // The drive path keeps no supply copy at rest; the scan result does.
+  TEST_ASSERT_FALSE(pump->supply.cycleUsed);
+  TEST_ASSERT_TRUE(pump->scan.cycleResult.supplyLatestValid);
+  // The rail is 12 V in the scan and at the Adjustometer: the scale stays 1,
+  // not 12.0 / 12.6 = 0.952.
+  TEST_ASSERT_FLOAT_WITHIN(.005f, 1.0f, pump->supply.localScale);
+  // A running scan whose mean goes stale pauses learning; the snapshot does
+  // not take over.
+  const float learned = pump->supply.localScale;
+  for (const uint32_t end = us + 1000000U; us <= end; us += 5000U) {
+    hal_mock_set_micros(fixture.startUs + us);
+    injectAdjRegisterData(100, 120U, 49U, ADJ_STATUS_OK);
+    injectLocalSupplyVoltage(12.6f);
+    VP37_process(pump);
+  }
+  TEST_ASSERT_TRUE(pump->scan.running);
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, learned, pump->supply.localScale);
+}
+
+void test_vp37_shunt_zero_learns_only_while_the_actuator_is_released(void) {
+  // The startup median read 12 codes; with the control running the released
+  // shunt reads 9. The zero follows the quiet scan windows at rest, holds
+  // while there is a demand, and waits after it before learning again.
+  VP37Pump *pump = vp37TestPump();
+  const SupplyScanFixture fixture = {100000U, false, false, false, true};
+  setupSupplyScan(pump, fixture.startUs);
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 12);
+  VP37_currentSenseInit();
+  VP37_setPositionDemandPercentage(pump, 0);
+  pump->demand.desiredPosition = (float)pump->feedback.adjustMin;
+  pump->demand.desired = pump->feedback.adjustMin;
+  const uint32_t blockUs =
+      VP37_CURRENT_SCAN_BLOCK_FRAMES * VP37_CURRENT_SCAN_FRAME_NS / 1000U;
+  uint32_t nextBlockUs = blockUs;
+  uint32_t us = 0U;
+  auto runFor = [&](uint32_t durationUs, uint16_t restShunt, int32_t adj) {
+    for (const uint32_t end = us + durationUs; us <= end; us += 5000U) {
+      while (nextBlockUs <= us) {
+        completeSupplyScan(fixture, nextBlockUs, 4.0f, 0, false, restShunt);
+        nextBlockUs += blockUs;
+      }
+      hal_mock_set_micros(fixture.startUs + us);
+      injectAdjRegisterData(adj, 120U, 49U, ADJ_STATUS_OK);
+      injectLocalSupplyVoltage(12.0f);
+      VP37_process(pump);
+    }
+  };
+  runFor(6000000U, 9U, 100);
+  TEST_ASSERT_TRUE(pump->demand.atRest);
+  TEST_ASSERT_GREATER_THAN_UINT32(0U, pump->scan.zeroLearns);
+  TEST_ASSERT_FLOAT_WITHIN(.05f, 9.0f, VP37_currentZero());
+  TEST_ASSERT_EQUAL_FLOAT(VP37_currentZero(), pump->scan.zeroCounts);
+
+  // A demand holds the zero even though the scan windows stay quiet. The step
+  // that takes the demand still reduces a window from before it.
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 50.0f));
+  runFor(0U, 5U, 4600);
+  TEST_ASSERT_FALSE(pump->demand.atRest);
+  const uint32_t learns = pump->scan.zeroLearns;
+  const float held = VP37_currentZero();
+  runFor(1000000U, 5U, 4600);
+  TEST_ASSERT_FALSE(pump->demand.atRest);
+  TEST_ASSERT_EQUAL_UINT32(learns, pump->scan.zeroLearns);
+  TEST_ASSERT_EQUAL_FLOAT(held, VP37_currentZero());
+
+  // Released again: nothing within the delay, then learning resumes.
+  TEST_ASSERT_EQUAL(HAL_OK, VP37_setPositionDemandPercentage(pump, 0));
+  pump->demand.desiredPosition = (float)pump->feedback.adjustMin;
+  pump->demand.desired = pump->feedback.adjustMin;
+  runFor(VP37_CURRENT_ZERO_LEARN_DELAY_US / 2U, 5U, 100);
+  TEST_ASSERT_TRUE(pump->demand.atRest);
+  TEST_ASSERT_EQUAL_UINT32(learns, pump->scan.zeroLearns);
+  runFor(6000000U, 5U, 100);
+  TEST_ASSERT_GREATER_THAN_UINT32(learns, pump->scan.zeroLearns);
+  TEST_ASSERT_FLOAT_WITHIN(.05f, 5.0f, VP37_currentZero());
+
+  // Later tests start from the usual startup zero.
+  hal_mock_adc_inject(JH_HW_NODE_VP37_PIN_SHUNT_ADC, 0);
+  VP37_currentSenseInit();
 }
 
 static void runLatchedSupplyProfile(const SupplyScanFixture &fixture,
@@ -7424,6 +7532,98 @@ void test_latch_lock_bounds_the_learned_trim(void) {
   TEST_ASSERT_EQUAL_INT32(-limit, lock.trimQ16);
 }
 
+/** @brief Lock after a driven step with a smoothed read-to-write time. */
+static VP37LatchLock latchLockWithProcess(uint32_t processUs) {
+  VP37LatchLock lock = latchLockAfterWrite();
+  lock.processScaled = processUs * VP37_LATCH_LOCK_PROCESS_DIVISOR;
+  return lock;
+}
+
+void test_latch_lock_wants_the_lead_that_keeps_the_read_distance(void) {
+  // No read-to-write time yet: the shortest lead, as before the read lock.
+  VP37LatchLock lock = latchLockAfterWrite();
+  TEST_ASSERT_EQUAL_UINT32(VP37_LATCH_LOCK_LEAD_US,
+                           VP37_latchLockWantedLead(&lock, 5000U));
+  // A fast step, such as code in SRAM, writes early: the write leads by the
+  // rest of the read distance, so the read keeps its place.
+  lock = latchLockWithProcess(1700U);
+  TEST_ASSERT_EQUAL_UINT32(VP37_LATCH_LOCK_SAMPLE_LEAD_US - 1700U,
+                           VP37_latchLockWantedLead(&lock, 5000U));
+  // A step that needs the whole distance keeps the shortest lead, so its
+  // write still meets the latch.
+  lock = latchLockWithProcess(VP37_LATCH_LOCK_SAMPLE_LEAD_US -
+                              VP37_LATCH_LOCK_LEAD_US + 300U);
+  TEST_ASSERT_EQUAL_UINT32(VP37_LATCH_LOCK_LEAD_US,
+                           VP37_latchLockWantedLead(&lock, 5000U));
+  lock = latchLockWithProcess(VP37_LATCH_LOCK_SAMPLE_LEAD_US + 500U);
+  TEST_ASSERT_EQUAL_UINT32(VP37_LATCH_LOCK_LEAD_US,
+                           VP37_latchLockWantedLead(&lock, 5000U));
+  // A very short step is bounded by the longest lead and by half the period.
+  lock = latchLockWithProcess(100U);
+  TEST_ASSERT_EQUAL_UINT32(VP37_LATCH_LOCK_MAX_LEAD_US,
+                           VP37_latchLockWantedLead(&lock, 5000U));
+  TEST_ASSERT_EQUAL_UINT32(1499U, VP37_latchLockWantedLead(&lock, 3000U));
+}
+
+void test_latch_lock_moves_the_grid_to_the_read_distance(void) {
+  const uint32_t wanted = VP37_LATCH_LOCK_SAMPLE_LEAD_US - 1700U;
+  VP37LatchLock lock = latchLockWithProcess(1700U);
+  TEST_ASSERT_EQUAL_INT32(0, latchLockStepWithLead(&lock, wanted));
+  TEST_ASSERT_EQUAL_INT32(0, lock.errorUs);
+  TEST_ASSERT_EQUAL_UINT32(wanted, lock.wantedLeadUs);
+  // The shortest lead is now a write too late for the read distance: the
+  // grid moves earlier, by one bounded step.
+  lock = latchLockWithProcess(1700U);
+  TEST_ASSERT_EQUAL_INT32(
+      -VP37_LATCH_LOCK_STEP_US,
+      latchLockStepWithLead(&lock, VP37_LATCH_LOCK_LEAD_US));
+  TEST_ASSERT_EQUAL_INT32((int32_t)VP37_LATCH_LOCK_LEAD_US - (int32_t)wanted,
+                          lock.errorUs);
+}
+
+void test_latch_lock_averages_the_read_to_write_time(void) {
+  VP37LatchLock lock = {};
+  lock.readOffsetUs = 200U;
+  VP37_latchLockNoteWrite(&lock, 1900U);
+  TEST_ASSERT_EQUAL_UINT32(1900U, lock.writeOffsetUs);
+  // The first driven step sets the average.
+  TEST_ASSERT_EQUAL_UINT32(1700U, lock.processScaled /
+                                      VP37_LATCH_LOCK_PROCESS_DIVISOR);
+  // A slow step moves it by one share of the difference.
+  VP37_latchLockNoteWrite(&lock, 200U + 1700U +
+                                     (VP37_LATCH_LOCK_PROCESS_DIVISOR * 100U));
+  TEST_ASSERT_EQUAL_UINT32(1800U, lock.processScaled /
+                                      VP37_LATCH_LOCK_PROCESS_DIVISOR);
+  // A write that does not follow the read leaves the average alone.
+  lock.readOffsetUs = 2500U;
+  VP37_latchLockNoteWrite(&lock, 2400U);
+  TEST_ASSERT_EQUAL_UINT32(2400U, lock.writeOffsetUs);
+  TEST_ASSERT_EQUAL_UINT32(1800U, lock.processScaled /
+                                      VP37_LATCH_LOCK_PROCESS_DIVISOR);
+  // Steady steps settle on their time.
+  lock.readOffsetUs = 200U;
+  for (unsigned step = 0U; step < 300U; ++step) {
+    VP37_latchLockNoteWrite(&lock, 1800U);
+  }
+  TEST_ASSERT_UINT32_WITHIN(
+      1U, 1600U, lock.processScaled / VP37_LATCH_LOCK_PROCESS_DIVISOR);
+}
+
+void test_vp37_step_records_the_read_and_the_write_for_the_latch_lock(void) {
+  VP37Pump *pump = vp37TestPump();
+  setupPumpForProcessTests(pump);
+  VP37_setPositionDemandPercentage(pump, 50.0f);
+  // Time runs on during the step, so the read and the write get offsets.
+  hal_mock_set_micros_step(3U);
+  controlStepAt(pump, 100000U);
+  controlStepAt(pump, 105000U);
+  const VP37LatchLock lock = pump->latchLock;
+  hal_mock_set_micros_step(0U);
+  TEST_ASSERT_TRUE(lock.readOffsetUs > 0U);
+  TEST_ASSERT_TRUE(lock.writeOffsetUs > lock.readOffsetUs);
+  TEST_ASSERT_TRUE(lock.processScaled > 0U);
+}
+
 void test_vp37_control_grid_follows_the_measured_latch(void) {
   VP37Pump *pump = vp37TestPump();
   setupPumpForProcessTests(pump);
@@ -7825,6 +8025,8 @@ int main(void) {
   RUN_TEST(test_vp37_scanned_supply_rejects_phase_ripple_with_clipped_current);
   RUN_TEST(test_vp37_scanned_supply_ramp_handles_microsecond_wrap);
   RUN_TEST(test_vp37_scanned_supply_expires_and_recovers_without_recalibration);
+  RUN_TEST(test_vp37_supply_scale_learns_on_the_scan_mean_not_the_snapshot);
+  RUN_TEST(test_vp37_shunt_zero_learns_only_while_the_actuator_is_released);
   RUN_TEST(test_vp37_supply_ramp_preserves_drive_between_pwm_latches);
   RUN_TEST(test_vp37_supply_steps_settle_with_latched_pwm);
   RUN_TEST(test_vp37_supply_ripple_stays_quiet_with_latched_pwm);
@@ -7845,6 +8047,10 @@ int main(void) {
   RUN_TEST(
       test_latch_lock_learns_the_pwm_period_and_holds_the_phase_without_a_latch);
   RUN_TEST(test_latch_lock_bounds_the_learned_trim);
+  RUN_TEST(test_latch_lock_wants_the_lead_that_keeps_the_read_distance);
+  RUN_TEST(test_latch_lock_moves_the_grid_to_the_read_distance);
+  RUN_TEST(test_latch_lock_averages_the_read_to_write_time);
+  RUN_TEST(test_vp37_step_records_the_read_and_the_write_for_the_latch_lock);
   RUN_TEST(test_vp37_control_grid_follows_the_measured_latch);
   RUN_TEST(test_vp37_control_grid_restarts_after_a_whole_period_late);
   RUN_TEST(test_vp37_control_grid_crosses_the_microsecond_wrap);

@@ -25,7 +25,7 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
     const char *const activeTest = view->activeTestName;
     const char *const testName = (activeTest != NULL) ? activeTest : "none";
     const uint32_t cycleDelayMs = view->cyclicDelayMs;
-    deb("VP37 CFG rev:224 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
+    deb("VP37 CFG rev:266 kp:%.4f ki:%.4f kd:%.5f topkd:%.5f dkeff:%.5f "
         "tf:%.4f tu:%.1f "
         "min:%d max:%d V:%.1f Vl:%.2f Ve:%.2f Vc:%.3f vg:%.4f vf:%.3f "
         "vcor:%.4f t:%.1fC imax:%.1f tw:%.2f "
@@ -38,7 +38,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         "mup:%.0f mdn:%.0f scan:%u fr:%lu blk:%lu gaps:%lu "
         "cen:%u cuse:%u ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cage:%lu "
         "Robs:%.4f rmatch:%u rquiet:%u rlearn:%u rlcnt:%lu scanus:%lu "
-        "execus:%lu late:%lu ovr:%lu plim:%.1f stand_slew:%.1f "
+        "execus:%lu late:%lu ovr:%lu lklead:%lu lkproc:%lu lkerr:%ld "
+        "plim:%.1f stand_slew:%.1f "
         "stand_upper:%.1f adec:%.0f "
         "hold_in:%d stand_rise:%.2f stand_fall:%.2f tdec:%.0f mcap:%.0f "
         "hoff:%lu thold:%u ref:%u full:%u freeze:%u mgate:%u mvel:%.1f "
@@ -90,7 +91,9 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
         (unsigned long)view->thermal.driveLearnedSamples,
         (unsigned long)view->scan.collectUs, (unsigned long)view->controlExecUs,
         (unsigned long)view->controlLateMaxUs,
-        (unsigned long)view->controlOverruns, view->demand.physicalLimitPercent,
+        (unsigned long)view->controlOverruns, (unsigned long)view->latchLeadUs,
+        (unsigned long)view->latchProcessUs, (long)view->latchErrorUs,
+        view->demand.physicalLimitPercent,
         VP37_STATIONARY_SLEW_PERCENT_PER_SECOND,
         VP37_STATIONARY_UPPER_SLEW_PERCENT_PER_SECOND,
         VP37_ARRIVAL_DECEL_PERCENT_PER_S2, VP37_INTEGRAL_HOLD_ENTER_HZ,
@@ -151,7 +154,8 @@ void VP37_showDebug(const VP37Pump *self, const VP37Snapshot *snapshot) {
  *   lduty, lv duty reconstructed from on / lp and valid latch timing
  *   n, gn     ON-phase samples acquired and left after the 60 us edge guards
  *   clip      samples that hit the ADC end stop
- *   zero, zv  shunt zero [ADC code] and whether it is valid
+ *   zero, zv  shunt zero in effect [ADC code, with its fraction] and whether
+ *             it is valid; zn its updates learned at rest since start
  *   valid     waveformValid: the ampere fields mean something
  *   status    hal_status_t of the reduction (HAL_EAGAIN: no complete period)
  *   Vavg, Vok full-period supply mean [V] and its own validity
@@ -176,7 +180,8 @@ void VP37_showCurrentPulse(const VP37Snapshot *snapshot) {
                         view->scan.cycleResultSequence);
   deb("VP37 IPULSE us:%lu seq:%lu state_us:%lu pwm:%ld adj:%ld des:%ld "
       "V:%.3f FT:%.1f Ion:%.4f I95:%.4f Ipk:%.4f per:%lu on:%lu "
-      "duty:%ld n:%lu gn:%lu clip:%lu zero:%u zv:%u valid:%u status:%d "
+      "duty:%ld n:%lu gn:%lu clip:%lu zero:%.2f zv:%u zn:%lu valid:%u "
+      "status:%d "
       "Vavg:%.4f Vok:%u blk:%lu gaps:%lu gl:%lu "
       "ctar:%.4f cref:%.4f cerr:%.4f cpwm:%.2f cuse:%u cage:%lu "
       "latch:%lu lp:%lu lduty:%ld lv:%u dma:%lu take:%lu reduce:%lu "
@@ -188,14 +193,14 @@ void VP37_showCurrentPulse(const VP37Snapshot *snapshot) {
       result->p95Amps, result->peakAmps, (unsigned long)result->periodUs,
       (unsigned long)result->onTimeUs, (long)result->pwmCommand,
       (unsigned long)result->samples, (unsigned long)result->guardedSamples,
-      (unsigned long)result->clippedSamples, (unsigned)result->zeroRaw,
-      result->zeroValid ? 1U : 0U, result->waveformValid ? 1U : 0U,
-      (int)view->scan.cycleResultStatus, result->supplyVolts,
-      result->supplyValid ? 1U : 0U, (unsigned long)view->scan.blocks,
-      (unsigned long)view->scan.gaps, (unsigned long)result->glitches,
-      view->currentControl.targetAmps, view->currentControl.sampleTargetAmps,
-      view->currentControl.errorAmps, view->currentControl.correctionPwm,
-      view->currentControl.active ? 1U : 0U,
+      (unsigned long)result->clippedSamples, view->scan.zeroCounts,
+      result->zeroValid ? 1U : 0U, (unsigned long)view->scan.zeroLearns,
+      result->waveformValid ? 1U : 0U, (int)view->scan.cycleResultStatus,
+      result->supplyVolts, result->supplyValid ? 1U : 0U,
+      (unsigned long)view->scan.blocks, (unsigned long)view->scan.gaps,
+      (unsigned long)result->glitches, view->currentControl.targetAmps,
+      view->currentControl.sampleTargetAmps, view->currentControl.errorAmps,
+      view->currentControl.correctionPwm, view->currentControl.active ? 1U : 0U,
       (unsigned long)view->currentControl.sampleAgeUs,
       (unsigned long)result->latchUs, (unsigned long)result->latchPeriodUs,
       (long)result->latchedPwm, result->latchValid ? 1U : 0U,

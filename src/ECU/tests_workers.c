@@ -64,7 +64,7 @@ static struct {
  * the actuator back, so every series approaches the top from the same rest
  * position instead of from wherever the previous one ended.
  */
-static const float s_topStepsSetpoints[] = {75.0f, 85.5f, 90.5f, 95.0f, 0.0f};
+static const float s_topStepsSetpoints[] = {75.0f, 85.5f, 88.0f, 95.0f, 0.0f};
 
 static struct {
   uint32_t stepStartedMs;

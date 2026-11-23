@@ -137,6 +137,49 @@ typedef struct {
 void VP37_currentSenseInit(void);
 
 /**
+ * @brief Learn the shunt zero at rest and take its fraction off a result.
+ * @param released True while the actuator has no demand and no PWM output.
+ * @param nowUs hal_micros() of the call; uint32_t wrap is supported.
+ * @param result Newest collected result, or NULL (nothing happens); its
+ * mean, P95, peak and profile amperes lose the fraction of the zero in effect.
+ * @note Core 1 only, once per new VP37_currentScanCollect result. Any call
+ * with released false holds the zero. VP37_CURRENT_ZERO_LEARN_DELAY_US after
+ * the last such call, each newest one-period window of the retained history
+ * whose shunt samples all stay below the gate OFF level above the zero trains
+ * the zero through VP37_currentZeroLearn; the first such window after a drive
+ * only starts the time step. VP37_currentScanReduce and
+ * VP37_currentPulseAnalyze use the whole codes of the zero only.
+ */
+void VP37_currentZeroUpdate(bool released, uint32_t nowUs,
+                            VP37CurrentPulseResult *result);
+
+/**
+ * @brief Move the shunt zero toward a raw rest-window mean.
+ * @param windowRaw Raw shunt mean over one PWM period with the drive
+ * released [ADC code].
+ * @param dt Time since the previous update [s]; values outside
+ * 0..VP37_CURRENT_ZERO_LEARN_MAX_DT_S are bounded.
+ * @return HAL_OK after the update (a zero dt leaves the zero where it is),
+ * HAL_EINVAL when an input is not finite, HAL_ESTATE while the startup zero
+ * is invalid; both errors leave the zero unchanged.
+ * @note First-order filter with VP37_CURRENT_ZERO_LEARN_S, sub-code
+ * resolution, bounded to 0..128 codes. The startup median is the first
+ * value.
+ */
+hal_status_t VP37_currentZeroLearn(float windowRaw, float dt);
+
+/** @brief Zero in effect, in ADC codes with its fraction. */
+float VP37_currentZero(void);
+
+/**
+ * @brief Zero updates learned at rest since VP37_currentSenseInit.
+ * @return Rest windows VP37_currentZeroUpdate passed to VP37_currentZeroLearn
+ * with a time step and that it accepted; windows seen while the startup zero
+ * is invalid do not count.
+ */
+uint32_t VP37_currentZeroLearns(void);
+
+/**
  * @brief Start the hardware-paced scan of the shunt, sensor mux and supply.
  * @return HAL_OK, or the scan start status (HAL_EBUSY, HAL_ENOMEM, ...).
  * @note Single owner, core 1: the completion interrupt and the reducer share

@@ -209,6 +209,13 @@ command scale. The local ADC fallback retains its 50 ms filter without predictio
 and resistance estimation use a separate voltage mean from the same PWM period as the current
 capture.
 
+The local divider gets its absolute level from the Adjustometer supply reading: at rest the
+scale between the two follows the same PWM-period mean the drive path multiplies, so it does
+not depend on the moment of the step that reads the ADC. A short local snapshot picks up board
+noise that moves with the code timing (30 mV between a flash and an SRAM build of the same
+control). While the scan runs but the mean is stale, the scale holds; without a running scan
+the snapshot remains its source.
+
 ### Learning coil resistance
 
 Resistance estimation uses the same historical PWM-latch matching as the
@@ -252,6 +259,17 @@ plus position-PID output expressed as guarded ON-phase current. The conversion
 preserves the resistance estimator's raw-voltage reference and the local
 divider calibration. The source shunt does not measure recirculation current
 while the MOSFET is off, so this target is not full-period coil current.
+
+The shunt zero starts as the median of 256 readings taken at boot, before
+the control code runs. That median lands on 8 to 12 whole ADC codes depending
+on what the cores do at that moment, and each code moves the top overshoot by
+about 20 Hz. While the actuator is released, the scan therefore keeps
+training the zero: 50 ms after the last demand or PWM output, every newest
+one-period window whose shunt samples all stay below the gate OFF level moves
+it with a 1 s time constant, keeping the fraction of a code. Any demand holds
+the zero. Samples lose its whole codes and the ampere results lose the
+remaining fraction. `IPULSE` prints the zero in effect as `zero` and its
+learned updates as `zn`.
 
 The inverted drive conducts at the end of each hardware PWM period. Each
 observation is matched to the command written before the preceding current

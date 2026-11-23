@@ -4,6 +4,7 @@
 #include "../vp37_drive_config.h"
 #include "vp37_config.h"
 
+#include <math.h>
 #include <string.h>
 
 /* Preserve the DMA buffer's four-byte alignment on both host compilers. */
@@ -25,6 +26,14 @@
 
 static uint16_t s_currentZeroRaw;
 static bool s_currentZeroValid;
+/* The zero in effect with its fraction: the samples lose its whole codes
+   (s_currentZeroRaw), VP37_currentZeroUpdate takes the rest off the amperes.
+   The learning state below belongs to VP37_currentZeroUpdate. */
+static float s_currentZero;
+static float s_currentZeroFraction;
+static uint32_t s_currentZeroDriveUs;
+static uint32_t s_currentZeroLearnUs;
+static uint32_t s_currentZeroLearns;
 
 static uint8_t s_scanShuntPosition;
 static uint8_t s_scanSupplyPosition;
@@ -145,6 +154,11 @@ void VP37_currentSenseInit(void) {
   uint16_t samples[VP37_CURRENT_ZERO_SAMPLES];
   s_currentZeroRaw = 0U;
   s_currentZeroValid = false;
+  s_currentZero = 0.0f;
+  s_currentZeroFraction = 0.0f;
+  s_currentZeroDriveUs = hal_micros();
+  s_currentZeroLearnUs = 0U;
+  s_currentZeroLearns = 0U;
   (void)VP37_currentReadRaw();
   for (uint32_t i = 0U; i < COUNTOF(samples); i++) {
     samples[i] = VP37_currentReadRaw();
@@ -153,7 +167,31 @@ void VP37_currentSenseInit(void) {
   VP37_currentSortRaw(samples, COUNTOF(samples));
   s_currentZeroRaw = samples[COUNTOF(samples) / 2U];
   s_currentZeroValid = s_currentZeroRaw <= VP37_CURRENT_ZERO_MAX_RAW;
+  s_currentZero = (float)s_currentZeroRaw;
 }
+
+hal_status_t VP37_currentZeroLearn(float windowRaw, float dt) {
+  hal_status_t status = HAL_OK;
+  if (!isfinite(windowRaw) || !isfinite(dt)) {
+    status = HAL_EINVAL;
+  } else if (!s_currentZeroValid) {
+    status = HAL_ESTATE;
+  } else {
+    const float step =
+        hal_constrain(dt, 0.0f, VP37_CURRENT_ZERO_LEARN_MAX_DT_S);
+    const float zero = s_currentZero + ((windowRaw - s_currentZero) * step /
+                                        (VP37_CURRENT_ZERO_LEARN_S + step));
+    s_currentZero = hal_constrain(zero, 0.0f, (float)VP37_CURRENT_ZERO_MAX_RAW);
+    const float whole = floorf(s_currentZero);
+    s_currentZeroRaw = (uint16_t)whole;
+    s_currentZeroFraction = s_currentZero - whole;
+  }
+  return status;
+}
+
+float VP37_currentZero(void) { return s_currentZero; }
+
+uint32_t VP37_currentZeroLearns(void) { return s_currentZeroLearns; }
 
 static bool VP37_currentPeriodPlausible(uint32_t periodUs) {
   const uint32_t expectedPeriodUs = 1000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ;
@@ -696,4 +734,86 @@ hal_status_t HAL_RAM_FUNC(VP37_currentScanCollect)(VP37CurrentPulseResult *out,
   out->scanCollectedUs = s_scanHistoryCollectedUs;
   out->scanPollUs = s_scanHistoryPollUs;
   return reduced;
+}
+
+/* The newest one-period window of the retained history, read before the
+   zero: its mean trains the zero when no sample reached the gate OFF level. */
+static bool VP37_currentQuietWindow(uint32_t periodUs, float *out_mean) {
+  if ((s_scanHistoryFrames == 0U) || (s_scanHistoryFrameNs == 0U)) {
+    return false;
+  }
+  const uint32_t periodNs =
+      VP37_currentPeriodPlausible(periodUs)
+          ? (periodUs * 1000U)
+          : (1000000000U / (uint32_t)VP37_PWM_FREQUENCY_HZ);
+  const uint32_t frames =
+      (periodNs + (s_scanHistoryFrameNs / 2U)) / s_scanHistoryFrameNs;
+  if ((frames == 0U) || (frames > s_scanHistoryFrames)) {
+    return false;
+  }
+  const VP37CurrentScanView view = {
+      .block = {.samples = s_scanHistory,
+                .frames = s_scanHistoryFrames,
+                .pinCount = VP37_CURRENT_HISTORY_PINS,
+                .shuntPosition = 0U,
+                .supplyPosition = 1U,
+                .frameNs = s_scanHistoryFrameNs,
+                .startUs = s_scanHistoryStartUs},
+      .first = s_scanHistoryFirst,
+      .capacity = VP37_CURRENT_SCAN_HISTORY_FRAMES};
+  const uint32_t quietRaw =
+      (uint32_t)s_currentZeroRaw +
+      (uint32_t)VP37_currentAmpsToRaw(VP37_CURRENT_GATE_OFF_AMPS);
+  uint32_t sum = 0U;
+  for (uint32_t k = s_scanHistoryFrames - frames; k < s_scanHistoryFrames;
+       k++) {
+    const uint16_t shunt = VP37_currentBlockRaw(&view, k, 0U, true);
+    if ((uint32_t)shunt >= quietRaw) {
+      return false;
+    }
+    sum += shunt;
+  }
+  *out_mean = (float)sum / (float)frames;
+  return true;
+}
+
+void VP37_currentZeroUpdate(bool released, uint32_t nowUs,
+                            VP37CurrentPulseResult *result) {
+  if (result == NULL) {
+    return;
+  }
+  if (!released) {
+    s_currentZeroDriveUs = nowUs;
+    s_currentZeroLearnUs = 0U;
+  } else if (hal_elapsed_u32(nowUs, s_currentZeroDriveUs,
+                             VP37_CURRENT_ZERO_LEARN_DELAY_US)) {
+    float mean = 0.0f;
+    if (VP37_currentQuietWindow(result->periodUs, &mean)) {
+      // The first quiet window after a drive only starts the time step.
+      if (s_currentZeroLearnUs != 0U) {
+        const uint32_t elapsedUs = nowUs - s_currentZeroLearnUs;
+        const float dt = (float)elapsedUs * 0.000001f;
+        const hal_status_t learned = VP37_currentZeroLearn(mean, dt);
+        if (learned == HAL_OK) {
+          s_currentZeroLearns++;
+        }
+      }
+      s_currentZeroLearnUs = nowUs;
+    }
+  } else {
+    // Released, but the newest window may still hold the last ON phase.
+  }
+  if (s_currentZeroFraction > 0.0f) {
+    const float fractionAmps =
+        s_currentZeroFraction *
+        (VP37_currentRawToAmps(VP37_CURRENT_ADC_MAX_RAW) /
+         (float)VP37_CURRENT_ADC_MAX_RAW);
+    result->meanAmps = fmaxf(result->meanAmps - fractionAmps, 0.0f);
+    result->p95Amps = fmaxf(result->p95Amps - fractionAmps, 0.0f);
+    result->peakAmps = fmaxf(result->peakAmps - fractionAmps, 0.0f);
+    for (uint32_t bin = 0U; bin < VP37_CURRENT_PROFILE_BINS; ++bin) {
+      result->profileAmps[bin] =
+          fmaxf(result->profileAmps[bin] - fractionAmps, 0.0f);
+    }
+  }
 }
