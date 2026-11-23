@@ -15,5 +15,8 @@
     "jaszczurhal.vscodeEntry": "../JaszczurHAL/vscode/entry/jh-vscode",
     "jaszczurhal.verbose": true,
     "jaszczurhal.vscodeEntryWindows": "../JaszczurHAL/vscode/entry/jh-vscode.cmd",
-    "cortex-debug.gdbPath.linux": "gdb-multiarch"
+    "cortex-debug.gdbPath.linux": "gdb-multiarch",
+    "C_Cpp.files.exclude": {
+        "**/.build": true
+    }
 }

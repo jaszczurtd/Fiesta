@@ -2,5 +2,8 @@
     "files.exclude": {
         "**/.build": true
     },
-    "task.allowAutomaticTasks": "on"
+    "task.allowAutomaticTasks": "on",
+    "C_Cpp.files.exclude": {
+        "**/.build": true
+    }
 }
