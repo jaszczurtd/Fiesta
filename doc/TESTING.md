@@ -43,7 +43,13 @@ errors remain failures. Started directly without a display, the progress-bar
 and Tests-tab tests report a skip in CTest.
 
 When `check-valgrind` fails, it prints the current run's `MemoryChecker.*.log`
-files, including allocation stacks. The SerialConfigurator CI job also saves
+reports that show a Valgrind error, a killed process or a cut-off report, with
+their allocation stacks. Reports of tests without such a problem stay in
+`Testing/Temporary`. The output ends with a summary of the failed tests: for
+each one it says whether Valgrind found errors and repeats the failure lines
+of the test output, such as a failed Unity assertion. The daily bootstrap
+mails only the end of its log, so that summary is enough to see what broke.
+The SerialConfigurator CI job also saves
 the `Testing/` directory as the `serial-configurator-test-reports` artifact,
 including after a failed test.
 

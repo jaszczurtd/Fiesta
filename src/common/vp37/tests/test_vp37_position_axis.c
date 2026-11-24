@@ -464,26 +464,30 @@ static void test_limit_correction_ignores_a_toggling_degree(void) {
 
 static void test_limit_correction_follows_a_lasting_step_with_its_lag(void) {
   startResting();
-  board.fuelTempC = 30;
+  // A 6 C step: no expected correction falls on a half hertz, where the
+  // result depends on how lroundf breaks the tie. Valgrind on arm64 rounds a
+  // tie to even until the fix of KDE bug 489338 (July 2024), so under
+  // Valgrind 3.19 the 80.5 Hz of a 5 C step read 80 instead of 81.
+  board.fuelTempC = 31;
   const float tau = (float)VP37_LIMIT_FT_FILTER_TAU_S;
-  const int32_t finalMin = correctionFor(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 5);
-  const int32_t finalMax = correctionFor(VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C, 5);
-  TEST_ASSERT_EQUAL_INT32(81, finalMin);
-  TEST_ASSERT_EQUAL_INT32(44, finalMax);
+  const int32_t finalMin = correctionFor(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 6);
+  const int32_t finalMax = correctionFor(VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C, 6);
+  TEST_ASSERT_EQUAL_INT32(97, finalMin);
+  TEST_ASSERT_EQUAL_INT32(53, finalMax);
   // One time constant: about 63 % of the way, not more.
   trackSlowly(AXIS_TAU_MS);
   TEST_ASSERT_INT32_WITHIN(
-      2, correctionAfter(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 5.0f, tau),
+      2, correctionAfter(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 6.0f, tau),
       pump.feedback.limitCorrectionMin);
   TEST_ASSERT_INT32_WITHIN(
-      2, correctionAfter(VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C, 5.0f, tau),
+      2, correctionAfter(VP37_LIMIT_FT_TOP_SLOPE_DHZ_PER_C, 6.0f, tau),
       pump.feedback.limitCorrectionMax);
   TEST_ASSERT_LESS_OR_EQUAL_INT32((finalMin * 64) / 100,
                                   pump.feedback.limitCorrectionMin);
   // Two time constants: further along the same curve.
   trackSlowly(AXIS_TAU_MS);
   TEST_ASSERT_INT32_WITHIN(
-      2, correctionAfter(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 5.0f, 2.0f * tau),
+      2, correctionAfter(VP37_LIMIT_FT_REST_SLOPE_DHZ_PER_C, 6.0f, 2.0f * tau),
       pump.feedback.limitCorrectionMin);
   // Six time constants: the whole correction.
   trackSlowly(4U * AXIS_TAU_MS);

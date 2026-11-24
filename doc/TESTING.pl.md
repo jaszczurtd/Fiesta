@@ -43,8 +43,14 @@ aplikacji nadal przerywają kontrolę.
 Uruchomione bezpośrednio bez ekranu testy paska postępu i karty Tests są
 w CTest oznaczone jako pominięte.
 
-Po błędzie `check-valgrind` wypisuje pliki `MemoryChecker.*.log` z bieżącego
-przebiegu, wraz ze stosami alokacji. Job CI SerialConfiguratora zapisuje też
+Po błędzie `check-valgrind` wypisuje te raporty `MemoryChecker.*.log`
+z bieżącego przebiegu, w których Valgrind znalazł błąd, proces zginął od
+sygnału albo raport się urwał, razem ze stosami alokacji. Raporty testów bez
+takiego problemu zostają w `Testing/Temporary`. Na końcu wyjścia stoi
+podsumowanie nieudanych testów: przy każdym widać, czy Valgrind znalazł
+błędy, oraz linie błędów z wyjścia testu, np. nieudaną asercję Unity. Daily
+bootstrap wysyła mailem tylko koniec logu, więc to podsumowanie wystarcza, żeby
+zobaczyć, co padło. Job CI SerialConfiguratora zapisuje też
 katalog `Testing/` jako artefakt `serial-configurator-test-reports`, również
 po nieudanym teście.
 
